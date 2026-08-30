@@ -164,4 +164,4 @@ Version `0.1.x` focuses on the tactical battlefield layer: fire, visible destruc
 
 ## Licence
 
-[MIT](LICENSE) © 2026 Marci
+[MIT](LICENSE) © 2026 GrabowMar
