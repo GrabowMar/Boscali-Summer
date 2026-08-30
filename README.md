@@ -32,7 +32,7 @@
 ### Manual installation
 
 1. Install [BepInEx 5](https://github.com/BepInEx/BepInEx/releases) into the Nuclear Option directory and launch the game once.
-2. Download `BoscaliSummer.dll` from the [latest release](https://github.com/GrabowMar/NuclearOption-BoscaliSummer/releases).
+2. Download `BoscaliSummer.dll` from the [latest release](https://github.com/GrabowMar/Boscali-Summer/releases).
 3. Copy it to:
 
    ```text
