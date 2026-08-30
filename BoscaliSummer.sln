@@ -1,0 +1,31 @@
+
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BoscaliSummer", "src\BoscaliSummer\BoscaliSummer.csproj", "{A52AA103-2CD9-4B72-BE21-42F2AA3CE823}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BoscaliSummer.Tests", "tests\BoscaliSummer.Tests\BoscaliSummer.Tests.csproj", "{D7C34933-172E-4DD9-B40E-B9A15B5D85DA}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BoscaliSummer.PatchProbe", "tests\BoscaliSummer.PatchProbe\BoscaliSummer.PatchProbe.csproj", "{9D71ABBE-948A-4B40-A41F-0A521FCB4249}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{A52AA103-2CD9-4B72-BE21-42F2AA3CE823}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A52AA103-2CD9-4B72-BE21-42F2AA3CE823}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A52AA103-2CD9-4B72-BE21-42F2AA3CE823}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A52AA103-2CD9-4B72-BE21-42F2AA3CE823}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D7C34933-172E-4DD9-B40E-B9A15B5D85DA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D7C34933-172E-4DD9-B40E-B9A15B5D85DA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D7C34933-172E-4DD9-B40E-B9A15B5D85DA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D7C34933-172E-4DD9-B40E-B9A15B5D85DA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9D71ABBE-948A-4B40-A41F-0A521FCB4249}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9D71ABBE-948A-4B40-A41F-0A521FCB4249}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9D71ABBE-948A-4B40-A41F-0A521FCB4249}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9D71ABBE-948A-4B40-A41F-0A521FCB4249}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
