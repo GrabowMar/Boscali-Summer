@@ -12,7 +12,7 @@ namespace BoscaliSummer.Tests
         private static int Main()
         {
             FrameworkTests.Run();
-            BuildingDamageTests.Run();
+            ImpactScorchTests.Run();
             RadioTests.Run();
             ModuleBoundaryTests.Run();
 

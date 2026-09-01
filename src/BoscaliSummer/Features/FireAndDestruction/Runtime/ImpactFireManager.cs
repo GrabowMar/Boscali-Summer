@@ -45,7 +45,6 @@ namespace BoscaliSummer.Fire
             public float ClusterScale;
             public Building BurningBuilding;
             public MapBuilding BurningMapBuilding;
-            public BuildingDamageStage DamageStage;
             public FireVisualPool.Visual Visual;
             public FuelDepotSmokePool.Visual BuildingSmoke;
         }
@@ -319,10 +318,7 @@ namespace BoscaliSummer.Fire
                         }
                         if (burningBuilding != null) fires[i].BurningBuilding = burningBuilding;
                         if (burningMapBuilding != null)
-                        {
                             fires[i].BurningMapBuilding = burningMapBuilding;
-                            AdvanceBurningBuildingDamage(fires[i], BuildingDamageStage.Minor);
-                        }
                         if (burningBuilding != null || burningMapBuilding != null)
                         {
                             fires[i].Forest = false;
@@ -352,7 +348,6 @@ namespace BoscaliSummer.Fire
                 ClusterScale = 1f,
                 BurningBuilding = burningBuilding,
                 BurningMapBuilding = burningMapBuilding,
-                DamageStage = BuildingDamageStage.Intact,
                 Visual = GameManager.IsHeadless ? null : visualPool.Acquire(position, forest),
                 BuildingSmoke = null
             };
@@ -367,7 +362,6 @@ namespace BoscaliSummer.Fire
                 if (site.BurningBuilding == null) site.BurningBuilding = nearbyBuilding;
                 if (site.BurningMapBuilding == null) site.BurningMapBuilding = nearbyMapBuilding;
             }
-            AdvanceBurningBuildingDamage(site, BuildingDamageStage.Minor);
             fires.Add(site);
             if (forest) QueueForestScorch(position);
             else QueueScorch(position, 1f);
@@ -445,13 +439,6 @@ namespace BoscaliSummer.Fire
                     fuelDepotSmokePool.Release(site.BuildingSmoke);
                     fires.RemoveAt(i);
                     continue;
-                }
-                if (IsServer() && site.BurningMapBuilding != null)
-                {
-                    float fireProgress = Mathf.Clamp01(
-                        (now - site.Born) / Mathf.Max(Plugin.Settings.FireLifetime, 1f));
-                    AdvanceBurningBuildingDamage(
-                        site, BuildingDamagePolicy.FromFireProgress(fireProgress));
                 }
                 site.Visual?.SetPosition(site.Position);
                 site.Visual?.SetClusterScale(site.ClusterScale);
@@ -728,18 +715,6 @@ namespace BoscaliSummer.Fire
             // three pooled vanilla smoke cores start across this broader irregular base and
             // then shear together with the wind as the logical cluster grows.
             return new Vector2(Mathf.Lerp(16f, 24f, x), Mathf.Lerp(14f, 22f, z));
-        }
-
-        private static void AdvanceBurningBuildingDamage(
-            FireSite site, BuildingDamageStage stage)
-        {
-            if (site == null || site.BurningMapBuilding == null ||
-                !Plugin.Settings.BuildingDamageEnabled.Value || stage <= site.DamageStage) return;
-            site.DamageStage = stage;
-            float severity = BuildingDamagePolicy.Severity(stage);
-            BuildingDamageVisual.Apply(site.BurningMapBuilding, severity);
-            ModNet.BroadcastBuildingDamage(
-                site.BurningMapBuilding.transform.GlobalPosition(), severity);
         }
 
         private void DemolishBurnedBuilding(FireSite site)

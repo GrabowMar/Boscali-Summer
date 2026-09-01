@@ -58,8 +58,10 @@ top-level names and their serializer field order unless deliberately versioning 
 protocol and all peers:
 
 - `BoscaliSummer.Runtime.FireIgnitedMessage`
-- `BoscaliSummer.Runtime.BuildingDamagedMessage`
 - `BoscaliSummer.Runtime.RuinCreatedMessage`
+
+There were three. `BoscaliSummer.Runtime.BuildingDamagedMessage` was removed in a
+deliberate protocol break when building damage became a local-only impact scorch mark.
 
 Prefer vanilla Mirage spawning for game objects. Custom messages carry only state vanilla
 networking does not own. Late-join snapshots stay bounded and feature-owned. Client support
@@ -72,9 +74,11 @@ derives and validates them.
   simulation. Avoid per-impact allocations and whole-scene searches.
 - `FireVisualPool` is flame-only. Smoke uses pooled, smoke-only copies of the vanilla Fuel
   Depot destruction prefab through `FuelDepotSmokePool`.
-- `BuildingDamageVisual` keeps intact geometry, material property blocks, and bounded
-  vanilla scorch projectors. Do not clone facade materials or substitute full ruin meshes
-  for intermediate damage.
+- `ImpactScorchManager` stamps one pooled vanilla scorch decal on a building wall where an
+  explosive hit lands. Local cosmetic only: no HP tracking, damage tiers, per-building
+  state, or networking. Keep the pool bounded and the cast queue salvo-safe. Do not
+  reintroduce facade tinting or an intermediate "battered" building state; `MapBuilding`
+  has no vanilla damage shader.
 - `RuinAftermathManager` keeps persistent logical records but assigns smoke only to a
   camera-near bounded subset. Collapse accents remain particle-only without debris
   rigidbodies or colliders.

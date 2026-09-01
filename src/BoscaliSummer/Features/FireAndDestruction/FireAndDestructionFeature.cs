@@ -14,7 +14,7 @@ namespace BoscaliSummer.Features.FireAndDestruction
             typeof(BulletImpactPatch),
             typeof(MissileImpactPatch),
             typeof(GroundVehicleDestructionPatch),
-            typeof(MapBuildingDamagePatch)
+            typeof(MapBuildingRuinPatch)
         };
 
         public FeatureMetadata Metadata => Feature;
@@ -24,12 +24,12 @@ namespace BoscaliSummer.Features.FireAndDestruction
         {
             ImpactFireManager fires = context.AddSceneService<ImpactFireManager>(10);
             fires.Configure(context.Services);
-            BuildingDamagePresentationManager damage =
-                context.AddSceneService<BuildingDamagePresentationManager>(15);
+            ImpactScorchManager scorch =
+                context.AddSceneService<ImpactScorchManager>(15);
             RuinAftermathManager ruins = context.AddSceneService<RuinAftermathManager>(20);
             ModNet network = context.AddSceneService<ModNet>(100);
             context.AddService(fires);
-            context.AddService(damage);
+            context.AddService(scorch);
             context.AddService(ruins);
             context.AddService(network);
         }

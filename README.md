@@ -25,10 +25,10 @@
 - Gunfire, missiles, and destroyed ground vehicles can ignite civilian buildings or procedural forests.
 - Forest fires grow progressively, form wind-biased child fronts, clear trees, and leave irregular vanilla-gray ash scars.
 - Building fires use smoke-only copies of Nuclear Option's Fuel Depot destruction effect rather than synthetic columns.
-- Lightweight city buildings pass through intact, battered, burning, and ruined states.
+- Lightweight city buildings pass through intact, burning, and ruined states; an explosive hit also leaves a scorch mark on the wall.
 - Ruins receive pooled collapse dust and permanent intermittent smouldering without persistent physics debris.
 - A few civilian buildings around controlled airbases become logic-only defensive positions using vanilla bunker behavior.
-- Active fires, damaged facades, ruins, and garrisons synchronize for multiplayer and late joiners.
+- Active fires, ruins, and garrisons synchronize for multiplayer and late joiners.
 - A client-local map radio plays user-supplied OGG/WAV stations through the game's music mixer.
 - Hard global budgets keep large city battles practical.
 
@@ -120,7 +120,7 @@ Forest smoke uses three pooled smoke-only copies of the vanilla Fuel Depot destr
 
 ### Buildings and ruins
 
-Lightweight `MapBuilding` objects enter a battered intermediate state after their first real HP loss. Supported materials receive the game's native `_HitPoints` and `_Damage` values; simpler scenery shaders retain their original colour under restrained warm soot, reduced gloss, and localized vanilla scorch marks. Damage advances through normalized minor, major, and critical tiers. Building fires cross the same tiers as they burn, while a bounded transition queue avoids material clones and repeated full-facade work for every small hit.
+`MapBuilding` objects have no vanilla damage shader: the base game only decrements hit points and swaps to a wreck mesh on death. So there is no intermediate "battered" facade. Instead, an explosive hit (missile, bomb, or rocket) stamps a single black scorch decal on the wall at the point of impact, sized from the blast yield and nudged and rolled so repeated hits are not identical stamps. It is purely local and cosmetic: no hit-point tracking, no damage tiers, no per-building state, and nothing on the wire. Marks are pooled; when the pool is full the oldest mark is recycled for the newest hit. Gun rounds leave no mark.
 
 Building flames are anchored to the collider-backed roof surface under the impact point. Two or three staggered smoke sources distribute the Fuel Depot plume across the footprint. When an unoccupied civilian building finishes burning, it follows the vanilla disabled/ruin path. A faction-owned building is considered occupied and is preserved.
 
@@ -140,14 +140,14 @@ Garrisons update with zone ownership, cannot duplicate, disappear when their she
 
 ## Configuration reference
 
-The public configuration is intentionally compact. Particle counts, spatial budgets, spread depth, and other safety limits are derived or fixed so a visually tempting setting cannot accidentally turn a long mission into a performance collapse. It exposes twelve high-level controls.
+The public configuration is intentionally compact. Particle counts, spatial budgets, spread depth, and other safety limits are derived or fixed so a visually tempting setting cannot accidentally turn a long mission into a performance collapse. It exposes eleven high-level controls.
 
 | Section | Setting | Default | Purpose |
 |---|---|---:|---|
 | Fires | `Enabled` | `true` | Enable impact and vehicle-loss fires |
 | Fires | `Intensity` | `1.0` | Scale ignition chance and visual intensity together |
 | Fires | `DemolishUnoccupiedBuildings` | `true` | Leave vanilla ruins after building fires burn out |
-| Buildings | `DamagedStateEnabled` | `true` | Enable the intermediate battered facade state |
+| Buildings | `ImpactScorchEnabled` | `true` | Stamp a local scorch mark where an explosive hit meets a building wall |
 | Garrisons | `Enabled` | `true` | Occupy eligible buildings around controlled zones |
 | Garrisons | `BuildingsPerZone` | `3` | Number of occupied civilian shells per zone |
 | Radio | `Enabled` | `true` | Enable the client-local map radio |
@@ -160,7 +160,7 @@ At intensity `1.0`, ordinary impacts have approximately a `0.25%` ignition chanc
 
 ## Multiplayer and performance
 
-Only authoritative transitions are networked. Fire particles, smoke evolution, lights, and collapse dust remain local and generate no per-frame mod traffic. Late joiners receive two delayed snapshots of active fires, damaged buildings, and ruins after authentication; garrisons use vanilla spawning.
+Only authoritative transitions are networked. Fire particles, smoke evolution, lights, impact scorch marks, and collapse dust remain local and generate no per-frame mod traffic. Late joiners receive two delayed snapshots of active fires and ruins after authentication; garrisons use vanilla spawning.
 
 The main runtime budgets are:
 
@@ -170,9 +170,8 @@ The main runtime budgets are:
 | Queued vehicle destructions | 32 |
 | Active fire sites | 24 |
 | Dynamic fire lights | 3 |
-| Queued building-damage transitions | 64 |
-| Tracked damaged buildings | 256 |
-| Camera-near facade/roof scorch projectors | 48 |
+| Queued impact scorch casts | 32 |
+| Pooled impact scorch marks | 64 |
 | Persistent logical ruins | 256 |
 | Nearest ruin smoke visuals | 24 |
 | Simultaneous collapse bursts | 4 |

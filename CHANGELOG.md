@@ -2,11 +2,19 @@
 
 ## Unreleased
 
-- Reworked lightweight buildings so their first real HP loss establishes minor visual damage,
-  followed by normalized major and critical stages; established fires progress through the same
-  stages before authoritative burnout demolition.
-- Added a 64-item, two-per-frame building presentation queue and a camera-near pool of 48
-  deterministic facade/roof scorch projectors, with 256-record damage snapshots and bounded retries.
+- Replaced the never-working building-damage visual (HP-fraction tiers, facade tint, and
+  48-projector camera-near pool) with a single local impact scorch mark: an explosive hit
+  stamps one black decal on the building wall at the point of impact, sized from the blast
+  yield and deterministically nudged and rolled. No HP tracking, damage tiers, per-building
+  state, or networking. `MapBuilding` has no vanilla damage shader, and every observed
+  in-game damage event was the lowest tier, so the old model could not escalate on the
+  buildings players actually bomb.
+- Removed the `BuildingDamagedMessage` wire contract, its snapshot loop, and its late-join
+  retries. This is a deliberate protocol break dropping replicated channels from three to
+  two; old and new peers stay compatible for the fire and ruin channels.
+- Rescued the outright-destruction ruin hook into `MapBuildingRuinPatch` so a direct bomb or
+  missile kill still leaves ruin smoke and collapse dust.
+- Renamed the `Buildings / DamagedStateEnabled` setting to `Buildings / ImpactScorchEnabled`.
 - Added a client-local `RAD` map-MFD music player with directory-based channels, bounded
   OGG/WAV discovery, asynchronous decoding, crossfade, transport controls, shuffle, repeat,
   rescan, and progress through Nuclear Option's music mixer.

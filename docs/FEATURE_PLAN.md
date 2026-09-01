@@ -64,7 +64,7 @@ large during the behavior-preserving move. Split them only behind tested seams:
 
 | Feature | Owns | Authority | Status |
 |---|---|---|---|
-| Fire and destruction | Ignition, forest index, spread, building damage, ruins, visuals | Host decisions; client presentation | Working baseline |
+| Fire and destruction | Ignition, forest index, spread, impact scorch, ruins, visuals | Host decisions; client presentation | Working baseline |
 | Urban combat | Shell catalogue, occupancy, defensive proxies, capture/destruction cleanup | Host plus vanilla spawning | Working abstract model |
 | Radio/music | Local track library, channels, playback adapter, MFD UI | Client-local | Working baseline |
 | Progression | Mod XP, skill graph, profile migration, entitlements | Host/server truth | Feasible after persistence/network work |
@@ -231,10 +231,9 @@ Existing release ceilings remain fixed:
 | Queued vehicle losses | 32; 1 processed/frame |
 | Active fire sites | 24 |
 | Dynamic fire lights | 3 |
-| Scorch work | 1 request/frame |
-| Facade/roof scorch projectors | 48 |
-| Building-damage transitions | 64 queued; 2 processed/frame |
-| Tracked damaged buildings | 256 |
+| Ground scorch work | 1 request/frame |
+| Impact scorch casts | 32 queued; 2 processed/frame |
+| Pooled impact scorch marks | 64; oldest recycled |
 | Logical ruins | 256 |
 | Ruin smoke visuals | 24 nearest |
 | Collapse bursts | 4 simultaneous |

@@ -25,7 +25,7 @@ src/BoscaliSummer/
     Diagnostics/             Shared diagnostic settings
     GameInterop/             Cached reflection and capability reporting
   Features/
-    FireAndDestruction/      Fire, damage, ruins, replication, effects, and patches
+    FireAndDestruction/      Fire, impact scorch, ruins, replication, effects, and patches
     Radio/                   Local music catalogue, playback ownership, and MFD panel
     UrbanCombat/             Occupancy, defensive proxies, visuals, and patches
 ```
@@ -36,8 +36,12 @@ folders. In particular, Mirage derives message IDs from full type names, so thes
 top-level wire contracts must not be renamed without a deliberate protocol break:
 
 - `BoscaliSummer.Runtime.FireIgnitedMessage`
-- `BoscaliSummer.Runtime.BuildingDamagedMessage`
 - `BoscaliSummer.Runtime.RuinCreatedMessage`
+
+There were three. `BoscaliSummer.Runtime.BuildingDamagedMessage` was removed in a
+deliberate protocol break when building damage visuals became a local-only impact scorch
+mark: nothing about it is replicated any more. Old and new peers stay compatible for the
+fire and ruin channels.
 
 ## Composition and feature ownership
 
@@ -84,7 +88,7 @@ Unity reports a loaded scene. Reset exceptions are isolated per service.
 | Order | Service |
 |---:|---|
 | 10 | Impact/fire manager |
-| 15 | Building-damage presentation manager |
+| 15 | Impact scorch manager |
 | 20 | Ruin aftermath manager |
 | 30 | Zone garrison manager |
 | 40 | Client-local radio panel/scene binding |
@@ -117,10 +121,12 @@ World mutation remains server-authoritative:
 
 - only the server rolls ignition and spread;
 - garrisons use vanilla server spawning;
-- building damage, fire, and ruin transitions use small reliable Mirage messages;
-- joining players receive two delayed snapshots after authentication;
-- particles, smoke evolution, wind, lights, scorch presentation, and collapse dust are
-  local presentation and never create per-frame network traffic.
+- fire and ruin transitions use small reliable Mirage messages;
+- joining players receive two delayed snapshots of active fires and ruins after
+  authentication;
+- particles, smoke evolution, wind, lights, impact scorch marks, ground scorch
+  presentation, and collapse dust are local presentation and never create per-frame
+  network traffic.
 
 The radio is client-local and sends no multiplayer data. It owns local file discovery,
 three embedded bounded PNG station identities, references to the current map's installed
@@ -130,9 +136,10 @@ extracted or packaged. A possible synchronized broadcast
 protocol is separately gated in [Radio plan](RADIO_PLAN.md); it would exchange only bounded
 station state after a compatibility handshake, never music content.
 
-`ModNet` is a Fire and Destruction-owned compatibility bridge containing the three existing
-channels. Its file, state, handlers, codecs, and snapshots live beside that feature while
-the compatibility-sensitive `BoscaliSummer.Runtime` message names remain unchanged. A
+`ModNet` is a Fire and Destruction-owned compatibility bridge containing the two existing
+channels (fire ignition and ruin creation). Its file, state, handlers, codecs, and
+snapshots live beside that feature while the compatibility-sensitive `BoscaliSummer.Runtime`
+message names remain unchanged. A
 later split may divide that bridge behind tested seams. The planned network framework adds
 a protocol handshake, scene epoch, bounded snapshot registry, and validated client-request
 path before support calls or progression are enabled in multiplayer.
@@ -153,9 +160,9 @@ The present safety model remains an architectural invariant:
 - 32 queued ground-vehicle losses, processing one spatial query per frame.
 - 24 active fire sites; nearby impacts merge under bounded rules.
 - One blast-map scorch request per frame and three dynamic fire lights globally.
-- Three normalized building-damage visual tiers using material property blocks, with a
-  64-transition queue processing two buildings per frame.
-- 48 pooled, camera-near vanilla facade/roof scorch projectors and 256 tracked damaged buildings.
+- Up to 64 pooled impact scorch decals, stamped where an explosive hit meets a building
+  wall, fed by a 32-deep queue drained two impacts per frame; the oldest mark is recycled
+  for the newest hit. No HP tracking, damage tiers, or per-building state.
 - 256 logical ruins, 24 nearest smoke visuals, and four collapse bursts.
 - Pooled particle-only collapse effects with no persistent debris physics.
 - Two bounded forest spread attempts per site under the global fire-site cap.

@@ -3,7 +3,7 @@ using BepInEx.Configuration;
 namespace BoscaliSummer.Features.FireAndDestruction.Configuration
 {
     /// <summary>
-    /// High-level fire, building damage, and aftermath settings. Detailed effect values
+    /// High-level fire, impact scorch, and aftermath settings. Detailed effect values
     /// remain derived and hard budgets remain bounded so old configs cannot disable the
     /// performance model.
     /// </summary>
@@ -12,7 +12,7 @@ namespace BoscaliSummer.Features.FireAndDestruction.Configuration
         public readonly ConfigEntry<bool> FiresEnabled;
         public readonly ConfigEntry<float> FireIntensity;
         public readonly ConfigEntry<bool> DemolishUnoccupiedBuildings;
-        public readonly ConfigEntry<bool> BuildingDamageEnabled;
+        public readonly ConfigEntry<bool> ImpactScorchEnabled;
 
         public float BulletIgnitionChance => 0.0025f * (0.65f + 0.35f * FireIntensity.Value);
         public float ExplosiveIgnitionChance => 0.06f * (0.65f + 0.35f * FireIntensity.Value);
@@ -32,9 +32,11 @@ namespace BoscaliSummer.Features.FireAndDestruction.Configuration
         public int MaximumRuinSmokeVisuals => 24;
         public int MaximumCollapseBursts => 4;
         public float HotRuinSeconds => 120f;
-        // Retained for the temporary central configuration facade. New building damage
-        // uses normalized stages in BuildingDamagePolicy.
-        public float BuildingDamagedHitPoints => 58f;
+        // Impact scorch marks are a local cosmetic. The pool ceiling and the salvo-safe
+        // drain rate are fixed derived budgets, never user config.
+        public int MaximumImpactScorches => 64;
+        public int ImpactScorchQueue => 32;
+        public int ImpactScorchesPerFrame => 2;
 
         public FireAndDestructionSettings(ConfigFile config)
         {
@@ -46,8 +48,8 @@ namespace BoscaliSummer.Features.FireAndDestruction.Configuration
                     new AcceptableValueRange<float>(0.5f, 1.5f)));
             DemolishUnoccupiedBuildings = config.Bind("Fires", "DemolishUnoccupiedBuildings", true,
                 "Demolish a civilian building after its fire burns out unless it has a faction owner.");
-            BuildingDamageEnabled = config.Bind("Buildings", "DamagedStateEnabled", true,
-                "Show a battered intermediate state before a lightweight building is ruined.");
+            ImpactScorchEnabled = config.Bind("Buildings", "ImpactScorchEnabled", true,
+                "Stamp a local scorch mark on a building wall where an explosive hit lands.");
         }
     }
 }
