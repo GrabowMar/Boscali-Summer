@@ -40,7 +40,7 @@ namespace BoscaliSummer.Fire
 
         internal void Enqueue(MapBuilding building, float severity)
         {
-            if (building == null) return;
+            if (building == null || GameManager.IsHeadless) return;
             severity = BuildingDamageVisual.QuantizeSeverity(severity);
             int id = building.GetInstanceID();
             if (pendingTransitions.TryGetValue(id, out PendingTransition pending))
@@ -48,7 +48,11 @@ namespace BoscaliSummer.Fire
                 if (severity > pending.Severity) pending.Severity = severity;
                 return;
             }
-            if (pendingTransitions.Count >= MaximumPendingTransitions) return;
+            if (pendingTransitions.Count >= MaximumPendingTransitions)
+            {
+                int oldest = transitionOrder.Dequeue();
+                pendingTransitions.Remove(oldest);
+            }
             pendingTransitions.Add(id, new PendingTransition { Building = building, Severity = severity });
             transitionOrder.Enqueue(id);
         }
@@ -118,7 +122,11 @@ namespace BoscaliSummer.Fire
             {
                 BuildingDamageVisual visual = trackedVisuals[i];
                 if (visual == null) trackedVisuals.RemoveAt(i);
-                else visual.DecalSelection = false;
+                else
+                {
+                    visual.DecalSelection = false;
+                    visual.SelectedDamageDecals = 0;
+                }
             }
             if (camera == null) return;
 
@@ -139,13 +147,17 @@ namespace BoscaliSummer.Fire
                 if (nearest == null) break;
                 nearest.DecalSelection = true;
                 int desired = Mathf.Min(nearest.DesiredDamageDecals, remaining);
-                nearest.SetDamageDecalCount(desired, this);
+                nearest.SelectedDamageDecals = desired;
                 remaining -= desired;
             }
 
             for (int i = 0; i < trackedVisuals.Count; i++)
                 if (!trackedVisuals[i].DecalSelection)
                     trackedVisuals[i].SetDamageDecalCount(0, this);
+            for (int i = 0; i < trackedVisuals.Count; i++)
+                if (trackedVisuals[i].DecalSelection)
+                    trackedVisuals[i].SetDamageDecalCount(
+                        trackedVisuals[i].SelectedDamageDecals, this);
         }
 
         private void Clear()

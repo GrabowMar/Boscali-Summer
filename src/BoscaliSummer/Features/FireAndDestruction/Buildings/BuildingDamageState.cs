@@ -30,12 +30,15 @@ namespace BoscaliSummer.Fire
         private static void Postfix(MapBuilding __instance, DamageState __state)
         {
             float hp = __instance != null ? GameAccess.GetMapBuildingHitPoints(__instance) : 0f;
-            if (__state.HitPoints > 0f && hp <= 0f && IsServer())
+            if (__state.HitPoints > 0f && hp <= 0f)
             {
                 ModNet.ForgetBuildingDamage(__instance.transform.GlobalPosition());
-                RuinGeometry ruin = CaptureRuinGeometry(__instance);
-                RuinAftermathManager.Instance?.RegisterRuin(
-                    ruin.RuinPosition, ruin.HalfExtents, 0f, true, true);
+                if (IsServer())
+                {
+                    RuinGeometry ruin = CaptureRuinGeometry(__instance);
+                    RuinAftermathManager.Instance?.RegisterRuin(
+                        ruin.RuinPosition, ruin.HalfExtents, 0f, true, true);
+                }
             }
             if (!Plugin.Settings.BuildingDamageEnabled.Value || __instance == null) return;
             if (hp > 0f)
@@ -177,6 +180,7 @@ namespace BoscaliSummer.Fire
             BuildingDamagePolicy.Severity(BuildingDamagePolicy.FromSeverity(severity));
 
         internal bool DecalSelection { get; set; }
+        internal int SelectedDamageDecals { get; set; }
         internal int DesiredDamageDecals => appliedSeverity >= 0.72f ? 2 : appliedSeverity > 0f ? 1 : 0;
         internal Vector3 WorldCenter => hasCachedBounds ? cachedBounds.center : transform.position;
 
