@@ -6,7 +6,7 @@ runtime design remains in [Architecture](ARCHITECTURE.md).
 
 | Change concerns | Primary folder | Matching tests | Normal dependencies |
 |---|---|---|---|
-| Fire, damage, ruins, smoke, scorch, fire replication | `src/BoscaliSummer/Features/FireAndDestruction` | `tests/BoscaliSummer.Tests/Features/FireAndDestruction` | Framework, shared game interop |
+| Fire, impact scorch, ruins, smoke, ground scorch, fire replication | `src/BoscaliSummer/Features/FireAndDestruction` | `tests/BoscaliSummer.Tests/Features/FireAndDestruction` | Framework, shared game interop |
 | Occupied shells, defensive proxies, capture cleanup | `src/BoscaliSummer/Features/UrbanCombat` | `tests/BoscaliSummer.Tests/Features/UrbanCombat` | Framework, shared game interop |
 | Local music, stations, playback, MFD radio UI | `src/BoscaliSummer/Features/Radio` | `tests/BoscaliSummer.Tests/Features/Radio` | Framework lifecycle, shared game interop |
 | Feature graph, host, lifecycle, service contracts | `src/BoscaliSummer/Framework` | `tests/BoscaliSummer.Tests/Framework` | No concrete feature |

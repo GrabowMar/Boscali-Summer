@@ -42,7 +42,7 @@ namespace BoscaliSummer
         public ConfigEntry<bool> FiresEnabled => FireAndDestruction.FiresEnabled;
         public ConfigEntry<float> FireIntensity => FireAndDestruction.FireIntensity;
         public ConfigEntry<bool> DemolishUnoccupiedBuildings => FireAndDestruction.DemolishUnoccupiedBuildings;
-        public ConfigEntry<bool> BuildingDamageEnabled => FireAndDestruction.BuildingDamageEnabled;
+        public ConfigEntry<bool> ImpactScorchEnabled => FireAndDestruction.ImpactScorchEnabled;
         public float BulletIgnitionChance => FireAndDestruction.BulletIgnitionChance;
         public float ExplosiveIgnitionChance => FireAndDestruction.ExplosiveIgnitionChance;
         public float VehicleExplosionIgnitionChance => FireAndDestruction.VehicleExplosionIgnitionChance;
@@ -61,7 +61,6 @@ namespace BoscaliSummer
         public int MaximumRuinSmokeVisuals => FireAndDestruction.MaximumRuinSmokeVisuals;
         public int MaximumCollapseBursts => FireAndDestruction.MaximumCollapseBursts;
         public float HotRuinSeconds => FireAndDestruction.HotRuinSeconds;
-        public float BuildingDamagedHitPoints => FireAndDestruction.BuildingDamagedHitPoints;
         public ConfigEntry<bool> GarrisonsEnabled => UrbanCombat.GarrisonsEnabled;
         public ConfigEntry<int> GarrisonsPerZone => UrbanCombat.GarrisonsPerZone;
         public int GarrisonsMinimum => UrbanCombat.GarrisonsMinimum;

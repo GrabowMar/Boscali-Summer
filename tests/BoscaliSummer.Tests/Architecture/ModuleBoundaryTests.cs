@@ -11,7 +11,7 @@ namespace BoscaliSummer.Tests.Architecture
             @"BoscaliSummer\.Features\.(?<feature>[A-Za-z0-9_]+)",
             RegexOptions.CultureInvariant);
         private static readonly Regex FireWireImplementation = new Regex(
-            @"\b(ModNet|FireIgnitedMessage|BuildingDamagedMessage|RuinCreatedMessage)\b",
+            @"\b(ModNet|FireIgnitedMessage|RuinCreatedMessage)\b",
             RegexOptions.CultureInvariant);
 
         public static void Run()

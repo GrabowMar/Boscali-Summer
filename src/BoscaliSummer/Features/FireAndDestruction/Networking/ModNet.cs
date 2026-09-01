@@ -1,6 +1,5 @@
 using System;
 using System.Collections;
-using System.Collections.Generic;
 using System.Reflection;
 using BoscaliSummer.Fire;
 using BoscaliSummer.Framework.Lifecycle;
@@ -23,15 +22,6 @@ namespace BoscaliSummer.Runtime
     }
 
     [NetworkMessage]
-    internal struct BuildingDamagedMessage
-    {
-        public float X;
-        public float Y;
-        public float Z;
-        public float Severity;
-    }
-
-    [NetworkMessage]
     internal struct RuinCreatedMessage
     {
         public float X;
@@ -50,30 +40,12 @@ namespace BoscaliSummer.Runtime
     /// </summary>
     internal sealed class ModNet : MonoBehaviour, ISceneService
     {
-        private sealed class PendingBuilding
-        {
-            public GlobalPosition Position;
-            public float Severity;
-            public float Expires;
-        }
-
-        private sealed class DamagedBuilding
-        {
-            public GlobalPosition Position;
-            public float Severity;
-        }
-
         public static ModNet Instance { get; private set; }
 
-        private const int MaximumDamagedBuildings = 256;
-        private const int MaximumPendingBuildings = 64;
         private static bool serializersInstalled;
-        private static readonly List<DamagedBuilding> damagedBuildings = new List<DamagedBuilding>();
-        private readonly List<PendingBuilding> pendingBuildings = new List<PendingBuilding>();
         private MessageHandler registeredClientHandler;
         private NetworkServer subscribedServer;
         private float nextRegistrationCheck;
-        private float nextDamageRetry;
 
         private void Awake()
         {
@@ -87,7 +59,6 @@ namespace BoscaliSummer.Runtime
             if (registeredClientHandler != null)
             {
                 registeredClientHandler.UnregisterHandler<FireIgnitedMessage>();
-                registeredClientHandler.UnregisterHandler<BuildingDamagedMessage>();
                 registeredClientHandler.UnregisterHandler<RuinCreatedMessage>();
             }
             if (Instance == this) Instance = null;
@@ -95,8 +66,6 @@ namespace BoscaliSummer.Runtime
 
         public void ResetForScene()
         {
-            damagedBuildings.Clear();
-            pendingBuildings.Clear();
         }
 
         private void Update()
@@ -105,11 +74,6 @@ namespace BoscaliSummer.Runtime
             {
                 nextRegistrationCheck = Time.unscaledTime + 0.5f;
                 RegisterLiveEndpoints();
-            }
-            if (Time.unscaledTime >= nextDamageRetry)
-            {
-                nextDamageRetry = Time.unscaledTime + 1f;
-                RetryPendingBuildings();
             }
         }
 
@@ -130,31 +94,6 @@ namespace BoscaliSummer.Runtime
             player.Send(ToFireMessage(position, remainingLifetime, forest, clusterScale));
         }
 
-        internal static void BroadcastBuildingDamage(GlobalPosition position, float severity = 0.62f)
-        {
-            if (!IsServer()) return;
-            severity = BuildingDamageVisual.QuantizeSeverity(severity);
-            for (int i = 0; i < damagedBuildings.Count; i++)
-            {
-                DamagedBuilding existing = damagedBuildings[i];
-                if ((existing.Position - position).sqrMagnitude >= 4f) continue;
-                if (severity <= existing.Severity + 0.08f) return;
-                existing.Severity = severity;
-                NetworkManagerNuclearOption.i.Server.SendToAll(
-                    ToBuildingMessage(position, severity),
-                    authenticatedOnly: true,
-                    excludeLocalPlayer: true);
-                return;
-            }
-            if (damagedBuildings.Count >= MaximumDamagedBuildings)
-                damagedBuildings.RemoveAt(0);
-            damagedBuildings.Add(new DamagedBuilding { Position = position, Severity = severity });
-            NetworkManagerNuclearOption.i.Server.SendToAll(
-                ToBuildingMessage(position, severity),
-                authenticatedOnly: true,
-                excludeLocalPlayer: true);
-        }
-
         internal static void BroadcastRuin(GlobalPosition position, Vector2 halfExtents)
         {
             if (!IsServer()) return;
@@ -162,18 +101,6 @@ namespace BoscaliSummer.Runtime
                 ToRuinMessage(position, halfExtents, 0f),
                 authenticatedOnly: true,
                 excludeLocalPlayer: true);
-        }
-
-        internal static void ForgetBuildingDamage(GlobalPosition position)
-        {
-            for (int i = damagedBuildings.Count - 1; i >= 0; i--)
-                if ((damagedBuildings[i].Position - position).sqrMagnitude < 4f)
-                    damagedBuildings.RemoveAt(i);
-            ModNet instance = Instance;
-            if (instance == null) return;
-            for (int i = instance.pendingBuildings.Count - 1; i >= 0; i--)
-                if ((instance.pendingBuildings[i].Position - position).sqrMagnitude < 4f)
-                    instance.pendingBuildings.RemoveAt(i);
         }
 
         internal static void SendRuin(
@@ -201,7 +128,6 @@ namespace BoscaliSummer.Runtime
             if (handler != null && handler != registeredClientHandler)
             {
                 handler.RegisterHandler<FireIgnitedMessage>(ReceiveFire, false);
-                handler.RegisterHandler<BuildingDamagedMessage>(ReceiveBuildingDamage, false);
                 handler.RegisterHandler<RuinCreatedMessage>(ReceiveRuin, false);
                 registeredClientHandler = handler;
                 Plugin.Logger.LogInfo("Registered Boscali Summer multiplayer event handlers.");
@@ -228,9 +154,6 @@ namespace BoscaliSummer.Runtime
             if (!IsServer() || player == null || !player.IsAuthenticated) return;
             ImpactFireManager.Instance?.SendSnapshot(player);
             RuinAftermathManager.Instance?.SendSnapshot(player);
-            for (int i = 0; i < damagedBuildings.Count; i++)
-                player.Send(ToBuildingMessage(
-                    damagedBuildings[i].Position, damagedBuildings[i].Severity));
         }
 
         private void ReceiveFire(INetworkPlayer player, FireIgnitedMessage message)
@@ -238,29 +161,6 @@ namespace BoscaliSummer.Runtime
             ImpactFireManager.Instance?.ReceiveIgnition(
                 new GlobalPosition(message.X, message.Y, message.Z),
                 message.RemainingLifetime, message.Forest, message.ClusterScale);
-        }
-
-        private void ReceiveBuildingDamage(INetworkPlayer player, BuildingDamagedMessage message)
-        {
-            var position = new GlobalPosition(message.X, message.Y, message.Z);
-            float severity = Mathf.Clamp01(message.Severity);
-            if (BuildingDamageVisual.ApplyNearest(position, severity)) return;
-            for (int i = 0; i < pendingBuildings.Count; i++)
-            {
-                PendingBuilding existing = pendingBuildings[i];
-                if ((existing.Position - position).sqrMagnitude >= 4f) continue;
-                if (severity > existing.Severity) existing.Severity = severity;
-                existing.Expires = Time.unscaledTime + 20f;
-                return;
-            }
-            if (pendingBuildings.Count >= MaximumPendingBuildings)
-                pendingBuildings.RemoveAt(0);
-            pendingBuildings.Add(new PendingBuilding
-            {
-                Position = position,
-                Severity = severity,
-                Expires = Time.unscaledTime + 20f
-            });
         }
 
         private void ReceiveRuin(INetworkPlayer player, RuinCreatedMessage message)
@@ -273,29 +173,15 @@ namespace BoscaliSummer.Runtime
                 message.AgeSeconds < 2f);
         }
 
-        private void RetryPendingBuildings()
-        {
-            for (int i = pendingBuildings.Count - 1; i >= 0; i--)
-            {
-                PendingBuilding item = pendingBuildings[i];
-                if (Time.unscaledTime >= item.Expires ||
-                    BuildingDamageVisual.ApplyNearest(item.Position, item.Severity))
-                    pendingBuildings.RemoveAt(i);
-            }
-        }
-
         private static void InstallSerializers()
         {
             if (serializersInstalled) return;
             serializersInstalled = true;
             SetWriter<FireIgnitedMessage>(WriteFire);
             SetReader<FireIgnitedMessage>(ReadFire);
-            SetWriter<BuildingDamagedMessage>(WriteBuilding);
-            SetReader<BuildingDamagedMessage>(ReadBuilding);
             SetWriter<RuinCreatedMessage>(WriteRuin);
             SetReader<RuinCreatedMessage>(ReadRuin);
             MessagePacker.RegisterMessage<FireIgnitedMessage>();
-            MessagePacker.RegisterMessage<BuildingDamagedMessage>();
             MessagePacker.RegisterMessage<RuinCreatedMessage>();
         }
 
@@ -326,18 +212,6 @@ namespace BoscaliSummer.Runtime
             Forest = reader.ReadBooleanExtension()
         };
 
-        private static void WriteBuilding(NetworkWriter writer, BuildingDamagedMessage message)
-        {
-            writer.WriteSingle(message.X); writer.WriteSingle(message.Y); writer.WriteSingle(message.Z);
-            writer.WriteSingle(message.Severity);
-        }
-
-        private static BuildingDamagedMessage ReadBuilding(NetworkReader reader) => new BuildingDamagedMessage
-        {
-            X = reader.ReadSingle(), Y = reader.ReadSingle(), Z = reader.ReadSingle(),
-            Severity = reader.ReadSingle()
-        };
-
         private static void WriteRuin(NetworkWriter writer, RuinCreatedMessage message)
         {
             writer.WriteSingle(message.X); writer.WriteSingle(message.Y); writer.WriteSingle(message.Z);
@@ -357,12 +231,6 @@ namespace BoscaliSummer.Runtime
         {
             X = position.x, Y = position.y, Z = position.z, RemainingLifetime = lifetime,
             Forest = forest, ClusterScale = clusterScale
-        };
-
-        private static BuildingDamagedMessage ToBuildingMessage(
-            GlobalPosition position, float severity) => new BuildingDamagedMessage
-        {
-            X = position.x, Y = position.y, Z = position.z, Severity = severity
         };
 
         private static RuinCreatedMessage ToRuinMessage(

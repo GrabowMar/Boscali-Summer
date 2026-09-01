@@ -17,10 +17,26 @@ namespace BoscaliSummer.Features.Radio.Presentation
     internal static class RadioPanel
     {
         private const float Width = 430f;
-        private const float Height = 556f;
-        private const float Pad = 12f;
-        private const float Gap = 4f;
+
+        // A four-pixel spacing rhythm. Every gap and inset on the panel is one of these,
+        // and the panel's height is the sum of its sections rather than a hand-fitted
+        // literal that drifts the moment a row moves.
+        private const float Space1 = 4f;
+        private const float Space2 = 8f;
+        private const float Space3 = 12f;
+        private const float Space4 = 16f;
+        private const float Space5 = 20f;
+        private const float Space6 = 24f;
+
+        private const float Pad = Space3;
+        private const float Gap = Space1;
         private const float RowHeight = 30f;
+        private const float ControlHeight = 34f;
+        private const float CardHeight = 94f;
+        private const float StatusHeight = 78f;
+        private const float ArtSize = 60f;
+        private const float ChannelPitch = RowHeight + 2f;
+
         private const float FontMicro = 10f;
         private const float FontSmall = 11f;
         private const float FontLead = 14f;
@@ -55,6 +71,7 @@ namespace BoscaliSummer.Features.Radio.Presentation
         private static Button pagePreviousButton;
         private static Button pageNextButton;
         private static TMP_Text statusLabel;
+        private static TMP_Text channelsEmptyLabel;
         private static Image progressFill;
         private static TMP_Text playButtonLabel;
         private static Button shuffleButton;
@@ -111,6 +128,7 @@ namespace BoscaliSummer.Features.Radio.Presentation
             pagePreviousButton = null;
             pageNextButton = null;
             statusLabel = null;
+            channelsEmptyLabel = null;
             progressFill = null;
             playButtonLabel = null;
             shuffleButton = null;
@@ -224,7 +242,7 @@ namespace BoscaliSummer.Features.Radio.Presentation
             rootRect.pivot = templateRect.pivot;
             rootRect.localScale = templateRect.localScale;
             rootRect.anchoredPosition = templateRect.anchoredPosition;
-            rootRect.sizeDelta = new Vector2(Width, Height);
+            // sizeDelta is set once the running cursor has measured the content, below.
 
             Image background = root.GetComponent<Image>();
             background.color = Unity(RadioUiPalette.PanelGround);
@@ -236,29 +254,45 @@ namespace BoscaliSummer.Features.Radio.Presentation
             Stretch(content);
 
             Color accent = Accent();
-            Outline(content, new Rect(0f, 0f, Width, Height), Unity(RadioUiPalette.PanelEdge));
-            Label(content, "MUSIC PLAYER", new Rect(Pad, -10f, Width - Pad * 2f, 24f),
-                accent, FontTitle, FontStyles.Normal, TextAlignmentOptions.Center);
-            Rule(content, new Rect(Pad, -40f, Width - Pad * 2f, 1f), Frame());
+            float inner = Width - Pad * 2f;
 
-            FramedPanel(content, new Rect(Pad, -50f, Width - Pad * 2f, 94f), Frame());
-            stationIconGround = FramedPanel(content, new Rect(Pad + 8f, -60f, 60f, 60f),
-                Frame());
-            stationIcon = Panel(stationIconGround.rectTransform, new Rect(5f, -5f, 50f, 50f), Color.white);
+            // A running cursor down the page, on the spacing rhythm, so the panel's height
+            // is the total of what it draws. The layout used two dozen hand-tuned Y
+            // literals and a Height constant that had to be kept in step with them by hand.
+            float y = -Pad;
+
+            Label(content, "MUSIC PLAYER", new Rect(Pad, y, inner, Space6),
+                accent, FontTitle, FontStyles.Normal, TextAlignmentOptions.Center);
+            y -= Space6 + Space2;
+            Rule(content, new Rect(Pad, y, inner, 1f), Frame());
+            y -= Space2;
+
+            // Now-playing card: station art on the left, the signal line, the track title,
+            // and a progress bar. Its internals stay positioned against the card top.
+            float cardTop = y;
+            FramedPanel(content, new Rect(Pad, cardTop, inner, CardHeight), Frame());
+            stationIconGround = FramedPanel(content,
+                new Rect(Pad + Space2, cardTop - Space2, ArtSize, ArtSize), Frame());
+            stationIcon = Panel(stationIconGround.rectTransform,
+                new Rect(Space1 + 1f, -(Space1 + 1f), ArtSize - Space2 - 2f, ArtSize - Space2 - 2f),
+                Color.white);
             stationIcon.preserveAspect = true;
             stationIcon.enabled = false;
-            stationBadge = Label(stationIconGround.rectTransform, "--", new Rect(0f, 0f, 60f, 60f),
+            stationBadge = Label(stationIconGround.rectTransform, "--",
+                new Rect(0f, 0f, ArtSize, ArtSize),
                 Color.white, FontLead, FontStyles.Bold, TextAlignmentOptions.Center);
 
-            channelLabel = Label(content, "LOCAL SIGNAL // CLIENT",
-                new Rect(Pad + 80f, -58f, Width - Pad * 2f - 88f, 18f),
+            float infoX = Pad + Space2 + ArtSize + Space3;
+            float infoW = Width - Pad - infoX;
+            channelLabel = Label(content, "",
+                new Rect(infoX, cardTop - Space2, infoW, Space4),
                 Friendly(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
             trackLabel = Label(content, "NO LOCAL TRACKS",
-                new Rect(Pad + 80f, -80f, Width - Pad * 2f - 88f, 34f),
+                new Rect(infoX, cardTop - Space5 - Space2, infoW, Space6 + Space2),
                 Color.white, FontLead, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
 
-            Image progressGround = Panel(content, new Rect(Pad + 80f, -120f,
-                Width - Pad * 2f - 88f, 4f),
+            Image progressGround = Panel(content,
+                new Rect(infoX, cardTop - CardHeight + Space6, infoW, 4f),
                 new Color(0f, 0f, 0f, 0.72f));
             var fillObject = new GameObject("Progress", typeof(RectTransform), typeof(Image));
             RectTransform fillRect = fillObject.GetComponent<RectTransform>();
@@ -271,49 +305,73 @@ namespace BoscaliSummer.Features.Radio.Presentation
             progressFill.fillOrigin = 0;
             progressFill.fillAmount = 0f;
             timeLabel = Label(content, "00:00 / 00:00",
-                new Rect(Pad + 80f, -126f, Width - Pad * 2f - 88f, 14f),
+                new Rect(infoX, cardTop - CardHeight + Space4, infoW, Space4),
                 Dim(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Right);
 
-            float controlsY = -156f;
-            MakeButton(content, "PREV", new Rect(Pad, controlsY, 82f, 34f),
-                RadioButtonStyle.Default, () => manager?.Previous());
-            MakeButton(content, "PLAY", new Rect(Pad + 86f, controlsY, 114f, 34f),
-                RadioButtonStyle.Primary, () => manager?.TogglePlayback(), out playButtonLabel);
-            MakeButton(content, "NEXT", new Rect(Pad + 204f, controlsY, 82f, 34f),
-                RadioButtonStyle.Default, () => manager?.Next());
-            MakeButton(content, "STOP", new Rect(Pad + 290f, controlsY, 116f, 34f),
-                RadioButtonStyle.Default, () => manager?.Stop());
+            y = cardTop - CardHeight - Space3;
 
-            float modesY = -194f;
-            float modeWidth = (Width - Pad * 2f - Gap * 3f) / 4f;
-            shuffleButton = MakeButton(content, "SHUFFLE", new Rect(Pad, modesY, modeWidth, RowHeight),
+            // Transport: PREV and NEXT are the same size on either side of a wider PLAY;
+            // STOP is no longer drawn as loud as PLAY.
+            const float skip = 90f;
+            const float play = 124f;
+            float stop = inner - skip * 2f - play - Gap * 3f;
+            MakeButton(content, "PREV", new Rect(Pad, y, skip, ControlHeight),
+                RadioButtonStyle.Default, () => manager?.Previous());
+            MakeButton(content, "PLAY", new Rect(Pad + skip + Gap, y, play, ControlHeight),
+                RadioButtonStyle.Primary, () => manager?.TogglePlayback(), out playButtonLabel);
+            MakeButton(content, "NEXT",
+                new Rect(Pad + skip + play + Gap * 2f, y, skip, ControlHeight),
+                RadioButtonStyle.Default, () => manager?.Next());
+            MakeButton(content, "STOP",
+                new Rect(Pad + skip * 2f + play + Gap * 3f, y, stop, ControlHeight),
+                RadioButtonStyle.Default, () => manager?.Stop());
+            y -= ControlHeight + Gap;
+
+            float modeWidth = (inner - Gap * 3f) / 4f;
+            shuffleButton = MakeButton(content, "SHUFFLE", new Rect(Pad, y, modeWidth, RowHeight),
                 RadioButtonStyle.Toggle, () => manager?.ToggleShuffle(), out shuffleButtonLabel);
             repeatButton = MakeButton(content, "REPEAT",
-                new Rect(Pad + modeWidth + Gap, modesY, modeWidth, RowHeight),
+                new Rect(Pad + modeWidth + Gap, y, modeWidth, RowHeight),
                 RadioButtonStyle.Toggle, () => manager?.ToggleRepeat(), out repeatButtonLabel);
             MakeButton(content, "FOLDER",
-                new Rect(Pad + (modeWidth + Gap) * 2f, modesY, modeWidth, RowHeight),
+                new Rect(Pad + (modeWidth + Gap) * 2f, y, modeWidth, RowHeight),
                 RadioButtonStyle.Quiet, () => manager?.OpenLibraryFolder());
             MakeButton(content, "RESCAN",
-                new Rect(Pad + (modeWidth + Gap) * 3f, modesY, modeWidth, RowHeight),
+                new Rect(Pad + (modeWidth + Gap) * 3f, y, modeWidth, RowHeight),
                 RadioButtonStyle.Quiet, () => manager?.Rescan());
+            y -= RowHeight + Space4;
 
-            Heading(content, "CHANNELS", -238f);
+            y = Heading(content, "CHANNELS", y);
+
+            float channelsBlock = ChannelPitch * RowsPerPage;
+            channelsEmptyLabel = Label(content, "",
+                new Rect(Pad + Space4, y, inner - Space4 * 2f, channelsBlock),
+                Dim(), FontMicro, FontStyles.Italic, TextAlignmentOptions.Center);
+            channelsEmptyLabel.enableWordWrapping = true;
+            channelsEmptyLabel.gameObject.SetActive(false);
 
             for (int i = 0; i < RowsPerPage; i++)
-                rows[i] = MakeChannelRow(content, i, -262f - i * 32f);
+                rows[i] = MakeChannelRow(content, i, y - i * ChannelPitch);
+            y -= channelsBlock + Space2;
 
             Button[] pageButtons = Stepper(
-                content, -432f, "CHANNEL PAGE", out pageLabel, PreviousPage, NextPage);
+                content, y, "CHANNEL PAGE", out pageLabel, PreviousPage, NextPage);
             pagePreviousButton = pageButtons[0];
             pageNextButton = pageButtons[1];
+            y -= RowHeight + Gap;
 
-            FramedPanel(content, new Rect(Pad, -466f, Width - Pad * 2f, 78f), Frame());
+            FramedPanel(content, new Rect(Pad, y, inner, StatusHeight), Frame());
             statusLabel = Label(content, "Stand by",
-                new Rect(Pad + 8f, -466f, Width - Pad * 2f - 16f, 78f),
+                new Rect(Pad + Space2, y, inner - Space4, StatusHeight),
                 Dim(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Center);
             statusLabel.enableWordWrapping = true;
             statusLabel.overflowMode = TextOverflowModes.Truncate;
+            y -= StatusHeight;
+
+            float panelHeight = -y + Pad;
+            rootRect.sizeDelta = new Vector2(Width, panelHeight);
+            Outline(content, new Rect(0f, 0f, Width, panelHeight),
+                Unity(RadioUiPalette.PanelEdge));
 
             var result = root.AddComponent<MFDScreen>();
             result.shortName = "RAD";
@@ -383,7 +441,7 @@ namespace BoscaliSummer.Features.Radio.Presentation
             int pages = Math.Max(1, (manager.ChannelCount + RowsPerPage - 1) / RowsPerPage);
             page = Mathf.Clamp(page, 0, pages - 1);
 
-            channelLabel.text = manager.CurrentChannelCode + " // " + manager.CurrentChannelName + " // LOCAL SIGNAL";
+            channelLabel.text = manager.CurrentChannelCode + "  ·  " + manager.CurrentChannelName;
             Color currentColor = manager.GetChannelColor(manager.SelectedChannel);
             stationIconGround.color = new Color(
                 currentColor.r * 0.22f, currentColor.g * 0.22f, currentColor.b * 0.22f, 0.96f);
@@ -404,6 +462,18 @@ namespace BoscaliSummer.Features.Radio.Presentation
             pageLabel.text = (page + 1) + " / " + pages;
             pagePreviousButton.interactable = page > 0;
             pageNextButton.interactable = page + 1 < pages;
+
+            // An empty channel list reads as a table still loading; say what to do instead.
+            bool noChannels = manager.ChannelCount == 0;
+            if (channelsEmptyLabel != null)
+            {
+                if (channelsEmptyLabel.gameObject.activeSelf != noChannels)
+                    channelsEmptyLabel.gameObject.SetActive(noChannels);
+                if (noChannels)
+                    channelsEmptyLabel.text =
+                        "No music folders found. Press FOLDER to open the library, add " +
+                        "subfolders of audio, then press RESCAN.";
+            }
 
             for (int row = 0; row < rows.Length; row++)
             {
@@ -508,13 +578,18 @@ namespace BoscaliSummer.Features.Radio.Presentation
             if (button != null) button.colors = ButtonColors(style, selected);
         }
 
-        private static void Heading(RectTransform parent, string text, float y)
+        private static float Heading(RectTransform parent, string text, float y)
         {
-            const float labelWidth = 78f;
-            Label(parent, text, new Rect(Pad, y, labelWidth, 16f),
+            // The rule starts after the text's measured width, not a fixed 78px that only
+            // happened to fit "CHANNELS". Returns the cursor advanced past the heading.
+            TMP_Text label = Label(parent, text, new Rect(Pad, y, Width - Pad * 2f, Space4),
                 Friendly(), FontMicro, FontStyles.Bold, TextAlignmentOptions.Left);
-            Rule(parent, new Rect(Pad + labelWidth + 8f, y - 8f,
-                Width - Pad * 2f - labelWidth - 8f, 1f), Frame());
+            float labelWidth = Mathf.Ceil(label.GetPreferredValues(text).x);
+
+            float ruleX = Pad + labelWidth + Space2;
+            Rule(parent, new Rect(ruleX, y - Space2,
+                Mathf.Max(0f, Width - Pad - ruleX), 1f), Frame());
+            return y - Space6;
         }
 
         private static Button[] Stepper(

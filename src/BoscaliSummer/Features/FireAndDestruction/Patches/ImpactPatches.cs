@@ -43,8 +43,13 @@ namespace BoscaliSummer.Fire
             Vector3 world = relativeUnit != null
                 ? relativeUnit.transform.TransformPoint(pos)
                 : pos + Datum.origin.position;
+            GlobalPosition worldPosition = world.ToGlobalPosition();
             ImpactFireManager.Instance?.SubmitImpact(
-                world.ToGlobalPosition(), true, Mathf.RoundToInt(___blastYield));
+                worldPosition, true, Mathf.RoundToInt(___blastYield));
+            // Local cosmetic only, so it does not go through SubmitImpact: that early-returns
+            // on !IsServer() and on FiresEnabled, whereas this patch runs on every client and
+            // a scorch decal needs no authority.
+            ImpactScorchManager.Instance?.SubmitExplosion(worldPosition, ___blastYield);
         }
     }
 

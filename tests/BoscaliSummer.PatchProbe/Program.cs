@@ -101,7 +101,7 @@ string[] patchTypes =
     "BoscaliSummer.Fire.BulletImpactPatch",
     "BoscaliSummer.Fire.GroundVehicleDestructionPatch",
     "BoscaliSummer.Fire.MissileImpactPatch",
-    "BoscaliSummer.Fire.MapBuildingDamagePatch",
+    "BoscaliSummer.Fire.MapBuildingRuinPatch",
     "BoscaliSummer.Garrisons.AirbaseCapturePatch",
     "BoscaliSummer.Garrisons.GarrisonClientVisualPatch",
     "BoscaliSummer.Features.Radio.Patches.VanillaPlayMusicPatch",
@@ -143,10 +143,6 @@ foreach (string resource in radioResources)
     ("BoscaliSummer.Runtime.FireIgnitedMessage", "RemainingLifetime", typeof(float)),
     ("BoscaliSummer.Runtime.FireIgnitedMessage", "ClusterScale", typeof(float)),
     ("BoscaliSummer.Runtime.FireIgnitedMessage", "Forest", typeof(bool)),
-    ("BoscaliSummer.Runtime.BuildingDamagedMessage", "X", typeof(float)),
-    ("BoscaliSummer.Runtime.BuildingDamagedMessage", "Y", typeof(float)),
-    ("BoscaliSummer.Runtime.BuildingDamagedMessage", "Z", typeof(float)),
-    ("BoscaliSummer.Runtime.BuildingDamagedMessage", "Severity", typeof(float)),
     ("BoscaliSummer.Runtime.RuinCreatedMessage", "X", typeof(float)),
     ("BoscaliSummer.Runtime.RuinCreatedMessage", "Y", typeof(float)),
     ("BoscaliSummer.Runtime.RuinCreatedMessage", "Z", typeof(float)),
@@ -174,7 +170,7 @@ Type messageHandler = mirageAssembly.GetType("Mirage.MessageHandler", true)!;
 if (!messageHandler.GetMethods(AllMembers).Any(method => method.Name == "RegisterHandler"))
     throw new MissingMethodException("Mirage.MessageHandler", "RegisterHandler");
 
-Console.WriteLine("Patch target probe: 13 game methods, 12 game fields, 1 game property, 9 patch classes, 3 features, 4 embedded radio assets, 3 wire contracts, and Mirage radio-sync seams resolved.");
+Console.WriteLine("Patch target probe: 13 game methods, 12 game fields, 1 game property, 9 patch classes, 3 features, 4 embedded radio assets, 2 wire contracts, and Mirage radio-sync seams resolved.");
 return 0;
 
 static bool MetadataHasMethod(string assemblyPath, string typeName, string methodName)
