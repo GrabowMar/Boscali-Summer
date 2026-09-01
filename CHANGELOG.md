@@ -1,5 +1,71 @@
 # Changelog
 
+## Unreleased
+
+- Replaced the never-working building-damage visual (HP-fraction tiers, facade tint, and
+  48-projector camera-near pool) with a single local impact scorch mark: an explosive hit
+  stamps one black decal on the building wall at the point of impact, sized from the blast
+  yield and deterministically nudged and rolled. No HP tracking, damage tiers, per-building
+  state, or networking. `MapBuilding` has no vanilla damage shader, and every observed
+  in-game damage event was the lowest tier, so the old model could not escalate on the
+  buildings players actually bomb.
+- Removed the `BuildingDamagedMessage` wire contract, its snapshot loop, and its late-join
+  retries. This is a deliberate protocol break dropping replicated channels from three to
+  two; old and new peers stay compatible for the fire and ruin channels.
+- Rescued the outright-destruction ruin hook into `MapBuildingRuinPatch` so a direct bomb or
+  missile kill still leaves ruin smoke and collapse dust.
+- Renamed the `Buildings / DamagedStateEnabled` setting to `Buildings / ImpactScorchEnabled`.
+- Added a client-local `RAD` map-MFD music player with directory-based channels, bounded
+  OGG/WAV discovery, asynchronous decoding, crossfade, transport controls, shuffle, repeat,
+  rescan, and progress through Nuclear Option's music mixer.
+- Added Agrapol FM and Maris Network with one installed faction-soundtrack clip each, plus
+  Base Broadcast with the current map's original-score pool; no soundtrack audio is copied
+  or packaged.
+- Added original BDF-inspired Agrapol FM and PALA-inspired Maris Network identities plus a
+  Nuclear Option-inspired Base Broadcast identity as embedded 256px transparent PNGs.
+- Added bounded `station.png` loading for custom stations, icon presentation in the header
+  and channel list, automatic import folders/instructions, badge fallbacks, and an in-panel
+  shortcut that opens the one-folder station import location.
+- Added cooperative vanilla-music ownership so game music requests are deferred only while
+  the radio is on air and restored when it stops; headless servers skip the feature.
+- Added radio catalogue tests, installed-game MFD/audio/Mirage compatibility probes, and a
+  gated same-mod/same-library synchronized-channel protocol plan that never transfers audio.
+- Kept built-in station images embedded instead of copying them into the music library;
+  Agrapol and Maris local tracks now replace their soundtrack fallbacks after rescanning,
+  while immutable Base Broadcast always plays only the installed original soundtrack.
+- Renamed the MFD heading to Music Player and removed its separate gain control so radio
+  playback follows Nuclear Option's global music setting at unity gain.
+- Added an explicit single-assembly feature framework with dependency ordering,
+  feature-owned Harmony patch lists, transactional startup, ordered scene resets, and
+  reverse teardown instead of manual component wiring and assembly-wide patch discovery.
+- Reorganized the source into Bootstrap, Framework, Infrastructure, Fire and Destruction,
+  and Urban Combat boundaries while preserving compatibility-sensitive namespaces and
+  Mirage message identities.
+- Added hierarchical agent scope files, a one-feature-at-a-time editing map, and automated
+  dependency-direction checks; moved Fire replication and Radio helpers into their owning
+  modules and replaced the direct Fire-to-Urban reference with a narrow occupancy contract.
+- Split configuration into module-owned settings plus one legacy migration step, added
+  feature graph/service tests, and expanded the patch probe to cover feature types and wire
+  contracts.
+- Made packaging stop on failed restore, build, test, or compatibility-probe commands so a
+  stale binary cannot be packaged after a native command failure.
+- Added the staged feature plan and a repository-scoped Codex skill for future maintenance.
+
+- Replaced the fallback gray facade wash with colour-preserving warm soot, reduced gloss,
+  and bounded vanilla scorch projectors on roofs and walls.
+- Quantized building damage into three synchronized visual tiers and moved native shader
+  controls to material property blocks, eliminating per-building material clones.
+- Deferred ruin-footprint renderer scans until actual destruction instead of performing
+  them for every hit on a lightweight building.
+- Collapsed duplicate per-impact building overlap queries into one non-allocating lookup
+  and replaced boxed reflective HP reads with a cached Harmony field delegate.
+- Cached civilian shell bounds/catalogues and defensive prefab bounds for garrison setup,
+  removed repeated per-zone scene scans and hot-path string allocations.
+- Smoothed Fuel Depot smoke creation across frames, bounded long-mission ignition cooldown
+  memory, removed the unused synthetic smoke path, and reduced routine distance work.
+- Expanded the compatibility probe to cover ground-vehicle destruction and the vanilla
+  scorch decal dependency.
+
 ## 0.1.1 - Destruction aftermath
 
 - Removed the experimental helicopter optical-smoke countermeasure, seeker patches, runtime cloud manager, icon asset, and public smoke settings; fire and ruin smoke are unaffected.
