@@ -136,8 +136,8 @@ namespace BoscaliSummer.Fire
             state.observedPeakHitPoints = Mathf.Max(
                 state.observedPeakHitPoints,
                 Mathf.Max(BuildingDamagePolicy.MinimumEstimatedHitPoints, beforeHitPoints));
-            BuildingDamageStage stage = BuildingDamagePolicy.FromHitPoints(
-                hitPoints, state.observedPeakHitPoints);
+            BuildingDamageStage stage = BuildingDamagePolicy.FromDamage(
+                beforeHitPoints, hitPoints, state.observedPeakHitPoints);
             float severity = BuildingDamagePolicy.Severity(stage);
             if (severity > 0f) Apply(building, severity);
             return severity;

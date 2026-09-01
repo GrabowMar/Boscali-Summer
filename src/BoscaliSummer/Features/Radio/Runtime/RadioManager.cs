@@ -65,7 +65,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
         public bool IsPaused => state == PlaybackState.Paused;
         public bool Shuffle => settings != null && settings.Shuffle.Value;
         public bool RepeatTrack => settings != null && settings.RepeatTrack.Value;
-        public float Volume => settings?.Volume.Value ?? 0f;
         public float Elapsed => currentSource != null && currentSource.clip != null ? currentSource.time : 0f;
         public float Duration => currentSource != null && currentSource.clip != null ? currentSource.clip.length : 0f;
         public float Progress => Duration > 0.01f ? Mathf.Clamp01(Elapsed / Duration) : 0f;
@@ -253,13 +252,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
             status = settings.RepeatTrack.Value ? "Repeat enabled" : "Repeat disabled";
         }
 
-        public void ChangeVolume(float delta)
-        {
-            settings.Volume.Value = Mathf.Clamp01(settings.Volume.Value + delta);
-            ApplySourceVolumes();
-            status = "Volume " + Mathf.RoundToInt(settings.Volume.Value * 100f) + "%";
-        }
-
         public void Rescan()
         {
             StopInternal(false);
@@ -328,15 +320,20 @@ namespace BoscaliSummer.Features.Radio.Runtime
             RadioChannel agrapolLocal = FindLocalChannel("Agrapol FM");
             RadioChannel marisLocal = FindLocalChannel("Maris Network");
             RadioChannel baseLocal = FindLocalChannel("Base Broadcast");
-
-            AddStation(result, "agrapol-fm", "AF", "Agrapol FM", "Fields, flightlines, forward signal",
+            AddBuiltInStation(result, BuiltInStationRules.AgrapolId, "AF", "Agrapol FM",
+                "Fields, flightlines, forward signal",
                 soundtrackCatalog?.AgrapolSeed == null ? Array.Empty<AudioClip>() :
-                    new[] { soundtrackCatalog.AgrapolSeed }, agrapolLocal);
-            AddStation(result, "maris-network", "MN", "Maris Network", "Coastal relay for the contested sky",
+                    new[] { soundtrackCatalog.AgrapolSeed }, agrapolLocal,
+                BuiltInIcon("agrapol-fm.png"));
+            AddBuiltInStation(result, BuiltInStationRules.MarisId, "MN", "Maris Network",
+                "Coastal relay for the contested sky",
                 soundtrackCatalog?.MarisSeed == null ? Array.Empty<AudioClip>() :
-                    new[] { soundtrackCatalog.MarisSeed }, marisLocal);
-            AddStation(result, "base-broadcast", "BB", "Base Broadcast", "Nuclear Option original soundtrack",
-                soundtrackCatalog?.All ?? Array.Empty<AudioClip>(), baseLocal);
+                    new[] { soundtrackCatalog.MarisSeed }, marisLocal,
+                BuiltInIcon("maris-network.png"));
+            AddBuiltInStation(result, BuiltInStationRules.BaseId, "BB", "Base Broadcast",
+                "Nuclear Option original soundtrack",
+                soundtrackCatalog?.All ?? Array.Empty<AudioClip>(), baseLocal,
+                BuiltInIcon("base-broadcast.png"));
 
             if (localLibrary != null)
             {
@@ -357,25 +354,33 @@ namespace BoscaliSummer.Features.Radio.Runtime
             stationRevision++;
         }
 
-        private void AddStation(
+        private void AddBuiltInStation(
             List<RadioStation> result,
             string id,
             string code,
             string name,
             string slogan,
             AudioClip[] vanilla,
-            RadioChannel local)
+            RadioChannel local,
+            string iconSource)
         {
-            int localCount = local?.Tracks.Length ?? 0;
-            var tracks = new RadioStationTrack[vanilla.Length + localCount];
-            for (int i = 0; i < vanilla.Length; i++)
+            int discoveredLocalCount = local?.Tracks.Length ?? 0;
+            int localCount = BuiltInStationRules.AcceptsLocalTracks(id) ? discoveredLocalCount : 0;
+            int vanillaCount = BuiltInStationRules.UsesVanillaTracks(id, localCount)
+                ? vanilla.Length
+                : 0;
+            var tracks = new RadioStationTrack[vanillaCount + localCount];
+            for (int i = 0; i < vanillaCount; i++)
                 tracks[i] = RadioStationTrack.Vanilla(vanilla[i]);
             for (int i = 0; i < localCount; i++)
-                tracks[vanilla.Length + i] = RadioStationTrack.Local(local.Tracks[i]);
+                tracks[vanillaCount + i] = RadioStationTrack.Local(local.Tracks[i]);
             result.Add(new RadioStation(
                 id, code, name, slogan,
-                StationIconPath(name), tracks));
+                iconSource, tracks));
         }
+
+        private static string BuiltInIcon(string fileName) =>
+            RadioStationIconCache.EmbeddedPrefix + "BoscaliSummer.RadioAssets." + fileName;
 
         private string StationIconPath(string stationName) =>
             Path.Combine(libraryPath, stationName, "station.png");
@@ -509,7 +514,7 @@ namespace BoscaliSummer.Features.Radio.Runtime
         {
             float duration = settings.CrossfadeSeconds.Value;
             float elapsed = 0f;
-            float target = settings.Volume.Value;
+            const float target = 1f;
             while (generation == loadGeneration && elapsed < duration)
             {
                 elapsed += Time.unscaledDeltaTime;
@@ -535,7 +540,7 @@ namespace BoscaliSummer.Features.Radio.Runtime
                 incomingSource.clip = null;
                 incomingSource.volume = 0f;
             }
-            currentSource.volume = settings.Volume.Value;
+            currentSource.volume = 1f;
             pendingCoroutine = null;
             state = PlaybackState.Playing;
             status = "On air";
@@ -566,15 +571,8 @@ namespace BoscaliSummer.Features.Radio.Runtime
             source.loop = false;
             source.ignoreListenerPause = true;
             source.spatialBlend = 0f;
-            source.volume = settings.Volume.Value;
+            source.volume = 1f;
             return source;
-        }
-
-        private void ApplySourceVolumes()
-        {
-            if (currentSource != null) currentSource.volume = settings.Volume.Value;
-            if (incomingSource != null && incomingSource.isPlaying)
-                incomingSource.volume = Math.Min(incomingSource.volume, settings.Volume.Value);
         }
 
         private void StopInternal(bool destroying)

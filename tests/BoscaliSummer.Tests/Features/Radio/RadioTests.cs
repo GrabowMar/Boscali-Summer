@@ -34,6 +34,12 @@ namespace BoscaliSummer.Tests.Features.Radio
                 TestAssert.That(library.Channels[1].Tracks[0].Title == "Alpha", "tracks were not sorted");
                 TestAssert.That(RadioLibrary.IsSupportedExtension(".WAV"), "WAV extension was rejected");
                 TestAssert.That(!RadioLibrary.IsSupportedExtension(".mp3"), "unprobed MP3 extension was accepted");
+
+                TestAssert.That(BuiltInStationRules.ImportFolderNames.Length == 2 &&
+                    Array.IndexOf(BuiltInStationRules.ImportFolderNames, "Agrapol FM") >= 0 &&
+                    Array.IndexOf(BuiltInStationRules.ImportFolderNames, "Maris Network") >= 0 &&
+                    Array.IndexOf(BuiltInStationRules.ImportFolderNames, "Base Broadcast") < 0,
+                    "starter folders did not preserve the immutable Base station boundary");
             }
             finally
             {
@@ -51,6 +57,18 @@ namespace BoscaliSummer.Tests.Features.Radio
             valid[1] = 0;
             TestAssert.That(!PngIconHeader.IsSupported(valid, out _, out _),
                 "invalid PNG signature was accepted");
+
+            TestAssert.That(BuiltInStationRules.AcceptsLocalTracks(BuiltInStationRules.AgrapolId),
+                "Agrapol station rejected local replacement tracks");
+            TestAssert.That(BuiltInStationRules.AcceptsLocalTracks(BuiltInStationRules.MarisId),
+                "Maris station rejected local replacement tracks");
+            TestAssert.That(!BuiltInStationRules.AcceptsLocalTracks(BuiltInStationRules.BaseId),
+                "Base station accepted local tracks");
+            TestAssert.That(BuiltInStationRules.UsesVanillaTracks(BuiltInStationRules.AgrapolId, 0) &&
+                !BuiltInStationRules.UsesVanillaTracks(BuiltInStationRules.AgrapolId, 1),
+                "Agrapol fallback was not replaced by local tracks");
+            TestAssert.That(BuiltInStationRules.UsesVanillaTracks(BuiltInStationRules.BaseId, 1),
+                "Base station stopped using the original soundtrack when local files existed");
 
             CheckPalette();
         }

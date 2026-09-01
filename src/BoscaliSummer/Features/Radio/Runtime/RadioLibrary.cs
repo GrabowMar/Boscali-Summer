@@ -4,6 +4,21 @@ using System.IO;
 
 namespace BoscaliSummer.Features.Radio.Runtime
 {
+    internal static class BuiltInStationRules
+    {
+        public const string AgrapolId = "agrapol-fm";
+        public const string MarisId = "maris-network";
+        public const string BaseId = "base-broadcast";
+
+        public static readonly string[] ImportFolderNames = { "Agrapol FM", "Maris Network" };
+
+        public static bool AcceptsLocalTracks(string stationId) =>
+            !string.Equals(stationId, BaseId, StringComparison.Ordinal);
+
+        public static bool UsesVanillaTracks(string stationId, int localTrackCount) =>
+            string.Equals(stationId, BaseId, StringComparison.Ordinal) || localTrackCount == 0;
+    }
+
     internal sealed class RadioTrack
     {
         public string Title { get; }

@@ -54,7 +54,6 @@ namespace BoscaliSummer.Features.Radio.Presentation
         private static TMP_Text pageLabel;
         private static Button pagePreviousButton;
         private static Button pageNextButton;
-        private static TMP_Text volumeLabel;
         private static TMP_Text statusLabel;
         private static Image progressFill;
         private static TMP_Text playButtonLabel;
@@ -111,7 +110,6 @@ namespace BoscaliSummer.Features.Radio.Presentation
             pageLabel = null;
             pagePreviousButton = null;
             pageNextButton = null;
-            volumeLabel = null;
             statusLabel = null;
             progressFill = null;
             playButtonLabel = null;
@@ -239,7 +237,7 @@ namespace BoscaliSummer.Features.Radio.Presentation
 
             Color accent = Accent();
             Outline(content, new Rect(0f, 0f, Width, Height), Unity(RadioUiPalette.PanelEdge));
-            Label(content, "BOSCALI RADIO", new Rect(Pad, -10f, Width - Pad * 2f, 24f),
+            Label(content, "MUSIC PLAYER", new Rect(Pad, -10f, Width - Pad * 2f, 24f),
                 accent, FontTitle, FontStyles.Normal, TextAlignmentOptions.Center);
             Rule(content, new Rect(Pad, -40f, Width - Pad * 2f, 1f), Frame());
 
@@ -310,12 +308,9 @@ namespace BoscaliSummer.Features.Radio.Presentation
             pagePreviousButton = pageButtons[0];
             pageNextButton = pageButtons[1];
 
-            Stepper(content, -466f, "MUSIC BUS", out volumeLabel,
-                () => manager?.ChangeVolume(-0.05f), () => manager?.ChangeVolume(0.05f), "-", "+");
-
-            FramedPanel(content, new Rect(Pad, -504f, Width - Pad * 2f, 40f), Frame());
+            FramedPanel(content, new Rect(Pad, -466f, Width - Pad * 2f, 78f), Frame());
             statusLabel = Label(content, "Stand by",
-                new Rect(Pad + 8f, -504f, Width - Pad * 2f - 16f, 40f),
+                new Rect(Pad + 8f, -466f, Width - Pad * 2f - 16f, 78f),
                 Dim(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Center);
             statusLabel.enableWordWrapping = true;
             statusLabel.overflowMode = TextOverflowModes.Truncate;
@@ -405,7 +400,6 @@ namespace BoscaliSummer.Features.Radio.Presentation
             repeatButtonLabel.color = manager.RepeatTrack ? Color.white : Accent();
             SetLatched(shuffleButton, RadioButtonStyle.Toggle, manager.Shuffle);
             SetLatched(repeatButton, RadioButtonStyle.Toggle, manager.RepeatTrack);
-            volumeLabel.text = Mathf.RoundToInt(manager.Volume * 100f) + "%";
             statusLabel.text = manager.Status;
             pageLabel.text = (page + 1) + " / " + pages;
             pagePreviousButton.interactable = page > 0;

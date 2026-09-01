@@ -76,22 +76,23 @@ They can also be edited in-game with [BepInEx ConfigurationManager](https://gith
 The radio is a local music player styled as a compact Nuclear Option MFD. It includes three
 stations without bundling audio:
 
-- **Agrapol FM** starts with one Boscali-side track from the installed original soundtrack.
-- **Maris Network** starts with one Primeva-side track from the installed original soundtrack.
-- **Base Broadcast** exposes the current map's available original-score pool.
+- **Agrapol FM** falls back to one Boscali-side track from the installed original soundtrack.
+- **Maris Network** falls back to one Primeva-side track from the installed original soundtrack.
+- **Base Broadcast** immutably exposes the current map's available original-score pool.
 
-Each station can use a small `station.png` identity, displayed in the current-station header
-and channel list. Use a square transparent PNG up to 256x256 pixels and 256 KiB. **FOLDER**
-opens the canonical Music directory; create one folder, drop OGG/WAV files and an optional
-`station.png` directly inside, then press **RESCAN**. Files placed directly in Music appear
-under `LOCAL`. Tracks added to one of the three starter folders join that station after its
-built-in soundtrack entry. Missing or invalid icons fall back to a two-letter badge. The
-panel also provides transport controls, channel paging, shuffle, repeat, volume, progress,
-and a status readout.
+The three built-in station images remain embedded in the DLL. **FOLDER** opens the canonical
+Music directory; create one folder, drop OGG/WAV files and an optional `station.png` directly
+inside, then press **RESCAN**. Files placed directly in Music appear under `LOCAL`. Tracks in
+the Agrapol FM or Maris Network folder replace that station's soundtrack fallback after a
+rescan. Base Broadcast ignores imported files and always exposes only the current map's
+original-score pool. Custom station icons may be up to 256x256 pixels and 256 KiB; missing
+or invalid icons fall back to a two-letter badge. The panel provides transport controls,
+channel paging, shuffle, repeat, progress, and a status readout.
 
 Only OGG and WAV imports are accepted in this baseline. The player never downloads,
 extracts, bundles, logs, or transmits soundtrack audio. Built-in entries retain references
-to AudioClips already loaded by Nuclear Option. The player routes through the game's music mixer, temporarily yields
+to AudioClips already loaded by Nuclear Option. The player routes at unity gain through the
+game's music mixer so it always follows the game's music-volume setting, temporarily yields
 vanilla music while on air, and restores the interrupted or latest requested vanilla track
 when stopped. Dedicated/headless servers skip the feature.
 
@@ -119,7 +120,7 @@ Forest smoke uses three pooled smoke-only copies of the vanilla Fuel Depot destr
 
 ### Buildings and ruins
 
-Lightweight `MapBuilding` objects enter a battered intermediate state before destruction. Supported materials receive the game's native `_HitPoints` and `_Damage` values; simpler scenery shaders retain their original colour under restrained warm soot, reduced gloss, and localized vanilla scorch marks. Damage advances through normalized minor, major, and critical tiers. Building fires cross the same tiers as they burn, while a bounded transition queue avoids material clones and repeated full-facade work for every small hit.
+Lightweight `MapBuilding` objects enter a battered intermediate state after their first real HP loss. Supported materials receive the game's native `_HitPoints` and `_Damage` values; simpler scenery shaders retain their original colour under restrained warm soot, reduced gloss, and localized vanilla scorch marks. Damage advances through normalized minor, major, and critical tiers. Building fires cross the same tiers as they burn, while a bounded transition queue avoids material clones and repeated full-facade work for every small hit.
 
 Building flames are anchored to the collider-backed roof surface under the impact point. Two or three staggered smoke sources distribute the Fuel Depot plume across the footprint. When an unoccupied civilian building finishes burning, it follows the vanilla disabled/ruin path. A faction-owned building is considered occupied and is preserved.
 
@@ -150,7 +151,6 @@ The public configuration is intentionally compact. Particle counts, spatial budg
 | Garrisons | `Enabled` | `true` | Occupy eligible buildings around controlled zones |
 | Garrisons | `BuildingsPerZone` | `3` | Number of occupied civilian shells per zone |
 | Radio | `Enabled` | `true` | Enable the client-local map radio |
-| Radio | `Volume` | `0.65` | Radio gain before the global music setting |
 | Radio | `CrossfadeSeconds` | `1.5` | Blend duration between local tracks |
 | Radio | `Shuffle` | `false` | Randomize advancement within a channel |
 | Radio | `RepeatTrack` | `false` | Repeat the current track |

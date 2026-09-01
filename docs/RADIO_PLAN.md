@@ -11,30 +11,33 @@ The `radio` feature owns configuration, catalogue scanning, audio decoding, temp
 vanilla-music ownership, and its map-MFD presentation.
 
 - `BepInEx/plugins/BoscaliSummer/Music` is the only import root and is created on first run,
-  together with a short station README and three starter folders.
+  together with a short station README and Agrapol FM and Maris Network starter folders.
 - OGG and WAV are supported. MP3 remains unadvertised until an actual target-runtime decode
   test passes.
 - Files directly inside `Music` appear on `LOCAL`; each immediate child directory is one
   additional channel. Nested trees and filesystem links are ignored.
-- Agrapol FM and Maris Network each seed one faction-associated `AudioClip` from the
-  installed map soundtrack. Base Broadcast exposes the unique start/strategic/tactical
-  clips already loaded for the current map. Installed references are capped at 30 unique
-  clips plus the two station seed entries. No soundtrack file is extracted or packaged.
-- Each starter folder receives an embedded 256x256 transparent PNG identity. The map MFD
-  renders it in the current-station header and channel list. User stations opt in by placing
+- Agrapol FM and Maris Network each use one faction-associated `AudioClip` from the installed
+  map soundtrack only while their import folder is empty; local tracks replace that fallback
+  after a rescan. Immutable Base Broadcast ignores imported files and exposes only the unique
+  start/strategic/tactical clips already loaded for the current map. Installed references are
+  capped at 30 unique clips plus the two station fallback entries. No soundtrack file is
+  extracted or packaged.
+- The three built-in 256x256 transparent PNG identities load directly from embedded resources
+  and are never copied into the music library. The map MFD renders them in the current-station
+  header and channel list. User stations opt in by placing
   `station.png` beside their tracks; files over 256 KiB, dimensions over 256 pixels, and
   malformed PNG headers are rejected before Unity decodes them. A two-letter badge remains
   the no-icon fallback.
 - The catalogue is capped at 32 channels, 512 tracks, and 512 MiB per track.
 - Loading uses `UnityWebRequestMultimedia` against local file URIs. One request is active at
   a time and no more than the outgoing and incoming decoded clips coexist during crossfade.
-- Two mod-owned `AudioSource` objects route through Nuclear Option's `MusicMixer`, so the
-  stock global music slider still applies.
+- Two mod-owned unity-gain `AudioSource` objects route through Nuclear Option's `MusicMixer`,
+  so radio and stock music always follow the same global music slider without a second gain.
 - While radio audio owns the music bus, vanilla play/crossfade/queue requests are deferred.
   Stopping the radio restores the latest deferred request, or the interrupted vanilla clip
   near its previous position.
 - The `RAD` screen claims an unused `VirtualMFD` bezel slot on the maximised map. It provides
-  previous/play/next/stop, shuffle, repeat, folder shortcut, rescan, volume, progress,
+  previous/play/next/stop, shuffle, repeat, folder shortcut, rescan, progress,
   status, station identities, and paged channel selection.
 - Headless servers skip the player and panel cleanly.
 

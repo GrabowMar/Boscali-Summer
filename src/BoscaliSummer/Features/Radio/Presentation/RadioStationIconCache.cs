@@ -1,12 +1,15 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using UnityEngine;
 
 namespace BoscaliSummer.Features.Radio.Presentation
 {
     internal static class RadioStationIconCache
     {
+        internal const string EmbeddedPrefix = "embedded:";
+
         private sealed class Entry
         {
             public Texture2D Texture;
@@ -18,7 +21,10 @@ namespace BoscaliSummer.Features.Radio.Presentation
 
         public static Sprite Get(string path)
         {
-            if (string.IsNullOrWhiteSpace(path) ||
+            if (string.IsNullOrWhiteSpace(path))
+                return null;
+            bool embedded = path.StartsWith(EmbeddedPrefix, StringComparison.Ordinal);
+            if (!embedded &&
                 !string.Equals(Path.GetExtension(path), ".png", StringComparison.OrdinalIgnoreCase))
                 return null;
 
@@ -44,11 +50,8 @@ namespace BoscaliSummer.Features.Radio.Presentation
         {
             try
             {
-                if (!File.Exists(path)) return null;
-                var info = new FileInfo(path);
-                if (info.Length <= 0 || info.Length > PngIconHeader.MaximumFileBytes) return null;
-
-                byte[] data = File.ReadAllBytes(path);
+                byte[] data = ReadData(path);
+                if (data == null) return null;
                 if (!PngIconHeader.IsSupported(data, out int width, out int height)) return null;
 
                 var texture = new Texture2D(2, 2, TextureFormat.RGBA32, false, false)
@@ -79,6 +82,33 @@ namespace BoscaliSummer.Features.Radio.Presentation
             {
                 return null;
             }
+        }
+
+        private static byte[] ReadData(string source)
+        {
+            if (source.StartsWith(EmbeddedPrefix, StringComparison.Ordinal))
+            {
+                string resourceName = source.Substring(EmbeddedPrefix.Length);
+                Assembly assembly = typeof(RadioStationIconCache).Assembly;
+                using Stream stream = assembly.GetManifestResourceStream(resourceName);
+                if (stream == null || stream.Length <= 0 ||
+                    stream.Length > PngIconHeader.MaximumFileBytes)
+                    return null;
+                var data = new byte[(int)stream.Length];
+                int offset = 0;
+                while (offset < data.Length)
+                {
+                    int read = stream.Read(data, offset, data.Length - offset);
+                    if (read <= 0) return null;
+                    offset += read;
+                }
+                return data;
+            }
+
+            if (!File.Exists(source)) return null;
+            var info = new FileInfo(source);
+            if (info.Length <= 0 || info.Length > PngIconHeader.MaximumFileBytes) return null;
+            return File.ReadAllBytes(source);
         }
     }
 }

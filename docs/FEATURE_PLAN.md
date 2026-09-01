@@ -125,14 +125,15 @@ Status: implemented development baseline; in-game interaction and long-session g
 Radio/music is an isolated client utility:
 
 - create and scan one contained `BepInEx/plugins/BoscaliSummer/Music` directory;
-- ship Agrapol FM, Maris Network, and Base Broadcast identities; seed their playback from
-  installed map soundtrack references without extracting or packaging audio;
+- ship embedded Agrapol FM, Maris Network, and Base Broadcast identities; use installed map
+  soundtrack references as the Agrapol/Maris empty-folder fallback and Base's immutable pool
+  without extracting or packaging audio;
 - accept local user files only, initially OGG and WAV;
 - probe MP3 support against the target Unity build before advertising it;
 - load asynchronously through Unity audio APIs and retain only current plus next clip;
 - route playback through the game's music mixer and pause vanilla music only while the
   Boscali player owns playback;
-- implement play/pause, stop, next/previous, channel folders, shuffle, repeat, volume, and crossfade;
+- implement play/pause, stop, next/previous, channel folders, shuffle, repeat, and crossfade;
 - skip the module cleanly on a headless server;
 - reject URLs and paths that escape the canonical music root.
 - accept one optional bounded `station.png` per station folder and fall back to a generated

@@ -24,6 +24,15 @@ namespace BoscaliSummer.Tests.Features.FireAndDestruction
             TestAssert.That(
                 BuildingDamagePolicy.FromHitPoints(55f, 55f) == BuildingDamageStage.Minor,
                 "minimum baseline must preserve damage for an already weakened building");
+            TestAssert.That(
+                BuildingDamagePolicy.FromDamage(100f, 99.999f, 100f) == BuildingDamageStage.Minor,
+                "any positive HP loss must establish minor visual damage");
+            TestAssert.That(
+                BuildingDamagePolicy.FromDamage(200f, 199.9f, 200f) == BuildingDamageStage.Minor,
+                "small damage on a tougher building must establish minor visual damage");
+            TestAssert.That(
+                BuildingDamagePolicy.FromDamage(100f, 100f, 100f) == BuildingDamageStage.Intact,
+                "zero-damage calls must not establish visual damage");
 
             TestAssert.That(
                 BuildingDamagePolicy.FromFireProgress(0f) == BuildingDamageStage.Minor,

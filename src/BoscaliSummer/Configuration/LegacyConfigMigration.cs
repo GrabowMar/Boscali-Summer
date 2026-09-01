@@ -39,6 +39,7 @@ namespace BoscaliSummer
             BindAndRemove(config, "Garrisons", "MinimumPerZone", 2);
             BindAndRemove(config, "Garrisons", "MaximumPerZone", 4);
             BindAndRemove(config, "Garrisons", "DefenseDefinitionKey", string.Empty);
+            BindAndRemove(config, "Radio", "Volume", 0.65f);
         }
 
         private static void BindAndRemove<T>(ConfigFile config, string section, string key, T defaultValue)

@@ -25,6 +25,16 @@ namespace BoscaliSummer.Fire
             return BuildingDamageStage.Intact;
         }
 
+        internal static BuildingDamageStage FromDamage(
+            float previousHitPoints, float hitPoints, float observedPeakHitPoints)
+        {
+            BuildingDamageStage stage = FromHitPoints(hitPoints, observedPeakHitPoints);
+            if (stage != BuildingDamageStage.Intact) return stage;
+            return hitPoints > 0f && hitPoints < previousHitPoints
+                ? BuildingDamageStage.Minor
+                : BuildingDamageStage.Intact;
+        }
+
         internal static BuildingDamageStage FromFireProgress(float progress)
         {
             if (progress >= 0.66f) return BuildingDamageStage.Critical;
