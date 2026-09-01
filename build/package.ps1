@@ -10,13 +10,17 @@ $root = Split-Path -Parent $PSScriptRoot
 $env:APPDATA = Join-Path $root '.appdata'
 
 dotnet restore (Join-Path $root 'BoscaliSummer.sln')
+if ($LASTEXITCODE -ne 0) { throw "dotnet restore failed with exit code $LASTEXITCODE" }
 dotnet build (Join-Path $root 'BoscaliSummer.sln') -c $Configuration --no-restore -p:GameDir="$GameDir"
+if ($LASTEXITCODE -ne 0) { throw "dotnet build failed with exit code $LASTEXITCODE" }
 
 $built = Join-Path $root "src\BoscaliSummer\bin\$Configuration\netstandard2.1\BoscaliSummer.dll"
 if (-not (Test-Path -LiteralPath $built)) { throw "Build output not found: $built" }
 dotnet run --project (Join-Path $root 'tests\BoscaliSummer.Tests\BoscaliSummer.Tests.csproj') -c $Configuration --no-build
+if ($LASTEXITCODE -ne 0) { throw "BoscaliSummer.Tests failed with exit code $LASTEXITCODE" }
 if (-not $SkipPatchProbe) {
     dotnet run --project (Join-Path $root 'tests\BoscaliSummer.PatchProbe\BoscaliSummer.PatchProbe.csproj') -c $Configuration --no-build -- $GameDir $built
+    if ($LASTEXITCODE -ne 0) { throw "BoscaliSummer.PatchProbe failed with exit code $LASTEXITCODE" }
 }
 
 $version = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($built).FileVersion

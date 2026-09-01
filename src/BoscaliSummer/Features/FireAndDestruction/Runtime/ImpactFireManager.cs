@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using BoscaliSummer.Core;
+using BoscaliSummer.Framework.Lifecycle;
 using BoscaliSummer.Garrisons;
 using BoscaliSummer.Runtime;
 using NuclearOption.Effects;
@@ -9,15 +10,13 @@ using UnityEngine;
 
 namespace BoscaliSummer.Fire
 {
-    internal sealed class ImpactFireManager : MonoBehaviour
+    internal sealed class ImpactFireManager : MonoBehaviour, ISceneService
     {
         private struct ImpactEvent
         {
             public GlobalPosition Position;
             public bool Explosive;
             public int Salt;
-            public float PierceDamage;
-            public float BlastDamage;
         }
 
         private struct ScorchMark
@@ -57,7 +56,9 @@ namespace BoscaliSummer.Fire
         private readonly List<FireSite> fires = new List<FireSite>(24);
         private readonly Dictionary<long, float> cellCooldowns = new Dictionary<long, float>();
         private readonly Dictionary<int, float> vehicleCooldowns = new Dictionary<int, float>();
+        private readonly List<long> expiredCooldownCells = new List<long>(128);
         private readonly Collider[] colliderBuffer = new Collider[32];
+        private readonly RaycastHit[] roofHitBuffer = new RaycastHit[24];
         private readonly ForestIndex forestIndex = new ForestIndex();
         private readonly FireVisualPool visualPool = new FireVisualPool();
         private readonly FuelDepotSmokePool fuelDepotSmokePool = new FuelDepotSmokePool();
@@ -66,8 +67,6 @@ namespace BoscaliSummer.Fire
         private int impactSequence;
 
         private void Awake() => Instance = this;
-
-        private void Start() => ResetForScene();
 
         private void OnDestroy()
         {
@@ -96,16 +95,14 @@ namespace BoscaliSummer.Fire
             indexRoutine = StartCoroutine(RebuildIndexDelayed());
         }
 
-        public void SubmitImpact(GlobalPosition position, bool explosive, int salt, float pierceDamage, float blastDamage)
+        public void SubmitImpact(GlobalPosition position, bool explosive, int salt)
         {
             if (!Plugin.Settings.FiresEnabled.Value || !IsServer() || impacts.Count >= 256) return;
             impacts.Enqueue(new ImpactEvent
             {
                 Position = position,
                 Explosive = explosive,
-                Salt = salt,
-                PierceDamage = pierceDamage,
-                BlastDamage = blastDamage
+                Salt = salt
             });
         }
 
@@ -159,8 +156,7 @@ namespace BoscaliSummer.Fire
             Vector3 local = impact.Position.ToLocalPosition();
             if (local.y < Datum.LocalSeaY + 0.5f) return;
 
-            MapBuilding mapBuilding = FindMapBuilding(local);
-            Building networkBuilding = FindNetworkBuilding(local);
+            FindBuildings(local, out Building networkBuilding, out MapBuilding mapBuilding);
             bool eligible = mapBuilding != null || networkBuilding != null || forestIndex.Contains(impact.Position);
             if (!eligible) return;
             long cell = Deterministic.CellKey(impact.Position.x, impact.Position.z, 24f);
@@ -176,6 +172,7 @@ namespace BoscaliSummer.Fire
             uint hash = Deterministic.Hash(x, y, z,
                 impact.Salt ^ (impact.Explosive ? 0x51f15e : 0x18b7) ^ impactSequence++);
             if (Deterministic.UnitFloat(hash) >= chance) return;
+            PruneCellCooldowns(now);
             cellCooldowns[cell] = now + Plugin.Settings.FireCellCooldown;
             bool forest = mapBuilding == null && networkBuilding == null;
             GlobalPosition anchor = forest
@@ -255,6 +252,7 @@ namespace BoscaliSummer.Fire
                 Mathf.RoundToInt(explosion.Position.z * 0.25f),
                 explosion.InstanceId, 0x6f2e9a31);
             if (Deterministic.UnitFloat(hash) >= Plugin.Settings.VehicleExplosionIgnitionChance) return;
+            PruneCellCooldowns(now);
             cellCooldowns[cell] = now + Plugin.Settings.FireCellCooldown;
 
             GlobalPosition anchor = forest
@@ -357,8 +355,12 @@ namespace BoscaliSummer.Fire
             // a server-side target already supplied by ProcessImpact: overlap queries can
             // miss a shell when its colliders are still settling after a scene load.
             Vector3 local = position.ToLocalPosition();
-            if (site.BurningBuilding == null) site.BurningBuilding = FindNetworkBuilding(local);
-            if (site.BurningMapBuilding == null) site.BurningMapBuilding = FindMapBuilding(local);
+            if (site.BurningBuilding == null || site.BurningMapBuilding == null)
+            {
+                FindBuildings(local, out Building nearbyBuilding, out MapBuilding nearbyMapBuilding);
+                if (site.BurningBuilding == null) site.BurningBuilding = nearbyBuilding;
+                if (site.BurningMapBuilding == null) site.BurningMapBuilding = nearbyMapBuilding;
+            }
             ApplyBurningBuildingDamage(site.BurningMapBuilding);
             fires.Add(site);
             if (forest) QueueForestScorch(position);
@@ -425,6 +427,7 @@ namespace BoscaliSummer.Fire
             Camera camera = Camera.main;
             int nearestA = -1, nearestB = -1, nearestC = -1;
             float distA = float.MaxValue, distB = float.MaxValue, distC = float.MaxValue;
+            int smokeAcquireBudget = 1;
 
             for (int i = fires.Count - 1; i >= 0; i--)
             {
@@ -462,13 +465,12 @@ namespace BoscaliSummer.Fire
                     if (site.BurningBuilding == null && site.BurningMapBuilding == null)
                     {
                         Vector3 local = site.Position.ToLocalPosition();
-                        site.BurningBuilding = FindNetworkBuilding(local);
-                        site.BurningMapBuilding = FindMapBuilding(local);
+                        FindBuildings(local, out site.BurningBuilding, out site.BurningMapBuilding);
                     }
                     bool buildingFire = site.BurningBuilding != null || site.BurningMapBuilding != null;
                     site.Forest = !buildingFire;
                     site.Visual?.Configure(site.Forest, site.Position);
-                    if (site.BuildingSmoke == null && !GameManager.IsHeadless)
+                    if (site.BuildingSmoke == null && !GameManager.IsHeadless && smokeAcquireBudget > 0)
                     {
                         // Both urban and forest sites now use smoke-only copies of the actual
                         // Fuel Depot destruction prefab. Forest fires get a wider, windier
@@ -481,6 +483,7 @@ namespace BoscaliSummer.Fire
                             site.Forest
                                 ? FuelDepotSmokePool.SmokeProfile.Forest
                                 : FuelDepotSmokePool.SmokeProfile.Building);
+                        if (site.BuildingSmoke != null) smokeAcquireBudget--;
                         site.BuildingSmoke?.SetForestClusterScale(site.ClusterScale);
                     }
                     site.NextSmoke = site.BuildingSmoke == null ? now + 2.4f : float.MaxValue;
@@ -560,6 +563,19 @@ namespace BoscaliSummer.Fire
             return true;
         }
 
+        private void PruneCellCooldowns(float now)
+        {
+            // Successful ignitions are sparse, so prune only when the dictionary becomes
+            // material. This bounds memory in multi-hour missions without adding a timer or
+            // a per-frame dictionary walk.
+            if (cellCooldowns.Count < 256) return;
+            expiredCooldownCells.Clear();
+            foreach (KeyValuePair<long, float> entry in cellCooldowns)
+                if (entry.Value <= now) expiredCooldownCells.Add(entry.Key);
+            for (int i = 0; i < expiredCooldownCells.Count; i++)
+                cellCooldowns.Remove(expiredCooldownCells[i]);
+        }
+
         private void QueueScorch(GlobalPosition position, float radiusScale)
         {
             if (scorches.Count >= 64) return;
@@ -585,32 +601,30 @@ namespace BoscaliSummer.Fire
             QueueScorch(position - offset * 0.62f, 0.66f);
         }
 
-        private MapBuilding FindMapBuilding(Vector3 position)
+        private void FindBuildings(
+            Vector3 position, out Building networkBuilding, out MapBuilding mapBuilding)
         {
+            networkBuilding = null;
+            mapBuilding = null;
             int count = Physics.OverlapSphereNonAlloc(position, 5f, colliderBuffer);
             for (int i = 0; i < count; i++)
             {
                 Collider collider = colliderBuffer[i];
                 if (collider == null) continue;
-                MapBuilding building = collider.GetComponentInParent<MapBuilding>();
-                if (building != null) return building;
+                if (mapBuilding == null)
+                    mapBuilding = collider.GetComponentInParent<MapBuilding>();
+                if (networkBuilding == null)
+                {
+                    Building candidate = collider.GetComponentInParent<Building>();
+                    if (candidate != null && !candidate.disabled)
+                    {
+                        BuildingDefinition definition = candidate.definition as BuildingDefinition;
+                        if (definition != null && definition.buildingType == BuildingType.CIV)
+                            networkBuilding = candidate;
+                    }
+                }
+                if (networkBuilding != null && mapBuilding != null) return;
             }
-            return null;
-        }
-
-        private Building FindNetworkBuilding(Vector3 position)
-        {
-            int count = Physics.OverlapSphereNonAlloc(position, 5f, colliderBuffer);
-            for (int i = 0; i < count; i++)
-            {
-                Collider collider = colliderBuffer[i];
-                if (collider == null) continue;
-                Building building = collider.GetComponentInParent<Building>();
-                if (building == null || building.disabled) continue;
-                BuildingDefinition definition = building.definition as BuildingDefinition;
-                if (definition != null && definition.buildingType == BuildingType.CIV) return building;
-            }
-            return null;
         }
 
         private static GlobalPosition SnapForestFireToGround(GlobalPosition position)
@@ -622,7 +636,7 @@ namespace BoscaliSummer.Fire
             return position;
         }
 
-        private static GlobalPosition SnapBuildingFireToRoof(
+        private GlobalPosition SnapBuildingFireToRoof(
             GlobalPosition position, Building networkBuilding, MapBuilding mapBuilding)
         {
             GameObject shell = networkBuilding != null
@@ -644,16 +658,16 @@ namespace BoscaliSummer.Fire
             // tallest aggregate bound.
             float roofY = float.NegativeInfinity;
             Vector3 origin = new Vector3(local.x, bounds.max.y + 8f, local.z);
-            RaycastHit[] hits = Physics.RaycastAll(
-                origin, Vector3.down, bounds.size.y + 24f,
+            int hitCount = Physics.RaycastNonAlloc(
+                origin, Vector3.down, roofHitBuffer, bounds.size.y + 24f,
                 ~0, QueryTriggerInteraction.Ignore);
-            for (int i = 0; i < hits.Length; i++)
+            for (int i = 0; i < hitCount; i++)
             {
-                Collider collider = hits[i].collider;
+                Collider collider = roofHitBuffer[i].collider;
                 if (collider == null) continue;
                 Transform hitTransform = collider.transform;
                 if (hitTransform != shell.transform && !hitTransform.IsChildOf(shell.transform)) continue;
-                if (hits[i].point.y > roofY) roofY = hits[i].point.y;
+                if (roofHitBuffer[i].point.y > roofY) roofY = roofHitBuffer[i].point.y;
             }
             local.y = (float.IsNegativeInfinity(roofY) ? bounds.max.y : roofY) + 0.06f;
             return local.ToGlobalPosition();

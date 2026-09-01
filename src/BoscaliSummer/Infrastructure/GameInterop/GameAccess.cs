@@ -7,6 +7,7 @@ namespace BoscaliSummer.Runtime
     internal static class GameAccess
     {
         private static FieldInfo mapBuildingHitPoints;
+        private static AccessTools.FieldRef<MapBuilding, float> mapBuildingHitPointsRef;
 
         public static bool MapBuildingHitPointsAvailable { get; private set; }
 
@@ -15,7 +16,10 @@ namespace BoscaliSummer.Runtime
             try
             {
                 mapBuildingHitPoints = AccessTools.Field(typeof(MapBuilding), "hitPoints");
-                MapBuildingHitPointsAvailable = mapBuildingHitPoints != null;
+                if (mapBuildingHitPoints != null)
+                    mapBuildingHitPointsRef =
+                        AccessTools.FieldRefAccess<MapBuilding, float>(mapBuildingHitPoints);
+                MapBuildingHitPointsAvailable = mapBuildingHitPointsRef != null;
             }
             catch (Exception e)
             {
@@ -26,7 +30,8 @@ namespace BoscaliSummer.Runtime
 
         public static float GetMapBuildingHitPoints(MapBuilding building)
         {
-            if (mapBuildingHitPoints?.GetValue(building) is float value) return value;
+            if (building != null && mapBuildingHitPointsRef != null)
+                return mapBuildingHitPointsRef(building);
             return 100f;
         }
     }

@@ -1,32 +1,150 @@
-# Boscali Summer 0.1.1 architecture
+# Boscali Summer architecture
 
-The plugin owns one persistent runtime object. Feature managers use bounded queues and slow ticks; no feature scans the whole scene every frame.
+Boscali Summer ships as one BepInEx assembly. Source boundaries are modular even though
+deployment remains a single DLL: that keeps installation simple and avoids making every
+feature a binary dependency.
+
+The current framework extraction is behavior-preserving. It gives future utilities a
+common lifecycle and patch owner; it does not yet turn the existing large managers or
+feature-specific network bridge into their final smaller services. See
+[Feature plan](FEATURE_PLAN.md) for that staged migration.
+
+## Source layout
+
+```text
+src/BoscaliSummer/
+  Bootstrap/                 BepInEx entry point and explicit composition root
+  Configuration/             Configuration composition and legacy-key migration
+  Core/                      Pure deterministic helpers
+  Framework/
+    Features/                Module metadata, dependency graph, host, service registry
+    Lifecycle/               Ordered scene reset contract and dispatcher
+  Infrastructure/
+    Diagnostics/             Shared diagnostic settings
+    GameInterop/             Cached reflection and capability reporting
+    Networking/              Mirage transport and networking module
+  Features/
+    FireAndDestruction/      Fire, building damage, ruins, effects, and patches
+    UrbanCombat/             Occupancy, defensive proxies, visuals, and patches
+```
+
+Several implementation namespaces intentionally retain `BoscaliSummer.Fire`,
+`BoscaliSummer.Garrisons`, and `BoscaliSummer.Runtime` while files move into the new
+folders. In particular, Mirage derives message IDs from full type names, so these
+top-level wire contracts must not be renamed without a deliberate protocol break:
+
+- `BoscaliSummer.Runtime.FireIgnitedMessage`
+- `BoscaliSummer.Runtime.BuildingDamagedMessage`
+- `BoscaliSummer.Runtime.RuinCreatedMessage`
+
+## Composition and feature ownership
+
+`Bootstrap/Plugin.cs` establishes logging and configuration, starts the explicit
+composition root, reports effective tuning, and disposes the host. `ModCompositionRoot`
+is the only feature list; modules are never discovered by assembly scanning.
+
+```text
+Networking
+  ├─ Fire and destruction
+  └─ Urban combat
+```
+
+Every module implements `IModFeature` and provides stable metadata, hard dependencies,
+the exact Harmony patch classes it owns, and an `Install` method for components and
+services. `FeatureGraph` validates IDs, duplicate registrations, missing dependencies,
+and cycles, then produces a deterministic dependency-first order. `FeatureHost` separately
+validates that a patch class has exactly one owner.
+
+Startup is transactional by feature:
+
+1. Install dependency services in graph order.
+2. Register scene services and perform one initial reset after all installs.
+3. Patch only the classes declared by that feature, under a feature-specific Harmony ID.
+4. If installation or patching fails, remove that feature's services and components,
+   unpatch its Harmony owner, and skip only its dependants.
+5. Continue loading unrelated modules and log the final feature and patch report.
+
+There is no assembly-wide `PatchAll`. Adding a feature therefore cannot silently install
+patches owned by another feature.
+
+## Runtime and scene lifecycle
+
+The host owns one hidden `DontDestroyOnLoad` object. Persistent managers implement
+`ISceneService`; `SceneLifecycle` resets them once at initial composition and whenever
+Unity reports a loaded scene. Reset exceptions are isolated per service.
+
+| Order | Service |
+|---:|---|
+| 10 | Impact/fire manager |
+| 20 | Ruin aftermath manager |
+| 30 | Zone garrison manager |
+| 100 | Network per-scene state |
+
+Plugin teardown unpatches features in reverse order, unregisters the scene callback,
+clears the service registry, unregisters Mirage client handlers, removes the server
+authentication listener, and destroys the runtime root.
+
+Longer-term scene work will use a scene generation/cancellation token and one readiness
+gate for mission data, networking, and `Encyclopedia` content. That replaces each
+feature inventing its own delayed readiness loop.
+
+## Configuration
+
+Configuration is composed centrally so BepInEx writes one file, but entries are owned by
+`FireAndDestructionSettings`, `UrbanCombatSettings`, and `DiagnosticSettings`.
+`LegacyConfigMigration` consumes removed experimental and low-level keys before saving.
+A temporary forwarding facade keeps the current managers behavior-identical while they
+are split. New modules should consume their settings object through `FeatureContext`
+instead of adding more flattened properties.
+
+Hard performance ceilings are derived constants, not user-disableable config values.
+High-level tuning may change intensity or counts only inside those ceilings.
 
 ## Authority and replication
 
-- Garrison spawning continues through Nuclear Option's normal server authority.
-- Only the server rolls ignition chances. Successful fire, lightweight-building damage, and permanent ruin transitions use small reliable Mirage messages.
-- A joining player receives two delayed snapshots after authentication so mission-scene loading cannot swallow persistent visual state.
-- Spawned garrison buildings use vanilla Mirage spawning and need no custom position updates.
+World mutation remains server-authoritative:
+
+- only the server rolls ignition and spread;
+- garrisons use vanilla server spawning;
+- building damage, fire, and ruin transitions use small reliable Mirage messages;
+- joining players receive two delayed snapshots after authentication;
+- particles, smoke evolution, wind, lights, scorch presentation, and collapse dust are
+  local presentation and never create per-frame network traffic.
+
+`ModNet` is currently a compatibility bridge containing the three existing channels. Its
+next extraction keeps the wire types stable while moving state, handlers, codecs, and
+snapshots beside their owning features. The planned network framework adds a protocol
+handshake, scene epoch, bounded snapshot registry, and validated client-request path before
+support calls or progression are enabled in multiplayer.
 
 ## Performance boundaries
 
-- 256 queued impacts, processed eight per frame.
-- 24 active fire sites by default; nearby impacts merge while generated forest children remain visible front sections.
-- 32 queued ground-vehicle destruction events, with at most one nearby-building query processed per frame.
-- One blast-map scorch request per frame.
-- Three dynamic fire lights globally.
-- 256 persistent logical ruin records, 24 nearest smoke visuals, and four simultaneous collapse bursts by default.
-- Ruin smoke switches from a dense hot phase to lower-rate intermittent smouldering but remains logically present for the mission.
-- Collapse dust is pooled particle rendering only; it creates no Rigidbody debris, colliders, or per-ruin update component.
-- Fire scorch requests use the vanilla BlastManager gray ash map with a configurable 0.72 radius scale by default.
-- Two spread attempts per forest site and at most the configured generation depth; all children share the global fire-site cap.
-- Procedural tree data is indexed once per scene. Exact hit tests search only the nine neighboring CPU cells.
-- Airbase building scans occur only after initial ownership or capture, one zone per frame. Missing scene dependencies or late-loaded town shells receive a bounded retry.
-- Empty rural capture circles receive one bounded 2.5 km fallback search for the nearest settlement.
+The present safety model remains an architectural invariant:
 
-## Compatibility behavior
+- 256 queued impacts, processing eight per frame.
+- 32 queued ground-vehicle losses, processing one spatial query per frame.
+- 24 active fire sites; nearby impacts merge under bounded rules.
+- One blast-map scorch request per frame and three dynamic fire lights globally.
+- Three building-damage visual tiers using material property blocks.
+- 48 bounded vanilla facade/roof scorch projectors.
+- 256 logical ruins, 24 nearest smoke visuals, and four collapse bursts.
+- Pooled particle-only collapse effects with no persistent debris physics.
+- Two bounded forest spread attempts per site under the global fire-site cap.
+- One procedural-tree index build per scene and local nine-cell hit searches.
+- One civilian-shell catalogue per scene and at most one garrison zone processed per frame.
 
-Reflection is resolved once and reported at startup. Optional Harmony patches use `Prepare` checks where their target can move. A missing defensive building definition disables only garrisons. Fire visuals build bounded emitters from materials discovered under vanilla `DamageParticles`; this prevents inherited explosion bursts, sparks, and debris. If no suitable materials exist, the module falls back to the pooled global smoke system.
+No feature may scan the whole scene every frame. Catalogue once, queue event work, use slow
+ticks, reuse non-allocating buffers, pool expensive visuals, and release scene references
+on reset.
 
-The startup log lists installed patches, resolved capabilities, and loaded `DEF` building definitions. This is the first place to look after a game update.
+## Compatibility boundaries
+
+Cached game reflection is initialized once. Optional Harmony patches use `Prepare` when a
+target may move, and the startup capability report exposes resolved targets and content.
+The metadata patch probe validates supported game methods, fields, module classes, patch
+classes, and the exact current wire contracts against the installed game.
+
+Before changing a Harmony target, private field, network message, or vanilla spawn/effect
+adapter, inspect the supported `Assembly-CSharp.dll` and extend the probe. A missing
+optional capability must disable one module or action, never trigger repeated reflection
+or whole-scene fallback scans.

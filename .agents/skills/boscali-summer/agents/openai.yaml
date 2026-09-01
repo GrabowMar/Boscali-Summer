@@ -1,0 +1,4 @@
+interface:
+  display_name: "Boscali Summer"
+  short_description: "Maintain the modular Boscali Summer Nuclear Option mod"
+  default_prompt: "Use $boscali-summer to inspect and improve this mod while preserving host authority and bounded runtime budgets."

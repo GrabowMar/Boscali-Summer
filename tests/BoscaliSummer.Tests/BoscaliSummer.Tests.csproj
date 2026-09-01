@@ -7,5 +7,8 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="..\..\src\BoscaliSummer\Core\Deterministic.cs" Link="Core\Deterministic.cs" />
+    <Compile Include="..\..\src\BoscaliSummer\Framework\Features\FeatureMetadata.cs" Link="Framework\FeatureMetadata.cs" />
+    <Compile Include="..\..\src\BoscaliSummer\Framework\Features\FeatureGraph.cs" Link="Framework\FeatureGraph.cs" />
+    <Compile Include="..\..\src\BoscaliSummer\Framework\Features\ServiceRegistry.cs" Link="Framework\ServiceRegistry.cs" />
   </ItemGroup>
 </Project>

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using BoscaliSummer.Framework.Lifecycle;
 using BoscaliSummer.Runtime;
 using NuclearOption.Networking;
 using UnityEngine;
@@ -10,7 +11,7 @@ namespace BoscaliSummer.Fire
     /// bounded subset. This keeps the aftermath persistent without making a destroyed city
     /// simulate hundreds of transparent plumes at once.
     /// </summary>
-    internal sealed class RuinAftermathManager : MonoBehaviour
+    internal sealed class RuinAftermathManager : MonoBehaviour, ISceneService
     {
         private sealed class RuinSite
         {
@@ -93,8 +94,9 @@ namespace BoscaliSummer.Fire
                 RuinSite site = ruins[i];
                 if (site.Smoke == null) continue;
                 float age = Mathf.Max(0f, now - site.Born);
-                float distance = Vector3.Distance(camera.transform.position, site.Position.ToLocalPosition());
-                float distanceScale = distance < 1200f ? 1f : distance < 3000f ? 0.68f : 0.46f;
+                float distanceSq = (camera.transform.position - site.Position.ToLocalPosition()).sqrMagnitude;
+                float distanceScale = distanceSq < 1200f * 1200f
+                    ? 1f : distanceSq < 3000f * 3000f ? 0.68f : 0.46f;
                 float ageScale;
                 if (age < hotSeconds)
                     ageScale = Mathf.Lerp(1f, 0.52f, Mathf.Clamp01(age / Mathf.Max(hotSeconds, 1f)));
@@ -130,6 +132,7 @@ namespace BoscaliSummer.Fire
                 ruins[best].Desired = true;
             }
 
+            int acquireBudget = 2;
             for (int i = 0; i < ruins.Count; i++)
             {
                 RuinSite site = ruins[i];
@@ -138,11 +141,12 @@ namespace BoscaliSummer.Fire
                     smokePool.Release(site.Smoke);
                     site.Smoke = null;
                 }
-                else if (site.Desired && site.Smoke == null && !GameManager.IsHeadless)
+                else if (site.Desired && site.Smoke == null && !GameManager.IsHeadless && acquireBudget > 0)
                 {
                     site.Smoke = smokePool.Acquire(
                         site.Position, site.HalfExtents,
                         FuelDepotSmokePool.SmokeProfile.Ruin);
+                    if (site.Smoke != null) acquireBudget--;
                 }
             }
         }

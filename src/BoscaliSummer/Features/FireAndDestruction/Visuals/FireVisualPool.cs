@@ -6,17 +6,10 @@ namespace BoscaliSummer.Fire
 {
     internal sealed class FireVisualPool
     {
-        internal enum LayerKind
-        {
-            Flame,
-            Smoke
-        }
-
         internal sealed class Visual
         {
             public GameObject Root;
             public ParticleSystem[] Systems;
-            public LayerKind[] Kinds;
             public float[] BaseRates;
             public Vector3[] BaseShapes;
             public Light Light;
@@ -75,13 +68,10 @@ namespace BoscaliSummer.Fire
                 if (Systems == null || BaseRates == null) return;
                 float growth = Smooth01(ageSeconds / Mathf.Max(GrowthSeconds, 1f));
                 float flameEnd = Smooth01(remainingFraction / 0.22f);
-                float smokeEnd = Smooth01(remainingFraction / 0.045f);
                 float flare = 0.76f + Mathf.PerlinNoise(FlickerSeed, Time.timeSinceLevelLoad * 0.38f) * 0.34f;
                 FlameIntensity = (0.018f + growth * 0.982f) * flameEnd * EmissionScale * flare;
                 if (Forest)
                     FlameIntensity *= Mathf.Lerp(1f, 1.30f, (ClusterScale - 1f) / 2f);
-                float smokeIntensity = (0.06f + growth * 0.94f)
-                    * Mathf.Lerp(0.62f, 1f, flameEnd) * smokeEnd;
                 float spread = Mathf.Lerp(FootprintScale * 0.24f, FootprintScale, growth) *
                     (Forest ? ClusterScale : 1f);
 
@@ -89,18 +79,16 @@ namespace BoscaliSummer.Fire
                 {
                     ParticleSystem system = Systems[i];
                     if (system == null) continue;
-                    bool smoke = Kinds[i] == LayerKind.Smoke;
                     ParticleSystem.EmissionModule emission = system.emission;
-                    emission.rateOverTimeMultiplier = BaseRates[i] *
-                        (smoke ? smokeIntensity * EmissionScale : FlameIntensity);
+                    emission.rateOverTimeMultiplier = BaseRates[i] * FlameIntensity;
                     ParticleSystem.ShapeModule shape = system.shape;
                     shape.scale = new Vector3(
                         BaseShapes[i].x * spread,
                         BaseShapes[i].y,
                         BaseShapes[i].z * spread);
                     ParticleSystem.VelocityOverLifetimeModule velocity = system.velocityOverLifetime;
-                    velocity.x = wind.x * (smoke ? 0.72f : 0.16f);
-                    velocity.z = wind.z * (smoke ? 0.72f : 0.16f);
+                    velocity.x = wind.x * 0.16f;
+                    velocity.z = wind.z * 0.16f;
                 }
             }
 
@@ -118,7 +106,6 @@ namespace BoscaliSummer.Fire
 
         private readonly List<Visual> visuals = new List<Visual>(24);
         private Material flameMaterial;
-        private Material smokeMaterial;
         private bool templatesSearched;
 
         public Visual Acquire(GlobalPosition position, bool forest)
@@ -156,7 +143,7 @@ namespace BoscaliSummer.Fire
                 if (visuals[i].Root != null) UnityEngine.Object.Destroy(visuals[i].Root);
             visuals.Clear();
             templatesSearched = false;
-            flameMaterial = smokeMaterial = null;
+            flameMaterial = null;
         }
 
         private Visual Create()
@@ -165,7 +152,6 @@ namespace BoscaliSummer.Fire
             var root = new GameObject("BoscaliSummer.FireSite");
             root.transform.SetParent(Datum.origin, false);
             var systems = new List<ParticleSystem>(3);
-            var kinds = new List<LayerKind>(3);
             var rates = new List<float>(3);
             var shapes = new List<Vector3>(3);
 
@@ -173,10 +159,10 @@ namespace BoscaliSummer.Fire
             {
                 AddFlameLayer(root.transform, "SurfaceFlame", flameMaterial,
                     new Vector3(30f, 1.2f, 23f), 24f, 0.65f, 1.45f, 0.5f, 2.2f, 3.2f, 7.5f,
-                    systems, kinds, rates, shapes);
+                    systems, rates, shapes);
                 AddFlameLayer(root.transform, "FlameTongues", flameMaterial,
                     new Vector3(22f, 1f, 17f), 7.5f, 1.1f, 2.35f, 1.2f, 3.6f, 4.2f, 9.5f,
-                    systems, kinds, rates, shapes);
+                    systems, rates, shapes);
             }
             // Fire smoke is emitted through the game's vanilla large-smoke catalogue by
             // ImpactFireManager. Keeping it out of this local pool avoids a second, flat
@@ -197,7 +183,6 @@ namespace BoscaliSummer.Fire
             {
                 Root = root,
                 Systems = systems.ToArray(),
-                Kinds = kinds.ToArray(),
                 BaseRates = rates.ToArray(),
                 BaseShapes = shapes.ToArray(),
                 Light = light
@@ -209,7 +194,6 @@ namespace BoscaliSummer.Fire
             if (templatesSearched) return;
             templatesSearched = true;
             int flameScore = int.MinValue;
-            int smokeScore = int.MinValue;
             DamageParticles[] effects = Resources.FindObjectsOfTypeAll<DamageParticles>();
             for (int e = 0; e < effects.Length; e++)
             {
@@ -222,22 +206,17 @@ namespace BoscaliSummer.Fire
                     string path = (effects[e].name + "/" + systems[i].name).ToLowerInvariant();
                     if (path.Contains("fire") || path.Contains("flame"))
                     {
-                        int score = ScoreMaterial(path, false);
+                        int score = ScoreMaterial(path);
                         if (score > flameScore) { flameScore = score; flameMaterial = renderer.sharedMaterial; }
-                    }
-                    if (path.Contains("smoke"))
-                    {
-                        int score = ScoreMaterial(path, true);
-                        if (score > smokeScore) { smokeScore = score; smokeMaterial = renderer.sharedMaterial; }
                     }
                 }
             }
-            Plugin.Logger.LogInfo($"Fire materials ready: flame={(flameMaterial != null)}, smoke={(smokeMaterial != null)}.");
+            Plugin.Logger.LogInfo($"Fire flame material ready: {flameMaterial != null}.");
         }
 
-        private static int ScoreMaterial(string path, bool smoke)
+        private static int ScoreMaterial(string path)
         {
-            int score = smoke ? (path.Contains("smoke") ? 50 : 0) : (path.Contains("flame") ? 60 : 40);
+            int score = path.Contains("flame") ? 60 : 40;
             if (path.Contains("damage") || path.Contains("burn")) score += 25;
             if (path.Contains("engine")) score += 8;
             string[] explosive = { "explosion", "spark", "shrapnel", "debris", "impact", "muzzle" };
@@ -249,7 +228,7 @@ namespace BoscaliSummer.Fire
         private static void AddFlameLayer(
             Transform parent, string name, Material material, Vector3 shapeScale, float rate,
             float lifeMin, float lifeMax, float speedMin, float speedMax, float sizeMin, float sizeMax,
-            List<ParticleSystem> systems, List<LayerKind> kinds, List<float> rates, List<Vector3> shapes)
+            List<ParticleSystem> systems, List<float> rates, List<Vector3> shapes)
         {
             ParticleSystem system = CreateSystem(parent, name, material, shapeScale, rate,
                 lifeMin, lifeMax, speedMin, speedMax, sizeMin, sizeMax, 220);
@@ -270,35 +249,7 @@ namespace BoscaliSummer.Fire
             ParticleSystem.ColorOverLifetimeModule color = system.colorOverLifetime;
             color.enabled = true;
             color.color = FlameGradient();
-            Register(system, LayerKind.Flame, shapeScale, rate, systems, kinds, rates, shapes);
-        }
-
-        private static void AddSmokeLayer(
-            Transform parent, Material material,
-            List<ParticleSystem> systems, List<LayerKind> kinds, List<float> rates, List<Vector3> shapes)
-        {
-            Vector3 shapeScale = new Vector3(44f, 2f, 34f);
-            const float rate = 8.5f;
-            ParticleSystem system = CreateSystem(parent, "DriftingSmoke", material, shapeScale, rate,
-                16f, 28f, 2.4f, 5.4f, 20f, 38f, 260);
-            ParticleSystem.MainModule main = system.main;
-            main.startColor = new ParticleSystem.MinMaxGradient(
-                new Color(0.10f, 0.095f, 0.085f, 0.68f),
-                new Color(0.32f, 0.31f, 0.29f, 0.84f));
-            main.gravityModifier = -0.035f;
-
-            ParticleSystem.NoiseModule noise = system.noise;
-            noise.enabled = true;
-            noise.quality = ParticleSystemNoiseQuality.Medium;
-            noise.strength = 4.2f;
-            noise.frequency = 0.12f;
-            noise.scrollSpeed = 0.2f;
-            noise.damping = true;
-
-            ParticleSystem.ColorOverLifetimeModule color = system.colorOverLifetime;
-            color.enabled = true;
-            color.color = SmokeGradient();
-            Register(system, LayerKind.Smoke, shapeScale, rate, systems, kinds, rates, shapes);
+            Register(system, shapeScale, rate, systems, rates, shapes);
         }
 
         private static ParticleSystem CreateSystem(
@@ -369,32 +320,11 @@ namespace BoscaliSummer.Fire
             return new ParticleSystem.MinMaxGradient(gradient);
         }
 
-        private static ParticleSystem.MinMaxGradient SmokeGradient()
-        {
-            var gradient = new Gradient();
-            gradient.SetKeys(
-                new[]
-                {
-                    new GradientColorKey(new Color(0.16f, 0.13f, 0.11f), 0f),
-                    new GradientColorKey(new Color(0.24f, 0.23f, 0.22f), 0.45f),
-                    new GradientColorKey(new Color(0.44f, 0.45f, 0.44f), 1f)
-                },
-                new[]
-                {
-                    new GradientAlphaKey(0f, 0f),
-                    new GradientAlphaKey(0.72f, 0.12f),
-                    new GradientAlphaKey(0.52f, 0.68f),
-                    new GradientAlphaKey(0f, 1f)
-                });
-            return new ParticleSystem.MinMaxGradient(gradient);
-        }
-
         private static void Register(
-            ParticleSystem system, LayerKind kind, Vector3 shape, float rate,
-            List<ParticleSystem> systems, List<LayerKind> kinds, List<float> rates, List<Vector3> shapes)
+            ParticleSystem system, Vector3 shape, float rate,
+            List<ParticleSystem> systems, List<float> rates, List<Vector3> shapes)
         {
             systems.Add(system);
-            kinds.Add(kind);
             rates.Add(rate);
             shapes.Add(shape);
         }

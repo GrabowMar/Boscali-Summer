@@ -20,7 +20,7 @@ namespace BoscaliSummer.Fire
             {
                 int salt = Mathf.RoundToInt(info.muzzleVelocity) ^ Mathf.RoundToInt(info.pierceDamage * 0.1f);
                 ImpactFireManager.Instance?.SubmitImpact(
-                    ___position, false, salt, info.pierceDamage, info.blastDamage);
+                    ___position, false, salt);
             }
         }
     }
@@ -44,7 +44,7 @@ namespace BoscaliSummer.Fire
                 ? relativeUnit.transform.TransformPoint(pos)
                 : pos + Datum.origin.position;
             ImpactFireManager.Instance?.SubmitImpact(
-                world.ToGlobalPosition(), true, Mathf.RoundToInt(___blastYield), 0f, ___blastYield);
+                world.ToGlobalPosition(), true, Mathf.RoundToInt(___blastYield));
         }
     }
 

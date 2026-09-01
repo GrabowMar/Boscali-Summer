@@ -305,6 +305,10 @@ namespace BoscaliSummer.Fire
             if (template == null || template.Prefab == null) return null;
             var root = new GameObject("BoscaliSummer.FuelDepotSmokeSources");
             root.transform.SetParent(Datum.origin, false);
+            // Keep the hierarchy inactive while cloning and stripping the vanilla wreck
+            // prefab. This prevents its scripts, audio, lights, and emitters from briefly
+            // enabling before PrepareSmokeSource removes them.
+            root.SetActive(false);
 
             var retained = new List<ParticleSystem>(template.SmokePaths.Count * MaximumSmokeSources);
             var rates = new List<float>(retained.Capacity);
@@ -330,7 +334,6 @@ namespace BoscaliSummer.Fire
                 UnityEngine.Object.Destroy(root);
                 return null;
             }
-            root.SetActive(false);
             return new Visual
             {
                 Root = root,

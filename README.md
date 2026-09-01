@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| **Current release** | `0.1.1` |
+| **Current development build** | `0.1.1` (unreleased) |
 | **Game version** | Nuclear Option `0.34.2` |
 | **Requirements** | BepInEx `5.4.23.3` or newer |
 | **Supported play** | Single-player and multiplayer with the mod on every peer |
@@ -12,6 +12,10 @@
 
 > [!IMPORTANT]
 > Boscali Summer is in active development. Fire balance, visual effects, configuration, and destruction behavior may change between releases.
+
+> [!WARNING]
+> No public binary release has been published yet. The repository currently represents
+> a development build intended for local testing.
 
 > [!NOTE]
 > Ignition, destruction, and garrison decisions are host-authoritative. In multiplayer, the host and every client must run the same Boscali Summer version.
@@ -32,7 +36,7 @@
 ### Manual installation
 
 1. Install [BepInEx 5](https://github.com/BepInEx/BepInEx/releases) into the Nuclear Option directory and launch the game once.
-2. Download `BoscaliSummer.dll` from the [latest release](https://github.com/GrabowMar/Boscali-Summer/releases).
+2. Build `BoscaliSummer.dll` from source using the instructions below.
 3. Copy it to:
 
    ```text
@@ -45,7 +49,8 @@
    Boscali Summer 0.1.1 loaded. All world changes remain host authoritative.
    ```
 
-The optional `BoscaliSummer-0.1.1.zip` mirrors the game directory and can instead be extracted at the Nuclear Option root. Do not install both copies.
+The packaging script can also create `BoscaliSummer-0.1.1.zip`, which mirrors the game
+directory and can be extracted at the Nuclear Option root. Do not install both copies.
 
 Settings are generated at:
 
@@ -83,7 +88,7 @@ Forest smoke uses three pooled smoke-only copies of the vanilla Fuel Depot destr
 
 ### Buildings and ruins
 
-Lightweight `MapBuilding` objects enter a battered intermediate state before destruction. Supported materials receive the game's native `_HitPoints` and `_Damage` values; simpler scenery shaders receive restrained, uneven soot while keeping their intact geometry and facade detail.
+Lightweight `MapBuilding` objects enter a battered intermediate state before destruction. Supported materials receive the game's native `_HitPoints` and `_Damage` values; simpler scenery shaders retain their original colour under restrained warm soot, reduced gloss, and localized vanilla scorch marks. Damage advances in three visual tiers, avoiding material clones and repeated full-facade work for every small hit.
 
 Building flames are anchored to the collider-backed roof surface under the impact point. Two or three staggered smoke sources distribute the Fuel Depot plume across the footprint. When an unoccupied civilian building finishes burning, it follows the vanilla disabled/ruin path. A faction-owned building is considered occupied and is preserved.
 
@@ -103,7 +108,7 @@ Garrisons update with zone ownership, cannot duplicate, disappear when their she
 
 ## Configuration reference
 
-The public configuration is intentionally compact. Particle counts, spatial budgets, spread depth, and other safety limits are derived or fixed so a visually tempting setting cannot accidentally turn a long mission into a performance collapse.
+The public configuration is intentionally compact. Particle counts, spatial budgets, spread depth, and other safety limits are derived or fixed so a visually tempting setting cannot accidentally turn a long mission into a performance collapse. It exposes seven high-level controls.
 
 | Section | Setting | Default | Purpose |
 |---|---|---:|---|
@@ -133,7 +138,9 @@ The main runtime budgets are:
 | Nearest ruin smoke visuals | 24 |
 | Simultaneous collapse bursts | 4 |
 
-See [Architecture](docs/ARCHITECTURE.md) for the authority model, scene indexing, pooling strategy, and compatibility boundaries.
+See [Architecture](docs/ARCHITECTURE.md) for the implemented module/lifecycle design and
+[Feature plan](docs/FEATURE_PLAN.md) for the staged urban-combat, music, progression, and
+support-call roadmap.
 
 ## Diagnostics and compatibility
 
@@ -160,7 +167,11 @@ Packaging builds the solution, runs the deterministic test suite, checks private
 
 ## Scope
 
-Version `0.1.x` focuses on the tactical battlefield layer: fire, visible destruction, persistent aftermath, and urban defensive positions. It intentionally does not add unbounded wildfire, continuous secondary fire damage, Rigidbody debris, new infantry models, or persistence between missions.
+Version `0.1.x` focuses on the tactical battlefield layer: fire, visible destruction,
+persistent aftermath, and urban defensive positions. It intentionally does not add
+unbounded wildfire, continuous secondary fire damage, Rigidbody debris, new infantry
+models, or persistence between missions. Later utilities remain gated by the
+[feature plan](docs/FEATURE_PLAN.md), not implied by the current version.
 
 ## Licence
 

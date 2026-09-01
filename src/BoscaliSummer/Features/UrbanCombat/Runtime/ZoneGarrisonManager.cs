@@ -1,13 +1,13 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using BoscaliSummer.Core;
+using BoscaliSummer.Framework.Lifecycle;
 using NuclearOption.Networking;
 using UnityEngine;
 
 namespace BoscaliSummer.Garrisons
 {
-    internal sealed class ZoneGarrisonManager : MonoBehaviour
+    internal sealed class ZoneGarrisonManager : MonoBehaviour, ISceneService
     {
         internal const string NamePrefix = "BoscaliSummer:Garrison:";
 
@@ -32,6 +32,11 @@ namespace BoscaliSummer.Garrisons
         private readonly List<PendingCapture> pending = new List<PendingCapture>();
         private readonly Dictionary<int, GarrisonRecord> records = new Dictionary<int, GarrisonRecord>();
         private readonly Dictionary<int, int> generations = new Dictionary<int, int>();
+        private readonly List<GameObject> shellCatalogue = new List<GameObject>(512);
+        private readonly Dictionary<int, Bounds> shellBounds = new Dictionary<int, Bounds>(512);
+        private BuildingDefinition cachedDefenseDefinition;
+        private Bounds cachedDefenseBounds;
+        private bool hasCachedDefenseBounds;
         private float nextLifecycleCheck;
         private bool missingDefinitionReported;
         private bool definitionInventoryReported;
@@ -46,6 +51,10 @@ namespace BoscaliSummer.Garrisons
             pending.Clear();
             records.Clear();
             generations.Clear();
+            shellCatalogue.Clear();
+            shellBounds.Clear();
+            cachedDefenseDefinition = null;
+            hasCachedDefenseBounds = false;
             missingDefinitionReported = false;
             definitionInventoryReported = false;
             initialScanComplete = false;
@@ -75,6 +84,7 @@ namespace BoscaliSummer.Garrisons
             if (!initialScanComplete && Time.unscaledTime >= initialScanAt)
             {
                 initialScanComplete = true;
+                RebuildShellCatalogue();
                 Airbase[] airbases = Resources.FindObjectsOfTypeAll<Airbase>();
                 for (int i = 0; i < airbases.Length; i++)
                 {
@@ -123,6 +133,14 @@ namespace BoscaliSummer.Garrisons
             List<GameObject> candidates = FindCandidates(airbase);
             if (candidates.Count == 0)
             {
+                if (capture.Attempts == 0)
+                {
+                    RebuildShellCatalogue();
+                    candidates = FindCandidates(airbase);
+                }
+            }
+            if (candidates.Count == 0)
+            {
                 if (capture.Attempts < 3) { Retry(capture); return; }
                 if (Plugin.Settings.VerboseLogging.Value)
                     Plugin.Logger.LogInfo("No eligible civilian building shells around airbase " + GetAirbaseName(airbase));
@@ -146,8 +164,13 @@ namespace BoscaliSummer.Garrisons
                 GameObject shell = candidates[slot];
                 if (shell == null) continue;
                 Building shellBuilding = shell.GetComponentInParent<Building>();
-                Bounds shellBounds = CalculateBounds(shell);
-                Bounds prefabBounds = CalculateBounds(defense.unitPrefab);
+                Bounds shellBounds = GetShellBounds(shell);
+                if (!hasCachedDefenseBounds)
+                {
+                    cachedDefenseBounds = CalculateBounds(defense.unitPrefab);
+                    hasCachedDefenseBounds = true;
+                }
+                Bounds prefabBounds = cachedDefenseBounds;
                 Vector3 local = shellBounds.center;
                 local.y = shellBounds.max.y - prefabBounds.min.y + 0.15f;
                 string unique = NamePrefix + Sanitize(GetAirbaseName(airbase)) + ":" + generation + ":" + slot;
@@ -218,29 +241,52 @@ namespace BoscaliSummer.Garrisons
 
         private BuildingDefinition ResolveDefenseDefinition()
         {
+            if (cachedDefenseDefinition != null) return cachedDefenseDefinition;
             if (Encyclopedia.i == null || Encyclopedia.i.buildings == null) return null;
             string requested = Plugin.Settings.GarrisonDefinitionKey?.Trim();
             if (!string.IsNullOrEmpty(requested))
-                return Encyclopedia.i.buildings.FirstOrDefault(x => x != null && x.jsonKey == requested && x.buildingType == BuildingType.DEF);
+            {
+                for (int i = 0; i < Encyclopedia.i.buildings.Count; i++)
+                {
+                    BuildingDefinition definition = Encyclopedia.i.buildings[i];
+                    if (definition != null && definition.jsonKey == requested &&
+                        definition.buildingType == BuildingType.DEF)
+                        return cachedDefenseDefinition = definition;
+                }
+                return null;
+            }
 
-            BuildingDefinition[] defs = Encyclopedia.i.buildings
-                .Where(x => x != null && x.buildingType == BuildingType.DEF && x.unitPrefab != null)
-                .ToArray();
+            var defs = new List<BuildingDefinition>();
+            for (int i = 0; i < Encyclopedia.i.buildings.Count; i++)
+            {
+                BuildingDefinition definition = Encyclopedia.i.buildings[i];
+                if (definition != null && definition.buildingType == BuildingType.DEF &&
+                    definition.unitPrefab != null) defs.Add(definition);
+            }
             if (!definitionInventoryReported)
             {
                 definitionInventoryReported = true;
+                var labels = new string[defs.Count];
+                for (int i = 0; i < defs.Count; i++)
+                    labels[i] = defs[i].jsonKey + " (" + defs[i].unitName + ")";
                 Plugin.Logger.LogInfo("Loaded DEF building definitions: " +
-                    (defs.Length == 0
-                        ? "none"
-                        : string.Join(", ", defs.Select(x => x.jsonKey + " (" + x.unitName + ")").ToArray())));
+                    (defs.Count == 0 ? "none" : string.Join(", ", labels)));
             }
-            return defs.FirstOrDefault(x =>
-                       (x.unitName?.IndexOf("bunker", StringComparison.OrdinalIgnoreCase) ?? -1) >= 0 ||
-                       (x.jsonKey?.IndexOf("bunker", StringComparison.OrdinalIgnoreCase) ?? -1) >= 0)
-                   ?? defs.OrderBy(x => Mathf.Max(1f, x.width) * Mathf.Max(1f, x.length)).FirstOrDefault();
+            BuildingDefinition smallest = null;
+            float smallestArea = float.MaxValue;
+            for (int i = 0; i < defs.Count; i++)
+            {
+                BuildingDefinition definition = defs[i];
+                if ((definition.unitName?.IndexOf("bunker", StringComparison.OrdinalIgnoreCase) ?? -1) >= 0 ||
+                    (definition.jsonKey?.IndexOf("bunker", StringComparison.OrdinalIgnoreCase) ?? -1) >= 0)
+                    return cachedDefenseDefinition = definition;
+                float area = Mathf.Max(1f, definition.width) * Mathf.Max(1f, definition.length);
+                if (area < smallestArea) { smallestArea = area; smallest = definition; }
+            }
+            return cachedDefenseDefinition = smallest;
         }
 
-        private static List<GameObject> FindCandidates(Airbase airbase)
+        private List<GameObject> FindCandidates(Airbase airbase)
         {
             var result = new List<GameObject>();
             var seen = new HashSet<int>();
@@ -262,42 +308,23 @@ namespace BoscaliSummer.Garrisons
             return result;
         }
 
-        private static void GatherCandidates(
+        private void GatherCandidates(
             Airbase airbase, Vector3 center, float radius, HashSet<int> seen, List<GameObject> result)
         {
-            MapBuilding[] all = Resources.FindObjectsOfTypeAll<MapBuilding>();
-            for (int i = 0; i < all.Length; i++)
-            {
-                MapBuilding building = all[i];
-                if (building != null) TryAddCandidate(building.gameObject, airbase, center, radius, seen, result);
-            }
-
-            // Some mission-authored towns use network Building instances rather than
-            // procedural MapBuilding shells. Admit only unruined CIV definitions.
-            Building[] networkBuildings = Resources.FindObjectsOfTypeAll<Building>();
-            for (int i = 0; i < networkBuildings.Length; i++)
-            {
-                Building building = networkBuildings[i];
-                if (building == null || building.disabled) continue;
-                // Do not steal a civilian shell that is already owned by a faction;
-                // NetworkHQ is also the occupancy state used by fire burnout handling.
-                if (building.NetworkHQ != null) continue;
-                BuildingDefinition definition = building.definition as BuildingDefinition;
-                if (definition == null || definition.buildingType != BuildingType.CIV) continue;
-                if (!string.IsNullOrEmpty(building.NetworkUniqueName) &&
-                    building.NetworkUniqueName.StartsWith(NamePrefix, StringComparison.Ordinal)) continue;
-                TryAddCandidate(building.gameObject, airbase, center, radius, seen, result);
-            }
+            for (int i = 0; i < shellCatalogue.Count; i++)
+                TryAddCandidate(shellCatalogue[i], airbase, center, radius, seen, result);
         }
 
-        private static void TryAddCandidate(
+        private void TryAddCandidate(
             GameObject shell, Airbase airbase, Vector3 center, float radius,
             HashSet<int> seen, List<GameObject> result)
         {
             if (shell == null || !shell.scene.IsValid() || shell.scene != airbase.gameObject.scene) return;
+            Building networkBuilding = shell.GetComponentInParent<Building>();
+            if (networkBuilding != null && (networkBuilding.disabled || networkBuilding.NetworkHQ != null)) return;
             int id = shell.GetInstanceID();
             if (seen.Contains(id) || IsCriticalName(shell.name)) return;
-            Bounds bounds = CalculateBounds(shell);
+            Bounds bounds = GetShellBounds(shell);
             Vector3 delta = bounds.center - center;
             delta.y = 0f;
             if (delta.sqrMagnitude > radius * radius) return;
@@ -306,20 +333,69 @@ namespace BoscaliSummer.Garrisons
             result.Add(shell);
         }
 
+        private void RebuildShellCatalogue()
+        {
+            shellCatalogue.Clear();
+            shellBounds.Clear();
+            var seen = new HashSet<int>();
+            MapBuilding[] mapBuildings = Resources.FindObjectsOfTypeAll<MapBuilding>();
+            for (int i = 0; i < mapBuildings.Length; i++)
+            {
+                MapBuilding building = mapBuildings[i];
+                if (building == null || !building.gameObject.scene.IsValid()) continue;
+                if (seen.Add(building.gameObject.GetInstanceID())) shellCatalogue.Add(building.gameObject);
+            }
+            Building[] networkBuildings = Resources.FindObjectsOfTypeAll<Building>();
+            for (int i = 0; i < networkBuildings.Length; i++)
+            {
+                Building building = networkBuildings[i];
+                if (building == null || !building.gameObject.scene.IsValid()) continue;
+                BuildingDefinition definition = building.definition as BuildingDefinition;
+                if (definition == null || definition.buildingType != BuildingType.CIV) continue;
+                if (!string.IsNullOrEmpty(building.NetworkUniqueName) &&
+                    building.NetworkUniqueName.StartsWith(NamePrefix, StringComparison.Ordinal)) continue;
+                if (seen.Add(building.gameObject.GetInstanceID())) shellCatalogue.Add(building.gameObject);
+            }
+            if (Plugin.Settings.VerboseLogging.Value)
+                Plugin.Logger.LogInfo($"Cached {shellCatalogue.Count} civilian shells for garrison searches.");
+        }
+
+        private Bounds GetShellBounds(GameObject shell)
+        {
+            int id = shell.GetInstanceID();
+            Bounds bounds;
+            if (!shellBounds.TryGetValue(id, out bounds))
+            {
+                bounds = CalculateBounds(shell);
+                shellBounds[id] = bounds;
+            }
+            return bounds;
+        }
+
         private static bool IsCriticalName(string name)
         {
-            string lower = (name ?? string.Empty).ToLowerInvariant();
-            string[] blocked = { "hangar", "radar", "factory", "depot", "ammo", "tower", "runway", "fuel" };
-            for (int i = 0; i < blocked.Length; i++) if (lower.Contains(blocked[i])) return true;
+            string value = name ?? string.Empty;
+            for (int i = 0; i < CriticalNameFragments.Length; i++)
+                if (value.IndexOf(CriticalNameFragments[i], StringComparison.OrdinalIgnoreCase) >= 0)
+                    return true;
             return false;
         }
+
+        private static readonly string[] CriticalNameFragments =
+            { "hangar", "radar", "factory", "depot", "ammo", "tower", "runway", "fuel" };
 
         private static Bounds CalculateBounds(GameObject root)
         {
             Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
-            if (renderers.Length == 0) return new Bounds(root.transform.position, Vector3.one * 4f);
-            Bounds bounds = renderers[0].bounds;
-            for (int i = 1; i < renderers.Length; i++) bounds.Encapsulate(renderers[i].bounds);
+            Bounds bounds = new Bounds(root.transform.position, Vector3.one * 4f);
+            bool found = false;
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                Renderer renderer = renderers[i];
+                if (renderer == null || renderer is ParticleSystemRenderer || !renderer.enabled) continue;
+                if (!found) { bounds = renderer.bounds; found = true; }
+                else bounds.Encapsulate(renderer.bounds);
+            }
             return bounds;
         }
 

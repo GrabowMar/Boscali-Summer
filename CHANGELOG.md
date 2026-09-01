@@ -1,5 +1,35 @@
 # Changelog
 
+## Unreleased
+
+- Added an explicit single-assembly feature framework with dependency ordering,
+  feature-owned Harmony patch lists, transactional startup, ordered scene resets, and
+  reverse teardown instead of manual component wiring and assembly-wide patch discovery.
+- Reorganized the source into Bootstrap, Framework, Infrastructure, Fire and Destruction,
+  and Urban Combat boundaries while preserving compatibility-sensitive namespaces and
+  Mirage message identities.
+- Split configuration into module-owned settings plus one legacy migration step, added
+  feature graph/service tests, and expanded the patch probe to cover feature types and wire
+  contracts.
+- Made packaging stop on failed restore, build, test, or compatibility-probe commands so a
+  stale binary cannot be packaged after a native command failure.
+- Added the staged feature plan and a repository-scoped Codex skill for future maintenance.
+
+- Replaced the fallback gray facade wash with colour-preserving warm soot, reduced gloss,
+  and bounded vanilla scorch projectors on roofs and walls.
+- Quantized building damage into three synchronized visual tiers and moved native shader
+  controls to material property blocks, eliminating per-building material clones.
+- Deferred ruin-footprint renderer scans until actual destruction instead of performing
+  them for every hit on a lightweight building.
+- Collapsed duplicate per-impact building overlap queries into one non-allocating lookup
+  and replaced boxed reflective HP reads with a cached Harmony field delegate.
+- Cached civilian shell bounds/catalogues and defensive prefab bounds for garrison setup,
+  removed repeated per-zone scene scans and hot-path string allocations.
+- Smoothed Fuel Depot smoke creation across frames, bounded long-mission ignition cooldown
+  memory, removed the unused synthetic smoke path, and reduced routine distance work.
+- Expanded the compatibility probe to cover ground-vehicle destruction and the vanilla
+  scorch decal dependency.
+
 ## 0.1.1 - Destruction aftermath
 
 - Removed the experimental helicopter optical-smoke countermeasure, seeker patches, runtime cloud manager, icon asset, and public smoke settings; fire and ruin smoke are unaffected.
