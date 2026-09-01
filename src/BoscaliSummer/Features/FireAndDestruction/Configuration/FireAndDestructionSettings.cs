@@ -32,6 +32,8 @@ namespace BoscaliSummer.Features.FireAndDestruction.Configuration
         public int MaximumRuinSmokeVisuals => 24;
         public int MaximumCollapseBursts => 4;
         public float HotRuinSeconds => 120f;
+        // Retained for the temporary central configuration facade. New building damage
+        // uses normalized stages in BuildingDamagePolicy.
         public float BuildingDamagedHitPoints => 58f;
 
         public FireAndDestructionSettings(ConfigFile config)

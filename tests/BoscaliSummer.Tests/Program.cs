@@ -1,6 +1,7 @@
 using System;
 using BoscaliSummer.Core;
 using BoscaliSummer.Tests.Architecture;
+using BoscaliSummer.Tests.Features.FireAndDestruction;
 using BoscaliSummer.Tests.Features.Radio;
 using BoscaliSummer.Tests.Framework;
 
@@ -11,6 +12,7 @@ namespace BoscaliSummer.Tests
         private static int Main()
         {
             FrameworkTests.Run();
+            BuildingDamageTests.Run();
             RadioTests.Run();
             ModuleBoundaryTests.Run();
 

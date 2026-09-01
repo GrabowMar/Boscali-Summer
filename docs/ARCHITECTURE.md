@@ -84,6 +84,7 @@ Unity reports a loaded scene. Reset exceptions are isolated per service.
 | Order | Service |
 |---:|---|
 | 10 | Impact/fire manager |
+| 15 | Building-damage presentation manager |
 | 20 | Ruin aftermath manager |
 | 30 | Zone garrison manager |
 | 40 | Client-local radio panel/scene binding |
@@ -152,8 +153,9 @@ The present safety model remains an architectural invariant:
 - 32 queued ground-vehicle losses, processing one spatial query per frame.
 - 24 active fire sites; nearby impacts merge under bounded rules.
 - One blast-map scorch request per frame and three dynamic fire lights globally.
-- Three building-damage visual tiers using material property blocks.
-- 48 bounded vanilla facade/roof scorch projectors.
+- Three normalized building-damage visual tiers using material property blocks, with a
+  64-transition queue processing two buildings per frame.
+- 48 pooled, camera-near vanilla facade/roof scorch projectors and 256 tracked damaged buildings.
 - 256 logical ruins, 24 nearest smoke visuals, and four collapse bursts.
 - Pooled particle-only collapse effects with no persistent debris physics.
 - Two bounded forest spread attempts per site under the global fire-site cap.

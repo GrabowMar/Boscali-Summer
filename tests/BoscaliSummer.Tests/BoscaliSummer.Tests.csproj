@@ -7,8 +7,10 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="..\..\src\BoscaliSummer\Core\Deterministic.cs" Link="Core\Deterministic.cs" />
+    <Compile Include="..\..\src\BoscaliSummer\Features\FireAndDestruction\Buildings\BuildingDamagePolicy.cs" Link="Features\FireAndDestruction\BuildingDamagePolicy.cs" />
     <Compile Include="..\..\src\BoscaliSummer\Features\Radio\Runtime\RadioLibrary.cs" Link="Features\Radio\RadioLibrary.cs" />
     <Compile Include="..\..\src\BoscaliSummer\Features\Radio\Presentation\PngIconHeader.cs" Link="Features\Radio\PngIconHeader.cs" />
+    <Compile Include="..\..\src\BoscaliSummer\Features\Radio\Presentation\RadioUiPalette.cs" Link="Features\Radio\RadioUiPalette.cs" />
     <Compile Include="..\..\src\BoscaliSummer\Framework\Features\FeatureMetadata.cs" Link="Framework\FeatureMetadata.cs" />
     <Compile Include="..\..\src\BoscaliSummer\Framework\Features\FeatureGraph.cs" Link="Framework\FeatureGraph.cs" />
     <Compile Include="..\..\src\BoscaliSummer\Framework\Features\ServiceRegistry.cs" Link="Framework\ServiceRegistry.cs" />

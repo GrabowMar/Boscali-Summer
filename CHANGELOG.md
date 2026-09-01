@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Reworked lightweight buildings around normalized minor, major, and critical damage stages;
+  established fires now progress through the same stages before authoritative burnout demolition.
+- Added a 64-item, two-per-frame building presentation queue and a camera-near pool of 48
+  deterministic facade/roof scorch projectors, with 256-record damage snapshots and bounded retries.
 - Added a client-local `RAD` map-MFD music player with directory-based channels, bounded
   OGG/WAV discovery, asynchronous decoding, crossfade, transport controls, shuffle, repeat,
   rescan, progress, and volume through Nuclear Option's music mixer.

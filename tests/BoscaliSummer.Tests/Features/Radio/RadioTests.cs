@@ -51,6 +51,64 @@ namespace BoscaliSummer.Tests.Features.Radio
             valid[1] = 0;
             TestAssert.That(!PngIconHeader.IsSupported(valid, out _, out _),
                 "invalid PNG signature was accepted");
+
+            CheckPalette();
+        }
+
+        private static void CheckPalette()
+        {
+            var darkMap = new RadioRgba(0.05f, 0.06f, 0.07f);
+            var brightMap = new RadioRgba(0.85f, 0.85f, 0.85f);
+            RadioRgba darkGround = RadioUiPalette.PanelGround.Over(darkMap);
+            RadioRgba brightGround = RadioUiPalette.PanelGround.Over(brightMap);
+            var accent = new RadioRgba(0.30f, 1f, 0.35f);
+
+            TestAssert.That(RadioRgba.Contrast(RadioUiPalette.Dim, darkGround) >= 4.5f,
+                "radio secondary text is unreadable over a dark map");
+            TestAssert.That(RadioRgba.Contrast(RadioUiPalette.Dim, brightGround) >= 4.5f,
+                "radio secondary text is unreadable over a bright map");
+            TestAssert.That(RadioRgba.Contrast(darkGround, brightGround) <= 1.5f,
+                "radio panel ground changes too much with the map beneath it");
+
+            RadioUiPaint resting = RadioUiPalette.Paint(
+                RadioButtonStyle.Toggle, accent, true, false, false, false);
+            RadioUiPaint hovered = RadioUiPalette.Paint(
+                RadioButtonStyle.Toggle, accent, true, false, true, false);
+            RadioUiPaint selected = RadioUiPalette.Paint(
+                RadioButtonStyle.Toggle, accent, true, true, false, false);
+            RadioUiPaint pressed = RadioUiPalette.Paint(
+                RadioButtonStyle.Toggle, accent, true, false, true, true);
+
+            RadioRgba restFill = resting.Fill.Over(darkGround);
+            RadioRgba hoverFill = hovered.Fill.Over(darkGround);
+            RadioRgba selectedFill = selected.Fill.Over(darkGround);
+            RadioRgba pressedFill = pressed.Fill.Over(darkGround);
+            TestAssert.That(RadioRgba.Contrast(hoverFill, restFill) >= 1.25f,
+                "radio button hover is indistinguishable from rest");
+            TestAssert.That(RadioRgba.Contrast(selectedFill, hoverFill) >= 1.25f,
+                "radio button selection is indistinguishable from hover");
+            TestAssert.That(pressedFill.RelativeLuminance > selectedFill.RelativeLuminance,
+                "radio button press is weaker than selection");
+
+            RadioButtonStyle[] styles =
+            {
+                RadioButtonStyle.Default,
+                RadioButtonStyle.Primary,
+                RadioButtonStyle.Quiet,
+                RadioButtonStyle.Toggle
+            };
+            foreach (RadioButtonStyle style in styles)
+            foreach (bool latched in new[] { false, true })
+            foreach (bool hover in new[] { false, true })
+            foreach (bool isPressed in new[] { false, true })
+            {
+                RadioUiPaint paint = RadioUiPalette.Paint(
+                    style, accent, true, latched, hover, isPressed);
+                float contrast = RadioRgba.Contrast(
+                    paint.Text, paint.Fill.Over(brightGround));
+                TestAssert.That(contrast >= 4.5f,
+                    "radio button label falls below readable contrast in style " + style);
+            }
         }
 
         private static byte[] MakePngHeader(uint width, uint height)

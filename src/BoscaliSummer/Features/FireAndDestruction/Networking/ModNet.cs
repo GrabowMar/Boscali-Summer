@@ -65,6 +65,8 @@ namespace BoscaliSummer.Runtime
 
         public static ModNet Instance { get; private set; }
 
+        private const int MaximumDamagedBuildings = 256;
+        private const int MaximumPendingBuildings = 64;
         private static bool serializersInstalled;
         private static readonly List<DamagedBuilding> damagedBuildings = new List<DamagedBuilding>();
         private readonly List<PendingBuilding> pendingBuildings = new List<PendingBuilding>();
@@ -144,6 +146,8 @@ namespace BoscaliSummer.Runtime
                     excludeLocalPlayer: true);
                 return;
             }
+            if (damagedBuildings.Count >= MaximumDamagedBuildings)
+                damagedBuildings.RemoveAt(0);
             damagedBuildings.Add(new DamagedBuilding { Position = position, Severity = severity });
             NetworkManagerNuclearOption.i.Server.SendToAll(
                 ToBuildingMessage(position, severity),
@@ -158,6 +162,18 @@ namespace BoscaliSummer.Runtime
                 ToRuinMessage(position, halfExtents, 0f),
                 authenticatedOnly: true,
                 excludeLocalPlayer: true);
+        }
+
+        internal static void ForgetBuildingDamage(GlobalPosition position)
+        {
+            for (int i = damagedBuildings.Count - 1; i >= 0; i--)
+                if ((damagedBuildings[i].Position - position).sqrMagnitude < 4f)
+                    damagedBuildings.RemoveAt(i);
+            ModNet instance = Instance;
+            if (instance == null) return;
+            for (int i = instance.pendingBuildings.Count - 1; i >= 0; i--)
+                if ((instance.pendingBuildings[i].Position - position).sqrMagnitude < 4f)
+                    instance.pendingBuildings.RemoveAt(i);
         }
 
         internal static void SendRuin(
@@ -229,6 +245,16 @@ namespace BoscaliSummer.Runtime
             var position = new GlobalPosition(message.X, message.Y, message.Z);
             float severity = Mathf.Clamp01(message.Severity);
             if (BuildingDamageVisual.ApplyNearest(position, severity)) return;
+            for (int i = 0; i < pendingBuildings.Count; i++)
+            {
+                PendingBuilding existing = pendingBuildings[i];
+                if ((existing.Position - position).sqrMagnitude >= 4f) continue;
+                if (severity > existing.Severity) existing.Severity = severity;
+                existing.Expires = Time.unscaledTime + 20f;
+                return;
+            }
+            if (pendingBuildings.Count >= MaximumPendingBuildings)
+                pendingBuildings.RemoveAt(0);
             pendingBuildings.Add(new PendingBuilding
             {
                 Position = position,

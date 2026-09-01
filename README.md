@@ -119,7 +119,7 @@ Forest smoke uses three pooled smoke-only copies of the vanilla Fuel Depot destr
 
 ### Buildings and ruins
 
-Lightweight `MapBuilding` objects enter a battered intermediate state before destruction. Supported materials receive the game's native `_HitPoints` and `_Damage` values; simpler scenery shaders retain their original colour under restrained warm soot, reduced gloss, and localized vanilla scorch marks. Damage advances in three visual tiers, avoiding material clones and repeated full-facade work for every small hit.
+Lightweight `MapBuilding` objects enter a battered intermediate state before destruction. Supported materials receive the game's native `_HitPoints` and `_Damage` values; simpler scenery shaders retain their original colour under restrained warm soot, reduced gloss, and localized vanilla scorch marks. Damage advances through normalized minor, major, and critical tiers. Building fires cross the same tiers as they burn, while a bounded transition queue avoids material clones and repeated full-facade work for every small hit.
 
 Building flames are anchored to the collider-backed roof surface under the impact point. Two or three staggered smoke sources distribute the Fuel Depot plume across the footprint. When an unoccupied civilian building finishes burning, it follows the vanilla disabled/ruin path. A faction-owned building is considered occupied and is preserved.
 
@@ -170,6 +170,9 @@ The main runtime budgets are:
 | Queued vehicle destructions | 32 |
 | Active fire sites | 24 |
 | Dynamic fire lights | 3 |
+| Queued building-damage transitions | 64 |
+| Tracked damaged buildings | 256 |
+| Camera-near facade/roof scorch projectors | 48 |
 | Persistent logical ruins | 256 |
 | Nearest ruin smoke visuals | 24 |
 | Simultaneous collapse bursts | 4 |

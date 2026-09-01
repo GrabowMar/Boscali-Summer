@@ -24,9 +24,12 @@ namespace BoscaliSummer.Features.FireAndDestruction
         {
             ImpactFireManager fires = context.AddSceneService<ImpactFireManager>(10);
             fires.Configure(context.Services);
+            BuildingDamagePresentationManager damage =
+                context.AddSceneService<BuildingDamagePresentationManager>(15);
             RuinAftermathManager ruins = context.AddSceneService<RuinAftermathManager>(20);
             ModNet network = context.AddSceneService<ModNet>(100);
             context.AddService(fires);
+            context.AddService(damage);
             context.AddService(ruins);
             context.AddService(network);
         }

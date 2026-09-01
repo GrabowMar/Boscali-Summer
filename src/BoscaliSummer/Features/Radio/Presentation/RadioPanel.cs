@@ -16,9 +16,15 @@ namespace BoscaliSummer.Features.Radio.Presentation
     /// </summary>
     internal static class RadioPanel
     {
-        private const float Width = 410f;
+        private const float Width = 430f;
         private const float Height = 556f;
-        private const float Pad = 16f;
+        private const float Pad = 12f;
+        private const float Gap = 4f;
+        private const float RowHeight = 30f;
+        private const float FontMicro = 10f;
+        private const float FontSmall = 11f;
+        private const float FontLead = 14f;
+        private const float FontTitle = 18f;
         private const int RowsPerPage = 5;
 
         private sealed class ChannelRow
@@ -26,6 +32,7 @@ namespace BoscaliSummer.Features.Radio.Presentation
             public int Index = -1;
             public GameObject Root;
             public Image Ground;
+            public Image SelectionRule;
             public Image BadgeGround;
             public Image Icon;
             public TMP_Text Badge;
@@ -45,10 +52,11 @@ namespace BoscaliSummer.Features.Radio.Presentation
         private static TMP_Text trackLabel;
         private static TMP_Text timeLabel;
         private static TMP_Text pageLabel;
+        private static Button pagePreviousButton;
+        private static Button pageNextButton;
         private static TMP_Text volumeLabel;
         private static TMP_Text statusLabel;
         private static Image progressFill;
-        private static Button playButton;
         private static TMP_Text playButtonLabel;
         private static Button shuffleButton;
         private static TMP_Text shuffleButtonLabel;
@@ -101,10 +109,11 @@ namespace BoscaliSummer.Features.Radio.Presentation
             trackLabel = null;
             timeLabel = null;
             pageLabel = null;
+            pagePreviousButton = null;
+            pageNextButton = null;
             volumeLabel = null;
             statusLabel = null;
             progressFill = null;
-            playButton = null;
             playButtonLabel = null;
             shuffleButton = null;
             shuffleButtonLabel = null;
@@ -220,7 +229,7 @@ namespace BoscaliSummer.Features.Radio.Presentation
             rootRect.sizeDelta = new Vector2(Width, Height);
 
             Image background = root.GetComponent<Image>();
-            background.color = new Color(0.025f, 0.043f, 0.060f, 0.965f);
+            background.color = Unity(RadioUiPalette.PanelGround);
             background.raycastTarget = true;
 
             var contentObject = new GameObject("Content", typeof(RectTransform));
@@ -229,24 +238,29 @@ namespace BoscaliSummer.Features.Radio.Presentation
             Stretch(content);
 
             Color accent = Accent();
-            Label(content, "BOSCALI RADIO", new Rect(Pad, -12f, Width - Pad * 2f, 26f),
-                accent, 17f, FontStyles.Normal, TextAlignmentOptions.Center);
-            Rule(content, new Rect(Pad, -42f, Width - Pad * 2f, 2f), accent.WithAlpha(0.72f));
+            Outline(content, new Rect(0f, 0f, Width, Height), Unity(RadioUiPalette.PanelEdge));
+            Label(content, "BOSCALI RADIO", new Rect(Pad, -10f, Width - Pad * 2f, 24f),
+                accent, FontTitle, FontStyles.Normal, TextAlignmentOptions.Center);
+            Rule(content, new Rect(Pad, -40f, Width - Pad * 2f, 1f), Frame());
 
-            stationIconGround = Panel(content, new Rect(Pad, -52f, 52f, 62f),
-                new Color(0f, 0f, 0f, 0.52f));
-            stationIcon = Panel(stationIconGround.rectTransform, new Rect(4f, -5f, 44f, 44f), Color.white);
+            FramedPanel(content, new Rect(Pad, -50f, Width - Pad * 2f, 94f), Frame());
+            stationIconGround = FramedPanel(content, new Rect(Pad + 8f, -60f, 60f, 60f),
+                Frame());
+            stationIcon = Panel(stationIconGround.rectTransform, new Rect(5f, -5f, 50f, 50f), Color.white);
             stationIcon.preserveAspect = true;
             stationIcon.enabled = false;
-            stationBadge = Label(stationIconGround.rectTransform, "--", new Rect(0f, -4f, 52f, 44f),
-                Color.white, 13f, FontStyles.Bold, TextAlignmentOptions.Center);
+            stationBadge = Label(stationIconGround.rectTransform, "--", new Rect(0f, 0f, 60f, 60f),
+                Color.white, FontLead, FontStyles.Bold, TextAlignmentOptions.Center);
 
-            channelLabel = Label(content, "LOCAL SIGNAL // CLIENT", new Rect(Pad + 62f, -52f, Width - Pad * 2f - 62f, 18f),
-                Friendly(), 10f, FontStyles.Normal, TextAlignmentOptions.Left);
-            trackLabel = Label(content, "NO LOCAL TRACKS", new Rect(Pad + 62f, -74f, Width - Pad * 2f - 62f, 42f),
-                Color.white, 15f, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
+            channelLabel = Label(content, "LOCAL SIGNAL // CLIENT",
+                new Rect(Pad + 80f, -58f, Width - Pad * 2f - 88f, 18f),
+                Friendly(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
+            trackLabel = Label(content, "NO LOCAL TRACKS",
+                new Rect(Pad + 80f, -80f, Width - Pad * 2f - 88f, 34f),
+                Color.white, FontLead, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
 
-            Image progressGround = Panel(content, new Rect(Pad, -122f, Width - Pad * 2f, 6f),
+            Image progressGround = Panel(content, new Rect(Pad + 80f, -120f,
+                Width - Pad * 2f - 88f, 4f),
                 new Color(0f, 0f, 0f, 0.72f));
             var fillObject = new GameObject("Progress", typeof(RectTransform), typeof(Image));
             RectTransform fillRect = fillObject.GetComponent<RectTransform>();
@@ -258,44 +272,53 @@ namespace BoscaliSummer.Features.Radio.Presentation
             progressFill.fillMethod = Image.FillMethod.Horizontal;
             progressFill.fillOrigin = 0;
             progressFill.fillAmount = 0f;
-            timeLabel = Label(content, "00:00 / 00:00", new Rect(Pad, -132f, Width - Pad * 2f, 18f),
-                Dim(), 9f, FontStyles.Normal, TextAlignmentOptions.Right);
+            timeLabel = Label(content, "00:00 / 00:00",
+                new Rect(Pad + 80f, -126f, Width - Pad * 2f - 88f, 14f),
+                Dim(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Right);
 
-            float controlsY = -158f;
-            MakeButton(content, "PREV", new Rect(Pad, controlsY, 76f, 34f), () => manager?.Previous());
-            playButton = MakeButton(content, "PLAY", new Rect(Pad + 84f, controlsY, 106f, 34f),
-                () => manager?.TogglePlayback(), out playButtonLabel);
-            MakeButton(content, "NEXT", new Rect(Pad + 198f, controlsY, 76f, 34f), () => manager?.Next());
-            MakeButton(content, "STOP", new Rect(Pad + 282f, controlsY, 96f, 34f), () => manager?.Stop());
+            float controlsY = -156f;
+            MakeButton(content, "PREV", new Rect(Pad, controlsY, 82f, 34f),
+                RadioButtonStyle.Default, () => manager?.Previous());
+            MakeButton(content, "PLAY", new Rect(Pad + 86f, controlsY, 114f, 34f),
+                RadioButtonStyle.Primary, () => manager?.TogglePlayback(), out playButtonLabel);
+            MakeButton(content, "NEXT", new Rect(Pad + 204f, controlsY, 82f, 34f),
+                RadioButtonStyle.Default, () => manager?.Next());
+            MakeButton(content, "STOP", new Rect(Pad + 290f, controlsY, 116f, 34f),
+                RadioButtonStyle.Default, () => manager?.Stop());
 
-            float modesY = -200f;
-            shuffleButton = MakeButton(content, "SHUFFLE", new Rect(Pad, modesY, 88f, 28f),
-                () => manager?.ToggleShuffle(), out shuffleButtonLabel);
-            repeatButton = MakeButton(content, "REPEAT", new Rect(Pad + 96f, modesY, 88f, 28f),
-                () => manager?.ToggleRepeat(), out repeatButtonLabel);
-            MakeButton(content, "FOLDER", new Rect(Pad + 192f, modesY, 88f, 28f),
-                () => manager?.OpenLibraryFolder());
-            MakeButton(content, "RESCAN", new Rect(Pad + 288f, modesY, 90f, 28f), () => manager?.Rescan());
+            float modesY = -194f;
+            float modeWidth = (Width - Pad * 2f - Gap * 3f) / 4f;
+            shuffleButton = MakeButton(content, "SHUFFLE", new Rect(Pad, modesY, modeWidth, RowHeight),
+                RadioButtonStyle.Toggle, () => manager?.ToggleShuffle(), out shuffleButtonLabel);
+            repeatButton = MakeButton(content, "REPEAT",
+                new Rect(Pad + modeWidth + Gap, modesY, modeWidth, RowHeight),
+                RadioButtonStyle.Toggle, () => manager?.ToggleRepeat(), out repeatButtonLabel);
+            MakeButton(content, "FOLDER",
+                new Rect(Pad + (modeWidth + Gap) * 2f, modesY, modeWidth, RowHeight),
+                RadioButtonStyle.Quiet, () => manager?.OpenLibraryFolder());
+            MakeButton(content, "RESCAN",
+                new Rect(Pad + (modeWidth + Gap) * 3f, modesY, modeWidth, RowHeight),
+                RadioButtonStyle.Quiet, () => manager?.Rescan());
 
-            Label(content, "CHANNELS", new Rect(Pad, -240f, Width - Pad * 2f, 20f),
-                accent, 11f, FontStyles.Bold, TextAlignmentOptions.Left);
-            Rule(content, new Rect(Pad, -262f, Width - Pad * 2f, 1f), accent.WithAlpha(0.42f));
+            Heading(content, "CHANNELS", -238f);
 
             for (int i = 0; i < RowsPerPage; i++)
-                rows[i] = MakeChannelRow(content, i, -270f - i * 34f);
+                rows[i] = MakeChannelRow(content, i, -262f - i * 32f);
 
-            MakeButton(content, "<", new Rect(Pad, -446f, 42f, 28f), PreviousPage);
-            pageLabel = Label(content, "1 / 1", new Rect(Pad + 50f, -446f, Width - Pad * 2f - 100f, 28f),
-                Dim(), 10f, FontStyles.Normal, TextAlignmentOptions.Center);
-            MakeButton(content, ">", new Rect(Width - Pad - 42f, -446f, 42f, 28f), NextPage);
+            Button[] pageButtons = Stepper(
+                content, -432f, "CHANNEL PAGE", out pageLabel, PreviousPage, NextPage);
+            pagePreviousButton = pageButtons[0];
+            pageNextButton = pageButtons[1];
 
-            MakeButton(content, "-", new Rect(Pad, -486f, 42f, 28f), () => manager?.ChangeVolume(-0.05f));
-            volumeLabel = Label(content, "MUSIC BUS // 65%", new Rect(Pad + 50f, -486f, Width - Pad * 2f - 100f, 28f),
-                Friendly(), 10f, FontStyles.Normal, TextAlignmentOptions.Center);
-            MakeButton(content, "+", new Rect(Width - Pad - 42f, -486f, 42f, 28f), () => manager?.ChangeVolume(0.05f));
+            Stepper(content, -466f, "MUSIC BUS", out volumeLabel,
+                () => manager?.ChangeVolume(-0.05f), () => manager?.ChangeVolume(0.05f), "-", "+");
 
-            statusLabel = Label(content, "Stand by", new Rect(Pad, -524f, Width - Pad * 2f, 22f),
-                Dim(), 9f, FontStyles.Normal, TextAlignmentOptions.Center);
+            FramedPanel(content, new Rect(Pad, -504f, Width - Pad * 2f, 40f), Frame());
+            statusLabel = Label(content, "Stand by",
+                new Rect(Pad + 8f, -504f, Width - Pad * 2f - 16f, 40f),
+                Dim(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Center);
+            statusLabel.enableWordWrapping = true;
+            statusLabel.overflowMode = TextOverflowModes.Truncate;
 
             var result = root.AddComponent<MFDScreen>();
             result.shortName = "RAD";
@@ -319,12 +342,11 @@ namespace BoscaliSummer.Features.Radio.Presentation
             var root = new GameObject("Channel" + row, typeof(RectTransform), typeof(Image), typeof(Button));
             RectTransform rect = root.GetComponent<RectTransform>();
             rect.SetParent(parent, false);
-            Place(rect, new Rect(Pad, y, Width - Pad * 2f, 30f));
+            Place(rect, new Rect(Pad, y, Width - Pad * 2f, RowHeight));
             Image ground = root.GetComponent<Image>();
-            ground.color = new Color(0f, 0f, 0f, 0.42f);
             Button button = root.GetComponent<Button>();
             button.targetGraphic = ground;
-            button.colors = ButtonColors(false);
+            button.colors = ButtonColors(RadioButtonStyle.Default, false);
 
             var result = new ChannelRow
             {
@@ -332,16 +354,21 @@ namespace BoscaliSummer.Features.Radio.Presentation
                 Ground = ground,
                 Button = button
             };
-            result.BadgeGround = Panel(rect, new Rect(5f, 4f, 28f, 22f), new Color(0.15f, 0.35f, 0.20f, 1f));
+            Outline(rect, new Rect(0f, 0f, Width - Pad * 2f, RowHeight), Frame());
+            result.SelectionRule = Rule(rect, new Rect(0f, 0f, 3f, RowHeight), Frame());
+            result.BadgeGround = Panel(rect, new Rect(7f, -4f, 28f, 22f),
+                new Color(0.15f, 0.35f, 0.20f, 1f));
             result.Icon = Panel(result.BadgeGround.rectTransform, new Rect(2f, -1f, 24f, 24f), Color.white);
             result.Icon.preserveAspect = true;
             result.Icon.enabled = false;
             result.Badge = Label(result.BadgeGround.rectTransform, "--", new Rect(0f, 0f, 28f, 22f),
-                Color.white, 9f, FontStyles.Bold, TextAlignmentOptions.Center);
-            result.Label = Label(rect, "LOCAL", new Rect(41f, 0f, Width - Pad * 2f - 101f, 30f),
-                Color.white, 10f, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
-            result.Count = Label(rect, "0", new Rect(Width - Pad * 2f - 58f, 0f, 48f, 30f),
-                Dim(), 9f, FontStyles.Normal, TextAlignmentOptions.MidlineRight);
+                Color.white, FontMicro, FontStyles.Bold, TextAlignmentOptions.Center);
+            result.Label = Label(rect, "LOCAL",
+                new Rect(43f, 0f, Width - Pad * 2f - 111f, RowHeight),
+                Friendly(), FontSmall, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
+            result.Count = Label(rect, "0",
+                new Rect(Width - Pad * 2f - 62f, 0f, 52f, RowHeight),
+                Dim(), FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineRight);
             button.onClick.AddListener(() =>
             {
                 if (manager != null && result.Index >= 0) manager.SelectChannel(result.Index);
@@ -374,11 +401,15 @@ namespace BoscaliSummer.Features.Radio.Presentation
             playButtonLabel.text = manager.IsPaused ? "RESUME" : manager.IsEngaged ? "PAUSE" : "PLAY";
             shuffleButtonLabel.text = manager.Shuffle ? "SHUFFLE ON" : "SHUFFLE";
             repeatButtonLabel.text = manager.RepeatTrack ? "REPEAT ON" : "REPEAT";
-            SetLatched(shuffleButton, manager.Shuffle);
-            SetLatched(repeatButton, manager.RepeatTrack);
-            volumeLabel.text = "MUSIC BUS // " + Mathf.RoundToInt(manager.Volume * 100f) + "%";
+            shuffleButtonLabel.color = manager.Shuffle ? Color.white : Accent();
+            repeatButtonLabel.color = manager.RepeatTrack ? Color.white : Accent();
+            SetLatched(shuffleButton, RadioButtonStyle.Toggle, manager.Shuffle);
+            SetLatched(repeatButton, RadioButtonStyle.Toggle, manager.RepeatTrack);
+            volumeLabel.text = Mathf.RoundToInt(manager.Volume * 100f) + "%";
             statusLabel.text = manager.Status;
             pageLabel.text = (page + 1) + " / " + pages;
+            pagePreviousButton.interactable = page > 0;
+            pageNextButton.interactable = page + 1 < pages;
 
             for (int row = 0; row < rows.Length; row++)
             {
@@ -396,7 +427,10 @@ namespace BoscaliSummer.Features.Radio.Presentation
                     stationColor.r * 0.34f, stationColor.g * 0.34f, stationColor.b * 0.34f, 1f);
                 item.Label.text = manager.GetChannelName(index);
                 item.Count.text = manager.GetChannelTrackCount(index) + " TRK";
-                item.Button.colors = ButtonColors(index == manager.SelectedChannel);
+                bool selected = index == manager.SelectedChannel;
+                item.Label.color = selected ? Color.white : Friendly();
+                item.SelectionRule.color = selected ? Accent() : Frame();
+                item.Button.colors = ButtonColors(RadioButtonStyle.Default, selected);
             }
         }
 
@@ -425,50 +459,92 @@ namespace BoscaliSummer.Features.Radio.Presentation
             nextRefresh = 0f;
         }
 
-        private static Button MakeButton(RectTransform parent, string text, Rect rect, Action action) =>
-            MakeButton(parent, text, rect, action, out _);
+        private static Button MakeButton(
+            RectTransform parent, string text, Rect rect, RadioButtonStyle style, Action action) =>
+            MakeButton(parent, text, rect, style, action, out _);
 
         private static Button MakeButton(
-            RectTransform parent, string text, Rect rect, Action action, out TMP_Text label)
+            RectTransform parent, string text, Rect rect, RadioButtonStyle style,
+            Action action, out TMP_Text label)
         {
             var root = new GameObject(text + "Button", typeof(RectTransform), typeof(Image), typeof(Button));
             RectTransform rt = root.GetComponent<RectTransform>();
             rt.SetParent(parent, false);
             Place(rt, rect);
             Image image = root.GetComponent<Image>();
-            image.color = new Color(0f, 0f, 0f, 0.52f);
             Button button = root.GetComponent<Button>();
             button.targetGraphic = image;
-            button.colors = ButtonColors(false);
+            button.colors = ButtonColors(style, false);
             button.onClick.AddListener(() =>
             {
                 action?.Invoke();
                 nextRefresh = 0f;
             });
+            Outline(rt, new Rect(0f, 0f, rect.width, rect.height),
+                style == RadioButtonStyle.Quiet ? Frame() : Accent().WithAlpha(0.80f));
+            RadioUiPaint paint = RadioUiPalette.Paint(
+                style, Radio(Accent()), true, false, false, false);
             label = Label(rt, text, new Rect(0f, 0f, rect.width, rect.height),
-                Color.white, 10f, FontStyles.Normal, TextAlignmentOptions.Center);
+                Unity(paint.Text), FontSmall, FontStyles.Normal, TextAlignmentOptions.Center);
             return button;
         }
 
-        private static ColorBlock ButtonColors(bool selected)
+        private static ColorBlock ButtonColors(RadioButtonStyle style, bool selected)
         {
-            Color accent = Accent();
+            RadioRgba accent = Radio(Accent());
             return new ColorBlock
             {
-                normalColor = selected ? new Color(accent.r * 0.25f, accent.g * 0.25f, accent.b * 0.25f, 0.96f)
-                    : new Color(0.025f, 0.055f, 0.065f, 0.94f),
-                highlightedColor = new Color(accent.r * 0.38f, accent.g * 0.38f, accent.b * 0.38f, 1f),
-                pressedColor = new Color(accent.r * 0.56f, accent.g * 0.56f, accent.b * 0.56f, 1f),
-                selectedColor = new Color(accent.r * 0.34f, accent.g * 0.34f, accent.b * 0.34f, 1f),
-                disabledColor = new Color(0.18f, 0.20f, 0.21f, 0.68f),
+                normalColor = Unity(RadioUiPalette.Paint(
+                    style, accent, true, selected, false, false).Fill),
+                highlightedColor = Unity(RadioUiPalette.Paint(
+                    style, accent, true, selected, true, false).Fill),
+                pressedColor = Unity(RadioUiPalette.Paint(
+                    style, accent, true, selected, true, true).Fill),
+                selectedColor = Unity(RadioUiPalette.Paint(
+                    style, accent, true, selected, true, false).Fill),
+                disabledColor = Unity(RadioUiPalette.Paint(
+                    style, accent, false, false, false, false).Fill),
                 colorMultiplier = 1f,
                 fadeDuration = 0.08f
             };
         }
 
-        private static void SetLatched(Button button, bool selected)
+        private static void SetLatched(Button button, RadioButtonStyle style, bool selected)
         {
-            if (button != null) button.colors = ButtonColors(selected);
+            if (button != null) button.colors = ButtonColors(style, selected);
+        }
+
+        private static void Heading(RectTransform parent, string text, float y)
+        {
+            const float labelWidth = 78f;
+            Label(parent, text, new Rect(Pad, y, labelWidth, 16f),
+                Friendly(), FontMicro, FontStyles.Bold, TextAlignmentOptions.Left);
+            Rule(parent, new Rect(Pad + labelWidth + 8f, y - 8f,
+                Width - Pad * 2f - labelWidth - 8f, 1f), Frame());
+        }
+
+        private static Button[] Stepper(
+            RectTransform parent, float y, string name, out TMP_Text value,
+            Action previous, Action next, string previousText = "<", string nextText = ">")
+        {
+            const float gutter = 86f;
+            const float arrow = 34f;
+            Label(parent, name, new Rect(Pad, y, gutter - Gap, RowHeight),
+                Dim(), FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
+
+            float x = Pad + gutter;
+            float width = Width - Pad - x;
+            FramedPanel(parent, new Rect(x, y, width, RowHeight), Frame());
+            Button previousButton = MakeButton(
+                parent, previousText, new Rect(x + 1f, y - 1f, arrow, RowHeight - 2f),
+                RadioButtonStyle.Quiet, previous);
+            Button nextButton = MakeButton(parent, nextText,
+                new Rect(x + width - arrow - 1f, y - 1f, arrow, RowHeight - 2f),
+                RadioButtonStyle.Quiet, next);
+            value = Label(parent, "",
+                new Rect(x + arrow + Gap, y, width - (arrow + Gap) * 2f, RowHeight),
+                Friendly(), FontSmall, FontStyles.Normal, TextAlignmentOptions.Center);
+            return new[] { previousButton, nextButton };
         }
 
         private static TMP_Text Label(
@@ -486,6 +562,7 @@ namespace BoscaliSummer.Features.Radio.Presentation
             label.fontStyle = style;
             label.alignment = alignment;
             label.enableWordWrapping = false;
+            label.overflowMode = TextOverflowModes.Ellipsis;
             label.raycastTarget = false;
             if (font != null) label.font = font;
             return label;
@@ -501,6 +578,24 @@ namespace BoscaliSummer.Features.Radio.Presentation
             image.color = color;
             image.raycastTarget = false;
             return image;
+        }
+
+        private static Image FramedPanel(RectTransform parent, Rect rect, Color frame)
+        {
+            Image fill = Panel(parent, rect, new Color(0f, 0f, 0f, 0.28f));
+            Outline(parent, rect, frame);
+            return fill;
+        }
+
+        private static void Outline(RectTransform parent, Rect rect, Color color)
+        {
+            const float thickness = 1f;
+            Rule(parent, new Rect(rect.x, rect.y, rect.width, thickness), color);
+            Rule(parent, new Rect(rect.x, rect.y - rect.height + thickness,
+                rect.width, thickness), color);
+            Rule(parent, new Rect(rect.x, rect.y, thickness, rect.height), color);
+            Rule(parent, new Rect(rect.x + rect.width - thickness, rect.y,
+                thickness, rect.height), color);
         }
 
         private static Image Rule(RectTransform parent, Rect rect, Color color) => Panel(parent, rect, color);
@@ -552,7 +647,15 @@ namespace BoscaliSummer.Features.Radio.Presentation
             catch { return new Color(0.45f, 0.95f, 0.55f); }
         }
 
-        private static Color Dim() => new Color(0.66f, 0.71f, 0.73f, 1f);
+        private static Color Dim() => Unity(RadioUiPalette.Dim);
+
+        private static Color Frame() => Unity(RadioUiPalette.Frame);
+
+        private static RadioRgba Radio(Color color) =>
+            new RadioRgba(color.r, color.g, color.b, color.a);
+
+        private static Color Unity(RadioRgba color) =>
+            new Color(color.R, color.G, color.B, color.A);
 
         private static Color WithAlpha(this Color color, float alpha) =>
             new Color(color.r, color.g, color.b, alpha);

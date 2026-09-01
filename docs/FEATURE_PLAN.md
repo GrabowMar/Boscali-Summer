@@ -232,6 +232,8 @@ Existing release ceilings remain fixed:
 | Dynamic fire lights | 3 |
 | Scorch work | 1 request/frame |
 | Facade/roof scorch projectors | 48 |
+| Building-damage transitions | 64 queued; 2 processed/frame |
+| Tracked damaged buildings | 256 |
 | Logical ruins | 256 |
 | Ruin smoke visuals | 24 nearest |
 | Collapse bursts | 4 simultaneous |
