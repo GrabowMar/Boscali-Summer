@@ -1,13 +1,14 @@
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Core;
+using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Lifecycle;
 using NuclearOption.Networking;
 using UnityEngine;
 
 namespace BoscaliSummer.Garrisons
 {
-    internal sealed class ZoneGarrisonManager : MonoBehaviour, ISceneService
+    internal sealed class ZoneGarrisonManager : MonoBehaviour, ISceneService, IBuildingOccupancy
     {
         internal const string NamePrefix = "BoscaliSummer:Garrison:";
 
@@ -28,6 +29,9 @@ namespace BoscaliSummer.Garrisons
         }
 
         public static ZoneGarrisonManager Instance { get; private set; }
+
+        bool IBuildingOccupancy.IsOccupied(GameObject shell) =>
+            GarrisonOccupancy.IsOccupied(shell);
 
         private readonly List<PendingCapture> pending = new List<PendingCapture>();
         private readonly Dictionary<int, GarrisonRecord> records = new Dictionary<int, GarrisonRecord>();

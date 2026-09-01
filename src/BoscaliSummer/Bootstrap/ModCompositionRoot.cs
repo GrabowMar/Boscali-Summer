@@ -3,7 +3,6 @@ using BoscaliSummer.Features.FireAndDestruction;
 using BoscaliSummer.Features.Radio;
 using BoscaliSummer.Features.UrbanCombat;
 using BoscaliSummer.Framework.Features;
-using BoscaliSummer.Infrastructure.Networking;
 using BoscaliSummer.Runtime;
 
 namespace BoscaliSummer.Bootstrap
@@ -18,7 +17,6 @@ namespace BoscaliSummer.Bootstrap
             {
                 host.Load(new IModFeature[]
                 {
-                    new NetworkingFeature(),
                     new FireAndDestructionFeature(),
                     new UrbanCombatFeature(),
                     new RadioFeature()

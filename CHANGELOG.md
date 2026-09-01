@@ -23,6 +23,9 @@
 - Reorganized the source into Bootstrap, Framework, Infrastructure, Fire and Destruction,
   and Urban Combat boundaries while preserving compatibility-sensitive namespaces and
   Mirage message identities.
+- Added hierarchical agent scope files, a one-feature-at-a-time editing map, and automated
+  dependency-direction checks; moved Fire replication and Radio helpers into their owning
+  modules and replaced the direct Fire-to-Urban reference with a narrow occupancy contract.
 - Split configuration into module-owned settings plus one legacy migration step, added
   feature graph/service tests, and expanded the patch probe to cover feature types and wire
   contracts.

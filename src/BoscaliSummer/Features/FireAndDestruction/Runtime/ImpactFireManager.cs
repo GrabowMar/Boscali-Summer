@@ -1,8 +1,9 @@
 using System.Collections;
 using System.Collections.Generic;
 using BoscaliSummer.Core;
+using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Framework.Features;
 using BoscaliSummer.Framework.Lifecycle;
-using BoscaliSummer.Garrisons;
 using BoscaliSummer.Runtime;
 using NuclearOption.Effects;
 using NuclearOption.Networking;
@@ -63,10 +64,13 @@ namespace BoscaliSummer.Fire
         private readonly FireVisualPool visualPool = new FireVisualPool();
         private readonly FuelDepotSmokePool fuelDepotSmokePool = new FuelDepotSmokePool();
         private Coroutine indexRoutine;
+        private ServiceRegistry services;
         private float nextTick;
         private int impactSequence;
 
         private void Awake() => Instance = this;
+
+        internal void Configure(ServiceRegistry serviceRegistry) => services = serviceRegistry;
 
         private void OnDestroy()
         {
@@ -726,7 +730,7 @@ namespace BoscaliSummer.Fire
             ModNet.BroadcastBuildingDamage(building.transform.GlobalPosition());
         }
 
-        private static void DemolishBurnedBuilding(FireSite site)
+        private void DemolishBurnedBuilding(FireSite site)
         {
             if (!Plugin.Settings.DemolishUnoccupiedBuildings.Value || !IsServer()) return;
 
@@ -757,8 +761,11 @@ namespace BoscaliSummer.Fire
             }
 
             MapBuilding mapBuilding = site.BurningMapBuilding;
-            if (mapBuilding != null && mapBuilding.gameObject &&
-                !GarrisonOccupancy.IsOccupied(mapBuilding.gameObject))
+            bool occupied = mapBuilding != null && mapBuilding.gameObject &&
+                services != null &&
+                services.TryGet(out IBuildingOccupancy occupancy) &&
+                occupancy.IsOccupied(mapBuilding.gameObject);
+            if (mapBuilding != null && mapBuilding.gameObject && !occupied)
             {
                 // MapBuildingSet.DestroyBuilding is reached through TakeDamage, which keeps
                 // the vanilla synchronized ruin path instead of destroying only the host copy.

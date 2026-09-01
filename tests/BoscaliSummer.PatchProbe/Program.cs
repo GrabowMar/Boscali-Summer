@@ -115,7 +115,6 @@ foreach (string patchType in patchTypes)
 
 string[] featureTypes =
 {
-    "BoscaliSummer.Infrastructure.Networking.NetworkingFeature",
     "BoscaliSummer.Features.FireAndDestruction.FireAndDestructionFeature",
     "BoscaliSummer.Features.UrbanCombat.UrbanCombatFeature",
     "BoscaliSummer.Features.Radio.RadioFeature"
@@ -175,7 +174,7 @@ Type messageHandler = mirageAssembly.GetType("Mirage.MessageHandler", true)!;
 if (!messageHandler.GetMethods(AllMembers).Any(method => method.Name == "RegisterHandler"))
     throw new MissingMethodException("Mirage.MessageHandler", "RegisterHandler");
 
-Console.WriteLine("Patch target probe: 13 game methods, 12 game fields, 1 game property, 9 patch classes, 4 features, 4 embedded radio assets, 3 wire contracts, and Mirage radio-sync seams resolved.");
+Console.WriteLine("Patch target probe: 13 game methods, 12 game fields, 1 game property, 9 patch classes, 3 features, 4 embedded radio assets, 3 wire contracts, and Mirage radio-sync seams resolved.");
 return 0;
 
 static bool MetadataHasMethod(string assemblyPath, string typeName, string methodName)

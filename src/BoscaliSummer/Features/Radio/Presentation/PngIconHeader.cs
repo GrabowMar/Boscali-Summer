@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Core
+namespace BoscaliSummer.Features.Radio.Presentation
 {
     internal static class PngIconHeader
     {

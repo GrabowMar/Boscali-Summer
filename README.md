@@ -174,9 +174,10 @@ The main runtime budgets are:
 | Nearest ruin smoke visuals | 24 |
 | Simultaneous collapse bursts | 4 |
 
-See [Architecture](docs/ARCHITECTURE.md) for the implemented module/lifecycle design and
-[Feature plan](docs/FEATURE_PLAN.md) for the staged urban-combat, music, progression, and
-support-call roadmap.
+See [Architecture](docs/ARCHITECTURE.md) for the implemented module/lifecycle design,
+[Module boundaries](docs/MODULE_BOUNDARIES.md) for the one-feature-at-a-time editing map,
+and [Feature plan](docs/FEATURE_PLAN.md) for the staged urban-combat, music, progression,
+and support-call roadmap.
 
 ## Diagnostics and compatibility
 

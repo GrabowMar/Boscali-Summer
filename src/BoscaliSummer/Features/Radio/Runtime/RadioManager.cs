@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.IO;
 using BepInEx;
 using BepInEx.Logging;
-using BoscaliSummer.Core;
 using BoscaliSummer.Features.Radio.Configuration;
 using BoscaliSummer.Features.Radio.Presentation;
 using BoscaliSummer.Framework.Lifecycle;

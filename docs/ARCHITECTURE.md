@@ -5,9 +5,10 @@ deployment remains a single DLL: that keeps installation simple and avoids makin
 feature a binary dependency.
 
 The current framework extraction is behavior-preserving. It gives future utilities a
-common lifecycle and patch owner; it does not yet turn the existing large managers or
-feature-specific network bridge into their final smaller services. See
-[Feature plan](FEATURE_PLAN.md) for that staged migration.
+common lifecycle and patch owner, physically keeps feature-owned code with its feature,
+and enforces dependency direction with source-level tests. It does not yet split the
+existing large managers into their final smaller services. See [Feature plan](FEATURE_PLAN.md)
+for that staged migration and [Module boundaries](MODULE_BOUNDARIES.md) for edit routing.
 
 ## Source layout
 
@@ -17,14 +18,14 @@ src/BoscaliSummer/
   Configuration/             Configuration composition and legacy-key migration
   Core/                      Pure deterministic helpers
   Framework/
+    Contracts/               Narrow cross-feature capability interfaces
     Features/                Module metadata, dependency graph, host, service registry
     Lifecycle/               Ordered scene reset contract and dispatcher
   Infrastructure/
     Diagnostics/             Shared diagnostic settings
     GameInterop/             Cached reflection and capability reporting
-    Networking/              Mirage transport and networking module
   Features/
-    FireAndDestruction/      Fire, building damage, ruins, effects, and patches
+    FireAndDestruction/      Fire, damage, ruins, replication, effects, and patches
     Radio/                   Local music catalogue, playback ownership, and MFD panel
     UrbanCombat/             Occupancy, defensive proxies, visuals, and patches
 ```
@@ -45,10 +46,16 @@ composition root, reports effective tuning, and disposes the host. `ModCompositi
 is the only feature list; modules are never discovered by assembly scanning.
 
 ```text
-Networking
+Independent feature roots
+  Radio
   ├─ Fire and destruction
   └─ Urban combat
 ```
+
+The three current features have no hard startup dependency on one another. Urban Combat
+publishes the read-only `IBuildingOccupancy` capability through `ServiceRegistry`; Fire and
+Destruction queries it when available without importing Urban Combat's manager or marker.
+Radio remains completely independent and client-local.
 
 Every module implements `IModFeature` and provides stable metadata, hard dependencies,
 the exact Harmony patch classes it owns, and an `Install` method for components and
@@ -80,7 +87,7 @@ Unity reports a loaded scene. Reset exceptions are isolated per service.
 | 20 | Ruin aftermath manager |
 | 30 | Zone garrison manager |
 | 40 | Client-local radio panel/scene binding |
-| 100 | Network per-scene state |
+| 100 | Fire-and-destruction network per-scene state |
 
 Plugin teardown unpatches features in reverse order, unregisters the scene callback,
 clears the service registry, unregisters Mirage client handlers, removes the server
@@ -122,11 +129,20 @@ extracted or packaged. A possible synchronized broadcast
 protocol is separately gated in [Radio plan](RADIO_PLAN.md); it would exchange only bounded
 station state after a compatibility handshake, never music content.
 
-`ModNet` is currently a compatibility bridge containing the three existing channels. Its
-next extraction keeps the wire types stable while moving state, handlers, codecs, and
-snapshots beside their owning features. The planned network framework adds a protocol
-handshake, scene epoch, bounded snapshot registry, and validated client-request path before
-support calls or progression are enabled in multiplayer.
+`ModNet` is a Fire and Destruction-owned compatibility bridge containing the three existing
+channels. Its file, state, handlers, codecs, and snapshots live beside that feature while
+the compatibility-sensitive `BoscaliSummer.Runtime` message names remain unchanged. A
+later split may divide that bridge behind tested seams. The planned network framework adds
+a protocol handshake, scene epoch, bounded snapshot registry, and validated client-request
+path before support calls or progression are enabled in multiplayer.
+
+## Maintainer and agent boundaries
+
+Hierarchical `AGENTS.md` files narrow automated edits to one feature or shared layer. The
+architecture test rejects sibling-feature imports, concrete feature imports from Framework
+or Infrastructure, missing feature descriptors/scope files, and regressions that move
+Fire networking or Radio helpers back into shared folders. See
+[Module boundaries](MODULE_BOUNDARIES.md) for the concise ownership map.
 
 ## Performance boundaries
 

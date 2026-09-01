@@ -29,16 +29,18 @@ Core rules:
 ## Framework roadmap
 
 The first framework slice is implemented: explicit feature registration, dependency
-sorting, feature-owned Harmony patch lists, ordered scene services, transactional startup,
-module settings, deterministic framework tests, and owned teardown.
+sorting, feature-owned Harmony patch lists and networking, ordered scene services,
+transactional startup, module settings, hierarchical agent scopes, source-level module
+boundary tests, deterministic framework tests, and owned teardown.
 
 The next slices should be completed before progression or support calls:
 
 1. **Stable world references.** Identify an authored `Building` by persistent/network name.
    Identify a procedural `MapBuilding` by its owning `MapBuildingSet` network identity plus
    building index. Keep quantized position only as a migration fallback.
-2. **Feature network registry.** Keep the existing message full names and serializer order,
-   but move handlers, authoritative stores, and late-join snapshots beside their features.
+2. **Feature network registry.** The current fire/destruction handlers, authoritative stores,
+   and late-join snapshots are physically feature-owned. Keep their existing message full
+   names and serializer order while extracting a bounded registry for future features.
 3. **Protocol envelope.** Add protocol version, feature mask, config digest, and scene epoch.
    Mixed protocols fail closed instead of running a partly synchronized mission.
 4. **Scene session.** Replace scattered delayed initialization with one generation-backed
@@ -91,9 +93,10 @@ Status: implemented in this reorganization.
 - Replace manual `Plugin.AddComponent` and assembly-wide patching with `FeatureHost`.
 - Make patch classes explicitly owned and startup failures feature-local.
 - Split module settings while preserving existing config keys and migrations.
-- Move source into Bootstrap, Framework, Infrastructure, and feature folders.
+- Move source into Bootstrap, Framework, Infrastructure, and feature folders; keep Radio
+  helpers and Fire replication physically owned by their modules.
 - Preserve exact Mirage message names and field layouts.
-- Add feature graph/service tests and expand the compatibility probe.
+- Add feature graph/service/module-boundary tests and expand the compatibility probe.
 
 Gate: Release build, deterministic/framework tests, metadata probe, scene reload smoke test,
 and host/client/late-join regression test all pass with no changed gameplay balance.
