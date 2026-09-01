@@ -19,7 +19,7 @@ presentation, and tests under `Features/<Name>`. Shared code is admitted to `Fra
 Core rules:
 
 - The host decides every gameplay mutation; clients send intent and render accepted state.
-- Local-only utilities, especially music, send no multiplayer data.
+- Local-only utilities, especially the implemented radio player, send no multiplayer data.
 - Use vanilla Mirage spawning for units, buildings, aircraft, containers, and ships.
 - Custom messages carry only state vanilla networking does not already own.
 - Every queue, snapshot, visual pool, spawned-object family, and retry loop has a hard cap.
@@ -64,7 +64,7 @@ large during the behavior-preserving move. Split them only behind tested seams:
 |---|---|---|---|
 | Fire and destruction | Ignition, forest index, spread, building damage, ruins, visuals | Host decisions; client presentation | Working baseline |
 | Urban combat | Shell catalogue, occupancy, defensive proxies, capture/destruction cleanup | Host plus vanilla spawning | Working abstract model |
-| Music | Local track library, playlist, playback adapter, UI | Client-local | Feasible, not implemented |
+| Radio/music | Local track library, channels, playback adapter, MFD UI | Client-local | Working baseline |
 | Progression | Mod XP, skill graph, profile migration, entitlements | Host/server truth | Feasible after persistence/network work |
 | Support calls | Validation, targeting, cost/cooldown, action jobs | Host validates and executes | Drops/artillery feasible; carriers high risk |
 | Future modules | One isolated capability spike at a time | Depends on feature | Unscheduled |
@@ -115,23 +115,35 @@ Ship the existing bounded wildfire and aftermath systems with hardened occupied 
 Excluded from this release: walkable interiors, room clearing, visible squads, breaching,
 floor-by-floor damage, soldier animations, and persistent infantry moving between buildings.
 
-### Phase 2 — Local music player
+### Phase 2 — Local radio/music player
 
-Music is an isolated client utility:
+Status: implemented development baseline; in-game interaction and long-session gates remain.
+
+Radio/music is an isolated client utility:
 
 - create and scan one contained `BepInEx/plugins/BoscaliSummer/Music` directory;
+- ship Agrapol FM, Maris Network, and Base Broadcast identities; seed their playback from
+  installed map soundtrack references without extracting or packaging audio;
 - accept local user files only, initially OGG and WAV;
 - probe MP3 support against the target Unity build before advertising it;
 - load asynchronously through Unity audio APIs and retain only current plus next clip;
 - route playback through the game's music mixer and pause vanilla music only while the
   Boscali player owns playback;
-- implement play/pause, next/previous, shuffle, repeat, playlist, volume, and crossfade;
+- implement play/pause, stop, next/previous, channel folders, shuffle, repeat, volume, and crossfade;
 - skip the module cleanly on a headless server;
 - reject URLs and paths that escape the canonical music root.
+- accept one optional bounded `station.png` per station folder and fall back to a generated
+  two-letter badge when the file is missing or invalid.
+
+The current implementation uses an unused map-MFD bezel slot and the game's music mixer.
+See [Radio plan](RADIO_PLAN.md) for the verified compatibility seams, exact runtime bounds,
+and the separately gated design for shared synchronized stations.
 
 Copyright boundary: do not bundle, download, mirror, link to, log, package, or transmit
-Ace Combat soundtracks. Ship only the player, an empty import directory, and instructions.
-Users are responsible for having the right to use their own local files.
+Ace Combat soundtracks. Ship only the player, station metadata/icons, an audio-free import
+directory, and instructions. Nuclear Option soundtrack entries are runtime references to
+the user's installed game, not copied files. Users are responsible for having the right to
+use their own imported music.
 
 ### Phase 3 — Progression foundation
 

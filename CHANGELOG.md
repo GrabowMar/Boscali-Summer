@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- Added a client-local `RAD` map-MFD music player with directory-based channels, bounded
+  OGG/WAV discovery, asynchronous decoding, crossfade, transport controls, shuffle, repeat,
+  rescan, progress, and volume through Nuclear Option's music mixer.
+- Added Agrapol FM and Maris Network with one installed faction-soundtrack clip each, plus
+  Base Broadcast with the current map's original-score pool; no soundtrack audio is copied
+  or packaged.
+- Added original BDF-inspired Agrapol FM and PALA-inspired Maris Network identities plus a
+  Nuclear Option-inspired Base Broadcast identity as embedded 256px transparent PNGs.
+- Added bounded `station.png` loading for custom stations, icon presentation in the header
+  and channel list, automatic starter folders/instructions, badge fallbacks, and an in-panel
+  shortcut that opens the one-folder station import location.
+- Added cooperative vanilla-music ownership so game music requests are deferred only while
+  the radio is on air and restored when it stops; headless servers skip the feature.
+- Added radio catalogue tests, installed-game MFD/audio/Mirage compatibility probes, and a
+  gated same-mod/same-library synchronized-channel protocol plan that never transfers audio.
 - Added an explicit single-assembly feature framework with dependency ordering,
   feature-owned Harmony patch lists, transactional startup, ordered scene resets, and
   reverse teardown instead of manual component wiring and assembly-wide patch discovery.

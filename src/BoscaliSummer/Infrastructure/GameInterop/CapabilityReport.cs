@@ -16,11 +16,20 @@ namespace BoscaliSummer.Runtime
             bool capture = AccessTools.Method(typeof(Airbase), "CaptureFaction") != null;
             bool blast = AccessTools.Method(typeof(BlastManager), "AddBlast") != null;
             bool scorchDecal = AccessTools.Field(typeof(GameAssets), "scorchMarkDecal") != null;
+            bool musicManager = AccessTools.Method(typeof(MusicManager), nameof(MusicManager.PlayMusic)) != null &&
+                AccessTools.Method(typeof(MusicManager), nameof(MusicManager.CrossFadeMusic)) != null;
+            bool soundtrackCatalog =
+                AccessTools.Method(typeof(MapSettings), nameof(MapSettings.GetStartMusic)) != null &&
+                AccessTools.Method(typeof(MapSettings), nameof(MapSettings.GetStrategicMusic)) != null &&
+                AccessTools.Method(typeof(MapSettings), nameof(MapSettings.GetTacticalMusic)) != null;
             Plugin.Logger.LogInfo(
                 "Capabilities: " +
                 $"BulletImpacts={bullet}, MissileImpacts={missile}, VehicleLosses={vehicle}, " +
                 $"MapBuildingHP={GameAccess.MapBuildingHitPointsAvailable}, " +
-                $"ScorchMap={blast}, FacadeScorch={scorchDecal}, AirbaseCapture={capture}.");
+                $"ScorchMap={blast}, FacadeScorch={scorchDecal}, AirbaseCapture={capture}, " +
+                $"RadioMFD={GameAccess.MfdAvailable}, MusicMixer={musicManager}, " +
+                $"MusicOwnership={GameAccess.MusicSourcesAvailable}, " +
+                $"SoundtrackCatalog={soundtrackCatalog}.");
 
             try
             {

@@ -29,6 +29,7 @@
 - Ruins receive pooled collapse dust and permanent intermittent smouldering without persistent physics debris.
 - A few civilian buildings around controlled airbases become logic-only defensive positions using vanilla bunker behavior.
 - Active fires, damaged facades, ruins, and garrisons synchronize for multiplayer and late joiners.
+- A client-local map radio plays user-supplied OGG/WAV stations through the game's music mixer.
 - Hard global budgets keep large city battles practical.
 
 ## Installation
@@ -67,6 +68,36 @@ They can also be edited in-game with [BepInEx ConfigurationManager](https://gith
 3. Watch established forest sites advance into separate downwind fronts and leave scorched terrain behind.
 4. Destroy ground vehicles near a town or tree line for a secondary chance to start a fire.
 5. Capture an airbase and inspect nearby civilian buildings; selected shells retain their normal appearance but behave as defensive positions.
+6. Maximise the tactical map and press the `RAD` bezel button. The three starter stations
+   use the installed game soundtrack immediately; press **FOLDER** to add OGG/WAV stations.
+
+## Boscali radio
+
+The radio is a local music player styled as a compact Nuclear Option MFD. It includes three
+stations without bundling audio:
+
+- **Agrapol FM** starts with one Boscali-side track from the installed original soundtrack.
+- **Maris Network** starts with one Primeva-side track from the installed original soundtrack.
+- **Base Broadcast** exposes the current map's available original-score pool.
+
+Each station can use a small `station.png` identity, displayed in the current-station header
+and channel list. Use a square transparent PNG up to 256x256 pixels and 256 KiB. **FOLDER**
+opens the canonical Music directory; create one folder, drop OGG/WAV files and an optional
+`station.png` directly inside, then press **RESCAN**. Files placed directly in Music appear
+under `LOCAL`. Tracks added to one of the three starter folders join that station after its
+built-in soundtrack entry. Missing or invalid icons fall back to a two-letter badge. The
+panel also provides transport controls, channel paging, shuffle, repeat, volume, progress,
+and a status readout.
+
+Only OGG and WAV imports are accepted in this baseline. The player never downloads,
+extracts, bundles, logs, or transmits soundtrack audio. Built-in entries retain references
+to AudioClips already loaded by Nuclear Option. The player routes through the game's music mixer, temporarily yields
+vanilla music while on air, and restores the interrupted or latest requested vanilla track
+when stopped. Dedicated/headless servers skip the feature.
+
+Shared synchronized stations are technically feasible when the host and clients have the
+same mod protocol and matching local libraries, but are not enabled in this release. See
+[Radio plan](docs/RADIO_PLAN.md) for the installed-game probe and bounded netcode design.
 
 ## Fire and destruction system
 
@@ -108,7 +139,7 @@ Garrisons update with zone ownership, cannot duplicate, disappear when their she
 
 ## Configuration reference
 
-The public configuration is intentionally compact. Particle counts, spatial budgets, spread depth, and other safety limits are derived or fixed so a visually tempting setting cannot accidentally turn a long mission into a performance collapse. It exposes seven high-level controls.
+The public configuration is intentionally compact. Particle counts, spatial budgets, spread depth, and other safety limits are derived or fixed so a visually tempting setting cannot accidentally turn a long mission into a performance collapse. It exposes twelve high-level controls.
 
 | Section | Setting | Default | Purpose |
 |---|---|---:|---|
@@ -118,6 +149,11 @@ The public configuration is intentionally compact. Particle counts, spatial budg
 | Buildings | `DamagedStateEnabled` | `true` | Enable the intermediate battered facade state |
 | Garrisons | `Enabled` | `true` | Occupy eligible buildings around controlled zones |
 | Garrisons | `BuildingsPerZone` | `3` | Number of occupied civilian shells per zone |
+| Radio | `Enabled` | `true` | Enable the client-local map radio |
+| Radio | `Volume` | `0.65` | Radio gain before the global music setting |
+| Radio | `CrossfadeSeconds` | `1.5` | Blend duration between local tracks |
+| Radio | `Shuffle` | `false` | Randomize advancement within a channel |
+| Radio | `RepeatTrack` | `false` | Repeat the current track |
 | Debug | `VerboseLogging` | `false` | Log individual ignition, spread, and merge events |
 
 At intensity `1.0`, ordinary impacts have approximately a `0.25%` ignition chance and explosive impacts approximately `6%`. Ground-vehicle destruction uses a lower chance derived from the explosive value. Old experimental smoke-countermeasure and detailed per-effect keys are removed automatically when the configuration is migrated.

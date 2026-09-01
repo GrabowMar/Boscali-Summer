@@ -25,6 +25,7 @@ src/BoscaliSummer/
     Networking/              Mirage transport and networking module
   Features/
     FireAndDestruction/      Fire, building damage, ruins, effects, and patches
+    Radio/                   Local music catalogue, playback ownership, and MFD panel
     UrbanCombat/             Occupancy, defensive proxies, visuals, and patches
 ```
 
@@ -78,6 +79,7 @@ Unity reports a loaded scene. Reset exceptions are isolated per service.
 | 10 | Impact/fire manager |
 | 20 | Ruin aftermath manager |
 | 30 | Zone garrison manager |
+| 40 | Client-local radio panel/scene binding |
 | 100 | Network per-scene state |
 
 Plugin teardown unpatches features in reverse order, unregisters the scene callback,
@@ -91,7 +93,8 @@ feature inventing its own delayed readiness loop.
 ## Configuration
 
 Configuration is composed centrally so BepInEx writes one file, but entries are owned by
-`FireAndDestructionSettings`, `UrbanCombatSettings`, and `DiagnosticSettings`.
+`FireAndDestructionSettings`, `UrbanCombatSettings`, `RadioSettings`, and
+`DiagnosticSettings`.
 `LegacyConfigMigration` consumes removed experimental and low-level keys before saving.
 A temporary forwarding facade keeps the current managers behavior-identical while they
 are split. New modules should consume their settings object through `FeatureContext`
@@ -110,6 +113,14 @@ World mutation remains server-authoritative:
 - joining players receive two delayed snapshots after authentication;
 - particles, smoke evolution, wind, lights, scorch presentation, and collapse dust are
   local presentation and never create per-frame network traffic.
+
+The radio is client-local and sends no multiplayer data. It owns local file discovery,
+three embedded bounded PNG station identities, references to the current map's installed
+soundtrack clips, decoded local clips, the music-bus handoff, and its MFD screen. Custom
+station PNGs are header-validated and cached once per station revision. No vanilla audio is
+extracted or packaged. A possible synchronized broadcast
+protocol is separately gated in [Radio plan](RADIO_PLAN.md); it would exchange only bounded
+station state after a compatibility handshake, never music content.
 
 `ModNet` is currently a compatibility bridge containing the three existing channels. Its
 next extraction keeps the wire types stable while moving state, handlers, codecs, and
@@ -132,6 +143,9 @@ The present safety model remains an architectural invariant:
 - Two bounded forest spread attempts per site under the global fire-site cap.
 - One procedural-tree index build per scene and local nine-cell hit searches.
 - One civilian-shell catalogue per scene and at most one garrison zone processed per frame.
+- 32 radio channels, 512 imported track records, at most 30 unique installed-soundtrack
+  references plus two station seeds, one active decode request, and at most two decoded
+  local clips during a crossfade; station icons are capped at 256 KiB and 256x256 pixels.
 
 No feature may scan the whole scene every frame. Catalogue once, queue event work, use slow
 ticks, reuse non-allocating buffers, pool expensive visuals, and release scene references

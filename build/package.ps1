@@ -28,6 +28,7 @@ $version = ($version -split '\.')[0..2] -join '.'
 $dist = Join-Path $root 'dist'
 $stage = Join-Path $dist 'stage'
 $pluginDir = Join-Path $stage 'BepInEx\plugins\BoscaliSummer'
+$musicDir = Join-Path $pluginDir 'Music'
 
 if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
 New-Item -ItemType Directory -Path $pluginDir -Force | Out-Null
@@ -35,6 +36,22 @@ Copy-Item -LiteralPath $built -Destination $pluginDir -Force
 Copy-Item -LiteralPath (Join-Path $root 'README.md') -Destination $pluginDir -Force
 Copy-Item -LiteralPath (Join-Path $root 'CHANGELOG.md') -Destination $pluginDir -Force
 Copy-Item -LiteralPath (Join-Path $root 'LICENSE') -Destination $pluginDir -Force
+
+$radioAssets = Join-Path $root 'src\BoscaliSummer\Features\Radio\Assets'
+New-Item -ItemType Directory -Path $musicDir -Force | Out-Null
+Copy-Item -LiteralPath (Join-Path $radioAssets 'stations-readme.txt') `
+    -Destination (Join-Path $musicDir 'README.txt') -Force
+$starterStations = @(
+    @{ Name = 'Agrapol FM'; Icon = 'agrapol-fm.png' },
+    @{ Name = 'Maris Network'; Icon = 'maris-network.png' },
+    @{ Name = 'Base Broadcast'; Icon = 'base-broadcast.png' }
+)
+foreach ($station in $starterStations) {
+    $stationDir = Join-Path $musicDir $station.Name
+    New-Item -ItemType Directory -Path $stationDir -Force | Out-Null
+    Copy-Item -LiteralPath (Join-Path $radioAssets $station.Icon) `
+        -Destination (Join-Path $stationDir 'station.png') -Force
+}
 
 $meta = [ordered]@{
     id = 'BoscaliSummer'

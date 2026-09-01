@@ -1,8 +1,10 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
+using System.Resources;
 using System.Runtime.Loader;
 
 if (args.Length != 2)
@@ -28,6 +30,7 @@ AssemblyLoadContext.Default.Resolving += (_, name) =>
 };
 
 Assembly gameAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(Path.Combine(managedDir, "Assembly-CSharp.dll"));
+Assembly mirageAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(Path.Combine(managedDir, "Mirage.dll"));
 const BindingFlags AllMembers = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
 Assembly pluginAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(pluginPath);
 
@@ -38,7 +41,14 @@ Assembly pluginAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(plugi
     ("BulletSim+Bullet", "TrajectoryTrace"),
     ("GroundVehicle", "UnitDisabled"),
     ("MapBuilding", "TakeDamage"),
-    ("Missile", "UserCode_RpcDetonate_897349600")
+    ("Missile", "UserCode_RpcDetonate_897349600"),
+    ("MusicManager", "PlayMusic"),
+    ("MusicManager", "CrossFadeMusic"),
+    ("MusicManager", "QueueMusicClip"),
+    ("MapSettings", "GetStartMusic"),
+    ("MapSettings", "GetStrategicMusic"),
+    ("MapSettings", "GetTacticalMusic"),
+    ("VirtualMFD", "SetupButtons")
 };
 
 foreach ((string typeName, string methodName) in targets)
@@ -63,7 +73,16 @@ foreach ((string typeName, string methodName) in targets)
 {
     ("MapBuilding", "hitPoints"),
     ("Missile", "blastYield"),
-    ("GameAssets", "scorchMarkDecal")
+    ("GameAssets", "scorchMarkDecal"),
+    ("MusicManager", "currentSource"),
+    ("MusicManager", "fadeSource"),
+    ("SoundManager", "MusicMixer"),
+    ("Faction", "factionName"),
+    ("FactionRegistry", "factions"),
+    ("VirtualMFD", "leftButtons"),
+    ("VirtualMFD", "rightButtons"),
+    ("VirtualMFD", "leftScreens"),
+    ("VirtualMFD", "rightScreens")
 };
 
 foreach ((string typeName, string fieldName) in fields)
@@ -73,6 +92,10 @@ foreach ((string typeName, string fieldName) in fields)
         throw new MissingFieldException(typeName, fieldName);
 }
 
+Type levelInfo = gameAssembly.GetType("LevelInfo", true)!;
+if (levelInfo.GetProperty("LoadedMapSettings", AllMembers) == null)
+    throw new MissingMemberException("LevelInfo.LoadedMapSettings");
+
 string[] patchTypes =
 {
     "BoscaliSummer.Fire.BulletImpactPatch",
@@ -80,7 +103,10 @@ string[] patchTypes =
     "BoscaliSummer.Fire.MissileImpactPatch",
     "BoscaliSummer.Fire.MapBuildingDamagePatch",
     "BoscaliSummer.Garrisons.AirbaseCapturePatch",
-    "BoscaliSummer.Garrisons.GarrisonClientVisualPatch"
+    "BoscaliSummer.Garrisons.GarrisonClientVisualPatch",
+    "BoscaliSummer.Features.Radio.Patches.VanillaPlayMusicPatch",
+    "BoscaliSummer.Features.Radio.Patches.VanillaCrossFadeMusicPatch",
+    "BoscaliSummer.Features.Radio.Patches.VanillaQueueMusicPatch"
 };
 
 foreach (string patchType in patchTypes)
@@ -91,11 +117,24 @@ string[] featureTypes =
 {
     "BoscaliSummer.Infrastructure.Networking.NetworkingFeature",
     "BoscaliSummer.Features.FireAndDestruction.FireAndDestructionFeature",
-    "BoscaliSummer.Features.UrbanCombat.UrbanCombatFeature"
+    "BoscaliSummer.Features.UrbanCombat.UrbanCombatFeature",
+    "BoscaliSummer.Features.Radio.RadioFeature"
 };
 foreach (string featureType in featureTypes)
     if (pluginAssembly.GetType(featureType, false) == null)
         throw new TypeLoadException("Plugin feature type missing: " + featureType);
+
+string[] radioResources =
+{
+    "BoscaliSummer.RadioAssets.agrapol-fm.png",
+    "BoscaliSummer.RadioAssets.maris-network.png",
+    "BoscaliSummer.RadioAssets.base-broadcast.png",
+    "BoscaliSummer.RadioAssets.stations-readme.txt"
+};
+string[] resources = pluginAssembly.GetManifestResourceNames();
+foreach (string resource in radioResources)
+    if (!resources.Contains(resource, StringComparer.Ordinal))
+        throw new MissingManifestResourceException("Plugin radio asset missing: " + resource);
 
 (string Type, string Field, Type FieldType)[] messageFields =
 {
@@ -126,7 +165,17 @@ foreach ((string typeName, string fieldName, Type fieldType) in messageFields)
             $"Message field type changed: {typeName}.{fieldName} is {field.FieldType}, expected {fieldType}.");
 }
 
-Console.WriteLine("Patch target probe: 6 methods, 3 game fields, 6 patch classes, 3 features, and 3 wire contracts resolved.");
+Type networkTime = mirageAssembly.GetType("Mirage.NetworkTime", true)!;
+if (networkTime.GetProperty("Time", AllMembers) == null)
+    throw new MissingMemberException("Mirage.NetworkTime.Time");
+Type networkServer = mirageAssembly.GetType("Mirage.NetworkServer", true)!;
+if (!networkServer.GetMethods(AllMembers).Any(method => method.Name == "SendToAll"))
+    throw new MissingMethodException("Mirage.NetworkServer", "SendToAll");
+Type messageHandler = mirageAssembly.GetType("Mirage.MessageHandler", true)!;
+if (!messageHandler.GetMethods(AllMembers).Any(method => method.Name == "RegisterHandler"))
+    throw new MissingMethodException("Mirage.MessageHandler", "RegisterHandler");
+
+Console.WriteLine("Patch target probe: 13 game methods, 12 game fields, 1 game property, 9 patch classes, 4 features, 4 embedded radio assets, 3 wire contracts, and Mirage radio-sync seams resolved.");
 return 0;
 
 static bool MetadataHasMethod(string assemblyPath, string typeName, string methodName)
