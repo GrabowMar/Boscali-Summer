@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Added an `OPS` map-MFD with Skills and Support pages. Vanilla player rank grants the
+  session skill-point budget without changing Nuclear Option's rank thresholds or unlocks.
+- Added host-owned skill selections for fuel conservation, typed reward bonuses, vehicle
+  requisition, artillery access, and combat engineering, with bounded client requests and
+  accepted-state snapshots.
+- Added server-authoritative support validation using native allocation, faction stock,
+  entitlements, typed denials, replay history, a two-per-second request limit, cooldowns,
+  terrain validation, and global job/unit caps.
+- Added native-parachute vehicle airdrops and controlled-zone reinforcement through Urban
+  Combat's narrow fortification capability. Added default-off experimental artillery using
+  an explicitly configured non-nuclear vanilla definition capped at 200 yield.
+
 - Replaced the never-working building-damage visual (HP-fraction tiers, facade tint, and
   48-projector camera-near pool) with a single local impact scorch mark: an explosive hit
   stamps one black decal on the building wall at the point of impact, sized from the blast

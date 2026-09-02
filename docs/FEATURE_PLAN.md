@@ -67,8 +67,8 @@ large during the behavior-preserving move. Split them only behind tested seams:
 | Fire and destruction | Ignition, forest index, spread, impact scorch, ruins, visuals | Host decisions; client presentation | Working baseline |
 | Urban combat | Shell catalogue, occupancy, defensive proxies, capture/destruction cleanup | Host plus vanilla spawning | Working abstract model |
 | Radio/music | Local track library, channels, playback adapter, MFD UI | Client-local | Working baseline |
-| Progression | Mod XP, skill graph, profile migration, entitlements | Host/server truth | Feasible after persistence/network work |
-| Support calls | Validation, targeting, cost/cooldown, action jobs | Host validates and executes | Drops/artillery feasible; carriers high risk |
+| Progression | Vanilla-rank skill budget, selected skills, entitlements | Host/server truth | Implemented development baseline; persistence gated |
+| Support calls | OPS MFD, validation, targeting, cost/cooldown, action jobs | Host validates and executes | Airdrop/fortification baseline; artillery default-off |
 | Future modules | One isolated capability spike at a time | Depends on feature | Unscheduled |
 
 ### Important urban-combat boundary
@@ -151,11 +151,11 @@ use their own imported music.
 
 ### Phase 3 — Progression foundation
 
-Add a Boscali-specific progression track instead of modifying Nuclear Option's six-rank
-`PlayerRank` state.
+Status: implemented development baseline using Nuclear Option's six-rank `PlayerRank` as
+the skill-point budget, without modifying rank thresholds or vanilla unlocks.
 
-- Patch the host reward path and turn verified rewards into typed progression events.
-- Keep an authoritative XP ledger and data-driven skill graph.
+- Keep the verified host reward path and vanilla score/rank as progression truth.
+- Keep an authoritative selected-skill mask and data-driven skill graph.
 - Expose entitlements through a narrow service consumed by Support.
 - Start with mission/session progression while balance is changing.
 - Add persistent profiles only after schema migration and recovery tests pass.
@@ -169,7 +169,9 @@ own XP total or unlock state as truth.
 
 ### Phase 4 — Support request core
 
-Build one secure request pipeline before individual support actions:
+Status: implemented development baseline; in-game multiplayer and long-session gates remain.
+
+The implementation uses one secure request pipeline before individual support actions:
 
 ```text
 client intent -> rate/idempotency check -> sender/HQ lookup -> entitlement ->
@@ -186,8 +188,10 @@ Initial actions, each in its own file:
    support. Validate terrain, altitude, clearance, stock, faction, and the global unit cap.
 2. **Artillery.** Use a whitelisted non-nuclear vanilla ordnance path with dealer
    attribution. Validate range, layer, scatter, round count, yield, and concurrent jobs.
-3. **Carrier requisition.** Default off. Validate deep water, clearance, objective/airbase
-   lifecycle, once-per-faction mission cap, late join, and full destruction cleanup.
+3. **Fortification.** Resolve a friendly controlled airbase and ask Urban Combat to rebuild
+   its bounded defensive positions through `IZoneFortificationService`.
+
+Carrier requisition remains unimplemented and outside this baseline.
 
 Carriers graduate only after a complete multiplayer mission can spawn, use, damage,
 destroy, and late-join around one without corrupting airbase or objective state.

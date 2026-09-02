@@ -8,7 +8,8 @@ using UnityEngine;
 
 namespace BoscaliSummer.Garrisons
 {
-    internal sealed class ZoneGarrisonManager : MonoBehaviour, ISceneService, IBuildingOccupancy
+    internal sealed class ZoneGarrisonManager : MonoBehaviour, ISceneService, IBuildingOccupancy,
+        IZoneFortificationService
     {
         internal const string NamePrefix = "BoscaliSummer:Garrison:";
 
@@ -32,6 +33,19 @@ namespace BoscaliSummer.Garrisons
 
         bool IBuildingOccupancy.IsOccupied(GameObject shell) =>
             GarrisonOccupancy.IsOccupied(shell);
+
+        bool IZoneFortificationService.TryFortify(
+            Airbase airbase, FactionHQ owner, NuclearOption.Networking.Player requester)
+        {
+            if (!IsServer() || airbase == null || owner == null || requester == null ||
+                airbase.AttachedAirbase || airbase.CurrentHQ != owner || requester.HQ != owner)
+                return false;
+            // A support call is an explicit rebuild request. Ordinary capture scheduling
+            // deliberately ignores an already-owned record, so clear that generation first.
+            ClearRecord(airbase.GetInstanceID());
+            ScheduleCapture(airbase, owner);
+            return true;
+        }
 
         private readonly List<PendingCapture> pending = new List<PendingCapture>();
         private readonly Dictionary<int, GarrisonRecord> records = new Dictionary<int, GarrisonRecord>();

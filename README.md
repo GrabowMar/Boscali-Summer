@@ -30,6 +30,8 @@
 - A few civilian buildings around controlled airbases become logic-only defensive positions using vanilla bunker behavior.
 - Active fires, ruins, and garrisons synchronize for multiplayer and late joiners.
 - A client-local map radio plays user-supplied OGG/WAV stations through the game's music mixer.
+- An `OPS` map-MFD provides a vanilla-rank skill tree and server-authoritative support requests.
+- Unlocked support can reinforce controlled zones or paradrop a native faction vehicle; experimental artillery is separately default-off.
 - Hard global budgets keep large city battles practical.
 
 ## Installation
@@ -70,6 +72,23 @@ They can also be edited in-game with [BepInEx ConfigurationManager](https://gith
 5. Capture an airbase and inspect nearby civilian buildings; selected shells retain their normal appearance but behave as defensive positions.
 6. Maximise the tactical map and press the `RAD` bezel button. The three starter stations
    use the installed game soundtrack immediately; press **FOLDER** to add OGG/WAV stations.
+7. Press the `OPS` bezel button. Spend points granted by vanilla player rank on **SKILLS**,
+   then use **SUPPORT** while the map cursor is over a valid target.
+
+## Progression and support
+
+Progression reuses Nuclear Option's player score and six ranks. Each rank above the
+starting rank grants one session-scoped skill point; Boscali does not alter rank thresholds,
+aircraft requirements, or weapon access. Skills cover fuel conservation, typed reward
+bonuses, vehicle requisition, artillery access, and combat engineering.
+
+Support uses the player's normal allocation rather than introducing another currency.
+The host validates identity, faction, entitlement, cost, stock, cooldown, target terrain,
+request replay, rate, and global caps. Vehicle requisitions consume faction vehicle stock
+and use only prefabs with Nuclear Option's native parachute system. Combat Engineering
+reinforces the selected friendly controlled zone through the existing bounded occupied-
+position system. Experimental artillery requires an explicitly configured low-yield
+vanilla missile definition and is disabled by default.
 
 ## Boscali radio
 
@@ -140,7 +159,7 @@ Garrisons update with zone ownership, cannot duplicate, disappear when their she
 
 ## Configuration reference
 
-The public configuration is intentionally compact. Particle counts, spatial budgets, spread depth, and other safety limits are derived or fixed so a visually tempting setting cannot accidentally turn a long mission into a performance collapse. It exposes eleven high-level controls.
+The public configuration is intentionally compact. Particle counts, spatial budgets, spread depth, and other safety limits are derived or fixed so a visually tempting setting cannot accidentally turn a long mission into a performance collapse. The most important controls are listed below.
 
 | Section | Setting | Default | Purpose |
 |---|---|---:|---|
@@ -154,6 +173,11 @@ The public configuration is intentionally compact. Particle counts, spatial budg
 | Radio | `CrossfadeSeconds` | `1.5` | Blend duration between local tracks |
 | Radio | `Shuffle` | `false` | Randomize advancement within a channel |
 | Radio | `RepeatTrack` | `false` | Repeat the current track |
+| Progression | `Enabled` | `true` | Use vanilla ranks as skill points |
+| Support | `Enabled` | `true` | Enable the OPS support request pipeline |
+| Support | `VehicleAirdrops` | `true` | Allow unlocked native-parachute vehicle drops |
+| Support | `Fortification` | `true` | Allow unlocked controlled-zone reinforcement |
+| Support | `Artillery` | `false` | Enable experimental configured low-yield artillery |
 | Debug | `VerboseLogging` | `false` | Log individual ignition, spread, and merge events |
 
 At intensity `1.0`, ordinary impacts have approximately a `0.25%` ignition chance and explosive impacts approximately `6%`. Ground-vehicle destruction uses a lower chance derived from the explosive value. Old experimental smoke-countermeasure and detailed per-effect keys are removed automatically when the configuration is migrated.
@@ -207,9 +231,10 @@ Packaging builds the solution, runs the deterministic test suite, checks private
 ## Scope
 
 Version `0.1.x` focuses on the tactical battlefield layer: fire, visible destruction,
-persistent aftermath, and urban defensive positions. It intentionally does not add
+persistent aftermath, urban defensive positions, and a development progression/support
+slice. It intentionally does not add
 unbounded wildfire, continuous secondary fire damage, Rigidbody debris, new infantry
-models, or persistence between missions. Later utilities remain gated by the
+models, persistent skill profiles between missions, or carrier requisitions. Later utilities remain gated by the
 [feature plan](docs/FEATURE_PLAN.md), not implied by the current version.
 
 ## Licence

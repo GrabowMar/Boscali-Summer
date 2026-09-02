@@ -26,7 +26,9 @@ src/BoscaliSummer/
     GameInterop/             Cached reflection and capability reporting
   Features/
     FireAndDestruction/      Fire, impact scorch, ruins, replication, effects, and patches
+    Progression/             Vanilla-rank skill choices, entitlements, and reward/fuel effects
     Radio/                   Local music catalogue, playback ownership, and MFD panel
+    Support/                 OPS MFD, validated requests, costs, cooldowns, and support jobs
     UrbanCombat/             Occupancy, defensive proxies, visuals, and patches
 ```
 
@@ -52,13 +54,16 @@ is the only feature list; modules are never discovered by assembly scanning.
 ```text
 Independent feature roots
   Radio
-  ├─ Fire and destruction
-  └─ Urban combat
+  Fire and destruction
+  Urban combat ──publishes──> optional zone-fortification capability
+  Progression ──required by──> Support
 ```
 
-The three current features have no hard startup dependency on one another. Urban Combat
+Fire, Radio, Urban Combat, and Progression have no hard startup dependency on one another. Urban Combat
 publishes the read-only `IBuildingOccupancy` capability through `ServiceRegistry`; Fire and
 Destruction queries it when available without importing Urban Combat's manager or marker.
+Urban Combat also publishes `IZoneFortificationService`, which Support consumes when present.
+Progression publishes host-owned entitlements and Support has one hard dependency on it.
 Radio remains completely independent and client-local.
 
 Every module implements `IModFeature` and provides stable metadata, hard dependencies,
@@ -92,6 +97,9 @@ Unity reports a loaded scene. Reset exceptions are isolated per service.
 | 20 | Ruin aftermath manager |
 | 30 | Zone garrison manager |
 | 40 | Client-local radio panel/scene binding |
+| 45 | Rank-derived progression state |
+| 50 | Authoritative support request and job manager |
+| 55 | Client OPS MFD scene binding |
 | 100 | Fire-and-destruction network per-scene state |
 
 Plugin teardown unpatches features in reverse order, unregisters the scene callback,
@@ -105,7 +113,8 @@ feature inventing its own delayed readiness loop.
 ## Configuration
 
 Configuration is composed centrally so BepInEx writes one file, but entries are owned by
-`FireAndDestructionSettings`, `UrbanCombatSettings`, `RadioSettings`, and
+`FireAndDestructionSettings`, `UrbanCombatSettings`, `RadioSettings`,
+`ProgressionSettings`, `SupportSettings`, and
 `DiagnosticSettings`.
 `LegacyConfigMigration` consumes removed experimental and low-level keys before saving.
 A temporary forwarding facade keeps the current managers behavior-identical while they
@@ -135,6 +144,19 @@ station PNGs are header-validated and cached once per station revision. No vanil
 extracted or packaged. A possible synchronized broadcast
 protocol is separately gated in [Radio plan](RADIO_PLAN.md); it would exchange only bounded
 station state after a compatibility handshake, never music content.
+
+Progression does not replace or modify Nuclear Option's score thresholds, six ranks, or
+aircraft unlocks. Each vanilla rank grants one session-scoped skill point; the host stores
+only selected skills and sends the accepted mask and rank to the owning client. Fuel and
+reward effects are applied at the verified vanilla `Aircraft.UseFuel` and
+`FactionHQ.RewardPlayer` seams.
+
+Support requests carry only a protocol byte, request ID, action ID, and target coordinate. The server
+derives the player, faction, entitlement, allocation cost, stock, definition, yield,
+cooldown, and caps. Airdrops and artillery use vanilla network spawners; fortification asks
+Urban Combat to rebuild the controlled zone through a narrow capability. Artillery remains
+disabled by default and requires an explicitly configured non-nuclear definition with a
+yield no greater than 200.
 
 `ModNet` is a Fire and Destruction-owned compatibility bridge containing the two existing
 channels (fire ignition and ruin creation). Its file, state, handlers, codecs, and
