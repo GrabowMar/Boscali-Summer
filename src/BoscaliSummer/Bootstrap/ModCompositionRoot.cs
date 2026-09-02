@@ -1,6 +1,8 @@
 using BepInEx.Logging;
 using BoscaliSummer.Features.FireAndDestruction;
 using BoscaliSummer.Features.Radio;
+using BoscaliSummer.Features.Progression;
+using BoscaliSummer.Features.Support;
 using BoscaliSummer.Features.UrbanCombat;
 using BoscaliSummer.Framework.Features;
 using BoscaliSummer.Runtime;
@@ -19,7 +21,9 @@ namespace BoscaliSummer.Bootstrap
                 {
                     new FireAndDestructionFeature(),
                     new UrbanCombatFeature(),
-                    new RadioFeature()
+                    new RadioFeature(),
+                    new ProgressionFeature(),
+                    new SupportFeature()
                 });
                 CapabilityReport.Log();
                 return host;

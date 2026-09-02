@@ -11,6 +11,9 @@
     <Compile Include="..\..\src\BoscaliSummer\Features\Radio\Runtime\RadioLibrary.cs" Link="Features\Radio\RadioLibrary.cs" />
     <Compile Include="..\..\src\BoscaliSummer\Features\Radio\Presentation\PngIconHeader.cs" Link="Features\Radio\PngIconHeader.cs" />
     <Compile Include="..\..\src\BoscaliSummer\Features\Radio\Presentation\RadioUiPalette.cs" Link="Features\Radio\RadioUiPalette.cs" />
+    <Compile Include="..\..\src\BoscaliSummer\Framework\Contracts\IPlayerEntitlements.cs" Link="Framework\IPlayerEntitlements.cs" />
+    <Compile Include="..\..\src\BoscaliSummer\Features\Progression\Runtime\SkillModel.cs" Link="Features\Progression\SkillModel.cs" />
+    <Compile Include="..\..\src\BoscaliSummer\Features\Support\Runtime\SupportModel.cs" Link="Features\Support\SupportModel.cs" />
     <Compile Include="..\..\src\BoscaliSummer\Framework\Features\FeatureMetadata.cs" Link="Framework\FeatureMetadata.cs" />
     <Compile Include="..\..\src\BoscaliSummer\Framework\Features\FeatureGraph.cs" Link="Framework\FeatureGraph.cs" />
     <Compile Include="..\..\src\BoscaliSummer\Framework\Features\ServiceRegistry.cs" Link="Framework\ServiceRegistry.cs" />

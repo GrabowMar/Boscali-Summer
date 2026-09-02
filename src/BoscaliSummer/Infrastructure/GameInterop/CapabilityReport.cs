@@ -22,6 +22,11 @@ namespace BoscaliSummer.Runtime
                 AccessTools.Method(typeof(MapSettings), nameof(MapSettings.GetStartMusic)) != null &&
                 AccessTools.Method(typeof(MapSettings), nameof(MapSettings.GetStrategicMusic)) != null &&
                 AccessTools.Method(typeof(MapSettings), nameof(MapSettings.GetTacticalMusic)) != null;
+            bool progression = AccessTools.Method(typeof(FactionHQ), nameof(FactionHQ.RewardPlayer)) != null &&
+                AccessTools.Method(typeof(Aircraft), nameof(Aircraft.UseFuel)) != null;
+            bool supportSpawning = AccessTools.Method(typeof(Spawner), nameof(Spawner.SpawnVehicle)) != null &&
+                AccessTools.Method(typeof(Spawner), nameof(Spawner.SpawnBuilding)) != null &&
+                AccessTools.Method(typeof(DynamicMap), nameof(DynamicMap.TryGetCursorCoordinates)) != null;
             Plugin.Logger.LogInfo(
                 "Capabilities: " +
                 $"BulletImpacts={bullet}, MissileImpacts={missile}, VehicleLosses={vehicle}, " +
@@ -29,7 +34,8 @@ namespace BoscaliSummer.Runtime
                 $"ScorchMap={blast}, FacadeScorch={scorchDecal}, AirbaseCapture={capture}, " +
                 $"RadioMFD={GameAccess.MfdAvailable}, MusicMixer={musicManager}, " +
                 $"MusicOwnership={GameAccess.MusicSourcesAvailable}, " +
-                $"SoundtrackCatalog={soundtrackCatalog}.");
+                $"SoundtrackCatalog={soundtrackCatalog}, Progression={progression}, " +
+                $"SupportSpawning={supportSpawning}.");
 
             try
             {

@@ -1,6 +1,8 @@
 using BepInEx.Configuration;
 using BoscaliSummer.Features.FireAndDestruction.Configuration;
 using BoscaliSummer.Features.Radio.Configuration;
+using BoscaliSummer.Features.Progression.Configuration;
+using BoscaliSummer.Features.Support.Configuration;
 using BoscaliSummer.Features.UrbanCombat.Configuration;
 using BoscaliSummer.Infrastructure.Diagnostics;
 
@@ -16,6 +18,8 @@ namespace BoscaliSummer
         public FireAndDestructionSettings FireAndDestruction { get; }
         public UrbanCombatSettings UrbanCombat { get; }
         public RadioSettings Radio { get; }
+        public ProgressionSettings Progression { get; }
+        public SupportSettings Support { get; }
         public DiagnosticSettings Diagnostics { get; }
 
         public ModConfiguration(ConfigFile config)
@@ -27,6 +31,8 @@ namespace BoscaliSummer
                 FireAndDestruction = new FireAndDestructionSettings(config);
                 UrbanCombat = new UrbanCombatSettings(config);
                 Radio = new RadioSettings(config);
+                Progression = new ProgressionSettings(config);
+                Support = new SupportSettings(config);
                 Diagnostics = new DiagnosticSettings(config);
                 LegacyConfigMigration.RemoveEntries(config);
             }

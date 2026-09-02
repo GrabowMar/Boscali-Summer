@@ -22,6 +22,7 @@ namespace BoscaliSummer.Features.UrbanCombat
         {
             ZoneGarrisonManager garrisons = context.AddSceneService<ZoneGarrisonManager>(30);
             context.AddService<IBuildingOccupancy>(garrisons);
+            context.AddService<IZoneFortificationService>(garrisons);
         }
     }
 }

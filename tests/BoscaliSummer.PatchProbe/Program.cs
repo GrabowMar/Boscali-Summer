@@ -48,7 +48,16 @@ Assembly pluginAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(plugi
     ("MapSettings", "GetStartMusic"),
     ("MapSettings", "GetStrategicMusic"),
     ("MapSettings", "GetTacticalMusic"),
-    ("VirtualMFD", "SetupButtons")
+    ("VirtualMFD", "SetupButtons"),
+    ("FactionHQ", "RewardPlayer"),
+    ("Aircraft", "UseFuel"),
+    ("DynamicMap", "TryGetCursorCoordinates"),
+    ("Spawner", "SpawnVehicle"),
+    ("Spawner", "SpawnBuilding"),
+    ("Spawner", "SpawnSavedMissile"),
+    ("Missile", "GetYield"),
+    ("Missile", "Arm"),
+    ("Missile", "SetAimpoint")
 };
 
 foreach ((string typeName, string methodName) in targets)
@@ -83,10 +92,17 @@ foreach ((string typeName, string methodName) in targets)
     ("VirtualMFD", "rightButtons"),
     ("VirtualMFD", "leftScreens"),
     ("VirtualMFD", "rightScreens")
+    ,("GroundVehicle", "parachuteSystem")
 };
 
 foreach ((string typeName, string fieldName) in fields)
 {
+    if (typeName == "GroundVehicle")
+    {
+        if (!MetadataHasField(Path.Combine(managedDir, "Assembly-CSharp.dll"), typeName, fieldName))
+            throw new MissingFieldException(typeName, fieldName);
+        continue;
+    }
     Type type = gameAssembly.GetType(typeName, true)!;
     if (type.GetField(fieldName, AllMembers) == null)
         throw new MissingFieldException(typeName, fieldName);
@@ -107,6 +123,8 @@ string[] patchTypes =
     "BoscaliSummer.Features.Radio.Patches.VanillaPlayMusicPatch",
     "BoscaliSummer.Features.Radio.Patches.VanillaCrossFadeMusicPatch",
     "BoscaliSummer.Features.Radio.Patches.VanillaQueueMusicPatch"
+    ,"BoscaliSummer.Features.Progression.Patches.AircraftFuelUsePatch"
+    ,"BoscaliSummer.Features.Progression.Patches.RewardAllocationPatch"
 };
 
 foreach (string patchType in patchTypes)
@@ -118,6 +136,8 @@ string[] featureTypes =
     "BoscaliSummer.Features.FireAndDestruction.FireAndDestructionFeature",
     "BoscaliSummer.Features.UrbanCombat.UrbanCombatFeature",
     "BoscaliSummer.Features.Radio.RadioFeature"
+    ,"BoscaliSummer.Features.Progression.ProgressionFeature"
+    ,"BoscaliSummer.Features.Support.SupportFeature"
 };
 foreach (string featureType in featureTypes)
     if (pluginAssembly.GetType(featureType, false) == null)
@@ -149,6 +169,26 @@ foreach (string resource in radioResources)
     ("BoscaliSummer.Runtime.RuinCreatedMessage", "HalfX", typeof(float)),
     ("BoscaliSummer.Runtime.RuinCreatedMessage", "HalfZ", typeof(float)),
     ("BoscaliSummer.Runtime.RuinCreatedMessage", "AgeSeconds", typeof(float))
+    ,("BoscaliSummer.Features.Progression.Networking.SkillUnlockRequest", "Protocol", typeof(byte))
+    ,("BoscaliSummer.Features.Progression.Networking.SkillUnlockRequest", "RequestId", typeof(int))
+    ,("BoscaliSummer.Features.Progression.Networking.SkillUnlockRequest", "Skill", typeof(byte))
+    ,("BoscaliSummer.Features.Progression.Networking.ProgressionStateMessage", "RequestId", typeof(int))
+    ,("BoscaliSummer.Features.Progression.Networking.ProgressionStateMessage", "Protocol", typeof(byte))
+    ,("BoscaliSummer.Features.Progression.Networking.ProgressionStateMessage", "PlayerId", typeof(ulong))
+    ,("BoscaliSummer.Features.Progression.Networking.ProgressionStateMessage", "SkillMask", typeof(ushort))
+    ,("BoscaliSummer.Features.Progression.Networking.ProgressionStateMessage", "Rank", typeof(byte))
+    ,("BoscaliSummer.Features.Progression.Networking.ProgressionStateMessage", "Result", typeof(byte))
+    ,("BoscaliSummer.Features.Support.Networking.SupportRequestMessage", "RequestId", typeof(int))
+    ,("BoscaliSummer.Features.Support.Networking.SupportRequestMessage", "Protocol", typeof(byte))
+    ,("BoscaliSummer.Features.Support.Networking.SupportRequestMessage", "Action", typeof(byte))
+    ,("BoscaliSummer.Features.Support.Networking.SupportRequestMessage", "X", typeof(float))
+    ,("BoscaliSummer.Features.Support.Networking.SupportRequestMessage", "Y", typeof(float))
+    ,("BoscaliSummer.Features.Support.Networking.SupportRequestMessage", "Z", typeof(float))
+    ,("BoscaliSummer.Features.Support.Networking.SupportResultMessage", "RequestId", typeof(int))
+    ,("BoscaliSummer.Features.Support.Networking.SupportResultMessage", "Protocol", typeof(byte))
+    ,("BoscaliSummer.Features.Support.Networking.SupportResultMessage", "Action", typeof(byte))
+    ,("BoscaliSummer.Features.Support.Networking.SupportResultMessage", "Result", typeof(byte))
+    ,("BoscaliSummer.Features.Support.Networking.SupportResultMessage", "CooldownSeconds", typeof(float))
 };
 foreach ((string typeName, string fieldName, Type fieldType) in messageFields)
 {
@@ -170,7 +210,7 @@ Type messageHandler = mirageAssembly.GetType("Mirage.MessageHandler", true)!;
 if (!messageHandler.GetMethods(AllMembers).Any(method => method.Name == "RegisterHandler"))
     throw new MissingMethodException("Mirage.MessageHandler", "RegisterHandler");
 
-Console.WriteLine("Patch target probe: 13 game methods, 12 game fields, 1 game property, 9 patch classes, 3 features, 4 embedded radio assets, 2 wire contracts, and Mirage radio-sync seams resolved.");
+Console.WriteLine("Patch target probe: game methods/fields, 11 patch classes, 5 features, radio assets, four wire contracts, and Mirage seams resolved.");
 return 0;
 
 static bool MetadataHasMethod(string assemblyPath, string typeName, string methodName)
@@ -184,6 +224,23 @@ static bool MetadataHasMethod(string assemblyPath, string typeName, string metho
         if (MetadataTypeName(metadata, handle) != typeName) continue;
         foreach (MethodDefinitionHandle methodHandle in definition.GetMethods())
             if (metadata.GetString(metadata.GetMethodDefinition(methodHandle).Name) == methodName)
+                return true;
+        return false;
+    }
+    return false;
+}
+
+static bool MetadataHasField(string assemblyPath, string typeName, string fieldName)
+{
+    using FileStream stream = File.OpenRead(assemblyPath);
+    using var pe = new PEReader(stream);
+    MetadataReader metadata = pe.GetMetadataReader();
+    foreach (TypeDefinitionHandle handle in metadata.TypeDefinitions)
+    {
+        TypeDefinition definition = metadata.GetTypeDefinition(handle);
+        if (MetadataTypeName(metadata, handle) != typeName) continue;
+        foreach (FieldDefinitionHandle fieldHandle in definition.GetFields())
+            if (metadata.GetString(metadata.GetFieldDefinition(fieldHandle).Name) == fieldName)
                 return true;
         return false;
     }
