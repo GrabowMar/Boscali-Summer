@@ -6,5 +6,6 @@ assets, and its Harmony patches.
 
 Do not edit combat modules. Radio is client-local and must not send multiplayer data.
 Never download, bundle, extract, log, or transmit music. Keep path containment, catalogue,
-decode, clip-retention, and icon-size bounds intact. Update `docs/RADIO_PLAN.md` only when a
-verified radio compatibility seam or public radio behavior changes.
+decode, clip-retention, and icon-size bounds intact. Update the radio entries in
+`docs/DESIGN_NOTES.md` and `docs/ROADMAP.md` only when a verified radio compatibility seam
+or public radio behavior changes.

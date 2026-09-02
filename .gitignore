@@ -2,6 +2,7 @@
 **/obj/
 dist/
 .appdata/
+.codex-remote-attachments/
 *.user
 *.suo
 .vs/

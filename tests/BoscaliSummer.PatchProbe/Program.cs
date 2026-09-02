@@ -48,7 +48,18 @@ Assembly pluginAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(plugi
     ("MapSettings", "GetStartMusic"),
     ("MapSettings", "GetStrategicMusic"),
     ("MapSettings", "GetTacticalMusic"),
-    ("VirtualMFD", "SetupButtons")
+    ("VirtualMFD", "SetupButtons"),
+    ("FactionHQ", "RewardPlayer"),
+    ("Aircraft", "UseFuel"),
+    ("DynamicMap", "TryGetCursorCoordinates"),
+    ("Spawner", "SpawnVehicle"),
+    ("Spawner", "SpawnBuilding"),
+    ("Spawner", "SpawnSavedMissile"),
+    ("Missile", "GetYield"),
+    ("Missile", "Arm"),
+    ("Missile", "SetAimpoint"),
+    ("FactionHQ", "SetTrackingState"),
+    ("UnitRegistry", "RegisterUnit")
 };
 
 foreach ((string typeName, string methodName) in targets)
@@ -82,14 +93,46 @@ foreach ((string typeName, string methodName) in targets)
     ("VirtualMFD", "leftButtons"),
     ("VirtualMFD", "rightButtons"),
     ("VirtualMFD", "leftScreens"),
-    ("VirtualMFD", "rightScreens")
+    ("VirtualMFD", "rightScreens"),
+    ("UnitRegistry", "allUnits"),
+    ("Unit", "persistentID"),
+    ("UnitDefinition", "value"),
+    ("UnitDefinition", "roleIdentity"),
+    ("RoleIdentity", "antiAir"),
+    ("RoleIdentity", "antiSurface")
+    ,("GroundVehicle", "parachuteSystem")
 };
 
 foreach ((string typeName, string fieldName) in fields)
 {
+    if (typeName == "GroundVehicle")
+    {
+        if (!MetadataHasField(Path.Combine(managedDir, "Assembly-CSharp.dll"), typeName, fieldName))
+            throw new MissingFieldException(typeName, fieldName);
+        continue;
+    }
     Type type = gameAssembly.GetType(typeName, true)!;
     if (type.GetField(fieldName, AllMembers) == null)
         throw new MissingFieldException(typeName, fieldName);
+}
+
+// Harmony binds patch parameters by name, so a rename in a game update throws at patch
+// time rather than degrading. Neither probe checked these names before.
+(string Type, string Method, string[] Parameters)[] parameterNames =
+{
+    ("Aircraft", "UseFuel", new[] { "fuelDrawn" }),
+    ("FactionHQ", "RewardPlayer", new[] { "player", "rewardAllocation", "missionType" })
+};
+foreach ((string typeName, string methodName, string[] expected) in parameterNames)
+{
+    MethodInfo method = gameAssembly.GetType(typeName, true)!.GetMethod(methodName, AllMembers)
+        ?? throw new MissingMethodException(typeName, methodName);
+    string[] actual = method.GetParameters().Select(parameter => parameter.Name!).ToArray();
+    foreach (string name in expected)
+        if (!actual.Contains(name, StringComparer.Ordinal))
+            throw new MissingMemberException(
+                $"{typeName}.{methodName} no longer has a parameter named '{name}' " +
+                $"(found: {string.Join(", ", actual)}). Harmony binds by name.");
 }
 
 Type levelInfo = gameAssembly.GetType("LevelInfo", true)!;
@@ -107,6 +150,8 @@ string[] patchTypes =
     "BoscaliSummer.Features.Radio.Patches.VanillaPlayMusicPatch",
     "BoscaliSummer.Features.Radio.Patches.VanillaCrossFadeMusicPatch",
     "BoscaliSummer.Features.Radio.Patches.VanillaQueueMusicPatch"
+    ,"BoscaliSummer.Features.Progression.Patches.AircraftFuelUsePatch"
+    ,"BoscaliSummer.Features.Progression.Patches.RewardAllocationPatch"
 };
 
 foreach (string patchType in patchTypes)
@@ -118,6 +163,8 @@ string[] featureTypes =
     "BoscaliSummer.Features.FireAndDestruction.FireAndDestructionFeature",
     "BoscaliSummer.Features.UrbanCombat.UrbanCombatFeature",
     "BoscaliSummer.Features.Radio.RadioFeature"
+    ,"BoscaliSummer.Features.Progression.ProgressionFeature"
+    ,"BoscaliSummer.Features.Support.SupportFeature"
 };
 foreach (string featureType in featureTypes)
     if (pluginAssembly.GetType(featureType, false) == null)
@@ -149,6 +196,25 @@ foreach (string resource in radioResources)
     ("BoscaliSummer.Runtime.RuinCreatedMessage", "HalfX", typeof(float)),
     ("BoscaliSummer.Runtime.RuinCreatedMessage", "HalfZ", typeof(float)),
     ("BoscaliSummer.Runtime.RuinCreatedMessage", "AgeSeconds", typeof(float))
+    ,("BoscaliSummer.Features.Progression.Networking.ProgressionSubmit", "Protocol", typeof(byte))
+    ,("BoscaliSummer.Features.Progression.Networking.ProgressionSubmit", "Perk", typeof(byte))
+    ,("BoscaliSummer.Features.Progression.Networking.ProgressionSnapshot", "Protocol", typeof(byte))
+    ,("BoscaliSummer.Features.Progression.Networking.ProgressionSnapshot", "PerkMask", typeof(uint))
+    ,("BoscaliSummer.Features.Progression.Networking.ProgressionSnapshot", "Score", typeof(ushort))
+    ,("BoscaliSummer.Features.Progression.Networking.ProgressionSnapshot", "EarnedPoints", typeof(byte))
+    ,("BoscaliSummer.Features.Progression.Networking.ProgressionSnapshot", "Rank", typeof(byte))
+    ,("BoscaliSummer.Features.Progression.Networking.ProgressionSnapshot", "Result", typeof(byte))
+    ,("BoscaliSummer.Features.Support.Networking.SupportRequestMessage", "RequestId", typeof(int))
+    ,("BoscaliSummer.Features.Support.Networking.SupportRequestMessage", "Protocol", typeof(byte))
+    ,("BoscaliSummer.Features.Support.Networking.SupportRequestMessage", "Action", typeof(byte))
+    ,("BoscaliSummer.Features.Support.Networking.SupportRequestMessage", "X", typeof(float))
+    ,("BoscaliSummer.Features.Support.Networking.SupportRequestMessage", "Y", typeof(float))
+    ,("BoscaliSummer.Features.Support.Networking.SupportRequestMessage", "Z", typeof(float))
+    ,("BoscaliSummer.Features.Support.Networking.SupportResultMessage", "RequestId", typeof(int))
+    ,("BoscaliSummer.Features.Support.Networking.SupportResultMessage", "Protocol", typeof(byte))
+    ,("BoscaliSummer.Features.Support.Networking.SupportResultMessage", "Action", typeof(byte))
+    ,("BoscaliSummer.Features.Support.Networking.SupportResultMessage", "Result", typeof(byte))
+    ,("BoscaliSummer.Features.Support.Networking.SupportResultMessage", "CooldownSeconds", typeof(float))
 };
 foreach ((string typeName, string fieldName, Type fieldType) in messageFields)
 {
@@ -170,7 +236,7 @@ Type messageHandler = mirageAssembly.GetType("Mirage.MessageHandler", true)!;
 if (!messageHandler.GetMethods(AllMembers).Any(method => method.Name == "RegisterHandler"))
     throw new MissingMethodException("Mirage.MessageHandler", "RegisterHandler");
 
-Console.WriteLine("Patch target probe: 13 game methods, 12 game fields, 1 game property, 9 patch classes, 3 features, 4 embedded radio assets, 2 wire contracts, and Mirage radio-sync seams resolved.");
+Console.WriteLine("Patch target probe: game methods/fields, Harmony parameter names, 11 patch classes, 5 features, radio assets, four wire contracts, and Mirage seams resolved.");
 return 0;
 
 static bool MetadataHasMethod(string assemblyPath, string typeName, string methodName)
@@ -184,6 +250,23 @@ static bool MetadataHasMethod(string assemblyPath, string typeName, string metho
         if (MetadataTypeName(metadata, handle) != typeName) continue;
         foreach (MethodDefinitionHandle methodHandle in definition.GetMethods())
             if (metadata.GetString(metadata.GetMethodDefinition(methodHandle).Name) == methodName)
+                return true;
+        return false;
+    }
+    return false;
+}
+
+static bool MetadataHasField(string assemblyPath, string typeName, string fieldName)
+{
+    using FileStream stream = File.OpenRead(assemblyPath);
+    using var pe = new PEReader(stream);
+    MetadataReader metadata = pe.GetMetadataReader();
+    foreach (TypeDefinitionHandle handle in metadata.TypeDefinitions)
+    {
+        TypeDefinition definition = metadata.GetTypeDefinition(handle);
+        if (MetadataTypeName(metadata, handle) != typeName) continue;
+        foreach (FieldDefinitionHandle fieldHandle in definition.GetFields())
+            if (metadata.GetString(metadata.GetFieldDefinition(fieldHandle).Name) == fieldName)
                 return true;
         return false;
     }

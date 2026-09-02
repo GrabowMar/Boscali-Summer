@@ -14,8 +14,8 @@ plugin GUID, config path, and public metadata unless the user requests a migrati
 
 - Read `docs/ARCHITECTURE.md` before changing runtime structure, patches, lifecycle,
   networking, or configuration.
-- Read the relevant sections of `docs/FEATURE_PLAN.md` when work affects feature scope,
-  future modules, public roadmap claims, performance gates, music, progression, or support.
+- Read `docs/ROADMAP.md` when work affects feature scope, future modules, public roadmap
+  claims, or performance gates, and `docs/DESIGN_NOTES.md` for why a past decision was made.
 - Treat `README.md` and `CHANGELOG.md` as public claims that must match verified behavior.
 - Inspect current changes before editing. Preserve unrelated dirty work and retain
   compatibility-sensitive namespaces during physical moves.
