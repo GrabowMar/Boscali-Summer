@@ -158,7 +158,9 @@ by default**.
 
 The public configuration is intentionally compact — particle counts, spatial budgets and
 spread depth are derived or fixed so a tempting setting can't turn a long mission into a
-performance collapse.
+performance collapse. Every entry says whether it is **host-authoritative** (on a server only
+the host's value decides anything; a client's copy just changes what its own OPS page
+predicts) or **client-local** (yours alone, never sent anywhere).
 
 | Section | Setting | Default | Purpose |
 |---|---|---:|---|
@@ -173,12 +175,14 @@ performance collapse.
 | Radio | `Shuffle` / `RepeatTrack` | `false` | Advancement within a channel |
 | Progression | `Enabled` | `true` | Score-earned perk board (disabling it also disables Support) |
 | Progression | `ScorePerPoint` | `500` | Mission score per perk point |
-| Progression | `MaximumPoints` | `6` | Perk points one player can earn in a mission |
+| Progression | `MaximumPoints` | `6` | Points one pilot can earn; the board costs 13 in total |
+| Progression | `PerkStrength` | `1.0` | Scales every passive perk bonus without editing the board |
 | Support | `Enabled` | `true` | OPS support request pipeline |
 | Support | `CostMultiplier` | `1.0` | Scales every support cost at once |
 | Support | `VehicleAirdrop` / `AirDefenceAirdrop` | `true` | Authorised armour / air-defence parachute drops |
 | Support | `GroundConvoy` / `ReconSweep` / `Fortification` | `true` | Convoy requisition / hostile reveal / zone reinforcement |
-| Support | `Artillery` | `false` | Experimental configured low-yield artillery |
+| Support | `Artillery` | `false` | Experimental low-yield artillery; needs `FireMissionDefinitionKey` |
+| Support | `MaximumRangeMeters` / `ReconRangeMeters` | `30000` / `120000` | Delivery reach / reconnaissance reach |
 | Debug | `VerboseLogging` | `false` | Log individual ignition, spread and merge events |
 
 At intensity `1.0`, ordinary impacts have ≈`0.25%` ignition chance and explosive impacts

@@ -71,7 +71,8 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
         }
 
         private static VehicleDefinition Definition(in SupportContext context) =>
-            context.Host.Vanilla.Convoy(context.Settings.ConvoyDefinitionKey.Value);
+            context.Host.Vanilla.Convoy(
+                context.Settings.ConvoyDefinitionKey.Value, context.Owner, Count(context));
 
         private static int Count(in SupportContext context) =>
             Mathf.Clamp(context.Settings.ConvoyVehicles.Value, 1, 6);

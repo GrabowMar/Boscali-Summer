@@ -35,6 +35,12 @@ namespace BoscaliSummer.Framework.Contracts
         int Score { get; }
         int EarnedPoints { get; }
         int AvailablePoints { get; }
+
+        /// <summary>
+        /// The configured point ceiling, so a view can size its budget readout to the server's
+        /// setting instead of assuming the shipped default.
+        /// </summary>
+        int MaximumPoints { get; }
         string Status { get; }
         PerkView[] GetPerks();
         void RequestUnlock(byte perkId);

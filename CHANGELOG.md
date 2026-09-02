@@ -40,6 +40,21 @@
   probe asserts the Harmony parameter names both progression patches bind by.
 - `Progression/Enabled=false` and `Support/Enabled=false` now skip installation entirely
   rather than patching and polling while denying everything.
+- Reworked the configuration surface. Every entry now states whether it is host-authoritative
+  or client-local, which is the thing that was genuinely unclear in multiplayer, and the
+  descriptions say what a value does rather than restating its name. `BypassRequirements` no
+  longer describes ranks and prerequisites that no longer exist, and warns that it is a
+  testing aid: it grants every perk free, so the board reads FREE and no point is ever spent.
+- Added `Progression/PerkStrength` to scale every passive perk bonus without editing the
+  board, and `Support/ReconRangeMeters` so a reconnaissance sweep is not held to the same
+  reach as a physical delivery.
+- The perk ribbon now reads `MaximumPoints` instead of assuming six, so a server running a
+  different ceiling no longer shows "6 OF 6 EARNED" while the pilot still has points to spend.
+- Renamed `FortificationCost`, `ArtilleryCost` and `ArtilleryDefinitionKey` to
+  `ZoneFortificationCost`, `FireMissionCost` and `FireMissionDefinitionKey`, and purged the
+  old keys along with the orphaned `VehicleAirdrops` and `VehicleAirdropCost`. The costs
+  changed meaning when they became vanilla-value derived, and an existing config would
+  otherwise have kept charging 10 and 8 allocation against a four-figure balance.
 - **Protocol break:** the progression and support message contracts were reshaped and their
   protocol bytes bumped to `2`. Old and new peers fail closed on these two channels; fire and
   ruin replication is untouched and still interoperates.

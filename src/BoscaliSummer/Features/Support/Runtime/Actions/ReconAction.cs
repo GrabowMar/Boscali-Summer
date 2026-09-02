@@ -29,7 +29,7 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
                 return SupportResult.NotAirborne;
 
             Vector3 centre = context.Target.ToLocalPosition();
-            if (Vector3.Distance(origin, centre) > context.Settings.MaximumRange.Value)
+            if (Vector3.Distance(origin, centre) > context.Settings.ReconRange.Value)
                 return SupportResult.OutOfRange;
 
             List<Unit> units = UnitRegistry.allUnits;

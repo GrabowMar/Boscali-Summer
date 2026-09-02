@@ -40,6 +40,7 @@ namespace BoscaliSummer.Features.Progression.Runtime
         int IProgressionView.Score => localScore;
         int IProgressionView.EarnedPoints => localEarnedPoints;
         int IProgressionView.AvailablePoints => localState.AvailablePoints(localEarnedPoints);
+        int IProgressionView.MaximumPoints => settings.MaximumPoints.Value;
         string IProgressionView.Status => LastResult;
 
         public bool BypassRequirements => bypassRequirements != null && bypassRequirements.Value;
@@ -185,12 +186,16 @@ namespace BoscaliSummer.Features.Progression.Runtime
         public float Multiplier(ulong playerId, PerkEffect effect)
         {
             if (!states.TryGetValue(playerId, out PerkState state)) return 1f;
+            // PerkStrength scales the distance each bonus travels from 1.0, so 0 makes passives
+            // cosmetic and 2.0 doubles them without editing the catalogue. Authorisation perks
+            // carry no multiplier and are unaffected.
+            float strength = settings.PerkStrength.Value;
             float multiplier = 1f;
             for (int i = 0; i < PerkCatalog.All.Length; i++)
             {
                 PerkDefinition definition = PerkCatalog.All[i];
                 if (definition.Capability == null && definition.Effect == effect && state.Has(definition.Id))
-                    multiplier *= definition.Multiplier;
+                    multiplier *= 1f + (definition.Multiplier - 1f) * strength;
             }
             return multiplier;
         }

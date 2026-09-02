@@ -10,10 +10,13 @@ namespace BoscaliSummer.Infrastructure.Diagnostics
         public DiagnosticSettings(ConfigFile config)
         {
             VerboseLogging = config.Bind("Debug", "VerboseLogging", false,
-                "Log bounded runtime diagnostics and individual feature events.");
+                "Log bounded runtime diagnostics and individual feature events. " +
+                "Client-local: affects this machine's log only.");
             BypassRequirements = config.Bind("Debug", "BypassRequirements", false,
-                "Ignore rank, skill-point, prerequisite, and support-entitlement requirements. " +
-                "Developer/testing aid; also removes support allocation cost.");
+                "TESTING AID, NOT A PLAY MODE. Grants every perk for free, authorises every " +
+                "support action, and charges no allocation, so the perk board shows FREE and no " +
+                "point is ever spent. Leave this false for normal play. " +
+                "Host-authoritative: on a server, only the host's value decides what is allowed.");
         }
     }
 }

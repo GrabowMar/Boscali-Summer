@@ -74,8 +74,10 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
         }
 
         private VehicleDefinition Definition(in SupportContext context) => airDefence
-            ? context.Host.Vanilla.AirDefence(context.Settings.AirDefenceDefinitionKey.Value)
-            : context.Host.Vanilla.Armour(context.Settings.VehicleDefinitionKey.Value);
+            ? context.Host.Vanilla.AirDefence(
+                context.Settings.AirDefenceDefinitionKey.Value, context.Owner, 1)
+            : context.Host.Vanilla.Armour(
+                context.Settings.VehicleDefinitionKey.Value, context.Owner, 1);
 
         /// <summary>
         /// Holds the drop slot until the vehicle is down, gone, or the timeout expires. The

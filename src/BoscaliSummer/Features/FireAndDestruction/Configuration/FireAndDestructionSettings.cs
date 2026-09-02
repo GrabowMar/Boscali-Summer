@@ -40,16 +40,22 @@ namespace BoscaliSummer.Features.FireAndDestruction.Configuration
 
         public FireAndDestructionSettings(ConfigFile config)
         {
+            // Ignition and demolition are decided by the host; scorch marks are drawn locally.
             FiresEnabled = config.Bind("Fires", "Enabled", true,
-                "Allow impacts on forests and buildings to ignite fires.");
+                "Allow impacts on forests and buildings to ignite fires. " +
+                "Host-authoritative: on a server, only the host's value applies.");
             FireIntensity = config.Bind("Fires", "Intensity", 1f,
                 new ConfigDescription(
-                    "Overall ignition, spread and visual intensity. Performance budgets remain bounded.",
+                    "Overall ignition, spread and visual intensity. Performance budgets stay " +
+                    "bounded at any value, so this cannot turn a long mission into a slideshow. " +
+                    "Host-authoritative: on a server, only the host's value applies.",
                     new AcceptableValueRange<float>(0.5f, 1.5f)));
             DemolishUnoccupiedBuildings = config.Bind("Fires", "DemolishUnoccupiedBuildings", true,
-                "Demolish a civilian building after its fire burns out unless it has a faction owner.");
+                "Demolish a civilian building after its fire burns out, unless it has a faction " +
+                "owner. Host-authoritative: on a server, only the host's value applies.");
             ImpactScorchEnabled = config.Bind("Buildings", "ImpactScorchEnabled", true,
-                "Stamp a local scorch mark on a building wall where an explosive hit lands.");
+                "Stamp a scorch mark on a building wall where an explosive hit lands. " +
+                "Client-local cosmetic: nothing is tracked or sent to other players.");
         }
     }
 }

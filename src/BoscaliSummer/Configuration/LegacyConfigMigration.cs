@@ -40,6 +40,15 @@ namespace BoscaliSummer
             BindAndRemove(config, "Garrisons", "MaximumPerZone", 4);
             BindAndRemove(config, "Garrisons", "DefenseDefinitionKey", string.Empty);
             BindAndRemove(config, "Radio", "Volume", 0.65f);
+
+            // Support costs stopped being hand-picked constants and became vanilla-value
+            // derived. The old keys are purged rather than reused: an existing config would
+            // otherwise keep charging 10 and 8 allocation against a four-figure balance.
+            BindAndRemove(config, "Support", "FortificationCost", 10f);
+            BindAndRemove(config, "Support", "ArtilleryCost", 8f);
+            BindAndRemove(config, "Support", "VehicleAirdrops", true);
+            BindAndRemove(config, "Support", "VehicleAirdropCost", 12f);
+            BindAndRemove(config, "Support", "ArtilleryDefinitionKey", string.Empty);
         }
 
         private static void BindAndRemove<T>(ConfigFile config, string section, string key, T defaultValue)

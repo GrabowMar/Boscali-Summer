@@ -328,7 +328,7 @@ namespace BoscaliSummer.Features.Support.Presentation
                 200f, 16f), Friendly(), AvionicsUiPalette.FontSmall, FontStyles.Bold,
                 TextAlignmentOptions.MidlineLeft);
 
-            rankSubLabel = Label(parent, "RANK -- · 500 PTS / POINT (MAX 6)",
+            rankSubLabel = Label(parent, "RANK --",
                 new Rect(Pad + AvionicsUiPalette.Space2, y - 18f, 200f, 14f),
                 AvionicsUiPalette.TextDim, AvionicsUiPalette.FontNano, FontStyles.Normal,
                 TextAlignmentOptions.MidlineLeft);
@@ -337,7 +337,7 @@ namespace BoscaliSummer.Features.Support.Presentation
                 new Rect(Pad + inner - 180f, y - 2f, 172f, 16f),
                 Accent(), AvionicsUiPalette.FontMicro, FontStyles.Bold, TextAlignmentOptions.MidlineRight);
 
-            pointsPipLabel = Label(parent, "□ □ □ □ □ □",
+            pointsPipLabel = Label(parent, string.Empty,
                 new Rect(Pad + inner - 180f, y - 18f, 172f, 14f),
                 Friendly(), AvionicsUiPalette.FontMicro, FontStyles.Bold, TextAlignmentOptions.MidlineRight);
 
@@ -636,13 +636,27 @@ namespace BoscaliSummer.Features.Support.Presentation
             int avail = progression.AvailablePoints;
             int earned = progression.EarnedPoints;
 
-            scoreLabel.text = "SCORE " + score.ToString("N0");
-            rankSubLabel.text = "RANK " + rank + "  ·  " + Math.Min(6, earned) + " OF 6 EARNED";
-            pointsChipLabel.text = avail + (avail == 1 ? " PT AVAILABLE" : " PTS AVAILABLE");
+            // Debug/BypassRequirements grants every perk free and authorises every action, so
+            // the board would otherwise be indistinguishable from a broken one: the point
+            // count never moves and every card reads as takeable. Say which mode is on.
+            bool bypass = support.BypassRequirements;
+            scoreLabel.text = bypass ? "DEBUG BYPASS ACTIVE" : "SCORE " + score.ToString("N0");
+            scoreLabel.color = bypass ? AvionicsUiPalette.TextWarning : Friendly();
+            // The ceiling is configurable, so the readout reads it rather than assuming the
+            // shipped default — a server running MaximumPoints=10 used to show "6 OF 6" while
+            // the pilot still had points to spend.
+            int ceiling = Mathf.Max(1, progression.MaximumPoints);
+            rankSubLabel.text = bypass
+                ? "PERK COSTS AND AUTHORISATIONS IGNORED"
+                : "RANK " + rank + "  ·  " + Math.Min(ceiling, earned) + " OF " + ceiling + " EARNED";
+            pointsChipLabel.text = bypass
+                ? "FREE"
+                : avail + (avail == 1 ? " PT AVAILABLE" : " PTS AVAILABLE");
 
-            // Build 6 tactical pips: [■] available unspent, [▣] spent/unlocked, [□] unearned
+            // Tactical pips: [■] available unspent, [▣] spent/unlocked, [□] unearned. Capped so
+            // a generous ceiling cannot overrun the ribbon.
             string pips = string.Empty;
-            for (int p = 0; p < 6; p++)
+            for (int p = 0; p < Math.Min(ceiling, 12); p++)
             {
                 if (p < avail) pips += "■ ";
                 else if (p < earned) pips += "▣ ";

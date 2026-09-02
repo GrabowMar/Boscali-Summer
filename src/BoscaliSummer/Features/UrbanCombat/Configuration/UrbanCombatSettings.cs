@@ -14,10 +14,15 @@ namespace BoscaliSummer.Features.UrbanCombat.Configuration
         public UrbanCombatSettings(ConfigFile config)
         {
             GarrisonsEnabled = config.Bind("Garrisons", "Enabled", true,
-                "Turn a few civilian buildings near owned airbases into defensive positions.");
+                "Turn a few civilian buildings near owned airbases into defensive positions. " +
+                "Also required by the Zone Fortification support action. " +
+                "Host-authoritative: on a server, only the host's value applies.");
             GarrisonsPerZone = config.Bind("Garrisons", "BuildingsPerZone", 3,
                 new ConfigDescription(
-                    "Number of occupied civilian buildings per controlled zone.",
+                    "Occupied civilian buildings per controlled zone. A successful Zone " +
+                    "Fortification request adds one above the zone's current count. 0 leaves " +
+                    "zones undefended without disabling the feature. " +
+                    "Host-authoritative: on a server, only the host's value applies.",
                     new AcceptableValueRange<int>(0, 6)));
         }
     }

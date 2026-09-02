@@ -50,13 +50,16 @@ namespace BoscaliSummer.Features.Support.Runtime
         }
 
         /// <summary>Parachute-capable ground unit whose role is primarily anti-surface.</summary>
-        public VehicleDefinition Armour(string key) => Pick(key, true, false);
+        public VehicleDefinition Armour(string key, FactionHQ owner, int needed) =>
+            Pick(key, true, false, owner, needed);
 
         /// <summary>Parachute-capable ground unit whose role is primarily anti-air.</summary>
-        public VehicleDefinition AirDefence(string key) => Pick(key, true, true);
+        public VehicleDefinition AirDefence(string key, FactionHQ owner, int needed) =>
+            Pick(key, true, true, owner, needed);
 
         /// <summary>Any anti-surface ground unit; a convoy is driven in, not dropped.</summary>
-        public VehicleDefinition Convoy(string key) => Pick(key, false, false);
+        public VehicleDefinition Convoy(string key, FactionHQ owner, int needed) =>
+            Pick(key, false, false, owner, needed);
 
         public MissileDefinition Artillery(string key)
         {
@@ -74,10 +77,19 @@ namespace BoscaliSummer.Features.Support.Runtime
             return null;
         }
 
-        private VehicleDefinition Pick(string key, bool requireParachute, bool antiAir)
+        /// <summary>
+        /// Picks the first matching definition the faction can actually deliver. Selecting the
+        /// first match regardless of stock is what made every drop come back NoStock on a map
+        /// where the leading candidate happened to be depleted; a definition with stock is
+        /// always preferred, and the first match is only used as a fallback so the caller
+        /// still gets a typed NoStock rather than CapabilityUnavailable.
+        /// </summary>
+        private VehicleDefinition Pick(
+            string key, bool requireParachute, bool antiAir, FactionHQ owner, int needed)
         {
             Classify();
             string wanted = string.IsNullOrEmpty(key) ? null : key.Trim();
+            VehicleDefinition fallback = null;
             for (int i = 0; i < vehicles.Count; i++)
             {
                 Candidate candidate = vehicles[i];
@@ -86,9 +98,11 @@ namespace BoscaliSummer.Features.Support.Runtime
                 if (wanted != null &&
                     !string.Equals(candidate.Definition.jsonKey, wanted, StringComparison.Ordinal))
                     continue;
-                return candidate.Definition;
+                if (fallback == null) fallback = candidate.Definition;
+                if (owner == null || owner.GetUnitSupply(candidate.Definition) >= needed)
+                    return candidate.Definition;
             }
-            return null;
+            return fallback;
         }
 
         /// <summary>
