@@ -57,7 +57,9 @@ Assembly pluginAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(plugi
     ("Spawner", "SpawnSavedMissile"),
     ("Missile", "GetYield"),
     ("Missile", "Arm"),
-    ("Missile", "SetAimpoint")
+    ("Missile", "SetAimpoint"),
+    ("FactionHQ", "SetTrackingState"),
+    ("UnitRegistry", "RegisterUnit")
 };
 
 foreach ((string typeName, string methodName) in targets)
@@ -91,7 +93,13 @@ foreach ((string typeName, string methodName) in targets)
     ("VirtualMFD", "leftButtons"),
     ("VirtualMFD", "rightButtons"),
     ("VirtualMFD", "leftScreens"),
-    ("VirtualMFD", "rightScreens")
+    ("VirtualMFD", "rightScreens"),
+    ("UnitRegistry", "allUnits"),
+    ("Unit", "persistentID"),
+    ("UnitDefinition", "value"),
+    ("UnitDefinition", "roleIdentity"),
+    ("RoleIdentity", "antiAir"),
+    ("RoleIdentity", "antiSurface")
     ,("GroundVehicle", "parachuteSystem")
 };
 
@@ -106,6 +114,25 @@ foreach ((string typeName, string fieldName) in fields)
     Type type = gameAssembly.GetType(typeName, true)!;
     if (type.GetField(fieldName, AllMembers) == null)
         throw new MissingFieldException(typeName, fieldName);
+}
+
+// Harmony binds patch parameters by name, so a rename in a game update throws at patch
+// time rather than degrading. Neither probe checked these names before.
+(string Type, string Method, string[] Parameters)[] parameterNames =
+{
+    ("Aircraft", "UseFuel", new[] { "fuelDrawn" }),
+    ("FactionHQ", "RewardPlayer", new[] { "player", "rewardAllocation", "missionType" })
+};
+foreach ((string typeName, string methodName, string[] expected) in parameterNames)
+{
+    MethodInfo method = gameAssembly.GetType(typeName, true)!.GetMethod(methodName, AllMembers)
+        ?? throw new MissingMethodException(typeName, methodName);
+    string[] actual = method.GetParameters().Select(parameter => parameter.Name!).ToArray();
+    foreach (string name in expected)
+        if (!actual.Contains(name, StringComparer.Ordinal))
+            throw new MissingMemberException(
+                $"{typeName}.{methodName} no longer has a parameter named '{name}' " +
+                $"(found: {string.Join(", ", actual)}). Harmony binds by name.");
 }
 
 Type levelInfo = gameAssembly.GetType("LevelInfo", true)!;
@@ -169,15 +196,14 @@ foreach (string resource in radioResources)
     ("BoscaliSummer.Runtime.RuinCreatedMessage", "HalfX", typeof(float)),
     ("BoscaliSummer.Runtime.RuinCreatedMessage", "HalfZ", typeof(float)),
     ("BoscaliSummer.Runtime.RuinCreatedMessage", "AgeSeconds", typeof(float))
-    ,("BoscaliSummer.Features.Progression.Networking.SkillUnlockRequest", "Protocol", typeof(byte))
-    ,("BoscaliSummer.Features.Progression.Networking.SkillUnlockRequest", "RequestId", typeof(int))
-    ,("BoscaliSummer.Features.Progression.Networking.SkillUnlockRequest", "Skill", typeof(byte))
-    ,("BoscaliSummer.Features.Progression.Networking.ProgressionStateMessage", "RequestId", typeof(int))
-    ,("BoscaliSummer.Features.Progression.Networking.ProgressionStateMessage", "Protocol", typeof(byte))
-    ,("BoscaliSummer.Features.Progression.Networking.ProgressionStateMessage", "PlayerId", typeof(ulong))
-    ,("BoscaliSummer.Features.Progression.Networking.ProgressionStateMessage", "SkillMask", typeof(ushort))
-    ,("BoscaliSummer.Features.Progression.Networking.ProgressionStateMessage", "Rank", typeof(byte))
-    ,("BoscaliSummer.Features.Progression.Networking.ProgressionStateMessage", "Result", typeof(byte))
+    ,("BoscaliSummer.Features.Progression.Networking.ProgressionSubmit", "Protocol", typeof(byte))
+    ,("BoscaliSummer.Features.Progression.Networking.ProgressionSubmit", "Perk", typeof(byte))
+    ,("BoscaliSummer.Features.Progression.Networking.ProgressionSnapshot", "Protocol", typeof(byte))
+    ,("BoscaliSummer.Features.Progression.Networking.ProgressionSnapshot", "PerkMask", typeof(uint))
+    ,("BoscaliSummer.Features.Progression.Networking.ProgressionSnapshot", "Score", typeof(ushort))
+    ,("BoscaliSummer.Features.Progression.Networking.ProgressionSnapshot", "EarnedPoints", typeof(byte))
+    ,("BoscaliSummer.Features.Progression.Networking.ProgressionSnapshot", "Rank", typeof(byte))
+    ,("BoscaliSummer.Features.Progression.Networking.ProgressionSnapshot", "Result", typeof(byte))
     ,("BoscaliSummer.Features.Support.Networking.SupportRequestMessage", "RequestId", typeof(int))
     ,("BoscaliSummer.Features.Support.Networking.SupportRequestMessage", "Protocol", typeof(byte))
     ,("BoscaliSummer.Features.Support.Networking.SupportRequestMessage", "Action", typeof(byte))
@@ -210,7 +236,7 @@ Type messageHandler = mirageAssembly.GetType("Mirage.MessageHandler", true)!;
 if (!messageHandler.GetMethods(AllMembers).Any(method => method.Name == "RegisterHandler"))
     throw new MissingMethodException("Mirage.MessageHandler", "RegisterHandler");
 
-Console.WriteLine("Patch target probe: game methods/fields, 11 patch classes, 5 features, radio assets, four wire contracts, and Mirage seams resolved.");
+Console.WriteLine("Patch target probe: game methods/fields, Harmony parameter names, 11 patch classes, 5 features, radio assets, four wire contracts, and Mirage seams resolved.");
 return 0;
 
 static bool MetadataHasMethod(string assemblyPath, string typeName, string methodName)

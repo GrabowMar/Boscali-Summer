@@ -31,7 +31,9 @@ namespace BoscaliSummer.Features.Support.Networking
 
     internal sealed class SupportNet : MonoBehaviour
     {
-        internal const byte ProtocolVersion = 1;
+        /// <summary>Bumped from 1: the action set changed to capability-addressed ids.</summary>
+        internal const byte ProtocolVersion = 2;
+
         private SupportManager manager;
         private MessageHandler serverHandler;
         private MessageHandler clientHandler;
@@ -49,7 +51,8 @@ namespace BoscaliSummer.Features.Support.Networking
             nextRegistration = Time.unscaledTime + 0.5f;
             NetworkManagerNuclearOption network = NetworkManagerNuclearOption.i;
             if (network == null) return;
-            if (network.Server?.MessageHandler != null && network.Server.Active && network.Server.MessageHandler != serverHandler)
+            if (network.Server != null && network.Server.Active &&
+                network.Server.MessageHandler != null && network.Server.MessageHandler != serverHandler)
             {
                 serverHandler?.UnregisterHandler<SupportRequestMessage>();
                 serverHandler = network.Server.MessageHandler;
@@ -69,32 +72,64 @@ namespace BoscaliSummer.Features.Support.Networking
             clientHandler?.UnregisterHandler<SupportResultMessage>();
         }
 
+        /// <summary>
+        /// Submits one request. When this process is the server the request is validated and
+        /// executed in-process, so single-player and listen-host never depend on the
+        /// custom-message pipe and a dropped send can no longer look like a pending one.
+        /// </summary>
         public void Request(int requestId, SupportActionId action, GlobalPosition target)
         {
-            NetworkClient client = NetworkManagerNuclearOption.i?.Client;
-            if (client == null || !client.Active) return;
-            client.Send(new SupportRequestMessage
+            var message = new SupportRequestMessage
             {
-                Protocol = ProtocolVersion, RequestId = requestId, Action = (byte)action,
-                X = target.x, Y = target.y, Z = target.z
-            });
+                Protocol = ProtocolVersion,
+                RequestId = requestId,
+                Action = (byte)action,
+                X = target.x,
+                Y = target.y,
+                Z = target.z
+            };
+
+            if (IsServer() && GameManager.GetLocalPlayer<Player>(out Player local) && local != null)
+            {
+                SupportResult result = manager.Evaluate(local, message);
+                manager.ReceiveResult(Reply(message, result, manager.ServerCooldown));
+                return;
+            }
+
+            NetworkClient client = NetworkManagerNuclearOption.i?.Client;
+            if (client == null || !client.Active)
+            {
+                manager.ReportOffline();
+                return;
+            }
+            client.Send(message);
         }
 
-        public void Reply(INetworkPlayer player, SupportRequestMessage request, SupportResult result, float cooldown)
+        private static bool IsServer()
         {
-            player?.Send(new SupportResultMessage
+            try { return NetworkManagerNuclearOption.i != null && NetworkManagerNuclearOption.i.Server.Active; }
+            catch { return false; }
+        }
+
+        private static SupportResultMessage Reply(
+            SupportRequestMessage request, SupportResult result, float cooldown) =>
+            new SupportResultMessage
             {
                 Protocol = ProtocolVersion,
                 RequestId = request.RequestId,
                 Action = request.Action,
                 Result = (byte)result,
-                CooldownSeconds = cooldown
-            });
-        }
+                CooldownSeconds = result == SupportResult.Accepted ? cooldown : 0f
+            };
 
         private void ReceiveRequest(INetworkPlayer sender, SupportRequestMessage request)
         {
-            if (request.Protocol == ProtocolVersion) manager.ReceiveRequest(sender, request);
+            if (request.Protocol != ProtocolVersion) return;
+            if (sender == null || !sender.IsAuthenticated ||
+                !sender.TryGetPlayer<Player>(out Player player) || player == null)
+                return;
+            SupportResult result = manager.Evaluate(player, request);
+            sender.Send(Reply(request, result, manager.ServerCooldown));
         }
 
         private void ReceiveResult(INetworkPlayer _, SupportResultMessage result)
@@ -111,35 +146,61 @@ namespace BoscaliSummer.Features.Support.Networking
             SetWriter<SupportRequestMessage>((writer, value) =>
             {
                 writer.WriteByte(value.Protocol);
-                writer.WritePackedInt32(value.RequestId); writer.WriteByte(value.Action);
-                writer.WriteSingle(value.X); writer.WriteSingle(value.Y); writer.WriteSingle(value.Z);
+                writer.WritePackedInt32(value.RequestId);
+                writer.WriteByte(value.Action);
+                writer.WriteSingle(value.X);
+                writer.WriteSingle(value.Y);
+                writer.WriteSingle(value.Z);
             });
             SetReader<SupportRequestMessage>(reader => new SupportRequestMessage
             {
-                Protocol = reader.ReadByte(), RequestId = reader.ReadPackedInt32(), Action = reader.ReadByte(),
-                X = reader.ReadSingle(), Y = reader.ReadSingle(), Z = reader.ReadSingle()
+                Protocol = reader.ReadByte(),
+                RequestId = reader.ReadPackedInt32(),
+                Action = reader.ReadByte(),
+                X = reader.ReadSingle(),
+                Y = reader.ReadSingle(),
+                Z = reader.ReadSingle()
             });
             SetWriter<SupportResultMessage>((writer, value) =>
             {
                 writer.WriteByte(value.Protocol);
-                writer.WritePackedInt32(value.RequestId); writer.WriteByte(value.Action);
-                writer.WriteByte(value.Result); writer.WriteSingle(value.CooldownSeconds);
+                writer.WritePackedInt32(value.RequestId);
+                writer.WriteByte(value.Action);
+                writer.WriteByte(value.Result);
+                writer.WriteSingle(value.CooldownSeconds);
             });
             SetReader<SupportResultMessage>(reader => new SupportResultMessage
             {
-                Protocol = reader.ReadByte(), RequestId = reader.ReadPackedInt32(), Action = reader.ReadByte(),
-                Result = reader.ReadByte(), CooldownSeconds = reader.ReadSingle()
+                Protocol = reader.ReadByte(),
+                RequestId = reader.ReadPackedInt32(),
+                Action = reader.ReadByte(),
+                Result = reader.ReadByte(),
+                CooldownSeconds = reader.ReadSingle()
             });
             MessagePacker.RegisterMessage<SupportRequestMessage>();
             MessagePacker.RegisterMessage<SupportResultMessage>();
         }
 
         private static void SetWriter<T>(Action<NetworkWriter, T> writer) =>
-            typeof(Writer<T>).GetProperty("Write", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)
-                ?.SetValue(null, writer, null);
+            Bind(typeof(Writer<T>), "Write", writer);
 
         private static void SetReader<T>(Func<NetworkReader, T> reader) =>
-            typeof(Reader<T>).GetProperty("Read", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)
-                ?.SetValue(null, reader, null);
+            Bind(typeof(Reader<T>), "Read", reader);
+
+        // A missing seam used to be swallowed by a null-conditional, leaving every support
+        // message silently unable to round-trip. Report it instead.
+        private static void Bind(Type holder, string property, object value)
+        {
+            PropertyInfo target = holder.GetProperty(
+                property, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+            if (target == null)
+            {
+                Plugin.Logger.LogError(
+                    "[Support] Mirage serializer seam " + holder.Name + "." + property +
+                    " is missing; support requests cannot replicate on this game build.");
+                return;
+            }
+            target.SetValue(null, value, null);
+        }
     }
 }

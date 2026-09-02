@@ -1,296 +1,353 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using BepInEx.Configuration;
 using BepInEx.Logging;
 using BoscaliSummer.Features.Support.Configuration;
 using BoscaliSummer.Features.Support.Networking;
-using BoscaliSummer.Features.Support.Runtime.Actions;
 using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Lifecycle;
-using Mirage;
 using NuclearOption.Networking;
 using UnityEngine;
 
 namespace BoscaliSummer.Features.Support.Runtime
 {
-    internal sealed class SupportManager : MonoBehaviour, ISceneService
+    /// <summary>
+    /// Validates and dispatches support requests. Everything an action does lives in the
+    /// action; this class owns only authority, economy, bounded concurrency and the client's
+    /// view of its own request.
+    /// </summary>
+    internal sealed class SupportManager : MonoBehaviour, ISceneService, ISupportHost
     {
         private const int MaximumSupportVehicles = 24;
         private const int MaximumDropsInFlight = 2;
         private const int MaximumArtilleryJobs = 2;
-        private const int ArtilleryRounds = 4;
+        private const int RequestsPerSecond = 2;
+
+        /// <summary>How long a client waits for a reply before reporting the host silent.</summary>
+        private const float ReplyTimeout = 5f;
 
         private readonly SupportRequestLedger ledger = new SupportRequestLedger();
-        private readonly List<GroundVehicle> supportVehicles = new List<GroundVehicle>();
+        private readonly List<GroundVehicle> supportVehicles = new List<GroundVehicle>(MaximumSupportVehicles);
+        private readonly int[] reserved = new int[2];
+
         private SupportSettings settings;
-        private IPlayerEntitlements entitlements;
-        private IZoneFortificationService fortifications;
+        private IPlayerPerks perks;
         private SupportNet network;
         private ManualLogSource logger;
-        private int dropsInFlight;
-        private int artilleryJobs;
-        private int nextRequestId;
+        private ConfigEntry<bool> bypassRequirements;
+        private SupportCatalog catalog;
+        private readonly VanillaSupportCatalog vanilla = new VanillaSupportCatalog();
 
-        public event Action StateChanged;
-        public string Status { get; private set; } = "Select support and designate a target on the map.";
+        private int nextRequestId;
+        private float pendingSince;
+        private bool pending;
+        private float localCooldownUntil;
+
+        public string Status { get; private set; } = "Designate a grid on the maximised map.";
+
+        SupportSettings ISupportHost.Settings => settings;
+        ManualLogSource ISupportHost.Logger => logger;
+        VanillaSupportCatalog ISupportHost.Vanilla => vanilla;
+
+        public IReadOnlyList<SupportActionDefinition> Actions => catalog.Actions;
+        public bool BypassRequirements => bypassRequirements != null && bypassRequirements.Value;
 
         public void Configure(
-            SupportSettings supportSettings, IPlayerEntitlements playerEntitlements,
-            IZoneFortificationService zoneFortifications, SupportNet net, ManualLogSource log)
+            SupportSettings supportSettings, IPlayerPerks playerPerks,
+            IZoneFortificationService fortifications, SupportNet net, ManualLogSource log)
         {
             settings = supportSettings;
-            entitlements = playerEntitlements;
-            fortifications = zoneFortifications;
+            perks = playerPerks;
             network = net;
             logger = log;
+            catalog = new SupportCatalog(supportSettings, fortifications);
         }
+
+        internal void ConfigureBypass(ConfigEntry<bool> bypass) => bypassRequirements = bypass;
+
+        public SupportActionId? ArmedAction { get; private set; }
+        public int ArmedFrame { get; private set; }
 
         public void ResetForScene()
         {
             ledger.Clear();
             supportVehicles.Clear();
-            dropsInFlight = 0;
-            artilleryJobs = 0;
+            Array.Clear(reserved, 0, reserved.Length);
+            vanilla.Reset();
             StopAllCoroutines();
-            Status = "Select support and designate a target on the map.";
-            StateChanged?.Invoke();
+            pending = false;
+            localCooldownUntil = 0f;
+            ArmedAction = null;
+            ArmedFrame = 0;
+            Status = "Select support option, then right-click on map.";
         }
 
-        public bool IsLocallyUnlocked(SupportActionId action)
+        private void Update()
         {
-            if (!GameManager.GetLocalPlayer<Player>(out Player player) || player == null) return false;
-            return entitlements.HasEntitlement(Identity(player), Entitlement(action));
-        }
-
-        public bool CanRequestLocally(SupportActionId action) =>
-            settings != null && settings.Enabled.Value && ActionEnabled(action) && IsLocallyUnlocked(action);
-
-        public float Cost(SupportActionId action)
-        {
-            switch (action)
+            if (pending && Time.unscaledTime - pendingSince > ReplyTimeout)
             {
-                case SupportActionId.VehicleAirdrop: return settings.VehicleAirdropCost.Value;
-                case SupportActionId.Artillery: return settings.ArtilleryCost.Value;
-                case SupportActionId.FortifyZone: return settings.FortificationCost.Value;
-                default: return 0f;
+                pending = false;
+                Status = "No response from host.";
+            }
+
+            if (ArmedAction.HasValue)
+            {
+                if (Input.GetKeyDown(KeyCode.Escape))
+                {
+                    Disarm();
+                    return;
+                }
+
+                if (Time.frameCount > ArmedFrame + 1 && Input.GetMouseButtonDown(1))
+                {
+                    DynamicMap map = SceneSingleton<DynamicMap>.i;
+                    if (map != null && DynamicMap.mapMaximized && map.TryGetCursorCoordinates(out GlobalPosition target))
+                    {
+                        SupportActionId action = ArmedAction.Value;
+                        ArmedAction = null;
+                        RequestAt(action, target);
+                    }
+                }
             }
         }
 
-        public void RequestAtMapCursor(SupportActionId action)
+        // ---- Client view -----------------------------------------------------------------
+
+        public float LocalAllocation =>
+            GameManager.GetLocalPlayer<Player>(out Player player) && player != null ? player.Allocation : 0f;
+
+        public float LocalCooldownRemaining =>
+            Mathf.Max(0f, localCooldownUntil - Time.unscaledTime);
+
+        public bool IsAuthorised(SupportActionDefinition action)
         {
+            if (BypassRequirements) return true;
+            if (!GameManager.GetLocalPlayer<Player>(out Player player) || player == null) return false;
+            return perks.Grants(PlayerIdentity.Of(player), action.Capability);
+        }
+
+        /// <summary>
+        /// Price for the local player, including the support-cost perk. The server runs the
+        /// same method, so the panel never advertises a number the host will not honour.
+        /// </summary>
+        public float Cost(SupportActionDefinition action)
+        {
+            GameManager.GetLocalPlayer<Player>(out Player player);
+            return Cost(action, player);
+        }
+
+        /// <summary>True when the maximised map currently has a usable cursor coordinate.</summary>
+        public bool TryGetDesignatedTarget(out GlobalPosition target)
+        {
+            target = default;
             DynamicMap map = SceneSingleton<DynamicMap>.i;
-            if (map == null || !DynamicMap.mapMaximized || !map.TryGetCursorCoordinates(out GlobalPosition target))
+            return map != null && DynamicMap.mapMaximized && map.TryGetCursorCoordinates(out target);
+        }
+
+        public void Arm(SupportActionId action)
+        {
+            if (ArmedAction.HasValue && ArmedAction.Value == action)
             {
-                Status = "Open the maximized map and place the cursor over a valid target.";
-                StateChanged?.Invoke();
+                Disarm();
                 return;
             }
-            network.Request(++nextRequestId, action, target);
-            Status = "Request sent to host.";
-            StateChanged?.Invoke();
+
+            ArmedAction = action;
+            ArmedFrame = Time.frameCount;
+
+            SupportActionDefinition def = catalog != null ? catalog.Find(action) : null;
+            string name = def != null ? def.Name : "SUPPORT";
+            Status = "ARMED: " + name + " — Right-click on map to call in (ESC to cancel).";
+
+            DynamicMap map = SceneSingleton<DynamicMap>.i;
+            if (map != null && !DynamicMap.mapMaximized)
+            {
+                map.Maximize();
+            }
         }
 
-        internal void ReceiveRequest(INetworkPlayer sender, SupportRequestMessage request)
+        public void Disarm()
         {
-            SupportResult result = ValidateAndExecute(sender, request);
-            network.Reply(sender, request, result,
-                result == SupportResult.Accepted ? settings.RequestCooldown.Value : 0f);
+            if (!ArmedAction.HasValue) return;
+            ArmedAction = null;
+            Status = "Support request cancelled.";
+        }
+
+        public void Request(SupportActionId action)
+        {
+            Arm(action);
+        }
+
+        public void RequestAt(SupportActionId action, GlobalPosition target)
+        {
+            SupportActionDefinition def = catalog != null ? catalog.Find(action) : null;
+            if (def == null || !def.Enabled)
+            {
+                Status = "Action unavailable.";
+                return;
+            }
+
+            float cost = Cost(def);
+            if (cost <= 0f)
+            {
+                Status = "Action unavailable on this map.";
+                return;
+            }
+
+            if (!IsAuthorised(def))
+            {
+                Status = "Action not authorised.";
+                return;
+            }
+
+            if (LocalCooldownRemaining > 0.5f)
+            {
+                Status = "Support network cooling down.";
+                return;
+            }
+
+            if (!BypassRequirements && LocalAllocation + 0.001f < cost)
+            {
+                Status = "Insufficient allocation (" + cost.ToString("0") + " required).";
+                return;
+            }
+
+            pending = true;
+            pendingSince = Time.unscaledTime;
+            Status = "Request sent to grid " + Mathf.RoundToInt(target.x) + " / " + Mathf.RoundToInt(target.z) + ".";
+            network.Request(++nextRequestId, action, target);
+        }
+
+        /// <summary>Called when the request could not leave this machine at all.</summary>
+        internal void ReportOffline()
+        {
+            pending = false;
+            Status = "No host connection.";
         }
 
         internal void ReceiveResult(SupportResultMessage message)
         {
+            pending = false;
             SupportResult result = (SupportResult)message.Result;
-            Status = result == SupportResult.Accepted
-                ? $"{(SupportActionId)message.Action} accepted. Cooldown {message.CooldownSeconds:0}s."
-                : $"{(SupportActionId)message.Action} denied: {result}.";
-            StateChanged?.Invoke();
+            SupportActionDefinition action = catalog.Find((SupportActionId)message.Action);
+            string name = action != null ? action.Name : "Support";
+            if (result == SupportResult.Accepted)
+            {
+                localCooldownUntil = Time.unscaledTime + message.CooldownSeconds;
+                Status = name + " accepted.";
+            }
+            else
+            {
+                Status = name + " denied: " + Explain(result) + ".";
+            }
         }
 
-        private SupportResult ValidateAndExecute(INetworkPlayer sender, SupportRequestMessage request)
+        internal static string Explain(SupportResult result)
         {
-            if (settings == null || !settings.Enabled.Value) return SupportResult.Disabled;
-            if (sender == null || !sender.IsAuthenticated ||
-                !sender.TryGetPlayer<Player>(out Player player) || player == null || player.HQ == null)
-                return SupportResult.InvalidTarget;
-            if (!Enum.IsDefined(typeof(SupportActionId), request.Action) ||
-                !Finite(request.X) || !Finite(request.Y) || !Finite(request.Z))
+            switch (result)
+            {
+                case SupportResult.Disabled: return "action disabled";
+                case SupportResult.NotUnlocked: return "not authorised";
+                case SupportResult.InvalidTarget: return "unusable target";
+                case SupportResult.OutOfRange: return "target out of range";
+                case SupportResult.NotAirborne: return "you must be in an aircraft";
+                case SupportResult.InsufficientAllocation: return "not enough allocation";
+                case SupportResult.NoStock: return "no stock at HQ";
+                case SupportResult.Cooldown: return "cooling down";
+                case SupportResult.Busy: return "too many jobs in flight";
+                case SupportResult.Duplicate: return "already handled";
+                case SupportResult.CapabilityUnavailable: return "unavailable on this map";
+                case SupportResult.SpawnFailed: return "could not be delivered";
+                case SupportResult.RateLimited: return "too many requests";
+                default: return result.ToString();
+            }
+        }
+
+        // ---- Server ----------------------------------------------------------------------
+
+        internal SupportResult Evaluate(Player player, SupportRequestMessage request)
+        {
+            if (player == null || player.HQ == null) return SupportResult.InvalidTarget;
+            if (!Finite(request.X) || !Finite(request.Y) || !Finite(request.Z))
                 return SupportResult.InvalidTarget;
 
-            SupportActionId action = (SupportActionId)request.Action;
-            ulong playerId = Identity(player);
-            if (ledger.IsDuplicate(playerId, request.RequestId)) return SupportResult.Duplicate;
-            if (ledger.IsRateLimited(playerId, Time.unscaledTime, 2, 1f)) return SupportResult.RateLimited;
-            if (!ActionEnabled(action)) return SupportResult.Disabled;
-            if (!entitlements.HasEntitlement(playerId, Entitlement(action))) return SupportResult.NotUnlocked;
-            if (ledger.IsCoolingDown(playerId, Time.unscaledTime, settings.RequestCooldown.Value))
+            SupportActionDefinition action = catalog.Find((SupportActionId)request.Action);
+            if (action == null) return SupportResult.CapabilityUnavailable;
+
+            ulong playerId = PlayerIdentity.Of(player);
+            float now = Time.unscaledTime;
+            bool bypass = BypassRequirements;
+
+            if (ledger.WasAccepted(playerId, request.RequestId)) return SupportResult.Duplicate;
+            if (ledger.IsRateLimited(playerId, now, RequestsPerSecond, 1f)) return SupportResult.RateLimited;
+            if (!action.Enabled) return SupportResult.Disabled;
+            if (!bypass && !perks.Grants(playerId, action.Capability)) return SupportResult.NotUnlocked;
+            if (ledger.IsCoolingDown(playerId, now, settings.RequestCooldown.Value))
                 return SupportResult.Cooldown;
-            float cost = Cost(action);
-            if (player.Allocation + 0.001f < cost) return SupportResult.InsufficientAllocation;
 
-            GlobalPosition target = new GlobalPosition(request.X, request.Y, request.Z);
-            SupportResult result;
-            switch (action)
+            var context = new SupportContext(
+                player, new GlobalPosition(request.X, request.Y, request.Z), request.RequestId, this);
+            float cost = Cost(action, player);
+            if (cost <= 0f) return SupportResult.CapabilityUnavailable;
+            if (!bypass && player.Allocation + 0.001f < cost) return SupportResult.InsufficientAllocation;
+
+            SupportResult result = action.Action.Execute(context);
+            if (result != SupportResult.Accepted)
             {
-                case SupportActionId.VehicleAirdrop: result = TryAirdrop(player, target, request.RequestId); break;
-                case SupportActionId.Artillery: result = TryArtillery(player, target, request.RequestId); break;
-                case SupportActionId.FortifyZone: result = TryFortify(player, target); break;
-                default: result = SupportResult.InvalidTarget; break;
+                logger.LogWarning("[Support] " + action.Name + " request " + request.RequestId +
+                    " rejected: " + result + ".");
+                return result;
             }
-            if (result != SupportResult.Accepted) return result;
-            player.SetAllocation(Mathf.Max(0f, player.Allocation - cost));
-            ledger.Accept(playerId, Time.unscaledTime);
-            logger.LogInfo($"Accepted {action} request {request.RequestId} from {player} for {target}.");
+
+            if (!bypass) player.SetAllocation(Mathf.Max(0f, player.Allocation - cost));
+            ledger.Accept(playerId, request.RequestId, now);
+            logger.LogInfo("[Support] Accepted " + action.Name + " request " + request.RequestId +
+                " from " + player + " at " + context.Target + " for " + Mathf.RoundToInt(cost) + " alloc.");
             return SupportResult.Accepted;
         }
 
-        private SupportResult TryAirdrop(Player player, GlobalPosition target, int requestId)
-        {
-            RemoveInactiveVehicles();
-            if (supportVehicles.Count >= MaximumSupportVehicles || dropsInFlight >= MaximumDropsInFlight)
-                return SupportResult.Busy;
-            if (!TryGround(target, out Vector3 ground)) return SupportResult.InvalidTarget;
-            if (player.Aircraft == null ||
-                Vector3.Distance(player.Aircraft.transform.position, ground) > 25000f)
-                return SupportResult.InvalidTarget;
-            VehicleDefinition definition = VanillaSupportCatalog.ResolveAirdropVehicle(settings);
-            if (definition == null) return SupportResult.CapabilityUnavailable;
-            if (player.HQ.GetUnitSupply(definition) <= 0) return SupportResult.NoStock;
-            Spawner spawner = NetworkSceneSingleton<Spawner>.i;
-            if (spawner == null) return SupportResult.CapabilityUnavailable;
+        internal float ServerCooldown => settings.RequestCooldown.Value;
 
-            player.HQ.ModifyUnitSupply(definition, -1);
-            try
-            {
-                Vector3 spawn = ground + Vector3.up * 550f;
-                string unique = $"BoscaliSummer:Support:Drop:{Identity(player)}:{requestId}";
-                GroundVehicle vehicle = spawner.SpawnVehicle(
-                    definition.unitPrefab, spawn.ToGlobalPosition(), Quaternion.identity,
-                    Vector3.down * 12f, player.HQ, unique, 1f, false, null);
-                if (vehicle == null) throw new InvalidOperationException("Spawner returned no vehicle.");
-                supportVehicles.Add(vehicle);
-                dropsInFlight++;
-                StartCoroutine(ReleaseDropSlot(vehicle));
-                return SupportResult.Accepted;
-            }
-            catch (Exception e)
-            {
-                player.HQ.ModifyUnitSupply(definition, 1);
-                logger.LogWarning("Vehicle airdrop failed and stock was refunded: " + e.Message);
-                return SupportResult.SpawnFailed;
-            }
+        /// <summary>
+        /// Price for one player. No action prices itself from the target, so costing uses a
+        /// bare context and both the panel and the host reach the same number.
+        /// </summary>
+        private float Cost(SupportActionDefinition action, Player player)
+        {
+            if (player == null) return 0f;
+            float baseCost = action.Action.BaseCost(new SupportContext(player, default, 0, this));
+            if (baseCost <= 0f) return 0f;
+            return baseCost * perks.Multiplier(PlayerIdentity.Of(player), PerkEffect.SupportCost);
         }
 
-        private IEnumerator ReleaseDropSlot(GroundVehicle vehicle)
+        // ---- Host services ---------------------------------------------------------------
+
+        bool ISupportHost.TryReserve(SupportPool pool)
         {
-            float until = Time.unscaledTime + 90f;
-            while (vehicle != null && !vehicle.disabled && Time.unscaledTime < until &&
-                vehicle.transform.position.y > Datum.LocalSeaY + 8f)
-                yield return new WaitForSecondsRealtime(1f);
-            dropsInFlight = Math.Max(0, dropsInFlight - 1);
+            int limit = pool == SupportPool.Drop ? MaximumDropsInFlight : MaximumArtilleryJobs;
+            if (reserved[(int)pool] >= limit) return false;
+            reserved[(int)pool]++;
+            return true;
         }
 
-        private SupportResult TryFortify(Player player, GlobalPosition target)
-        {
-            if (fortifications == null) return SupportResult.CapabilityUnavailable;
-            Vector3 localTarget = target.ToLocalPosition();
-            Airbase closest = null;
-            float closestDistance = float.MaxValue;
-            foreach (Airbase airbase in player.HQ.GetAirbases())
-            {
-                if (airbase == null || airbase.AttachedAirbase || airbase.CurrentHQ != player.HQ) continue;
-                Vector3 center = airbase.center != null ? airbase.center.position : airbase.transform.position;
-                float distance = Vector3.Distance(center, localTarget);
-                if (distance < closestDistance) { closest = airbase; closestDistance = distance; }
-            }
-            if (closest == null || closestDistance > Mathf.Max(closest.GetRadius() * 1.5f, 650f))
-                return SupportResult.InvalidTarget;
-            return fortifications.TryFortify(closest, player.HQ, player)
-                ? SupportResult.Accepted
-                : SupportResult.SpawnFailed;
-        }
+        void ISupportHost.Release(SupportPool pool) =>
+            reserved[(int)pool] = Math.Max(0, reserved[(int)pool] - 1);
 
-        private SupportResult TryArtillery(Player player, GlobalPosition target, int requestId)
-        {
-            if (artilleryJobs >= MaximumArtilleryJobs) return SupportResult.Busy;
-            if (!TryGround(target, out Vector3 ground)) return SupportResult.InvalidTarget;
-            if (NetworkSceneSingleton<Spawner>.i == null || player.Aircraft == null)
-                return SupportResult.CapabilityUnavailable;
-            if (Vector3.Distance(player.Aircraft.transform.position, ground) > 30000f)
-                return SupportResult.InvalidTarget;
-            MissileDefinition definition = VanillaSupportCatalog.ResolveArtilleryOrdnance(settings);
-            if (definition == null) return SupportResult.CapabilityUnavailable;
-            artilleryJobs++;
-            StartCoroutine(ArtillerySalvo(player, definition, ground, requestId));
-            return SupportResult.Accepted;
-        }
+        void ISupportHost.Run(IEnumerator routine) => StartCoroutine(routine);
 
-        private IEnumerator ArtillerySalvo(Player player, MissileDefinition definition, Vector3 target, int requestId)
-        {
-            try
-            {
-                for (int round = 0; round < ArtilleryRounds; round++)
-                {
-                    if (NetworkSceneSingleton<Spawner>.i == null || player == null || player.HQ == null) yield break;
-                    Vector2 scatter = UnityEngine.Random.insideUnitCircle * 45f;
-                    Vector3 impact = target + new Vector3(scatter.x, 0f, scatter.y);
-                    Vector3 spawn = impact + Vector3.up * 1000f;
-                    string guide = player.Aircraft != null ? player.Aircraft.UniqueName : string.Empty;
-                    Missile missile = NetworkSceneSingleton<Spawner>.i.SpawnSavedMissile(
-                        definition.unitPrefab, spawn.ToGlobalPosition(), Quaternion.LookRotation(Vector3.down),
-                        player.HQ, string.Empty, guide, Vector3.down * 220f,
-                        $"BoscaliSummer:Support:Artillery:{Identity(player)}:{requestId}:{round}");
-                    if (missile != null)
-                    {
-                        missile.SetAimpoint(impact.ToGlobalPosition(), Vector3.zero);
-                        missile.Arm();
-                    }
-                    yield return new WaitForSecondsRealtime(1.25f);
-                }
-            }
-            finally
-            {
-                artilleryJobs = Math.Max(0, artilleryJobs - 1);
-            }
-        }
-
-        private static bool TryGround(GlobalPosition target, out Vector3 ground)
-        {
-            Vector3 local = target.ToLocalPosition();
-            Vector3 origin = new Vector3(local.x, Mathf.Max(local.y, Datum.LocalSeaY) + 3000f, local.z);
-            if (Physics.Raycast(origin, Vector3.down, out RaycastHit hit, 6000f,
-                (int)PhysicsLayers.StaticsMask | (int)PhysicsLayers.ShipsMask))
-            {
-                ground = hit.point;
-                if (ground.y <= Datum.LocalSeaY + 2f) return false;
-                if (Vector3.Angle(hit.normal, Vector3.up) > 25f) return false;
-                int blockers = (int)PhysicsLayers.DefaultMask | (int)PhysicsLayers.StaticsMask |
-                    (int)PhysicsLayers.ShipsMask | (int)PhysicsLayers.ExclusionZonesMask;
-                if (Physics.CheckSphere(ground + Vector3.up * 10f, 8f, blockers)) return false;
-                return true;
-            }
-            ground = default;
-            return false;
-        }
-
-        private void RemoveInactiveVehicles()
+        bool ISupportHost.HasVehicleCapacity(int count)
         {
             for (int i = supportVehicles.Count - 1; i >= 0; i--)
-                if (supportVehicles[i] == null || supportVehicles[i].disabled) supportVehicles.RemoveAt(i);
+                if (supportVehicles[i] == null || supportVehicles[i].disabled)
+                    supportVehicles.RemoveAt(i);
+            return supportVehicles.Count + count <= MaximumSupportVehicles;
         }
 
-        private bool ActionEnabled(SupportActionId action) =>
-            action == SupportActionId.VehicleAirdrop ? settings.VehicleAirdropsEnabled.Value :
-            action == SupportActionId.Artillery ? settings.ArtilleryEnabled.Value :
-            action == SupportActionId.FortifyZone && settings.FortificationEnabled.Value;
-
-        private static string Entitlement(SupportActionId action) =>
-            action == SupportActionId.VehicleAirdrop ? SupportEntitlements.VehicleAirdrop :
-            action == SupportActionId.Artillery ? SupportEntitlements.Artillery :
-            SupportEntitlements.Fortification;
-
-        private static ulong Identity(Player player) => player.SteamID != 0UL
-            ? player.SteamID
-            : 0x8000000000000000UL | (uint)Math.Max(0, player.PlayerIndex);
+        void ISupportHost.TrackVehicle(GroundVehicle vehicle)
+        {
+            if (vehicle != null) supportVehicles.Add(vehicle);
+        }
 
         private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
     }

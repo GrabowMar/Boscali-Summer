@@ -101,6 +101,18 @@ namespace BoscaliSummer.Features.Radio.Presentation
         public static readonly RadioRgba Disabled =
             new RadioRgba(0.42f, 0.45f, 0.46f, 0.75f);
 
+        // 3-layer design tokens (Surfaces, Borders, Rails, Typography)
+        public static readonly RadioRgba SurfaceCard = new RadioRgba(0.071f, 0.098f, 0.133f, 0.88f);
+        public static readonly RadioRgba SurfaceCardHover = new RadioRgba(0.094f, 0.133f, 0.188f, 0.95f);
+        public static readonly RadioRgba SurfaceElevated = new RadioRgba(0.118f, 0.161f, 0.231f, 0.95f);
+        public static readonly RadioRgba BorderSubtle = new RadioRgba(0.137f, 0.196f, 0.271f, 0.65f);
+        public static readonly RadioRgba RailEmerald = new RadioRgba(0.000f, 1.000f, 0.400f);
+        public static readonly RadioRgba RailAmber = new RadioRgba(0.961f, 0.620f, 0.043f);
+        public static readonly RadioRgba RailCyan = new RadioRgba(0.024f, 0.714f, 0.831f);
+        public static readonly RadioRgba RailRed = new RadioRgba(0.937f, 0.267f, 0.267f);
+        public static readonly RadioRgba TextPrimary = RadioRgba.White;
+        public static readonly RadioRgba TextSecondary = new RadioRgba(0.580f, 0.639f, 0.722f);
+
         public static RadioUiPaint Paint(
             RadioButtonStyle style, RadioRgba accent,
             bool enabled, bool latched, bool hover, bool pressed)

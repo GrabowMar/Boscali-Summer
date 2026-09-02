@@ -17,16 +17,18 @@ namespace BoscaliSummer.Features.Support
 
         public void Install(FeatureContext context)
         {
-            IPlayerEntitlements entitlements = context.Services.GetRequired<IPlayerEntitlements>();
+            IPlayerPerks perks = context.Services.GetRequired<IPlayerPerks>();
             IProgressionView progression = context.Services.GetRequired<IProgressionView>();
             context.Services.TryGet(out IZoneFortificationService fortifications);
+
             SupportManager manager = context.AddSceneService<SupportManager>(50);
             SupportNet network = context.AddComponent<SupportNet>();
             SupportPanel panel = context.AddSceneService<SupportPanel>(55);
+
             network.Configure(manager);
-            manager.Configure(context.Settings.Support, entitlements, fortifications, network, context.Logger);
+            manager.Configure(context.Settings.Support, perks, fortifications, network, context.Logger);
+            manager.ConfigureBypass(context.Settings.BypassRequirements);
             panel.Configure(manager, progression, context.Logger);
-            context.AddService(manager);
         }
     }
 }

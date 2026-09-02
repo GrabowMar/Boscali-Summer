@@ -7,22 +7,30 @@ namespace BoscaliSummer.Tests.Features.Support
         public static void Run()
         {
             var ledger = new SupportRequestLedger(4);
-            TestAssert.That(!ledger.IsDuplicate(10, 1), "first request was marked duplicate");
-            TestAssert.That(ledger.IsDuplicate(10, 1), "request replay was not detected");
-            TestAssert.That(!ledger.IsDuplicate(11, 1), "request IDs leaked between players");
-            ledger.Accept(10, 100f);
-            TestAssert.That(ledger.IsCoolingDown(10, 105f, 10f), "active cooldown was ignored");
-            TestAssert.That(!ledger.IsCoolingDown(10, 111f, 10f), "expired cooldown remained active");
 
-            TestAssert.That(!ledger.IsRateLimited(20, 1f, 2, 1f), "first request was rate limited");
-            TestAssert.That(!ledger.IsRateLimited(20, 1.2f, 2, 1f), "second request was rate limited");
-            TestAssert.That(ledger.IsRateLimited(20, 1.4f, 2, 1f), "request flood was not rate limited");
-            TestAssert.That(!ledger.IsRateLimited(20, 2.1f, 2, 1f), "rate limit window did not recover");
+            // Only accepted requests are remembered. A denial must not burn the id, or the
+            // client's next legitimate attempt with that id comes back as a duplicate.
+            TestAssert.That(!ledger.WasAccepted(10, 1), "an unseen request was marked accepted");
+            ledger.Accept(10, 1, 100f);
+            TestAssert.That(ledger.WasAccepted(10, 1), "an accepted request replay was not detected");
+            TestAssert.That(!ledger.WasAccepted(11, 1), "request ids leaked between players");
 
-            for (int i = 2; i <= 6; i++) ledger.IsDuplicate(10, i);
-            TestAssert.That(!ledger.IsDuplicate(10, 1), "bounded replay history retained an evicted ID");
+            TestAssert.That(ledger.IsCoolingDown(10, 105f, 10f), "an active cooldown was ignored");
+            TestAssert.That(!ledger.IsCoolingDown(10, 111f, 10f), "an expired cooldown stayed active");
+            TestAssert.That(ledger.CooldownRemaining(10, 105f, 10f) == 5f, "cooldown countdown is wrong");
+            TestAssert.That(ledger.CooldownRemaining(10, 130f, 10f) == 0f,
+                "an expired cooldown reported time remaining");
+
+            TestAssert.That(!ledger.IsRateLimited(20, 1f, 2, 1f), "the first request was rate limited");
+            TestAssert.That(!ledger.IsRateLimited(20, 1.2f, 2, 1f), "the second request was rate limited");
+            TestAssert.That(ledger.IsRateLimited(20, 1.4f, 2, 1f), "a request flood was not rate limited");
+            TestAssert.That(!ledger.IsRateLimited(20, 2.1f, 2, 1f), "the rate window did not recover");
+
+            for (int i = 2; i <= 6; i++) ledger.Accept(10, i, 100f);
+            TestAssert.That(!ledger.WasAccepted(10, 1), "bounded replay history kept an evicted id");
+
             ledger.Clear();
-            TestAssert.That(!ledger.IsCoolingDown(10, 101f, 10f), "scene reset retained cooldown state");
+            TestAssert.That(!ledger.IsCoolingDown(10, 101f, 10f), "a scene reset kept cooldown state");
         }
     }
 }

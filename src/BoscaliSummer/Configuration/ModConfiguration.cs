@@ -73,5 +73,6 @@ namespace BoscaliSummer
         public int GarrisonsMaximum => UrbanCombat.GarrisonsMaximum;
         public string GarrisonDefinitionKey => UrbanCombat.GarrisonDefinitionKey;
         public ConfigEntry<bool> VerboseLogging => Diagnostics.VerboseLogging;
+        public ConfigEntry<bool> BypassRequirements => Diagnostics.BypassRequirements;
     }
 }

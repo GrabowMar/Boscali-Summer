@@ -5,6 +5,7 @@ using BoscaliSummer.Runtime;
 using NuclearOption.UIStyleSystem;
 using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace BoscaliSummer.Features.Radio.Presentation
@@ -271,6 +272,7 @@ namespace BoscaliSummer.Features.Radio.Presentation
             // and a progress bar. Its internals stay positioned against the card top.
             float cardTop = y;
             FramedPanel(content, new Rect(Pad, cardTop, inner, CardHeight), Frame());
+            Rule(content, new Rect(Pad, cardTop, 3f, CardHeight), accent);
             stationIconGround = FramedPanel(content,
                 new Rect(Pad + Space2, cardTop - Space2, ArtSize, ArtSize), Frame());
             stationIcon = Panel(stationIconGround.rectTransform,
@@ -399,6 +401,7 @@ namespace BoscaliSummer.Features.Radio.Presentation
             Image ground = root.GetComponent<Image>();
             Button button = root.GetComponent<Button>();
             button.targetGraphic = ground;
+            button.navigation = new Navigation { mode = Navigation.Mode.None };
             button.colors = ButtonColors(RadioButtonStyle.Default, false);
 
             var result = new ChannelRow
@@ -424,6 +427,10 @@ namespace BoscaliSummer.Features.Radio.Presentation
                 Dim(), FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineRight);
             button.onClick.AddListener(() =>
             {
+                if (EventSystem.current != null && EventSystem.current.currentSelectedGameObject == root)
+                {
+                    EventSystem.current.SetSelectedGameObject(null);
+                }
                 if (manager != null && result.Index >= 0) manager.SelectChannel(result.Index);
                 nextRefresh = 0f;
             });
@@ -538,9 +545,14 @@ namespace BoscaliSummer.Features.Radio.Presentation
             Image image = root.GetComponent<Image>();
             Button button = root.GetComponent<Button>();
             button.targetGraphic = image;
+            button.navigation = new Navigation { mode = Navigation.Mode.None };
             button.colors = ButtonColors(style, false);
             button.onClick.AddListener(() =>
             {
+                if (EventSystem.current != null && EventSystem.current.currentSelectedGameObject == root)
+                {
+                    EventSystem.current.SetSelectedGameObject(null);
+                }
                 action?.Invoke();
                 nextRefresh = 0f;
             });
@@ -651,7 +663,7 @@ namespace BoscaliSummer.Features.Radio.Presentation
 
         private static Image FramedPanel(RectTransform parent, Rect rect, Color frame)
         {
-            Image fill = Panel(parent, rect, new Color(0f, 0f, 0f, 0.28f));
+            Image fill = Panel(parent, rect, Unity(RadioUiPalette.SurfaceCard));
             Outline(parent, rect, frame);
             return fill;
         }

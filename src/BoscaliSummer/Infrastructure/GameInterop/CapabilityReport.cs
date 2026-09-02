@@ -27,6 +27,8 @@ namespace BoscaliSummer.Runtime
             bool supportSpawning = AccessTools.Method(typeof(Spawner), nameof(Spawner.SpawnVehicle)) != null &&
                 AccessTools.Method(typeof(Spawner), nameof(Spawner.SpawnBuilding)) != null &&
                 AccessTools.Method(typeof(DynamicMap), nameof(DynamicMap.TryGetCursorCoordinates)) != null;
+            bool supportRecon = AccessTools.Method(typeof(FactionHQ), "SetTrackingState",
+                new[] { typeof(PersistentID), typeof(GlobalPosition), typeof(float) }) != null;
             Plugin.Logger.LogInfo(
                 "Capabilities: " +
                 $"BulletImpacts={bullet}, MissileImpacts={missile}, VehicleLosses={vehicle}, " +
@@ -35,7 +37,7 @@ namespace BoscaliSummer.Runtime
                 $"RadioMFD={GameAccess.MfdAvailable}, MusicMixer={musicManager}, " +
                 $"MusicOwnership={GameAccess.MusicSourcesAvailable}, " +
                 $"SoundtrackCatalog={soundtrackCatalog}, Progression={progression}, " +
-                $"SupportSpawning={supportSpawning}.");
+                $"SupportSpawning={supportSpawning}, SupportRecon={supportRecon}.");
 
             try
             {

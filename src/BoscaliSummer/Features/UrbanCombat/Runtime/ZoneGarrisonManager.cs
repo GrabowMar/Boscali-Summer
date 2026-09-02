@@ -19,6 +19,12 @@ namespace BoscaliSummer.Garrisons
             public FactionHQ Owner;
             public float ExecuteAt;
             public int Attempts;
+
+            /// <summary>
+            /// Floor on the garrison size. A support fortification sets this so reinforcing a
+            /// zone can never roll a smaller garrison than the one it replaced.
+            /// </summary>
+            public int MinimumCount;
         }
 
         private sealed class GarrisonRecord
@@ -40,10 +46,33 @@ namespace BoscaliSummer.Garrisons
             if (!IsServer() || airbase == null || owner == null || requester == null ||
                 airbase.AttachedAirbase || airbase.CurrentHQ != owner || requester.HQ != owner)
                 return false;
+
+            // Verify everything ApplyCapture will need *before* tearing the current garrison
+            // down. Returning true used to mean only "scheduled", so the caller charged the
+            // player for a fortification that could then silently place nothing - and the
+            // ClearRecord below had already removed the defenders that were there.
+            if (!Plugin.Settings.GarrisonsEnabled.Value) return false;
+            BuildingDefinition defense = ResolveDefenseDefinition();
+            if (defense == null || defense.unitPrefab == null ||
+                NetworkSceneSingleton<Spawner>.i == null)
+                return false;
+            if (FindCandidates(airbase).Count == 0)
+            {
+                RebuildShellCatalogue();
+                if (FindCandidates(airbase).Count == 0) return false;
+            }
+
+            int key = airbase.GetInstanceID();
+            int floor = records.TryGetValue(key, out GarrisonRecord existing)
+                ? existing.Defenses.Count + 1
+                : 0;
+
             // A support call is an explicit rebuild request. Ordinary capture scheduling
             // deliberately ignores an already-owned record, so clear that generation first.
-            ClearRecord(airbase.GetInstanceID());
+            ClearRecord(key);
             ScheduleCapture(airbase, owner);
+            for (int i = 0; i < pending.Count; i++)
+                if (pending[i].Airbase == airbase) pending[i].MinimumCount = floor;
             return true;
         }
 
@@ -173,7 +202,8 @@ namespace BoscaliSummer.Garrisons
             Shuffle(candidates, seed);
             int min = Mathf.Min(Plugin.Settings.GarrisonsMinimum, Plugin.Settings.GarrisonsMaximum);
             int max = Mathf.Max(Plugin.Settings.GarrisonsMinimum, Plugin.Settings.GarrisonsMaximum);
-            int count = Mathf.Clamp(min + (int)(seed % (uint)Mathf.Max(1, max - min + 1)), 0, candidates.Count);
+            int rolled = min + (int)(seed % (uint)Mathf.Max(1, max - min + 1));
+            int count = Mathf.Clamp(Mathf.Max(rolled, capture.MinimumCount), 0, candidates.Count);
 
             var record = new GarrisonRecord { Airbase = airbase, Owner = owner };
             records[key] = record;

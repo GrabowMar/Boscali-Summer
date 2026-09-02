@@ -2,17 +2,47 @@
 
 ## Unreleased
 
-- Added an `OPS` map-MFD with Skills and Support pages. Vanilla player rank grants the
-  session skill-point budget without changing Nuclear Option's rank thresholds or unlocks.
-- Added host-owned skill selections for fuel conservation, typed reward bonuses, vehicle
-  requisition, artillery access, and combat engineering, with bounded client requests and
-  accepted-state snapshots.
-- Added server-authoritative support validation using native allocation, faction stock,
-  entitlements, typed denials, replay history, a two-per-second request limit, cooldowns,
-  terrain validation, and global job/unit caps.
-- Added native-parachute vehicle airdrops and controlled-zone reinforcement through Urban
-  Combat's narrow fortification capability. Added default-off experimental artillery using
-  an explicitly configured non-nuclear vanilla definition capped at 200 yield.
+- Rebuilt the perk and support slices from scratch on two data-driven catalogues. Adding a
+  perk is one table row; adding a support action is one row plus one `ISupportAction` file.
+  A perk grants capability strings, an action requires one, and a test asserts the two
+  catalogues cannot drift apart.
+- **Perk points now come from live mission score** (one per 500, capped at six) instead of
+  vanilla player rank. The old budget was `PlayerRank - spent`, so a fresh pilot had zero
+  points and the board was unusable by construction. Rank thresholds and unlocks are still
+  never modified, and rank is now displayed as flavour only.
+- Flattened the nine-skill, two-tier prerequisite tree into eleven independent perks with
+  per-perk point costs. Group headings are presentation labels, which removes the entire
+  prerequisite bug class.
+- **Fixed the client never learning its own state.** A one-shot snapshot latch meant rank,
+  score and points were read once at join and never refreshed. The client now polls only
+  while the OPS page is open — no traffic when it is closed, never stale when it is not.
+- **Added a host fast-path to both features.** Requests used to be routed through
+  `client.Send` even when this process was the server, and a dropped send was silent.
+  Single-player and listen-host now resolve in-process.
+- Added air-defence airdrops, ground convoy requisition, and reconnaissance sweeps. Roles are
+  read from the vanilla `roleIdentity`; recon drives the private faction tracking seam
+  through reflection and is omitted from the catalogue when it cannot be resolved.
+- **Priced support from vanilla unit value** rather than three invented constants (12/10/8
+  allocation against a ~9900 balance). One `CostMultiplier` scales the whole board.
+- Fixed target resolution rejecting almost every map pick: the clearance sphere counted the
+  terrain the ray had just hit as a blocker. Slope tolerance widened to 35 degrees.
+- Fixed fortification charging for work that never happened. `TryFortify` used to clear the
+  existing garrison and return true after merely *scheduling*, so a failed reinforcement left
+  a zone with fewer defenders and a charged player. It now verifies definition, spawner and
+  candidate shells first, and can no longer roll a smaller garrison than it replaced.
+- Fixed a permanently leaked airdrop slot (a stopped coroutine never released it, locking
+  every later drop into `Busy`), a denial burning the request id a client would retry with,
+  and an encyclopedia rescan with a `GetComponent` per entry on every single request.
+- The support board now renders verified state per action — no target, disabled, locked,
+  cooling down, insufficient allocation, or ready — and reports an unanswered request after
+  five seconds instead of showing "sent" forever.
+- A missing Mirage serializer seam is now logged instead of silently swallowed, and the patch
+  probe asserts the Harmony parameter names both progression patches bind by.
+- `Progression/Enabled=false` and `Support/Enabled=false` now skip installation entirely
+  rather than patching and polling while denying everything.
+- **Protocol break:** the progression and support message contracts were reshaped and their
+  protocol bytes bumped to `2`. Old and new peers fail closed on these two channels; fire and
+  ruin replication is untouched and still interoperates.
 
 - Replaced the never-working building-damage visual (HP-fraction tiers, facade tint, and
   48-projector camera-near pool) with a single local impact scorch mark: an explosive hit

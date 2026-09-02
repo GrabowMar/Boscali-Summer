@@ -26,9 +26,9 @@ namespace BoscaliSummer.Features.Progression
             ProgressionNet network = context.AddComponent<ProgressionNet>();
             network.Configure(manager);
             manager.Configure(context.Settings.Progression, context.Logger, network);
-            context.AddService<IPlayerEntitlements>(manager);
+            manager.ConfigureBypass(context.Settings.BypassRequirements);
+            context.AddService<IPlayerPerks>(manager);
             context.AddService<IProgressionView>(manager);
-            context.AddService(manager);
         }
     }
 }
