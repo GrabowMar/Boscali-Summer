@@ -220,13 +220,28 @@ dotnet build .\src\BoscaliSummer\BoscaliSummer.csproj -c Release `
   -p:GameDir='D:\SteamLibrary\steamapps\common\Nuclear Option'
 ```
 
-Build and package with:
+Build, deploy and package go through [nomodkit](../nomodkit), which replaced
+`build/package.ps1` and `build/copy-to-game.ps1`:
 
-```powershell
-.\build\package.ps1 -GameDir 'D:\SteamLibrary\steamapps\common\Nuclear Option'
+```bash
+nomod build --mod boscalisummer
 ```
 
-Packaging builds the solution, runs the deterministic test suite, checks private fields and Harmony targets against the installed game assembly, and produces a bare DLL plus a game-directory ZIP. `build/copy-to-game.ps1` deploys an existing Release build and is never run automatically.
+```bash
+nomod package --mod boscalisummer
+```
+
+Packaging builds the solution, runs the deterministic test suite and the patch probe
+against the installed game assembly, then produces a bare DLL plus a game-directory ZIP
+carrying the starter radio stations. `nomod deploy --mod boscalisummer` deploys an
+existing Release build and is never run automatically.
+
+Harmony targets and private fields can also be checked on their own, without building
+or launching the game:
+
+```bash
+nomod asm verify --mod boscalisummer
+```
 
 ## Scope
 
