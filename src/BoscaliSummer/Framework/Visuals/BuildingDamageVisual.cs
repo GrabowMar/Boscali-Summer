@@ -1,9 +1,9 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
 
-namespace BoscaliSummer.Garrisons
+namespace BoscaliSummer.Framework.Visuals
 {
     /// <summary>
     /// Manages authentic, localized war destruction and ruin effects for buildings:

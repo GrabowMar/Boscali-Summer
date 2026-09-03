@@ -5,6 +5,7 @@ using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Lifecycle;
 using NuclearOption.Networking;
 using UnityEngine;
+using BoscaliSummer.Framework.Visuals;
 
 namespace BoscaliSummer.Garrisons
 {

@@ -1,6 +1,7 @@
 using System.Reflection;
 using HarmonyLib;
 using UnityEngine;
+using BoscaliSummer.Framework.Visuals;
 
 namespace BoscaliSummer.Garrisons
 {

@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using BoscaliSummer.Core;
 using BoscaliSummer.Framework.Lifecycle;
+using BoscaliSummer.Framework.Visuals;
 using HarmonyLib;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
@@ -124,6 +125,12 @@ namespace BoscaliSummer.Fire
             }
 
             PlaceMark(point, normal, explosion.BlastYield);
+
+            if (buildingRoot != null)
+            {
+                BuildingDamageVisual visual = BuildingDamageVisual.GetOrAdd(buildingRoot.gameObject);
+                visual?.ApplyLocalImpact(point, normal, explosion.BlastYield, Mathf.Max(10f, explosion.BlastYield * 12f));
+            }
         }
 
         private void PlaceMark(Vector3 point, Vector3 normal, float blastYield)
@@ -150,19 +157,30 @@ namespace BoscaliSummer.Fire
                 size, ImpactScorchPolicy.BitangentJitter(seed));
             t.position = position;
 
-            // The depth ratio the vanilla DecalSpawner uses for a wall scorch.
-            projector.size = new Vector3(size, size, size * 0.2f);
-            projector.fadeFactor = 0.85f;
-            projector.drawDistance = 2600f;
+            projector.size = new Vector3(size, size, size * 0.38f);
+            projector.fadeFactor = 0.98f;
+            projector.drawDistance = 2800f;
 
-            Material scorch = ResolveScorchMaterial();
-            if (scorch != null) projector.material = scorch;
+            RuinTextureCatalog.RuinTier tier = blastYield > 10f
+                ? RuinTextureCatalog.RuinTier.Heavy
+                : (blastYield > 0.5f ? RuinTextureCatalog.RuinTier.Medium : RuinTextureCatalog.RuinTier.Light);
+
+            Material ruinMat = RuinTextureCatalog.GetDecalMaterial(tier);
+            if (ruinMat != null)
+            {
+                projector.material = ruinMat;
+            }
+            else
+            {
+                Material scorch = ResolveScorchMaterial();
+                if (scorch != null) projector.material = scorch;
+            }
 
             if (!loggedFirstMark && Plugin.Settings.VerboseLogging.Value)
             {
                 loggedFirstMark = true;
                 Plugin.Logger.LogInfo(
-                    $"Impact scorch: first mark placed at {point} (size {size:0.#}m, " +
+                    $"Impact scorch: first mark placed at {point} (size {size:0.#}m, tier {tier}, " +
                     $"material '{(projector.material != null ? projector.material.name : "null")}').");
             }
         }

@@ -1,6 +1,7 @@
 using System;
 using NuclearOption.Networking;
 using UnityEngine;
+using BoscaliSummer.Framework.Visuals;
 
 namespace BoscaliSummer.Garrisons
 {

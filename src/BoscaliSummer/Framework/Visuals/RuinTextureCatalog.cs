@@ -1,8 +1,8 @@
-﻿using System;
+using System;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
 
-namespace BoscaliSummer.Garrisons
+namespace BoscaliSummer.Framework.Visuals
 {
     /// <summary>
     /// Generates and caches procedural normal (bump) maps, albedo textures, and URP decal
