@@ -41,6 +41,7 @@ namespace BoscaliSummer.Features.Progression.Runtime
         int IProgressionView.EarnedPoints => localEarnedPoints;
         int IProgressionView.AvailablePoints => localState.AvailablePoints(localEarnedPoints);
         int IProgressionView.MaximumPoints => settings.MaximumPoints.Value;
+        int IProgressionView.ScorePerPoint => settings.ScorePerPoint.Value;
         string IProgressionView.Status => LastResult;
 
         public bool BypassRequirements => bypassRequirements != null && bypassRequirements.Value;

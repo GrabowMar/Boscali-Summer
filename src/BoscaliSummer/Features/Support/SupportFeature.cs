@@ -13,20 +13,24 @@ namespace BoscaliSummer.Features.Support
             new FeatureMetadata("support", "Support operations", "progression");
 
         public FeatureMetadata Metadata => Feature;
-        public Type[] PatchTypes => Array.Empty<Type>();
+        public Type[] PatchTypes => new[]
+        {
+            typeof(Patches.SupportMissileDetonatePatch)
+        };
 
         public void Install(FeatureContext context)
         {
             IPlayerPerks perks = context.Services.GetRequired<IPlayerPerks>();
             IProgressionView progression = context.Services.GetRequired<IProgressionView>();
             context.Services.TryGet(out IZoneFortificationService fortifications);
+            context.Services.TryGet(out IFireSuppressionService fireSuppression);
 
             SupportManager manager = context.AddSceneService<SupportManager>(50);
             SupportNet network = context.AddComponent<SupportNet>();
             SupportPanel panel = context.AddSceneService<SupportPanel>(55);
 
             network.Configure(manager);
-            manager.Configure(context.Settings.Support, perks, fortifications, network, context.Logger);
+            manager.Configure(context.Settings.Support, perks, fortifications, network, context.Logger, fireSuppression);
             manager.ConfigureBypass(context.Settings.Diagnostics.BypassRequirements);
             manager.ConfigureDisableCooldowns(context.Settings.Diagnostics.DisableOpsCooldowns);
             panel.Configure(manager, progression, context.Logger);

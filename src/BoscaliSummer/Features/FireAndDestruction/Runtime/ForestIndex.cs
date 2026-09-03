@@ -74,5 +74,41 @@ namespace BoscaliSummer.Fire
             }
             return false;
         }
+
+        public int ClearInRadius(GlobalPosition position, float radius)
+        {
+            if (!Ready || occupied.Count == 0) return 0;
+            float radiusSq = radius * radius;
+            int cx = Mathf.FloorToInt(position.x / cellSize);
+            int cz = Mathf.FloorToInt(position.z / cellSize);
+            int searchCellRadius = Mathf.CeilToInt(radius / cellSize);
+            int cleared = 0;
+
+            for (int x = cx - searchCellRadius; x <= cx + searchCellRadius; x++)
+            for (int z = cz - searchCellRadius; z <= cz + searchCellRadius; z++)
+            {
+                long key = ((long)x << 32) ^ (uint)z;
+                if (!occupied.TryGetValue(key, out List<Vector2> points)) continue;
+
+                for (int i = points.Count - 1; i >= 0; i--)
+                {
+                    float dx = points[i].x - position.x;
+                    float dz = points[i].y - position.z;
+                    if (dx * dx + dz * dz <= radiusSq)
+                    {
+                        points.RemoveAt(i);
+                        cleared++;
+                        PositionCount--;
+                    }
+                }
+
+                if (points.Count == 0)
+                {
+                    occupied.Remove(key);
+                }
+            }
+
+            return cleared;
+        }
     }
 }

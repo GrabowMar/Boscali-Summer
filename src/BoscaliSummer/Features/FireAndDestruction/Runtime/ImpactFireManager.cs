@@ -13,7 +13,7 @@ using UnityEngine;
 
 namespace BoscaliSummer.Fire
 {
-    internal sealed class ImpactFireManager : MonoBehaviour, ISceneService
+    internal sealed class ImpactFireManager : MonoBehaviour, ISceneService, IFireSuppressionService
     {
         private struct ImpactEvent
         {
@@ -103,6 +103,51 @@ namespace BoscaliSummer.Fire
             impactSequence = 0;
             if (indexRoutine != null) StopCoroutine(indexRoutine);
             indexRoutine = StartCoroutine(RebuildIndexDelayed());
+        }
+
+        /// <summary>Extinguishes active fires within the given radius around a position.</summary>
+        public int ExtinguishInRadius(GlobalPosition position, float radius)
+        {
+            if (fires.Count == 0) return 0;
+            float radiusSq = radius * radius;
+            int extinguished = 0;
+
+            for (int i = fires.Count - 1; i >= 0; i--)
+            {
+                FireSite site = fires[i];
+                float dx = site.Position.x - position.x;
+                float dz = site.Position.z - position.z;
+                if (dx * dx + dz * dz <= radiusSq)
+                {
+                    visualPool.Release(site.Visual);
+                    fuelDepotSmokePool.Release(site.BuildingSmoke);
+                    fires.RemoveAt(i);
+                    extinguished++;
+                }
+            }
+
+            if (extinguished > 0)
+            {
+                Plugin.Logger.LogInfo($"[ImpactFireManager] Extinguished {extinguished} fire site(s) within {radius}m of {position}.");
+            }
+
+            return extinguished;
+        }
+
+        /// <summary>Clears procedural forest entries within the given radius to form a firebreak.</summary>
+        public int ClearForestInRadius(GlobalPosition position, float radius)
+        {
+            return forestIndex.ClearInRadius(position, radius);
+        }
+
+        public int ActiveFireCount => fires.Count;
+
+        /// <summary>Deploys an artillery smoke marker with a prominent signaling smoke plume.</summary>
+        public void DeploySmokeMarker(GlobalPosition position)
+        {
+            if (!GameAccess.IsServer()) return;
+            Ignite(position, Time.timeSinceLevelLoad, false, 999, false);
+            Plugin.Logger.LogInfo($"[ImpactFireManager] Deployed CAS smoke marker at {position}.");
         }
 
         public void SubmitImpact(GlobalPosition position, bool explosive, int salt)

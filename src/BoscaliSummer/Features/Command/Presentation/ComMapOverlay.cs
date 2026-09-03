@@ -10,6 +10,8 @@ using BoscaliSummer.Runtime;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using NOAvionics;
+using NOAvionics.Ui;
 
 namespace BoscaliSummer.Features.Command.Presentation
 {
@@ -204,8 +206,9 @@ namespace BoscaliSummer.Features.Command.Presentation
                 GameObject labelObj = new GameObject("Label", typeof(RectTransform), typeof(TextMeshProUGUI));
                 labelObj.transform.SetParent(vecObj.transform, false);
                 TMP_Text lbl = labelObj.GetComponent<TextMeshProUGUI>();
-                lbl.fontSize = ComPalette.FontNano;
-                lbl.color = ComPalette.TextPrimary;
+                lbl.fontSize = AvTokens.FontMicro;
+                lbl.color = AvTheme.TextPrimary;
+                if (AvFont.Font != null) lbl.font = AvFont.Font;
                 lbl.alignment = TextAlignmentOptions.MidlineLeft;
                 lbl.raycastTarget = false;
                 lbl.rectTransform.sizeDelta = new Vector2(160f, 20f);
@@ -334,7 +337,7 @@ namespace BoscaliSummer.Features.Command.Presentation
 
                 vec.Line.color = order.MissionColor;
                 vec.Label.text = order.Callsign + " > " + order.TargetName;
-                vec.Label.color = ComPalette.WithAlpha(order.MissionColor, 0.9f);
+                vec.Label.color = order.MissionColor.WithAlpha(0.9f);
                 vec.Label.rectTransform.localEulerAngles = new Vector3(0f, 0f, -angle); // Keep text horizontal
 
                 vec.Root.SetActive(true);

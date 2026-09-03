@@ -9,7 +9,9 @@ namespace BoscaliSummer.Features.Support.Runtime
         Recon = 4,
         Fortify = 5,
         Artillery = 6,
-        Emp = 7
+        Emp = 7,
+        Firebreak = 8,
+        SmokeMarker = 9
     }
 
     internal enum SupportResult : byte

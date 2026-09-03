@@ -43,7 +43,48 @@ namespace BoscaliSummer.Features.Support.Runtime
         private bool pending;
         private float localCooldownUntil;
 
-        public string Status { get; private set; } = "Designate a grid on the maximised map.";
+        private string inboundStrikeName;
+        private float inboundStrikeImpactTime;
+        private float inboundStrikeConfirmedUntil;
+        private string statusText = "Designate a grid on the maximised map.";
+
+        public void RegisterInboundStrike(string strikeName, float etaSeconds)
+        {
+            inboundStrikeName = strikeName;
+            inboundStrikeImpactTime = Time.timeSinceLevelLoad + etaSeconds;
+            inboundStrikeConfirmedUntil = 0f;
+        }
+
+        public string Status
+        {
+            get
+            {
+                float now = Time.timeSinceLevelLoad;
+                if (inboundStrikeImpactTime > 0f)
+                {
+                    if (now < inboundStrikeImpactTime)
+                    {
+                        int remaining = Mathf.Max(0, Mathf.CeilToInt(inboundStrikeImpactTime - now));
+                        return $"[TRAJECTORY ACQUIRED // {inboundStrikeName}: T-{remaining:D2}s]";
+                    }
+                    else if (inboundStrikeConfirmedUntil == 0f)
+                    {
+                        inboundStrikeConfirmedUntil = now + 4f;
+                    }
+
+                    if (now < inboundStrikeConfirmedUntil)
+                    {
+                        return $"[IMPACT CONFIRMED // {inboundStrikeName} SPLASH]";
+                    }
+                    else
+                    {
+                        inboundStrikeImpactTime = 0f;
+                    }
+                }
+                return statusText;
+            }
+            private set => statusText = value;
+        }
 
         SupportSettings ISupportHost.Settings => settings;
         ManualLogSource ISupportHost.Logger => logger;
@@ -53,15 +94,31 @@ namespace BoscaliSummer.Features.Support.Runtime
         public bool BypassRequirements => bypassRequirements != null && bypassRequirements.Value;
         public bool DisableCooldowns => disableCooldowns != null && disableCooldowns.Value;
 
+        private IFireSuppressionService fireSuppressionService;
+
+        public string FireTelemetry
+        {
+            get
+            {
+                if (fireSuppressionService == null) return string.Empty;
+                int active = fireSuppressionService.ActiveFireCount;
+                if (active <= 0) return string.Empty;
+                string hazard = active >= 6 ? "CRITICAL" : active >= 3 ? "HIGH" : "MODERATE";
+                return $"[WILDFIRE CONDITIONS // {active} ACTIVE FRONTS · HAZARD {hazard}]";
+            }
+        }
+
         public void Configure(
             SupportSettings supportSettings, IPlayerPerks playerPerks,
-            IZoneFortificationService fortifications, SupportNet net, ManualLogSource log)
+            IZoneFortificationService fortifications, SupportNet net, ManualLogSource log,
+            IFireSuppressionService fireSuppression = null)
         {
             settings = supportSettings;
             perks = playerPerks;
             network = net;
             logger = log;
-            catalog = new SupportCatalog(supportSettings, fortifications);
+            fireSuppressionService = fireSuppression;
+            catalog = new SupportCatalog(supportSettings, fortifications, fireSuppression);
         }
 
         internal void ConfigureBypass(ConfigEntry<bool> bypass) => bypassRequirements = bypass;
@@ -121,6 +178,9 @@ namespace BoscaliSummer.Features.Support.Runtime
 
         public float LocalCooldownRemaining =>
             DisableCooldowns ? 0f : Mathf.Max(0f, localCooldownUntil - Time.unscaledTime);
+
+        public float LocalCooldownTotal =>
+            DisableCooldowns ? 0f : settings != null ? settings.RequestCooldown.Value : 0f;
 
         public bool IsAuthorised(SupportActionDefinition action)
         {
@@ -237,6 +297,11 @@ namespace BoscaliSummer.Features.Support.Runtime
             {
                 localCooldownUntil = DisableCooldowns ? 0f : Time.unscaledTime + message.CooldownSeconds;
                 Status = name + " accepted.";
+                if (action != null && (action.Id == SupportActionId.Artillery || action.Id == SupportActionId.Emp))
+                {
+                    float eta = action.Id == SupportActionId.Artillery ? 8f : 12f;
+                    RegisterInboundStrike(name, eta);
+                }
             }
             else
             {

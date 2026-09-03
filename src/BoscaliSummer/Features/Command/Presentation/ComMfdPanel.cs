@@ -7,21 +7,20 @@ using BoscaliSummer.Features.Command.Runtime;
 using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Lifecycle;
 using BoscaliSummer.Runtime;
+using NOAvionics;
+using NOAvionics.Ui;
 using NuclearOption.UIStyleSystem;
 using TMPro;
 using UnityEngine;
-using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace BoscaliSummer.Features.Command.Presentation
 {
     internal sealed class ComMfdPanel : MonoBehaviour, ISceneService, ITheaterPage
     {
-        private const float Width = 430f;
-        private const float Pad = 12f;
-        private const float Gap = 8f;
-        private const float PanelHeight = 492f;
-        private const float TabHeight = 28f;
+        private const float Pad = AvTokens.Pad;
+        private const float Gap = AvTokens.Gap;
+        private const float TabHeight = AvTokens.TabBarHeight;
         private const float RefreshInterval = 0.25f;
 
         private CommandSettings settings;
@@ -36,27 +35,19 @@ namespace BoscaliSummer.Features.Command.Presentation
         private GameObject doctrinePage;
         private GameObject mapModesPage;
 
-        private Button theaterTab;
-        private Button doctrineTab;
-        private Button mapModesTab;
-
-        private TMP_Text theaterTabLabel;
-        private TMP_Text doctrineTabLabel;
-        private TMP_Text mapModesTabLabel;
-
-        private Image theaterUnderline;
-        private Image doctrineUnderline;
-        private Image mapModesUnderline;
+        private AvButton theaterTab;
+        private AvButton doctrineTab;
+        private AvButton mapModesTab;
 
         // Theater SA widgets
         private TMP_Text airRatioLabel;
         private TMP_Text defconLabel;
+        private Image airBalanceFill;
         private TMP_Text airbaseCountLabel;
         private TMP_Text sortiesLabel;
 
         // Doctrine widgets
-        private readonly List<Button> doctrineButtons = new List<Button>();
-        private readonly List<TMP_Text> doctrineLabels = new List<TMP_Text>();
+        private readonly List<AvButton> doctrineButtons = new List<AvButton>();
         private TMP_Text activeDoctrineDesc;
         private TMP_Text priorityTargetsLabel;
 
@@ -65,9 +56,6 @@ namespace BoscaliSummer.Features.Command.Presentation
         private TMP_Text radarToggleLabel;
         private TMP_Text reconToggleLabel;
         private TMP_Text ordersToggleLabel;
-
-        // Shared Telemetry Terminal
-        private TMP_Text telemetryLabel;
 
         private float nextRefresh;
         private bool failed;
@@ -88,7 +76,11 @@ namespace BoscaliSummer.Features.Command.Presentation
             doctrinePage = null;
             mapModesPage = null;
             doctrineButtons.Clear();
-            doctrineLabels.Clear();
+            airRatioLabel = null;
+            defconLabel = null;
+            airBalanceFill = null;
+            airbaseCountLabel = null;
+            sortiesLabel = null;
             nextRefresh = 0f;
             failed = false;
         }
@@ -113,7 +105,6 @@ namespace BoscaliSummer.Features.Command.Presentation
             doctrinePage = null;
             mapModesPage = null;
             doctrineButtons.Clear();
-            doctrineLabels.Clear();
         }
 
         public void RefreshView() => Refresh();
@@ -131,18 +122,17 @@ namespace BoscaliSummer.Features.Command.Presentation
         private void BuildInto(RectTransform host, float inner, float startY)
         {
             float y = startY;
-            Label(host, "FRIENDLY MISSION AI  ·  NEVER TASKS YOUR WING", new Rect(Pad, y, inner, 14f),
-                ComPalette.TextDim, ComPalette.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
+            AvKit.Label(host, "FRIENDLY MISSION AI  ·  NEVER TASKS YOUR WING", new Rect(Pad, y, inner, 14f),
+                        AvTheme.Dim, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
             y -= 18f;
 
             float tabWidth = (inner - Gap * 2f) / 3f;
-            theaterTab = MakeTabButton(host, "SA", new Rect(Pad, y, tabWidth, TabHeight),
-                ShowTheater, out theaterTabLabel, out theaterUnderline);
-            doctrineTab = MakeTabButton(host, "DOCTRINE", new Rect(Pad + tabWidth + Gap, y, tabWidth, TabHeight),
-                ShowDoctrine, out doctrineTabLabel, out doctrineUnderline);
-            mapModesTab = MakeTabButton(host, "MAP", new Rect(Pad + (tabWidth + Gap) * 2f, y, tabWidth, TabHeight),
-                ShowMapModes, out mapModesTabLabel, out mapModesUnderline);
-            y -= TabHeight + 8f;
+            theaterTab = AvKit.Tab(host, "SA", new Rect(Pad, y, tabWidth, TabHeight), ShowTheater);
+            doctrineTab = AvKit.Tab(host, "DOCTRINE", new Rect(Pad + tabWidth + Gap, y, tabWidth, TabHeight), ShowDoctrine);
+            mapModesTab = AvKit.Tab(host, "MAP", new Rect(Pad + (tabWidth + Gap) * 2f, y, tabWidth, TabHeight), ShowMapModes);
+            y -= TabHeight;
+            AvKit.Rule(host, new Rect(Pad, y, inner, 1f), AvTheme.Frame);
+            y -= AvTokens.Space2;
 
             theaterPage = CreatePage(host, "TheaterPage");
             BuildTheaterPage((RectTransform)theaterPage.transform, inner, y);
@@ -159,37 +149,42 @@ namespace BoscaliSummer.Features.Command.Presentation
         private void BuildTheaterPage(RectTransform parent, float inner, float startY)
         {
             float y = startY;
-            TacticalCard(parent, new Rect(Pad, y, inner, 80f), ComPalette.HudEmerald);
+            const float cardH = 92f;
+            AvKit.TacticalCard(parent, new Rect(Pad, y, inner, cardH), AvTheme.RailReady);
 
-            Label(parent, "FORCE RATIO & AIR DOMINANCE", new Rect(Pad + 12f, y - 4f, inner - 20f, 14f),
-                ComPalette.TextDim, ComPalette.FontNano, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
+            AvKit.Label(parent, "FORCE RATIO & AIR DOMINANCE", new Rect(Pad + 12f, y - 4f, inner - 20f, 14f),
+                        AvTheme.Dim, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
 
-            airRatioLabel = Label(parent, "AIR RATIO: 50% FRIENDLY", new Rect(Pad + 12f, y - 20f, inner - 20f, 20f),
-                ComPalette.HudEmerald, ComPalette.FontLead, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
+            airRatioLabel = AvKit.Label(parent, "AIR BALANCE: 50% FRIENDLY", new Rect(Pad + 12f, y - 22f, inner - 20f, 22f),
+                                        AvTheme.RailReady, AvTokens.FontLead, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
 
-            defconLabel = Label(parent, "DEFCON 3: CONTESTED THEATER", new Rect(Pad + 12f, y - 42f, inner - 20f, 16f),
-                ComPalette.ThreatAmber, ComPalette.FontSmall, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
+            // Air-dominance meter: biased left=friendly, right=hostile; fill fills from the left.
+            airBalanceFill = AvKit.ProgressBar(parent, new Rect(Pad + 12f, y - 52f, inner - 24f, 8f), 0.5f, AvTheme.RailReady);
 
-            y -= 90f;
+            defconLabel = AvKit.Label(parent, "DEFCON 3: CONTESTED THEATER", new Rect(Pad + 12f, y - 66f, inner - 20f, 16f),
+                                      AvTheme.RailCaution, AvTokens.FontSmall, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
 
-            TacticalCard(parent, new Rect(Pad, y, inner, 120f), ComPalette.InfoCyan);
-            Label(parent, "THEATER INFRASTRUCTURE & ACTIVE SORTIES", new Rect(Pad + 12f, y - 4f, inner - 20f, 14f),
-                ComPalette.TextDim, ComPalette.FontNano, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
+            y -= cardH + 8f;
 
-            airbaseCountLabel = Label(parent, "AIRBASES: -- FRIENDLY / -- HOSTILE", new Rect(Pad + 12f, y - 24f, inner - 20f, 18f),
-                ComPalette.TextPrimary, ComPalette.FontSmall, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
+            const float infraH = 84f;
+            AvKit.TacticalCard(parent, new Rect(Pad, y, inner, infraH), AvTheme.RailInfo);
+            AvKit.Label(parent, "THEATER INFRASTRUCTURE & ACTIVE SORTIES", new Rect(Pad + 12f, y - 4f, inner - 20f, 14f),
+                        AvTheme.Dim, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
 
-            sortiesLabel = Label(parent, "ACTIVE SORTIES: -- CAP | -- STRIKE | -- CAS | -- RTB",
-                new Rect(Pad + 12f, y - 48f, inner - 20f, 18f),
-                ComPalette.InfoCyan, ComPalette.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
+            airbaseCountLabel = AvKit.Label(parent, "AIRBASES: -- FRIENDLY / -- HOSTILE", new Rect(Pad + 12f, y - 24f, inner - 20f, 18f),
+                                            AvTheme.TextPrimary, AvTokens.FontSmall, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
+
+            sortiesLabel = AvKit.Label(parent, "SAM SITES: -- | DOCTRINE: --",
+                                       new Rect(Pad + 12f, y - 48f, inner - 20f, 18f),
+                                       AvTheme.RailInfo, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
         }
 
         private void BuildDoctrinePage(RectTransform parent, float inner, float startY)
         {
             float y = startY;
 
-            Label(parent, "FRIENDLY MISSION-AI BIAS  ·  DOES NOT OVERRIDE WING ORDERS", new Rect(Pad, y, inner, 14f),
-                ComPalette.TextDim, ComPalette.FontNano, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
+            AvKit.Label(parent, "FRIENDLY MISSION-AI BIAS  ·  DOES NOT OVERRIDE WING ORDERS", new Rect(Pad, y, inner, 14f),
+                        AvTheme.Dim, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
             y -= 16f;
 
             CommandDoctrine[] doctrines = (CommandDoctrine[])Enum.GetValues(typeof(CommandDoctrine));
@@ -199,32 +194,30 @@ namespace BoscaliSummer.Features.Command.Presentation
             {
                 CommandDoctrine doc = doctrines[i];
                 float bx = Pad + i * (btnW + 4f);
-                TMP_Text btnLbl;
-                Button btn = MakeActionButton(parent, doc.ToString().Substring(0, Math.Min(5, doc.ToString().Length)).ToUpperInvariant(),
-                    new Rect(bx, y, btnW, 28f), ComPalette.HudEmerald, () =>
+                AvButton btn = AvKit.Button(parent, doc.ToString().Substring(0, Math.Min(5, doc.ToString().Length)).ToUpperInvariant(),
+                    new Rect(bx, y, btnW, 28f), () =>
                     {
                         command?.TrySetDoctrine(doc);
                         Refresh();
-                    }, out btnLbl);
+                    }, AvTokens.FontSmall, AvButtonStyle.Toggle);
                 doctrineButtons.Add(btn);
-                doctrineLabels.Add(btnLbl);
             }
             y -= 34f;
 
-            activeDoctrineDesc = Label(parent, "Balanced: Standard autonomous AI targeting.",
-                new Rect(Pad, y, inner, 40f), ComPalette.TextPrimary, ComPalette.FontMicro,
+            activeDoctrineDesc = AvKit.Label(parent, "Balanced: Standard autonomous AI targeting.",
+                new Rect(Pad, y, inner, 40f), AvTheme.TextPrimary, AvTokens.FontMicro,
                 FontStyles.Normal, TextAlignmentOptions.TopLeft);
             y -= 48f;
 
-            Rule(parent, new Rect(Pad, y, inner, 1f), ComPalette.Frame);
+            AvKit.Rule(parent, new Rect(Pad, y, inner, 1f), AvTheme.Frame);
             y -= 8f;
 
-            Label(parent, "PRIORITY TARGET DESIGNATIONS (REQ RANK 1 SGT)", new Rect(Pad, y, inner, 14f),
-                ComPalette.TextDim, ComPalette.FontNano, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
+            AvKit.Label(parent, "PRIORITY TARGET DESIGNATIONS (REQ RANK 1 SGT)", new Rect(Pad, y, inner, 14f),
+                        AvTheme.Dim, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
             y -= 16f;
 
-            priorityTargetsLabel = Label(parent, "0 / 1 TARGETS DESIGNATED (CLICK TRACKED HOSTILE TO MARK)",
-                new Rect(Pad, y, inner, 20f), ComPalette.ThreatAmber, ComPalette.FontMicro,
+            priorityTargetsLabel = AvKit.Label(parent, "0 / 1 TARGETS DESIGNATED (CLICK TRACKED HOSTILE TO MARK)",
+                new Rect(Pad, y, inner, 20f), AvTheme.RailCaution, AvTokens.FontMicro,
                 FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
         }
 
@@ -232,62 +225,54 @@ namespace BoscaliSummer.Features.Command.Presentation
         {
             float y = startY;
 
-            Label(parent, "TACTICAL MAP OVERLAYS & MODES", new Rect(Pad, y, inner, 14f),
-                ComPalette.TextDim, ComPalette.FontNano, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
+            AvKit.Label(parent, "TACTICAL MAP OVERLAYS & MODES", new Rect(Pad, y, inner, 14f),
+                        AvTheme.Dim, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
             y -= 18f;
 
             float rowH = 34f;
 
             // 1. Frontlines
-            MakeActionButton(parent, "TOGGLE FRONTLINES (AREA OF CONTROL)", new Rect(Pad, y, inner - 90f, rowH),
-                ComPalette.HudEmerald, () =>
+            AvKit.Button(parent, "TOGGLE FRONTLINES (AREA OF CONTROL)", new Rect(Pad, y, inner - 90f, rowH),
+                () =>
                 {
                     if (overlay != null) overlay.ShowFrontlines = !overlay.ShowFrontlines;
                     Refresh();
-                }, out _);
-            frontlinesToggleLabel = Label(parent, "ON", new Rect(Pad + inner - 80f, y, 76f, rowH),
-                ComPalette.HudEmerald, ComPalette.FontSmall, FontStyles.Bold, TextAlignmentOptions.Center);
+                }, AvTokens.FontSmall, AvButtonStyle.Default);
+            frontlinesToggleLabel = AvKit.Label(parent, "ON", new Rect(Pad + inner - 80f, y, 76f, rowH),
+                AvTheme.RailReady, AvTokens.FontSmall, FontStyles.Bold, TextAlignmentOptions.Center);
             y -= rowH + 6f;
 
             // 2. Radar
-            MakeActionButton(parent, "TOGGLE RADAR / SAM THREAT ENVELOPES", new Rect(Pad, y, inner - 90f, rowH),
-                ComPalette.InfoCyan, () =>
+            AvKit.Button(parent, "TOGGLE RADAR / SAM THREAT ENVELOPES", new Rect(Pad, y, inner - 90f, rowH),
+                () =>
                 {
                     if (overlay != null) overlay.ShowRadar = !overlay.ShowRadar;
                     Refresh();
-                }, out _);
-            radarToggleLabel = Label(parent, "ON", new Rect(Pad + inner - 80f, y, 76f, rowH),
-                ComPalette.InfoCyan, ComPalette.FontSmall, FontStyles.Bold, TextAlignmentOptions.Center);
+                }, AvTokens.FontSmall, AvButtonStyle.Default);
+            radarToggleLabel = AvKit.Label(parent, "ON", new Rect(Pad + inner - 80f, y, 76f, rowH),
+                AvTheme.RailInfo, AvTokens.FontSmall, FontStyles.Bold, TextAlignmentOptions.Center);
             y -= rowH + 6f;
 
             // 3. AI Orders
-            MakeActionButton(parent, "TOGGLE AI ORDER VECTORS (FLIGHT PATHS)", new Rect(Pad, y, inner - 90f, rowH),
-                ComPalette.ThreatAmber, () =>
+            AvKit.Button(parent, "TOGGLE AI ORDER VECTORS (FLIGHT PATHS)", new Rect(Pad, y, inner - 90f, rowH),
+                () =>
                 {
                     if (overlay != null) overlay.ShowAiOrders = !overlay.ShowAiOrders;
                     Refresh();
-                }, out _);
-            ordersToggleLabel = Label(parent, "ON", new Rect(Pad + inner - 80f, y, 76f, rowH),
-                ComPalette.ThreatAmber, ComPalette.FontSmall, FontStyles.Bold, TextAlignmentOptions.Center);
+                }, AvTokens.FontSmall, AvButtonStyle.Default);
+            ordersToggleLabel = AvKit.Label(parent, "ON", new Rect(Pad + inner - 80f, y, 76f, rowH),
+                AvTheme.RailCaution, AvTokens.FontSmall, FontStyles.Bold, TextAlignmentOptions.Center);
             y -= rowH + 6f;
 
             // 4. Recon
-            MakeActionButton(parent, "TOGGLE VISIBILITY & RECON SURVEILLANCE", new Rect(Pad, y, inner - 90f, rowH),
-                ComPalette.TextPrimary, () =>
+            AvKit.Button(parent, "TOGGLE VISIBILITY & RECON SURVEILLANCE", new Rect(Pad, y, inner - 90f, rowH),
+                () =>
                 {
                     if (overlay != null) overlay.ShowRecon = !overlay.ShowRecon;
                     Refresh();
-                }, out _);
-            reconToggleLabel = Label(parent, "ON", new Rect(Pad + inner - 80f, y, 76f, rowH),
-                ComPalette.TextPrimary, ComPalette.FontSmall, FontStyles.Bold, TextAlignmentOptions.Center);
-        }
-
-        private void BuildTelemetryRibbon(RectTransform parent, float inner, float y)
-        {
-            TacticalCard(parent, new Rect(Pad, y, inner, 38f), ComPalette.HudEmerald);
-            telemetryLabel = Label(parent, "> TACTICAL LINK ESTABLISHED // OBSERVING THEATER",
-                new Rect(Pad + 12f, y - 2f, inner - 20f, 34f), ComPalette.HudEmerald,
-                ComPalette.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
+                }, AvTokens.FontSmall, AvButtonStyle.Default);
+            reconToggleLabel = AvKit.Label(parent, "ON", new Rect(Pad + inner - 80f, y, 76f, rowH),
+                AvTheme.TextPrimary, AvTokens.FontSmall, FontStyles.Bold, TextAlignmentOptions.Center);
         }
 
         private void ShowTheater()
@@ -295,9 +280,10 @@ namespace BoscaliSummer.Features.Command.Presentation
             theaterPage?.SetActive(true);
             doctrinePage?.SetActive(false);
             mapModesPage?.SetActive(false);
-            SetTabState(theaterTabLabel, theaterUnderline, true);
-            SetTabState(doctrineTabLabel, doctrineUnderline, false);
-            SetTabState(mapModesTabLabel, mapModesUnderline, false);
+            theaterTab?.SetLatched(true);
+            doctrineTab?.SetLatched(false);
+            mapModesTab?.SetLatched(false);
+            Refresh();
         }
 
         private void ShowDoctrine()
@@ -305,9 +291,10 @@ namespace BoscaliSummer.Features.Command.Presentation
             theaterPage?.SetActive(false);
             doctrinePage?.SetActive(true);
             mapModesPage?.SetActive(false);
-            SetTabState(theaterTabLabel, theaterUnderline, false);
-            SetTabState(doctrineTabLabel, doctrineUnderline, true);
-            SetTabState(mapModesTabLabel, mapModesUnderline, false);
+            theaterTab?.SetLatched(false);
+            doctrineTab?.SetLatched(true);
+            mapModesTab?.SetLatched(false);
+            Refresh();
         }
 
         private void ShowMapModes()
@@ -315,15 +302,10 @@ namespace BoscaliSummer.Features.Command.Presentation
             theaterPage?.SetActive(false);
             doctrinePage?.SetActive(false);
             mapModesPage?.SetActive(true);
-            SetTabState(theaterTabLabel, theaterUnderline, false);
-            SetTabState(doctrineTabLabel, doctrineUnderline, false);
-            SetTabState(mapModesTabLabel, mapModesUnderline, true);
-        }
-
-        private static void SetTabState(TMP_Text label, Image underline, bool active)
-        {
-            if (label != null) label.color = active ? ComPalette.HudEmerald : ComPalette.TextDim;
-            if (underline != null) underline.color = active ? ComPalette.HudEmerald : Color.clear;
+            theaterTab?.SetLatched(false);
+            doctrineTab?.SetLatched(false);
+            mapModesTab?.SetLatched(true);
+            Refresh();
         }
 
         private void Refresh()
@@ -345,10 +327,16 @@ namespace BoscaliSummer.Features.Command.Presentation
                     "% (" + state.FriendlyAircraftCount + " FRIENDLY / " + state.HostileAircraftCount + " HOSTILE)";
             }
 
+            if (airBalanceFill != null)
+            {
+                airBalanceFill.fillAmount = Mathf.Clamp01(state.AirSuperiorityRatio);
+                airBalanceFill.color = state.AirSuperiorityRatio >= 0.5f ? AvTheme.RailReady : AvTheme.RailCaution;
+            }
+
             if (defconLabel != null)
             {
                 defconLabel.text = "DEFCON " + state.DefconLevel + ": " + state.PrimaryThreatDescription;
-                defconLabel.color = state.DefconLevel <= 2 ? ComPalette.AlertRed : ComPalette.ThreatAmber;
+                defconLabel.color = state.DefconLevel <= 2 ? AvTheme.Alert : AvTheme.RailCaution;
             }
 
             if (airbaseCountLabel != null)
@@ -359,7 +347,7 @@ namespace BoscaliSummer.Features.Command.Presentation
 
             if (sortiesLabel != null)
             {
-                sortiesLabel.text = "FRIENDLY SAM SITES: " + state.FriendlySamCount +
+                sortiesLabel.text = "SAM SITES: " + state.FriendlySamCount +
                     " | DOCTRINE: " + CommandDoctrineHelper.GetName(command.ActiveDoctrine);
             }
 
@@ -368,6 +356,12 @@ namespace BoscaliSummer.Features.Command.Presentation
             {
                 activeDoctrineDesc.text = CommandDoctrineHelper.GetName(command.ActiveDoctrine) + "\n" +
                     CommandDoctrineHelper.GetDescription(command.ActiveDoctrine);
+            }
+
+            CommandDoctrine[] doctrines = (CommandDoctrine[])Enum.GetValues(typeof(CommandDoctrine));
+            for (int i = 0; i < doctrineButtons.Count && i < doctrines.Length; i++)
+            {
+                doctrineButtons[i].SetLatched(command.ActiveDoctrine == doctrines[i]);
             }
 
             if (priorityTargetsLabel != null)
@@ -383,92 +377,24 @@ namespace BoscaliSummer.Features.Command.Presentation
                 if (frontlinesToggleLabel != null)
                 {
                     frontlinesToggleLabel.text = overlay.ShowFrontlines ? "ON" : "OFF";
-                    frontlinesToggleLabel.color = overlay.ShowFrontlines ? ComPalette.HudEmerald : ComPalette.TextDim;
+                    frontlinesToggleLabel.color = overlay.ShowFrontlines ? AvTheme.RailReady : AvTheme.Dim;
                 }
                 if (radarToggleLabel != null)
                 {
                     radarToggleLabel.text = overlay.ShowRadar ? "ON" : "OFF";
-                    radarToggleLabel.color = overlay.ShowRadar ? ComPalette.InfoCyan : ComPalette.TextDim;
+                    radarToggleLabel.color = overlay.ShowRadar ? AvTheme.RailInfo : AvTheme.Dim;
                 }
                 if (ordersToggleLabel != null)
                 {
                     ordersToggleLabel.text = overlay.ShowAiOrders ? "ON" : "OFF";
-                    ordersToggleLabel.color = overlay.ShowAiOrders ? ComPalette.ThreatAmber : ComPalette.TextDim;
+                    ordersToggleLabel.color = overlay.ShowAiOrders ? AvTheme.RailCaution : AvTheme.Dim;
                 }
                 if (reconToggleLabel != null)
                 {
                     reconToggleLabel.text = overlay.ShowRecon ? "ON" : "OFF";
-                    reconToggleLabel.color = overlay.ShowRecon ? ComPalette.TextPrimary : ComPalette.TextDim;
+                    reconToggleLabel.color = overlay.ShowRecon ? AvTheme.TextPrimary : AvTheme.Dim;
                 }
             }
-
-            if (telemetryLabel != null)
-            {
-                telemetryLabel.text = "DOCTRINE: " + CommandDoctrineHelper.GetName(command.ActiveDoctrine) +
-                    "  ·  WINGMEN EXCLUDED";
-            }
-        }
-
-        // ---- UI Helpers ----
-
-        private Button MakeTabButton(
-            RectTransform parent, string text, Rect area, Action action,
-            out TMP_Text label, out Image underline)
-        {
-            var root = new GameObject("Tab_" + text, typeof(RectTransform), typeof(Image), typeof(Button));
-            RectTransform rect = root.GetComponent<RectTransform>();
-            rect.SetParent(parent, false);
-            Place(rect, area);
-
-            Image image = root.GetComponent<Image>();
-            image.color = ComPalette.SurfaceCard;
-
-            Button button = root.GetComponent<Button>();
-            button.targetGraphic = image;
-            button.navigation = new Navigation { mode = Navigation.Mode.None };
-            button.onClick.AddListener(() =>
-            {
-                Deselect(root);
-                action?.Invoke();
-            });
-
-            Outline(rect, new Rect(0f, 0f, area.width, area.height), ComPalette.Frame);
-            underline = Rule(rect, new Rect(0f, -(area.height - 3f), area.width, 3f), Color.clear);
-            label = Label(rect, text, new Rect(0f, 0f, area.width, area.height),
-                ComPalette.TextDim, ComPalette.FontSmall, FontStyles.Bold, TextAlignmentOptions.Center);
-            return button;
-        }
-
-        private Button MakeActionButton(
-            RectTransform parent, string text, Rect area, Color accent, Action action, out TMP_Text label)
-        {
-            var root = new GameObject("ActionBtn", typeof(RectTransform), typeof(Image), typeof(Button));
-            RectTransform rect = root.GetComponent<RectTransform>();
-            rect.SetParent(parent, false);
-            Place(rect, area);
-
-            Image image = root.GetComponent<Image>();
-            image.color = ComPalette.WithAlpha(accent, 0.25f);
-
-            Button button = root.GetComponent<Button>();
-            button.targetGraphic = image;
-            button.navigation = new Navigation { mode = Navigation.Mode.None };
-            button.onClick.AddListener(() =>
-            {
-                Deselect(root);
-                action?.Invoke();
-            });
-
-            Outline(rect, new Rect(0f, 0f, area.width, area.height), ComPalette.WithAlpha(accent, 0.8f));
-            label = Label(rect, text, new Rect(0f, 0f, area.width, area.height),
-                ComPalette.TextPrimary, ComPalette.FontNano, FontStyles.Bold, TextAlignmentOptions.Center);
-            return button;
-        }
-
-        private static void Deselect(GameObject root)
-        {
-            if (EventSystem.current != null && EventSystem.current.currentSelectedGameObject == root)
-                EventSystem.current.SetSelectedGameObject(null);
         }
 
         private static GameObject CreatePage(RectTransform parent, string name)
@@ -476,112 +402,8 @@ namespace BoscaliSummer.Features.Command.Presentation
             var page = new GameObject(name, typeof(RectTransform));
             RectTransform rect = page.GetComponent<RectTransform>();
             rect.SetParent(parent, false);
-            Stretch(rect);
+            AvKit.Stretch(rect);
             return page;
-        }
-
-        private TMP_Text Label(
-            RectTransform parent, string text, Rect area, Color color, float size,
-            FontStyles style, TextAlignmentOptions alignment)
-        {
-            var root = new GameObject("Label", typeof(RectTransform), typeof(TextMeshProUGUI));
-            RectTransform rect = root.GetComponent<RectTransform>();
-            rect.SetParent(parent, false);
-            Place(rect, area);
-
-            TextMeshProUGUI label = root.GetComponent<TextMeshProUGUI>();
-            label.text = text;
-            label.color = color;
-            label.fontSize = size;
-            label.fontStyle = style;
-            label.alignment = alignment;
-            label.enableWordWrapping = false;
-            label.overflowMode = TextOverflowModes.Ellipsis;
-            label.raycastTarget = false;
-            if (font != null) label.font = font;
-            return label;
-        }
-
-        private static void Place(RectTransform target, Rect area)
-        {
-            target.anchorMin = new Vector2(0f, 1f);
-            target.anchorMax = new Vector2(0f, 1f);
-            target.pivot = new Vector2(0f, 1f);
-            target.anchoredPosition = new Vector2(area.x, area.y);
-            target.sizeDelta = new Vector2(area.width, area.height);
-            target.localScale = Vector3.one;
-        }
-
-        private static void Stretch(RectTransform target)
-        {
-            target.anchorMin = Vector2.zero;
-            target.anchorMax = Vector2.one;
-            target.offsetMin = Vector2.zero;
-            target.offsetMax = Vector2.zero;
-            target.localScale = Vector3.one;
-        }
-
-        private static Image Panel(RectTransform parent, Rect area, Color color)
-        {
-            var root = new GameObject("Panel", typeof(RectTransform), typeof(Image));
-            RectTransform rect = root.GetComponent<RectTransform>();
-            rect.SetParent(parent, false);
-            Place(rect, area);
-            Image image = root.GetComponent<Image>();
-            image.color = color;
-            image.raycastTarget = false;
-            return image;
-        }
-
-        private static void FramedPanel(RectTransform parent, Rect area, Color frameColor, Color fillColor)
-        {
-            Panel(parent, area, fillColor);
-            Outline(parent, area, frameColor);
-        }
-
-        private static void Outline(RectTransform parent, Rect area, Color color)
-        {
-            const float t = 1f;
-            Rule(parent, new Rect(area.x, area.y, area.width, t), color);
-            Rule(parent, new Rect(area.x, area.y - area.height + t, area.width, t), color);
-            Rule(parent, new Rect(area.x, area.y, t, area.height), color);
-            Rule(parent, new Rect(area.x + area.width - t, area.y, t, area.height), color);
-        }
-
-        private static Image Rule(RectTransform parent, Rect area, Color color) => Panel(parent, area, color);
-
-        private static (Image Background, TMP_Text Label) StatusChip(
-            RectTransform parent, string text, Rect rect, Color railColor, Color textColor, float fontSize = ComPalette.FontNano)
-        {
-            var go = new GameObject("StatusChip", typeof(RectTransform), typeof(Image));
-            var rt = go.GetComponent<RectTransform>();
-            rt.SetParent(parent, false);
-            Place(rt, rect);
-
-            Image bg = go.GetComponent<Image>();
-            bg.raycastTarget = false;
-            bg.color = new Color(railColor.r * 0.15f, railColor.g * 0.15f, railColor.b * 0.15f, 0.85f);
-
-            Outline(parent, rect, new Color(railColor.r, railColor.g, railColor.b, 0.45f));
-
-            var lblGo = new GameObject("ChipLabel", typeof(RectTransform), typeof(TextMeshProUGUI));
-            var lRt = lblGo.GetComponent<RectTransform>();
-            lRt.SetParent(parent, false);
-            Place(lRt, rect);
-            var label = lblGo.GetComponent<TextMeshProUGUI>();
-            label.text = text;
-            label.color = textColor;
-            label.fontSize = fontSize;
-            label.fontStyle = FontStyles.Bold;
-            label.alignment = TextAlignmentOptions.Center;
-            label.raycastTarget = false;
-            return (bg, label);
-        }
-
-        private static Image TacticalCard(RectTransform parent, Rect area, Color railColor)
-        {
-            FramedPanel(parent, area, ComPalette.BorderSubtle, ComPalette.SurfaceCard);
-            return Rule(parent, new Rect(area.x, area.y, 3f, area.height), railColor);
         }
     }
 }

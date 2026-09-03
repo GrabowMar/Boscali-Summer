@@ -8,6 +8,7 @@ namespace BoscaliSummer.Tests.Features.Command
         public static void Run()
         {
             AvionicsProtocolTests.Run(TestAssert.That);
+            AvionicsTokenTests.Run(TestAssert.That);
 
             TestAssert.That(CommandDoctrineHelper.CanSetDoctrine(0),
                 "Doctrine is host-always-on; vanilla rank is not a lock");

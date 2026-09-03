@@ -16,7 +16,9 @@ namespace BoscaliSummer.Features.Support.Runtime
     {
         private readonly List<SupportActionDefinition> actions = new List<SupportActionDefinition>(4);
 
-        public SupportCatalog(SupportSettings settings, IZoneFortificationService fortifications)
+        public SupportCatalog(
+            SupportSettings settings, IZoneFortificationService fortifications,
+            IFireSuppressionService fireSuppression = null)
         {
             if (VanillaSupportCatalog.ReconAvailable)
                 actions.Add(new SupportActionDefinition(
@@ -39,6 +41,16 @@ namespace BoscaliSummer.Features.Support.Runtime
                 SupportActionId.Emp, "EMP SHOCK",
                 "A high-altitude burst that blinds radars across a wide area - friend and foe alike.",
                 SupportCapabilities.Emp, settings.EmpEnabled, new EmpAction()));
+
+            actions.Add(new SupportActionDefinition(
+                SupportActionId.Firebreak, "FIREBREAK CORRIDOR",
+                "Combat engineering: clear forest, suppress fires, and erect perimeter barriers.",
+                SupportCapabilities.Fortify, settings.FortifyEnabled, new FirebreakAction(fireSuppression, fortifications)));
+
+            actions.Add(new SupportActionDefinition(
+                SupportActionId.SmokeMarker, "SMOKE DESIGNATION",
+                "CAS marker: deploy a high-visibility signaling smoke plume on the target grid.",
+                SupportCapabilities.Recon, settings.ReconEnabled, new SmokeMarkerAction(fireSuppression)));
         }
 
         public IReadOnlyList<SupportActionDefinition> Actions => actions;

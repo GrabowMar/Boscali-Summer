@@ -172,6 +172,12 @@ namespace BoscaliSummer.Garrisons
                 if (aa == null)
                     SpawnEmplacement(site, spawner, "Emplacement1_MANPADS", "MANPADS", aaPos, Quaternion.LookRotation(Vector3.forward), "AA");
             }
+
+            if (site.Tier >= 4 && !HasEmplacement(site, "radar") && !HasEmplacement(site, "MC260"))
+            {
+                Vector3 radarPos = SnapToGround(site.Center + Vector3.back * 12f);
+                SpawnEmplacement(site, spawner, "MC260_RadarContainer", "radar", radarPos, Quaternion.identity, "Radar");
+            }
         }
 
         private static Building SpawnEmplacement(

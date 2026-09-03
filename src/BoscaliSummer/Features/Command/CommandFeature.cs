@@ -27,12 +27,10 @@ namespace BoscaliSummer.Features.Command
 
             CommandManager manager = context.AddSceneService<CommandManager>(52);
             ComMapOverlay overlay = context.AddSceneService<ComMapOverlay>(53);
-            ComMapDock dock = context.AddSceneService<ComMapDock>(54);
             ComMfdPanel mfd = context.AddSceneService<ComMfdPanel>(56);
 
             manager.Configure(context.Settings.Command, progression, context.Logger);
             overlay.Configure(context.Settings.Command, manager, context.Logger);
-            dock.Configure(context.Settings.Command, manager, overlay, context.Logger);
             mfd.Configure(context.Settings.Command, manager, overlay, context.Logger);
             context.AddService<ITheaterPage>(mfd);
         }

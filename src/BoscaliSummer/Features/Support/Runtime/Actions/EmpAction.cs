@@ -29,7 +29,7 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
                 return SupportResult.CapabilityUnavailable;
             }
             if (NetworkSceneSingleton<Spawner>.i == null) return SupportResult.CapabilityUnavailable;
-            if (!SupportTargeting.TryGround(context.Target, out Vector3 ground))
+            if (!SupportTargeting.TryMapPoint(context.Target, out Vector3 ground))
                 return SupportResult.InvalidTarget;
 
             if (SupportTargeting.TryOrigin(context.Player, out Vector3 origin))
@@ -40,6 +40,9 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
 
             if (!context.Host.TryReserve(SupportPool.Strike)) return SupportResult.Busy;
 
+            context.Logger.LogInfo("[Support] EMP shock using " + definition.jsonKey +
+                                   " at " + ground.y.ToString("F0") + " m AGL-local, release +" +
+                                   ReleaseAltitude.ToString("F0") + " m");
             context.Host.Run(Discharge(context.Host, context.Player, context.Owner, definition, ground,
                 context.Settings.EmpRadius.Value, SupportNaming.Unique("Emp", context)));
             return SupportResult.Accepted;
@@ -74,10 +77,10 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
 
                 yield return new WaitForSecondsRealtime(DischargeDelay);
 
-                // High-altitude atmospheric EMP detonation point
-                Vector3 burstPoint = missile != null
-                    ? missile.transform.position
-                    : (target + Vector3.up * Mathf.Max(4000f, ReleaseAltitude * 0.45f));
+                // The burst is an airburst over the mark, not wherever the delivery
+                // missile has wandered. A terrain-following prefab used to put this on
+                // the deck; the visual and the jam stay at altitude either way.
+                Vector3 burstPoint = target + Vector3.up * Mathf.Max(4000f, ReleaseAltitude * 0.45f);
 
                 if (missile != null && !missile.disabled)
                 {
@@ -111,14 +114,8 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
                     }
                 }
 
-                // Check local player aircraft
-                if (GameManager.GetLocalPlayer<Player>(out Player localPlayer) && localPlayer != null && localPlayer.Aircraft != null)
-                {
-                    if ((localPlayer.Aircraft.transform.position - target).sqrMagnitude <= radius * radius)
-                    {
-                        Visuals.CockpitEmpDisruption.TriggerForPlayer(localPlayer.Aircraft, 1.2f);
-                    }
-                }
+                // Check local player aircraft for cockpit disruption
+                Visuals.CockpitEmpDisruption.CheckLocalDisruption(burstPoint, radius);
             }
             finally
             {

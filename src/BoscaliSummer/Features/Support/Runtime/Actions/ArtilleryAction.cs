@@ -28,7 +28,7 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
                 return SupportResult.CapabilityUnavailable;
             }
             if (NetworkSceneSingleton<Spawner>.i == null) return SupportResult.CapabilityUnavailable;
-            if (!SupportTargeting.TryGround(context.Target, out Vector3 ground))
+            if (!SupportTargeting.TryMapPoint(context.Target, out Vector3 ground))
                 return SupportResult.InvalidTarget;
             if (SupportTargeting.TryOrigin(context.Player, out Vector3 origin))
             {
@@ -37,6 +37,7 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
             }
             if (!context.Host.TryReserve(SupportPool.Strike)) return SupportResult.Busy;
 
+            context.Logger.LogInfo("[Support] Rod from God using " + definition.jsonKey);
             context.Host.Run(Strike(context.Host, context.Player, context.Owner, definition, ground,
                 SupportNaming.Unique("Rod", context)));
             return SupportResult.Accepted;
@@ -62,6 +63,7 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
                 {
                     missile.SetAimpoint(target.ToGlobalPosition(), Vector3.zero);
                     missile.Arm();
+                    Visuals.KineticRodStrikeVisuals.Track(missile, target);
                 }
             }
             finally

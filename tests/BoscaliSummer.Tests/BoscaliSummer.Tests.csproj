@@ -10,7 +10,6 @@
     <Compile Include="..\..\src\BoscaliSummer\Features\FireAndDestruction\Buildings\ImpactScorchPolicy.cs" Link="Features\FireAndDestruction\ImpactScorchPolicy.cs" />
     <Compile Include="..\..\src\BoscaliSummer\Features\Radio\Runtime\RadioLibrary.cs" Link="Features\Radio\RadioLibrary.cs" />
     <Compile Include="..\..\src\BoscaliSummer\Features\Radio\Presentation\PngIconHeader.cs" Link="Features\Radio\PngIconHeader.cs" />
-    <Compile Include="..\..\src\BoscaliSummer\Features\Radio\Presentation\RadioUiPalette.cs" Link="Features\Radio\RadioUiPalette.cs" />
     <Compile Include="..\..\src\BoscaliSummer\Framework\Contracts\IPlayerPerks.cs" Link="Framework\IPlayerPerks.cs" />
     <Compile Include="..\..\src\BoscaliSummer\Features\Progression\Runtime\PerkCatalog.cs" Link="Features\Progression\PerkCatalog.cs" />
     <Compile Include="..\..\src\BoscaliSummer\Features\Support\Runtime\SupportModel.cs" Link="Features\Support\SupportModel.cs" />

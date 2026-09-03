@@ -94,6 +94,26 @@ namespace BoscaliSummer.Garrisons
             return true;
         }
 
+        public bool TryDeployFirebreak(Vector3 targetPosition, float radius)
+        {
+            if (!GameAccess.IsServer()) return false;
+
+            int segments = 8;
+            float arcRadius = Mathf.Clamp(radius * 0.35f, 25f, 80f);
+            for (int i = 0; i < segments; i++)
+            {
+                float angle = (i - segments * 0.5f) * 22f * Mathf.Deg2Rad;
+                Vector3 offset = new Vector3(Mathf.Sin(angle), 0f, Mathf.Cos(angle)) * arcRadius;
+                Vector3 barrierPos = targetPosition + offset;
+                Quaternion barrierRot = Quaternion.LookRotation(new Vector3(-offset.z, 0f, offset.x).normalized);
+
+                MakeshiftFortificationBuilder.CreateConcreteBarrier(barrierPos, barrierRot, null);
+            }
+
+            Plugin.Logger.LogInfo($"[Fortification] Deployed firebreak concrete revetments around {targetPosition}.");
+            return true;
+        }
+
         public bool TryOccupyBuilding(GameObject shell, FactionHQ owner, Airbase airbase)
         {
             if (shell == null || owner == null) return false;

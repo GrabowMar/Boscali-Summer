@@ -7,35 +7,33 @@ using BoscaliSummer.Framework.Features;
 using BoscaliSummer.Framework.Lifecycle;
 using BoscaliSummer.Runtime;
 using NOAvionics;
+using NOAvionics.Ui;
 using NuclearOption.UIStyleSystem;
 using TMPro;
 using UnityEngine;
-using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace BoscaliSummer.Features.Support.Presentation
 {
     /// <summary>
     /// Cockpit MFD screen for Boscali Operations: the perk board and the support board.
-    /// Redesigned as a high-density, dual-column military avionics console with tactile
-    /// controls, visual progression meters, and an integrated real-time telemetry terminal.
+    /// Redesigned in the unified 5th-gen fighter cockpit avionics language at 470px width,
+    /// with SDF chamfered bezels, tactile cards, visual progression meters, and an integrated status strip.
     /// </summary>
     internal sealed class SupportPanel : MonoBehaviour, ISceneService
     {
-        private const float Width = 430f;
-        private const float Pad = 12f;
-        private const float Gap = 8f;
-        private const float PanelHeight = 492f;
-        private const float TabHeight = 28f;
-        private const float RibbonHeight = 36f;
-        private const float TerminalHeight = 66f;
+        private const float Width = AvTokens.PanelWidth;
+        private const float Pad = AvTokens.Pad;
+        private const float Gap = AvTokens.Gap;
+        private const float PanelHeight = AvTokens.PanelHeight;
+        private const float TabHeight = AvTokens.TabBarHeight;
         private const float RefreshInterval = 0.15f;
 
         private sealed class PerkCard
         {
             public byte Id;
             public GameObject Root;
-            public Button Button;
+            public AvButton Button;
             public Image Rail;
             public Image Background;
             public TMP_Text Name;
@@ -47,8 +45,7 @@ namespace BoscaliSummer.Features.Support.Presentation
         {
             public SupportActionDefinition Definition;
             public GameObject Root;
-            public Button RequestButton;
-            public TMP_Text RequestLabel;
+            public AvButton RequestButton;
             public Image Rail;
             public Image Background;
             public TMP_Text Name;
@@ -56,17 +53,6 @@ namespace BoscaliSummer.Features.Support.Presentation
             public TMP_Text AuthStatus;
             public TMP_Text Description;
             public TMP_Text StateLabel;
-            public Color Accent;
-        }
-
-        internal sealed class OpsHoverTrigger : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
-        {
-            public Action OnEnter;
-            public Action OnExit;
-
-            public void OnPointerEnter(PointerEventData eventData) => OnEnter?.Invoke();
-            public void OnPointerExit(PointerEventData eventData) => OnExit?.Invoke();
-            private void OnDisable() => OnExit?.Invoke();
         }
 
         private SupportManager support;
@@ -79,26 +65,24 @@ namespace BoscaliSummer.Features.Support.Presentation
         private GameObject perksPage;
         private GameObject supportPage;
         private GameObject theaterPage;
-        private Button perksTab;
-        private Button supportTab;
-        private Button theaterTab;
-        private TMP_Text perksTabLabel;
-        private TMP_Text supportTabLabel;
-        private TMP_Text theaterTabLabel;
-        private Image perksUnderline;
-        private Image supportUnderline;
-        private Image theaterUnderline;
+        private AvButton perksTab;
+        private AvButton supportTab;
+        private AvButton theaterTab;
         private ITheaterPage theater;
 
         // Perks Page Widgets
         private TMP_Text scoreLabel;
         private TMP_Text rankSubLabel;
         private TMP_Text pointsChipLabel;
-        private TMP_Text pointsPipLabel;
+        private TMP_Text progressCaptionLabel;
+        private RectTransform pipMeterArea;
+        private Image scoreBarFill;
 
         // Support Page Widgets
         private TMP_Text allocationLabel;
         private TMP_Text targetLabel;
+        private Image cooldownBarFill;
+        private TMP_Text cooldownCaptionLabel;
 
         // Shared Telemetry Terminal
         private TMP_Text telemetryLabel;
@@ -137,9 +121,13 @@ namespace BoscaliSummer.Features.Support.Presentation
             scoreLabel = null;
             rankSubLabel = null;
             pointsChipLabel = null;
-            pointsPipLabel = null;
+            progressCaptionLabel = null;
+            pipMeterArea = null;
+            scoreBarFill = null;
             allocationLabel = null;
             targetLabel = null;
+            cooldownBarFill = null;
+            cooldownCaptionLabel = null;
             telemetryLabel = null;
             activeHoverTooltip = null;
             perkCards.Clear();
@@ -242,59 +230,50 @@ namespace BoscaliSummer.Features.Support.Presentation
             rootRect.sizeDelta = new Vector2(Width, PanelHeight);
 
             Image background = root.GetComponent<Image>();
-            background.color = AvionicsUiPalette.SurfaceScreen;
+            background.sprite = AvSprites.Panel;
+            background.type = Image.Type.Sliced;
+            background.color = Color.white;
             background.raycastTarget = true;
 
             var contentObject = new GameObject("Content", typeof(RectTransform));
             RectTransform content = contentObject.GetComponent<RectTransform>();
             content.SetParent(rootRect, false);
-            Stretch(content);
+            AvKit.Stretch(content);
 
             float inner = Width - Pad * 2f;
             float y = -Pad;
 
-            // Header Banner
-            Label(content, "BOSCALI OPERATIONS", new Rect(Pad, y, inner, 18f),
-                Accent(), AvionicsUiPalette.FontTitle, FontStyles.Bold, TextAlignmentOptions.Center);
-            y -= 18f;
+            // Header Banner (28px Title Bar)
+            TMP_Text title = AvKit.Label(content, "BOSCALI OPERATIONS", new Rect(Pad, y, inner, AvTokens.TitleBarHeight),
+                                         AvTheme.Accent, AvTokens.FontTitle, FontStyles.Bold, TextAlignmentOptions.Center);
+            title.characterSpacing = 0.8f;
+            y -= AvTokens.TitleBarHeight + AvTokens.Space1;
 
-            Label(content, "THEATER LOGISTICS & AIR-GROUND STRIKE COMMAND", new Rect(Pad, y, inner, 12f),
-                AvionicsUiPalette.TextDim, AvionicsUiPalette.FontNano, FontStyles.Normal, TextAlignmentOptions.Center);
-            y -= 14f;
+            // 18px Chip rail: SYS: LOGISTICS, NET: BOTE-LINK, AUTH: READY
+            float chipW = (inner - Gap * 2f) / 3f;
+            AvKit.StatusChip(content, "SYS: LOGISTICS", new Rect(Pad, y, chipW, AvTokens.ChipRailHeight),
+                             AvTheme.RailReady, AvTheme.TextPrimary, AvTokens.FontMicro);
+            AvKit.StatusChip(content, "NET: BOTE-LINK", new Rect(Pad + chipW + Gap, y, chipW, AvTokens.ChipRailHeight),
+                             AvTheme.RailInfo, AvTheme.TextPrimary, AvTokens.FontMicro);
+            AvKit.StatusChip(content, "AUTH: READY", new Rect(Pad + (chipW + Gap) * 2f, y, chipW, AvTokens.ChipRailHeight),
+                             AvTheme.RailReady, AvTheme.TextPrimary, AvTokens.FontMicro);
 
-            // Deep-space mission tracking telemetry header strip
-            float chipW = 86f;
-            float chipH = 16f;
-            float chipGap = 8f;
-            float totalChipsW = chipW * 3f + chipGap * 2f;
-            float startX = Pad + (inner - totalChipsW) * 0.5f;
-
-            StatusChip(content, "SYS: LOGISTICS", new Rect(startX, y, chipW, chipH),
-                       AvionicsUiPalette.RailEmerald, AvionicsUiPalette.TextPrimary);
-            StatusChip(content, "NET: BOTE-LINK", new Rect(startX + chipW + chipGap, y, chipW, chipH),
-                       AvionicsUiPalette.RailCyan, AvionicsUiPalette.TextPrimary);
-            StatusChip(content, "AUTH: READY", new Rect(startX + (chipW + chipGap) * 2f, y, chipW, chipH),
-                       AvionicsUiPalette.RailEmerald, AvionicsUiPalette.TextPrimary);
-
-            y -= chipH + 8f;
-            Rule(content, new Rect(Pad, y, inner, 1f), AvionicsUiPalette.BorderSubtle);
-            y -= AvionicsUiPalette.Space2;
+            y -= AvTokens.ChipRailHeight + AvTokens.Space2;
+            AvKit.Rule(content, new Rect(Pad, y, inner, 1f), AvTheme.Hairline);
+            y -= AvTokens.Space2;
 
             ModServices.TryGet(out theater);
             int tabCount = theater != null ? 3 : 2;
             float tabWidth = (inner - Gap * (tabCount - 1)) / tabCount;
-            perksTab = MakeTabButton(content, "PERKS", new Rect(Pad, y, tabWidth, TabHeight),
-                ShowPerks, out perksTabLabel, out perksUnderline);
-            supportTab = MakeTabButton(content, "SUPPORT",
-                new Rect(Pad + tabWidth + Gap, y, tabWidth, TabHeight),
-                ShowSupport, out supportTabLabel, out supportUnderline);
+            perksTab = AvKit.Tab(content, "PERKS", new Rect(Pad, y, tabWidth, TabHeight), ShowPerks);
+            supportTab = AvKit.Tab(content, "SUPPORT", new Rect(Pad + tabWidth + Gap, y, tabWidth, TabHeight), ShowSupport);
             if (theater != null)
             {
-                theaterTab = MakeTabButton(content, "THEATER",
-                    new Rect(Pad + (tabWidth + Gap) * 2f, y, tabWidth, TabHeight),
-                    ShowTheater, out theaterTabLabel, out theaterUnderline);
+                theaterTab = AvKit.Tab(content, "THEATER", new Rect(Pad + (tabWidth + Gap) * 2f, y, tabWidth, TabHeight), ShowTheater);
             }
-            y -= TabHeight + AvionicsUiPalette.Space2;
+            y -= TabHeight;
+            AvKit.Rule(content, new Rect(Pad, y, inner, 1f), AvTheme.Frame);
+            y -= AvTokens.Space2;
 
             perksPage = CreatePage(content, "PerksPage");
             BuildPerksPage((RectTransform)perksPage.transform, inner, y);
@@ -308,12 +287,12 @@ namespace BoscaliSummer.Features.Support.Presentation
                 theater.Mount((RectTransform)theaterPage.transform, font, inner, y);
             }
 
-            // Pinned Telemetry Terminal
-            float terminalY = -PanelHeight + TerminalHeight + Pad;
-            BuildTelemetryTerminal(content, inner, terminalY);
+            // Pinned Telemetry Terminal (StatusStrip: 56px, 2-line padded)
+            float terminalY = -(PanelHeight - Pad - AvTokens.StatusStripHeight);
+            telemetryLabel = AvKit.StatusStrip(content, new Rect(Pad, terminalY, inner, AvTokens.StatusStripHeight), AvTheme.RailReady);
 
-            // Outer Avionics Border
-            Outline(content, new Rect(0f, 0f, Width, PanelHeight), AvionicsUiPalette.Frame);
+            // Chamfer Corner Ticks for panel
+            AvKit.CornerTicks(content, new Rect(0f, 0f, Width, PanelHeight), AvTheme.Hairline);
 
             MFDScreen result = root.AddComponent<MFDScreen>();
             result.shortName = "OPS";
@@ -339,28 +318,45 @@ namespace BoscaliSummer.Features.Support.Presentation
         {
             float y = startY;
 
-            // Status Ribbon: Score, Rank & Tactical Points Meter
-            FramedPanel(parent, new Rect(Pad, y, inner, RibbonHeight),
-                AvionicsUiPalette.Frame, AvionicsUiPalette.SurfaceRibbon);
+            // Status Ribbon: Score, Rank, Tactical Points budget & score-driven progress.
+            const float ribbonH = 58f;
+            AvKit.Panel(parent, new Rect(Pad, y, inner, ribbonH), AvTheme.SurfaceInert, AvSprites.Card);
+            AvKit.Outline(parent, new Rect(Pad, y, inner, ribbonH), AvTheme.Hairline);
+            AvKit.CornerTicks(parent, new Rect(Pad, y, inner, ribbonH), AvTheme.Hairline);
 
-            scoreLabel = Label(parent, "SCORE 0", new Rect(Pad + AvionicsUiPalette.Space2, y - 2f,
-                200f, 16f), Friendly(), AvionicsUiPalette.FontSmall, FontStyles.Bold,
-                TextAlignmentOptions.MidlineLeft);
+            // Left: score readout + rank subtitle
+            scoreLabel = AvKit.Label(parent, "SCORE 0",
+                                     new Rect(Pad + AvTokens.Space2, y - 2f, 200f, 18f),
+                                     AvTheme.Friendly, AvTokens.FontLead, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
 
-            rankSubLabel = Label(parent, "RANK --",
-                new Rect(Pad + AvionicsUiPalette.Space2, y - 18f, 200f, 14f),
-                AvionicsUiPalette.TextDim, AvionicsUiPalette.FontNano, FontStyles.Normal,
-                TextAlignmentOptions.MidlineLeft);
+            rankSubLabel = AvKit.Label(parent, "RANK --",
+                                       new Rect(Pad + AvTokens.Space2, y - 22f, 220f, 14f),
+                                       AvTheme.Dim, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
 
-            pointsChipLabel = Label(parent, "0 PTS AVAILABLE",
-                new Rect(Pad + inner - 180f, y - 2f, 172f, 16f),
-                Accent(), AvionicsUiPalette.FontMicro, FontStyles.Bold, TextAlignmentOptions.MidlineRight);
+            // Right: points-available chip
+            pointsChipLabel = AvKit.Label(parent, "0 PTS AVAILABLE",
+                                          new Rect(Pad + inner - 176f, y - 2f, 168f, 18f),
+                                          AvTheme.Accent, AvTokens.FontMicro, FontStyles.Bold, TextAlignmentOptions.MidlineRight);
 
-            pointsPipLabel = Label(parent, string.Empty,
-                new Rect(Pad + inner - 180f, y - 18f, 172f, 14f),
-                Friendly(), AvionicsUiPalette.FontMicro, FontStyles.Bold, TextAlignmentOptions.MidlineRight);
+            var pipGo = new GameObject("PipArea", typeof(RectTransform));
+            pipMeterArea = pipGo.GetComponent<RectTransform>();
+            pipMeterArea.SetParent(parent, false);
+            AvKit.Place(pipMeterArea, new Rect(Pad + inner - 150f, y - 22f, 142f, 10f));
 
-            y -= RibbonHeight + AvionicsUiPalette.Space2;
+            // Bottom: score-to-next-point progress with caption
+            float barX = Pad + AvTokens.Space2;
+            float barW = inner - AvTokens.Space2 * 2f;
+            progressCaptionLabel = AvKit.Label(parent, "0 / 0 EARNED",
+                                               new Rect(barX, y - ribbonH + 4f, 120f, 10f),
+                                               AvTheme.TextPrimary, AvTokens.FontMicro, FontStyles.Bold,
+                                               TextAlignmentOptions.MidlineLeft);
+            AvKit.Label(parent, "SCORE TO NEXT POINT",
+                        new Rect(barX + 132f, y - ribbonH + 4f, barW - 160f, 10f),
+                        AvTheme.Dim, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineRight);
+
+            scoreBarFill = AvKit.ProgressBar(parent, new Rect(barX, y - ribbonH + 2f, barW, 6f), 0f, AvTheme.RailReady);
+
+            y -= ribbonH + AvTokens.Space2;
 
             // Dual Column Layout
             float colWidth = (inner - Gap) * 0.5f;
@@ -368,14 +364,14 @@ namespace BoscaliSummer.Features.Support.Presentation
             float col2X = Pad + colWidth + Gap;
 
             // Column 1 Header: Passives
-            Label(parent, "PASSIVE FLIGHT & REWARD SYSTEMS", new Rect(col1X, y, colWidth, 14f),
-                Friendly(), AvionicsUiPalette.FontNano, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
-            Rule(parent, new Rect(col1X, y - 15f, colWidth, 1f), AvionicsUiPalette.WithAlpha(Friendly(), 0.4f));
+            AvKit.Label(parent, "PASSIVE FLIGHT & REWARD SYSTEMS", new Rect(col1X, y, colWidth, 14f),
+                        AvTheme.Friendly, AvTokens.FontMicro, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
+            AvKit.Rule(parent, new Rect(col1X, y - 15f, colWidth, 1f), AvTheme.Friendly.WithAlpha(0.4f));
 
             // Column 2 Header: Authorisations
-            Label(parent, "TACTICAL SUPPORT AUTHORISATIONS", new Rect(col2X, y, colWidth, 14f),
-                AvionicsUiPalette.RailCyan, AvionicsUiPalette.FontNano, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
-            Rule(parent, new Rect(col2X, y - 15f, colWidth, 1f), AvionicsUiPalette.WithAlpha(AvionicsUiPalette.RailCyan, 0.4f));
+            AvKit.Label(parent, "TACTICAL SUPPORT AUTHORISATIONS", new Rect(col2X, y, colWidth, 14f),
+                        AvTheme.RailInfo, AvTokens.FontMicro, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
+            AvKit.Rule(parent, new Rect(col2X, y - 15f, colWidth, 1f), AvTheme.RailInfo.WithAlpha(0.4f));
 
             y -= 18f;
 
@@ -403,69 +399,63 @@ namespace BoscaliSummer.Features.Support.Presentation
             }
         }
 
+        private static string PerkGlyph(bool isAuth)
+        {
+            return isAuth ? "◈" : "▣";
+        }
+
         private void AddPerkCard(
             RectTransform parent, PerkView view, float x, float y, float w, float h)
         {
-            var root = new GameObject("PerkCard_" + view.Id, typeof(RectTransform), typeof(Image), typeof(Button));
-            RectTransform rect = root.GetComponent<RectTransform>();
-            rect.SetParent(parent, false);
-            Place(rect, new Rect(x, y, w, h));
+            bool isAuth = view.Group != null && view.Group.IndexOf("AUTHORIS", StringComparison.OrdinalIgnoreCase) >= 0;
 
-            Image bg = root.GetComponent<Image>();
-            bg.color = AvionicsUiPalette.SurfaceCard;
-            Outline(rect, new Rect(0f, 0f, w, h), AvionicsUiPalette.Frame);
-            Image rail = Rule(rect, new Rect(0f, 0f, 3f, h), AvionicsUiPalette.RailInert);
+            Color groupRail = isAuth ? AvTheme.RailInfo : AvTheme.RailReady;
+            var (cardFill, rail) = AvKit.TacticalCard(parent, new Rect(x, y, w, h), AvTheme.RailInert);
+            RectTransform rect = cardFill.rectTransform;
+
+            // Category glyph block on the left
+            TMP_Text glyph = AvKit.Label(rect, PerkGlyph(isAuth),
+                new Rect(AvTokens.Space2, -2f, 20f, 36f),
+                groupRail, AvTokens.FontSmall, FontStyles.Bold, TextAlignmentOptions.MidlineRight);
+
+            float textX = AvTokens.Space2 + 24f;
 
             // Title line
-            TMP_Text nameLabel = Label(rect, view.Name.ToUpperInvariant(),
-                new Rect(AvionicsUiPalette.Space2, -2f, w - 74f, 18f),
-                AvionicsUiPalette.TextPrimary, AvionicsUiPalette.FontSmall, FontStyles.Bold,
-                TextAlignmentOptions.MidlineLeft);
+            TMP_Text nameLabel = AvKit.Label(rect, view.Name.ToUpperInvariant(),
+                new Rect(textX, -2f, w - textX - 74f, 18f),
+                AvTheme.TextPrimary, AvTokens.FontSmall, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
 
-            TMP_Text badge = Label(rect, string.Empty,
+            TMP_Text badge = AvKit.Label(rect, string.Empty,
                 new Rect(w - 70f, -2f, 66f, 18f),
-                Accent(), AvionicsUiPalette.FontNano, FontStyles.Bold, TextAlignmentOptions.MidlineRight);
+                AvTheme.Accent, AvTokens.FontMicro, FontStyles.Bold, TextAlignmentOptions.MidlineRight);
 
             // Subtitle / synopsis
-            TMP_Text sub = Label(rect, view.Description,
-                new Rect(AvionicsUiPalette.Space2, -20f, w - AvionicsUiPalette.Space3, 16f),
-                AvionicsUiPalette.TextDim, AvionicsUiPalette.FontNano, FontStyles.Normal,
-                TextAlignmentOptions.MidlineLeft);
+            TMP_Text sub = AvKit.Label(rect, view.Description,
+                new Rect(textX, -20f, w - textX - AvTokens.Space3, 16f),
+                AvTheme.Dim, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
 
             byte id = view.Id;
-            Button button = root.GetComponent<Button>();
-            button.targetGraphic = bg;
-            button.navigation = new Navigation { mode = Navigation.Mode.None };
-            button.onClick.AddListener(() =>
+            AvButton button = AvKit.HitButton(rect, new Rect(0f, 0f, w, h), () =>
             {
-                Deselect(root);
+                AvInput.Deselect(cardFill.gameObject);
                 progression.RequestUnlock(id);
                 nextRefresh = 0f;
             });
+            button.SetRowHighlight(cardFill, AvTheme.Surface,
+                AvTheme.Unity(AvTokens.Wash(AvTheme.Accent.ToRgba(), AvTokens.RowHoverScale, AvTokens.RowHoverAlpha)));
 
             string tooltip = "[PERK] " + view.Name.ToUpperInvariant() + " · COST: " + view.Cost +
                 (view.Cost == 1 ? " POINT" : " POINTS") + "\n" + view.Description +
                 "\nUnlocks via mission score points (1 pt per 500 score).";
-
-            var hover = root.AddComponent<OpsHoverTrigger>();
-            hover.OnEnter = () =>
-            {
-                bg.color = AvionicsUiPalette.SurfaceCardHover;
-                SetHoverTooltip(tooltip);
-            };
-            hover.OnExit = () =>
-            {
-                bg.color = AvionicsUiPalette.SurfaceCard;
-                ClearHoverTooltip();
-            };
+            button.WithTooltip(tooltip);
 
             perkCards.Add(new PerkCard
             {
                 Id = id,
-                Root = root,
+                Root = cardFill.gameObject,
                 Button = button,
                 Rail = rail,
-                Background = bg,
+                Background = cardFill,
                 Name = nameLabel,
                 Badge = badge,
                 Subtitle = sub
@@ -474,35 +464,63 @@ namespace BoscaliSummer.Features.Support.Presentation
 
         // ---- Support Page ----------------------------------------------------------------
 
+        private static string ActionGlyph(SupportActionId id)
+        {
+            switch (id)
+            {
+                case SupportActionId.Artillery: return "[ARTY]";
+                case SupportActionId.Fortify: return "[BASE]";
+                case SupportActionId.Recon: return "[RECON]";
+                case SupportActionId.Emp: return "[EMP]";
+                case SupportActionId.Firebreak: return "[FIRE]";
+                case SupportActionId.SmokeMarker: return "[SMOKE]";
+                default: return "[OPS]";
+            }
+        }
+
         private void BuildSupportPage(RectTransform parent, float inner, float startY)
         {
             float y = startY;
 
-            // Status Ribbon: Allocation Budget & Map Target
-            FramedPanel(parent, new Rect(Pad, y, inner, RibbonHeight),
-                AvionicsUiPalette.Frame, AvionicsUiPalette.SurfaceRibbon);
+            // Status Ribbon: Allocation Budget & Designated Strike Target.
+            const float ribbonH = 64f;
+            AvKit.Panel(parent, new Rect(Pad, y, inner, ribbonH), AvTheme.SurfaceInert, AvSprites.Card);
+            AvKit.Outline(parent, new Rect(Pad, y, inner, ribbonH), AvTheme.Hairline);
+            AvKit.CornerTicks(parent, new Rect(Pad, y, inner, ribbonH), AvTheme.Hairline);
 
             // Allocation section
-            Label(parent, "ALLOCATION BUDGET", new Rect(Pad + AvionicsUiPalette.Space2, y - 2f, 150f, 14f),
-                AvionicsUiPalette.TextDim, AvionicsUiPalette.FontNano, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
+            AvKit.Label(parent, "ALLOCATION BUDGET", new Rect(Pad + AvTokens.Space2, y - 2f, 160f, 14f),
+                        AvTheme.Dim, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
 
-            allocationLabel = Label(parent, "0 ALLOC", new Rect(Pad + AvionicsUiPalette.Space2, y - 16f, 150f, 18f),
-                Accent(), AvionicsUiPalette.FontLead, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
+            allocationLabel = AvKit.Label(parent, "0 ALLOC", new Rect(Pad + AvTokens.Space2, y - 16f, 170f, 18f),
+                                          AvTheme.Accent, AvTokens.FontLead, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
 
             // Target section
-            Label(parent, "DESIGNATED STRIKE TARGET", new Rect(Pad + 170f, y - 2f, inner - 178f, 14f),
-                AvionicsUiPalette.TextDim, AvionicsUiPalette.FontNano, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
+            AvKit.Label(parent, "DESIGNATED STRIKE TARGET", new Rect(Pad + 188f, y - 2f, inner - 196f, 14f),
+                        AvTheme.Dim, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
 
-            targetLabel = Label(parent, "NO TARGET — DESIGNATE GRID ON MAXIMISED MAP",
-                new Rect(Pad + 170f, y - 16f, inner - 178f, 18f),
-                AvionicsUiPalette.TextWarning, AvionicsUiPalette.FontNano, FontStyles.Bold,
-                TextAlignmentOptions.MidlineLeft);
+            targetLabel = AvKit.Label(parent, "NO TARGET — DESIGNATE GRID ON MAXIMISED MAP",
+                                      new Rect(Pad + 188f, y - 16f, inner - 196f, 18f),
+                                      AvTheme.Friendly, AvTokens.FontMicro, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
 
-            y -= RibbonHeight + AvionicsUiPalette.Space2;
+            // Bottom: cooldown readiness bar with caption
+            float barX = Pad + AvTokens.Space2;
+            float barW = inner - AvTokens.Space2 * 2f;
+            cooldownCaptionLabel = AvKit.Label(parent, "SUPPORT NET READY",
+                                               new Rect(barX, y - ribbonH + 5f, 150f, 10f),
+                                               AvTheme.RailReady, AvTokens.FontMicro, FontStyles.Bold,
+                                               TextAlignmentOptions.MidlineLeft);
+            AvKit.Label(parent, "REQUEST COOLDOWN",
+                        new Rect(barX + 158f, y - ribbonH + 5f, barW - 174f, 10f),
+                        AvTheme.Dim, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineRight);
+
+            cooldownBarFill = AvKit.ProgressBar(parent, new Rect(barX, y - ribbonH + 2f, barW, 6f), 1f, AvTheme.RailReady);
+
+            y -= ribbonH + AvTokens.Space2;
 
             // Dual Column Grid (3 rows × 2 cols = 6 cards)
             float colWidth = (inner - Gap) * 0.5f;
-            const float cardH = 76f;
+            const float cardH = 88f;
             const float pitch = cardH + 6f;
 
             IReadOnlyList<SupportActionDefinition> actions = support.Actions;
@@ -513,133 +531,92 @@ namespace BoscaliSummer.Features.Support.Presentation
                 float bx = Pad + col * (colWidth + Gap);
                 float by = y - row * pitch;
 
-                AddSupportCard(parent, actions[i], AccentFor(actions[i].Id), bx, by, colWidth, cardH);
+                AddSupportCard(parent, actions[i], bx, by, colWidth, cardH);
             }
         }
 
         private void AddSupportCard(
-            RectTransform parent, SupportActionDefinition definition, Color accent,
+            RectTransform parent, SupportActionDefinition definition,
             float x, float y, float w, float h)
         {
-            var root = new GameObject("SupportCard_" + definition.Id, typeof(RectTransform), typeof(Image));
-            RectTransform rect = root.GetComponent<RectTransform>();
-            rect.SetParent(parent, false);
-            Place(rect, new Rect(x, y, w, h));
+            var (cardFill, rail) = AvKit.TacticalCard(parent, new Rect(x, y, w, h), AvTheme.RailInert);
+            RectTransform rect = cardFill.rectTransform;
 
-            Image bg = root.GetComponent<Image>();
-            bg.color = AvionicsUiPalette.SurfaceCard;
-            Outline(rect, new Rect(0f, 0f, w, h), AvionicsUiPalette.Frame);
-            Image rail = Rule(rect, new Rect(0f, 0f, 4f, h), accent);
+            // Title line: action type glyph + name
+            string titleText = ActionGlyph(definition.Id) + " " + definition.Name;
+            TMP_Text nameLabel = AvKit.Label(rect, titleText,
+                new Rect(AvTokens.Space2, -3f, w - 84f, 18f),
+                AvTheme.TextPrimary, AvTokens.FontSmall, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
 
-            // Title & Cost
-            TMP_Text nameLabel = Label(rect, definition.Name,
-                new Rect(AvionicsUiPalette.Space2, -3f, w - 80f, 18f),
-                AvionicsUiPalette.TextPrimary, AvionicsUiPalette.FontSmall, FontStyles.Bold,
-                TextAlignmentOptions.MidlineLeft);
-
-            TMP_Text costChip = Label(rect, string.Empty,
-                new Rect(w - 76f, -3f, 70f, 18f),
-                accent, AvionicsUiPalette.FontMicro, FontStyles.Bold, TextAlignmentOptions.MidlineRight);
+            // Cost chip: coloured by affordability, right-aligned
+            TMP_Text costChip = AvKit.Label(rect, string.Empty,
+                new Rect(w - 80f, -4f, 74f, 16f),
+                AvTheme.Accent, AvTokens.FontMicro, FontStyles.Bold, TextAlignmentOptions.MidlineRight);
 
             // Required Authorisation Status
-            TMP_Text authStatus = Label(rect, string.Empty,
-                new Rect(AvionicsUiPalette.Space2, -20f, w - AvionicsUiPalette.Space3, 14f),
-                AvionicsUiPalette.TextDim, AvionicsUiPalette.FontNano, FontStyles.Normal,
-                TextAlignmentOptions.MidlineLeft);
+            TMP_Text authStatus = AvKit.Label(rect, string.Empty,
+                new Rect(AvTokens.Space2, -22f, w - AvTokens.Space3, 14f),
+                AvTheme.Dim, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
 
-            // Description
-            TMP_Text desc = Label(rect, definition.Description,
-                new Rect(AvionicsUiPalette.Space2, -34f, w - AvionicsUiPalette.Space3, 16f),
-                AvionicsUiPalette.TextDim, AvionicsUiPalette.FontNano, FontStyles.Normal,
-                TextAlignmentOptions.MidlineLeft);
+            // Description (word wrapping enabled, 2-line flow)
+            TMP_Text desc = AvKit.Label(rect, definition.Description,
+                new Rect(AvTokens.Space2, -37f, w - AvTokens.Space3, 30f),
+                AvTheme.Dim, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft, wrap: true);
 
-            // Status readout & Request Button
-            TMP_Text stateLabel = Label(rect, string.Empty,
-                new Rect(AvionicsUiPalette.Space2, -52f, w - 90f, 20f),
-                Friendly(), AvionicsUiPalette.FontNano, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
+            // Status readout
+            TMP_Text stateLabel = AvKit.Label(rect, string.Empty,
+                new Rect(AvTokens.Space2, -70f, w - 94f, 18f),
+                AvTheme.Friendly, AvTokens.FontMicro, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
 
             SupportActionId id = definition.Id;
-            Button request = MakeActionButton(rect, "REQUEST",
-                new Rect(w - 82f, -52f, 78f, 20f),
-                accent, () => { support.Request(id); nextRefresh = 0f; }, out TMP_Text requestLabel);
+            AvButton request = AvKit.Button(rect, "REQUEST",
+                new Rect(w - 88f, -69f, 84f, 20f),
+                () => { support.Request(id); nextRefresh = 0f; },
+                AvTokens.FontMicro, AvButtonStyle.Primary);
 
-            var hover = root.AddComponent<OpsHoverTrigger>();
-            hover.OnEnter = () =>
-            {
-                bg.color = AvionicsUiPalette.SurfaceCardHover;
-                string tooltip = "[SUPPORT] " + definition.Name + " · " +
-                    support.Cost(definition).ToString("0") + " ALLOC\n" + definition.Description +
-                    "\nAuthorised by '" + progression.PerkNameFor(definition.Capability) + "' perk.";
-                SetHoverTooltip(tooltip);
-            };
-            hover.OnExit = () =>
-            {
-                bg.color = AvionicsUiPalette.SurfaceCard;
-                ClearHoverTooltip();
-            };
+            string tooltip = "[SUPPORT] " + definition.Name + " · " +
+                support.Cost(definition).ToString("0") + " ALLOC\n" + definition.Description +
+                "\nAuthorised by '" + progression.PerkNameFor(definition.Capability) + "' perk.";
+            request.WithTooltip(tooltip);
 
             supportCards.Add(new SupportCard
             {
                 Definition = definition,
-                Root = root,
+                Root = cardFill.gameObject,
                 RequestButton = request,
-                RequestLabel = requestLabel,
                 Rail = rail,
-                Background = bg,
+                Background = cardFill,
                 Name = nameLabel,
                 CostChip = costChip,
                 AuthStatus = authStatus,
                 Description = desc,
                 StateLabel = stateLabel,
-                Accent = accent
             });
-        }
-
-        // ---- Tactical Telemetry Terminal -------------------------------------------------
-
-        private void BuildTelemetryTerminal(RectTransform parent, float inner, float y)
-        {
-            TacticalCard(parent, new Rect(Pad, y, inner, TerminalHeight), AvionicsUiPalette.RailEmerald);
-
-            // Terminal Header
-            Label(parent, "> TACTICAL TELEMETRY // OPERATIONS INTEL",
-                new Rect(Pad + AvionicsUiPalette.Space3, y - 2f, inner - AvionicsUiPalette.Space4, 14f),
-                Accent(), AvionicsUiPalette.FontNano, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
-
-            Rule(parent, new Rect(Pad + AvionicsUiPalette.Space3, y - 16f, inner - AvionicsUiPalette.Space4 - AvionicsUiPalette.Space2, 1f),
-                AvionicsUiPalette.BorderSubtle);
-
-            telemetryLabel = Label(parent, string.Empty,
-                new Rect(Pad + AvionicsUiPalette.Space3, y - 18f, inner - AvionicsUiPalette.Space4 - AvionicsUiPalette.Space2, TerminalHeight - 20f),
-                Friendly(), AvionicsUiPalette.FontMicro, FontStyles.Normal, TextAlignmentOptions.TopLeft);
-            telemetryLabel.enableWordWrapping = true;
-            telemetryLabel.overflowMode = TextOverflowModes.Ellipsis;
-        }
-
-        private void SetHoverTooltip(string tooltip)
-        {
-            activeHoverTooltip = tooltip;
-            UpdateTelemetry();
-        }
-
-        private void ClearHoverTooltip()
-        {
-            activeHoverTooltip = null;
-            UpdateTelemetry();
         }
 
         private void UpdateTelemetry()
         {
             if (telemetryLabel == null) return;
-            if (!string.IsNullOrEmpty(activeHoverTooltip))
+            string hovered = AvButton.HoveredTooltip;
+            if (!string.IsNullOrEmpty(hovered))
             {
-                telemetryLabel.text = activeHoverTooltip;
-                telemetryLabel.color = Friendly();
+                telemetryLabel.text = "> " + hovered;
+                telemetryLabel.color = AvTheme.Friendly;
                 return;
             }
-            telemetryLabel.text = (progression != null ? progression.Status : "") + "\n" +
-                                 (support != null ? support.Status : "");
-            telemetryLabel.color = AvionicsUiPalette.TextDim;
+            if (!string.IsNullOrEmpty(activeHoverTooltip))
+            {
+                telemetryLabel.text = "> " + activeHoverTooltip;
+                telemetryLabel.color = AvTheme.Friendly;
+                return;
+            }
+            string fireTelemetry = support != null ? support.FireTelemetry : string.Empty;
+            string baseTelemetry = (progression != null ? progression.Status : "") + " · " +
+                                   (support != null ? support.Status : "");
+            telemetryLabel.text = "> " + (string.IsNullOrEmpty(fireTelemetry)
+                ? baseTelemetry
+                : baseTelemetry + " · " + fireTelemetry);
+            telemetryLabel.color = AvTheme.Dim;
         }
 
         // ---- State Refresh ---------------------------------------------------------------
@@ -659,7 +636,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             // count never moves and every card reads as takeable. Say which mode is on.
             bool bypass = support.BypassRequirements;
             scoreLabel.text = bypass ? "DEBUG BYPASS ACTIVE" : "SCORE " + score.ToString("N0");
-            scoreLabel.color = bypass ? AvionicsUiPalette.TextWarning : Friendly();
+            scoreLabel.color = bypass ? AvTheme.Warning : AvTheme.Friendly;
             // The ceiling is configurable, so the readout reads it rather than assuming the
             // shipped default — a server running MaximumPoints=10 used to show "6 OF 6" while
             // the pilot still had points to spend.
@@ -671,16 +648,26 @@ namespace BoscaliSummer.Features.Support.Presentation
                 ? "FREE"
                 : avail + (avail == 1 ? " PT AVAILABLE" : " PTS AVAILABLE");
 
-            // Tactical pips: [■] available unspent, [▣] spent/unlocked, [□] unearned. Capped so
-            // a generous ceiling cannot overrun the ribbon.
-            string pips = string.Empty;
-            for (int p = 0; p < Math.Min(ceiling, 12); p++)
+            // Real pip meter
+            if (pipMeterArea != null)
             {
-                if (p < avail) pips += "■ ";
-                else if (p < earned) pips += "▣ ";
-                else pips += "□ ";
+                for (int c = pipMeterArea.childCount - 1; c >= 0; c--)
+                    UnityEngine.Object.Destroy(pipMeterArea.GetChild(c).gameObject);
+                AvKit.PipMeter(pipMeterArea, new Rect(0f, 0f, 140f, 8f), avail, Math.Min(ceiling, 10), AvTheme.RailReady, AvTheme.Disabled);
             }
-            pointsPipLabel.text = pips.TrimEnd();
+
+            // Score → next point progress bar. Shows fractional progress within the current
+            // point so the pilot sees how close the next perk point is without doing the
+            // division themselves.
+            if (scoreBarFill != null && progressCaptionLabel != null)
+            {
+                int perPoint = Math.Max(1, progression.ScorePerPoint);
+                int intoPoint = score % perPoint;
+                scoreBarFill.fillAmount = Mathf.Clamp01(intoPoint / (float)perPoint);
+                scoreBarFill.color = bypass ? AvTheme.Warning : AvTheme.RailReady;
+                progressCaptionLabel.text = bypass ? "—" : (perPoint - intoPoint) + " SCORE TO NEXT PT";
+                progressCaptionLabel.color = bypass ? AvTheme.Warning : AvTheme.TextPrimary;
+            }
 
             // Refresh individual Perk Cards
             PerkView[] perks = progression.GetPerks();
@@ -689,31 +676,31 @@ namespace BoscaliSummer.Features.Support.Presentation
                 PerkCard card = perkCards[i];
                 if (!TryFind(perks, card.Id, out PerkView view)) continue;
 
-                card.Button.interactable = view.Affordable && !view.Unlocked;
+                card.Button.SetEnabled(view.Affordable && !view.Unlocked);
 
                 if (view.Unlocked)
                 {
-                    card.Background.color = AvionicsUiPalette.SurfaceActive;
-                    card.Rail.color = AvionicsUiPalette.RailEmerald;
-                    card.Name.color = AvionicsUiPalette.TextPrimary;
+                    card.Background.color = AvTheme.SurfaceRaised;
+                    card.Rail.color = AvTheme.RailReady;
+                    card.Name.color = AvTheme.TextPrimary;
                     card.Badge.text = "ACTIVE ✓";
-                    card.Badge.color = AvionicsUiPalette.RailEmerald;
+                    card.Badge.color = AvTheme.RailReady;
                 }
                 else if (view.Affordable)
                 {
-                    card.Background.color = AvionicsUiPalette.SurfaceCard;
-                    card.Rail.color = AvionicsUiPalette.RailAmber;
-                    card.Name.color = Friendly();
+                    card.Background.color = AvTheme.Surface;
+                    card.Rail.color = AvTheme.RailCaution;
+                    card.Name.color = AvTheme.Friendly;
                     card.Badge.text = "UNLOCK " + view.Cost + "P";
-                    card.Badge.color = AvionicsUiPalette.RailAmber;
+                    card.Badge.color = AvTheme.RailCaution;
                 }
                 else
                 {
-                    card.Background.color = AvionicsUiPalette.SurfaceInert;
-                    card.Rail.color = AvionicsUiPalette.RailInert;
-                    card.Name.color = AvionicsUiPalette.TextDim;
+                    card.Background.color = AvTheme.SurfaceInert;
+                    card.Rail.color = AvTheme.RailInert;
+                    card.Name.color = AvTheme.Dim;
                     card.Badge.text = view.Cost + "P REQ";
-                    card.Badge.color = AvionicsUiPalette.TextDim;
+                    card.Badge.color = AvTheme.Dim;
                 }
             }
 
@@ -736,14 +723,35 @@ namespace BoscaliSummer.Features.Support.Presentation
                 }
                 string name = armedDef != null ? armedDef.Name : "SUPPORT";
                 targetLabel.text = "ARMED: " + name + "  [RIGHT-CLICK MAP TO CALL IN · ESC TO CANCEL]";
-                targetLabel.color = AvionicsUiPalette.RailAmber;
+                targetLabel.color = AvTheme.RailCaution;
             }
             else
             {
                 targetLabel.text = support.DisableCooldowns
                     ? "NO COOLDOWNS · SELECT OPTION, RIGHT-CLICK MAP"
                     : "SELECT SUPPORT OPTION BELOW, THEN RIGHT-CLICK ON MAP";
-                targetLabel.color = support.DisableCooldowns ? AvionicsUiPalette.RailAmber : Friendly();
+                targetLabel.color = support.DisableCooldowns ? AvTheme.RailCaution : AvTheme.Friendly;
+            }
+
+            // Cooldown readiness bar: fills toward ready as the shared request cooldown drains.
+            float netCooldown = support.LocalCooldownRemaining;
+            float netTotal = support.LocalCooldownTotal;
+            if (cooldownBarFill != null && cooldownCaptionLabel != null)
+            {
+                if (netCooldown > 0.5f && netTotal > 0f)
+                {
+                    cooldownBarFill.fillAmount = Mathf.Clamp01(1f - netCooldown / netTotal);
+                    cooldownBarFill.color = AvTheme.RailCaution;
+                    cooldownCaptionLabel.text = "NET RECHARGING · T-" + Mathf.CeilToInt(netCooldown) + "s";
+                    cooldownCaptionLabel.color = AvTheme.RailCaution;
+                }
+                else
+                {
+                    cooldownBarFill.fillAmount = 1f;
+                    cooldownBarFill.color = support.DisableCooldowns ? AvTheme.RailInfo : AvTheme.RailReady;
+                    cooldownCaptionLabel.text = support.DisableCooldowns ? "NO COOLDOWN LIMIT" : "SUPPORT NET READY";
+                    cooldownCaptionLabel.color = support.DisableCooldowns ? AvTheme.RailInfo : AvTheme.RailReady;
+                }
             }
 
             // Refresh Support Action Cards
@@ -758,43 +766,65 @@ namespace BoscaliSummer.Features.Support.Presentation
                 if (isAuth)
                 {
                     card.AuthStatus.text = "AUTH: " + progression.PerkNameFor(card.Definition.Capability).ToUpperInvariant() + " ✓";
-                    card.AuthStatus.color = AvionicsUiPalette.RailEmerald;
+                    card.AuthStatus.color = AvTheme.RailReady;
                 }
                 else
                 {
                     card.AuthStatus.text = "LOCKED: REQ '" + progression.PerkNameFor(card.Definition.Capability).ToUpperInvariant() + "'";
-                    card.AuthStatus.color = AvionicsUiPalette.TextWarning;
+                    card.AuthStatus.color = AvTheme.Warning;
                 }
 
                 bool isArmed = support.ArmedAction.HasValue && support.ArmedAction.Value == card.Definition.Id;
 
                 if (!card.Definition.Enabled)
                 {
-                    SetActionState(card, "SERVER DISABLED", "OFF", 0.25f, false);
+                    SetActionState(card, "SERVER DISABLED", "OFF", AvTheme.RailInert, false);
                 }
                 else if (cost <= 0f)
                 {
-                    SetActionState(card, "UNAVAILABLE ON MAP", "N/A", 0.25f, false);
+                    SetActionState(card, "UNAVAILABLE ON MAP", "N/A", AvTheme.RailInert, false);
                 }
                 else if (!isAuth)
                 {
-                    SetActionState(card, "AUTHORISATION REQ", "LOCKED", 0.35f, false);
+                    SetActionState(card, "AUTHORISATION REQ", "LOCKED", AvTheme.RailCaution, false);
                 }
                 else if (cooldown > 0.5f)
                 {
-                    SetActionState(card, "COOLING DOWN", "WAIT " + Mathf.CeilToInt(cooldown) + "s", 0.6f, false);
+                    SetActionState(card, "NET COOLING DOWN", "WAIT " + Mathf.CeilToInt(cooldown) + "s", AvTheme.RailCaution, false);
                 }
                 else if (!support.BypassRequirements && allocation + 0.001f < cost)
                 {
-                    SetActionState(card, "INSUFFICIENT ALLOC", "NO ALLOC", 0.6f, false);
+                    SetActionState(card, "INSUFFICIENT ALLOC", "NO ALLOC", AvTheme.RailDanger, false);
                 }
                 else if (isArmed)
                 {
-                    SetActionState(card, "ARMED · RIGHT-CLICK MAP", "ARMED", 1f, true, isArmed: true);
+                    SetActionState(card, "ARMED · RIGHT-CLICK MAP", "ARMED", AvTheme.RailCaution, true, isArmed: true);
                 }
                 else
                 {
-                    SetActionState(card, "CLEARED TO CALL IN", "CALL IN", 1f, true);
+                    SetActionState(card, "CLEARED TO CALL IN", "CALL IN", AvTheme.RailReady, true);
+                }
+
+                // Cost chip colour tracks affordability, independent of rail state.
+                if (!card.Definition.Enabled || cost <= 0f)
+                {
+                    card.CostChip.color = AvTheme.RailInert;
+                }
+                else if (!isAuth)
+                {
+                    card.CostChip.color = AvTheme.Warning;
+                }
+                else if (!support.BypassRequirements && allocation + 0.001f < cost)
+                {
+                    card.CostChip.color = AvTheme.RailDanger;
+                }
+                else if (isArmed)
+                {
+                    card.CostChip.color = AvTheme.RailCaution;
+                }
+                else
+                {
+                    card.CostChip.color = AvTheme.RailReady;
                 }
             }
 
@@ -805,20 +835,16 @@ namespace BoscaliSummer.Features.Support.Presentation
         }
 
         private static void SetActionState(
-            SupportCard card, string state, string button, float railAlpha, bool ready, bool isArmed = false)
+            SupportCard card, string state, string button, Color railColor, bool ready, bool isArmed = false)
         {
-            Color railColor = isArmed ? AvionicsUiPalette.RailAmber : card.Accent;
-            card.Rail.color = AvionicsUiPalette.WithAlpha(railColor, railAlpha);
+            card.Rail.color = railColor;
             card.StateLabel.text = state;
             card.StateLabel.color = isArmed
-                ? AvionicsUiPalette.RailAmber
-                : (ready ? AvionicsUiPalette.RailEmerald : AvionicsUiPalette.TextWarning);
-            card.RequestLabel.text = button;
-            card.RequestLabel.color = isArmed
-                ? AvionicsUiPalette.RailAmber
-                : (ready ? AvionicsUiPalette.TextPrimary : AvionicsUiPalette.TextDim);
-            card.CostChip.color = ready ? card.Accent : AvionicsUiPalette.TextDim;
-            card.RequestButton.interactable = ready;
+                ? AvTheme.RailCaution
+                : (ready ? AvTheme.RailReady : AvTheme.Warning);
+            card.RequestButton.SetText(button);
+            card.RequestButton.SetEnabled(ready || isArmed);
+            card.RequestButton.SetLatched(isArmed);
         }
 
         private static bool TryFind(PerkView[] perks, byte id, out PerkView view)
@@ -835,18 +861,6 @@ namespace BoscaliSummer.Features.Support.Presentation
             return false;
         }
 
-        // ---- Palette Helpers -------------------------------------------------------------
-
-        private static Color AccentFor(SupportActionId id)
-        {
-            switch (id)
-            {
-                case SupportActionId.Artillery: return AvionicsUiPalette.RailAmber;
-                case SupportActionId.Fortify: return AvionicsUiPalette.RailEmerald;
-                default: return AvionicsUiPalette.RailCyan;
-            }
-        }
-
         // ---- Tabs & Navigation -----------------------------------------------------------
 
         private void ShowPerks()
@@ -855,7 +869,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             supportPage?.SetActive(false);
             theaterPage?.SetActive(false);
             SetTabHighlight(0);
-            ClearHoverTooltip();
+            activeHoverTooltip = null;
             nextRefresh = 0f;
         }
 
@@ -865,7 +879,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             supportPage?.SetActive(true);
             theaterPage?.SetActive(false);
             SetTabHighlight(1);
-            ClearHoverTooltip();
+            activeHoverTooltip = null;
             nextRefresh = 0f;
         }
 
@@ -875,115 +889,15 @@ namespace BoscaliSummer.Features.Support.Presentation
             supportPage?.SetActive(false);
             theaterPage?.SetActive(true);
             SetTabHighlight(2);
-            ClearHoverTooltip();
+            activeHoverTooltip = null;
             nextRefresh = 0f;
         }
 
         private void SetTabHighlight(int active)
         {
-            PaintTab(perksTab, perksTabLabel, perksUnderline, active == 0);
-            PaintTab(supportTab, supportTabLabel, supportUnderline, active == 1);
-            PaintTab(theaterTab, theaterTabLabel, theaterUnderline, active == 2);
-        }
-
-        private void PaintTab(Button tab, TMP_Text label, Image underline, bool active)
-        {
-            if (tab == null) return;
-            tab.colors = TabColors(active);
-            if (label != null) label.color = active ? AvionicsUiPalette.TextPrimary : Accent();
-            if (underline != null) underline.color = active ? Accent() : Color.clear;
-        }
-
-        private static ColorBlock TabColors(bool active)
-        {
-            Color accent = Accent();
-            return new ColorBlock
-            {
-                normalColor = active
-                    ? AvionicsUiPalette.WithAlpha(accent, 0.30f)
-                    : AvionicsUiPalette.SurfaceCard,
-                highlightedColor = AvionicsUiPalette.WithAlpha(accent, 0.45f),
-                pressedColor = AvionicsUiPalette.WithAlpha(accent, 0.65f),
-                selectedColor = active
-                    ? AvionicsUiPalette.WithAlpha(accent, 0.30f)
-                    : AvionicsUiPalette.SurfaceCard,
-                disabledColor = new Color(0.03f, 0.05f, 0.06f, 0.5f),
-                colorMultiplier = 1f,
-                fadeDuration = 0.06f
-            };
-        }
-
-        private Button MakeTabButton(
-            RectTransform parent, string text, Rect area, Action action,
-            out TMP_Text label, out Image underline)
-        {
-            var root = new GameObject(text + "Tab", typeof(RectTransform), typeof(Image), typeof(Button));
-            RectTransform rect = root.GetComponent<RectTransform>();
-            rect.SetParent(parent, false);
-            Place(rect, area);
-
-            Image image = root.GetComponent<Image>();
-            image.color = AvionicsUiPalette.SurfaceCard;
-
-            Button button = root.GetComponent<Button>();
-            button.targetGraphic = image;
-            button.navigation = new Navigation { mode = Navigation.Mode.None };
-            button.onClick.AddListener(() =>
-            {
-                Deselect(root);
-                action?.Invoke();
-            });
-
-            Outline(rect, new Rect(0f, 0f, area.width, area.height),
-                AvionicsUiPalette.WithAlpha(Accent(), 0.5f));
-            underline = Rule(rect, new Rect(0f, -(area.height - 3f), area.width, 3f), Color.clear);
-            label = Label(rect, text, new Rect(0f, 0f, area.width, area.height),
-                Accent(), AvionicsUiPalette.FontSmall, FontStyles.Bold, TextAlignmentOptions.Center);
-            return button;
-        }
-
-        private Button MakeActionButton(
-            RectTransform parent, string text, Rect area, Color accent, Action action, out TMP_Text label)
-        {
-            var root = new GameObject("ActionBtn", typeof(RectTransform), typeof(Image), typeof(Button));
-            RectTransform rect = root.GetComponent<RectTransform>();
-            rect.SetParent(parent, false);
-            Place(rect, area);
-
-            Image image = root.GetComponent<Image>();
-            image.color = AvionicsUiPalette.WithAlpha(accent, 0.25f);
-
-            Button button = root.GetComponent<Button>();
-            button.targetGraphic = image;
-            button.navigation = new Navigation { mode = Navigation.Mode.None };
-            button.colors = new ColorBlock
-            {
-                normalColor = AvionicsUiPalette.WithAlpha(accent, 0.25f),
-                highlightedColor = AvionicsUiPalette.WithAlpha(accent, 0.45f),
-                pressedColor = AvionicsUiPalette.WithAlpha(accent, 0.65f),
-                selectedColor = AvionicsUiPalette.WithAlpha(accent, 0.25f),
-                disabledColor = new Color(0.04f, 0.06f, 0.07f, 0.6f),
-                colorMultiplier = 1f,
-                fadeDuration = 0.06f
-            };
-            button.onClick.AddListener(() =>
-            {
-                Deselect(root);
-                action?.Invoke();
-            });
-
-            Outline(rect, new Rect(0f, 0f, area.width, area.height),
-                AvionicsUiPalette.WithAlpha(accent, 0.8f));
-            label = Label(rect, text, new Rect(0f, 0f, area.width, area.height),
-                AvionicsUiPalette.TextPrimary, AvionicsUiPalette.FontNano, FontStyles.Bold,
-                TextAlignmentOptions.Center);
-            return button;
-        }
-
-        private static void Deselect(GameObject root)
-        {
-            if (EventSystem.current != null && EventSystem.current.currentSelectedGameObject == root)
-                EventSystem.current.SetSelectedGameObject(null);
+            perksTab?.SetLatched(active == 0);
+            supportTab?.SetLatched(active == 1);
+            theaterTab?.SetLatched(active == 2);
         }
 
         private static GameObject CreatePage(RectTransform parent, string name)
@@ -991,49 +905,8 @@ namespace BoscaliSummer.Features.Support.Presentation
             var page = new GameObject(name, typeof(RectTransform));
             RectTransform rect = page.GetComponent<RectTransform>();
             rect.SetParent(parent, false);
-            Stretch(rect);
+            AvKit.Stretch(rect);
             return page;
-        }
-
-        private TMP_Text Label(
-            RectTransform parent, string text, Rect area, Color color, float size,
-            FontStyles style, TextAlignmentOptions alignment)
-        {
-            var root = new GameObject("Label", typeof(RectTransform), typeof(TextMeshProUGUI));
-            RectTransform rect = root.GetComponent<RectTransform>();
-            rect.SetParent(parent, false);
-            Place(rect, area);
-
-            TextMeshProUGUI label = root.GetComponent<TextMeshProUGUI>();
-            label.text = text;
-            label.color = color;
-            label.fontSize = size;
-            label.fontStyle = style;
-            label.alignment = alignment;
-            label.enableWordWrapping = false;
-            label.overflowMode = TextOverflowModes.Ellipsis;
-            label.raycastTarget = false;
-            if (font != null) label.font = font;
-            return label;
-        }
-
-        private static void Place(RectTransform target, Rect area)
-        {
-            target.anchorMin = new Vector2(0f, 1f);
-            target.anchorMax = new Vector2(0f, 1f);
-            target.pivot = new Vector2(0f, 1f);
-            target.anchoredPosition = new Vector2(area.x, area.y);
-            target.sizeDelta = new Vector2(area.width, area.height);
-            target.localScale = Vector3.one;
-        }
-
-        private static void Stretch(RectTransform target)
-        {
-            target.anchorMin = Vector2.zero;
-            target.anchorMax = Vector2.one;
-            target.offsetMin = Vector2.zero;
-            target.offsetMax = Vector2.zero;
-            target.localScale = Vector3.one;
         }
 
         private static Image FindHighlight(Button button)
@@ -1043,81 +916,6 @@ namespace BoscaliSummer.Features.Support.Presentation
             for (int i = 0; i < images.Length; i++)
                 if (images[i].gameObject != button.gameObject) return images[i];
             return button.GetComponent<Image>();
-        }
-
-        private static Image Panel(RectTransform parent, Rect area, Color color)
-        {
-            var root = new GameObject("Panel", typeof(RectTransform), typeof(Image));
-            RectTransform rect = root.GetComponent<RectTransform>();
-            rect.SetParent(parent, false);
-            Place(rect, area);
-            Image image = root.GetComponent<Image>();
-            image.color = color;
-            image.raycastTarget = false;
-            return image;
-        }
-
-        private static void FramedPanel(RectTransform parent, Rect area, Color frameColor, Color fillColor)
-        {
-            Panel(parent, area, fillColor);
-            Outline(parent, area, frameColor);
-        }
-
-        private static void Outline(RectTransform parent, Rect area, Color color)
-        {
-            const float t = 1f;
-            Rule(parent, new Rect(area.x, area.y, area.width, t), color);
-            Rule(parent, new Rect(area.x, area.y - area.height + t, area.width, t), color);
-            Rule(parent, new Rect(area.x, area.y, t, area.height), color);
-            Rule(parent, new Rect(area.x + area.width - t, area.y, t, area.height), color);
-        }
-
-        private static Image Rule(RectTransform parent, Rect area, Color color) => Panel(parent, area, color);
-
-        private static (Image Background, TMP_Text Label) StatusChip(
-            RectTransform parent, string text, Rect rect, Color railColor, Color textColor, float fontSize = AvionicsUiPalette.FontNano)
-        {
-            var go = new GameObject("StatusChip", typeof(RectTransform), typeof(Image));
-            var rt = go.GetComponent<RectTransform>();
-            rt.SetParent(parent, false);
-            Place(rt, rect);
-
-            Image bg = go.GetComponent<Image>();
-            bg.raycastTarget = false;
-            bg.color = new Color(railColor.r * 0.15f, railColor.g * 0.15f, railColor.b * 0.15f, 0.85f);
-
-            Outline(parent, rect, new Color(railColor.r, railColor.g, railColor.b, 0.45f));
-
-            var lblGo = new GameObject("ChipLabel", typeof(RectTransform), typeof(TextMeshProUGUI));
-            var lRt = lblGo.GetComponent<RectTransform>();
-            lRt.SetParent(parent, false);
-            Place(lRt, rect);
-            var label = lblGo.GetComponent<TextMeshProUGUI>();
-            label.text = text;
-            label.color = textColor;
-            label.fontSize = fontSize;
-            label.fontStyle = FontStyles.Bold;
-            label.alignment = TextAlignmentOptions.Center;
-            label.raycastTarget = false;
-            return (bg, label);
-        }
-
-        private static Image TacticalCard(RectTransform parent, Rect area, Color railColor)
-        {
-            FramedPanel(parent, area, AvionicsUiPalette.BorderSubtle, AvionicsUiPalette.SurfaceCard);
-            return Rule(parent, new Rect(area.x, area.y, 3f, area.height), railColor);
-        }
-
-        private static Color Accent()
-        {
-            try { return ThemeManager.Active.ColorTheme.AllClear; }
-            catch { return new Color(0.30f, 1f, 0.35f); }
-        }
-
-        private static Color Friendly()
-        {
-            try { return ThemeManager.Active.ColorTheme.MapIconFriendly; }
-            catch { return new Color(0.45f, 0.95f, 0.55f); }
         }
     }
 }

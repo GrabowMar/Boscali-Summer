@@ -15,18 +15,38 @@ namespace BoscaliSummer.Features.Support.Runtime
         public static bool TryGround(GlobalPosition target, out Vector3 ground)
         {
             ground = default;
-            Vector3 local = target.ToLocalPosition();
-            Vector3 origin = new Vector3(local.x, Mathf.Max(local.y, Datum.LocalSeaY) + 3000f, local.z);
-            if (!Physics.Raycast(origin, Vector3.down, out RaycastHit hit, 6000f,
-                (int)PhysicsLayers.StaticsMask | (int)PhysicsLayers.ShipsMask))
+            if (!TryMapPoint(target, out Vector3 hit) || hit.y <= Datum.LocalSeaY + 2f)
                 return false;
-            if (hit.point.y <= Datum.LocalSeaY + 2f) return false;
-            if (Vector3.Angle(hit.normal, Vector3.up) > 35f) return false;
+            if (!Physics.Raycast(
+                    new Vector3(hit.x, hit.y + 4f, hit.z), Vector3.down, out RaycastHit sample, 16f,
+                    (int)PhysicsLayers.StaticsMask | (int)PhysicsLayers.ShipsMask))
+                return false;
+            if (Vector3.Angle(sample.normal, Vector3.up) > 35f) return false;
 
             int blockers = (int)PhysicsLayers.DefaultMask | (int)PhysicsLayers.ShipsMask |
                 (int)PhysicsLayers.ExclusionZonesMask;
-            if (Physics.CheckSphere(hit.point + Vector3.up * 12f, 6f, blockers)) return false;
-            ground = hit.point;
+            if (Physics.CheckSphere(hit + Vector3.up * 12f, 6f, blockers)) return false;
+            ground = hit;
+            return true;
+        }
+
+        /// <summary>
+        /// Map click to a world point. EMP and kinetic strikes need an XZ, not a buildable
+        /// pad: slope and nearby units used to reject the first click as InvalidTarget, and
+        /// the missile then never left the ground.
+        /// </summary>
+        public static bool TryMapPoint(GlobalPosition target, out Vector3 point)
+        {
+            Vector3 local = target.ToLocalPosition();
+            Vector3 origin = new Vector3(local.x, Mathf.Max(local.y, Datum.LocalSeaY) + 8000f, local.z);
+            if (Physics.Raycast(origin, Vector3.down, out RaycastHit hit, 16000f,
+                (int)PhysicsLayers.StaticsMask | (int)PhysicsLayers.ShipsMask))
+            {
+                point = hit.point;
+                return true;
+            }
+
+            point = new Vector3(local.x, Mathf.Max(local.y, Datum.LocalSeaY), local.z);
             return true;
         }
 

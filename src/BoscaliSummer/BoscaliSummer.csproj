@@ -42,6 +42,7 @@
     <Reference Include="UnityEngine.UnityWebRequestAudioModule"><HintPath>$(ManagedDir)\UnityEngine.UnityWebRequestAudioModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Unity.RenderPipelines.Universal.Runtime"><HintPath>$(ManagedDir)\Unity.RenderPipelines.Universal.Runtime.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.AnimationModule"><HintPath>$(ManagedDir)\UnityEngine.AnimationModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.IMGUIModule"><HintPath>$(ManagedDir)\UnityEngine.IMGUIModule.dll</HintPath><Private>false</Private></Reference>
   </ItemGroup>
 
   <ItemGroup>
@@ -49,6 +50,7 @@
          Wing Command can coordinate bezels and map gestures without a shared DLL. -->
     <Compile Include="..\..\..\nomodkit\shared\avionics\*.cs" Link="Avionics\%(Filename)%(Extension)"
              Exclude="..\..\..\nomodkit\shared\avionics\*Tests.cs" />
+    <Compile Include="..\..\..\nomodkit\shared\avionics-ui\*.cs" Link="AvionicsUi\%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup Label="Radio station assets">

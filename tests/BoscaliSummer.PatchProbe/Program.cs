@@ -168,7 +168,8 @@ string[] patchTypes =
     "BoscaliSummer.Features.Progression.Patches.RewardAllocationPatch",
     "BoscaliSummer.Features.Command.Patches.AiTargetScoringPatch",
     "BoscaliSummer.Features.Command.Patches.DynamicMapMaximizePatch",
-    "BoscaliSummer.Features.Command.Patches.DynamicMapMinimizePatch"
+    "BoscaliSummer.Features.Command.Patches.DynamicMapMinimizePatch",
+    "BoscaliSummer.Features.Support.Patches.SupportMissileDetonatePatch"
 };
 
 foreach (string patchType in patchTypes)
