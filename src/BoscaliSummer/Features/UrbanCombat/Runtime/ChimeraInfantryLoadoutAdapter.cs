@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using HarmonyLib;
 using NuclearOption.Networking;
@@ -10,6 +10,7 @@ namespace BoscaliSummer.Garrisons
     /// Injects Infantry / Paratrooper troop mounts into the MC-260 Chimera's
     /// cargo and mission bays (Cargo Bay Rear, Cargo Bay Front, Mission Bay)
     /// using the exact same icon as the UH-90 Ibis.
+    /// Strictly excluded from helicopters.
     /// </summary>
     internal static class ChimeraInfantryLoadoutAdapter
     {
@@ -18,14 +19,18 @@ namespace BoscaliSummer.Garrisons
         public static WeaponMount GetOrCreateChimeraTroopsMount()
         {
             if (cachedChimeraTroopsMount != null) return cachedChimeraTroopsMount;
-            if (Encyclopedia.i == null || Encyclopedia.i.weaponMounts == null) return null;
 
             WeaponMount sourceTroopsMount = null;
-            for (int i = 0; i < Encyclopedia.i.weaponMounts.Count; i++)
+
+            // 1. Search all loaded WeaponMount objects (including uncatalogued assets)
+            WeaponMount[] allMounts = Resources.FindObjectsOfTypeAll<WeaponMount>();
+            for (int i = 0; i < allMounts.Length; i++)
             {
-                WeaponMount wm = Encyclopedia.i.weaponMounts[i];
+                WeaponMount wm = allMounts[i];
                 if (wm == null) continue;
-                if (string.Equals(wm.jsonKey, "Troopsx8_UtilityHelo1_F", StringComparison.OrdinalIgnoreCase) ||
+                if (string.Equals(wm.name, "Troopsx8_UtilityHelo1_F", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(wm.jsonKey, "Troopsx8_UtilityHelo1_F", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(wm.name, "Troopsx8_UtilityHelo1_R", StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(wm.jsonKey, "Troopsx8_UtilityHelo1_R", StringComparison.OrdinalIgnoreCase))
                 {
                     sourceTroopsMount = wm;
@@ -37,8 +42,61 @@ namespace BoscaliSummer.Garrisons
                 }
             }
 
-            if (sourceTroopsMount == null) return null;
+            // 2. Fallback: search in UtilityHelo1's hardpoint sets
+            if (sourceTroopsMount == null && Encyclopedia.i != null && Encyclopedia.i.aircraft != null)
+            {
+                for (int a = 0; a < Encyclopedia.i.aircraft.Count; a++)
+                {
+                    AircraftDefinition adef = Encyclopedia.i.aircraft[a];
+                    if (adef != null && adef.unitPrefab != null)
+                    {
+                        WeaponManager wm = adef.unitPrefab.GetComponentInChildren<WeaponManager>();
+                        if (wm != null && wm.hardpointSets != null)
+                        {
+                            for (int s = 0; s < wm.hardpointSets.Length; s++)
+                            {
+                                HardpointSet hs = wm.hardpointSets[s];
+                                if (hs != null && hs.weaponOptions != null)
+                                {
+                                    for (int o = 0; o < hs.weaponOptions.Count; o++)
+                                    {
+                                        WeaponMount opt = hs.weaponOptions[o];
+                                        if (opt != null && (opt.Troops || (opt.info != null && opt.info.troops)))
+                                        {
+                                            sourceTroopsMount = opt;
+                                            break;
+                                        }
+                                    }
+                                }
+                                if (sourceTroopsMount != null) break;
+                            }
+                        }
+                    }
+                    if (sourceTroopsMount != null) break;
+                }
+            }
 
+            // 3. Fallback: Encyclopedia weaponMounts
+            if (sourceTroopsMount == null && Encyclopedia.i != null && Encyclopedia.i.weaponMounts != null)
+            {
+                for (int i = 0; i < Encyclopedia.i.weaponMounts.Count; i++)
+                {
+                    WeaponMount wm = Encyclopedia.i.weaponMounts[i];
+                    if (wm != null && (wm.Troops || (wm.info != null && wm.info.troops)))
+                    {
+                        sourceTroopsMount = wm;
+                        break;
+                    }
+                }
+            }
+
+            if (sourceTroopsMount == null)
+            {
+                Plugin.Logger.LogWarning("[Chimera Loadout] Could not locate source Troops mount for clone.");
+                return null;
+            }
+
+            // Clone mount with heavy paratrooper capacity
             cachedChimeraTroopsMount = ScriptableObject.Instantiate(sourceTroopsMount);
             cachedChimeraTroopsMount.name = "Troopsx16_Chimera";
             cachedChimeraTroopsMount.jsonKey = "Troopsx16_Chimera";
@@ -56,7 +114,7 @@ namespace BoscaliSummer.Garrisons
                 info.name = "Troopsx16_Chimera_info";
                 info.weaponName = "Airborne Paratroopers";
                 info.shortName = "Troops";
-                info.description = "Airborne infantry company equipped with static-line combat parachutes. Drops over hostile or friendly territory to capture strategic urban buildings or establish fortified combat encampments.";
+                info.description = "Airborne infantry company equipped with static-line combat parachutes. Drops out the rear cargo hold ramp over hostile or friendly territory to capture strategic urban buildings or establish fortified combat encampments.";
                 info.weaponIcon = sourceTroopsMount.info.weaponIcon; // EXACT SAME ICON AS IBIS!
                 info.troops = true;
                 info.cargo = true;
@@ -65,7 +123,7 @@ namespace BoscaliSummer.Garrisons
                 cachedChimeraTroopsMount.info = info;
             }
 
-            if (!Encyclopedia.i.weaponMounts.Contains(cachedChimeraTroopsMount))
+            if (Encyclopedia.i != null && Encyclopedia.i.weaponMounts != null && !Encyclopedia.i.weaponMounts.Contains(cachedChimeraTroopsMount))
                 Encyclopedia.i.weaponMounts.Add(cachedChimeraTroopsMount);
             if (Encyclopedia.WeaponLookup != null && !Encyclopedia.WeaponLookup.ContainsKey(cachedChimeraTroopsMount.jsonKey))
                 Encyclopedia.WeaponLookup[cachedChimeraTroopsMount.jsonKey] = cachedChimeraTroopsMount;
@@ -80,13 +138,14 @@ namespace BoscaliSummer.Garrisons
                 return;
 
             AircraftDefinition def = aircraft.definition as AircraftDefinition;
-            string name = def != null ? (def.unitName ?? def.jsonKey ?? "") : aircraft.name ?? "";
+            string name = ((def != null ? (def.unitName ?? def.jsonKey ?? "") : "") + " " + (aircraft.name ?? "")).ToLowerInvariant();
 
-            bool isChimera = name.IndexOf("chimera", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                             name.IndexOf("mc260", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                             name.IndexOf("mc-260", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                             (def != null && def.jsonKey != null && def.jsonKey.IndexOf("chimera", StringComparison.OrdinalIgnoreCase) >= 0);
+            bool isHelo = (def != null && def.CanSlingLoad) || name.Contains("ibis") || name.Contains("helo") || name.Contains("utilityhelo");
 
+            // Strictly disallow Paratroopers on helicopters!
+            if (isHelo) return;
+
+            bool isChimera = name.Contains("chimera") || name.Contains("mc260") || name.Contains("mc-260") || name.Contains("aryx");
             if (!isChimera) return;
 
             WeaponMount troops = GetOrCreateChimeraTroopsMount();

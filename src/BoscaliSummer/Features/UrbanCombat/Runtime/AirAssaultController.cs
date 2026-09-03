@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+using System;
 using BoscaliSummer.Framework.Lifecycle;
 using NuclearOption.Networking;
 using UnityEngine;
@@ -8,18 +7,19 @@ namespace BoscaliSummer.Garrisons
 {
     /// <summary>
     /// Controls air assault insertions:
-    /// - Drops Paratroopers from the MC-260 Chimera transport plane.
-    /// - Deploys Fast-Rope / Rope-sling infantry from the UH-90 Ibis helicopter.
-    /// - If executed above civilian buildings: infantry takes and fortifies the building (rooftop AA, ground bunkers, markings).
-    /// - If executed above open ground / terrain: infantry establishes a combat encampment (sandbags, MGs, ATGMs, MANPADS).
+    /// - Deployed strictly by selecting Troops/Paratroopers in the weapon stations menu and pulling
+    ///   the normal fire trigger (no special J hotkey).
+    /// - From MC-260 Chimera: Paratroopers deploy out of the rear cargo hold ramp like cargo/vehicles,
+    ///   decelerating under the official ejected-pilot parachute canopy and lines.
+    /// - From UH-90 Ibis: Fast-rope rappelling squad descends when hovering under 40m.
     /// </summary>
     internal sealed class AirAssaultController : MonoBehaviour, ISceneService
     {
         public static AirAssaultController Instance { get; private set; }
 
         private float nextDropTime;
-        private const float Cooldown = 15f;
-        private KeyCode airAssaultKey = KeyCode.J;
+        private const float MinFireInterval = 0.8f;
+        private bool loggedActive;
 
         private void Awake() => Instance = this;
         private void OnDestroy() { if (Instance == this) Instance = null; }
@@ -27,97 +27,118 @@ namespace BoscaliSummer.Garrisons
         public void ResetForScene()
         {
             nextDropTime = 0f;
+            loggedActive = false;
         }
 
         private void Update()
         {
-            if (!Input.GetKeyDown(airAssaultKey)) return;
+            if (!loggedActive)
+            {
+                loggedActive = true;
+                Plugin.Logger.LogInfo("[Air Assault] Controller active. Select Troops/Paratroopers in weapons menu and pull trigger to deploy.");
+            }
+        }
 
-            Aircraft aircraft = GetLocalAircraft();
+        public void DeployFromWeaponStation(Aircraft aircraft, MountedTroops mountedTroops, Vector3 inheritedVelocity)
+        {
             if (aircraft == null) return;
 
             if (Time.unscaledTime < nextDropTime)
-            {
-                float remaining = nextDropTime - Time.unscaledTime;
-                Plugin.Logger.LogInfo($"[Air Assault] Recharging: {remaining:0.#}s");
                 return;
-            }
 
             AircraftDefinition def = aircraft.definition as AircraftDefinition;
-            string name = def != null ? (def.unitName ?? def.jsonKey ?? "") : "";
+            string name = def != null ? (def.unitName ?? def.jsonKey ?? "") : aircraft.name ?? "";
 
             bool isChimera = IsChimera(name, def);
             bool isIbis = IsIbis(name, def);
 
-            // If not specifically Chimera or Ibis, still allow if CanSlingLoad or transport
             if (!isChimera && !isIbis)
             {
                 if (def != null && def.CanSlingLoad) isIbis = true;
-                else
+                else isChimera = true; // allow other heavy transports
+            }
+
+            // Check if cargo ramp / bay door is open
+            if (!IsCargoDoorOpen(aircraft, out string doorReason))
+            {
+                Plugin.Logger.LogInfo($"[Air Assault] Cannot deploy: {doorReason}");
+                return;
+            }
+
+            // Check stored infantry count
+            if (mountedTroops == null)
+                mountedTroops = aircraft.GetComponentInChildren<MountedTroops>();
+
+            if (mountedTroops != null)
+            {
+                int ammo = mountedTroops.ammo;
+                if (ammo <= 0)
                 {
-                    Plugin.Logger.LogInfo($"[Air Assault] Requires Chimera (plane) or Ibis (helo). Current: {name}");
+                    Plugin.Logger.LogInfo($"[Air Assault] Cannot deploy: 0 squads remaining aboard {name}! Rearm at an airbase.");
                     return;
                 }
-            }
 
-            Vector3 origin = aircraft.transform.position;
-            if (!Physics.Raycast(origin, Vector3.down, out RaycastHit hit, 3500f, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore))
+                mountedTroops.ammo--;
+                Plugin.Logger.LogInfo($"[Air Assault] Deployed 1 infantry squad from {name}. {mountedTroops.ammo} squad(s) remaining aboard.");
+            }
+            else
             {
-                Plugin.Logger.LogInfo("[Air Assault] Aborted: No clear ground or building below.");
-                return;
+                Plugin.Logger.LogInfo($"[Air Assault] Deploying tactical infantry squad from internal {name} bay.");
             }
 
-            if (hit.point.y <= Datum.LocalSeaY + 1f)
-            {
-                Plugin.Logger.LogInfo("[Air Assault] Aborted: Water landing zone.");
-                return;
-            }
-
-            nextDropTime = Time.unscaledTime + Cooldown;
+            nextDropTime = Time.unscaledTime + MinFireInterval;
             FactionHQ owner = aircraft.NetworkHQ;
-            Airbase airbase = FindNearestAirbase(hit.point);
+            Airbase airbase = FindNearestAirbase(aircraft.transform.position);
 
-            GameObject shell = ResolveCivilianBuilding(hit.collider);
-
-            if (shell != null)
+            if (isChimera)
             {
-                if (isChimera)
+                // MC-260 Chimera: Deploy out rear cargo hold ramp like cargo/vehicles
+                Vector3 rampPos = aircraft.transform.position - aircraft.transform.forward * 12f - aircraft.transform.up * 1.8f;
+                Vector3 exitVel = inheritedVelocity - aircraft.transform.forward * 8f;
+
+                Plugin.Logger.LogInfo($"[CHIMERA] Paratrooper squad launched from rear cargo hold ramp at ({rampPos.x:0}, {rampPos.y:0}, {rampPos.z:0}).");
+                AirAssaultVisuals.SpawnParatrooperCargoDrop(aircraft, rampPos, exitVel, owner, airbase);
+            }
+            else
+            {
+                // UH-90 Ibis: Fast-rope rappelling (requires low hover)
+                Vector3 origin = aircraft.transform.position;
+                if (!Physics.Raycast(origin, Vector3.down, out RaycastHit hit, 500f, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore))
                 {
-                    Plugin.Logger.LogInfo($"[CHIMERA] Paratroopers dropped over {shell.name}!");
-                    AirAssaultVisuals.SpawnParatrooperDrop(origin, hit.point, aircraft.transform.rotation, owner, () =>
-                    {
-                        ZoneGarrisonManager.Instance?.TryOccupyBuilding(shell, owner, airbase);
-                        Plugin.Logger.LogInfo($"[AIR ASSAULT] Paratroopers secured and fortified {shell.name}!");
-                    });
+                    Plugin.Logger.LogInfo("[Air Assault] Aborted: No surface detected below helicopter.");
+                    return;
                 }
-                else
+
+                if (hit.point.y <= Datum.LocalSeaY + 1f)
                 {
-                    Plugin.Logger.LogInfo($"[IBIS] Fast-roping infantry onto {shell.name}!");
-                    AirAssaultVisuals.SpawnFastRopeDeployment(aircraft.transform, hit.point, owner, () =>
+                    Plugin.Logger.LogInfo("[Air Assault] Aborted: Cannot fast-rope over open water.");
+                    return;
+                }
+
+                float height = origin.y - hit.point.y;
+                if (height > 45f)
+                {
+                    Plugin.Logger.LogInfo($"[Air Assault] Altitude too high for fast-rope ({height:0}m). Fast-rope operations require hovering below 40m. Descend closer to the rooftop or ground.");
+                    return;
+                }
+
+                GameObject shell = ResolveCivilianBuilding(hit.collider);
+                if (shell != null)
+                {
+                    Plugin.Logger.LogInfo($"[IBIS] Fast-rope rappelling squad inserting onto building {shell.name}!");
+                    AirAssaultVisuals.SpawnFastRopeRappelling(aircraft.transform, hit.point, owner, () =>
                     {
                         ZoneGarrisonManager.Instance?.TryOccupyBuilding(shell, owner, airbase);
                         Plugin.Logger.LogInfo($"[AIR ASSAULT] Fast-rope squad secured and fortified {shell.name}!");
                     });
                 }
-            }
-            else
-            {
-                if (isChimera)
-                {
-                    Plugin.Logger.LogInfo("[CHIMERA] Paratroopers dropped to establish combat encampment!");
-                    AirAssaultVisuals.SpawnParatrooperDrop(origin, hit.point, aircraft.transform.rotation, owner, () =>
-                    {
-                        ZoneGarrisonManager.Instance?.TryDeployEncampment(hit.point, owner, airbase);
-                        Plugin.Logger.LogInfo("[AIR ASSAULT] Paratrooper combat encampment established!");
-                    });
-                }
                 else
                 {
-                    Plugin.Logger.LogInfo("[IBIS] Fast-roping infantry to establish ground encampment!");
-                    AirAssaultVisuals.SpawnFastRopeDeployment(aircraft.transform, hit.point, owner, () =>
+                    Plugin.Logger.LogInfo($"[IBIS] Fast-rope rappelling squad deploying ground combat encampment at ({hit.point.x:0}, {hit.point.z:0})!");
+                    AirAssaultVisuals.SpawnFastRopeRappelling(aircraft.transform, hit.point, owner, () =>
                     {
                         ZoneGarrisonManager.Instance?.TryDeployEncampment(hit.point, owner, airbase);
-                        Plugin.Logger.LogInfo("[AIR ASSAULT] Fast-rope squad established combat encampment!");
+                        Plugin.Logger.LogInfo($"[AIR ASSAULT] Fast-rope squad established combat encampment at ({hit.point.x:0}, {hit.point.z:0})!");
                     });
                 }
             }
@@ -155,17 +176,6 @@ namespace BoscaliSummer.Garrisons
             return null;
         }
 
-        private static Aircraft GetLocalAircraft()
-        {
-            Aircraft[] all = FindObjectsOfType<Aircraft>();
-            for (int i = 0; i < all.Length; i++)
-            {
-                if (all[i] != null && all[i].IsLocalPlayer && !all[i].disabled)
-                    return all[i];
-            }
-            return null;
-        }
-
         private static Airbase FindNearestAirbase(Vector3 pos)
         {
             Airbase[] all = Resources.FindObjectsOfTypeAll<Airbase>();
@@ -183,6 +193,56 @@ namespace BoscaliSummer.Garrisons
                 }
             }
             return best;
+        }
+
+        private static readonly System.Reflection.FieldInfo BayDoorOpenAmountField =
+            typeof(BayDoor).GetField("openAmount", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        private static readonly System.Reflection.FieldInfo CargoRampOpenAmountField =
+            typeof(CargoRamp).GetField("openAmount", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+        private static bool IsCargoDoorOpen(Aircraft aircraft, out string reason)
+        {
+            reason = null;
+            if (aircraft == null) return true;
+
+            // Check CargoRamp (used by Chimera and heavy transports)
+            CargoRamp ramp = aircraft.GetComponentInChildren<CargoRamp>();
+            if (ramp != null)
+            {
+                float amt = CargoRampOpenAmountField != null ? (float)CargoRampOpenAmountField.GetValue(ramp) : 1f;
+                if (amt < 0.35f && !ramp.IsOpen())
+                {
+                    reason = "Cargo ramp is closed! Open the cargo ramp before deploying troops.";
+                    return false;
+                }
+                return true;
+            }
+
+            // Check BayDoors (used by Ibis and cargo/troop bays)
+            BayDoor[] bayDoors = aircraft.GetComponentsInChildren<BayDoor>();
+            if (bayDoors != null && bayDoors.Length > 0)
+            {
+                bool anyOpen = false;
+                for (int i = 0; i < bayDoors.Length; i++)
+                {
+                    if (bayDoors[i] != null)
+                    {
+                        float amt = BayDoorOpenAmountField != null ? (float)BayDoorOpenAmountField.GetValue(bayDoors[i]) : 1f;
+                        if (amt > 0.35f)
+                        {
+                            anyOpen = true;
+                            break;
+                        }
+                    }
+                }
+                if (!anyOpen)
+                {
+                    reason = "Cargo bay door is closed! Open the door before deploying troops.";
+                    return false;
+                }
+            }
+
+            return true;
         }
     }
 }

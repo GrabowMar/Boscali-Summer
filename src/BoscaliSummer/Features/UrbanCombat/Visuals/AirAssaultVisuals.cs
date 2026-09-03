@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -6,124 +6,250 @@ using UnityEngine;
 namespace BoscaliSummer.Garrisons
 {
     /// <summary>
-    /// Visual presentation for air assault operations:
-    /// - Paratrooper parachute canopy drops trailing smoke for the Chimera transport plane.
-    /// - Fast-rope deployment lines and descending infantry for the Ibis helicopter.
+    /// Advanced visual animations for air assault insertions:
+    /// - Paratrooper Cargo Hold Drop: Deploys out the rear cargo ramp like vehicle/cargo drops,
+    ///   deploys the authentic ejected pilot parachute canopy & lines, decelerates realistically,
+    ///   and lands to capture buildings or establish combat encampments.
+    /// - Fast-Rope Rappelling: Realistic, slower slide (~3.5s) down port & starboard ropes from helicopters.
     /// </summary>
     internal static class AirAssaultVisuals
     {
-        public static void SpawnParatrooperDrop(
-            Vector3 releasePos,
-            Vector3 landingPos,
-            Quaternion forwardRot,
-            FactionHQ owner,
-            Action onLanded)
-        {
-            var dropGo = new GameObject("BoscaliSummer.ParatrooperDrop");
-            dropGo.transform.position = releasePos;
-            dropGo.transform.rotation = forwardRot;
+        private static Mesh cachedCanopyMesh;
+        private static Mesh cachedLinesMesh;
+        private static Material cachedParachuteMat;
 
-            ParatrooperDescent descent = dropGo.AddComponent<ParatrooperDescent>();
-            descent.Initialize(releasePos, landingPos, owner, onLanded);
+        public static void SpawnParatrooperCargoDrop(
+            Aircraft aircraft,
+            Vector3 rampPos,
+            Vector3 exitVelocity,
+            FactionHQ owner,
+            Airbase airbase)
+        {
+            var dropGo = new GameObject("BoscaliSummer.ParatrooperCargoDrop");
+            dropGo.transform.position = rampPos;
+
+            ParatrooperCargoDropOperation op = dropGo.AddComponent<ParatrooperCargoDropOperation>();
+            op.Initialize(aircraft, rampPos, exitVelocity, owner, airbase);
         }
 
-        public static void SpawnFastRopeDeployment(
+        public static void SpawnFastRopeRappelling(
             Transform heloTransform,
             Vector3 landingPos,
             FactionHQ owner,
             Action onLanded)
         {
-            var ropeGo = new GameObject("BoscaliSummer.FastRopeOperation");
-            ropeGo.transform.position = heloTransform.position;
+            var opGo = new GameObject("BoscaliSummer.FastRopeRappelling");
+            opGo.transform.position = heloTransform.position;
 
-            FastRopeOperation op = ropeGo.AddComponent<FastRopeOperation>();
+            FastRopeRappellingOperation op = opGo.AddComponent<FastRopeRappellingOperation>();
             op.Initialize(heloTransform, landingPos, owner, onLanded);
         }
 
-        private sealed class ParatrooperDescent : MonoBehaviour
+        public static Mesh GetParachuteCanopyMesh()
         {
-            private Vector3 start;
-            private Vector3 target;
-            private Action callback;
-            private float descentSpeed = 16f;
-            private GameObject canopy;
-            private GameObject payload;
-
-            public void Initialize(Vector3 startPos, Vector3 targetPos, FactionHQ owner, Action onLanded)
+            if (cachedCanopyMesh != null) return cachedCanopyMesh;
+            Mesh[] all = Resources.FindObjectsOfTypeAll<Mesh>();
+            for (int i = 0; i < all.Length; i++)
             {
-                start = startPos;
-                target = targetPos;
-                callback = onLanded;
-
-                BuildParatrooperMesh(owner);
-                StartCoroutine(DescentRoutine());
+                if (all[i] != null && all[i].name.IndexOf("canopy", StringComparison.OrdinalIgnoreCase) >= 0)
+                    return cachedCanopyMesh = all[i];
             }
+            return cachedCanopyMesh = CreateFallbackCanopyMesh();
+        }
 
-            private void BuildParatrooperMesh(FactionHQ owner)
+        public static Mesh GetParachuteLinesMesh()
+        {
+            if (cachedLinesMesh != null) return cachedLinesMesh;
+            Mesh[] all = Resources.FindObjectsOfTypeAll<Mesh>();
+            for (int i = 0; i < all.Length; i++)
             {
-                // 1. Parachute canopy (dome shape)
-                canopy = new GameObject("Canopy");
-                canopy.transform.SetParent(transform, false);
-                canopy.transform.localPosition = Vector3.up * 4.5f;
-
-                MeshFilter mf = canopy.AddComponent<MeshFilter>();
-                MeshRenderer mr = canopy.AddComponent<MeshRenderer>();
-                mf.sharedMesh = CreateCanopyMesh(4.5f, 2.8f);
-
-                Material canopyMat = new Material(Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard"));
-                canopyMat.color = owner != null && owner.faction != null ? owner.faction.color : new Color(0.85f, 0.85f, 0.8f, 1f);
-                mr.sharedMaterial = canopyMat;
-
-                // 2. Payload pallet / soldier squad crate
-                payload = new GameObject("Payload");
-                payload.transform.SetParent(transform, false);
-                payload.transform.localPosition = Vector3.zero;
-
-                MeshFilter pmf = payload.AddComponent<MeshFilter>();
-                MeshRenderer pmr = payload.AddComponent<MeshRenderer>();
-                pmf.sharedMesh = CreateCubeMesh(1.5f, 1.2f, 1.5f);
-
-                Material payMat = new Material(Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard"));
-                payMat.color = new Color(0.28f, 0.32f, 0.26f, 1f); // Military olive
-                pmr.sharedMaterial = payMat;
+                if (all[i] != null && all[i].name.IndexOf("lines", StringComparison.OrdinalIgnoreCase) >= 0)
+                    return cachedLinesMesh = all[i];
             }
+            return null;
+        }
 
-            private IEnumerator DescentRoutine()
+        public static Material GetParachuteMaterial()
+        {
+            if (cachedParachuteMat != null) return cachedParachuteMat;
+            Material[] mats = Resources.FindObjectsOfTypeAll<Material>();
+            for (int i = 0; i < mats.Length; i++)
             {
-                Vector3 current = start;
-                while (current.y > target.y + 0.5f)
+                if (mats[i] != null && mats[i].name.IndexOf("parachute", StringComparison.OrdinalIgnoreCase) >= 0)
+                    return cachedParachuteMat = mats[i];
+            }
+            return cachedParachuteMat = MaterialProvider.GetSandbagMaterial() ?? MaterialProvider.GetConcreteMaterial();
+        }
+
+        private sealed class ParatrooperCargoDropOperation : MonoBehaviour
+        {
+            private FactionHQ owner;
+            private Airbase airbase;
+            private Vector3 velocity;
+            private GameObject soldier;
+            private GameObject canopyObj;
+            private GameObject linesObj;
+            private bool chuteOpened;
+            private bool landed;
+
+            public void Initialize(
+                Aircraft aircraft,
+                Vector3 exitPos,
+                Vector3 initialVel,
+                FactionHQ faction,
+                Airbase baseObj)
+            {
+                owner = faction;
+                airbase = baseObj;
+                velocity = initialVel;
+                transform.position = exitPos;
+
+                // 1. Spawn authentic vanilla soldier model
+                soldier = VanillaSoldierFactory.CreateVisualSoldier(exitPos, Quaternion.LookRotation(initialVel), transform);
+                if (soldier != null) soldier.transform.localPosition = Vector3.zero;
+
+                // 2. Prepare parachute canopy (same as ejected pilot)
+                canopyObj = new GameObject("ParachuteCanopy");
+                canopyObj.transform.SetParent(transform, false);
+                canopyObj.transform.localPosition = new Vector3(0f, 3.4f, 0f);
+
+                MeshFilter cmf = canopyObj.AddComponent<MeshFilter>();
+                MeshRenderer cmr = canopyObj.AddComponent<MeshRenderer>();
+                cmf.sharedMesh = GetParachuteCanopyMesh();
+                cmr.sharedMaterial = GetParachuteMaterial();
+                canopyObj.SetActive(false);
+
+                // 3. Prepare parachute lines
+                Mesh linesMesh = GetParachuteLinesMesh();
+                if (linesMesh != null)
                 {
-                    current.y = Mathf.MoveTowards(current.y, target.y, descentSpeed * Time.deltaTime);
-                    current.x = Mathf.MoveTowards(current.x, target.x, 3f * Time.deltaTime);
-                    current.z = Mathf.MoveTowards(current.z, target.z, 3f * Time.deltaTime);
-                    transform.position = current;
+                    linesObj = new GameObject("ParachuteLines");
+                    linesObj.transform.SetParent(transform, false);
+                    linesObj.transform.localPosition = new Vector3(0f, 1.7f, 0f);
+                    MeshFilter lmf = linesObj.AddComponent<MeshFilter>();
+                    MeshRenderer lmr = linesObj.AddComponent<MeshRenderer>();
+                    lmf.sharedMesh = linesMesh;
+                    lmr.sharedMaterial = GetParachuteMaterial();
+                    linesObj.SetActive(false);
+                }
+
+                StartCoroutine(FlightRoutine());
+            }
+
+            private IEnumerator FlightRoutine()
+            {
+                float timeInAir = 0f;
+                float gravity = 9.81f;
+
+                while (!landed)
+                {
+                    float dt = Time.deltaTime;
+                    timeInAir += dt;
+
+                    // Phase 1: Freefall separation from cargo hold (0.6s)
+                    if (timeInAir < 0.6f)
+                    {
+                        velocity.y -= gravity * dt;
+                        velocity.x = Mathf.Lerp(velocity.x, 0f, dt * 0.4f);
+                        velocity.z = Mathf.Lerp(velocity.z, 0f, dt * 0.4f);
+                    }
+                    else
+                    {
+                        // Phase 2: Parachute opens!
+                        if (!chuteOpened)
+                        {
+                            chuteOpened = true;
+                            if (canopyObj != null) canopyObj.SetActive(true);
+                            if (linesObj != null) linesObj.SetActive(true);
+                            Plugin.Logger.LogInfo("[Paratroopers] Static-line parachute deployed behind aircraft.");
+                        }
+
+                        // Aerodynamic parachute deceleration
+                        // Decelerate forward airspeed rapidly to ~2-4 m/s drift
+                        velocity.x = Mathf.Lerp(velocity.x, 0f, dt * 1.8f);
+                        velocity.z = Mathf.Lerp(velocity.z, 0f, dt * 1.8f);
+
+                        // Settle vertical speed to stable ~6.5 m/s descent
+                        velocity.y = Mathf.MoveTowards(velocity.y, -6.8f, dt * 12f);
+
+                        // Gentle wind sway
+                        float sway = Mathf.Sin(timeInAir * 2.2f) * 0.35f;
+                        transform.rotation = Quaternion.Euler(sway * 5f, 0f, sway * 3f);
+                    }
+
+                    Vector3 nextPos = transform.position + velocity * dt;
+
+                    // Check surface collision (terrain or building)
+                    if (Physics.Raycast(transform.position, velocity.normalized, out RaycastHit hit, velocity.magnitude * dt + 0.6f, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore))
+                    {
+                        landed = true;
+                        transform.position = hit.point;
+                        OnTouchdown(hit);
+                        break;
+                    }
+
+                    // Fallback sea level check
+                    if (nextPos.y <= Datum.LocalSeaY + 0.5f)
+                    {
+                        landed = true;
+                        Plugin.Logger.LogInfo("[Paratroopers] Paratroopers touched down in water.");
+                        break;
+                    }
+
+                    transform.position = nextPos;
                     yield return null;
                 }
 
-                transform.position = target;
+                yield return new WaitForSeconds(3f);
+                Destroy(gameObject);
+            }
 
-                // Dust burst upon impact
+            private void OnTouchdown(RaycastHit hit)
+            {
+                // Touchdown dust effect
                 if (GameAssets.i != null && GameAssets.i.contactDust != null)
                 {
-                    GameObject dust = Instantiate(GameAssets.i.contactDust, target + Vector3.up * 0.2f, Quaternion.identity);
+                    GameObject dust = Instantiate(GameAssets.i.contactDust, hit.point + Vector3.up * 0.2f, Quaternion.identity);
                     dust.SetActive(true);
-                    Destroy(dust, 3f);
+                    Destroy(dust, 3.5f);
                 }
 
-                callback?.Invoke();
-                Destroy(gameObject, 0.2f);
+                // Collapse parachute
+                if (canopyObj != null) canopyObj.SetActive(false);
+                if (linesObj != null) linesObj.SetActive(false);
+
+                // Check if hit a building
+                GameObject shell = ResolveCivilianBuilding(hit.collider);
+                if (shell != null)
+                {
+                    Plugin.Logger.LogInfo($"[AIR ASSAULT] Paratrooper squad secured and fortified building: {shell.name}!");
+                    ZoneGarrisonManager.Instance?.TryOccupyBuilding(shell, owner, airbase);
+                }
+                else
+                {
+                    Plugin.Logger.LogInfo($"[AIR ASSAULT] Paratroopers established combat encampment at ({hit.point.x:0}, {hit.point.z:0})!");
+                    ZoneGarrisonManager.Instance?.TryDeployEncampment(hit.point, owner, airbase);
+                }
             }
         }
 
-        private sealed class FastRopeOperation : MonoBehaviour
+        private sealed class FastRopeRappellingOperation : MonoBehaviour
         {
             private Transform helo;
             private Vector3 target;
             private Action callback;
             private LineRenderer ropeLeft;
             private LineRenderer ropeRight;
-            private GameObject soldierLeft;
-            private GameObject soldierRight;
+            private readonly List<RappellingSoldier> soldiers = new List<RappellingSoldier>();
+
+            private sealed class RappellingSoldier
+            {
+                public GameObject Root;
+                public bool LeftRope;
+                public float StartDelay;
+                public float Progress;
+                public bool Landed;
+            }
 
             public void Initialize(Transform helicopter, Vector3 targetPos, FactionHQ owner, Action onLanded)
             {
@@ -131,16 +257,17 @@ namespace BoscaliSummer.Garrisons
                 target = targetPos;
                 callback = onLanded;
 
-                Material ropeMat = new Material(Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard"));
-                ropeMat.color = new Color(0.12f, 0.12f, 0.12f, 1f);
+                Material ropeMat = MaterialProvider.GetCargoHookRopeMaterial() ?? MaterialProvider.GetConcreteMaterial();
 
-                ropeLeft = CreateRopeLine("RopeLeft", ropeMat);
-                ropeRight = CreateRopeLine("RopeRight", ropeMat);
+                ropeLeft = CreateRopeLine("Rope_Port", ropeMat);
+                ropeRight = CreateRopeLine("Rope_Starboard", ropeMat);
 
-                soldierLeft = CreateSoldierFigure("Soldier1");
-                soldierRight = CreateSoldierFigure("Soldier2");
+                soldiers.Add(new RappellingSoldier { Root = CreateSoldier("Rappeller_L1"), LeftRope = true, StartDelay = 0.2f });
+                soldiers.Add(new RappellingSoldier { Root = CreateSoldier("Rappeller_R1"), LeftRope = false, StartDelay = 0.5f });
+                soldiers.Add(new RappellingSoldier { Root = CreateSoldier("Rappeller_L2"), LeftRope = true, StartDelay = 1.1f });
+                soldiers.Add(new RappellingSoldier { Root = CreateSoldier("Rappeller_R2"), LeftRope = false, StartDelay = 1.4f });
 
-                StartCoroutine(FastRopeRoutine());
+                StartCoroutine(RappellingRoutine());
             }
 
             private LineRenderer CreateRopeLine(string name, Material mat)
@@ -148,85 +275,166 @@ namespace BoscaliSummer.Garrisons
                 var go = new GameObject(name);
                 go.transform.SetParent(transform, false);
                 LineRenderer lr = go.AddComponent<LineRenderer>();
-                lr.sharedMaterial = mat;
+                if (mat != null) lr.sharedMaterial = mat;
                 lr.startWidth = 0.08f;
                 lr.endWidth = 0.08f;
-                lr.positionCount = 2;
+                lr.positionCount = 3;
                 return lr;
             }
 
-            private GameObject CreateSoldierFigure(string name)
+            private GameObject CreateSoldier(string name)
             {
-                var go = new GameObject(name);
-                go.transform.SetParent(transform, false);
-                MeshFilter mf = go.AddComponent<MeshFilter>();
-                MeshRenderer mr = go.AddComponent<MeshRenderer>();
-                mf.sharedMesh = CreateCubeMesh(0.5f, 1.2f, 0.5f);
-
-                Material mat = new Material(Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard"));
-                mat.color = new Color(0.2f, 0.24f, 0.2f, 1f);
-                mr.sharedMaterial = mat;
-                return go;
+                GameObject soldier = VanillaSoldierFactory.CreateVisualSoldier(transform.position, Quaternion.identity, transform);
+                if (soldier != null)
+                {
+                    soldier.name = name;
+                    soldier.SetActive(false);
+                    return soldier;
+                }
+                var fallback = new GameObject(name);
+                fallback.transform.SetParent(transform, false);
+                fallback.SetActive(false);
+                return fallback;
             }
 
-            private IEnumerator FastRopeRoutine()
+            private IEnumerator RappellingRoutine()
             {
-                float duration = 2.5f;
+                float duration = 6.0f;
                 float elapsed = 0f;
-                bool deployed = false;
+                bool triggered = false;
 
                 while (elapsed < duration)
                 {
                     elapsed += Time.deltaTime;
-                    float progress = Mathf.Clamp01(elapsed / 1.8f);
 
                     Vector3 heloPos = helo != null ? helo.position : transform.position;
-                    Vector3 leftDoor = heloPos - (helo != null ? helo.right * 1.2f : Vector3.right * 1.2f);
-                    Vector3 rightDoor = heloPos + (helo != null ? helo.right * 1.2f : Vector3.right * 1.2f);
+                    Vector3 heloRight = helo != null ? helo.right : Vector3.right;
+                    Vector3 heloFwd = helo != null ? helo.forward : Vector3.forward;
+                    Vector3 heloUp = helo != null ? helo.up : Vector3.up;
 
-                    ropeLeft.SetPosition(0, leftDoor);
-                    ropeLeft.SetPosition(1, target + Vector3.left * 0.8f);
+                    // Lines deploy directly from the back of the cargo hold at the rear of the model
+                    Vector3 rearRampPos = heloPos - heloFwd * 3.8f - heloUp * 0.45f;
+                    Vector3 doorLeft = rearRampPos - heloRight * 0.55f;
+                    Vector3 doorRight = rearRampPos + heloRight * 0.55f;
 
-                    ropeRight.SetPosition(0, rightDoor);
-                    ropeRight.SetPosition(1, target + Vector3.right * 0.8f);
+                    Vector3 groundLeft = target - heloRight * 1.1f;
+                    Vector3 groundRight = target + heloRight * 1.1f;
 
-                    soldierLeft.transform.position = Vector3.Lerp(leftDoor, target + Vector3.left * 0.8f, progress);
-                    soldierRight.transform.position = Vector3.Lerp(rightDoor, target + Vector3.right * 0.8f, Mathf.Clamp01(progress * 1.15f));
+                    Vector3 midLeft = Vector3.Lerp(doorLeft, groundLeft, 0.5f) + Vector3.down * 0.4f;
+                    Vector3 midRight = Vector3.Lerp(doorRight, groundRight, 0.5f) + Vector3.down * 0.4f;
 
-                    if (!deployed && progress >= 0.95f)
+                    if (ropeLeft != null)
                     {
-                        deployed = true;
+                        ropeLeft.SetPosition(0, doorLeft);
+                        ropeLeft.SetPosition(1, midLeft);
+                        ropeLeft.SetPosition(2, groundLeft);
+                    }
+
+                    if (ropeRight != null)
+                    {
+                        ropeRight.SetPosition(0, doorRight);
+                        ropeRight.SetPosition(1, midRight);
+                        ropeRight.SetPosition(2, groundRight);
+                    }
+
+                    int landedCount = 0;
+
+                    for (int i = 0; i < soldiers.Count; i++)
+                    {
+                        RappellingSoldier s = soldiers[i];
+                        if (s.Root == null) continue;
+                        if (elapsed < s.StartDelay) continue;
+
+                        if (!s.Root.activeSelf) s.Root.SetActive(true);
+
+                        Vector3 door = s.LeftRope ? doorLeft : doorRight;
+                        Vector3 ground = s.LeftRope ? groundLeft : groundRight;
+
+                        float descentTime = elapsed - s.StartDelay;
+                        s.Progress = Mathf.Clamp01(descentTime / 3.4f);
+
+                        if (s.Progress < 1f)
+                        {
+                            Vector3 pos = Vector3.Lerp(door, ground, s.Progress);
+                            pos += Mathf.Sin(elapsed * 8f + i) * 0.05f * (s.LeftRope ? -heloRight : heloRight);
+                            s.Root.transform.position = pos;
+                            s.Root.transform.rotation = Quaternion.LookRotation(heloFwd, Vector3.up);
+                        }
+                        else
+                        {
+                            if (!s.Landed)
+                            {
+                                s.Landed = true;
+                                if (GameAssets.i != null && GameAssets.i.contactDust != null)
+                                {
+                                    GameObject dust = Instantiate(GameAssets.i.contactDust, ground + Vector3.up * 0.2f, Quaternion.identity);
+                                    dust.SetActive(true);
+                                    Destroy(dust, 3f);
+                                }
+                            }
+
+                            float fanAngle = (i * 90f + 45f) * Mathf.Deg2Rad;
+                            Vector3 fanDir = new Vector3(Mathf.Cos(fanAngle), 0f, Mathf.Sin(fanAngle));
+                            float fanDist = Mathf.Min((elapsed - s.StartDelay - 3.4f) * 1.8f, 3.5f);
+
+                            Vector3 perimeterPos = ground + fanDir * fanDist;
+                            s.Root.transform.position = perimeterPos;
+                            s.Root.transform.rotation = Quaternion.LookRotation(fanDir, Vector3.up);
+                            landedCount++;
+                        }
+                    }
+
+                    if (landedCount >= 2 && !triggered)
+                    {
+                        triggered = true;
                         callback?.Invoke();
                     }
 
                     yield return null;
                 }
 
-                Destroy(soldierLeft);
-                Destroy(soldierRight);
-                Destroy(ropeLeft.gameObject);
-                Destroy(ropeRight.gameObject);
-                Destroy(gameObject, 0.5f);
+                if (!triggered) callback?.Invoke();
+
+                float dropTime = 0f;
+                while (dropTime < 0.8f)
+                {
+                    dropTime += Time.deltaTime;
+                    if (ropeLeft != null) ropeLeft.transform.position += Vector3.down * 4f * Time.deltaTime;
+                    if (ropeRight != null) ropeRight.transform.position += Vector3.down * 4f * Time.deltaTime;
+                    yield return null;
+                }
+
+                Destroy(gameObject, 4f);
             }
         }
 
-        private static Mesh CreateCanopyMesh(float radius, float height)
+        private static GameObject ResolveCivilianBuilding(Collider col)
+        {
+            if (col == null) return null;
+            MapBuilding mb = col.GetComponentInParent<MapBuilding>();
+            if (mb != null) return mb.gameObject;
+
+            Building b = col.GetComponentInParent<Building>();
+            if (b != null && b.definition is BuildingDefinition bDef && bDef.buildingType == BuildingType.CIV)
+                return b.gameObject;
+
+            return null;
+        }
+
+        private static Mesh CreateFallbackCanopyMesh()
         {
             Mesh mesh = new Mesh();
-            mesh.name = "ParachuteCanopy";
+            mesh.name = "FallbackCanopy";
 
-            int segments = 12;
+            int segments = 16;
             var verts = new List<Vector3>();
             var tris = new List<int>();
 
-            // Apex
-            verts.Add(new Vector3(0f, height, 0f));
-
-            // Ring
+            verts.Add(new Vector3(0f, 1.4f, 0f));
             for (int i = 0; i < segments; i++)
             {
                 float a = (float)i / segments * Mathf.PI * 2f;
-                verts.Add(new Vector3(Mathf.Cos(a) * radius, 0f, Mathf.Sin(a) * radius));
+                verts.Add(new Vector3(Mathf.Cos(a) * 2.8f, 0f, Mathf.Sin(a) * 2.8f));
             }
 
             for (int i = 0; i < segments; i++)
@@ -240,45 +448,6 @@ namespace BoscaliSummer.Garrisons
             mesh.SetVertices(verts);
             mesh.SetTriangles(tris, 0);
             mesh.RecalculateNormals();
-            mesh.RecalculateBounds();
-            return mesh;
-        }
-
-        private static Mesh CreateCubeMesh(float w, float h, float d)
-        {
-            Mesh mesh = new Mesh();
-            mesh.name = "Box";
-
-            float hw = w * 0.5f;
-            float hh = h * 0.5f;
-            float hd = d * 0.5f;
-
-            Vector3[] vertices = new Vector3[]
-            {
-                new Vector3(-hw, -hh, -hd),
-                new Vector3( hw, -hh, -hd),
-                new Vector3( hw,  hh, -hd),
-                new Vector3(-hw,  hh, -hd),
-                new Vector3(-hw, -hh,  hd),
-                new Vector3( hw, -hh,  hd),
-                new Vector3( hw,  hh,  hd),
-                new Vector3(-hw,  hh,  hd)
-            };
-
-            int[] triangles = new int[]
-            {
-                0, 2, 1,  0, 3, 2,
-                4, 5, 6,  4, 6, 7,
-                0, 1, 5,  0, 5, 4,
-                2, 3, 7,  2, 7, 6,
-                0, 4, 7,  0, 7, 3,
-                1, 2, 6,  1, 6, 5
-            };
-
-            mesh.vertices = vertices;
-            mesh.triangles = triangles;
-            mesh.RecalculateNormals();
-            mesh.RecalculateBounds();
             return mesh;
         }
     }
