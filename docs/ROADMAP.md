@@ -24,8 +24,10 @@ managers (`ImpactFireManager`, `ZoneGarrisonManager`, `ModNet`) into their final
 4. **Scene session** — one generation-backed cancellation scope and one readiness gate for
    mission, network and content, replacing per-feature delayed-init loops.
 5. **Bounded scheduler** — central slow-tick and queue budgets, no gameplay rules.
-6. **Shared menu shell** — one `IModMenuHost` / `IModMenuPage` / `ITargetPicker` so Radio,
-   Progression and Support stop competing for overlays and keybinds.
+6. **Shared menu shell** — named bezel claims and an exclusive map picker now live in
+   `nomodkit/shared/avionics` (`NOAvionics`), compiled into both this plugin and Wing
+   Command. COM is folded into the OPS THEATER tab. Remaining: one widget factory so
+   OPS/RAD match WMC chrome exactly.
 7. **Persistence service** — schema-versioned, debounced, atomic JSON writes with backup
    recovery, before any persistent skill state.
 

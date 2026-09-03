@@ -10,6 +10,7 @@ maintainers and coding agents; runtime design is in [ARCHITECTURE.md](ARCHITECTU
 | Local music, stations, playback, MFD radio UI | `Features/Radio` | `Features/Radio` | Framework lifecycle, game interop |
 | Score-earned perks, capabilities, reward/fuel effects | `Features/Progression` | `Features/Progression` | Framework lifecycle/contracts, game interop |
 | OPS MFD, support validation, costs, cooldowns, spawn jobs | `Features/Support` | `Features/Support` | Progression + optional zone-fortification contracts, game interop |
+| COM MFD, map overlays, doctrine, AI target scoring | `Features/Command` | `Features/Command` | Progression contracts, game interop |
 | Feature graph, host, lifecycle, service contracts | `Framework` | `Framework` | no concrete feature |
 | Cached game/reflection/diagnostic adapters | `Infrastructure` | architecture / patch probe | no feature policy |
 | Registration and plugin startup | `Bootstrap` | Framework / architecture | may name every feature |
@@ -30,8 +31,8 @@ Bootstrap / Configuration
 Sibling Feature A  ──✗──►  Sibling Feature B implementation
 ```
 
-Support declares a dependency on Progression but consumes only `IPlayerPerks` /
-`IProgressionView`; its optional Urban Combat integration uses only
+Support and Command declare a dependency on Progression but consume only `IPlayerPerks` /
+`IProgressionView`; Support's optional Urban Combat integration uses only
 `IZoneFortificationService`. Neither edge permits a concrete sibling import. When two
 features genuinely interact, define the smallest interface in `Framework/Contracts`,
 implement it in the owner, resolve it through `ServiceRegistry` — never expose a manager,

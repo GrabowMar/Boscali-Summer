@@ -83,35 +83,26 @@ namespace BoscaliSummer.Features.Radio.Presentation
         }
     }
 
-    /// <summary>
-    /// The radio's visual state vocabulary. Selection owns the fill, hover lifts it, and a
-    /// press is the strongest response. Keeping the arithmetic here makes those distinctions
-    /// testable without a running Unity scene.
-    /// </summary>
+    /// <summary>Radio MFD colours and button fill/text for each interaction state.</summary>
     internal static class RadioUiPalette
     {
         public static readonly RadioRgba PanelGround =
-            new RadioRgba(0.028f, 0.045f, 0.062f, 0.965f);
+            new RadioRgba(0.022f, 0.040f, 0.032f, 0.965f);
         public static readonly RadioRgba PanelEdge =
-            new RadioRgba(0.30f, 0.34f, 0.36f);
+            new RadioRgba(0.18f, 0.55f, 0.38f);
         public static readonly RadioRgba Frame =
-            new RadioRgba(0.52f, 0.55f, 0.56f, 0.55f);
+            new RadioRgba(0.18f, 0.65f, 0.42f, 0.35f);
         public static readonly RadioRgba Dim =
-            new RadioRgba(0.66f, 0.71f, 0.73f);
+            new RadioRgba(0.62f, 0.72f, 0.67f);
         public static readonly RadioRgba Disabled =
-            new RadioRgba(0.42f, 0.45f, 0.46f, 0.75f);
+            new RadioRgba(0.34f, 0.44f, 0.40f, 0.75f);
 
         // 3-layer design tokens (Surfaces, Borders, Rails, Typography)
-        public static readonly RadioRgba SurfaceCard = new RadioRgba(0.071f, 0.098f, 0.133f, 0.88f);
-        public static readonly RadioRgba SurfaceCardHover = new RadioRgba(0.094f, 0.133f, 0.188f, 0.95f);
-        public static readonly RadioRgba SurfaceElevated = new RadioRgba(0.118f, 0.161f, 0.231f, 0.95f);
-        public static readonly RadioRgba BorderSubtle = new RadioRgba(0.137f, 0.196f, 0.271f, 0.65f);
-        public static readonly RadioRgba RailEmerald = new RadioRgba(0.000f, 1.000f, 0.400f);
-        public static readonly RadioRgba RailAmber = new RadioRgba(0.961f, 0.620f, 0.043f);
-        public static readonly RadioRgba RailCyan = new RadioRgba(0.024f, 0.714f, 0.831f);
-        public static readonly RadioRgba RailRed = new RadioRgba(0.937f, 0.267f, 0.267f);
-        public static readonly RadioRgba TextPrimary = RadioRgba.White;
-        public static readonly RadioRgba TextSecondary = new RadioRgba(0.580f, 0.639f, 0.722f);
+        public static readonly RadioRgba SurfaceCard = new RadioRgba(0.038f, 0.080f, 0.060f, 0.88f);
+        public static readonly RadioRgba BorderSubtle = new RadioRgba(0.18f, 0.65f, 0.42f, 0.30f);
+        public static readonly RadioRgba RailEmerald = new RadioRgba(0.000f, 1.000f, 0.616f);
+        public static readonly RadioRgba RailCyan = new RadioRgba(0.000f, 0.898f, 1.000f);
+        public static readonly RadioRgba TextPrimary = new RadioRgba(0.92f, 1.00f, 0.96f);
 
         public static RadioUiPaint Paint(
             RadioButtonStyle style, RadioRgba accent,

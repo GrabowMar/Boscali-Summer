@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Features;
 using BoscaliSummer.Garrisons;
@@ -16,7 +16,8 @@ namespace BoscaliSummer.Features.UrbanCombat
             typeof(MountedTroopsFirePatch),
             typeof(ChimeraLoadoutAssignAircraftPatch),
             typeof(ChimeraWeaponManagerInitPatch),
-            typeof(ChimeraWeaponSelectorPopulatePatch)
+            typeof(ChimeraWeaponSelectorPopulatePatch),
+            typeof(ChimeraWeaponCheckerAvailablePatch)
         };
 
         public FeatureMetadata Metadata => Feature;

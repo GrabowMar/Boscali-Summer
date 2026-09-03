@@ -3,8 +3,10 @@ using System.Collections.Generic;
 using BepInEx.Logging;
 using BoscaliSummer.Features.Support.Runtime;
 using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Framework.Features;
 using BoscaliSummer.Framework.Lifecycle;
 using BoscaliSummer.Runtime;
+using NOAvionics;
 using NuclearOption.UIStyleSystem;
 using TMPro;
 using UnityEngine;
@@ -76,12 +78,17 @@ namespace BoscaliSummer.Features.Support.Presentation
 
         private GameObject perksPage;
         private GameObject supportPage;
+        private GameObject theaterPage;
         private Button perksTab;
         private Button supportTab;
+        private Button theaterTab;
         private TMP_Text perksTabLabel;
         private TMP_Text supportTabLabel;
+        private TMP_Text theaterTabLabel;
         private Image perksUnderline;
         private Image supportUnderline;
+        private Image theaterUnderline;
+        private ITheaterPage theater;
 
         // Perks Page Widgets
         private TMP_Text scoreLabel;
@@ -114,14 +121,19 @@ namespace BoscaliSummer.Features.Support.Presentation
 
         public void ResetForScene()
         {
+            theater?.Unmount();
+            BezelRegistry.Release(BezelRegistry.Ops);
             if (screenRoot != null) UnityEngine.Object.Destroy(screenRoot);
             screenRoot = null;
             screen = null;
             font = null;
             perksPage = null;
             supportPage = null;
+            theaterPage = null;
             perksTab = null;
             supportTab = null;
+            theaterTab = null;
+            theater = null;
             scoreLabel = null;
             rankSubLabel = null;
             pointsChipLabel = null;
@@ -178,51 +190,31 @@ namespace BoscaliSummer.Features.Support.Presentation
                 VirtualMFD mfd = UnityEngine.Object.FindObjectOfType<VirtualMFD>();
                 if (mfd == null) return;
 
-                List<Button> buttons = GameAccess.GetLeftMfdButtons(mfd);
-                List<MFDScreen> screens = GameAccess.GetLeftMfdScreens(mfd);
-                bool right = false;
-
-                if (!TryClaimSlot(buttons, screens, out int slot))
+                if (!MfdBezel.TryClaim(BezelRegistry.Ops, preferLeft: true, mfd,
+                    out List<Button> buttons, out List<MFDScreen> screens, out int slot, out bool left))
                 {
-                    buttons = GameAccess.GetRightMfdButtons(mfd);
-                    screens = GameAccess.GetRightMfdScreens(mfd);
-                    right = true;
-                    if (!TryClaimSlot(buttons, screens, out slot))
-                    {
-                        failed = true;
-                        logger.LogWarning("OPS MFD unavailable: no free bezel slot.");
-                        return;
-                    }
+                    failed = true;
+                    logger.LogWarning("OPS MFD unavailable: no free bezel slot.");
+                    return;
                 }
 
-                MFDScreen template = FindTemplate(screens) ??
-                    FindTemplate(GameAccess.GetLeftMfdScreens(mfd)) ??
-                    FindTemplate(GameAccess.GetRightMfdScreens(mfd));
-                if (template == null) return;
+                MFDScreen template = MfdBezel.FindTemplate(screens) ?? MfdBezel.FindTemplate(mfd);
+                if (template == null)
+                {
+                    BezelRegistry.Release(BezelRegistry.Ops);
+                    return;
+                }
 
                 screen = Build(template, buttons[slot]);
-                if (screen == null) { failed = true; return; }
-
-                while (screens.Count <= slot) screens.Add(null);
-                screens[slot] = screen;
-                mfd.SetupButtons();
-
-                Button bezel = buttons[slot];
-                bezel.enabled = true;
-                bezel.interactable = true;
-                if (bezel.onClick.GetPersistentEventCount() == 0)
+                if (screen == null)
                 {
-                    VirtualMFD owner = mfd;
-                    bool onRight = right;
-                    bezel.onClick.AddListener(() =>
-                    {
-                        if (onRight) owner.PressRightButton(bezel);
-                        else owner.PressLeftButton(bezel);
-                    });
+                    BezelRegistry.Release(BezelRegistry.Ops);
+                    failed = true;
+                    return;
                 }
 
-                screen.CloseScreen(Screen.width * (right ? Vector3.right : Vector3.left));
-                logger.LogInfo("OPS MFD installed on " + (right ? "right" : "left") +
+                MfdBezel.Bind(mfd, buttons, screens, slot, left, screen);
+                logger.LogInfo("OPS MFD installed on " + (left ? "left" : "right") +
                     " bezel slot " + (slot + 1) + ".");
             }
             catch (Exception e)
@@ -270,24 +262,51 @@ namespace BoscaliSummer.Features.Support.Presentation
                 AvionicsUiPalette.TextDim, AvionicsUiPalette.FontNano, FontStyles.Normal, TextAlignmentOptions.Center);
             y -= 14f;
 
-            Rule(content, new Rect(Pad, y, inner, 1f), AvionicsUiPalette.Frame);
+            // Deep-space mission tracking telemetry header strip
+            float chipW = 86f;
+            float chipH = 16f;
+            float chipGap = 8f;
+            float totalChipsW = chipW * 3f + chipGap * 2f;
+            float startX = Pad + (inner - totalChipsW) * 0.5f;
+
+            StatusChip(content, "SYS: LOGISTICS", new Rect(startX, y, chipW, chipH),
+                       AvionicsUiPalette.RailEmerald, AvionicsUiPalette.TextPrimary);
+            StatusChip(content, "NET: BOTE-LINK", new Rect(startX + chipW + chipGap, y, chipW, chipH),
+                       AvionicsUiPalette.RailCyan, AvionicsUiPalette.TextPrimary);
+            StatusChip(content, "AUTH: READY", new Rect(startX + (chipW + chipGap) * 2f, y, chipW, chipH),
+                       AvionicsUiPalette.RailEmerald, AvionicsUiPalette.TextPrimary);
+
+            y -= chipH + 8f;
+            Rule(content, new Rect(Pad, y, inner, 1f), AvionicsUiPalette.BorderSubtle);
             y -= AvionicsUiPalette.Space2;
 
-            // Tab Navigation
-            float tabWidth = (inner - Gap) * 0.5f;
-            perksTab = MakeTabButton(content, "PERKS & REWARDS", new Rect(Pad, y, tabWidth, TabHeight),
+            ModServices.TryGet(out theater);
+            int tabCount = theater != null ? 3 : 2;
+            float tabWidth = (inner - Gap * (tabCount - 1)) / tabCount;
+            perksTab = MakeTabButton(content, "PERKS", new Rect(Pad, y, tabWidth, TabHeight),
                 ShowPerks, out perksTabLabel, out perksUnderline);
-            supportTab = MakeTabButton(content, "SUPPORT MISSIONS",
+            supportTab = MakeTabButton(content, "SUPPORT",
                 new Rect(Pad + tabWidth + Gap, y, tabWidth, TabHeight),
                 ShowSupport, out supportTabLabel, out supportUnderline);
+            if (theater != null)
+            {
+                theaterTab = MakeTabButton(content, "THEATER",
+                    new Rect(Pad + (tabWidth + Gap) * 2f, y, tabWidth, TabHeight),
+                    ShowTheater, out theaterTabLabel, out theaterUnderline);
+            }
             y -= TabHeight + AvionicsUiPalette.Space2;
 
-            // Pages
             perksPage = CreatePage(content, "PerksPage");
             BuildPerksPage((RectTransform)perksPage.transform, inner, y);
 
             supportPage = CreatePage(content, "SupportPage");
             BuildSupportPage((RectTransform)supportPage.transform, inner, y);
+
+            if (theater != null)
+            {
+                theaterPage = CreatePage(content, "TheaterPage");
+                theater.Mount((RectTransform)theaterPage.transform, font, inner, y);
+            }
 
             // Pinned Telemetry Terminal
             float terminalY = -PanelHeight + TerminalHeight + Pad;
@@ -580,19 +599,18 @@ namespace BoscaliSummer.Features.Support.Presentation
 
         private void BuildTelemetryTerminal(RectTransform parent, float inner, float y)
         {
-            FramedPanel(parent, new Rect(Pad, y, inner, TerminalHeight),
-                AvionicsUiPalette.Frame, AvionicsUiPalette.SurfaceRibbon);
+            TacticalCard(parent, new Rect(Pad, y, inner, TerminalHeight), AvionicsUiPalette.RailEmerald);
 
             // Terminal Header
-            Label(parent, "▶ TACTICAL TELEMETRY & OPERATIONS INTEL",
-                new Rect(Pad + AvionicsUiPalette.Space2, y - 2f, inner - AvionicsUiPalette.Space4, 14f),
+            Label(parent, "> TACTICAL TELEMETRY // OPERATIONS INTEL",
+                new Rect(Pad + AvionicsUiPalette.Space3, y - 2f, inner - AvionicsUiPalette.Space4, 14f),
                 Accent(), AvionicsUiPalette.FontNano, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
 
-            Rule(parent, new Rect(Pad + AvionicsUiPalette.Space2, y - 16f, inner - AvionicsUiPalette.Space4, 1f),
-                AvionicsUiPalette.WithAlpha(AvionicsUiPalette.Frame, 0.6f));
+            Rule(parent, new Rect(Pad + AvionicsUiPalette.Space3, y - 16f, inner - AvionicsUiPalette.Space4 - AvionicsUiPalette.Space2, 1f),
+                AvionicsUiPalette.BorderSubtle);
 
             telemetryLabel = Label(parent, string.Empty,
-                new Rect(Pad + AvionicsUiPalette.Space2, y - 18f, inner - AvionicsUiPalette.Space4, TerminalHeight - 20f),
+                new Rect(Pad + AvionicsUiPalette.Space3, y - 18f, inner - AvionicsUiPalette.Space4 - AvionicsUiPalette.Space2, TerminalHeight - 20f),
                 Friendly(), AvionicsUiPalette.FontMicro, FontStyles.Normal, TextAlignmentOptions.TopLeft);
             telemetryLabel.enableWordWrapping = true;
             telemetryLabel.overflowMode = TextOverflowModes.Ellipsis;
@@ -701,7 +719,9 @@ namespace BoscaliSummer.Features.Support.Presentation
 
             // 2. Refresh Support HUD
             float allocation = support.LocalAllocation;
-            allocationLabel.text = allocation.ToString("N0") + " ALLOC";
+            bool wingPresent = !string.IsNullOrEmpty(PresenceBoard.GetString(PresenceBoard.WingGuid));
+            allocationLabel.text = allocation.ToString("N0") + " ALLOC" +
+                (wingPresent ? "  ·  SHARED WITH WING COMMAND" : "");
 
             if (support.ArmedAction.HasValue)
             {
@@ -778,6 +798,9 @@ namespace BoscaliSummer.Features.Support.Presentation
                 }
             }
 
+            if (theaterPage != null && theaterPage.activeSelf)
+                theater?.RefreshView();
+
             UpdateTelemetry();
         }
 
@@ -830,7 +853,8 @@ namespace BoscaliSummer.Features.Support.Presentation
         {
             perksPage?.SetActive(true);
             supportPage?.SetActive(false);
-            SetTabHighlight(true);
+            theaterPage?.SetActive(false);
+            SetTabHighlight(0);
             ClearHoverTooltip();
             nextRefresh = 0f;
         }
@@ -839,25 +863,35 @@ namespace BoscaliSummer.Features.Support.Presentation
         {
             perksPage?.SetActive(false);
             supportPage?.SetActive(true);
-            SetTabHighlight(false);
+            theaterPage?.SetActive(false);
+            SetTabHighlight(1);
             ClearHoverTooltip();
             nextRefresh = 0f;
         }
 
-        private void SetTabHighlight(bool perksActive)
+        private void ShowTheater()
         {
-            if (perksTab != null)
-            {
-                perksTab.colors = TabColors(perksActive);
-                perksTabLabel.color = perksActive ? AvionicsUiPalette.TextPrimary : Accent();
-                if (perksUnderline != null) perksUnderline.color = perksActive ? Accent() : Color.clear;
-            }
-            if (supportTab != null)
-            {
-                supportTab.colors = TabColors(!perksActive);
-                supportTabLabel.color = perksActive ? Accent() : AvionicsUiPalette.TextPrimary;
-                if (supportUnderline != null) supportUnderline.color = perksActive ? Color.clear : Accent();
-            }
+            perksPage?.SetActive(false);
+            supportPage?.SetActive(false);
+            theaterPage?.SetActive(true);
+            SetTabHighlight(2);
+            ClearHoverTooltip();
+            nextRefresh = 0f;
+        }
+
+        private void SetTabHighlight(int active)
+        {
+            PaintTab(perksTab, perksTabLabel, perksUnderline, active == 0);
+            PaintTab(supportTab, supportTabLabel, supportUnderline, active == 1);
+            PaintTab(theaterTab, theaterTabLabel, theaterUnderline, active == 2);
+        }
+
+        private void PaintTab(Button tab, TMP_Text label, Image underline, bool active)
+        {
+            if (tab == null) return;
+            tab.colors = TabColors(active);
+            if (label != null) label.color = active ? AvionicsUiPalette.TextPrimary : Accent();
+            if (underline != null) underline.color = active ? Accent() : Color.clear;
         }
 
         private static ColorBlock TabColors(bool active)
@@ -952,29 +986,6 @@ namespace BoscaliSummer.Features.Support.Presentation
                 EventSystem.current.SetSelectedGameObject(null);
         }
 
-        private static bool TryClaimSlot(List<Button> buttons, List<MFDScreen> screens, out int slot)
-        {
-            slot = -1;
-            if (buttons == null || screens == null) return false;
-            for (int i = 0; i < buttons.Count; i++)
-            {
-                if (buttons[i] != null && (i >= screens.Count || screens[i] == null))
-                {
-                    slot = i;
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        private static MFDScreen FindTemplate(List<MFDScreen> screens)
-        {
-            if (screens == null) return null;
-            for (int i = 0; i < screens.Count; i++)
-                if (screens[i] != null && screens[i].transform.parent != null) return screens[i];
-            return null;
-        }
-
         private static GameObject CreatePage(RectTransform parent, string name)
         {
             var page = new GameObject(name, typeof(RectTransform));
@@ -1062,6 +1073,40 @@ namespace BoscaliSummer.Features.Support.Presentation
         }
 
         private static Image Rule(RectTransform parent, Rect area, Color color) => Panel(parent, area, color);
+
+        private static (Image Background, TMP_Text Label) StatusChip(
+            RectTransform parent, string text, Rect rect, Color railColor, Color textColor, float fontSize = AvionicsUiPalette.FontNano)
+        {
+            var go = new GameObject("StatusChip", typeof(RectTransform), typeof(Image));
+            var rt = go.GetComponent<RectTransform>();
+            rt.SetParent(parent, false);
+            Place(rt, rect);
+
+            Image bg = go.GetComponent<Image>();
+            bg.raycastTarget = false;
+            bg.color = new Color(railColor.r * 0.15f, railColor.g * 0.15f, railColor.b * 0.15f, 0.85f);
+
+            Outline(parent, rect, new Color(railColor.r, railColor.g, railColor.b, 0.45f));
+
+            var lblGo = new GameObject("ChipLabel", typeof(RectTransform), typeof(TextMeshProUGUI));
+            var lRt = lblGo.GetComponent<RectTransform>();
+            lRt.SetParent(parent, false);
+            Place(lRt, rect);
+            var label = lblGo.GetComponent<TextMeshProUGUI>();
+            label.text = text;
+            label.color = textColor;
+            label.fontSize = fontSize;
+            label.fontStyle = FontStyles.Bold;
+            label.alignment = TextAlignmentOptions.Center;
+            label.raycastTarget = false;
+            return (bg, label);
+        }
+
+        private static Image TacticalCard(RectTransform parent, Rect area, Color railColor)
+        {
+            FramedPanel(parent, area, AvionicsUiPalette.BorderSubtle, AvionicsUiPalette.SurfaceCard);
+            return Rule(parent, new Rect(area.x, area.y, 3f, area.height), railColor);
+        }
 
         private static Color Accent()
         {

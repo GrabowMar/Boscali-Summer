@@ -23,9 +23,10 @@ namespace BoscaliSummer
             Settings = new ModConfiguration(Config);
 
             featureHost = ModCompositionRoot.Start(Logger, Settings);
-            Logger.LogInfo($"Effective fire tuning: bullet ignition={Settings.BulletIgnitionChance:0.####}, " +
-                $"explosive ignition={Settings.ExplosiveIgnitionChance:0.####}, intensity={Settings.FireIntensity.Value:0.##}, " +
-                $"active-site cap={Settings.MaxActiveFires}.");
+            TheaterInteropPush.PublishGuid();
+            Logger.LogInfo($"Effective fire tuning: bullet ignition={Settings.FireAndDestruction.BulletIgnitionChance:0.####}, " +
+                $"explosive ignition={Settings.FireAndDestruction.ExplosiveIgnitionChance:0.####}, intensity={Settings.FireAndDestruction.FireIntensity.Value:0.##}, " +
+                $"active-site cap={Settings.FireAndDestruction.MaxActiveFires}.");
             Logger.LogInfo($"{PluginName} {PluginVersion} loaded. All world changes remain host authoritative.");
         }
 

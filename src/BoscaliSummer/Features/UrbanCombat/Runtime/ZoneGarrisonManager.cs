@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Core;
+using BoscaliSummer.Features.UrbanCombat.Configuration;
 using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Lifecycle;
+using BoscaliSummer.Infrastructure.Diagnostics;
+using BoscaliSummer.Runtime;
 using NuclearOption.Networking;
 using UnityEngine;
 using BoscaliSummer.Framework.Visuals;
@@ -33,6 +36,9 @@ namespace BoscaliSummer.Garrisons
 
         public static ZoneGarrisonManager Instance { get; private set; }
 
+        private static UrbanCombatSettings Urban => Plugin.Settings.UrbanCombat;
+        private static DiagnosticSettings Diagnostics => Plugin.Settings.Diagnostics;
+
         bool IBuildingOccupancy.IsOccupied(GameObject shell) =>
             GarrisonOccupancy.IsOccupied(shell);
 
@@ -41,7 +47,7 @@ namespace BoscaliSummer.Garrisons
         bool IZoneFortificationService.TryFortify(
             Airbase airbase, FactionHQ owner, NuclearOption.Networking.Player requester, Vector3 targetPosition)
         {
-            if (!IsServer() || airbase == null || owner == null || requester == null ||
+            if (!GameAccess.IsServer() || airbase == null || owner == null || requester == null ||
                 airbase.AttachedAirbase || airbase.CurrentHQ != owner || requester.HQ != owner)
                 return false;
 
@@ -151,25 +157,11 @@ namespace BoscaliSummer.Garrisons
             return true;
         }
 
-        public bool TryDeployEncampment(Vector3 groundPos, FactionHQ owner, Airbase airbase)
+        public bool TryDeployEncampment(Vector3 groundPos, FactionHQ owner, Airbase airbase, int troopCount)
         {
             if (owner == null) return false;
-            int key = airbase != null ? airbase.GetInstanceID() : 0;
-            if (!records.TryGetValue(key, out GarrisonRecord record))
-            {
-                record = new GarrisonRecord { Airbase = airbase, Owner = owner };
-                records[key] = record;
-            }
-
-            int index = (record.Defenses.Count / 5) + 1;
-            var spawned = InfantryEncampmentBuilder.DeployEncampment(airbase, owner, groundPos, index);
-            if (spawned != null && spawned.Count > 0)
-            {
-                record.Defenses.AddRange(spawned);
-                Plugin.Logger.LogInfo($"[Air Assault] Successfully deployed {spawned.Count} ground encampment units at {groundPos} for {owner.name}.");
-                return true;
-            }
-            return false;
+            InfantryEncampmentBuilder.DeployOrReinforce(groundPos, owner, airbase, Math.Max(1, troopCount));
+            return true;
         }
 
         private readonly List<PendingCapture> pending = new List<PendingCapture>();
@@ -214,7 +206,7 @@ namespace BoscaliSummer.Garrisons
 
         public void ScheduleCapture(Airbase airbase, FactionHQ owner)
         {
-            if (!IsServer() || airbase == null) return;
+            if (!GameAccess.IsServer() || airbase == null) return;
             int key = airbase.GetInstanceID();
             if (records.TryGetValue(key, out GarrisonRecord current) && current.Owner == owner) return;
 
@@ -231,7 +223,7 @@ namespace BoscaliSummer.Garrisons
 
         private void Update()
         {
-            if (!IsServer()) return;
+            if (!GameAccess.IsServer()) return;
             if (!initialScanComplete && Time.unscaledTime >= initialScanAt)
             {
                 initialScanComplete = true;
@@ -267,7 +259,7 @@ namespace BoscaliSummer.Garrisons
             if (airbase == null) return;
             int key = airbase.GetInstanceID();
             ClearRecord(key);
-            if (owner == null || !Plugin.Settings.GarrisonsEnabled.Value || airbase.AttachedAirbase) return;
+            if (owner == null || !Urban.GarrisonsEnabled.Value || airbase.AttachedAirbase) return;
 
             BuildingDefinition defense = ResolveDefenseDefinition();
             if (defense == null || defense.unitPrefab == null || NetworkSceneSingleton<Spawner>.i == null)
@@ -293,7 +285,7 @@ namespace BoscaliSummer.Garrisons
             if (candidates.Count == 0)
             {
                 if (capture.Attempts < 3) { Retry(capture); return; }
-                if (Plugin.Settings.VerboseLogging.Value)
+                if (Diagnostics.VerboseLogging.Value)
                     Plugin.Logger.LogInfo("No eligible civilian building shells around airbase " + GetAirbaseName(airbase));
                 return;
             }
@@ -304,10 +296,7 @@ namespace BoscaliSummer.Garrisons
                 (int)Deterministic.HashString(GetAirbaseName(airbase)),
                 owner.GetInstanceID(), generation);
             Shuffle(candidates, seed);
-            int min = Mathf.Min(Plugin.Settings.GarrisonsMinimum, Plugin.Settings.GarrisonsMaximum);
-            int max = Mathf.Max(Plugin.Settings.GarrisonsMinimum, Plugin.Settings.GarrisonsMaximum);
-            int rolled = min + (int)(seed % (uint)Mathf.Max(1, max - min + 1));
-            int count = Mathf.Clamp(rolled, 0, candidates.Count);
+            int count = Mathf.Clamp(Urban.GarrisonsPerZone.Value, 0, candidates.Count);
 
             var record = new GarrisonRecord { Airbase = airbase, Owner = owner };
             records[key] = record;
@@ -347,9 +336,9 @@ namespace BoscaliSummer.Garrisons
                     owner,
                     airbase,
                     spawned,
-                    Plugin.Settings.UrbanCombat.StrongholdHitPoints.Value,
-                    Plugin.Settings.UrbanCombat.StrongholdPierceArmor.Value,
-                    Plugin.Settings.UrbanCombat.StrongholdBlastArmor.Value);
+                    Urban.StrongholdHitPoints.Value,
+                    Urban.StrongholdPierceArmor.Value,
+                    Urban.StrongholdBlastArmor.Value);
 
                 GarrisonOccupancy.Set(shell, owner);
                 GarrisonVisual.Apply(spawned);
@@ -357,7 +346,7 @@ namespace BoscaliSummer.Garrisons
                 record.Shells.Add(shell);
             }
 
-            Plugin.Logger.LogInfo($"Fortified {record.Defenses.Count} building stronghold(s) around {GetAirbaseName(airbase)} for {owner} ({Plugin.Settings.UrbanCombat.StrongholdHitPoints.Value:0} HP, {defense.jsonKey} armament).");
+            Plugin.Logger.LogInfo($"Fortified {record.Defenses.Count} building stronghold(s) around {GetAirbaseName(airbase)} for {owner} ({Urban.StrongholdHitPoints.Value:0} HP, {defense.jsonKey} armament).");
         }
 
         private void Retry(PendingCapture capture)
@@ -460,7 +449,7 @@ namespace BoscaliSummer.Garrisons
         {
             if (cachedDefenseDefinition != null) return cachedDefenseDefinition;
             if (Encyclopedia.i == null || Encyclopedia.i.buildings == null) return null;
-            string requested = Plugin.Settings.GarrisonDefinitionKey?.Trim();
+            string requested = Urban.GarrisonDefinitionKey?.Trim();
             if (!string.IsNullOrEmpty(requested) && !string.Equals(requested, "auto", StringComparison.OrdinalIgnoreCase))
             {
                 for (int i = 0; i < Encyclopedia.i.buildings.Count; i++)
@@ -542,7 +531,7 @@ namespace BoscaliSummer.Garrisons
                 GatherCandidates(airbase, center, usedRadius, seen, result);
             }
 
-            if (Plugin.Settings.VerboseLogging.Value)
+            if (Diagnostics.VerboseLogging.Value)
                 Plugin.Logger.LogInfo($"Garrison search around {GetAirbaseName(airbase)}: {result.Count} shell(s), radius {usedRadius:0} m, center {center}.");
             return result;
         }
@@ -595,7 +584,7 @@ namespace BoscaliSummer.Garrisons
                     building.NetworkUniqueName.StartsWith(NamePrefix, StringComparison.Ordinal)) continue;
                 if (seen.Add(building.gameObject.GetInstanceID())) shellCatalogue.Add(building.gameObject);
             }
-            if (Plugin.Settings.VerboseLogging.Value)
+            if (Diagnostics.VerboseLogging.Value)
                 Plugin.Logger.LogInfo($"Cached {shellCatalogue.Count} civilian shells for garrison searches.");
         }
 
@@ -656,11 +645,5 @@ namespace BoscaliSummer.Garrisons
 
         private static string Sanitize(string value) =>
             (value ?? "Airbase").Replace(':', '_').Replace(' ', '_');
-
-        private static bool IsServer()
-        {
-            try { return NetworkManagerNuclearOption.i != null && NetworkManagerNuclearOption.i.Server.Active; }
-            catch { return false; }
-        }
     }
 }

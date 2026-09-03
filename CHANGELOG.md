@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Removed leftover unused APIs (radio slogans, unread garrison damage-shader config keys,
+  unused support action ids for deleted airdrop/convoy actions, and unreferenced helpers).
+  Live support action wire bytes are unchanged (`Recon` = 4 through `Emp` = 7).
+- Dropped the flattened `ModConfiguration` property facade. Features read their own
+  module settings object. Zone occupation uses `BuildingsPerZone` directly, and
+  `IZoneFortificationService` now exposes only `TryFortify`.
+
 - Rebuilt the perk and support slices from scratch on two data-driven catalogues. Adding a
   perk is one table row; adding a support action is one row plus one `ISupportAction` file.
   A perk grants capability strings, an action requires one, and a test asserts the two

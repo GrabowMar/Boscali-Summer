@@ -11,7 +11,7 @@ namespace BoscaliSummer.Garrisons
 
         private static void Postfix(Airbase __instance, FactionHQ newHQ)
         {
-            if (Plugin.Settings.GarrisonsEnabled.Value)
+            if (Plugin.Settings.UrbanCombat.GarrisonsEnabled.Value)
                 ZoneGarrisonManager.Instance?.ScheduleCapture(__instance, newHQ);
         }
     }

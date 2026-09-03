@@ -1,5 +1,6 @@
 using BoscaliSummer.Features.Progression.Runtime;
 using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Runtime;
 using HarmonyLib;
 using NuclearOption.Networking;
 
@@ -34,7 +35,7 @@ namespace BoscaliSummer.Features.Progression.Patches
         {
             ProgressionManager manager = ProgressionRuntime.Active;
             if (manager == null || player == null || rewardAllocation <= 0f) return;
-            if (__instance == null || !IsServer()) return;
+            if (__instance == null || !GameAccess.IsServer()) return;
             if (!TryEffect(missionType, out PerkEffect effect)) return;
 
             float multiplier = manager.Multiplier(PlayerIdentity.Of(player), effect);
@@ -72,12 +73,6 @@ namespace BoscaliSummer.Features.Progression.Patches
                     effect = PerkEffect.FuelUse;
                     return false;
             }
-        }
-
-        private static bool IsServer()
-        {
-            try { return NetworkManagerNuclearOption.i != null && NetworkManagerNuclearOption.i.Server.Active; }
-            catch { return false; }
         }
     }
 }

@@ -161,9 +161,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
         public string GetChannelCode(int index) =>
             index >= 0 && index < ChannelCount ? stations[index].Code : "--";
 
-        public string GetChannelSlogan(int index) =>
-            index >= 0 && index < ChannelCount ? stations[index].Slogan : string.Empty;
-
         public string GetChannelIconPath(int index) =>
             index >= 0 && index < ChannelCount ? stations[index].IconPath : string.Empty;
 
@@ -321,17 +318,14 @@ namespace BoscaliSummer.Features.Radio.Runtime
             RadioChannel marisLocal = FindLocalChannel("Maris Network");
             RadioChannel baseLocal = FindLocalChannel("Base Broadcast");
             AddBuiltInStation(result, BuiltInStationRules.AgrapolId, "AF", "Agrapol FM",
-                "Fields, flightlines, forward signal",
                 soundtrackCatalog?.AgrapolSeed == null ? Array.Empty<AudioClip>() :
                     new[] { soundtrackCatalog.AgrapolSeed }, agrapolLocal,
                 BuiltInIcon("agrapol-fm.png"));
             AddBuiltInStation(result, BuiltInStationRules.MarisId, "MN", "Maris Network",
-                "Coastal relay for the contested sky",
                 soundtrackCatalog?.MarisSeed == null ? Array.Empty<AudioClip>() :
                     new[] { soundtrackCatalog.MarisSeed }, marisLocal,
                 BuiltInIcon("maris-network.png"));
             AddBuiltInStation(result, BuiltInStationRules.BaseId, "BB", "Base Broadcast",
-                "Nuclear Option original soundtrack",
                 soundtrackCatalog?.All ?? Array.Empty<AudioClip>(), baseLocal,
                 BuiltInIcon("base-broadcast.png"));
 
@@ -347,7 +341,7 @@ namespace BoscaliSummer.Features.Radio.Runtime
                         tracks[track] = RadioStationTrack.Local(channel.Tracks[track]);
                     result.Add(new RadioStation(
                         "user-" + channel.Name.ToLowerInvariant(), StationCode(channel.Name),
-                        channel.Name, "Local station", StationIconPath(channel.Name), tracks));
+                        channel.Name, StationIconPath(channel.Name), tracks));
                 }
             }
             stations = result.ToArray();
@@ -359,7 +353,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
             string id,
             string code,
             string name,
-            string slogan,
             AudioClip[] vanilla,
             RadioChannel local,
             string iconSource)
@@ -374,9 +367,7 @@ namespace BoscaliSummer.Features.Radio.Runtime
                 tracks[i] = RadioStationTrack.Vanilla(vanilla[i]);
             for (int i = 0; i < localCount; i++)
                 tracks[vanillaCount + i] = RadioStationTrack.Local(local.Tracks[i]);
-            result.Add(new RadioStation(
-                id, code, name, slogan,
-                iconSource, tracks));
+            result.Add(new RadioStation(id, code, name, iconSource, tracks));
         }
 
         private static string BuiltInIcon(string fileName) =>

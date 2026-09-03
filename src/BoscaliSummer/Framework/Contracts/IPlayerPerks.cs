@@ -1,9 +1,6 @@
 namespace BoscaliSummer.Framework.Contracts
 {
-    /// <summary>
-    /// The effects a perk can scale. This enum lives in the contract rather than in the
-    /// Progression feature because Framework may not import a concrete feature namespace.
-    /// </summary>
+    /// <summary>Perk-scaled effect kinds. Lives here so Framework need not import Progression.</summary>
     internal enum PerkEffect : byte
     {
         FuelUse = 0,
@@ -14,9 +11,7 @@ namespace BoscaliSummer.Framework.Contracts
     }
 
     /// <summary>
-    /// Server-side perk effects. A perk grants zero or more capability strings; a support
-    /// action requires exactly one. That single rule is the whole coupling between the two
-    /// features, and <c>PerkCatalogTests</c> asserts both catalogues agree on the set.
+    /// Server perk effects. A perk grants capability strings; a support action requires one.
     /// </summary>
     internal interface IPlayerPerks
     {

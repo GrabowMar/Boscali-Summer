@@ -7,14 +7,58 @@ using UnityEngine;
 namespace BoscaliSummer.Garrisons
 {
     /// <summary>
-    /// Injects Infantry / Paratrooper troop mounts into the MC-260 Chimera's
-    /// cargo and mission bays (Cargo Bay Rear, Cargo Bay Front, Mission Bay)
-    /// using the exact same icon as the UH-90 Ibis.
-    /// Strictly excluded from helicopters.
+    /// Adds a MountedTroops station to MC-260 Chimera cargo and mission bays, not helicopters.
     /// </summary>
     internal static class ChimeraInfantryLoadoutAdapter
     {
         private static WeaponMount cachedChimeraTroopsMount;
+        private static GameObject cachedTroopsPrefab;
+
+        public static bool IsChimera(Aircraft aircraft)
+        {
+            if (aircraft == null) return false;
+            AircraftDefinition def = aircraft.definition as AircraftDefinition;
+            string name = ((def != null ? (def.unitName ?? def.jsonKey ?? "") : "") + " " + (aircraft.name ?? "")).ToLowerInvariant();
+            return name.Contains("chimera") || name.Contains("mc260") || name.Contains("mc-260") || name.Contains("aryx");
+        }
+
+        public static bool IsHelicopter(Aircraft aircraft)
+        {
+            if (aircraft == null) return false;
+            AircraftDefinition def = aircraft.definition as AircraftDefinition;
+            string name = ((def != null ? (def.unitName ?? def.jsonKey ?? "") : "") + " " + (aircraft.name ?? "")).ToLowerInvariant();
+            return (def != null && def.CanSlingLoad) || name.Contains("ibis") || name.Contains("helo") || name.Contains("utilityhelo");
+        }
+
+        public static GameObject GetOrCreateTroopsPrefab(WeaponMount sourceMount)
+        {
+            if (cachedTroopsPrefab != null) return cachedTroopsPrefab;
+
+            GameObject go = new GameObject("Chimera_Paratroopers_Prefab");
+            GameObject.DontDestroyOnLoad(go);
+
+            MountedTroops mt = go.AddComponent<MountedTroops>();
+            mt.ammo = 16;
+            mt.Rearmable = true;
+
+            if (sourceMount != null && sourceMount.info != null)
+            {
+                WeaponInfo info = ScriptableObject.Instantiate(sourceMount.info);
+                info.name = "Paratroopers_WeaponInfo";
+                info.weaponName = "Airborne Paratroopers";
+                info.shortName = "Troops";
+                info.description = "Airborne paratrooper company deployed via static-line combat parachutes from the rear cargo ramp.";
+                info.weaponIcon = sourceMount.info.weaponIcon;
+                info.troops = true;
+                info.cargo = false; // Enabled as standard selectable weapon station
+                info.costPerRound = 0.1f;
+                info.massPerRound = 0.12f;
+                mt.info = info;
+            }
+
+            go.SetActive(false);
+            return cachedTroopsPrefab = go;
+        }
 
         public static WeaponMount GetOrCreateChimeraTroopsMount()
         {
@@ -22,7 +66,7 @@ namespace BoscaliSummer.Garrisons
 
             WeaponMount sourceTroopsMount = null;
 
-            // 1. Search all loaded WeaponMount objects (including uncatalogued assets)
+            // 1. Search all loaded WeaponMount objects
             WeaponMount[] allMounts = Resources.FindObjectsOfTypeAll<WeaponMount>();
             for (int i = 0; i < allMounts.Length; i++)
             {
@@ -76,27 +120,13 @@ namespace BoscaliSummer.Garrisons
                 }
             }
 
-            // 3. Fallback: Encyclopedia weaponMounts
-            if (sourceTroopsMount == null && Encyclopedia.i != null && Encyclopedia.i.weaponMounts != null)
-            {
-                for (int i = 0; i < Encyclopedia.i.weaponMounts.Count; i++)
-                {
-                    WeaponMount wm = Encyclopedia.i.weaponMounts[i];
-                    if (wm != null && (wm.Troops || (wm.info != null && wm.info.troops)))
-                    {
-                        sourceTroopsMount = wm;
-                        break;
-                    }
-                }
-            }
-
             if (sourceTroopsMount == null)
             {
                 Plugin.Logger.LogWarning("[Chimera Loadout] Could not locate source Troops mount for clone.");
                 return null;
             }
 
-            // Clone mount with heavy paratrooper capacity
+            // Clone mount with heavy paratrooper capacity and functional prefab
             cachedChimeraTroopsMount = ScriptableObject.Instantiate(sourceTroopsMount);
             cachedChimeraTroopsMount.name = "Troopsx16_Chimera";
             cachedChimeraTroopsMount.jsonKey = "Troopsx16_Chimera";
@@ -106,7 +136,10 @@ namespace BoscaliSummer.Garrisons
             cachedChimeraTroopsMount.mass = 2.4f;
             cachedChimeraTroopsMount.emptyMass = 0.4f;
             cachedChimeraTroopsMount.Troops = true;
-            cachedChimeraTroopsMount.Cargo = true;
+            cachedChimeraTroopsMount.Cargo = false; // Selectable in cockpit weapon switch
+
+            // Assign functional prefab with MountedTroops component
+            cachedChimeraTroopsMount.prefab = GetOrCreateTroopsPrefab(sourceTroopsMount);
 
             if (sourceTroopsMount.info != null)
             {
@@ -115,9 +148,9 @@ namespace BoscaliSummer.Garrisons
                 info.weaponName = "Airborne Paratroopers";
                 info.shortName = "Troops";
                 info.description = "Airborne infantry company equipped with static-line combat parachutes. Drops out the rear cargo hold ramp over hostile or friendly territory to capture strategic urban buildings or establish fortified combat encampments.";
-                info.weaponIcon = sourceTroopsMount.info.weaponIcon; // EXACT SAME ICON AS IBIS!
+                info.weaponIcon = sourceTroopsMount.info.weaponIcon;
                 info.troops = true;
-                info.cargo = true;
+                info.cargo = false;
                 info.costPerRound = 0.1f;
                 info.massPerRound = 0.12f;
                 cachedChimeraTroopsMount.info = info;
@@ -137,16 +170,9 @@ namespace BoscaliSummer.Garrisons
             if (aircraft == null || aircraft.weaponManager == null || aircraft.weaponManager.hardpointSets == null)
                 return;
 
-            AircraftDefinition def = aircraft.definition as AircraftDefinition;
-            string name = ((def != null ? (def.unitName ?? def.jsonKey ?? "") : "") + " " + (aircraft.name ?? "")).ToLowerInvariant();
-
-            bool isHelo = (def != null && def.CanSlingLoad) || name.Contains("ibis") || name.Contains("helo") || name.Contains("utilityhelo");
-
-            // Strictly disallow Paratroopers on helicopters!
-            if (isHelo) return;
-
-            bool isChimera = name.Contains("chimera") || name.Contains("mc260") || name.Contains("mc-260") || name.Contains("aryx");
-            if (!isChimera) return;
+            // Strictly disallow Paratroopers on helicopters and non-Chimera!
+            if (IsHelicopter(aircraft) || !IsChimera(aircraft))
+                return;
 
             WeaponMount troops = GetOrCreateChimeraTroopsMount();
             if (troops == null) return;

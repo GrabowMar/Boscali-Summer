@@ -6,14 +6,7 @@ using UnityEngine.Rendering.Universal;
 namespace BoscaliSummer.Framework.Visuals
 {
     /// <summary>
-    /// Manages authentic, localized war destruction and ruin effects for buildings:
-    /// - Localized blast craters and jagged breach holes placed directly at impact sites on building facades.
-    /// - Deploys procedural bump-mapped decal materials (RuinTextureCatalog) with authentic 3D normal relief,
-    ///   crater depth, and Voronoi fracture crack networks under dynamic lighting.
-    /// - Physical concrete rubble and fallen masonry mounds spawned at the base of damaged walls.
-    /// - Progressively scales facade bump map weathering on the building geometry via MaterialPropertyBlock.
-    /// - Proximity merging: repeated hits in close proximity upgrade the crater tier rather than stacking decals.
-    /// - Spawns localized impact dust, spall sparks, and severe-damage venting smoke.
+    /// Per-building local breach decals, rubble, and weathering. Cosmetic only.
     /// </summary>
     internal sealed class BuildingDamageVisual : MonoBehaviour
     {

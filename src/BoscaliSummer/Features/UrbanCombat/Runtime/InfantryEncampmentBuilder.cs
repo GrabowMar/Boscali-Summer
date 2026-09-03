@@ -6,22 +6,32 @@ using UnityEngine;
 namespace BoscaliSummer.Garrisons
 {
     /// <summary>
-    /// Deploys authentic, visible vanilla infantry combat encampments on the ground
-    /// to reinforce controlled zones. Unlike civilian rooftop proxies, these are real,
-    /// visible vanilla field fortifications (sandbag bunkers, heavy machine guns,
-    /// ATGMs, MANPADS/AAA) that defend the airbase perimeter.
+    /// Places or reinforces a vanilla emplacement outpost; extra troops raise its tier.
     /// </summary>
     internal static class InfantryEncampmentBuilder
     {
         internal const string NamePrefix = "BoscaliSummer:Encampment:";
 
+        public sealed class EncampmentSite
+        {
+            public Vector3 Center;
+            public FactionHQ Owner;
+            public Airbase Airbase;
+            public int Tier;
+            public int Troops;
+            public readonly List<Building> Emplacements = new List<Building>();
+            public readonly List<GameObject> Props = new List<GameObject>();
+            public readonly List<GameObject> Sentries = new List<GameObject>();
+        }
+
+        private static readonly List<EncampmentSite> ActiveSites = new List<EncampmentSite>();
         private static readonly Dictionary<string, BuildingDefinition> CachedDefs =
             new Dictionary<string, BuildingDefinition>(StringComparer.OrdinalIgnoreCase);
-
         private static bool catalogInitialized;
 
         public static void ResetForScene()
         {
+            ActiveSites.Clear();
             CachedDefs.Clear();
             catalogInitialized = false;
         }
@@ -64,7 +74,6 @@ namespace BoscaliSummer.Garrisons
                 }
             }
 
-            // Return any available DEF definition if keyword match fails
             using (var enumerator = CachedDefs.Values.GetEnumerator())
             {
                 if (enumerator.MoveNext()) return enumerator.Current;
@@ -72,95 +81,194 @@ namespace BoscaliSummer.Garrisons
             return null;
         }
 
-        public static List<Building> DeployEncampment(
-            Airbase airbase, FactionHQ owner, Vector3 targetCenter, int encampmentIndex)
+        public static EncampmentSite FindNearbySite(Vector3 pos, float maxDistance = 150f)
         {
-            var spawnedBuildings = new List<Building>();
-            if (airbase == null || owner == null || NetworkSceneSingleton<Spawner>.i == null)
-                return spawnedBuildings;
-
-            EnsureCatalog();
-            if (CachedDefs.Count == 0) return spawnedBuildings;
-
-            // Resolve vanilla defense assets
-            BuildingDefinition bunkerDef = Resolve("gabionBunker1", "bunker");
-            BuildingDefinition mgDef = Resolve("Emplacement1_MG", "MG");
-            BuildingDefinition atgmDef = Resolve("Emplacement1_ATGM", "ATGM");
-            BuildingDefinition aaDef = Resolve("Emplacement1_MANPADS", "MANPADS") ?? Resolve("Emplacement1_23mm", "23mm");
-            BuildingDefinition pillboxDef = Resolve("pillbox", "pillbox");
-
-            // Plan perimeter positions around targetCenter
-            // Radius ~18-24m gives a realistic infantry defensive compound
-            float radius = 20f;
-            var layout = new (BuildingDefinition Def, float AngleDeg, float Distance)[]
+            for (int i = 0; i < ActiveSites.Count; i++)
             {
-                (mgDef ?? bunkerDef, 0f, radius),
-                (bunkerDef, 72f, radius * 1.1f),
-                (atgmDef ?? bunkerDef, 144f, radius),
-                (bunkerDef, 216f, radius * 1.1f),
-                (aaDef ?? pillboxDef ?? bunkerDef, 288f, radius)
-            };
+                EncampmentSite site = ActiveSites[i];
+                if (site != null && Vector3.Distance(site.Center, pos) <= maxDistance)
+                    return site;
+            }
+            return null;
+        }
 
-            string airbaseName = !string.IsNullOrEmpty(airbase.NetworknetworkUniqueName)
-                ? airbase.NetworknetworkUniqueName
-                : airbase.name;
-            string cleanName = (airbaseName ?? "Airbase").Replace(':', '_').Replace(' ', '_');
+        public static List<Building> DeployEncampment(Airbase airbase, FactionHQ owner, Vector3 targetCenter, int encampmentIndex)
+        {
+            DeployOrReinforce(targetCenter, owner, airbase, TroopDeploymentMath.DefaultSquadSize);
+            EncampmentSite site = FindNearbySite(targetCenter, 150f);
+            return site != null ? site.Emplacements : new List<Building>();
+        }
 
+        public static void DeployOrReinforce(Vector3 dropPos, FactionHQ owner, Airbase airbase, int troopCount)
+        {
+            EncampmentSite existing = FindNearbySite(dropPos, 150f);
+            if (existing != null)
+            {
+                ReinforceSite(existing, troopCount);
+            }
+            else
+            {
+                CreateNewSite(dropPos, owner, airbase, troopCount);
+            }
+        }
+
+        private static void CreateNewSite(Vector3 center, FactionHQ owner, Airbase airbase, int troopCount)
+        {
             Spawner spawner = NetworkSceneSingleton<Spawner>.i;
+            if (spawner == null) return;
 
-            for (int i = 0; i < layout.Length; i++)
+            var site = new EncampmentSite
             {
-                BuildingDefinition def = layout[i].Def;
-                if (def == null || def.unitPrefab == null) continue;
+                Center = center,
+                Owner = owner,
+                Airbase = airbase,
+                Troops = Math.Max(1, troopCount),
+                Tier = 1
+            };
+            site.Tier = TroopDeploymentMath.ComputeTier(site.Troops);
 
-                float rad = layout[i].AngleDeg * Mathf.Deg2Rad;
-                Vector3 offset = new Vector3(Mathf.Sin(rad), 0f, Mathf.Cos(rad)) * layout[i].Distance;
-                Vector3 candidatePoint = targetCenter + offset;
+            SpawnEmplacements(site, spawner);
+            SpawnBarriers(site, 2);
+            SpawnSentries(site);
 
-                // Raycast to find exact ground surface and normal
-                Vector3 rayStart = candidatePoint + Vector3.up * 250f;
-                if (!Physics.Raycast(rayStart, Vector3.down, out RaycastHit hit, 500f,
-                    (int)PhysicsLayers.StaticsMask | (int)PhysicsLayers.ShipsMask))
-                {
-                    continue;
-                }
+            ActiveSites.Add(site);
+            Plugin.Logger.LogInfo($"[ENCAMPMENT] Established Tier {site.Tier} combat outpost with {site.Troops} infantry at ({center.x:0}, {center.z:0}).");
+        }
 
-                // Check slope - encampment should be placed on reasonable terrain (< 35 degrees)
-                if (Vector3.Angle(hit.normal, Vector3.up) > 35f) continue;
-                if (hit.point.y <= Datum.LocalSeaY + 1f) continue;
+        private static void ReinforceSite(EncampmentSite site, int troopCount)
+        {
+            Spawner spawner = NetworkSceneSingleton<Spawner>.i;
+            if (spawner == null || site == null) return;
 
-                Vector3 spawnPos = hit.point;
+            int previousTier = site.Tier;
+            site.Troops += Math.Max(1, troopCount);
+            site.Tier = TroopDeploymentMath.ComputeTier(site.Troops);
 
-                // Face outward from encampment center
-                Vector3 outwardDir = Vector3.ProjectOnPlane(spawnPos - targetCenter, hit.normal);
-                if (outwardDir.sqrMagnitude < 0.01f) outwardDir = Vector3.forward;
-                Quaternion rotation = Quaternion.LookRotation(outwardDir.normalized, hit.normal);
+            SpawnEmplacements(site, spawner);
+            if (site.Tier >= 4 && previousTier < 4)
+                SpawnBarriers(site, 1);
+            if (site.Tier >= 4)
+                ReplenishFirebase(site);
+            SpawnSentries(site);
 
-                string uniqueName = $"{NamePrefix}{cleanName}:{encampmentIndex}:{i}:{def.jsonKey}";
+            Plugin.Logger.LogInfo($"[ENCAMPMENT] Reinforced outpost to Tier {site.Tier} with {site.Troops} total infantry committed.");
+        }
 
-                Building building = spawner.SpawnBuilding(
-                    def.unitPrefab,
-                    spawnPos.ToGlobalPosition(),
-                    rotation,
-                    owner,
-                    airbase,
-                    uniqueName,
-                    false,
-                    null);
+        private static void SpawnEmplacements(EncampmentSite site, Spawner spawner)
+        {
+            if (site.Tier >= 1 && !HasEmplacement(site, "MG"))
+                SpawnEmplacement(site, spawner, "Emplacement1_MG", "MG", site.Center, Quaternion.identity, "MG");
 
-                if (building != null)
-                {
-                    // Ensure renderers remain enabled (unlike the old logic proxies)
-                    Renderer[] renderers = building.GetComponentsInChildren<Renderer>(true);
-                    for (int r = 0; r < renderers.Length; r++)
-                    {
-                        if (renderers[r] != null) renderers[r].enabled = true;
-                    }
-                    spawnedBuildings.Add(building);
-                }
+            if (site.Tier >= 2 && !HasEmplacement(site, "ATGM"))
+            {
+                Vector3 atgmPos = SnapToGround(site.Center + Vector3.forward * 10f + Vector3.right * 6f);
+                SpawnEmplacement(site, spawner, "Emplacement1_ATGM", "ATGM", atgmPos, Quaternion.LookRotation(Vector3.forward), "ATGM");
             }
 
-            return spawnedBuildings;
+            if (site.Tier >= 3 && !HasEmplacement(site, "23mm") && !HasEmplacement(site, "MANPADS"))
+            {
+                Vector3 aaPos = SnapToGround(site.Center + Vector3.forward * 10f + Vector3.left * 6f);
+                Building aa = SpawnEmplacement(site, spawner, "Emplacement1_23mm", "23mm", aaPos, Quaternion.LookRotation(Vector3.forward), "AA");
+                if (aa == null)
+                    SpawnEmplacement(site, spawner, "Emplacement1_MANPADS", "MANPADS", aaPos, Quaternion.LookRotation(Vector3.forward), "AA");
+            }
         }
+
+        private static Building SpawnEmplacement(
+            EncampmentSite site, Spawner spawner, string preferredKey, string fallbackKeyword,
+            Vector3 position, Quaternion rotation, string label)
+        {
+            BuildingDefinition def = Resolve(preferredKey, fallbackKeyword);
+            if (def == null || def.unitPrefab == null || spawner == null) return null;
+
+            Building b = spawner.SpawnBuilding(
+                def.unitPrefab,
+                position.ToGlobalPosition(),
+                rotation,
+                site.Owner,
+                site.Airbase,
+                $"{NamePrefix}{Sanitize(site.Airbase?.name)}:{site.Tier}:{label}",
+                false,
+                null);
+
+            if (b != null) site.Emplacements.Add(b);
+            return b;
+        }
+
+        private static bool HasEmplacement(EncampmentSite site, string keyword)
+        {
+            for (int i = 0; i < site.Emplacements.Count; i++)
+            {
+                Building b = site.Emplacements[i];
+                if (b == null || b.definition == null) continue;
+                if (!(b.definition is BuildingDefinition d)) continue;
+                if ((d.jsonKey?.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) ?? -1) >= 0 ||
+                    (d.unitName?.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) ?? -1) >= 0)
+                    return true;
+            }
+            return false;
+        }
+
+        private static void SpawnBarriers(EncampmentSite site, int count)
+        {
+            Vector3[] localOffsets =
+            {
+                new Vector3(-4.5f, 0f, 0f),
+                new Vector3(4.5f, 0f, 0f),
+                new Vector3(0f, 0f, 4.5f),
+                new Vector3(0f, 0f, -4.5f)
+            };
+
+            for (int i = 0; i < count && i < localOffsets.Length; i++)
+            {
+                Quaternion rotation = i < 2 ? Quaternion.identity : Quaternion.Euler(0f, 90f, 0f);
+                GameObject barrier = MakeshiftFortificationBuilder.CreateConcreteBarrier(
+                    SnapToGround(site.Center + localOffsets[i]), rotation, null);
+                if (barrier != null) site.Props.Add(barrier);
+            }
+        }
+
+        private static void SpawnSentries(EncampmentSite site)
+        {
+            int target = TroopDeploymentMath.ComputeVisibleSentries(site.Troops);
+            int spacing = Math.Max(3, target);
+
+            for (int i = site.Sentries.Count; i < target; i++)
+            {
+                float angle = (i * 360f / spacing) * Mathf.Deg2Rad;
+                Vector3 dir = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)).normalized;
+                Vector3 pos = SnapToGround(site.Center + dir * 6.5f);
+                Quaternion rot = Quaternion.LookRotation(-dir, Vector3.up);
+
+                GameObject sentry = VanillaSoldierFactory.CreateVisualSoldier(pos, rot, null);
+                if (sentry != null)
+                {
+                    site.Sentries.Add(sentry);
+                    site.Props.Add(sentry);
+                }
+            }
+        }
+
+        private static void ReplenishFirebase(EncampmentSite site)
+        {
+            for (int i = 0; i < site.Emplacements.Count; i++)
+            {
+                Building b = site.Emplacements[i];
+                if (b == null) continue;
+                UnitPart part = b.GetComponentInChildren<UnitPart>();
+                if (part != null)
+                    part.hitPoints = Mathf.Max(part.hitPoints, 100f);
+            }
+            Plugin.Logger.LogInfo($"[ENCAMPMENT] Forward firebase replenished at Tier {site.Tier}.");
+        }
+
+        private static Vector3 SnapToGround(Vector3 position)
+        {
+            if (Physics.Raycast(position + Vector3.up * 50f, Vector3.down, out RaycastHit hit, 100f, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore))
+                return hit.point;
+            return position;
+        }
+
+        private static string Sanitize(string name) => (name ?? "Base").Replace(':', '_').Replace(' ', '_');
     }
 }

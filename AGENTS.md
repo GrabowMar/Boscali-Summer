@@ -3,6 +3,10 @@
 This repository is a collection of independent mod features shipped in one DLL. Treat a
 folder boundary as an ownership boundary, not merely as source organization.
 
+Cross-mod rules (Wing Command bezels, map picker, no hard dependency) live in
+`C:\Users\marci\dev\nomodkit\shared\avionics\README.md`. Read that before adding an
+MFD screen, an armed map click, or anything that would need Wing Command to exist.
+
 ## Start narrow
 
 1. Classify the request as one feature, framework, infrastructure, bootstrap/configuration,

@@ -6,11 +6,7 @@ using UnityEngine;
 
 namespace BoscaliSummer.Fire
 {
-    /// <summary>
-    /// Reuses the smoke layer serialized into Nuclear Option's Fuel Depot destruction
-    /// effect. Nothing about the particle material, color, noise, velocity, or shape is
-    /// recreated here; a smoke-only copy of the vanilla prefab is pooled per fire site.
-    /// </summary>
+    /// <summary>Pooled smoke-only copies of the vanilla Fuel Depot destruction prefab.</summary>
     internal sealed class FuelDepotSmokePool
     {
         internal enum SmokeProfile

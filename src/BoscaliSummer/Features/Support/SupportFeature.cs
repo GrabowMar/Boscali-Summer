@@ -27,8 +27,8 @@ namespace BoscaliSummer.Features.Support
 
             network.Configure(manager);
             manager.Configure(context.Settings.Support, perks, fortifications, network, context.Logger);
-            manager.ConfigureBypass(context.Settings.BypassRequirements);
-            manager.ConfigureDisableCooldowns(context.Settings.DisableOpsCooldowns);
+            manager.ConfigureBypass(context.Settings.Diagnostics.BypassRequirements);
+            manager.ConfigureDisableCooldowns(context.Settings.Diagnostics.DisableOpsCooldowns);
             panel.Configure(manager, progression, context.Logger);
         }
     }

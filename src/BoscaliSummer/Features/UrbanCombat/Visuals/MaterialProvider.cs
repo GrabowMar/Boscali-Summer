@@ -83,27 +83,6 @@ namespace BoscaliSummer.Garrisons
             return GetConcreteMaterial();
         }
 
-        public static void FixRenderers(GameObject root)
-        {
-            if (root == null) return;
-            Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
-            Material fallback = GetSandbagMaterial() ?? GetConcreteMaterial();
-            if (fallback == null) return;
-
-            for (int i = 0; i < renderers.Length; i++)
-            {
-                Renderer r = renderers[i];
-                if (r == null) continue;
-                r.enabled = true;
-
-                if (r.sharedMaterial == null || r.sharedMaterial.shader == null ||
-                    r.sharedMaterial.shader.name.IndexOf("InternalError", StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    r.sharedMaterial = fallback;
-                }
-            }
-        }
-
         private static BuildingDefinition ResolveDef(string key)
         {
             if (Encyclopedia.i?.buildings == null) return null;

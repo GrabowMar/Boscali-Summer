@@ -2,38 +2,34 @@ using UnityEngine;
 
 namespace BoscaliSummer.Features.Support.Presentation
 {
-    /// <summary>
-    /// Design tokens for the OPS cockpit MFD page. Every token here is consumed by
-    /// <see cref="SupportPanel"/>, which no longer keeps private copies of the same values.
-    /// </summary>
+    /// <summary>OPS MFD colours, type scale, and spacing.</summary>
     internal static class AvionicsUiPalette
     {
         // Surfaces
-        public static readonly Color SurfaceScreen = new Color(0.02f, 0.04f, 0.05f, 0.96f);
-        public static readonly Color SurfaceCard = new Color(0.071f, 0.098f, 0.133f, 0.88f);
-        public static readonly Color SurfaceCardHover = new Color(0.094f, 0.133f, 0.188f, 0.95f);
-        public static readonly Color SurfaceActive = new Color(0.04f, 0.12f, 0.07f, 0.85f);
-        public static readonly Color SurfaceInert = new Color(0.03f, 0.05f, 0.06f, 0.60f);
-        public static readonly Color SurfaceRibbon = new Color(0.04f, 0.08f, 0.09f, 0.90f);
-        public static readonly Color Frame = new Color(0.18f, 0.28f, 0.30f, 0.85f);
+        public static readonly Color SurfaceScreen = new Color(0.022f, 0.040f, 0.032f, 0.96f);
+        public static readonly Color SurfaceCard = new Color(0.038f, 0.080f, 0.060f, 0.88f);
+        public static readonly Color SurfaceCardHover = new Color(0.058f, 0.120f, 0.088f, 0.95f);
+        public static readonly Color SurfaceActive = new Color(0.04f, 0.15f, 0.09f, 0.88f);
+        public static readonly Color SurfaceInert = new Color(0.025f, 0.05f, 0.04f, 0.60f);
+        public static readonly Color SurfaceRibbon = new Color(0.03f, 0.07f, 0.055f, 0.92f);
+        public static readonly Color Frame = new Color(0.18f, 0.65f, 0.42f, 0.35f);
+        public static readonly Color BorderSubtle = new Color(0.18f, 0.65f, 0.42f, 0.30f);
 
         // Status rails
-        public static readonly Color RailEmerald = new Color(0f, 1f, 0.4f, 1f);
+        public static readonly Color RailEmerald = new Color(0.000f, 1.000f, 0.616f, 1f);
         public static readonly Color RailAmber = new Color(0.961f, 0.620f, 0.043f, 1f);
-        public static readonly Color RailCyan = new Color(0.024f, 0.714f, 0.831f, 1f);
-        public static readonly Color RailInert = new Color(0.2f, 0.28f, 0.35f, 0.5f);
+        public static readonly Color RailCyan = new Color(0.000f, 0.898f, 1.000f, 1f);
+        public static readonly Color RailInert = new Color(0.15f, 0.30f, 0.24f, 0.5f);
 
         // Type
-        public static readonly Color TextPrimary = new Color(0.973f, 0.980f, 0.988f, 1f);
-        public static readonly Color TextDim = new Color(0.55f, 0.62f, 0.65f, 1f);
+        public static readonly Color TextPrimary = new Color(0.92f, 1.00f, 0.96f, 1f);
+        public static readonly Color TextDim = new Color(0.48f, 0.70f, 0.62f, 1f);
         public static readonly Color TextWarning = new Color(1f, 0.72f, 0.25f, 1f);
 
         // Spacing, on an 4pt rhythm
-        public const float Space1 = 4f;
         public const float Space2 = 8f;
         public const float Space3 = 12f;
         public const float Space4 = 16f;
-        public const float Space5 = 20f;
 
         public const float FontTitle = 16f;
         public const float FontLead = 13f;

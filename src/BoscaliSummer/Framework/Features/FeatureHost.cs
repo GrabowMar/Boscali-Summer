@@ -27,8 +27,6 @@ namespace BoscaliSummer.Framework.Features
         private bool disposed;
         private bool loadAttempted;
 
-        public ServiceRegistry Services => services;
-
         public FeatureHost(ManualLogSource logger, ModConfiguration settings)
         {
             this.logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -37,6 +35,7 @@ namespace BoscaliSummer.Framework.Features
             runtimeRoot.hideFlags = HideFlags.HideAndDontSave;
             UnityEngine.Object.DontDestroyOnLoad(runtimeRoot);
             sceneLifecycle = runtimeRoot.AddComponent<SceneLifecycle>();
+            ModServices.Active = services;
         }
 
         public void Load(IReadOnlyList<IModFeature> features)
@@ -193,6 +192,8 @@ namespace BoscaliSummer.Framework.Features
             loadedFeatures.Clear();
             if (sceneLifecycle != null) sceneLifecycle.enabled = false;
             services.Clear();
+            if (ReferenceEquals(ModServices.Active, services)) ModServices.Active = null;
+            TheaterInteropPush.Clear();
             if (runtimeRoot != null) UnityEngine.Object.Destroy(runtimeRoot);
         }
     }

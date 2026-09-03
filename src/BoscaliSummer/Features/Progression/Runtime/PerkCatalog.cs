@@ -4,10 +4,7 @@ using BoscaliSummer.Framework.Contracts;
 namespace BoscaliSummer.Features.Progression.Runtime
 {
     /// <summary>
-    /// One perk. A perk either scales an effect (<see cref="Multiplier"/> != 1) or grants a
-    /// support capability (<see cref="Capability"/> != null) — never both. <see cref="Group"/>
-    /// is a presentation label with no data-model meaning; the catalogue is flat and has no
-    /// prerequisites or tiers.
+    /// One perk: either a multiplier or a support capability, never both. Group is display-only.
     /// </summary>
     internal readonly struct PerkDefinition
     {

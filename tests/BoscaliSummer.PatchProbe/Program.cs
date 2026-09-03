@@ -64,7 +64,11 @@ Assembly pluginAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(plugi
     ("MountedTroops", "Fire"),
     ("LoadoutSelector", "AssignAircraft"),
     ("WeaponManager", "InitializeWeaponManager"),
-    ("WeaponSelector", "PopulateOptions")
+    ("WeaponSelector", "PopulateOptions"),
+    ("WeaponChecker", "GetAvailableWeaponsNonAlloc"),
+    ("CombatAI", "AnalyzeTarget"),
+    ("DynamicMap", "Maximize"),
+    ("DynamicMap", "Minimize")
 };
 
 foreach ((string typeName, string methodName) in targets)
@@ -156,11 +160,15 @@ string[] patchTypes =
     "BoscaliSummer.Garrisons.ChimeraLoadoutAssignAircraftPatch",
     "BoscaliSummer.Garrisons.ChimeraWeaponManagerInitPatch",
     "BoscaliSummer.Garrisons.ChimeraWeaponSelectorPopulatePatch",
+    "BoscaliSummer.Garrisons.ChimeraWeaponCheckerAvailablePatch",
     "BoscaliSummer.Features.Radio.Patches.VanillaPlayMusicPatch",
     "BoscaliSummer.Features.Radio.Patches.VanillaCrossFadeMusicPatch",
-    "BoscaliSummer.Features.Radio.Patches.VanillaQueueMusicPatch"
-    ,"BoscaliSummer.Features.Progression.Patches.AircraftFuelUsePatch"
-    ,"BoscaliSummer.Features.Progression.Patches.RewardAllocationPatch"
+    "BoscaliSummer.Features.Radio.Patches.VanillaQueueMusicPatch",
+    "BoscaliSummer.Features.Progression.Patches.AircraftFuelUsePatch",
+    "BoscaliSummer.Features.Progression.Patches.RewardAllocationPatch",
+    "BoscaliSummer.Features.Command.Patches.AiTargetScoringPatch",
+    "BoscaliSummer.Features.Command.Patches.DynamicMapMaximizePatch",
+    "BoscaliSummer.Features.Command.Patches.DynamicMapMinimizePatch"
 };
 
 foreach (string patchType in patchTypes)
@@ -171,9 +179,10 @@ string[] featureTypes =
 {
     "BoscaliSummer.Features.FireAndDestruction.FireAndDestructionFeature",
     "BoscaliSummer.Features.UrbanCombat.UrbanCombatFeature",
-    "BoscaliSummer.Features.Radio.RadioFeature"
-    ,"BoscaliSummer.Features.Progression.ProgressionFeature"
-    ,"BoscaliSummer.Features.Support.SupportFeature"
+    "BoscaliSummer.Features.Radio.RadioFeature",
+    "BoscaliSummer.Features.Progression.ProgressionFeature",
+    "BoscaliSummer.Features.Support.SupportFeature",
+    "BoscaliSummer.Features.Command.CommandFeature"
 };
 foreach (string featureType in featureTypes)
     if (pluginAssembly.GetType(featureType, false) == null)
@@ -245,7 +254,7 @@ Type messageHandler = mirageAssembly.GetType("Mirage.MessageHandler", true)!;
 if (!messageHandler.GetMethods(AllMembers).Any(method => method.Name == "RegisterHandler"))
     throw new MissingMethodException("Mirage.MessageHandler", "RegisterHandler");
 
-Console.WriteLine("Patch target probe: game methods/fields, Harmony parameter names, 12 patch classes, 5 features, radio assets, four wire contracts, and Mirage seams resolved.");
+Console.WriteLine($"Patch target probe: game methods/fields, Harmony parameter names, {patchTypes.Length} patch classes, {featureTypes.Length} features, radio assets, four wire contracts, and Mirage seams resolved.");
 return 0;
 
 static bool MetadataHasMethod(string assemblyPath, string typeName, string methodName)

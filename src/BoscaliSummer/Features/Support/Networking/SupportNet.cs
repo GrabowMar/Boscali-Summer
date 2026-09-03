@@ -1,6 +1,7 @@
 using System;
 using System.Reflection;
 using BoscaliSummer.Features.Support.Runtime;
+using BoscaliSummer.Runtime;
 using Mirage;
 using Mirage.Serialization;
 using NuclearOption.Networking;
@@ -89,7 +90,7 @@ namespace BoscaliSummer.Features.Support.Networking
                 Z = target.z
             };
 
-            if (IsServer() && GameManager.GetLocalPlayer<Player>(out Player local) && local != null)
+            if (GameAccess.IsServer() && GameManager.GetLocalPlayer<Player>(out Player local) && local != null)
             {
                 SupportResult result = manager.Evaluate(local, message);
                 manager.ReceiveResult(Reply(message, result, manager.ServerCooldown));
@@ -103,12 +104,6 @@ namespace BoscaliSummer.Features.Support.Networking
                 return;
             }
             client.Send(message);
-        }
-
-        private static bool IsServer()
-        {
-            try { return NetworkManagerNuclearOption.i != null && NetworkManagerNuclearOption.i.Server.Active; }
-            catch { return false; }
         }
 
         private static SupportResultMessage Reply(

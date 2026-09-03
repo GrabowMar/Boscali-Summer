@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using BoscaliSummer.Features.FireAndDestruction.Configuration;
 using BoscaliSummer.Framework.Lifecycle;
 using BoscaliSummer.Runtime;
 using NuclearOption.Networking;
@@ -30,6 +31,8 @@ namespace BoscaliSummer.Fire
         private float nextSelection;
         private float nextVisualTick;
 
+        private static FireAndDestructionSettings Fire => Plugin.Settings.FireAndDestruction;
+
         private void Awake() => Instance = this;
 
         private void OnDestroy()
@@ -46,7 +49,7 @@ namespace BoscaliSummer.Fire
         {
             for (int i = 0; i < ruins.Count; i++)
                 if ((ruins[i].Position - position).sqrMagnitude < 64f) return;
-            if (ruins.Count >= Plugin.Settings.MaximumPersistentRuins) return;
+            if (ruins.Count >= Fire.MaximumPersistentRuins) return;
 
             halfExtents.x = Mathf.Clamp(halfExtents.x, 3f, 32f);
             halfExtents.y = Mathf.Clamp(halfExtents.y, 3f, 32f);
@@ -64,7 +67,7 @@ namespace BoscaliSummer.Fire
 
         internal void SendSnapshot(Mirage.INetworkPlayer player)
         {
-            if (!IsServer() || player == null) return;
+            if (!GameAccess.IsServer() || player == null) return;
             float now = Time.timeSinceLevelLoad;
             for (int i = 0; i < ruins.Count; i++)
                 ModNet.SendRuin(player, ruins[i].Position, ruins[i].HalfExtents,
@@ -88,7 +91,7 @@ namespace BoscaliSummer.Fire
             Vector3 wind = NetworkSceneSingleton<LevelInfo>.i != null
                 ? NetworkSceneSingleton<LevelInfo>.i.GetWind()
                 : Vector3.zero;
-            float hotSeconds = Plugin.Settings.HotRuinSeconds;
+            float hotSeconds = Fire.HotRuinSeconds;
             for (int i = 0; i < ruins.Count; i++)
             {
                 RuinSite site = ruins[i];
@@ -113,7 +116,7 @@ namespace BoscaliSummer.Fire
         private void SelectVisuals(Vector3 cameraPosition)
         {
             for (int i = 0; i < ruins.Count; i++) ruins[i].Desired = false;
-            int budget = Mathf.Min(Plugin.Settings.MaximumRuinSmokeVisuals, ruins.Count);
+            int budget = Mathf.Min(Fire.MaximumRuinSmokeVisuals, ruins.Count);
             float maximumDistanceSq = 6000f * 6000f;
             for (int slot = 0; slot < budget; slot++)
             {
@@ -158,12 +161,6 @@ namespace BoscaliSummer.Fire
             smokePool.Clear();
             collapsePool.Clear();
             nextSelection = nextVisualTick = 0f;
-        }
-
-        private static bool IsServer()
-        {
-            try { return NetworkManagerNuclearOption.i != null && NetworkManagerNuclearOption.i.Server.Active; }
-            catch { return false; }
         }
     }
 }

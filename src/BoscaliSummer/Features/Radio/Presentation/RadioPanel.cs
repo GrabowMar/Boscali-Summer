@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using BoscaliSummer.Features.Radio.Runtime;
 using BoscaliSummer.Runtime;
+using NOAvionics;
 using NuclearOption.UIStyleSystem;
 using TMPro;
 using UnityEngine;
@@ -115,6 +116,7 @@ namespace BoscaliSummer.Features.Radio.Presentation
 
         public static void Reset()
         {
+            BezelRegistry.Release(BezelRegistry.Rad);
             RadioStationIconCache.Clear();
             screen = null;
             font = null;
@@ -151,50 +153,29 @@ namespace BoscaliSummer.Features.Radio.Presentation
                 VirtualMFD mfd = UnityEngine.Object.FindObjectOfType<VirtualMFD>();
                 if (mfd == null) return;
 
-                // Prefer the right bezel so a co-installed tactical command panel can keep
-                // the conventional left-side management position.
-                List<Button> buttons = GameAccess.GetRightMfdButtons(mfd);
-                List<MFDScreen> screens = GameAccess.GetRightMfdScreens(mfd);
-                bool right = true;
-                if (!TryClaimSlot(buttons, screens, out int slot))
+                if (!MfdBezel.TryClaim(BezelRegistry.Rad, preferLeft: false, mfd,
+                    out List<Button> buttons, out List<MFDScreen> screens, out int slot, out bool left))
                 {
-                    buttons = GameAccess.GetLeftMfdButtons(mfd);
-                    screens = GameAccess.GetLeftMfdScreens(mfd);
-                    right = false;
-                    if (!TryClaimSlot(buttons, screens, out slot))
-                    {
-                        Fail("no free bezel slot");
-                        return;
-                    }
+                    Fail("no free bezel slot");
+                    return;
                 }
 
-                MFDScreen template = FindTemplate(screens) ??
-                    FindTemplate(GameAccess.GetRightMfdScreens(mfd)) ??
-                    FindTemplate(GameAccess.GetLeftMfdScreens(mfd));
-                if (template == null) return;
+                MFDScreen template = MfdBezel.FindTemplate(screens) ?? MfdBezel.FindTemplate(mfd);
+                if (template == null)
+                {
+                    BezelRegistry.Release(BezelRegistry.Rad);
+                    return;
+                }
 
                 screen = Build(template, buttons[slot]);
-                if (screen == null) return;
-                while (screens.Count <= slot) screens.Add(null);
-                screens[slot] = screen;
-                mfd.SetupButtons();
-
-                Button bezel = buttons[slot];
-                bezel.enabled = true;
-                bezel.interactable = true;
-                if (bezel.onClick.GetPersistentEventCount() == 0)
+                if (screen == null)
                 {
-                    VirtualMFD owner = mfd;
-                    bool onRight = right;
-                    bezel.onClick.AddListener(() =>
-                    {
-                        if (onRight) owner.PressRightButton(bezel);
-                        else owner.PressLeftButton(bezel);
-                    });
+                    BezelRegistry.Release(BezelRegistry.Rad);
+                    return;
                 }
 
-                screen.CloseScreen(Screen.width * (right ? Vector3.right : Vector3.left));
-                Plugin.Logger.LogInfo("Radio MFD installed on " + (right ? "right" : "left") +
+                MfdBezel.Bind(mfd, buttons, screens, slot, left, screen);
+                Plugin.Logger.LogInfo("Radio MFD installed on " + (left ? "left" : "right") +
                     " bezel slot " + (slot + 1) + ".");
             }
             catch (Exception e)
@@ -202,31 +183,6 @@ namespace BoscaliSummer.Features.Radio.Presentation
                 Fail(e.Message);
                 Plugin.Logger.LogError("Radio MFD install failed: " + e);
             }
-        }
-
-        private static bool TryClaimSlot(List<Button> buttons, List<MFDScreen> screens, out int slot)
-        {
-            slot = -1;
-            if (buttons == null || screens == null) return false;
-            for (int i = 0; i < buttons.Count; i++)
-            {
-                if (buttons[i] == null) continue;
-                if (i >= screens.Count || screens[i] == null)
-                {
-                    slot = i;
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        private static MFDScreen FindTemplate(List<MFDScreen> screens)
-        {
-            if (screens == null) return null;
-            for (int i = 0; i < screens.Count; i++)
-                if (screens[i] != null && screens[i].transform.parent != null)
-                    return screens[i];
-            return null;
         }
 
         private static MFDScreen Build(MFDScreen template, Button bezel)
@@ -262,17 +218,32 @@ namespace BoscaliSummer.Features.Radio.Presentation
             // literals and a Height constant that had to be kept in step with them by hand.
             float y = -Pad;
 
-            Label(content, "MUSIC PLAYER", new Rect(Pad, y, inner, Space6),
-                accent, FontTitle, FontStyles.Normal, TextAlignmentOptions.Center);
-            y -= Space6 + Space2;
-            Rule(content, new Rect(Pad, y, inner, 1f), Frame());
+            Label(content, "RADIO COMMS // AUDIO RECEIVER", new Rect(Pad, y, inner, Space5),
+                accent, FontTitle, FontStyles.Bold, TextAlignmentOptions.Center);
+            y -= Space5;
+
+            // Deep-space mission tracking telemetry header strip
+            float chipW = 86f;
+            float chipH = 16f;
+            float chipGap = 8f;
+            float totalChipsW = chipW * 3f + chipGap * 2f;
+            float startX = Pad + (inner - totalChipsW) * 0.5f;
+
+            StatusChip(content, "SYS: AUDIO-NET", new Rect(startX, y, chipW, chipH),
+                       Unity(RadioUiPalette.RailEmerald), Unity(RadioUiPalette.TextPrimary), FontMicro - 1f);
+            StatusChip(content, "SIGNAL: HIGH", new Rect(startX + chipW + chipGap, y, chipW, chipH),
+                       Unity(RadioUiPalette.RailCyan), Unity(RadioUiPalette.TextPrimary), FontMicro - 1f);
+            StatusChip(content, "FREQ: VHF-COM", new Rect(startX + (chipW + chipGap) * 2f, y, chipW, chipH),
+                       Unity(RadioUiPalette.RailEmerald), Unity(RadioUiPalette.TextPrimary), FontMicro - 1f);
+
+            y -= chipH + Space2;
+            Rule(content, new Rect(Pad, y, inner, 1f), Unity(RadioUiPalette.BorderSubtle));
             y -= Space2;
 
             // Now-playing card: station art on the left, the signal line, the track title,
             // and a progress bar. Its internals stay positioned against the card top.
             float cardTop = y;
-            FramedPanel(content, new Rect(Pad, cardTop, inner, CardHeight), Frame());
-            Rule(content, new Rect(Pad, cardTop, 3f, CardHeight), accent);
+            TacticalCard(content, new Rect(Pad, cardTop, inner, CardHeight), accent);
             stationIconGround = FramedPanel(content,
                 new Rect(Pad + Space2, cardTop - Space2, ArtSize, ArtSize), Frame());
             stationIcon = Panel(stationIconGround.rectTransform,
@@ -680,6 +651,40 @@ namespace BoscaliSummer.Features.Radio.Presentation
         }
 
         private static Image Rule(RectTransform parent, Rect rect, Color color) => Panel(parent, rect, color);
+
+        private static (Image Background, TMP_Text Label) StatusChip(
+            RectTransform parent, string text, Rect rect, Color railColor, Color textColor, float fontSize = FontMicro)
+        {
+            var go = new GameObject("StatusChip", typeof(RectTransform), typeof(Image));
+            var rt = go.GetComponent<RectTransform>();
+            rt.SetParent(parent, false);
+            Place(rt, rect);
+
+            Image bg = go.GetComponent<Image>();
+            bg.raycastTarget = false;
+            bg.color = new Color(railColor.r * 0.15f, railColor.g * 0.15f, railColor.b * 0.15f, 0.85f);
+
+            Outline(parent, rect, new Color(railColor.r, railColor.g, railColor.b, 0.45f));
+
+            var lblGo = new GameObject("ChipLabel", typeof(RectTransform), typeof(TextMeshProUGUI));
+            var lRt = lblGo.GetComponent<RectTransform>();
+            lRt.SetParent(parent, false);
+            Place(lRt, rect);
+            var label = lblGo.GetComponent<TextMeshProUGUI>();
+            label.text = text;
+            label.color = textColor;
+            label.fontSize = fontSize;
+            label.fontStyle = FontStyles.Bold;
+            label.alignment = TextAlignmentOptions.Center;
+            label.raycastTarget = false;
+            return (bg, label);
+        }
+
+        private static Image TacticalCard(RectTransform parent, Rect area, Color railColor)
+        {
+            FramedPanel(parent, area, Unity(RadioUiPalette.BorderSubtle));
+            return Rule(parent, new Rect(area.x, area.y, 3f, area.height), railColor);
+        }
 
         private static void Place(RectTransform target, Rect rect)
         {

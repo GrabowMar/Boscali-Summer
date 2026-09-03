@@ -5,14 +5,7 @@ using UnityEngine.Rendering.Universal;
 namespace BoscaliSummer.Framework.Visuals
 {
     /// <summary>
-    /// Generates and caches procedural normal (bump) maps, albedo textures, and URP decal
-    /// materials for progressive building ruin and destruction effects.
-    ///
-    /// Performance-oriented:
-    /// - Textures (256x256) are generated once procedurally and shared across all buildings.
-    /// - Generates authentic tangent-space normal maps using Sobel height gradient filtering.
-    /// - Incorporates Voronoi cellular crack networks and multi-octave Fractal Brownian Motion (FBM)
-    ///   noise so damage creates chiseled 3D fracture relief under dynamic lighting.
+    /// Shared procedural ruin textures and URP decal materials, generated once per session.
     /// </summary>
     internal static class RuinTextureCatalog
     {
@@ -45,13 +38,6 @@ namespace BoscaliSummer.Framework.Visuals
             EnsureInitialized();
             int idx = Mathf.Clamp((int)tier, 0, 2);
             return decalMaterials[idx];
-        }
-
-        public static Texture2D GetNormalMap(RuinTier tier)
-        {
-            EnsureInitialized();
-            int idx = Mathf.Clamp((int)tier, 0, 2);
-            return normalMaps[idx];
         }
 
         public static void EnsureInitialized()

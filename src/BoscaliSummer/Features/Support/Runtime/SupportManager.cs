@@ -7,6 +7,7 @@ using BoscaliSummer.Features.Support.Configuration;
 using BoscaliSummer.Features.Support.Networking;
 using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Lifecycle;
+using NOAvionics;
 using NuclearOption.Networking;
 using UnityEngine;
 
@@ -78,6 +79,7 @@ namespace BoscaliSummer.Features.Support.Runtime
             localCooldownUntil = 0f;
             ArmedAction = null;
             ArmedFrame = 0;
+            MapPicker.Disarm(MapPicker.Support);
             Status = "Select support option, then right-click on map.";
         }
 
@@ -97,13 +99,15 @@ namespace BoscaliSummer.Features.Support.Runtime
                     return;
                 }
 
-                if (Time.frameCount > ArmedFrame + 1 && Input.GetMouseButtonDown(1))
+                if (Time.frameCount > ArmedFrame + 1 && Input.GetMouseButtonDown(1) &&
+                    MapPicker.IsOwner(MapPicker.Support))
                 {
                     DynamicMap map = SceneSingleton<DynamicMap>.i;
                     if (map != null && DynamicMap.mapMaximized && map.TryGetCursorCoordinates(out GlobalPosition target))
                     {
                         SupportActionId action = ArmedAction.Value;
                         ArmedAction = null;
+                        MapPicker.Disarm(MapPicker.Support);
                         RequestAt(action, target);
                     }
                 }
@@ -135,14 +139,6 @@ namespace BoscaliSummer.Features.Support.Runtime
             return Cost(action, player);
         }
 
-        /// <summary>True when the maximised map currently has a usable cursor coordinate.</summary>
-        public bool TryGetDesignatedTarget(out GlobalPosition target)
-        {
-            target = default;
-            DynamicMap map = SceneSingleton<DynamicMap>.i;
-            return map != null && DynamicMap.mapMaximized && map.TryGetCursorCoordinates(out target);
-        }
-
         public void Arm(SupportActionId action)
         {
             if (ArmedAction.HasValue && ArmedAction.Value == action)
@@ -151,11 +147,17 @@ namespace BoscaliSummer.Features.Support.Runtime
                 return;
             }
 
-            ArmedAction = action;
-            ArmedFrame = Time.frameCount;
-
             SupportActionDefinition def = catalog != null ? catalog.Find(action) : null;
             string name = def != null ? def.Name : "SUPPORT";
+            string prompt = name + " ARMED · RIGHT-CLICK MAP";
+            if (!MapPicker.TryArm(MapPicker.Support, MapPicker.GestureRight, prompt))
+            {
+                Status = MapPicker.Prompt ?? "MAP BUSY";
+                return;
+            }
+
+            ArmedAction = action;
+            ArmedFrame = Time.frameCount;
             Status = "ARMED: " + name + " — Right-click on map to call in (ESC to cancel).";
 
             DynamicMap map = SceneSingleton<DynamicMap>.i;
@@ -169,6 +171,7 @@ namespace BoscaliSummer.Features.Support.Runtime
         {
             if (!ArmedAction.HasValue) return;
             ArmedAction = null;
+            MapPicker.Disarm(MapPicker.Support);
             Status = "Support request cancelled.";
         }
 

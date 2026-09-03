@@ -10,11 +10,8 @@ namespace BoscaliSummer.Features.UrbanCombat.Configuration
         public readonly ConfigEntry<float> StrongholdPierceArmor;
         public readonly ConfigEntry<float> StrongholdBlastArmor;
         public readonly ConfigEntry<string> StrongholdDefenseType;
-        public readonly ConfigEntry<bool> DamageShaderEnabled;
-        public readonly ConfigEntry<bool> DamageHeatGlowEnabled;
+        public readonly ConfigEntry<int> TroopsPerDeploy;
 
-        public int GarrisonsMinimum => GarrisonsPerZone.Value;
-        public int GarrisonsMaximum => GarrisonsPerZone.Value;
         public string GarrisonDefinitionKey => StrongholdDefenseType.Value;
 
         public UrbanCombatSettings(ConfigFile config)
@@ -50,10 +47,12 @@ namespace BoscaliSummer.Features.UrbanCombat.Configuration
                 "Building definition key for the stronghold defensive armament. " +
                 "'auto' chooses pillbox or heavy emplacements over standard sandbag bunkers. " +
                 "Or specify an exact unit key such as pillbox, Emplacement1_ATGM, or Emplacement1_MG.");
-            DamageShaderEnabled = config.Bind("Garrisons", "DamageShaderEnabled", true,
-                "Enable progressive structural damage, surface charring, and soot staining on buildings via URP MaterialPropertyBlocks.");
-            DamageHeatGlowEnabled = config.Bind("Garrisons", "DamageHeatGlowEnabled", true,
-                "Enable dynamic incandescent thermal heat flash on building surfaces at impact points that cools over time.");
+            TroopsPerDeploy = config.Bind("Air Assault", "InfantryPerFastRope", 8,
+                new ConfigDescription(
+                    "Infantry committed from the UH-90 Ibis on each fast-rope trigger. The more " +
+                    "infantry committed to an encampment, the heavier the emplacements that spawn. " +
+                    "Host-authoritative: on a server, only the host's value applies.",
+                    new AcceptableValueRange<int>(2, 16)));
         }
     }
 }

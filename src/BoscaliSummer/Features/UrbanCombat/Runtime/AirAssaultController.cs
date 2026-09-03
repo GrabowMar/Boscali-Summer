@@ -6,12 +6,7 @@ using UnityEngine;
 namespace BoscaliSummer.Garrisons
 {
     /// <summary>
-    /// Controls air assault insertions:
-    /// - Deployed strictly by selecting Troops/Paratroopers in the weapon stations menu and pulling
-    ///   the normal fire trigger (no special J hotkey).
-    /// - From MC-260 Chimera: Paratroopers deploy out of the rear cargo hold ramp like cargo/vehicles,
-    ///   decelerating under the official ejected-pilot parachute canopy and lines.
-    /// - From UH-90 Ibis: Fast-rope rappelling squad descends when hovering under 40m.
+    /// Fires Chimera paratroops and Ibis fast-rope from the troops weapon trigger.
     /// </summary>
     internal sealed class AirAssaultController : MonoBehaviour, ISceneService
     {
@@ -69,30 +64,24 @@ namespace BoscaliSummer.Garrisons
             if (mountedTroops == null)
                 mountedTroops = aircraft.GetComponentInChildren<MountedTroops>();
 
-            if (mountedTroops != null)
+            int aboard = mountedTroops != null ? Mathf.Max(0, mountedTroops.ammo)
+                : Plugin.Settings.UrbanCombat.TroopsPerDeploy.Value;
+            if (aboard <= 0)
             {
-                int ammo = mountedTroops.ammo;
-                if (ammo <= 0)
-                {
-                    Plugin.Logger.LogInfo($"[Air Assault] Cannot deploy: 0 squads remaining aboard {name}! Rearm at an airbase.");
-                    return;
-                }
-
-                mountedTroops.ammo--;
-                Plugin.Logger.LogInfo($"[Air Assault] Deployed 1 infantry squad from {name}. {mountedTroops.ammo} squad(s) remaining aboard.");
-            }
-            else
-            {
-                Plugin.Logger.LogInfo($"[Air Assault] Deploying tactical infantry squad from internal {name} bay.");
+                Plugin.Logger.LogInfo($"[Air Assault] Cannot deploy: 0 infantry remaining aboard {name}! Rearm at an airbase.");
+                return;
             }
 
-            nextDropTime = Time.unscaledTime + MinFireInterval;
             FactionHQ owner = aircraft.NetworkHQ;
             Airbase airbase = FindNearestAirbase(aircraft.transform.position);
 
             if (isChimera)
             {
                 // MC-260 Chimera: Deploy out rear cargo hold ramp like cargo/vehicles
+                if (mountedTroops != null)
+                    mountedTroops.ammo = Mathf.Max(0, mountedTroops.ammo - 1);
+
+                nextDropTime = Time.unscaledTime + MinFireInterval;
                 Vector3 rampPos = aircraft.transform.position - aircraft.transform.forward * 12f - aircraft.transform.up * 1.8f;
                 Vector3 exitVel = inheritedVelocity - aircraft.transform.forward * 8f;
 
@@ -122,23 +111,30 @@ namespace BoscaliSummer.Garrisons
                     return;
                 }
 
+                // Fast-rope deploys a fixed squad per trigger. The drop only costs the
+                // infantry once the insertion is confirmed feasible.
+                int dropCount = TroopDeploymentMath.ComputeDropSize(aboard, Plugin.Settings.UrbanCombat.TroopsPerDeploy.Value);
+                if (mountedTroops != null)
+                    mountedTroops.ammo = Mathf.Max(0, mountedTroops.ammo - dropCount);
+
+                nextDropTime = Time.unscaledTime + MinFireInterval;
+                Plugin.Logger.LogInfo($"[IBIS] Fast-rope rappelling squadron of {dropCount} infantry descending to ({hit.point.x:0}, {hit.point.z:0}). {mountedTroops?.ammo ?? 0} infantry remaining aboard.");
+
                 GameObject shell = ResolveCivilianBuilding(hit.collider);
                 if (shell != null)
                 {
-                    Plugin.Logger.LogInfo($"[IBIS] Fast-rope rappelling squad inserting onto building {shell.name}!");
-                    AirAssaultVisuals.SpawnFastRopeRappelling(aircraft.transform, hit.point, owner, () =>
+                    AirAssaultVisuals.SpawnFastRopeRappelling(aircraft, hit.point, owner, dropCount, () =>
                     {
                         ZoneGarrisonManager.Instance?.TryOccupyBuilding(shell, owner, airbase);
-                        Plugin.Logger.LogInfo($"[AIR ASSAULT] Fast-rope squad secured and fortified {shell.name}!");
+                        Plugin.Logger.LogInfo($"[AIR ASSAULT] Fast-rope squadron secured and fortified {shell.name}!");
                     });
                 }
                 else
                 {
-                    Plugin.Logger.LogInfo($"[IBIS] Fast-rope rappelling squad deploying ground combat encampment at ({hit.point.x:0}, {hit.point.z:0})!");
-                    AirAssaultVisuals.SpawnFastRopeRappelling(aircraft.transform, hit.point, owner, () =>
+                    AirAssaultVisuals.SpawnFastRopeRappelling(aircraft, hit.point, owner, dropCount, () =>
                     {
-                        ZoneGarrisonManager.Instance?.TryDeployEncampment(hit.point, owner, airbase);
-                        Plugin.Logger.LogInfo($"[AIR ASSAULT] Fast-rope squad established combat encampment at ({hit.point.x:0}, {hit.point.z:0})!");
+                        ZoneGarrisonManager.Instance?.TryDeployEncampment(hit.point, owner, airbase, dropCount);
+                        Plugin.Logger.LogInfo($"[AIR ASSAULT] Fast-rope squadron of {dropCount} established combat encampment at ({hit.point.x:0}, {hit.point.z:0})!");
                     });
                 }
             }

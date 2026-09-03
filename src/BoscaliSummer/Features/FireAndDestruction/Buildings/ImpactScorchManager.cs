@@ -1,8 +1,10 @@
 using System.Collections.Generic;
 using System.Reflection;
 using BoscaliSummer.Core;
+using BoscaliSummer.Features.FireAndDestruction.Configuration;
 using BoscaliSummer.Framework.Lifecycle;
 using BoscaliSummer.Framework.Visuals;
+using BoscaliSummer.Infrastructure.Diagnostics;
 using HarmonyLib;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
@@ -35,9 +37,12 @@ namespace BoscaliSummer.Fire
         private bool scorchMaterialSearched;
         private bool loggedFirstMark;
 
-        private static int QueueCapacity => Plugin.Settings.FireAndDestruction.ImpactScorchQueue;
-        private static int PerFrame => Plugin.Settings.FireAndDestruction.ImpactScorchesPerFrame;
-        private static int MaximumMarks => Plugin.Settings.FireAndDestruction.MaximumImpactScorches;
+        private static FireAndDestructionSettings Fire => Plugin.Settings.FireAndDestruction;
+        private static DiagnosticSettings Diagnostics => Plugin.Settings.Diagnostics;
+
+        private static int QueueCapacity => Fire.ImpactScorchQueue;
+        private static int PerFrame => Fire.ImpactScorchesPerFrame;
+        private static int MaximumMarks => Fire.MaximumImpactScorches;
 
         private void Awake() => Instance = this;
 
@@ -56,7 +61,7 @@ namespace BoscaliSummer.Fire
         internal void SubmitExplosion(GlobalPosition position, float blastYield)
         {
             if (GameManager.IsHeadless ||
-                !Plugin.Settings.FireAndDestruction.ImpactScorchEnabled.Value) return;
+                !Fire.ImpactScorchEnabled.Value) return;
             // A missile salvo cannot burst-cast: the queue is bounded and drained a couple
             // of impacts per frame.
             if (pending.Count >= QueueCapacity) return;
@@ -175,7 +180,7 @@ namespace BoscaliSummer.Fire
                 if (scorch != null) projector.material = scorch;
             }
 
-            if (!loggedFirstMark && Plugin.Settings.VerboseLogging.Value)
+            if (!loggedFirstMark && Diagnostics.VerboseLogging.Value)
             {
                 loggedFirstMark = true;
                 Plugin.Logger.LogInfo(
@@ -232,7 +237,7 @@ namespace BoscaliSummer.Fire
                     if (spawners[i] != null)
                         ScoreScorchCandidate(field.GetValue(spawners[i]) as Material, ref bestScore);
             }
-            if (Plugin.Settings.VerboseLogging.Value)
+            if (Diagnostics.VerboseLogging.Value)
                 Plugin.Logger.LogInfo(scorchMaterial != null
                     ? $"Impact scorch decal material resolved: '{scorchMaterial.name}' " +
                       $"(shader '{scorchMaterial.shader.name}', score {bestScore})."

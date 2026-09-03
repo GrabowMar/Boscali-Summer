@@ -2,6 +2,7 @@ using System;
 using System.Reflection;
 using BoscaliSummer.Features.Progression.Runtime;
 using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Runtime;
 using Mirage;
 using Mirage.Serialization;
 using NuclearOption.Networking;
@@ -88,7 +89,7 @@ namespace BoscaliSummer.Features.Progression.Networking
         /// </summary>
         public void Submit(byte perkId)
         {
-            if (IsServer() && GameManager.GetLocalPlayer<Player>(out Player local) && local != null)
+            if (GameAccess.IsServer() && GameManager.GetLocalPlayer<Player>(out Player local) && local != null)
             {
                 manager.Apply(manager.Handle(local, perkId), PlayerIdentity.Of(local));
                 return;
@@ -100,12 +101,6 @@ namespace BoscaliSummer.Features.Progression.Networking
                 return;
             }
             client.Send(new ProgressionSubmit { Protocol = ProtocolVersion, Perk = perkId });
-        }
-
-        private static bool IsServer()
-        {
-            NetworkServer server = NetworkManagerNuclearOption.i?.Server;
-            return server != null && server.Active;
         }
 
         private void ReceiveSubmit(INetworkPlayer sender, ProgressionSubmit submit)
