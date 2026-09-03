@@ -121,8 +121,10 @@ namespace BoscaliSummer.Framework.Visuals
 
                     if (existing.Projector != null)
                     {
-                        float newSize = Mathf.Min(existing.Projector.size.x * 1.35f, 15f);
-                        existing.Projector.size = new Vector3(newSize, newSize, newSize * 0.42f);
+                        float newSize = Mathf.Min(existing.Projector.size.x * 1.35f, 16f);
+                        float depth = Mathf.Max(8f, newSize * 1.2f);
+                        existing.Projector.renderingLayerMask = ~0u;
+                        existing.Projector.size = new Vector3(newSize, newSize, depth);
                         existing.Projector.material = RuinTextureCatalog.GetDecalMaterial(existing.Tier);
                     }
                     return;
@@ -130,14 +132,17 @@ namespace BoscaliSummer.Framework.Visuals
             }
 
             float baseSize = blastYield > 0.1f
-                ? Mathf.Clamp(2.8f + blastYield * 0.45f, 2.8f, 13f)
-                : Mathf.Clamp(1.3f + damage * 0.045f, 1.3f, 4.0f); // Bullets/cannons
+                ? Mathf.Clamp(3.5f + blastYield * 0.55f, 3.5f, 16f)
+                : Mathf.Clamp(1.6f + damage * 0.05f, 1.6f, 4.5f); // Bullets/cannons
+
+            float projDepth = Mathf.Max(8f, baseSize * 1.2f);
 
             Quaternion facing = Quaternion.LookRotation(-normal, Vector3.up);
             uint seed = (uint)(Mathf.Abs(point.x * 137f + point.y * 311f + point.z * 523f));
             Quaternion roll = Quaternion.AngleAxis((seed % 360), -normal);
 
-            GameObject breach = Instantiate(GameAssets.i.scorchMarkDecal, point + normal * 0.08f, roll * facing, transform);
+            Vector3 projectorPos = point + normal * 1.5f;
+            GameObject breach = Instantiate(GameAssets.i.scorchMarkDecal, projectorPos, roll * facing, transform);
             breach.name = $"BoscaliSummer.LocalBreach_{targetTier}";
             breach.SetActive(true);
 
@@ -147,9 +152,10 @@ namespace BoscaliSummer.Framework.Visuals
                 Material ruinMat = RuinTextureCatalog.GetDecalMaterial(targetTier);
                 if (ruinMat != null) projector.material = ruinMat;
 
-                projector.size = new Vector3(baseSize, baseSize, baseSize * 0.42f);
+                projector.renderingLayerMask = ~0u;
+                projector.size = new Vector3(baseSize, baseSize, projDepth);
                 projector.fadeFactor = 0.98f;
-                projector.drawDistance = 2800f;
+                projector.drawDistance = 3500f;
             }
 
             if (activeBreaches.Count >= MaxLocalBreachesPerBuilding)
@@ -177,14 +183,16 @@ namespace BoscaliSummer.Framework.Visuals
             if (Physics.Raycast(castOrigin, Vector3.down, out RaycastHit hit, 160f, mask, QueryTriggerInteraction.Ignore))
             {
                 float rubbleSize = blastYield > 0.1f
-                    ? Mathf.Clamp(3.2f + blastYield * 0.5f, 3f, 12f)
-                    : Mathf.Clamp(1.8f + damage * 0.03f, 1.8f, 4f);
+                    ? Mathf.Clamp(3.5f + blastYield * 0.55f, 3.5f, 14f)
+                    : Mathf.Clamp(1.8f + damage * 0.03f, 1.8f, 4.5f);
+
+                float depth = Mathf.Max(6f, rubbleSize * 1.0f);
 
                 Quaternion rubbleFacing = Quaternion.LookRotation(Vector3.down, normal);
                 uint seed = (uint)(Mathf.Abs(hit.point.x * 71f + hit.point.z * 193f));
                 Quaternion roll = Quaternion.AngleAxis((seed % 360), Vector3.down);
 
-                GameObject rubble = Instantiate(GameAssets.i.scorchMarkDecal, hit.point + Vector3.up * 0.04f, roll * rubbleFacing, transform);
+                GameObject rubble = Instantiate(GameAssets.i.scorchMarkDecal, hit.point + Vector3.up * 0.5f, roll * rubbleFacing, transform);
                 rubble.name = "BoscaliSummer.GroundRubble";
                 rubble.SetActive(true);
 
@@ -194,9 +202,10 @@ namespace BoscaliSummer.Framework.Visuals
                     Material rubbleMat = RuinTextureCatalog.GetDecalMaterial(RuinTextureCatalog.RuinTier.Light);
                     if (rubbleMat != null) proj.material = rubbleMat;
 
-                    proj.size = new Vector3(rubbleSize, rubbleSize, rubbleSize * 0.3f);
+                    proj.renderingLayerMask = ~0u;
+                    proj.size = new Vector3(rubbleSize, rubbleSize, depth);
                     proj.fadeFactor = 0.92f;
-                    proj.drawDistance = 2400f;
+                    proj.drawDistance = 2800f;
                 }
 
                 if (activeRubblePiles.Count >= MaxLocalBreachesPerBuilding)

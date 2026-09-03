@@ -28,6 +28,7 @@ namespace BoscaliSummer.Garrisons
             public FactionHQ Owner;
             public readonly List<Building> Defenses = new List<Building>();
             public readonly List<GameObject> Shells = new List<GameObject>();
+            public readonly List<GameObject> SpawnedProps = new List<GameObject>();
         }
 
         public static ZoneGarrisonManager Instance { get; private set; }
@@ -85,6 +86,90 @@ namespace BoscaliSummer.Garrisons
             list.AddRange(spawned);
             Plugin.Logger.LogInfo($"[Fortification] Deployed {spawned.Count} visible infantry encampment building(s) at {GetAirbaseName(airbase)} for {owner.name}. Total active fortifications: {list.Count}.");
             return true;
+        }
+
+        public bool TryOccupyBuilding(GameObject shell, FactionHQ owner, Airbase airbase)
+        {
+            if (shell == null || owner == null) return false;
+
+            Building shellBuilding = shell.GetComponentInParent<Building>();
+            Bounds bounds = GetShellBounds(shell);
+
+            int key = airbase != null ? airbase.GetInstanceID() : 0;
+            if (!records.TryGetValue(key, out GarrisonRecord record))
+            {
+                record = new GarrisonRecord { Airbase = airbase, Owner = owner };
+                records[key] = record;
+            }
+
+            int slot = record.Shells.Count;
+            int generation = generations.TryGetValue(key, out int gen) ? gen : 1;
+
+            // 1. Resolve Rooftop Anti-Aircraft unit (alternating 23mm AAA and MANPADS SAM)
+            BuildingDefinition aaDef = ResolveAADefinition(slot) ?? ResolveDefenseDefinition();
+            if (aaDef != null && aaDef.unitPrefab != null && NetworkSceneSingleton<Spawner>.i != null)
+            {
+                Bounds prefabBounds = CalculateBounds(aaDef.unitPrefab);
+                Vector3 rooftopLocal = bounds.center;
+                rooftopLocal.y = bounds.max.y - prefabBounds.min.y + 0.1f;
+
+                string uniqueAA = NamePrefix + "RooftopAA:Assault:" + generation + ":" + slot;
+                Building spawnedAA = NetworkSceneSingleton<Spawner>.i.SpawnBuilding(
+                    aaDef.unitPrefab,
+                    rooftopLocal.ToGlobalPosition(),
+                    shell.transform.rotation,
+                    owner,
+                    airbase,
+                    uniqueAA,
+                    false,
+                    null);
+
+                if (spawnedAA != null)
+                {
+                    GarrisonVisual.Apply(spawnedAA);
+                    record.Defenses.Add(spawnedAA);
+                }
+            }
+
+            // 2. Deploy makeshift ground fortifications & 3D Jersey barriers around the building foot
+            var groundUnits = MakeshiftFortificationBuilder.DeployGroundFortifications(
+                shell, bounds, owner, airbase, slot, generation, out var spawnedProps);
+            record.Defenses.AddRange(groundUnits);
+            record.SpawnedProps.AddRange(spawnedProps);
+
+            // 3. Apply high-visibility military faction markings and rooftop beacon mast
+            OccupiedBuildingMarking.Apply(shell, owner, bounds);
+
+            // 4. Register enemy ownership
+            if (shellBuilding != null && !shellBuilding.disabled)
+                shellBuilding.NetworkHQ = owner;
+
+            GarrisonOccupancy.Set(shell, owner);
+            record.Shells.Add(shell);
+
+            Plugin.Logger.LogInfo($"[Air Assault] Successfully captured and occupied {shell.name} for {owner.name} with rooftop AA and ground fortifications.");
+            return true;
+        }
+
+        public bool TryDeployEncampment(Vector3 groundPos, FactionHQ owner, Airbase airbase)
+        {
+            if (owner == null) return false;
+            int key = airbase != null ? airbase.GetInstanceID() : 0;
+            if (!records.TryGetValue(key, out GarrisonRecord record))
+            {
+                record = new GarrisonRecord { Airbase = airbase, Owner = owner };
+                records[key] = record;
+            }
+
+            int index = (record.Defenses.Count / 5) + 1;
+            var spawned = InfantryEncampmentBuilder.DeployEncampment(airbase, owner, groundPos, index);
+            if (spawned != null && spawned.Count > 0)
+            {
+                record.Defenses.AddRange(spawned);
+                Plugin.Logger.LogInfo($"[Air Assault] Successfully deployed {spawned.Count} ground encampment units at {groundPos} for {owner.name}.");
+                return true;
+            }
+            return false;
         }
 
         private readonly List<PendingCapture> pending = new List<PendingCapture>();
@@ -338,6 +423,37 @@ namespace BoscaliSummer.Garrisons
         {
             if (building == null || NetworkManagerNuclearOption.i == null) return;
             NetworkManagerNuclearOption.i.ServerObjectManager.Destroy(building.Identity, true);
+        }
+
+        private BuildingDefinition ResolveAADefinition(int slot)
+        {
+            if (Encyclopedia.i == null || Encyclopedia.i.buildings == null) return null;
+
+            BuildingDefinition aaa23mm = null;
+            BuildingDefinition manpads = null;
+            BuildingDefinition fallback = null;
+
+            for (int i = 0; i < Encyclopedia.i.buildings.Count; i++)
+            {
+                BuildingDefinition def = Encyclopedia.i.buildings[i];
+                if (def == null || def.buildingType != BuildingType.DEF || def.unitPrefab == null) continue;
+
+                if (def.jsonKey.IndexOf("23mm", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    (def.unitName?.IndexOf("23mm", StringComparison.OrdinalIgnoreCase) ?? -1) >= 0)
+                    aaa23mm = def;
+                else if (def.jsonKey.IndexOf("MANPADS", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    (def.unitName?.IndexOf("MANPADS", StringComparison.OrdinalIgnoreCase) ?? -1) >= 0)
+                    manpads = def;
+                else if (fallback == null && (def.jsonKey.IndexOf("pillbox", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    def.jsonKey.IndexOf("bunker", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    def.jsonKey.IndexOf("guard", StringComparison.OrdinalIgnoreCase) >= 0))
+                    fallback = def;
+            }
+
+            if (slot % 2 == 0)
+                return aaa23mm ?? manpads ?? fallback;
+            else
+                return manpads ?? aaa23mm ?? fallback;
         }
 
         private BuildingDefinition ResolveDefenseDefinition()

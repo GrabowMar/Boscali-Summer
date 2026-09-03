@@ -79,4 +79,50 @@ namespace BoscaliSummer.Garrisons
             return true;
         }
     }
+
+    [HarmonyPatch(typeof(MapBuilding), nameof(MapBuilding.TakeShockwave))]
+    internal static class StrongholdMapBuildingShockwavePatch
+    {
+        private static void Postfix(
+            MapBuilding __instance,
+            Vector3 origin,
+            float blastEffectScale,
+            float blastPower)
+        {
+            if (__instance == null || blastPower < 0.1f) return;
+
+            BuildingDamageVisual visual = BuildingDamageVisual.GetOrAdd(__instance.gameObject);
+            if (visual != null)
+            {
+                Vector3 buildingCenter = __instance.transform.position + Vector3.up * 6f;
+                Collider col = __instance.GetComponentInChildren<Collider>();
+                if (col != null) buildingCenter = col.bounds.center;
+
+                Vector3 fromBlast = (buildingCenter - origin).normalized;
+                if (fromBlast.sqrMagnitude < 0.01f) fromBlast = Vector3.forward;
+
+                Vector3 hitPoint = buildingCenter;
+                Vector3 normal = -fromBlast;
+
+                // Cast ray from blast origin directly into the building facade
+                if (Physics.Raycast(origin - fromBlast * 1.5f, fromBlast, out RaycastHit hit, 90f, PhysicsLayers.StaticsMask))
+                {
+                    hitPoint = hit.point;
+                    normal = hit.normal;
+                }
+                else
+                {
+                    // Cast from building perimeter back towards the blast
+                    Vector3 toBlast = (origin - buildingCenter).normalized;
+                    if (Physics.Raycast(buildingCenter + toBlast * 40f, -toBlast, out RaycastHit hitBack, 55f, PhysicsLayers.StaticsMask))
+                    {
+                        hitPoint = hitBack.point;
+                        normal = hitBack.normal;
+                    }
+                }
+
+                visual.ApplyLocalImpact(hitPoint, normal, blastPower, blastPower * 12f);
+            }
+        }
+    }
 }

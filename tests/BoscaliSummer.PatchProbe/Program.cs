@@ -41,6 +41,7 @@ Assembly pluginAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(plugi
     ("BulletSim+Bullet", "TrajectoryTrace"),
     ("GroundVehicle", "UnitDisabled"),
     ("MapBuilding", "TakeDamage"),
+    ("MapBuilding", "TakeShockwave"),
     ("Missile", "UserCode_RpcDetonate_897349600"),
     ("MusicManager", "PlayMusic"),
     ("MusicManager", "CrossFadeMusic"),
@@ -148,6 +149,7 @@ string[] patchTypes =
     "BoscaliSummer.Garrisons.AirbaseCapturePatch",
     "BoscaliSummer.Garrisons.GarrisonClientVisualPatch",
     "BoscaliSummer.Garrisons.StrongholdMapBuildingDamagePatch",
+    "BoscaliSummer.Garrisons.StrongholdMapBuildingShockwavePatch",
     "BoscaliSummer.Features.Radio.Patches.VanillaPlayMusicPatch",
     "BoscaliSummer.Features.Radio.Patches.VanillaCrossFadeMusicPatch",
     "BoscaliSummer.Features.Radio.Patches.VanillaQueueMusicPatch"

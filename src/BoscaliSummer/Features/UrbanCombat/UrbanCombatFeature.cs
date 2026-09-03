@@ -13,7 +13,8 @@ namespace BoscaliSummer.Features.UrbanCombat
         {
             typeof(AirbaseCapturePatch),
             typeof(GarrisonClientVisualPatch),
-            typeof(StrongholdMapBuildingDamagePatch)
+            typeof(StrongholdMapBuildingDamagePatch),
+            typeof(StrongholdMapBuildingShockwavePatch)
         };
 
         public FeatureMetadata Metadata => Feature;
@@ -22,6 +23,7 @@ namespace BoscaliSummer.Features.UrbanCombat
         public void Install(FeatureContext context)
         {
             ZoneGarrisonManager garrisons = context.AddSceneService<ZoneGarrisonManager>(30);
+            context.AddSceneService<AirAssaultController>(31);
             context.AddService<IBuildingOccupancy>(garrisons);
             context.AddService<IZoneFortificationService>(garrisons);
         }
