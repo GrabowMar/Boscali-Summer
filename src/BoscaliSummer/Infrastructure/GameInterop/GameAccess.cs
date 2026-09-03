@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using HarmonyLib;
+using NuclearOption.Networking;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -17,10 +18,16 @@ namespace BoscaliSummer.Runtime
         private static AccessTools.FieldRef<VirtualMFD, List<MFDScreen>> rightMfdScreensRef;
         private static AccessTools.FieldRef<MusicManager, AudioSource> currentMusicSourceRef;
         private static AccessTools.FieldRef<MusicManager, AudioSource> fadeMusicSourceRef;
+        private static AccessTools.FieldRef<FactionHQ, List<Radar>> hqRadarsRef;
+        private static AccessTools.FieldRef<AIPilotCombatModes, Unit> aiCurrentTargetRef;
+        private static AccessTools.FieldRef<AIPilotCombatModes, GlobalPosition> aiTargetKnownPosRef;
+        private static FieldInfo aiAttackModeField;
 
         public static bool MapBuildingHitPointsAvailable { get; private set; }
         public static bool MfdAvailable { get; private set; }
         public static bool MusicSourcesAvailable { get; private set; }
+        public static bool HqSensorsAvailable { get; private set; }
+        public static bool AiPilotCombatAvailable { get; private set; }
 
         public static void Initialise()
         {
@@ -63,6 +70,30 @@ namespace BoscaliSummer.Runtime
                 MusicSourcesAvailable = false;
                 Plugin.Logger?.LogWarning("Vanilla music ownership access unavailable: " + e.Message);
             }
+
+            try
+            {
+                hqRadarsRef = FieldRef<FactionHQ, List<Radar>>("radars");
+                HqSensorsAvailable = true;
+            }
+            catch (Exception e)
+            {
+                HqSensorsAvailable = false;
+                Plugin.Logger?.LogWarning("HQ sensor arrays access unavailable: " + e.Message);
+            }
+
+            try
+            {
+                aiCurrentTargetRef = FieldRef<AIPilotCombatModes, Unit>("currentTarget");
+                aiTargetKnownPosRef = FieldRef<AIPilotCombatModes, GlobalPosition>("targetKnownPosition");
+                aiAttackModeField = AccessTools.Field(typeof(AIPilotCombatModes), "attackMode");
+                AiPilotCombatAvailable = true;
+            }
+            catch (Exception e)
+            {
+                AiPilotCombatAvailable = false;
+                Plugin.Logger?.LogWarning("AI pilot combat state access unavailable: " + e.Message);
+            }
         }
 
         public static float GetMapBuildingHitPoints(MapBuilding building)
@@ -80,6 +111,31 @@ namespace BoscaliSummer.Runtime
             currentMusicSourceRef == null || music == null ? null : currentMusicSourceRef(music);
         public static AudioSource GetFadeMusicSource(MusicManager music) =>
             fadeMusicSourceRef == null || music == null ? null : fadeMusicSourceRef(music);
+
+        public static List<Radar> GetHqRadars(FactionHQ hq) =>
+            hqRadarsRef == null || hq == null ? null : hqRadarsRef(hq);
+
+        public static Unit GetAiCurrentTarget(AIPilotCombatModes modes) =>
+            aiCurrentTargetRef == null || modes == null ? null : aiCurrentTargetRef(modes);
+
+        public static GlobalPosition GetAiTargetKnownPosition(AIPilotCombatModes modes) =>
+            aiTargetKnownPosRef == null || modes == null ? default : aiTargetKnownPosRef(modes);
+
+        public static int GetAiAttackMode(AIPilotCombatModes modes)
+        {
+            if (aiAttackModeField != null && modes != null)
+            {
+                object val = aiAttackModeField.GetValue(modes);
+                if (val != null) return (int)val;
+            }
+            return 3;
+        }
+
+        public static bool IsServer()
+        {
+            try { return NetworkManagerNuclearOption.i != null && NetworkManagerNuclearOption.i.Server.Active; }
+            catch { return false; }
+        }
 
         private static AccessTools.FieldRef<TInstance, TField> FieldRef<TInstance, TField>(string name)
         {

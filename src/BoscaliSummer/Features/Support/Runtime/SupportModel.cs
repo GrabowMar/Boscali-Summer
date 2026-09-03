@@ -6,12 +6,12 @@ namespace BoscaliSummer.Features.Support.Runtime
     /// <summary>Wire ids. Stable: they are the only action identity that crosses the network.</summary>
     internal enum SupportActionId : byte
     {
-        Airdrop = 1,
-        AirDefenceDrop = 2,
-        Convoy = 3,
         Recon = 4,
         Fortify = 5,
-        Artillery = 6
+        Artillery = 6,
+        Emp = 7,
+        Firebreak = 8,
+        SmokeMarker = 9
     }
 
     internal enum SupportResult : byte

@@ -41,9 +41,8 @@ namespace BoscaliSummer.Tests.Features.Progression
             // every support capability must be reachable through exactly one perk.
             string[] required =
             {
-                SupportCapabilities.Airdrop, SupportCapabilities.AirDefenceDrop,
-                SupportCapabilities.Convoy, SupportCapabilities.Recon,
-                SupportCapabilities.Fortify, SupportCapabilities.Artillery
+                SupportCapabilities.Recon, SupportCapabilities.Fortify,
+                SupportCapabilities.Artillery, SupportCapabilities.Emp
             };
             for (int i = 0; i < required.Length; i++)
                 TestAssert.That(capabilities.Contains(required[i]),

@@ -2,19 +2,14 @@ using BoscaliSummer.Core;
 
 namespace BoscaliSummer.Fire
 {
-    /// <summary>
-    /// Pure sizing and deterministic-placement maths for an impact scorch mark. Kept free of
-    /// UnityEngine types so it compiles into the test assembly. The manager owns the physics
-    /// query and the actual <c>DecalProjector</c>; this only decides how large the mark is and
-    /// how far it is nudged and rolled so repeated hits on one facade are not identical stamps.
-    /// </summary>
+    /// <summary>Scorch size and jitter maths, Unity-free so tests can compile it.</summary>
     internal static class ImpactScorchPolicy
     {
         /// <summary>Smallest scorch footprint, in metres. A glancing rocket still reads.</summary>
-        internal const float MinimumSize = 4f;
+        internal const float MinimumSize = 5f;
 
         /// <summary>Largest scorch footprint, in metres. A heavy bomb cannot exceed this.</summary>
-        internal const float MaximumSize = 16f;
+        internal const float MaximumSize = 22f;
 
         /// <summary>
         /// Decal edge length from the weapon's blast yield, clamped to the readable band.
@@ -22,7 +17,7 @@ namespace BoscaliSummer.Fire
         /// </summary>
         internal static float DecalSize(float blastYield)
         {
-            float size = MinimumSize + Max(0f, blastYield) * 0.5f;
+            float size = MinimumSize + Max(0f, blastYield) * 0.85f;
             return Clamp(size, MinimumSize, MaximumSize);
         }
 

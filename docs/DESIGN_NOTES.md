@@ -119,8 +119,15 @@ Decisions that cost an argument. Kept so they are not made again the other way.
 
 ## Wing Command reuse boundary
 
-No Wing Command source, spawn-menu code, dependency or licence is in this repo. Do not
-decompile an installed DLL or add a hard runtime dependency on the strength of the teaser.
-The framework may define `IModMenuHost` / `IModMenuPage` / `ITargetPicker` before that source
-arrives, but recycled UI behaviour waits for an ownership/licence audit, and Boscali Summer
-must stay functional when Wing Command is absent.
+No compile-time or BepInEx hard dependency on Wing Command. The two mods coordinate
+through `NOAvionics` (source-linked protocol: named bezel claims, exclusive map picker,
+presence board) compiled into both DLLs. Boscali Summer stays functional when Wing Command
+is absent. Do not reference the Wing Command assembly, and do not decompile an installed DLL.
+
+Product split: Wing Command owns the recruited squadron; Boscali owns the battlefield
+(fire, occupancy, perks/support, theater SA). COM is no longer a fourth bezel — theater
+SA mounts as the OPS **THEATER** tab. Doctrine biases friendly mission AI only and never
+retasks a wingman.
+
+Maintenance rules (how to change bezels, the picker, the protocol):
+`C:\Users\marci\dev\nomodkit\shared\avionics\README.md`.

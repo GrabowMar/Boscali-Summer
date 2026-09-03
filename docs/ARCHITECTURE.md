@@ -1,6 +1,6 @@
 # Architecture
 
-One BepInEx assembly, five features. Source is modular so a feature can be disabled or
+One BepInEx assembly, six features. Source is modular so a feature can be disabled or
 replaced without destabilising the others; deployment stays a single DLL so installation is
 simple and no feature is a binary dependency.
 
@@ -19,6 +19,7 @@ src/BoscaliSummer/
     Progression/         score-earned perk choices, capabilities, reward/fuel effects
     Radio/               local music catalogue, playback ownership, map-MFD panel
     Support/             OPS MFD, validated requests, costs/cooldowns, support jobs
+    Command/             COM MFD, map overlays, doctrine, AI target scoring
     UrbanCombat/         occupancy, defensive proxies, capture cleanup
 ```
 
@@ -42,7 +43,8 @@ only its dependants, continuing to load the rest.
 Radio                         independent, client-local
 Fire and destruction          independent
 Urban Combat  ──publishes──►  IBuildingOccupancy, IZoneFortificationService
-Progression   ──required by─►  Support        (Support's one hard dependency)
+Progression   ──required by─►  Support, Command
+Command       ──publishes──►  ITheaterPage (mounted by OPS, no COM bezel)
 ```
 
 Features talk only through `Framework/Contracts` interfaces resolved via `ServiceRegistry` —
@@ -53,8 +55,9 @@ never a sibling's manager, singleton, patch class, or settings object.
 The host owns one hidden `DontDestroyOnLoad` object. Persistent managers implement
 `ISceneService`; `SceneLifecycle` resets them once at composition and on every loaded scene,
 isolating reset exceptions per service. Reset order: fire (10) → impact scorch (15) → ruin
-aftermath (20) → zone garrison (30) → radio (40) → progression (45) → support (50) → OPS MFD
-(55) → fire-network per-scene state (100). Teardown unpatches in reverse, unregisters the
+aftermath (20) → zone garrison (30) → radio (40) → progression (45) → support (50) →
+command (52) → COM overlay (53) → COM dock (54) → OPS MFD (55, hosts THEATER tab) →
+fire-network per-scene state (100). Teardown unpatches in reverse, unregisters the
 scene callback and Mirage handlers, clears the registry, and destroys the root.
 
 ## Authority and replication
@@ -78,7 +81,7 @@ generate per-frame network traffic.
   The server derives player, faction, authorisation, cost, stock, definition, yield, cooldown
   and caps. Actions live behind one `ISupportAction` interface and one catalogue row; an
   action whose game capability cannot be resolved is absent rather than failing at request
-  time. Airdrops/convoys/artillery use vanilla spawners, recon stamps the faction tracking
+  time. Artillery uses a vanilla missile spawner, recon stamps the faction tracking
   state, and fortification calls Urban Combat through `IZoneFortificationService`, which
   returns false unless it has verified it can place defenders. Every denial is typed; only
   accepted ids are remembered for replay; each player has a token-bucket rate limit.

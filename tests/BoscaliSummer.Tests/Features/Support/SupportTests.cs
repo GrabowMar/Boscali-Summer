@@ -20,6 +20,8 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(ledger.CooldownRemaining(10, 105f, 10f) == 5f, "cooldown countdown is wrong");
             TestAssert.That(ledger.CooldownRemaining(10, 130f, 10f) == 0f,
                 "an expired cooldown reported time remaining");
+            TestAssert.That(!ledger.IsCoolingDown(10, 105f, 0f), "zero cooldown was marked cooling down");
+            TestAssert.That(ledger.CooldownRemaining(10, 105f, 0f) == 0f, "zero cooldown reported remaining time");
 
             TestAssert.That(!ledger.IsRateLimited(20, 1f, 2, 1f), "the first request was rate limited");
             TestAssert.That(!ledger.IsRateLimited(20, 1.2f, 2, 1f), "the second request was rate limited");

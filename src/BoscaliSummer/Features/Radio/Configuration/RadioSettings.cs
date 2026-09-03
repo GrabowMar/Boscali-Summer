@@ -11,11 +11,13 @@ namespace BoscaliSummer.Features.Radio.Configuration
 
         public RadioSettings(ConfigFile config)
         {
+            // The radio never touches the network, so every value here is yours alone.
             Enabled = config.Bind("Radio", "Enabled", true,
-                "Enable the client-local Boscali radio and its map MFD panel.");
+                "Enable the Boscali radio and its map MFD panel. " +
+                "Client-local: this setting affects only your own game, never other players.");
             CrossfadeSeconds = config.Bind("Radio", "CrossfadeSeconds", 1.5f,
                 new ConfigDescription(
-                    "Seconds used to blend between local tracks.",
+                    "Seconds used to blend between tracks. 0 cuts straight from one to the next.",
                     new AcceptableValueRange<float>(0f, 8f)));
             Shuffle = config.Bind("Radio", "Shuffle", false,
                 "Choose a different random track after each song.");

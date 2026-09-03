@@ -31,7 +31,7 @@ namespace BoscaliSummer.Fire
                 if (!visuals[i].Active) { visual = visuals[i]; break; }
             if (visual == null)
             {
-                if (visuals.Count >= Plugin.Settings.MaximumCollapseBursts) return;
+                if (visuals.Count >= Plugin.Settings.FireAndDestruction.MaximumCollapseBursts) return;
                 visual = Create();
                 if (visual == null) return;
                 visuals.Add(visual);

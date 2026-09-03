@@ -1,7 +1,10 @@
 using System.Collections.Generic;
 using System.Reflection;
 using BoscaliSummer.Core;
+using BoscaliSummer.Features.FireAndDestruction.Configuration;
 using BoscaliSummer.Framework.Lifecycle;
+using BoscaliSummer.Framework.Visuals;
+using BoscaliSummer.Infrastructure.Diagnostics;
 using HarmonyLib;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
@@ -34,9 +37,12 @@ namespace BoscaliSummer.Fire
         private bool scorchMaterialSearched;
         private bool loggedFirstMark;
 
-        private static int QueueCapacity => Plugin.Settings.FireAndDestruction.ImpactScorchQueue;
-        private static int PerFrame => Plugin.Settings.FireAndDestruction.ImpactScorchesPerFrame;
-        private static int MaximumMarks => Plugin.Settings.FireAndDestruction.MaximumImpactScorches;
+        private static FireAndDestructionSettings Fire => Plugin.Settings.FireAndDestruction;
+        private static DiagnosticSettings Diagnostics => Plugin.Settings.Diagnostics;
+
+        private static int QueueCapacity => Fire.ImpactScorchQueue;
+        private static int PerFrame => Fire.ImpactScorchesPerFrame;
+        private static int MaximumMarks => Fire.MaximumImpactScorches;
 
         private void Awake() => Instance = this;
 
@@ -55,7 +61,7 @@ namespace BoscaliSummer.Fire
         internal void SubmitExplosion(GlobalPosition position, float blastYield)
         {
             if (GameManager.IsHeadless ||
-                !Plugin.Settings.FireAndDestruction.ImpactScorchEnabled.Value) return;
+                !Fire.ImpactScorchEnabled.Value) return;
             // A missile salvo cannot burst-cast: the queue is bounded and drained a couple
             // of impacts per frame.
             if (pending.Count >= QueueCapacity) return;
@@ -74,8 +80,9 @@ namespace BoscaliSummer.Fire
             if (GameAssets.i == null || GameAssets.i.scorchMarkDecal == null) return;
 
             Vector3 local = explosion.Position.ToLocalPosition();
+            float searchRadius = Mathf.Clamp(8f + explosion.BlastYield * 0.8f, 8f, 40f);
             int count = Physics.OverlapSphereNonAlloc(
-                local, 6f, overlapBuffer, PhysicsLayers.StaticsMask,
+                local, searchRadius, overlapBuffer, PhysicsLayers.StaticsMask,
                 QueryTriggerInteraction.Collide);
 
             Collider nearest = null;
@@ -87,43 +94,42 @@ namespace BoscaliSummer.Fire
                 if (collider == null) continue;
                 Transform root = BuildingRootOf(collider);
                 if (root == null) continue;
-                float distance = (collider.ClosestPoint(local) - local).sqrMagnitude;
+                float distance = (collider.bounds.center - local).sqrMagnitude;
                 if (distance >= nearestSq) continue;
                 nearestSq = distance;
                 nearest = collider;
                 buildingRoot = root;
             }
-            if (nearest == null) return;
+            if (nearest == null || buildingRoot == null) return;
 
-            Vector3 surface = nearest.ClosestPoint(local);
-            Vector3 toSurface = surface - local;
-            Vector3 point = surface;
-            Vector3 normal = toSurface.sqrMagnitude > 0.0001f ? (-toSurface).normalized : Vector3.up;
+            Vector3 buildingCenter = nearest.bounds.center;
+            Vector3 toCenter = (buildingCenter - local).normalized;
+            if (toCenter.sqrMagnitude < 0.01f) toCenter = Vector3.forward;
 
-            // Short cast back along the impact direction for an accurate surface point and
-            // normal, accepting only a hit on a collider that belongs to this building. Same
-            // shape as ImpactFireManager.SnapBuildingFireToRoof, but this one keeps the normal.
-            if (toSurface.sqrMagnitude > 0.0001f)
+            Vector3 point = local;
+            Vector3 normal = -toCenter;
+
+            // Cast ray from blast towards building center to find wall surface
+            if (Physics.Raycast(local - toCenter * 1.5f, toCenter, out RaycastHit hit, toCenter.magnitude + 40f, PhysicsLayers.StaticsMask))
             {
-                Vector3 direction = toSurface.normalized;
-                int hits = Physics.RaycastNonAlloc(
-                    local - direction * 1.5f, direction, rayBuffer, toSurface.magnitude + 3f,
-                    ~0, QueryTriggerInteraction.Ignore);
-                float bestHit = float.MaxValue;
-                for (int i = 0; i < hits; i++)
+                point = hit.point;
+                normal = hit.normal;
+            }
+            else
+            {
+                // Cast from building perimeter back towards the blast
+                Vector3 toBlast = (local - buildingCenter).normalized;
+                if (Physics.Raycast(buildingCenter + toBlast * 40f, -toBlast, out RaycastHit hitBack, 55f, PhysicsLayers.StaticsMask))
                 {
-                    Collider collider = rayBuffer[i].collider;
-                    if (collider == null) continue;
-                    Transform hitTransform = collider.transform;
-                    if (hitTransform != buildingRoot && !hitTransform.IsChildOf(buildingRoot)) continue;
-                    if (rayBuffer[i].distance >= bestHit) continue;
-                    bestHit = rayBuffer[i].distance;
-                    point = rayBuffer[i].point;
-                    normal = rayBuffer[i].normal;
+                    point = hitBack.point;
+                    normal = hitBack.normal;
                 }
             }
 
             PlaceMark(point, normal, explosion.BlastYield);
+
+            BuildingDamageVisual visual = BuildingDamageVisual.GetOrAdd(buildingRoot.gameObject);
+            visual?.ApplyLocalImpact(point, normal, explosion.BlastYield, Mathf.Max(10f, explosion.BlastYield * 12f));
         }
 
         private void PlaceMark(Vector3 point, Vector3 normal, float blastYield)
@@ -138,31 +144,47 @@ namespace BoscaliSummer.Fire
                 SeedSalt);
 
             float size = ImpactScorchPolicy.DecalSize(blastYield);
+            float depth = Mathf.Clamp(size * 0.22f, 1.6f, 4.0f);
+
             Quaternion facing = Quaternion.LookRotation(-normal, Vector3.up);
             Quaternion roll = Quaternion.AngleAxis(ImpactScorchPolicy.RollDegrees(seed), -normal);
             Transform t = mark.transform;
             t.rotation = roll * facing;
 
-            Vector3 position = point + normal * 0.05f;
+            Vector3 position = point + normal * (depth * 0.45f);
             position += t.right * ImpactScorchPolicy.JitterOffset(
                 size, ImpactScorchPolicy.TangentJitter(seed));
             position += t.up * ImpactScorchPolicy.JitterOffset(
                 size, ImpactScorchPolicy.BitangentJitter(seed));
             t.position = position;
 
-            // The depth ratio the vanilla DecalSpawner uses for a wall scorch.
-            projector.size = new Vector3(size, size, size * 0.2f);
-            projector.fadeFactor = 0.85f;
-            projector.drawDistance = 2600f;
+            projector.renderingLayerMask = ~0u;
+            projector.size = new Vector3(size, size, depth);
+            projector.startAngleFade = 45f;
+            projector.endAngleFade = 70f;
+            projector.fadeFactor = 0.98f;
+            projector.drawDistance = 3500f;
 
-            Material scorch = ResolveScorchMaterial();
-            if (scorch != null) projector.material = scorch;
+            RuinTextureCatalog.RuinTier tier = blastYield > 10f
+                ? RuinTextureCatalog.RuinTier.Heavy
+                : (blastYield > 0.5f ? RuinTextureCatalog.RuinTier.Medium : RuinTextureCatalog.RuinTier.Light);
 
-            if (!loggedFirstMark && Plugin.Settings.VerboseLogging.Value)
+            Material ruinMat = RuinTextureCatalog.GetDecalMaterial(tier);
+            if (ruinMat != null)
+            {
+                projector.material = ruinMat;
+            }
+            else
+            {
+                Material scorch = ResolveScorchMaterial();
+                if (scorch != null) projector.material = scorch;
+            }
+
+            if (!loggedFirstMark && Diagnostics.VerboseLogging.Value)
             {
                 loggedFirstMark = true;
                 Plugin.Logger.LogInfo(
-                    $"Impact scorch: first mark placed at {point} (size {size:0.#}m, " +
+                    $"Impact scorch: first mark placed at {point} (size {size:0.#}m, tier {tier}, " +
                     $"material '{(projector.material != null ? projector.material.name : "null")}').");
             }
         }
@@ -215,7 +237,7 @@ namespace BoscaliSummer.Fire
                     if (spawners[i] != null)
                         ScoreScorchCandidate(field.GetValue(spawners[i]) as Material, ref bestScore);
             }
-            if (Plugin.Settings.VerboseLogging.Value)
+            if (Diagnostics.VerboseLogging.Value)
                 Plugin.Logger.LogInfo(scorchMaterial != null
                     ? $"Impact scorch decal material resolved: '{scorchMaterial.name}' " +
                       $"(shader '{scorchMaterial.shader.name}', score {bestScore})."

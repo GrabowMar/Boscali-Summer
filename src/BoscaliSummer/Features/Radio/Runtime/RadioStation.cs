@@ -38,18 +38,16 @@ namespace BoscaliSummer.Features.Radio.Runtime
         public string Id { get; }
         public string Code { get; }
         public string Name { get; }
-        public string Slogan { get; }
         public string IconPath { get; }
         public RadioStationTrack[] Tracks { get; }
 
         public RadioStation(
-            string id, string code, string name, string slogan, string iconPath,
+            string id, string code, string name, string iconPath,
             RadioStationTrack[] tracks)
         {
             Id = id;
             Code = code;
             Name = name;
-            Slogan = slogan;
             IconPath = iconPath;
             Tracks = tracks;
         }

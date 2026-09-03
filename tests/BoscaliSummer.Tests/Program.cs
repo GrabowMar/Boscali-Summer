@@ -1,10 +1,12 @@
 using System;
 using BoscaliSummer.Core;
 using BoscaliSummer.Tests.Architecture;
+using BoscaliSummer.Tests.Features.Command;
 using BoscaliSummer.Tests.Features.FireAndDestruction;
 using BoscaliSummer.Tests.Features.Radio;
 using BoscaliSummer.Tests.Features.Progression;
 using BoscaliSummer.Tests.Features.Support;
+using BoscaliSummer.Tests.Features.UrbanCombat;
 using BoscaliSummer.Tests.Framework;
 
 namespace BoscaliSummer.Tests
@@ -15,9 +17,12 @@ namespace BoscaliSummer.Tests
         {
             FrameworkTests.Run();
             ImpactScorchTests.Run();
+            StrongholdTests.Run();
+            TroopDeploymentTests.Run();
             RadioTests.Run();
             ProgressionTests.Run();
             SupportTests.Run();
+            CommandTests.Run();
             ModuleBoundaryTests.Run();
 
             TestAssert.That(

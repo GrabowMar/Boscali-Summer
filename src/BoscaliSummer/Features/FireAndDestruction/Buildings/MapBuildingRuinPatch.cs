@@ -6,12 +6,7 @@ using UnityEngine;
 namespace BoscaliSummer.Fire
 {
     /// <summary>
-    /// MapBuilding has no vanilla damage shader channel: the base game only decrements HP and
-    /// swaps to a wreck prefab on death. This patch does one job. When a hit takes a live
-    /// building straight to zero HP (a direct bomb or missile kill rather than a fire burning
-    /// out), it registers a logical ruin so the mission-long aftermath smoke and collapse
-    /// dust still appear. Burnout demolition and its ruin are handled separately by
-    /// <see cref="ImpactFireManager"/>.
+    /// Registers a logical ruin when a live building is killed outright, not by fire burnout.
     /// </summary>
     [HarmonyPatch(typeof(MapBuilding), "TakeDamage")]
     internal static class MapBuildingRuinPatch
@@ -33,9 +28,9 @@ namespace BoscaliSummer.Fire
         {
             if (__instance == null) return;
             float hp = GameAccess.GetMapBuildingHitPoints(__instance);
-            if (__state <= 0f || hp > 0f || !IsServer()) return;
+            if (__state <= 0f || hp > 0f || !GameAccess.IsServer()) return;
 
-            if (Plugin.Settings.VerboseLogging.Value)
+            if (Plugin.Settings.Diagnostics.VerboseLogging.Value)
                 Plugin.Logger.LogInfo(
                     $"MapBuilding '{__instance.name}' destroyed outright from HP {__state:0.#}.");
 
@@ -71,12 +66,6 @@ namespace BoscaliSummer.Fire
                 geometry.RuinPosition = anchor.ToGlobalPosition();
             }
             return geometry;
-        }
-
-        private static bool IsServer()
-        {
-            try { return NetworkManagerNuclearOption.i != null && NetworkManagerNuclearOption.i.Server.Active; }
-            catch { return false; }
         }
     }
 }

@@ -7,6 +7,7 @@ using BoscaliSummer.Features.Support.Configuration;
 using BoscaliSummer.Features.Support.Networking;
 using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Lifecycle;
+using NOAvionics;
 using NuclearOption.Networking;
 using UnityEngine;
 
@@ -19,23 +20,21 @@ namespace BoscaliSummer.Features.Support.Runtime
     /// </summary>
     internal sealed class SupportManager : MonoBehaviour, ISceneService, ISupportHost
     {
-        private const int MaximumSupportVehicles = 24;
-        private const int MaximumDropsInFlight = 2;
-        private const int MaximumArtilleryJobs = 2;
+        private const int MaximumStrikeJobs = 2;
         private const int RequestsPerSecond = 2;
 
         /// <summary>How long a client waits for a reply before reporting the host silent.</summary>
         private const float ReplyTimeout = 5f;
 
         private readonly SupportRequestLedger ledger = new SupportRequestLedger();
-        private readonly List<GroundVehicle> supportVehicles = new List<GroundVehicle>(MaximumSupportVehicles);
-        private readonly int[] reserved = new int[2];
+        private readonly int[] reserved = new int[1];
 
         private SupportSettings settings;
         private IPlayerPerks perks;
         private SupportNet network;
         private ManualLogSource logger;
         private ConfigEntry<bool> bypassRequirements;
+        private ConfigEntry<bool> disableCooldowns;
         private SupportCatalog catalog;
         private readonly VanillaSupportCatalog vanilla = new VanillaSupportCatalog();
 
@@ -44,7 +43,48 @@ namespace BoscaliSummer.Features.Support.Runtime
         private bool pending;
         private float localCooldownUntil;
 
-        public string Status { get; private set; } = "Designate a grid on the maximised map.";
+        private string inboundStrikeName;
+        private float inboundStrikeImpactTime;
+        private float inboundStrikeConfirmedUntil;
+        private string statusText = "Designate a grid on the maximised map.";
+
+        public void RegisterInboundStrike(string strikeName, float etaSeconds)
+        {
+            inboundStrikeName = strikeName;
+            inboundStrikeImpactTime = Time.timeSinceLevelLoad + etaSeconds;
+            inboundStrikeConfirmedUntil = 0f;
+        }
+
+        public string Status
+        {
+            get
+            {
+                float now = Time.timeSinceLevelLoad;
+                if (inboundStrikeImpactTime > 0f)
+                {
+                    if (now < inboundStrikeImpactTime)
+                    {
+                        int remaining = Mathf.Max(0, Mathf.CeilToInt(inboundStrikeImpactTime - now));
+                        return $"[TRAJECTORY ACQUIRED // {inboundStrikeName}: T-{remaining:D2}s]";
+                    }
+                    else if (inboundStrikeConfirmedUntil == 0f)
+                    {
+                        inboundStrikeConfirmedUntil = now + 4f;
+                    }
+
+                    if (now < inboundStrikeConfirmedUntil)
+                    {
+                        return $"[IMPACT CONFIRMED // {inboundStrikeName} SPLASH]";
+                    }
+                    else
+                    {
+                        inboundStrikeImpactTime = 0f;
+                    }
+                }
+                return statusText;
+            }
+            private set => statusText = value;
+        }
 
         SupportSettings ISupportHost.Settings => settings;
         ManualLogSource ISupportHost.Logger => logger;
@@ -52,19 +92,37 @@ namespace BoscaliSummer.Features.Support.Runtime
 
         public IReadOnlyList<SupportActionDefinition> Actions => catalog.Actions;
         public bool BypassRequirements => bypassRequirements != null && bypassRequirements.Value;
+        public bool DisableCooldowns => disableCooldowns != null && disableCooldowns.Value;
+
+        private IFireSuppressionService fireSuppressionService;
+
+        public string FireTelemetry
+        {
+            get
+            {
+                if (fireSuppressionService == null) return string.Empty;
+                int active = fireSuppressionService.ActiveFireCount;
+                if (active <= 0) return string.Empty;
+                string hazard = active >= 6 ? "CRITICAL" : active >= 3 ? "HIGH" : "MODERATE";
+                return $"[WILDFIRE CONDITIONS // {active} ACTIVE FRONTS · HAZARD {hazard}]";
+            }
+        }
 
         public void Configure(
             SupportSettings supportSettings, IPlayerPerks playerPerks,
-            IZoneFortificationService fortifications, SupportNet net, ManualLogSource log)
+            IZoneFortificationService fortifications, SupportNet net, ManualLogSource log,
+            IFireSuppressionService fireSuppression = null)
         {
             settings = supportSettings;
             perks = playerPerks;
             network = net;
             logger = log;
-            catalog = new SupportCatalog(supportSettings, fortifications);
+            fireSuppressionService = fireSuppression;
+            catalog = new SupportCatalog(supportSettings, fortifications, fireSuppression);
         }
 
         internal void ConfigureBypass(ConfigEntry<bool> bypass) => bypassRequirements = bypass;
+        internal void ConfigureDisableCooldowns(ConfigEntry<bool> disable) => disableCooldowns = disable;
 
         public SupportActionId? ArmedAction { get; private set; }
         public int ArmedFrame { get; private set; }
@@ -72,14 +130,13 @@ namespace BoscaliSummer.Features.Support.Runtime
         public void ResetForScene()
         {
             ledger.Clear();
-            supportVehicles.Clear();
             Array.Clear(reserved, 0, reserved.Length);
-            vanilla.Reset();
             StopAllCoroutines();
             pending = false;
             localCooldownUntil = 0f;
             ArmedAction = null;
             ArmedFrame = 0;
+            MapPicker.Disarm(MapPicker.Support);
             Status = "Select support option, then right-click on map.";
         }
 
@@ -99,13 +156,15 @@ namespace BoscaliSummer.Features.Support.Runtime
                     return;
                 }
 
-                if (Time.frameCount > ArmedFrame + 1 && Input.GetMouseButtonDown(1))
+                if (Time.frameCount > ArmedFrame + 1 && Input.GetMouseButtonDown(1) &&
+                    MapPicker.IsOwner(MapPicker.Support))
                 {
                     DynamicMap map = SceneSingleton<DynamicMap>.i;
                     if (map != null && DynamicMap.mapMaximized && map.TryGetCursorCoordinates(out GlobalPosition target))
                     {
                         SupportActionId action = ArmedAction.Value;
                         ArmedAction = null;
+                        MapPicker.Disarm(MapPicker.Support);
                         RequestAt(action, target);
                     }
                 }
@@ -118,7 +177,10 @@ namespace BoscaliSummer.Features.Support.Runtime
             GameManager.GetLocalPlayer<Player>(out Player player) && player != null ? player.Allocation : 0f;
 
         public float LocalCooldownRemaining =>
-            Mathf.Max(0f, localCooldownUntil - Time.unscaledTime);
+            DisableCooldowns ? 0f : Mathf.Max(0f, localCooldownUntil - Time.unscaledTime);
+
+        public float LocalCooldownTotal =>
+            DisableCooldowns ? 0f : settings != null ? settings.RequestCooldown.Value : 0f;
 
         public bool IsAuthorised(SupportActionDefinition action)
         {
@@ -137,14 +199,6 @@ namespace BoscaliSummer.Features.Support.Runtime
             return Cost(action, player);
         }
 
-        /// <summary>True when the maximised map currently has a usable cursor coordinate.</summary>
-        public bool TryGetDesignatedTarget(out GlobalPosition target)
-        {
-            target = default;
-            DynamicMap map = SceneSingleton<DynamicMap>.i;
-            return map != null && DynamicMap.mapMaximized && map.TryGetCursorCoordinates(out target);
-        }
-
         public void Arm(SupportActionId action)
         {
             if (ArmedAction.HasValue && ArmedAction.Value == action)
@@ -153,11 +207,17 @@ namespace BoscaliSummer.Features.Support.Runtime
                 return;
             }
 
-            ArmedAction = action;
-            ArmedFrame = Time.frameCount;
-
             SupportActionDefinition def = catalog != null ? catalog.Find(action) : null;
             string name = def != null ? def.Name : "SUPPORT";
+            string prompt = name + " ARMED · RIGHT-CLICK MAP";
+            if (!MapPicker.TryArm(MapPicker.Support, MapPicker.GestureRight, prompt))
+            {
+                Status = MapPicker.Prompt ?? "MAP BUSY";
+                return;
+            }
+
+            ArmedAction = action;
+            ArmedFrame = Time.frameCount;
             Status = "ARMED: " + name + " — Right-click on map to call in (ESC to cancel).";
 
             DynamicMap map = SceneSingleton<DynamicMap>.i;
@@ -171,6 +231,7 @@ namespace BoscaliSummer.Features.Support.Runtime
         {
             if (!ArmedAction.HasValue) return;
             ArmedAction = null;
+            MapPicker.Disarm(MapPicker.Support);
             Status = "Support request cancelled.";
         }
 
@@ -234,8 +295,13 @@ namespace BoscaliSummer.Features.Support.Runtime
             string name = action != null ? action.Name : "Support";
             if (result == SupportResult.Accepted)
             {
-                localCooldownUntil = Time.unscaledTime + message.CooldownSeconds;
+                localCooldownUntil = DisableCooldowns ? 0f : Time.unscaledTime + message.CooldownSeconds;
                 Status = name + " accepted.";
+                if (action != null && (action.Id == SupportActionId.Artillery || action.Id == SupportActionId.Emp))
+                {
+                    float eta = action.Id == SupportActionId.Artillery ? 8f : 12f;
+                    RegisterInboundStrike(name, eta);
+                }
             }
             else
             {
@@ -280,10 +346,10 @@ namespace BoscaliSummer.Features.Support.Runtime
             bool bypass = BypassRequirements;
 
             if (ledger.WasAccepted(playerId, request.RequestId)) return SupportResult.Duplicate;
-            if (ledger.IsRateLimited(playerId, now, RequestsPerSecond, 1f)) return SupportResult.RateLimited;
+            if (!DisableCooldowns && ledger.IsRateLimited(playerId, now, RequestsPerSecond, 1f)) return SupportResult.RateLimited;
             if (!action.Enabled) return SupportResult.Disabled;
             if (!bypass && !perks.Grants(playerId, action.Capability)) return SupportResult.NotUnlocked;
-            if (ledger.IsCoolingDown(playerId, now, settings.RequestCooldown.Value))
+            if (!DisableCooldowns && ledger.IsCoolingDown(playerId, now, settings.RequestCooldown.Value))
                 return SupportResult.Cooldown;
 
             var context = new SupportContext(
@@ -307,7 +373,7 @@ namespace BoscaliSummer.Features.Support.Runtime
             return SupportResult.Accepted;
         }
 
-        internal float ServerCooldown => settings.RequestCooldown.Value;
+        internal float ServerCooldown => DisableCooldowns ? 0f : settings.RequestCooldown.Value;
 
         /// <summary>
         /// Price for one player. No action prices itself from the target, so costing uses a
@@ -325,8 +391,8 @@ namespace BoscaliSummer.Features.Support.Runtime
 
         bool ISupportHost.TryReserve(SupportPool pool)
         {
-            int limit = pool == SupportPool.Drop ? MaximumDropsInFlight : MaximumArtilleryJobs;
-            if (reserved[(int)pool] >= limit) return false;
+            if (DisableCooldowns) return true;
+            if (reserved[(int)pool] >= MaximumStrikeJobs) return false;
             reserved[(int)pool]++;
             return true;
         }
@@ -335,19 +401,6 @@ namespace BoscaliSummer.Features.Support.Runtime
             reserved[(int)pool] = Math.Max(0, reserved[(int)pool] - 1);
 
         void ISupportHost.Run(IEnumerator routine) => StartCoroutine(routine);
-
-        bool ISupportHost.HasVehicleCapacity(int count)
-        {
-            for (int i = supportVehicles.Count - 1; i >= 0; i--)
-                if (supportVehicles[i] == null || supportVehicles[i].disabled)
-                    supportVehicles.RemoveAt(i);
-            return supportVehicles.Count + count <= MaximumSupportVehicles;
-        }
-
-        void ISupportHost.TrackVehicle(GroundVehicle vehicle)
-        {
-            if (vehicle != null) supportVehicles.Add(vehicle);
-        }
 
         private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
     }

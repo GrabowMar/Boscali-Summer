@@ -1,5 +1,6 @@
 using System;
 using BoscaliSummer.Fire;
+using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Features;
 using BoscaliSummer.Runtime;
 
@@ -29,6 +30,7 @@ namespace BoscaliSummer.Features.FireAndDestruction
             RuinAftermathManager ruins = context.AddSceneService<RuinAftermathManager>(20);
             ModNet network = context.AddSceneService<ModNet>(100);
             context.AddService(fires);
+            context.AddService<IFireSuppressionService>(fires);
             context.AddService(scorch);
             context.AddService(ruins);
             context.AddService(network);

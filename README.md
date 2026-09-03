@@ -35,9 +35,10 @@ system pooled, event-driven, and globally bounded.
   defensive positions using vanilla bunker behaviour.
 - **Radio** — a client-local map-MFD music player for your own OGG/WAV stations through the
   game's music mixer.
-- **Perks & support** — an `OPS` map-MFD with a flat, score-earned perk board and
-  server-authoritative support requests (armour and air-defence airdrops, ground convoys,
-  recon sweeps, zone reinforcement; experimental artillery is separately default-off).
+- **Perks & support** — an `OPS` map-MFD with a flat, score-earned perk board,
+  server-authoritative support requests (recon, zone fortification, kinetic strike, EMP),
+  and a **THEATER** tab for friendly mission-AI doctrine. Aircraft command is Wing Command's
+  job; this mod never tasks a recruited wing.
 
 Active fires, ruins and garrisons sync for multiplayer and late joiners. Hard global budgets
 keep large city battles practical.
@@ -75,8 +76,10 @@ in-game with [ConfigurationManager](https://github.com/BepInEx/BepInEx.Configura
    normal look but behave as defensive positions.
 5. Maximise the tactical map, press the **`RAD`** bezel: the three starter stations use the
    installed soundtrack immediately; **FOLDER** adds OGG/WAV stations.
-6. Press the **`OPS`** bezel: spend score-earned points on **PERKS**, then use **SUPPORT**
-   with the map cursor over a valid target.
+6. Press the **`OPS`** bezel: spend score-earned points on **PERKS**, use **SUPPORT**
+   with the map cursor over a valid target, and optionally set friendly-AI **THEATER**
+   doctrine. If Wing Command is also installed it claims **WMC** on the left bezel; radio
+   stays on **RAD** to the right.
 
 ## Fire and destruction
 
@@ -137,28 +140,27 @@ list with no prerequisites and no tiers: passives (fuel discipline, combat pay, 
 objective focus, cheaper support) and one authorisation per support action. Selections are
 session-scoped and reset with the mission.
 
-Support spends the player's normal allocation — no second currency. Actions that spawn units
-are priced from the **vanilla unit value**, so a drop costs roughly what the vehicle is
-worth and stays balanced when the game rebalances; `CostMultiplier` scales everything at
-once. The host validates identity, faction, authorisation, cost, stock, cooldown, target
-terrain, replay, rate and global caps; every denial is typed and shown on the card. The
-board renders only state it has verified — no target, locked, cooling down and unaffordable
-are all distinct — and an unanswered request reports the host as silent rather than hanging.
+Support spends the player's normal allocation — no second currency. `CostMultiplier` scales
+every action at once. The host validates identity, faction, authorisation, cost, cooldown,
+target terrain, replay, rate and global caps; every denial is typed and shown on the card.
+The board renders only state it has verified — no target, locked, cooling down and
+unaffordable are all distinct — and an unanswered request reports the host as silent rather
+than hanging.
 
-Airdrops consume faction stock and use only native-parachute prefabs; roles come from the
-vanilla `roleIdentity`, so the armour and air-defence drops follow the game's own unit data.
 Recon stamps the faction tracking state around the mark, and is left out of the catalogue
 entirely when that game seam cannot be resolved. Fortification reinforces the selected
 friendly controlled zone through the bounded occupied-position system, and is charged only
-after Urban Combat has verified it can actually place defenders. Experimental artillery
-needs an explicitly configured low-yield non-nuclear vanilla missile definition and is **off
-by default**.
+after Urban Combat has verified it can actually place defenders. Rod from God and EMP shock
+use a configured non-nuclear vanilla missile (`FireMissionDefinitionKey`; empty auto-picks
+a yield ≤ 200 definition).
 
 ## Configuration
 
 The public configuration is intentionally compact — particle counts, spatial budgets and
 spread depth are derived or fixed so a tempting setting can't turn a long mission into a
-performance collapse.
+performance collapse. Every entry says whether it is **host-authoritative** (on a server only
+the host's value decides anything; a client's copy just changes what its own OPS page
+predicts) or **client-local** (yours alone, never sent anywhere).
 
 | Section | Setting | Default | Purpose |
 |---|---|---:|---|
@@ -173,12 +175,14 @@ performance collapse.
 | Radio | `Shuffle` / `RepeatTrack` | `false` | Advancement within a channel |
 | Progression | `Enabled` | `true` | Score-earned perk board (disabling it also disables Support) |
 | Progression | `ScorePerPoint` | `500` | Mission score per perk point |
-| Progression | `MaximumPoints` | `6` | Perk points one player can earn in a mission |
+| Progression | `MaximumPoints` | `6` | Points one pilot can earn; the board costs 13 in total |
+| Progression | `PerkStrength` | `1.0` | Scales every passive perk bonus without editing the board |
 | Support | `Enabled` | `true` | OPS support request pipeline |
 | Support | `CostMultiplier` | `1.0` | Scales every support cost at once |
-| Support | `VehicleAirdrop` / `AirDefenceAirdrop` | `true` | Authorised armour / air-defence parachute drops |
-| Support | `GroundConvoy` / `ReconSweep` / `Fortification` | `true` | Convoy requisition / hostile reveal / zone reinforcement |
-| Support | `Artillery` | `false` | Experimental configured low-yield artillery |
+| Support | `ReconSweep` / `Fortification` | `true` | Hostile reveal / zone reinforcement |
+| Support | `RodFromGod` | `true` | Orbital kinetic strike; uses `FireMissionDefinitionKey` |
+| Support | `EmpShock` | `true` | Wide-area radar jam; uses `FireMissionDefinitionKey` |
+| Support | `MaximumRangeMeters` / `ReconRangeMeters` | `30000` / `120000` | Delivery reach / reconnaissance reach |
 | Debug | `VerboseLogging` | `false` | Log individual ignition, spread and merge events |
 
 At intensity `1.0`, ordinary impacts have ≈`0.25%` ignition chance and explosive impacts

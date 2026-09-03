@@ -80,7 +80,7 @@ namespace BoscaliSummer.Runtime
         internal static void BroadcastFire(
             GlobalPosition position, float remainingLifetime, bool forest, float clusterScale)
         {
-            if (!IsServer()) return;
+            if (!GameAccess.IsServer()) return;
             NetworkManagerNuclearOption.i.Server.SendToAll(
                 ToFireMessage(position, remainingLifetime, forest, clusterScale),
                 authenticatedOnly: true,
@@ -90,13 +90,13 @@ namespace BoscaliSummer.Runtime
         internal static void SendFire(INetworkPlayer player, GlobalPosition position,
             float remainingLifetime, bool forest, float clusterScale)
         {
-            if (!IsServer() || player == null || remainingLifetime <= 0f) return;
+            if (!GameAccess.IsServer() || player == null || remainingLifetime <= 0f) return;
             player.Send(ToFireMessage(position, remainingLifetime, forest, clusterScale));
         }
 
         internal static void BroadcastRuin(GlobalPosition position, Vector2 halfExtents)
         {
-            if (!IsServer()) return;
+            if (!GameAccess.IsServer()) return;
             NetworkManagerNuclearOption.i.Server.SendToAll(
                 ToRuinMessage(position, halfExtents, 0f),
                 authenticatedOnly: true,
@@ -106,7 +106,7 @@ namespace BoscaliSummer.Runtime
         internal static void SendRuin(
             INetworkPlayer player, GlobalPosition position, Vector2 halfExtents, float ageSeconds)
         {
-            if (!IsServer() || player == null) return;
+            if (!GameAccess.IsServer() || player == null) return;
             player.Send(ToRuinMessage(position, halfExtents, ageSeconds));
         }
 
@@ -151,7 +151,7 @@ namespace BoscaliSummer.Runtime
 
         private static void SendSnapshot(INetworkPlayer player)
         {
-            if (!IsServer() || player == null || !player.IsAuthenticated) return;
+            if (!GameAccess.IsServer() || player == null || !player.IsAuthenticated) return;
             ImpactFireManager.Instance?.SendSnapshot(player);
             RuinAftermathManager.Instance?.SendSnapshot(player);
         }
@@ -240,11 +240,5 @@ namespace BoscaliSummer.Runtime
             HalfX = halfExtents.x, HalfZ = halfExtents.y,
             AgeSeconds = ageSeconds
         };
-
-        private static bool IsServer()
-        {
-            try { return NetworkManagerNuclearOption.i != null && NetworkManagerNuclearOption.i.Server.Active; }
-            catch { return false; }
-        }
     }
 }
