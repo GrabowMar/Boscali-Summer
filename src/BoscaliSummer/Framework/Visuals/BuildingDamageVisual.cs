@@ -83,37 +83,16 @@ namespace BoscaliSummer.Framework.Visuals
             // 1. Localized structural breach crater with 3D procedural bump mapping on the building facade
             PlaceWallBreach(impactPoint, normal, blastYield, damage);
 
-            // 2. Multi-surface blast wrapping: if hitting near roof parapets or wall corners, wrap onto adjacent faces
-            if (blastYield > 1.0f)
-            {
-                float baseSize = Mathf.Clamp(14f + blastYield * 0.95f, 14f, 38f);
-                Vector3[] testDirs = { Vector3.forward, Vector3.back, Vector3.left, Vector3.right, Vector3.down };
-                for (int d = 0; d < testDirs.Length; d++)
-                {
-                    Vector3 dir = testDirs[d];
-                    if (Vector3.Dot(dir, normal) > 0.2f) continue;
-
-                    Vector3 rayOrigin = impactPoint + dir * (baseSize * 0.45f) + normal * 1.2f;
-                    if (Physics.Raycast(rayOrigin, -dir, out RaycastHit sideHit, baseSize * 0.60f, PhysicsLayers.StaticsMask))
-                    {
-                        if (sideHit.collider != null && sideHit.transform.IsChildOf(transform) && Vector3.Angle(sideHit.normal, normal) > 35f)
-                        {
-                            PlaceWallBreach(sideHit.point, sideHit.normal, blastYield * 0.65f, damage * 0.65f);
-                        }
-                    }
-                }
-            }
-
-            // 3. Persistent billowing ruin smoke plume and smoldering embers at impact site
+            // 2. Persistent billowing ruin smoke plume and smoldering embers at impact site
             SpawnBreachPlume(impactPoint, normal, blastYield);
 
-            // 4. Physical fallen rubble mound at the base of the damaged wall
+            // 3. Physical fallen rubble mound at the base of the damaged wall
             PlaceGroundRubble(impactPoint, normal, blastYield, damage);
 
-            // 5. Impact dust burst and concrete pulverization accent
+            // 4. Impact dust burst and concrete pulverization accent
             SpawnImpactDust(impactPoint, normal, blastYield, damage);
 
-            // 6. Update overall building facade weathering, soot charring, and micro-crack bump intensity
+            // 5. Update overall building facade weathering and micro-crack bump intensity
             UpdateFacadeWeathering();
         }
 
@@ -128,10 +107,10 @@ namespace BoscaliSummer.Framework.Visuals
                     : RuinTextureCatalog.RuinTier.Light);
 
             float baseSize = blastYield > 0.1f
-                ? Mathf.Clamp(14f + blastYield * 0.95f, 14f, 38f)
-                : Mathf.Clamp(2.5f + damage * 0.08f, 2.5f, 6.0f); // Bullets/cannons
+                ? Mathf.Clamp(7f + blastYield * 0.65f, 7f, 22f)
+                : Mathf.Clamp(2.0f + damage * 0.05f, 2.0f, 4.5f); // Bullets/cannons
 
-            float mergeDistSq = (baseSize * 0.45f) * (baseSize * 0.45f);
+            float mergeDistSq = (baseSize * 0.40f) * (baseSize * 0.40f);
 
             // Check if there is an existing breach very close to merge with
             for (int i = 0; i < activeBreaches.Count; i++)
@@ -152,23 +131,26 @@ namespace BoscaliSummer.Framework.Visuals
 
                     if (existing.Projector != null)
                     {
-                        float newSize = Mathf.Min(existing.Projector.size.x * 1.35f, 45f);
-                        float depth = Mathf.Max(10f, newSize * 1.2f);
+                        float newSize = Mathf.Min(existing.Projector.size.x * 1.30f, 28f);
+                        float mergedDepth = Mathf.Clamp(newSize * 0.22f, 1.8f, 4.5f);
                         existing.Projector.renderingLayerMask = ~0u;
-                        existing.Projector.size = new Vector3(newSize, newSize, depth);
+                        existing.Projector.size = new Vector3(newSize, newSize, mergedDepth);
+                        existing.Projector.startAngleFade = 45f;
+                        existing.Projector.endAngleFade = 70f;
                         existing.Projector.material = RuinTextureCatalog.GetDecalMaterial(existing.Tier);
                     }
                     return;
                 }
             }
 
-            float projDepth = Mathf.Max(10f, baseSize * 1.2f);
+            // Tightly constrained depth box so the projection never bleeds through walls or onto the street
+            float projDepth = Mathf.Clamp(baseSize * 0.22f, 1.6f, 4.0f);
 
             Quaternion facing = Quaternion.LookRotation(-normal, Vector3.up);
             uint seed = (uint)(Mathf.Abs(point.x * 137f + point.y * 311f + point.z * 523f));
             Quaternion roll = Quaternion.AngleAxis((seed % 360), -normal);
 
-            Vector3 projectorPos = point + normal * 2.0f;
+            Vector3 projectorPos = point + normal * (projDepth * 0.45f);
             GameObject breach = Instantiate(GameAssets.i.scorchMarkDecal, projectorPos, roll * facing, transform);
             breach.name = $"BoscaliSummer.LocalBreach_{targetTier}";
             breach.SetActive(true);
@@ -181,8 +163,10 @@ namespace BoscaliSummer.Framework.Visuals
 
                 projector.renderingLayerMask = ~0u;
                 projector.size = new Vector3(baseSize, baseSize, projDepth);
+                projector.startAngleFade = 45f;
+                projector.endAngleFade = 70f;
                 projector.fadeFactor = 0.98f;
-                projector.drawDistance = 4500f;
+                projector.drawDistance = 3500f;
             }
 
             if (activeBreaches.Count >= MaxLocalBreachesPerBuilding)
@@ -215,7 +199,7 @@ namespace BoscaliSummer.Framework.Visuals
                 var main = ps.main;
                 main.loop = true;
                 main.startLifetime = 14f;
-                main.startSize = new ParticleSystem.MinMaxCurve(7f, 16f);
+                main.startSize = new ParticleSystem.MinMaxCurve(6f, 13f);
                 main.startColor = new Color(0.08f, 0.08f, 0.08f, 0.88f); // thick black smoke
                 main.maxParticles = 80;
                 ps.Play();
@@ -227,8 +211,8 @@ namespace BoscaliSummer.Framework.Visuals
             Light light = fireLight.AddComponent<Light>();
             light.type = LightType.Point;
             light.color = new Color(1.0f, 0.50f, 0.12f);
-            light.range = Mathf.Clamp(10f + blastYield * 0.6f, 10f, 26f);
-            light.intensity = 2.8f;
+            light.range = Mathf.Clamp(7f + blastYield * 0.35f, 7f, 15f);
+            light.intensity = 1.6f;
 
             if (activePlumes.Count >= 8)
             {
@@ -250,16 +234,16 @@ namespace BoscaliSummer.Framework.Visuals
             if (Physics.Raycast(castOrigin, Vector3.down, out RaycastHit hit, 160f, mask, QueryTriggerInteraction.Ignore))
             {
                 float rubbleSize = blastYield > 0.1f
-                    ? Mathf.Clamp(7f + blastYield * 0.75f, 7f, 26f)
-                    : Mathf.Clamp(2.5f + damage * 0.05f, 2.5f, 6.0f);
+                    ? Mathf.Clamp(4f + blastYield * 0.45f, 4f, 14f)
+                    : Mathf.Clamp(1.8f + damage * 0.03f, 1.8f, 4.0f);
 
-                float depth = Mathf.Max(8f, rubbleSize * 1.0f);
+                float depth = Mathf.Clamp(rubbleSize * 0.22f, 1.4f, 3.5f);
 
                 Quaternion rubbleFacing = Quaternion.LookRotation(Vector3.down, normal);
                 uint seed = (uint)(Mathf.Abs(hit.point.x * 71f + hit.point.z * 193f));
                 Quaternion roll = Quaternion.AngleAxis((seed % 360), Vector3.down);
 
-                GameObject rubble = Instantiate(GameAssets.i.scorchMarkDecal, hit.point + Vector3.up * 0.5f, roll * rubbleFacing, transform);
+                GameObject rubble = Instantiate(GameAssets.i.scorchMarkDecal, hit.point + Vector3.up * (depth * 0.45f), roll * rubbleFacing, transform);
                 rubble.name = "BoscaliSummer.GroundRubble";
                 rubble.SetActive(true);
 
@@ -271,8 +255,10 @@ namespace BoscaliSummer.Framework.Visuals
 
                     proj.renderingLayerMask = ~0u;
                     proj.size = new Vector3(rubbleSize, rubbleSize, depth);
+                    proj.startAngleFade = 50f;
+                    proj.endAngleFade = 75f;
                     proj.fadeFactor = 0.92f;
-                    proj.drawDistance = 3500f;
+                    proj.drawDistance = 2800f;
                 }
 
                 if (activeRubblePiles.Count >= MaxLocalBreachesPerBuilding)

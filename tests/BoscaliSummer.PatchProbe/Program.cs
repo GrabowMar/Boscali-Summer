@@ -60,8 +60,7 @@ Assembly pluginAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(plugi
     ("Missile", "Arm"),
     ("Missile", "SetAimpoint"),
     ("FactionHQ", "SetTrackingState"),
-    ("UnitRegistry", "RegisterUnit"),
-    ("MountedTroops", "Fire")
+    ("UnitRegistry", "RegisterUnit")
 };
 
 foreach ((string typeName, string methodName) in targets)
@@ -149,7 +148,8 @@ string[] patchTypes =
     "BoscaliSummer.Fire.MapBuildingRuinPatch",
     "BoscaliSummer.Garrisons.AirbaseCapturePatch",
     "BoscaliSummer.Garrisons.GarrisonClientVisualPatch",
-    "BoscaliSummer.Garrisons.MountedTroopsFirePatch",
+    "BoscaliSummer.Garrisons.StrongholdMapBuildingDamagePatch",
+    "BoscaliSummer.Garrisons.StrongholdMapBuildingShockwavePatch",
     "BoscaliSummer.Features.Radio.Patches.VanillaPlayMusicPatch",
     "BoscaliSummer.Features.Radio.Patches.VanillaCrossFadeMusicPatch",
     "BoscaliSummer.Features.Radio.Patches.VanillaQueueMusicPatch"

@@ -11,10 +11,10 @@ namespace BoscaliSummer.Fire
     internal static class ImpactScorchPolicy
     {
         /// <summary>Smallest scorch footprint, in metres. A glancing rocket still reads.</summary>
-        internal const float MinimumSize = 6f;
+        internal const float MinimumSize = 5f;
 
         /// <summary>Largest scorch footprint, in metres. A heavy bomb cannot exceed this.</summary>
-        internal const float MaximumSize = 36f;
+        internal const float MaximumSize = 22f;
 
         /// <summary>
         /// Decal edge length from the weapon's blast yield, clamped to the readable band.
@@ -22,7 +22,7 @@ namespace BoscaliSummer.Fire
         /// </summary>
         internal static float DecalSize(float blastYield)
         {
-            float size = MinimumSize + Max(0f, blastYield) * 1.5f;
+            float size = MinimumSize + Max(0f, blastYield) * 0.85f;
             return Clamp(size, MinimumSize, MaximumSize);
         }
 

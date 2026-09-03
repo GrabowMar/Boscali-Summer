@@ -139,14 +139,14 @@ namespace BoscaliSummer.Fire
                 SeedSalt);
 
             float size = ImpactScorchPolicy.DecalSize(blastYield);
-            float depth = Mathf.Max(8f, size * 1.2f);
+            float depth = Mathf.Clamp(size * 0.22f, 1.6f, 4.0f);
 
             Quaternion facing = Quaternion.LookRotation(-normal, Vector3.up);
             Quaternion roll = Quaternion.AngleAxis(ImpactScorchPolicy.RollDegrees(seed), -normal);
             Transform t = mark.transform;
             t.rotation = roll * facing;
 
-            Vector3 position = point + normal * 1.5f;
+            Vector3 position = point + normal * (depth * 0.45f);
             position += t.right * ImpactScorchPolicy.JitterOffset(
                 size, ImpactScorchPolicy.TangentJitter(seed));
             position += t.up * ImpactScorchPolicy.JitterOffset(
@@ -155,6 +155,8 @@ namespace BoscaliSummer.Fire
 
             projector.renderingLayerMask = ~0u;
             projector.size = new Vector3(size, size, depth);
+            projector.startAngleFade = 45f;
+            projector.endAngleFade = 70f;
             projector.fadeFactor = 0.98f;
             projector.drawDistance = 3500f;
 

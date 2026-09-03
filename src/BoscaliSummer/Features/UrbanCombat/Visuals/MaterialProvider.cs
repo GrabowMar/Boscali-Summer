@@ -1,0 +1,90 @@
+﻿using System;
+using UnityEngine;
+
+namespace BoscaliSummer.Garrisons
+{
+    /// <summary>
+    /// Safely resolves authentic vanilla materials from game prefabs (pillbox concrete,
+    /// gabion sandbags) to guarantee that procedural fortifications and repaired bunker
+    /// sub-meshes never appear pink.
+    /// </summary>
+    internal static class MaterialProvider
+    {
+        private static Material cachedConcrete;
+        private static Material cachedSandbag;
+
+        public static Material GetConcreteMaterial()
+        {
+            if (cachedConcrete != null) return cachedConcrete;
+
+            BuildingDefinition pillbox = ResolveDef("pillbox");
+            if (pillbox?.unitPrefab != null)
+            {
+                Renderer r = pillbox.unitPrefab.GetComponentInChildren<Renderer>();
+                if (r != null && r.sharedMaterial != null)
+                    return cachedConcrete = r.sharedMaterial;
+            }
+
+            BuildingDefinition bunker = ResolveDef("gabionBunker1");
+            if (bunker?.unitPrefab != null)
+            {
+                Renderer r = bunker.unitPrefab.GetComponentInChildren<Renderer>();
+                if (r != null && r.sharedMaterial != null)
+                    return cachedConcrete = r.sharedMaterial;
+            }
+
+            return null;
+        }
+
+        public static Material GetSandbagMaterial()
+        {
+            if (cachedSandbag != null) return cachedSandbag;
+
+            BuildingDefinition bunker = ResolveDef("gabionBunker1");
+            if (bunker?.unitPrefab != null)
+            {
+                Renderer[] renderers = bunker.unitPrefab.GetComponentsInChildren<Renderer>();
+                for (int i = 0; i < renderers.Length; i++)
+                {
+                    if (renderers[i]?.sharedMaterial != null)
+                        return cachedSandbag = renderers[i].sharedMaterial;
+                }
+            }
+
+            return GetConcreteMaterial();
+        }
+
+        public static void FixRenderers(GameObject root)
+        {
+            if (root == null) return;
+            Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
+            Material fallback = GetSandbagMaterial() ?? GetConcreteMaterial();
+            if (fallback == null) return;
+
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                Renderer r = renderers[i];
+                if (r == null) continue;
+                r.enabled = true;
+
+                if (r.sharedMaterial == null || r.sharedMaterial.shader == null ||
+                    r.sharedMaterial.shader.name.IndexOf("InternalError", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    r.sharedMaterial = fallback;
+                }
+            }
+        }
+
+        private static BuildingDefinition ResolveDef(string key)
+        {
+            if (Encyclopedia.i?.buildings == null) return null;
+            for (int i = 0; i < Encyclopedia.i.buildings.Count; i++)
+            {
+                BuildingDefinition def = Encyclopedia.i.buildings[i];
+                if (def != null && string.Equals(def.jsonKey, key, StringComparison.OrdinalIgnoreCase))
+                    return def;
+            }
+            return null;
+        }
+    }
+}
