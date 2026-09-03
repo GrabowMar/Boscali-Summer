@@ -19,23 +19,21 @@ namespace BoscaliSummer.Features.Support.Runtime
     /// </summary>
     internal sealed class SupportManager : MonoBehaviour, ISceneService, ISupportHost
     {
-        private const int MaximumSupportVehicles = 24;
-        private const int MaximumDropsInFlight = 2;
-        private const int MaximumArtilleryJobs = 2;
+        private const int MaximumStrikeJobs = 2;
         private const int RequestsPerSecond = 2;
 
         /// <summary>How long a client waits for a reply before reporting the host silent.</summary>
         private const float ReplyTimeout = 5f;
 
         private readonly SupportRequestLedger ledger = new SupportRequestLedger();
-        private readonly List<GroundVehicle> supportVehicles = new List<GroundVehicle>(MaximumSupportVehicles);
-        private readonly int[] reserved = new int[2];
+        private readonly int[] reserved = new int[1];
 
         private SupportSettings settings;
         private IPlayerPerks perks;
         private SupportNet network;
         private ManualLogSource logger;
         private ConfigEntry<bool> bypassRequirements;
+        private ConfigEntry<bool> disableCooldowns;
         private SupportCatalog catalog;
         private readonly VanillaSupportCatalog vanilla = new VanillaSupportCatalog();
 
@@ -52,6 +50,7 @@ namespace BoscaliSummer.Features.Support.Runtime
 
         public IReadOnlyList<SupportActionDefinition> Actions => catalog.Actions;
         public bool BypassRequirements => bypassRequirements != null && bypassRequirements.Value;
+        public bool DisableCooldowns => disableCooldowns != null && disableCooldowns.Value;
 
         public void Configure(
             SupportSettings supportSettings, IPlayerPerks playerPerks,
@@ -65,6 +64,7 @@ namespace BoscaliSummer.Features.Support.Runtime
         }
 
         internal void ConfigureBypass(ConfigEntry<bool> bypass) => bypassRequirements = bypass;
+        internal void ConfigureDisableCooldowns(ConfigEntry<bool> disable) => disableCooldowns = disable;
 
         public SupportActionId? ArmedAction { get; private set; }
         public int ArmedFrame { get; private set; }
@@ -72,9 +72,7 @@ namespace BoscaliSummer.Features.Support.Runtime
         public void ResetForScene()
         {
             ledger.Clear();
-            supportVehicles.Clear();
             Array.Clear(reserved, 0, reserved.Length);
-            vanilla.Reset();
             StopAllCoroutines();
             pending = false;
             localCooldownUntil = 0f;
@@ -118,7 +116,7 @@ namespace BoscaliSummer.Features.Support.Runtime
             GameManager.GetLocalPlayer<Player>(out Player player) && player != null ? player.Allocation : 0f;
 
         public float LocalCooldownRemaining =>
-            Mathf.Max(0f, localCooldownUntil - Time.unscaledTime);
+            DisableCooldowns ? 0f : Mathf.Max(0f, localCooldownUntil - Time.unscaledTime);
 
         public bool IsAuthorised(SupportActionDefinition action)
         {
@@ -234,7 +232,7 @@ namespace BoscaliSummer.Features.Support.Runtime
             string name = action != null ? action.Name : "Support";
             if (result == SupportResult.Accepted)
             {
-                localCooldownUntil = Time.unscaledTime + message.CooldownSeconds;
+                localCooldownUntil = DisableCooldowns ? 0f : Time.unscaledTime + message.CooldownSeconds;
                 Status = name + " accepted.";
             }
             else
@@ -280,10 +278,10 @@ namespace BoscaliSummer.Features.Support.Runtime
             bool bypass = BypassRequirements;
 
             if (ledger.WasAccepted(playerId, request.RequestId)) return SupportResult.Duplicate;
-            if (ledger.IsRateLimited(playerId, now, RequestsPerSecond, 1f)) return SupportResult.RateLimited;
+            if (!DisableCooldowns && ledger.IsRateLimited(playerId, now, RequestsPerSecond, 1f)) return SupportResult.RateLimited;
             if (!action.Enabled) return SupportResult.Disabled;
             if (!bypass && !perks.Grants(playerId, action.Capability)) return SupportResult.NotUnlocked;
-            if (ledger.IsCoolingDown(playerId, now, settings.RequestCooldown.Value))
+            if (!DisableCooldowns && ledger.IsCoolingDown(playerId, now, settings.RequestCooldown.Value))
                 return SupportResult.Cooldown;
 
             var context = new SupportContext(
@@ -307,7 +305,7 @@ namespace BoscaliSummer.Features.Support.Runtime
             return SupportResult.Accepted;
         }
 
-        internal float ServerCooldown => settings.RequestCooldown.Value;
+        internal float ServerCooldown => DisableCooldowns ? 0f : settings.RequestCooldown.Value;
 
         /// <summary>
         /// Price for one player. No action prices itself from the target, so costing uses a
@@ -325,8 +323,8 @@ namespace BoscaliSummer.Features.Support.Runtime
 
         bool ISupportHost.TryReserve(SupportPool pool)
         {
-            int limit = pool == SupportPool.Drop ? MaximumDropsInFlight : MaximumArtilleryJobs;
-            if (reserved[(int)pool] >= limit) return false;
+            if (DisableCooldowns) return true;
+            if (reserved[(int)pool] >= MaximumStrikeJobs) return false;
             reserved[(int)pool]++;
             return true;
         }
@@ -335,19 +333,6 @@ namespace BoscaliSummer.Features.Support.Runtime
             reserved[(int)pool] = Math.Max(0, reserved[(int)pool] - 1);
 
         void ISupportHost.Run(IEnumerator routine) => StartCoroutine(routine);
-
-        bool ISupportHost.HasVehicleCapacity(int count)
-        {
-            for (int i = supportVehicles.Count - 1; i >= 0; i--)
-                if (supportVehicles[i] == null || supportVehicles[i].disabled)
-                    supportVehicles.RemoveAt(i);
-            return supportVehicles.Count + count <= MaximumSupportVehicles;
-        }
-
-        void ISupportHost.TrackVehicle(GroundVehicle vehicle)
-        {
-            if (vehicle != null) supportVehicles.Add(vehicle);
-        }
 
         private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
     }

@@ -70,18 +70,14 @@ namespace BoscaliSummer.Features.Progression.Runtime
                 "20% more allocation from captures and pilot rescue.", 1, PerkEffect.ObjectiveReward, 1.20f),
             new PerkDefinition(4, Allocation, "Logistics Officer",
                 "20% cheaper support requests.", 1, PerkEffect.SupportCost, 0.80f),
-            new PerkDefinition(5, Authorisations, "Vehicle Requisition",
-                "Authorises armour airdrops.", 1, SupportCapabilities.Airdrop),
-            new PerkDefinition(6, Authorisations, "Air Defence Requisition",
-                "Authorises air-defence airdrops.", 1, SupportCapabilities.AirDefenceDrop),
-            new PerkDefinition(7, Authorisations, "Logistics Command",
-                "Authorises ground convoy requisition.", 1, SupportCapabilities.Convoy),
-            new PerkDefinition(8, Authorisations, "Forward Observer",
-                "Authorises reconnaissance sweeps.", 1, SupportCapabilities.Recon),
-            new PerkDefinition(9, Authorisations, "Combat Engineering",
+            new PerkDefinition(5, Authorisations, "Satellite Scan",
+                "Authorises satellite reconnaissance sweeps.", 1, SupportCapabilities.Recon),
+            new PerkDefinition(6, Authorisations, "Combat Engineering",
                 "Authorises controlled-zone fortification.", 2, SupportCapabilities.Fortify),
-            new PerkDefinition(10, Authorisations, "Fire Mission",
-                "Authorises artillery fire missions.", 2, SupportCapabilities.Artillery)
+            new PerkDefinition(7, Authorisations, "Rod from God",
+                "Authorises orbital kinetic strikes.", 2, SupportCapabilities.Artillery),
+            new PerkDefinition(8, Authorisations, "EMP Shock",
+                "Authorises electromagnetic pulse strikes.", 2, SupportCapabilities.Emp)
         };
 
         /// <summary>The perk mask is a uint, so the catalogue cannot exceed 32 entries.</summary>

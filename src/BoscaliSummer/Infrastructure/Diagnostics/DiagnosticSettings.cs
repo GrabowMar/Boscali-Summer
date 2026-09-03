@@ -6,6 +6,7 @@ namespace BoscaliSummer.Infrastructure.Diagnostics
     {
         public readonly ConfigEntry<bool> VerboseLogging;
         public readonly ConfigEntry<bool> BypassRequirements;
+        public readonly ConfigEntry<bool> DisableOpsCooldowns;
 
         public DiagnosticSettings(ConfigFile config)
         {
@@ -16,6 +17,10 @@ namespace BoscaliSummer.Infrastructure.Diagnostics
                 "TESTING AID, NOT A PLAY MODE. Grants every perk for free, authorises every " +
                 "support action, and charges no allocation, so the perk board shows FREE and no " +
                 "point is ever spent. Leave this false for normal play. " +
+                "Host-authoritative: on a server, only the host's value decides what is allowed.");
+            DisableOpsCooldowns = config.Bind("Debug", "DisableOpsCooldowns", false,
+                "DEBUG CHEAT: Disable loading times (cooldowns) between abilities in OPS, " +
+                "allowing consecutive support requests without waiting. " +
                 "Host-authoritative: on a server, only the host's value decides what is allowed.");
         }
     }

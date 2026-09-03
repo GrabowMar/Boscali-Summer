@@ -720,8 +720,10 @@ namespace BoscaliSummer.Features.Support.Presentation
             }
             else
             {
-                targetLabel.text = "SELECT SUPPORT OPTION BELOW, THEN RIGHT-CLICK ON MAP";
-                targetLabel.color = Friendly();
+                targetLabel.text = support.DisableCooldowns
+                    ? "NO COOLDOWNS · SELECT OPTION, RIGHT-CLICK MAP"
+                    : "SELECT SUPPORT OPTION BELOW, THEN RIGHT-CLICK ON MAP";
+                targetLabel.color = support.DisableCooldowns ? AvionicsUiPalette.RailAmber : Friendly();
             }
 
             // Refresh Support Action Cards

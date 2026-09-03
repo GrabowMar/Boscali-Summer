@@ -14,6 +14,7 @@
     <Compile Include="..\..\src\BoscaliSummer\Framework\Contracts\IPlayerPerks.cs" Link="Framework\IPlayerPerks.cs" />
     <Compile Include="..\..\src\BoscaliSummer\Features\Progression\Runtime\PerkCatalog.cs" Link="Features\Progression\PerkCatalog.cs" />
     <Compile Include="..\..\src\BoscaliSummer\Features\Support\Runtime\SupportModel.cs" Link="Features\Support\SupportModel.cs" />
+    <Compile Include="..\..\src\BoscaliSummer\Features\UrbanCombat\Runtime\StrongholdDamagePolicy.cs" Link="Features\UrbanCombat\StrongholdDamagePolicy.cs" />
     <Compile Include="..\..\src\BoscaliSummer\Framework\Features\FeatureMetadata.cs" Link="Framework\FeatureMetadata.cs" />
     <Compile Include="..\..\src\BoscaliSummer\Framework\Features\FeatureGraph.cs" Link="Framework\FeatureGraph.cs" />
     <Compile Include="..\..\src\BoscaliSummer\Framework\Features\ServiceRegistry.cs" Link="Framework\ServiceRegistry.cs" />

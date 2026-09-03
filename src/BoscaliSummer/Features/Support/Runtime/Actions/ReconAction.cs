@@ -25,19 +25,19 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
         public SupportResult Execute(in SupportContext context)
         {
             if (!VanillaSupportCatalog.ReconAvailable) return SupportResult.CapabilityUnavailable;
-            if (!SupportTargeting.TryOrigin(context.Player, out Vector3 origin))
-                return SupportResult.NotAirborne;
 
             Vector3 centre = context.Target.ToLocalPosition();
-            if (Vector3.Distance(origin, centre) > context.Settings.ReconRange.Value)
-                return SupportResult.OutOfRange;
+            if (SupportTargeting.TryOrigin(context.Player, out Vector3 origin))
+            {
+                if (Vector3.Distance(origin, centre) > context.Settings.ReconRange.Value)
+                    return SupportResult.OutOfRange;
+            }
 
             List<Unit> units = UnitRegistry.allUnits;
             if (units == null) return SupportResult.CapabilityUnavailable;
 
             float radius = context.Settings.ReconRadius.Value;
             float radiusSquared = radius * radius;
-            float now = Time.time;
             int revealed = 0;
             for (int i = 0; i < units.Count && revealed < MaximumReveals; i++)
             {
@@ -49,21 +49,21 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
                 if ((position - centre).sqrMagnitude > radiusSquared) continue;
                 try
                 {
-                    VanillaSupportCatalog.SetTrackingState.Invoke(
-                        context.Owner,
-                        new object[] { unit.persistentID, position.ToGlobalPosition(), now });
-                    revealed++;
+                    if (context.Owner != null)
+                    {
+                        context.Owner.RpcUpdateTrackingInfo(unit.persistentID);
+                        revealed++;
+                    }
                 }
                 catch (Exception e)
                 {
-                    context.Logger.LogWarning("[Support] Recon reveal failed: " + e.Message);
-                    return SupportResult.CapabilityUnavailable;
+                    context.Logger.LogWarning("[Support] Satellite scan reveal error: " + e.Message);
                 }
             }
 
-            context.Logger.LogInfo("[Support] Recon sweep revealed " + revealed + " contact(s) within " +
+            context.Logger.LogInfo("[Support] Satellite scan completed: " + revealed + " contact(s) detected within " +
                 Mathf.RoundToInt(radius) + "m.");
-            return revealed > 0 ? SupportResult.Accepted : SupportResult.InvalidTarget;
+            return SupportResult.Accepted;
         }
     }
 }

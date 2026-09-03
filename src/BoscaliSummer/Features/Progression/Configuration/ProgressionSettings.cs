@@ -26,9 +26,9 @@ namespace BoscaliSummer.Features.Progression.Configuration
                     new AcceptableValueRange<int>(50, 10000)));
             MaximumPoints = config.Bind("Progression", "MaximumPoints", 6,
                 new ConfigDescription(
-                    "Most perk points one player can earn in a mission. The board holds eleven " +
-                    "perks costing thirteen points in total, so this is the real balance dial: " +
-                    "6 forces a specialisation, 13 lets one pilot take everything. " +
+                    "Most perk points one player can earn in a mission. The board holds nine " +
+                    "perks costing twelve points in total, so this is the real balance dial: " +
+                    "6 forces a specialisation, 12 lets one pilot take everything. " +
                     "Host-authoritative: on a server, only the host's value applies.",
                     new AcceptableValueRange<int>(1, 20)));
             PerkStrength = config.Bind("Progression", "PerkStrength", 1f,

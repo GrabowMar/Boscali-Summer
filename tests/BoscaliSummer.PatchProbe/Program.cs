@@ -147,6 +147,7 @@ string[] patchTypes =
     "BoscaliSummer.Fire.MapBuildingRuinPatch",
     "BoscaliSummer.Garrisons.AirbaseCapturePatch",
     "BoscaliSummer.Garrisons.GarrisonClientVisualPatch",
+    "BoscaliSummer.Garrisons.StrongholdMapBuildingDamagePatch",
     "BoscaliSummer.Features.Radio.Patches.VanillaPlayMusicPatch",
     "BoscaliSummer.Features.Radio.Patches.VanillaCrossFadeMusicPatch",
     "BoscaliSummer.Features.Radio.Patches.VanillaQueueMusicPatch"
@@ -236,7 +237,7 @@ Type messageHandler = mirageAssembly.GetType("Mirage.MessageHandler", true)!;
 if (!messageHandler.GetMethods(AllMembers).Any(method => method.Name == "RegisterHandler"))
     throw new MissingMethodException("Mirage.MessageHandler", "RegisterHandler");
 
-Console.WriteLine("Patch target probe: game methods/fields, Harmony parameter names, 11 patch classes, 5 features, radio assets, four wire contracts, and Mirage seams resolved.");
+Console.WriteLine("Patch target probe: game methods/fields, Harmony parameter names, 12 patch classes, 5 features, radio assets, four wire contracts, and Mirage seams resolved.");
 return 0;
 
 static bool MetadataHasMethod(string assemblyPath, string typeName, string methodName)

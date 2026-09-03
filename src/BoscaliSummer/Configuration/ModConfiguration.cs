@@ -72,7 +72,13 @@ namespace BoscaliSummer
         public int GarrisonsMinimum => UrbanCombat.GarrisonsMinimum;
         public int GarrisonsMaximum => UrbanCombat.GarrisonsMaximum;
         public string GarrisonDefinitionKey => UrbanCombat.GarrisonDefinitionKey;
+        public ConfigEntry<float> StrongholdHitPoints => UrbanCombat.StrongholdHitPoints;
+        public ConfigEntry<float> StrongholdPierceArmor => UrbanCombat.StrongholdPierceArmor;
+        public ConfigEntry<float> StrongholdBlastArmor => UrbanCombat.StrongholdBlastArmor;
+        public ConfigEntry<bool> DamageShaderEnabled => UrbanCombat.DamageShaderEnabled;
+        public ConfigEntry<bool> DamageHeatGlowEnabled => UrbanCombat.DamageHeatGlowEnabled;
         public ConfigEntry<bool> VerboseLogging => Diagnostics.VerboseLogging;
         public ConfigEntry<bool> BypassRequirements => Diagnostics.BypassRequirements;
+        public ConfigEntry<bool> DisableOpsCooldowns => Diagnostics.DisableOpsCooldowns;
     }
 }

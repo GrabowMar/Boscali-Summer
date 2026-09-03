@@ -48,6 +48,8 @@
 - Added `Progression/PerkStrength` to scale every passive perk bonus without editing the
   board, and `Support/ReconRangeMeters` so a reconnaissance sweep is not held to the same
   reach as a physical delivery.
+- Added `Debug/DisableOpsCooldowns` cheat to eliminate loading times and cooldowns between
+  support abilities in OPS, allowing consecutive calls without delay.
 - The perk ribbon now reads `MaximumPoints` instead of assuming six, so a server running a
   different ceiling no longer shows "6 OF 6 EARNED" while the pilot still has points to spend.
 - Renamed `FortificationCost`, `ArtilleryCost` and `ArtilleryDefinitionKey` to

@@ -12,7 +12,8 @@ namespace BoscaliSummer.Features.UrbanCombat
         private static readonly Type[] Patches =
         {
             typeof(AirbaseCapturePatch),
-            typeof(GarrisonClientVisualPatch)
+            typeof(GarrisonClientVisualPatch),
+            typeof(StrongholdMapBuildingDamagePatch)
         };
 
         public FeatureMetadata Metadata => Feature;

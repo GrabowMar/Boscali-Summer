@@ -79,9 +79,9 @@ namespace BoscaliSummer.Fire
                         Quaternion.Euler(0f, Yaw, 0f);
                     if (Profile == SmokeProfile.Forest)
                         Root.transform.localScale = new Vector3(
-                            Mathf.Lerp(1.16f, 1.95f, clusterT),
-                            Mathf.Lerp(1.12f, 1.50f, clusterT),
-                            Mathf.Lerp(1.16f, 1.95f, clusterT));
+                            Mathf.Lerp(1.65f, 2.55f, clusterT),
+                            Mathf.Lerp(1.40f, 2.15f, clusterT),
+                            Mathf.Lerp(1.65f, 2.55f, clusterT));
                 }
                 for (int i = 0; i < Systems.Length && i < BaseRates.Length; i++)
                 {
@@ -433,10 +433,10 @@ namespace BoscaliSummer.Fire
             // Each source is deliberately lighter and smaller than the previous single
             // column; total emission remains in the same bounded range.
             visual.IntensityScale = forest
-                ? Mathf.Lerp(0.29f, 0.39f, a)
+                ? Mathf.Lerp(0.14f, 0.20f, a)
                 : ruin ? Mathf.Lerp(0.10f, 0.16f, a) : Mathf.Lerp(0.16f, 0.24f, a);
             visual.DriftScale = forest
-                ? Mathf.Lerp(1.18f, 1.72f, b)
+                ? Mathf.Lerp(1.45f, 2.05f, b)
                 : ruin ? Mathf.Lerp(0.82f, 1.28f, b) : Mathf.Lerp(0.72f, 1.22f, b);
             visual.GrowthSeconds = forest
                 ? Mathf.Lerp(7f, 13f, c)
@@ -448,10 +448,10 @@ namespace BoscaliSummer.Fire
             visual.SetPosition(position);
             visual.Root.transform.localScale = Vector3.one;
 
-            float radiusX = Mathf.Clamp(halfExtents.x * (forest ? 0.72f : 0.52f),
-                2.5f, forest ? 26f : 16f);
-            float radiusZ = Mathf.Clamp(halfExtents.y * (forest ? 0.72f : 0.52f),
-                2.5f, forest ? 26f : 16f);
+            float radiusX = Mathf.Clamp(halfExtents.x * (forest ? 0.85f : 0.52f),
+                2.5f, forest ? 36f : 16f);
+            float radiusZ = Mathf.Clamp(halfExtents.y * (forest ? 0.85f : 0.52f),
+                2.5f, forest ? 36f : 16f);
             float baseAngle = b * Mathf.PI * 2f;
             for (int source = 0; source < visual.SourceRoots.Length; source++)
             {
@@ -462,25 +462,25 @@ namespace BoscaliSummer.Fire
 
                 float sourceSeed = Mathf.Repeat(a + source * 0.371f, 1f);
                 float angle = baseAngle + source * Mathf.PI * 2f / visual.ActiveSourceCount;
-                float radius = source == 0 ? 0.34f : Mathf.Lerp(0.56f, 0.88f, sourceSeed);
+                float radius = source == 0 ? (forest ? 0.38f : 0.34f) : Mathf.Lerp(forest ? 0.65f : 0.56f, forest ? 1.08f : 0.88f, sourceSeed);
                 sourceRoot.localPosition = new Vector3(
                     Mathf.Cos(angle) * radiusX * radius,
                     0f,
                     Mathf.Sin(angle) * radiusZ * radius);
                 sourceRoot.localRotation = Quaternion.Euler(0f, sourceSeed * 360f, 0f);
                 float horizontalScale = forest
-                    ? Mathf.Lerp(0.78f, 1.02f, sourceSeed)
+                    ? Mathf.Lerp(1.45f, 1.95f, sourceSeed)
                     : ruin ? Mathf.Lerp(0.34f, 0.50f, sourceSeed) : Mathf.Lerp(0.38f, 0.57f, sourceSeed);
                 sourceRoot.localScale = new Vector3(
                     horizontalScale,
                     forest
-                        ? Mathf.Lerp(1.04f, 1.38f, Mathf.Repeat(c + source * 0.217f, 1f))
+                        ? Mathf.Lerp(1.35f, 1.85f, Mathf.Repeat(c + source * 0.217f, 1f))
                         : ruin
                             ? Mathf.Lerp(0.42f, 0.68f, Mathf.Repeat(c + source * 0.217f, 1f))
                             : Mathf.Lerp(0.58f, 0.86f, Mathf.Repeat(c + source * 0.217f, 1f)),
                     horizontalScale);
                 visual.SourceIntensity[source] = forest
-                    ? Mathf.Lerp(0.98f, 1.28f, sourceSeed)
+                    ? Mathf.Lerp(0.72f, 0.96f, sourceSeed)
                     : Mathf.Lerp(0.78f, 1.12f, sourceSeed);
                 visual.SourceDelay[source] = source == 0
                     ? 0f

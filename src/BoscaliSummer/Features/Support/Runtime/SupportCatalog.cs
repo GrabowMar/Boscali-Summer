@@ -14,29 +14,14 @@ namespace BoscaliSummer.Features.Support.Runtime
     /// </summary>
     internal sealed class SupportCatalog
     {
-        private readonly List<SupportActionDefinition> actions = new List<SupportActionDefinition>(6);
+        private readonly List<SupportActionDefinition> actions = new List<SupportActionDefinition>(4);
 
         public SupportCatalog(SupportSettings settings, IZoneFortificationService fortifications)
         {
-            actions.Add(new SupportActionDefinition(
-                SupportActionId.Airdrop, "VEHICLE AIRDROP",
-                "Air-drop an armoured vehicle at marked coordinates.",
-                SupportCapabilities.Airdrop, settings.AirdropEnabled, new AirdropAction(false)));
-
-            actions.Add(new SupportActionDefinition(
-                SupportActionId.AirDefenceDrop, "AIR DEFENCE AIRDROP",
-                "Air-drop a mobile air-defence vehicle at marked coordinates.",
-                SupportCapabilities.AirDefenceDrop, settings.AirDefenceDropEnabled, new AirdropAction(true)));
-
-            actions.Add(new SupportActionDefinition(
-                SupportActionId.Convoy, "GROUND CONVOY",
-                "Requisition a ground convoy at the friendly airbase nearest the mark.",
-                SupportCapabilities.Convoy, settings.ConvoyEnabled, new ConvoyAction()));
-
             if (VanillaSupportCatalog.ReconAvailable)
                 actions.Add(new SupportActionDefinition(
-                    SupportActionId.Recon, "RECON SWEEP",
-                    "Reveal hostile units around the marked coordinates.",
+                    SupportActionId.Recon, "SATELLITE SCAN",
+                    "Reveal hostile units across a wide area via satellite.",
                     SupportCapabilities.Recon, settings.ReconEnabled, new ReconAction()));
 
             if (fortifications != null)
@@ -46,9 +31,14 @@ namespace BoscaliSummer.Features.Support.Runtime
                     SupportCapabilities.Fortify, settings.FortifyEnabled, new FortifyAction(fortifications)));
 
             actions.Add(new SupportActionDefinition(
-                SupportActionId.Artillery, "ARTILLERY FIRE MISSION",
-                "Precision artillery salvo on the selected target coordinates.",
+                SupportActionId.Artillery, "ROD FROM GOD",
+                "Orbital kinetic strike: one high-velocity projectile onto the mark.",
                 SupportCapabilities.Artillery, settings.ArtilleryEnabled, new ArtilleryAction()));
+
+            actions.Add(new SupportActionDefinition(
+                SupportActionId.Emp, "EMP SHOCK",
+                "A high-altitude burst that blinds radars across a wide area - friend and foe alike.",
+                SupportCapabilities.Emp, settings.EmpEnabled, new EmpAction()));
         }
 
         public IReadOnlyList<SupportActionDefinition> Actions => actions;

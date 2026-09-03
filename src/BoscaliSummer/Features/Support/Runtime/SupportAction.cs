@@ -10,13 +10,12 @@ namespace BoscaliSummer.Features.Support.Runtime
     /// <summary>Bounded concurrency pools the host hands out to actions.</summary>
     internal enum SupportPool : byte
     {
-        Drop = 0,
-        Artillery = 1
+        Strike = 0
     }
 
     /// <summary>
-    /// What an action is allowed to ask of the feature: bounded slots, coroutines, tracked
-    /// spawns, settings and logging. Keeping this narrow is what stops an action from growing
+    /// What an action is allowed to ask of the feature: bounded slots, coroutines,
+    /// settings and logging. Keeping this narrow is what stops an action from growing
     /// its own lifecycle.
     /// </summary>
     internal interface ISupportHost
@@ -28,11 +27,6 @@ namespace BoscaliSummer.Features.Support.Runtime
         bool TryReserve(SupportPool pool);
         void Release(SupportPool pool);
         void Run(IEnumerator routine);
-
-        /// <summary>Room under the global support-vehicle cap for this many more spawns.</summary>
-        bool HasVehicleCapacity(int count);
-
-        void TrackVehicle(GroundVehicle vehicle);
     }
 
     internal readonly struct SupportContext

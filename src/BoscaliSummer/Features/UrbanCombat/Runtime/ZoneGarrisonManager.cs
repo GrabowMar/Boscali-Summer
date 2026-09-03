@@ -19,12 +19,6 @@ namespace BoscaliSummer.Garrisons
             public FactionHQ Owner;
             public float ExecuteAt;
             public int Attempts;
-
-            /// <summary>
-            /// Floor on the garrison size. A support fortification sets this so reinforcing a
-            /// zone can never roll a smaller garrison than the one it replaced.
-            /// </summary>
-            public int MinimumCount;
         }
 
         private sealed class GarrisonRecord
@@ -40,39 +34,55 @@ namespace BoscaliSummer.Garrisons
         bool IBuildingOccupancy.IsOccupied(GameObject shell) =>
             GarrisonOccupancy.IsOccupied(shell);
 
+        private readonly Dictionary<int, List<Building>> fortificationRecords = new Dictionary<int, List<Building>>();
+
         bool IZoneFortificationService.TryFortify(
-            Airbase airbase, FactionHQ owner, NuclearOption.Networking.Player requester)
+            Airbase airbase, FactionHQ owner, NuclearOption.Networking.Player requester, Vector3 targetPosition)
         {
             if (!IsServer() || airbase == null || owner == null || requester == null ||
                 airbase.AttachedAirbase || airbase.CurrentHQ != owner || requester.HQ != owner)
                 return false;
 
-            // Verify everything ApplyCapture will need *before* tearing the current garrison
-            // down. Returning true used to mean only "scheduled", so the caller charged the
-            // player for a fortification that could then silently place nothing - and the
-            // ClearRecord below had already removed the defenders that were there.
-            if (!Plugin.Settings.GarrisonsEnabled.Value) return false;
-            BuildingDefinition defense = ResolveDefenseDefinition();
-            if (defense == null || defense.unitPrefab == null ||
-                NetworkSceneSingleton<Spawner>.i == null)
-                return false;
-            if (FindCandidates(airbase).Count == 0)
-            {
-                RebuildShellCatalogue();
-                if (FindCandidates(airbase).Count == 0) return false;
-            }
+            if (NetworkSceneSingleton<Spawner>.i == null) return false;
 
             int key = airbase.GetInstanceID();
-            int floor = records.TryGetValue(key, out GarrisonRecord existing)
-                ? existing.Defenses.Count + 1
-                : 0;
+            if (!fortificationRecords.TryGetValue(key, out var list))
+            {
+                list = new List<Building>();
+                fortificationRecords[key] = list;
+            }
 
-            // A support call is an explicit rebuild request. Ordinary capture scheduling
-            // deliberately ignores an already-owned record, so clear that generation first.
-            ClearRecord(key);
-            ScheduleCapture(airbase, owner);
-            for (int i = 0; i < pending.Count; i++)
-                if (pending[i].Airbase == airbase) pending[i].MinimumCount = floor;
+            // Remove any disabled or destroyed buildings from our tracking list
+            for (int i = list.Count - 1; i >= 0; i--)
+            {
+                if (list[i] == null || list[i].disabled) list.RemoveAt(i);
+            }
+
+            Vector3 center = targetPosition != default
+                ? targetPosition
+                : (airbase.center != null ? airbase.center.position : airbase.transform.position);
+
+            // If designated target is right at the runway / airbase center, place on the defense perimeter
+            if (targetPosition == default || (center - airbase.transform.position).sqrMagnitude < 400f)
+            {
+                float angle = (list.Count * 65f) * Mathf.Deg2Rad;
+                float dist = Mathf.Max(220f, airbase.GetRadius() * 0.75f);
+                center = airbase.transform.position + new Vector3(Mathf.Sin(angle), 0f, Mathf.Cos(angle)) * dist;
+            }
+
+            var spawned = InfantryEncampmentBuilder.DeployEncampment(airbase, owner, center, (list.Count / 5) + 1);
+            if (spawned.Count == 0)
+            {
+                // Fallback attempt with alternative offset near airbase
+                Vector3 fallbackCenter = (airbase.center != null ? airbase.center.position : airbase.transform.position)
+                    + new Vector3(100f, 0f, 100f);
+                spawned = InfantryEncampmentBuilder.DeployEncampment(airbase, owner, fallbackCenter, (list.Count / 5) + 1);
+            }
+
+            if (spawned.Count == 0) return false;
+
+            list.AddRange(spawned);
+            Plugin.Logger.LogInfo($"[Fortification] Deployed {spawned.Count} visible infantry encampment building(s) at {GetAirbaseName(airbase)} for {owner.name}. Total active fortifications: {list.Count}.");
             return true;
         }
 
@@ -106,6 +116,14 @@ namespace BoscaliSummer.Garrisons
             definitionInventoryReported = false;
             initialScanComplete = false;
             initialScanAt = Time.unscaledTime + 3f;
+
+            foreach (var fortList in fortificationRecords.Values)
+            {
+                for (int i = 0; i < fortList.Count; i++)
+                    DestroyNetworked(fortList[i]);
+            }
+            fortificationRecords.Clear();
+            InfantryEncampmentBuilder.ResetForScene();
         }
 
         public void ScheduleCapture(Airbase airbase, FactionHQ owner)
@@ -203,7 +221,7 @@ namespace BoscaliSummer.Garrisons
             int min = Mathf.Min(Plugin.Settings.GarrisonsMinimum, Plugin.Settings.GarrisonsMaximum);
             int max = Mathf.Max(Plugin.Settings.GarrisonsMinimum, Plugin.Settings.GarrisonsMaximum);
             int rolled = min + (int)(seed % (uint)Mathf.Max(1, max - min + 1));
-            int count = Mathf.Clamp(Mathf.Max(rolled, capture.MinimumCount), 0, candidates.Count);
+            int count = Mathf.Clamp(rolled, 0, candidates.Count);
 
             var record = new GarrisonRecord { Airbase = airbase, Owner = owner };
             records[key] = record;
@@ -219,8 +237,9 @@ namespace BoscaliSummer.Garrisons
                     hasCachedDefenseBounds = true;
                 }
                 Bounds prefabBounds = cachedDefenseBounds;
-                Vector3 local = shellBounds.center;
-                local.y = shellBounds.max.y - prefabBounds.min.y + 0.15f;
+                // Anchor defensive proxy logic inside the building core (slightly elevated
+                // for realistic embrasure sightlines) rather than perched on the roof.
+                Vector3 local = shellBounds.center + Vector3.up * Mathf.Min(shellBounds.extents.y * 0.35f, 3.5f);
                 string unique = NamePrefix + Sanitize(GetAirbaseName(airbase)) + ":" + generation + ":" + slot;
                 Building spawned = NetworkSceneSingleton<Spawner>.i.SpawnBuilding(
                     defense.unitPrefab,
@@ -234,13 +253,25 @@ namespace BoscaliSummer.Garrisons
                 if (spawned == null) continue;
                 if (shellBuilding != null && !shellBuilding.disabled)
                     shellBuilding.NetworkHQ = owner;
+
+                // Turn the building itself into a de facto bunker / fortified stronghold
+                StrongholdBuilding stronghold = shell.GetComponent<StrongholdBuilding>();
+                if (stronghold == null) stronghold = shell.AddComponent<StrongholdBuilding>();
+                stronghold.Initialize(
+                    owner,
+                    airbase,
+                    spawned,
+                    Plugin.Settings.UrbanCombat.StrongholdHitPoints.Value,
+                    Plugin.Settings.UrbanCombat.StrongholdPierceArmor.Value,
+                    Plugin.Settings.UrbanCombat.StrongholdBlastArmor.Value);
+
                 GarrisonOccupancy.Set(shell, owner);
                 GarrisonVisual.Apply(spawned);
                 record.Defenses.Add(spawned);
                 record.Shells.Add(shell);
             }
 
-            Plugin.Logger.LogInfo($"Occupied {record.Defenses.Count} building(s) around {GetAirbaseName(airbase)} for {owner} using logic-only {defense.jsonKey} proxies.");
+            Plugin.Logger.LogInfo($"Fortified {record.Defenses.Count} building stronghold(s) around {GetAirbaseName(airbase)} for {owner} ({Plugin.Settings.UrbanCombat.StrongholdHitPoints.Value:0} HP, {defense.jsonKey} armament).");
         }
 
         private void Retry(PendingCapture capture)
@@ -259,8 +290,15 @@ namespace BoscaliSummer.Garrisons
                 {
                     GameObject shell = record.Shells[i];
                     Building shellBuilding = shell != null ? shell.GetComponentInParent<Building>() : null;
-                    if ((shell != null && (shellBuilding == null || !shellBuilding.disabled)) && record.Defenses[i] != null)
+                    StrongholdBuilding stronghold = shell != null ? shell.GetComponent<StrongholdBuilding>() : null;
+
+                    bool shellAlive = shell != null &&
+                        (stronghold == null || !stronghold.IsDestroyed) &&
+                        (shellBuilding == null || !shellBuilding.disabled);
+
+                    if (shellAlive && record.Defenses[i] != null)
                         continue;
+
                     DestroyNetworked(record.Defenses[i]);
                     record.Defenses[i] = null;
                 }
@@ -269,10 +307,24 @@ namespace BoscaliSummer.Garrisons
 
         private void ClearRecord(int key)
         {
+            if (fortificationRecords.TryGetValue(key, out var fortList))
+            {
+                for (int i = 0; i < fortList.Count; i++) DestroyNetworked(fortList[i]);
+                fortificationRecords.Remove(key);
+            }
+
             if (!records.TryGetValue(key, out GarrisonRecord record)) return;
             for (int i = 0; i < record.Defenses.Count; i++) DestroyNetworked(record.Defenses[i]);
             for (int i = 0; i < record.Shells.Count; i++)
             {
+                GameObject shell = record.Shells[i];
+                if (shell != null)
+                {
+                    StrongholdBuilding stronghold = shell.GetComponent<StrongholdBuilding>();
+                    if (stronghold != null) Destroy(stronghold);
+                    BuildingDamageVisual visual = shell.GetComponent<BuildingDamageVisual>();
+                    if (visual != null) visual.ResetForScene();
+                }
                 Building shellBuilding = record.Shells[i]?.GetComponentInParent<Building>();
                 if (shellBuilding != null && shellBuilding.NetworkHQ == record.Owner)
                     shellBuilding.NetworkHQ = null;
@@ -292,7 +344,7 @@ namespace BoscaliSummer.Garrisons
             if (cachedDefenseDefinition != null) return cachedDefenseDefinition;
             if (Encyclopedia.i == null || Encyclopedia.i.buildings == null) return null;
             string requested = Plugin.Settings.GarrisonDefinitionKey?.Trim();
-            if (!string.IsNullOrEmpty(requested))
+            if (!string.IsNullOrEmpty(requested) && !string.Equals(requested, "auto", StringComparison.OrdinalIgnoreCase))
             {
                 for (int i = 0; i < Encyclopedia.i.buildings.Count; i++)
                 {
@@ -301,7 +353,6 @@ namespace BoscaliSummer.Garrisons
                         definition.buildingType == BuildingType.DEF)
                         return cachedDefenseDefinition = definition;
                 }
-                return null;
             }
 
             var defs = new List<BuildingDefinition>();
@@ -320,18 +371,41 @@ namespace BoscaliSummer.Garrisons
                 Plugin.Logger.LogInfo("Loaded DEF building definitions: " +
                     (defs.Count == 0 ? "none" : string.Join(", ", labels)));
             }
-            BuildingDefinition smallest = null;
-            float smallestArea = float.MaxValue;
+
+            // Prioritize formidable stronghold defense assets:
+            // 1. Pillboxes (reinforced concrete pillboxes with heavy rapid-fire armaments)
+            for (int i = 0; i < defs.Count; i++)
+            {
+                BuildingDefinition d = defs[i];
+                if (d.jsonKey.IndexOf("pillbox", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    (d.unitName?.IndexOf("pillbox", StringComparison.OrdinalIgnoreCase) ?? -1) >= 0)
+                    return cachedDefenseDefinition = d;
+            }
+
+            // 2. Heavy emplacements (ATGM, Autocannon, MG)
+            for (int i = 0; i < defs.Count; i++)
+            {
+                BuildingDefinition d = defs[i];
+                if (d.jsonKey.IndexOf("ATGM", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    d.jsonKey.IndexOf("23mm", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    d.jsonKey.IndexOf("MG", StringComparison.OrdinalIgnoreCase) >= 0)
+                    return cachedDefenseDefinition = d;
+            }
+
+            // 3. Any bunker definition
             for (int i = 0; i < defs.Count; i++)
             {
                 BuildingDefinition definition = defs[i];
                 if ((definition.unitName?.IndexOf("bunker", StringComparison.OrdinalIgnoreCase) ?? -1) >= 0 ||
                     (definition.jsonKey?.IndexOf("bunker", StringComparison.OrdinalIgnoreCase) ?? -1) >= 0)
                     return cachedDefenseDefinition = definition;
-                float area = Mathf.Max(1f, definition.width) * Mathf.Max(1f, definition.length);
-                if (area < smallestArea) { smallestArea = area; smallest = definition; }
             }
-            return cachedDefenseDefinition = smallest;
+
+            // 4. Any available DEF definition
+            if (defs.Count > 0)
+                return cachedDefenseDefinition = defs[0];
+
+            return null;
         }
 
         private List<GameObject> FindCandidates(Airbase airbase)

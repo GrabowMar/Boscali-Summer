@@ -11,7 +11,8 @@ namespace BoscaliSummer.Features.Support.Runtime
         Convoy = 3,
         Recon = 4,
         Fortify = 5,
-        Artillery = 6
+        Artillery = 6,
+        Emp = 7
     }
 
     internal enum SupportResult : byte

@@ -28,11 +28,9 @@ namespace BoscaliSummer.Framework.Contracts
 
     internal static class SupportCapabilities
     {
-        public const string Airdrop = "support.airdrop";
-        public const string AirDefenceDrop = "support.airdrop-aa";
-        public const string Convoy = "support.convoy";
         public const string Recon = "support.recon";
         public const string Fortify = "support.fortify";
         public const string Artillery = "support.artillery";
+        public const string Emp = "support.emp";
     }
 }
