@@ -97,23 +97,33 @@ namespace BoscaliSummer.Garrisons
             float totalDamage = StrongholdDamagePolicy.CalculateMitigatedDamage(
                 pierceDamage, blastDamage, amountAffected, fireDamage, impactDamage, PierceArmor, BlastArmor);
 
-            Vector3 hitPoint = transform.position + Vector3.up * 4f;
-            Vector3 normal = Vector3.forward;
+            Vector3 buildingCenter = transform.position + Vector3.up * 4f;
+            Collider col = GetComponentInChildren<Collider>();
+            if (col != null) buildingCenter = col.bounds.center;
 
-            // Resolve exact hit surface from attacker trajectory
+            Vector3 hitPoint = buildingCenter;
+            Vector3 normal = Vector3.up;
+
+            Vector3 fromDir = Vector3.forward;
             if (dealerID.IsValid && dealerID.TryGetUnit(out Unit attacker) && attacker != null)
             {
-                Vector3 attackerPos = attacker.transform.position;
-                Vector3 toCenter = (transform.position + Vector3.up * 4f) - attackerPos;
-                if (Physics.Raycast(attackerPos, toCenter.normalized, out RaycastHit hit, toCenter.magnitude + 20f, PhysicsLayers.StaticsMask))
-                {
-                    hitPoint = hit.point;
-                    normal = hit.normal;
-                }
-                else
-                {
-                    normal = (-toCenter).normalized;
-                }
+                fromDir = (buildingCenter - attacker.transform.position).normalized;
+            }
+            else if (Camera.main != null)
+            {
+                fromDir = (buildingCenter - Camera.main.transform.position).normalized;
+            }
+
+            Vector3 rayStart = buildingCenter - fromDir * 35f;
+            if (Physics.Raycast(rayStart, fromDir, out RaycastHit hit, 45f, PhysicsLayers.StaticsMask))
+            {
+                hitPoint = hit.point;
+                normal = hit.normal;
+            }
+            else if (col != null)
+            {
+                hitPoint = col.ClosestPoint(rayStart);
+                normal = (hitPoint - buildingCenter).normalized;
             }
 
             return ApplyCalculatedDamage(totalDamage, hitPoint, normal, blastDamage * 0.1f);

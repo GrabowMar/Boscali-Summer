@@ -34,32 +34,44 @@ namespace BoscaliSummer.Garrisons
                 return true;
             }
 
-            // For regular civilian buildings: when struck by heavy ordnance, place a localized
-            // breach crater and ground rubble at the hit site without modifying building materials.
-            if (blastDamage > 12f)
+            // For regular civilian buildings: when struck by weapons, place a localized
+            // breach crater and ground rubble at the exterior hit site without modifying materials.
+            float totalDamage = pierceDamage + blastDamage + fireDamage + impactDamage;
+            if (totalDamage > 2f)
             {
                 BuildingDamageVisual visual = BuildingDamageVisual.GetOrAdd(__instance.gameObject);
                 if (visual != null)
                 {
-                    Vector3 hitPoint = __instance.transform.position + Vector3.up * 3f;
-                    Vector3 normal = Vector3.forward;
+                    Vector3 buildingCenter = __instance.transform.position + Vector3.up * 4f;
+                    Collider col = __instance.GetComponentInChildren<Collider>();
+                    if (col != null) buildingCenter = col.bounds.center;
 
+                    Vector3 hitPoint = buildingCenter;
+                    Vector3 normal = Vector3.up;
+
+                    Vector3 fromDir = Vector3.forward;
                     if (dealerID.IsValid && dealerID.TryGetUnit(out Unit attacker) && attacker != null)
                     {
-                        Vector3 attackerPos = attacker.transform.position;
-                        Vector3 toCenter = (__instance.transform.position + Vector3.up * 3f) - attackerPos;
-                        if (Physics.Raycast(attackerPos, toCenter.normalized, out RaycastHit hit, toCenter.magnitude + 20f, PhysicsLayers.StaticsMask))
-                        {
-                            hitPoint = hit.point;
-                            normal = hit.normal;
-                        }
-                        else
-                        {
-                            normal = (-toCenter).normalized;
-                        }
+                        fromDir = (buildingCenter - attacker.transform.position).normalized;
+                    }
+                    else if (Camera.main != null)
+                    {
+                        fromDir = (buildingCenter - Camera.main.transform.position).normalized;
                     }
 
-                    visual.ApplyLocalImpact(hitPoint, normal, blastDamage * 0.1f, blastDamage);
+                    Vector3 rayStart = buildingCenter - fromDir * 35f;
+                    if (Physics.Raycast(rayStart, fromDir, out RaycastHit hit, 45f, PhysicsLayers.StaticsMask))
+                    {
+                        hitPoint = hit.point;
+                        normal = hit.normal;
+                    }
+                    else if (col != null)
+                    {
+                        hitPoint = col.ClosestPoint(rayStart);
+                        normal = (hitPoint - buildingCenter).normalized;
+                    }
+
+                    visual.ApplyLocalImpact(hitPoint, normal, blastDamage * 0.1f, totalDamage);
                 }
             }
 

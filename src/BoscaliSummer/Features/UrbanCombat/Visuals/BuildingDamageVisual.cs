@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
@@ -8,19 +8,30 @@ namespace BoscaliSummer.Garrisons
     /// <summary>
     /// Manages authentic, localized war destruction and ruin effects for buildings:
     /// - Localized blast craters and jagged breach holes placed directly at impact sites on building facades.
+    /// - Deploys procedural bump-mapped decal materials (RuinTextureCatalog) with authentic 3D normal relief,
+    ///   crater depth, and Voronoi fracture crack networks under dynamic lighting.
     /// - Physical concrete rubble and fallen masonry mounds spawned at the base of damaged walls.
-    /// - Localized impact dust and smoke plumes venting from breach holes.
-    /// - Does NOT globally tint buildings black or cause windows to glow neon orange.
+    /// - Progressively scales facade bump map weathering on the building geometry via MaterialPropertyBlock.
+    /// - Proximity merging: repeated hits in close proximity upgrade the crater tier rather than stacking decals.
+    /// - Spawns localized impact dust, spall sparks, and severe-damage venting smoke.
     /// </summary>
     internal sealed class BuildingDamageVisual : MonoBehaviour
     {
-        private const int MaxLocalBreachesPerBuilding = 16;
+        private const int MaxLocalBreachesPerBuilding = 24;
         private const float MaxViewingDistanceSq = 3500f * 3500f;
 
-        private readonly List<GameObject> activeBreaches = new List<GameObject>(MaxLocalBreachesPerBuilding);
+        private sealed class BreachEntry
+        {
+            public GameObject GameObject;
+            public DecalProjector Projector;
+            public RuinTextureCatalog.RuinTier Tier;
+        }
+
+        private readonly List<BreachEntry> activeBreaches = new List<BreachEntry>(MaxLocalBreachesPerBuilding);
         private readonly List<GameObject> activeRubblePiles = new List<GameObject>(MaxLocalBreachesPerBuilding);
         private GameObject breachSmokeEmitter;
-        private bool isRestored;
+        private MaterialPropertyBlock propertyBlock;
+        private float cumulativeDamage;
 
         public static BuildingDamageVisual GetOrAdd(GameObject buildingRoot)
         {
@@ -32,18 +43,15 @@ namespace BoscaliSummer.Garrisons
 
         private void Awake()
         {
-            RestoreOriginalMaterials();
+            RuinTextureCatalog.EnsureInitialized();
         }
 
         /// <summary>
-        /// Restores normal building materials, clearing any global soot tint or emission
-        /// so buildings never appear completely grayed out or have glowing neon windows.
+        /// Restores normal building materials and clears any active decals and emitters.
         /// </summary>
         public void RestoreOriginalMaterials()
         {
-            if (isRestored) return;
-            isRestored = true;
-
+            cumulativeDamage = 0f;
             Renderer[] all = GetComponentsInChildren<Renderer>(false);
             for (int i = 0; i < all.Length; i++)
             {
@@ -56,13 +64,11 @@ namespace BoscaliSummer.Garrisons
         }
 
         /// <summary>
-        /// Places a localized war damage breach crater on the building facade and spawns
-        /// fallen concrete rubble mounds at the ground beneath the impact.
+        /// Places a localized war damage breach crater on the building facade with procedural bump mapping
+        /// and spawns fallen concrete rubble mounds at the ground beneath the impact.
         /// </summary>
         public void ApplyLocalImpact(Vector3 impactPoint, Vector3 normal, float blastYield, float damage)
         {
-            RestoreOriginalMaterials();
-
             if (impactPoint == Vector3.zero) return;
             if (normal == Vector3.zero) normal = Vector3.up;
 
@@ -71,64 +77,97 @@ namespace BoscaliSummer.Garrisons
             if (cam != null && (cam.transform.position - impactPoint).sqrMagnitude > MaxViewingDistanceSq)
                 return;
 
-            // 1. Localized structural breach crater on the building facade
-            PlaceWallBreach(impactPoint, normal, blastYield);
+            cumulativeDamage += damage;
+
+            // 1. Localized structural breach crater with 3D procedural bump mapping on the building facade
+            PlaceWallBreach(impactPoint, normal, blastYield, damage);
 
             // 2. Physical fallen rubble mound at the base of the damaged wall
-            PlaceGroundRubble(impactPoint, normal, blastYield);
+            PlaceGroundRubble(impactPoint, normal, blastYield, damage);
 
             // 3. Impact dust burst and concrete pulverization accent
-            SpawnImpactDust(impactPoint, normal, blastYield);
+            SpawnImpactDust(impactPoint, normal, blastYield, damage);
+
+            // 4. Update overall building facade weathering and micro-crack bump intensity
+            UpdateFacadeWeathering();
         }
 
-        private void PlaceWallBreach(Vector3 point, Vector3 normal, float blastYield)
+        private void PlaceWallBreach(Vector3 point, Vector3 normal, float blastYield, float damage)
         {
             if (GameAssets.i == null || GameAssets.i.scorchMarkDecal == null) return;
+
+            RuinTextureCatalog.RuinTier targetTier = (blastYield > 10f || damage > 150f)
+                ? RuinTextureCatalog.RuinTier.Heavy
+                : (blastYield > 0.1f || damage > 40f
+                    ? RuinTextureCatalog.RuinTier.Medium
+                    : RuinTextureCatalog.RuinTier.Light);
 
             // Check if there is an existing breach very close to merge with
             for (int i = 0; i < activeBreaches.Count; i++)
             {
-                GameObject existing = activeBreaches[i];
-                if (existing != null && (existing.transform.position - point).sqrMagnitude < 4f)
+                BreachEntry existing = activeBreaches[i];
+                if (existing != null && existing.GameObject != null &&
+                    (existing.GameObject.transform.position - point).sqrMagnitude < 4.0f)
                 {
-                    // Expand existing breach hole
-                    DecalProjector proj = existing.GetComponent<DecalProjector>();
-                    if (proj != null)
+                    // Upgrade existing breach hole tier and expand size
+                    if (existing.Tier < targetTier)
                     {
-                        float newSize = Mathf.Min(proj.size.x * 1.35f, 14f);
-                        proj.size = new Vector3(newSize, newSize, newSize * 0.35f);
+                        existing.Tier = targetTier;
+                    }
+                    else if (existing.Tier < RuinTextureCatalog.RuinTier.Heavy && (damage > 30f || blastYield > 0.1f))
+                    {
+                        existing.Tier = (RuinTextureCatalog.RuinTier)((int)existing.Tier + 1);
+                    }
+
+                    if (existing.Projector != null)
+                    {
+                        float newSize = Mathf.Min(existing.Projector.size.x * 1.35f, 15f);
+                        existing.Projector.size = new Vector3(newSize, newSize, newSize * 0.42f);
+                        existing.Projector.material = RuinTextureCatalog.GetDecalMaterial(existing.Tier);
                     }
                     return;
                 }
             }
 
-            float size = Mathf.Clamp(2.8f + blastYield * 0.42f, 2.5f, 12f);
+            float baseSize = blastYield > 0.1f
+                ? Mathf.Clamp(2.8f + blastYield * 0.45f, 2.8f, 13f)
+                : Mathf.Clamp(1.3f + damage * 0.045f, 1.3f, 4.0f); // Bullets/cannons
+
             Quaternion facing = Quaternion.LookRotation(-normal, Vector3.up);
             uint seed = (uint)(Mathf.Abs(point.x * 137f + point.y * 311f + point.z * 523f));
             Quaternion roll = Quaternion.AngleAxis((seed % 360), -normal);
 
-            GameObject breach = Instantiate(GameAssets.i.scorchMarkDecal, point + normal * 0.06f, roll * facing, transform);
-            breach.name = "BoscaliSummer.LocalBreach";
+            GameObject breach = Instantiate(GameAssets.i.scorchMarkDecal, point + normal * 0.08f, roll * facing, transform);
+            breach.name = $"BoscaliSummer.LocalBreach_{targetTier}";
             breach.SetActive(true);
 
             DecalProjector projector = breach.GetComponent<DecalProjector>();
             if (projector != null)
             {
-                projector.size = new Vector3(size, size, size * 0.3f);
-                projector.fadeFactor = 0.96f; // High contrast charred crater
-                projector.drawDistance = 2600f;
+                Material ruinMat = RuinTextureCatalog.GetDecalMaterial(targetTier);
+                if (ruinMat != null) projector.material = ruinMat;
+
+                projector.size = new Vector3(baseSize, baseSize, baseSize * 0.42f);
+                projector.fadeFactor = 0.98f;
+                projector.drawDistance = 2800f;
             }
 
             if (activeBreaches.Count >= MaxLocalBreachesPerBuilding)
             {
-                GameObject oldest = activeBreaches[0];
+                BreachEntry oldest = activeBreaches[0];
                 activeBreaches.RemoveAt(0);
-                if (oldest != null) Destroy(oldest);
+                if (oldest != null && oldest.GameObject != null) Destroy(oldest.GameObject);
             }
-            activeBreaches.Add(breach);
+
+            activeBreaches.Add(new BreachEntry
+            {
+                GameObject = breach,
+                Projector = projector,
+                Tier = targetTier
+            });
         }
 
-        private void PlaceGroundRubble(Vector3 impactPoint, Vector3 normal, float blastYield)
+        private void PlaceGroundRubble(Vector3 impactPoint, Vector3 normal, float blastYield, float damage)
         {
             if (GameAssets.i == null || GameAssets.i.scorchMarkDecal == null) return;
 
@@ -137,7 +176,10 @@ namespace BoscaliSummer.Garrisons
             int mask = PhysicsLayers.StaticsMask;
             if (Physics.Raycast(castOrigin, Vector3.down, out RaycastHit hit, 160f, mask, QueryTriggerInteraction.Ignore))
             {
-                float rubbleSize = Mathf.Clamp(3.2f + blastYield * 0.5f, 3f, 12f);
+                float rubbleSize = blastYield > 0.1f
+                    ? Mathf.Clamp(3.2f + blastYield * 0.5f, 3f, 12f)
+                    : Mathf.Clamp(1.8f + damage * 0.03f, 1.8f, 4f);
+
                 Quaternion rubbleFacing = Quaternion.LookRotation(Vector3.down, normal);
                 uint seed = (uint)(Mathf.Abs(hit.point.x * 71f + hit.point.z * 193f));
                 Quaternion roll = Quaternion.AngleAxis((seed % 360), Vector3.down);
@@ -149,8 +191,11 @@ namespace BoscaliSummer.Garrisons
                 DecalProjector proj = rubble.GetComponent<DecalProjector>();
                 if (proj != null)
                 {
-                    proj.size = new Vector3(rubbleSize, rubbleSize, rubbleSize * 0.25f);
-                    proj.fadeFactor = 0.90f;
+                    Material rubbleMat = RuinTextureCatalog.GetDecalMaterial(RuinTextureCatalog.RuinTier.Light);
+                    if (rubbleMat != null) proj.material = rubbleMat;
+
+                    proj.size = new Vector3(rubbleSize, rubbleSize, rubbleSize * 0.3f);
+                    proj.fadeFactor = 0.92f;
                     proj.drawDistance = 2400f;
                 }
 
@@ -164,22 +209,51 @@ namespace BoscaliSummer.Garrisons
             }
         }
 
-        private void SpawnImpactDust(Vector3 point, Vector3 normal, float blastYield)
+        private void SpawnImpactDust(Vector3 point, Vector3 normal, float blastYield, float damage)
         {
             if (GameAssets.i == null) return;
 
             if (GameAssets.i.contactDust != null)
             {
-                GameObject dust = Instantiate(GameAssets.i.contactDust, point + normal * 0.2f, Quaternion.LookRotation(normal));
+                GameObject dust = Instantiate(GameAssets.i.contactDust, point + normal * 0.25f, Quaternion.LookRotation(normal));
                 dust.SetActive(true);
-                Destroy(dust, 4.5f);
+                Destroy(dust, 4f);
             }
 
-            if (blastYield > 10f && GameAssets.i.rotorStrike_solid != null)
+            if ((blastYield > 5f || damage > 40f) && GameAssets.i.rotorStrike_solid != null)
             {
-                GameObject spall = Instantiate(GameAssets.i.rotorStrike_solid, point + normal * 0.2f, Quaternion.LookRotation(normal));
+                GameObject spall = Instantiate(GameAssets.i.rotorStrike_solid, point + normal * 0.25f, Quaternion.LookRotation(normal));
                 spall.SetActive(true);
-                Destroy(spall, 3f);
+                Destroy(spall, 2.5f);
+            }
+        }
+
+        /// <summary>
+        /// Updates the building geometry's facade weathering and micro-crack normal map
+        /// intensity via MaterialPropertyBlock without instantiating new Material assets.
+        /// </summary>
+        private void UpdateFacadeWeathering()
+        {
+            if (propertyBlock == null) propertyBlock = new MaterialPropertyBlock();
+
+            float damageFactor = Mathf.Clamp01(cumulativeDamage / 350f);
+            Texture2D detailNormal = RuinTextureCatalog.FacadeDetailNormal;
+
+            if (detailNormal != null)
+            {
+                propertyBlock.SetTexture("_DetailNormalMap", detailNormal);
+                propertyBlock.SetFloat("_DetailNormalMapScale", damageFactor * 1.5f);
+                propertyBlock.SetFloat("_BumpScale", 1.0f + damageFactor * 0.8f);
+            }
+
+            Renderer[] renderers = GetComponentsInChildren<Renderer>(false);
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                Renderer r = renderers[i];
+                if (r != null && !(r is ParticleSystemRenderer) && !(r is TrailRenderer))
+                {
+                    r.SetPropertyBlock(propertyBlock);
+                }
             }
         }
 
@@ -203,7 +277,7 @@ namespace BoscaliSummer.Garrisons
                         var main = ps.main;
                         main.loop = true;
                         main.startLifetime = 6f;
-                        main.startSize = new ParticleSystem.MinMaxCurve(3f, 6f);
+                        main.startSize = new ParticleSystem.MinMaxCurve(3.5f, 7f);
                         ps.Play();
                     }
                 }
@@ -218,7 +292,10 @@ namespace BoscaliSummer.Garrisons
         public void ResetForScene()
         {
             for (int i = 0; i < activeBreaches.Count; i++)
-                if (activeBreaches[i] != null) Destroy(activeBreaches[i]);
+            {
+                if (activeBreaches[i] != null && activeBreaches[i].GameObject != null)
+                    Destroy(activeBreaches[i].GameObject);
+            }
             activeBreaches.Clear();
 
             for (int i = 0; i < activeRubblePiles.Count; i++)
@@ -231,7 +308,6 @@ namespace BoscaliSummer.Garrisons
                 breachSmokeEmitter = null;
             }
 
-            isRestored = false;
             RestoreOriginalMaterials();
         }
 
