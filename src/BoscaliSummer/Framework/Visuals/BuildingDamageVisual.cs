@@ -318,14 +318,9 @@ namespace BoscaliSummer.Framework.Visuals
             if (detailNormal != null)
             {
                 propertyBlock.SetTexture("_DetailNormalMap", detailNormal);
-                propertyBlock.SetFloat("_DetailNormalMapScale", damageFactor * 1.6f);
-                propertyBlock.SetFloat("_BumpScale", 1.0f + damageFactor * 1.0f);
+                propertyBlock.SetFloat("_DetailNormalMapScale", damageFactor * 1.5f);
+                propertyBlock.SetFloat("_BumpScale", 1.0f + damageFactor * 0.8f);
             }
-
-            // Facade soot charring
-            Color charColor = Color.Lerp(Color.white, new Color(0.32f, 0.30f, 0.28f), damageFactor);
-            propertyBlock.SetColor("_BaseColor", charColor);
-            propertyBlock.SetColor("_Color", charColor);
 
             Renderer[] renderers = GetComponentsInChildren<Renderer>(false);
             for (int i = 0; i < renderers.Length; i++)

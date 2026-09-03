@@ -9,17 +9,21 @@ namespace BoscaliSummer.Garrisons
     /// <summary>
     /// Controls air assault insertions:
     /// - Drops Paratroopers from the MC-260 Chimera transport plane.
-    /// - Deploys Fast-Rope / Rope-sling infantry from the UH-90 Ibis helicopter.
-    /// - If executed above civilian buildings: infantry takes and fortifies the building (rooftop AA, ground bunkers, markings).
-    /// - If executed above open ground / terrain: infantry establishes a combat encampment (sandbags, MGs, ATGMs, MANPADS).
+    /// - Deploys Fast-Rope Rappelling infantry squads from the UH-90 Ibis helicopter,
+    ///   consuming infantry stored in the helicopter.
+    /// - If executed above civilian buildings: infantry fast-ropes/parachutes in and takes
+    ///   the building as a fortified stronghold (rooftop AA, ground bunkers, markings).
+    /// - If executed above open ground / terrain: infantry establishes a combat encampment
+    ///   (sandbag bunkers, heavy MGs, ATGMs, MANPADS).
     /// </summary>
     internal sealed class AirAssaultController : MonoBehaviour, ISceneService
     {
         public static AirAssaultController Instance { get; private set; }
 
         private float nextDropTime;
-        private const float Cooldown = 15f;
+        private const float Cooldown = 10f;
         private KeyCode airAssaultKey = KeyCode.J;
+        private bool loggedActive;
 
         private void Awake() => Instance = this;
         private void OnDestroy() { if (Instance == this) Instance = null; }
@@ -27,19 +31,40 @@ namespace BoscaliSummer.Garrisons
         public void ResetForScene()
         {
             nextDropTime = 0f;
+            loggedActive = false;
         }
 
         private void Update()
         {
-            if (!Input.GetKeyDown(airAssaultKey)) return;
+            if (!loggedActive)
+            {
+                loggedActive = true;
+                Plugin.Logger.LogInfo("[Air Assault] Controller active. Deploy troops via [J] or firing Troops weapon station.");
+            }
 
-            Aircraft aircraft = GetLocalAircraft();
+            if (Input.GetKeyDown(airAssaultKey))
+            {
+                Aircraft local = GetLocalAircraft();
+                if (local != null)
+                {
+                    Plugin.Logger.LogInfo($"[Air Assault] Key [J] pressed while piloting {local.name}.");
+                    TriggerAirAssault(local, null);
+                }
+                else
+                {
+                    Plugin.Logger.LogInfo("[Air Assault] Key [J] pressed but local aircraft could not be found.");
+                }
+            }
+        }
+
+        public void TriggerAirAssault(Aircraft aircraft, MountedTroops mountedTroops)
+        {
             if (aircraft == null) return;
 
             if (Time.unscaledTime < nextDropTime)
             {
-                float remaining = nextDropTime - Time.unscaledTime;
-                Plugin.Logger.LogInfo($"[Air Assault] Recharging: {remaining:0.#}s");
+                float rem = nextDropTime - Time.unscaledTime;
+                Plugin.Logger.LogInfo($"[Air Assault] Cooldown active ({rem:0.#}s remaining).");
                 return;
             }
 
@@ -49,27 +74,53 @@ namespace BoscaliSummer.Garrisons
             bool isChimera = IsChimera(name, def);
             bool isIbis = IsIbis(name, def);
 
-            // If not specifically Chimera or Ibis, still allow if CanSlingLoad or transport
+            // If not specifically Chimera or Ibis, still allow if CanSlingLoad or helicopter
             if (!isChimera && !isIbis)
             {
                 if (def != null && def.CanSlingLoad) isIbis = true;
                 else
                 {
-                    Plugin.Logger.LogInfo($"[Air Assault] Requires Chimera (plane) or Ibis (helo). Current: {name}");
+                    Plugin.Logger.LogInfo($"[Air Assault] Aircraft {name} does not support air assault. Chimera or Ibis required.");
                     return;
                 }
             }
 
+            // Check stored infantry aboard the helicopter
+            if (isIbis)
+            {
+                if (mountedTroops == null)
+                    mountedTroops = aircraft.GetComponentInChildren<MountedTroops>();
+
+                if (mountedTroops != null)
+                {
+                    int ammo = mountedTroops.ammo;
+                    if (ammo <= 0)
+                    {
+                        Plugin.Logger.LogInfo("[Air Assault] Cannot deploy: 0 infantry squads stored in helicopter! Return to base to embark troops.");
+                        return;
+                    }
+
+                    // Consume one stored squad from the helicopter
+                    mountedTroops.ammo--;
+                    Plugin.Logger.LogInfo($"[Air Assault] Deployed 1 infantry squad from helicopter. {mountedTroops.ammo} squad(s) remaining aboard.");
+                }
+                else
+                {
+                    Plugin.Logger.LogInfo("[Air Assault] Deploying tactical infantry squad from cabin transport bay.");
+                }
+            }
+
+            // Raycast down to surface
             Vector3 origin = aircraft.transform.position;
             if (!Physics.Raycast(origin, Vector3.down, out RaycastHit hit, 3500f, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore))
             {
-                Plugin.Logger.LogInfo("[Air Assault] Aborted: No clear ground or building below.");
+                Plugin.Logger.LogInfo("[Air Assault] Aborted: No solid surface detected below.");
                 return;
             }
 
             if (hit.point.y <= Datum.LocalSeaY + 1f)
             {
-                Plugin.Logger.LogInfo("[Air Assault] Aborted: Water landing zone.");
+                Plugin.Logger.LogInfo("[Air Assault] Aborted: Cannot deploy over open water.");
                 return;
             }
 
@@ -81,9 +132,10 @@ namespace BoscaliSummer.Garrisons
 
             if (shell != null)
             {
+                // TARGET: CIVILIAN BUILDING TAKEOVER
                 if (isChimera)
                 {
-                    Plugin.Logger.LogInfo($"[CHIMERA] Paratroopers dropped over {shell.name}!");
+                    Plugin.Logger.LogInfo($"[CHIMERA] Paratroopers airdropped over building {shell.name}!");
                     AirAssaultVisuals.SpawnParatrooperDrop(origin, hit.point, aircraft.transform.rotation, owner, () =>
                     {
                         ZoneGarrisonManager.Instance?.TryOccupyBuilding(shell, owner, airbase);
@@ -92,8 +144,8 @@ namespace BoscaliSummer.Garrisons
                 }
                 else
                 {
-                    Plugin.Logger.LogInfo($"[IBIS] Fast-roping infantry onto {shell.name}!");
-                    AirAssaultVisuals.SpawnFastRopeDeployment(aircraft.transform, hit.point, owner, () =>
+                    Plugin.Logger.LogInfo($"[IBIS] Fast-rope rappelling squad inserting onto building {shell.name}!");
+                    AirAssaultVisuals.SpawnFastRopeRappelling(aircraft.transform, hit.point, owner, () =>
                     {
                         ZoneGarrisonManager.Instance?.TryOccupyBuilding(shell, owner, airbase);
                         Plugin.Logger.LogInfo($"[AIR ASSAULT] Fast-rope squad secured and fortified {shell.name}!");
@@ -102,22 +154,23 @@ namespace BoscaliSummer.Garrisons
             }
             else
             {
+                // TARGET: OPEN GROUND COMBAT ENCAMPMENT
                 if (isChimera)
                 {
-                    Plugin.Logger.LogInfo("[CHIMERA] Paratroopers dropped to establish combat encampment!");
+                    Plugin.Logger.LogInfo($"[CHIMERA] Paratroopers airdropped to establish ground combat encampment at ({hit.point.x:0}, {hit.point.z:0})!");
                     AirAssaultVisuals.SpawnParatrooperDrop(origin, hit.point, aircraft.transform.rotation, owner, () =>
                     {
                         ZoneGarrisonManager.Instance?.TryDeployEncampment(hit.point, owner, airbase);
-                        Plugin.Logger.LogInfo("[AIR ASSAULT] Paratrooper combat encampment established!");
+                        Plugin.Logger.LogInfo($"[AIR ASSAULT] Paratroopers established combat encampment at ({hit.point.x:0}, {hit.point.z:0})!");
                     });
                 }
                 else
                 {
-                    Plugin.Logger.LogInfo("[IBIS] Fast-roping infantry to establish ground encampment!");
-                    AirAssaultVisuals.SpawnFastRopeDeployment(aircraft.transform, hit.point, owner, () =>
+                    Plugin.Logger.LogInfo($"[IBIS] Fast-rope rappelling squad deploying ground combat encampment at ({hit.point.x:0}, {hit.point.z:0})!");
+                    AirAssaultVisuals.SpawnFastRopeRappelling(aircraft.transform, hit.point, owner, () =>
                     {
                         ZoneGarrisonManager.Instance?.TryDeployEncampment(hit.point, owner, airbase);
-                        Plugin.Logger.LogInfo("[AIR ASSAULT] Fast-rope squad established combat encampment!");
+                        Plugin.Logger.LogInfo($"[AIR ASSAULT] Fast-rope squad established combat encampment at ({hit.point.x:0}, {hit.point.z:0})!");
                     });
                 }
             }
@@ -157,10 +210,19 @@ namespace BoscaliSummer.Garrisons
 
         private static Aircraft GetLocalAircraft()
         {
+            if (GameManager.GetLocalPlayer<Player>(out var player) && player != null && player.Aircraft != null)
+                return player.Aircraft;
+
+            if (Camera.main != null)
+            {
+                Aircraft fromCam = Camera.main.GetComponentInParent<Aircraft>();
+                if (fromCam != null) return fromCam;
+            }
+
             Aircraft[] all = FindObjectsOfType<Aircraft>();
             for (int i = 0; i < all.Length; i++)
             {
-                if (all[i] != null && all[i].IsLocalPlayer && !all[i].disabled)
+                if (all[i] != null && (all[i].LocalSim || all[i].IsLocalPlayer) && !all[i].disabled)
                     return all[i];
             }
             return null;

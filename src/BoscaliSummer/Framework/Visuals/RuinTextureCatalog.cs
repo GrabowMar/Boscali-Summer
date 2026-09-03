@@ -179,11 +179,10 @@ namespace BoscaliSummer.Framework.Visuals
             float[,] heightfield = new float[TexResolution, TexResolution];
 
             int seedOffset = (int)tier * 37;
-            float craterDepth = tier == RuinTier.Light ? 0.55f : (tier == RuinTier.Medium ? 1.15f : 1.75f);
-            float crackWeight = tier == RuinTier.Light ? 0.35f : (tier == RuinTier.Medium ? 0.65f : 0.95f);
-            float rimRadius = tier == RuinTier.Light ? 0.30f : (tier == RuinTier.Medium ? 0.45f : 0.58f);
+            float craterDepth = tier == RuinTier.Light ? 0.65f : (tier == RuinTier.Medium ? 1.45f : 2.20f);
+            float rimRadius = tier == RuinTier.Light ? 0.35f : (tier == RuinTier.Medium ? 0.50f : 0.65f);
 
-            // Compute composite heightfield using Voronoi cracks + radial crater profile + FBM turbulence
+            // Compute composite heightfield: stepped floor slabs, broken pillars, rebar grid, and cellular cracks
             for (int y = 0; y < TexResolution; y++)
             {
                 float ny = (y / (float)(TexResolution - 1)) * 2f - 1f;
@@ -192,34 +191,44 @@ namespace BoscaliSummer.Framework.Visuals
                     float nx = (x / (float)(TexResolution - 1)) * 2f - 1f;
                     float dist = Mathf.Sqrt(nx * nx + ny * ny);
 
-                    // 1. Radial crater cavity profile with raised beveled rim
-                    float craterH = 0f;
-                    if (dist < rimRadius)
+                    float voronoi = GetVoronoiCrack(nx * 3.8f, ny * 3.8f, seedOffset);
+                    float fbm = GetFbm(nx * 4.5f, ny * 4.5f, 4, seedOffset);
+                    float noisyDist = dist + (fbm - 0.5f) * 0.30f + (voronoi - 0.5f) * 0.18f;
+
+                    float totalH = 0f;
+
+                    if (noisyDist < rimRadius)
                     {
-                        // Inside crater: deep concave depression
-                        float t = dist / rimRadius;
-                        craterH = -craterDepth * Mathf.Cos(t * Mathf.PI * 0.5f);
+                        // Inside the breach: stepped architectural damage (gutted floors & columns)
+                        float depthFraction = Mathf.Clamp01((rimRadius - noisyDist) / (rimRadius * 0.5f));
+                        float baseCavity = -craterDepth * Mathf.Pow(depthFraction, 0.6f);
+
+                        // Horizontal concrete floor slabs (stepped ledges repeating vertically)
+                        float floorSlab = Mathf.Clamp01(Mathf.Sin(ny * 9.0f * Mathf.PI) * 4f) * 0.35f * craterDepth;
+
+                        // Vertical sheared pillars / columns
+                        float column = Mathf.Clamp01(Mathf.Sin(nx * 6.0f * Mathf.PI) * 3f) * 0.25f * craterDepth;
+
+                        // Exposed corrugated steel decking / rebar grid in deep cavity
+                        float rebarGrid = (Mathf.Sin(nx * 36f) * Mathf.Sin(ny * 36f)) * 0.08f;
+
+                        // Combine into stepped architectural interior ruin
+                        totalH = baseCavity + floorSlab + column + rebarGrid;
                     }
-                    else if (dist < rimRadius * 1.45f)
+                    else if (noisyDist < rimRadius * 1.35f)
                     {
-                        // Crater rim lip: raised displaced concrete
-                        float t = (dist - rimRadius) / (rimRadius * 0.45f);
-                        craterH = (craterDepth * 0.28f) * Mathf.Sin(t * Mathf.PI);
+                        // Blown-out wall perimeter: raised jagged shattered concrete lips
+                        float t = (noisyDist - rimRadius) / (rimRadius * 0.35f);
+                        totalH = (craterDepth * 0.32f) * Mathf.Sin(t * Mathf.PI) * (voronoi * 0.8f + fbm * 0.4f);
+                    }
+                    else
+                    {
+                        // Exterior facade surface: spiderweb fracture cracks
+                        float radialCrack = Mathf.Abs(Mathf.Sin(Mathf.Atan2(ny, nx) * 7f + fbm * 3f));
+                        float crackMask = Mathf.Pow(Mathf.Clamp01(1f - dist * 1.05f), 1.5f);
+                        totalH = (voronoi * 0.25f - radialCrack * 0.20f) * crackMask;
                     }
 
-                    // 2. Cellular / Voronoi fracture crack lines
-                    float voronoi = GetVoronoiCrack(nx * 3.5f, ny * 3.5f, seedOffset);
-
-                    // 3. Multi-octave FBM surface roughness (pulverized concrete grit)
-                    float fbm = GetFbm(nx * 5.0f, ny * 5.0f, 4, seedOffset);
-
-                    // 4. Radial fracture rays branching from center
-                    float angle = Mathf.Atan2(ny, nx);
-                    float radialCracks = Mathf.Abs(Mathf.Sin(angle * 6f + fbm * 3f)) * Mathf.Clamp01(dist / rimRadius);
-                    float crackMask = Mathf.Pow(Mathf.Clamp01(1f - dist * 1.1f), 1.2f);
-
-                    // Combined composite height
-                    float totalH = craterH + (voronoi * crackWeight + fbm * 0.22f - radialCracks * 0.28f) * crackMask;
                     heightfield[x, y] = totalH;
                 }
             }
@@ -280,14 +289,15 @@ namespace BoscaliSummer.Framework.Visuals
             Color[] colors = new Color[TexResolution * TexResolution];
             int seedOffset = (int)tier * 37 + 101;
 
-            // Authentic high-contrast war ruin & catastrophic breach color palette:
-            Color abyssBlack = new Color(0.015f, 0.015f, 0.015f, 1f);       // Pure scorched cavernous cavity
-            Color moltenEmber = new Color(1.0f, 0.44f, 0.08f, 1f);           // Glowing hot fissure veins
-            Color charredGirders = new Color(0.12f, 0.09f, 0.07f, 1f);       // Burnt steel rebar lattice
-            Color fracturedStone = new Color(0.24f, 0.22f, 0.21f, 1f);       // Dark shattered concrete debris
-            Color sootBurst = new Color(0.035f, 0.035f, 0.035f, 1f);         // Heavy carbon black soot
+            // Authentic architectural war ruin color palette:
+            Color roomVoid = new Color(0.02f, 0.02f, 0.02f, 1f);        // Deep shadow of gutted interior rooms
+            Color concreteFloor = new Color(0.38f, 0.36f, 0.34f, 1f);   // Exposed concrete floor slab edges
+            Color shearedPillar = new Color(0.44f, 0.42f, 0.40f, 1f);   // Broken concrete columns / masonry
+            Color steelRebar = new Color(0.18f, 0.14f, 0.10f, 1f);      // Charred rusty steel rebar & girders
+            Color glowingEmber = new Color(1.0f, 0.45f, 0.08f, 1f);     // Smoldering hot crack embers
+            Color sootBurst = new Color(0.04f, 0.04f, 0.04f, 1f);       // Carbon soot dispersion
 
-            float radius = tier == RuinTier.Light ? 0.42f : (tier == RuinTier.Medium ? 0.58f : 0.72f);
+            float rimRadius = tier == RuinTier.Light ? 0.35f : (tier == RuinTier.Medium ? 0.50f : 0.65f);
 
             for (int y = 0; y < TexResolution; y++)
             {
@@ -297,54 +307,61 @@ namespace BoscaliSummer.Framework.Visuals
                     float nx = (x / (float)(TexResolution - 1)) * 2f - 1f;
                     float dist = Mathf.Sqrt(nx * nx + ny * ny);
 
-                    // Fractal edge erosion & cellular cracks
-                    float fbm = GetFbm(nx * 4.2f, ny * 4.2f, 3, seedOffset);
-                    float voronoi = GetVoronoiCrack(nx * 3.5f, ny * 3.5f, seedOffset);
+                    float fbm = GetFbm(nx * 4.5f, ny * 4.5f, 3, seedOffset);
+                    float voronoi = GetVoronoiCrack(nx * 3.8f, ny * 3.8f, seedOffset);
 
-                    // Multi-frequency directional blast streaks radiating outward
-                    float angle = Mathf.Atan2(ny, nx);
-                    float ray1 = Mathf.Pow(Mathf.Abs(Mathf.Sin(angle * 7f + fbm * 4f)), 3.0f);
-                    float ray2 = Mathf.Pow(Mathf.Abs(Mathf.Sin(angle * 13f - fbm * 3.2f)), 4.0f);
-                    float starburst = (ray1 * 0.55f + ray2 * 0.45f) * Mathf.Clamp01((0.96f - dist) / 0.40f);
+                    // Vertical upward soot drift (smoke plumes staining the wall upwards)
+                    float upwardSmoke = Mathf.Clamp01((ny + 0.3f) * 0.7f) * Mathf.Pow(Mathf.Abs(Mathf.Sin(nx * 5f + fbm * 2f)), 2f);
 
-                    float noisyDist = dist + (fbm - 0.5f) * 0.28f + (voronoi - 0.5f) * 0.16f - starburst * 0.22f;
+                    float noisyDist = dist + (fbm - 0.5f) * 0.30f + (voronoi - 0.5f) * 0.18f;
 
                     float alpha;
                     Color color;
 
-                    if (noisyDist < radius * 0.40f)
+                    if (noisyDist < rimRadius * 0.85f)
                     {
-                        // Central abyssal breach: deep black void with smoldering ember veins
-                        float t = noisyDist / (radius * 0.40f);
-                        color = Color.Lerp(abyssBlack, charredGirders, t);
-                        alpha = 0.99f;
+                        // Inside the gutted building breach:
+                        float floorSlab = Mathf.Clamp01(Mathf.Sin(ny * 9.0f * Mathf.PI) * 4f);
+                        float column = Mathf.Clamp01(Mathf.Sin(nx * 6.0f * Mathf.PI) * 3f);
 
-                        // Hot ember veins along inner fracture fissures for medium/heavy hits
-                        if (tier >= RuinTier.Medium && voronoi < 0.22f && noisyDist < radius * 0.35f)
+                        if (floorSlab > 0.4f)
                         {
-                            float emberT = Mathf.Clamp01((0.22f - voronoi) / 0.22f);
-                            color = Color.Lerp(color, moltenEmber, emberT * 0.90f);
+                            // Horizontal floor slabs
+                            color = Color.Lerp(concreteFloor, steelRebar, (fbm + 0.2f) * 0.5f);
                         }
+                        else if (column > 0.5f)
+                        {
+                            // Vertical pillars
+                            color = Color.Lerp(shearedPillar, roomVoid, 0.35f);
+                        }
+                        else
+                        {
+                            // Gutted dark room void
+                            color = roomVoid;
+
+                            // Glowing ember fissures in the depths
+                            if (tier >= RuinTier.Medium && voronoi < 0.18f && noisyDist < rimRadius * 0.45f)
+                            {
+                                float emberT = (0.18f - voronoi) / 0.18f;
+                                color = Color.Lerp(color, glowingEmber, emberT * 0.90f);
+                            }
+                        }
+
+                        alpha = 0.99f;
                     }
-                    else if (noisyDist < radius * 0.82f)
+                    else if (noisyDist < rimRadius * 1.25f)
                     {
-                        // Rim shelf: jagged shattered concrete, exposed girders, intense charring
-                        float t = (noisyDist - radius * 0.40f) / (radius * 0.42f);
-                        color = Color.Lerp(charredGirders, fracturedStone, t);
-                        alpha = Mathf.Lerp(0.99f, 0.92f, t);
+                        // Shattered wall perimeter: jagged spall, chipped plaster & heavy soot
+                        float t = (noisyDist - rimRadius * 0.85f) / (rimRadius * 0.40f);
+                        color = Color.Lerp(shearedPillar, sootBurst, t);
+                        alpha = Mathf.Lerp(0.99f, 0.55f, t);
                     }
-                    else if (noisyDist < radius * 1.30f)
+                    else if (dist < 0.94f)
                     {
-                        // Outer rim: violent black soot plumes and spall
-                        float t = (noisyDist - radius * 0.82f) / (radius * 0.48f);
-                        color = Color.Lerp(fracturedStone, sootBurst, t);
-                        alpha = Mathf.Lerp(0.92f, 0.35f, t);
-                    }
-                    else if (dist < 0.95f)
-                    {
-                        // Distant radial blast fingers extending across the entire decal
+                        // Soot feathers and upward smoke plume stains
                         color = sootBurst;
-                        alpha = starburst * 0.85f * Mathf.Clamp01((0.95f - dist) / 0.25f);
+                        float streak = (upwardSmoke * 0.6f + Mathf.Pow(Mathf.Abs(Mathf.Sin(Mathf.Atan2(ny, nx) * 7f)), 3f) * 0.4f);
+                        alpha = streak * Mathf.Clamp01((0.94f - dist) / 0.35f) * 0.75f;
                     }
                     else
                     {
