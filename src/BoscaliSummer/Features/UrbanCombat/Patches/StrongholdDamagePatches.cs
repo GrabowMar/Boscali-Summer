@@ -34,19 +34,32 @@ namespace BoscaliSummer.Garrisons
                 return true;
             }
 
-            // General building damage shader integration: apply charring and heat glow if enabled
-            if (Plugin.Settings.UrbanCombat.DamageShaderEnabled.Value)
+            // For regular civilian buildings: when struck by heavy ordnance, place a localized
+            // breach crater and ground rubble at the hit site without modifying building materials.
+            if (blastDamage > 12f)
             {
                 BuildingDamageVisual visual = BuildingDamageVisual.GetOrAdd(__instance.gameObject);
                 if (visual != null)
                 {
-                    float approxHp = BoscaliSummer.Runtime.GameAccess.GetMapBuildingHitPoints(__instance);
-                    visual.ApplyDamage(
-                        Mathf.Max(0f, approxHp - (pierceDamage + blastDamage + fireDamage + impactDamage)),
-                        100f,
-                        __instance.transform.position + Vector3.up * 2f,
-                        blastDamage * 0.1f,
-                        pierceDamage + blastDamage + fireDamage + impactDamage);
+                    Vector3 hitPoint = __instance.transform.position + Vector3.up * 3f;
+                    Vector3 normal = Vector3.forward;
+
+                    if (dealerID.IsValid && dealerID.TryGetUnit(out Unit attacker) && attacker != null)
+                    {
+                        Vector3 attackerPos = attacker.transform.position;
+                        Vector3 toCenter = (__instance.transform.position + Vector3.up * 3f) - attackerPos;
+                        if (Physics.Raycast(attackerPos, toCenter.normalized, out RaycastHit hit, toCenter.magnitude + 20f, PhysicsLayers.StaticsMask))
+                        {
+                            hitPoint = hit.point;
+                            normal = hit.normal;
+                        }
+                        else
+                        {
+                            normal = (-toCenter).normalized;
+                        }
+                    }
+
+                    visual.ApplyLocalImpact(hitPoint, normal, blastDamage * 0.1f, blastDamage);
                 }
             }
 

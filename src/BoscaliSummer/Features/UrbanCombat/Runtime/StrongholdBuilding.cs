@@ -80,8 +80,8 @@ namespace BoscaliSummer.Garrisons
             if (rawDamage <= 0.001f) return;
 
             // Proxy damage directly damages the stronghold
-            Vector3 hitPoint = DefenseProxy != null ? DefenseProxy.transform.position : transform.position;
-            ApplyCalculatedDamage(rawDamage, hitPoint, e.blastDamage * 0.1f);
+            Vector3 hitPoint = DefenseProxy != null ? DefenseProxy.transform.position : (transform.position + Vector3.up * 4f);
+            ApplyCalculatedDamage(rawDamage, hitPoint, Vector3.up, e.blastDamage * 0.1f);
         }
 
         public bool TakeDamage(
@@ -97,16 +97,39 @@ namespace BoscaliSummer.Garrisons
             float totalDamage = StrongholdDamagePolicy.CalculateMitigatedDamage(
                 pierceDamage, blastDamage, amountAffected, fireDamage, impactDamage, PierceArmor, BlastArmor);
 
-            Vector3 hitPoint = transform.position + Vector3.up * 3f;
-            return ApplyCalculatedDamage(totalDamage, hitPoint, blastDamage * 0.1f);
+            Vector3 hitPoint = transform.position + Vector3.up * 4f;
+            Vector3 normal = Vector3.forward;
+
+            // Resolve exact hit surface from attacker trajectory
+            if (dealerID.IsValid && dealerID.TryGetUnit(out Unit attacker) && attacker != null)
+            {
+                Vector3 attackerPos = attacker.transform.position;
+                Vector3 toCenter = (transform.position + Vector3.up * 4f) - attackerPos;
+                if (Physics.Raycast(attackerPos, toCenter.normalized, out RaycastHit hit, toCenter.magnitude + 20f, PhysicsLayers.StaticsMask))
+                {
+                    hitPoint = hit.point;
+                    normal = hit.normal;
+                }
+                else
+                {
+                    normal = (-toCenter).normalized;
+                }
+            }
+
+            return ApplyCalculatedDamage(totalDamage, hitPoint, normal, blastDamage * 0.1f);
         }
 
-        private bool ApplyCalculatedDamage(float damage, Vector3 hitPoint, float blastYield)
+        private bool ApplyCalculatedDamage(float damage, Vector3 hitPoint, Vector3 normal, float blastYield)
         {
             if (IsDestroyed || damage <= 0.001f) return false;
 
             CurrentHitPoints -= damage;
-            damageVisual?.ApplyDamage(CurrentHitPoints, MaxHitPoints, hitPoint, blastYield, damage);
+            damageVisual?.ApplyLocalImpact(hitPoint, normal, blastYield, damage);
+
+            if (CurrentHitPoints < MaxHitPoints * 0.5f)
+            {
+                damageVisual?.SetSevereDamageSmoke(true, hitPoint);
+            }
 
             if (CurrentHitPoints <= 0f)
             {
@@ -122,7 +145,7 @@ namespace BoscaliSummer.Garrisons
             IsDestroyed = true;
             CurrentHitPoints = 0f;
 
-            damageVisual?.ApplyDamage(0f, MaxHitPoints, transform.position, 10f, 100f);
+            damageVisual?.SetSevereDamageSmoke(false, Vector3.zero);
 
             // Destroy defense proxy
             if (DefenseProxy != null)
