@@ -7,65 +7,47 @@ using BoscaliSummer.Features.Command.Patches;
 using BoscaliSummer.Features.Command.Runtime;
 using BoscaliSummer.Framework.Lifecycle;
 using BoscaliSummer.Runtime;
-using TMPro;
-using UnityEngine;
-using UnityEngine.UI;
 using NOAvionics;
 using NOAvionics.Ui;
+using UnityEngine;
+using UnityEngine.UI;
 
 namespace BoscaliSummer.Features.Command.Presentation
 {
     internal sealed class ComMapOverlay : MonoBehaviour, ISceneService
     {
+        private const int BaseTextureWidth = 512;
+
         private CommandSettings settings;
         private CommandManager command;
         private ManualLogSource logger;
 
         private DynamicMap dynamicMap;
+        private GameObject overlayObj;
         private RawImage overlayImage;
         private Texture2D overlayTexture;
-        private InfluenceGridCalculator gridCalc;
-        private AiOrderExtractor orderExtractor;
-
-        // Pooled Vector Objects
-        private sealed class PooledVector
-        {
-            public GameObject Root;
-            public RectTransform Rect;
-            public Image Line;
-            public TMP_Text Label;
-        }
-
-        private readonly List<PooledVector> vectorPool = new List<PooledVector>(48);
-        private readonly List<AiTaskingOrder> activeOrders = new List<AiTaskingOrder>(48);
-        private readonly List<InfluenceGridCalculator.InfluenceSource> influenceSources =
-            new List<InfluenceGridCalculator.InfluenceSource>(64);
-        private readonly List<InfluenceGridCalculator.RadarSource> radarSources =
-            new List<InfluenceGridCalculator.RadarSource>(32);
+        private TacticalSectorGrid sectorGrid;
+        private MissionMapCompatibilityEngine compatibilityEngine;
 
         private float nextGridUpdate;
-        private float nextVectorUpdate;
         private bool isMapMaximized;
         private bool initialized;
 
+        public bool ShowSectors = true;
         public bool ShowFrontlines = true;
-        public bool ShowRadar = true;
-        public bool ShowRecon = true;
-        public bool ShowAiOrders = true;
 
-        public void Configure(CommandSettings config, CommandManager manager, ManualLogSource log)
+        public void Configure(CommandSettings config, CommandManager manager, MissionMapCompatibilityEngine compat, ManualLogSource log)
         {
             settings = config;
             command = manager;
+            compatibilityEngine = compat;
             logger = log;
 
+            ShowSectors = settings.FrontlinesOverlay.Value;
             ShowFrontlines = settings.FrontlinesOverlay.Value;
-            ShowRadar = settings.RadarCoverageOverlay.Value;
-            ShowRecon = settings.VisibilityOverlay.Value;
-            ShowAiOrders = settings.AiOrdersOverlay.Value;
 
-            gridCalc = new InfluenceGridCalculator(settings.GridResolution.Value, 81920f);
-            orderExtractor = new AiOrderExtractor(settings.MaxOrderVectors.Value);
+            int res = settings.GridResolution.Value;
+            sectorGrid = new TacticalSectorGrid(res > 0 ? res : TacticalSectorGrid.DefaultResolution, 100000f);
 
             DynamicMapMaximizePatch.OnMaximized += HandleMapMaximized;
             DynamicMapMinimizePatch.OnMinimized += HandleMapMinimized;
@@ -73,29 +55,28 @@ namespace BoscaliSummer.Features.Command.Presentation
 
         public void ResetForScene()
         {
-            if (overlayImage != null && overlayImage.gameObject != null)
+            if (overlayObj != null)
             {
-                UnityEngine.Object.Destroy(overlayImage.gameObject);
+                Destroy(overlayObj);
+                overlayObj = null;
             }
             overlayImage = null;
 
             if (overlayTexture != null)
             {
-                UnityEngine.Object.Destroy(overlayTexture);
+                Destroy(overlayTexture);
+                overlayTexture = null;
             }
-            overlayTexture = null;
 
-            for (int i = 0; i < vectorPool.Count; i++)
+            if (sectorGrid != null)
             {
-                if (vectorPool[i].Root != null) UnityEngine.Object.Destroy(vectorPool[i].Root);
+                sectorGrid.ResetAll();
             }
-            vectorPool.Clear();
 
             dynamicMap = null;
             initialized = false;
             isMapMaximized = false;
             nextGridUpdate = 0f;
-            nextVectorUpdate = 0f;
         }
 
         private void OnDestroy()
@@ -109,20 +90,18 @@ namespace BoscaliSummer.Features.Command.Presentation
         {
             isMapMaximized = true;
             nextGridUpdate = 0f;
-            nextVectorUpdate = 0f;
-            if (overlayImage != null) overlayImage.enabled = true;
+            if (overlayObj != null) overlayObj.SetActive(true);
         }
 
         private void HandleMapMinimized()
         {
             isMapMaximized = false;
-            if (overlayImage != null) overlayImage.enabled = false;
-            HideAllVectors();
+            if (overlayObj != null) overlayObj.SetActive(false);
         }
 
         private void Update()
         {
-            if (!settings.Enabled.Value) return;
+            if (settings == null || !settings.Enabled.Value) return;
 
             if (!initialized)
             {
@@ -133,40 +112,130 @@ namespace BoscaliSummer.Features.Command.Presentation
             if (dynamicMap == null) return;
             isMapMaximized = DynamicMap.mapMaximized;
 
-            // Performance-first: ZERO CPU work while the map is minimized during flight!
-            if (!isMapMaximized) return;
+            // Strict visibility control: Overlay is strictly for the Maximized Theater Map!
+            // When minimized (cockpit flight HUD), overlay MUST stay disabled so it never pollutes the cockpit MFD.
+            if (overlayObj != null && overlayObj.activeSelf != isMapMaximized)
+            {
+                overlayObj.SetActive(isMapMaximized);
+            }
+
+            if (!isMapMaximized)
+            {
+                return;
+            }
+
+            // Ensure overlay stays parented to mapImage with stretch anchors
+            if (overlayObj != null && dynamicMap.mapImage != null && overlayObj.transform.parent != dynamicMap.mapImage.transform)
+            {
+                overlayObj.transform.SetParent(dynamicMap.mapImage.transform, false);
+                RectTransform overlayRect = overlayObj.GetComponent<RectTransform>();
+                overlayRect.anchorMin = Vector2.zero;
+                overlayRect.anchorMax = Vector2.one;
+                overlayRect.offsetMin = Vector2.zero;
+                overlayRect.offsetMax = Vector2.zero;
+                overlayRect.localScale = Vector3.one;
+                overlayRect.localPosition = Vector3.zero;
+            }
 
             float now = Time.unscaledTime;
 
             if (now >= nextGridUpdate)
             {
                 nextGridUpdate = now + settings.GridRefreshInterval.Value;
-                UpdateInfluenceGrid();
-            }
-
-            if (now >= nextVectorUpdate)
-            {
-                nextVectorUpdate = now + settings.VectorRefreshInterval.Value;
-                UpdateOrderVectors();
+                UpdateSectorGrid();
             }
         }
 
-        private void TryInitialize()
+        private static Vector2 GetLoadedMapSize(DynamicMap map)
         {
-            dynamicMap = UnityEngine.Object.FindObjectOfType<DynamicMap>();
-            if (dynamicMap == null || dynamicMap.mapImage == null) return;
+            try
+            {
+                MapSettings mapSettings = UnityEngine.Object.FindObjectOfType<MapSettings>();
+                if (mapSettings != null && mapSettings.MapSize.x > 1000f && mapSettings.MapSize.y > 1000f)
+                {
+                    return mapSettings.MapSize;
+                }
+            }
+            catch { }
 
-            RectTransform mapImageRect = dynamicMap.mapImage.GetComponent<RectTransform>();
-            if (mapImageRect == null) return;
+            try
+            {
+                if (map != null && map.mapImage != null)
+                {
+                    RectTransform rect = map.mapImage.GetComponent<RectTransform>();
+                    if (rect != null && rect.sizeDelta.x > 100f && rect.sizeDelta.y > 100f)
+                    {
+                        // DynamicMap sets: sizeDelta = Vector2.one * (mapSettings.MapSize / 81920f) * 900f
+                        // Therefore: MapSize = (sizeDelta / 900f) * 81920f
+                        float szX = (rect.sizeDelta.x / 900f) * 81920f;
+                        float szY = (rect.sizeDelta.y / 900f) * 81920f;
+                        if (szX > 1000f && szY > 1000f)
+                        {
+                            return new Vector2(szX, szY);
+                        }
+                    }
+                }
+            }
+            catch { }
 
-            int res = settings.GridResolution.Value;
-            overlayTexture = new Texture2D(res, res, TextureFormat.RGBA32, false)
+            try
+            {
+                LevelInfo levelInfo = NetworkSceneSingleton<LevelInfo>.i;
+                if (levelInfo != null && levelInfo.mapSize > 1000f)
+                {
+                    return new Vector2(levelInfo.mapSize * 2f, levelInfo.mapSize);
+                }
+            }
+            catch { }
+
+            return new Vector2(163840f, 81920f);
+        }
+
+        private void EnsureTexture(int texW, int texH)
+        {
+            if (overlayTexture != null && overlayTexture.width == texW && overlayTexture.height == texH)
+                return;
+
+            if (overlayTexture != null)
+            {
+                Destroy(overlayTexture);
+            }
+
+            overlayTexture = new Texture2D(texW, texH, TextureFormat.RGBA32, false)
             {
                 filterMode = FilterMode.Bilinear,
                 wrapMode = TextureWrapMode.Clamp
             };
 
-            GameObject overlayObj = new GameObject("ComMapOverlay", typeof(RectTransform), typeof(RawImage));
+            // Immediately clear to transparent pixels so the overlay never shows uninitialized grey memory
+            Color32[] transparentPixels = new Color32[texW * texH];
+            overlayTexture.SetPixels32(transparentPixels);
+            overlayTexture.Apply(false);
+
+            if (overlayImage != null)
+            {
+                overlayImage.texture = overlayTexture;
+            }
+        }
+
+        private void TryInitialize()
+        {
+            dynamicMap = SceneSingleton<DynamicMap>.i;
+            if (dynamicMap == null || dynamicMap.mapImage == null) return;
+
+            RectTransform mapImageRect = dynamicMap.mapImage.GetComponent<RectTransform>();
+            if (mapImageRect == null) return;
+
+            Vector2 mapSize = (compatibilityEngine != null)
+                ? compatibilityEngine.ResolveTheaterDimensions(dynamicMap)
+                : GetLoadedMapSize(dynamicMap);
+            sectorGrid.SetWorldSize(mapSize.x, mapSize.y);
+
+            int texW = BaseTextureWidth;
+            int texH = (int)Math.Max(128, Math.Round(texW * (mapSize.y / mapSize.x)));
+            EnsureTexture(texW, texH);
+
+            overlayObj = new GameObject("ComSectorGridOverlay", typeof(RectTransform), typeof(RawImage));
             overlayObj.transform.SetParent(dynamicMap.mapImage.transform, false);
 
             RectTransform overlayRect = overlayObj.GetComponent<RectTransform>();
@@ -175,180 +244,134 @@ namespace BoscaliSummer.Features.Command.Presentation
             overlayRect.offsetMin = Vector2.zero;
             overlayRect.offsetMax = Vector2.zero;
             overlayRect.pivot = mapImageRect.pivot;
+            overlayRect.localScale = Vector3.one;
+            overlayRect.localPosition = Vector3.zero;
 
             overlayImage = overlayObj.GetComponent<RawImage>();
             overlayImage.texture = overlayTexture;
             overlayImage.raycastTarget = false;
-            overlayImage.enabled = DynamicMap.mapMaximized;
+            overlayObj.SetActive(DynamicMap.mapMaximized);
 
-            // Ensure overlay draws above map background but below iconLayer
+            // Draw overlay directly above terrain image
             overlayObj.transform.SetAsFirstSibling();
 
-            // Initialize Vector Pool under iconLayer
-            Transform vectorParent = dynamicMap.iconLayer != null
-                ? dynamicMap.iconLayer.transform
-                : dynamicMap.mapTransform;
-
-            int poolSize = settings.MaxOrderVectors.Value;
-            for (int i = 0; i < poolSize; i++)
-            {
-                GameObject vecObj = new GameObject("ComOrderVec_" + i, typeof(RectTransform), typeof(Image));
-                vecObj.transform.SetParent(vectorParent, false);
-
-                RectTransform r = vecObj.GetComponent<RectTransform>();
-                r.pivot = new Vector2(0f, 0.5f);
-                r.anchorMin = new Vector2(0.5f, 0.5f);
-                r.anchorMax = new Vector2(0.5f, 0.5f);
-
-                Image img = vecObj.GetComponent<Image>();
-                img.raycastTarget = false;
-
-                GameObject labelObj = new GameObject("Label", typeof(RectTransform), typeof(TextMeshProUGUI));
-                labelObj.transform.SetParent(vecObj.transform, false);
-                TMP_Text lbl = labelObj.GetComponent<TextMeshProUGUI>();
-                lbl.fontSize = AvTokens.FontMicro;
-                lbl.color = AvTheme.TextPrimary;
-                if (AvFont.Font != null) lbl.font = AvFont.Font;
-                lbl.alignment = TextAlignmentOptions.MidlineLeft;
-                lbl.raycastTarget = false;
-                lbl.rectTransform.sizeDelta = new Vector2(160f, 20f);
-                lbl.rectTransform.localPosition = new Vector3(8f, 12f, 0f);
-
-                vecObj.SetActive(false);
-                vectorPool.Add(new PooledVector { Root = vecObj, Rect = r, Line = img, Label = lbl });
-            }
-
             initialized = true;
-            logger?.LogInfo("[COM] Tactical Map Overlay initialized (" + res + "x" + res + " grid, " +
-                poolSize + " vector pool).");
+            logger?.LogInfo("[COM] Running With Rifles Tactical Grid Overlay initialized (" + sectorGrid.Resolution + "x" +
+                sectorGrid.Resolution + " sectors, " + mapSize.x + "x" + mapSize.y + "m theater).");
         }
 
-        private void UpdateInfluenceGrid()
+        private void UpdateSectorGrid()
         {
-            if (dynamicMap == null || overlayTexture == null) return;
-            FactionHQ localHq = dynamicMap.HQ;
-            if (localHq == null) return;
+            if (dynamicMap == null) return;
 
-            gridCalc.Clear();
-            influenceSources.Clear();
-            radarSources.Clear();
-
-            // 1. Airbases
-            IEnumerable<Airbase> airbases = localHq.GetAirbases();
-            if (airbases != null)
+            try
             {
-                foreach (Airbase ab in airbases)
+                FactionHQ localHq = (compatibilityEngine != null)
+                    ? compatibilityEngine.ResolvePlayerHq(dynamicMap)
+                    : dynamicMap.HQ;
+                if (localHq == null) return;
+
+                Vector2 mapSize = (compatibilityEngine != null)
+                    ? compatibilityEngine.ResolveTheaterDimensions(dynamicMap)
+                    : GetLoadedMapSize(dynamicMap);
+
+                sectorGrid.SetWorldSize(mapSize.x, mapSize.y);
+                sectorGrid.Clear();
+
+                int texW = BaseTextureWidth;
+                int texH = (int)Math.Max(128, Math.Round(texW * (mapSize.y / mapSize.x)));
+                EnsureTexture(texW, texH);
+
+                // 1. Reconcile Mission Strategic Nodes (Airbases, Depots, Factories, Objectives)
+                if (compatibilityEngine != null)
                 {
-                    if (ab == null || ab.UnitDestroyed()) continue;
-                    Vector3 pos = ab.transform.position;
-                    bool hostile = ab.CurrentHQ != localHq;
-                    influenceSources.Add(new InfluenceGridCalculator.InfluenceSource(
-                        pos.x, pos.z, 14000f, 2.5f, hostile));
+                    compatibilityEngine.ReconcileMissionNodes(sectorGrid, localHq);
                 }
-            }
-
-            // 2. Active Units & Garrisons
-            IReadOnlyList<Aircraft> allAircraft = UnitRegistry.allAircraft;
-            if (allAircraft != null)
-            {
-                for (int i = 0; i < allAircraft.Count; i++)
+                else
                 {
-                    Aircraft ac = allAircraft[i];
-                    if (ac == null || ac.disabled) continue;
-                    Vector3 pos = ac.transform.position;
-                    bool hostile = ac.NetworkHQ != localHq;
-                    if (hostile && !localHq.IsTargetBeingTracked(ac)) continue;
-
-                    influenceSources.Add(new InfluenceGridCalculator.InfluenceSource(
-                        pos.x, pos.z, 6000f, 0.8f, hostile));
-                }
-            }
-
-            // 3. Radars & SAMs
-            if (GameAccess.HqSensorsAvailable)
-            {
-                List<Radar> radars = GameAccess.GetHqRadars(localHq);
-                if (radars != null)
-                {
-                    for (int i = 0; i < radars.Count; i++)
+                    // Fallback Airbase Scan
+                    HashSet<int> seenAirbases = new HashSet<int>();
+                    var allHqs = FactionRegistry.GetAllHQs();
+                    if (allHqs != null)
                     {
-                        Radar r = radars[i];
-                        if (r == null) continue;
-                        Vector3 pos = r.transform.position;
-                        float range = r.GetRadarRange();
-                        radarSources.Add(new InfluenceGridCalculator.RadarSource(
-                            pos.x, pos.z, range > 1000f ? range : 25000f, false, false));
+                        foreach (FactionHQ hq in allHqs)
+                        {
+                            if (hq == null) continue;
+                            var hqAirbases = hq.GetAirbases();
+                            if (hqAirbases != null)
+                            {
+                                foreach (Airbase ab in hqAirbases)
+                                {
+                                    if (ab == null || ab.UnitDestroyed() || !seenAirbases.Add(ab.GetInstanceID())) continue;
+                                    Transform anchor = (ab.center != null) ? ab.center : ab.transform;
+                                    Vector3 pos = anchor.GlobalPosition().AsVector3();
+                                    SectorControl faction = SectorControl.Neutral;
+                                    if (ab.CurrentHQ != null)
+                                    {
+                                        faction = (ab.CurrentHQ == localHq) ? SectorControl.Friendly : SectorControl.Hostile;
+                                    }
+                                    sectorGrid.RegisterNode(ab.GetInstanceID(), ab.name ?? "Airbase", pos.x, pos.z, faction, 0f, true);
+                                }
+                            }
+                        }
                     }
                 }
-            }
 
-            gridCalc.AddInfluence(influenceSources);
-            gridCalc.AddRadars(radarSources);
-
-            Color32[] pixels = gridCalc.BakeTexture(
-                ShowFrontlines, ShowRadar, ShowRecon, settings.OverlayOpacity.Value);
-            overlayTexture.SetPixels32(pixels);
-            overlayTexture.Apply(false);
-        }
-
-        private void UpdateOrderVectors()
-        {
-            if (!ShowAiOrders || dynamicMap == null)
-            {
-                HideAllVectors();
-                return;
-            }
-
-            FactionHQ localHq = dynamicMap.HQ;
-            if (localHq == null) return;
-
-            int count = orderExtractor.ExtractActiveOrders(localHq, activeOrders);
-            float mapFactor = dynamicMap.mapDisplayFactor;
-
-            for (int i = 0; i < vectorPool.Count; i++)
-            {
-                PooledVector vec = vectorPool[i];
-                if (i >= count)
+                // 2. Troops on the Ground, Combat Armor & SAM Sites
+                List<Unit> allUnits = UnitRegistry.allUnits;
+                if (allUnits != null)
                 {
-                    vec.Root.SetActive(false);
-                    continue;
+                    for (int i = 0; i < allUnits.Count; i++)
+                    {
+                        Unit u = allUnits[i];
+                        if (u == null || u.disabled || u is Aircraft || u is Missile) continue;
+
+                        bool isHostile = u.NetworkHQ != localHq;
+                        // Fog of War: enemy units only exert sector presence if tracked by our sensors/HQ
+                        if (isHostile && !localHq.IsTargetBeingTracked(u)) continue;
+
+                        Vector3 pos = u.GlobalPosition().AsVector3();
+                        float combatWeight = 1.0f;
+
+                        if (u is Ship)
+                        {
+                            combatWeight = 4.0f;
+                        }
+                        else if (u is GroundVehicle)
+                        {
+                            combatWeight = 2.5f;
+                        }
+                        else if (u is PilotDismounted)
+                        {
+                            combatWeight = 0.8f;
+                        }
+                        else if (u is Building)
+                        {
+                            combatWeight = 2.5f;
+                        }
+
+                        sectorGrid.AddTroopPresence(pos.x, pos.z, combatWeight, isHostile);
+                    }
                 }
 
-                AiTaskingOrder order = activeOrders[i];
+                // 3. Evaluate Sectors (Wavefront Growth + 66% Superiority Rule + Frontlines)
+                sectorGrid.EvaluateSectors();
+                command?.SyncSectorTelemetry(sectorGrid);
 
-                // Convert world coords to map local coords
-                Vector2 startMap = new Vector2(order.OriginWorld.x * mapFactor, order.OriginWorld.z * mapFactor);
-                Vector2 endMap = new Vector2(order.TargetWorld.x * mapFactor, order.TargetWorld.z * mapFactor);
+                // 4. Fast Procedural Texture Bake
+                Color32[] pixels = sectorGrid.BakeTexture(
+                    texW,
+                    texH,
+                    ShowSectors,
+                    ShowFrontlines,
+                    settings.OverlayOpacity.Value);
 
-                Vector2 delta = endMap - startMap;
-                float distance = delta.magnitude;
-
-                if (distance < 2f)
-                {
-                    vec.Root.SetActive(false);
-                    continue;
-                }
-
-                float angle = Mathf.Atan2(delta.y, delta.x) * Mathf.Rad2Deg;
-
-                vec.Rect.localPosition = new Vector3(startMap.x, startMap.y, 0f);
-                vec.Rect.sizeDelta = new Vector2(distance, 2.5f);
-                vec.Rect.localEulerAngles = new Vector3(0f, 0f, angle);
-
-                vec.Line.color = order.MissionColor;
-                vec.Label.text = order.Callsign + " > " + order.TargetName;
-                vec.Label.color = order.MissionColor.WithAlpha(0.9f);
-                vec.Label.rectTransform.localEulerAngles = new Vector3(0f, 0f, -angle); // Keep text horizontal
-
-                vec.Root.SetActive(true);
+                overlayTexture.SetPixels32(pixels);
+                overlayTexture.Apply(false);
             }
-        }
-
-        private void HideAllVectors()
-        {
-            for (int i = 0; i < vectorPool.Count; i++)
+            catch (Exception ex)
             {
-                if (vectorPool[i].Root != null) vectorPool[i].Root.SetActive(false);
+                logger?.LogWarning("[COM] Error updating tactical sector grid: " + ex.Message);
             }
         }
     }

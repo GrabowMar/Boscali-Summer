@@ -10,7 +10,6 @@ namespace BoscaliSummer.Features.Support.Runtime
         Fortify = 5,
         Artillery = 6,
         Emp = 7,
-        Firebreak = 8,
         SmokeMarker = 9
     }
 

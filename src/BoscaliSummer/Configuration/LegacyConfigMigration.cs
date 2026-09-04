@@ -41,6 +41,11 @@ namespace BoscaliSummer
             BindAndRemove(config, "Garrisons", "DefenseDefinitionKey", string.Empty);
             BindAndRemove(config, "Garrisons", "DamageShaderEnabled", true);
             BindAndRemove(config, "Garrisons", "DamageHeatGlowEnabled", true);
+            BindAndRemove(config, "Garrisons", "StrongholdHitPoints", 2500f);
+            BindAndRemove(config, "Garrisons", "StrongholdPierceArmor", 25f);
+            BindAndRemove(config, "Garrisons", "StrongholdBlastArmor", 50f);
+            BindAndRemove(config, "Garrisons", "StrongholdDefenseType", "auto");
+            BindAndRemove(config, "Air Assault", "InfantryPerFastRope", 8);
             BindAndRemove(config, "Radio", "Volume", 0.65f);
 
             // Support costs stopped being hand-picked constants and became vanilla-value

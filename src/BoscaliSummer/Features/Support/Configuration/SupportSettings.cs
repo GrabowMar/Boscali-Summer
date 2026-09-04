@@ -24,6 +24,10 @@ namespace BoscaliSummer.Features.Support.Configuration
 
         public ConfigEntry<string> ArtilleryDefinitionKey { get; }
 
+        public ConfigEntry<bool> ThirdPersonHudEnabled { get; }
+        public ConfigEntry<UnityEngine.KeyCode> ThirdPersonHudKey { get; }
+        public ConfigEntry<bool> ThirdPersonHidePitchLadder { get; }
+
         public SupportSettings(ConfigFile config)
         {
             // Every value in this section is decided by the host. A client's copy only
@@ -107,6 +111,13 @@ namespace BoscaliSummer.Features.Support.Configuration
                 "Exact jsonKey of the missile used by Rod from God and EMP shock. Empty auto-picks " +
                 "a non-nuclear vanilla missile. Only non-nuclear missiles with a yield of 200 or " +
                 "less are accepted. Check the startup log for the definitions this game build loaded.");
+
+            ThirdPersonHudEnabled = config.Bind("Avionics", "ThirdPersonHudEnabled", true,
+                "Keep tactical flight HUD visible in external orbit and chase camera views.");
+            ThirdPersonHudKey = config.Bind("Avionics", "ThirdPersonHudKey", UnityEngine.KeyCode.F7,
+                "Hotkey to toggle third-person HUD visibility on the fly.");
+            ThirdPersonHidePitchLadder = config.Bind("Avionics", "ThirdPersonHidePitchLadder", true,
+                "Declutter: hide the floating pitch ladder in third person while keeping reticle, ammo, and radar.");
         }
     }
 }

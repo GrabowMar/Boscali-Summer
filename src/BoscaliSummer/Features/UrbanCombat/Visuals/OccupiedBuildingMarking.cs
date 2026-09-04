@@ -8,6 +8,10 @@ namespace BoscaliSummer.Garrisons
     {
         private GameObject rooftopMast;
         private GameObject facadeBanner;
+        private Mesh mastMesh;
+        private Mesh bannerMesh;
+        private Material mastMaterial;
+        private Material bannerMaterial;
 
         public static OccupiedBuildingMarking Apply(GameObject shell, FactionHQ owner, Bounds bounds)
         {
@@ -33,11 +37,12 @@ namespace BoscaliSummer.Garrisons
 
             MeshFilter mf = rooftopMast.AddComponent<MeshFilter>();
             MeshRenderer mr = rooftopMast.AddComponent<MeshRenderer>();
-            mf.sharedMesh = CreatePoleMesh(5.5f, 0.15f);
+            mastMesh = CreatePoleMesh(5.5f, 0.15f);
+            mf.sharedMesh = mastMesh;
 
-            Material mastMat = new Material(Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard"));
-            mastMat.color = new Color(0.2f, 0.22f, 0.24f, 1f);
-            mr.sharedMaterial = mastMat;
+            mastMaterial = new Material(Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard"));
+            mastMaterial.color = new Color(0.2f, 0.22f, 0.24f, 1f);
+            mr.sharedMaterial = mastMaterial;
 
             var beaconGo = new GameObject("BeaconLight");
             beaconGo.transform.position = mastPos + Vector3.up * 5.2f;
@@ -59,11 +64,12 @@ namespace BoscaliSummer.Garrisons
 
             MeshFilter bmf = facadeBanner.AddComponent<MeshFilter>();
             MeshRenderer bmr = facadeBanner.AddComponent<MeshRenderer>();
-            bmf.sharedMesh = CreateBannerMesh(3.5f, 6.0f);
+            bannerMesh = CreateBannerMesh(3.5f, 6.0f);
+            bmf.sharedMesh = bannerMesh;
 
-            Material bannerMat = new Material(Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard"));
-            bannerMat.color = factionColor;
-            bmr.sharedMaterial = bannerMat;
+            bannerMaterial = new Material(Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard"));
+            bannerMaterial.color = factionColor;
+            bmr.sharedMaterial = bannerMaterial;
         }
 
         private static Color GetFactionColor(FactionHQ owner)
@@ -170,6 +176,10 @@ namespace BoscaliSummer.Garrisons
         {
             if (rooftopMast != null) { Destroy(rooftopMast); rooftopMast = null; }
             if (facadeBanner != null) { Destroy(facadeBanner); facadeBanner = null; }
+            if (mastMesh != null) { Destroy(mastMesh); mastMesh = null; }
+            if (bannerMesh != null) { Destroy(bannerMesh); bannerMesh = null; }
+            if (mastMaterial != null) { Destroy(mastMaterial); mastMaterial = null; }
+            if (bannerMaterial != null) { Destroy(bannerMaterial); bannerMaterial = null; }
         }
 
         private void OnDestroy()

@@ -131,6 +131,18 @@ namespace BoscaliSummer.Features.Command.Runtime
             TheaterInteropPush.PublishDoctrine((int)ActiveDoctrine, hashes);
         }
 
+        public void SyncSectorTelemetry(TacticalSectorGrid grid)
+        {
+            if (grid == null) return;
+            TheaterState.FriendlySectorCount = grid.FriendlySectorCount;
+            TheaterState.HostileSectorCount = grid.HostileSectorCount;
+            TheaterState.ContestedSectorCount = grid.ContestedSectorCount;
+            TheaterState.NeutralSectorCount = grid.NeutralSectorCount;
+            TheaterState.TerritoryControlRatio = grid.TerritoryControlRatio;
+            TheaterState.ActiveClashesCount = grid.ActiveClashesCount;
+            TheaterState.TotalNodesCount = grid.TotalNodesCount;
+        }
+
         public void UpdateTelemetry(FactionHQ localHq)
         {
             if (localHq == null) return;
@@ -142,6 +154,8 @@ namespace BoscaliSummer.Features.Command.Runtime
             TheaterState.ContestedAirbaseCount = 0;
             TheaterState.FriendlySamCount = 0;
             TheaterState.HostileSamCount = 0;
+            TheaterState.FriendlyGroundUnitsCount = 0;
+            TheaterState.HostileGroundUnitsCount = 0;
 
             IReadOnlyList<Aircraft> allAircraft = UnitRegistry.allAircraft;
             if (allAircraft != null)
@@ -172,6 +186,22 @@ namespace BoscaliSummer.Features.Command.Runtime
                 }
             }
 
+            // Ground & Naval Forces
+            List<Unit> allUnits = UnitRegistry.allUnits;
+            if (allUnits != null)
+            {
+                for (int i = 0; i < allUnits.Count; i++)
+                {
+                    Unit u = allUnits[i];
+                    if (u == null || u.disabled) continue;
+                    if (u is GroundVehicle || u is Ship)
+                    {
+                        if (u.NetworkHQ == localHq) TheaterState.FriendlyGroundUnitsCount++;
+                        else if (localHq.IsTargetBeingTracked(u)) TheaterState.HostileGroundUnitsCount++;
+                    }
+                }
+            }
+
             // Sensors
             if (GameAccess.HqSensorsAvailable)
             {
@@ -179,21 +209,30 @@ namespace BoscaliSummer.Features.Command.Runtime
                 if (radars != null) TheaterState.FriendlySamCount = radars.Count;
             }
 
-            // Defcon status
-            if (TheaterState.AirSuperiorityRatio > 0.7f && TheaterState.FriendlyAirbaseCount > TheaterState.HostileAirbaseCount)
-            {
-                TheaterState.DefconLevel = 4;
-                TheaterState.PrimaryThreatDescription = "AIR DOMINANCE";
-            }
-            else if (TheaterState.AirSuperiorityRatio < 0.35f || TheaterState.HostileAircraftCount > TheaterState.FriendlyAircraftCount * 2)
+            // Defcon & Early Warning status
+            if (TheaterState.HostileAircraftCount > 0 && (TheaterState.AirSuperiorityRatio < 0.35f || TheaterState.HostileAircraftCount > TheaterState.FriendlyAircraftCount * 2))
             {
                 TheaterState.DefconLevel = 1;
                 TheaterState.PrimaryThreatDescription = "AIR DEFENSE ALERT";
+                TheaterState.ActiveThreatWarning = "RED ALERT: HEAVY AIR THREAT DETECTED";
+            }
+            else if (TheaterState.ContestedSectorCount > 0)
+            {
+                TheaterState.DefconLevel = 2;
+                TheaterState.PrimaryThreatDescription = "ACTIVE GROUND BATTLE";
+                TheaterState.ActiveThreatWarning = "AMBER ALERT: " + TheaterState.ContestedSectorCount + " CONTESTED SECTORS IN CONFLICT";
+            }
+            else if (TheaterState.AirSuperiorityRatio > 0.65f && TheaterState.FriendlyAirbaseCount >= TheaterState.HostileAirbaseCount)
+            {
+                TheaterState.DefconLevel = 4;
+                TheaterState.PrimaryThreatDescription = "AIR DOMINANCE";
+                TheaterState.ActiveThreatWarning = "AIR DOMINANCE ESTABLISHED";
             }
             else
             {
                 TheaterState.DefconLevel = 3;
                 TheaterState.PrimaryThreatDescription = "CONTESTED THEATER";
+                TheaterState.ActiveThreatWarning = "AIRSPACE NOMINAL / PATROLS ACTIVE";
             }
         }
     }

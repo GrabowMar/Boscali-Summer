@@ -15,7 +15,8 @@ namespace BoscaliSummer.Features.FireAndDestruction
             typeof(BulletImpactPatch),
             typeof(MissileImpactPatch),
             typeof(GroundVehicleDestructionPatch),
-            typeof(MapBuildingRuinPatch)
+            typeof(MapBuildingRuinPatch),
+            typeof(AircraftWreckPersistencePatch)
         };
 
         public FeatureMetadata Metadata => Feature;

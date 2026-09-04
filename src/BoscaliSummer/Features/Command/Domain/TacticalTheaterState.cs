@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 
 namespace BoscaliSummer.Features.Command.Domain
 {
@@ -11,6 +11,15 @@ namespace BoscaliSummer.Features.Command.Domain
         public int ContestedAirbaseCount;
         public int FriendlySamCount;
         public int HostileSamCount;
+        public int FriendlyGroundUnitsCount;
+        public int HostileGroundUnitsCount;
+        public int FriendlySectorCount;
+        public int HostileSectorCount;
+        public int ContestedSectorCount;
+        public int NeutralSectorCount;
+        public int ActiveClashesCount;
+        public int TotalNodesCount;
+        public float TerritoryControlRatio = 0.5f;
         public int ActiveSortiesCount;
         public int CapSortiesCount;
         public int StrikeSortiesCount;
@@ -20,6 +29,7 @@ namespace BoscaliSummer.Features.Command.Domain
         public float AirSuperiorityRatio;
         public int DefconLevel = 3;
         public string PrimaryThreatDescription = "NOMINAL";
+        public string ActiveThreatWarning = "AIRSPACE NOMINAL";
 
         public void Reset()
         {
@@ -30,6 +40,15 @@ namespace BoscaliSummer.Features.Command.Domain
             ContestedAirbaseCount = 0;
             FriendlySamCount = 0;
             HostileSamCount = 0;
+            FriendlyGroundUnitsCount = 0;
+            HostileGroundUnitsCount = 0;
+            FriendlySectorCount = 0;
+            HostileSectorCount = 0;
+            ContestedSectorCount = 0;
+            NeutralSectorCount = 0;
+            ActiveClashesCount = 0;
+            TotalNodesCount = 0;
+            TerritoryControlRatio = 0.5f;
             ActiveSortiesCount = 0;
             CapSortiesCount = 0;
             StrikeSortiesCount = 0;
@@ -39,6 +58,7 @@ namespace BoscaliSummer.Features.Command.Domain
             AirSuperiorityRatio = 0.5f;
             DefconLevel = 3;
             PrimaryThreatDescription = "NOMINAL";
+            ActiveThreatWarning = "AIRSPACE NOMINAL";
         }
     }
 }

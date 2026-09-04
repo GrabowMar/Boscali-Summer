@@ -11,9 +11,6 @@ namespace BoscaliSummer.Garrisons
         /// <summary>Infantry committed per fast-rope trigger on the UH-90 Ibis.</summary>
         public const int DefaultSquadSize = 8;
 
-        /// <summary>Upper bound on visible sentries rendered at an encampment.</summary>
-        public const int MaxVisibleSentries = 8;
-
         /// <summary>How many infantry actually slide down the ropes this trigger.</summary>
         public static int ComputeDropSize(int ammo, int desiredPerDeploy)
         {
@@ -34,10 +31,5 @@ namespace BoscaliSummer.Garrisons
             return 1;
         }
 
-        /// <summary>How many standing sentries are visible guarding a site.</summary>
-        public static int ComputeVisibleSentries(int totalTroops)
-        {
-            return Math.Max(2, Math.Min(totalTroops, MaxVisibleSentries));
-        }
     }
 }

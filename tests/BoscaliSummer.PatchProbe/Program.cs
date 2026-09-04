@@ -154,6 +154,7 @@ string[] patchTypes =
     "BoscaliSummer.Fire.GroundVehicleDestructionPatch",
     "BoscaliSummer.Fire.MissileImpactPatch",
     "BoscaliSummer.Fire.MapBuildingRuinPatch",
+    "BoscaliSummer.Fire.AircraftWreckPersistencePatch",
     "BoscaliSummer.Garrisons.AirbaseCapturePatch",
     "BoscaliSummer.Garrisons.GarrisonClientVisualPatch",
     "BoscaliSummer.Garrisons.MountedTroopsFirePatch",
@@ -169,7 +170,8 @@ string[] patchTypes =
     "BoscaliSummer.Features.Command.Patches.AiTargetScoringPatch",
     "BoscaliSummer.Features.Command.Patches.DynamicMapMaximizePatch",
     "BoscaliSummer.Features.Command.Patches.DynamicMapMinimizePatch",
-    "BoscaliSummer.Features.Support.Patches.SupportMissileDetonatePatch"
+    "BoscaliSummer.Features.Support.Patches.SupportMissileDetonatePatch",
+    "BoscaliSummer.Features.Support.Patches.ThirdPersonHudPatches"
 };
 
 foreach (string patchType in patchTypes)

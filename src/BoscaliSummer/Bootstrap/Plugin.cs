@@ -2,6 +2,7 @@ using BoscaliSummer.Bootstrap;
 using BepInEx;
 using BepInEx.Logging;
 using BoscaliSummer.Framework.Features;
+using NOAvionics.Ui;
 
 namespace BoscaliSummer
 {
@@ -21,6 +22,12 @@ namespace BoscaliSummer
         {
             Logger = base.Logger;
             Settings = new ModConfiguration(Config);
+
+            // The panels' look lives in a stylesheet, not in literals. The embedded copy is
+            // always valid; pointing the host at the config directory is what lets a player
+            // drop their own avionics.avss beside it and retune every panel in both mods
+            // without a rebuild. Wing Command configures the same path on purpose.
+            AvStyleHost.Configure(Paths.ConfigPath, Logger.LogInfo, Logger.LogWarning);
 
             featureHost = ModCompositionRoot.Start(Logger, Settings);
             TheaterInteropPush.PublishGuid();

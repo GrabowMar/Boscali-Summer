@@ -9,7 +9,6 @@ using BoscaliSummer.Framework.Lifecycle;
 using BoscaliSummer.Runtime;
 using NOAvionics;
 using NOAvionics.Ui;
-using NuclearOption.UIStyleSystem;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -18,7 +17,7 @@ namespace BoscaliSummer.Features.Command.Presentation
 {
     internal sealed class ComMfdPanel : MonoBehaviour, ISceneService, ITheaterPage
     {
-        private const float Pad = AvTokens.Pad;
+        private const float Pad = AvTokens.Pad + 14f;
         private const float Gap = AvTokens.Gap;
         private const float TabHeight = AvTokens.TabBarHeight;
         private const float RefreshInterval = 0.25f;
@@ -40,11 +39,16 @@ namespace BoscaliSummer.Features.Command.Presentation
         private AvButton mapModesTab;
 
         // Theater SA widgets
-        private TMP_Text airRatioLabel;
         private TMP_Text defconLabel;
+        private TMP_Text airRatioLabel;
         private Image airBalanceFill;
-        private TMP_Text airbaseCountLabel;
-        private TMP_Text sortiesLabel;
+
+        private TMP_Text sectorControlLabel;
+        private Image territoryFill;
+        private TMP_Text groundUnitsLabel;
+
+        private TMP_Text earlyWarningLabel;
+        private TMP_Text infraLabel;
 
         // Doctrine widgets
         private readonly List<AvButton> doctrineButtons = new List<AvButton>();
@@ -52,10 +56,9 @@ namespace BoscaliSummer.Features.Command.Presentation
         private TMP_Text priorityTargetsLabel;
 
         // Map Modes widgets
+        private TMP_Text sectorsToggleLabel;
         private TMP_Text frontlinesToggleLabel;
-        private TMP_Text radarToggleLabel;
-        private TMP_Text reconToggleLabel;
-        private TMP_Text ordersToggleLabel;
+        private TMP_Text opacityValueLabel;
 
         private float nextRefresh;
         private bool failed;
@@ -76,11 +79,17 @@ namespace BoscaliSummer.Features.Command.Presentation
             doctrinePage = null;
             mapModesPage = null;
             doctrineButtons.Clear();
-            airRatioLabel = null;
             defconLabel = null;
+            airRatioLabel = null;
             airBalanceFill = null;
-            airbaseCountLabel = null;
-            sortiesLabel = null;
+            sectorControlLabel = null;
+            territoryFill = null;
+            groundUnitsLabel = null;
+            earlyWarningLabel = null;
+            infraLabel = null;
+            sectorsToggleLabel = null;
+            frontlinesToggleLabel = null;
+            opacityValueLabel = null;
             nextRefresh = 0f;
             failed = false;
         }
@@ -122,9 +131,16 @@ namespace BoscaliSummer.Features.Command.Presentation
         private void BuildInto(RectTransform host, float inner, float startY)
         {
             float y = startY;
-            AvKit.Label(host, "FRIENDLY MISSION AI  ·  NEVER TASKS YOUR WING", new Rect(Pad, y, inner, 14f),
-                        AvTheme.Dim, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
-            y -= 18f;
+
+            AvStyled.Spine(host, new Rect(AvTokens.Pad, startY, 3f, Mathf.Abs(startY) + 320f));
+            AvStyled.SpineTick(host, AvTokens.Pad + 3f, y - 7f);
+
+            AvStyled.Label(host, new Rect(Pad, y, inner, 14f),
+                           "TACTICAL THEATER COMMAND", "section-title");
+            AvStyled.Label(host, new Rect(Pad, y, inner, 14f),
+                           "C4ISR OVERVIEW", "section-title-note",
+                           align: TextAlignmentOptions.MidlineRight);
+            y -= 20f;
 
             float tabWidth = (inner - Gap * 2f) / 3f;
             theaterTab = AvKit.Tab(host, "SA", new Rect(Pad, y, tabWidth, TabHeight), ShowTheater);
@@ -149,34 +165,59 @@ namespace BoscaliSummer.Features.Command.Presentation
         private void BuildTheaterPage(RectTransform parent, float inner, float startY)
         {
             float y = startY;
-            const float cardH = 92f;
-            AvKit.TacticalCard(parent, new Rect(Pad, y, inner, cardH), AvTheme.RailReady);
 
-            AvKit.Label(parent, "FORCE RATIO & AIR DOMINANCE", new Rect(Pad + 12f, y - 4f, inner - 20f, 14f),
+            // Card 1: Air Dominance & DEFCON Rail
+            const float airCardH = 78f;
+            AvStyled.Box(parent, new Rect(Pad, y, inner, airCardH), "section");
+            AvStyled.Rail(parent, new Rect(Pad, y, 3f, airCardH), "ready");
+
+            defconLabel = AvKit.Label(parent, "DEFCON 3: CONTESTED THEATER",
+                new Rect(Pad + 12f, y - 4f, inner - 20f, 15f),
+                AvTheme.RailCaution, AvTokens.FontSmall, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
+
+            airRatioLabel = AvKit.Label(parent, "AIR DOMINANCE: 50% FRIENDLY (-- / -- AC)",
+                new Rect(Pad + 12f, y - 22f, inner - 20f, 18f),
+                AvTheme.RailReady, AvTokens.FontSmall, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
+
+            airBalanceFill = AvKit.ProgressBar(parent, new Rect(Pad + 12f, y - 48f, inner - 24f, 7f), 0.5f, AvTheme.RailReady);
+
+            y -= airCardH + 6f;
+
+            // Card 2: Ground Territory & Tactical Sectors (FrontlineMap / NOCommander inspiration)
+            const float sectorCardH = 82f;
+            AvStyled.Box(parent, new Rect(Pad, y, inner, sectorCardH), "section band");
+            AvStyled.Rail(parent, new Rect(Pad, y, 3f, sectorCardH), "info");
+
+            AvKit.Label(parent, "TERRITORY & SECTOR CONTROL", new Rect(Pad + 12f, y - 4f, inner - 20f, 14f),
                         AvTheme.Dim, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
 
-            airRatioLabel = AvKit.Label(parent, "AIR BALANCE: 50% FRIENDLY", new Rect(Pad + 12f, y - 22f, inner - 20f, 22f),
-                                        AvTheme.RailReady, AvTokens.FontLead, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
+            sectorControlLabel = AvKit.Label(parent, "ALLIED: -- | ENEMY: -- | CONTESTED: --",
+                new Rect(Pad + 12f, y - 20f, inner - 20f, 18f),
+                AvTheme.TextPrimary, AvTokens.FontSmall, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
 
-            // Air-dominance meter: biased left=friendly, right=hostile; fill fills from the left.
-            airBalanceFill = AvKit.ProgressBar(parent, new Rect(Pad + 12f, y - 52f, inner - 24f, 8f), 0.5f, AvTheme.RailReady);
+            territoryFill = AvKit.ProgressBar(parent, new Rect(Pad + 12f, y - 44f, inner - 24f, 7f), 0.5f, AvTheme.RailInfo);
 
-            defconLabel = AvKit.Label(parent, "DEFCON 3: CONTESTED THEATER", new Rect(Pad + 12f, y - 66f, inner - 20f, 16f),
-                                      AvTheme.RailCaution, AvTokens.FontSmall, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
+            groundUnitsLabel = AvKit.Label(parent, "GROUND FORCES: -- ALLIED / -- HOSTILE",
+                new Rect(Pad + 12f, y - 58f, inner - 20f, 16f),
+                AvTheme.RailInfo, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
 
-            y -= cardH + 8f;
+            y -= sectorCardH + 6f;
 
-            const float infraH = 84f;
-            AvKit.TacticalCard(parent, new Rect(Pad, y, inner, infraH), AvTheme.RailInfo);
-            AvKit.Label(parent, "THEATER INFRASTRUCTURE & ACTIVE SORTIES", new Rect(Pad + 12f, y - 4f, inner - 20f, 14f),
+            // Card 3: Early Warning Threat Board (Alarm System inspiration)
+            const float warningCardH = 76f;
+            AvStyled.Box(parent, new Rect(Pad, y, inner, warningCardH), "section");
+            AvStyled.Rail(parent, new Rect(Pad, y, 3f, warningCardH), "alert");
+
+            AvKit.Label(parent, "EARLY WARNING & INFRASTRUCTURE", new Rect(Pad + 12f, y - 4f, inner - 20f, 14f),
                         AvTheme.Dim, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
 
-            airbaseCountLabel = AvKit.Label(parent, "AIRBASES: -- FRIENDLY / -- HOSTILE", new Rect(Pad + 12f, y - 24f, inner - 20f, 18f),
-                                            AvTheme.TextPrimary, AvTokens.FontSmall, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
+            earlyWarningLabel = AvKit.Label(parent, "AIRSPACE NOMINAL",
+                new Rect(Pad + 12f, y - 22f, inner - 20f, 18f),
+                AvTheme.Alert, AvTokens.FontSmall, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
 
-            sortiesLabel = AvKit.Label(parent, "SAM SITES: -- | DOCTRINE: --",
-                                       new Rect(Pad + 12f, y - 48f, inner - 20f, 18f),
-                                       AvTheme.RailInfo, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
+            infraLabel = AvKit.Label(parent, "AIRBASES: -- FRIENDLY / -- HOSTILE | SAMS: --",
+                new Rect(Pad + 12f, y - 46f, inner - 20f, 16f),
+                AvTheme.TextPrimary, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
         }
 
         private void BuildDoctrinePage(RectTransform parent, float inner, float startY)
@@ -225,54 +266,60 @@ namespace BoscaliSummer.Features.Command.Presentation
         {
             float y = startY;
 
-            AvKit.Label(parent, "TACTICAL MAP OVERLAYS & MODES", new Rect(Pad, y, inner, 14f),
+            AvKit.Label(parent, "TACTICAL MAP OVERLAYS & CONTROLS", new Rect(Pad, y, inner, 14f),
                         AvTheme.Dim, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
             y -= 18f;
 
-            float rowH = 34f;
+            float rowH = 30f;
 
-            // 1. Frontlines
-            AvKit.Button(parent, "TOGGLE FRONTLINES (AREA OF CONTROL)", new Rect(Pad, y, inner - 90f, rowH),
+            // 1. Sector Grid
+            AvKit.Button(parent, "SECTOR CONTROL GRID", new Rect(Pad, y, inner - 80f, rowH),
+                () =>
+                {
+                    if (overlay != null) overlay.ShowSectors = !overlay.ShowSectors;
+                    Refresh();
+                }, AvTokens.FontSmall, AvButtonStyle.Default);
+            sectorsToggleLabel = AvKit.Label(parent, "ON", new Rect(Pad + inner - 72f, y, 70f, rowH),
+                AvTheme.RailReady, AvTokens.FontSmall, FontStyles.Bold, TextAlignmentOptions.Center);
+            y -= rowH + 5f;
+
+            // 2. Frontline Barriers
+            AvKit.Button(parent, "FRONTLINE BARRIER LINES", new Rect(Pad, y, inner - 80f, rowH),
                 () =>
                 {
                     if (overlay != null) overlay.ShowFrontlines = !overlay.ShowFrontlines;
                     Refresh();
                 }, AvTokens.FontSmall, AvButtonStyle.Default);
-            frontlinesToggleLabel = AvKit.Label(parent, "ON", new Rect(Pad + inner - 80f, y, 76f, rowH),
+            frontlinesToggleLabel = AvKit.Label(parent, "ON", new Rect(Pad + inner - 72f, y, 70f, rowH),
                 AvTheme.RailReady, AvTokens.FontSmall, FontStyles.Bold, TextAlignmentOptions.Center);
-            y -= rowH + 6f;
+            y -= rowH + 12f;
 
-            // 2. Radar
-            AvKit.Button(parent, "TOGGLE RADAR / SAM THREAT ENVELOPES", new Rect(Pad, y, inner - 90f, rowH),
-                () =>
-                {
-                    if (overlay != null) overlay.ShowRadar = !overlay.ShowRadar;
-                    Refresh();
-                }, AvTokens.FontSmall, AvButtonStyle.Default);
-            radarToggleLabel = AvKit.Label(parent, "ON", new Rect(Pad + inner - 80f, y, 76f, rowH),
-                AvTheme.RailInfo, AvTokens.FontSmall, FontStyles.Bold, TextAlignmentOptions.Center);
-            y -= rowH + 6f;
+            AvKit.Rule(parent, new Rect(Pad, y, inner, 1f), AvTheme.Frame);
+            y -= 8f;
 
-            // 3. AI Orders
-            AvKit.Button(parent, "TOGGLE AI ORDER VECTORS (FLIGHT PATHS)", new Rect(Pad, y, inner - 90f, rowH),
-                () =>
-                {
-                    if (overlay != null) overlay.ShowAiOrders = !overlay.ShowAiOrders;
-                    Refresh();
-                }, AvTokens.FontSmall, AvButtonStyle.Default);
-            ordersToggleLabel = AvKit.Label(parent, "ON", new Rect(Pad + inner - 80f, y, 76f, rowH),
-                AvTheme.RailCaution, AvTokens.FontSmall, FontStyles.Bold, TextAlignmentOptions.Center);
-            y -= rowH + 6f;
+            // Opacity quick steps
+            AvKit.Label(parent, "OVERLAY OPACITY (PRESETS)", new Rect(Pad, y, inner, 14f),
+                        AvTheme.Dim, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
+            y -= 16f;
 
-            // 4. Recon
-            AvKit.Button(parent, "TOGGLE VISIBILITY & RECON SURVEILLANCE", new Rect(Pad, y, inner - 90f, rowH),
-                () =>
-                {
-                    if (overlay != null) overlay.ShowRecon = !overlay.ShowRecon;
-                    Refresh();
-                }, AvTokens.FontSmall, AvButtonStyle.Default);
-            reconToggleLabel = AvKit.Label(parent, "ON", new Rect(Pad + inner - 80f, y, 76f, rowH),
-                AvTheme.TextPrimary, AvTokens.FontSmall, FontStyles.Bold, TextAlignmentOptions.Center);
+            float opW = (inner - 9f) / 4f;
+            AvKit.Button(parent, "20%", new Rect(Pad, y, opW, 26f), () => SetOpacity(0.20f), AvTokens.FontMicro, AvButtonStyle.Default);
+            AvKit.Button(parent, "35%", new Rect(Pad + (opW + 3f), y, opW, 26f), () => SetOpacity(0.35f), AvTokens.FontMicro, AvButtonStyle.Default);
+            AvKit.Button(parent, "50%", new Rect(Pad + (opW + 3f) * 2f, y, opW, 26f), () => SetOpacity(0.50f), AvTokens.FontMicro, AvButtonStyle.Default);
+            AvKit.Button(parent, "75%", new Rect(Pad + (opW + 3f) * 3f, y, opW, 26f), () => SetOpacity(0.75f), AvTokens.FontMicro, AvButtonStyle.Default);
+            y -= 30f;
+
+            opacityValueLabel = AvKit.Label(parent, "CURRENT OPACITY: 35%", new Rect(Pad, y, inner, 16f),
+                AvTheme.TextPrimary, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
+        }
+
+        private void SetOpacity(float val)
+        {
+            if (settings != null)
+            {
+                settings.OverlayOpacity.Value = val;
+            }
+            Refresh();
         }
 
         private void ShowTheater()
@@ -313,7 +360,7 @@ namespace BoscaliSummer.Features.Command.Presentation
             if (command == null) return;
 
             // Update Telemetry
-            DynamicMap dm = UnityEngine.Object.FindObjectOfType<DynamicMap>();
+            DynamicMap dm = SceneSingleton<DynamicMap>.i;
             if (dm != null && dm.HQ != null)
             {
                 command.UpdateTelemetry(dm.HQ);
@@ -321,10 +368,18 @@ namespace BoscaliSummer.Features.Command.Presentation
 
             TacticalTheaterState state = command.TheaterState;
 
+            // 1. Air & DEFCON
+            if (defconLabel != null)
+            {
+                defconLabel.text = "DEFCON " + state.DefconLevel + ": " + state.PrimaryThreatDescription;
+                defconLabel.color = state.DefconLevel <= 2 ? AvTheme.Alert :
+                    (state.DefconLevel == 3 ? AvTheme.RailCaution : AvTheme.RailReady);
+            }
+
             if (airRatioLabel != null)
             {
-                airRatioLabel.text = "AIR BALANCE: " + (state.AirSuperiorityRatio * 100f).ToString("N0") +
-                    "% (" + state.FriendlyAircraftCount + " FRIENDLY / " + state.HostileAircraftCount + " HOSTILE)";
+                airRatioLabel.text = "AIR DOMINANCE: " + (state.AirSuperiorityRatio * 100f).ToString("N0") +
+                    "% (" + state.FriendlyAircraftCount + " ALLIED / " + state.HostileAircraftCount + " HOSTILE)";
             }
 
             if (airBalanceFill != null)
@@ -333,25 +388,40 @@ namespace BoscaliSummer.Features.Command.Presentation
                 airBalanceFill.color = state.AirSuperiorityRatio >= 0.5f ? AvTheme.RailReady : AvTheme.RailCaution;
             }
 
-            if (defconLabel != null)
+            // 2. Sectors & Territory
+            if (sectorControlLabel != null)
             {
-                defconLabel.text = "DEFCON " + state.DefconLevel + ": " + state.PrimaryThreatDescription;
-                defconLabel.color = state.DefconLevel <= 2 ? AvTheme.Alert : AvTheme.RailCaution;
+                sectorControlLabel.text = "ALLIED: " + state.FriendlySectorCount + " | ENEMY: " +
+                    state.HostileSectorCount + " | CONTESTED: " + state.ContestedSectorCount +
+                    " (" + (state.TerritoryControlRatio * 100f).ToString("N0") + "% CONTROL)";
             }
 
-            if (airbaseCountLabel != null)
+            if (territoryFill != null)
             {
-                airbaseCountLabel.text = "AIRBASES: " + state.FriendlyAirbaseCount + " FRIENDLY / " +
-                    state.HostileAirbaseCount + " HOSTILE";
+                territoryFill.fillAmount = Mathf.Clamp01(state.TerritoryControlRatio);
+                territoryFill.color = state.TerritoryControlRatio >= 0.5f ? AvTheme.RailReady : AvTheme.RailCaution;
             }
 
-            if (sortiesLabel != null)
+            if (groundUnitsLabel != null)
             {
-                sortiesLabel.text = "SAM SITES: " + state.FriendlySamCount +
-                    " | DOCTRINE: " + CommandDoctrineHelper.GetName(command.ActiveDoctrine);
+                groundUnitsLabel.text = "GROUND FORCES: " + state.FriendlyGroundUnitsCount +
+                    " ALLIED / " + state.HostileGroundUnitsCount + " HOSTILE UNITS";
             }
 
-            // Doctrine
+            // 3. Early Warning & Infrastructure
+            if (earlyWarningLabel != null)
+            {
+                earlyWarningLabel.text = state.ActiveThreatWarning;
+                earlyWarningLabel.color = state.DefconLevel <= 2 ? AvTheme.Alert : AvTheme.RailInfo;
+            }
+
+            if (infraLabel != null)
+            {
+                infraLabel.text = "AIRBASES: " + state.FriendlyAirbaseCount + " ALLIED / " +
+                    state.HostileAirbaseCount + " ENEMY | SAMS: " + state.FriendlySamCount + " ACTIVE";
+            }
+
+            // 4. Doctrine
             if (activeDoctrineDesc != null)
             {
                 activeDoctrineDesc.text = CommandDoctrineHelper.GetName(command.ActiveDoctrine) + "\n" +
@@ -371,29 +441,24 @@ namespace BoscaliSummer.Features.Command.Presentation
                     " PRIORITY TARGETS (FRIENDLY MISSION AI ONLY)";
             }
 
-            // Map Modes
+            // 5. Map Modes
             if (overlay != null)
             {
+                if (sectorsToggleLabel != null)
+                {
+                    sectorsToggleLabel.text = overlay.ShowSectors ? "ON" : "OFF";
+                    sectorsToggleLabel.color = overlay.ShowSectors ? AvTheme.RailReady : AvTheme.Dim;
+                }
                 if (frontlinesToggleLabel != null)
                 {
                     frontlinesToggleLabel.text = overlay.ShowFrontlines ? "ON" : "OFF";
                     frontlinesToggleLabel.color = overlay.ShowFrontlines ? AvTheme.RailReady : AvTheme.Dim;
                 }
-                if (radarToggleLabel != null)
-                {
-                    radarToggleLabel.text = overlay.ShowRadar ? "ON" : "OFF";
-                    radarToggleLabel.color = overlay.ShowRadar ? AvTheme.RailInfo : AvTheme.Dim;
-                }
-                if (ordersToggleLabel != null)
-                {
-                    ordersToggleLabel.text = overlay.ShowAiOrders ? "ON" : "OFF";
-                    ordersToggleLabel.color = overlay.ShowAiOrders ? AvTheme.RailCaution : AvTheme.Dim;
-                }
-                if (reconToggleLabel != null)
-                {
-                    reconToggleLabel.text = overlay.ShowRecon ? "ON" : "OFF";
-                    reconToggleLabel.color = overlay.ShowRecon ? AvTheme.TextPrimary : AvTheme.Dim;
-                }
+            }
+
+            if (opacityValueLabel != null && settings != null)
+            {
+                opacityValueLabel.text = "CURRENT OPACITY: " + Mathf.RoundToInt(settings.OverlayOpacity.Value * 100f) + "%";
             }
         }
 

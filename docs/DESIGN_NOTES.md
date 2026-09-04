@@ -22,8 +22,8 @@ Decisions that cost an argument. Kept so they are not made again the other way.
   original model (HP-fraction tiers, facade tint, a 48-projector pool) was replaced by a
   single local scorch decal because every observed in-game damage event was the lowest tier,
   so it could never escalate on the buildings players actually bomb.
-- **Impact scorch is purely cosmetic and local.** An explosive hit stamps one pooled black
-  decal, sized from blast yield, deterministically nudged and rolled so repeats differ. No
+- **Impact scorch is purely cosmetic and local.** An explosive hit stamps a bounded cluster
+  of one to three pooled black decals, sized from blast yield and deterministically varied. No
   HP tracking, no damage tiers, no per-building state, nothing on the wire. Gun rounds leave
   no mark. This is what let `BuildingDamagedMessage` be deleted (see ARCHITECTURE's wire
   names) — a deliberate protocol break, three replicated channels down to two.
@@ -45,8 +45,9 @@ Decisions that cost an argument. Kept so they are not made again the other way.
   weapon. So the feature is honestly **occupied civilian buildings** / **urban defensive
   positions**, not room-clearing infantry. A hidden vanilla `DEF` building proxy supplies
   server-owned weapons/health/targeting/replication while the civilian shell keeps its normal
-  appearance and ownership. Walkable interiors, breaching, visible squads and floor-by-floor
-  damage are a separate R&D phase, not a later patch.
+  appearance and ownership. Air-assault infantry therefore remains presentation attached
+  to networked vanilla emplacements; it does not claim independent squad AI. Walkable
+  interiors, breaching, and floor-by-floor damage remain out of scope.
 - **Occupancy is a record, not its marker.** Garrisons follow zone ownership, cannot
   duplicate across capture churn / late load / scene reload / late join, vanish when the
   shell is ruined, and return only on a later capture. Critical infrastructure and very small

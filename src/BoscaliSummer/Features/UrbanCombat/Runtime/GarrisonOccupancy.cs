@@ -10,25 +10,40 @@ namespace BoscaliSummer.Garrisons
     {
         public FactionHQ Owner;
 
+        private static readonly System.Collections.Generic.HashSet<GameObject> occupiedShells =
+            new System.Collections.Generic.HashSet<GameObject>();
+
         public static void Set(GameObject shell, FactionHQ owner)
         {
             if (shell == null) return;
             GarrisonOccupancy marker = shell.GetComponent<GarrisonOccupancy>();
             if (marker == null) marker = shell.AddComponent<GarrisonOccupancy>();
             marker.Owner = owner;
+            if (owner != null)
+                occupiedShells.Add(shell);
+            else
+                occupiedShells.Remove(shell);
         }
 
         public static bool IsOccupied(GameObject shell)
         {
-            GarrisonOccupancy marker = shell != null ? shell.GetComponent<GarrisonOccupancy>() : null;
-            return marker != null && marker.Owner != null;
+            return shell != null && occupiedShells.Contains(shell);
         }
 
         public static void Clear(GameObject shell, FactionHQ owner)
         {
-            GarrisonOccupancy marker = shell != null ? shell.GetComponent<GarrisonOccupancy>() : null;
+            if (shell == null) return;
+            GarrisonOccupancy marker = shell.GetComponent<GarrisonOccupancy>();
             if (marker != null && (owner == null || marker.Owner == owner))
+            {
+                occupiedShells.Remove(shell);
                 Object.Destroy(marker);
+            }
+        }
+
+        public static void Reset()
+        {
+            occupiedShells.Clear();
         }
     }
 }

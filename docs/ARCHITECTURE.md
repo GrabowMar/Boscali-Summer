@@ -110,7 +110,8 @@ holding both remaining channels.
 | Active fire sites | 24 |
 | Dynamic fire lights | 3 |
 | Ground scorch requests | 1/frame |
-| Impact scorch: queue / pool | 32 (2/frame) / 64 (oldest recycled) |
+| Impact scorch: queue / pool | 32 (2 impacts/frame, ≤3 marks each) / 64 (oldest recycled) |
+| Air-assault visual operations / encampment sites | 8 / 12 |
 | Logical ruins / nearest smoke visuals | 256 / 24 |
 | Simultaneous collapse bursts | 4 |
 | Forest spread per site | 2 attempts, ≤2 generations |

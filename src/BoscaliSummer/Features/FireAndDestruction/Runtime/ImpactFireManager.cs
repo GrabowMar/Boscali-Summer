@@ -105,41 +105,6 @@ namespace BoscaliSummer.Fire
             indexRoutine = StartCoroutine(RebuildIndexDelayed());
         }
 
-        /// <summary>Extinguishes active fires within the given radius around a position.</summary>
-        public int ExtinguishInRadius(GlobalPosition position, float radius)
-        {
-            if (fires.Count == 0) return 0;
-            float radiusSq = radius * radius;
-            int extinguished = 0;
-
-            for (int i = fires.Count - 1; i >= 0; i--)
-            {
-                FireSite site = fires[i];
-                float dx = site.Position.x - position.x;
-                float dz = site.Position.z - position.z;
-                if (dx * dx + dz * dz <= radiusSq)
-                {
-                    visualPool.Release(site.Visual);
-                    fuelDepotSmokePool.Release(site.BuildingSmoke);
-                    fires.RemoveAt(i);
-                    extinguished++;
-                }
-            }
-
-            if (extinguished > 0)
-            {
-                Plugin.Logger.LogInfo($"[ImpactFireManager] Extinguished {extinguished} fire site(s) within {radius}m of {position}.");
-            }
-
-            return extinguished;
-        }
-
-        /// <summary>Clears procedural forest entries within the given radius to form a firebreak.</summary>
-        public int ClearForestInRadius(GlobalPosition position, float radius)
-        {
-            return forestIndex.ClearInRadius(position, radius);
-        }
-
         public int ActiveFireCount => fires.Count;
 
         /// <summary>Deploys an artillery smoke marker with a prominent signaling smoke plume.</summary>
@@ -479,7 +444,8 @@ namespace BoscaliSummer.Fire
             Vector3 wind = NetworkSceneSingleton<LevelInfo>.i != null
                 ? NetworkSceneSingleton<LevelInfo>.i.GetWind()
                 : Vector3.zero;
-            Camera camera = Camera.main;
+            Camera camera = SceneSingleton<CameraStateManager>.i?.mainCamera ?? Camera.main;
+            Vector3 camPos = camera != null ? camera.transform.position : Vector3.zero;
             int nearestA = -1, nearestB = -1, nearestC = -1;
             float distA = float.MaxValue, distB = float.MaxValue, distC = float.MaxValue;
             int smokeAcquireBudget = 1;
@@ -551,7 +517,7 @@ namespace BoscaliSummer.Fire
                     site.NextSmoke = site.BuildingSmoke == null ? now + 2.4f : float.MaxValue;
                 }
                 if (camera == null || site.Visual == null) continue;
-                float d = (camera.transform.position - site.Position.ToLocalPosition()).sqrMagnitude;
+                float d = (camPos - site.Position.ToLocalPosition()).sqrMagnitude;
                 if (d < distA)
                 {
                     distC = distB; nearestC = nearestB;

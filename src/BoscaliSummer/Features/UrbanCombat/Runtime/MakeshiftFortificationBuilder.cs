@@ -7,6 +7,8 @@ namespace BoscaliSummer.Garrisons
 {
     internal static class MakeshiftFortificationBuilder
     {
+        internal const string NamePrefix = "BoscaliSummer:AssaultDefense:";
+
         public static GameObject CreateConcreteBarrier(Vector3 position, Quaternion rotation, Transform parent)
         {
             var go = new GameObject("BoscaliSummer.ConcreteBarrier");
@@ -16,7 +18,6 @@ namespace BoscaliSummer.Garrisons
 
             MeshFilter mf = go.AddComponent<MeshFilter>();
             MeshRenderer mr = go.AddComponent<MeshRenderer>();
-            BoxCollider col = go.AddComponent<BoxCollider>();
 
             Mesh mesh = new Mesh();
             mesh.name = "JerseyBarrier";
@@ -58,10 +59,41 @@ namespace BoscaliSummer.Garrisons
             Material mat = MaterialProvider.GetConcreteMaterial() ?? MaterialProvider.GetSandbagMaterial();
             if (mat != null) mr.sharedMaterial = mat;
 
-            col.center = new Vector3(0f, h * 0.5f, 0f);
-            col.size = new Vector3(hl * 2f, h, hw * 2f);
-
             return go;
+        }
+
+        public static void ApplyPresentation(Building building)
+        {
+            if (building == null || building.transform.Find("BoscaliSummer.FortificationPresentation") != null)
+                return;
+
+            Bounds bounds = new Bounds(building.transform.position, Vector3.one * 4f);
+            Renderer[] sourceRenderers = building.GetComponentsInChildren<Renderer>(true);
+            bool foundBounds = false;
+            for (int i = 0; i < sourceRenderers.Length; i++)
+            {
+                if (sourceRenderers[i] == null) continue;
+                if (!foundBounds) { bounds = sourceRenderers[i].bounds; foundBounds = true; }
+                else bounds.Encapsulate(sourceRenderers[i].bounds);
+            }
+
+            var root = new GameObject("BoscaliSummer.FortificationPresentation");
+            root.transform.SetParent(building.transform, false);
+
+            GameObject left = CreateConcreteBarrier(
+                building.transform.position - building.transform.right * 2.2f,
+                building.transform.rotation, root.transform);
+            GameObject right = CreateConcreteBarrier(
+                building.transform.position + building.transform.right * 2.2f,
+                building.transform.rotation, root.transform);
+            if (left != null) left.transform.localPosition += Vector3.back * 1.8f;
+            if (right != null) right.transform.localPosition += Vector3.back * 1.8f;
+
+            GameObject sentry = VanillaSoldierFactory.CreateVisualSoldier(
+                building.transform.position + building.transform.forward * 1.6f,
+                building.transform.rotation, root.transform);
+            if (sentry != null) sentry.name = "BoscaliSummer.FortificationSentry";
+            OccupiedBuildingMarking.Apply(building.gameObject, building.NetworkHQ, bounds);
         }
 
         public static List<Building> DeployGroundFortifications(
@@ -70,11 +102,9 @@ namespace BoscaliSummer.Garrisons
             FactionHQ owner,
             Airbase airbase,
             int slot,
-            int generation,
-            out List<GameObject> spawnedProps)
+            int generation)
         {
             var spawnedUnits = new List<Building>();
-            spawnedProps = new List<GameObject>();
 
             if (NetworkSceneSingleton<Spawner>.i == null || shell == null) return spawnedUnits;
             Spawner spawner = NetworkSceneSingleton<Spawner>.i;
@@ -110,7 +140,7 @@ namespace BoscaliSummer.Garrisons
                 BuildingDefinition chosenDef = (i == 0 ? mgDef : atgmDef) ?? mgDef;
                 if (chosenDef != null && chosenDef.unitPrefab != null)
                 {
-                    string uniqueName = $"BoscaliSummer:GroundDefense:{Sanitize(airbase?.name)}:{generation}:{slot}:{i}:{chosenDef.jsonKey}";
+                    string uniqueName = $"{NamePrefix}{Sanitize(airbase?.name)}:{generation}:{slot}:{i}:{chosenDef.jsonKey}";
                     Building defenseUnit = spawner.SpawnBuilding(
                         chosenDef.unitPrefab,
                         groundPos.ToGlobalPosition(),
@@ -128,22 +158,10 @@ namespace BoscaliSummer.Garrisons
                             if (renderers[r] != null) renderers[r].enabled = true;
 
                         spawnedUnits.Add(defenseUnit);
+                        ApplyPresentation(defenseUnit);
                     }
                 }
 
-                Vector3 leftOffset = groundPos - facing * Vector3.right * 3.2f;
-                Vector3 rightOffset = groundPos + facing * Vector3.right * 3.2f;
-
-                Quaternion barrierRot = facing * Quaternion.Euler(0f, 15f, 0f);
-                GameObject barrier1 = CreateConcreteBarrier(leftOffset, barrierRot, shell.transform);
-                GameObject barrier2 = CreateConcreteBarrier(rightOffset, facing * Quaternion.Euler(0f, -15f, 0f), shell.transform);
-
-                if (barrier1 != null) spawnedProps.Add(barrier1);
-                if (barrier2 != null) spawnedProps.Add(barrier2);
-
-                // Add a sentry soldier at each fortification
-                GameObject sentry = VanillaSoldierFactory.CreateVisualSoldier(groundPos + facing * Vector3.forward * 2f, facing, shell.transform);
-                if (sentry != null) spawnedProps.Add(sentry);
             }
 
             return spawnedUnits;
