@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using NuclearOption.Networking;
 using UnityEngine;
@@ -23,6 +23,12 @@ namespace BoscaliSummer.Features.Support.Visuals
         public static void TriggerForPlayer(Aircraft aircraft, float severity)
         {
             if (aircraft == null || GameManager.IsHeadless) return;
+
+            // Jam aircraft's radar and sensors directly
+            aircraft.Jam(new Unit.JamEventArgs
+            {
+                jamAmount = 1000f * severity
+            });
 
             var disruption = aircraft.gameObject.GetComponent<CockpitEmpDisruption>()
                           ?? aircraft.gameObject.AddComponent<CockpitEmpDisruption>();
@@ -53,6 +59,7 @@ namespace BoscaliSummer.Features.Support.Visuals
         private float disruptionDuration;
         private float currentSeverity;
         private AudioSource staticSource;
+        private AudioSource radioStaticSource;
         private Light cockpitSparkLight;
         private VirtualMFD virtualMfd;
 
@@ -94,6 +101,21 @@ namespace BoscaliSummer.Features.Support.Visuals
                 staticSource.Play();
             }
 
+            // Radio static noise layer from game assets
+            if (radioStaticSource == null && GameAssets.i?.radioStatic != null)
+            {
+                radioStaticSource = gameObject.AddComponent<AudioSource>();
+                radioStaticSource.clip = GameAssets.i.radioStatic;
+                radioStaticSource.spatialBlend = 0f;
+                radioStaticSource.volume = 0.75f;
+                radioStaticSource.loop = true;
+            }
+
+            if (radioStaticSource != null && !radioStaticSource.isPlaying)
+            {
+                radioStaticSource.Play();
+            }
+
             // Initial camera jolt
             var csm = SceneSingleton<CameraStateManager>.i;
             if (csm != null)
@@ -131,7 +153,7 @@ namespace BoscaliSummer.Features.Support.Visuals
                     var combatHud = SceneSingleton<CombatHUD>.i;
                     if (combatHud != null)
                     {
-                        combatHud.jamAccumulation = Mathf.Max(combatHud.jamAccumulation, 2.8f * currentSeverity * decay);
+                        combatHud.jamAccumulation = Mathf.Max(combatHud.jamAccumulation, 3.5f * currentSeverity * decay);
                     }
 
                     // 3. Glitch VirtualMFD screens during peak disruption
@@ -140,13 +162,17 @@ namespace BoscaliSummer.Features.Support.Visuals
                         mfdGlitchTimer -= Time.deltaTime;
                         if (mfdGlitchTimer <= 0f)
                         {
-                            mfdGlitchTimer = UnityEngine.Random.Range(0.12f, 0.35f);
-                            if (UnityEngine.Random.value > 0.4f)
+                            mfdGlitchTimer = UnityEngine.Random.Range(0.08f, 0.28f);
+                            bool screenPowerOff = UnityEngine.Random.value > 0.4f;
+                            if (virtualMfd.gameObject.activeSelf == screenPowerOff)
                             {
-                                virtualMfd.HideAllLeftScreens();
-                                virtualMfd.HideAllRightScreens();
+                                virtualMfd.gameObject.SetActive(!screenPowerOff);
                             }
                         }
+                    }
+                    else if (virtualMfd != null && !virtualMfd.gameObject.activeSelf)
+                    {
+                        virtualMfd.gameObject.SetActive(true);
                     }
 
                     // 4. Cockpit spark light flickering
@@ -178,12 +204,23 @@ namespace BoscaliSummer.Features.Support.Visuals
                 {
                     blackout.color = originalBlackout;
                 }
+
+                // Restore MFD screens to their active state after reboot
+                if (virtualMfd != null && !virtualMfd.gameObject.activeSelf)
+                {
+                    virtualMfd.gameObject.SetActive(true);
+                }
             }
 
             // Cleanup
             if (staticSource != null && staticSource.isPlaying)
             {
                 staticSource.Stop();
+            }
+
+            if (radioStaticSource != null && radioStaticSource.isPlaying)
+            {
+                radioStaticSource.Stop();
             }
 
             if (cockpitSparkLight != null)

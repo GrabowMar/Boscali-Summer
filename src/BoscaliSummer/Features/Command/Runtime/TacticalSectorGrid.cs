@@ -73,44 +73,6 @@ namespace BoscaliSummer.Features.Command.Runtime
             }
         }
 
-        // Active Tactical Clash (Contact Hotspot)
-        public struct TacticalClash
-        {
-            public int Col;
-            public int Row;
-            public float WorldX;
-            public float WorldZ;
-            public float FriendlyForce;
-            public float HostileForce;
-            public float SuperiorityRatio; // Friendly / Total
-        }
-
-        // Tactical Attack Route Vector
-        public struct AttackThrust
-        {
-            public float OriginX;
-            public float OriginZ;
-            public float TargetX;
-            public float TargetZ;
-            public SectorControl AttackerFaction;
-        }
-
-        public struct ThreatSource
-        {
-            public float X;
-            public float Z;
-            public float Range;
-            public bool IsHostile;
-
-            public ThreatSource(float x, float z, float range, bool isHostile)
-            {
-                X = x;
-                Z = z;
-                Range = Math.Max(range, 1000f);
-                IsHostile = isHostile;
-            }
-        }
-
         // Discrete Sector Grid Buffers
         // holdStrength: continuous range from -1.0 (Full Hostile) to +1.0 (Full Friendly), 0.0 = Neutral
         private readonly float[] holdStrength;
@@ -122,11 +84,8 @@ namespace BoscaliSummer.Features.Command.Runtime
         private readonly int[] bfsQueue;
         private readonly int[] bfsDist;
 
-        // Active nodes, clashes, attack routes, threat bubbles
+        // Active nodes
         private readonly List<TacticalNode> nodes = new List<TacticalNode>(32);
-        private readonly List<TacticalClash> clashes = new List<TacticalClash>(16);
-        private readonly List<AttackThrust> attackThrusts = new List<AttackThrust>(8);
-        private readonly List<ThreatSource> threatSources = new List<ThreatSource>(32);
 
         // Cached Pixel Buffer for Instant GPU Texture Baking
         private Color32[] pixelBuffer;
@@ -138,7 +97,7 @@ namespace BoscaliSummer.Features.Command.Runtime
         public int HostileSectorCount { get; private set; }
         public int ContestedSectorCount { get; private set; }
         public int NeutralSectorCount { get; private set; }
-        public int ActiveClashesCount => clashes.Count;
+        public int ActiveClashesCount => ContestedSectorCount;
         public int TotalNodesCount => nodes.Count;
         public int TotalSectors => ResolutionX * ResolutionY;
         public float TerritoryControlRatio => (FriendlySectorCount + HostileSectorCount > 0)
@@ -207,9 +166,6 @@ namespace BoscaliSummer.Features.Command.Runtime
             Array.Clear(frontlineBorders, 0, frontlineBorders.Length);
             Array.Clear(isSupplied, 0, isSupplied.Length);
             nodes.Clear();
-            clashes.Clear();
-            attackThrusts.Clear();
-            threatSources.Clear();
         }
 
         /// <summary>
@@ -302,16 +258,8 @@ namespace BoscaliSummer.Features.Command.Runtime
             RegisterNode(nodes.Count + 1, "Airbase_" + (nodes.Count + 1), worldX, worldZ, faction, influenceRadius, true);
         }
 
-        public void AddThreatBubble(float worldX, float worldZ, float range, bool isHostile)
-        {
-            threatSources.Add(new ThreatSource(worldX, worldZ, range, isHostile));
-        }
-
         public IReadOnlyList<TacticalNode> GetNodes() => nodes;
-        public IReadOnlyList<TacticalClash> GetClashes() => clashes;
-        public IReadOnlyList<AttackThrust> GetAttackThrusts() => attackThrusts;
 
-        /// <summary>
         /// <summary>
         /// Simulates organic node growth via unbounded multi-source wavefront BFS expansion,
         /// vehicle concentrations with the 66% force superiority rule, and extracts frontline edge borders.
@@ -319,9 +267,6 @@ namespace BoscaliSummer.Features.Command.Runtime
         /// </summary>
         public void EvaluateSectors()
         {
-            clashes.Clear();
-            attackThrusts.Clear();
-
             int totalSectors = ResolutionX * ResolutionY;
             int qHead = 0;
             int qTail = 0;
@@ -517,18 +462,6 @@ namespace BoscaliSummer.Features.Command.Runtime
                         float total = fF + hF;
                         float friendlyRatio = fF / total;
 
-                        CellToCenter(c, r, out float cx, out float cz);
-                        clashes.Add(new TacticalClash
-                        {
-                            Col = c,
-                            Row = r,
-                            WorldX = cx,
-                            WorldZ = cz,
-                            FriendlyForce = fF,
-                            HostileForce = hF,
-                            SuperiorityRatio = friendlyRatio
-                        });
-
                         // 66% Superiority Rule (RWR)
                         if (friendlyRatio >= 0.66f)
                         {
@@ -638,39 +571,6 @@ namespace BoscaliSummer.Features.Command.Runtime
                     frontlineBorders[idx] = edgeMask;
                 }
             }
-
-            // Generate Attack Thrusts toward major contested clash locations
-            for (int i = 0; i < clashes.Count && attackThrusts.Count < 4; i++)
-            {
-                TacticalClash clash = clashes[i];
-                // Find nearest friendly node to this clash
-                TacticalNode stagingNode = null;
-                float bestDistSq = float.MaxValue;
-
-                for (int n = 0; n < nodes.Count; n++)
-                {
-                    TacticalNode node = nodes[n];
-                    if (node.Faction != SectorControl.Friendly) continue;
-                    float dSq = (node.X - clash.WorldX) * (node.X - clash.WorldX) + (node.Z - clash.WorldZ) * (node.Z - clash.WorldZ);
-                    if (dSq < bestDistSq)
-                    {
-                        bestDistSq = dSq;
-                        stagingNode = node;
-                    }
-                }
-
-                if (stagingNode != null && bestDistSq > 1000f * 1000f)
-                {
-                    attackThrusts.Add(new AttackThrust
-                    {
-                        OriginX = stagingNode.X,
-                        OriginZ = stagingNode.Z,
-                        TargetX = clash.WorldX,
-                        TargetZ = clash.WorldZ,
-                        AttackerFaction = SectorControl.Friendly
-                    });
-                }
-            }
         }
 
         private static bool IsOpposing(SectorControl a, SectorControl b)
@@ -692,7 +592,6 @@ namespace BoscaliSummer.Features.Command.Runtime
             int texHeight,
             bool showSectors,
             bool showFrontlines,
-            bool showThreatRings,
             float globalOpacity)
         {
             int totalPixels = texWidth * texHeight;
@@ -793,71 +692,18 @@ namespace BoscaliSummer.Features.Command.Runtime
                 }
             }
 
-            // 2. Threat Rings (if enabled)
-            if (showThreatRings && threatSources.Count > 0)
-            {
-                Color32 threatRingColor = new Color32(255, 40, 40, (byte)Math.Clamp((int)(globalOpacity * 255f * 0.8f), 90, 200));
-                for (int t = 0; t < threatSources.Count; t++)
-                {
-                    ThreatSource src = threatSources[t];
-                    // Convert world to pixel coords
-                    float u = (src.X + WorldSizeX * 0.5f) / WorldSizeX;
-                    float v = (src.Z + WorldSizeY * 0.5f) / WorldSizeY;
-
-                    int centerPx = (int)(u * texWidth);
-                    int centerPy = (int)(v * texHeight);
-                    int radiusPx = (int)((src.Range / WorldSizeX) * texWidth);
-
-                    if (radiusPx < 2) continue;
-
-                    // Rasterize clean Bresenham circle outline
-                    DrawCircleOutline(centerPx, centerPy, radiusPx, threatRingColor, texWidth, texHeight);
-                }
-            }
-
+            // 2. Return rendered pixel buffer
             return pixelBuffer;
         }
 
-        private void DrawCircleOutline(int cx, int cy, int radius, Color32 color, int texW, int texH)
-        {
-            int x = 0;
-            int y = radius;
-            int d = 3 - 2 * radius;
-
-            while (y >= x)
-            {
-                PlotCircle8(cx, cy, x, y, color, texW, texH);
-                x++;
-                if (d > 0)
-                {
-                    y--;
-                    d = d + 4 * (x - y) + 10;
-                }
-                else
-                {
-                    d = d + 4 * x + 6;
-                }
-            }
-        }
-
-        private void PlotCircle8(int cx, int cy, int x, int y, Color32 color, int texW, int texH)
-        {
-            PlotPixel(cx + x, cy + y, color, texW, texH);
-            PlotPixel(cx - x, cy + y, color, texW, texH);
-            PlotPixel(cx + x, cy - y, color, texW, texH);
-            PlotPixel(cx - x, cy - y, color, texW, texH);
-            PlotPixel(cx + y, cy + x, color, texW, texH);
-            PlotPixel(cx - y, cy + x, color, texW, texH);
-            PlotPixel(cx + y, cy - x, color, texW, texH);
-            PlotPixel(cx - y, cy - x, color, texW, texH);
-        }
-
-        private void PlotPixel(int x, int y, Color32 color, int texW, int texH)
-        {
-            if (x >= 0 && x < texW && y >= 0 && y < texH)
-            {
-                pixelBuffer[y * texW + x] = color;
-            }
-        }
+        // Backwards compatibility overload
+        public Color32[] BakeTexture(
+            int texWidth,
+            int texHeight,
+            bool showSectors,
+            bool showFrontlines,
+            bool showThreatRings,
+            float globalOpacity)
+            => BakeTexture(texWidth, texHeight, showSectors, showFrontlines, globalOpacity);
     }
 }

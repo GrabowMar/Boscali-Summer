@@ -91,7 +91,6 @@ namespace BoscaliSummer.Tests.Features.Command
             grid.Clear();
             grid.AddAirbasePresence(-15000f, 0f, false, 32000f);
             grid.AddAirbasePresence(15000f, 0f, true, 32000f);
-            grid.AddThreatBubble(15000f, 0f, 12000f, true);
             grid.EvaluateSectors();
 
             TestAssert.That(grid.FriendlySectorCount > 0, "Allied sectors exist");
@@ -100,18 +99,17 @@ namespace BoscaliSummer.Tests.Features.Command
             TestAssert.That(grid.FriendlySectorCount + grid.HostileSectorCount == grid.TotalSectors,
                 "Wavefront expands across the entire theater until meeting opposing automata; total claimed sectors equals TotalSectors");
 
-            // 5. Test 66% Force Superiority Rule & Attack Thrusts
+            // 5. Test 66% Force Superiority Rule & Contested Clashes
             // Spawn hostile armor in neutral sector (mid-point)
             grid.AddTroopPresence(0f, 0f, 4.0f, true); // Hostile heavy armor
             grid.AddTroopPresence(0f, 0f, 1.0f, false); // Friendly light probe
             grid.EvaluateSectors();
 
             TestAssert.That(grid.ContestedSectorCount >= 1, "Clash detected at contested contact point");
-            TestAssert.That(grid.ActiveClashesCount >= 1, "Clash list reports active battle");
-            TestAssert.That(grid.GetAttackThrusts().Count >= 1, "Attack thrust vector generated toward contested sector");
+            TestAssert.That(grid.ActiveClashesCount >= 1, "Clash count reports active battle");
 
-            // 6. Texture baking (RWR tactical grid + frontline borders + threat ring)
-            var pixels = grid.BakeTexture(128, 128, true, true, true, 0.35f);
+            // 6. Texture baking (RWR tactical grid + frontline borders)
+            var pixels = grid.BakeTexture(128, 128, true, true, 0.35f);
             TestAssert.That(pixels != null && pixels.Length == 128 * 128, "BakeTexture generates valid pixel array");
 
             int drawnPixels = 0;

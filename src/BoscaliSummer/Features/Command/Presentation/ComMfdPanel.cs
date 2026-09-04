@@ -58,10 +58,6 @@ namespace BoscaliSummer.Features.Command.Presentation
         // Map Modes widgets
         private TMP_Text sectorsToggleLabel;
         private TMP_Text frontlinesToggleLabel;
-        private TMP_Text threatToggleLabel;
-        private TMP_Text ordersToggleLabel;
-        private TMP_Text clashesToggleLabel;
-        private TMP_Text attackToggleLabel;
         private TMP_Text opacityValueLabel;
 
         private float nextRefresh;
@@ -93,10 +89,6 @@ namespace BoscaliSummer.Features.Command.Presentation
             infraLabel = null;
             sectorsToggleLabel = null;
             frontlinesToggleLabel = null;
-            threatToggleLabel = null;
-            ordersToggleLabel = null;
-            clashesToggleLabel = null;
-            attackToggleLabel = null;
             opacityValueLabel = null;
             nextRefresh = 0f;
             failed = false;
@@ -300,56 +292,7 @@ namespace BoscaliSummer.Features.Command.Presentation
                 }, AvTokens.FontSmall, AvButtonStyle.Default);
             frontlinesToggleLabel = AvKit.Label(parent, "ON", new Rect(Pad + inner - 72f, y, 70f, rowH),
                 AvTheme.RailReady, AvTokens.FontSmall, FontStyles.Bold, TextAlignmentOptions.Center);
-            y -= rowH + 5f;
-
-            // 3. Threat Rings
-            AvKit.Button(parent, "SAM / RADAR THREAT RINGS", new Rect(Pad, y, inner - 80f, rowH),
-                () =>
-                {
-                    if (overlay != null) overlay.ShowThreatRings = !overlay.ShowThreatRings;
-                    Refresh();
-                }, AvTokens.FontSmall, AvButtonStyle.Default);
-            threatToggleLabel = AvKit.Label(parent, "ON", new Rect(Pad + inner - 72f, y, 70f, rowH),
-                AvTheme.RailInfo, AvTokens.FontSmall, FontStyles.Bold, TextAlignmentOptions.Center);
-            y -= rowH + 5f;
-
-            // 4. Flight Vectors
-            AvKit.Button(parent, "AI FLIGHT SORTIE VECTORS", new Rect(Pad, y, inner - 80f, rowH),
-                () =>
-                {
-                    if (overlay != null) overlay.ShowAiOrders = !overlay.ShowAiOrders;
-                    Refresh();
-                }, AvTokens.FontSmall, AvButtonStyle.Default);
-            ordersToggleLabel = AvKit.Label(parent, "ON", new Rect(Pad + inner - 72f, y, 70f, rowH),
-                AvTheme.RailCaution, AvTokens.FontSmall, FontStyles.Bold, TextAlignmentOptions.Center);
-            y -= rowH + 5f;
-
-            // 5. Clashes & Nodes
-            AvKit.Button(parent, "COMBAT CLASHES & NODES", new Rect(Pad, y, inner - 80f, rowH),
-                () =>
-                {
-                    if (overlay != null)
-                    {
-                        bool toggle = !overlay.ShowClashes;
-                        overlay.ShowClashes = toggle;
-                        overlay.ShowNodes = toggle;
-                    }
-                    Refresh();
-                }, AvTokens.FontSmall, AvButtonStyle.Default);
-            clashesToggleLabel = AvKit.Label(parent, "ON", new Rect(Pad + inner - 72f, y, 70f, rowH),
-                AvTheme.RailReady, AvTokens.FontSmall, FontStyles.Bold, TextAlignmentOptions.Center);
-            y -= rowH + 5f;
-
-            // 6. Attack Routes
-            AvKit.Button(parent, "ATTACK THRUST ROUTES", new Rect(Pad, y, inner - 80f, rowH),
-                () =>
-                {
-                    if (overlay != null) overlay.ShowAttackRoutes = !overlay.ShowAttackRoutes;
-                    Refresh();
-                }, AvTokens.FontSmall, AvButtonStyle.Default);
-            attackToggleLabel = AvKit.Label(parent, "ON", new Rect(Pad + inner - 72f, y, 70f, rowH),
-                AvTheme.RailReady, AvTokens.FontSmall, FontStyles.Bold, TextAlignmentOptions.Center);
-            y -= rowH + 8f;
+            y -= rowH + 12f;
 
             AvKit.Rule(parent, new Rect(Pad, y, inner, 1f), AvTheme.Frame);
             y -= 8f;
@@ -510,26 +453,6 @@ namespace BoscaliSummer.Features.Command.Presentation
                 {
                     frontlinesToggleLabel.text = overlay.ShowFrontlines ? "ON" : "OFF";
                     frontlinesToggleLabel.color = overlay.ShowFrontlines ? AvTheme.RailReady : AvTheme.Dim;
-                }
-                if (threatToggleLabel != null)
-                {
-                    threatToggleLabel.text = overlay.ShowThreatRings ? "ON" : "OFF";
-                    threatToggleLabel.color = overlay.ShowThreatRings ? AvTheme.RailInfo : AvTheme.Dim;
-                }
-                if (ordersToggleLabel != null)
-                {
-                    ordersToggleLabel.text = overlay.ShowAiOrders ? "ON" : "OFF";
-                    ordersToggleLabel.color = overlay.ShowAiOrders ? AvTheme.RailCaution : AvTheme.Dim;
-                }
-                if (clashesToggleLabel != null)
-                {
-                    clashesToggleLabel.text = overlay.ShowClashes ? "ON" : "OFF";
-                    clashesToggleLabel.color = overlay.ShowClashes ? AvTheme.RailReady : AvTheme.Dim;
-                }
-                if (attackToggleLabel != null)
-                {
-                    attackToggleLabel.text = overlay.ShowAttackRoutes ? "ON" : "OFF";
-                    attackToggleLabel.color = overlay.ShowAttackRoutes ? AvTheme.RailReady : AvTheme.Dim;
                 }
             }
 

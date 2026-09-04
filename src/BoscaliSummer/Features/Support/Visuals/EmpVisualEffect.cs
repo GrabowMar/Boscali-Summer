@@ -1,7 +1,9 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using NuclearOption.Effects;
 using UnityEngine;
+using UnityEngine.Rendering.Universal;
 
 namespace BoscaliSummer.Features.Support.Visuals
 {
@@ -9,22 +11,48 @@ namespace BoscaliSummer.Features.Support.Visuals
     /// Spectacular high-altitude electromagnetic pulse (EMP) burst visual, atmospheric,
     /// and acoustic effect.
     /// Simulates real-life high-altitude nuclear / flux-compression EMP phenomena:
-    /// 1. Blinding ionospheric flash illuminating clouds and terrain for tens of kilometers.
+    /// 1. Blinding prompt ionospheric flash illuminating clouds and terrain for tens of kilometers.
     /// 2. 3D volumetric expanding plasma ionization sphere and dual hypervelocity compression rings.
-    /// 3. Fractal 3D branching atmospheric lightning spiderwebs arcing across the upper sky.
-    /// 4. Thunderous sub-bass atmospheric surge, high-voltage arc crackle, and power-grid whine.
+    /// 3. Native URP ground shockwave decal projector conforming across the terrain below.
+    /// 4. Fractal 3D branching atmospheric lightning spiderwebs arcing across the upper sky.
+    /// 5. Coronal ionization spark particle burst.
+    /// 6. Multi-layered acoustics: supersonic dielectric snap, distance-delayed thunder via
+    ///    ExplosionAudioManager, sub-bass atmospheric pulse, and descending inverter whine.
     /// </summary>
     internal sealed class EmpVisualEffect : MonoBehaviour
     {
         private const int SampleRate = 44100;
+        private static readonly List<(Vector3 pos, float time)> recentStrikes =
+            new List<(Vector3 pos, float time)>();
+
         private static Material sphereMaterial;
         private static Material ringMaterial;
         private static Material arcMaterial;
+        private static Material sparkMaterial;
         private static AudioClip empAudioClip;
+
+        private static readonly int id_decalSize = Shader.PropertyToID("_DecalSize");
+        private static readonly int id_opacity = Shader.PropertyToID("_Opacity");
+        private static readonly int id_shockwaveExpansion = Shader.PropertyToID("_ShockwaveExpansion");
 
         public static void Trigger(Vector3 detonationPoint, float radiusMeters)
         {
             if (GameManager.IsHeadless) return;
+
+            // Deduplication guard: suppress redundant triggers within 3.0 seconds and 2500m
+            float now = Time.time;
+            for (int i = recentStrikes.Count - 1; i >= 0; i--)
+            {
+                if (now - recentStrikes[i].time > 3.0f)
+                {
+                    recentStrikes.RemoveAt(i);
+                }
+                else if (Vector3.Distance(recentStrikes[i].pos, detonationPoint) < 2500f)
+                {
+                    return; // Duplicate trigger suppressed
+                }
+            }
+            recentStrikes.Add((detonationPoint, now));
 
             var go = new GameObject("BoscaliSummer.EmpVisualEffect");
             go.transform.position = detonationPoint;
@@ -44,7 +72,7 @@ namespace BoscaliSummer.Features.Support.Visuals
         private MeshRenderer sphereRenderer;
         private Mesh sphereMesh;
 
-        // Primary & Tilted Compression Rings
+        // Equatorial & Tilted Compression Rings
         private GameObject ringObj;
         private MeshFilter ringFilter;
         private MeshRenderer ringRenderer;
@@ -55,10 +83,22 @@ namespace BoscaliSummer.Features.Support.Visuals
         private MeshRenderer tiltedRingRenderer;
         private Mesh tiltedRingMesh;
 
+        // Ground Decal Projector Shockwave
+        private GameObject groundDecalObj;
+        private DecalProjector decalProjector;
+        private Material decalMaterial;
+        private bool hasGroundDecal;
+        private float groundRadius;
+        private float groundShockwaveProgression;
+        private float groundDecalOpacity = 1f;
+
+        // Coronal ionization sparks
+        private ParticleSystem sparkSystem;
+
         private readonly List<LineRenderer> lightningArcs = new List<LineRenderer>();
         private AudioSource audioSource;
         private float startTime;
-        private const float ShockwaveDuration = 4.2f;
+        private const float ShockwaveDuration = 5.0f;
 
         private void Initialize(Vector3 point, float radius)
         {
@@ -66,35 +106,36 @@ namespace BoscaliSummer.Features.Support.Visuals
             maxRadius = radius;
             startTime = Time.time;
 
+            NukeEffectAssets.EnsureResolved();
             EnsureMaterials();
             EnsureAudio();
 
-            // 1. Blinding multi-phase atmospheric lighting
+            // 1. Blinding multi-phase atmospheric lighting (Prompt Compton Flash + Auroral Glow)
             var lightObj = new GameObject("BurstLight");
             lightObj.transform.SetParent(transform, false);
             burstLight = lightObj.AddComponent<Light>();
             burstLight.type = LightType.Point;
-            burstLight.color = new Color(0.7f, 0.92f, 1.0f);
-            burstLight.range = Mathf.Max(radius * 3.5f, 85000f);
-            burstLight.intensity = 75f;
+            burstLight.color = new Color(0.82f, 0.96f, 1.0f);
+            burstLight.range = Mathf.Max(radius * 4f, 110000f);
+            burstLight.intensity = 160f;
             burstLight.shadows = LightShadows.None;
 
             var auroraObj = new GameObject("AuroraLight");
             auroraObj.transform.SetParent(transform, false);
             auroraLight = auroraObj.AddComponent<Light>();
             auroraLight.type = LightType.Point;
-            auroraLight.color = new Color(0.4f, 0.6f, 1.0f);
-            auroraLight.range = Mathf.Max(radius * 2.5f, 60000f);
-            auroraLight.intensity = 24f;
+            auroraLight.color = new Color(0.35f, 0.58f, 1.0f);
+            auroraLight.range = Mathf.Max(radius * 2.8f, 75000f);
+            auroraLight.intensity = 32f;
             auroraLight.shadows = LightShadows.None;
 
-            // 2. 3D Volumetric Expanding Ionization Sphere
+            // 2. 3D Volumetric Expanding Ionization Sphere (smoothed 32x48 mesh)
             sphereObj = new GameObject("IonizationSphere");
             sphereObj.transform.SetParent(transform, false);
             sphereFilter = sphereObj.AddComponent<MeshFilter>();
             sphereRenderer = sphereObj.AddComponent<MeshRenderer>();
             sphereRenderer.sharedMaterial = sphereMaterial;
-            sphereMesh = BuildSphereMesh(16, 24);
+            sphereMesh = BuildSphereMesh(32, 48);
             sphereFilter.sharedMesh = sphereMesh;
 
             // 3. Equatorial & Tilted Plasma Shockwave Rings
@@ -108,47 +149,162 @@ namespace BoscaliSummer.Features.Support.Visuals
 
             tiltedRingObj = new GameObject("TiltedShockwave");
             tiltedRingObj.transform.SetParent(transform, false);
-            tiltedRingObj.transform.localRotation = Quaternion.Euler(28f, 45f, 15f);
+            tiltedRingObj.transform.localRotation = Quaternion.Euler(32f, 42f, 18f);
             tiltedRingFilter = tiltedRingObj.AddComponent<MeshFilter>();
             tiltedRingRenderer = tiltedRingObj.AddComponent<MeshRenderer>();
             tiltedRingRenderer.sharedMaterial = ringMaterial;
             tiltedRingMesh = new Mesh { name = "EmpTiltedMesh" };
             tiltedRingFilter.sharedMesh = tiltedRingMesh;
 
-            // 4. 3D Atmospheric Fractal Branching Lightning Arcs
-            int arcCount = UnityEngine.Random.Range(16, 22);
+            // 4. Ground Decal Projector Shockwave (conforming to terrain below)
+            SetupGroundDecal(point, radius);
+
+            // 5. Coronal ionization spark particle burst
+            SetupSparkBurst();
+
+            // 6. 3D Atmospheric Fractal Branching Lightning Arcs
+            int arcCount = UnityEngine.Random.Range(24, 32);
             for (int i = 0; i < arcCount; i++)
             {
                 CreateLightningBranch(i, origin, radius);
             }
 
-            // 5. Atmospheric Audio
+            // 7. Multi-layered Acoustic Design
+            SetupAcoustics();
+
+            // 8. Camera Electromagnetic Shudder
+            TriggerCameraShudder();
+
+            StartCoroutine(Animate());
+        }
+
+        private void SetupGroundDecal(Vector3 point, float radius)
+        {
+            if (Physics.Raycast(point, Vector3.down, out var hit, 25000f, PhysicsLayers.StaticsMask))
+            {
+                hasGroundDecal = true;
+                groundRadius = radius * 1.15f;
+                groundShockwaveProgression = 20f;
+
+                if (NukeEffectAssets.GroundDecalPrefab != null)
+                {
+                    groundDecalObj = Instantiate(NukeEffectAssets.GroundDecalPrefab, hit.point + Vector3.up * 3f, Quaternion.LookRotation(Vector3.down));
+                    groundDecalObj.transform.SetParent(Datum.origin, true);
+                    decalProjector = groundDecalObj.GetComponent<DecalProjector>()
+                                  ?? groundDecalObj.GetComponentInChildren<DecalProjector>();
+                }
+
+                if (decalProjector == null && NukeEffectAssets.ShockwaveDecalMaterial != null)
+                {
+                    groundDecalObj = new GameObject("EmpGroundDecal");
+                    groundDecalObj.transform.position = hit.point + Vector3.up * 3f;
+                    groundDecalObj.transform.rotation = Quaternion.LookRotation(Vector3.down);
+                    groundDecalObj.transform.SetParent(Datum.origin, true);
+                    decalProjector = groundDecalObj.AddComponent<DecalProjector>();
+                    decalProjector.material = NukeEffectAssets.ShockwaveDecalMaterial;
+                }
+
+                if (decalProjector != null)
+                {
+                    decalProjector.size = new Vector3(groundRadius * 2f, groundRadius * 2f, groundRadius * 2f);
+                    decalMaterial = new Material(decalProjector.material);
+                    decalProjector.material = decalMaterial;
+                    decalMaterial.SetFloat(id_decalSize, groundRadius);
+                    decalMaterial.SetFloat(id_opacity, 1.0f);
+                }
+            }
+        }
+
+        private void SetupSparkBurst()
+        {
+            var sparkObj = new GameObject("CoronalSparks");
+            sparkObj.transform.SetParent(transform, false);
+            sparkSystem = sparkObj.AddComponent<ParticleSystem>();
+            var renderer = sparkObj.GetComponent<ParticleSystemRenderer>();
+            renderer.sharedMaterial = NukeEffectAssets.EjectaParticleMaterial
+                                   ?? sparkMaterial;
+
+            var main = sparkSystem.main;
+            main.simulationSpace = ParticleSystemSimulationSpace.World;
+            main.duration = 1.5f;
+            main.startLifetime = new ParticleSystem.MinMaxCurve(1.2f, 2.5f);
+            main.startSpeed = new ParticleSystem.MinMaxCurve(650f, 1350f);
+            main.startSize = new ParticleSystem.MinMaxCurve(12f, 28f);
+            main.gravityModifier = 0.05f;
+            main.startColor = new ParticleSystem.MinMaxGradient(
+                new Color(0.85f, 0.96f, 1.0f, 1f),
+                new Color(0.35f, 0.65f, 1.0f, 0.85f));
+            main.maxParticles = 500;
+
+            var emission = sparkSystem.emission;
+            emission.rateOverTime = 0f;
+            emission.SetBursts(new[] { new ParticleSystem.Burst(0f, 320, 450) });
+
+            var shape = sparkSystem.shape;
+            shape.shapeType = ParticleSystemShapeType.Sphere;
+            shape.radius = 40f;
+        }
+
+        private void SetupAcoustics()
+        {
+            // 1. Supersonic dielectric ionization snap (plays immediately on arrival)
+            if (GameAssets.i?.sonicBoom != null)
+            {
+                var snapObj = new GameObject("DielectricSnap");
+                snapObj.transform.position = origin;
+                snapObj.transform.SetParent(transform, false);
+                var snapSrc = snapObj.AddComponent<AudioSource>();
+                snapSrc.clip = GameAssets.i.sonicBoom;
+                snapSrc.spatialBlend = 0.45f;
+                snapSrc.minDistance = 800f;
+                snapSrc.maxDistance = 100000f;
+                snapSrc.volume = 1.0f;
+                snapSrc.pitch = UnityEngine.Random.Range(1.15f, 1.25f); // High-voltage electrical snap
+                snapSrc.rolloffMode = AudioRolloffMode.Logarithmic;
+                snapSrc.Play();
+            }
+
+            // 2. Realistic distance-delayed heavy explosion rumble via ExplosionAudioManager
+            if (NukeEffectAssets.NukeExplosionClip != null && SceneSingleton<ExplosionAudioManager>.i != null)
+            {
+                var boomObj = new GameObject("EmpAtmosphericBoom");
+                boomObj.transform.position = origin;
+                boomObj.transform.SetParent(transform, false);
+                var boomSrc = boomObj.AddComponent<AudioSource>();
+                boomSrc.clip = NukeEffectAssets.NukeExplosionClip;
+                boomSrc.spatialBlend = 1.0f;
+                boomSrc.minDistance = 800f;
+                boomSrc.maxDistance = 120000f;
+                var filter = boomObj.AddComponent<AudioLowPassFilter>();
+                SceneSingleton<ExplosionAudioManager>.i.AddExplosionAudio(boomSrc, filter, 0.4f);
+            }
+
+            // 3. Sub-bass atmospheric pulse, arc crackle & descending inverter whine
             if (empAudioClip != null)
             {
                 audioSource = gameObject.AddComponent<AudioSource>();
                 audioSource.clip = empAudioClip;
                 audioSource.spatialBlend = 0.35f;
-                audioSource.minDistance = 600f;
+                audioSource.minDistance = 800f;
                 audioSource.maxDistance = 150000f;
                 audioSource.volume = 1.0f;
                 audioSource.rolloffMode = AudioRolloffMode.Logarithmic;
                 audioSource.Play();
             }
+        }
 
-            // 6. Camera Electromagnetic Shudder for nearby players
+        private void TriggerCameraShudder()
+        {
             var csm = SceneSingleton<CameraStateManager>.i;
             Camera cam = csm?.mainCamera ?? Camera.main;
-            if (cam != null)
-            {
-                float camDist = Vector3.Distance(cam.transform.position, origin);
-                if (camDist < radius * 1.8f)
-                {
-                    float factor = Mathf.Clamp01(1f - (camDist / (radius * 1.8f)));
-                    if (csm != null) csm.ShakeCamera(0.8f * factor, 1.6f * factor);
-                }
-            }
+            if (cam == null) return;
 
-            StartCoroutine(Animate());
+            float camDist = Vector3.Distance(cam.transform.position, origin);
+            if (camDist < maxRadius * 2.2f)
+            {
+                float factor = Mathf.Clamp01(1f - (camDist / (maxRadius * 2.2f)));
+                if (csm != null) csm.ShakeCamera(1.1f * factor, 2.2f * factor);
+            }
         }
 
         private void CreateLightningBranch(int index, Vector3 center, float radius)
@@ -158,21 +314,21 @@ namespace BoscaliSummer.Features.Support.Visuals
             var lr = arcObj.AddComponent<LineRenderer>();
             lr.sharedMaterial = arcMaterial;
             lr.useWorldSpace = true;
-            lr.startWidth = UnityEngine.Random.Range(22f, 38f);
-            lr.endWidth = UnityEngine.Random.Range(2f, 6f);
+            lr.startWidth = UnityEngine.Random.Range(26f, 44f);
+            lr.endWidth = UnityEngine.Random.Range(3f, 7f);
             lr.startColor = new Color(0.92f, 0.98f, 1f, 1f);
             lr.endColor = new Color(0.2f, 0.65f, 1f, 0f);
 
             float azimuth = UnityEngine.Random.Range(0f, 360f) * Mathf.Deg2Rad;
-            float pitch = UnityEngine.Random.Range(-45f, 35f) * Mathf.Deg2Rad;
-            float branchLength = UnityEngine.Random.Range(radius * 0.45f, radius * 1.05f);
+            float pitch = UnityEngine.Random.Range(-55f, 50f) * Mathf.Deg2Rad;
+            float branchLength = UnityEngine.Random.Range(radius * 0.45f, radius * 1.1f);
             Vector3 direction = new Vector3(
                 Mathf.Cos(azimuth) * Mathf.Cos(pitch),
                 Mathf.Sin(pitch),
                 Mathf.Sin(azimuth) * Mathf.Cos(pitch));
 
             Vector3 primaryEnd = center + direction * branchLength;
-            GenerateBranchingLightning(lr, center, primaryEnd, 28, branchLength * 0.09f);
+            GenerateBranchingLightning(lr, center, primaryEnd, 28, branchLength * 0.08f);
             lightningArcs.Add(lr);
 
             // Add secondary forked branch for 50% of arcs
@@ -183,12 +339,12 @@ namespace BoscaliSummer.Features.Support.Visuals
                 var subLr = subObj.AddComponent<LineRenderer>();
                 subLr.sharedMaterial = arcMaterial;
                 subLr.useWorldSpace = true;
-                subLr.startWidth = lr.startWidth * 0.6f;
-                subLr.endWidth = 1.5f;
+                subLr.startWidth = lr.startWidth * 0.65f;
+                subLr.endWidth = 1.8f;
 
                 Vector3 midPoint = center + direction * (branchLength * 0.5f);
-                Vector3 subDir = Quaternion.Euler(UnityEngine.Random.Range(-30f, 30f), UnityEngine.Random.Range(-30f, 30f), 0f) * direction;
-                Vector3 subEnd = midPoint + subDir * (branchLength * 0.4f);
+                Vector3 subDir = Quaternion.Euler(UnityEngine.Random.Range(-35f, 35f), UnityEngine.Random.Range(-35f, 35f), 0f) * direction;
+                Vector3 subEnd = midPoint + subDir * (branchLength * 0.45f);
                 GenerateBranchingLightning(subLr, midPoint, subEnd, 16, branchLength * 0.06f);
                 lightningArcs.Add(subLr);
             }
@@ -202,27 +358,27 @@ namespace BoscaliSummer.Features.Support.Visuals
                 elapsed = Time.time - startTime;
                 float progress = Mathf.Clamp01(elapsed / ShockwaveDuration);
 
-                // Animate flash lighting
+                // 1. Animate flash lighting
                 if (burstLight != null)
                 {
-                    float coreFactor = Mathf.Pow(1f - Mathf.Clamp01(elapsed / 1.6f), 3.0f);
-                    burstLight.intensity = 75f * coreFactor;
+                    float coreFactor = Mathf.Pow(1f - Mathf.Clamp01(elapsed / 1.4f), 3.0f);
+                    burstLight.intensity = 160f * coreFactor;
                     if (coreFactor <= 0.01f) burstLight.enabled = false;
                 }
 
                 if (auroraLight != null)
                 {
-                    float auroraFactor = Mathf.Pow(1f - Mathf.Clamp01(elapsed / 3.8f), 1.8f);
-                    float pulse = 0.85f + Mathf.Sin(elapsed * 12f) * 0.15f;
-                    auroraLight.intensity = 24f * auroraFactor * pulse;
+                    float auroraFactor = Mathf.Pow(1f - Mathf.Clamp01(elapsed / 4.2f), 1.8f);
+                    float pulse = 0.85f + Mathf.Sin(elapsed * 11f) * 0.15f;
+                    auroraLight.intensity = 32f * auroraFactor * pulse;
                     if (auroraFactor <= 0.01f) auroraLight.enabled = false;
                 }
 
-                // Animate 3D Volumetric Sphere expansion
+                // 2. Animate 3D Volumetric Sphere expansion
                 if (sphereObj != null)
                 {
-                    float sphereProgress = Mathf.Clamp01(elapsed / 2.2f);
-                    float sphereScale = Mathf.Lerp(80f, maxRadius, Mathf.Sqrt(sphereProgress));
+                    float sphereProgress = Mathf.Clamp01(elapsed / 2.6f);
+                    float sphereScale = Mathf.Lerp(120f, maxRadius, Mathf.Sqrt(sphereProgress));
                     sphereObj.transform.localScale = Vector3.one * sphereScale;
 
                     float sphereAlpha = Mathf.Pow(1f - sphereProgress, 2.0f);
@@ -230,28 +386,47 @@ namespace BoscaliSummer.Features.Support.Visuals
                     if (sphereProgress >= 1f && sphereObj.activeSelf) sphereObj.SetActive(false);
                 }
 
-                // Animate plasma shockwave expansion
-                float currentRadius = Mathf.Lerp(120f, maxRadius, Mathf.Sqrt(progress));
-                float thickness = Mathf.Lerp(100f, 750f, progress);
+                // 3. Animate plasma shockwave rings expansion
+                float currentRadius = Mathf.Lerp(150f, maxRadius, Mathf.Sqrt(progress));
+                float thickness = Mathf.Lerp(120f, 850f, progress);
                 float alpha = Mathf.Pow(1f - progress, 1.5f);
                 UpdateRingMesh(ringMesh, currentRadius, thickness, alpha, true);
                 UpdateRingMesh(tiltedRingMesh, currentRadius * 0.88f, thickness * 0.85f, alpha * 0.75f, false);
 
-                // Animate lightning arcs flickering and decaying
+                // 4. Animate ground shockwave decal expansion
+                if (hasGroundDecal && decalMaterial != null)
+                {
+                    groundShockwaveProgression += 1350f * Time.deltaTime;
+                    decalMaterial.SetFloat(id_shockwaveExpansion, (1f * groundRadius) / Mathf.Max(1f, groundShockwaveProgression));
+
+                    if (groundShockwaveProgression > groundRadius)
+                    {
+                        groundDecalOpacity -= Time.deltaTime * 0.18f;
+                        decalMaterial.SetFloat(id_opacity, Mathf.Max(0f, groundDecalOpacity));
+                        if (groundDecalOpacity <= 0f && groundDecalObj != null)
+                        {
+                            Destroy(groundDecalObj);
+                            groundDecalObj = null;
+                        }
+                    }
+                }
+
+                // 5. Animate lightning arcs flickering and decaying
                 for (int i = 0; i < lightningArcs.Count; i++)
                 {
                     LineRenderer lr = lightningArcs[i];
                     if (lr == null) continue;
-                    float arcLife = Mathf.Clamp01(1f - (elapsed / (1.2f + (i % 4) * 0.35f)));
-                    float flicker = UnityEngine.Random.value > 0.28f ? 1f : 0.15f;
-                    Color c = new Color(0.55f, 0.88f, 1f, arcLife * flicker);
+                    float arcLife = Mathf.Clamp01(1f - (elapsed / (1.4f + (i % 4) * 0.35f)));
+                    float flicker = UnityEngine.Random.value > 0.25f ? 1f : 0.1f;
+                    Color c = new Color(0.6f, 0.9f, 1f, arcLife * flicker);
                     lr.startColor = c;
-                    lr.endColor = new Color(0.1f, 0.45f, 0.95f, 0f);
+                    lr.endColor = new Color(0.15f, 0.45f, 0.95f, 0f);
                 }
 
                 yield return null;
             }
 
+            if (groundDecalObj != null) Destroy(groundDecalObj);
             Destroy(gameObject, 2.0f);
         }
 
@@ -392,7 +567,7 @@ namespace BoscaliSummer.Features.Support.Visuals
 
         private static void EnsureMaterials()
         {
-            if (sphereMaterial != null && ringMaterial != null && arcMaterial != null) return;
+            if (sphereMaterial != null && ringMaterial != null && arcMaterial != null && sparkMaterial != null) return;
 
             Shader shader = Shader.Find("Universal Render Pipeline/Unlit")
                          ?? Shader.Find("Sprites/Default")
@@ -420,6 +595,14 @@ namespace BoscaliSummer.Features.Support.Visuals
                 arcMaterial.SetColor("_Color", new Color(0.85f, 0.95f, 1f, 1f));
                 if (arcMaterial.HasProperty("_Surface")) arcMaterial.SetFloat("_Surface", 1f);
                 if (arcMaterial.HasProperty("_Blend")) arcMaterial.SetFloat("_Blend", 1f);
+            }
+
+            if (sparkMaterial == null)
+            {
+                sparkMaterial = new Material(shader) { name = "EmpSparkMat" };
+                sparkMaterial.SetColor("_Color", new Color(0.7f, 0.95f, 1f, 1f));
+                if (sparkMaterial.HasProperty("_Surface")) sparkMaterial.SetFloat("_Surface", 1f);
+                if (sparkMaterial.HasProperty("_Blend")) sparkMaterial.SetFloat("_Blend", 1f);
             }
         }
 
@@ -469,6 +652,8 @@ namespace BoscaliSummer.Features.Support.Visuals
             if (sphereMesh != null) Destroy(sphereMesh);
             if (ringMesh != null) Destroy(ringMesh);
             if (tiltedRingMesh != null) Destroy(tiltedRingMesh);
+            if (decalMaterial != null) Destroy(decalMaterial);
+            if (groundDecalObj != null) Destroy(groundDecalObj);
         }
     }
 }
