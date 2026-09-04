@@ -496,7 +496,6 @@ namespace BoscaliSummer.Features.Support.Presentation
                 case SupportActionId.Fortify: return "FTF";
                 case SupportActionId.Recon: return "SAT";
                 case SupportActionId.Emp: return "EMP";
-                case SupportActionId.Firebreak: return "FIR";
                 case SupportActionId.SmokeMarker: return "SMK";
                 default: return "OPS";
             }

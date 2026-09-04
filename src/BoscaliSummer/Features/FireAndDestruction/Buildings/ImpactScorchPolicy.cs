@@ -21,6 +21,9 @@ namespace BoscaliSummer.Fire
             return Clamp(size, MinimumSize, MaximumSize);
         }
 
+        /// <summary>Large blasts gain a small bounded cluster instead of a facade-wide state.</summary>
+        internal static int DecalCount(float blastYield) => blastYield >= 6f ? 3 : blastYield >= 0.75f ? 2 : 1;
+
         /// <summary>
         /// Signed [-1, 1] slide along the surface's horizontal tangent, from the low draw.
         /// </summary>

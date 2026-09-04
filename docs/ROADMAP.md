@@ -39,9 +39,10 @@ codecs and snapshot providers; garrison catalogue/selection/spawning/lifecycle.
 
 - **Urban combat first release** — deterministic shell selection around controlled ground
   airbases, an authoritative occupancy record separate from its visual, `Occupied →
-  Neutralized/Ruined` transitions, no duplicate proxies under churn/late-join, a global proxy
-  cap (~96), stable references instead of nearest-position repair. Excludes interiors, room
-  clearing, visible squads, breaching, per-floor damage, roaming infantry.
+  Neutralized/Ruined` transitions, bounded air-assault presentation, no duplicate proxies
+  under churn/late-join, a global proxy cap (~96), stable references instead of
+  nearest-position repair. Excludes interiors, room clearing, breaching, per-floor damage,
+  and autonomous roaming infantry.
 - **Radio** — in-game interaction and long-session gates remain; MP3 only after a real decode
   test; synchronized broadcast stays behind the handshake/manifest gate in
   [DESIGN_NOTES.md](DESIGN_NOTES.md).

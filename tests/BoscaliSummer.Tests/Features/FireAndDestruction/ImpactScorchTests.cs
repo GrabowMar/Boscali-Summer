@@ -19,6 +19,12 @@ namespace BoscaliSummer.Tests.Features.FireAndDestruction
                 ImpactScorchPolicy.DecalSize(12f) > ImpactScorchPolicy.DecalSize(4f) &&
                 ImpactScorchPolicy.DecalSize(4f) > ImpactScorchPolicy.DecalSize(0f),
                 "scorch size must grow monotonically with blast yield inside the band");
+            TestAssert.That(ImpactScorchPolicy.DecalCount(0.5f) == 1,
+                "small impacts should use one scorch decal");
+            TestAssert.That(ImpactScorchPolicy.DecalCount(1f) == 2,
+                "medium impacts should use a two-mark scorch cluster");
+            TestAssert.That(ImpactScorchPolicy.DecalCount(10f) == 3,
+                "large impacts should use a bounded three-mark scorch cluster");
             for (float yield = -20f; yield <= 200f; yield += 7f)
             {
                 float size = ImpactScorchPolicy.DecalSize(yield);

@@ -13,7 +13,12 @@ namespace BoscaliSummer.Features.UrbanCombat
         private static readonly Type[] Patches =
         {
             typeof(AirbaseCapturePatch),
-            typeof(GarrisonClientVisualPatch)
+            typeof(GarrisonClientVisualPatch),
+            typeof(MountedTroopsFirePatch),
+            typeof(ChimeraLoadoutAssignAircraftPatch),
+            typeof(ChimeraWeaponManagerInitPatch),
+            typeof(ChimeraWeaponSelectorPopulatePatch),
+            typeof(ChimeraWeaponCheckerAvailablePatch)
         };
 
         public FeatureMetadata Metadata => Feature;
@@ -22,6 +27,7 @@ namespace BoscaliSummer.Features.UrbanCombat
         public void Install(FeatureContext context)
         {
             ZoneGarrisonManager garrisons = context.AddSceneService<ZoneGarrisonManager>(30);
+            context.AddSceneService<AirAssaultController>(31);
             BaseDefenseAlarmService alarm = context.AddSceneService<BaseDefenseAlarmService>(32);
             context.AddService<IBuildingOccupancy>(garrisons);
             context.AddService<IZoneFortificationService>(garrisons);

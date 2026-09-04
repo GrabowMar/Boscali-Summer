@@ -96,8 +96,8 @@ per frame.
 
 **Scorch marks.** `MapBuilding` has no vanilla damage shader — the game only decrements hit
 points and swaps to a wreck mesh — so there's no "battered" facade. Instead an explosive hit
-(missile, bomb, rocket) stamps one pooled black decal on the wall at the point of impact,
-sized from blast yield and nudged so repeats differ. Purely local and cosmetic: no HP
+(missile, bomb, rocket) stamps a bounded cluster of one to three pooled black decals on the
+wall at the point of impact, sized from blast yield and nudged so repeats differ. Purely local and cosmetic: no HP
 tracking, no damage tiers, nothing on the wire. Gun rounds leave no mark.
 
 **Ruins.** A destroyed building enters a mission-long aftermath: a pooled two-layer collapse
@@ -114,6 +114,11 @@ building supplies targeting, weapons, health and networking while its proxy rend
 disabled; the civilian shell keeps its normal appearance and ownership. Garrisons track zone
 ownership, can't duplicate, vanish when their shell is ruined, and return only on a later
 capture. Highway airstrips are supported; attached ship airbases are ignored.
+
+Air assault adds visible insertion sequences and bounded defensive outposts. Infantry
+figures are presentation only; vanilla networked DEF emplacements own combat behavior.
+Client-side barriers, faction markers, and sentries are attached to those network objects,
+so every peer sees them and their cleanup follows the emplacement lifecycle.
 
 ## Radio
 

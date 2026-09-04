@@ -68,6 +68,63 @@ namespace BoscaliSummer.Garrisons
             return true;
         }
 
+        public bool TryOccupyBuilding(GameObject shell, FactionHQ owner, Airbase airbase)
+        {
+            if (!GameAccess.IsServer() || shell == null || owner == null ||
+                NetworkSceneSingleton<Spawner>.i == null || GarrisonOccupancy.IsOccupied(shell))
+                return false;
+
+            BuildingDefinition defense = ResolveDefenseDefinition();
+            if (defense == null || defense.unitPrefab == null) return false;
+
+            int key = airbase != null ? airbase.GetInstanceID() : shell.scene.handle;
+            if (records.TryGetValue(key, out GarrisonRecord previous) && previous.Owner != owner)
+                ClearRecord(key);
+            if (!records.TryGetValue(key, out GarrisonRecord record))
+            {
+                record = new GarrisonRecord { Owner = owner };
+                records[key] = record;
+            }
+
+            Bounds bounds = GetShellBounds(shell);
+            int slot = record.Defenses.Count;
+            int generation = generations.TryGetValue(key, out int current) ? current : 1;
+            Building core = NetworkSceneSingleton<Spawner>.i.SpawnBuilding(
+                defense.unitPrefab,
+                (bounds.center + Vector3.up * Mathf.Min(bounds.extents.y * 0.35f, 3.5f)).ToGlobalPosition(),
+                shell.transform.rotation,
+                owner,
+                airbase,
+                $"{NamePrefix}Assault:{generation}:{slot}",
+                false,
+                null);
+            if (core == null) return false;
+
+            GarrisonVisual.Apply(core);
+            record.Defenses.Add(core);
+            record.Shells.Add(shell);
+
+            List<Building> perimeter = MakeshiftFortificationBuilder.DeployGroundFortifications(
+                shell, bounds, owner, airbase, slot, generation);
+            for (int i = 0; i < perimeter.Count; i++)
+            {
+                record.Defenses.Add(perimeter[i]);
+                record.Shells.Add(shell);
+            }
+
+            Building shellBuilding = shell.GetComponentInParent<Building>();
+            if (shellBuilding != null && !shellBuilding.disabled) shellBuilding.NetworkHQ = owner;
+            GarrisonOccupancy.Set(shell, owner);
+            Plugin.Logger.LogInfo($"[Air Assault] Occupied {shell.name} with one hidden defense proxy and {perimeter.Count} visible perimeter emplacement(s).");
+            return true;
+        }
+
+        public bool TryDeployEncampment(Vector3 position, FactionHQ owner, Airbase airbase, int troopCount)
+        {
+            return GameAccess.IsServer() && owner != null &&
+                InfantryEncampmentBuilder.DeployOrReinforce(position, owner, airbase, troopCount);
+        }
+
         private readonly List<PendingCapture> pending = new List<PendingCapture>();
         private readonly Dictionary<int, GarrisonRecord> records = new Dictionary<int, GarrisonRecord>();
         private readonly Dictionary<int, int> generations = new Dictionary<int, int>();
@@ -96,6 +153,7 @@ namespace BoscaliSummer.Garrisons
             initialScanComplete = false;
             initialScanAt = Time.unscaledTime + 3f;
 
+            InfantryEncampmentBuilder.ResetForScene();
             GarrisonOccupancy.Reset();
         }
 

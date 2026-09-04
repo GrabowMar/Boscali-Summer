@@ -123,7 +123,18 @@ namespace BoscaliSummer.Fire
                 }
             }
 
+            int markCount = ImpactScorchPolicy.DecalCount(explosion.BlastYield);
             PlaceMark(point, normal, explosion.BlastYield);
+            if (markCount > 1)
+            {
+                Vector3 tangent = Vector3.Cross(normal, Vector3.up).normalized;
+                if (tangent.sqrMagnitude < 0.01f) tangent = Vector3.right;
+                Vector3 bitangent = Vector3.Cross(normal, tangent).normalized;
+                float spread = ImpactScorchPolicy.DecalSize(explosion.BlastYield) * 0.32f;
+                PlaceMark(point + tangent * spread + bitangent * spread * 0.3f, normal, explosion.BlastYield * 0.45f);
+                if (markCount > 2)
+                    PlaceMark(point - tangent * spread * 0.75f - bitangent * spread * 0.45f, normal, explosion.BlastYield * 0.32f);
+            }
         }
 
         private void PlaceMark(Vector3 point, Vector3 normal, float blastYield)

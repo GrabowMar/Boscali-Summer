@@ -6,6 +6,7 @@ namespace BoscaliSummer.Features.UrbanCombat.Configuration
     {
         public readonly ConfigEntry<bool> GarrisonsEnabled;
         public readonly ConfigEntry<int> GarrisonsPerZone;
+        public readonly ConfigEntry<int> TroopsPerDeploy;
 
         public UrbanCombatSettings(ConfigFile config)
         {
@@ -20,6 +21,11 @@ namespace BoscaliSummer.Features.UrbanCombat.Configuration
                     "zones undefended without disabling the feature. " +
                     "Host-authoritative: on a server, only the host's value applies.",
                     new AcceptableValueRange<int>(0, 6)));
+            TroopsPerDeploy = config.Bind("Air Assault", "InfantryPerInsertion", 8,
+                new ConfigDescription(
+                    "Visual infantry deployed per air-assault insertion. Vanilla defense " +
+                    "emplacements provide the authoritative combat behavior.",
+                    new AcceptableValueRange<int>(2, 12)));
         }
     }
 }
