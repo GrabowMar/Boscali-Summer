@@ -8,7 +8,6 @@ using BoscaliSummer.Framework.Lifecycle;
 using BoscaliSummer.Runtime;
 using NOAvionics;
 using NOAvionics.Ui;
-using NuclearOption.UIStyleSystem;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -16,47 +15,68 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Features.Support.Presentation
 {
     /// <summary>
-    /// Cockpit MFD screen for Boscali Operations: the perk board and the support board.
-    /// Redesigned in the unified 5th-gen fighter cockpit avionics language at 470px width,
-    /// with SDF chamfered bezels, tactile cards, visual progression meters, and an integrated status strip.
+    /// "OPS" — the operations console on the maximised map's left bezel.
+    ///
+    /// Rebuilt on the shared layout engine. Three changes, all structural rather than
+    /// cosmetic, and each one fixing something the previous design could not:
+    ///
+    /// 1. <b>The metrics moved out of the tabs.</b> Allocation and score are what a pilot
+    ///    checks constantly and both pages need them, so neither page owns them. They sit
+    ///    above the tab bar at display size instead of as 12px body text inside whichever
+    ///    tab happened to hold them.
+    /// 2. <b>Rows size to their own copy.</b> Every card used to be a fixed 40 or 88
+    ///    pixels with its description clipped to fit, which is why widening the panel from
+    ///    430 to 470 did not stop the ellipses. <c>AvSize.Auto</c> ends that class of bug
+    ///    outright — the row is exactly as tall as the wrapped text inside it.
+    /// 3. <b>The support grid became a list.</b> A 2×3 grid of 88px cards showed four
+    ///    actions and truncated all of them; one row per action shows six and truncates
+    ///    none, because a full-width row has room a half-width card never had.
+    ///
+    /// Colour no longer encodes what an action *is*. The old <c>AccentFor</c> painted
+    /// artillery amber and fortify emerald, colliding with the amber and emerald the rails
+    /// spend on *state*; two meanings on one channel is what made the board unreadable.
+    /// Kind is now a three-letter code, state is the rail.
     /// </summary>
     internal sealed class SupportPanel : MonoBehaviour, ISceneService
     {
         private const float Width = AvTokens.PanelWidth;
         private const float Pad = AvTokens.Pad;
-        private const float Gap = AvTokens.Gap;
         private const float PanelHeight = AvTokens.PanelHeight;
-        private const float TabHeight = AvTokens.TabBarHeight;
         private const float RefreshInterval = 0.15f;
 
-        private sealed class PerkCard
+        /// <summary>How far the spine sits inside the panel padding.</summary>
+        private const float SpineInset = 14f;
+
+        private const float ChipWidth = 74f;
+        private const float ChipGap = 2f;
+        private const int ChipCount = 3;
+
+        private sealed class PerkRow
         {
             public byte Id;
-            public GameObject Root;
             public AvButton Button;
             public Image Rail;
             public Image Background;
+            public TMP_Text Code;
             public TMP_Text Name;
             public TMP_Text Badge;
-            public TMP_Text Subtitle;
         }
 
-        private sealed class SupportCard
+        private sealed class StrikeRow
         {
             public SupportActionDefinition Definition;
-            public GameObject Root;
-            public AvButton RequestButton;
+            public AvButton Action;
             public Image Rail;
             public Image Background;
+            public TMP_Text Code;
             public TMP_Text Name;
-            public TMP_Text CostChip;
-            public TMP_Text AuthStatus;
-            public TMP_Text Description;
-            public TMP_Text StateLabel;
+            public TMP_Text Status;
+            public TMP_Text Cost;
         }
 
         private SupportManager support;
         private IProgressionView progression;
+        private IBaseDefenseAlarmService baseAlarm;
         private ManualLogSource logger;
         private MFDScreen screen;
         private GameObject screenRoot;
@@ -70,37 +90,29 @@ namespace BoscaliSummer.Features.Support.Presentation
         private AvButton theaterTab;
         private ITheaterPage theater;
 
-        // Perks Page Widgets
-        private TMP_Text scoreLabel;
-        private TMP_Text rankSubLabel;
-        private TMP_Text pointsChipLabel;
-        private TMP_Text progressCaptionLabel;
-        private RectTransform pipMeterArea;
-        private Image scoreBarFill;
+        private AvStyled.DataBar dataBar;
+        private AvStyled.Metric allocMetric;
+        private AvStyled.Metric scoreMetric;
 
-        // Support Page Widgets
-        private TMP_Text allocationLabel;
-        private TMP_Text targetLabel;
-        private Image cooldownBarFill;
-        private TMP_Text cooldownCaptionLabel;
-
-        // Shared Telemetry Terminal
-        private TMP_Text telemetryLabel;
+        private TMP_Text statusText;
         private string activeHoverTooltip;
 
-        private readonly List<PerkCard> perkCards = new List<PerkCard>();
-        private readonly List<SupportCard> supportCards = new List<SupportCard>();
+        private readonly List<PerkRow> perkRows = new List<PerkRow>();
+        private readonly List<StrikeRow> strikeRows = new List<StrikeRow>();
 
         private float nextAttempt;
         private float nextRefresh;
         private bool failed;
         private bool viewOpen;
 
-        public void Configure(SupportManager manager, IProgressionView progressionView, ManualLogSource log)
+        public void Configure(
+            SupportManager manager, IProgressionView progressionView, ManualLogSource log,
+            IBaseDefenseAlarmService alarm = null)
         {
             support = manager;
             progression = progressionView;
             logger = log;
+            baseAlarm = alarm;
         }
 
         public void ResetForScene()
@@ -118,20 +130,13 @@ namespace BoscaliSummer.Features.Support.Presentation
             supportTab = null;
             theaterTab = null;
             theater = null;
-            scoreLabel = null;
-            rankSubLabel = null;
-            pointsChipLabel = null;
-            progressCaptionLabel = null;
-            pipMeterArea = null;
-            scoreBarFill = null;
-            allocationLabel = null;
-            targetLabel = null;
-            cooldownBarFill = null;
-            cooldownCaptionLabel = null;
-            telemetryLabel = null;
+            dataBar = null;
+            allocMetric = null;
+            scoreMetric = null;
+            statusText = null;
             activeHoverTooltip = null;
-            perkCards.Clear();
-            supportCards.Clear();
+            perkRows.Clear();
+            strikeRows.Clear();
             nextAttempt = 0f;
             nextRefresh = 0f;
             failed = false;
@@ -175,7 +180,8 @@ namespace BoscaliSummer.Features.Support.Presentation
         {
             try
             {
-                VirtualMFD mfd = UnityEngine.Object.FindObjectOfType<VirtualMFD>();
+                VirtualMFD mfd = SceneSingleton<DynamicMap>.i?.maximizedMapCanvas?.GetComponentInChildren<VirtualMFD>(true)
+                    ?? UnityEngine.Object.FindObjectOfType<VirtualMFD>();
                 if (mfd == null) return;
 
                 if (!MfdBezel.TryClaim(BezelRegistry.Ops, preferLeft: true, mfd,
@@ -216,6 +222,7 @@ namespace BoscaliSummer.Features.Support.Presentation
         {
             TMP_Text sourceText = template.GetComponentInChildren<TMP_Text>(true);
             font = sourceText != null ? sourceText.font : null;
+            if (font != null) AvFont.Font = font;
 
             var root = new GameObject("BoscaliOperations.Screen", typeof(RectTransform), typeof(Image));
             RectTransform rootRect = root.GetComponent<RectTransform>();
@@ -225,7 +232,10 @@ namespace BoscaliSummer.Features.Support.Presentation
             rootRect.anchorMin = templateRect.anchorMin;
             rootRect.anchorMax = templateRect.anchorMax;
             rootRect.pivot = templateRect.pivot;
-            rootRect.anchoredPosition = templateRect.anchoredPosition;
+            // Position is deliberately not copied. VirtualMFD.showPos is Vector3.zero and
+            // MFDScreen.ShowScreen assigns it straight to localPosition, so a screen has no
+            // remembered home — it is placed by its parent and anchors, and an
+            // anchoredPosition written here is overwritten whenever the panel is opened.
             rootRect.localScale = templateRect.localScale;
             rootRect.sizeDelta = new Vector2(Width, PanelHeight);
 
@@ -240,59 +250,59 @@ namespace BoscaliSummer.Features.Support.Presentation
             content.SetParent(rootRect, false);
             AvKit.Stretch(content);
 
-            float inner = Width - Pad * 2f;
-            float y = -Pad;
-
-            // Header Banner (28px Title Bar)
-            TMP_Text title = AvKit.Label(content, "BOSCALI OPERATIONS", new Rect(Pad, y, inner, AvTokens.TitleBarHeight),
-                                         AvTheme.Accent, AvTokens.FontTitle, FontStyles.Bold, TextAlignmentOptions.Center);
-            title.characterSpacing = 0.8f;
-            y -= AvTokens.TitleBarHeight + AvTokens.Space1;
-
-            // 18px Chip rail: SYS: LOGISTICS, NET: BOTE-LINK, AUTH: READY
-            float chipW = (inner - Gap * 2f) / 3f;
-            AvKit.StatusChip(content, "SYS: LOGISTICS", new Rect(Pad, y, chipW, AvTokens.ChipRailHeight),
-                             AvTheme.RailReady, AvTheme.TextPrimary, AvTokens.FontMicro);
-            AvKit.StatusChip(content, "NET: BOTE-LINK", new Rect(Pad + chipW + Gap, y, chipW, AvTokens.ChipRailHeight),
-                             AvTheme.RailInfo, AvTheme.TextPrimary, AvTokens.FontMicro);
-            AvKit.StatusChip(content, "AUTH: READY", new Rect(Pad + (chipW + Gap) * 2f, y, chipW, AvTokens.ChipRailHeight),
-                             AvTheme.RailReady, AvTheme.TextPrimary, AvTokens.FontMicro);
-
-            y -= AvTokens.ChipRailHeight + AvTokens.Space2;
-            AvKit.Rule(content, new Rect(Pad, y, inner, 1f), AvTheme.Hairline);
-            y -= AvTokens.Space2;
-
             ModServices.TryGet(out theater);
             int tabCount = theater != null ? 3 : 2;
-            float tabWidth = (inner - Gap * (tabCount - 1)) / tabCount;
-            perksTab = AvKit.Tab(content, "PERKS", new Rect(Pad, y, tabWidth, TabHeight), ShowPerks);
-            supportTab = AvKit.Tab(content, "SUPPORT", new Rect(Pad + tabWidth + Gap, y, tabWidth, TabHeight), ShowSupport);
-            if (theater != null)
+
+            // The panel shell, declared once. Every rectangle below is read out of this
+            // tree rather than accumulated by a running `y -= 34f` cursor.
+            AvNode shell = AvBox.Column("ops").Pad(Pad).Gaps(AvTokens.Space2)
+                .Add(AvBox.Row("databar").Height(AvTokens.TitleBarHeight + 2f))
+                .Add(AvBox.Grid("metrics", 2).Height(58f).Gaps(0f)
+                    .Add(AvBox.Cell("alloc"), AvBox.Cell("score")))
+                .Add(AvBox.Row("tabs").Height(AvTokens.TabBarHeight).Gaps(1f))
+                .Add(AvBox.Cell("body").Grow())
+                .Add(AvBox.Cell("status").Height(AvTokens.StatusStripHeight));
+
+            AvNode tabs = shell.Find("tabs");
+            for (int i = 0; i < tabCount; i++) tabs.Add(AvBox.Cell("t" + i).Grow());
+
+            shell.Arrange(new Rect(0f, 0f, Width, PanelHeight));
+
+            dataBar = AvStyled.TopBar(content, shell.At("databar"), "OPS", ChipCount);
+            AvKit.HitButton(content, ChipRect(shell.At("databar"), 2), () =>
             {
-                theaterTab = AvKit.Tab(content, "THEATER", new Rect(Pad + (tabWidth + Gap) * 2f, y, tabWidth, TabHeight), ShowTheater);
-            }
-            y -= TabHeight;
-            AvKit.Rule(content, new Rect(Pad, y, inner, 1f), AvTheme.Frame);
-            y -= AvTokens.Space2;
+                ThirdPersonHudController.Instance?.Toggle();
+                nextRefresh = 0f;
+            }).WithTooltip("Toggle the third-person HUD overlay.");
+
+            AvStyled.Box(content, shell.At("metrics"), "metrics");
+            allocMetric = AvStyled.MetricCell(content, shell.At("metrics.alloc"), "ALLOCATION", "ALLOC");
+            scoreMetric = AvStyled.MetricCell(content, shell.At("metrics.score"), "MISSION SCORE", "PTS");
+            AvKit.Rule(content, VerticalDivider(shell.At("metrics")), AvTheme.Hairline);
+
+            perksTab = AvStyled.Button(content, shell.At("tabs.t0"), "PERKS", "tab", ShowPerks, AvButtonStyle.Tab);
+            supportTab = AvStyled.Button(content, shell.At("tabs.t1"), "SUPPORT", "tab", ShowSupport, AvButtonStyle.Tab);
+            if (theater != null)
+                theaterTab = AvStyled.Button(content, shell.At("tabs.t2"), "THEATER", "tab", ShowTheater, AvButtonStyle.Tab);
+
+            Rect body = shell.At("body");
 
             perksPage = CreatePage(content, "PerksPage");
-            BuildPerksPage((RectTransform)perksPage.transform, inner, y);
+            BuildPerksPage((RectTransform)perksPage.transform, body);
 
             supportPage = CreatePage(content, "SupportPage");
-            BuildSupportPage((RectTransform)supportPage.transform, inner, y);
+            BuildSupportPage((RectTransform)supportPage.transform, body);
 
             if (theater != null)
             {
                 theaterPage = CreatePage(content, "TheaterPage");
-                theater.Mount((RectTransform)theaterPage.transform, font, inner, y);
+                // The theater page still lays itself out against a width and a cursor, so
+                // it gets the same inner column the other two pages work inside.
+                theater.Mount((RectTransform)theaterPage.transform,
+                              font, body.width - SpineInset, body.y);
             }
 
-            // Pinned Telemetry Terminal (StatusStrip: 56px, 2-line padded)
-            float terminalY = -(PanelHeight - Pad - AvTokens.StatusStripHeight);
-            telemetryLabel = AvKit.StatusStrip(content, new Rect(Pad, terminalY, inner, AvTokens.StatusStripHeight), AvTheme.RailReady);
-
-            // Chamfer Corner Ticks for panel
-            AvKit.CornerTicks(content, new Rect(0f, 0f, Width, PanelHeight), AvTheme.Hairline);
+            statusText = AvStyled.StatusStrip(content, shell.At("status"));
 
             MFDScreen result = root.AddComponent<MFDScreen>();
             result.shortName = "OPS";
@@ -307,544 +317,487 @@ namespace BoscaliSummer.Features.Support.Presentation
             }
 
             screenRoot = root;
-            ShowPerks();
-            Refresh();
+            SetPage(1);
             return result;
         }
 
-        // ---- Perks Page ------------------------------------------------------------------
-
-        private void BuildPerksPage(RectTransform parent, float inner, float startY)
+        /// <summary>Where the nth status chip sits in the data bar, so a hit target can cover it.</summary>
+        private static Rect ChipRect(Rect bar, int index)
         {
-            float y = startY;
+            float chipsWidth = ChipCount * ChipWidth + (ChipCount - 1) * ChipGap;
+            float x = bar.x + bar.width - chipsWidth - 6f + index * (ChipWidth + ChipGap);
+            return new Rect(x, bar.y - (bar.height - 16f) * 0.5f, ChipWidth, 16f);
+        }
 
-            // Status Ribbon: Score, Rank, Tactical Points budget & score-driven progress.
-            const float ribbonH = 58f;
-            AvKit.Panel(parent, new Rect(Pad, y, inner, ribbonH), AvTheme.SurfaceInert, AvSprites.Card);
-            AvKit.Outline(parent, new Rect(Pad, y, inner, ribbonH), AvTheme.Hairline);
-            AvKit.CornerTicks(parent, new Rect(Pad, y, inner, ribbonH), AvTheme.Hairline);
+        private static Rect VerticalDivider(Rect metrics) =>
+            new Rect(metrics.x + metrics.width * 0.5f, metrics.y, 1f, metrics.height);
 
-            // Left: score readout + rank subtitle
-            scoreLabel = AvKit.Label(parent, "SCORE 0",
-                                     new Rect(Pad + AvTokens.Space2, y - 2f, 200f, 18f),
-                                     AvTheme.Friendly, AvTokens.FontLead, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
+        // ---- Page scaffolding ------------------------------------------------------------
 
-            rankSubLabel = AvKit.Label(parent, "RANK --",
-                                       new Rect(Pad + AvTokens.Space2, y - 22f, 220f, 14f),
-                                       AvTheme.Dim, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
+        /// <summary>
+        /// A section: a title line plus one auto-height row per entry.
+        ///
+        /// Sections are open — a band and a spine tick, no enclosing rectangle. Four
+        /// hairlines around every group is what made the old panel read as a wall of
+        /// boxes with nothing more important than anything else.
+        /// </summary>
+        private static AvNode Section(string name, IList<string> descriptions)
+        {
+            AvNode section = AvBox.Column(name).Pad(12f, 14f, 14f, 12f).Gaps(0f)
+                .Add(AvBox.Cell("title").Height(20f));
+            for (int i = 0; i < descriptions.Count; i++)
+                section.Add(RowNode("r" + i, descriptions[i]));
+            return section;
+        }
 
-            // Right: points-available chip
-            pointsChipLabel = AvKit.Label(parent, "0 PTS AVAILABLE",
-                                          new Rect(Pad + inner - 176f, y - 2f, 168f, 18f),
-                                          AvTheme.Accent, AvTokens.FontMicro, FontStyles.Bold, TextAlignmentOptions.MidlineRight);
+        /// <summary>
+        /// One list row: rail, code, a growing text column, and a trailing slot.
+        ///
+        /// <para>The description is handed to the box <b>as text</b>, not as an empty cell to
+        /// be filled in later. That distinction is the whole feature: an empty
+        /// <c>Auto()</c> cell measures zero, the row collapses to the height of its one-line
+        /// name, and the cost and the action button end up drawn on top of each other. The
+        /// box can only size to content it has been given.</para>
+        /// </summary>
+        private static AvNode RowNode(string name, string description) =>
+            AvBox.Row(name).Pad(8f, 0f, 8f, 0f).Gaps(10f)
+                .Add(AvBox.Cell("rail").Width(3f))
+                .Add(AvBox.Cell("code").Width(30f))
+                .Add(AvBox.Column("text").Grow().Gaps(3f)
+                    .Add(AvBox.Cell("name").Height(15f))
+                    .Add(AvBox.Text("desc", description, "row-sub")))
+                .Add(AvBox.Cell("trail").Width(96f));
 
-            var pipGo = new GameObject("PipArea", typeof(RectTransform));
-            pipMeterArea = pipGo.GetComponent<RectTransform>();
-            pipMeterArea.SetParent(parent, false);
-            AvKit.Place(pipMeterArea, new Rect(Pad + inner - 150f, y - 22f, 142f, 10f));
+        private void DrawSectionHeader(RectTransform parent, AvNode node, Rect area,
+                                       string title, string note, bool band)
+        {
+            AvStyled.Box(parent, area, band ? "section band" : "section");
+            AvStyled.SpineTick(parent, area.x - SpineInset + 3f, area.y - 16f);
 
-            // Bottom: score-to-next-point progress with caption
-            float barX = Pad + AvTokens.Space2;
-            float barW = inner - AvTokens.Space2 * 2f;
-            progressCaptionLabel = AvKit.Label(parent, "0 / 0 EARNED",
-                                               new Rect(barX, y - ribbonH + 4f, 120f, 10f),
-                                               AvTheme.TextPrimary, AvTokens.FontMicro, FontStyles.Bold,
-                                               TextAlignmentOptions.MidlineLeft);
-            AvKit.Label(parent, "SCORE TO NEXT POINT",
-                        new Rect(barX + 132f, y - ribbonH + 4f, barW - 160f, 10f),
-                        AvTheme.Dim, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineRight);
+            // Split the line rather than drawing both labels across its whole width: a
+            // right-aligned note and a left-aligned title in the same rect collide in the
+            // middle, which is how "TACTICAL SUPPORT" and "RIGHT-CLICK MAP TO DESIGNATE"
+            // came out overprinted on each other.
+            Rect titleRect = node.At("title");
+            float titleWidth = titleRect.width * 0.42f;
 
-            scoreBarFill = AvKit.ProgressBar(parent, new Rect(barX, y - ribbonH + 2f, barW, 6f), 0f, AvTheme.RailReady);
+            AvStyled.Label(parent, new Rect(titleRect.x, titleRect.y, titleWidth, titleRect.height),
+                           title, "section-title");
 
-            y -= ribbonH + AvTokens.Space2;
-
-            // Dual Column Layout
-            float colWidth = (inner - Gap) * 0.5f;
-            float col1X = Pad;
-            float col2X = Pad + colWidth + Gap;
-
-            // Column 1 Header: Passives
-            AvKit.Label(parent, "PASSIVE FLIGHT & REWARD SYSTEMS", new Rect(col1X, y, colWidth, 14f),
-                        AvTheme.Friendly, AvTokens.FontMicro, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
-            AvKit.Rule(parent, new Rect(col1X, y - 15f, colWidth, 1f), AvTheme.Friendly.WithAlpha(0.4f));
-
-            // Column 2 Header: Authorisations
-            AvKit.Label(parent, "TACTICAL SUPPORT AUTHORISATIONS", new Rect(col2X, y, colWidth, 14f),
-                        AvTheme.RailInfo, AvTokens.FontMicro, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
-            AvKit.Rule(parent, new Rect(col2X, y - 15f, colWidth, 1f), AvTheme.RailInfo.WithAlpha(0.4f));
-
-            y -= 18f;
-
-            PerkView[] perks = progression.GetPerks();
-            float col1Y = y;
-            float col2Y = y;
-            const float cardH = 40f;
-            const float pitch = cardH + 4f;
-
-            for (int i = 0; i < perks.Length; i++)
+            if (!string.IsNullOrEmpty(note))
             {
-                PerkView perk = perks[i];
-                bool isAuth = perk.Group != null && perk.Group.IndexOf("AUTHORIS", StringComparison.OrdinalIgnoreCase) >= 0;
-
-                if (!isAuth)
-                {
-                    AddPerkCard(parent, perk, col1X, col1Y, colWidth, cardH);
-                    col1Y -= pitch;
-                }
-                else
-                {
-                    AddPerkCard(parent, perk, col2X, col2Y, colWidth, cardH);
-                    col2Y -= pitch;
-                }
+                AvStyled.Label(parent,
+                    new Rect(titleRect.x + titleWidth, titleRect.y,
+                             titleRect.width - titleWidth, titleRect.height),
+                    note, "section-title-note", align: TextAlignmentOptions.MidlineRight);
             }
         }
 
-        private static string PerkGlyph(bool isAuth)
+        /// <summary>The thin divider under a row. Rows separate by a line, not by a box.</summary>
+        private static void RowSeparator(RectTransform parent, Rect area) =>
+            AvKit.Rule(parent, new Rect(area.x, area.y - area.height, area.width, 1f),
+                       AvTheme.Unity(AvTokens.Hairline.WithAlpha(0.13f)));
+
+        // ---- Perks page ------------------------------------------------------------------
+
+        /// <summary>What a perk is, as a code. Kind on the code, state on the rail.</summary>
+        private static string PerkCode(bool isAuthorisation) => isAuthorisation ? "AUT" : "PAS";
+
+        private void BuildPerksPage(RectTransform parent, Rect body)
         {
-            return isAuth ? "◈" : "▣";
+            PerkView[] perks = progression.GetPerks();
+
+            var passives = new List<PerkView>();
+            var auths = new List<PerkView>();
+            for (int i = 0; i < perks.Length; i++)
+            {
+                bool isAuth = perks[i].Group != null &&
+                              perks[i].Group.IndexOf("AUTHORIS", StringComparison.OrdinalIgnoreCase) >= 0;
+                (isAuth ? auths : passives).Add(perks[i]);
+            }
+
+            AvNode page = AvBox.Column("perks").Gaps(0f)
+                .Add(Section("passive", Descriptions(passives)))
+                .Add(Section("auth", Descriptions(auths)))
+                .Add(AvBox.Filler());
+            page.Arrange(body);
+
+            AvStyled.Spine(parent, new Rect(body.x, body.y, 3f, body.height));
+
+            BuildPerkSection(parent, page.Find("passive"), page.At("passive"),
+                             "PASSIVE SYSTEMS", passives, band: false);
+            BuildPerkSection(parent, page.Find("auth"), page.At("auth"),
+                             "STRIKE AUTHORISATIONS", auths, band: true);
         }
 
-        private void AddPerkCard(
-            RectTransform parent, PerkView view, float x, float y, float w, float h)
+        private void BuildPerkSection(
+            RectTransform parent, AvNode node, Rect area, string title,
+            List<PerkView> perks, bool band)
         {
-            bool isAuth = view.Group != null && view.Group.IndexOf("AUTHORIS", StringComparison.OrdinalIgnoreCase) >= 0;
+            if (perks.Count == 0) return;
 
-            Color groupRail = isAuth ? AvTheme.RailInfo : AvTheme.RailReady;
-            var (cardFill, rail) = AvKit.TacticalCard(parent, new Rect(x, y, w, h), AvTheme.RailInert);
-            RectTransform rect = cardFill.rectTransform;
+            DrawSectionHeader(parent, node, area, title, perks.Count.ToString(), band);
 
-            // Category glyph block on the left
-            TMP_Text glyph = AvKit.Label(rect, PerkGlyph(isAuth),
-                new Rect(AvTokens.Space2, -2f, 20f, 36f),
-                groupRail, AvTokens.FontSmall, FontStyles.Bold, TextAlignmentOptions.MidlineRight);
+            for (int i = 0; i < perks.Count; i++)
+                AddPerkRow(parent, node.Find("r" + i), perks[i], PerkCode(band));
+        }
 
-            float textX = AvTokens.Space2 + 24f;
+        private void AddPerkRow(RectTransform parent, AvNode row, PerkView view, string code)
+        {
+            Rect area = row.Rect.ToUnity();
+            var perk = new PerkRow { Id = view.Id };
 
-            // Title line
-            TMP_Text nameLabel = AvKit.Label(rect, view.Name.ToUpperInvariant(),
-                new Rect(textX, -2f, w - textX - 74f, 18f),
-                AvTheme.TextPrimary, AvTokens.FontSmall, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
+            perk.Background = AvKit.Panel(parent, area, Color.clear);
+            RowSeparator(parent, area);
 
-            TMP_Text badge = AvKit.Label(rect, string.Empty,
-                new Rect(w - 70f, -2f, 66f, 18f),
-                AvTheme.Accent, AvTokens.FontMicro, FontStyles.Bold, TextAlignmentOptions.MidlineRight);
-
-            // Subtitle / synopsis
-            TMP_Text sub = AvKit.Label(rect, view.Description,
-                new Rect(textX, -20f, w - textX - AvTokens.Space3, 16f),
-                AvTheme.Dim, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
+            perk.Rail = AvStyled.Rail(parent, row.At("rail"), "locked");
+            perk.Code = AvStyled.Label(parent, row.At("code"), code, "row-sub",
+                                       align: TextAlignmentOptions.MidlineLeft);
+            perk.Name = AvStyled.Label(parent, row.At("text.name"),
+                                       view.Name.ToUpperInvariant(), "row-name");
+            AvStyled.Label(parent, row.At("text.desc"), view.Description, "row-sub");
+            perk.Badge = AvStyled.Label(parent, row.At("trail"), "", "badge",
+                                        align: TextAlignmentOptions.MidlineRight);
 
             byte id = view.Id;
-            AvButton button = AvKit.HitButton(rect, new Rect(0f, 0f, w, h), () =>
+            perk.Button = AvKit.HitButton(parent, area, () =>
             {
-                AvInput.Deselect(cardFill.gameObject);
+                AvInput.Deselect(perk.Background.gameObject);
                 progression.RequestUnlock(id);
                 nextRefresh = 0f;
             });
-            button.SetRowHighlight(cardFill, AvTheme.Surface,
-                AvTheme.Unity(AvTokens.Wash(AvTheme.Accent.ToRgba(), AvTokens.RowHoverScale, AvTokens.RowHoverAlpha)));
+            perk.Button.SetRowHighlight(perk.Background, Color.clear, HoverFill());
+            perk.Button.WithTooltip(
+                view.Name.ToUpperInvariant() + " — costs " + view.Cost +
+                (view.Cost == 1 ? " point" : " points") + ". " + view.Description +
+                " One point per " + Math.Max(1, progression.ScorePerPoint) + " mission score.");
 
-            string tooltip = "[PERK] " + view.Name.ToUpperInvariant() + " · COST: " + view.Cost +
-                (view.Cost == 1 ? " POINT" : " POINTS") + "\n" + view.Description +
-                "\nUnlocks via mission score points (1 pt per 500 score).";
-            button.WithTooltip(tooltip);
-
-            perkCards.Add(new PerkCard
-            {
-                Id = id,
-                Root = cardFill.gameObject,
-                Button = button,
-                Rail = rail,
-                Background = cardFill,
-                Name = nameLabel,
-                Badge = badge,
-                Subtitle = sub
-            });
+            perkRows.Add(perk);
         }
 
-        // ---- Support Page ----------------------------------------------------------------
+        private static List<string> Descriptions(List<PerkView> perks)
+        {
+            var text = new List<string>(perks.Count);
+            for (int i = 0; i < perks.Count; i++) text.Add(perks[i].Description);
+            return text;
+        }
 
-        private static string ActionGlyph(SupportActionId id)
+        private static Color HoverFill() =>
+            AvStyleHost.Resolve(AvStyleHost.Style("row", "hover").Background, AvTheme.SurfaceRaised);
+
+        // ---- Support page ----------------------------------------------------------------
+
+        /// <summary>What an action is, as a code. Never its state.</summary>
+        private static string ActionCode(SupportActionId id)
         {
             switch (id)
             {
-                case SupportActionId.Artillery: return "[ARTY]";
-                case SupportActionId.Fortify: return "[BASE]";
-                case SupportActionId.Recon: return "[RECON]";
-                case SupportActionId.Emp: return "[EMP]";
-                case SupportActionId.Firebreak: return "[FIRE]";
-                case SupportActionId.SmokeMarker: return "[SMOKE]";
-                default: return "[OPS]";
+                case SupportActionId.Artillery: return "ART";
+                case SupportActionId.Fortify: return "FTF";
+                case SupportActionId.Recon: return "SAT";
+                case SupportActionId.Emp: return "EMP";
+                case SupportActionId.Firebreak: return "FIR";
+                case SupportActionId.SmokeMarker: return "SMK";
+                default: return "OPS";
             }
         }
 
-        private void BuildSupportPage(RectTransform parent, float inner, float startY)
+        private void BuildSupportPage(RectTransform parent, Rect body)
         {
-            float y = startY;
-
-            // Status Ribbon: Allocation Budget & Designated Strike Target.
-            const float ribbonH = 64f;
-            AvKit.Panel(parent, new Rect(Pad, y, inner, ribbonH), AvTheme.SurfaceInert, AvSprites.Card);
-            AvKit.Outline(parent, new Rect(Pad, y, inner, ribbonH), AvTheme.Hairline);
-            AvKit.CornerTicks(parent, new Rect(Pad, y, inner, ribbonH), AvTheme.Hairline);
-
-            // Allocation section
-            AvKit.Label(parent, "ALLOCATION BUDGET", new Rect(Pad + AvTokens.Space2, y - 2f, 160f, 14f),
-                        AvTheme.Dim, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
-
-            allocationLabel = AvKit.Label(parent, "0 ALLOC", new Rect(Pad + AvTokens.Space2, y - 16f, 170f, 18f),
-                                          AvTheme.Accent, AvTokens.FontLead, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
-
-            // Target section
-            AvKit.Label(parent, "DESIGNATED STRIKE TARGET", new Rect(Pad + 188f, y - 2f, inner - 196f, 14f),
-                        AvTheme.Dim, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
-
-            targetLabel = AvKit.Label(parent, "NO TARGET — DESIGNATE GRID ON MAXIMISED MAP",
-                                      new Rect(Pad + 188f, y - 16f, inner - 196f, 18f),
-                                      AvTheme.Friendly, AvTokens.FontMicro, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
-
-            // Bottom: cooldown readiness bar with caption
-            float barX = Pad + AvTokens.Space2;
-            float barW = inner - AvTokens.Space2 * 2f;
-            cooldownCaptionLabel = AvKit.Label(parent, "SUPPORT NET READY",
-                                               new Rect(barX, y - ribbonH + 5f, 150f, 10f),
-                                               AvTheme.RailReady, AvTokens.FontMicro, FontStyles.Bold,
-                                               TextAlignmentOptions.MidlineLeft);
-            AvKit.Label(parent, "REQUEST COOLDOWN",
-                        new Rect(barX + 158f, y - ribbonH + 5f, barW - 174f, 10f),
-                        AvTheme.Dim, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineRight);
-
-            cooldownBarFill = AvKit.ProgressBar(parent, new Rect(barX, y - ribbonH + 2f, barW, 6f), 1f, AvTheme.RailReady);
-
-            y -= ribbonH + AvTokens.Space2;
-
-            // Dual Column Grid (3 rows × 2 cols = 6 cards)
-            float colWidth = (inner - Gap) * 0.5f;
-            const float cardH = 88f;
-            const float pitch = cardH + 6f;
-
             IReadOnlyList<SupportActionDefinition> actions = support.Actions;
-            for (int i = 0; i < actions.Count; i++)
-            {
-                int col = i % 2;
-                int row = i / 2;
-                float bx = Pad + col * (colWidth + Gap);
-                float by = y - row * pitch;
 
-                AddSupportCard(parent, actions[i], bx, by, colWidth, cardH);
-            }
+            var descriptions = new List<string>();
+            for (int i = 0; i < actions.Count; i++) descriptions.Add(actions[i].Description);
+
+            AvNode page = AvBox.Column("support").Gaps(0f)
+                .Add(Section("strikes", descriptions))
+                .Add(AvBox.Filler());
+            page.Arrange(body);
+
+            AvStyled.Spine(parent, new Rect(body.x, body.y, 3f, body.height));
+
+            AvNode section = page.Find("strikes");
+            DrawSectionHeader(parent, section, page.At("strikes"),
+                              "TACTICAL SUPPORT", "RIGHT-CLICK MAP TO DESIGNATE", band: false);
+
+            for (int i = 0; i < actions.Count; i++)
+                AddStrikeRow(parent, section.Find("r" + i), actions[i]);
         }
 
-        private void AddSupportCard(
-            RectTransform parent, SupportActionDefinition definition,
-            float x, float y, float w, float h)
+        private void AddStrikeRow(RectTransform parent, AvNode row, SupportActionDefinition definition)
         {
-            var (cardFill, rail) = AvKit.TacticalCard(parent, new Rect(x, y, w, h), AvTheme.RailInert);
-            RectTransform rect = cardFill.rectTransform;
+            Rect area = row.Rect.ToUnity();
+            var strike = new StrikeRow { Definition = definition };
 
-            // Title line: action type glyph + name
-            string titleText = ActionGlyph(definition.Id) + " " + definition.Name;
-            TMP_Text nameLabel = AvKit.Label(rect, titleText,
-                new Rect(AvTokens.Space2, -3f, w - 84f, 18f),
-                AvTheme.TextPrimary, AvTokens.FontSmall, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
+            strike.Background = AvKit.Panel(parent, area, Color.clear);
+            RowSeparator(parent, area);
 
-            // Cost chip: coloured by affordability, right-aligned
-            TMP_Text costChip = AvKit.Label(rect, string.Empty,
-                new Rect(w - 80f, -4f, 74f, 16f),
-                AvTheme.Accent, AvTokens.FontMicro, FontStyles.Bold, TextAlignmentOptions.MidlineRight);
+            strike.Rail = AvStyled.Rail(parent, row.At("rail"), "locked");
+            strike.Code = AvStyled.Label(parent, row.At("code"), ActionCode(definition.Id), "row-sub",
+                                         align: TextAlignmentOptions.MidlineLeft);
+            strike.Name = AvStyled.Label(parent, row.At("text.name"),
+                                         definition.Name.ToUpperInvariant(), "row-name");
+            strike.Status = AvStyled.Label(parent, row.At("text.desc"), definition.Description, "row-sub");
 
-            // Required Authorisation Status
-            TMP_Text authStatus = AvKit.Label(rect, string.Empty,
-                new Rect(AvTokens.Space2, -22f, w - AvTokens.Space3, 14f),
-                AvTheme.Dim, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
-
-            // Description (word wrapping enabled, 2-line flow)
-            TMP_Text desc = AvKit.Label(rect, definition.Description,
-                new Rect(AvTokens.Space2, -37f, w - AvTokens.Space3, 30f),
-                AvTheme.Dim, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft, wrap: true);
-
-            // Status readout
-            TMP_Text stateLabel = AvKit.Label(rect, string.Empty,
-                new Rect(AvTokens.Space2, -70f, w - 94f, 18f),
-                AvTheme.Friendly, AvTokens.FontMicro, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
+            Rect trail = row.At("trail");
+            strike.Cost = AvStyled.Label(parent, new Rect(trail.x, trail.y, trail.width, 15f),
+                                         "", "row-value", align: TextAlignmentOptions.MidlineRight);
 
             SupportActionId id = definition.Id;
-            AvButton request = AvKit.Button(rect, "REQUEST",
-                new Rect(w - 88f, -69f, 84f, 20f),
+            strike.Action = AvStyled.Button(parent,
+                new Rect(trail.x + 10f, trail.y - 19f, trail.width - 10f, 22f),
+                "CALL IN", "btn",
                 () => { support.Request(id); nextRefresh = 0f; },
-                AvTokens.FontMicro, AvButtonStyle.Primary);
+                AvButtonStyle.Primary);
 
-            string tooltip = "[SUPPORT] " + definition.Name + " · " +
-                support.Cost(definition).ToString("0") + " ALLOC\n" + definition.Description +
-                "\nAuthorised by '" + progression.PerkNameFor(definition.Capability) + "' perk.";
-            request.WithTooltip(tooltip);
+            strike.Action.WithTooltip(
+                definition.Name.ToUpperInvariant() + " — " +
+                support.Cost(definition).ToString("0") + " alloc. " + definition.Description +
+                " Authorised by the '" + progression.PerkNameFor(definition.Capability) + "' perk.");
 
-            supportCards.Add(new SupportCard
-            {
-                Definition = definition,
-                Root = cardFill.gameObject,
-                RequestButton = request,
-                Rail = rail,
-                Background = cardFill,
-                Name = nameLabel,
-                CostChip = costChip,
-                AuthStatus = authStatus,
-                Description = desc,
-                StateLabel = stateLabel,
-            });
+            strikeRows.Add(strike);
         }
 
-        private void UpdateTelemetry()
-        {
-            if (telemetryLabel == null) return;
-            string hovered = AvButton.HoveredTooltip;
-            if (!string.IsNullOrEmpty(hovered))
-            {
-                telemetryLabel.text = "> " + hovered;
-                telemetryLabel.color = AvTheme.Friendly;
-                return;
-            }
-            if (!string.IsNullOrEmpty(activeHoverTooltip))
-            {
-                telemetryLabel.text = "> " + activeHoverTooltip;
-                telemetryLabel.color = AvTheme.Friendly;
-                return;
-            }
-            string fireTelemetry = support != null ? support.FireTelemetry : string.Empty;
-            string baseTelemetry = (progression != null ? progression.Status : "") + " · " +
-                                   (support != null ? support.Status : "");
-            telemetryLabel.text = "> " + (string.IsNullOrEmpty(fireTelemetry)
-                ? baseTelemetry
-                : baseTelemetry + " · " + fireTelemetry);
-            telemetryLabel.color = AvTheme.Dim;
-        }
-
-        // ---- State Refresh ---------------------------------------------------------------
+        // ---- State refresh ---------------------------------------------------------------
 
         private void Refresh()
         {
-            if (scoreLabel == null) return;
+            if (allocMetric == null) return;
 
-            // 1. Refresh Perks HUD
-            int score = progression.Score;
-            int rank = progression.Rank;
-            int avail = progression.AvailablePoints;
-            int earned = progression.EarnedPoints;
-
-            // Debug/BypassRequirements grants every perk free and authorises every action, so
-            // the board would otherwise be indistinguishable from a broken one: the point
-            // count never moves and every card reads as takeable. Say which mode is on.
             bool bypass = support.BypassRequirements;
-            scoreLabel.text = bypass ? "DEBUG BYPASS ACTIVE" : "SCORE " + score.ToString("N0");
-            scoreLabel.color = bypass ? AvTheme.Warning : AvTheme.Friendly;
-            // The ceiling is configurable, so the readout reads it rather than assuming the
-            // shipped default — a server running MaximumPoints=10 used to show "6 OF 6" while
-            // the pilot still had points to spend.
-            int ceiling = Mathf.Max(1, progression.MaximumPoints);
-            rankSubLabel.text = bypass
-                ? "PERK COSTS AND AUTHORISATIONS IGNORED"
-                : "RANK " + rank + "  ·  " + Math.Min(ceiling, earned) + " OF " + ceiling + " EARNED";
-            pointsChipLabel.text = bypass
-                ? "FREE"
-                : avail + (avail == 1 ? " PT AVAILABLE" : " PTS AVAILABLE");
 
-            // Real pip meter
-            if (pipMeterArea != null)
-            {
-                for (int c = pipMeterArea.childCount - 1; c >= 0; c--)
-                    UnityEngine.Object.Destroy(pipMeterArea.GetChild(c).gameObject);
-                AvKit.PipMeter(pipMeterArea, new Rect(0f, 0f, 140f, 8f), avail, Math.Min(ceiling, 10), AvTheme.RailReady, AvTheme.Disabled);
-            }
+            RefreshDataBar(bypass);
+            RefreshMetrics(bypass);
+            RefreshPerkRows();
+            RefreshStrikeRows(bypass);
 
-            // Score → next point progress bar. Shows fractional progress within the current
-            // point so the pilot sees how close the next perk point is without doing the
-            // division themselves.
-            if (scoreBarFill != null && progressCaptionLabel != null)
-            {
-                int perPoint = Math.Max(1, progression.ScorePerPoint);
-                int intoPoint = score % perPoint;
-                scoreBarFill.fillAmount = Mathf.Clamp01(intoPoint / (float)perPoint);
-                scoreBarFill.color = bypass ? AvTheme.Warning : AvTheme.RailReady;
-                progressCaptionLabel.text = bypass ? "—" : (perPoint - intoPoint) + " SCORE TO NEXT PT";
-                progressCaptionLabel.color = bypass ? AvTheme.Warning : AvTheme.TextPrimary;
-            }
+            if (theaterPage != null && theaterPage.activeSelf) theater?.RefreshView();
 
-            // Refresh individual Perk Cards
-            PerkView[] perks = progression.GetPerks();
-            for (int i = 0; i < perkCards.Count; i++)
-            {
-                PerkCard card = perkCards[i];
-                if (!TryFind(perks, card.Id, out PerkView view)) continue;
+            UpdateStatusStrip();
+        }
 
-                card.Button.SetEnabled(view.Affordable && !view.Unlocked);
-
-                if (view.Unlocked)
-                {
-                    card.Background.color = AvTheme.SurfaceRaised;
-                    card.Rail.color = AvTheme.RailReady;
-                    card.Name.color = AvTheme.TextPrimary;
-                    card.Badge.text = "ACTIVE ✓";
-                    card.Badge.color = AvTheme.RailReady;
-                }
-                else if (view.Affordable)
-                {
-                    card.Background.color = AvTheme.Surface;
-                    card.Rail.color = AvTheme.RailCaution;
-                    card.Name.color = AvTheme.Friendly;
-                    card.Badge.text = "UNLOCK " + view.Cost + "P";
-                    card.Badge.color = AvTheme.RailCaution;
-                }
-                else
-                {
-                    card.Background.color = AvTheme.SurfaceInert;
-                    card.Rail.color = AvTheme.RailInert;
-                    card.Name.color = AvTheme.Dim;
-                    card.Badge.text = view.Cost + "P REQ";
-                    card.Badge.color = AvTheme.Dim;
-                }
-            }
-
-            // 2. Refresh Support HUD
-            float allocation = support.LocalAllocation;
+        private void RefreshDataBar(bool bypass)
+        {
             bool wingPresent = !string.IsNullOrEmpty(PresenceBoard.GetString(PresenceBoard.WingGuid));
-            allocationLabel.text = allocation.ToString("N0") + " ALLOC" +
-                (wingPresent ? "  ·  SHARED WITH WING COMMAND" : "");
+            bool hud = ThirdPersonHudController.Instance != null &&
+                       ThirdPersonHudController.Instance.IsEnabled;
+            bool underAttack = baseAlarm != null && baseAlarm.IsBaseUnderAttack;
 
-            if (support.ArmedAction.HasValue)
+            if (underAttack)
             {
-                SupportActionDefinition armedDef = null;
-                for (int i = 0; i < supportCards.Count; i++)
-                {
-                    if (supportCards[i].Definition.Id == support.ArmedAction.Value)
-                    {
-                        armedDef = supportCards[i].Definition;
-                        break;
-                    }
-                }
-                string name = armedDef != null ? armedDef.Name : "SUPPORT";
-                targetLabel.text = "ARMED: " + name + "  [RIGHT-CLICK MAP TO CALL IN · ESC TO CANCEL]";
-                targetLabel.color = AvTheme.RailCaution;
+                dataBar.State.text = "BASE UNDER ATTACK";
+                dataBar.State.color = AvTheme.Alert;
+            }
+            else if (bypass)
+            {
+                dataBar.State.text = "DEBUG BYPASS — COSTS IGNORED";
+                dataBar.State.color = AvTheme.Warning;
             }
             else
             {
-                targetLabel.text = support.DisableCooldowns
-                    ? "NO COOLDOWNS · SELECT OPTION, RIGHT-CLICK MAP"
-                    : "SELECT SUPPORT OPTION BELOW, THEN RIGHT-CLICK ON MAP";
-                targetLabel.color = support.DisableCooldowns ? AvTheme.RailCaution : AvTheme.Friendly;
+                dataBar.State.text = "THEATER LOGISTICS";
+                dataBar.State.color = AvTheme.Dim;
             }
 
-            // Cooldown readiness bar: fills toward ready as the shared request cooldown drains.
-            float netCooldown = support.LocalCooldownRemaining;
-            float netTotal = support.LocalCooldownTotal;
-            if (cooldownBarFill != null && cooldownCaptionLabel != null)
-            {
-                if (netCooldown > 0.5f && netTotal > 0f)
-                {
-                    cooldownBarFill.fillAmount = Mathf.Clamp01(1f - netCooldown / netTotal);
-                    cooldownBarFill.color = AvTheme.RailCaution;
-                    cooldownCaptionLabel.text = "NET RECHARGING · T-" + Mathf.CeilToInt(netCooldown) + "s";
-                    cooldownCaptionLabel.color = AvTheme.RailCaution;
-                }
-                else
-                {
-                    cooldownBarFill.fillAmount = 1f;
-                    cooldownBarFill.color = support.DisableCooldowns ? AvTheme.RailInfo : AvTheme.RailReady;
-                    cooldownCaptionLabel.text = support.DisableCooldowns ? "NO COOLDOWN LIMIT" : "SUPPORT NET READY";
-                    cooldownCaptionLabel.color = support.DisableCooldowns ? AvTheme.RailInfo : AvTheme.RailReady;
-                }
-            }
+            dataBar.SetChip(0, "LOGISTICS", true);
+            dataBar.SetChip(1, wingPresent ? "WING LINK" : "NO WING", wingPresent);
+            dataBar.SetChip(2, hud ? "3RD HUD" : "HUD OFF", hud);
+        }
 
-            // Refresh Support Action Cards
+        private void RefreshMetrics(bool bypass)
+        {
+            float allocation = support.LocalAllocation;
             float cooldown = support.LocalCooldownRemaining;
-            for (int i = 0; i < supportCards.Count; i++)
+            float cooldownTotal = support.LocalCooldownTotal;
+            bool wingPresent = !string.IsNullOrEmpty(PresenceBoard.GetString(PresenceBoard.WingGuid));
+
+            string allocCaption;
+            float allocFraction;
+            Color allocFill;
+
+            if (cooldown > 0.5f && cooldownTotal > 0f)
             {
-                SupportCard card = supportCards[i];
-                float cost = support.Cost(card.Definition);
-                card.CostChip.text = cost > 0f ? cost.ToString("N0") + " ALLOC" : "N/A";
+                allocCaption = "NET RECHARGING · T-" + Mathf.CeilToInt(cooldown) + "s";
+                allocFraction = 1f - cooldown / cooldownTotal;
+                allocFill = AvTheme.RailCaution;
+            }
+            else if (support.DisableCooldowns)
+            {
+                allocCaption = "NO COOLDOWN LIMIT";
+                allocFraction = 1f;
+                allocFill = AvTheme.RailInfo;
+            }
+            else
+            {
+                allocCaption = wingPresent ? "SHARED WITH WING COMMAND" : "SUPPORT NET READY";
+                allocFraction = 1f;
+                allocFill = AvTheme.RailReady;
+            }
 
-                bool isAuth = support.IsAuthorised(card.Definition);
-                if (isAuth)
-                {
-                    card.AuthStatus.text = "AUTH: " + progression.PerkNameFor(card.Definition.Capability).ToUpperInvariant() + " ✓";
-                    card.AuthStatus.color = AvTheme.RailReady;
-                }
+            allocMetric.Set(allocation.ToString("N0"), allocCaption, allocFraction, allocFill);
+
+            int score = progression.Score;
+            int perPoint = Math.Max(1, progression.ScorePerPoint);
+            int intoPoint = score % perPoint;
+            int ceiling = Mathf.Max(1, progression.MaximumPoints);
+            int avail = progression.AvailablePoints;
+
+            scoreMetric.Set(
+                bypass ? "FREE" : score.ToString("N0"),
+                bypass
+                    ? "ALL PERKS UNLOCKED"
+                    : avail + (avail == 1 ? " PT · " : " PTS · ") + (perPoint - intoPoint) + " TO NEXT",
+                bypass ? 1f : intoPoint / (float)perPoint,
+                bypass ? AvTheme.Warning : AvTheme.RailReady);
+
+            scoreMetric.Unit.text = bypass
+                ? "BYPASS"
+                : "PTS · RANK " + progression.Rank + "/" + ceiling;
+        }
+
+        private void RefreshPerkRows()
+        {
+            PerkView[] perks = progression.GetPerks();
+
+            for (int i = 0; i < perkRows.Count; i++)
+            {
+                PerkRow row = perkRows[i];
+                if (!TryFind(perks, row.Id, out PerkView view)) continue;
+
+                row.Button.SetEnabled(view.Affordable && !view.Unlocked);
+
+                if (view.Unlocked)
+                    PaintPerk(row, "ready", AvTheme.TextPrimary, "ACTIVE", AvTheme.RailReady);
+                else if (view.Affordable)
+                    PaintPerk(row, "armed", AvTheme.TextPrimary, "UNLOCK " + view.Cost + "P", AvTheme.RailCaution);
                 else
-                {
-                    card.AuthStatus.text = "LOCKED: REQ '" + progression.PerkNameFor(card.Definition.Capability).ToUpperInvariant() + "'";
-                    card.AuthStatus.color = AvTheme.Warning;
-                }
+                    PaintPerk(row, "locked", AvTheme.Dim, view.Cost + "P REQ", AvTheme.Dim);
+            }
+        }
 
-                bool isArmed = support.ArmedAction.HasValue && support.ArmedAction.Value == card.Definition.Id;
+        private static void PaintPerk(PerkRow row, string railState, Color name, string badge, Color badgeColor)
+        {
+            Color rail = RailColour(railState);
+            row.Rail.color = rail;
+            row.Code.color = rail;
+            row.Name.color = name;
+            row.Badge.text = badge;
+            row.Badge.color = badgeColor;
+        }
 
-                if (!card.Definition.Enabled)
+        private static Color RailColour(string state) =>
+            AvStyleHost.Resolve(AvStyleHost.Style("rail " + state).Background, AvTheme.RailInert);
+
+        private void RefreshStrikeRows(bool bypass)
+        {
+            float allocation = support.LocalAllocation;
+            float cooldown = support.LocalCooldownRemaining;
+
+            for (int i = 0; i < strikeRows.Count; i++)
+            {
+                StrikeRow row = strikeRows[i];
+                float cost = support.Cost(row.Definition);
+                bool isAuth = support.IsAuthorised(row.Definition);
+                bool isArmed = support.ArmedAction.HasValue &&
+                               support.ArmedAction.Value == row.Definition.Id;
+
+                row.Cost.text = cost > 0f ? cost.ToString("N0") : "—";
+
+                if (!row.Definition.Enabled)
                 {
-                    SetActionState(card, "SERVER DISABLED", "OFF", AvTheme.RailInert, false);
+                    SetRowState(row, "locked", "SERVER DISABLED", AvTheme.Dim, "OFF", false, false);
                 }
                 else if (cost <= 0f)
                 {
-                    SetActionState(card, "UNAVAILABLE ON MAP", "N/A", AvTheme.RailInert, false);
+                    SetRowState(row, "locked", "UNAVAILABLE ON THIS MAP", AvTheme.Dim, "N/A", false, false);
                 }
                 else if (!isAuth)
                 {
-                    SetActionState(card, "AUTHORISATION REQ", "LOCKED", AvTheme.RailCaution, false);
+                    SetRowState(row, "locked",
+                        "LOCKED · REQUIRES '" +
+                        progression.PerkNameFor(row.Definition.Capability).ToUpperInvariant() + "'",
+                        AvTheme.Warning, "LOCKED", false, false);
                 }
                 else if (cooldown > 0.5f)
                 {
-                    SetActionState(card, "NET COOLING DOWN", "WAIT " + Mathf.CeilToInt(cooldown) + "s", AvTheme.RailCaution, false);
+                    SetRowState(row, "cooling", "NET COOLING DOWN", AvTheme.RailCaution,
+                        "WAIT " + Mathf.CeilToInt(cooldown) + "s", false, false);
                 }
-                else if (!support.BypassRequirements && allocation + 0.001f < cost)
+                else if (!bypass && allocation + 0.001f < cost)
                 {
-                    SetActionState(card, "INSUFFICIENT ALLOC", "NO ALLOC", AvTheme.RailDanger, false);
+                    SetRowState(row, "danger", "INSUFFICIENT ALLOCATION", AvTheme.RailDanger,
+                        "NO ALLOC", false, false);
                 }
                 else if (isArmed)
                 {
-                    SetActionState(card, "ARMED · RIGHT-CLICK MAP", "ARMED", AvTheme.RailCaution, true, isArmed: true);
+                    SetRowState(row, "armed", "ARMED · RIGHT-CLICK THE MAP TO DESIGNATE",
+                        AvTheme.RailCaution, "ABORT", true, true);
                 }
                 else
                 {
-                    SetActionState(card, "CLEARED TO CALL IN", "CALL IN", AvTheme.RailReady, true);
+                    SetRowState(row, "ready",
+                        "AUTH: " + progression.PerkNameFor(row.Definition.Capability).ToUpperInvariant() +
+                        " · CLEARED",
+                        AvTheme.RailReady, "CALL IN", true, false);
                 }
 
-                // Cost chip colour tracks affordability, independent of rail state.
-                if (!card.Definition.Enabled || cost <= 0f)
-                {
-                    card.CostChip.color = AvTheme.RailInert;
-                }
-                else if (!isAuth)
-                {
-                    card.CostChip.color = AvTheme.Warning;
-                }
-                else if (!support.BypassRequirements && allocation + 0.001f < cost)
-                {
-                    card.CostChip.color = AvTheme.RailDanger;
-                }
-                else if (isArmed)
-                {
-                    card.CostChip.color = AvTheme.RailCaution;
-                }
-                else
-                {
-                    card.CostChip.color = AvTheme.RailReady;
-                }
+                row.Cost.color = row.Status.color;
             }
-
-            if (theaterPage != null && theaterPage.activeSelf)
-                theater?.RefreshView();
-
-            UpdateTelemetry();
         }
 
-        private static void SetActionState(
-            SupportCard card, string state, string button, Color railColor, bool ready, bool isArmed = false)
+        private static void SetRowState(
+            StrikeRow row, string railState, string status, Color statusColor,
+            string button, bool ready, bool armed)
         {
-            card.Rail.color = railColor;
-            card.StateLabel.text = state;
-            card.StateLabel.color = isArmed
-                ? AvTheme.RailCaution
-                : (ready ? AvTheme.RailReady : AvTheme.Warning);
-            card.RequestButton.SetText(button);
-            card.RequestButton.SetEnabled(ready || isArmed);
-            card.RequestButton.SetLatched(isArmed);
+            Color rail = RailColour(railState);
+            row.Rail.color = rail;
+            row.Code.color = rail;
+
+            row.Status.text = status;
+            row.Status.color = statusColor;
+
+            row.Action.SetText(button);
+            row.Action.SetEnabled(ready || armed);
+            row.Action.SetLatched(armed);
+        }
+
+        /// <summary>
+        /// The strip's priority order: a base under attack outranks everything, then the
+        /// hovered control's explanation, then the armed prompt, then idle telemetry.
+        /// </summary>
+        private void UpdateStatusStrip()
+        {
+            if (statusText == null) return;
+
+            string alert = baseAlarm != null ? baseAlarm.ActiveAlertTicker : string.Empty;
+            if (!string.IsNullOrEmpty(alert))
+            {
+                statusText.text = "> " + alert;
+                statusText.color = AvTheme.Alert;
+                return;
+            }
+
+            string hovered = AvButton.HoveredTooltip;
+            if (!string.IsNullOrEmpty(hovered))
+            {
+                statusText.text = "> " + hovered;
+                statusText.color = AvTheme.Friendly;
+                return;
+            }
+
+            if (!string.IsNullOrEmpty(activeHoverTooltip))
+            {
+                statusText.text = "> " + activeHoverTooltip;
+                statusText.color = AvTheme.Friendly;
+                return;
+            }
+
+            string fire = support != null ? support.FireTelemetry : string.Empty;
+            string baseLine = (progression != null ? progression.Status : "") + " · " +
+                              (support != null ? support.Status : "");
+
+            statusText.text = "> " + (string.IsNullOrEmpty(fire) ? baseLine : baseLine + " · " + fire);
+            statusText.color = AvTheme.Dim;
         }
 
         private static bool TryFind(PerkView[] perks, byte id, out PerkView view)
@@ -861,43 +814,24 @@ namespace BoscaliSummer.Features.Support.Presentation
             return false;
         }
 
-        // ---- Tabs & Navigation -----------------------------------------------------------
+        // ---- Tabs & navigation -----------------------------------------------------------
 
-        private void ShowPerks()
+        private void ShowPerks() => SetPage(0);
+        private void ShowSupport() => SetPage(1);
+        private void ShowTheater() => SetPage(2);
+
+        private void SetPage(int index)
         {
-            perksPage?.SetActive(true);
-            supportPage?.SetActive(false);
-            theaterPage?.SetActive(false);
-            SetTabHighlight(0);
+            perksPage?.SetActive(index == 0);
+            supportPage?.SetActive(index == 1);
+            theaterPage?.SetActive(index == 2);
+
+            perksTab?.SetLatched(index == 0);
+            supportTab?.SetLatched(index == 1);
+            theaterTab?.SetLatched(index == 2);
+
             activeHoverTooltip = null;
             nextRefresh = 0f;
-        }
-
-        private void ShowSupport()
-        {
-            perksPage?.SetActive(false);
-            supportPage?.SetActive(true);
-            theaterPage?.SetActive(false);
-            SetTabHighlight(1);
-            activeHoverTooltip = null;
-            nextRefresh = 0f;
-        }
-
-        private void ShowTheater()
-        {
-            perksPage?.SetActive(false);
-            supportPage?.SetActive(false);
-            theaterPage?.SetActive(true);
-            SetTabHighlight(2);
-            activeHoverTooltip = null;
-            nextRefresh = 0f;
-        }
-
-        private void SetTabHighlight(int active)
-        {
-            perksTab?.SetLatched(active == 0);
-            supportTab?.SetLatched(active == 1);
-            theaterTab?.SetLatched(active == 2);
         }
 
         private static GameObject CreatePage(RectTransform parent, string name)

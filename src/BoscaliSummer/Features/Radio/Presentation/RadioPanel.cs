@@ -56,6 +56,7 @@ namespace BoscaliSummer.Features.Radio.Presentation
         private static TMP_Text pageLabel;
         private static AvButton pagePreviousButton;
         private static AvButton pageNextButton;
+        private static AvStyled.DataBar dataBar;
         private static TMP_Text statusLabel;
         private static TMP_Text channelsEmptyLabel;
         private static Image progressFill;
@@ -130,7 +131,8 @@ namespace BoscaliSummer.Features.Radio.Presentation
         {
             try
             {
-                VirtualMFD mfd = UnityEngine.Object.FindObjectOfType<VirtualMFD>();
+                VirtualMFD mfd = SceneSingleton<DynamicMap>.i?.maximizedMapCanvas?.GetComponentInChildren<VirtualMFD>(true)
+                    ?? UnityEngine.Object.FindObjectOfType<VirtualMFD>();
                 if (mfd == null) return;
 
                 if (!MfdBezel.TryClaim(BezelRegistry.Rad, preferLeft: false, mfd,
@@ -178,7 +180,10 @@ namespace BoscaliSummer.Features.Radio.Presentation
             rootRect.anchorMax = templateRect.anchorMax;
             rootRect.pivot = templateRect.pivot;
             rootRect.localScale = templateRect.localScale;
-            rootRect.anchoredPosition = templateRect.anchoredPosition;
+            // Position is deliberately not copied. VirtualMFD.showPos is Vector3.zero and
+            // MFDScreen.ShowScreen assigns it straight to localPosition, so a screen has no
+            // remembered home — it is placed by its parent and anchors, and an
+            // anchoredPosition written here is overwritten whenever the panel is opened.
             rootRect.sizeDelta = new Vector2(Width, PanelHeight);
 
             Image background = root.GetComponent<Image>();
@@ -192,35 +197,32 @@ namespace BoscaliSummer.Features.Radio.Presentation
             content.SetParent(rootRect, false);
             AvKit.Stretch(content);
 
+            // The hard data bar: a filled id tag, the live state, and three chips, in one
+            // 30px row. It replaces the centred title, the subtitle and the separate chip
+            // rail these panels used to stack, which cost about 24px of height and said
+            // nothing the id tag does not.
             float inner = Width - Pad * 2f;
-            float y = -Pad;
+            var bar = new Rect(Pad, -Pad, inner, AvTokens.TitleBarHeight + 2f);
+            dataBar = AvStyled.TopBar(content, bar, "RAD", 3);
 
-            // Header Banner (28px Title Bar)
-            TMP_Text title = AvKit.Label(content, "RADIO COMMS // AUDIO RECEIVER", new Rect(Pad, y, inner, AvTokens.TitleBarHeight),
-                                         AvTheme.Accent, AvTokens.FontTitle, FontStyles.Bold, TextAlignmentOptions.Center);
-            title.characterSpacing = 0.8f;
-            y -= AvTokens.TitleBarHeight + AvTokens.Space1;
+            float y = bar.y - bar.height - AvTokens.Space2;
 
-            // 18px Chip rail: SYS: AUDIO-NET, SIGNAL: HIGH, FREQ: VHF-COM
-            float chipW = (inner - Gap * 2f) / 3f;
-            AvKit.StatusChip(content, "SYS: AUDIO-NET", new Rect(Pad, y, chipW, AvTokens.ChipRailHeight),
-                             AvTheme.RailReady, AvTheme.TextPrimary, AvTokens.FontMicro);
-            AvKit.StatusChip(content, "SIGNAL: HIGH", new Rect(Pad + chipW + Gap, y, chipW, AvTokens.ChipRailHeight),
-                             AvTheme.RailInfo, AvTheme.TextPrimary, AvTokens.FontMicro);
-            AvKit.StatusChip(content, "FREQ: VHF-COM", new Rect(Pad + (chipW + Gap) * 2f, y, chipW, AvTokens.ChipRailHeight),
-                             AvTheme.RailReady, AvTheme.TextPrimary, AvTokens.FontMicro);
+            // The spine every section hangs off, in place of a frame around each one.
+            float bodyTop = y;
+            float bodyBottom = -(PanelHeight - Pad - AvTokens.StatusStripHeight - AvTokens.Space2);
+            AvStyled.Spine(content, new Rect(Pad, bodyTop, 3f, bodyTop - bodyBottom));
 
-            y -= AvTokens.ChipRailHeight + AvTokens.Space2;
-            AvKit.Rule(content, new Rect(Pad, y, inner, 1f), AvTheme.Hairline);
-            y -= AvTokens.Space2;
+            float spineInset = 14f;
+            float bodyX = Pad + spineInset;
+            float bodyW = Width - Pad - bodyX;
 
             // Now-playing card: station art on the left, the signal line, the track title,
             // and a progress bar. Its internals stay positioned against the card top.
             float cardTop = y;
-            var (cardFill, rail) = AvKit.TacticalCard(content, new Rect(Pad, cardTop, inner, CardHeight), AvTheme.RailReady);
+            var (cardFill, rail) = AvKit.TacticalCard(content, new Rect(bodyX, cardTop, bodyW, CardHeight), AvTheme.RailReady);
             stationIconGround = AvKit.Panel(content,
-                new Rect(Pad + AvTokens.Space2, cardTop - AvTokens.Space2, ArtSize, ArtSize), AvTheme.SurfaceInert, AvSprites.Card);
-            AvKit.Outline(content, new Rect(Pad + AvTokens.Space2, cardTop - AvTokens.Space2, ArtSize, ArtSize), AvTheme.Frame);
+                new Rect(bodyX + AvTokens.Space2, cardTop - AvTokens.Space2, ArtSize, ArtSize), AvTheme.SurfaceInert, AvSprites.Card);
+            AvKit.Outline(content, new Rect(bodyX + AvTokens.Space2, cardTop - AvTokens.Space2, ArtSize, ArtSize), AvTheme.Frame);
 
             stationIcon = AvKit.Panel(stationIconGround.rectTransform,
                 new Rect(AvTokens.Space1 + 1f, -(AvTokens.Space1 + 1f), ArtSize - AvTokens.Space2 - 2f, ArtSize - AvTokens.Space2 - 2f),
@@ -231,8 +233,8 @@ namespace BoscaliSummer.Features.Radio.Presentation
                 new Rect(0f, 0f, ArtSize, ArtSize),
                 Color.white, AvTokens.FontLead, FontStyles.Bold, TextAlignmentOptions.Center);
 
-            float infoX = Pad + AvTokens.Space2 + ArtSize + AvTokens.Space3;
-            float infoW = Width - Pad - infoX;
+            float infoX = bodyX + AvTokens.Space2 + ArtSize + AvTokens.Space3;
+            float infoW = bodyX + bodyW - infoX;
             channelLabel = AvKit.Label(content, "",
                 new Rect(infoX, cardTop - AvTokens.Space2, infoW, AvTokens.Space4),
                 AvTheme.Friendly, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
@@ -253,33 +255,37 @@ namespace BoscaliSummer.Features.Radio.Presentation
             // Transport
             const float skip = 90f;
             const float play = 140f;
-            float stop = inner - skip * 2f - play - Gap * 3f;
-            AvKit.Button(content, "PREV", new Rect(Pad, y, skip, ControlHeight),
+            float stop = bodyW - skip * 2f - play - Gap * 3f;
+            AvKit.Button(content, "PREV", new Rect(bodyX, y, skip, ControlHeight),
                 () => manager?.Previous(), AvTokens.FontSmall, AvButtonStyle.Default);
-            playButton = AvKit.Button(content, "PLAY", new Rect(Pad + skip + Gap, y, play, ControlHeight),
+            playButton = AvKit.Button(content, "PLAY", new Rect(bodyX + skip + Gap, y, play, ControlHeight),
                 () => manager?.TogglePlayback(), AvTokens.FontSmall, AvButtonStyle.Primary);
-            AvKit.Button(content, "NEXT", new Rect(Pad + skip + play + Gap * 2f, y, skip, ControlHeight),
+            AvKit.Button(content, "NEXT", new Rect(bodyX + skip + play + Gap * 2f, y, skip, ControlHeight),
                 () => manager?.Next(), AvTokens.FontSmall, AvButtonStyle.Default);
-            AvKit.Button(content, "STOP", new Rect(Pad + skip * 2f + play + Gap * 3f, y, stop, ControlHeight),
+            AvKit.Button(content, "STOP", new Rect(bodyX + skip * 2f + play + Gap * 3f, y, stop, ControlHeight),
                 () => manager?.Stop(), AvTokens.FontSmall, AvButtonStyle.Default);
             y -= ControlHeight + Gap;
 
-            float modeWidth = (inner - Gap * 3f) / 4f;
-            shuffleButton = AvKit.Button(content, "SHUFFLE", new Rect(Pad, y, modeWidth, RowHeight),
+            float modeWidth = (bodyW - Gap * 3f) / 4f;
+            shuffleButton = AvKit.Button(content, "SHUFFLE", new Rect(bodyX, y, modeWidth, RowHeight),
                 () => manager?.ToggleShuffle(), AvTokens.FontMicro, AvButtonStyle.Toggle);
-            repeatButton = AvKit.Button(content, "REPEAT", new Rect(Pad + modeWidth + Gap, y, modeWidth, RowHeight),
+            repeatButton = AvKit.Button(content, "REPEAT", new Rect(bodyX + modeWidth + Gap, y, modeWidth, RowHeight),
                 () => manager?.ToggleRepeat(), AvTokens.FontMicro, AvButtonStyle.Toggle);
-            AvKit.Button(content, "FOLDER", new Rect(Pad + (modeWidth + Gap) * 2f, y, modeWidth, RowHeight),
+            AvKit.Button(content, "FOLDER", new Rect(bodyX + (modeWidth + Gap) * 2f, y, modeWidth, RowHeight),
                 () => manager?.OpenLibraryFolder(), AvTokens.FontMicro, AvButtonStyle.Quiet);
-            AvKit.Button(content, "RESCAN", new Rect(Pad + (modeWidth + Gap) * 3f, y, modeWidth, RowHeight),
+            AvKit.Button(content, "RESCAN", new Rect(bodyX + (modeWidth + Gap) * 3f, y, modeWidth, RowHeight),
                 () => manager?.Rescan(), AvTokens.FontMicro, AvButtonStyle.Quiet);
             y -= RowHeight + AvTokens.Space4;
 
-            y = AvKit.Heading(content, y, "CHANNELS", Width);
+            AvStyled.SpineTick(content, Pad + 3f, y - 8f);
+            AvStyled.Label(content, new Rect(bodyX, y, bodyW, 14f), "CHANNELS", "section-title");
+            AvStyled.Label(content, new Rect(bodyX, y, bodyW, 14f), "VHF-COM", "section-title-note",
+                           align: TextAlignmentOptions.MidlineRight);
+            y -= 20f;
 
             float channelsBlock = ChannelPitch * RowsPerPage;
             channelsEmptyLabel = AvKit.Label(content, "",
-                new Rect(Pad + AvTokens.Space4, y, inner - AvTokens.Space4 * 2f, channelsBlock),
+                new Rect(bodyX + AvTokens.Space4, y, bodyW - AvTokens.Space4 * 2f, channelsBlock),
                 AvTheme.Dim, AvTokens.FontMicro, FontStyles.Italic, TextAlignmentOptions.Center, wrap: true);
             channelsEmptyLabel.gameObject.SetActive(false);
 
@@ -288,14 +294,14 @@ namespace BoscaliSummer.Features.Radio.Presentation
             y -= channelsBlock + AvTokens.Space2;
 
             AvButton[] pageButtons = AvKit.Stepper(
-                content, Pad, y, inner, out pageLabel, PreviousPage, NextPage);
+                content, bodyX, y, bodyW, out pageLabel, PreviousPage, NextPage);
             pagePreviousButton = pageButtons[0];
             pageNextButton = pageButtons[1];
             y -= RowHeight + Gap;
 
             // Pinned Status Strip at footer
             float terminalY = -(PanelHeight - Pad - AvTokens.StatusStripHeight);
-            statusLabel = AvKit.StatusStrip(content, new Rect(Pad, terminalY, inner, AvTokens.StatusStripHeight), AvTheme.RailReady);
+            statusLabel = AvStyled.StatusStrip(content, new Rect(Pad, terminalY, inner, AvTokens.StatusStripHeight));
 
             // Chamfer Corner Ticks
             AvKit.CornerTicks(content, new Rect(0f, 0f, Width, PanelHeight), AvTheme.Hairline);
@@ -319,7 +325,19 @@ namespace BoscaliSummer.Features.Radio.Presentation
 
         private static ChannelRow MakeChannelRow(RectTransform parent, int row, float y)
         {
-            var (ground, selectionRule) = AvKit.TacticalCard(parent, new Rect(Pad, y, Width - Pad * 2f, RowHeight), AvTheme.Frame);
+            // A channel row is a list entry, not an object: a hairline underneath and a
+            // selection fill, rather than the outline-plus-corner-ticks card every group
+            // used to wear. Ticks now mean "this is the focused thing", so spending them
+            // on five identical rows made them mean nothing.
+            const float inset = 14f;
+            float x = Pad + inset;
+            float w = Width - Pad - x;
+
+            Image ground = AvKit.Panel(parent, new Rect(x, y, w, RowHeight), Color.clear);
+            AvKit.Rule(parent, new Rect(x, y - RowHeight, w, 1f),
+                       AvTheme.Unity(AvTokens.Hairline.WithAlpha(0.13f)));
+            Image selectionRule = AvKit.Rule(parent, new Rect(x, y, 3f, RowHeight), Color.clear);
+
             RectTransform rect = ground.rectTransform;
 
             var result = new ChannelRow
@@ -329,27 +347,25 @@ namespace BoscaliSummer.Features.Radio.Presentation
                 SelectionRule = selectionRule
             };
 
-            result.BadgeGround = AvKit.Panel(rect, new Rect(7f, -4f, 28f, 22f), new Color(0.15f, 0.35f, 0.20f, 1f));
-            result.Icon = AvKit.Panel(result.BadgeGround.rectTransform, new Rect(2f, -1f, 24f, 24f), Color.white);
+            result.BadgeGround = AvKit.Panel(rect, new Rect(10f, -4f, 26f, 22f), AvTheme.SurfaceInert);
+            result.Icon = AvKit.Panel(result.BadgeGround.rectTransform, new Rect(1f, -1f, 24f, 24f), Color.white);
             result.Icon.preserveAspect = true;
             result.Icon.enabled = false;
-            result.Badge = AvKit.Label(result.BadgeGround.rectTransform, "--", new Rect(0f, 0f, 28f, 22f),
+            result.Badge = AvKit.Label(result.BadgeGround.rectTransform, "--", new Rect(0f, 0f, 26f, 22f),
                 Color.white, AvTokens.FontMicro, FontStyles.Bold, TextAlignmentOptions.Center);
-            result.Label = AvKit.Label(rect, "LOCAL",
-                new Rect(43f, 0f, Width - Pad * 2f - 111f, RowHeight),
-                AvTheme.Friendly, AvTokens.FontSmall, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
-            result.Count = AvKit.Label(rect, "0",
-                new Rect(Width - Pad * 2f - 62f, 0f, 52f, RowHeight),
-                AvTheme.Dim, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineRight);
 
-            AvButton button = AvKit.HitButton(rect, new Rect(0f, 0f, Width - Pad * 2f, RowHeight), () =>
+            result.Label = AvStyled.Label(rect, new Rect(44f, 0f, w - 112f, RowHeight), "LOCAL", "row-name");
+            result.Count = AvStyled.Label(rect, new Rect(w - 62f, 0f, 52f, RowHeight), "0", "row-sub",
+                                          align: TextAlignmentOptions.MidlineRight);
+
+            AvButton button = AvKit.HitButton(rect, new Rect(0f, 0f, w, RowHeight), () =>
             {
                 AvInput.Deselect(ground.gameObject);
                 if (manager != null && result.Index >= 0) manager.SelectChannel(result.Index);
                 nextRefresh = 0f;
             });
-            button.SetRowHighlight(ground, AvTheme.Surface,
-                AvTheme.Unity(AvTokens.Wash(AvTheme.Accent.ToRgba(), AvTokens.RowHoverScale, AvTokens.RowHoverAlpha)));
+            button.SetRowHighlight(ground, Color.clear,
+                AvStyleHost.Resolve(AvStyleHost.Style("row", "hover").Background, AvTheme.SurfaceRaised));
             result.Button = button;
             return result;
         }
@@ -382,6 +398,20 @@ namespace BoscaliSummer.Features.Radio.Presentation
             pagePreviousButton?.SetEnabled(page > 0);
             pageNextButton?.SetEnabled(page + 1 < pages);
 
+            if (dataBar != null)
+            {
+                bool playing = manager.IsEngaged && !manager.IsPaused;
+                bool haveTracks = manager.ChannelCount > 0;
+                dataBar.State.text = playing ? "RECEIVING"
+                                    : manager.IsPaused ? "PAUSED"
+                                    : haveTracks ? "STANDBY" : "NO LIBRARY";
+                dataBar.State.color = playing ? AvTheme.RailReady
+                                    : haveTracks ? AvTheme.Dim : AvTheme.Warning;
+                dataBar.SetChip(0, "AUDIO-NET", haveTracks);
+                dataBar.SetChip(1, playing ? "SIGNAL HI" : "SIGNAL --", playing);
+                dataBar.SetChip(2, "VHF-COM", true);
+            }
+
             // An empty channel list reads as a table still loading; say what to do instead.
             bool noChannels = manager.ChannelCount == 0;
             if (channelsEmptyLabel != null)
@@ -411,9 +441,11 @@ namespace BoscaliSummer.Features.Radio.Presentation
                 item.Label.text = manager.GetChannelName(index);
                 item.Count.text = manager.GetChannelTrackCount(index) + " TRK";
                 bool selected = index == manager.SelectedChannel;
-                item.Label.color = selected ? Color.white : AvTheme.Friendly;
-                item.SelectionRule.color = selected ? AvTheme.Accent : AvTheme.Frame;
-                item.Ground.color = selected ? AvTheme.Unity(AvTokens.Wash(AvTheme.Accent.ToRgba(), AvTokens.SelectedScale, AvTokens.SelectedAlpha)) : AvTheme.Surface;
+                item.Label.color = selected ? Color.white : AvTheme.TextPrimary;
+                item.SelectionRule.color = selected ? AvTheme.Accent : Color.clear;
+                item.Ground.color = selected
+                    ? AvTheme.Unity(AvTokens.Wash(AvTheme.Accent.ToRgba(), AvTokens.SelectedScale, AvTokens.SelectedAlpha))
+                    : Color.clear;
             }
         }
 

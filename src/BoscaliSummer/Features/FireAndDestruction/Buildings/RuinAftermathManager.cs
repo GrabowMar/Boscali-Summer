@@ -78,12 +78,13 @@ namespace BoscaliSummer.Fire
         {
             float now = Time.timeSinceLevelLoad;
             collapsePool.Update(now);
-            Camera camera = Camera.main;
+            Camera camera = SceneSingleton<CameraStateManager>.i?.mainCamera ?? Camera.main;
             if (camera == null) return;
+            Vector3 camPos = camera.transform.position;
             if (now >= nextSelection)
             {
                 nextSelection = now + 0.5f;
-                SelectVisuals(camera.transform.position);
+                SelectVisuals(camPos);
             }
             if (now < nextVisualTick) return;
             nextVisualTick = now + 0.25f;
@@ -97,7 +98,7 @@ namespace BoscaliSummer.Fire
                 RuinSite site = ruins[i];
                 if (site.Smoke == null) continue;
                 float age = Mathf.Max(0f, now - site.Born);
-                float distanceSq = (camera.transform.position - site.Position.ToLocalPosition()).sqrMagnitude;
+                float distanceSq = (camPos - site.Position.ToLocalPosition()).sqrMagnitude;
                 float distanceScale = distanceSq < 1200f * 1200f
                     ? 1f : distanceSq < 3000f * 3000f ? 0.68f : 0.46f;
                 float ageScale;

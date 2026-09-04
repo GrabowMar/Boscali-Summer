@@ -67,7 +67,7 @@ namespace BoscaliSummer.Framework.Visuals
             if (normal == Vector3.zero) normal = Vector3.up;
 
             // Reject impacts beyond camera drawing distance
-            Camera cam = Camera.main;
+            Camera cam = SceneSingleton<CameraStateManager>.i?.mainCamera ?? Camera.main;
             if (cam != null && (cam.transform.position - impactPoint).sqrMagnitude > MaxViewingDistanceSq)
                 return;
 

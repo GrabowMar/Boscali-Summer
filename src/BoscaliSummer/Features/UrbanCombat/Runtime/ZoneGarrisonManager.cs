@@ -222,6 +222,7 @@ namespace BoscaliSummer.Garrisons
             }
             fortificationRecords.Clear();
             InfantryEncampmentBuilder.ResetForScene();
+            GarrisonOccupancy.Reset();
         }
 
         public void ScheduleCapture(Airbase airbase, FactionHQ owner)
@@ -248,12 +249,16 @@ namespace BoscaliSummer.Garrisons
             {
                 initialScanComplete = true;
                 RebuildShellCatalogue();
-                Airbase[] airbases = Resources.FindObjectsOfTypeAll<Airbase>();
-                for (int i = 0; i < airbases.Length; i++)
+                IEnumerable<Airbase> airbases = (FactionRegistry.airbaseLookup != null && FactionRegistry.airbaseLookup.Count > 0)
+                    ? (IEnumerable<Airbase>)FactionRegistry.airbaseLookup.Values
+                    : Resources.FindObjectsOfTypeAll<Airbase>();
+                if (airbases != null)
                 {
-                    Airbase airbase = airbases[i];
-                    if (airbase == null || !airbase.gameObject.scene.IsValid() || airbase.AttachedAirbase) continue;
-                    ScheduleCapture(airbase, airbase.CurrentHQ);
+                    foreach (Airbase airbase in airbases)
+                    {
+                        if (airbase == null || !airbase.gameObject.scene.IsValid() || airbase.AttachedAirbase) continue;
+                        ScheduleCapture(airbase, airbase.CurrentHQ);
+                    }
                 }
             }
             for (int i = 0; i < pending.Count; i++)

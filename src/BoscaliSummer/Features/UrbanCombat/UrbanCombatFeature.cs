@@ -2,6 +2,7 @@ using System;
 using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Features;
 using BoscaliSummer.Garrisons;
+using BoscaliSummer.Features.UrbanCombat.Runtime;
 
 namespace BoscaliSummer.Features.UrbanCombat
 {
@@ -27,8 +28,10 @@ namespace BoscaliSummer.Features.UrbanCombat
         {
             ZoneGarrisonManager garrisons = context.AddSceneService<ZoneGarrisonManager>(30);
             context.AddSceneService<AirAssaultController>(31);
+            BaseDefenseAlarmService alarm = context.AddSceneService<BaseDefenseAlarmService>(32);
             context.AddService<IBuildingOccupancy>(garrisons);
             context.AddService<IZoneFortificationService>(garrisons);
+            context.AddService<IBaseDefenseAlarmService>(alarm);
         }
     }
 }

@@ -18,7 +18,11 @@ namespace BoscaliSummer.Features.Command.Presentation
 {
     internal sealed class ComMfdPanel : MonoBehaviour, ISceneService, ITheaterPage
     {
-        private const float Pad = AvTokens.Pad;
+        /// <summary>
+        /// The left edge, inset past the spine OPS draws. THEATER is mounted inside the
+        /// OPS body, so it shares that body's column rather than the panel's.
+        /// </summary>
+        private const float Pad = AvTokens.Pad + 14f;
         private const float Gap = AvTokens.Gap;
         private const float TabHeight = AvTokens.TabBarHeight;
         private const float RefreshInterval = 0.25f;
@@ -122,9 +126,16 @@ namespace BoscaliSummer.Features.Command.Presentation
         private void BuildInto(RectTransform host, float inner, float startY)
         {
             float y = startY;
-            AvKit.Label(host, "FRIENDLY MISSION AI  ·  NEVER TASKS YOUR WING", new Rect(Pad, y, inner, 14f),
-                        AvTheme.Dim, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
-            y -= 18f;
+
+            AvStyled.Spine(host, new Rect(AvTokens.Pad, startY, 3f, Mathf.Abs(startY) + 320f));
+            AvStyled.SpineTick(host, AvTokens.Pad + 3f, y - 7f);
+
+            AvStyled.Label(host, new Rect(Pad, y, inner, 14f),
+                           "FRIENDLY MISSION AI", "section-title");
+            AvStyled.Label(host, new Rect(Pad, y, inner, 14f),
+                           "NEVER TASKS YOUR WING", "section-title-note",
+                           align: TMPro.TextAlignmentOptions.MidlineRight);
+            y -= 20f;
 
             float tabWidth = (inner - Gap * 2f) / 3f;
             theaterTab = AvKit.Tab(host, "SA", new Rect(Pad, y, tabWidth, TabHeight), ShowTheater);
@@ -150,7 +161,8 @@ namespace BoscaliSummer.Features.Command.Presentation
         {
             float y = startY;
             const float cardH = 92f;
-            AvKit.TacticalCard(parent, new Rect(Pad, y, inner, cardH), AvTheme.RailReady);
+            AvStyled.Box(parent, new Rect(Pad, y, inner, cardH), "section");
+            AvStyled.Rail(parent, new Rect(Pad, y, 3f, cardH), "ready");
 
             AvKit.Label(parent, "FORCE RATIO & AIR DOMINANCE", new Rect(Pad + 12f, y - 4f, inner - 20f, 14f),
                         AvTheme.Dim, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
@@ -167,7 +179,8 @@ namespace BoscaliSummer.Features.Command.Presentation
             y -= cardH + 8f;
 
             const float infraH = 84f;
-            AvKit.TacticalCard(parent, new Rect(Pad, y, inner, infraH), AvTheme.RailInfo);
+            AvStyled.Box(parent, new Rect(Pad, y, inner, infraH), "section band");
+            AvStyled.Rail(parent, new Rect(Pad, y, 3f, infraH), "info");
             AvKit.Label(parent, "THEATER INFRASTRUCTURE & ACTIVE SORTIES", new Rect(Pad + 12f, y - 4f, inner - 20f, 14f),
                         AvTheme.Dim, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
 
@@ -313,7 +326,7 @@ namespace BoscaliSummer.Features.Command.Presentation
             if (command == null) return;
 
             // Update Telemetry
-            DynamicMap dm = UnityEngine.Object.FindObjectOfType<DynamicMap>();
+            DynamicMap dm = SceneSingleton<DynamicMap>.i;
             if (dm != null && dm.HQ != null)
             {
                 command.UpdateTelemetry(dm.HQ);

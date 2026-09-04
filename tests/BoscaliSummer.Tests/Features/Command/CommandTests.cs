@@ -9,6 +9,9 @@ namespace BoscaliSummer.Tests.Features.Command
         {
             AvionicsProtocolTests.Run(TestAssert.That);
             AvionicsTokenTests.Run(TestAssert.That);
+            AvBoxTests.Run(TestAssert.That);
+            AvGridTests.Run(TestAssert.That);
+            AvStyleTests.Run(TestAssert.That);
 
             TestAssert.That(CommandDoctrineHelper.CanSetDoctrine(0),
                 "Doctrine is host-always-on; vanilla rank is not a lock");

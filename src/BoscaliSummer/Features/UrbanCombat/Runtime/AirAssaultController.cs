@@ -15,6 +15,7 @@ namespace BoscaliSummer.Garrisons
         private float nextDropTime;
         private const float MinFireInterval = 0.8f;
         private bool loggedActive;
+        private static Airbase[] cachedAirbases;
 
         private void Awake() => Instance = this;
         private void OnDestroy() { if (Instance == this) Instance = null; }
@@ -23,6 +24,7 @@ namespace BoscaliSummer.Garrisons
         {
             nextDropTime = 0f;
             loggedActive = false;
+            cachedAirbases = null;
         }
 
         private void Update()
@@ -174,18 +176,33 @@ namespace BoscaliSummer.Garrisons
 
         private static Airbase FindNearestAirbase(Vector3 pos)
         {
-            Airbase[] all = Resources.FindObjectsOfTypeAll<Airbase>();
-            Airbase best = null;
-            float bestDist = float.MaxValue;
-            for (int i = 0; i < all.Length; i++)
+            if (cachedAirbases == null || cachedAirbases.Length == 0)
             {
-                if (all[i] == null || !all[i].gameObject.scene.IsValid() || all[i].AttachedAirbase) continue;
-                Vector3 center = all[i].center != null ? all[i].center.position : all[i].transform.position;
-                float d = Vector3.Distance(center, pos);
-                if (d < bestDist)
+                if (FactionRegistry.airbaseLookup != null && FactionRegistry.airbaseLookup.Count > 0)
                 {
-                    bestDist = d;
-                    best = all[i];
+                    var values = FactionRegistry.airbaseLookup.Values;
+                    cachedAirbases = new Airbase[values.Count];
+                    values.CopyTo(cachedAirbases, 0);
+                }
+                else
+                {
+                    cachedAirbases = UnityEngine.Object.FindObjectsOfType<Airbase>();
+                }
+            }
+            if (cachedAirbases == null || cachedAirbases.Length == 0) return null;
+
+            Airbase best = null;
+            float bestDistSq = float.MaxValue;
+            for (int i = 0; i < cachedAirbases.Length; i++)
+            {
+                Airbase ab = cachedAirbases[i];
+                if (ab == null || !ab.gameObject.scene.IsValid() || ab.AttachedAirbase) continue;
+                Vector3 center = ab.center != null ? ab.center.position : ab.transform.position;
+                float dSq = (center - pos).sqrMagnitude;
+                if (dSq < bestDistSq)
+                {
+                    bestDistSq = dSq;
+                    best = ab;
                 }
             }
             return best;

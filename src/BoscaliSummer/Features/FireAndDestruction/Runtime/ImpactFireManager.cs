@@ -479,7 +479,8 @@ namespace BoscaliSummer.Fire
             Vector3 wind = NetworkSceneSingleton<LevelInfo>.i != null
                 ? NetworkSceneSingleton<LevelInfo>.i.GetWind()
                 : Vector3.zero;
-            Camera camera = Camera.main;
+            Camera camera = SceneSingleton<CameraStateManager>.i?.mainCamera ?? Camera.main;
+            Vector3 camPos = camera != null ? camera.transform.position : Vector3.zero;
             int nearestA = -1, nearestB = -1, nearestC = -1;
             float distA = float.MaxValue, distB = float.MaxValue, distC = float.MaxValue;
             int smokeAcquireBudget = 1;
@@ -551,7 +552,7 @@ namespace BoscaliSummer.Fire
                     site.NextSmoke = site.BuildingSmoke == null ? now + 2.4f : float.MaxValue;
                 }
                 if (camera == null || site.Visual == null) continue;
-                float d = (camera.transform.position - site.Position.ToLocalPosition()).sqrMagnitude;
+                float d = (camPos - site.Position.ToLocalPosition()).sqrMagnitude;
                 if (d < distA)
                 {
                     distC = distB; nearestC = nearestB;

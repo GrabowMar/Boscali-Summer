@@ -110,9 +110,10 @@ namespace BoscaliSummer.Garrisons
             {
                 fromDir = (buildingCenter - attacker.transform.position).normalized;
             }
-            else if (Camera.main != null)
+            else
             {
-                fromDir = (buildingCenter - Camera.main.transform.position).normalized;
+                Camera cam = SceneSingleton<CameraStateManager>.i?.mainCamera ?? Camera.main;
+                if (cam != null) fromDir = (buildingCenter - cam.transform.position).normalized;
             }
 
             Vector3 rayStart = buildingCenter - fromDir * 35f;

@@ -47,6 +47,8 @@ namespace BoscaliSummer.Features.Command.Presentation
         private float nextVectorUpdate;
         private bool isMapMaximized;
         private bool initialized;
+        private Coroutine gridComputeCoroutine;
+        private bool isComputingGrid;
 
         public bool ShowFrontlines = true;
         public bool ShowRadar = true;
@@ -73,6 +75,13 @@ namespace BoscaliSummer.Features.Command.Presentation
 
         public void ResetForScene()
         {
+            if (gridComputeCoroutine != null)
+            {
+                StopCoroutine(gridComputeCoroutine);
+                gridComputeCoroutine = null;
+            }
+            isComputingGrid = false;
+
             if (overlayImage != null && overlayImage.gameObject != null)
             {
                 UnityEngine.Object.Destroy(overlayImage.gameObject);
@@ -115,6 +124,13 @@ namespace BoscaliSummer.Features.Command.Presentation
 
         private void HandleMapMinimized()
         {
+            if (gridComputeCoroutine != null)
+            {
+                StopCoroutine(gridComputeCoroutine);
+                gridComputeCoroutine = null;
+            }
+            isComputingGrid = false;
+
             isMapMaximized = false;
             if (overlayImage != null) overlayImage.enabled = false;
             HideAllVectors();
@@ -138,10 +154,10 @@ namespace BoscaliSummer.Features.Command.Presentation
 
             float now = Time.unscaledTime;
 
-            if (now >= nextGridUpdate)
+            if (now >= nextGridUpdate && !isComputingGrid)
             {
                 nextGridUpdate = now + settings.GridRefreshInterval.Value;
-                UpdateInfluenceGrid();
+                gridComputeCoroutine = StartCoroutine(SpreadInfluenceGridComputation());
             }
 
             if (now >= nextVectorUpdate)
@@ -153,7 +169,7 @@ namespace BoscaliSummer.Features.Command.Presentation
 
         private void TryInitialize()
         {
-            dynamicMap = UnityEngine.Object.FindObjectOfType<DynamicMap>();
+            dynamicMap = SceneSingleton<DynamicMap>.i;
             if (dynamicMap == null || dynamicMap.mapImage == null) return;
 
             RectTransform mapImageRect = dynamicMap.mapImage.GetComponent<RectTransform>();
@@ -223,12 +239,13 @@ namespace BoscaliSummer.Features.Command.Presentation
                 poolSize + " vector pool).");
         }
 
-        private void UpdateInfluenceGrid()
+        private System.Collections.IEnumerator SpreadInfluenceGridComputation()
         {
-            if (dynamicMap == null || overlayTexture == null) return;
+            if (dynamicMap == null || overlayTexture == null) yield break;
             FactionHQ localHq = dynamicMap.HQ;
-            if (localHq == null) return;
+            if (localHq == null) yield break;
 
+            isComputingGrid = true;
             gridCalc.Clear();
             influenceSources.Clear();
             radarSources.Clear();
@@ -247,7 +264,11 @@ namespace BoscaliSummer.Features.Command.Presentation
                 }
             }
 
-            // 2. Active Units & Garrisons
+            // Yield to next frame to keep frame rate silky smooth
+            yield return null;
+            if (!isMapMaximized || dynamicMap == null) { isComputingGrid = false; yield break; }
+
+            // 2. Active Units & Garrisons (aircraft + ground combat vehicles)
             IReadOnlyList<Aircraft> allAircraft = UnitRegistry.allAircraft;
             if (allAircraft != null)
             {
@@ -263,6 +284,31 @@ namespace BoscaliSummer.Features.Command.Presentation
                         pos.x, pos.z, 6000f, 0.8f, hostile));
                 }
             }
+
+            List<Unit> allUnits = UnitRegistry.allUnits;
+            if (allUnits != null)
+            {
+                for (int i = 0; i < allUnits.Count; i++)
+                {
+                    Unit u = allUnits[i];
+                    if (u == null || u.disabled || u is Aircraft || u is Missile) continue;
+                    if (u is GroundVehicle || u is Ship)
+                    {
+                        Vector3 pos = u.transform.position;
+                        bool hostile = u.NetworkHQ != localHq;
+                        if (hostile && !localHq.IsTargetBeingTracked(u)) continue;
+
+                        influenceSources.Add(new InfluenceGridCalculator.InfluenceSource(
+                            pos.x, pos.z, 5000f, 1.2f, hostile));
+                    }
+                }
+            }
+
+            gridCalc.AddInfluence(influenceSources);
+
+            // Yield to next frame
+            yield return null;
+            if (!isMapMaximized || dynamicMap == null) { isComputingGrid = false; yield break; }
 
             // 3. Radars & SAMs
             if (GameAccess.HqSensorsAvailable)
@@ -282,13 +328,19 @@ namespace BoscaliSummer.Features.Command.Presentation
                 }
             }
 
-            gridCalc.AddInfluence(influenceSources);
             gridCalc.AddRadars(radarSources);
 
+            // Yield to next frame
+            yield return null;
+            if (!isMapMaximized || dynamicMap == null || overlayTexture == null) { isComputingGrid = false; yield break; }
+
+            // 4. Bake Texture & Apply
             Color32[] pixels = gridCalc.BakeTexture(
                 ShowFrontlines, ShowRadar, ShowRecon, settings.OverlayOpacity.Value);
             overlayTexture.SetPixels32(pixels);
             overlayTexture.Apply(false);
+
+            isComputingGrid = false;
         }
 
         private void UpdateOrderVectors()

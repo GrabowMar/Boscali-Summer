@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -136,14 +136,14 @@ namespace BoscaliSummer.Features.Support.Visuals
             }
 
             // 6. Camera Electromagnetic Shudder for nearby players
-            Camera cam = Camera.main;
+            var csm = SceneSingleton<CameraStateManager>.i;
+            Camera cam = csm?.mainCamera ?? Camera.main;
             if (cam != null)
             {
                 float camDist = Vector3.Distance(cam.transform.position, origin);
                 if (camDist < radius * 1.8f)
                 {
                     float factor = Mathf.Clamp01(1f - (camDist / (radius * 1.8f)));
-                    var csm = SceneSingleton<CameraStateManager>.i;
                     if (csm != null) csm.ShakeCamera(0.8f * factor, 1.6f * factor);
                 }
             }

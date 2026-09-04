@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using NuclearOption.Networking;
@@ -152,14 +152,14 @@ namespace BoscaliSummer.Features.Support.Visuals
                 float distToGround = transform.position.y - targetPosition.y;
                 if (distToGround < 2200f && distToGround > 0f)
                 {
-                    Camera cam = Camera.main;
+                    var csm = SceneSingleton<CameraStateManager>.i;
+                    Camera cam = csm?.mainCamera ?? Camera.main;
                     if (cam != null)
                     {
                         float camDist = Vector3.Distance(cam.transform.position, targetPosition);
                         if (camDist < 12000f)
                         {
                             float factor = Mathf.Clamp01(1f - (camDist / 12000f)) * Mathf.Clamp01(1f - (distToGround / 2200f));
-                            var csm = SceneSingleton<CameraStateManager>.i;
                             if (csm != null) csm.ShakeCamera(0.25f * factor, 0.5f * factor);
                         }
                     }
@@ -369,7 +369,7 @@ namespace BoscaliSummer.Features.Support.Visuals
 
         private void TriggerSeismicShock()
         {
-            Camera cam = Camera.main;
+            Camera cam = SceneSingleton<CameraStateManager>.i?.mainCamera ?? Camera.main;
             if (cam == null) return;
 
             float distance = Vector3.Distance(cam.transform.position, groundZero);
