@@ -4,22 +4,16 @@ using UnityEngine;
 namespace BoscaliSummer.Features.Support.Runtime.Actions
 {
     /// <summary>
-    /// Combat Engineering / Firebreak Support: Clears procedural forest, suppresses active fire sites,
-    /// and erects physical concrete barrier revetments to stop advancing fire fronts.
-    /// Fully abstracted via Framework.Contracts to adhere to module architecture boundaries.
+    /// Combat Engineering / Firebreak Support: clears procedural forest and suppresses
+    /// active fire sites without spawning synthetic fortification geometry.
     /// </summary>
     internal sealed class FirebreakAction : ISupportAction
     {
         private const float FirebreakRadius = 150f;
 
         private readonly IFireSuppressionService fireSuppression;
-        private readonly IZoneFortificationService fortifications;
 
-        public FirebreakAction(IFireSuppressionService fires, IZoneFortificationService forts)
-        {
-            fireSuppression = fires;
-            fortifications = forts;
-        }
+        public FirebreakAction(IFireSuppressionService fires) => fireSuppression = fires;
 
         public float BaseCost(in SupportContext context) =>
             context.Settings.FortifyCost.Value * 0.75f * context.Settings.CostMultiplier.Value;
@@ -35,17 +29,10 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
                     return SupportResult.OutOfRange;
             }
 
-            // 1. Extinguish active fires and clear flammable trees in radius
             if (fireSuppression != null)
             {
                 fireSuppression.ExtinguishInRadius(context.Target, FirebreakRadius);
                 fireSuppression.ClearForestInRadius(context.Target, FirebreakRadius);
-            }
-
-            // 2. Deploy physical barrier revetments to visually establish the firebreak perimeter
-            if (fortifications != null)
-            {
-                fortifications.TryDeployFirebreak(ground, FirebreakRadius);
             }
 
             context.Logger.LogInfo($"[Support] Firebreak established at {context.Target} (cleared radius {FirebreakRadius}m).");

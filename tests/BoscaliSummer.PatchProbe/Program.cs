@@ -61,11 +61,6 @@ Assembly pluginAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(plugi
     ("Missile", "SetAimpoint"),
     ("FactionHQ", "SetTrackingState"),
     ("UnitRegistry", "RegisterUnit"),
-    ("MountedTroops", "Fire"),
-    ("LoadoutSelector", "AssignAircraft"),
-    ("WeaponManager", "InitializeWeaponManager"),
-    ("WeaponSelector", "PopulateOptions"),
-    ("WeaponChecker", "GetAvailableWeaponsNonAlloc"),
     ("CombatAI", "AnalyzeTarget"),
     ("DynamicMap", "Maximize"),
     ("DynamicMap", "Minimize")
@@ -154,13 +149,9 @@ string[] patchTypes =
     "BoscaliSummer.Fire.GroundVehicleDestructionPatch",
     "BoscaliSummer.Fire.MissileImpactPatch",
     "BoscaliSummer.Fire.MapBuildingRuinPatch",
+    "BoscaliSummer.Fire.AircraftWreckPersistencePatch",
     "BoscaliSummer.Garrisons.AirbaseCapturePatch",
     "BoscaliSummer.Garrisons.GarrisonClientVisualPatch",
-    "BoscaliSummer.Garrisons.MountedTroopsFirePatch",
-    "BoscaliSummer.Garrisons.ChimeraLoadoutAssignAircraftPatch",
-    "BoscaliSummer.Garrisons.ChimeraWeaponManagerInitPatch",
-    "BoscaliSummer.Garrisons.ChimeraWeaponSelectorPopulatePatch",
-    "BoscaliSummer.Garrisons.ChimeraWeaponCheckerAvailablePatch",
     "BoscaliSummer.Features.Radio.Patches.VanillaPlayMusicPatch",
     "BoscaliSummer.Features.Radio.Patches.VanillaCrossFadeMusicPatch",
     "BoscaliSummer.Features.Radio.Patches.VanillaQueueMusicPatch",
@@ -169,7 +160,8 @@ string[] patchTypes =
     "BoscaliSummer.Features.Command.Patches.AiTargetScoringPatch",
     "BoscaliSummer.Features.Command.Patches.DynamicMapMaximizePatch",
     "BoscaliSummer.Features.Command.Patches.DynamicMapMinimizePatch",
-    "BoscaliSummer.Features.Support.Patches.SupportMissileDetonatePatch"
+    "BoscaliSummer.Features.Support.Patches.SupportMissileDetonatePatch",
+    "BoscaliSummer.Features.Support.Patches.ThirdPersonHudPatches"
 };
 
 foreach (string patchType in patchTypes)

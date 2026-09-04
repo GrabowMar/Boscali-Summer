@@ -3,7 +3,6 @@ using System.Reflection;
 using BoscaliSummer.Core;
 using BoscaliSummer.Features.FireAndDestruction.Configuration;
 using BoscaliSummer.Framework.Lifecycle;
-using BoscaliSummer.Framework.Visuals;
 using BoscaliSummer.Infrastructure.Diagnostics;
 using HarmonyLib;
 using UnityEngine;
@@ -86,7 +85,6 @@ namespace BoscaliSummer.Fire
                 QueryTriggerInteraction.Collide);
 
             Collider nearest = null;
-            Transform buildingRoot = null;
             float nearestSq = float.MaxValue;
             for (int i = 0; i < count; i++)
             {
@@ -98,9 +96,8 @@ namespace BoscaliSummer.Fire
                 if (distance >= nearestSq) continue;
                 nearestSq = distance;
                 nearest = collider;
-                buildingRoot = root;
             }
-            if (nearest == null || buildingRoot == null) return;
+            if (nearest == null) return;
 
             Vector3 buildingCenter = nearest.bounds.center;
             Vector3 toCenter = (buildingCenter - local).normalized;
@@ -127,9 +124,6 @@ namespace BoscaliSummer.Fire
             }
 
             PlaceMark(point, normal, explosion.BlastYield);
-
-            BuildingDamageVisual visual = BuildingDamageVisual.GetOrAdd(buildingRoot.gameObject);
-            visual?.ApplyLocalImpact(point, normal, explosion.BlastYield, Mathf.Max(10f, explosion.BlastYield * 12f));
         }
 
         private void PlaceMark(Vector3 point, Vector3 normal, float blastYield)
@@ -165,26 +159,14 @@ namespace BoscaliSummer.Fire
             projector.fadeFactor = 0.98f;
             projector.drawDistance = 3500f;
 
-            RuinTextureCatalog.RuinTier tier = blastYield > 10f
-                ? RuinTextureCatalog.RuinTier.Heavy
-                : (blastYield > 0.5f ? RuinTextureCatalog.RuinTier.Medium : RuinTextureCatalog.RuinTier.Light);
-
-            Material ruinMat = RuinTextureCatalog.GetDecalMaterial(tier);
-            if (ruinMat != null)
-            {
-                projector.material = ruinMat;
-            }
-            else
-            {
-                Material scorch = ResolveScorchMaterial();
-                if (scorch != null) projector.material = scorch;
-            }
+            Material scorch = ResolveScorchMaterial();
+            if (scorch != null) projector.material = scorch;
 
             if (!loggedFirstMark && Diagnostics.VerboseLogging.Value)
             {
                 loggedFirstMark = true;
                 Plugin.Logger.LogInfo(
-                    $"Impact scorch: first mark placed at {point} (size {size:0.#}m, tier {tier}, " +
+                    $"Impact scorch: first mark placed at {point} (size {size:0.#}m, " +
                     $"material '{(projector.material != null ? projector.material.name : "null")}').");
             }
         }

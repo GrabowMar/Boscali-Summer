@@ -45,7 +45,7 @@ namespace BoscaliSummer.Features.Support.Runtime
             actions.Add(new SupportActionDefinition(
                 SupportActionId.Firebreak, "FIREBREAK CORRIDOR",
                 "Combat engineering: clear forest, suppress fires, and erect perimeter barriers.",
-                SupportCapabilities.Fortify, settings.FortifyEnabled, new FirebreakAction(fireSuppression, fortifications)));
+                SupportCapabilities.Fortify, settings.FortifyEnabled, new FirebreakAction(fireSuppression)));
 
             actions.Add(new SupportActionDefinition(
                 SupportActionId.SmokeMarker, "SMOKE DESIGNATION",

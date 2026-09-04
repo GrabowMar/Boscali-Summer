@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Removed the outdated visible-infantry and air-assault stack, including synthetic troop
+  loadouts, fast-rope presentation, encampments, rooftop weapons, and makeshift geometry.
+  Urban Combat is again limited to occupied civilian shells backed by hidden vanilla DEF
+  proxies; Firebreak now clears vegetation and suppresses fire without spawning props.
+- Removed the legacy tiered building-damage stack (facade tinting, breach/rubble effects,
+  ruin texture generation, and stronghold HP/armor). Explosive impacts now use only the
+  bounded pool of vanilla scorch decals described by the current architecture.
 - Removed leftover unused APIs (radio slogans, unread garrison damage-shader config keys,
   unused support action ids for deleted airdrop/convoy actions, and unreferenced helpers).
   Live support action wire bytes are unchanged (`Recon` = 4 through `Emp` = 7).

@@ -1,19 +1,13 @@
 using NuclearOption.Networking;
-using UnityEngine;
 
 namespace BoscaliSummer.Framework.Contracts
 {
     internal interface IZoneFortificationService
     {
         /// <summary>
-        /// Reinforces the garrison of a zone the requester's faction controls by deploying
-        /// an authentic vanilla infantry encampment.
+        /// Reinforces occupied civilian shells in a zone the requester's faction controls
+        /// with hidden vanilla defense proxies.
         /// </summary>
-        bool TryFortify(Airbase airbase, FactionHQ owner, Player requester, Vector3 targetPosition = default);
-
-        /// <summary>
-        /// Erects perimeter revetments and barriers to establish an engineered firebreak line.
-        /// </summary>
-        bool TryDeployFirebreak(Vector3 targetPosition, float radius);
+        bool TryFortify(Airbase airbase, FactionHQ owner, Player requester);
     }
 }

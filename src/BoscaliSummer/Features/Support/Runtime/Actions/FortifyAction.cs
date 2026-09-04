@@ -29,7 +29,7 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
             if (zone == null || distance > Mathf.Max(zone.GetRadius() * 1.5f, MinimumZoneRadius))
                 return SupportResult.InvalidTarget;
 
-            return fortifications.TryFortify(zone, context.Owner, context.Player, target)
+            return fortifications.TryFortify(zone, context.Owner, context.Player)
                 ? SupportResult.Accepted
                 : SupportResult.SpawnFailed;
         }
