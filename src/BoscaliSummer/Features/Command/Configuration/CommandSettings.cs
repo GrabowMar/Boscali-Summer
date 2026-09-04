@@ -1,4 +1,4 @@
-﻿using BepInEx.Configuration;
+using BepInEx.Configuration;
 
 namespace BoscaliSummer.Features.Command.Configuration
 {
@@ -21,26 +21,26 @@ namespace BoscaliSummer.Features.Command.Configuration
                 "Enable the Tactical COM Panel, map tactical overlays, and AI Battle Director.");
 
             FrontlinesOverlay = config.Bind("Command", "FrontlinesOverlay", true,
-                "Render dynamic area-of-control and contested frontline boundaries on the tactical map.");
+                "Render tactical sector control grid and dynamic contested frontline boundaries on the tactical map.");
 
-            RadarCoverageOverlay = config.Bind("Command", "RadarCoverageOverlay", true,
-                "Render friendly radar networks and detected hostile SAM/radar coverage bubbles.");
+            RadarCoverageOverlay = config.Bind("Command", "RadarCoverageOverlay", false,
+                "Render hostile SAM threat envelopes and friendly radar coverage contours.");
 
-            VisibilityOverlay = config.Bind("Command", "VisibilityOverlay", true,
-                "Render visual and sensor surveillance coverage and recon staleness.");
+            VisibilityOverlay = config.Bind("Command", "VisibilityOverlay", false,
+                "Render airbase runways, approach cones, and strategic logistics links.");
 
-            AiOrdersOverlay = config.Bind("Command", "AiOrdersOverlay", true,
-                "Draw friendly and detected AI operational order vectors (CAP, Strike, CAS, RTB) on the main map.");
+            AiOrdersOverlay = config.Bind("Command", "AiOrdersOverlay", false,
+                "Draw friendly and detected AI operational flight vectors (CAP, Strike, CAS, RTB) on the main map.");
 
-            OverlayOpacity = config.Bind("Command", "OverlayOpacity", 0.45f,
+            OverlayOpacity = config.Bind("Command", "OverlayOpacity", 0.35f,
                 new ConfigDescription(
-                    "Alpha opacity of the rasterized tactical map modes.",
+                    "Alpha opacity of the rasterized tactical map modes (0.1 = faint, 1.0 = solid).",
                     new AcceptableValueRange<float>(0.1f, 1.0f)));
 
-            GridResolution = config.Bind("Command", "GridResolution", 64,
+            GridResolution = config.Bind("Command", "GridResolution", 32,
                 new ConfigDescription(
-                    "Influence grid dimension (64 = 64x64 cells). Keep at 64 for optimal performance.",
-                    new AcceptableValueRange<int>(32, 128)));
+                    "Tactical sector grid dimension (32 = 32x32 sectors). Recommended: 32.",
+                    new AcceptableValueRange<int>(16, 64)));
 
             GridRefreshInterval = config.Bind("Command", "GridRefreshInterval", 0.5f,
                 new ConfigDescription(

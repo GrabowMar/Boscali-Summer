@@ -27,6 +27,16 @@ namespace BoscaliSummer.Tests.Features.UrbanCombat
             TestAssert.That(TroopDeploymentMath.ComputeTier(32) == 4, "four committed squads cap at tier 4");
             TestAssert.That(TroopDeploymentMath.ComputeTier(40) == 4, "overflow caps at tier 4");
 
+            // Reinforcement accumulation: sequential squads grow the encampment tier
+            int committed = 0;
+            committed += TroopDeploymentMath.ComputeDropSize(32, 8);
+            TestAssert.That(TroopDeploymentMath.ComputeTier(committed) == 1, "first drop of 8 troops establishes tier 1");
+            committed += TroopDeploymentMath.ComputeDropSize(24, 8);
+            TestAssert.That(TroopDeploymentMath.ComputeTier(committed) == 2, "second drop reaches 16 troops and tier 2");
+            committed += TroopDeploymentMath.ComputeDropSize(16, 8);
+            TestAssert.That(TroopDeploymentMath.ComputeTier(committed) == 3, "third drop reaches 24 troops and tier 3");
+            committed += TroopDeploymentMath.ComputeDropSize(8, 8);
+            TestAssert.That(TroopDeploymentMath.ComputeTier(committed) == 4, "fourth drop reaches 32 troops and tier 4");
         }
     }
 }

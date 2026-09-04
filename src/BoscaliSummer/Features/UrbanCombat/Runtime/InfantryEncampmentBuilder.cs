@@ -13,18 +13,29 @@ namespace BoscaliSummer.Garrisons
         internal const string NamePrefix = "BoscaliSummer:Encampment:";
         private const int MaximumSites = 12;
 
+        public enum EncampmentType
+        {
+            MGNest = 0,    // 12.7mm Heavy Machine Gun Nest
+            AGMNest = 1,   // AT-145 Anti-Tank Missile Nest
+            AANest = 2     // IRM-S1 & 23mm Air Defense Nest
+        }
+
         public sealed class EncampmentSite
         {
             public Vector3 Center;
+            public Vector3 Forward;
             public FactionHQ Owner;
             public Airbase Airbase;
             public int Tier;
             public int Troops;
             public int Id;
+            public EncampmentType Type;
+            public readonly HashSet<int> SpawnedSlots = new HashSet<int>();
             public readonly List<Building> Emplacements = new List<Building>();
         }
 
         private static readonly List<EncampmentSite> ActiveSites = new List<EncampmentSite>();
+        public static IReadOnlyList<EncampmentSite> GetActiveSites() => ActiveSites;
         private static readonly Dictionary<string, BuildingDefinition> CachedDefs =
             new Dictionary<string, BuildingDefinition>(StringComparer.OrdinalIgnoreCase);
         private static bool catalogInitialized;
@@ -111,19 +122,72 @@ namespace BoscaliSummer.Garrisons
             return CreateNewSite(dropPos, owner, airbase, troopCount);
         }
 
+        private struct SlotSpec
+        {
+            public string PrefKey;
+            public string Fallback;
+            public string Label;
+            public SlotSpec(string prefKey, string fallback, string label)
+            {
+                PrefKey = prefKey;
+                Fallback = fallback;
+                Label = label;
+            }
+        }
+
+        private static SlotSpec[] GetSlotsForType(EncampmentType type)
+        {
+            switch (type)
+            {
+                case EncampmentType.AANest:
+                    return new[]
+                    {
+                        new SlotSpec("Emplacement1_MANPADS", "MANPADS", "AA"),
+                        new SlotSpec("Emplacement1_MG", "MG", "MG"),
+                        new SlotSpec("Emplacement1_23mm", "23mm", "AAA"),
+                        new SlotSpec("Emplacement1_MANPADS", "MANPADS", "AA2")
+                    };
+                case EncampmentType.AGMNest:
+                    return new[]
+                    {
+                        new SlotSpec("Emplacement1_ATGM", "ATGM", "AGM"),
+                        new SlotSpec("Emplacement1_MG", "MG", "MG"),
+                        new SlotSpec("Emplacement1_ATGM", "ATGM", "AGM2"),
+                        new SlotSpec("Emplacement1_MANPADS", "MANPADS", "AA")
+                    };
+                default: // MGNest
+                    return new[]
+                    {
+                        new SlotSpec("Emplacement1_MG", "MG", "MG"),
+                        new SlotSpec("Emplacement1_ATGM", "ATGM", "AGM"),
+                        new SlotSpec("Emplacement1_MANPADS", "MANPADS", "AA"),
+                        new SlotSpec("Emplacement1_23mm", "23mm", "AAA")
+                    };
+            }
+        }
+
         private static bool CreateNewSite(Vector3 center, FactionHQ owner, Airbase airbase, int troopCount)
         {
             Spawner spawner = NetworkSceneSingleton<Spawner>.i;
             if (spawner == null) return false;
 
+            Vector3 groundCenter = SnapToGround(center);
+            Vector3 forward = Vector3.forward;
+            if (airbase != null)
+            {
+                Vector3 toBase = Vector3.ProjectOnPlane(airbase.transform.position - groundCenter, Vector3.up);
+                if (toBase.sqrMagnitude > 1f) forward = toBase.normalized;
+            }
+
             var site = new EncampmentSite
             {
-                Center = center,
+                Center = groundCenter,
+                Forward = forward,
                 Owner = owner,
                 Airbase = airbase,
                 Troops = Math.Max(1, troopCount),
-                Tier = 1,
-                Id = ActiveSites.Count
+                Id = ActiveSites.Count,
+                Type = (EncampmentType)(ActiveSites.Count % 3)
             };
             site.Tier = TroopDeploymentMath.ComputeTier(site.Troops);
 
@@ -131,7 +195,7 @@ namespace BoscaliSummer.Garrisons
             if (site.Emplacements.Count == 0) return false;
 
             ActiveSites.Add(site);
-            Plugin.Logger.LogInfo($"[ENCAMPMENT] Established Tier {site.Tier} defensive outpost with {site.Troops} visual infantry at ({center.x:0}, {center.z:0}).");
+            Plugin.Logger.LogInfo($"[ENCAMPMENT] Established Tier {site.Tier} {site.Type} with {site.Troops} infantry committed at ({groundCenter.x:0}, {groundCenter.z:0}).");
             return true;
         }
 
@@ -147,32 +211,47 @@ namespace BoscaliSummer.Garrisons
             if (site.Tier >= 4)
                 ReplenishFirebase(site);
 
-            Plugin.Logger.LogInfo($"[ENCAMPMENT] Reinforced outpost to Tier {site.Tier} with {site.Troops} total infantry committed.");
+            Plugin.Logger.LogInfo($"[ENCAMPMENT] Reinforced {site.Type} outpost to Tier {site.Tier} with {site.Troops} total infantry committed.");
         }
 
         private static void SpawnEmplacements(EncampmentSite site, Spawner spawner)
         {
-            if (site.Tier >= 1 && !HasEmplacement(site, "MG"))
-                SpawnEmplacement(site, spawner, "Emplacement1_MG", "MG", site.Center, Quaternion.identity, "MG");
+            Vector3 right = Vector3.Cross(Vector3.up, site.Forward).normalized;
+            SlotSpec[] slots = GetSlotsForType(site.Type);
 
-            if (site.Tier >= 2 && !HasEmplacement(site, "ATGM"))
+            for (int slot = 0; slot < slots.Length; slot++)
             {
-                Vector3 atgmPos = SnapToGround(site.Center + Vector3.forward * 10f + Vector3.right * 6f);
-                SpawnEmplacement(site, spawner, "Emplacement1_ATGM", "ATGM", atgmPos, Quaternion.LookRotation(Vector3.forward), "ATGM");
-            }
+                int requiredTier = slot + 1;
+                if (site.Tier < requiredTier || site.SpawnedSlots.Contains(slot))
+                    continue;
 
-            if (site.Tier >= 3 && !HasEmplacement(site, "23mm") && !HasEmplacement(site, "MANPADS"))
-            {
-                Vector3 aaPos = SnapToGround(site.Center + Vector3.forward * 10f + Vector3.left * 6f);
-                Building aa = SpawnEmplacement(site, spawner, "Emplacement1_23mm", "23mm", aaPos, Quaternion.LookRotation(Vector3.forward), "AA");
-                if (aa == null)
-                    SpawnEmplacement(site, spawner, "Emplacement1_MANPADS", "MANPADS", aaPos, Quaternion.LookRotation(Vector3.forward), "AA");
-            }
+                Vector3 pos;
+                Quaternion rot;
+                switch (slot)
+                {
+                    case 0:
+                        pos = site.Center;
+                        rot = Quaternion.LookRotation(site.Forward, Vector3.up);
+                        break;
+                    case 1:
+                        pos = SnapToGround(site.Center + site.Forward * 9f + right * 6f);
+                        rot = Quaternion.LookRotation((pos - site.Center).normalized, Vector3.up);
+                        break;
+                    case 2:
+                        pos = SnapToGround(site.Center + site.Forward * 9f - right * 6f);
+                        rot = Quaternion.LookRotation((pos - site.Center).normalized, Vector3.up);
+                        break;
+                    default:
+                        pos = SnapToGround(site.Center - site.Forward * 12f);
+                        rot = Quaternion.LookRotation(-site.Forward, Vector3.up);
+                        break;
+                }
 
-            if (site.Tier >= 4 && !HasEmplacement(site, "radar") && !HasEmplacement(site, "MC260"))
-            {
-                Vector3 radarPos = SnapToGround(site.Center + Vector3.back * 12f);
-                SpawnEmplacement(site, spawner, "MC260_RadarContainer", "radar", radarPos, Quaternion.identity, "Radar");
+                Building b = SpawnEmplacement(site, spawner, slots[slot].PrefKey, slots[slot].Fallback, pos, rot, slots[slot].Label);
+                if (b != null)
+                {
+                    site.SpawnedSlots.Add(slot);
+                }
             }
         }
 
@@ -196,24 +275,10 @@ namespace BoscaliSummer.Garrisons
             if (b != null)
             {
                 site.Emplacements.Add(b);
-                MakeshiftFortificationBuilder.ApplyPresentation(b);
             }
             return b;
         }
 
-        private static bool HasEmplacement(EncampmentSite site, string keyword)
-        {
-            for (int i = 0; i < site.Emplacements.Count; i++)
-            {
-                Building b = site.Emplacements[i];
-                if (b == null || b.definition == null) continue;
-                if (!(b.definition is BuildingDefinition d)) continue;
-                if ((d.jsonKey?.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) ?? -1) >= 0 ||
-                    (d.unitName?.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) ?? -1) >= 0)
-                    return true;
-            }
-            return false;
-        }
 
         private static void ReplenishFirebase(EncampmentSite site)
         {

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using BoscaliSummer.Features.Command.Patches;
 using BoscaliSummer.Features.Command.Presentation;
 using BoscaliSummer.Features.Command.Runtime;
@@ -25,12 +25,14 @@ namespace BoscaliSummer.Features.Command
         {
             IProgressionView progression = context.Services.GetRequired<IProgressionView>();
 
+            MissionMapCompatibilityEngine compat = context.AddSceneService<MissionMapCompatibilityEngine>(51);
             CommandManager manager = context.AddSceneService<CommandManager>(52);
             ComMapOverlay overlay = context.AddSceneService<ComMapOverlay>(53);
             ComMfdPanel mfd = context.AddSceneService<ComMfdPanel>(56);
 
+            compat.Configure(context.Settings.Command, context.Logger);
             manager.Configure(context.Settings.Command, progression, context.Logger);
-            overlay.Configure(context.Settings.Command, manager, context.Logger);
+            overlay.Configure(context.Settings.Command, manager, compat, context.Logger);
             mfd.Configure(context.Settings.Command, manager, overlay, context.Logger);
             context.AddService<ITheaterPage>(mfd);
         }

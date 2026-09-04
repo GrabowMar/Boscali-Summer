@@ -1,5 +1,6 @@
 using System;
 using BoscaliSummer.Framework.Lifecycle;
+using BoscaliSummer.Runtime;
 using NuclearOption.Networking;
 using UnityEngine;
 
@@ -66,19 +67,20 @@ namespace BoscaliSummer.Garrisons
             if (isChimera)
             {
                 // MC-260 Chimera: Deploy out rear cargo hold ramp like cargo/vehicles
+                int dropCount = TroopDeploymentMath.ComputeDropSize(aboard, Plugin.Settings.UrbanCombat.TroopsPerDeploy.Value);
                 if (mountedTroops != null)
-                    mountedTroops.ammo = Mathf.Max(0, mountedTroops.ammo - 1);
+                    mountedTroops.ammo = Mathf.Max(0, mountedTroops.ammo - dropCount);
 
                 nextDropTime = Time.unscaledTime + MinFireInterval;
                 Vector3 rampPos = aircraft.transform.position - aircraft.transform.forward * 12f - aircraft.transform.up * 1.8f;
                 Vector3 exitVel = inheritedVelocity - aircraft.transform.forward * 8f;
 
-                Plugin.Logger.LogInfo($"[CHIMERA] Paratrooper squad launched from rear cargo hold ramp at ({rampPos.x:0}, {rampPos.y:0}, {rampPos.z:0}).");
-                AirAssaultVisuals.SpawnParatrooperCargoDrop(aircraft, rampPos, exitVel, owner, airbase);
+                Plugin.Logger.LogInfo($"[CHIMERA] Paratrooper company of {dropCount} launched from rear cargo hold ramp at ({rampPos.x:0}, {rampPos.y:0}, {rampPos.z:0}). {mountedTroops?.ammo ?? 0} infantry remaining aboard.");
+                AirAssaultVisuals.SpawnParatrooperCargoDrop(aircraft, rampPos, exitVel, owner, airbase, dropCount);
             }
             else
             {
-                // UH-90 Ibis: Fast-rope rappelling (requires low hover)
+                // UH-90 Ibis: Fast-rope rappelling (requires low hover directly over building)
                 Vector3 origin = aircraft.transform.position;
                 if (!Physics.Raycast(origin, Vector3.down, out RaycastHit hit, 500f, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore))
                 {
@@ -99,32 +101,52 @@ namespace BoscaliSummer.Garrisons
                     return;
                 }
 
-                // Fast-rope deploys a fixed squad per trigger. The drop only costs the
+                GameObject shell = ResolveCivilianBuilding(hit.collider);
+
+                // Fast-rope deploys a squad per trigger. The drop only costs the
                 // infantry once the insertion is confirmed feasible.
                 int dropCount = TroopDeploymentMath.ComputeDropSize(aboard, Plugin.Settings.UrbanCombat.TroopsPerDeploy.Value);
                 if (mountedTroops != null)
                     mountedTroops.ammo = Mathf.Max(0, mountedTroops.ammo - dropCount);
 
                 nextDropTime = Time.unscaledTime + MinFireInterval;
-                Plugin.Logger.LogInfo($"[IBIS] Fast-rope rappelling squadron of {dropCount} infantry descending to ({hit.point.x:0}, {hit.point.z:0}). {mountedTroops?.ammo ?? 0} infantry remaining aboard.");
-
-                GameObject shell = ResolveCivilianBuilding(hit.collider);
                 if (shell != null)
-                {
-                    AirAssaultVisuals.SpawnFastRopeRappelling(aircraft, hit.point, owner, dropCount, () =>
-                    {
-                        ZoneGarrisonManager.Instance?.TryOccupyBuilding(shell, owner, airbase);
-                        Plugin.Logger.LogInfo($"[AIR ASSAULT] Fast-rope squadron secured and fortified {shell.name}!");
-                    });
-                }
+                    Plugin.Logger.LogInfo($"[IBIS] Fast-rope rappelling squadron of {dropCount} infantry descending to ({hit.point.x:0}, {hit.point.z:0}) on {shell.name}. {mountedTroops?.ammo ?? 0} infantry remaining aboard.");
                 else
+                    Plugin.Logger.LogInfo($"[IBIS] Fast-rope rappelling squadron of {dropCount} infantry descending to LZ ({hit.point.x:0}, {hit.point.z:0}). {mountedTroops?.ammo ?? 0} infantry remaining aboard.");
+
+                AirAssaultVisuals.SpawnFastRopeRappelling(aircraft, hit.point, owner, dropCount, () =>
                 {
-                    AirAssaultVisuals.SpawnFastRopeRappelling(aircraft, hit.point, owner, dropCount, () =>
+                    bool occupied = false;
+                    if (shell != null && ZoneGarrisonManager.Instance != null)
                     {
-                        ZoneGarrisonManager.Instance?.TryDeployEncampment(hit.point, owner, airbase, dropCount);
-                        Plugin.Logger.LogInfo($"[AIR ASSAULT] Fast-rope squadron of {dropCount} established combat encampment at ({hit.point.x:0}, {hit.point.z:0})!");
-                    });
-                }
+                        occupied = ZoneGarrisonManager.Instance.TryOccupyBuilding(shell, owner, airbase);
+                        if (occupied)
+                            Plugin.Logger.LogInfo($"[AIR ASSAULT] Fast-rope squadron secured and fortified {shell.name}!");
+                    }
+
+                    if (!occupied)
+                    {
+                        bool deployed = false;
+                        if (ZoneGarrisonManager.Instance != null)
+                        {
+                            deployed = ZoneGarrisonManager.Instance.TryDeployEncampment(hit.point, owner, airbase, dropCount);
+                        }
+                        else if (GameAccess.IsServer() && owner != null)
+                        {
+                            deployed = InfantryEncampmentBuilder.DeployOrReinforce(hit.point, owner, airbase, dropCount);
+                        }
+
+                        if (deployed)
+                        {
+                            Plugin.Logger.LogInfo($"[AIR ASSAULT] Fast-rope squadron of {dropCount} established combat encampment at ({hit.point.x:0}, {hit.point.z:0})!");
+                        }
+                        else
+                        {
+                            Plugin.Logger.LogInfo($"[AIR ASSAULT] Fast-rope squadron of {dropCount} deployed to LZ perimeter at ({hit.point.x:0}, {hit.point.z:0}).");
+                        }
+                    }
+                });
             }
         }
 

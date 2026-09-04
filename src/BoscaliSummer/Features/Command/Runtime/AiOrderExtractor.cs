@@ -45,74 +45,36 @@ namespace BoscaliSummer.Features.Command.Runtime
                 // For enemy aircraft, only show if being actively tracked by our HQ
                 if (!isFriendly && !localHq.IsTargetBeingTracked(aircraft)) continue;
 
-                AiTaskingOrder order = pooledOrders[count];
-                order.Unit = aircraft;
-                order.Callsign = string.IsNullOrEmpty(aircraft.unitName) ? "AIRCRAFT" : aircraft.unitName;
-                order.IsFriendly = isFriendly;
-                order.OriginWorld = aircraft.transform.position;
-
-                // Deduce mission state
+                // Only draw flight order vectors when aircraft is actively engaging a valid, living target
                 if (pilot.currentState is AIPilotCombatModes combatModes && GameAccess.AiPilotCombatAvailable)
                 {
                     Unit target = GameAccess.GetAiCurrentTarget(combatModes);
-                    int mode = GameAccess.GetAiAttackMode(combatModes);
+                    if (target == null || target.disabled || target == aircraft) continue;
 
-                    if (target != null && !target.disabled)
-                    {
-                        order.CurrentTarget = target;
-                        order.TargetWorld = target.transform.position;
-                        order.TargetName = string.IsNullOrEmpty(target.unitName) ? "TARGET" : target.unitName;
+                    Vector3 origin = aircraft.GlobalPosition().AsVector3();
+                    Vector3 targetPos = target.GlobalPosition().AsVector3();
+                    float dist = Vector3.Distance(origin, targetPos);
+                    if (dist < 1000f || dist > 80000f) continue;
 
-                        bool isAirTarget = target is Aircraft;
-                        if (isAirTarget)
-                        {
-                            order.MissionType = AiMissionType.CombatAirPatrol;
-                        }
-                        else
-                        {
-                            order.MissionType = AiMissionType.Strike;
-                        }
-                    }
-                    else
-                    {
-                        GlobalPosition knownPos = GameAccess.GetAiTargetKnownPosition(combatModes);
-                        order.CurrentTarget = null;
-                        order.TargetWorld = knownPos.AsVector3();
-                        order.TargetName = "PATROL AREA";
-                        order.MissionType = AiMissionType.CombatAirPatrol;
-                    }
-                }
-                else if (pilot.currentState is AIPilotLandingState)
-                {
-                    order.MissionType = AiMissionType.ReturnToBase;
-                    order.TargetName = "RTB (AIRBASE)";
-                    order.CurrentTarget = null;
-                    order.TargetWorld = aircraft.transform.position + aircraft.transform.forward * 3000f;
-                }
-                else if (pilot.currentState is AIPilotTakeoffState)
-                {
-                    order.MissionType = AiMissionType.CombatAirPatrol;
-                    order.TargetName = "CLIMBOUT";
-                    order.CurrentTarget = null;
-                    order.TargetWorld = aircraft.transform.position + aircraft.transform.forward * 5000f;
-                }
-                else
-                {
-                    order.MissionType = AiMissionType.CombatAirPatrol;
-                    order.TargetName = "PATROL";
-                    order.CurrentTarget = null;
-                    order.TargetWorld = aircraft.transform.position + aircraft.transform.forward * 2000f;
-                }
+                    AiTaskingOrder order = pooledOrders[count];
+                    order.Unit = aircraft;
+                    order.Callsign = string.IsNullOrEmpty(aircraft.unitName) ? "AIRCRAFT" : aircraft.unitName;
+                    order.IsFriendly = isFriendly;
+                    order.OriginWorld = origin;
+                    order.CurrentTarget = target;
+                    order.TargetWorld = targetPos;
+                    order.TargetName = string.IsNullOrEmpty(target.unitName) ? "TARGET" : target.unitName;
+                    order.EstimatedRange = dist;
 
-                order.EstimatedRange = Vector3.Distance(order.OriginWorld, order.TargetWorld);
-                order.MissionColor = AiTaskingOrder.GetMissionColor(order.MissionType);
-                if (!isFriendly)
-                {
-                    order.MissionColor = new Color(0.95f, 0.2f, 0.2f, 0.85f); // Red for tracked enemies
-                }
+                    bool isAirTarget = target is Aircraft;
+                    order.MissionType = isAirTarget ? AiMissionType.CombatAirPatrol : AiMissionType.Strike;
+                    order.MissionColor = isFriendly
+                        ? (isAirTarget ? new Color(0.2f, 0.8f, 1.0f, 0.85f) : new Color(1.0f, 0.55f, 0.15f, 0.85f))
+                        : new Color(0.95f, 0.2f, 0.2f, 0.85f); // Red for tracked enemies
 
-                outOrders.Add(order);
-                count++;
+                    outOrders.Add(order);
+                    count++;
+                }
             }
 
             return count;

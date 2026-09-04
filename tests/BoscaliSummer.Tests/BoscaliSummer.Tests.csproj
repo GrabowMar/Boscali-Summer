@@ -18,6 +18,7 @@
     <Compile Include="..\..\src\BoscaliSummer\Framework\Features\FeatureGraph.cs" Link="Framework\FeatureGraph.cs" />
     <Compile Include="..\..\src\BoscaliSummer\Framework\Features\ServiceRegistry.cs" Link="Framework\ServiceRegistry.cs" />
     <Compile Include="..\..\src\BoscaliSummer\Features\Command\Domain\CommandDoctrine.cs" Link="Features\Command\CommandDoctrine.cs" />
+    <Compile Include="..\..\src\BoscaliSummer\Features\Command\Runtime\TacticalSectorGrid.cs" Link="Features\Command\TacticalSectorGrid.cs" />
     <Compile Include="..\..\..\nomodkit\shared\avionics\*.cs" LinkBase="Avionics" />
   </ItemGroup>
 </Project>

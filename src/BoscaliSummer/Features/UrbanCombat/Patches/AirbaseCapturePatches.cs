@@ -30,8 +30,7 @@ namespace BoscaliSummer.Garrisons
                 GarrisonVisual.Apply(__instance);
             else if (__instance != null &&
                 !string.IsNullOrEmpty(__instance.NetworkUniqueName) &&
-                (__instance.NetworkUniqueName.StartsWith(MakeshiftFortificationBuilder.NamePrefix, System.StringComparison.Ordinal) ||
-                 __instance.NetworkUniqueName.StartsWith(InfantryEncampmentBuilder.NamePrefix, System.StringComparison.Ordinal)))
+                __instance.NetworkUniqueName.StartsWith(MakeshiftFortificationBuilder.NamePrefix, System.StringComparison.Ordinal))
                 MakeshiftFortificationBuilder.ApplyPresentation(__instance);
         }
     }

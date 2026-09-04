@@ -21,6 +21,7 @@ namespace BoscaliSummer.Garrisons
             for (int i = 0; i < ActiveOperations.Count; i++)
                 if (ActiveOperations[i] != null) UnityEngine.Object.Destroy(ActiveOperations[i]);
             ActiveOperations.Clear();
+
             cachedCanopyMesh = null;
             cachedLinesMesh = null;
             cachedParachuteMat = null;
@@ -44,14 +45,15 @@ namespace BoscaliSummer.Garrisons
             Vector3 rampPos,
             Vector3 exitVelocity,
             FactionHQ owner,
-            Airbase airbase)
+            Airbase airbase,
+            int troopCount)
         {
             var dropGo = new GameObject("BoscaliSummer.ParatrooperCargoDrop");
             dropGo.transform.position = rampPos;
             if (!Track(dropGo)) return;
 
             ParatrooperCargoDropOperation op = dropGo.AddComponent<ParatrooperCargoDropOperation>();
-            op.Initialize(aircraft, rampPos, exitVelocity, owner, airbase);
+            op.Initialize(aircraft, rampPos, exitVelocity, owner, airbase, troopCount);
         }
 
         public static void SpawnFastRopeRappelling(
@@ -110,6 +112,7 @@ namespace BoscaliSummer.Garrisons
             private FactionHQ owner;
             private Airbase airbase;
             private Vector3 velocity;
+            private int troopCount;
             private GameObject soldier;
             private GameObject canopyObj;
             private GameObject linesObj;
@@ -121,11 +124,13 @@ namespace BoscaliSummer.Garrisons
                 Vector3 exitPos,
                 Vector3 initialVel,
                 FactionHQ faction,
-                Airbase baseObj)
+                Airbase baseObj,
+                int count)
             {
                 owner = faction;
                 airbase = baseObj;
                 velocity = initialVel;
+                troopCount = Mathf.Max(1, count);
                 transform.position = exitPos;
 
                 // 1. Spawn authentic vanilla soldier model
@@ -246,25 +251,34 @@ namespace BoscaliSummer.Garrisons
                 GameObject shell = ResolveCivilianBuilding(hit.collider);
                 if (shell != null)
                 {
-                    Plugin.Logger.LogInfo($"[AIR ASSAULT] Paratrooper squad secured and fortified building: {shell.name}!");
+                    Plugin.Logger.LogInfo($"[AIR ASSAULT] Paratrooper squad ({troopCount} troops) secured and fortified building: {shell.name}!");
                     ZoneGarrisonManager.Instance?.TryOccupyBuilding(shell, owner, airbase);
                 }
                 else
                 {
-                    Plugin.Logger.LogInfo($"[AIR ASSAULT] Paratroopers established combat encampment at ({hit.point.x:0}, {hit.point.z:0})!");
-                    ZoneGarrisonManager.Instance?.TryDeployEncampment(hit.point, owner, airbase, 1);
+                    Plugin.Logger.LogInfo($"[AIR ASSAULT] Paratroopers ({troopCount} troops) established combat encampment at ({hit.point.x:0}, {hit.point.z:0})!");
+                    ZoneGarrisonManager.Instance?.TryDeployEncampment(hit.point, owner, airbase, troopCount);
                 }
             }
         }
+
+
 
         private sealed class FastRopeRappellingOperation : MonoBehaviour
         {
             private const float RopeHalfSpread = 0.55f;
             private const float FallbackRearDistance = 5f;
             private const float FallbackDoorDrop = 0.6f;
-            private const float MinDescent = 2.5f;
-            private const float MaxDescent = 4.6f;
-            private const float OperationTimeCap = 16f;
+            private const float SlideDescentSpeed = 7.2f;
+            private const float DeployWinchSpeed = 24f;
+            private const float RetractWinchSpeed = 22f;
+            private const float OperationTimeCap = 22f;
+            private const int RopePoints = 14;
+
+            private static AudioClip cachedWinchStart;
+            private static AudioClip cachedWinchStop;
+            private static AudioClip cachedWinchLoop;
+            private static bool audioProbed;
 
             private Aircraft aircraft;
             private Transform helo;
@@ -274,6 +288,7 @@ namespace BoscaliSummer.Garrisons
 
             private LineRenderer ropeLeft;
             private LineRenderer ropeRight;
+            private AudioSource audioSource;
 
             private Vector3 doorLeft;
             private Vector3 doorRight;
@@ -290,11 +305,9 @@ namespace BoscaliSummer.Garrisons
                 public GameObject Root;
                 public int Rope;
                 public float StartDelay;
-                public float DescentDuration;
                 public float Progress;
                 public bool Landed;
                 public Vector3 FanDir;
-                public float SwayPhase;
             }
 
             public void Initialize(Aircraft currentAircraft, Vector3 targetPos, FactionHQ owner, int soldierCount, Action onLanded)
@@ -305,20 +318,109 @@ namespace BoscaliSummer.Garrisons
                 callback = onLanded;
                 requestedCount = Mathf.Max(1, soldierCount);
 
-                // Anchor the whole operation to the aircraft so the ropes and rappellers
-                // track it exactly — they can never drift detached when the helo moves.
                 transform.SetParent(helo, false);
                 transform.localPosition = Vector3.zero;
                 transform.localRotation = Quaternion.identity;
+
+                SetupAudio();
 
                 Material ropeMat = MaterialProvider.GetCargoHookRopeMaterial() ?? MaterialProvider.GetConcreteMaterial();
                 ropeLeft = CreateRopeLine("Rope_Left", ropeMat);
                 ropeRight = CreateRopeLine("Rope_Right", ropeMat);
 
-                ComputeAnchors();
+                ComputeInitialAnchors();
                 BuildSoldiers();
 
                 StartCoroutine(RappellingRoutine());
+            }
+
+            private static void EnsureWinchAudio()
+            {
+                if (audioProbed) return;
+                audioProbed = true;
+
+                try
+                {
+                    SlingloadHook[] hooks = Resources.FindObjectsOfTypeAll<SlingloadHook>();
+                    for (int i = 0; i < hooks.Length; i++)
+                    {
+                        if (hooks[i] == null) continue;
+                        var t = typeof(SlingloadHook);
+                        if (cachedWinchStart == null)
+                        {
+                            var f = t.GetField("winchStartSound", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
+                            if (f != null) cachedWinchStart = f.GetValue(hooks[i]) as AudioClip;
+                        }
+                        if (cachedWinchStop == null)
+                        {
+                            var f = t.GetField("winchStopSound", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
+                            if (f != null) cachedWinchStop = f.GetValue(hooks[i]) as AudioClip;
+                        }
+                        if (cachedWinchLoop == null)
+                        {
+                            var f = t.GetField("winchAudioSource", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
+                            if (f != null && f.GetValue(hooks[i]) is AudioSource src && src.clip != null)
+                                cachedWinchLoop = src.clip;
+                        }
+                        if (cachedWinchStart != null && cachedWinchStop != null && cachedWinchLoop != null)
+                            break;
+                    }
+                }
+                catch { }
+
+                if (cachedWinchStart != null && cachedWinchStop != null && cachedWinchLoop != null)
+                    return;
+
+                try
+                {
+                    AudioClip[] clips = Resources.FindObjectsOfTypeAll<AudioClip>();
+                    for (int i = 0; i < clips.Length; i++)
+                    {
+                        if (clips[i] == null) continue;
+                        string n = clips[i].name.ToLowerInvariant();
+                        if (cachedWinchStart == null && n.Contains("winchstart")) cachedWinchStart = clips[i];
+                        else if (cachedWinchStop == null && n.Contains("winchstop")) cachedWinchStop = clips[i];
+                        else if (cachedWinchLoop == null && n.Contains("winchloop")) cachedWinchLoop = clips[i];
+                    }
+                }
+                catch { }
+            }
+
+            private void SetupAudio()
+            {
+                EnsureWinchAudio();
+                audioSource = gameObject.AddComponent<AudioSource>();
+                audioSource.spatialBlend = 1f;
+                audioSource.minDistance = 6f;
+                audioSource.maxDistance = 250f;
+                audioSource.rolloffMode = AudioRolloffMode.Logarithmic;
+                audioSource.dopplerLevel = 0f;
+                audioSource.playOnAwake = false;
+            }
+
+            private void PlayWinchAudio(bool isDeploy)
+            {
+                if (audioSource == null) return;
+                if (cachedWinchStart != null)
+                    audioSource.PlayOneShot(cachedWinchStart, 0.7f);
+
+                if (cachedWinchLoop != null)
+                {
+                    audioSource.clip = cachedWinchLoop;
+                    audioSource.loop = true;
+                    audioSource.volume = 0.45f;
+                    audioSource.pitch = isDeploy ? 1.0f : 0.92f;
+                    audioSource.Play();
+                }
+            }
+
+            private void StopWinchAudio()
+            {
+                if (audioSource == null) return;
+                if (audioSource.isPlaying)
+                    audioSource.Stop();
+                if (cachedWinchStop != null)
+                    audioSource.PlayOneShot(cachedWinchStop, 0.65f);
             }
 
             private LineRenderer CreateRopeLine(string name, Material mat)
@@ -328,9 +430,13 @@ namespace BoscaliSummer.Garrisons
                 LineRenderer lr = go.AddComponent<LineRenderer>();
                 if (mat != null) lr.sharedMaterial = mat;
                 lr.startWidth = 0.045f;
-                lr.endWidth = 0.03f;
+                lr.endWidth = 0.035f;
                 lr.useWorldSpace = true;
-                lr.positionCount = 3;
+                lr.positionCount = RopePoints;
+                lr.alignment = LineAlignment.View;
+                lr.textureMode = LineTextureMode.Tile;
+                lr.numCapVertices = 2;
+                lr.numCornerVertices = 2;
                 return lr;
             }
 
@@ -361,27 +467,33 @@ namespace BoscaliSummer.Garrisons
                     {
                         Root = CreateSoldier($"Rappeller_{i}"),
                         Rope = rope,
-                        StartDelay = 0.2f + onRope * 0.9f + UnityEngine.Random.Range(0f, 0.35f) + rope * 0.12f,
-                        DescentDuration = UnityEngine.Random.Range(MinDescent, MaxDescent),
-                        SwayPhase = UnityEngine.Random.Range(0f, Mathf.PI * 2f),
+                        StartDelay = onRope * 0.75f + UnityEngine.Random.Range(0f, 0.18f) + rope * 0.08f,
+                        Progress = 0f,
                         FanDir = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)).normalized
                     });
                 }
             }
 
-            private void ComputeAnchors()
+            private void ComputeInitialAnchors()
+            {
+                UpdateDoorAnchors();
+
+                groundLeft = target - helo.right * 1.2f;
+                groundRight = target + helo.right * 1.2f;
+
+                if (Physics.Raycast(groundLeft + Vector3.up * 4f, Vector3.down, out RaycastHit hitL, 10f, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore))
+                    groundLeft = hitL.point;
+                if (Physics.Raycast(groundRight + Vector3.up * 4f, Vector3.down, out RaycastHit hitR, 10f, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore))
+                    groundRight = hitR.point;
+            }
+
+            private void UpdateDoorAnchors()
             {
                 Vector3 rearCenter = ComputeRearExit();
                 doorLeft = rearCenter - helo.right * RopeHalfSpread;
                 doorRight = rearCenter + helo.right * RopeHalfSpread;
-
-                groundLeft = target - helo.right * 1.1f;
-                groundRight = target + helo.right * 1.1f;
             }
 
-            // Anchors the ropes to the rear cargo door / ramp opening, not the middle of
-            // the fuselage. Falls back to a scaled rear-of-aircraft offset when no door
-            // transform is present on the model.
             private Vector3 ComputeRearExit()
             {
                 if (aircraft == null)
@@ -404,72 +516,157 @@ namespace BoscaliSummer.Garrisons
                 return helo.position - helo.forward * FallbackRearDistance - helo.up * FallbackDoorDrop;
             }
 
+            private Vector3 EvaluateRopeCurve(int ropeIndex, float u, float lengthRatio, float time)
+            {
+                Vector3 door = ropeIndex == 0 ? doorLeft : doorRight;
+                Vector3 ground = ropeIndex == 0 ? groundLeft : groundRight;
+                Vector3 targetEnd = Vector3.Lerp(door, ground, lengthRatio);
+
+                // Baseline straight segment
+                Vector3 basePos = Vector3.Lerp(door, targetEnd, u);
+
+                // Gravity / Catenary sag (4u(1-u) has maximum 1.0 at u = 0.5)
+                float sagFactor = 4f * u * (1f - u);
+                float fullDist = Mathf.Max(1f, Vector3.Distance(door, ground));
+                float sagAmount = Mathf.Clamp(fullDist * 0.035f, 0.45f, 1.2f) * lengthRatio;
+                Vector3 sag = Vector3.down * (sagFactor * sagAmount);
+
+                // Aerodynamic drag swing (trails opposite to horizontal airspeed)
+                Vector3 heloVel = (aircraft != null && aircraft.rb != null) ? aircraft.rb.velocity : Vector3.zero;
+                Vector3 horizVel = Vector3.ProjectOnPlane(heloVel, Vector3.up);
+                float dragShape = Mathf.Sin(u * Mathf.PI);
+                Vector3 drag = -horizVel * 0.08f * dragShape * lengthRatio;
+
+                // Rotor downwash deflection and lateral spread
+                float side = ropeIndex == 0 ? -1f : 1f;
+                Vector3 wash = (Vector3.down * 0.2f + helo.right * (0.12f * side)) * dragShape * lengthRatio;
+
+                // Dynamic pendulum sway oscillation
+                Vector3 sway = (helo.right * Mathf.Sin(time * 3.2f + ropeIndex * 1.5f) +
+                                helo.forward * Mathf.Cos(time * 2.6f)) * (0.05f * dragShape * lengthRatio);
+
+                return basePos + sag + drag + wash + sway;
+            }
+
+            private void UpdateRopeRenderer(LineRenderer lr, int ropeIndex, float lengthRatio, float time)
+            {
+                if (lr == null) return;
+                for (int i = 0; i < RopePoints; i++)
+                {
+                    float u = (float)i / (RopePoints - 1);
+                    lr.SetPosition(i, EvaluateRopeCurve(ropeIndex, u, lengthRatio, time));
+                }
+            }
+
             private IEnumerator RappellingRoutine()
             {
+                float totalDist = Mathf.Max(1f, Vector3.Distance(helo.position, target));
+
+                // -------------------------------------------------------------
+                // Phase 1: Winch Cable Deployment Animation (ropes reel down)
+                // -------------------------------------------------------------
+                PlayWinchAudio(isDeploy: true);
+                float deployProgress = 0f;
+
+                while (deployProgress < 1f)
+                {
+                    float dt = Time.deltaTime;
+                    elapsed += dt;
+                    UpdateDoorAnchors();
+
+                    deployProgress += (DeployWinchSpeed / totalDist) * dt;
+                    if (deployProgress > 1f) deployProgress = 1f;
+
+                    if (audioSource != null)
+                        audioSource.pitch = 0.95f + 0.1f * deployProgress;
+
+                    UpdateRopeRenderer(ropeLeft, 0, deployProgress, elapsed);
+                    UpdateRopeRenderer(ropeRight, 1, deployProgress, elapsed);
+
+                    // Break safety check if helo moves out of range
+                    if (Vector3.Distance(helo.position, target) > 65f)
+                    {
+                        StopWinchAudio();
+                        Destroy(gameObject);
+                        yield break;
+                    }
+
+                    yield return null;
+                }
+
+                StopWinchAudio();
+                SpawnDust(groundLeft);
+                SpawnDust(groundRight);
+
+                // -------------------------------------------------------------
+                // Phase 2: Rappelling Descent along Physics Cable
+                // -------------------------------------------------------------
+                float rappellingStartTime = elapsed;
+
                 while (elapsed < OperationTimeCap && landedCount < soldiers.Count)
                 {
                     float dt = Time.deltaTime;
                     elapsed += dt;
+                    UpdateDoorAnchors();
 
-                    // Recomputed every frame so the rope tops follow the moving helicopter.
-                    ComputeAnchors();
+                    UpdateRopeRenderer(ropeLeft, 0, 1f, elapsed);
+                    UpdateRopeRenderer(ropeRight, 1, 1f, elapsed);
 
-                    if (ropeLeft != null)
-                    {
-                        ropeLeft.SetPosition(0, doorLeft);
-                        ropeLeft.SetPosition(1, Vector3.Lerp(doorLeft, groundLeft, 0.5f) + Vector3.down * 0.45f);
-                        ropeLeft.SetPosition(2, groundLeft);
-                    }
-                    if (ropeRight != null)
-                    {
-                        ropeRight.SetPosition(0, doorRight);
-                        ropeRight.SetPosition(1, Vector3.Lerp(doorRight, groundRight, 0.5f) + Vector3.down * 0.45f);
-                        ropeRight.SetPosition(2, groundRight);
-                    }
+                    float descentElapsed = elapsed - rappellingStartTime;
 
                     for (int i = 0; i < soldiers.Count; i++)
                     {
                         RappellingSoldier s = soldiers[i];
                         if (s.Root == null) continue;
-                        if (elapsed < s.StartDelay) continue;
+                        if (descentElapsed < s.StartDelay) continue;
 
-                        if (!s.Root.activeSelf) s.Root.SetActive(true);
-
-                        Vector3 door = s.Rope == 0 ? doorLeft : doorRight;
-                        Vector3 ground = s.Rope == 0 ? groundLeft : groundRight;
-
-                        float descentTime = elapsed - s.StartDelay;
-                        s.Progress = Mathf.Clamp01(descentTime / s.DescentDuration);
-
-                        if (s.Progress < 1f)
+                        if (!s.Root.activeSelf)
                         {
-                            float eased = Mathf.SmoothStep(0f, 1f, s.Progress);
-                            Vector3 pos = Vector3.Lerp(door, ground, eased);
-                            pos += helo.right * Mathf.Sin(elapsed * 7f + s.SwayPhase) * 0.055f * (s.Rope == 0 ? -1f : 1f);
-
-                            s.Root.transform.position = pos;
-
-                            Vector3 facing = Vector3.ProjectOnPlane(helo.position - pos, Vector3.up);
-                            if (facing.sqrMagnitude < 0.001f) facing = -helo.forward;
-                            s.Root.transform.rotation = Quaternion.LookRotation(facing.normalized, Vector3.up);
-                            continue;
+                            s.Root.SetActive(true);
+                            Animator anim = s.Root.GetComponentInChildren<Animator>();
+                            if (anim != null)
+                                anim.SetInteger("PilotState", (int)PilotDismounted.PilotState.parachuting);
                         }
 
                         if (!s.Landed)
                         {
+                            s.Progress += (SlideDescentSpeed / totalDist) * dt;
+                            if (s.Progress < 1f)
+                            {
+                                Vector3 pos = EvaluateRopeCurve(s.Rope, s.Progress, 1f, elapsed);
+                                Vector3 nextPos = EvaluateRopeCurve(s.Rope, Mathf.Min(1f, s.Progress + 0.04f), 1f, elapsed);
+                                Vector3 descentDir = (nextPos - pos).normalized;
+                                Vector3 faceDir = Vector3.ProjectOnPlane(descentDir, Vector3.up);
+                                if (faceDir.sqrMagnitude < 0.001f) faceDir = -helo.forward;
+
+                                s.Root.transform.position = pos;
+                                s.Root.transform.rotation = Quaternion.LookRotation(faceDir.normalized, Vector3.up);
+                                continue;
+                            }
+
+                            // Touchdown!
                             s.Landed = true;
                             landedCount++;
-                            SpawnDust(ground);
-                        }
+                            Vector3 touchGround = s.Rope == 0 ? groundLeft : groundRight;
+                            SpawnDust(touchGround);
 
-                        float spread = Mathf.Min((descentTime - s.DescentDuration) * 1.9f, 3.6f);
-                        Vector3 perimeterPos = ground + s.FanDir * spread;
-                        s.Root.transform.position = perimeterPos;
-                        s.Root.transform.rotation = Quaternion.LookRotation(s.FanDir, Vector3.up);
+                            Animator landedAnim = s.Root.GetComponentInChildren<Animator>();
+                            if (landedAnim != null)
+                                landedAnim.SetInteger("PilotState", (int)PilotDismounted.PilotState.landing);
+
+                            float spread = UnityEngine.Random.Range(2.4f, 4.2f);
+                            Vector3 perimeterPos = touchGround + s.FanDir * spread;
+                            if (Physics.Raycast(perimeterPos + Vector3.up * 4f, Vector3.down, out RaycastHit pHit, 10f, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore))
+                                perimeterPos = pHit.point;
+
+                            s.Root.transform.position = perimeterPos;
+                            s.Root.transform.rotation = Quaternion.LookRotation(s.FanDir, Vector3.up);
+
+                            // Soldiers dismount and cleanly despawn into the established encampment/building
+                            Destroy(s.Root, 2.5f);
+                        }
                     }
 
-                    // Trigger the capture/encampment as soon as the lead soldier is down so
-                    // the landing zone starts being secured while the tail of the squad finishes.
                     if (landedCount > 0 && !callbackFired)
                     {
                         callbackFired = true;
@@ -485,29 +682,54 @@ namespace BoscaliSummer.Garrisons
                     callback?.Invoke();
                 }
 
-                // Pull the ropes up into the aircraft after the squad has cleared.
-                float retract = 0f;
-                const float retractTime = 0.9f;
-                while (retract < retractTime)
+                // -------------------------------------------------------------
+                // Phase 3: Winch Retraction Animation (ropes reel back into door)
+                // -------------------------------------------------------------
+                yield return new WaitForSeconds(0.4f);
+                PlayWinchAudio(isDeploy: false);
+                float retractProgress = 0f;
+
+                while (retractProgress < 1f)
                 {
-                    retract += Time.deltaTime;
-                    float t = Mathf.Clamp01(retract / retractTime);
-                    if (ropeLeft != null)
-                    {
-                        ropeLeft.SetPosition(0, doorLeft);
-                        ropeLeft.SetPosition(1, Vector3.Lerp(doorLeft, groundLeft, (1f - t) * 0.5f) + Vector3.down * 0.45f * (1f - t));
-                        ropeLeft.SetPosition(2, Vector3.Lerp(doorLeft, groundLeft, 1f - t));
-                    }
-                    if (ropeRight != null)
-                    {
-                        ropeRight.SetPosition(0, doorRight);
-                        ropeRight.SetPosition(1, Vector3.Lerp(doorRight, groundRight, (1f - t) * 0.5f) + Vector3.down * 0.45f * (1f - t));
-                        ropeRight.SetPosition(2, Vector3.Lerp(doorRight, groundRight, 1f - t));
-                    }
+                    float dt = Time.deltaTime;
+                    elapsed += dt;
+                    UpdateDoorAnchors();
+
+                    retractProgress += (RetractWinchSpeed / totalDist) * dt;
+                    if (retractProgress > 1f) retractProgress = 1f;
+
+                    if (audioSource != null)
+                        audioSource.pitch = 1.0f - 0.1f * retractProgress;
+
+                    float remainingRatio = 1f - retractProgress;
+                    UpdateRopeRenderer(ropeLeft, 0, remainingRatio, elapsed);
+                    UpdateRopeRenderer(ropeRight, 1, remainingRatio, elapsed);
+
                     yield return null;
                 }
 
-                Destroy(gameObject, 1.5f);
+                StopWinchAudio();
+                if (ropeLeft != null) ropeLeft.enabled = false;
+                if (ropeRight != null) ropeRight.enabled = false;
+
+                // Ensure all soldier GameObjects are cleaned up
+                for (int i = 0; i < soldiers.Count; i++)
+                {
+                    if (soldiers[i]?.Root != null)
+                        Destroy(soldiers[i].Root);
+                }
+
+                Destroy(gameObject, 0.5f);
+            }
+
+            private void OnDestroy()
+            {
+                StopWinchAudio();
+                for (int i = 0; i < soldiers.Count; i++)
+                {
+                    if (soldiers[i]?.Root != null)
+                        Destroy(soldiers[i].Root);
+                }
             }
 
             private static void SpawnDust(Vector3 pos)

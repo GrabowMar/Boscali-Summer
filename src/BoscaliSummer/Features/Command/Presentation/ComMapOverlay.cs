@@ -7,25 +7,28 @@ using BoscaliSummer.Features.Command.Patches;
 using BoscaliSummer.Features.Command.Runtime;
 using BoscaliSummer.Framework.Lifecycle;
 using BoscaliSummer.Runtime;
-using TMPro;
-using UnityEngine;
-using UnityEngine.UI;
 using NOAvionics;
 using NOAvionics.Ui;
+using UnityEngine;
+using UnityEngine.UI;
 
 namespace BoscaliSummer.Features.Command.Presentation
 {
     internal sealed class ComMapOverlay : MonoBehaviour, ISceneService
     {
+        private const int BaseTextureWidth = 512;
+
         private CommandSettings settings;
         private CommandManager command;
         private ManualLogSource logger;
 
         private DynamicMap dynamicMap;
+        private GameObject overlayObj;
         private RawImage overlayImage;
         private Texture2D overlayTexture;
-        private InfluenceGridCalculator gridCalc;
+        private TacticalSectorGrid sectorGrid;
         private AiOrderExtractor orderExtractor;
+        private MissionMapCompatibilityEngine compatibilityEngine;
 
         // Pooled Vector Objects
         private sealed class PooledVector
@@ -33,40 +36,52 @@ namespace BoscaliSummer.Features.Command.Presentation
             public GameObject Root;
             public RectTransform Rect;
             public Image Line;
-            public TMP_Text Label;
+        }
+
+        private sealed class PooledMarker
+        {
+            public GameObject Root;
+            public RectTransform Rect;
+            public Image Graphic;
         }
 
         private readonly List<PooledVector> vectorPool = new List<PooledVector>(48);
+        private readonly List<PooledVector> thrustPool = new List<PooledVector>(12);
+        private readonly List<PooledMarker> clashPool = new List<PooledMarker>(16);
+        private readonly List<PooledMarker> nodeRingPool = new List<PooledMarker>(16);
+
         private readonly List<AiTaskingOrder> activeOrders = new List<AiTaskingOrder>(48);
-        private readonly List<InfluenceGridCalculator.InfluenceSource> influenceSources =
-            new List<InfluenceGridCalculator.InfluenceSource>(64);
-        private readonly List<InfluenceGridCalculator.RadarSource> radarSources =
-            new List<InfluenceGridCalculator.RadarSource>(32);
 
         private float nextGridUpdate;
         private float nextVectorUpdate;
         private bool isMapMaximized;
         private bool initialized;
-        private Coroutine gridComputeCoroutine;
-        private bool isComputingGrid;
 
+        public bool ShowSectors = true;
         public bool ShowFrontlines = true;
-        public bool ShowRadar = true;
-        public bool ShowRecon = true;
+        public bool ShowThreatRings = false;
+        public bool ShowNodes = true;
+        public bool ShowClashes = true;
+        public bool ShowAttackRoutes = true;
         public bool ShowAiOrders = true;
 
-        public void Configure(CommandSettings config, CommandManager manager, ManualLogSource log)
+        public void Configure(CommandSettings config, CommandManager manager, MissionMapCompatibilityEngine compat, ManualLogSource log)
         {
             settings = config;
             command = manager;
+            compatibilityEngine = compat;
             logger = log;
 
+            ShowSectors = settings.FrontlinesOverlay.Value;
             ShowFrontlines = settings.FrontlinesOverlay.Value;
-            ShowRadar = settings.RadarCoverageOverlay.Value;
-            ShowRecon = settings.VisibilityOverlay.Value;
+            ShowThreatRings = settings.RadarCoverageOverlay.Value;
             ShowAiOrders = settings.AiOrdersOverlay.Value;
+            ShowNodes = true;
+            ShowClashes = true;
+            ShowAttackRoutes = true;
 
-            gridCalc = new InfluenceGridCalculator(settings.GridResolution.Value, 81920f);
+            int res = settings.GridResolution.Value;
+            sectorGrid = new TacticalSectorGrid(res > 0 ? res : TacticalSectorGrid.DefaultResolution, 100000f);
             orderExtractor = new AiOrderExtractor(settings.MaxOrderVectors.Value);
 
             DynamicMapMaximizePatch.OnMaximized += HandleMapMaximized;
@@ -75,30 +90,47 @@ namespace BoscaliSummer.Features.Command.Presentation
 
         public void ResetForScene()
         {
-            if (gridComputeCoroutine != null)
+            if (overlayObj != null)
             {
-                StopCoroutine(gridComputeCoroutine);
-                gridComputeCoroutine = null;
-            }
-            isComputingGrid = false;
-
-            if (overlayImage != null && overlayImage.gameObject != null)
-            {
-                UnityEngine.Object.Destroy(overlayImage.gameObject);
+                Destroy(overlayObj);
+                overlayObj = null;
             }
             overlayImage = null;
 
             if (overlayTexture != null)
             {
-                UnityEngine.Object.Destroy(overlayTexture);
+                Destroy(overlayTexture);
+                overlayTexture = null;
             }
-            overlayTexture = null;
 
             for (int i = 0; i < vectorPool.Count; i++)
             {
-                if (vectorPool[i].Root != null) UnityEngine.Object.Destroy(vectorPool[i].Root);
+                if (vectorPool[i].Root != null) Destroy(vectorPool[i].Root);
             }
             vectorPool.Clear();
+
+            for (int i = 0; i < thrustPool.Count; i++)
+            {
+                if (thrustPool[i].Root != null) Destroy(thrustPool[i].Root);
+            }
+            thrustPool.Clear();
+
+            for (int i = 0; i < clashPool.Count; i++)
+            {
+                if (clashPool[i].Root != null) Destroy(clashPool[i].Root);
+            }
+            clashPool.Clear();
+
+            for (int i = 0; i < nodeRingPool.Count; i++)
+            {
+                if (nodeRingPool[i].Root != null) Destroy(nodeRingPool[i].Root);
+            }
+            nodeRingPool.Clear();
+
+            if (sectorGrid != null)
+            {
+                sectorGrid.ResetAll();
+            }
 
             dynamicMap = null;
             initialized = false;
@@ -119,26 +151,19 @@ namespace BoscaliSummer.Features.Command.Presentation
             isMapMaximized = true;
             nextGridUpdate = 0f;
             nextVectorUpdate = 0f;
-            if (overlayImage != null) overlayImage.enabled = true;
+            if (overlayObj != null) overlayObj.SetActive(true);
         }
 
         private void HandleMapMinimized()
         {
-            if (gridComputeCoroutine != null)
-            {
-                StopCoroutine(gridComputeCoroutine);
-                gridComputeCoroutine = null;
-            }
-            isComputingGrid = false;
-
             isMapMaximized = false;
-            if (overlayImage != null) overlayImage.enabled = false;
+            if (overlayObj != null) overlayObj.SetActive(false);
             HideAllVectors();
         }
 
         private void Update()
         {
-            if (!settings.Enabled.Value) return;
+            if (settings == null || !settings.Enabled.Value) return;
 
             if (!initialized)
             {
@@ -149,21 +174,116 @@ namespace BoscaliSummer.Features.Command.Presentation
             if (dynamicMap == null) return;
             isMapMaximized = DynamicMap.mapMaximized;
 
-            // Performance-first: ZERO CPU work while the map is minimized during flight!
-            if (!isMapMaximized) return;
+            // Strict visibility control: Overlay is strictly for the Maximized Theater Map!
+            // When minimized (cockpit flight HUD), overlay MUST stay disabled so it never pollutes the cockpit MFD.
+            if (overlayObj != null && overlayObj.activeSelf != isMapMaximized)
+            {
+                overlayObj.SetActive(isMapMaximized);
+            }
+
+            if (!isMapMaximized)
+            {
+                HideAllVectors();
+                return;
+            }
+
+            // Ensure overlay stays parented to mapImage with stretch anchors
+            if (overlayObj != null && dynamicMap.mapImage != null && overlayObj.transform.parent != dynamicMap.mapImage.transform)
+            {
+                overlayObj.transform.SetParent(dynamicMap.mapImage.transform, false);
+                RectTransform overlayRect = overlayObj.GetComponent<RectTransform>();
+                overlayRect.anchorMin = Vector2.zero;
+                overlayRect.anchorMax = Vector2.one;
+                overlayRect.offsetMin = Vector2.zero;
+                overlayRect.offsetMax = Vector2.zero;
+                overlayRect.localScale = Vector3.one;
+                overlayRect.localPosition = Vector3.zero;
+            }
 
             float now = Time.unscaledTime;
 
-            if (now >= nextGridUpdate && !isComputingGrid)
+            if (now >= nextGridUpdate)
             {
                 nextGridUpdate = now + settings.GridRefreshInterval.Value;
-                gridComputeCoroutine = StartCoroutine(SpreadInfluenceGridComputation());
+                UpdateSectorGrid();
             }
 
             if (now >= nextVectorUpdate)
             {
                 nextVectorUpdate = now + settings.VectorRefreshInterval.Value;
-                UpdateOrderVectors();
+                UpdateTacticalVectors();
+            }
+        }
+
+        private static Vector2 GetLoadedMapSize(DynamicMap map)
+        {
+            try
+            {
+                MapSettings mapSettings = UnityEngine.Object.FindObjectOfType<MapSettings>();
+                if (mapSettings != null && mapSettings.MapSize.x > 1000f && mapSettings.MapSize.y > 1000f)
+                {
+                    return mapSettings.MapSize;
+                }
+            }
+            catch { }
+
+            try
+            {
+                if (map != null && map.mapImage != null)
+                {
+                    RectTransform rect = map.mapImage.GetComponent<RectTransform>();
+                    if (rect != null && rect.sizeDelta.x > 100f && rect.sizeDelta.y > 100f)
+                    {
+                        // DynamicMap sets: sizeDelta = Vector2.one * (mapSettings.MapSize / 81920f) * 900f
+                        // Therefore: MapSize = (sizeDelta / 900f) * 81920f
+                        float szX = (rect.sizeDelta.x / 900f) * 81920f;
+                        float szY = (rect.sizeDelta.y / 900f) * 81920f;
+                        if (szX > 1000f && szY > 1000f)
+                        {
+                            return new Vector2(szX, szY);
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            try
+            {
+                LevelInfo levelInfo = NetworkSceneSingleton<LevelInfo>.i;
+                if (levelInfo != null && levelInfo.mapSize > 1000f)
+                {
+                    return new Vector2(levelInfo.mapSize * 2f, levelInfo.mapSize);
+                }
+            }
+            catch { }
+
+            return new Vector2(163840f, 81920f);
+        }
+
+        private void EnsureTexture(int texW, int texH)
+        {
+            if (overlayTexture != null && overlayTexture.width == texW && overlayTexture.height == texH)
+                return;
+
+            if (overlayTexture != null)
+            {
+                Destroy(overlayTexture);
+            }
+
+            overlayTexture = new Texture2D(texW, texH, TextureFormat.RGBA32, false)
+            {
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp
+            };
+
+            // Immediately clear to transparent pixels so the overlay never shows uninitialized grey memory
+            Color32[] transparentPixels = new Color32[texW * texH];
+            overlayTexture.SetPixels32(transparentPixels);
+            overlayTexture.Apply(false);
+
+            if (overlayImage != null)
+            {
+                overlayImage.texture = overlayTexture;
             }
         }
 
@@ -175,14 +295,16 @@ namespace BoscaliSummer.Features.Command.Presentation
             RectTransform mapImageRect = dynamicMap.mapImage.GetComponent<RectTransform>();
             if (mapImageRect == null) return;
 
-            int res = settings.GridResolution.Value;
-            overlayTexture = new Texture2D(res, res, TextureFormat.RGBA32, false)
-            {
-                filterMode = FilterMode.Bilinear,
-                wrapMode = TextureWrapMode.Clamp
-            };
+            Vector2 mapSize = (compatibilityEngine != null)
+                ? compatibilityEngine.ResolveTheaterDimensions(dynamicMap)
+                : GetLoadedMapSize(dynamicMap);
+            sectorGrid.SetWorldSize(mapSize.x, mapSize.y);
 
-            GameObject overlayObj = new GameObject("ComMapOverlay", typeof(RectTransform), typeof(RawImage));
+            int texW = BaseTextureWidth;
+            int texH = (int)Math.Max(128, Math.Round(texW * (mapSize.y / mapSize.x)));
+            EnsureTexture(texW, texH);
+
+            overlayObj = new GameObject("ComSectorGridOverlay", typeof(RectTransform), typeof(RawImage));
             overlayObj.transform.SetParent(dynamicMap.mapImage.transform, false);
 
             RectTransform overlayRect = overlayObj.GetComponent<RectTransform>();
@@ -191,24 +313,27 @@ namespace BoscaliSummer.Features.Command.Presentation
             overlayRect.offsetMin = Vector2.zero;
             overlayRect.offsetMax = Vector2.zero;
             overlayRect.pivot = mapImageRect.pivot;
+            overlayRect.localScale = Vector3.one;
+            overlayRect.localPosition = Vector3.zero;
 
             overlayImage = overlayObj.GetComponent<RawImage>();
             overlayImage.texture = overlayTexture;
             overlayImage.raycastTarget = false;
-            overlayImage.enabled = DynamicMap.mapMaximized;
+            overlayObj.SetActive(DynamicMap.mapMaximized);
 
-            // Ensure overlay draws above map background but below iconLayer
+            // Draw overlay directly above terrain image
             overlayObj.transform.SetAsFirstSibling();
 
-            // Initialize Vector Pool under iconLayer
+            // Initialize Vector Pools under iconLayer
             Transform vectorParent = dynamicMap.iconLayer != null
                 ? dynamicMap.iconLayer.transform
                 : dynamicMap.mapTransform;
 
-            int poolSize = settings.MaxOrderVectors.Value;
-            for (int i = 0; i < poolSize; i++)
+            // 1. AI Flight Orders Pool
+            int flightPoolSize = settings.MaxOrderVectors.Value;
+            for (int i = 0; i < flightPoolSize; i++)
             {
-                GameObject vecObj = new GameObject("ComOrderVec_" + i, typeof(RectTransform), typeof(Image));
+                GameObject vecObj = new GameObject("ComFlightVec_" + i, typeof(RectTransform), typeof(Image));
                 vecObj.transform.SetParent(vectorParent, false);
 
                 RectTransform r = vecObj.GetComponent<RectTransform>();
@@ -219,133 +344,213 @@ namespace BoscaliSummer.Features.Command.Presentation
                 Image img = vecObj.GetComponent<Image>();
                 img.raycastTarget = false;
 
-                GameObject labelObj = new GameObject("Label", typeof(RectTransform), typeof(TextMeshProUGUI));
-                labelObj.transform.SetParent(vecObj.transform, false);
-                TMP_Text lbl = labelObj.GetComponent<TextMeshProUGUI>();
-                lbl.fontSize = AvTokens.FontMicro;
-                lbl.color = AvTheme.TextPrimary;
-                if (AvFont.Font != null) lbl.font = AvFont.Font;
-                lbl.alignment = TextAlignmentOptions.MidlineLeft;
-                lbl.raycastTarget = false;
-                lbl.rectTransform.sizeDelta = new Vector2(160f, 20f);
-                lbl.rectTransform.localPosition = new Vector3(8f, 12f, 0f);
-
                 vecObj.SetActive(false);
-                vectorPool.Add(new PooledVector { Root = vecObj, Rect = r, Line = img, Label = lbl });
+                vectorPool.Add(new PooledVector { Root = vecObj, Rect = r, Line = img });
+            }
+
+            // 2. Attack Thrust Arrows Pool
+            for (int i = 0; i < 12; i++)
+            {
+                GameObject thrustObj = new GameObject("ComAttackThrust_" + i, typeof(RectTransform), typeof(Image));
+                thrustObj.transform.SetParent(vectorParent, false);
+
+                RectTransform r = thrustObj.GetComponent<RectTransform>();
+                r.pivot = new Vector2(0f, 0.5f);
+                r.anchorMin = new Vector2(0.5f, 0.5f);
+                r.anchorMax = new Vector2(0.5f, 0.5f);
+
+                Image img = thrustObj.GetComponent<Image>();
+                img.raycastTarget = false;
+
+                thrustObj.SetActive(false);
+                thrustPool.Add(new PooledVector { Root = thrustObj, Rect = r, Line = img });
+            }
+
+            // 3. Combat Clash Hotspot Markers Pool
+            for (int i = 0; i < 16; i++)
+            {
+                GameObject clashObj = new GameObject("ComClashMarker_" + i, typeof(RectTransform), typeof(Image));
+                clashObj.transform.SetParent(vectorParent, false);
+
+                RectTransform r = clashObj.GetComponent<RectTransform>();
+                r.pivot = new Vector2(0.5f, 0.5f);
+                r.anchorMin = new Vector2(0.5f, 0.5f);
+                r.anchorMax = new Vector2(0.5f, 0.5f);
+                r.sizeDelta = new Vector2(16f, 16f);
+
+                Image img = clashObj.GetComponent<Image>();
+                img.raycastTarget = false;
+
+                clashObj.SetActive(false);
+                clashPool.Add(new PooledMarker { Root = clashObj, Rect = r, Graphic = img });
+            }
+
+            // 4. Contested Node Rings Pool
+            for (int i = 0; i < 16; i++)
+            {
+                GameObject ringObj = new GameObject("ComNodeRing_" + i, typeof(RectTransform), typeof(Image));
+                ringObj.transform.SetParent(vectorParent, false);
+
+                RectTransform r = ringObj.GetComponent<RectTransform>();
+                r.pivot = new Vector2(0.5f, 0.5f);
+                r.anchorMin = new Vector2(0.5f, 0.5f);
+                r.anchorMax = new Vector2(0.5f, 0.5f);
+                r.sizeDelta = new Vector2(28f, 28f);
+
+                Image img = ringObj.GetComponent<Image>();
+                img.raycastTarget = false;
+
+                ringObj.SetActive(false);
+                nodeRingPool.Add(new PooledMarker { Root = ringObj, Rect = r, Graphic = img });
             }
 
             initialized = true;
-            logger?.LogInfo("[COM] Tactical Map Overlay initialized (" + res + "x" + res + " grid, " +
-                poolSize + " vector pool).");
+            logger?.LogInfo("[COM] Running With Rifles Tactical Grid Overlay initialized (" + sectorGrid.Resolution + "x" +
+                sectorGrid.Resolution + " sectors, " + mapSize.x + "x" + mapSize.y + "m theater).");
         }
 
-        private System.Collections.IEnumerator SpreadInfluenceGridComputation()
+        private void UpdateSectorGrid()
         {
-            if (dynamicMap == null || overlayTexture == null) yield break;
-            FactionHQ localHq = dynamicMap.HQ;
-            if (localHq == null) yield break;
+            if (dynamicMap == null) return;
 
-            isComputingGrid = true;
-            gridCalc.Clear();
-            influenceSources.Clear();
-            radarSources.Clear();
-
-            // 1. Airbases
-            IEnumerable<Airbase> airbases = localHq.GetAirbases();
-            if (airbases != null)
+            try
             {
-                foreach (Airbase ab in airbases)
+                FactionHQ localHq = (compatibilityEngine != null)
+                    ? compatibilityEngine.ResolvePlayerHq(dynamicMap)
+                    : dynamicMap.HQ;
+                if (localHq == null) return;
+
+                Vector2 mapSize = (compatibilityEngine != null)
+                    ? compatibilityEngine.ResolveTheaterDimensions(dynamicMap)
+                    : GetLoadedMapSize(dynamicMap);
+
+                sectorGrid.SetWorldSize(mapSize.x, mapSize.y);
+                sectorGrid.Clear();
+
+                int texW = BaseTextureWidth;
+                int texH = (int)Math.Max(128, Math.Round(texW * (mapSize.y / mapSize.x)));
+                EnsureTexture(texW, texH);
+
+                // 1. Reconcile Mission Strategic Nodes (Airbases, Depots, Factories, Objectives)
+                if (compatibilityEngine != null)
                 {
-                    if (ab == null || ab.UnitDestroyed()) continue;
-                    Vector3 pos = ab.transform.position;
-                    bool hostile = ab.CurrentHQ != localHq;
-                    influenceSources.Add(new InfluenceGridCalculator.InfluenceSource(
-                        pos.x, pos.z, 14000f, 2.5f, hostile));
+                    compatibilityEngine.ReconcileMissionNodes(sectorGrid, localHq);
                 }
-            }
-
-            // Yield to next frame to keep frame rate silky smooth
-            yield return null;
-            if (!isMapMaximized || dynamicMap == null) { isComputingGrid = false; yield break; }
-
-            // 2. Active Units & Garrisons (aircraft + ground combat vehicles)
-            IReadOnlyList<Aircraft> allAircraft = UnitRegistry.allAircraft;
-            if (allAircraft != null)
-            {
-                for (int i = 0; i < allAircraft.Count; i++)
+                else
                 {
-                    Aircraft ac = allAircraft[i];
-                    if (ac == null || ac.disabled) continue;
-                    Vector3 pos = ac.transform.position;
-                    bool hostile = ac.NetworkHQ != localHq;
-                    if (hostile && !localHq.IsTargetBeingTracked(ac)) continue;
-
-                    influenceSources.Add(new InfluenceGridCalculator.InfluenceSource(
-                        pos.x, pos.z, 6000f, 0.8f, hostile));
-                }
-            }
-
-            List<Unit> allUnits = UnitRegistry.allUnits;
-            if (allUnits != null)
-            {
-                for (int i = 0; i < allUnits.Count; i++)
-                {
-                    Unit u = allUnits[i];
-                    if (u == null || u.disabled || u is Aircraft || u is Missile) continue;
-                    if (u is GroundVehicle || u is Ship)
+                    // Fallback Airbase Scan
+                    HashSet<int> seenAirbases = new HashSet<int>();
+                    var allHqs = FactionRegistry.GetAllHQs();
+                    if (allHqs != null)
                     {
-                        Vector3 pos = u.transform.position;
-                        bool hostile = u.NetworkHQ != localHq;
-                        if (hostile && !localHq.IsTargetBeingTracked(u)) continue;
-
-                        influenceSources.Add(new InfluenceGridCalculator.InfluenceSource(
-                            pos.x, pos.z, 5000f, 1.2f, hostile));
+                        foreach (FactionHQ hq in allHqs)
+                        {
+                            if (hq == null) continue;
+                            var hqAirbases = hq.GetAirbases();
+                            if (hqAirbases != null)
+                            {
+                                foreach (Airbase ab in hqAirbases)
+                                {
+                                    if (ab == null || ab.UnitDestroyed() || !seenAirbases.Add(ab.GetInstanceID())) continue;
+                                    Transform anchor = (ab.center != null) ? ab.center : ab.transform;
+                                    Vector3 pos = anchor.GlobalPosition().AsVector3();
+                                    SectorControl faction = SectorControl.Neutral;
+                                    if (ab.CurrentHQ != null)
+                                    {
+                                        faction = (ab.CurrentHQ == localHq) ? SectorControl.Friendly : SectorControl.Hostile;
+                                    }
+                                    sectorGrid.RegisterNode(ab.GetInstanceID(), ab.name ?? "Airbase", pos.x, pos.z, faction, 0f, true);
+                                }
+                            }
+                        }
                     }
                 }
-            }
 
-            gridCalc.AddInfluence(influenceSources);
-
-            // Yield to next frame
-            yield return null;
-            if (!isMapMaximized || dynamicMap == null) { isComputingGrid = false; yield break; }
-
-            // 3. Radars & SAMs
-            if (GameAccess.HqSensorsAvailable)
-            {
-                List<Radar> radars = GameAccess.GetHqRadars(localHq);
-                if (radars != null)
+                // 2. Troops on the Ground, Combat Armor & SAM Sites
+                List<Unit> allUnits = UnitRegistry.allUnits;
+                if (allUnits != null)
                 {
-                    for (int i = 0; i < radars.Count; i++)
+                    for (int i = 0; i < allUnits.Count; i++)
                     {
-                        Radar r = radars[i];
-                        if (r == null) continue;
-                        Vector3 pos = r.transform.position;
-                        float range = r.GetRadarRange();
-                        radarSources.Add(new InfluenceGridCalculator.RadarSource(
-                            pos.x, pos.z, range > 1000f ? range : 25000f, false, false));
+                        Unit u = allUnits[i];
+                        if (u == null || u.disabled || u is Aircraft || u is Missile) continue;
+
+                        bool isHostile = u.NetworkHQ != localHq;
+                        // Fog of War: enemy units only exert sector presence if tracked by our sensors/HQ
+                        if (isHostile && !localHq.IsTargetBeingTracked(u)) continue;
+
+                        Vector3 pos = u.GlobalPosition().AsVector3();
+                        float combatWeight = 1.0f;
+
+                        if (u is Ship)
+                        {
+                            combatWeight = 4.0f;
+                        }
+                        else if (u is GroundVehicle)
+                        {
+                            combatWeight = 2.5f;
+                        }
+                        else if (u is PilotDismounted)
+                        {
+                            combatWeight = 0.8f;
+                        }
+                        else if (u is Building)
+                        {
+                            combatWeight = 2.5f;
+                        }
+
+                        sectorGrid.AddTroopPresence(pos.x, pos.z, combatWeight, isHostile);
+
+                        // Threat envelope check: SAM sites with active radar
+                        if (ShowThreatRings && isHostile && u.definition != null && u.definition.roleIdentity.antiAir > 0.5f)
+                        {
+                            sectorGrid.AddThreatBubble(pos.x, pos.z, 14000f, true);
+                        }
                     }
                 }
+
+                // 3. Early Warning Radar Networks
+                if (ShowThreatRings && GameAccess.HqSensorsAvailable)
+                {
+                    List<Radar> radars = GameAccess.GetHqRadars(localHq);
+                    if (radars != null)
+                    {
+                        for (int i = 0; i < radars.Count; i++)
+                        {
+                            Radar r = radars[i];
+                            if (r == null) continue;
+                            Vector3 pos = r.transform.GlobalPosition().AsVector3();
+                            float range = r.GetRadarRange();
+                            sectorGrid.AddThreatBubble(pos.x, pos.z, range > 2000f ? range : 25000f, false);
+                        }
+                    }
+                }
+
+                // 4. Evaluate Sectors (Wavefront Growth + 66% Superiority Rule + Frontlines)
+                sectorGrid.EvaluateSectors();
+                command?.SyncSectorTelemetry(sectorGrid);
+
+                // 5. Fast Procedural Texture Bake
+                Color32[] pixels = sectorGrid.BakeTexture(
+                    texW,
+                    texH,
+                    ShowSectors,
+                    ShowFrontlines,
+                    ShowThreatRings,
+                    settings.OverlayOpacity.Value);
+
+                overlayTexture.SetPixels32(pixels);
+                overlayTexture.Apply(false);
             }
-
-            gridCalc.AddRadars(radarSources);
-
-            // Yield to next frame
-            yield return null;
-            if (!isMapMaximized || dynamicMap == null || overlayTexture == null) { isComputingGrid = false; yield break; }
-
-            // 4. Bake Texture & Apply
-            Color32[] pixels = gridCalc.BakeTexture(
-                ShowFrontlines, ShowRadar, ShowRecon, settings.OverlayOpacity.Value);
-            overlayTexture.SetPixels32(pixels);
-            overlayTexture.Apply(false);
-
-            isComputingGrid = false;
+            catch (Exception ex)
+            {
+                logger?.LogWarning("[COM] Error updating tactical sector grid: " + ex.Message);
+            }
         }
 
-        private void UpdateOrderVectors()
+        private void UpdateTacticalVectors()
         {
-            if (!ShowAiOrders || dynamicMap == null)
+            if (dynamicMap == null)
             {
                 HideAllVectors();
                 return;
@@ -354,45 +559,171 @@ namespace BoscaliSummer.Features.Command.Presentation
             FactionHQ localHq = dynamicMap.HQ;
             if (localHq == null) return;
 
-            int count = orderExtractor.ExtractActiveOrders(localHq, activeOrders);
             float mapFactor = dynamicMap.mapDisplayFactor;
+            float inverseScale = 1f / Mathf.Max(0.01f, dynamicMap.mapImage.transform.localScale.x);
 
-            for (int i = 0; i < vectorPool.Count; i++)
+            // 1. AI Flight Sortie Vectors (CAP, Strike, CAS, RTB)
+            if (ShowAiOrders)
             {
-                PooledVector vec = vectorPool[i];
-                if (i >= count)
+                int count = orderExtractor.ExtractActiveOrders(localHq, activeOrders);
+                for (int i = 0; i < vectorPool.Count; i++)
                 {
-                    vec.Root.SetActive(false);
-                    continue;
+                    PooledVector vec = vectorPool[i];
+                    if (i >= count)
+                    {
+                        vec.Root.SetActive(false);
+                        continue;
+                    }
+
+                    AiTaskingOrder order = activeOrders[i];
+                    Vector2 startMap = new Vector2(order.OriginWorld.x * mapFactor, order.OriginWorld.z * mapFactor);
+                    Vector2 endMap = new Vector2(order.TargetWorld.x * mapFactor, order.TargetWorld.z * mapFactor);
+
+                    Vector2 delta = endMap - startMap;
+                    float distance = delta.magnitude;
+
+                    if (distance < 3f)
+                    {
+                        vec.Root.SetActive(false);
+                        continue;
+                    }
+
+                    float angle = Mathf.Atan2(delta.y, delta.x) * Mathf.Rad2Deg;
+                    float thickness = 2.0f * inverseScale;
+
+                    vec.Rect.localPosition = new Vector3(startMap.x, startMap.y, 0f);
+                    vec.Rect.sizeDelta = new Vector2(distance, thickness);
+                    vec.Rect.localEulerAngles = new Vector3(0f, 0f, angle);
+                    vec.Line.color = order.MissionColor;
+
+                    vec.Root.SetActive(true);
+                }
+            }
+            else
+            {
+                for (int i = 0; i < vectorPool.Count; i++)
+                {
+                    if (vectorPool[i].Root != null) vectorPool[i].Root.SetActive(false);
+                }
+            }
+
+            // 2. Attack Thrust Arrows (From friendly forward nodes to contested enemy sectors)
+            if (ShowAttackRoutes)
+            {
+                var thrusts = sectorGrid.GetAttackThrusts();
+                for (int i = 0; i < thrustPool.Count; i++)
+                {
+                    PooledVector thrust = thrustPool[i];
+                    if (i >= thrusts.Count)
+                    {
+                        thrust.Root.SetActive(false);
+                        continue;
+                    }
+
+                    TacticalSectorGrid.AttackThrust t = thrusts[i];
+                    Vector2 startMap = new Vector2(t.OriginX * mapFactor, t.OriginZ * mapFactor);
+                    Vector2 endMap = new Vector2(t.TargetX * mapFactor, t.TargetZ * mapFactor);
+
+                    Vector2 delta = endMap - startMap;
+                    float distance = delta.magnitude;
+
+                    if (distance < 5f)
+                    {
+                        thrust.Root.SetActive(false);
+                        continue;
+                    }
+
+                    float angle = Mathf.Atan2(delta.y, delta.x) * Mathf.Rad2Deg;
+                    float thickness = 3.5f * inverseScale;
+
+                    thrust.Rect.localPosition = new Vector3(startMap.x, startMap.y, 0f);
+                    thrust.Rect.sizeDelta = new Vector2(distance, thickness);
+                    thrust.Rect.localEulerAngles = new Vector3(0f, 0f, angle);
+                    thrust.Line.color = new Color(0.2f, 0.9f, 0.5f, 0.85f); // Tactical green attack arrow
+
+                    thrust.Root.SetActive(true);
+                }
+            }
+            else
+            {
+                for (int i = 0; i < thrustPool.Count; i++)
+                {
+                    if (thrustPool[i].Root != null) thrustPool[i].Root.SetActive(false);
+                }
+            }
+
+            // 3. Combat Clash Hotspot Markers (Crossed / diamond contact bursts)
+            if (ShowClashes)
+            {
+                var clashes = sectorGrid.GetClashes();
+                for (int i = 0; i < clashPool.Count; i++)
+                {
+                    PooledMarker marker = clashPool[i];
+                    if (i >= clashes.Count)
+                    {
+                        marker.Root.SetActive(false);
+                        continue;
+                    }
+
+                    TacticalSectorGrid.TacticalClash clash = clashes[i];
+                    Vector2 mapPos = new Vector2(clash.WorldX * mapFactor, clash.WorldZ * mapFactor);
+                    float size = 16f * inverseScale;
+
+                    marker.Rect.localPosition = new Vector3(mapPos.x, mapPos.y, 0f);
+                    marker.Rect.sizeDelta = new Vector2(size, size);
+                    marker.Rect.localEulerAngles = new Vector3(0f, 0f, 45f); // Rotated diamond
+
+                    // Pulsing clash color
+                    float pulse = 0.7f + 0.3f * Mathf.Sin(Time.unscaledTime * 5f);
+                    marker.Graphic.color = new Color(1.0f, 0.35f, 0.1f, pulse);
+
+                    marker.Root.SetActive(true);
+                }
+            }
+            else
+            {
+                for (int i = 0; i < clashPool.Count; i++)
+                {
+                    if (clashPool[i].Root != null) clashPool[i].Root.SetActive(false);
+                }
+            }
+
+            // 4. Contested Strategic Node Rings
+            if (ShowNodes)
+            {
+                var nodes = sectorGrid.GetNodes();
+                int ringIdx = 0;
+
+                for (int i = 0; i < nodes.Count && ringIdx < nodeRingPool.Count; i++)
+                {
+                    TacticalSectorGrid.TacticalNode node = nodes[i];
+                    if (!node.IsContested) continue;
+
+                    PooledMarker ring = nodeRingPool[ringIdx++];
+                    Vector2 mapPos = new Vector2(node.X * mapFactor, node.Z * mapFactor);
+                    float size = 26f * inverseScale;
+
+                    ring.Rect.localPosition = new Vector3(mapPos.x, mapPos.y, 0f);
+                    ring.Rect.sizeDelta = new Vector2(size, size);
+                    ring.Rect.localEulerAngles = Vector3.zero;
+
+                    float pulse = 0.6f + 0.4f * Mathf.Sin(Time.unscaledTime * 4f);
+                    ring.Graphic.color = new Color(1.0f, 0.8f, 0.2f, pulse);
+
+                    ring.Root.SetActive(true);
                 }
 
-                AiTaskingOrder order = activeOrders[i];
-
-                // Convert world coords to map local coords
-                Vector2 startMap = new Vector2(order.OriginWorld.x * mapFactor, order.OriginWorld.z * mapFactor);
-                Vector2 endMap = new Vector2(order.TargetWorld.x * mapFactor, order.TargetWorld.z * mapFactor);
-
-                Vector2 delta = endMap - startMap;
-                float distance = delta.magnitude;
-
-                if (distance < 2f)
+                for (int i = ringIdx; i < nodeRingPool.Count; i++)
                 {
-                    vec.Root.SetActive(false);
-                    continue;
+                    nodeRingPool[i].Root.SetActive(false);
                 }
-
-                float angle = Mathf.Atan2(delta.y, delta.x) * Mathf.Rad2Deg;
-
-                vec.Rect.localPosition = new Vector3(startMap.x, startMap.y, 0f);
-                vec.Rect.sizeDelta = new Vector2(distance, 2.5f);
-                vec.Rect.localEulerAngles = new Vector3(0f, 0f, angle);
-
-                vec.Line.color = order.MissionColor;
-                vec.Label.text = order.Callsign + " > " + order.TargetName;
-                vec.Label.color = order.MissionColor.WithAlpha(0.9f);
-                vec.Label.rectTransform.localEulerAngles = new Vector3(0f, 0f, -angle); // Keep text horizontal
-
-                vec.Root.SetActive(true);
+            }
+            else
+            {
+                for (int i = 0; i < nodeRingPool.Count; i++)
+                {
+                    if (nodeRingPool[i].Root != null) nodeRingPool[i].Root.SetActive(false);
+                }
             }
         }
 
@@ -401,6 +732,18 @@ namespace BoscaliSummer.Features.Command.Presentation
             for (int i = 0; i < vectorPool.Count; i++)
             {
                 if (vectorPool[i].Root != null) vectorPool[i].Root.SetActive(false);
+            }
+            for (int i = 0; i < thrustPool.Count; i++)
+            {
+                if (thrustPool[i].Root != null) thrustPool[i].Root.SetActive(false);
+            }
+            for (int i = 0; i < clashPool.Count; i++)
+            {
+                if (clashPool[i].Root != null) clashPool[i].Root.SetActive(false);
+            }
+            for (int i = 0; i < nodeRingPool.Count; i++)
+            {
+                if (nodeRingPool[i].Root != null) nodeRingPool[i].Root.SetActive(false);
             }
         }
     }
