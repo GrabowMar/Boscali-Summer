@@ -25,9 +25,9 @@ plugin GUID, config path, and public metadata unless the user requests a migrati
 
 ## Module architecture
 
-Keep one shipped `BoscaliSummer.dll`. Source modules live under `Features/<Feature>` and
-shared mechanics under `Framework` or `Infrastructure` only when multiple real consumers
-justify them.
+Keep one shipped `BoscaliSummer.dll`. Source modules live under `modules/<Feature>` at the
+repo root, and shared mechanics under `Framework` or `Infrastructure` only when multiple
+real consumers justify them.
 
 For a new feature:
 
@@ -105,7 +105,7 @@ Build and validate against the installed game before deployment:
 ```powershell
 dotnet build .\BoscaliSummer.sln -c Release --no-restore --disable-build-servers
 dotnet run --project .\tests\BoscaliSummer.Tests\BoscaliSummer.Tests.csproj -c Release --no-build
-dotnet run --project .\tests\BoscaliSummer.PatchProbe\BoscaliSummer.PatchProbe.csproj -c Release --no-build -- "C:\Program Files (x86)\Steam\steamapps\common\Nuclear Option" ".\src\BoscaliSummer\bin\Release\netstandard2.1\BoscaliSummer.dll"
+dotnet run --project .\tests\BoscaliSummer.PatchProbe\BoscaliSummer.PatchProbe.csproj -c Release --no-build -- "C:\Program Files (x86)\Steam\steamapps\common\Nuclear Option" ".\bin\Release\netstandard2.1\BoscaliSummer.dll"
 git diff --check
 ```
 

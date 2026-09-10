@@ -6,33 +6,33 @@
     <RootNamespace>BoscaliSummer.Tests</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="..\..\src\BoscaliSummer\Features\QoL\Runtime\GunAimAssistPolicy.cs" Link="Features\QoL\GunAimAssistPolicy.cs" />
-    <Compile Include="..\..\src\BoscaliSummer\Features\DynamicOperations\Domain\OperationBoard.cs" Link="Features\DynamicOperations\OperationBoard.cs" />
-    <Compile Include="..\..\src\BoscaliSummer\Features\Command\Presentation\MapUi\MfdSecondaryObjectives.cs" Link="Features\Command\MfdSecondaryObjectives.cs" />
-    <Compile Include="..\..\src\BoscaliSummer\Framework\Contracts\IObservationSource.cs" Link="Framework\IObservationSource.cs" />
-    <Compile Include="..\..\src\BoscaliSummer\Features\QoL\Runtime\ObservationStore.cs" Link="Features\QoL\ObservationStore.cs" />
-    <Compile Include="..\..\src\BoscaliSummer\Features\Command\Presentation\MapUi\MfdTargetPresets.cs" Link="Features\Command\MfdTargetPresets.cs" />
-    <Compile Include="..\..\src\BoscaliSummer\Features\Command\Presentation\MapUi\MfdChartScale.cs" Link="Features\Command\MfdChartScale.cs" />
-    <Compile Include="..\..\src\BoscaliSummer\Features\QoL\Runtime\ThirdPersonCameraPolicy.cs" Link="Features\QoL\ThirdPersonCameraPolicy.cs" />
-    <Compile Include="..\..\src\BoscaliSummer\Features\Command\Presentation\MapUi\MfdLogSpace.cs" Link="Features\Command\MfdLogSpace.cs" />
-    <Compile Include="..\..\src\BoscaliSummer\Features\Command\Presentation\MapUi\VanillaMfdPanelCatalog.cs" Link="Features\Command\VanillaMfdPanelCatalog.cs" />
-    <Compile Include="..\..\src\BoscaliSummer\Features\Command\Domain\CommandScoring.cs" Link="Features\Command\CommandScoring.cs" />
-    <Compile Include="..\..\src\BoscaliSummer\Features\Support\Runtime\SupportMapGesture.cs" Link="Features\Support\SupportMapGesture.cs" />
-    <Compile Include="..\..\src\BoscaliSummer\Core\Deterministic.cs" Link="Core\Deterministic.cs" />
-    <Compile Include="..\..\src\BoscaliSummer\Features\FireAndDestruction\Buildings\ImpactScorchPolicy.cs" Link="Features\FireAndDestruction\ImpactScorchPolicy.cs" />
-    <Compile Include="..\..\src\BoscaliSummer\Features\Radio\Runtime\RadioLibrary.cs" Link="Features\Radio\RadioLibrary.cs" />
-    <Compile Include="..\..\src\BoscaliSummer\Features\Radio\Presentation\PngIconHeader.cs" Link="Features\Radio\PngIconHeader.cs" />
-    <Compile Include="..\..\src\BoscaliSummer\Framework\Contracts\IPlayerPerks.cs" Link="Framework\IPlayerPerks.cs" />
-    <Compile Include="..\..\src\BoscaliSummer\Features\Progression\Runtime\PerkCatalog.cs" Link="Features\Progression\PerkCatalog.cs" />
-    <Compile Include="..\..\src\BoscaliSummer\Features\Support\Runtime\SupportModel.cs" Link="Features\Support\SupportModel.cs" />
-    <Compile Include="..\..\src\BoscaliSummer\Features\UrbanCombat\Runtime\TroopDeploymentMath.cs" Link="Features\UrbanCombat\TroopDeploymentMath.cs" />
-    <Compile Include="..\..\src\BoscaliSummer\Framework\Features\FeatureMetadata.cs" Link="Framework\FeatureMetadata.cs" />
-    <Compile Include="..\..\src\BoscaliSummer\Framework\Features\FeatureGraph.cs" Link="Framework\FeatureGraph.cs" />
-    <Compile Include="..\..\src\BoscaliSummer\Framework\Features\ServiceRegistry.cs" Link="Framework\ServiceRegistry.cs" />
-    <Compile Include="..\..\src\BoscaliSummer\Features\Command\Domain\CommandDoctrine.cs" Link="Features\Command\CommandDoctrine.cs" />
-    <Compile Include="..\..\src\BoscaliSummer\Features\Command\Runtime\TacticalSectorGrid.cs" Link="Features\Command\TacticalSectorGrid.cs" />
-    <Compile Include="..\..\src\BoscaliSummer\Features\Command\Domain\SortieClassifier.cs" Link="Features\Command\SortieClassifier.cs" />
-    <Compile Include="..\..\src\BoscaliSummer\Features\Command\Domain\TheaterReadout.cs" Link="Features\Command\TheaterReadout.cs" />
+    <Compile Include="..\..\modules\QoL\Runtime\GunAimAssistPolicy.cs" Link="Features\QoL\GunAimAssistPolicy.cs" />
+    <Compile Include="..\..\modules\DynamicOperations\Domain\OperationBoard.cs" Link="Features\DynamicOperations\OperationBoard.cs" />
+    <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdSecondaryObjectives.cs" Link="Features\Command\MfdSecondaryObjectives.cs" />
+    <Compile Include="..\..\Framework\Contracts\IObservationSource.cs" Link="Framework\IObservationSource.cs" />
+    <Compile Include="..\..\modules\QoL\Runtime\ObservationStore.cs" Link="Features\QoL\ObservationStore.cs" />
+    <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdTargetPresets.cs" Link="Features\Command\MfdTargetPresets.cs" />
+    <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdChartScale.cs" Link="Features\Command\MfdChartScale.cs" />
+    <Compile Include="..\..\modules\QoL\Runtime\ThirdPersonCameraPolicy.cs" Link="Features\QoL\ThirdPersonCameraPolicy.cs" />
+    <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdLogSpace.cs" Link="Features\Command\MfdLogSpace.cs" />
+    <Compile Include="..\..\modules\Command\Presentation\MapUi\VanillaMfdPanelCatalog.cs" Link="Features\Command\VanillaMfdPanelCatalog.cs" />
+    <Compile Include="..\..\modules\Command\Domain\CommandScoring.cs" Link="Features\Command\CommandScoring.cs" />
+    <Compile Include="..\..\modules\Support\Runtime\SupportMapGesture.cs" Link="Features\Support\SupportMapGesture.cs" />
+    <Compile Include="..\..\Core\Deterministic.cs" Link="Core\Deterministic.cs" />
+    <Compile Include="..\..\modules\FireAndDestruction\Buildings\ImpactScorchPolicy.cs" Link="Features\FireAndDestruction\ImpactScorchPolicy.cs" />
+    <Compile Include="..\..\modules\Radio\Runtime\RadioLibrary.cs" Link="Features\Radio\RadioLibrary.cs" />
+    <Compile Include="..\..\modules\Radio\Presentation\PngIconHeader.cs" Link="Features\Radio\PngIconHeader.cs" />
+    <Compile Include="..\..\Framework\Contracts\IPlayerPerks.cs" Link="Framework\IPlayerPerks.cs" />
+    <Compile Include="..\..\modules\Progression\Runtime\PerkCatalog.cs" Link="Features\Progression\PerkCatalog.cs" />
+    <Compile Include="..\..\modules\Support\Runtime\SupportModel.cs" Link="Features\Support\SupportModel.cs" />
+    <Compile Include="..\..\modules\UrbanCombat\Runtime\TroopDeploymentMath.cs" Link="Features\UrbanCombat\TroopDeploymentMath.cs" />
+    <Compile Include="..\..\Framework\Features\FeatureMetadata.cs" Link="Framework\FeatureMetadata.cs" />
+    <Compile Include="..\..\Framework\Features\FeatureGraph.cs" Link="Framework\FeatureGraph.cs" />
+    <Compile Include="..\..\Framework\Features\ServiceRegistry.cs" Link="Framework\ServiceRegistry.cs" />
+    <Compile Include="..\..\modules\Command\Domain\CommandDoctrine.cs" Link="Features\Command\CommandDoctrine.cs" />
+    <Compile Include="..\..\modules\Command\Runtime\TacticalSectorGrid.cs" Link="Features\Command\TacticalSectorGrid.cs" />
+    <Compile Include="..\..\modules\Command\Domain\SortieClassifier.cs" Link="Features\Command\SortieClassifier.cs" />
+    <Compile Include="..\..\modules\Command\Domain\TheaterReadout.cs" Link="Features\Command\TheaterReadout.cs" />
     <Compile Include="..\..\..\nomodkit\shared\avionics\*.cs" LinkBase="Avionics" />
   </ItemGroup>
 </Project>

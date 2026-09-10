@@ -16,8 +16,8 @@ namespace BoscaliSummer.Tests.Architecture
 
         public static void Run()
         {
-            string sourceRoot = FindSourceRoot();
-            string featuresRoot = Path.Combine(sourceRoot, "Features");
+            string sourceRoot = FindRepoRoot();
+            string featuresRoot = Path.Combine(sourceRoot, "modules");
 
             foreach (string featurePath in Directory.GetDirectories(featuresRoot))
             {
@@ -77,16 +77,17 @@ namespace BoscaliSummer.Tests.Architecture
             }
         }
 
-        private static string FindSourceRoot()
+        private static string FindRepoRoot()
         {
             DirectoryInfo directory = new DirectoryInfo(AppContext.BaseDirectory);
             while (directory != null)
             {
-                string candidate = Path.Combine(directory.FullName, "src", "BoscaliSummer");
-                if (Directory.Exists(Path.Combine(candidate, "Features"))) return candidate;
+                if (File.Exists(Path.Combine(directory.FullName, "BoscaliSummer.sln")) &&
+                    Directory.Exists(Path.Combine(directory.FullName, "modules")))
+                    return directory.FullName;
                 directory = directory.Parent;
             }
-            throw new DirectoryNotFoundException("Could not locate src/BoscaliSummer from test output.");
+            throw new DirectoryNotFoundException("Could not locate the repo root (BoscaliSummer.sln + modules/) from test output.");
         }
 
         private static string Relative(string root, string path) =>
