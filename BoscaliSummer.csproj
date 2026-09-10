@@ -1,0 +1,113 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AssemblyName>BoscaliSummer</AssemblyName>
+    <RootNamespace>BoscaliSummer</RootNamespace>
+    <Version>0.1.1</Version>
+    <DebugType>portable</DebugType>
+    <!-- CS0436: shared avionics source is linked into this assembly and the tests. -->
+    <NoWarn>$(NoWarn);CS0436;MSB3277</NoWarn>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <!-- The project lives at the repo root, so the SDK's implicit **/*.cs glob would also
+         sweep tests/, docs/ and the git-ignored .nomodkit/ tool cache. Enumerate the
+         source roots explicitly instead. -->
+    <EnableDefaultItems>false</EnableDefaultItems>
+  </PropertyGroup>
+
+  <ItemGroup Label="Source roots">
+    <Compile Include="Bootstrap\**\*.cs" />
+    <Compile Include="Configuration\**\*.cs" />
+    <Compile Include="Core\**\*.cs" />
+    <Compile Include="Framework\**\*.cs" />
+    <Compile Include="Infrastructure\**\*.cs" />
+    <Compile Include="Interop\**\*.cs" />
+    <Compile Include="modules\**\*.cs" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <GameDir Condition="'$(GameDir)' == ''">C:\Program Files (x86)\Steam\steamapps\common\Nuclear Option</GameDir>
+    <ManagedDir>$(GameDir)\NuclearOption_Data\Managed</ManagedDir>
+    <BepInExDir>$(GameDir)\BepInEx\core</BepInExDir>
+    <NomodKitDir Condition="'$(NomodKitDir)' == ''">$(MSBuildProjectDirectory)\..\nomodkit</NomodKitDir>
+  </PropertyGroup>
+
+  <Target Name="CheckLocalDependencies" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="!Exists('$(ManagedDir)\Assembly-CSharp.dll')"
+           Text="Nuclear Option assemblies not found under $(ManagedDir). Set GameDir to your game installation." />
+    <Error Condition="!Exists('$(BepInExDir)\BepInEx.dll')"
+           Text="BepInEx 5 not found under $(BepInExDir). Install it in the game directory and launch once." />
+    <Error Condition="!Exists('$(NomodKitDir)\shared\avionics') Or !Exists('$(NomodKitDir)\shared\avionics-ui\avionics.avss')"
+           Text="Shared avionics sources not found under $(NomodKitDir). Set NomodKitDir to your nomodkit checkout." />
+  </Target>
+
+  <!-- Keep the BepInPlugin compile-time version constant aligned with assembly metadata. -->
+  <Target Name="CheckPluginVersionMatchesCsproj" BeforeTargets="CoreCompile">
+    <PropertyGroup>
+      <_PluginSource>$([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)/Bootstrap/Plugin.cs'))</_PluginSource>
+      <_DeclaredVersion>$([System.Text.RegularExpressions.Regex]::Match($(_PluginSource), 'PluginVersion\s*=\s*"([^"]*)"').Groups[1].Value)</_DeclaredVersion>
+    </PropertyGroup>
+    <Error Condition="'$(_DeclaredVersion)' == ''"
+           Text="Could not find Plugin.PluginVersion in Bootstrap/Plugin.cs. If it moved, update this check." />
+    <Error Condition="'$(_DeclaredVersion)' != '$(Version)'"
+           Text="Version mismatch: csproj &lt;Version&gt; is '$(Version)' but Plugin.PluginVersion is '$(_DeclaredVersion)'. Bump both." />
+  </Target>
+
+  <ItemGroup Label="BepInEx and Harmony">
+    <Reference Include="BepInEx"><HintPath>$(BepInExDir)\BepInEx.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="0Harmony"><HintPath>$(BepInExDir)\0Harmony.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+
+  <ItemGroup Label="Game">
+    <Reference Include="Assembly-CSharp"><HintPath>$(ManagedDir)\Assembly-CSharp.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Assembly-CSharp-firstpass"><HintPath>$(ManagedDir)\Assembly-CSharp-firstpass.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Mirage"><HintPath>$(ManagedDir)\Mirage.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UniTask"><HintPath>$(ManagedDir)\UniTask.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Rewired_Core"><HintPath>$(ManagedDir)\Rewired_Core.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+
+  <ItemGroup Label="Unity">
+    <Reference Include="UnityEngine"><HintPath>$(ManagedDir)\UnityEngine.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.CoreModule"><HintPath>$(ManagedDir)\UnityEngine.CoreModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.PhysicsModule"><HintPath>$(ManagedDir)\UnityEngine.PhysicsModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.ParticleSystemModule"><HintPath>$(ManagedDir)\UnityEngine.ParticleSystemModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.ImageConversionModule"><HintPath>$(ManagedDir)\UnityEngine.ImageConversionModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.AudioModule"><HintPath>$(ManagedDir)\UnityEngine.AudioModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.UI"><HintPath>$(ManagedDir)\UnityEngine.UI.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.UIModule"><HintPath>$(ManagedDir)\UnityEngine.UIModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.InputLegacyModule"><HintPath>$(ManagedDir)\UnityEngine.InputLegacyModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.TextRenderingModule"><HintPath>$(ManagedDir)\UnityEngine.TextRenderingModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Unity.TextMeshPro"><HintPath>$(ManagedDir)\Unity.TextMeshPro.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.UnityWebRequestModule"><HintPath>$(ManagedDir)\UnityEngine.UnityWebRequestModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.UnityWebRequestAudioModule"><HintPath>$(ManagedDir)\UnityEngine.UnityWebRequestAudioModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Unity.RenderPipelines.Universal.Runtime"><HintPath>$(ManagedDir)\Unity.RenderPipelines.Universal.Runtime.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.AnimationModule"><HintPath>$(ManagedDir)\UnityEngine.AnimationModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.IMGUIModule"><HintPath>$(ManagedDir)\UnityEngine.IMGUIModule.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Engine-free avionics protocol, compiled into this plugin so Boscali Summer and
+         Wing Command can coordinate bezels and map gestures without a shared DLL. -->
+    <Compile Include="$(NomodKitDir)\shared\avionics\*.cs" Link="Avionics\%(Filename)%(Extension)"
+             Exclude="$(NomodKitDir)\shared\avionics\*Tests.cs" />
+    <Compile Include="$(NomodKitDir)\shared\avionics-ui\*.cs" Link="AvionicsUi\%(Filename)%(Extension)" />
+
+    <!-- The panels' look, as data. Embedded so there is always a valid default, and
+         overridable at BepInEx/config/NOAvionics/avionics.avss so it can be retuned
+         without a rebuild. Both plugins embed the same file under the same name. -->
+    <EmbeddedResource Include="$(NomodKitDir)\shared\avionics-ui\avionics.avss">
+      <LogicalName>NOAvionics.avionics.avss</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup Label="Radio station assets">
+    <EmbeddedResource Include="modules\Radio\Assets\*.png">
+      <LogicalName>BoscaliSummer.RadioAssets.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="modules\Radio\Assets\stations-readme.txt">
+      <LogicalName>BoscaliSummer.RadioAssets.stations-readme.txt</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+</Project>

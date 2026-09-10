@@ -6,6 +6,7 @@ using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
 using System.Resources;
 using System.Runtime.Loader;
+using System.Collections.Immutable;
 
 if (args.Length != 2)
 {
@@ -36,6 +37,18 @@ Assembly pluginAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(plugi
 
 (string Type, string Method)[] targets =
 {
+    ("ControlsFilter", "GetAim"),
+    ("PilotPlayerState", "PlayerAxisControls"),
+    ("CameraStateManager", "SwitchState"),
+    ("CameraStateManager", "SetFollowingUnit"),
+    ("CameraOrbitState", "UpdateState"),
+    ("CameraChaseState", "UpdateState"),
+    ("GameplayUI", "SelectAircraft"),
+    ("GameplayUI", "PauseGame"),
+    ("GameplayUI", "ResumeGame"),
+    ("FlightHud", "EnableCanvas"),
+    ("DynamicMap", "EnableCanvas"),
+    ("WeaponManager", "GetTargetList"),
     ("Airbase", "CaptureFaction"),
     ("Building", "OnStartClient"),
     ("BulletSim+Bullet", "TrajectoryTrace"),
@@ -50,6 +63,10 @@ Assembly pluginAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(plugi
     ("MapSettings", "GetStrategicMusic"),
     ("MapSettings", "GetTacticalMusic"),
     ("VirtualMFD", "SetupButtons"),
+    ("VirtualMFD", "PressLeftButton"),
+    ("VirtualMFD", "PressRightButton"),
+    ("MFDScreen", "ShowScreen"),
+    ("MFDScreen", "CloseScreen"),
     ("FactionHQ", "RewardPlayer"),
     ("Aircraft", "UseFuel"),
     ("DynamicMap", "TryGetCursorCoordinates"),
@@ -60,6 +77,7 @@ Assembly pluginAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(plugi
     ("Missile", "Arm"),
     ("Missile", "SetAimpoint"),
     ("FactionHQ", "SetTrackingState"),
+    ("FactionHQ", "GetTrackingData"),
     ("UnitRegistry", "RegisterUnit"),
     ("MountedTroops", "Fire"),
     ("LoadoutSelector", "AssignAircraft"),
@@ -91,6 +109,8 @@ foreach ((string typeName, string methodName) in targets)
 
 (string Type, string Field)[] fields =
 {
+    ("TargetCam", "cam"),
+    ("Aircraft", "targetCam"),
     ("MapBuilding", "hitPoints"),
     ("Missile", "blastYield"),
     ("GameAssets", "scorchMarkDecal"),
@@ -99,6 +119,11 @@ foreach ((string typeName, string methodName) in targets)
     ("SoundManager", "MusicMixer"),
     ("Faction", "factionName"),
     ("FactionRegistry", "factions"),
+    ("VirtualMFD", "speed"),
+    ("GameplayUI", "selectAirbasePanel"),
+    ("GameplayUI", "spectatorPanel"),
+    ("MessageUI", "messageText"),
+    ("MessageUI", "killFeedText"),
     ("VirtualMFD", "leftButtons"),
     ("VirtualMFD", "rightButtons"),
     ("VirtualMFD", "leftScreens"),
@@ -125,10 +150,60 @@ foreach ((string typeName, string fieldName) in fields)
         throw new MissingFieldException(typeName, fieldName);
 }
 
+// Typed seams used by the external HUD and camera patches, including Harmony field injection.
+(string Type, string Field, string FieldType)[] cameraFields =
+{
+    ("ControlsFilter", "aircraft", "Aircraft"),
+    ("PilotBaseState", "pilot", "Pilot"),
+    ("PilotPlayerState", "pilotStrength", "System.Single"),
+    ("FlightHud", "canvas", "UnityEngine.Canvas"),
+    ("FlightHud", "pitchCompassCenter", "UnityEngine.GameObject"),
+    ("TargetCam", "cam", "UnityEngine.Camera"),
+    ("TargetCam", "currentMode", "TargetCam+CamMode"),
+    ("TrackingInfo", "lastSpottedTime", "System.Single"),
+    ("CameraOrbitState", "panView", "System.Single"),
+    ("CameraOrbitState", "tiltView", "System.Single"),
+    ("CameraOrbitState", "viewDistAdjust", "System.Single"),
+    ("CameraOrbitState", "lookAtTargetLerp", "System.Single"),
+    ("CameraChaseState", "viewDistAdjust", "System.Single"),
+    ("CameraChaseState", "currentPos", "CameraChaseState+ChasePos")
+};
+foreach (var seam in cameraFields)
+{
+    FieldInfo field = gameAssembly.GetType(seam.Type, true)!.GetField(seam.Field, AllMembers)
+        ?? throw new MissingFieldException(seam.Type, seam.Field);
+    if (field.FieldType.FullName != seam.FieldType)
+        throw new InvalidOperationException($"Camera seam {seam.Type}.{seam.Field} changed type");
+}
+Type chasePosition = gameAssembly.GetType("CameraChaseState+ChasePos", true)!;
+MethodInfo gunAim = gameAssembly.GetType("ControlsFilter", true)!.GetMethod("GetAim", AllMembers)!;
+var gunAimParameters = gunAim.GetParameters();
+Type globalPosition = gameAssembly.GetType("GlobalPosition", true)!;
+Type optionalPositionRef = typeof(Nullable<>).MakeGenericType(globalPosition).MakeByRefType();
+if (gunAim.ReturnType != typeof(void) || gunAimParameters.Length != 3 ||
+    gunAimParameters[0].ParameterType.FullName != "Unit" ||
+    gunAimParameters[1].ParameterType != optionalPositionRef || !gunAimParameters[1].IsOut ||
+    gunAimParameters[2].ParameterType != optionalPositionRef || !gunAimParameters[2].IsOut)
+    throw new InvalidOperationException("ControlsFilter.GetAim gun solution signature changed");
+MethodInfo playerAxes = gameAssembly.GetType("PilotPlayerState", true)!.GetMethod("PlayerAxisControls", AllMembers)!;
+if (playerAxes.ReturnType != typeof(void) || playerAxes.GetParameters().Length != 0 || playerAxes.IsStatic)
+    throw new InvalidOperationException("PilotPlayerState.PlayerAxisControls input signature changed");
+if (Convert.ToInt32(Enum.Parse(chasePosition, "Back")) != 0)
+    throw new InvalidOperationException("Native rear chase preset changed value");
+foreach (string cameraState in new[] { "CameraOrbitState", "CameraChaseState" })
+{
+    MethodInfo update = gameAssembly.GetType(cameraState, true)!.GetMethod("UpdateState", AllMembers)!;
+    var parameters = update.GetParameters();
+    if (update.ReturnType != typeof(void) || parameters.Length != 1 ||
+        parameters[0].ParameterType.FullName != "CameraStateManager" || parameters[0].Name != "cam")
+        throw new InvalidOperationException(cameraState + ".UpdateState camera binding changed");
+}
+
 // Harmony binds patch parameters by name, so a rename in a game update throws at patch
 // time rather than degrading. Neither probe checked these names before.
 (string Type, string Method, string[] Parameters)[] parameterNames =
 {
+    ("ControlsFilter", "GetAim", new[] { "target", "aimPoint", "impactPoint" }),
     ("Aircraft", "UseFuel", new[] { "fuelDrawn" }),
     ("FactionHQ", "RewardPlayer", new[] { "player", "rewardAllocation", "missionType" })
 };
@@ -168,10 +243,17 @@ string[] patchTypes =
     "BoscaliSummer.Features.Progression.Patches.AircraftFuelUsePatch",
     "BoscaliSummer.Features.Progression.Patches.RewardAllocationPatch",
     "BoscaliSummer.Features.Command.Patches.AiTargetScoringPatch",
+    "BoscaliSummer.Features.Command.Presentation.MapUi.MfdRailPatch",
+    "BoscaliSummer.Features.Command.Presentation.MapUi.MfdScreenChromePatch",
+    "BoscaliSummer.Features.Command.Presentation.MapUi.MfdSinglePanelPatch",
     "BoscaliSummer.Features.Command.Patches.DynamicMapMaximizePatch",
     "BoscaliSummer.Features.Command.Patches.DynamicMapMinimizePatch",
     "BoscaliSummer.Features.Support.Patches.SupportMissileDetonatePatch",
-    "BoscaliSummer.Features.Support.Patches.ThirdPersonHudPatches"
+    "BoscaliSummer.Features.QoL.Patches.ThirdPersonHudPatches",
+    "BoscaliSummer.Features.QoL.Patches.ThirdPersonOrbitPatch",
+    "BoscaliSummer.Features.QoL.Patches.ThirdPersonChasePatch",
+    "BoscaliSummer.Features.QoL.Patches.GunAimSolutionPatch",
+    "BoscaliSummer.Features.QoL.Patches.GunAimInputPatch"
 };
 
 foreach (string patchType in patchTypes)
@@ -185,6 +267,7 @@ string[] featureTypes =
     "BoscaliSummer.Features.Radio.RadioFeature",
     "BoscaliSummer.Features.Progression.ProgressionFeature",
     "BoscaliSummer.Features.Support.SupportFeature",
+    "BoscaliSummer.Features.QoL.QoLFeature",
     "BoscaliSummer.Features.Command.CommandFeature"
 };
 foreach (string featureType in featureTypes)
@@ -257,7 +340,75 @@ Type messageHandler = mirageAssembly.GetType("Mirage.MessageHandler", true)!;
 if (!messageHandler.GetMethods(AllMembers).Any(method => method.Name == "RegisterHandler"))
     throw new MissingMethodException("Mirage.MessageHandler", "RegisterHandler");
 
-Console.WriteLine($"Patch target probe: game methods/fields, Harmony parameter names, {patchTypes.Length} patch classes, {featureTypes.Length} features, radio assets, four wire contracts, and Mirage seams resolved.");
+// Dynamic operations: exact native reward/road signatures, including Unity Mono types
+// which cannot safely be materialized by CoreCLR reflection.
+string operationAssembly = Path.Combine(managedDir, "Assembly-CSharp.dll");
+(string Type, string Method, string Signature)[] operationMethods =
+{
+    ("Spawner", "SpawnVehicle", "GroundVehicle(UnityEngine.GameObject,GlobalPosition,UnityEngine.Quaternion,UnityEngine.Vector3,FactionHQ,System.String,System.Single,System.Boolean,NuclearOption.Networking.Player)"),
+    ("Spawner", "SpawnBuilding", "Building(UnityEngine.GameObject,GlobalPosition,UnityEngine.Quaternion,FactionHQ,Airbase,System.String,System.Boolean,NuclearOption.SavedMission.SavedBuilding+FactoryOptions)"),
+    ("UnitCommand", "SetDestination", "System.Void(GlobalPosition,System.Boolean)"),
+    ("Unit", "add_onDisableUnit", "System.Void(System.Action`1<Unit>)"),
+    ("Unit", "remove_onDisableUnit", "System.Void(System.Action`1<Unit>)"),
+    ("GroundVehicle", "get_UnitCommand", "UnitCommand()"),
+    ("GroundVehicle", "SetHoldPosition", "System.Void(System.Boolean)"),
+    ("FactionHQ", "RewardPlayer", "System.Void(NuclearOption.Networking.Player,Unit,System.Single,System.Single,FactionHQ+RewardType)"),
+    ("FactionHQ", "GetTrackingData", "TrackingInfo(PersistentID)"),
+    ("Airbase", "get_AttachedAirbase", "System.Boolean()"),
+    ("Airbase", "get_CurrentHQ", "FactionHQ()"),
+    ("Airbase", "get_disabled", "System.Boolean()"),
+    ("Airbase", "get_capture", "Capture()"),
+    ("Airbase", "get_SavedAirbase", "NuclearOption.SavedMission.SavedAirbase()"),
+    ("Capture", "get_controlBalance", "System.Single()"),
+    ("Capture", "get_capturingHQ", "FactionHQ()"),
+    ("LevelInfo", "get_roadNetwork", "RoadPathfinding.RoadNetwork()"),
+    ("RoadPathfinder", "TryPathfind", "System.Void(RoadPathfinding.RoadNetwork,GlobalPosition,GlobalPosition,System.Collections.Generic.List`1<RoadPathfinding.Node>,RoadPathfinder+PathfindResult&)"),
+    ("RoadPathfinding.Road", "IsBridge", "System.Boolean()"),
+    ("UnitDefinition", "IsAllowed", "System.Boolean(System.Boolean)"),
+    ("NuclearOption.Networking.Player", "get_HQ", "FactionHQ()"),
+    ("NuclearOption.Networking.Player", "AddScore", "System.Void(System.Single)"),
+    ("NuclearOption.Networking.Player", "AddAllocation", "System.Void(System.Single)"),
+    ("MissionManager", "get_IsRunning", "System.Boolean()"),
+    ("MissionManager", "get_MissionTime", "System.Single()")
+};
+foreach (var seam in operationMethods)
+    RequireMetadataSignature(operationAssembly, seam.Type, seam.Method, seam.Signature);
+RequireMetadataSignature(Path.Combine(managedDir, "Mirage.dll"), "Mirage.ServerObjectManager", "Destroy", "System.Void(UnityEngine.GameObject,System.Boolean)");
+(string Type, string Field, string FieldType)[] operationFields =
+{
+    ("FactionRegistry", "airbaseLookup", "System.Collections.Generic.Dictionary`2<System.String,Airbase>"),
+    ("FactionHQ", "factionPlayers", "Mirage.Collections.SyncList`1<NuclearOption.Networking.PlayerRef>"),
+    ("TrackingInfo", "lastKnownPosition", "GlobalPosition"),
+    ("TrackingInfo", "lastSpottedTime", "System.Single"),
+    ("Airbase", "center", "UnityEngine.Transform"),
+    ("NuclearOption.SavedMission.SavedAirbase", "Capturable", "System.Boolean"),
+    ("RoadPathfinding.RoadNetwork", "roads", "System.Collections.Generic.List`1<RoadPathfinding.Road>"),
+    ("RoadPathfinding.RoadNetwork", "nodes", "System.Collections.Generic.List`1<RoadPathfinding.Node>"),
+    ("RoadPathfinding.Road", "points", "System.Collections.Generic.List`1<GlobalPosition>"),
+    ("Encyclopedia", "vehicles", "System.Collections.Generic.List`1<VehicleDefinition>"),
+    ("Encyclopedia", "buildings", "System.Collections.Generic.List`1<BuildingDefinition>")
+};
+foreach (var seam in operationFields)
+    RequireMetadataField(operationAssembly, seam.Type, seam.Field, seam.FieldType);
+if (Convert.ToInt32(Enum.Parse(gameAssembly.GetType("FactionHQ+RewardType", true)!, "None")) != 0)
+    throw new InvalidOperationException("Dynamic operations reward category changed");
+foreach (string type in new[] {
+    "BoscaliSummer.Features.DynamicOperations.DynamicOperationsFeature",
+    "BoscaliSummer.Features.DynamicOperations.Runtime.OperationsManager",
+    "BoscaliSummer.Features.DynamicOperations.Runtime.OperationRewards",
+    "BoscaliSummer.Features.DynamicOperations.Networking.OperationsNet" })
+    if (pluginAssembly.GetType(type, false) == null) throw new TypeLoadException(type);
+foreach (var contract in new[] {
+    ("BoscaliSummer.Features.DynamicOperations.Networking.OperationsQuery", new[] { "Protocol:System.Byte", "Scene:System.UInt32", "Token:System.UInt32" }),
+    ("BoscaliSummer.Features.DynamicOperations.Networking.OperationsSnapshot", new[] { "Protocol:System.Byte", "Scene:System.UInt32", "Token:System.UInt32", "Status:System.String", "Cards:BoscaliSummer.Framework.Contracts.SecondaryObjectiveView[]" }) })
+{
+    Type type = pluginAssembly.GetType(contract.Item1, true)!;
+    string[] actual = type.GetFields(BindingFlags.Public | BindingFlags.Instance).OrderBy(field => field.MetadataToken)
+        .Select(field => field.Name + ":" + field.FieldType.FullName).ToArray();
+    if (!actual.SequenceEqual(contract.Item2)) throw new InvalidOperationException(contract.Item1 + " wire fields changed");
+}
+ProbeOperationSerialization(pluginAssembly, mirageAssembly);
+Console.WriteLine($"Patch target probe: game methods/fields, Harmony parameters, {patchTypes.Length} patch classes, {featureTypes.Length + 1} features, radio assets, wire contracts, dynamic operation reward/road signatures, and Mirage seams resolved.");
 return 0;
 
 static bool MetadataHasMethod(string assemblyPath, string typeName, string methodName)
@@ -302,4 +453,155 @@ static string MetadataTypeName(MetadataReader metadata, TypeDefinitionHandle han
     if (!parent.IsNil) return MetadataTypeName(metadata, parent) + "+" + name;
     string ns = metadata.GetString(definition.Namespace);
     return string.IsNullOrEmpty(ns) ? name : ns + "." + name;
+}
+
+static void RequireMetadataSignature(string assemblyPath, string typeName, string methodName, string expected)
+{
+    using var stream = File.OpenRead(assemblyPath);
+    using var pe = new PEReader(stream);
+    MetadataReader metadata = pe.GetMetadataReader();
+    foreach (TypeDefinitionHandle handle in metadata.TypeDefinitions)
+    {
+        if (MetadataTypeName(metadata, handle) != typeName) continue;
+        foreach (MethodDefinitionHandle methodHandle in metadata.GetTypeDefinition(handle).GetMethods())
+        {
+            MethodDefinition method = metadata.GetMethodDefinition(methodHandle);
+            if (metadata.GetString(method.Name) != methodName || (method.Attributes & MethodAttributes.Public) == 0) continue;
+            var signature = method.DecodeSignature(new ProbeSignatureNames(), (object)null);
+            string actual = signature.ReturnType + "(" + string.Join(",", signature.ParameterTypes) + ")";
+            if (actual == expected) return;
+        }
+    }
+    throw new MissingMethodException(typeName, methodName + ": " + expected);
+}
+
+static void RequireMetadataField(string assemblyPath, string typeName, string fieldName, string expected)
+{
+    using var stream = File.OpenRead(assemblyPath);
+    using var pe = new PEReader(stream);
+    MetadataReader metadata = pe.GetMetadataReader();
+    foreach (TypeDefinitionHandle handle in metadata.TypeDefinitions)
+    {
+        if (MetadataTypeName(metadata, handle) != typeName) continue;
+        foreach (FieldDefinitionHandle fieldHandle in metadata.GetTypeDefinition(handle).GetFields())
+        {
+            FieldDefinition field = metadata.GetFieldDefinition(fieldHandle);
+            if (metadata.GetString(field.Name) == fieldName && (field.Attributes & FieldAttributes.Public) != 0 &&
+                field.DecodeSignature(new ProbeSignatureNames(), (object)null) == expected) return;
+        }
+    }
+    throw new MissingFieldException(typeName, fieldName + ": " + expected);
+}
+
+static void ProbeOperationSerialization(Assembly plugin, Assembly mirage)
+{
+    const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance;
+    Type net = plugin.GetType("BoscaliSummer.Features.DynamicOperations.Networking.OperationsNet", true)!;
+    if ((byte)net.GetField("ProtocolVersion", flags)!.GetRawConstantValue()! != 1)
+        throw new InvalidOperationException("Operations protocol changed without updating its probe");
+    net.GetMethod("InstallSerializers", flags)!.Invoke(null, null);
+    Type writerType = mirage.GetType("Mirage.Serialization.NetworkWriter", true)!;
+    Type readerType = mirage.GetType("Mirage.Serialization.NetworkReader", true)!;
+    Type queryType = plugin.GetType("BoscaliSummer.Features.DynamicOperations.Networking.OperationsQuery", true)!;
+    Type snapshotType = plugin.GetType("BoscaliSummer.Features.DynamicOperations.Networking.OperationsSnapshot", true)!;
+    Type cardType = plugin.GetType("BoscaliSummer.Framework.Contracts.SecondaryObjectiveView", true)!;
+
+    object Encode(Type type, object value)
+    {
+        object writer = Activator.CreateInstance(writerType, 8192)!;
+        Type holder = mirage.GetType("Mirage.Serialization.Writer`1", true)!.MakeGenericType(type);
+        ((Delegate)holder.GetProperty("Write", flags)!.GetValue(null)!).DynamicInvoke(writer, value);
+        return writer;
+    }
+    object Decode(Type type, object writer)
+    {
+        object reader = Activator.CreateInstance(readerType)!;
+        try
+        {
+            byte[] bytes = (byte[])writerType.GetMethod("ToArray")!.Invoke(writer, null)!;
+            readerType.GetMethod("Reset", new[] { typeof(byte[]) })!.Invoke(reader, new object[] { bytes });
+            Type holder = mirage.GetType("Mirage.Serialization.Reader`1", true)!.MakeGenericType(type);
+            return ((Delegate)holder.GetProperty("Read", flags)!.GetValue(null)!).DynamicInvoke(reader)!;
+        }
+        finally { ((IDisposable)reader).Dispose(); }
+    }
+    void Reject(object writer)
+    {
+        try { Decode(snapshotType, writer); }
+        catch (TargetInvocationException error) when (error.InnerException is InvalidOperationException) { return; }
+        throw new InvalidOperationException("Malformed operations snapshot was accepted");
+    }
+    object Card(float progress, float remaining = 300f, int money = 17, int xp = 29) =>
+        Activator.CreateInstance(cardType, 123, new string('T', 150), "description", "target", "status", "reward", progress, remaining, money, xp, true)!;
+    object Snapshot(int count, object card)
+    {
+        object snapshot = Activator.CreateInstance(snapshotType)!;
+        snapshotType.GetField("Protocol")!.SetValue(snapshot, (byte)1);
+        snapshotType.GetField("Scene")!.SetValue(snapshot, 345u);
+        snapshotType.GetField("Token")!.SetValue(snapshot, 678u);
+        snapshotType.GetField("Status")!.SetValue(snapshot, new string('S', 200));
+        Array cards = Array.CreateInstance(cardType, count);
+        for (int i = 0; i < count; i++) cards.SetValue(card, i);
+        snapshotType.GetField("Cards")!.SetValue(snapshot, cards);
+        return snapshot;
+    }
+    object query = Activator.CreateInstance(queryType)!;
+    queryType.GetField("Protocol")!.SetValue(query, (byte)1);
+    queryType.GetField("Scene")!.SetValue(query, uint.MaxValue);
+    queryType.GetField("Token")!.SetValue(query, 987654u);
+    object queryResult = Decode(queryType, Encode(queryType, query));
+    foreach (FieldInfo field in queryType.GetFields(BindingFlags.Public | BindingFlags.Instance))
+        if (!Equals(field.GetValue(query), field.GetValue(queryResult))) throw new InvalidOperationException("Operations query roundtrip changed " + field.Name);
+
+    object decoded = Decode(snapshotType, Encode(snapshotType, Snapshot(4, Card(0.75f))));
+    Array output = (Array)snapshotType.GetField("Cards")!.GetValue(decoded)!;
+    if (output.Length != 3 || (string)snapshotType.GetField("Status")!.GetValue(decoded)! != new string('S', 128) ||
+        (uint)snapshotType.GetField("Scene")!.GetValue(decoded)! != 345u || (uint)snapshotType.GetField("Token")!.GetValue(decoded)! != 678u)
+        throw new InvalidOperationException("Operations snapshot bounds/header roundtrip failed");
+    object cardResult = output.GetValue(0)!;
+    object expectedCard = Activator.CreateInstance(cardType, 123, new string('T', 128), "description", "target", "status", "reward", 0.75f, 300f, 17, 29, true)!;
+    foreach (PropertyInfo property in cardType.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+        if (!Equals(property.GetValue(expectedCard), property.GetValue(cardResult))) throw new InvalidOperationException("Operations card roundtrip changed " + property.Name);
+    Reject(Encode(snapshotType, Snapshot(1, Card(float.NaN))));
+    Reject(Encode(snapshotType, Snapshot(1, Card(0.5f, float.PositiveInfinity))));
+    Reject(Encode(snapshotType, Snapshot(1, Card(0.5f, 300f, -1))));
+    Reject(Encode(snapshotType, Snapshot(1, Card(0.5f, 300f, 17, 10001))));
+    object excessiveCount = Encode(snapshotType, Snapshot(0, Card(0f)));
+    int bitPosition = (int)writerType.GetProperty("BitPosition")!.GetValue(excessiveCount)!;
+    writerType.GetField("_bitPosition", flags)!.SetValue(excessiveCount, bitPosition - 8);
+    writerType.GetMethod("WriteByte")!.Invoke(excessiveCount, new object[] { (byte)4 });
+    Reject(excessiveCount);
+    Console.WriteLine("  Dynamic operations serializers: query/card roundtrip, 3-card/128-char bounds, non-finite/range/count rejection");
+}
+
+sealed class ProbeSignatureNames : ISignatureTypeProvider<string, object>
+{
+    public string GetArrayType(string element, ArrayShape shape) => element + "[" + new string(',', shape.Rank - 1) + "]";
+    public string GetByReferenceType(string element) => element + "&";
+    public string GetFunctionPointerType(MethodSignature<string> signature) => "methodptr";
+    public string GetGenericInstantiation(string type, ImmutableArray<string> arguments) => type + "<" + string.Join(",", arguments) + ">";
+    public string GetGenericMethodParameter(object context, int index) => "!!" + index;
+    public string GetGenericTypeParameter(object context, int index) => "!" + index;
+    public string GetModifiedType(string modifier, string element, bool required) => element;
+    public string GetPinnedType(string element) => element;
+    public string GetPointerType(string element) => element + "*";
+    public string GetPrimitiveType(PrimitiveTypeCode code) => "System." + code;
+    public string GetSZArrayType(string element) => element + "[]";
+    public string GetTypeFromDefinition(MetadataReader reader, TypeDefinitionHandle handle, byte kind)
+    {
+        TypeDefinition definition = reader.GetTypeDefinition(handle);
+        string name = reader.GetString(definition.Name);
+        return definition.GetDeclaringType().IsNil ? Qualify(reader.GetString(definition.Namespace), name)
+            : GetTypeFromDefinition(reader, definition.GetDeclaringType(), kind) + "+" + name;
+    }
+    public string GetTypeFromReference(MetadataReader reader, TypeReferenceHandle handle, byte kind)
+    {
+        TypeReference reference = reader.GetTypeReference(handle);
+        string name = reader.GetString(reference.Name);
+        return reference.ResolutionScope.Kind == HandleKind.TypeReference
+            ? GetTypeFromReference(reader, (TypeReferenceHandle)reference.ResolutionScope, kind) + "+" + name
+            : Qualify(reader.GetString(reference.Namespace), name);
+    }
+    public string GetTypeFromSpecification(MetadataReader reader, object context, TypeSpecificationHandle handle, byte kind) => reader.GetTypeSpecification(handle).DecodeSignature(this, context);
+    private static string Qualify(string ns, string name) => ns.Length == 0 ? name : ns + "." + name;
 }

@@ -6,11 +6,13 @@ performance design pass its gate.
 
 ## Now working (vertical slice)
 
-Fire, forest spread, impact scorch, ruins and aftermath; occupied civilian buildings;
-client-local radio; a session-scoped perk/support slice (score-earned perks; armour and
-air-defence airdrops, ground convoy, recon sweep and fortification, artillery default-off). Framework extraction is done and behaviour-preserving: it
-gave every feature a common lifecycle and patch owner without yet splitting the large
-managers (`ImpactFireManager`, `ZoneGarrisonManager`, `ModNet`) into their final services.
+Fire, forest spread, impact scorch, ruins, aftermath and wreck persistence; occupied
+civilian buildings; client-local radio; the expanded tactical map and STR theater screen;
+local QoL camera/HUD conveniences; a session-scoped perk/support slice (nine score-earned
+perks; satellite scan, zone fortification, Rod from God, EMP shock and flare barrage
+support actions). Framework extraction is done and behaviour-preserving: it gave every
+module a common lifecycle and patch owner without yet splitting the large managers
+(`ImpactFireManager`, `ZoneGarrisonManager`, `ModNet`) into their final services.
 
 ## Framework slices, before more multiplayer features
 
@@ -26,8 +28,10 @@ managers (`ImpactFireManager`, `ZoneGarrisonManager`, `ModNet`) into their final
 5. **Bounded scheduler** — central slow-tick and queue budgets, no gameplay rules.
 6. **Shared menu shell** — named bezel claims and an exclusive map picker now live in
    `nomodkit/shared/avionics` (`NOAvionics`), compiled into both this plugin and Wing
-   Command. COM is folded into the OPS THEATER tab. Remaining: one widget factory so
-   OPS/RAD match WMC chrome exactly.
+   Command. The theater tab is now its own `STR` bezel screen, and the widget factory
+   exists: `AvScreen` builds the data bar, metric row, tab bar, body and status strip for
+   OPS and STR. Remaining: fold the vanilla-panel rebuild's private `MfdShell` and the RAD
+   and SET screens onto it too, so all of them match WMC chrome exactly.
 7. **Persistence service** — schema-versioned, debounced, atomic JSON writes with backup
    recovery, before any persistent skill state.
 
@@ -36,6 +40,16 @@ consumers; building catalogue → destruction/occupancy consumers; network trans
 codecs and snapshot providers; garrison catalogue/selection/spawning/lifecycle.
 
 ## Feature direction
+
+- **Dynamic operations** — capture/defense/interdiction director, secondary MIS panel,
+  finite convoy/fortification awards and snapshot protocol implemented behind default-off
+  `DynamicOperations.Enabled`. Current frontlines use elapsed-time observed pressure.
+  Enable-by-default gate: mission/scene lifecycle, award attribution and tax/score,
+  road/terrain placement, listen-host/client/late join and bounded long-session behavior.
+  See [DYNAMIC_OPERATIONS.md](DYNAMIC_OPERATIONS.md) and its pinned research links.
+- **Weather removed** — the experimental weather code, its shader tooling, tests and
+  settings were removed from the active build at the user's request (see the CHANGELOG).
+  No development or automatic restoration is scheduled.
 
 - **Urban combat first release** — deterministic shell selection around controlled ground
   airbases, an authoritative occupancy record separate from its visual, `Occupied →

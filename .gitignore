@@ -1,9 +1,52 @@
+# Build output
 **/bin/
 **/obj/
+build/
 dist/
+*.dll
+*.pdb
+*.exe
+.dll-backup/
+
+# Test artifacts
+TestResults/
+*.trx
+
+# Logs
+*.log
+
+# Local tooling caches (nomodkit, offline NuGet shim, Codex attachments)
 .appdata/
 .codex-remote-attachments/
+.nomodkit/
+
+# Editors / IDEs
+.vs/
+.vscode/
+.idea/
 *.user
 *.suo
-.vs/
-.nomodkit/
+*.DotSettings.user
+
+# Operating-system metadata
+Thumbs.db
+.DS_Store
+
+# Local agent instructions and tooling (kept on disk, out of the repo)
+AGENTS.md
+**/AGENTS.md
+.agents/
+.claude/
+.opencode/
+.cursor/
+.cursorrules
+CLAUDE.md
+GEMINI.md
+.github/copilot-instructions.md
+
+# CI workflows are maintained outside the repo
+.github/workflows/
+
+# Patch / merge cruft
+*.orig
+*.rej
