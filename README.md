@@ -1,5 +1,17 @@
 # Boscali Summer
 
+Experimental gun aim assist is available in `[QoL]`: set `GunAimAssist = true`
+in the BepInEx config (default off pending flight testing). With native flight assist on,
+selected fixed guns receive a small pitch/yaw nudge within 2.5 degrees of the native
+lead cue for the first selected, freshly tracked enemy. `GunAimAssistStrength = 0.04`
+caps added input at 4% before falloff; zero disables it. Steering away or making a
+strong control input releases the help. It does not aim turrets or change bullets.
+It borrows the HUD solution; hiding that cue or losing fresh tracking stops assistance.
+
+The expanded tactical map is owned by Boscali Summer and enabled by default
+(`Command.ExpandedMapUi`): left-side pages and event log, central map, right-side
+button rail, and the native spawn footer. It works with or without Wing Command.
+
 **Battlefield destruction, spreading fires, persistent ruins, occupied urban positions, a
 local map radio, and a score-driven perk and support layer for Nuclear Option** — every expensive
 system pooled, event-driven, and globally bounded.
@@ -23,6 +35,32 @@ system pooled, event-driven, and globally bounded.
 
 ## What it does
 
+- **Dynamic frontlines** — tactical-map control responds gradually to observed ground
+  pressure and actual base ownership. Hostile influence uses recorded positions and
+  fades with contact age. This is an advisory control overlay; vanilla capture rules remain.
+- **Secondary missions (experimental, opt-in)** — `MIS` → **SECONDARY** shows capture,
+  threatened-base defense and ground interdiction, with requirements, timers, money/XP
+  and deployment outcomes. Successful special missions can launch six-vehicle mixed
+  convoys or establish three defensive positions. See [setup and limits](docs/DYNAMIC_OPERATIONS.md).
+- **Third-person flight view** — orbit and rear chase use smooth flight-direction follow,
+  a steady horizon, and lower aircraft framing to leave space for aiming. Orbit/free-look
+  returns behind the aircraft after 1.25 seconds without view input (hold right mouse to
+  keep looking). Native zoom, target look-at and other chase presets remain available.
+  `Avionics.ThirdPersonFlightCameraEnabled` restores native camera motion when disabled.
+  The HUD also restores the native minimap. A larger framed target feed appears at the
+  lower right only while live targets are selected, and clears immediately on deselection.
+  It borrows the native texture; landing mode and unavailable sources cannot appear as
+  live target video. F7 (or the OPS HUD toggle) hides the HUD and panel;
+  `Avionics.ThirdPersonCameraEnabled` disables just the panel. Owned by the independent
+  QoL module (`QoL.Enabled`); Support and Progression are not required for the HUD/camera.
+  In-game visual validation is pending.
+- **Camera observations** — F8 (configurable through `QoL.MarkCameraKey`) marks a fixed
+  surface point from the live native camera. OPS also provides **MARK CAMERA** and shows
+  coordinates, range and age. Select a support action, then press **CALL AT MARK** to
+  confirm it through normal host validation and costs. One mark lasts 120 seconds and
+  clears on aircraft/faction/scene change or ejection. The target panel also shows the
+  selected contact's report age from faction tracking; unknown age stays unknown.
+  `QoL.CameraMarks` disables capture. Marks do not create laser locks or reveal contacts.
 - **Fire** — guns, missiles and destroyed ground vehicles can ignite civilian buildings or
   procedural forests. Ignition is deliberately probabilistic.
 - **Forest fires** — grow over seconds, throw wind-biased child fronts (2 attempts, ≤2
@@ -35,10 +73,15 @@ system pooled, event-driven, and globally bounded.
   defensive positions using vanilla bunker behaviour.
 - **Radio** — a client-local map-MFD music player for your own OGG/WAV stations through the
   game's music mixer.
-- **Perks & support** — an `OPS` map-MFD with a flat, score-earned perk board,
-  server-authoritative support requests (recon, zone fortification, kinetic strike, EMP),
-  and a **THEATER** tab for friendly mission-AI doctrine. Aircraft command is Wing Command's
-  job; this mod never tasks a recruited wing.
+- **Perks & support** — an `OPS` map-MFD with a flat, score-earned perk board split into
+  **PASSIVE** systems and strike **AUTH**orisations, server-authoritative **SUPPORT**
+  requests (recon, zone fortification, kinetic strike, EMP), and a **RECORD** page showing
+  where the perk points came from and what they bought.
+- **Strategic layer** — an `STR` map-MFD carrying the theater picture: DEFCON and the air
+  balance with a friendly-AI sortie board (**SA**), the live sector field with the contested
+  nodes ranked by pressure (**FRONT**), the faction objective board (**TASKING**), the
+  theater account and stockpile (**LOG**), and mission-AI doctrine plus priority targets
+  (**CMD**). Aircraft command is Wing Command's job; this mod never tasks a recruited wing.
 
 Active fires, ruins and garrisons sync for multiplayer and late joiners. Hard global budgets
 keep large city battles practical.
@@ -66,6 +109,9 @@ Settings are generated at `BepInEx/config/com.marci.boscalisummer.cfg` and can b
 in-game with [ConfigurationManager](https://github.com/BepInEx/BepInEx.ConfigurationManager)
 (**F1**).
 
+The experimental Weather feature is paused and excluded from the build. Its source,
+tools and research are preserved in the [Weather archive](archive/weather-phase-a-2026-09-09/README.md).
+
 ## Quick start
 
 1. Host or start a mission; wait a few seconds for the procedural-forest index to build.
@@ -76,10 +122,10 @@ in-game with [ConfigurationManager](https://github.com/BepInEx/BepInEx.Configura
    normal look but behave as defensive positions.
 5. Maximise the tactical map, press the **`RAD`** bezel: the three starter stations use the
    installed soundtrack immediately; **FOLDER** adds OGG/WAV stations.
-6. Press the **`OPS`** bezel: spend score-earned points on **PERKS**, use **SUPPORT**
-   with the map cursor over a valid target, and optionally set friendly-AI **THEATER**
-   doctrine. If Wing Command is also installed it claims **WMC** on the left bezel; radio
-   stays on **RAD** to the right.
+6. Press the **`OPS`** bezel: spend score-earned points on **PASSIVE** and **AUTH**, then
+   use **SUPPORT** with the map cursor over a valid target. Press **`STR`** for the theater
+   picture and to set friendly-AI doctrine. If Wing Command is also installed it claims
+   **WMC** on the left bezel; radio stays on **RAD** to the right.
 
 ## Fire and destruction
 

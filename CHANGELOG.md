@@ -2,6 +2,72 @@
 
 ## Unreleased
 
+- Split the `OPS` console in two. OPS keeps the player's own board — the perk list is now a
+  **PASSIVE** page and an **AUTH** page instead of two sections sharing one, **SUPPORT** has
+  room for a full description beside its cost and call-in button, and a new **RECORD** page
+  shows rank, the score-per-point budget and what the committed points bought.
+- Added the `STR` strategic screen on its own bezel: **SA** (DEFCON, the air balance and a
+  friendly-AI sortie board), **FRONT** (the sector field with contested nodes ranked by
+  pressure and the frontline's length), **TASKING** (the faction objective board), **LOG**
+  (theater funds, income, warheads, reserve airframes and the AI ceiling) and **CMD**
+  (mission-AI doctrine, priority targets, overlay toggles). Theater SA is no longer a tab
+  inside OPS opening a second row of tabs, and doctrine names are no longer cut to five
+  characters. Protocol break: the `ITheaterPage` contract is gone.
+- Fixed the theater airbase counts. They were read from `FactionHQ.GetAirbases()`, the
+  player faction's own list, so the enemy total was permanently near zero; they now come
+  from the fixed airbase catalogue, the same source the sector grid reconciles nodes from,
+  and neutral and contested bases are counted too.
+- Renamed the theater "SAMS" readout to friendly radars, which is the list it was always
+  counting.
+- The sortie breakdown, the frontline segment count and the contested-node list are now
+  produced rather than declared and left at zero. Where the AI pilot state cannot be read
+  the board says so instead of reporting no sorties.
+- Panels grew: the unified bezel is 512px wide and takes the height its column actually has,
+  up to 896px, instead of a fixed 596 that left roughly 320px of the left bay unused.
+  Protocol break: `AvTokens.PanelWidth` changed, so both plugins need a Release build.
+- Added `AvScreen` to the shared avionics kit — one factory for the data bar, metric row, tab
+  bar, body and status strip, now used by both Boscali screens instead of a third copy.
+
+- Added experimental `DynamicOperations.Enabled` (default false): faction secondary
+  capture, defense and interdiction missions, one-time vanilla allocation/mission-score
+  rewards, finite convoy/fortification awards, and a bounded read-only client protocol.
+- Added MIS → SECONDARY with paged requirements, progress, deadlines and reward outcomes.
+- Reworked tactical frontlines into elapsed-time pressure and recovery, with bounded
+  rectangular grids, actual base ownership and expiring faction-known enemy positions.
+  No aircraft takeover or copied external combat systems. In-game validation is pending.
+- Added opt-in QoL gun aim assist using the existing native HUD lead solution and local
+  player input seam: 2.5-degree cone, 4% default input ceiling with smooth falloff and
+  steering override. Fixed guns and the first selected fresh enemy contact only. No
+  extra trajectories, scene scans or messages; default off pending flight validation.
+
+- Moved local third-person HUD/camera settings, runtime and patches into the independent
+  QoL module, preserving existing Avionics config keys. OPS uses optional contracts.
+- Added one expiring native-camera observation mark (F8 / MARK CAMERA), coordinate/range/age
+  readout, and explicit CALL AT MARK confirmation through the existing support request path.
+  Marks clear on invalid capture, ownship/faction/scene change and ejection; no extra rendering
+  or networking. Added selected-contact freshness from the native faction tracking timestamp.
+
+- Refined orbit/rear chase framing with smooth flight-direction follow, a steady horizon,
+  orbit return, and aircraft placement below the aiming area. Retains static-world
+  collision, native zoom/look-at and alternate chase presets; camera motion has its own
+  `Avionics.ThirdPersonFlightCameraEnabled` toggle.
+- Fixed the third-person minimap by restoring the native flight canvas and map together,
+  with visibility restored before native camera/map/menu transitions.
+- Enlarged and framed the passive target-camera panel, with live/signal state and selection
+  count. It hides immediately on deselection and never presents landing mode or a disabled
+  source as live target video. In-game visual validation remains pending.
+- Restored the full tactical-map GUI under Boscali Command: left dock and event log,
+  central map, right bezel rail, and native spawn footer. Enabled by default through
+  `Command.ExpandedMapUi`; Wing Command remains an optional, unchanged companion.
+
+- Shelved Weather at the user's request. Removed its runtime, debug controls, settings,
+  shader build integration and tests from the active build; preserved the experiment
+  and restoration notes in `archive/weather-phase-a-2026-09-09/`.
+
+- Fixed Wing Command coexistence: theater doctrine leaves recruited wing analyzers
+  untouched, and support retains map ownership through the consuming click's frame
+  so WMC tactical mode cannot also turn a support right-click into a wing move order.
+
 - Removed Firebreak from the support catalogue and its cross-feature suppression APIs.
 - Reworked air assault and visible fortifications: insertions are capped, restricted to the
   intended aircraft, and use networked vanilla emplacements whose client-side barriers,

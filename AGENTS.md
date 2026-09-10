@@ -52,3 +52,10 @@ MFD screen, an armed map click, or anything that would need Wing Command to exis
   directory.
 
 See `docs/MODULE_BOUNDARIES.md` for the routing map and escalation rules.
+
+## Local conveniences
+
+HUD, camera conveniences and observation marks belong to `Features/QoL`; support
+execution remains in Support. Verify camera and tracking seams against the installed
+game. Keep borrowed rendering resources producer-owned, distinguish observations from
+authorised gameplay actions, and clear scene-bound state when its owner changes.

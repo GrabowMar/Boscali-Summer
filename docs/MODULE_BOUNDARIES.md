@@ -5,12 +5,14 @@ maintainers and coding agents; runtime design is in [ARCHITECTURE.md](ARCHITECTU
 
 | Change concerns | Folder | Tests | Normal deps |
 |---|---|---|---|
+| Local HUD/camera conveniences, observation marks, contact-age readout | `Features/QoL` | `Features/QoL` | Framework lifecycle/contracts, game interop; no feature dependency |
 | Fire, impact scorch, ruins, smoke, ground scorch, fire replication | `Features/FireAndDestruction` | `Features/FireAndDestruction` | Framework, game interop |
 | Occupied shells, defensive proxies, capture cleanup | `Features/UrbanCombat` | `Features/UrbanCombat` | Framework, game interop |
 | Local music, stations, playback, MFD radio UI | `Features/Radio` | `Features/Radio` | Framework lifecycle, game interop |
 | Score-earned perks, capabilities, reward/fuel effects | `Features/Progression` | `Features/Progression` | Framework lifecycle/contracts, game interop |
-| OPS MFD, support validation, costs, cooldowns, spawn jobs | `Features/Support` | `Features/Support` | Progression + optional zone-fortification contracts, game interop |
+| OPS MFD (perks, support, record), request validation, costs, cooldowns, spawn jobs | `Features/Support` | `Features/Support` | Progression + optional zone-fortification contracts, game interop |
 | COM MFD, map overlays, doctrine, AI target scoring | `Features/Command` | `Features/Command` | Progression contracts, game interop |
+| Secondary objectives, faction awards, finite reinforcement batches | `Features/DynamicOperations` | `Features/DynamicOperations` | Framework lifecycle/contracts, native game interop |
 | Feature graph, host, lifecycle, service contracts | `Framework` | `Framework` | no concrete feature |
 | Cached game/reflection/diagnostic adapters | `Infrastructure` | architecture / patch probe | no feature policy |
 | Registration and plugin startup | `Bootstrap` | Framework / architecture | may name every feature |
