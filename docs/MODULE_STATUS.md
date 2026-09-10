@@ -320,7 +320,7 @@ Still open:
 
 1. **Flare Barrage has no perk of its own** — it is authorised by the Satellite Scan perk's
    `Recon` capability. Either give it a distinct capability + perk row, or keep the
-   shared-capability decision and document it in `modules/Support/AGENTS.md`. (Support)
+   shared-capability decision and document it in the Support module. (Support)
 2. **Chimera paratrooper loadout + `BaseDefenseAlarmService` + encampment builders** are not
    described in any narrative doc — decide keep vs cut, then write them up. (Urban Combat)
 

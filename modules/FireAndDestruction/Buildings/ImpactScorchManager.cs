@@ -29,7 +29,6 @@ namespace BoscaliSummer.Fire
 
         private readonly Queue<PendingExplosion> pending = new Queue<PendingExplosion>(32);
         private readonly Collider[] overlapBuffer = new Collider[32];
-        private readonly RaycastHit[] rayBuffer = new RaycastHit[16];
         private readonly List<GameObject> marks = new List<GameObject>(64);
         private int ringHead;
         private Material scorchMaterial;

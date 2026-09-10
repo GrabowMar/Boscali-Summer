@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using BepInEx.Logging;
-using BoscaliSummer.Features.Command.Configuration;
 using BoscaliSummer.Features.Command.Domain;
 using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Lifecycle;
@@ -16,7 +15,6 @@ namespace BoscaliSummer.Features.Command.Runtime
     {
         public static CommandManager Active { get; internal set; }
 
-        private CommandSettings settings;
         private IProgressionView progression;
         private ManualLogSource logger;
 
@@ -32,9 +30,8 @@ namespace BoscaliSummer.Features.Command.Runtime
 
         private const int EmitterCacheLimit = 512;
 
-        public void Configure(CommandSettings config, IProgressionView progressionView, ManualLogSource log)
+        public void Configure(IProgressionView progressionView, ManualLogSource log)
         {
-            settings = config;
             progression = progressionView;
             logger = log;
             Active = this;

@@ -36,8 +36,8 @@ namespace BoscaliSummer.Features.Command
             context.AddSceneService<MapUiManager>(57);
             context.AddSceneService<SettingsMfdPanel>(58).Configure(context.Settings.Command, context.Logger);
 
-            compat.Configure(context.Settings.Command, context.Logger);
-            manager.Configure(context.Settings.Command, progression, context.Logger);
+            compat.Configure(context.Logger);
+            manager.Configure(progression, context.Logger);
             overlay.Configure(context.Settings.Command, manager, compat, context.Logger);
             strategic.Configure(context.Settings.Command, manager, overlay, context.Logger);
         }

@@ -44,7 +44,7 @@ singleton, patch class, mutable collection, or settings object as the contract.
 
 ## Workflow for an ordinary feature request
 
-1. Pick the feature from the table; read its local `AGENTS.md`.
+1. Pick the module from the table; read its folder (and its local `AGENTS.md` if one is present).
 2. Search only that production folder and its test folder.
 3. Open a Framework/Infrastructure file only when a referenced type forces it.
 4. Keep edits inside the feature; register or document it only when the behaviour requires it.

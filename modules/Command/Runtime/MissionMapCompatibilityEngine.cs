@@ -1,6 +1,5 @@
 using System;
 using BepInEx.Logging;
-using BoscaliSummer.Features.Command.Configuration;
 using BoscaliSummer.Framework.Lifecycle;
 using UnityEngine;
 
@@ -14,7 +13,6 @@ namespace BoscaliSummer.Features.Command.Runtime
     {
         public static MissionMapCompatibilityEngine Active { get; private set; }
 
-        private CommandSettings settings;
         private ManualLogSource logger;
 
         public Vector2 ResolvedMapSize { get; private set; } = new Vector2(81920f, 81920f);
@@ -22,9 +20,8 @@ namespace BoscaliSummer.Features.Command.Runtime
         public bool IsMissionReady { get; private set; }
         private bool dimensionsResolved;
 
-        public void Configure(CommandSettings config, ManualLogSource log)
+        public void Configure(ManualLogSource log)
         {
-            settings = config;
             logger = log;
             Active = this;
         }

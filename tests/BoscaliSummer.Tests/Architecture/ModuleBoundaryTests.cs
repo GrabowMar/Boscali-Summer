@@ -22,8 +22,6 @@ namespace BoscaliSummer.Tests.Architecture
             foreach (string featurePath in Directory.GetDirectories(featuresRoot))
             {
                 string featureName = Path.GetFileName(featurePath);
-                TestAssert.That(File.Exists(Path.Combine(featurePath, "AGENTS.md")),
-                    featureName + " is missing its local AGENTS.md scope file");
                 TestAssert.That(File.Exists(Path.Combine(featurePath, featureName + "Feature.cs")),
                     featureName + " is missing its explicit IModFeature descriptor");
 

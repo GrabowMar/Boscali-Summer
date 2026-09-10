@@ -38,7 +38,6 @@ namespace BoscaliSummer.Features.Command.Presentation
     internal sealed class StrMfdPanel : MonoBehaviour, ISceneService
     {
         private const float Width = AvTokens.PanelWidth;
-        private const float Pad = AvTokens.Pad;
         private const float RefreshInterval = 0.25f;
 
         private const int TabSa = 0;

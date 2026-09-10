@@ -200,9 +200,11 @@ wire contracts against the installed `Assembly-CSharp.dll` — extend it before 
 Harmony target, private field, message, or vanilla spawn/effect adapter. A missing optional
 capability disables one module or action; it never triggers a whole-scene fallback scan.
 
-## Agent boundaries
+## Enforced boundaries
 
-Hierarchical `AGENTS.md` files narrow automated edits to one feature or shared layer. The
-architecture test rejects sibling-feature imports, concrete-feature imports from Framework or
-Infrastructure, missing feature descriptors, and moves of Fire networking or Radio helpers
-back into shared folders. See [MODULE_BOUNDARIES.md](MODULE_BOUNDARIES.md).
+The architecture test (`ModuleBoundaryTests`, part of the pure suite) rejects
+sibling-feature imports, concrete-feature imports from `Framework` or `Infrastructure`,
+a module missing its `<Name>Feature.cs` descriptor, and moves of Fire networking or Radio
+helpers back into shared folders. See [MODULE_BOUNDARIES.md](MODULE_BOUNDARIES.md) for the
+routing map. Local `AGENTS.md` / `CLAUDE.md` files (git-ignored) may add per-folder notes
+for coding agents but are not required and enforce nothing.

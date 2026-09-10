@@ -107,7 +107,6 @@ namespace BoscaliSummer.Features.Support.Presentation
         private AvStyled.Metric allocMetric;
         private AvStyled.Metric scoreMetric;
 
-        private TMP_Text statusText;
         private string activeHoverTooltip;
 
         private readonly List<PerkRow> perkRows = new List<PerkRow>();
@@ -150,7 +149,6 @@ namespace BoscaliSummer.Features.Support.Presentation
             dataBar = null;
             allocMetric = null;
             scoreMetric = null;
-            statusText = null;
             observations = null;
             thirdPersonHud = null;
             observationText = null;
@@ -295,7 +293,6 @@ namespace BoscaliSummer.Features.Support.Presentation
             dataBar = shell.DataBar;
             allocMetric = shell.Metrics[0];
             scoreMetric = shell.Metrics[1];
-            statusText = shell.Status;
 
             AvKit.HitButton(content, ChipRect(shell.Body, 2), () =>
             {

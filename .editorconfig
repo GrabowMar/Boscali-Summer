@@ -1,0 +1,17 @@
+root = true
+
+[*.cs]
+
+# Dead-code tripwire, matching Wing Command's build.
+#
+# IDE0052 (private field/property is assigned but never read) has no blind spot here,
+# so it is a build warning: a hit is real dead code to remove.
+#
+# IDE0051 (unused private member) cannot see that Unity invokes MonoBehaviour messages
+# (Awake/Update/OnDestroy/...) and Harmony invokes [Harmony*] patch methods by
+# reflection, so left at "warning" it drowns real hits in ~100 false positives. Patch
+# methods carry explicit [HarmonyPrefix]/[HarmonyPostfix]/... attributes (which the
+# analyser then trusts); the residual noise is Unity messages, so IDE0051 is kept at
+# "suggestion" — still surfaced in the IDE, just not failing an otherwise-clean build.
+dotnet_diagnostic.IDE0052.severity = warning
+dotnet_diagnostic.IDE0051.severity = suggestion

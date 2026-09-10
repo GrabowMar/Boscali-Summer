@@ -45,7 +45,6 @@ namespace BoscaliSummer.Features.Radio.Presentation
 
         private static readonly ChannelRow[] rows = new ChannelRow[RowsPerPage];
         private static MFDScreen screen;
-        private static TMP_FontAsset font;
         private static RadioManager manager;
         private static TMP_Text channelLabel;
         private static Image stationIconGround;
@@ -102,7 +101,6 @@ namespace BoscaliSummer.Features.Radio.Presentation
             BezelRegistry.Release(BezelRegistry.Rad);
             RadioStationIconCache.Clear();
             screen = null;
-            font = null;
             manager = null;
             channelLabel = null;
             stationIconGround = null;
@@ -169,9 +167,6 @@ namespace BoscaliSummer.Features.Radio.Presentation
 
         private static MFDScreen Build(MFDScreen template, Button bezel)
         {
-            TMP_Text anyText = template.GetComponentInChildren<TMP_Text>(true);
-            font = anyText != null ? anyText.font : null;
-
             var root = new GameObject("BoscaliRadio.Screen", typeof(RectTransform), typeof(Image));
             RectTransform rootRect = root.GetComponent<RectTransform>();
             rootRect.SetParent(template.transform.parent, false);
