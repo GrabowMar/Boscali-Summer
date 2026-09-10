@@ -1,9 +1,24 @@
+# Build output
 **/bin/
 **/obj/
 dist/
+
+# Local tooling caches (nomodkit, offline NuGet shim, Codex attachments)
 .appdata/
 .codex-remote-attachments/
+.nomodkit/
+
+# Editors / IDEs
+.vs/
+.vscode/
+.idea/
 *.user
 *.suo
-.vs/
-.nomodkit/
+*.DotSettings.user
+
+# AI assistant local state
+.claude/
+
+# Patch / merge cruft
+*.orig
+*.rej
