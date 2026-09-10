@@ -61,8 +61,8 @@
   `Command.ExpandedMapUi`; Wing Command remains an optional, unchanged companion.
 
 - Shelved Weather at the user's request. Removed its runtime, debug controls, settings,
-  shader build integration and tests from the active build; preserved the experiment
-  and restoration notes in `archive/weather-phase-a-2026-09-09/`.
+  shader build integration and tests from the active build. The archival step was never
+  completed; Weather now survives only as removed-feature notes here.
 
 - Fixed Wing Command coexistence: theater doctrine leaves recruited wing analyzers
   untouched, and support retains map ownership through the consuming click's frame

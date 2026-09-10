@@ -5,7 +5,9 @@ see at a glance what is solid, what is mid-rework, and what has never been confi
 live mission. This is a planning aid, not a spec — [ARCHITECTURE](ARCHITECTURE.md) and
 [MODULE_BOUNDARIES](MODULE_BOUNDARIES.md) still own the design rules.
 
-Last swept: 2026-09-10, against `main` (working tree, dev build `0.1.1`).
+Last swept: 2026-09-10, against `main` (dev build `0.1.1`). Updated after the
+September repo reorganization (flatten to `modules/` at the root, AGENTS.md
+consolidation, README/doc drift fixes).
 Release build: **passes**, 0 warnings. Pure test suite (`dotnet run --project
 tests/BoscaliSummer.Tests -c Release`): **passes** (module + framework + architecture).
 
@@ -271,8 +273,9 @@ Full MIS panel also needs `Progression.Enabled` + `Command.Enabled` + `Command.E
 ## Weather — absent
 
 Shelved at the user's request. Runtime, debug controls, settings, shader build integration
-and tests were removed from the active build. Source and restoration notes preserved in
-`archive/weather-phase-a-2026-09-09/`. No work scheduled.
+and tests were removed from the active build. The planned `archive/` snapshot was never
+completed; Weather survives only as removed-feature notes in the CHANGELOG. No work
+scheduled.
 
 ---
 
@@ -305,25 +308,25 @@ map-overlay grid test beyond `FrontlineTests`, garrison lifecycle only via
 
 ## Consolidated doc/code drift (fix list)
 
-1. **Perk count / cost** — README "13", code "12", DESIGN_NOTES + ROADMAP "eleven perks",
-   code has 9. (Progression)
-2. **STR vs THEATER tab** — DESIGN_NOTES "Wing Command reuse boundary" describes the old
-   OPS THEATER tab and `ITheaterPage`; both are gone, `STR` is its own bezel. (Command)
-3. **Flare Barrage** — shipped support action, absent from README config table and the
-   "Perks & support" section; authorised by the Recon perk with no row of its own. (Support)
-4. **Rod from God default** — DESIGN_NOTES "default-off"; code `RodFromGod = true`. (Support)
-5. **Fire caps** — README/ARCHITECTURE "24 active fires, ≤2 spread generations"; code
-   `MaxActiveFires => 32`, `FireSpreadGenerations => 3`. (Fire)
-6. **Undocumented systems** — `AircraftWreckPersistencePatch` (Fire), Chimera paratrooper
-   loadout + `BaseDefenseAlarmService` + encampment builders (Urban Combat).
-7. **Support config table in README** missing `EmpShockRadiusMeters`, `FlareBarrage*`,
-   `ReconRadiusMeters`, `RequestCooldownSeconds`.
-8. **Untracked docs** — `DYNAMIC_OPERATIONS.md`, `RESEARCH_DYNAMIC_*.md` (×3) are new and
-   not yet committed.
+Resolved in the September reorg: perk count/cost (README + DESIGN_NOTES + ROADMAP now say
+nine perks / twelve points), STR-vs-THEATER-tab (DESIGN_NOTES rewritten), Rod from God
+default (DESIGN_NOTES no longer says "default-off"), fire caps (ARCHITECTURE now 32 sites /
+≤3 generations; the README budgets table was dropped in favour of ARCHITECTURE), Flare
+Barrage (now in the README action list, with a note that it shares the Satellite Scan
+authorisation), wreck persistence (README + ARCHITECTURE mention it), the README Support
+config table (now an explicitly curated subset), and the untracked docs (committed).
+
+Still open:
+
+1. **Flare Barrage has no perk of its own** — it is authorised by the Satellite Scan perk's
+   `Recon` capability. Either give it a distinct capability + perk row, or keep the
+   shared-capability decision and document it in `modules/Support/AGENTS.md`. (Support)
+2. **Chimera paratrooper loadout + `BaseDefenseAlarmService` + encampment builders** are not
+   described in any narrative doc — decide keep vs cut, then write them up. (Urban Combat)
 
 ## Refactor / cleanup debt
 
-- `Features/Command/Presentation/MapUi/` (~30 files) — audit for dead code after COM→STR.
+- `modules/Command/Presentation/MapUi/` (~30 files) — audit for dead code after COM→STR.
 - Split `ImpactFireManager`, `ZoneGarrisonManager`, `ModNet` (roadmap, behind seams only).
 - Fold `MfdShell` + RAD + SET screens onto shared `AvScreen`.
 - Decide keep-or-cut: gun aim assist, Chimera paradrop, Urban Combat encampment builders.

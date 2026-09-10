@@ -81,11 +81,11 @@ Decisions that cost an argument. Kept so they are not made again the other way.
   live `Player.PlayerScore` in configured tiers, capped. Thresholds, aircraft requirements
   and weapon access are still not altered, and rank is displayed as flavour only. Support
   spends the player's normal allocation — no second currency.
-- **The perk list is flat.** The nine-skill, two-tier prerequisite tree produced a UI that
-  could only ever show "everything locked" or, under the debug bypass, "everything
-  available" — there was no state a real player saw. Eleven independent perks with per-perk
-  costs removed the prerequisite bug class outright. Group headings are presentation labels
-  with no data-model meaning.
+- **The perk list is flat.** The old nine-skill, two-tier prerequisite tree produced a UI
+  that could only ever show "everything locked" or, under the debug bypass, "everything
+  available" — there was no state a real player saw. Nine independent perks with per-perk
+  costs (twelve points to buy the whole board) removed the prerequisite bug class outright.
+  Group headings are presentation labels with no data-model meaning.
 - **One rule couples the two features.** A perk grants zero or more capability strings; a
   support action requires exactly one. A pure test asserts both catalogues name the same
   set, which is what stops them drifting apart as either grows.
@@ -113,10 +113,11 @@ Decisions that cost an argument. Kept so they are not made again the other way.
   charged the player and left the zone weaker than before. It now verifies definition,
   spawner and candidate shells before touching anything, and carries a floor so reinforcing
   cannot roll a smaller garrison.
-- **Artillery is default-off** and requires an explicitly configured non-nuclear vanilla
-  definition with yield ≤ 200. Carrier requisition is unimplemented — it graduates only after
-  a full multiplayer mission can spawn/use/damage/destroy/late-join around one without
-  corrupting airbase or objective state.
+- **Rod from God (kinetic strike) needs an explicit missile.** It and EMP shock use the
+  configured `FireMissionDefinitionKey`; empty auto-picks a non-nuclear vanilla definition
+  with yield ≤ 200. The action ships enabled. Carrier requisition is unimplemented — it
+  graduates only after a full multiplayer mission can spawn/use/damage/destroy/late-join
+  around one without corrupting airbase or objective state.
 
 ## Wing Command reuse boundary
 
@@ -126,9 +127,10 @@ presence board) compiled into both DLLs. Boscali Summer stays functional when Wi
 is absent. Do not reference the Wing Command assembly, and do not decompile an installed DLL.
 
 Product split: Wing Command owns the recruited squadron; Boscali owns the battlefield
-(fire, occupancy, perks/support, theater SA). COM is no longer a fourth bezel — theater
-SA mounts as the OPS **THEATER** tab. Doctrine biases friendly mission AI only and never
-retasks a wingman.
+(fire, occupancy, perks/support, theater SA). The theater picture is its own **STR** bezel
+screen (SA / FRONT / TASKING / LOG / CMD) — it installs and fails on its own and does not
+borrow an OPS tab or a slot from Wing Command. Doctrine biases friendly mission AI only and
+never retasks a wingman.
 
 Maintenance rules (how to change bezels, the picker, the protocol):
 `C:\Users\marci\dev\nomodkit\shared\avionics\README.md`.

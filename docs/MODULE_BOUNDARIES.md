@@ -5,20 +5,22 @@ maintainers and coding agents; runtime design is in [ARCHITECTURE.md](ARCHITECTU
 
 | Change concerns | Folder | Tests | Normal deps |
 |---|---|---|---|
-| Local HUD/camera conveniences, observation marks, contact-age readout | `Features/QoL` | `Features/QoL` | Framework lifecycle/contracts, game interop; no feature dependency |
-| Fire, impact scorch, ruins, smoke, ground scorch, fire replication | `Features/FireAndDestruction` | `Features/FireAndDestruction` | Framework, game interop |
-| Occupied shells, defensive proxies, capture cleanup | `Features/UrbanCombat` | `Features/UrbanCombat` | Framework, game interop |
-| Local music, stations, playback, MFD radio UI | `Features/Radio` | `Features/Radio` | Framework lifecycle, game interop |
-| Score-earned perks, capabilities, reward/fuel effects | `Features/Progression` | `Features/Progression` | Framework lifecycle/contracts, game interop |
-| OPS MFD (perks, support, record), request validation, costs, cooldowns, spawn jobs | `Features/Support` | `Features/Support` | Progression + optional zone-fortification contracts, game interop |
-| COM MFD, map overlays, doctrine, AI target scoring | `Features/Command` | `Features/Command` | Progression contracts, game interop |
-| Secondary objectives, faction awards, finite reinforcement batches | `Features/DynamicOperations` | `Features/DynamicOperations` | Framework lifecycle/contracts, native game interop |
+| Local HUD/camera conveniences, observation marks, contact-age readout | `modules/QoL` | `Features/QoL` | Framework lifecycle/contracts, game interop; no feature dependency |
+| Fire, impact scorch, ruins, smoke, wreck persistence, fire replication | `modules/FireAndDestruction` | `Features/FireAndDestruction` | Framework, game interop |
+| Occupied shells, defensive proxies, capture cleanup | `modules/UrbanCombat` | `Features/UrbanCombat` | Framework, game interop |
+| Local music, stations, playback, MFD radio UI | `modules/Radio` | `Features/Radio` | Framework lifecycle, game interop |
+| Score-earned perks, capabilities, reward/fuel effects | `modules/Progression` | `Features/Progression` | Framework lifecycle/contracts, game interop |
+| OPS MFD (perks, support, record), request validation, costs, cooldowns, spawn jobs | `modules/Support` | `Features/Support` | Progression + optional zone-fortification contracts, game interop |
+| STR MFD, expanded map GUI, map overlays, doctrine, AI target scoring | `modules/Command` | `Features/Command` | Progression contracts, game interop |
+| Secondary objectives, faction awards, finite reinforcement batches | `modules/DynamicOperations` | `Features/DynamicOperations` | Framework lifecycle/contracts, native game interop |
 | Feature graph, host, lifecycle, service contracts | `Framework` | `Framework` | no concrete feature |
 | Cached game/reflection/diagnostic adapters | `Infrastructure` | architecture / patch probe | no feature policy |
 | Registration and plugin startup | `Bootstrap` | Framework / architecture | may name every feature |
 | Config composition and legacy migration | `Configuration` | relevant feature / framework | may compose module settings |
 
-Folders under `src/BoscaliSummer/`; test folders under `tests/BoscaliSummer.Tests/`.
+Module folders are `modules/<Feature>/` at the repo root; the shared trees (`Framework`,
+`Infrastructure`, `Bootstrap`, `Configuration`, `Core`, `Interop`) sit beside them. Test
+folders are under `tests/BoscaliSummer.Tests/`.
 
 ## Dependency direction
 
@@ -26,11 +28,11 @@ Folders under `src/BoscaliSummer/`; test folders under `tests/BoscaliSummer.Test
 Bootstrap / Configuration
         │
         ▼
-     Features  ──►  Framework contracts + lifecycle
-        │                    │
-        └────────►  Infrastructure adapters
+   modules/<Feature>  ──►  Framework contracts + lifecycle
+        │                         │
+        └─────────────►  Infrastructure adapters
 
-Sibling Feature A  ──✗──►  Sibling Feature B implementation
+Sibling module A  ──✗──►  Sibling module B implementation
 ```
 
 Support and Command declare a dependency on Progression but consume only `IPlayerPerks` /

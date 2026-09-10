@@ -6,23 +6,26 @@ simple and no feature is a binary dependency.
 
 ## Source layout
 
+Everything lives at the repo root; `BoscaliSummer.csproj` and `.sln` sit beside these
+folders and the csproj lists its source roots explicitly.
+
 ```text
-src/BoscaliSummer/
-  Bootstrap/        BepInEx entry point + the one explicit composition root
-  Configuration/    central config composition, legacy-key migration
-  Core/             pure deterministic helpers
-  Framework/        Contracts/ (narrow cross-feature interfaces), Features/ (graph, host,
-                    metadata, service registry), Lifecycle/ (ordered scene reset)
-  Infrastructure/   Diagnostics/, GameInterop/ (cached reflection, capability report)
-  Features/
-    QoL/                local HUD/camera conveniences, observation marks and freshness readout
-    FireAndDestruction/  ignition, forest index, spread, impact scorch, ruins, visuals, replication
-    Progression/         score-earned perk choices, capabilities, reward/fuel effects
-    Radio/               local music catalogue, playback ownership, map-MFD panel
-    Support/             OPS MFD, validated requests, costs/cooldowns, support jobs
-    Command/             COM MFD, map overlays, doctrine, AI target scoring
-    DynamicOperations/   secondary mission director, faction awards, native reinforcement batches
-    UrbanCombat/         occupancy, defensive proxies, capture cleanup
+Bootstrap/        BepInEx entry point + the one explicit composition root
+Configuration/    central config composition, legacy-key migration
+Core/             pure deterministic helpers
+Framework/        Contracts/ (narrow cross-feature interfaces), Features/ (graph, host,
+                  metadata, service registry), Lifecycle/ (ordered scene reset)
+Infrastructure/   Diagnostics/, GameInterop/ (cached reflection, capability report)
+Interop/          public reflection-safe theater/doctrine façade for Wing Command
+modules/
+  QoL/                local HUD/camera conveniences, observation marks and freshness readout
+  FireAndDestruction/  ignition, forest index, spread, impact scorch, ruins, wreck persistence, replication
+  Progression/         score-earned perk choices, capabilities, reward/fuel effects
+  Radio/               local music catalogue, playback ownership, map-MFD panel
+  Support/             OPS MFD, validated requests, costs/cooldowns, support jobs
+  Command/             STR MFD, expanded map GUI, map overlays, doctrine, AI target scoring
+  DynamicOperations/   secondary mission director, faction awards, native reinforcement batches
+  UrbanCombat/         occupancy, defensive proxies, capture cleanup
 ```
 
 ## Composition
@@ -110,14 +113,14 @@ holding both remaining channels.
 |---|---:|
 | Queued projectile impacts | 256, 8/frame |
 | Queued vehicle losses | 32, 1 spatial query/frame |
-| Active fire sites | 24 |
+| Active fire sites | 32 |
 | Dynamic fire lights | 3 |
 | Ground scorch requests | 1/frame |
 | Impact scorch: queue / pool | 32 (2 impacts/frame, ≤3 marks each) / 64 (oldest recycled) |
 | Air-assault visual operations / encampment sites | 8 / 12 |
 | Logical ruins / nearest smoke visuals | 256 / 24 |
 | Simultaneous collapse bursts | 4 |
-| Forest spread per site | 2 attempts, ≤2 generations |
+| Forest spread per site | 2 attempts, ≤3 generations |
 | Garrison zones processed | 1/frame |
 | Radio | 32 channels, 512 tracks, ≤30 soundtrack refs, 1 active decode, ≤2 clips mid-crossfade; icons ≤256×256, ≤256 KiB |
 

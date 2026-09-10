@@ -6,11 +6,13 @@ performance design pass its gate.
 
 ## Now working (vertical slice)
 
-Fire, forest spread, impact scorch, ruins and aftermath; occupied civilian buildings;
-client-local radio; a session-scoped perk/support slice (score-earned perks; armour and
-air-defence airdrops, ground convoy, recon sweep and fortification, artillery default-off). Framework extraction is done and behaviour-preserving: it
-gave every feature a common lifecycle and patch owner without yet splitting the large
-managers (`ImpactFireManager`, `ZoneGarrisonManager`, `ModNet`) into their final services.
+Fire, forest spread, impact scorch, ruins, aftermath and wreck persistence; occupied
+civilian buildings; client-local radio; the expanded tactical map and STR theater screen;
+local QoL camera/HUD conveniences; a session-scoped perk/support slice (nine score-earned
+perks; satellite scan, zone fortification, Rod from God, EMP shock and flare barrage
+support actions). Framework extraction is done and behaviour-preserving: it gave every
+module a common lifecycle and patch owner without yet splitting the large managers
+(`ImpactFireManager`, `ZoneGarrisonManager`, `ModNet`) into their final services.
 
 ## Framework slices, before more multiplayer features
 
@@ -45,10 +47,9 @@ codecs and snapshot providers; garrison catalogue/selection/spawning/lifecycle.
   Enable-by-default gate: mission/scene lifecycle, award attribution and tax/score,
   road/terrain placement, listen-host/client/late join and bounded long-session behavior.
   See [DYNAMIC_OPERATIONS.md](DYNAMIC_OPERATIONS.md) and its pinned research links.
-- **Weather paused** — experimental code was removed from the active build at the
-  user's request. Source, shader tooling, tests and research are preserved in the
-  [Weather archive](../archive/weather-phase-a-2026-09-09/README.md). No development
-  or automatic restoration is scheduled.
+- **Weather removed** — the experimental weather code, its shader tooling, tests and
+  settings were removed from the active build at the user's request (see the CHANGELOG).
+  No development or automatic restoration is scheduled.
 
 - **Urban combat first release** — deterministic shell selection around controlled ground
   airbases, an authoritative occupancy record separate from its visual, `Occupied →

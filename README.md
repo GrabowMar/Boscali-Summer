@@ -1,26 +1,14 @@
 # Boscali Summer
 
-Experimental gun aim assist is available in `[QoL]`: set `GunAimAssist = true`
-in the BepInEx config (default off pending flight testing). With native flight assist on,
-selected fixed guns receive a small pitch/yaw nudge within 2.5 degrees of the native
-lead cue for the first selected, freshly tracked enemy. `GunAimAssistStrength = 0.04`
-caps added input at 4% before falloff; zero disables it. Steering away or making a
-strong control input releases the help. It does not aim turrets or change bullets.
-It borrows the HUD solution; hiding that cue or losing fresh tracking stops assistance.
-
-The expanded tactical map is owned by Boscali Summer and enabled by default
-(`Command.ExpandedMapUi`): left-side pages and event log, central map, right-side
-button rail, and the native spawn footer. It works with or without Wing Command.
-
 **Battlefield destruction, spreading fires, persistent ruins, occupied urban positions, a
-local map radio, and a score-driven perk and support layer for Nuclear Option** — every expensive
-system pooled, event-driven, and globally bounded.
+local map radio, a score-driven perk & support layer, and an expanded tactical map for
+Nuclear Option** — every expensive system pooled, event-driven, and globally bounded.
 
 | | |
 |---|---|
 | **Development build** | `0.1.1` (unreleased) |
 | **Game** | Nuclear Option `0.34.2` |
-| **Requires** | BepInEx `5.4.23.3`+ |
+| **Requires** | BepInEx `5.4.23.4`+ |
 | **Play** | Single-player, and multiplayer with the mod on **every** peer |
 | **Licence** | MIT |
 
@@ -29,62 +17,49 @@ system pooled, event-driven, and globally bounded.
 > `BoscaliSummer.dll` from source (below).
 
 > [!NOTE]
-> Ignition, destruction and garrison decisions are host-authoritative. In multiplayer the
-> host and every client must run the same version. Balance, effects and config may change
-> between releases.
+> Ignition, destruction, garrison, progression and support decisions are host-authoritative.
+> In multiplayer the host and every client must run the same version. Balance, effects and
+> config may change between releases.
 
 ## What it does
 
-- **Dynamic frontlines** — tactical-map control responds gradually to observed ground
-  pressure and actual base ownership. Hostile influence uses recorded positions and
-  fades with contact age. This is an advisory control overlay; vanilla capture rules remain.
-- **Secondary missions (experimental, opt-in)** — `MIS` → **SECONDARY** shows capture,
-  threatened-base defense and ground interdiction, with requirements, timers, money/XP
-  and deployment outcomes. Successful special missions can launch six-vehicle mixed
-  convoys or establish three defensive positions. See [setup and limits](docs/DYNAMIC_OPERATIONS.md).
-- **Third-person flight view** — orbit and rear chase use smooth flight-direction follow,
-  a steady horizon, and lower aircraft framing to leave space for aiming. Orbit/free-look
-  returns behind the aircraft after 1.25 seconds without view input (hold right mouse to
-  keep looking). Native zoom, target look-at and other chase presets remain available.
-  `Avionics.ThirdPersonFlightCameraEnabled` restores native camera motion when disabled.
-  The HUD also restores the native minimap. A larger framed target feed appears at the
-  lower right only while live targets are selected, and clears immediately on deselection.
-  It borrows the native texture; landing mode and unavailable sources cannot appear as
-  live target video. F7 (or the OPS HUD toggle) hides the HUD and panel;
-  `Avionics.ThirdPersonCameraEnabled` disables just the panel. Owned by the independent
-  QoL module (`QoL.Enabled`); Support and Progression are not required for the HUD/camera.
-  In-game visual validation is pending.
-- **Camera observations** — F8 (configurable through `QoL.MarkCameraKey`) marks a fixed
-  surface point from the live native camera. OPS also provides **MARK CAMERA** and shows
-  coordinates, range and age. Select a support action, then press **CALL AT MARK** to
-  confirm it through normal host validation and costs. One mark lasts 120 seconds and
-  clears on aircraft/faction/scene change or ejection. The target panel also shows the
-  selected contact's report age from faction tracking; unknown age stays unknown.
-  `QoL.CameraMarks` disables capture. Marks do not create laser locks or reveal contacts.
-- **Fire** — guns, missiles and destroyed ground vehicles can ignite civilian buildings or
-  procedural forests. Ignition is deliberately probabilistic.
-- **Forest fires** — grow over seconds, throw wind-biased child fronts (2 attempts, ≤2
-  generations), clear trees, and leave irregular vanilla-grey ash scars.
-- **Buildings** — lightweight city buildings pass through intact → burning → ruined; an
-  explosive hit also stamps a local scorch mark on the wall. Smoke is a smoke-only copy of
-  the vanilla Fuel Depot effect, not a synthetic column.
-- **Ruins** — pooled collapse dust and permanent intermittent smouldering, no physics debris.
+- **Fire & destruction** — guns, missiles and destroyed ground vehicles can ignite civilian
+  buildings or procedural forests (deliberately low, probabilistic chance). Forest fires
+  grow, throw wind-biased downwind fronts, clear trees and leave ash scars. Buildings pass
+  intact → burning → ruined; an explosive hit also stamps a local scorch decal. Ruins get
+  pooled collapse dust and permanent intermittent smoulder. Destroyed aircraft wreckage
+  lingers and smokes instead of vanishing after 30 s.
 - **Occupied buildings** — a few civilian shells around controlled airbases become logic-only
-  defensive positions using vanilla bunker behaviour.
-- **Radio** — a client-local map-MFD music player for your own OGG/WAV stations through the
-  game's music mixer.
-- **Perks & support** — an `OPS` map-MFD with a flat, score-earned perk board split into
-  **PASSIVE** systems and strike **AUTH**orisations, server-authoritative **SUPPORT**
-  requests (recon, zone fortification, kinetic strike, EMP), and a **RECORD** page showing
-  where the perk points came from and what they bought.
-- **Strategic layer** — an `STR` map-MFD carrying the theater picture: DEFCON and the air
-  balance with a friendly-AI sortie board (**SA**), the live sector field with the contested
-  nodes ranked by pressure (**FRONT**), the faction objective board (**TASKING**), the
-  theater account and stockpile (**LOG**), and mission-AI doctrine plus priority targets
-  (**CMD**). Aircraft command is Wing Command's job; this mod never tasks a recruited wing.
+  defensive positions backed by hidden vanilla `DEF` proxies; the shell keeps its normal
+  look and ownership. Air assault adds bounded, visible insertion sequences (presentation
+  only; vanilla emplacements own the combat).
+- **Radio** — a client-local map-MFD music player (`RAD` bezel) for your own OGG/WAV
+  stations, routed through the game's music mixer. Three starter stations; no bundled audio.
+- **Perks & support** — an `OPS` map-MFD: a flat, score-earned perk board (**PASSIVE**
+  systems and strike **AUTH**orisations), server-validated **SUPPORT** requests (satellite
+  scan, zone fortification, Rod from God, EMP shock, flare barrage) that spend your normal
+  allocation, and a **RECORD** page of where the points came from.
+- **Strategic layer** — an `STR` map-MFD with the theater picture: DEFCON and the air
+  balance with a friendly-AI sortie board (**SA**), the live sector field and contested
+  nodes (**FRONT**), the faction objective board (**TASKING**), the theater account and
+  stockpile (**LOG**), and mission-AI doctrine plus priority targets (**CMD**). Aircraft
+  command stays Wing Command's job; this mod never tasks a recruited wing.
+- **Expanded tactical map** — `Command.ExpandedMapUi` (default on): left-side MFD pages and
+  event log, central map, right-side bezel rail, native spawn footer. Works with or without
+  Wing Command.
+- **Quality of life** (`QoL.Enabled`, client-local, independent of Support/Progression) —
+  smooth third-person orbit/chase framing with a steady horizon and room to aim, HUD and
+  native-minimap restore in external views, a framed target-camera feed while targets are
+  selected, one expiring camera-observation mark (**F8** / OPS **MARK CAMERA**), and an
+  opt-in gun aim-assist nudge (`GunAimAssist`, default off, pending flight testing).
+- **Dynamic operations** (`DynamicOperations.Enabled`, **default off**, experimental) —
+  automatic secondary missions (capture / defend / interdict) with one-time faction money
+  and XP awards and finite convoy/fortification spawns. See
+  [docs/DYNAMIC_OPERATIONS.md](docs/DYNAMIC_OPERATIONS.md).
 
-Active fires, ruins and garrisons sync for multiplayer and late joiners. Hard global budgets
-keep large city battles practical.
+Active fires, ruins and garrisons sync for multiplayer and late joiners; only authoritative
+transitions go on the wire. Hard global budgets keep large city battles practical — see
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Install
 
@@ -107,161 +82,52 @@ and extracts at the Nuclear Option root — don't install both copies.
 
 Settings are generated at `BepInEx/config/com.marci.boscalisummer.cfg` and can be edited
 in-game with [ConfigurationManager](https://github.com/BepInEx/BepInEx.ConfigurationManager)
-(**F1**).
-
-The experimental Weather feature is paused and excluded from the build. Its source,
-tools and research are preserved in the [Weather archive](archive/weather-phase-a-2026-09-09/README.md).
+(**F1**), which shows every key with an inline description.
 
 ## Quick start
 
 1. Host or start a mission; wait a few seconds for the procedural-forest index to build.
-2. Attack wooded terrain or civilian buildings with guns or missiles.
-3. Watch established forest sites advance into separate downwind fronts and leave scorched
-   terrain behind. Destroy vehicles near a town or tree line for a secondary ignition chance.
-4. Capture an airbase and inspect nearby civilian buildings — selected shells keep their
-   normal look but behave as defensive positions.
-5. Maximise the tactical map, press the **`RAD`** bezel: the three starter stations use the
-   installed soundtrack immediately; **FOLDER** adds OGG/WAV stations.
-6. Press the **`OPS`** bezel: spend score-earned points on **PASSIVE** and **AUTH**, then
-   use **SUPPORT** with the map cursor over a valid target. Press **`STR`** for the theater
-   picture and to set friendly-AI doctrine. If Wing Command is also installed it claims
-   **WMC** on the left bezel; radio stays on **RAD** to the right.
-
-## Fire and destruction
-
-| Ignition source | Target | Default |
-|---|---|---|
-| Projectile impact | Forest or civilian building | Low chance |
-| Missile detonation | Forest or civilian building | Higher explosive chance |
-| Ground-vehicle destruction | Nearest civilian building or nearby forest | One bounded secondary roll |
-
-Open ground and water are ignored. Projectile events run through a 256-item host queue, 8 per
-frame; tree positions are indexed once per scene and checked against nearby cells only;
-vehicle losses use a separate 32-event queue and at most one non-allocating building query
-per frame.
-
-**Scorch marks.** `MapBuilding` has no vanilla damage shader — the game only decrements hit
-points and swaps to a wreck mesh — so there's no "battered" facade. Instead an explosive hit
-(missile, bomb, rocket) stamps a bounded cluster of one to three pooled black decals on the
-wall at the point of impact, sized from blast yield and nudged so repeats differ. Purely local and cosmetic: no HP
-tracking, no damage tiers, nothing on the wire. Gun rounds leave no mark.
-
-**Ruins.** A destroyed building enters a mission-long aftermath: a pooled two-layer collapse
-burst (footprint-shaped dust) → one or two vanilla smoke sources for the hot phase →
-intermittent smouldering once cool. Up to 256 ruins are recorded; only the nearest 24 get
-smoke visuals; collapse bursts are capped at 4 and create no Rigidbody debris. A
-faction-owned building counts as occupied and is preserved instead.
-
-## Occupied buildings
-
-At mission start and after a capture, the server picks eligible civilian buildings around the
-zone (critical infrastructure and very small structures excluded). A hidden vanilla defensive
-building supplies targeting, weapons, health and networking while its proxy renderers stay
-disabled; the civilian shell keeps its normal appearance and ownership. Garrisons track zone
-ownership, can't duplicate, vanish when their shell is ruined, and return only on a later
-capture. Highway airstrips are supported; attached ship airbases are ignored.
-
-Air assault adds visible insertion sequences and bounded defensive outposts. Infantry
-figures are presentation only; vanilla networked DEF emplacements own combat behavior.
-Client-side barriers, faction markers, and sentries are attached to those network objects,
-so every peer sees them and their cleanup follows the emplacement lifecycle.
-
-## Radio
-
-A client-local music player styled as a compact MFD, with no bundled audio. Three built-in
-stations: **Agrapol FM** and **Maris Network** fall back to one installed-soundtrack track
-each until their folder holds imports; **Base Broadcast** always exposes only the current
-map's original-score pool and ignores imports.
-
-**FOLDER** opens the canonical `Music` directory — drop OGG/WAV files (and an optional
-`station.png`, ≤256×256, ≤256 KiB) into one folder, press **RESCAN**. Files directly in
-`Music` show under `LOCAL`. Only OGG and WAV are accepted. The player never downloads,
-extracts, bundles, logs or transmits soundtrack audio; built-in entries reference AudioClips
-Nuclear Option already loaded. It routes at unity gain through the game's music mixer (so it
-follows the music-volume slider), yields vanilla music while on air, and restores it on stop.
-Headless servers skip the feature. Synchronized stations across peers are feasible but
-gated — see [docs/DESIGN_NOTES.md](docs/DESIGN_NOTES.md).
-
-## Perks and support
-
-Perks are earned from your **live mission score** — one point per `ScorePerPoint` (500 by
-default), up to six. Nuclear Option's rank thresholds, aircraft requirements and weapon
-access are never touched; rank is shown on the board as flavour only. The board is one flat
-list with no prerequisites and no tiers: passives (fuel discipline, combat pay, ground crew,
-objective focus, cheaper support) and one authorisation per support action. Selections are
-session-scoped and reset with the mission.
-
-Support spends the player's normal allocation — no second currency. `CostMultiplier` scales
-every action at once. The host validates identity, faction, authorisation, cost, cooldown,
-target terrain, replay, rate and global caps; every denial is typed and shown on the card.
-The board renders only state it has verified — no target, locked, cooling down and
-unaffordable are all distinct — and an unanswered request reports the host as silent rather
-than hanging.
-
-Recon stamps the faction tracking state around the mark, and is left out of the catalogue
-entirely when that game seam cannot be resolved. Fortification reinforces the selected
-friendly controlled zone through the bounded occupied-position system, and is charged only
-after Urban Combat has verified it can actually place defenders. Rod from God and EMP shock
-use a configured non-nuclear vanilla missile (`FireMissionDefinitionKey`; empty auto-picks
-a yield ≤ 200 definition).
+2. Attack wooded terrain or civilian buildings with guns or missiles; destroy vehicles near
+   a town or tree line for a secondary ignition chance.
+3. Capture an airbase and inspect nearby civilian buildings — selected shells keep their
+   look but behave as defensive positions.
+4. Maximise the tactical map. Press **`RAD`** for the radio (**FOLDER** adds OGG/WAV
+   stations). Press **`OPS`** to spend perk points and call in support with the map cursor
+   over a valid target. Press **`STR`** for the theater picture and friendly-AI doctrine.
+   With Wing Command installed it claims **WMC** on the left bezel; radio stays on **RAD**.
 
 ## Configuration
 
-The public configuration is intentionally compact — particle counts, spatial budgets and
-spread depth are derived or fixed so a tempting setting can't turn a long mission into a
-performance collapse. Every entry says whether it is **host-authoritative** (on a server only
-the host's value decides anything; a client's copy just changes what its own OPS page
-predicts) or **client-local** (yours alone, never sent anywhere).
+The public surface is intentionally compact — particle counts, spatial budgets and spread
+depth are derived and bounded so a setting can't turn a long mission into a slideshow. Every
+entry says whether it is **host-authoritative** (on a server only the host's value decides
+anything) or **client-local**. This table is a curated subset; F1 shows the rest.
 
 | Section | Setting | Default | Purpose |
 |---|---|---:|---|
-| Fires | `Enabled` | `true` | Impact and vehicle-loss fires |
-| Fires | `Intensity` | `1.0` | Scale ignition chance and visual intensity together |
+| Fires | `Enabled` / `Intensity` | `true` / `1.0` | Impact & vehicle-loss fires; scale ignition + visual intensity |
 | Fires | `DemolishUnoccupiedBuildings` | `true` | Leave vanilla ruins after building fires burn out |
-| Buildings | `ImpactScorchEnabled` | `true` | Stamp a local scorch mark where an explosive hit meets a wall |
-| Garrisons | `Enabled` | `true` | Occupy eligible buildings around controlled zones |
-| Garrisons | `BuildingsPerZone` | `3` | Occupied civilian shells per zone |
-| Radio | `Enabled` | `true` | Client-local map radio |
-| Radio | `CrossfadeSeconds` | `1.5` | Blend duration between local tracks |
-| Radio | `Shuffle` / `RepeatTrack` | `false` | Advancement within a channel |
-| Progression | `Enabled` | `true` | Score-earned perk board (disabling it also disables Support) |
-| Progression | `ScorePerPoint` | `500` | Mission score per perk point |
-| Progression | `MaximumPoints` | `6` | Points one pilot can earn; the board costs 13 in total |
-| Progression | `PerkStrength` | `1.0` | Scales every passive perk bonus without editing the board |
-| Support | `Enabled` | `true` | OPS support request pipeline |
-| Support | `CostMultiplier` | `1.0` | Scales every support cost at once |
-| Support | `ReconSweep` / `Fortification` | `true` | Hostile reveal / zone reinforcement |
-| Support | `RodFromGod` | `true` | Orbital kinetic strike; uses `FireMissionDefinitionKey` |
-| Support | `EmpShock` | `true` | Wide-area radar jam; uses `FireMissionDefinitionKey` |
-| Support | `MaximumRangeMeters` / `ReconRangeMeters` | `30000` / `120000` | Delivery reach / reconnaissance reach |
-| Debug | `VerboseLogging` | `false` | Log individual ignition, spread and merge events |
+| Buildings | `ImpactScorchEnabled` | `true` | Local scorch decal where an explosive hit meets a wall (client-local) |
+| Garrisons | `Enabled` / `BuildingsPerZone` | `true` / `3` | Occupy civilian shells around controlled zones |
+| Radio | `Enabled` / `CrossfadeSeconds` | `true` / `1.5` | Client-local map radio; blend between tracks |
+| QoL | `Enabled` | `true` | Local HUD/camera conveniences + observation marks |
+| QoL | `GunAimAssist` / `GunAimAssistStrength` | `false` / `0.04` | Experimental gun nudge; input ceiling before falloff |
+| QoL | `CameraMarks` / `MarkCameraKey` | `true` / `F8` | Camera observation mark |
+| Avionics | `ThirdPersonFlightCameraEnabled` | `true` | Smooth orbit/rear-chase framing (disable → native motion) |
+| Avionics | `ThirdPersonHudEnabled` / `ThirdPersonHudKey` | `true` / `F7` | Keep the flight HUD in external views; toggle key |
+| Progression | `Enabled` | `true` | Score-earned perk board (off also disables Support) |
+| Progression | `ScorePerPoint` / `MaximumPoints` | `500` / `6` | Score per perk point; points one pilot can earn (board costs 12) |
+| Progression | `PerkStrength` | `1.0` | Scale every passive perk without editing the board |
+| Support | `Enabled` / `CostMultiplier` | `true` / `1.0` | OPS support pipeline; scale every cost at once |
+| Support | `ReconSweep` `Fortification` `RodFromGod` `EmpShock` `FlareBarrage` | `true` | Per-action toggles (flare barrage shares the Satellite Scan authorisation) |
+| Support | `MaximumRangeMeters` / `RequestCooldownSeconds` | `30000` / `30` | Strike delivery reach; cooldown per player |
+| Support | `FireMissionDefinitionKey` | *(empty)* | Missile for Rod from God / EMP; empty auto-picks a yield ≤ 200 vanilla missile |
+| Command | `Enabled` / `ExpandedMapUi` | `true` / `true` | STR screen + overlays + AI target scoring; full tactical map GUI |
+| Command | `FrontlinesOverlay` / `OverlayOpacity` | `true` / `0.35` | Sector-control grid on the map |
+| DynamicOperations | `Enabled` / `RewardMultiplier` | `false` / `1.0` | Experimental secondary missions; scale money & XP |
+| Debug | `VerboseLogging` `BypassRequirements` `DisableOpsCooldowns` | `false` | Diagnostics and testing aids |
 
-At intensity `1.0`, ordinary impacts have ≈`0.25%` ignition chance and explosive impacts
-≈`6%`; vehicle destruction uses a lower value derived from the explosive one. Removed
-experimental keys are migrated out automatically.
-
-## Multiplayer and performance
-
-Only authoritative transitions are networked. Fire particles, smoke evolution, lights,
-scorch marks and collapse dust are local and generate no per-frame mod traffic. Late joiners
-get two delayed snapshots of active fires and ruins after authentication; garrisons use
-vanilla spawning.
-
-| System | Limit | | System | Limit |
-|---|---:|---|---|---:|
-| Queued projectile impacts | 256 | | Queued impact scorch casts | 32 |
-| Queued vehicle destructions | 32 | | Pooled impact scorch marks | 64 |
-| Active fire sites | 24 | | Persistent logical ruins | 256 |
-| Dynamic fire lights | 3 | | Nearest ruin smoke visuals | 24 |
-| | | | Simultaneous collapse bursts | 4 |
-
-## Diagnostics and compatibility
-
-Startup writes the resolved Harmony patch list, capability checks, forest-index size,
-defensive definitions and the vanilla smoke-template result to `LogOutput.log` — the first
-place to look after a Nuclear Option update. Boscali Summer needs no Blueprinter; it
-discovers vanilla materials, effects and definitions at runtime, and a missing optional
-target disables or reports that capability rather than starting an unbounded scan.
+Removed experimental keys are migrated out automatically on upgrade.
 
 ## Building from source
 
@@ -269,8 +135,7 @@ References the locally installed Nuclear Option assemblies. Override `GameDir` f
 Steam library:
 
 ```powershell
-dotnet build .\src\BoscaliSummer\BoscaliSummer.csproj -c Release `
-  -p:GameDir='D:\SteamLibrary\steamapps\common\Nuclear Option'
+dotnet build .\BoscaliSummer.sln -c Release -p:GameDir='D:\SteamLibrary\steamapps\common\Nuclear Option'
 ```
 
 Build, package and deploy go through [nomodkit](../nomodkit):
@@ -292,15 +157,23 @@ run automatically. Check Harmony targets and private fields on their own with:
 nomod asm verify --mod boscalisummer
 ```
 
-## Scope
+The `netstandard2.1` plugin and the two `net8.0` test projects live in one solution;
+`BoscaliSummer.csproj` is at the repo root and lists its source roots explicitly.
+
+## Scope and docs
 
 `0.1.x` is the tactical battlefield layer: fire, visible destruction, persistent aftermath,
-urban defensive positions, and a development progression/support slice. It does **not** add
-unbounded wildfire, continuous secondary fire damage, Rigidbody debris, infantry models,
-cross-mission perk profiles, or carrier requisitions. Later utilities are gated by
-[docs/ROADMAP.md](docs/ROADMAP.md), not implied by the current version. Design rationale is
-in [docs/](docs/) — [ARCHITECTURE](docs/ARCHITECTURE.md),
-[MODULE_BOUNDARIES](docs/MODULE_BOUNDARIES.md), [DESIGN_NOTES](docs/DESIGN_NOTES.md).
+urban defensive positions, an expanded map, and a development progression/support/theater
+slice. It does **not** add unbounded wildfire, continuous secondary fire damage, Rigidbody
+debris, autonomous infantry, cross-mission perk profiles, or carrier requisitions. Weather
+was an experiment and was removed — see the CHANGELOG. Later utilities are gated by
+[docs/ROADMAP.md](docs/ROADMAP.md), not implied by the current version.
+
+Design rationale lives in [docs/](docs/):
+[ARCHITECTURE](docs/ARCHITECTURE.md) (composition, lifecycle, replication, hard budgets),
+[MODULE_BOUNDARIES](docs/MODULE_BOUNDARIES.md) (the editing map),
+[DESIGN_NOTES](docs/DESIGN_NOTES.md) (decisions and why), and
+[MODULE_STATUS](docs/MODULE_STATUS.md) (what currently works vs. is unverified).
 
 ## Licence
 
