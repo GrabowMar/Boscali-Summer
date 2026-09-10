@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using BepInEx.Logging;
+using BoscaliSummer.Features.DynamicOperations;
 using BoscaliSummer.Features.Command;
+using BoscaliSummer.Features.QoL;
 using BoscaliSummer.Features.FireAndDestruction;
 using BoscaliSummer.Features.Radio;
 using BoscaliSummer.Features.Progression;
@@ -19,20 +21,22 @@ namespace BoscaliSummer.Bootstrap
             var host = new FeatureHost(logger, settings);
             try
             {
-                // A feature turned off in config is never installed, so it also never patches,
-                // registers a network handler or polls. Support and Command depend on Progression.
+                // Progression, Support and Command disabled at startup are not installed.
                 var features = new List<IModFeature>
                 {
                     new FireAndDestructionFeature(),
                     new UrbanCombatFeature(),
                     new RadioFeature()
                 };
+                if (settings.QoL.Enabled.Value && !UnityEngine.Application.isBatchMode)
+                    features.Add(new QoLFeature());
                 if (settings.Progression.Enabled.Value)
                 {
                     features.Add(new ProgressionFeature());
                     if (settings.Support.Enabled.Value) features.Add(new SupportFeature());
                     if (settings.Command.Enabled.Value) features.Add(new CommandFeature());
                 }
+                if (settings.DynamicOperations.Enabled.Value) features.Add(new DynamicOperationsFeature());
                 host.Load(features.ToArray());
                 CapabilityReport.Log();
                 return host;

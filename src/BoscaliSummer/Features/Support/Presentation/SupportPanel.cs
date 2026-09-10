@@ -15,10 +15,17 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Features.Support.Presentation
 {
     /// <summary>
-    /// "OPS" — the operations console on the maximised map's left bezel.
+    /// "OPS" — the pilot's own console on the maximised map.
     ///
-    /// Rebuilt on the shared layout engine. Three changes, all structural rather than
-    /// cosmetic, and each one fixing something the previous design could not:
+    /// <para>OPS answers one question: what have you earned, and what may you call in. The
+    /// theater picture used to be a third tab here, opening a second row of tabs inside the
+    /// first; it is now its own screen, and the two stopped competing for the same 400
+    /// pixels. What OPS got back it spent on the perk board, which is why the passive
+    /// systems and the strike authorisations are now a page each instead of two sections
+    /// fighting over one.</para>
+    ///
+    /// Built on the shared layout engine. Three earlier changes still hold, all structural
+    /// rather than cosmetic, and each one fixing something the previous design could not:
     ///
     /// 1. <b>The metrics moved out of the tabs.</b> Allocation and score are what a pilot
     ///    checks constantly and both pages need them, so neither page owns them. They sit
@@ -51,6 +58,14 @@ namespace BoscaliSummer.Features.Support.Presentation
         private const float ChipGap = 2f;
         private const int ChipCount = 3;
 
+        private const int TabPassive = 0;
+        private const int TabAuth = 1;
+        private const int TabSupport = 2;
+        private const int TabRecord = 3;
+
+        /// <summary>Pip slots kept for the perk-point budget. Servers configure the ceiling.</summary>
+        private const int MaximumBudgetPips = 16;
+
         private sealed class PerkRow
         {
             public byte Id;
@@ -78,17 +93,15 @@ namespace BoscaliSummer.Features.Support.Presentation
         private IProgressionView progression;
         private IBaseDefenseAlarmService baseAlarm;
         private ManualLogSource logger;
+        private IObservationSource observations;
+        private IThirdPersonHud thirdPersonHud;
+        private TMP_Text observationText;
+        private AvButton captureMark, callAtMark, clearMark;
         private MFDScreen screen;
         private GameObject screenRoot;
         private TMP_FontAsset font;
 
-        private GameObject perksPage;
-        private GameObject supportPage;
-        private GameObject theaterPage;
-        private AvButton perksTab;
-        private AvButton supportTab;
-        private AvButton theaterTab;
-        private ITheaterPage theater;
+        private AvScreen shell;
 
         private AvStyled.DataBar dataBar;
         private AvStyled.Metric allocMetric;
@@ -99,6 +112,17 @@ namespace BoscaliSummer.Features.Support.Presentation
 
         private readonly List<PerkRow> perkRows = new List<PerkRow>();
         private readonly List<StrikeRow> strikeRows = new List<StrikeRow>();
+
+        // ---- Record page ---------------------------------------------------------------
+
+        private TMP_Text rankValue;
+        private TMP_Text scoreValue;
+        private TMP_Text perPointValue;
+        private TMP_Text earnedValue;
+        private TMP_Text spentValue;
+        private TMP_Text availableValue;
+        private TMP_Text unlockedList;
+        private Image[] budgetPips;
 
         private float nextAttempt;
         private float nextRefresh;
@@ -117,26 +141,26 @@ namespace BoscaliSummer.Features.Support.Presentation
 
         public void ResetForScene()
         {
-            theater?.Unmount();
             BezelRegistry.Release(BezelRegistry.Ops);
             if (screenRoot != null) UnityEngine.Object.Destroy(screenRoot);
             screenRoot = null;
             screen = null;
             font = null;
-            perksPage = null;
-            supportPage = null;
-            theaterPage = null;
-            perksTab = null;
-            supportTab = null;
-            theaterTab = null;
-            theater = null;
+            shell = null;
             dataBar = null;
             allocMetric = null;
             scoreMetric = null;
             statusText = null;
+            observations = null;
+            thirdPersonHud = null;
+            observationText = null;
+            captureMark = callAtMark = clearMark = null;
             activeHoverTooltip = null;
             perkRows.Clear();
             strikeRows.Clear();
+            rankValue = scoreValue = perPointValue = null;
+            earnedValue = spentValue = availableValue = unlockedList = null;
+            budgetPips = null;
             nextAttempt = 0f;
             nextRefresh = 0f;
             failed = false;
@@ -237,7 +261,12 @@ namespace BoscaliSummer.Features.Support.Presentation
             // remembered home — it is placed by its parent and anchors, and an
             // anchoredPosition written here is overwritten whenever the panel is opened.
             rootRect.localScale = templateRect.localScale;
-            rootRect.sizeDelta = new Vector2(Width, PanelHeight);
+
+            // Take the bay the column actually has. It is roughly 900px once the mission
+            // clock and the spawn strip are reserved, and this panel used to take 596 of it.
+            float height = AvScreen.ResolveHeight(
+                templateRect.parent as RectTransform, PanelHeight, AvTokens.PanelHeightMax);
+            rootRect.sizeDelta = new Vector2(Width, height);
 
             Image background = root.GetComponent<Image>();
             background.sprite = AvSprites.Panel;
@@ -250,59 +279,42 @@ namespace BoscaliSummer.Features.Support.Presentation
             content.SetParent(rootRect, false);
             AvKit.Stretch(content);
 
-            ModServices.TryGet(out theater);
-            int tabCount = theater != null ? 3 : 2;
+            ModServices.TryGet(out observations);
+            ModServices.TryGet(out thirdPersonHud);
 
-            // The panel shell, declared once. Every rectangle below is read out of this
-            // tree rather than accumulated by a running `y -= 34f` cursor.
-            AvNode shell = AvBox.Column("ops").Pad(Pad).Gaps(AvTokens.Space2)
-                .Add(AvBox.Row("databar").Height(AvTokens.TitleBarHeight + 2f))
-                .Add(AvBox.Grid("metrics", 2).Height(58f).Gaps(0f)
-                    .Add(AvBox.Cell("alloc"), AvBox.Cell("score")))
-                .Add(AvBox.Row("tabs").Height(AvTokens.TabBarHeight).Gaps(1f))
-                .Add(AvBox.Cell("body").Grow())
-                .Add(AvBox.Cell("status").Height(AvTokens.StatusStripHeight));
+            shell = AvScreen.Build(
+                content, "OPS",
+                new[] { "PASSIVE", "AUTH", "SUPPORT", "RECORD" },
+                new[]
+                {
+                    new[] { "ALLOCATION", "ALLOC" },
+                    new[] { "MISSION SCORE", "PTS" },
+                },
+                ChipCount, Width, height, _ => nextRefresh = 0f);
 
-            AvNode tabs = shell.Find("tabs");
-            for (int i = 0; i < tabCount; i++) tabs.Add(AvBox.Cell("t" + i).Grow());
+            dataBar = shell.DataBar;
+            allocMetric = shell.Metrics[0];
+            scoreMetric = shell.Metrics[1];
+            statusText = shell.Status;
 
-            shell.Arrange(new Rect(0f, 0f, Width, PanelHeight));
-
-            dataBar = AvStyled.TopBar(content, shell.At("databar"), "OPS", ChipCount);
-            AvKit.HitButton(content, ChipRect(shell.At("databar"), 2), () =>
+            AvKit.HitButton(content, ChipRect(shell.Body, 2), () =>
             {
-                ThirdPersonHudController.Instance?.Toggle();
+                thirdPersonHud?.Toggle();
                 nextRefresh = 0f;
             }).WithTooltip("Toggle the third-person HUD overlay.");
 
-            AvStyled.Box(content, shell.At("metrics"), "metrics");
-            allocMetric = AvStyled.MetricCell(content, shell.At("metrics.alloc"), "ALLOCATION", "ALLOC");
-            scoreMetric = AvStyled.MetricCell(content, shell.At("metrics.score"), "MISSION SCORE", "PTS");
-            AvKit.Rule(content, VerticalDivider(shell.At("metrics")), AvTheme.Hairline);
+            Rect body = shell.Body;
 
-            perksTab = AvStyled.Button(content, shell.At("tabs.t0"), "PERKS", "tab", ShowPerks, AvButtonStyle.Tab);
-            supportTab = AvStyled.Button(content, shell.At("tabs.t1"), "SUPPORT", "tab", ShowSupport, AvButtonStyle.Tab);
-            if (theater != null)
-                theaterTab = AvStyled.Button(content, shell.At("tabs.t2"), "THEATER", "tab", ShowTheater, AvButtonStyle.Tab);
+            SplitPerks(out List<PerkView> passives, out List<PerkView> auths);
 
-            Rect body = shell.At("body");
+            BuildPerkPage((RectTransform)shell.CreatePage(TabPassive, "PassivePage").transform,
+                          body, passives, "PASSIVE SYSTEMS", "ALWAYS ON", PassiveCode, band: false);
+            BuildPerkPage((RectTransform)shell.CreatePage(TabAuth, "AuthPage").transform,
+                          body, auths, "STRIKE AUTHORISATIONS", "CLEARS A CALL-IN",
+                          AuthCode, band: true);
 
-            perksPage = CreatePage(content, "PerksPage");
-            BuildPerksPage((RectTransform)perksPage.transform, body);
-
-            supportPage = CreatePage(content, "SupportPage");
-            BuildSupportPage((RectTransform)supportPage.transform, body);
-
-            if (theater != null)
-            {
-                theaterPage = CreatePage(content, "TheaterPage");
-                // The theater page still lays itself out against a width and a cursor, so
-                // it gets the same inner column the other two pages work inside.
-                theater.Mount((RectTransform)theaterPage.transform,
-                              font, body.width - SpineInset, body.y);
-            }
-
-            statusText = AvStyled.StatusStrip(content, shell.At("status"));
+            BuildSupportPage((RectTransform)shell.CreatePage(TabSupport, "SupportPage").transform, body);
+            BuildRecordPage((RectTransform)shell.CreatePage(TabRecord, "RecordPage").transform, body);
 
             MFDScreen result = root.AddComponent<MFDScreen>();
             result.shortName = "OPS";
@@ -317,20 +329,21 @@ namespace BoscaliSummer.Features.Support.Presentation
             }
 
             screenRoot = root;
-            SetPage(1);
+            shell.SetPage(TabSupport);
             return result;
         }
 
-        /// <summary>Where the nth status chip sits in the data bar, so a hit target can cover it.</summary>
-        private static Rect ChipRect(Rect bar, int index)
+        /// <summary>
+        /// Where the nth status chip sits, so a hit target can cover it. The data bar is the
+        /// first row of the shell, which puts it at the top padding by construction.
+        /// </summary>
+        private static Rect ChipRect(Rect body, int index)
         {
+            const float barHeight = AvTokens.TitleBarHeight + 2f;
             float chipsWidth = ChipCount * ChipWidth + (ChipCount - 1) * ChipGap;
-            float x = bar.x + bar.width - chipsWidth - 6f + index * (ChipWidth + ChipGap);
-            return new Rect(x, bar.y - (bar.height - 16f) * 0.5f, ChipWidth, 16f);
+            float x = body.x + body.width - chipsWidth - 6f + index * (ChipWidth + ChipGap);
+            return new Rect(x, -Pad - (barHeight - 16f) * 0.5f, ChipWidth, 16f);
         }
-
-        private static Rect VerticalDivider(Rect metrics) =>
-            new Rect(metrics.x + metrics.width * 0.5f, metrics.y, 1f, metrics.height);
 
         // ---- Page scaffolding ------------------------------------------------------------
 
@@ -401,45 +414,65 @@ namespace BoscaliSummer.Features.Support.Presentation
         // ---- Perks page ------------------------------------------------------------------
 
         /// <summary>What a perk is, as a code. Kind on the code, state on the rail.</summary>
-        private static string PerkCode(bool isAuthorisation) => isAuthorisation ? "AUT" : "PAS";
+        private const string PassiveCode = "PAS";
 
-        private void BuildPerksPage(RectTransform parent, Rect body)
+        private const string AuthCode = "AUT";
+
+        /// <summary>
+        /// Split the board on the only distinction that changes what a perk does: a passive
+        /// improves a number you already have, an authorisation unlocks a call-in you do
+        /// not. They are separate pages because they are separate decisions.
+        /// </summary>
+        private void SplitPerks(out List<PerkView> passives, out List<PerkView> auths)
         {
             PerkView[] perks = progression.GetPerks();
+            passives = new List<PerkView>();
+            auths = new List<PerkView>();
 
-            var passives = new List<PerkView>();
-            var auths = new List<PerkView>();
             for (int i = 0; i < perks.Length; i++)
             {
                 bool isAuth = perks[i].Group != null &&
                               perks[i].Group.IndexOf("AUTHORIS", StringComparison.OrdinalIgnoreCase) >= 0;
                 (isAuth ? auths : passives).Add(perks[i]);
             }
+        }
+
+        private void BuildPerkPage(
+            RectTransform parent, Rect body, List<PerkView> perks,
+            string title, string note, string code, bool band)
+        {
+            AvStyled.Spine(parent, new Rect(body.x, body.y, 3f, body.height));
+
+            if (perks.Count == 0)
+            {
+                AvStyled.Label(parent, new Rect(body.x + SpineInset, body.y, body.width - SpineInset, 40f),
+                               "No " + title.ToLowerInvariant() + " are configured on this server.",
+                               "row-sub");
+                return;
+            }
 
             AvNode page = AvBox.Column("perks").Gaps(0f)
-                .Add(Section("passive", Descriptions(passives)))
-                .Add(Section("auth", Descriptions(auths)))
+                .Add(Section("list", Descriptions(perks)))
                 .Add(AvBox.Filler());
             page.Arrange(body);
 
-            AvStyled.Spine(parent, new Rect(body.x, body.y, 3f, body.height));
+            AvNode section = page.Find("list");
+            Rect area = page.At("list");
 
-            BuildPerkSection(parent, page.Find("passive"), page.At("passive"),
-                             "PASSIVE SYSTEMS", passives, band: false);
-            BuildPerkSection(parent, page.Find("auth"), page.At("auth"),
-                             "STRIKE AUTHORISATIONS", auths, band: true);
-        }
+            // A page of rows can outgrow even the taller bay once descriptions wrap.
+            if (area.height > body.height)
+            {
+                parent = AvScreen.Scroll(parent, body, area.height, out Rect scrolled);
+                page.Arrange(scrolled);
+                section = page.Find("list");
+                area = page.At("list");
+                AvStyled.Spine(parent, new Rect(scrolled.x, scrolled.y, 3f, scrolled.height));
+            }
 
-        private void BuildPerkSection(
-            RectTransform parent, AvNode node, Rect area, string title,
-            List<PerkView> perks, bool band)
-        {
-            if (perks.Count == 0) return;
-
-            DrawSectionHeader(parent, node, area, title, perks.Count.ToString(), band);
+            DrawSectionHeader(parent, section, area, title, note, band);
 
             for (int i = 0; i < perks.Count; i++)
-                AddPerkRow(parent, node.Find("r" + i), perks[i], PerkCode(band));
+                AddPerkRow(parent, section.Find("r" + i), perks[i], code);
         }
 
         private void AddPerkRow(RectTransform parent, AvNode row, PerkView view, string code)
@@ -496,13 +529,29 @@ namespace BoscaliSummer.Features.Support.Presentation
                 case SupportActionId.Fortify: return "FTF";
                 case SupportActionId.Recon: return "SAT";
                 case SupportActionId.Emp: return "EMP";
-                case SupportActionId.SmokeMarker: return "SMK";
+                case SupportActionId.FlareMissile: return "FLR";
                 default: return "OPS";
             }
         }
 
         private void BuildSupportPage(RectTransform parent, Rect body)
         {
+            if (observations != null)
+            {
+                observationText = AvKit.Label(parent, "No camera mark.",
+                    new Rect(body.x + SpineInset, body.y, body.width - SpineInset, 32f), AvTheme.Dim, 12f);
+                float x = body.x + SpineInset;
+                float buttonWidth = (body.width - SpineInset - 8f) / 3f;
+                captureMark = AvStyled.Button(parent, new Rect(x, body.y - 36f, buttonWidth, 24f),
+                    "MARK CAMERA", "btn", () => { observations.Capture(); nextRefresh = 0f; })
+                    .WithTooltip("Record the surface at the centre of the live native camera. One local mark, expires after 120 seconds.");
+                callAtMark = AvStyled.Button(parent, new Rect(x + buttonWidth + 4f, body.y - 36f, buttonWidth, 24f),
+                    "CALL AT MARK", "btn", () => { support.RequestAtMark(observations); nextRefresh = 0f; })
+                    .WithTooltip("Select a support action below first, then confirm execution at this camera mark. Normal cost and host validation apply.");
+                clearMark = AvStyled.Button(parent, new Rect(x + (buttonWidth + 4f) * 2f, body.y - 36f, buttonWidth, 24f),
+                    "CLEAR MARK", "btn", () => { observations.Clear(); nextRefresh = 0f; });
+                body = new Rect(body.x, body.y - 68f, body.width, body.height - 68f);
+            }
             IReadOnlyList<SupportActionDefinition> actions = support.Actions;
 
             var descriptions = new List<string>();
@@ -513,11 +562,19 @@ namespace BoscaliSummer.Features.Support.Presentation
                 .Add(AvBox.Filler());
             page.Arrange(body);
 
+            // Keep the mark controls fixed and long action descriptions inside the page.
+            if (page.At("strikes").height > body.height)
+            {
+                parent = AvScreen.Scroll(parent, body, page.At("strikes").height, out Rect scrolled);
+                page.Arrange(scrolled);
+                body = scrolled;
+            }
+
             AvStyled.Spine(parent, new Rect(body.x, body.y, 3f, body.height));
 
             AvNode section = page.Find("strikes");
             DrawSectionHeader(parent, section, page.At("strikes"),
-                              "TACTICAL SUPPORT", "RIGHT-CLICK MAP TO DESIGNATE", band: false);
+                              "TACTICAL SUPPORT", "SCROLL ACTIONS · RIGHT-CLICK MAP", band: false);
 
             for (int i = 0; i < actions.Count; i++)
                 AddStrikeRow(parent, section.Find("r" + i), actions[i]);
@@ -557,6 +614,128 @@ namespace BoscaliSummer.Features.Support.Presentation
             strikeRows.Add(strike);
         }
 
+        // ---- Record page -----------------------------------------------------------------
+
+        /// <summary>A label/figure pair on one line, the figure right-aligned to the gutter.</summary>
+        private static TMP_Text KeyValue(
+            RectTransform parent, float x, float y, float width, string key)
+        {
+            AvStyled.Label(parent, new Rect(x, y, width * 0.62f, 16f), key, "kv-key");
+            return AvStyled.Label(parent, new Rect(x + width * 0.62f, y, width * 0.38f, 16f),
+                                  "—", "kv-value", align: TextAlignmentOptions.MidlineRight);
+        }
+
+        /// <summary>
+        /// The career page: where the points came from and what they went on.
+        ///
+        /// <para>The metric row above the tabs carries score and the points it has bought,
+        /// but a running total cannot say how close the next point is, how many are still
+        /// unspent, or what the spent ones bought. Those are the numbers a pilot checks
+        /// before deciding whether to hold a point back, so they get a page.</para>
+        /// </summary>
+        private void BuildRecordPage(RectTransform parent, Rect body)
+        {
+            float x = body.x + SpineInset;
+            float width = body.width - SpineInset;
+            float y = body.y;
+
+            AvStyled.Spine(parent, new Rect(body.x, body.y, 3f, body.height));
+
+            y = RecordHeader(parent, x, y, width, "SERVICE RECORD", "THIS MISSION", band: false);
+
+            rankValue = KeyValue(parent, x, y, width, "PILOT RANK");
+            y -= 18f;
+            scoreValue = KeyValue(parent, x, y, width, "MISSION SCORE");
+            y -= 18f;
+            perPointValue = KeyValue(parent, x, y, width, "SCORE PER PERK POINT");
+            y -= 26f;
+
+            y = RecordHeader(parent, x, y, width, "PERK BUDGET", "EARNED · SPENT", band: true);
+
+            earnedValue = KeyValue(parent, x, y, width, "POINTS EARNED");
+            y -= 18f;
+            spentValue = KeyValue(parent, x, y, width, "POINTS COMMITTED");
+            y -= 18f;
+            availableValue = KeyValue(parent, x, y, width, "POINTS UNSPENT");
+            y -= 26f;
+
+            // One pip per point in the ceiling: filled where committed, outlined where the
+            // point is banked, dark where it has not been earned yet. A bar cannot show
+            // three states of a budget that only ever runs to single digits.
+            int ceiling = Mathf.Clamp(progression.MaximumPoints, 1, MaximumBudgetPips);
+            budgetPips = new Image[ceiling];
+            for (int i = 0; i < ceiling; i++)
+            {
+                var pip = new Rect(x + i * 15f, y, 12f, 12f);
+                AvKit.Outline(parent, pip, AvTheme.Hairline);
+                budgetPips[i] = AvKit.Panel(parent, new Rect(pip.x + 2f, pip.y - 2f, 8f, 8f),
+                                            Color.clear);
+            }
+            y -= 26f;
+
+            y = RecordHeader(parent, x, y, width, "COMMITTED SYSTEMS", null, band: false);
+
+            unlockedList = AvStyled.Label(parent, new Rect(x, y, width, 120f), "", "row-sub");
+        }
+
+        /// <summary>A section header on the record page's spine. Title and note split the line.</summary>
+        private static float RecordHeader(
+            RectTransform parent, float x, float y, float width, string title, string note, bool band)
+        {
+            if (band) AvStyled.Box(parent, new Rect(x - 6f, y + 4f, width + 12f, 22f), "section band");
+            AvStyled.SpineTick(parent, x - SpineInset + 3f, y - 7f);
+
+            float half = width * 0.5f;
+            AvStyled.Label(parent, new Rect(x, y, half, 14f), title, "section-title");
+            if (!string.IsNullOrEmpty(note))
+            {
+                AvStyled.Label(parent, new Rect(x + half, y, width - half, 14f), note,
+                               "section-title-note", align: TextAlignmentOptions.MidlineRight);
+            }
+            return y - 22f;
+        }
+
+        private void RefreshRecord(bool bypass)
+        {
+            if (rankValue == null || progression == null) return;
+
+            int score = progression.Score;
+            int perPoint = Math.Max(1, progression.ScorePerPoint);
+            int earned = progression.EarnedPoints;
+            int available = progression.AvailablePoints;
+            int spent = Math.Max(0, earned - available);
+            int ceiling = Math.Max(1, progression.MaximumPoints);
+
+            rankValue.text = progression.Rank.ToString();
+            scoreValue.text = score.ToString("N0");
+            perPointValue.text = perPoint.ToString("N0") + "  ·  " +
+                                 (perPoint - score % perPoint) + " TO NEXT";
+
+            earnedValue.text = bypass ? "BYPASS" : earned + " / " + ceiling;
+            spentValue.text = bypass ? "—" : spent.ToString();
+            availableValue.text = bypass ? "UNLIMITED" : available.ToString();
+            availableValue.color = !bypass && available > 0 ? AvTheme.RailReady : AvTheme.TextPrimary;
+
+            for (int i = 0; i < budgetPips.Length; i++)
+            {
+                budgetPips[i].color = bypass || i < spent ? AvTheme.Accent
+                                    : i < earned ? AvTheme.RailReady
+                                    : Color.clear;
+            }
+
+            PerkView[] perks = progression.GetPerks();
+            var committed = new List<string>();
+            for (int i = 0; i < perks.Length; i++)
+            {
+                if (perks[i].Unlocked) committed.Add(perks[i].Name.ToUpperInvariant());
+            }
+
+            unlockedList.text = committed.Count == 0
+                ? "Nothing committed yet. Points are spent on the PASSIVE and AUTH pages."
+                : string.Join("  ·  ", committed.ToArray());
+            unlockedList.color = committed.Count == 0 ? AvTheme.Dim : AvTheme.TextPrimary;
+        }
+
         // ---- State refresh ---------------------------------------------------------------
 
         private void Refresh()
@@ -569,8 +748,8 @@ namespace BoscaliSummer.Features.Support.Presentation
             RefreshMetrics(bypass);
             RefreshPerkRows();
             RefreshStrikeRows(bypass);
-
-            if (theaterPage != null && theaterPage.activeSelf) theater?.RefreshView();
+            RefreshObservation();
+            RefreshRecord(bypass);
 
             UpdateStatusStrip();
         }
@@ -578,8 +757,7 @@ namespace BoscaliSummer.Features.Support.Presentation
         private void RefreshDataBar(bool bypass)
         {
             bool wingPresent = !string.IsNullOrEmpty(PresenceBoard.GetString(PresenceBoard.WingGuid));
-            bool hud = ThirdPersonHudController.Instance != null &&
-                       ThirdPersonHudController.Instance.IsEnabled;
+            bool hud = thirdPersonHud != null && thirdPersonHud.IsEnabled;
             bool underAttack = baseAlarm != null && baseAlarm.IsBaseUnderAttack;
 
             if (underAttack)
@@ -600,7 +778,27 @@ namespace BoscaliSummer.Features.Support.Presentation
 
             dataBar.SetChip(0, "LOGISTICS", true);
             dataBar.SetChip(1, wingPresent ? "WING LINK" : "NO WING", wingPresent);
-            dataBar.SetChip(2, hud ? "3RD HUD" : "HUD OFF", hud);
+            dataBar.SetChip(2, thirdPersonHud == null ? "HUD N/A" : hud ? "3RD HUD" : "HUD OFF", hud);
+        }
+
+        private void RefreshObservation()
+        {
+            if (observationText == null || observations == null) return;
+            bool marked = observations.TryGet(out ObservationPoint point);
+            observationText.text = marked
+                ? $"{point.Source} MARK · X {point.X:0} / Z {point.Z:0}\n{Mathf.Max(0f, Time.unscaledTime - point.RecordedAt):0}s OLD · RANGE {point.Range / 1000f:0.0} km · FIXED POINT"
+                : observations.Status;
+            bool canCapture = observations.CanCapture;
+            captureMark.SetEnabled(canCapture);
+            captureMark.WithTooltip(canCapture
+                ? "Record a fixed point from the native camera; this does not call support."
+                : "Requires a live native camera on your own aircraft, with no pause or spectator view.");
+            bool armed = support.ArmedAction.HasValue && MapPicker.IsOwner(MapPicker.Support);
+            callAtMark.SetEnabled(marked && armed);
+            callAtMark.WithTooltip(!marked ? "Capture a fresh camera mark first."
+                : !armed ? "Select a support action below first."
+                : "Confirm the selected support at this fixed point. Normal cost and host validation apply.");
+            clearMark.SetEnabled(marked);
         }
 
         private void RefreshMetrics(bool bypass)
@@ -766,37 +964,16 @@ namespace BoscaliSummer.Features.Support.Presentation
         /// </summary>
         private void UpdateStatusStrip()
         {
-            if (statusText == null) return;
-
-            string alert = baseAlarm != null ? baseAlarm.ActiveAlertTicker : string.Empty;
-            if (!string.IsNullOrEmpty(alert))
-            {
-                statusText.text = "> " + alert;
-                statusText.color = AvTheme.Alert;
-                return;
-            }
-
-            string hovered = AvButton.HoveredTooltip;
-            if (!string.IsNullOrEmpty(hovered))
-            {
-                statusText.text = "> " + hovered;
-                statusText.color = AvTheme.Friendly;
-                return;
-            }
-
-            if (!string.IsNullOrEmpty(activeHoverTooltip))
-            {
-                statusText.text = "> " + activeHoverTooltip;
-                statusText.color = AvTheme.Friendly;
-                return;
-            }
+            if (shell == null) return;
 
             string fire = support != null ? support.FireTelemetry : string.Empty;
             string baseLine = (progression != null ? progression.Status : "") + " · " +
                               (support != null ? support.Status : "");
 
-            statusText.text = "> " + (string.IsNullOrEmpty(fire) ? baseLine : baseLine + " · " + fire);
-            statusText.color = AvTheme.Dim;
+            shell.WriteStatus(
+                baseAlarm != null ? baseAlarm.ActiveAlertTicker : null,
+                activeHoverTooltip,
+                string.IsNullOrEmpty(fire) ? baseLine : baseLine + " · " + fire);
         }
 
         private static bool TryFind(PerkView[] perks, byte id, out PerkView view)
@@ -814,33 +991,6 @@ namespace BoscaliSummer.Features.Support.Presentation
         }
 
         // ---- Tabs & navigation -----------------------------------------------------------
-
-        private void ShowPerks() => SetPage(0);
-        private void ShowSupport() => SetPage(1);
-        private void ShowTheater() => SetPage(2);
-
-        private void SetPage(int index)
-        {
-            perksPage?.SetActive(index == 0);
-            supportPage?.SetActive(index == 1);
-            theaterPage?.SetActive(index == 2);
-
-            perksTab?.SetLatched(index == 0);
-            supportTab?.SetLatched(index == 1);
-            theaterTab?.SetLatched(index == 2);
-
-            activeHoverTooltip = null;
-            nextRefresh = 0f;
-        }
-
-        private static GameObject CreatePage(RectTransform parent, string name)
-        {
-            var page = new GameObject(name, typeof(RectTransform));
-            RectTransform rect = page.GetComponent<RectTransform>();
-            rect.SetParent(parent, false);
-            AvKit.Stretch(rect);
-            return page;
-        }
 
         private static Image FindHighlight(Button button)
         {

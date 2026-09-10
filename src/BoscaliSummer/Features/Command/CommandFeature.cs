@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Features.Command.Presentation.MapUi;
 using BoscaliSummer.Features.Command.Patches;
 using BoscaliSummer.Features.Command.Presentation;
 using BoscaliSummer.Features.Command.Runtime;
@@ -17,6 +18,9 @@ namespace BoscaliSummer.Features.Command
         public Type[] PatchTypes => new[]
         {
             typeof(AiTargetScoringPatch),
+            typeof(MfdRailPatch),
+            typeof(MfdScreenChromePatch),
+            typeof(MfdSinglePanelPatch),
             typeof(DynamicMapMaximizePatch),
             typeof(DynamicMapMinimizePatch)
         };
@@ -28,13 +32,14 @@ namespace BoscaliSummer.Features.Command
             MissionMapCompatibilityEngine compat = context.AddSceneService<MissionMapCompatibilityEngine>(51);
             CommandManager manager = context.AddSceneService<CommandManager>(52);
             ComMapOverlay overlay = context.AddSceneService<ComMapOverlay>(53);
-            ComMfdPanel mfd = context.AddSceneService<ComMfdPanel>(56);
+            StrMfdPanel strategic = context.AddSceneService<StrMfdPanel>(56);
+            context.AddSceneService<MapUiManager>(57);
+            context.AddSceneService<SettingsMfdPanel>(58).Configure(context.Settings.Command, context.Logger);
 
             compat.Configure(context.Settings.Command, context.Logger);
             manager.Configure(context.Settings.Command, progression, context.Logger);
             overlay.Configure(context.Settings.Command, manager, compat, context.Logger);
-            mfd.Configure(context.Settings.Command, manager, overlay, context.Logger);
-            context.AddService<ITheaterPage>(mfd);
+            strategic.Configure(context.Settings.Command, manager, overlay, context.Logger);
         }
     }
 }

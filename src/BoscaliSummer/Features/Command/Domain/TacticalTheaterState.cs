@@ -1,32 +1,48 @@
-using UnityEngine;
-
 namespace BoscaliSummer.Features.Command.Domain
 {
+    /// <summary>
+    /// The theater picture, as one mutable bag the strategic panel reads.
+    ///
+    /// <para>Every field here is written each telemetry pass. Fields that nothing produces
+    /// do not belong: a counter that is reset to zero and never filled looks exactly like a
+    /// counter reporting "none", and the panel has no way to tell the reader apart.</para>
+    /// </summary>
     internal sealed class TacticalTheaterState
     {
         public int FriendlyAircraftCount;
         public int HostileAircraftCount;
+
         public int FriendlyAirbaseCount;
         public int HostileAirbaseCount;
+        public int NeutralAirbaseCount;
         public int ContestedAirbaseCount;
-        public int FriendlySamCount;
-        public int HostileSamCount;
+
+        /// <summary>
+        /// Emitters on the friendly network. This counts <em>radars</em>, which is what the
+        /// game exposes; it is not a SAM-site count and must not be labelled as one.
+        /// </summary>
+        public int FriendlyRadarCount;
+
         public int FriendlyGroundUnitsCount;
         public int HostileGroundUnitsCount;
+
         public int FriendlySectorCount;
         public int HostileSectorCount;
         public int ContestedSectorCount;
         public int NeutralSectorCount;
         public int ActiveClashesCount;
         public int TotalNodesCount;
+        public int TotalSectorCount;
+
+        /// <summary>Cell edges where friendly and hostile control meet. The frontline's length.</summary>
+        public int FrontlineSegmentCount;
+
         public float TerritoryControlRatio = 0.5f;
-        public int ActiveSortiesCount;
-        public int CapSortiesCount;
-        public int StrikeSortiesCount;
-        public int CasSortiesCount;
-        public int SeadSortiesCount;
-        public int RtbSortiesCount;
-        public float AirSuperiorityRatio;
+
+        /// <summary>Friendly AI sorties by role. <c>Observed == 0</c> means "not known", not "none".</summary>
+        public SortieTally Sorties;
+
+        public float AirSuperiorityRatio = 0.5f;
         public int DefconLevel = 3;
         public string PrimaryThreatDescription = "NOMINAL";
         public string ActiveThreatWarning = "AIRSPACE NOMINAL";
@@ -35,26 +51,29 @@ namespace BoscaliSummer.Features.Command.Domain
         {
             FriendlyAircraftCount = 0;
             HostileAircraftCount = 0;
+
             FriendlyAirbaseCount = 0;
             HostileAirbaseCount = 0;
+            NeutralAirbaseCount = 0;
             ContestedAirbaseCount = 0;
-            FriendlySamCount = 0;
-            HostileSamCount = 0;
+
+            FriendlyRadarCount = 0;
+
             FriendlyGroundUnitsCount = 0;
             HostileGroundUnitsCount = 0;
+
             FriendlySectorCount = 0;
             HostileSectorCount = 0;
             ContestedSectorCount = 0;
             NeutralSectorCount = 0;
             ActiveClashesCount = 0;
             TotalNodesCount = 0;
+            TotalSectorCount = 0;
+            FrontlineSegmentCount = 0;
+
             TerritoryControlRatio = 0.5f;
-            ActiveSortiesCount = 0;
-            CapSortiesCount = 0;
-            StrikeSortiesCount = 0;
-            CasSortiesCount = 0;
-            SeadSortiesCount = 0;
-            RtbSortiesCount = 0;
+            Sorties.Reset();
+
             AirSuperiorityRatio = 0.5f;
             DefconLevel = 3;
             PrimaryThreatDescription = "NOMINAL";

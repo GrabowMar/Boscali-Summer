@@ -9,6 +9,7 @@ namespace BoscaliSummer.Features.Support.Configuration
         public ConfigEntry<bool> FortifyEnabled { get; }
         public ConfigEntry<bool> ArtilleryEnabled { get; }
         public ConfigEntry<bool> EmpEnabled { get; }
+        public ConfigEntry<bool> FlareBarrageEnabled { get; }
 
         public ConfigEntry<float> CostMultiplier { get; }
         public ConfigEntry<float> ReconCost { get; }
@@ -17,16 +18,16 @@ namespace BoscaliSummer.Features.Support.Configuration
         public ConfigEntry<float> ArtilleryCost { get; }
         public ConfigEntry<float> EmpCost { get; }
         public ConfigEntry<float> EmpRadius { get; }
+        public ConfigEntry<float> FlareBarrageCost { get; }
+        public ConfigEntry<float> FlareBarrageRadius { get; }
+        public ConfigEntry<int> FlareBarrageCount { get; }
+        public ConfigEntry<float> FlareBarrageDuration { get; }
 
         public ConfigEntry<float> MaximumRange { get; }
         public ConfigEntry<float> RequestCooldown { get; }
         public ConfigEntry<float> ReconRadius { get; }
 
         public ConfigEntry<string> ArtilleryDefinitionKey { get; }
-
-        public ConfigEntry<bool> ThirdPersonHudEnabled { get; }
-        public ConfigEntry<UnityEngine.KeyCode> ThirdPersonHudKey { get; }
-        public ConfigEntry<bool> ThirdPersonHidePitchLadder { get; }
 
         public SupportSettings(ConfigFile config)
         {
@@ -49,6 +50,9 @@ namespace BoscaliSummer.Features.Support.Configuration
             EmpEnabled = config.Bind("Support", "EmpShock", true,
                 "EMP shock: blinds radars across a wide area, friendly and hostile alike. Uses the " +
                 "FireMissionDefinitionKey missile as a delivery visual.");
+            FlareBarrageEnabled = config.Bind("Support", "FlareBarrage", true,
+                "Flare barrage: launches an airburst countermeasure missile that disperses a cluster of " +
+                "intense pyrotechnic flares, seducing and misguiding all IR-seeking missiles in the area.");
 
             CostMultiplier = config.Bind("Support", "CostMultiplier", 1f,
                 new ConfigDescription(
@@ -83,6 +87,23 @@ namespace BoscaliSummer.Features.Support.Configuration
                     "Radius around the mark in which radars are jammed by an EMP shock. Affects " +
                     "friendly and hostile units alike.",
                     new AcceptableValueRange<float>(1000f, 60000f)));
+            FlareBarrageCost = config.Bind("Support", "FlareBarrageCost", 500f,
+                new ConfigDescription(
+                    "Allocation charged for one Flare Barrage countermeasure rocket, before " +
+                    "CostMultiplier and the Logistics Officer perk.",
+                    new AcceptableValueRange<float>(0f, 20000f)));
+            FlareBarrageRadius = config.Bind("Support", "FlareBarrageRadiusMeters", 4000f,
+                new ConfigDescription(
+                    "Radius around the mark in which IR missiles are seduced and misguided.",
+                    new AcceptableValueRange<float>(500f, 15000f)));
+            FlareBarrageCount = config.Bind("Support", "FlareBarrageCount", 36,
+                new ConfigDescription(
+                    "Number of authentic pyrotechnic flares dispersed in the initial airburst wave.",
+                    new AcceptableValueRange<int>(12, 64)));
+            FlareBarrageDuration = config.Bind("Support", "FlareBarrageDurationSeconds", 15f,
+                new ConfigDescription(
+                    "Total duration in seconds of the continuous flare countermeasure barrage.",
+                    new AcceptableValueRange<float>(5f, 45f)));
 
             MaximumRange = config.Bind("Support", "MaximumRangeMeters", 30000f,
                 new ConfigDescription(
@@ -112,12 +133,6 @@ namespace BoscaliSummer.Features.Support.Configuration
                 "a non-nuclear vanilla missile. Only non-nuclear missiles with a yield of 200 or " +
                 "less are accepted. Check the startup log for the definitions this game build loaded.");
 
-            ThirdPersonHudEnabled = config.Bind("Avionics", "ThirdPersonHudEnabled", true,
-                "Keep tactical flight HUD visible in external orbit and chase camera views.");
-            ThirdPersonHudKey = config.Bind("Avionics", "ThirdPersonHudKey", UnityEngine.KeyCode.F7,
-                "Hotkey to toggle third-person HUD visibility on the fly.");
-            ThirdPersonHidePitchLadder = config.Bind("Avionics", "ThirdPersonHidePitchLadder", true,
-                "Declutter: hide the floating pitch ladder in third person while keeping reticle, ammo, and radar.");
         }
     }
 }

@@ -43,9 +43,9 @@ namespace BoscaliSummer.Features.Support.Runtime
                 SupportCapabilities.Emp, settings.EmpEnabled, new EmpAction()));
 
             actions.Add(new SupportActionDefinition(
-                SupportActionId.SmokeMarker, "SMOKE DESIGNATION",
-                "CAS marker: deploy a high-visibility signaling smoke plume on the target grid.",
-                SupportCapabilities.Recon, settings.ReconEnabled, new SmokeMarkerAction(fireSuppression)));
+                SupportActionId.FlareMissile, "FLARE BARRAGE",
+                "Airburst countermeasure rocket: deploys an expansive cloud of pyrotechnic flares that blinds and misguides IR missiles.",
+                SupportCapabilities.Recon, settings.FlareBarrageEnabled, new FlareMissileAction()));
         }
 
         public IReadOnlyList<SupportActionDefinition> Actions => actions;

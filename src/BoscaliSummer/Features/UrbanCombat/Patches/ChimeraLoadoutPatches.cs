@@ -7,6 +7,9 @@ using UnityEngine;
 
 namespace BoscaliSummer.Garrisons
 {
+    /// <summary>
+    /// Injects and exposes the Chimera/Tarantula paradrop station in cargo-loadout UI paths.
+    /// </summary>
     [HarmonyPatch(typeof(LoadoutSelector), nameof(LoadoutSelector.AssignAircraft))]
     internal static class ChimeraLoadoutAssignAircraftPatch
     {
@@ -65,8 +68,9 @@ namespace BoscaliSummer.Garrisons
                         HardpointSet hs = __instance.hardpointSets[i];
                         if (hs == null || hs.weaponMount == null) continue;
 
-                        if (hs.weaponMount.name.IndexOf("Troops", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                            hs.weaponMount.mountName.IndexOf("Paratrooper", StringComparison.OrdinalIgnoreCase) >= 0)
+                        if ((hs.weaponMount.name.IndexOf("Troops", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                             hs.weaponMount.mountName.IndexOf("Paratrooper", StringComparison.OrdinalIgnoreCase) >= 0) &&
+                             ChimeraLoadoutSetRules.IsChimeraCargoSet(hs.name))
                         {
                             // Check if already in aircraft.weaponStations
                             bool stationFound = false;
@@ -124,28 +128,31 @@ namespace BoscaliSummer.Garrisons
 
                 WeaponMount troopsMount = ChimeraInfantryLoadoutAdapter.GetOrCreateChimeraTroopsMount();
 
-                // Primary: resolve aircraft from the parent LoadoutSelector (always populated in the hangar UI)
+                // Primary: resolve aircraft from the parent LoadoutSelector (always populated in the hangar UI).
                 Aircraft ac = null;
                 LoadoutSelector ls = __instance.GetComponentInParent<LoadoutSelector>();
                 if (ls != null && LoadoutAircraftField != null)
                     ac = LoadoutAircraftField.GetValue(ls) as Aircraft;
 
-                // Fallback: try hardpoint parent hierarchy (works in-flight/spawned context)
+                // Fallback: try hardpoint parent hierarchy (works in-flight/spawned context).
                 if (ac == null && hardpointSet.hardpoints != null && hardpointSet.hardpoints.Count > 0 && hardpointSet.hardpoints[0] != null)
                     ac = hardpointSet.hardpoints[0].transform.GetComponentInParent<Aircraft>();
 
-                // Only inject when confirmed Chimera — strip from everything else (Ibis, unknown, helicopters)
-                bool isConfirmedChimera = ac != null && ChimeraInfantryLoadoutAdapter.IsChimera(ac) && !ChimeraInfantryLoadoutAdapter.IsHelicopter(ac);
+                // If aircraft context is not yet bound, keep existing options to avoid mutating non-target UI.
+                if (ac == null)
+                    return;
+
+                // Only inject when confirmed Chimera / Tarantula — strip from everything else (Ibis, unknown, helicopters).
+                bool isConfirmedChimera = ChimeraInfantryLoadoutAdapter.IsChimera(ac) && !ChimeraInfantryLoadoutAdapter.IsHelicopter(ac);
                 if (!isConfirmedChimera)
                 {
                     if (troopsMount != null) hardpointSet.weaponOptions.Remove(troopsMount);
                     return;
                 }
 
-                // Only inject into Chimera cargo/mission bays
+                // Only inject into cargo-capable hardpoints.
                 string name = hardpointSet.name ?? "";
-                if (name.IndexOf("Cargo Bay", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                    name.IndexOf("Mission Bay", StringComparison.OrdinalIgnoreCase) >= 0)
+                if (ChimeraLoadoutSetRules.IsChimeraCargoSet(name))
                 {
                     if (troopsMount != null && !hardpointSet.weaponOptions.Contains(troopsMount))
                     {
@@ -178,7 +185,10 @@ namespace BoscaliSummer.Garrisons
                         ac = hardpointSet.hardpoints[0].transform.GetComponentInParent<Aircraft>();
                     }
 
-                    // Strictly remove from everything that isn't confirmed Chimera (helicopter, Ibis, unknown)
+                    if (ac == null)
+                        return;
+
+                    // Strictly remove from everything that isn't confirmed Chimera (helicopter, Ibis, unknown).
                     bool isConfirmedChimera = ac != null && ChimeraInfantryLoadoutAdapter.IsChimera(ac) && !ChimeraInfantryLoadoutAdapter.IsHelicopter(ac);
                     if (!isConfirmedChimera)
                     {
@@ -187,8 +197,7 @@ namespace BoscaliSummer.Garrisons
                     }
 
                     string name = hardpointSet.name ?? "";
-                    if (name.IndexOf("Cargo Bay", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                        name.IndexOf("Mission Bay", StringComparison.OrdinalIgnoreCase) >= 0)
+                    if (ChimeraLoadoutSetRules.IsChimeraCargoSet(name))
                     {
                         if (troops != null && !outAvailable.Contains(troops))
                         {
@@ -200,8 +209,18 @@ namespace BoscaliSummer.Garrisons
             }
             catch (Exception ex)
             {
-                Plugin.Logger.LogWarning("[Chimera Loadout] Error in WeaponChecker patch: " + ex);
+                    Plugin.Logger.LogWarning("[Chimera Loadout] Error in WeaponChecker patch: " + ex);
             }
+        }
+    }
+
+    internal static class ChimeraLoadoutSetRules
+    {
+        internal static bool IsChimeraCargoSet(string hardpointName)
+        {
+            if (string.IsNullOrWhiteSpace(hardpointName)) return false;
+            return hardpointName.IndexOf("Cargo", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   hardpointName.IndexOf("Mission Bay", StringComparison.OrdinalIgnoreCase) >= 0;
         }
     }
 }

@@ -1,4 +1,5 @@
 using System;
+using System.Reflection;
 using BoscaliSummer.Framework.Lifecycle;
 using BoscaliSummer.Runtime;
 using NuclearOption.Networking;
@@ -37,16 +38,28 @@ namespace BoscaliSummer.Garrisons
             AircraftDefinition def = aircraft.definition as AircraftDefinition;
             string name = def != null ? (def.unitName ?? def.jsonKey ?? "") : aircraft.name ?? "";
 
-            bool isChimera = IsChimera(name, def);
+            bool isChimera = IsChimeraCarrier(name, def);
             bool isIbis = IsIbis(name, def);
 
             if (!isChimera && !isIbis) return;
 
-            // Check if cargo ramp / bay door is open
+            // Ensure door state and auto-open for immediate paradrop/roping.
             if (!IsCargoDoorOpen(aircraft, out string doorReason))
             {
-                Plugin.Logger.LogInfo($"[Air Assault] Cannot deploy: {doorReason}");
-                return;
+                if (ForceOpenCargoAccess(aircraft, out string openFailure))
+                {
+                    Plugin.Logger.LogInfo("[Air Assault] Opening cargo access for paradrop/fast-rope sequence.");
+                }
+                else if (openFailure != null)
+                {
+                    Plugin.Logger.LogInfo($"[Air Assault] Could not auto-open cargo access doors: {openFailure}");
+                }
+
+                if (!IsCargoDoorOpen(aircraft, out doorReason))
+                {
+                    Plugin.Logger.LogInfo($"[Air Assault] Cannot deploy: {doorReason}");
+                    return;
+                }
             }
 
             // Check stored infantry count
@@ -72,7 +85,7 @@ namespace BoscaliSummer.Garrisons
                     mountedTroops.ammo = Mathf.Max(0, mountedTroops.ammo - dropCount);
 
                 nextDropTime = Time.unscaledTime + MinFireInterval;
-                Vector3 rampPos = aircraft.transform.position - aircraft.transform.forward * 12f - aircraft.transform.up * 1.8f;
+                Vector3 rampPos = ComputeCargoDropExitPosition(aircraft, dropCount);
                 Vector3 exitVel = inheritedVelocity - aircraft.transform.forward * 8f;
 
                 Plugin.Logger.LogInfo($"[CHIMERA] Paratrooper company of {dropCount} launched from rear cargo hold ramp at ({rampPos.x:0}, {rampPos.y:0}, {rampPos.z:0}). {mountedTroops?.ammo ?? 0} infantry remaining aboard.");
@@ -150,18 +163,71 @@ namespace BoscaliSummer.Garrisons
             }
         }
 
-        private static bool IsChimera(string name, AircraftDefinition def)
+        private static bool IsChimeraCarrier(string name, AircraftDefinition def)
         {
             if (string.IsNullOrEmpty(name)) return false;
             return name.IndexOf("chimera", StringComparison.OrdinalIgnoreCase) >= 0 ||
                    name.IndexOf("mc260", StringComparison.OrdinalIgnoreCase) >= 0 ||
                    name.IndexOf("mc-260", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   name.IndexOf("tarantula", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   name.IndexOf("tarantulla", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   name.IndexOf("aryx", StringComparison.OrdinalIgnoreCase) >= 0 ||
                    (def != null && def.jsonKey != null && def.jsonKey.IndexOf("chimera", StringComparison.OrdinalIgnoreCase) >= 0);
+        }
+
+        private static Vector3 ComputeCargoDropExitPosition(Aircraft aircraft, int dropCount)
+        {
+            if (aircraft == null) return Vector3.zero;
+
+            Transform anchor = null;
+            float rearOffset = Mathf.Lerp(0f, 2f, Mathf.InverseLerp(1, 16, dropCount));
+
+            CargoRamp ramp = aircraft.GetComponentInChildren<CargoRamp>(true);
+            if (ramp != null && ramp.transform != null)
+            {
+                anchor = ramp.transform;
+            }
+            else
+            {
+                BayDoor[] bayDoors = aircraft.GetComponentsInChildren<BayDoor>(true);
+                if (bayDoors != null && bayDoors.Length > 0)
+                {
+                    float best = float.MaxValue;
+                    Vector3 aircraftPos = aircraft.transform.position;
+                    Vector3 forward = aircraft.transform.forward;
+                    for (int i = 0; i < bayDoors.Length; i++)
+                    {
+                        if (bayDoors[i] == null) continue;
+                        Transform candidate = bayDoors[i].transform;
+                        if (candidate == null) continue;
+
+                        float score = Vector3.Dot(candidate.position - aircraftPos, forward);
+                        if (score < best)
+                        {
+                            best = score;
+                            anchor = candidate;
+                        }
+                    }
+                }
+            }
+
+            if (anchor != null)
+            {
+                Vector3 backward = -aircraft.transform.forward * (5f + rearOffset);
+                Vector3 dropOffset = backward + -aircraft.transform.up * (1.4f + 0.08f * dropCount);
+                return anchor.position + dropOffset;
+            }
+
+            return aircraft.transform.position - aircraft.transform.forward * (11f + rearOffset) - aircraft.transform.up * 1.8f;
         }
 
         private static bool IsIbis(string name, AircraftDefinition def)
         {
             if (string.IsNullOrEmpty(name)) return false;
+            if (name.IndexOf("tarantula", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                name.IndexOf("tarantulla", StringComparison.OrdinalIgnoreCase) >= 0)
+                return false;
+
             return name.IndexOf("ibis", StringComparison.OrdinalIgnoreCase) >= 0 ||
                    name.IndexOf("utilityhelo", StringComparison.OrdinalIgnoreCase) >= 0 ||
                    name.IndexOf("uh-90", StringComparison.OrdinalIgnoreCase) >= 0 ||
@@ -216,10 +282,105 @@ namespace BoscaliSummer.Garrisons
             return best;
         }
 
-        private static readonly System.Reflection.FieldInfo BayDoorOpenAmountField =
-            typeof(BayDoor).GetField("openAmount", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        private static readonly System.Reflection.FieldInfo CargoRampOpenAmountField =
-            typeof(CargoRamp).GetField("openAmount", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        private static readonly FieldInfo BayDoorOpenAmountField =
+            typeof(BayDoor).GetField("openAmount", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+        private static readonly FieldInfo CargoRampOpenAmountField =
+            typeof(CargoRamp).GetField("openAmount", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+        private static readonly MethodInfo BayDoorOpenMethod =
+            typeof(BayDoor).GetMethod("Open", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+        private static readonly MethodInfo BayDoorSetOpenMethod =
+            typeof(BayDoor).GetMethod("SetOpen", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+        private static readonly MethodInfo CargoRampOpenMethod =
+            typeof(CargoRamp).GetMethod("Open", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+        private static readonly MethodInfo CargoRampSetOpenMethod =
+            typeof(CargoRamp).GetMethod("SetOpen", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+
+        private static bool ForceOpenCargoAccess(Aircraft aircraft, out string failureReason)
+        {
+            failureReason = null;
+            if (aircraft == null) return false;
+
+            bool forced = false;
+            bool hasAccessDevice = false;
+
+            CargoRamp ramp = aircraft.GetComponentInChildren<CargoRamp>(true);
+            if (ramp != null)
+            {
+                hasAccessDevice = true;
+                bool rampChanged = SetOpenAmount(ramp, CargoRampOpenAmountField, 1f) | TryInvokeOpenMethod(ramp, CargoRampOpenMethod, true) | TryInvokeOpenMethod(ramp, CargoRampSetOpenMethod, true);
+                if (rampChanged) forced = true;
+            }
+
+            BayDoor[] bayDoors = aircraft.GetComponentsInChildren<BayDoor>(true);
+            if (bayDoors != null && bayDoors.Length > 0)
+            {
+                hasAccessDevice = true;
+                for (int i = 0; i < bayDoors.Length; i++)
+                {
+                    BayDoor door = bayDoors[i];
+                    if (door == null) continue;
+                    bool doorChanged = SetOpenAmount(door, BayDoorOpenAmountField, 1f) | TryInvokeOpenMethod(door, BayDoorOpenMethod, true) | TryInvokeOpenMethod(door, BayDoorSetOpenMethod, true);
+                    if (doorChanged) forced = true;
+                }
+            }
+
+            if (!hasAccessDevice)
+                failureReason = "No cargo ramp or bay doors found on this aircraft.";
+            else if (!forced)
+                failureReason = "Cargo access controls were found but could not be driven open automatically.";
+
+            return forced;
+        }
+
+        private static bool SetOpenAmount(object component, FieldInfo field, float amount)
+        {
+            if (component == null || field == null) return false;
+
+            try
+            {
+                field.SetValue(component, amount);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool TryInvokeOpenMethod(object component, MethodInfo explicitMethod, bool open = true)
+        {
+            try
+            {
+                if (explicitMethod != null)
+                {
+                    ParameterInfo[] p = explicitMethod.GetParameters();
+                    if (p.Length == 0)
+                    {
+                        explicitMethod.Invoke(component, null);
+                        return true;
+                    }
+                    if (p.Length == 1)
+                    {
+                        if (p[0].ParameterType == typeof(bool))
+                        {
+                            explicitMethod.Invoke(component, new object[] { open });
+                            return true;
+                        }
+                        if (p[0].ParameterType == typeof(float))
+                        {
+                            explicitMethod.Invoke(component, new object[] { 1f });
+                            return true;
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // ignore
+            }
+
+            return false;
+        }
 
         private static bool IsCargoDoorOpen(Aircraft aircraft, out string reason)
         {

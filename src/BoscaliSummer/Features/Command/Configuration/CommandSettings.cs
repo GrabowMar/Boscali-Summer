@@ -5,6 +5,7 @@ namespace BoscaliSummer.Features.Command.Configuration
     internal sealed class CommandSettings
     {
         public ConfigEntry<bool> Enabled { get; }
+        public ConfigEntry<bool> ExpandedMapUi { get; }
         public ConfigEntry<bool> FrontlinesOverlay { get; }
         public ConfigEntry<float> OverlayOpacity { get; }
         public ConfigEntry<int> GridResolution { get; }
@@ -12,6 +13,8 @@ namespace BoscaliSummer.Features.Command.Configuration
 
         public CommandSettings(ConfigFile config)
         {
+            ExpandedMapUi = config.Bind("Command", "ExpandedMapUi", true,
+                "Use Boscali's full tactical display: left panel and log, central map, right button rail, and spawn footer.");
             Enabled = config.Bind("Command", "Enabled", true,
                 "Enable the Tactical COM Panel, map tactical overlays, and AI Battle Director.");
 

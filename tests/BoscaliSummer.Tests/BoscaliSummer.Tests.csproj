@@ -6,6 +6,18 @@
     <RootNamespace>BoscaliSummer.Tests</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="..\..\src\BoscaliSummer\Features\QoL\Runtime\GunAimAssistPolicy.cs" Link="Features\QoL\GunAimAssistPolicy.cs" />
+    <Compile Include="..\..\src\BoscaliSummer\Features\DynamicOperations\Domain\OperationBoard.cs" Link="Features\DynamicOperations\OperationBoard.cs" />
+    <Compile Include="..\..\src\BoscaliSummer\Features\Command\Presentation\MapUi\MfdSecondaryObjectives.cs" Link="Features\Command\MfdSecondaryObjectives.cs" />
+    <Compile Include="..\..\src\BoscaliSummer\Framework\Contracts\IObservationSource.cs" Link="Framework\IObservationSource.cs" />
+    <Compile Include="..\..\src\BoscaliSummer\Features\QoL\Runtime\ObservationStore.cs" Link="Features\QoL\ObservationStore.cs" />
+    <Compile Include="..\..\src\BoscaliSummer\Features\Command\Presentation\MapUi\MfdTargetPresets.cs" Link="Features\Command\MfdTargetPresets.cs" />
+    <Compile Include="..\..\src\BoscaliSummer\Features\Command\Presentation\MapUi\MfdChartScale.cs" Link="Features\Command\MfdChartScale.cs" />
+    <Compile Include="..\..\src\BoscaliSummer\Features\QoL\Runtime\ThirdPersonCameraPolicy.cs" Link="Features\QoL\ThirdPersonCameraPolicy.cs" />
+    <Compile Include="..\..\src\BoscaliSummer\Features\Command\Presentation\MapUi\MfdLogSpace.cs" Link="Features\Command\MfdLogSpace.cs" />
+    <Compile Include="..\..\src\BoscaliSummer\Features\Command\Presentation\MapUi\VanillaMfdPanelCatalog.cs" Link="Features\Command\VanillaMfdPanelCatalog.cs" />
+    <Compile Include="..\..\src\BoscaliSummer\Features\Command\Domain\CommandScoring.cs" Link="Features\Command\CommandScoring.cs" />
+    <Compile Include="..\..\src\BoscaliSummer\Features\Support\Runtime\SupportMapGesture.cs" Link="Features\Support\SupportMapGesture.cs" />
     <Compile Include="..\..\src\BoscaliSummer\Core\Deterministic.cs" Link="Core\Deterministic.cs" />
     <Compile Include="..\..\src\BoscaliSummer\Features\FireAndDestruction\Buildings\ImpactScorchPolicy.cs" Link="Features\FireAndDestruction\ImpactScorchPolicy.cs" />
     <Compile Include="..\..\src\BoscaliSummer\Features\Radio\Runtime\RadioLibrary.cs" Link="Features\Radio\RadioLibrary.cs" />
@@ -19,6 +31,8 @@
     <Compile Include="..\..\src\BoscaliSummer\Framework\Features\ServiceRegistry.cs" Link="Framework\ServiceRegistry.cs" />
     <Compile Include="..\..\src\BoscaliSummer\Features\Command\Domain\CommandDoctrine.cs" Link="Features\Command\CommandDoctrine.cs" />
     <Compile Include="..\..\src\BoscaliSummer\Features\Command\Runtime\TacticalSectorGrid.cs" Link="Features\Command\TacticalSectorGrid.cs" />
+    <Compile Include="..\..\src\BoscaliSummer\Features\Command\Domain\SortieClassifier.cs" Link="Features\Command\SortieClassifier.cs" />
+    <Compile Include="..\..\src\BoscaliSummer\Features\Command\Domain\TheaterReadout.cs" Link="Features\Command\TheaterReadout.cs" />
     <Compile Include="..\..\..\nomodkit\shared\avionics\*.cs" LinkBase="Avionics" />
   </ItemGroup>
 </Project>

@@ -29,14 +29,17 @@ namespace BoscaliSummer.Features.Command.Runtime
     }
 
     /// <summary>
-    /// Discrete tactical grid and node territory engine inspired by Running With Rifles (RWR).
-    /// Bases and landing zones act as nodes that organically grow control outward.
-    /// Major concentrations of combat armor flip and capture contested sectors.
-    /// Grid cells maintain a 1:1 square aspect ratio across all theater dimensions.
+    /// Advisory frontlines from actual strategic ownership and faction-known ground pressure.
+    /// Persistent control follows elapsed mission time; no vanilla capture state is mutated.
     /// </summary>
     internal sealed class TacticalSectorGrid
     {
         public const int DefaultResolution = 32;
+        public const int MaximumNodes = 128;
+        private const int MaximumInfluenceCells = 8;
+        private const float CaptureSeconds = 15f;
+        private const float RecoverySeconds = 90f;
+        private bool hasEvaluated;
         public readonly int Resolution;
 
         public int ResolutionX { get; private set; }
@@ -47,7 +50,7 @@ namespace BoscaliSummer.Features.Command.Runtime
         public float WorldSize => Math.Max(WorldSizeX, WorldSizeY);
 
         // Strategic Node Definition (Airbases, Forward LZs, Encampments, Strategic POIs)
-        public sealed class TacticalNode
+        public struct TacticalNode
         {
             public int Id;
             public string Name;
@@ -57,7 +60,7 @@ namespace BoscaliSummer.Features.Command.Runtime
             public float MaxRadius;
             public bool IsAirbase;
             public bool IsContested;
-            public float CaptureProgress; // 0.0 to 1.0
+            public float CaptureProgress; // Local opposing pressure ratio, not vanilla capture progress.
 
             public TacticalNode(int id, string name, float x, float z, SectorControl faction, float maxRadius, bool isAirbase)
             {
@@ -80,12 +83,10 @@ namespace BoscaliSummer.Features.Command.Runtime
         private readonly float[] hostileForce;
         private readonly SectorControl[] sectorStates;
         private readonly byte[] frontlineBorders; // bitmask: 1=N, 2=E, 4=S, 8=W
-        private readonly bool[] isSupplied;
-        private readonly int[] bfsQueue;
-        private readonly int[] bfsDist;
+        private readonly byte[] nodeAnchors;
 
         // Active nodes
-        private readonly List<TacticalNode> nodes = new List<TacticalNode>(32);
+        private readonly List<TacticalNode> nodes = new List<TacticalNode>(MaximumNodes);
 
         // Cached Pixel Buffer for Instant GPU Texture Baking
         private Color32[] pixelBuffer;
@@ -98,6 +99,16 @@ namespace BoscaliSummer.Features.Command.Runtime
         public int ContestedSectorCount { get; private set; }
         public int NeutralSectorCount { get; private set; }
         public int ActiveClashesCount => ContestedSectorCount;
+
+        /// <summary>
+        /// Cell edges where friendly control meets hostile or contested control — the
+        /// frontline's length, in grid segments.
+        ///
+        /// <para>Counted from the same border pass that builds the edge mask, so it costs
+        /// nothing beyond an increment, and it is the one number that separates a long thin
+        /// front from a compact pocket holding the same number of sectors.</para>
+        /// </summary>
+        public int FrontlineSegmentCount { get; private set; }
         public int TotalNodesCount => nodes.Count;
         public int TotalSectors => ResolutionX * ResolutionY;
         public float TerritoryControlRatio => (FriendlySectorCount + HostileSectorCount > 0)
@@ -112,8 +123,8 @@ namespace BoscaliSummer.Features.Command.Runtime
         public TacticalSectorGrid(int resolution, float worldSizeX, float worldSizeY)
         {
             Resolution = Math.Clamp(resolution, 16, 64);
-            WorldSizeX = worldSizeX > 1000f ? worldSizeX : 100000f;
-            WorldSizeY = worldSizeY > 1000f ? worldSizeY : 100000f;
+            WorldSizeX = ValidWorldSize(worldSizeX) ? worldSizeX : 100000f;
+            WorldSizeY = ValidWorldSize(worldSizeY) ? worldSizeY : 100000f;
 
             UpdateResolutions();
 
@@ -124,15 +135,17 @@ namespace BoscaliSummer.Features.Command.Runtime
             hostileForce = new float[total];
             sectorStates = new SectorControl[total];
             frontlineBorders = new byte[total];
-            isSupplied = new bool[total];
-            bfsQueue = new int[total * 2];
-            bfsDist = new int[total];
+            nodeAnchors = new byte[total];
+            NeutralSectorCount = TotalSectors;
         }
 
         private void UpdateResolutions()
         {
-            ResolutionX = Resolution;
-            ResolutionY = (int)Math.Max(8, Math.Round(ResolutionX * (WorldSizeY / WorldSizeX)));
+            // The longest axis owns the budget, including portrait maps. Integer rounding
+            // approximates square cells; extreme aspect ratios bottom out at one cell.
+            float longest = Math.Max(WorldSizeX, WorldSizeY);
+            ResolutionX = Math.Clamp((int)Math.Round(Resolution * WorldSizeX / longest), 1, Resolution);
+            ResolutionY = Math.Clamp((int)Math.Round(Resolution * WorldSizeY / longest), 1, Resolution);
         }
 
         public void SetWorldSize(float worldSize)
@@ -143,12 +156,12 @@ namespace BoscaliSummer.Features.Command.Runtime
         public void SetWorldSize(float worldSizeX, float worldSizeY)
         {
             bool changed = false;
-            if (worldSizeX > 1000f && Math.Abs(WorldSizeX - worldSizeX) > 0.01f)
+            if (ValidWorldSize(worldSizeX) && Math.Abs(WorldSizeX - worldSizeX) > 0.01f)
             {
                 WorldSizeX = worldSizeX;
                 changed = true;
             }
-            if (worldSizeY > 1000f && Math.Abs(WorldSizeY - worldSizeY) > 0.01f)
+            if (ValidWorldSize(worldSizeY) && Math.Abs(WorldSizeY - worldSizeY) > 0.01f)
             {
                 WorldSizeY = worldSizeY;
                 changed = true;
@@ -156,15 +169,19 @@ namespace BoscaliSummer.Features.Command.Runtime
             if (changed)
             {
                 UpdateResolutions();
+                ResetAll();
             }
         }
 
+        private static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
+        private static bool ValidWorldSize(float value) => IsFinite(value) && value > 1000f && value <= 10000000f;
+
+        /// <summary>Starts a fresh observation snapshot while retaining control history.</summary>
         public void Clear()
         {
             Array.Clear(friendlyForce, 0, friendlyForce.Length);
             Array.Clear(hostileForce, 0, hostileForce.Length);
-            Array.Clear(frontlineBorders, 0, frontlineBorders.Length);
-            Array.Clear(isSupplied, 0, isSupplied.Length);
+            Array.Clear(nodeAnchors, 0, nodeAnchors.Length);
             nodes.Clear();
         }
 
@@ -179,26 +196,21 @@ namespace BoscaliSummer.Features.Command.Runtime
             FriendlySectorCount = 0;
             HostileSectorCount = 0;
             ContestedSectorCount = 0;
-            NeutralSectorCount = 0;
+            NeutralSectorCount = TotalSectors;
+            hasEvaluated = false;
+            Array.Clear(frontlineBorders, 0, frontlineBorders.Length);
+            FrontlineSegmentCount = 0;
         }
 
         public bool WorldToCell(float worldX, float worldZ, out int col, out int row)
         {
-            float halfX = WorldSizeX * 0.5f;
-            float halfY = WorldSizeY * 0.5f;
-            float cellSizeX = WorldSizeX / ResolutionX;
-            float cellSizeY = WorldSizeY / ResolutionY;
-
-            col = (int)Math.Floor((worldX + halfX) / cellSizeX);
-            row = (int)Math.Floor((worldZ + halfY) / cellSizeY);
-
-            if (col < 0 || col >= ResolutionX || row < 0 || row >= ResolutionY)
-            {
-                col = Math.Clamp(col, 0, ResolutionX - 1);
-                row = Math.Clamp(row, 0, ResolutionY - 1);
-                return false;
-            }
-            return true;
+            col = row = 0;
+            if (!IsFinite(worldX) || !IsFinite(worldZ)) return false;
+            double x = (double)worldX / WorldSizeX + 0.5;
+            double z = (double)worldZ / WorldSizeY + 0.5;
+            col = (int)Math.Clamp(Math.Floor(x * ResolutionX), 0, ResolutionX - 1);
+            row = (int)Math.Clamp(Math.Floor(z * ResolutionY), 0, ResolutionY - 1);
+            return x >= 0 && x < 1 && z >= 0 && z < 1;
         }
 
         public void CellToWorldBounds(int col, int row, out float minX, out float minZ, out float maxX, out float maxZ)
@@ -237,18 +249,49 @@ namespace BoscaliSummer.Features.Command.Runtime
 
         public void RegisterNode(int id, string name, float worldX, float worldZ, SectorControl faction, float maxRadius, bool isAirbase)
         {
-            nodes.Add(new TacticalNode(id, name, worldX, worldZ, faction, maxRadius, isAirbase));
+            if (!WorldToCell(worldX, worldZ, out _, out _) || !IsFinite(maxRadius) || maxRadius < 0f ||
+                (faction != SectorControl.Friendly && faction != SectorControl.Hostile && faction != SectorControl.Neutral)) return;
+            float radius = maxRadius > 0f ? Math.Clamp(maxRadius, 2000f, WorldSize) : WorldSize * 0.25f;
+            for (int i = 0; i < nodes.Count; i++)
+            {
+                if (nodes[i].Id != id) continue;
+                TacticalNode node = nodes[i];
+                node.Name = name ?? ("Node_" + id);
+                node.X = worldX;
+                node.Z = worldZ;
+                node.Faction = faction;
+                node.MaxRadius = radius;
+                node.IsAirbase = isAirbase;
+                nodes[i] = node;
+                return;
+            }
+            if (nodes.Count < MaximumNodes)
+                nodes.Add(new TacticalNode(id, name, worldX, worldZ, faction, radius, isAirbase));
         }
+
+        internal static float ObservationConfidence(float ageSeconds)
+            => IsFinite(ageSeconds) && ageSeconds >= 0f ? Math.Max(0f, 1f - ageSeconds / 30f) : 0f;
 
         public void AddTroopPresence(float worldX, float worldZ, float weight, bool isHostile, float influenceRadius = 12000f)
         {
-            if (WorldToCell(worldX, worldZ, out int col, out int row))
+            if (!IsFinite(weight) || weight <= 0f || !IsFinite(influenceRadius) || influenceRadius < 0f ||
+                !WorldToCell(worldX, worldZ, out int col, out int row)) return;
+            weight = Math.Min(weight, 100f);
+            float radius = Math.Min(influenceRadius, 16000f);
+            // Even tiny custom theaters scan at most a 17 x 17 stencil per unit.
+            int reachX = Math.Min(MaximumInfluenceCells, (int)Math.Ceiling(radius / (WorldSizeX / ResolutionX)));
+            int reachY = Math.Min(MaximumInfluenceCells, (int)Math.Ceiling(radius / (WorldSizeY / ResolutionY)));
+            float[] force = isHostile ? hostileForce : friendlyForce;
+            for (int r = Math.Max(0, row - reachY); r <= Math.Min(ResolutionY - 1, row + reachY); r++)
             {
-                int idx = row * ResolutionX + col;
-                if (isHostile)
-                    hostileForce[idx] += weight;
-                else
-                    friendlyForce[idx] += weight;
+                for (int c = Math.Max(0, col - reachX); c <= Math.Min(ResolutionX - 1, col + reachX); c++)
+                {
+                    CellToCenter(c, r, out float x, out float z);
+                    float distance = (float)Math.Sqrt((x - worldX) * (x - worldX) + (z - worldZ) * (z - worldZ));
+                    float falloff = c == col && r == row ? 1f : (radius > 0f ? Math.Max(0f, 1f - distance / radius) : 0f);
+                    int index = r * ResolutionX + c;
+                    force[index] = Math.Min(1000f, force[index] + weight * falloff);
+                }
             }
         }
 
@@ -261,278 +304,76 @@ namespace BoscaliSummer.Features.Command.Runtime
         public IReadOnlyList<TacticalNode> GetNodes() => nodes;
 
         /// <summary>
-        /// Simulates organic node growth via unbounded multi-source wavefront BFS expansion,
-        /// vehicle concentrations with the 66% force superiority rule, and extracts frontline edge borders.
-        /// Friendly and enemy wavefronts propagate outward across the theater until colliding at the frontline.
+        /// Advances the advisory control field using a fresh observation snapshot. The
+        /// exponential response is independent of map refresh rate for unchanged inputs.
         /// </summary>
-        public void EvaluateSectors()
+        public void EvaluateSectors(float elapsedSeconds = 0.5f)
         {
-            int totalSectors = ResolutionX * ResolutionY;
-            int qHead = 0;
-            int qTail = 0;
-
-            // -------------------------------------------------------------
-            // PHASE 1: SEED STRATEGIC NODES (Airbases, LZs, Outposts)
-            // -------------------------------------------------------------
-            for (int i = 0; i < totalSectors; i++)
-            {
-                bfsDist[i] = int.MaxValue;
-                sectorStates[i] = SectorControl.Neutral;
-                holdStrength[i] = 0f;
-            }
-
-            int friendlySeedCount = 0;
-            int hostileSeedCount = 0;
-
+            float elapsed = IsFinite(elapsedSeconds) ? Math.Clamp(elapsedSeconds, 0f, 300f) : 0f;
+            Array.Clear(nodeAnchors, 0, nodeAnchors.Length);
             for (int i = 0; i < nodes.Count; i++)
             {
                 TacticalNode node = nodes[i];
-                if (!WorldToCell(node.X, node.Z, out int c, out int r)) continue;
-
-                int nodeIdx = r * ResolutionX + c;
-                float fForce = friendlyForce[nodeIdx];
-                float hForce = hostileForce[nodeIdx];
-
-                // Check if node is contested
-                if (node.Faction == SectorControl.Friendly && hForce > 0f)
-                {
-                    node.IsContested = true;
-                    float total = fForce + hForce;
-                    node.CaptureProgress = (total > 0.01f) ? Math.Clamp(hForce / total, 0f, 1f) : 0f;
-                }
-                else if (node.Faction == SectorControl.Hostile && fForce > 0f)
-                {
-                    node.IsContested = true;
-                    float total = fForce + hForce;
-                    node.CaptureProgress = (total > 0.01f) ? Math.Clamp(fForce / total, 0f, 1f) : 0f;
-                }
-                else
-                {
-                    node.IsContested = false;
-                    node.CaptureProgress = 0f;
-                }
-
-                // Check if cell is already claimed by an opposing node
-                if (sectorStates[nodeIdx] != SectorControl.Neutral && sectorStates[nodeIdx] != node.Faction)
-                {
-                    sectorStates[nodeIdx] = SectorControl.Contested;
-                    holdStrength[nodeIdx] = 0f;
-                    node.IsContested = true;
-                    continue;
-                }
-
-                // Seed home cell
-                sectorStates[nodeIdx] = node.Faction;
-                bfsDist[nodeIdx] = 0;
-                holdStrength[nodeIdx] = (node.Faction == SectorControl.Friendly) ? 1.0f : ((node.Faction == SectorControl.Hostile) ? -1.0f : 0f);
-
-                // CRITICAL: Only Friendly and Hostile wavefronts expand! Neutral nodes do NOT flood-fill.
-                if (node.Faction == SectorControl.Friendly)
-                {
-                    friendlySeedCount++;
-                    if (qTail < bfsQueue.Length) bfsQueue[qTail++] = nodeIdx;
-                }
-                else if (node.Faction == SectorControl.Hostile)
-                {
-                    hostileSeedCount++;
-                    if (qTail < bfsQueue.Length) bfsQueue[qTail++] = nodeIdx;
-                }
-
-                // If airbase, firmly anchor immediate 3x3 perimeter sectors
+                WorldToCell(node.X, node.Z, out int c, out int r);
+                int index = r * ResolutionX + c;
+                float opposing = node.Faction == SectorControl.Friendly ? hostileForce[index] : friendlyForce[index];
+                node.IsContested = node.Faction != SectorControl.Neutral && opposing > 0.05f;
+                node.CaptureProgress = node.IsContested ? opposing / Math.Max(0.05f, friendlyForce[index] + hostileForce[index]) : 0f;
+                nodes[i] = node;
                 if (node.IsAirbase)
-                {
-                    for (int dr = -1; dr <= 1; dr++)
-                    {
-                        for (int dc = -1; dc <= 1; dc++)
-                        {
-                            if (dr == 0 && dc == 0) continue;
-                            int nr = r + dr;
-                            int nc = c + dc;
-                            if (nc >= 0 && nc < ResolutionX && nr >= 0 && nr < ResolutionY)
-                            {
-                                int nIdx = nr * ResolutionX + nc;
-                                if (sectorStates[nIdx] == SectorControl.Neutral && bfsDist[nIdx] > 1)
-                                {
-                                    sectorStates[nIdx] = node.Faction;
-                                    bfsDist[nIdx] = 1;
-                                    holdStrength[nIdx] = (node.Faction == SectorControl.Friendly) ? 0.9f : ((node.Faction == SectorControl.Hostile) ? -0.9f : 0f);
-                                    if (node.Faction == SectorControl.Friendly || node.Faction == SectorControl.Hostile)
-                                    {
-                                        if (qTail < bfsQueue.Length) bfsQueue[qTail++] = nIdx;
-                                    }
-                                }
-                                else if (sectorStates[nIdx] != SectorControl.Neutral && sectorStates[nIdx] != node.Faction)
-                                {
-                                    sectorStates[nIdx] = SectorControl.Contested;
-                                    holdStrength[nIdx] = 0f;
-                                }
-                            }
-                        }
-                    }
-                }
+                    nodeAnchors[index] |= node.Faction == SectorControl.Friendly ? (byte)1 : node.Faction == SectorControl.Hostile ? (byte)2 : (byte)0;
             }
 
-            // Fallback for made missions: if a faction has zero airbases/nodes, seed from significant unit presence
-            if (friendlySeedCount == 0 || hostileSeedCount == 0)
-            {
-                for (int i = 0; i < totalSectors; i++)
-                {
-                    float fF = friendlyForce[i];
-                    float hF = hostileForce[i];
-                    if (friendlySeedCount == 0 && fF >= 1.5f && hF < 0.1f && sectorStates[i] == SectorControl.Neutral)
-                    {
-                        sectorStates[i] = SectorControl.Friendly;
-                        bfsDist[i] = 0;
-                        holdStrength[i] = 0.9f;
-                        if (qTail < bfsQueue.Length) bfsQueue[qTail++] = i;
-                    }
-                    else if (hostileSeedCount == 0 && hF >= 1.5f && fF < 0.1f && sectorStates[i] == SectorControl.Neutral)
-                    {
-                        sectorStates[i] = SectorControl.Hostile;
-                        bfsDist[i] = 0;
-                        holdStrength[i] = -0.9f;
-                        if (qTail < bfsQueue.Length) bfsQueue[qTail++] = i;
-                    }
-                }
-            }
-
-            // -------------------------------------------------------------
-            // PHASE 2: UNBOUNDED WAVEFRONT BFS EXPANSION
-            // Expands outward cell-by-cell until colliding with opposing factions.
-            // -------------------------------------------------------------
-            while (qHead < qTail)
-            {
-                int currIdx = bfsQueue[qHead++];
-                int cc = currIdx % ResolutionX;
-                int cr = currIdx / ResolutionX;
-                SectorControl currFaction = sectorStates[currIdx];
-                if (currFaction != SectorControl.Friendly && currFaction != SectorControl.Hostile) continue;
-                int nextDist = bfsDist[currIdx] + 1;
-
-                // 4-way orthogonal expansion: North, South, East, West
-                for (int d = 0; d < 4; d++)
-                {
-                    int nc = cc;
-                    int nr = cr;
-                    if (d == 0) nr++;
-                    else if (d == 1) nr--;
-                    else if (d == 2) nc++;
-                    else if (d == 3) nc--;
-
-                    if (nc < 0 || nc >= ResolutionX || nr < 0 || nr >= ResolutionY) continue;
-
-                    int nIdx = nr * ResolutionX + nc;
-
-                    // Unclaimed / Neutral sector: expand into it!
-                    if (sectorStates[nIdx] == SectorControl.Neutral)
-                    {
-                        sectorStates[nIdx] = currFaction;
-                        bfsDist[nIdx] = nextDist;
-                        float decay = 1.0f / (1.0f + 0.04f * nextDist);
-                        holdStrength[nIdx] = (currFaction == SectorControl.Friendly) ? decay : -decay;
-                        if (qTail < bfsQueue.Length) bfsQueue[qTail++] = nIdx;
-                    }
-                    // Same faction with shorter distance: relax distance & supply
-                    else if (sectorStates[nIdx] == currFaction && bfsDist[nIdx] > nextDist)
-                    {
-                        bfsDist[nIdx] = nextDist;
-                        float decay = 1.0f / (1.0f + 0.04f * nextDist);
-                        holdStrength[nIdx] = (currFaction == SectorControl.Friendly) ? decay : -decay;
-                        if (qTail < bfsQueue.Length) bfsQueue[qTail++] = nIdx;
-                    }
-                    // Opposing faction: COLLISION! Frontline formed here.
-                }
-            }
-
-            // -------------------------------------------------------------
-            // PHASE 3: VEHICLE CONCENTRATION & THE 66% FORCE SUPERIORITY RULE
-            // Active ground forces overpower passive hold and contest/flip sectors.
-            // -------------------------------------------------------------
+            // ponytail: at most 4096 cells x 128 strategic nodes, avoiding pathfinding
+            // and terrain claims. Add terrain-aware supply only after profiling/playtests.
             for (int r = 0; r < ResolutionY; r++)
             {
                 for (int c = 0; c < ResolutionX; c++)
                 {
-                    int idx = r * ResolutionX + c;
-                    float fF = friendlyForce[idx];
-                    float hF = hostileForce[idx];
+                    int index = r * ResolutionX + c;
+                    CellToCenter(c, r, out float x, out float z);
+                    float friendlyInfluence = 0f, hostileInfluence = 0f;
+                    for (int n = 0; n < nodes.Count; n++)
+                    {
+                        TacticalNode node = nodes[n];
+                        if (node.Faction == SectorControl.Neutral) continue;
+                        float dx = x - node.X, dz = z - node.Z;
+                        float influence = node.MaxRadius / (node.MaxRadius + (float)Math.Sqrt(dx * dx + dz * dz));
+                        if (node.Faction == SectorControl.Friendly) friendlyInfluence = Math.Max(friendlyInfluence, influence);
+                        else hostileInfluence = Math.Max(hostileInfluence, influence);
+                    }
+                    float strongest = Math.Max(friendlyInfluence, hostileInfluence);
+                    float strategic = strongest > 0f ? Math.Clamp(3f * (friendlyInfluence - hostileInfluence) / strongest, -1f, 1f) : 0f;
+                    float friendly = friendlyForce[index], hostile = hostileForce[index];
+                    float total = friendly + hostile;
+                    float pressure = (friendly - hostile) / Math.Max(3f, total);
+                    float target = Math.Clamp(strategic + 2f * pressure, -1f, 1f);
+                    float response = 1f - (float)Math.Exp(-elapsed / (total > 0.05f ? CaptureSeconds : RecoverySeconds));
+                    holdStrength[index] = hasEvaluated ? holdStrength[index] + (target - holdStrength[index]) * response : target;
 
-                    if (fF > 0.05f && hF > 0.05f)
-                    {
-                        // Active combat clash in this sector!
-                        float total = fF + hF;
-                        float friendlyRatio = fF / total;
-
-                        // 66% Superiority Rule (RWR)
-                        if (friendlyRatio >= 0.66f)
-                        {
-                            // Friendly superiority: push toward Friendly
-                            holdStrength[idx] = Math.Clamp(holdStrength[idx] + 0.35f, -1.0f, 1.0f);
-                            sectorStates[idx] = holdStrength[idx] > 0f ? SectorControl.Friendly : SectorControl.Contested;
-                        }
-                        else if (friendlyRatio <= 0.34f)
-                        {
-                            // Hostile superiority: push toward Hostile
-                            holdStrength[idx] = Math.Clamp(holdStrength[idx] - 0.35f, -1.0f, 1.0f);
-                            sectorStates[idx] = holdStrength[idx] < 0f ? SectorControl.Hostile : SectorControl.Contested;
-                        }
-                        else
-                        {
-                            // Tactical stalemate
-                            sectorStates[idx] = SectorControl.Contested;
-                        }
-                    }
-                    else if (fF > 0.05f && hF <= 0.05f)
-                    {
-                        // Only Friendly forces present: capture / solidify
-                        if (sectorStates[idx] == SectorControl.Hostile)
-                        {
-                            holdStrength[idx] = Math.Clamp(holdStrength[idx] + (0.3f * fF), -1.0f, 1.0f);
-                            if (holdStrength[idx] > 0.1f)
-                                sectorStates[idx] = SectorControl.Friendly;
-                        }
-                        else
-                        {
-                            holdStrength[idx] = Math.Clamp(holdStrength[idx] + (0.2f * fF), -1.0f, 1.0f);
-                            sectorStates[idx] = SectorControl.Friendly;
-                        }
-                    }
-                    else if (hF > 0.05f && fF <= 0.05f)
-                    {
-                        // Only Hostile forces present: capture / solidify
-                        if (sectorStates[idx] == SectorControl.Friendly)
-                        {
-                            holdStrength[idx] = Math.Clamp(holdStrength[idx] - (0.3f * hF), -1.0f, 1.0f);
-                            if (holdStrength[idx] < -0.1f)
-                                sectorStates[idx] = SectorControl.Hostile;
-                        }
-                        else
-                        {
-                            holdStrength[idx] = Math.Clamp(holdStrength[idx] - (0.2f * hF), -1.0f, 1.0f);
-                            sectorStates[idx] = SectorControl.Hostile;
-                        }
-                    }
-                    else
-                    {
-                        // No forces present in this sector
-                        if (nodes.Count == 0)
-                        {
-                            sectorStates[idx] = SectorControl.Neutral;
-                            holdStrength[idx] = 0f;
-                        }
-                    }
+                    // Actual vanilla airbase ownership anchors its cell; this overlay never
+                    // captures a base merely because enough observed vehicles surround it.
+                    if (nodeAnchors[index] != 0)
+                        holdStrength[index] = nodeAnchors[index] == 1 ? 1f : nodeAnchors[index] == 2 ? -1f : 0f;
+                    float hold = holdStrength[index];
+                    bool balancedClash = friendly > 0.05f && hostile > 0.05f && friendly / total > 0.34f && friendly / total < 0.66f;
+                    bool advancing = Math.Abs(pressure) > 0.05f && pressure * hold < 0f;
+                    sectorStates[index] = nodeAnchors[index] == 3 || balancedClash || advancing
+                        ? SectorControl.Contested
+                        : hold > 0.01f ? SectorControl.Friendly : hold < -0.01f ? SectorControl.Hostile
+                        : strongest > 0f || total > 0.05f ? SectorControl.Contested : SectorControl.Neutral;
                 }
             }
+            hasEvaluated = true;
 
-            // -------------------------------------------------------------
-            // PHASE 4: FRONTLINE EDGE EXTRACTION & ATTACK THRUSTS
-            // Crisp grid borders where Friendly meets Hostile or Contested.
-            // -------------------------------------------------------------
+            // Extract crisp borders after every cell has advanced (no traversal-order bias).
             FriendlySectorCount = 0;
             HostileSectorCount = 0;
             ContestedSectorCount = 0;
             NeutralSectorCount = 0;
 
             Array.Clear(frontlineBorders, 0, frontlineBorders.Length);
+            int segments = 0;
 
             for (int r = 0; r < ResolutionY; r++)
             {
@@ -569,8 +410,14 @@ namespace BoscaliSummer.Features.Command.Runtime
                         edgeMask |= 8;
 
                     frontlineBorders[idx] = edgeMask;
+
+                    // Each shared edge is seen from both of its cells; count it once.
+                    if ((edgeMask & 1) != 0) segments++;
+                    if ((edgeMask & 2) != 0) segments++;
                 }
             }
+
+            FrontlineSegmentCount = segments;
         }
 
         private static bool IsOpposing(SectorControl a, SectorControl b)
@@ -585,7 +432,7 @@ namespace BoscaliSummer.Features.Command.Runtime
         /// <summary>
         /// Fast procedural CPU rasterizer that bakes the discrete military grid,
         /// translucent sector fills, crisp frontline boundaries, and hazard striping.
-        /// Runs in < 1ms on a 512x256 buffer with zero memory allocations.
+        /// Reuses a bounded pixel buffer after the initial allocation.
         /// </summary>
         public Color32[] BakeTexture(
             int texWidth,
@@ -594,6 +441,9 @@ namespace BoscaliSummer.Features.Command.Runtime
             bool showFrontlines,
             float globalOpacity)
         {
+            if (texWidth < 1 || texHeight < 1 || texWidth > 512 || texHeight > 512)
+                throw new ArgumentOutOfRangeException(nameof(texWidth), "Tactical overlay dimensions must be 1..512.");
+            globalOpacity = IsFinite(globalOpacity) ? Math.Clamp(globalOpacity, 0f, 1f) : 0f;
             int totalPixels = texWidth * texHeight;
             if (pixelBuffer == null || pixelBuffer.Length != totalPixels || cachedTexWidth != texWidth || cachedTexHeight != texHeight)
             {
@@ -604,6 +454,8 @@ namespace BoscaliSummer.Features.Command.Runtime
 
             Color32 clearColor = new Color32(0, 0, 0, 0);
             Array.Fill(pixelBuffer, clearColor);
+
+            if ((!showSectors && !showFrontlines) || globalOpacity <= 0f) return pixelBuffer;
 
             byte sectorAlpha = (byte)Math.Clamp((int)(globalOpacity * 255f * 0.45f), 20, 60); // 8% to 24% opacity
             byte borderAlpha = (byte)Math.Clamp((int)(globalOpacity * 255f * 0.85f), 120, 230);
@@ -664,7 +516,7 @@ namespace BoscaliSummer.Features.Command.Runtime
                             }
 
                             // Subtle grid matrix line at sector cell boundaries
-                            if (x == pxMin || y == pyMin)
+                            if (showSectors && (x == pxMin || y == pyMin))
                             {
                                 pixelBuffer[rowOffset + x] = gridLineColor;
                                 continue;

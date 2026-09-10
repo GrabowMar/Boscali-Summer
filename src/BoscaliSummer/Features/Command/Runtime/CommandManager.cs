@@ -27,6 +27,11 @@ namespace BoscaliSummer.Features.Command.Runtime
 
         public int PlayerRank => progression != null ? progression.Rank : 0;
 
+        /// <summary>Whether a surface target carries a radar, remembered per unit instance.</summary>
+        private readonly Dictionary<int, bool> emitterCache = new Dictionary<int, bool>(64);
+
+        private const int EmitterCacheLimit = 512;
+
         public void Configure(CommandSettings config, IProgressionView progressionView, ManualLogSource log)
         {
             settings = config;
@@ -41,6 +46,7 @@ namespace BoscaliSummer.Features.Command.Runtime
             PriorityTargets.Clear();
             SectorStrikeTarget = null;
             TheaterState.Reset();
+            emitterCache.Clear();
             PublishInterop();
         }
 
@@ -107,14 +113,11 @@ namespace BoscaliSummer.Features.Command.Runtime
             if (GameManager.GetLocalPlayer<Player>(out Player player) && player != null && player.HQ != null)
                 analyzerIsFriendly = searcher.NetworkHQ == player.HQ;
 
-            bool targetIsWingman = PresenceBoard.Contains(
-                PresenceBoard.GetInts(PresenceBoard.WingMemberIds),
-                target.persistentID.GetHashCode());
-
             bool targetIsAntiAir = target.definition != null && target.definition.roleIdentity.antiAir > 0.1f;
-            return TheaterScoring.Bias(
+            return CommandScoring.Bias(
                 analyzerIsFriendly,
-                targetIsWingman,
+                searcher.persistentID.GetHashCode(),
+                target.persistentID.GetHashCode(),
                 (int)ActiveDoctrine,
                 PriorityTargets.Contains(target.persistentID),
                 target is Aircraft,
@@ -141,6 +144,110 @@ namespace BoscaliSummer.Features.Command.Runtime
             TheaterState.TerritoryControlRatio = grid.TerritoryControlRatio;
             TheaterState.ActiveClashesCount = grid.ActiveClashesCount;
             TheaterState.TotalNodesCount = grid.TotalNodesCount;
+            TheaterState.TotalSectorCount = grid.TotalSectors;
+            TheaterState.FrontlineSegmentCount = grid.FrontlineSegmentCount;
+
+            // Which bases are being argued over is a property of the field, not of the
+            // airbase list: an airbase is contested when the ground around it is.
+            int contested = 0;
+            IReadOnlyList<TacticalSectorGrid.TacticalNode> nodes = grid.GetNodes();
+            for (int i = 0; i < nodes.Count; i++)
+            {
+                if (nodes[i].IsAirbase && nodes[i].IsContested) contested++;
+            }
+            TheaterState.ContestedAirbaseCount = contested;
+        }
+
+
+        /// <summary>
+        /// Count every airbase in the theater, not just the ones this HQ already holds.
+        ///
+        /// <para><c>FactionHQ.GetAirbases()</c> is the faction's own list, so classifying it
+        /// by owner can only ever produce friendly bases — the enemy count read zero for as
+        /// long as it was on screen. The fixed catalogue is the same source the sector grid
+        /// reconciles nodes from, so the two boards now agree.</para>
+        /// </summary>
+        private void CountAirbases(FactionHQ localHq)
+        {
+            if (FactionRegistry.airbaseLookup == null) return;
+
+            foreach (Airbase airbase in FactionRegistry.airbaseLookup.Values)
+            {
+                // A carrier holds no ground and belongs on no territorial tally.
+                if (airbase == null || airbase.AttachedAirbase || airbase.UnitDestroyed()) continue;
+
+                if (airbase.CurrentHQ == null) TheaterState.NeutralAirbaseCount++;
+                else if (airbase.CurrentHQ == localHq) TheaterState.FriendlyAirbaseCount++;
+                else TheaterState.HostileAirbaseCount++;
+            }
+        }
+
+        /// <summary>
+        /// Add one friendly aircraft to the sortie board, by what its AI pilot is pointed at.
+        ///
+        /// <para>Player-flown aircraft are excluded because a sortie board reports what the
+        /// theater is doing on its own; and Wing Command's recruited wing is excluded
+        /// because those aircraft are under the player's orders, not the theater's. Reading
+        /// them here would double-count the same jets on two different consoles.</para>
+        /// </summary>
+        private void TallySortie(Aircraft aircraft)
+        {
+            if (!GameAccess.AiPilotCombatAvailable) return;
+
+            Pilot[] pilots = aircraft != null ? aircraft.pilots : null;
+            if (pilots == null || pilots.Length == 0) return;
+
+            Pilot pilot = pilots[0];
+            if (pilot == null || pilot.dead || pilot.playerControlled) return;
+            if (IsPublishedWingMember(aircraft)) return;
+
+            var combat = pilot.currentState as AIPilotCombatModes;
+            SortieTarget target = combat != null
+                ? KindOf(GameAccess.GetAiCurrentTarget(combat))
+                : SortieTarget.None;
+
+            TheaterState.Sorties.Add(SortieClassifier.Classify(target));
+        }
+
+        /// <summary>
+        /// Whether this aircraft is on the wing another plugin has published. Absent that
+        /// plugin the board is empty and every AI jet counts, which is correct.
+        /// </summary>
+        private static bool IsPublishedWingMember(Aircraft aircraft)
+        {
+            if (aircraft == null) return false;
+            int[] wing = PresenceBoard.GetInts(PresenceBoard.WingMemberIds);
+            return wing.Length != 0 &&
+                   PresenceBoard.Contains(wing, aircraft.persistentID.GetHashCode());
+        }
+
+        /// <summary>
+        /// What a target is, in the terms the classifier understands. An emitter is called
+        /// out separately because hunting one is a different sortie from bombing it.
+        ///
+        /// <para>Deciding whether a surface target emits means looking for a radar on it,
+        /// which is a component search — so the answer is remembered per unit. Targets do
+        /// not grow radars mid-mission, and without the cache this would re-walk a
+        /// hierarchy for every tasked aircraft on every refresh.</para>
+        /// </summary>
+        private SortieTarget KindOf(Unit target)
+        {
+            if (target == null || target.disabled) return SortieTarget.None;
+            if (target is Aircraft) return SortieTarget.Aircraft;
+            if (target is Ship) return SortieTarget.Ship;
+            if (target is PilotDismounted) return SortieTarget.Infantry;
+            if (!(target is GroundVehicle || target is Building)) return SortieTarget.None;
+
+            int id = target.GetInstanceID();
+            if (emitterCache.TryGetValue(id, out bool emits))
+                return emits ? SortieTarget.Emitter
+                     : target is GroundVehicle ? SortieTarget.Vehicle : SortieTarget.Structure;
+
+            emits = target.GetComponentInChildren<Radar>(true) != null;
+            if (emitterCache.Count < EmitterCacheLimit) emitterCache[id] = emits;
+
+            return emits ? SortieTarget.Emitter
+                 : target is GroundVehicle ? SortieTarget.Vehicle : SortieTarget.Structure;
         }
 
         public void UpdateTelemetry(FactionHQ localHq)
@@ -151,11 +258,12 @@ namespace BoscaliSummer.Features.Command.Runtime
             TheaterState.HostileAircraftCount = 0;
             TheaterState.FriendlyAirbaseCount = 0;
             TheaterState.HostileAirbaseCount = 0;
+            TheaterState.NeutralAirbaseCount = 0;
             TheaterState.ContestedAirbaseCount = 0;
-            TheaterState.FriendlySamCount = 0;
-            TheaterState.HostileSamCount = 0;
+            TheaterState.FriendlyRadarCount = 0;
             TheaterState.FriendlyGroundUnitsCount = 0;
             TheaterState.HostileGroundUnitsCount = 0;
+            TheaterState.Sorties.Reset();
 
             IReadOnlyList<Aircraft> allAircraft = UnitRegistry.allAircraft;
             if (allAircraft != null)
@@ -164,7 +272,11 @@ namespace BoscaliSummer.Features.Command.Runtime
                 {
                     Aircraft ac = allAircraft[i];
                     if (ac == null || ac.disabled) continue;
-                    if (ac.NetworkHQ == localHq) TheaterState.FriendlyAircraftCount++;
+                    if (ac.NetworkHQ == localHq)
+                    {
+                        TheaterState.FriendlyAircraftCount++;
+                        TallySortie(ac);
+                    }
                     else if (localHq.IsTargetBeingTracked(ac)) TheaterState.HostileAircraftCount++;
                 }
             }
@@ -174,17 +286,7 @@ namespace BoscaliSummer.Features.Command.Runtime
                 ? (float)TheaterState.FriendlyAircraftCount / totalAir
                 : 0.5f;
 
-            // Airbases
-            IEnumerable<Airbase> airbases = localHq.GetAirbases();
-            if (airbases != null)
-            {
-                foreach (Airbase ab in airbases)
-                {
-                    if (ab == null || ab.UnitDestroyed()) continue;
-                    if (ab.CurrentHQ == localHq) TheaterState.FriendlyAirbaseCount++;
-                    else TheaterState.HostileAirbaseCount++;
-                }
-            }
+            CountAirbases(localHq);
 
             // Ground & Naval Forces
             List<Unit> allUnits = UnitRegistry.allUnits;
@@ -202,11 +304,11 @@ namespace BoscaliSummer.Features.Command.Runtime
                 }
             }
 
-            // Sensors
+            // Emitters on the friendly network. This is a radar count, and the panel says so.
             if (GameAccess.HqSensorsAvailable)
             {
                 List<Radar> radars = GameAccess.GetHqRadars(localHq);
-                if (radars != null) TheaterState.FriendlySamCount = radars.Count;
+                if (radars != null) TheaterState.FriendlyRadarCount = radars.Count;
             }
 
             // Defcon & Early Warning status

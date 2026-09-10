@@ -27,6 +27,7 @@ namespace BoscaliSummer.Features.Support.Runtime
         private const float ReplyTimeout = 5f;
 
         private readonly SupportRequestLedger ledger = new SupportRequestLedger();
+        private readonly SupportMapGesture mapGesture = new SupportMapGesture();
         private readonly int[] reserved = new int[1];
 
         private SupportSettings settings;
@@ -136,12 +137,15 @@ namespace BoscaliSummer.Features.Support.Runtime
             localCooldownUntil = 0f;
             ArmedAction = null;
             ArmedFrame = 0;
-            MapPicker.Disarm(MapPicker.Support);
+            mapGesture.Reset();
             Status = "Select support option, then right-click on map.";
         }
 
+        private void OnDestroy() => mapGesture.Reset();
+
         private void Update()
         {
+            mapGesture.Advance(Time.frameCount);
             if (pending && Time.unscaledTime - pendingSince > ReplyTimeout)
             {
                 pending = false;
@@ -164,7 +168,7 @@ namespace BoscaliSummer.Features.Support.Runtime
                     {
                         SupportActionId action = ArmedAction.Value;
                         ArmedAction = null;
-                        MapPicker.Disarm(MapPicker.Support);
+                        mapGesture.Complete(Time.frameCount);
                         RequestAt(action, target);
                     }
                 }
@@ -210,7 +214,7 @@ namespace BoscaliSummer.Features.Support.Runtime
             SupportActionDefinition def = catalog != null ? catalog.Find(action) : null;
             string name = def != null ? def.Name : "SUPPORT";
             string prompt = name + " ARMED · RIGHT-CLICK MAP";
-            if (!MapPicker.TryArm(MapPicker.Support, MapPicker.GestureRight, prompt))
+            if (!mapGesture.TryArm(prompt))
             {
                 Status = MapPicker.Prompt ?? "MAP BUSY";
                 return;
@@ -231,13 +235,27 @@ namespace BoscaliSummer.Features.Support.Runtime
         {
             if (!ArmedAction.HasValue) return;
             ArmedAction = null;
-            MapPicker.Disarm(MapPicker.Support);
+            mapGesture.Complete(Time.frameCount);
             Status = "Support request cancelled.";
         }
 
         public void Request(SupportActionId action)
         {
             Arm(action);
+        }
+
+        public void RequestAtMark(IObservationSource observations)
+        {
+            if (GameplayUI.GameIsPaused || pending || !ArmedAction.HasValue ||
+                !MapPicker.IsOwner(MapPicker.Support)) return;
+            if (observations == null || !observations.TryGet(out ObservationPoint point))
+            {
+                Status = "Camera mark unavailable. Mark again or right-click the map.";
+                return;
+            }
+            SupportActionId action = ArmedAction.Value;
+            Disarm();
+            RequestAt(action, new GlobalPosition(point.X, point.Y, point.Z));
         }
 
         public void RequestAt(SupportActionId action, GlobalPosition target)
@@ -297,9 +315,9 @@ namespace BoscaliSummer.Features.Support.Runtime
             {
                 localCooldownUntil = DisableCooldowns ? 0f : Time.unscaledTime + message.CooldownSeconds;
                 Status = name + " accepted.";
-                if (action != null && (action.Id == SupportActionId.Artillery || action.Id == SupportActionId.Emp))
+                if (action != null && (action.Id == SupportActionId.Artillery || action.Id == SupportActionId.Emp || action.Id == SupportActionId.FlareMissile))
                 {
-                    float eta = action.Id == SupportActionId.Artillery ? 8f : 12f;
+                    float eta = action.Id == SupportActionId.Artillery ? 8f : action.Id == SupportActionId.Emp ? 12f : 5.5f;
                     RegisterInboundStrike(name, eta);
                 }
             }

@@ -29,6 +29,9 @@ namespace BoscaliSummer.Runtime
                 AccessTools.Method(typeof(DynamicMap), nameof(DynamicMap.TryGetCursorCoordinates)) != null;
             bool supportRecon = AccessTools.Method(typeof(FactionHQ), "SetTrackingState",
                 new[] { typeof(PersistentID), typeof(GlobalPosition), typeof(float) }) != null;
+            bool dynamicOperations = AccessTools.Property(typeof(MissionManager), nameof(MissionManager.IsRunning)) != null &&
+                AccessTools.Method(typeof(FactionHQ), nameof(FactionHQ.RewardPlayer)) != null &&
+                AccessTools.Method(typeof(FactionHQ), nameof(FactionHQ.GetTrackingData)) != null && supportSpawning;
             Plugin.Logger.LogInfo(
                 "Capabilities: " +
                 $"BulletImpacts={bullet}, MissileImpacts={missile}, VehicleLosses={vehicle}, " +
@@ -37,7 +40,7 @@ namespace BoscaliSummer.Runtime
                 $"RadioMFD={GameAccess.MfdAvailable}, MusicMixer={musicManager}, " +
                 $"MusicOwnership={GameAccess.MusicSourcesAvailable}, " +
                 $"SoundtrackCatalog={soundtrackCatalog}, Progression={progression}, " +
-                $"SupportSpawning={supportSpawning}, SupportRecon={supportRecon}.");
+                $"SupportSpawning={supportSpawning}, SupportRecon={supportRecon}, DynamicOperations={dynamicOperations}.");
 
             try
             {

@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-
 namespace BoscaliSummer.Features.Support.Runtime
 {
     /// <summary>Wire ids. Stable: they are the only action identity that crosses the network.</summary>
@@ -10,7 +9,7 @@ namespace BoscaliSummer.Features.Support.Runtime
         Fortify = 5,
         Artillery = 6,
         Emp = 7,
-        SmokeMarker = 9
+        FlareMissile = 9
     }
 
     internal enum SupportResult : byte

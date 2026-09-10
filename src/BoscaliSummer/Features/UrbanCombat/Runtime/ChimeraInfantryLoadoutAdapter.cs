@@ -11,6 +11,10 @@ namespace BoscaliSummer.Garrisons
     /// </summary>
     internal static class ChimeraInfantryLoadoutAdapter
     {
+        private const int ParatrooperCapacity = 16;
+        private const string IbisTroopsMountForward = "Troopsx8_UtilityHelo1_F";
+        private const string IbisTroopsMountReverse = "Troopsx8_UtilityHelo1_R";
+
         private static WeaponMount cachedChimeraTroopsMount;
         private static GameObject cachedTroopsPrefab;
 
@@ -19,7 +23,8 @@ namespace BoscaliSummer.Garrisons
             if (aircraft == null) return false;
             AircraftDefinition def = aircraft.definition as AircraftDefinition;
             string name = ((def != null ? (def.unitName ?? def.jsonKey ?? "") : "") + " " + (aircraft.name ?? "")).ToLowerInvariant();
-            return name.Contains("chimera") || name.Contains("mc260") || name.Contains("mc-260") || name.Contains("aryx");
+            return name.Contains("chimera") || name.Contains("mc260") || name.Contains("mc-260") || name.Contains("aryx") ||
+                name.Contains("tarantula") || name.Contains("tarantulla");
         }
 
         public static bool IsHelicopter(Aircraft aircraft)
@@ -27,6 +32,9 @@ namespace BoscaliSummer.Garrisons
             if (aircraft == null) return false;
             AircraftDefinition def = aircraft.definition as AircraftDefinition;
             string name = ((def != null ? (def.unitName ?? def.jsonKey ?? "") : "") + " " + (aircraft.name ?? "")).ToLowerInvariant();
+            if (name.Contains("tarantula") || name.Contains("tarantulla"))
+                return false;
+
             return (def != null && def.CanSlingLoad) || name.Contains("ibis") || name.Contains("helo") || name.Contains("utilityhelo");
         }
 
@@ -34,29 +42,36 @@ namespace BoscaliSummer.Garrisons
         {
             if (cachedTroopsPrefab != null) return cachedTroopsPrefab;
 
-            GameObject go = new GameObject("Chimera_Paratroopers_Prefab");
-            GameObject.DontDestroyOnLoad(go);
-
-            MountedTroops mt = go.AddComponent<MountedTroops>();
-            mt.ammo = 16;
-            mt.Rearmable = true;
-
-            if (sourceMount != null && sourceMount.info != null)
+            // Keep the template dormant without disabling clones spawned by Hardpoint.SpawnMount.
+            GameObject templateRoot = new GameObject("ParatrooperTemplateRoot");
+            templateRoot.SetActive(false);
+            GameObject.DontDestroyOnLoad(templateRoot);
+            GameObject go = sourceMount != null ? sourceMount.prefab : null;
+            if (go != null)
             {
-                WeaponInfo info = ScriptableObject.Instantiate(sourceMount.info);
-                info.name = "Paratroopers_WeaponInfo";
-                info.weaponName = "Airborne Paratroopers";
-                info.shortName = "Troops";
-                info.description = "Airborne paratrooper company deployed via static-line combat parachutes from the rear cargo ramp.";
-                info.weaponIcon = sourceMount.info.weaponIcon;
-                info.troops = true;
-                info.cargo = false; // Enabled as standard selectable weapon station
-                info.costPerRound = 0.1f;
-                info.massPerRound = 0.12f;
-                mt.info = info;
+                go = UnityEngine.Object.Instantiate(go, templateRoot.transform);
+            }
+            else
+            {
+                go = new GameObject("Chimera_Paratroopers_Prefab");
+                go.transform.SetParent(templateRoot.transform, false);
+            }
+            MountedTroops mt = go.GetComponentInChildren<MountedTroops>(true);
+            if (mt == null)
+            {
+                mt = go.AddComponent<MountedTroops>();
+            }
+            mt.ammo = ParatrooperCapacity;
+            // Vanilla Awake and ammo accounting read captureStrength, not the mount's ammo.
+            HarmonyLib.AccessTools.Field(typeof(MountedTroops), "captureStrength")
+                .SetValue(mt, (float)ParatrooperCapacity);
+            mt.Rearmable = true;
+            if (mt.info == null && sourceMount != null && sourceMount.info != null)
+            {
+                mt.info = ScriptableObject.Instantiate(sourceMount.info);
             }
 
-            go.SetActive(false);
+            go.SetActive(true);
             return cachedTroopsPrefab = go;
         }
 
@@ -64,61 +79,7 @@ namespace BoscaliSummer.Garrisons
         {
             if (cachedChimeraTroopsMount != null) return cachedChimeraTroopsMount;
 
-            WeaponMount sourceTroopsMount = null;
-
-            // 1. Search all loaded WeaponMount objects
-            WeaponMount[] allMounts = Resources.FindObjectsOfTypeAll<WeaponMount>();
-            for (int i = 0; i < allMounts.Length; i++)
-            {
-                WeaponMount wm = allMounts[i];
-                if (wm == null) continue;
-                if (string.Equals(wm.name, "Troopsx8_UtilityHelo1_F", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(wm.jsonKey, "Troopsx8_UtilityHelo1_F", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(wm.name, "Troopsx8_UtilityHelo1_R", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(wm.jsonKey, "Troopsx8_UtilityHelo1_R", StringComparison.OrdinalIgnoreCase))
-                {
-                    sourceTroopsMount = wm;
-                    break;
-                }
-                if (wm.Troops || (wm.info != null && wm.info.troops))
-                {
-                    sourceTroopsMount = wm;
-                }
-            }
-
-            // 2. Fallback: search in UtilityHelo1's hardpoint sets
-            if (sourceTroopsMount == null && Encyclopedia.i != null && Encyclopedia.i.aircraft != null)
-            {
-                for (int a = 0; a < Encyclopedia.i.aircraft.Count; a++)
-                {
-                    AircraftDefinition adef = Encyclopedia.i.aircraft[a];
-                    if (adef != null && adef.unitPrefab != null)
-                    {
-                        WeaponManager wm = adef.unitPrefab.GetComponentInChildren<WeaponManager>();
-                        if (wm != null && wm.hardpointSets != null)
-                        {
-                            for (int s = 0; s < wm.hardpointSets.Length; s++)
-                            {
-                                HardpointSet hs = wm.hardpointSets[s];
-                                if (hs != null && hs.weaponOptions != null)
-                                {
-                                    for (int o = 0; o < hs.weaponOptions.Count; o++)
-                                    {
-                                        WeaponMount opt = hs.weaponOptions[o];
-                                        if (opt != null && (opt.Troops || (opt.info != null && opt.info.troops)))
-                                        {
-                                            sourceTroopsMount = opt;
-                                            break;
-                                        }
-                                    }
-                                }
-                                if (sourceTroopsMount != null) break;
-                            }
-                        }
-                    }
-                    if (sourceTroopsMount != null) break;
-                }
-            }
+            WeaponMount sourceTroopsMount = FindIbisTroopsMount();
 
             if (sourceTroopsMount == null)
             {
@@ -126,17 +87,13 @@ namespace BoscaliSummer.Garrisons
                 return null;
             }
 
-            // Clone mount with heavy paratrooper capacity and functional prefab
             cachedChimeraTroopsMount = ScriptableObject.Instantiate(sourceTroopsMount);
             cachedChimeraTroopsMount.name = "Troopsx16_Chimera";
             cachedChimeraTroopsMount.jsonKey = "Troopsx16_Chimera";
             cachedChimeraTroopsMount.mountName = "Paratroopers (x16)";
-            cachedChimeraTroopsMount.ammo = 16;
-            cachedChimeraTroopsMount.emptyCost = 1.8f;
-            cachedChimeraTroopsMount.mass = 2.4f;
-            cachedChimeraTroopsMount.emptyMass = 0.4f;
+            cachedChimeraTroopsMount.ammo = ParatrooperCapacity;
             cachedChimeraTroopsMount.Troops = true;
-            cachedChimeraTroopsMount.Cargo = false; // Selectable in cockpit weapon switch
+            cachedChimeraTroopsMount.Cargo = false;
 
             // Assign functional prefab with MountedTroops component
             cachedChimeraTroopsMount.prefab = GetOrCreateTroopsPrefab(sourceTroopsMount);
@@ -151,9 +108,8 @@ namespace BoscaliSummer.Garrisons
                 info.weaponIcon = sourceTroopsMount.info.weaponIcon;
                 info.troops = true;
                 info.cargo = false;
-                info.costPerRound = 0.1f;
-                info.massPerRound = 0.12f;
                 cachedChimeraTroopsMount.info = info;
+                cachedChimeraTroopsMount.prefab.GetComponentInChildren<MountedTroops>(true).info = info;
             }
 
             if (Encyclopedia.i != null && Encyclopedia.i.weaponMounts != null && !Encyclopedia.i.weaponMounts.Contains(cachedChimeraTroopsMount))
@@ -182,8 +138,7 @@ namespace BoscaliSummer.Garrisons
                 HardpointSet set = aircraft.weaponManager.hardpointSets[i];
                 if (set == null || string.IsNullOrEmpty(set.name)) continue;
 
-                if (set.name.IndexOf("Cargo Bay", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                    set.name.IndexOf("Mission Bay", StringComparison.OrdinalIgnoreCase) >= 0)
+                if (ChimeraLoadoutSetRules.IsChimeraCargoSet(set.name))
                 {
                     if (set.weaponOptions != null && !set.weaponOptions.Contains(troops))
                     {
@@ -192,6 +147,98 @@ namespace BoscaliSummer.Garrisons
                     }
                 }
             }
+        }
+
+        private static WeaponMount FindIbisTroopsMount()
+        {
+            WeaponMount sourceTroopsMount = null;
+
+            WeaponMount[] allMounts = Resources.FindObjectsOfTypeAll<WeaponMount>();
+            if (allMounts != null)
+            {
+                for (int i = 0; i < allMounts.Length; i++)
+                {
+                    WeaponMount wm = allMounts[i];
+                    if (wm == null) continue;
+
+                    if (string.Equals(wm.name, IbisTroopsMountForward, StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(wm.jsonKey, IbisTroopsMountForward, StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(wm.name, IbisTroopsMountReverse, StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(wm.jsonKey, IbisTroopsMountReverse, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return wm;
+                    }
+
+                    if (wm.Troops || (wm.info != null && wm.info.troops))
+                    {
+                        sourceTroopsMount ??= wm;
+                    }
+                }
+            }
+
+            if (sourceTroopsMount == null && Encyclopedia.i != null && Encyclopedia.i.aircraft != null)
+            {
+                for (int a = 0; a < Encyclopedia.i.aircraft.Count; a++)
+                {
+                    AircraftDefinition adef = Encyclopedia.i.aircraft[a];
+                    if (adef == null || adef.unitPrefab == null)
+                        continue;
+
+                    WeaponManager wm = adef.unitPrefab.GetComponentInChildren<WeaponManager>(true);
+                    if (wm == null || wm.hardpointSets == null)
+                        continue;
+
+                    string sourceName = (adef.unitName ?? adef.jsonKey ?? "").ToLowerInvariant();
+                    if (sourceName.IndexOf("ibis", StringComparison.OrdinalIgnoreCase) < 0 &&
+                        sourceName.IndexOf("utilityhelo", StringComparison.OrdinalIgnoreCase) < 0)
+                    {
+                        continue;
+                    }
+
+                    sourceTroopsMount = FindTroopsMountInHardpointSets(wm.hardpointSets);
+                    if (sourceTroopsMount != null) break;
+                }
+            }
+
+            if (sourceTroopsMount == null)
+            {
+                sourceTroopsMount = FindTroopsMountInDefinitions();
+            }
+
+            return sourceTroopsMount;
+        }
+
+        private static WeaponMount FindTroopsMountInHardpointSets(HardpointSet[] hardpointSets)
+        {
+            for (int s = 0; s < hardpointSets.Length; s++)
+            {
+                HardpointSet hs = hardpointSets[s];
+                if (hs == null || hs.weaponOptions == null) continue;
+
+                for (int o = 0; o < hs.weaponOptions.Count; o++)
+                {
+                    WeaponMount opt = hs.weaponOptions[o];
+                    if (opt != null && (opt.Troops || (opt.info != null && opt.info.troops)))
+                    {
+                        return opt;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        private static WeaponMount FindTroopsMountInDefinitions()
+        {
+            if (Encyclopedia.i == null || Encyclopedia.i.weaponMounts == null) return null;
+
+            foreach (WeaponMount mount in Encyclopedia.i.weaponMounts)
+            {
+                if (mount != null && (mount.Troops || (mount.info != null && mount.info.troops)))
+                    return mount;
+            }
+
+            return null;
         }
     }
 }

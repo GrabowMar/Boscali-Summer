@@ -15,8 +15,7 @@ namespace BoscaliSummer.Features.Support
         public FeatureMetadata Metadata => Feature;
         public Type[] PatchTypes => new[]
         {
-            typeof(Patches.SupportMissileDetonatePatch),
-            typeof(Patches.ThirdPersonHudPatches)
+            typeof(Patches.SupportMissileDetonatePatch)
         };
 
         public void Install(FeatureContext context)
@@ -29,10 +28,8 @@ namespace BoscaliSummer.Features.Support
 
             SupportManager manager = context.AddSceneService<SupportManager>(50);
             SupportNet network = context.AddComponent<SupportNet>();
-            ThirdPersonHudController hudController = context.AddSceneService<ThirdPersonHudController>(52);
             SupportPanel panel = context.AddSceneService<SupportPanel>(55);
 
-            hudController.Configure(context.Settings.Support);
             network.Configure(manager);
             manager.Configure(context.Settings.Support, perks, fortifications, network, context.Logger, fireSuppression);
             manager.ConfigureBypass(context.Settings.Diagnostics.BypassRequirements);

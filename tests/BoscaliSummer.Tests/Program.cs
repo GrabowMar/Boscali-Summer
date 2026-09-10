@@ -21,7 +21,12 @@ namespace BoscaliSummer.Tests
             RadioTests.Run();
             ProgressionTests.Run();
             SupportTests.Run();
+            Features.QoL.ObservationTests.Run();
+            Features.QoL.CameraTests.Run();
+            Features.QoL.GunAimAssistTests.Run();
             CommandTests.Run();
+            MfdSecondaryObjectivesTests.Run();
+            Features.DynamicOperations.OperationTests.Run();
             ModuleBoundaryTests.Run();
 
             TestAssert.That(
