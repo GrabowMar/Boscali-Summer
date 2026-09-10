@@ -1,7 +1,6 @@
 # Progression module
 
-Scope edits to this folder and `tests/BoscaliSummer.Tests/Features/Progression`. This module
-turns the player's mission score into a bounded perk-point budget and owns selected perks,
+Turns the player's mission score into a bounded perk-point budget and owns selected perks,
 capability lookups, reward/fuel patches, and the perk board's view data.
 
 Do not alter Nuclear Option's rank thresholds, aircraft unlocks, score, or reward source.
