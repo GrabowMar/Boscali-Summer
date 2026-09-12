@@ -6,6 +6,7 @@ using BoscaliSummer.Tests.Features.FireAndDestruction;
 using BoscaliSummer.Tests.Features.Radio;
 using BoscaliSummer.Tests.Features.Progression;
 using BoscaliSummer.Tests.Features.Support;
+using BoscaliSummer.Tests.Features.Trenches;
 using BoscaliSummer.Tests.Features.UrbanCombat;
 using BoscaliSummer.Tests.Framework;
 
@@ -19,7 +20,9 @@ namespace BoscaliSummer.Tests
             ImpactScorchTests.Run();
             TroopDeploymentTests.Run();
             RadioTests.Run();
+            Features.Squad.AceCareerTests.Run();
             ProgressionTests.Run();
+            ProgressionPresentationTests.Run();
             SupportTests.Run();
             Features.QoL.ObservationTests.Run();
             Features.QoL.CameraTests.Run();
@@ -27,6 +30,7 @@ namespace BoscaliSummer.Tests
             CommandTests.Run();
             MfdSecondaryObjectivesTests.Run();
             Features.DynamicOperations.OperationTests.Run();
+            TrenchTests.Run();
             ModuleBoundaryTests.Run();
 
             TestAssert.That(

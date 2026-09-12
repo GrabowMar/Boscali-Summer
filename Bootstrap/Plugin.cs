@@ -7,6 +7,7 @@ using NOAvionics.Ui;
 namespace BoscaliSummer
 {
     [BepInPlugin(PluginGuid, PluginName, PluginVersion)]
+    [BepInDependency("com.marci.wingcommand", "0.9.2.6")]
     public sealed class Plugin : BaseUnityPlugin
     {
         public const string PluginGuid = "com.marci.boscalisummer";
@@ -30,7 +31,6 @@ namespace BoscaliSummer
             AvStyleHost.Configure(Paths.ConfigPath, Logger.LogInfo, Logger.LogWarning);
 
             featureHost = ModCompositionRoot.Start(Logger, Settings);
-            TheaterInteropPush.PublishGuid();
             Logger.LogInfo($"Effective fire tuning: bullet ignition={Settings.FireAndDestruction.BulletIgnitionChance:0.####}, " +
                 $"explosive ignition={Settings.FireAndDestruction.ExplosiveIgnitionChance:0.####}, intensity={Settings.FireAndDestruction.FireIntensity.Value:0.##}, " +
                 $"active-site cap={Settings.FireAndDestruction.MaxActiveFires}.");

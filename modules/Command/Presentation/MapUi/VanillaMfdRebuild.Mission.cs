@@ -41,8 +41,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             protected override void BuildContent()
             {
-                Shell.ConfigureTabs(new[] { "MISSION", "OBJECTIVES", "SECONDARY" }, SelectPage);
-                pages = new[] { Shell.CreatePage("Mission"), Shell.CreatePage("Objectives"), Shell.CreatePage("Secondary") };
+                ConfigureTabs(new[] { "MISSION", "OBJECTIVES", "SECONDARY" }, SelectPage);
+                pages = new[] { CreatePage("Mission"), CreatePage("Objectives"), CreatePage("Secondary") };
                 BuildMissionPage(pages[0]);
                 BuildObjectivesPage(pages[1]);
                 BuildSecondaryPage(pages[2]);
@@ -116,7 +116,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             {
                 selectedPage = selected;
                 for (int i = 0; i < pages.Length; i++) pages[i].gameObject.SetActive(i == selected);
-                Shell.SetSelectedTab(selected);
+                SetSelectedTab(selected);
                 RequestRefresh();
             }
 
@@ -322,7 +322,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             protected override void BuildContent()
             {
-                RectTransform page = Shell.CreatePage("Unavailable");
+                RectTransform page = CreatePage("Unavailable");
                 DrawSpine(page);
                 AvStyled.SpineTick(page, 3f, -AvTokens.Space3);
                 AvStyled.Label(page, new Rect(AvTokens.Space3, -AvTokens.Space3,

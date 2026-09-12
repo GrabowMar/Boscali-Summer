@@ -1,4 +1,6 @@
+using System;
 using System.Reflection;
+using BoscaliSummer.Infrastructure.Diagnostics;
 using HarmonyLib;
 using UnityEngine;
 
@@ -16,13 +18,22 @@ namespace BoscaliSummer.Fire
             WeaponInfo info,
             bool visualOnly)
         {
-            if (!__state && ___impacted && info != null)
+            // Runs on every tracer's trajectory trace: a fault here must not stop the bullet
+            // simulation, only skip the ignition and scorch for this one round.
+            try
             {
-                int salt = Mathf.RoundToInt(info.muzzleVelocity) ^ Mathf.RoundToInt(info.pierceDamage * 0.1f);
-                ImpactFireManager.Instance?.SubmitImpact(
-                    ___position, false, salt);
-                ImpactScorchManager.Instance?.SubmitExplosion(
-                    ___position, Mathf.Clamp(info.pierceDamage * 0.05f, 0.35f, 2.5f));
+                if (!__state && ___impacted && info != null)
+                {
+                    int salt = Mathf.RoundToInt(info.muzzleVelocity) ^ Mathf.RoundToInt(info.pierceDamage * 0.1f);
+                    ImpactFireManager.Instance?.SubmitImpact(
+                        ___position, false, salt);
+                    ImpactScorchManager.Instance?.SubmitExplosion(
+                        ___position, Mathf.Clamp(info.pierceDamage * 0.05f, 0.35f, 2.5f));
+                }
+            }
+            catch (Exception e)
+            {
+                PatchGuard.Report("Fire.BulletImpact", e);
             }
         }
     }
@@ -42,16 +53,25 @@ namespace BoscaliSummer.Fire
             float ___blastYield)
         {
             if (!armed) return;
-            Vector3 world = relativeUnit != null
-                ? relativeUnit.transform.TransformPoint(pos)
-                : pos + Datum.origin.position;
-            GlobalPosition worldPosition = world.ToGlobalPosition();
-            ImpactFireManager.Instance?.SubmitImpact(
-                worldPosition, true, Mathf.RoundToInt(___blastYield));
-            // Local cosmetic only, so it does not go through SubmitImpact: that early-returns
-            // on !IsServer() and on FiresEnabled, whereas this patch runs on every client and
-            // a scorch decal needs no authority.
-            ImpactScorchManager.Instance?.SubmitExplosion(worldPosition, ___blastYield);
+            // Runs on every client for every missile detonation; a fault must not swallow the
+            // detonation RPC, only the fire and scorch this mod adds on top of it.
+            try
+            {
+                Vector3 world = relativeUnit != null
+                    ? relativeUnit.transform.TransformPoint(pos)
+                    : pos + Datum.origin.position;
+                GlobalPosition worldPosition = world.ToGlobalPosition();
+                ImpactFireManager.Instance?.SubmitImpact(
+                    worldPosition, true, Mathf.RoundToInt(___blastYield));
+                // Local cosmetic only, so it does not go through SubmitImpact: that early-returns
+                // on !IsServer() and on FiresEnabled, whereas this patch runs on every client and
+                // a scorch decal needs no authority.
+                ImpactScorchManager.Instance?.SubmitExplosion(worldPosition, ___blastYield);
+            }
+            catch (Exception e)
+            {
+                PatchGuard.Report("Fire.MissileImpact", e);
+            }
         }
     }
 
@@ -63,9 +83,16 @@ namespace BoscaliSummer.Fire
     {
         private static void Postfix(GroundVehicle __instance, bool oldState, bool newState)
         {
-            if (!oldState && newState && __instance != null)
-                ImpactFireManager.Instance?.SubmitVehicleExplosion(
-                    __instance.transform.position.ToGlobalPosition(), __instance.GetInstanceID());
+            try
+            {
+                if (!oldState && newState && __instance != null)
+                    ImpactFireManager.Instance?.SubmitVehicleExplosion(
+                        __instance.transform.position.ToGlobalPosition(), __instance.GetInstanceID());
+            }
+            catch (Exception e)
+            {
+                PatchGuard.Report("Fire.GroundVehicleDestruction", e);
+            }
         }
     }
 }

@@ -8,9 +8,10 @@ maintainers and coding agents; runtime design is in [ARCHITECTURE.md](ARCHITECTU
 | Local HUD/camera conveniences, observation marks, contact-age readout | `modules/QoL` | `Features/QoL` | Framework lifecycle/contracts, game interop; no feature dependency |
 | Fire, impact scorch, ruins, smoke, wreck persistence, fire replication | `modules/FireAndDestruction` | `Features/FireAndDestruction` | Framework, game interop |
 | Occupied shells, defensive proxies, capture cleanup | `modules/UrbanCombat` | `Features/UrbanCombat` | Framework, game interop |
-| Local music, stations, playback, MFD radio UI | `modules/Radio` | `Features/Radio` | Framework lifecycle, game interop |
-| Score-earned perks, capabilities, reward/fuel effects | `modules/Progression` | `Features/Progression` | Framework lifecycle/contracts, game interop |
-| OPS MFD (perks, support, record), request validation, costs, cooldowns, spawn jobs | `modules/Support` | `Features/Support` | Progression + optional zone-fortification contracts, game interop |
+| Local music, stations, hunt soundtrack override, MFD radio UI | `modules/Radio` | `Features/Radio` | Framework lifecycle, optional `ISquadView`, game interop |
+| Player pilot careers, enemy ace hunts, bonus awards and roster snapshots | `modules/Squad` | `Features/Squad` | Framework lifecycle/contracts, cached Wing Command public API adapter |
+| SQD MFD/HUD, score/ace-earned perks, capabilities, reward/fuel effects | `modules/Progression` | `Features/Progression` | Squad through `ISquadView`, Framework lifecycle/contracts, game interop |
+| OPS MFD (support, observation, battle status), request validation, costs, cooldowns, spawn jobs | `modules/Support` | `Features/Support` | Progression + optional zone-fortification contracts, game interop |
 | STR MFD, expanded map GUI, map overlays, doctrine, AI target scoring | `modules/Command` | `Features/Command` | Progression contracts, game interop |
 | Secondary objectives, faction awards, finite reinforcement batches | `modules/DynamicOperations` | `Features/DynamicOperations` | Framework lifecycle/contracts, native game interop |
 | Feature graph, host, lifecycle, service contracts | `Framework` | `Framework` | no concrete feature |
@@ -41,6 +42,11 @@ Support and Command declare a dependency on Progression but consume only `IPlaye
 features genuinely interact, define the smallest interface in `Framework/Contracts`,
 implement it in the owner, resolve it through `ServiceRegistry` — never expose a manager,
 singleton, patch class, mutable collection, or settings object as the contract.
+
+Progression depends on Squad's read-only `ISquadView` for pilot generations and ace
+bonus points. Radio observes the same contract optionally for local music transitions.
+The plugin requires Wing Command `0.9.2.3`+ at runtime; `WingLink` caches its public
+pilot/ace-wing/chatter API and no feature imports Wing Command implementation types.
 
 ## Workflow for an ordinary feature request
 

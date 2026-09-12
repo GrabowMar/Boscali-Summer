@@ -26,12 +26,11 @@ module a common lifecycle and patch owner without yet splitting the large manage
 4. **Scene session** — one generation-backed cancellation scope and one readiness gate for
    mission, network and content, replacing per-feature delayed-init loops.
 5. **Bounded scheduler** — central slow-tick and queue budgets, no gameplay rules.
-6. **Shared menu shell** — named bezel claims and an exclusive map picker now live in
-   `nomodkit/shared/avionics` (`NOAvionics`), compiled into both this plugin and Wing
-   Command. The theater tab is now its own `STR` bezel screen, and the widget factory
-   exists: `AvScreen` builds the data bar, metric row, tab bar, body and status strip for
-   OPS and STR. Remaining: fold the vanilla-panel rebuild's private `MfdShell` and the RAD
-   and SET screens onto it too, so all of them match WMC chrome exactly.
+6. **Shared menu shell — complete** — named bezel claims and an exclusive map picker live in
+   `Avionics/` (`NOAvionics`), compiled into this plugin and kept in sync by hand with Wing
+   Command's copy. `AvScreen` now builds the data bar, metric row, tabs, body and status strip
+   for OPS, STR, RAD, SET, and the rebuilt vanilla map panels. All four Boscali screens use
+   resolved dock height, shared semantic styling, and the common status priority.
 7. **Persistence service** — schema-versioned, debounced, atomic JSON writes with backup
    recovery, before any persistent skill state.
 
@@ -41,6 +40,10 @@ codecs and snapshot providers; garrison catalogue/selection/spawning/lifecycle.
 
 ## Feature direction
 
+- **Ace hunt soundtrack validation** — local Hunt station selection, installed tactical
+  fallback and prior radio/native state restoration are implemented. Live-play gate:
+  playing/paused/off starts, unreadable imports, manual Stop, remote hunt notifications
+  while SQD is closed, and scene reload. See [ACE_HUNTS.md](ACE_HUNTS.md).
 - **Dynamic operations** — capture/defense/interdiction director, secondary MIS panel,
   finite convoy/fortification awards and snapshot protocol implemented behind default-off
   `DynamicOperations.Enabled`. Current frontlines use elapsed-time observed pressure.

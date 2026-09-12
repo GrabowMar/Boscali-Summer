@@ -42,6 +42,7 @@ namespace BoscaliSummer.Framework.Contracts
         /// </summary>
         int MaximumPoints { get; }
         string Status { get; }
+        bool UnlockPending { get; }
 
         /// <summary>Score required for each perk point, so a view can render a score-progress bar.</summary>
         int ScorePerPoint { get; }

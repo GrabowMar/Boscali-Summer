@@ -40,6 +40,7 @@ namespace BoscaliSummer.Runtime
                 $"RadioMFD={GameAccess.MfdAvailable}, MusicMixer={musicManager}, " +
                 $"MusicOwnership={GameAccess.MusicSourcesAvailable}, " +
                 $"SoundtrackCatalog={soundtrackCatalog}, Progression={progression}, " +
+                $"SquadWingCommandApi={WingLink.SquadAvailable}, " +
                 $"SupportSpawning={supportSpawning}, SupportRecon={supportRecon}, DynamicOperations={dynamicOperations}.");
 
             try

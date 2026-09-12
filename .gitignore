@@ -15,10 +15,9 @@ TestResults/
 # Logs
 *.log
 
-# Local tooling caches (nomodkit, offline NuGet shim, Codex attachments)
+# Stray local tooling droppings
 .appdata/
 .codex-remote-attachments/
-.nomodkit/
 
 # Editors / IDEs
 .vs/

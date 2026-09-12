@@ -61,12 +61,12 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             protected override void BuildContent()
             {
-                Shell.ConfigureTabs(new[] { "FORCES", "LEDGER", "STATUS" }, SelectPage);
+                ConfigureTabs(new[] { "FORCES", "LEDGER", "STATUS" }, SelectPage);
                 pages = new[]
                 {
-                    Shell.CreatePage("Forces"),
-                    Shell.CreatePage("Ledger"),
-                    Shell.CreatePage("Status"),
+                    CreatePage("Forces"),
+                    CreatePage("Ledger"),
+                    CreatePage("Status"),
                 };
 
                 BuildForcesPage(pages[0]);
@@ -223,7 +223,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private void SelectPage(int selected)
             {
                 for (int i = 0; i < pages.Length; i++) pages[i].gameObject.SetActive(i == selected);
-                Shell.SetSelectedTab(selected);
+                SetSelectedTab(selected);
                 RequestRefresh();
             }
 

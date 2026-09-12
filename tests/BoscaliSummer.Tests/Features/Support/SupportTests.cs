@@ -1,4 +1,5 @@
 using BoscaliSummer.Features.Support.Runtime;
+using NOAvionics;
 
 namespace BoscaliSummer.Tests.Features.Support
 {
@@ -6,42 +7,74 @@ namespace BoscaliSummer.Tests.Features.Support
     {
         private static void TestMapGesture()
         {
+            MapPicker.Reset();
             var gesture = new SupportMapGesture();
-            NOAvionics.MapPicker.Reset();
-            try
-            {
-                TestAssert.That(gesture.TryArm("SUPPORT"), "Support must arm without Wing Command");
-                TestAssert.That(NOAvionics.MapPicker.IsBusy, "WC running before support must see the reservation");
-                gesture.Complete(10);
-                gesture.Advance(10);
-                TestAssert.That(NOAvionics.MapPicker.IsOwner(NOAvionics.MapPicker.Support),
-                    "WC running after support must not reuse the consumed right-click");
-                TestAssert.That(!NOAvionics.MapPicker.TryArm(NOAvionics.MapPicker.WingPoint, 1, "WING"),
-                    "The consuming frame must remain exclusive");
-                gesture.Advance(11);
-                TestAssert.That(!NOAvionics.MapPicker.IsBusy, "Support must release on the following frame");
-                NOAvionics.MapPicker.TryArm(NOAvionics.MapPicker.WingPoint, 1, "WING");
-                TestAssert.That(!gesture.TryArm("SUPPORT"), "Support must respect an armed wing order");
-                gesture.Reset();
-                TestAssert.That(NOAvionics.MapPicker.IsOwner(NOAvionics.MapPicker.WingPoint),
-                    "Support cleanup must not clear Wing Command's gesture");
-                NOAvionics.MapPicker.Disarm(NOAvionics.MapPicker.WingPoint);
-                gesture.TryArm("SUPPORT");
-                gesture.Complete(12);
-                gesture.TryArm("NEW SUPPORT");
-                gesture.Advance(13);
-                TestAssert.That(NOAvionics.MapPicker.IsOwner(NOAvionics.MapPicker.Support),
-                    "Rearming must cancel a pending release");
-                gesture.Reset();
-                TestAssert.That(!NOAvionics.MapPicker.IsBusy, "Scene teardown must release support ownership");
-            }
-            finally { NOAvionics.MapPicker.Reset(); }
+            TestAssert.That(!gesture.Armed, "a fresh gesture must not be armed");
+
+            TestAssert.That(MapPicker.TryArm(MapPicker.WingPoint, MapPicker.GestureLeft, "WING"),
+                "test setup could not arm the wing picker");
+            TestAssert.That(!gesture.TryArm("CALL IN"),
+                "support armed while Wing Command owned the shared map picker");
+            MapPicker.Disarm(MapPicker.WingPoint);
+
+            TestAssert.That(gesture.TryArm("CALL IN"), "arming must succeed");
+            TestAssert.That(gesture.Armed, "TryArm must arm the gesture");
+            TestAssert.That(gesture.Prompt == "CALL IN", "TryArm must keep the supplied prompt");
+
+            gesture.TryArm(null);
+            TestAssert.That(!string.IsNullOrEmpty(gesture.Prompt), "an empty prompt must fall back to a default");
+
+            // The click is consumed in Update; the gesture must still read as armed for the
+            // rest of that frame, no matter where the plugin's Update falls in frame order.
+            gesture.Complete(10);
+            gesture.Advance(10);
+            TestAssert.That(gesture.Armed, "the consuming frame must keep the gesture armed");
+            gesture.Advance(11);
+            TestAssert.That(!gesture.Armed, "the gesture must release on the following frame");
+            TestAssert.That(gesture.Prompt == null, "release must clear the prompt");
+
+            // Re-arming before the release frame cancels the pending release.
+            gesture.TryArm("FIRST");
+            gesture.Complete(20);
+            gesture.TryArm("SECOND");
+            gesture.Advance(21);
+            TestAssert.That(gesture.Armed && gesture.Prompt == "SECOND", "re-arming must cancel a pending release");
+
+            gesture.Reset();
+            TestAssert.That(!gesture.Armed, "Reset must disarm the gesture");
+        }
+
+        private static void TestClickVsDrag()
+        {
+            var gesture = new SupportMapGesture();
+
+            // With no press tracked, a release must not read as a click.
+            TestAssert.That(!gesture.ReleasedAsClick(100f, 100f, 8f),
+                "a release with no tracked press was read as a click");
+
+            gesture.NotePointerDown(100f, 100f);
+            TestAssert.That(gesture.ReleasedAsClick(104f, 103f, 8f),
+                "a barely-moved release was not read as a click");
+            TestAssert.That(gesture.ReleasedAsClick(108f, 100f, 8f),
+                "a release on the slop boundary was rejected");
+            TestAssert.That(!gesture.ReleasedAsClick(120f, 100f, 8f),
+                "a dragged release was still read as a click");
+
+            // Arming drops any pending press so it cannot leak into the next gesture.
+            gesture.NotePointerDown(100f, 100f);
+            gesture.TryArm("SUPPORT");
+            TestAssert.That(!gesture.ReleasedAsClick(100f, 100f, 8f), "arming kept a stale press");
+
+            gesture.NotePointerDown(100f, 100f);
+            gesture.Reset();
+            TestAssert.That(!gesture.ReleasedAsClick(100f, 100f, 8f), "reset kept a stale press");
         }
 
         public static void Run()
         {
-
             TestMapGesture();
+            TestClickVsDrag();
+
             var ledger = new SupportRequestLedger(4);
 
             // Only accepted requests are remembered. A denial must not burn the id, or the

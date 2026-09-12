@@ -10,6 +10,7 @@ namespace BoscaliSummer.Tests.Features.Progression
         {
             Catalog();
             Points();
+            PilotPoints();
             Spending();
         }
 
@@ -60,6 +61,32 @@ namespace BoscaliSummer.Tests.Features.Progression
             TestAssert.That(PerkPoints.Earned(100000, 500, 6) == 6, "the point ceiling was exceeded");
             TestAssert.That(PerkPoints.Earned(-50, 500, 6) == 0, "a negative score granted points");
             TestAssert.That(PerkPoints.Earned(500, 0, 6) == 0, "a zero tier size did not fail closed");
+        }
+
+        private static void PilotPoints()
+        {
+            TestAssert.That(PerkPoints.EarnedForPilot(70500, 70000, 500, 6, 0) == 1,
+                "a successor above ushort score range must earn only its own score point");
+            TestAssert.That(PerkPoints.EarnedForPilot(70000, 70000, 500, 6, 0) == 0,
+                "a new pilot inherited the retired pilot's score");
+            TestAssert.That(PerkPoints.EarnedForPilot(69999, 70000, 500, 6, 2) == 2,
+                "a score below the origin must retain bonus points without earning score points");
+            TestAssert.That(PerkPoints.EarnedForPilot(100000, 0, 500, 6, 3) == 9,
+                "ace bonus points must extend the score-only ceiling");
+            TestAssert.That(PerkPoints.EarnedForPilot(499, 0, 500, 6, 1) == 1,
+                "a partial score point must not be rounded up when adding an ace bonus");
+            TestAssert.That(PerkPoints.EarnedForPilot(int.MaxValue, 0, 1, int.MaxValue, int.MaxValue) == 20,
+                "large score and bonus inputs must not overflow or exceed the overall 20-point ceiling");
+            TestAssert.That(PerkPoints.EarnedForPilot(int.MaxValue, int.MinValue, 1, 6, 0) == 6,
+                "a negative origin must be normalized before score subtraction");
+            TestAssert.That(PerkPoints.EarnedForPilot(int.MinValue, int.MaxValue, 500, 6, 3) == 3,
+                "extreme negative score must not wrap into score-derived points");
+            TestAssert.That(PerkPoints.EarnedForPilot(500, 0, 500, 6, int.MinValue) == 1,
+                "negative bonuses must not remove legitimately earned score points");
+            TestAssert.That(PerkPoints.EarnedForPilot(500, 0, 0, 6, 2) == 2,
+                "an invalid score interval must disable score awards while preserving independent bonuses");
+            TestAssert.That(PerkPoints.EarnedForPilot(500, 0, 500, -1, 2) == 2,
+                "an invalid score ceiling must not invalidate independent ace bonuses");
         }
 
         private static void Spending()

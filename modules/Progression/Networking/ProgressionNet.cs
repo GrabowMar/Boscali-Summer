@@ -16,11 +16,12 @@ namespace BoscaliSummer.Features.Progression.Networking
     {
         public byte Protocol;
         public byte Perk;
+        public uint Scene, Token;
+        public int Generation;
     }
 
     /// <summary>
-    /// The server's authoritative view of one player. Idempotent state, so a replayed or
-    /// out-of-order snapshot is harmless and no request-id correlation is needed.
+    /// The server's authoritative view of one player, correlated to the requesting scene and career.
     /// </summary>
     [NetworkMessage]
     internal struct ProgressionSnapshot
@@ -31,16 +32,20 @@ namespace BoscaliSummer.Features.Progression.Networking
 
         public byte Protocol;
         public uint PerkMask;
-        public ushort Score;
+        public int Score;
         public byte EarnedPoints;
         public byte Rank;
         public byte Result;
+        public int Generation;
+        public uint Scene, Token;
+        public int ScorePerPoint;
+        public byte MaximumPoints;
     }
 
     internal sealed class ProgressionNet : MonoBehaviour
     {
-        /// <summary>Bumped from 1: the mask widened and the rank budget became a score budget.</summary>
-        internal const byte ProtocolVersion = 2;
+        /// <summary>Version 3 includes pilot generation so a retired career cannot be restored by an old reply.</summary>
+        internal const byte ProtocolVersion = 3;
 
         /// <summary>Perk id meaning "send me a snapshot, change nothing".</summary>
         internal const byte QueryOnly = byte.MaxValue;
@@ -49,6 +54,11 @@ namespace BoscaliSummer.Features.Progression.Networking
         private MessageHandler serverHandler;
         private MessageHandler clientHandler;
         private float nextRegistration;
+        private uint scene, token;
+        private ulong requestedPlayer;
+        private FactionHQ requestedHq;
+
+        internal void ResetScene() { scene++; requestedPlayer = PlayerIdentity.None; requestedHq = null; }
 
         public void Configure(ProgressionManager progression)
         {
@@ -89,7 +99,9 @@ namespace BoscaliSummer.Features.Progression.Networking
         /// </summary>
         public void Submit(byte perkId)
         {
-            if (GameAccess.IsServer() && GameManager.GetLocalPlayer<Player>(out Player local) && local != null)
+            if (!GameManager.GetLocalPlayer<Player>(out Player local) || local == null)
+            { manager.ReportOffline(); return; }
+            if (GameAccess.IsServer())
             {
                 manager.Apply(manager.Handle(local, perkId), PlayerIdentity.Of(local));
                 return;
@@ -100,25 +112,32 @@ namespace BoscaliSummer.Features.Progression.Networking
                 manager.ReportOffline();
                 return;
             }
-            client.Send(new ProgressionSubmit { Protocol = ProtocolVersion, Perk = perkId });
+            requestedPlayer = PlayerIdentity.Of(local); requestedHq = local.HQ;
+            client.Send(new ProgressionSubmit { Protocol = ProtocolVersion, Perk = perkId,
+                Scene = scene, Token = ++token, Generation = manager.Generation(local) });
         }
 
         private void ReceiveSubmit(INetworkPlayer sender, ProgressionSubmit submit)
         {
-            if (submit.Protocol != ProtocolVersion) return;
+            if (!GameAccess.IsServer() || submit.Protocol != ProtocolVersion) return;
             if (sender == null || !sender.IsAuthenticated ||
                 !sender.TryGetPlayer<Player>(out Player player) || player == null)
                 return;
             if (submit.Perk != QueryOnly && !PerkCatalog.IsDefined(submit.Perk)) return;
-            sender.Send(manager.Handle(player, submit.Perk));
+            bool oldCareer = submit.Perk != QueryOnly && submit.Generation != manager.Generation(player);
+            ProgressionSnapshot snapshot = manager.Handle(player, oldCareer ? QueryOnly : submit.Perk);
+            if (oldCareer) snapshot.Result = ProgressionSnapshot.Denied;
+            snapshot.Scene = submit.Scene; snapshot.Token = submit.Token;
+            sender.Send(snapshot);
         }
 
         private void ReceiveSnapshot(INetworkPlayer _, ProgressionSnapshot snapshot)
         {
-            if (snapshot.Protocol != ProtocolVersion) return;
+            if (GameAccess.IsServer() || snapshot.Protocol != ProtocolVersion || snapshot.Scene != scene || snapshot.Token != token) return;
             ulong localId = GameManager.GetLocalPlayer<Player>(out Player local) && local != null
                 ? PlayerIdentity.Of(local)
                 : PlayerIdentity.None;
+            if (localId == PlayerIdentity.None || localId != requestedPlayer || local.HQ != requestedHq) return;
             manager.Apply(snapshot, localId);
         }
 
@@ -132,29 +151,35 @@ namespace BoscaliSummer.Features.Progression.Networking
             {
                 writer.WriteByte(value.Protocol);
                 writer.WriteByte(value.Perk);
+                writer.WritePackedUInt32(value.Scene); writer.WritePackedUInt32(value.Token); writer.WritePackedInt32(value.Generation);
             });
             SetReader<ProgressionSubmit>(reader => new ProgressionSubmit
             {
                 Protocol = reader.ReadByte(),
-                Perk = reader.ReadByte()
+                Perk = reader.ReadByte(), Scene = reader.ReadPackedUInt32(), Token = reader.ReadPackedUInt32(), Generation = reader.ReadPackedInt32()
             });
             SetWriter<ProgressionSnapshot>((writer, value) =>
             {
                 writer.WriteByte(value.Protocol);
                 writer.WritePackedUInt32(value.PerkMask);
-                writer.WritePackedUInt32(value.Score);
+                writer.WritePackedInt32(value.Score);
                 writer.WriteByte(value.EarnedPoints);
                 writer.WriteByte(value.Rank);
                 writer.WriteByte(value.Result);
+                writer.WritePackedInt32(value.Generation);
+                writer.WritePackedUInt32(value.Scene); writer.WritePackedUInt32(value.Token);
+                writer.WritePackedInt32(value.ScorePerPoint); writer.WriteByte(value.MaximumPoints);
             });
             SetReader<ProgressionSnapshot>(reader => new ProgressionSnapshot
             {
                 Protocol = reader.ReadByte(),
                 PerkMask = reader.ReadPackedUInt32(),
-                Score = (ushort)reader.ReadPackedUInt32(),
+                Score = reader.ReadPackedInt32(),
                 EarnedPoints = reader.ReadByte(),
                 Rank = reader.ReadByte(),
-                Result = reader.ReadByte()
+                Result = reader.ReadByte(),
+                Generation = reader.ReadPackedInt32(), Scene = reader.ReadPackedUInt32(), Token = reader.ReadPackedUInt32(),
+                ScorePerPoint = reader.ReadPackedInt32(), MaximumPoints = reader.ReadByte()
             });
             MessagePacker.RegisterMessage<ProgressionSubmit>();
             MessagePacker.RegisterMessage<ProgressionSnapshot>();

@@ -15,9 +15,9 @@ module. Its MIT notice is preserved in LICENSE. No Wing Command binary is refere
 loaded by reflection, or required. Existing WMC pages are discovered through the game's
 VirtualMFD lists just like OPS, RAD, and vanilla pages; wing orders remain WC-owned.
 
-The shared nomodkit widget library and pure layout arithmetic remain shared. Changes
-to this Boscali-owned layout do not change Wing Command's standalone presentation.
-The nomodkit HTML previews are reference drawings, not runtime assets.
+The `NOAvionics` widget kit (`Avionics/`, `AvionicsUi/`) and the pure layout arithmetic
+are the shared vocabulary with Wing Command, vendored into each mod. Changes to this
+Boscali-owned layout do not change Wing Command's standalone presentation.
 
 ## Adapted vanilla panels
 

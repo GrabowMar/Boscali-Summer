@@ -22,7 +22,7 @@ namespace BoscaliSummer.Features.Radio
         public void Install(FeatureContext context)
         {
             RadioManager radio = context.AddSceneService<RadioManager>(40);
-            radio.Configure(context.Settings.Radio, context.Logger);
+            radio.Configure(context.Settings.Radio, context.Logger, context.Services);
             context.AddService(radio);
         }
     }

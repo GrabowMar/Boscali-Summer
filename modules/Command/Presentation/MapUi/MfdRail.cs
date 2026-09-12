@@ -28,8 +28,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
     {
         /// <summary>
         /// The well-known name Boscali Summer looks for. Changing it is a breaking change to
-        /// the dual-mod contract and belongs in
-        /// <c>nomodkit/shared/avionics/README.md</c> along with the bezel and picker rules.
+        /// the dual-mod contract and belongs in <c>Avionics/README.md</c> along with the
+        /// bezel and picker rules.
         /// </summary>
         public const string RailName = "NOAvionics.Rail";
 
@@ -45,6 +45,11 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         /// <summary>Vertical gap between buttons.</summary>
         private const float ButtonGap = 12f;
 
+        private const float CompactGap = 4f;
+
+        /// <summary>Desktop pointer target floor; below this the stock two-column bezel wins.</summary>
+        private const float MinimumButtonHeight = 44f;
+
         /// <summary>Inset from the rail's own edges to a button.</summary>
         private const float RailPad = 8f;
 
@@ -59,6 +64,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private const float RailTop = 8f;
 
         private static RectTransform rail;
+        private static float effectiveButtonHeight = ButtonHeight;
+        private static float effectiveButtonGap = ButtonGap;
+        private static float effectiveLabelSize = LabelSize;
 
         /// <summary>Y offset of the next free slot, measured down from the rail's top.</summary>
         private static float cursor;
@@ -105,17 +113,58 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         }
 
         /// <summary>
+        /// Choose the largest rail keys that fit the live screen count. Returns false when
+        /// even the 44px pointer-target floor would not fit, allowing the caller to leave
+        /// the stock two-column bezel untouched.
+        /// </summary>
+        public static bool PrepareCapacity(float railHeight, int itemCount)
+        {
+            effectiveButtonHeight = ButtonHeight;
+            effectiveButtonGap = ButtonGap;
+            effectiveLabelSize = LabelSize;
+            if (itemCount <= 0) return true;
+
+            float roomy = RailTop + RailPad + itemCount * ButtonHeight +
+                          Mathf.Max(0, itemCount - 1) * ButtonGap;
+            if (roomy <= railHeight) return true;
+
+            effectiveButtonGap = CompactGap;
+            effectiveButtonHeight = (railHeight - RailTop - RailPad -
+                                     Mathf.Max(0, itemCount - 1) * CompactGap) / itemCount;
+            if (effectiveButtonHeight < MinimumButtonHeight)
+            {
+                effectiveButtonHeight = ButtonHeight;
+                effectiveButtonGap = ButtonGap;
+                return false;
+            }
+
+            effectiveLabelSize = Mathf.Clamp(effectiveButtonHeight * 0.42f, 16f, LabelSize);
+            return true;
+        }
+
+        public static int Count(List<Button> buttons, List<MFDScreen> screens)
+        {
+            if (buttons == null || screens == null) return 0;
+            int count = 0;
+            int length = Mathf.Min(buttons.Count, screens.Count);
+            for (int i = 0; i < length; i++)
+                if (buttons[i] != null && screens[i] != null) count++;
+            return count;
+        }
+
+        /// <summary>
         /// Claim the next slot down the rail.
         ///
         /// Both this mod's buttons and Boscali's overlay toggles advance the same cursor, so
         /// the two mods' controls stack rather than overlapping — without either needing to
         /// know how many buttons the other added.
         /// </summary>
-        public static Rect NextSlot(float height = ButtonHeight)
+        public static Rect NextSlot(float height = -1f)
         {
+            if (height <= 0f) height = effectiveButtonHeight;
             float width = rail != null ? rail.rect.width - RailPad * 2f : MfdLayout.RailWidth - RailPad * 2f;
             var slot = new Rect(RailPad, -cursor, width, height);
-            cursor += height + ButtonGap;
+            cursor += height + effectiveButtonGap;
             return slot;
         }
 
@@ -125,6 +174,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             if (rail != null) Object.Destroy(rail.gameObject);
             rail = null;
             cursor = RailTop;
+            effectiveButtonHeight = ButtonHeight;
+            effectiveButtonGap = ButtonGap;
+            effectiveLabelSize = LabelSize;
         }
 
         // ------------------------------------------------------------------- restyling
@@ -226,10 +278,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 // discards whatever fontSize is assigned. Turning it off — and pinning the
                 // min/max it would otherwise clamp to — is what makes the rail's type take.
                 label.enableAutoSizing = false;
-                label.fontSizeMin = LabelSize;
-                label.fontSizeMax = LabelSize;
+                label.fontSizeMin = effectiveLabelSize;
+                label.fontSizeMax = effectiveLabelSize;
                 label.color = AvTheme.TextPrimary;
-                label.fontSize = LabelSize;
+                label.fontSize = effectiveLabelSize;
                 label.fontStyle = FontStyles.Bold;
                 label.characterSpacing = 1f;
                 label.alignment = TextAlignmentOptions.Center;

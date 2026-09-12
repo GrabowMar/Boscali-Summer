@@ -127,7 +127,6 @@ namespace BoscaliSummer.Features.Command.Presentation
 
         private readonly List<AvButton> doctrineButtons = new List<AvButton>();
         private TMP_Text doctrineDescription;
-        private TMP_Text priorityLabel;
         private AvButton sectorToggle;
         private AvButton frontlineToggle;
 
@@ -145,7 +144,7 @@ namespace BoscaliSummer.Features.Command.Presentation
 
         public void ResetForScene()
         {
-            BezelRegistry.Release(BezelRegistry.Str);
+            MfdBezel.Release(MfdSlots.Str);
             if (screenRoot != null) UnityEngine.Object.Destroy(screenRoot);
 
             screenRoot = null;
@@ -173,7 +172,7 @@ namespace BoscaliSummer.Features.Command.Presentation
             warheadValue = airframeValue = aiCapValue = null;
 
             doctrineButtons.Clear();
-            doctrineDescription = priorityLabel = null;
+            doctrineDescription = null;
             sectorToggle = frontlineToggle = null;
 
             nextAttempt = 0f;
@@ -216,7 +215,7 @@ namespace BoscaliSummer.Features.Command.Presentation
                     ?? UnityEngine.Object.FindObjectOfType<VirtualMFD>();
                 if (mfd == null) return;
 
-                if (!MfdBezel.TryClaim(BezelRegistry.Str, preferLeft: true, mfd,
+                if (!MfdBezel.TryClaim(MfdSlots.Str, preferLeft: true, mfd,
                     out List<Button> buttons, out List<MFDScreen> screens, out int slot, out bool left))
                 {
                     // No slot is a crowded bezel, not a broken mod: OPS still installs.
@@ -228,24 +227,34 @@ namespace BoscaliSummer.Features.Command.Presentation
                 MFDScreen template = MfdBezel.FindTemplate(screens) ?? MfdBezel.FindTemplate(mfd);
                 if (template == null)
                 {
-                    BezelRegistry.Release(BezelRegistry.Str);
+                    MfdBezel.Release(MfdSlots.Str);
                     return;
                 }
 
                 screen = Build(template, buttons[slot]);
                 if (screen == null)
                 {
-                    BezelRegistry.Release(BezelRegistry.Str);
+                    MfdBezel.Release(MfdSlots.Str);
                     failed = true;
                     return;
                 }
 
-                MfdBezel.Bind(mfd, buttons, screens, slot, left, screen);
+                if (!MfdBezel.Bind(mfd, buttons, screens, slot, left, screen))
+                {
+                    MfdBezel.Release(MfdSlots.Str);
+                    if (screenRoot != null) UnityEngine.Object.Destroy(screenRoot);
+                    screenRoot = null;
+                    screen = null;
+                    failed = true;
+                    logger?.LogWarning("STR MFD unavailable: claimed bezel changed before binding.");
+                    return;
+                }
                 logger?.LogInfo("STR MFD installed on " + (left ? "left" : "right") +
                                 " bezel slot " + (slot + 1) + ".");
             }
             catch (Exception e)
             {
+                MfdBezel.Release(MfdSlots.Str);
                 failed = true;
                 logger?.LogError("STR MFD install failed: " + e);
             }
@@ -549,8 +558,11 @@ namespace BoscaliSummer.Features.Command.Presentation
 
         private void BuildFrontPage(GameObject page)
         {
-            frontRoot = (RectTransform)page.transform;
             Rect body = shell.Body;
+            // Eight bounded rows still exceed the reduced MFD body at lower canvas
+            // heights. Clip and scroll only when needed so the last rows never run under
+            // the status strip.
+            frontRoot = AvScreen.Scroll((RectTransform)page.transform, body, 596f, out body);
             float x = body.x + AvScreen.SpineInset;
             float width = body.width - AvScreen.SpineInset;
             float y = body.y;
@@ -890,17 +902,7 @@ namespace BoscaliSummer.Features.Command.Presentation
             doctrineDescription = AvStyled.Label(parent, new Rect(x, y, width, 40f), "", "row-sub");
             y -= 46f;
 
-            y = SectionHeader(parent, x, y, width, "PRIORITY TARGETS", "FRIENDLY AI ONLY", band: true);
-
-            priorityLabel = AvStyled.Label(parent, new Rect(x, y, width, 16f), "", "row-name");
-            y -= 20f;
-            AvStyled.Label(parent, new Rect(x, y, width, 28f),
-                           "Click a tracked hostile on the map to mark it. Marked units bias " +
-                           "friendly mission AI only; a recruited wing keeps its own orders.",
-                           "row-sub");
-            y -= 34f;
-
-            y = SectionHeader(parent, x, y, width, "MAP OVERLAYS", "TACTICAL FIELD", band: false);
+            y = SectionHeader(parent, x, y, width, "MAP OVERLAYS", "TACTICAL FIELD", band: true);
 
             sectorToggle = AvStyled.Button(parent, new Rect(x, y, width, 26f),
                 "SECTOR CONTROL GRID", "btn",
@@ -944,11 +946,6 @@ namespace BoscaliSummer.Features.Command.Presentation
                 doctrineButtons[i].SetLatched(command.ActiveDoctrine == doctrines[i]);
             }
 
-            int max = CommandDoctrineHelper.MaxPriorityTargets(command.PlayerRank);
-            int held = command.PriorityTargets.Count;
-            priorityLabel.text = held + " / " + max + " DESIGNATED";
-            priorityLabel.color = held > 0 ? AvTheme.RailCaution : AvTheme.Dim;
-
             if (overlay != null)
             {
                 sectorToggle.SetLatched(overlay.ShowSectors);
@@ -985,7 +982,7 @@ namespace BoscaliSummer.Features.Command.Presentation
 
             shell.WriteStatus(
                 baseAlarm != null ? baseAlarm.ActiveAlertTicker : null,
-                null,
+                MapPicker.Prompt,
                 Ambient(state));
         }
 
@@ -996,7 +993,10 @@ namespace BoscaliSummer.Features.Command.Presentation
                                       : state.DefconLevel == 3 ? AvTheme.Warning
                                       : AvTheme.Dim;
 
-            shell.DataBar.SetChip(0, "DEFCON " + state.DefconLevel, state.DefconLevel >= 3);
+            shell.DataBar.SetChip(
+                0,
+                "DEFCON " + state.DefconLevel,
+                state.DefconLevel <= 2 ? "danger" : state.DefconLevel == 3 ? "warn" : "live");
             shell.DataBar.SetChip(1, ShortDoctrine(command.ActiveDoctrine),
                                   command.ActiveDoctrine != CommandDoctrine.Balanced);
             shell.DataBar.SetChip(2, overlay != null && overlay.ShowSectors ? "GRID ON" : "GRID OFF",

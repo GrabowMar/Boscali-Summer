@@ -192,7 +192,22 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             Canvas canvas = __instance.maximizedMapCanvas;
             if (!MfdLayout.TryResolve(canvas, out MfdLayout.Columns columns)) return;
 
-            MfdPresentation.Capture(canvas.GetComponentInChildren<VirtualMFD>(true));
+            VirtualMFD mfd = canvas.GetComponentInChildren<VirtualMFD>(true) ??
+                             Object.FindObjectOfType<VirtualMFD>();
+            if (mfd == null) return;
+            List<Button> leftButtons = MapUiAccess.GetLeftButtons(mfd);
+            List<Button> rightButtons = MapUiAccess.GetRightButtons(mfd);
+            int activeButtons = MfdRail.Count(leftButtons, MapUiAccess.GetLeftScreens(mfd)) +
+                                MfdRail.Count(rightButtons, MapUiAccess.GetRightScreens(mfd));
+            if (!MfdRail.PrepareCapacity(columns.Rail.height, activeButtons))
+            {
+                Plugin.Logger.LogWarning(
+                    "Expanded map kept the stock bezel: " + activeButtons +
+                    " active MFD buttons do not fit the rail at this canvas height.");
+                return;
+            }
+
+            MfdPresentation.Capture(mfd);
 
             ResizeMap(__instance, columns);
             BuildRail(canvas, columns);

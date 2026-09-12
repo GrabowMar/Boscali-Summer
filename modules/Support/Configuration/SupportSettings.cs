@@ -10,6 +10,7 @@ namespace BoscaliSummer.Features.Support.Configuration
         public ConfigEntry<bool> ArtilleryEnabled { get; }
         public ConfigEntry<bool> EmpEnabled { get; }
         public ConfigEntry<bool> FlareBarrageEnabled { get; }
+        public ConfigEntry<bool> ShowOnTacticalMap { get; }
 
         public ConfigEntry<float> CostMultiplier { get; }
         public ConfigEntry<float> ReconCost { get; }
@@ -53,6 +54,8 @@ namespace BoscaliSummer.Features.Support.Configuration
             FlareBarrageEnabled = config.Bind("Support", "FlareBarrage", true,
                 "Flare barrage: launches an airburst countermeasure missile that disperses a cluster of " +
                 "intense pyrotechnic flares, seducing and misguiding all IR-seeking missiles in the area.");
+            ShowOnTacticalMap = config.Bind("Support", "ShowOnTacticalMap", true,
+                "Show ability range circles, tactical vector icons, and active strike waypoints on the tactical theater map.");
 
             CostMultiplier = config.Bind("Support", "CostMultiplier", 1f,
                 new ConfigDescription(

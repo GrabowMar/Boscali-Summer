@@ -185,13 +185,15 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
                 // Use transformed bounds, not a nominal content height: companion
                 // panels can resize or scale independently of the dock slot.
-                // The controller root can span the whole bay even when its visible
-                // display occupies only the bottom. Reserve the display, not both.
+                // A controller root is not necessarily visible, but mod screens can
+                // paint their frame there outside the display's bounds.
                 RectTransform surface = screen.displayPanel.transform as RectTransform;
-                if (!ReserveSurface(surface, ref height))
+                bool hasDisplayBounds = ReserveSurface(surface, ref height);
+                RectTransform root = screen.transform as RectTransform;
+                if (root != null && root != surface && root.gameObject.activeInHierarchy)
                 {
-                    RectTransform root = screen.transform as RectTransform;
-                    if (root != null && root.gameObject.activeInHierarchy)
+                    Graphic frame = root.GetComponent<Graphic>();
+                    if (!hasDisplayBounds || (frame != null && frame.isActiveAndEnabled && frame.color.a > 0f))
                         ReserveSurface(root, ref height);
                 }
             }
@@ -204,13 +206,15 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             surface.GetWorldCorners(corners);
             float left = float.PositiveInfinity, right = float.NegativeInfinity;
             float top = float.NegativeInfinity, bottom = float.PositiveInfinity;
+            // Columns use the canvas centre; InverseTransformPoint uses its pivot.
+            Vector2 centre = ((RectTransform)panel.parent).rect.center;
             for (int i = 0; i < corners.Length; i++)
             {
                 Vector3 point = panel.parent.InverseTransformPoint(corners[i]);
-                left = Mathf.Min(left, point.x);
-                right = Mathf.Max(right, point.x);
-                top = Mathf.Max(top, point.y);
-                bottom = Mathf.Min(bottom, point.y);
+                left = Mathf.Min(left, point.x - centre.x);
+                right = Mathf.Max(right, point.x - centre.x);
+                top = Mathf.Max(top, point.y - centre.y);
+                bottom = Mathf.Min(bottom, point.y - centre.y);
             }
             height = MfdLogSpace.Remaining(height, columns.Panel.x, columns.Panel.y,
                 columns.Panel.width, left, right, bottom, top, MfdLayout.Gutter);

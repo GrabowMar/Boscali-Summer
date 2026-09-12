@@ -6,8 +6,11 @@ using BepInEx;
 using BepInEx.Logging;
 using BoscaliSummer.Features.Radio.Configuration;
 using BoscaliSummer.Features.Radio.Presentation;
+using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Framework.Features;
 using BoscaliSummer.Framework.Lifecycle;
 using BoscaliSummer.Runtime;
+using NuclearOption.Networking;
 using UnityEngine;
 using UnityEngine.Networking;
 
@@ -55,6 +58,18 @@ namespace BoscaliSummer.Features.Radio.Runtime
         private float deferredVanillaPriority;
         private bool deferredVanillaCrossfade;
         private string status = "Stand by";
+        private ServiceRegistry services;
+        private ISquadView squad;
+        private readonly HuntMusicGate huntMusic = new HuntMusicGate();
+        private float nextHuntPoll;
+        private bool huntOverride;
+        private RadioStationTrack huntTrack;
+        private int savedChannel;
+        private int savedTrack;
+        private float savedTime;
+        private PlaybackState savedState;
+        private float restoreTime = -1f;
+        private bool restorePaused;
 
         public int ChannelCount => stations.Length;
         public int SelectedChannel => selectedChannel;
@@ -69,10 +84,10 @@ namespace BoscaliSummer.Features.Radio.Runtime
         public float Duration => currentSource != null && currentSource.clip != null ? currentSource.clip.length : 0f;
         public float Progress => Duration > 0.01f ? Mathf.Clamp01(Elapsed / Duration) : 0f;
 
-        public string CurrentChannelName => ChannelCount == 0
+        public string CurrentChannelName => huntTrack != null ? "HUNT" : ChannelCount == 0
             ? "NO CHANNEL"
             : stations[Mathf.Clamp(selectedChannel, 0, ChannelCount - 1)].Name;
-        public string CurrentChannelCode => ChannelCount == 0
+        public string CurrentChannelCode => huntTrack != null ? "HT" : ChannelCount == 0
             ? "--"
             : stations[Mathf.Clamp(selectedChannel, 0, ChannelCount - 1)].Code;
 
@@ -85,10 +100,11 @@ namespace BoscaliSummer.Features.Radio.Runtime
             }
         }
 
-        internal void Configure(RadioSettings radioSettings, ManualLogSource log)
+        internal void Configure(RadioSettings radioSettings, ManualLogSource log, ServiceRegistry registry)
         {
             settings = radioSettings ?? throw new ArgumentNullException(nameof(radioSettings));
             logger = log ?? throw new ArgumentNullException(nameof(log));
+            services = registry;
             libraryPath = System.IO.Path.Combine(Paths.PluginPath, "BoscaliSummer", "Music");
             configured = true;
             active = this;
@@ -101,6 +117,11 @@ namespace BoscaliSummer.Features.Radio.Runtime
 
         public void ResetForScene()
         {
+            huntMusic.Reset();
+            huntOverride = false;
+            huntTrack = null;
+            restoreTime = -1f;
+            nextHuntPoll = 0f;
             RadioPanel.Reset();
             if (!configured || !settings.Enabled.Value || GameManager.IsHeadless)
             {
@@ -125,8 +146,14 @@ namespace BoscaliSummer.Features.Radio.Runtime
 
         private void Update()
         {
-            if (!configured || !settings.Enabled.Value || GameManager.IsHeadless) return;
+            if (!configured || GameManager.IsHeadless) return;
+            if (!settings.Enabled.Value)
+            {
+                if (IsEngaged) Stop();
+                return;
+            }
             ProbeSoundtrack();
+            PollHunt();
             RadioPanel.Tick(this);
 
             if (state == PlaybackState.Playing && pendingCoroutine == null &&
@@ -136,17 +163,19 @@ namespace BoscaliSummer.Features.Radio.Runtime
                 if (!settings.RepeatTrack.Value && currentSource.isPlaying &&
                     remaining <= Mathf.Max(0.1f, settings.CrossfadeSeconds.Value))
                 {
-                    Next();
+                    NextTrack();
                     return;
                 }
                 if (currentSource.isPlaying) return;
                 if (settings.RepeatTrack.Value) PlayCurrent();
-                else Next();
+                else NextTrack();
             }
         }
 
         private void OnDestroy()
         {
+            huntOverride = false;
+            huntTrack = null;
             RadioPanel.Reset();
             StopInternal(true);
             if (ReferenceEquals(active, this)) active = null;
@@ -178,7 +207,8 @@ namespace BoscaliSummer.Features.Radio.Runtime
 
         public void SelectChannel(int index)
         {
-            if (index < 0 || index >= ChannelCount || index == selectedChannel) return;
+            if (index < 0 || index >= ChannelCount || index == selectedChannel && huntTrack == null) return;
+            ManualTransport();
             bool resume = IsEngaged;
             selectedChannel = index;
             selectedTrack = 0;
@@ -188,6 +218,7 @@ namespace BoscaliSummer.Features.Radio.Runtime
 
         public void TogglePlayback()
         {
+            ManualTransport(false);
             if (state == PlaybackState.Loading)
             {
                 Stop();
@@ -210,10 +241,15 @@ namespace BoscaliSummer.Features.Radio.Runtime
             PlayCurrent();
         }
 
-        public void Stop() => StopInternal(false);
+        public void Stop()
+        {
+            ManualTransport();
+            StopInternal(false);
+        }
 
         public void Previous()
         {
+            ManualTransport();
             RadioStation channel = CurrentChannel();
             if (channel == null || channel.Tracks.Length == 0) return;
             selectedTrack = (selectedTrack - 1 + channel.Tracks.Length) % channel.Tracks.Length;
@@ -222,6 +258,13 @@ namespace BoscaliSummer.Features.Radio.Runtime
 
         public void Next()
         {
+            ManualTransport();
+            NextTrack();
+        }
+
+        private void NextTrack()
+        {
+            if (huntTrack != null) { PlayCurrent(); return; }
             RadioStation channel = CurrentChannel();
             if (channel == null || channel.Tracks.Length == 0) return;
             if (settings.Shuffle.Value && channel.Tracks.Length > 1)
@@ -251,6 +294,7 @@ namespace BoscaliSummer.Features.Radio.Runtime
 
         public void Rescan()
         {
+            ManualTransport();
             StopInternal(false);
             ScanLibrary();
         }
@@ -406,12 +450,14 @@ namespace BoscaliSummer.Features.Radio.Runtime
             if (track == null)
             {
                 status = "No playable track on this channel";
+                RecoverHuntLoadFailure();
                 return;
             }
 
             if (!PrepareAudioSources())
             {
                 status = "Music mixer is not ready";
+                RecoverHuntLoadFailure();
                 return;
             }
 
@@ -427,6 +473,7 @@ namespace BoscaliSummer.Features.Radio.Runtime
                     state = currentClip != null ? PlaybackState.Playing : PlaybackState.Stopped;
                     status = "Original soundtrack is not ready";
                     if (currentClip == null) ReleaseVanillaOwnership();
+                    RecoverHuntLoadFailure();
                     return;
                 }
                 StartIncomingClip(track.VanillaClip, false, generation);
@@ -453,6 +500,7 @@ namespace BoscaliSummer.Features.Radio.Runtime
                 status = "Could not open " + track.Title;
                 logger.LogWarning("Radio track open failed: " + e.Message);
                 if (currentClip == null) ReleaseVanillaOwnership();
+                RecoverHuntLoadFailure();
             }
         }
 
@@ -472,6 +520,7 @@ namespace BoscaliSummer.Features.Radio.Runtime
                 status = "Skipped unreadable track";
                 logger.LogWarning("Radio could not decode a local track: " + error);
                 if (currentClip == null) ReleaseVanillaOwnership();
+                RecoverHuntLoadFailure();
                 yield break;
             }
 
@@ -482,6 +531,7 @@ namespace BoscaliSummer.Features.Radio.Runtime
                 state = currentClip != null ? PlaybackState.Playing : PlaybackState.Stopped;
                 status = "Skipped empty track";
                 if (currentClip == null) ReleaseVanillaOwnership();
+                RecoverHuntLoadFailure();
                 yield break;
             }
 
@@ -494,14 +544,92 @@ namespace BoscaliSummer.Features.Radio.Runtime
             incomingClip = clip;
             incomingClipOwned = owned;
             incomingSource.clip = clip;
-            incomingSource.time = 0f;
+            bool paused = restoreTime >= 0f && restorePaused;
+            incomingSource.time = restoreTime < 0f ? 0f :
+                Mathf.Clamp(restoreTime, 0f, Math.Max(0f, clip.length - 0.05f));
+            restoreTime = -1f;
             incomingSource.loop = false;
             incomingSource.volume = 0f;
             incomingSource.Play();
-            pendingCoroutine = StartCoroutine(CrossFadeToIncoming(generation));
+            if (paused) incomingSource.Pause();
+            pendingCoroutine = StartCoroutine(CrossFadeToIncoming(generation, paused));
         }
 
-        private IEnumerator CrossFadeToIncoming(int generation)
+        private void PollHunt()
+        {
+            if (Time.unscaledTime < nextHuntPoll) return;
+            nextHuntPoll = Time.unscaledTime + 0.5f;
+            if (squad == null) services?.TryGet(out squad);
+            bool hunting = squad != null && squad.HuntActive;
+            // Replacing a debug wing keeps the original pre-hunt music restore point.
+            if (huntMusic.Begin(hunting, squad?.ActiveHuntId ?? 0) && !huntOverride) BeginHuntMusic();
+            if (!hunting && huntOverride) EndHuntMusic();
+        }
+
+        private void BeginHuntMusic()
+        {
+            int channel = -1;
+            for (int i = 0; i < stations.Length; i++)
+                if (string.Equals(stations[i].Name, "Hunt", StringComparison.OrdinalIgnoreCase) &&
+                    stations[i].Tracks.Length > 0) { channel = i; break; }
+
+            AudioClip tactical = null;
+            if (channel < 0)
+            {
+                try
+                {
+                    LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
+                    if (level != null && level.LoadedMapSettings != null &&
+                        GameManager.GetLocalPlayer<Player>(out Player player) && player?.HQ?.faction != null)
+                        tactical = level.LoadedMapSettings.GetTacticalMusic(player.HQ.faction);
+                }
+                catch { }
+                if (tactical == null) return;
+            }
+            if (!PrepareAudioSources()) return;
+
+            savedChannel = selectedChannel;
+            savedTrack = selectedTrack;
+            savedState = state;
+            savedTime = state == PlaybackState.Loading ? 0f : Elapsed;
+            restoreTime = -1f;
+            huntOverride = true;
+            if (channel >= 0) { selectedChannel = channel; selectedTrack = 0; }
+            else huntTrack = RadioStationTrack.Vanilla(tactical);
+            PlayCurrent();
+        }
+
+        private void EndHuntMusic()
+        {
+            huntOverride = false;
+            huntTrack = null;
+            selectedChannel = Mathf.Clamp(savedChannel, 0, Math.Max(0, ChannelCount - 1));
+            selectedTrack = savedTrack;
+            if (savedState == PlaybackState.Stopped || CurrentTrack() == null)
+            {
+                StopInternal(false);
+                return;
+            }
+            restoreTime = savedTime;
+            restorePaused = savedState == PlaybackState.Paused;
+            PlayCurrent();
+        }
+
+        private void ManualTransport(bool clearTrack = true)
+        {
+            huntMusic.Suppress(squad?.ActiveHuntId ?? 0);
+            huntOverride = false;
+            if (clearTrack) huntTrack = null;
+            restoreTime = -1f;
+        }
+
+        private void RecoverHuntLoadFailure()
+        {
+            if (restoreTime >= 0f) StopInternal(false);
+            else if (huntOverride) EndHuntMusic();
+        }
+
+        private IEnumerator CrossFadeToIncoming(int generation, bool paused)
         {
             float duration = settings.CrossfadeSeconds.Value;
             float elapsed = 0f;
@@ -533,8 +661,8 @@ namespace BoscaliSummer.Features.Radio.Runtime
             }
             currentSource.volume = 1f;
             pendingCoroutine = null;
-            state = PlaybackState.Playing;
-            status = "On air";
+            state = paused ? PlaybackState.Paused : PlaybackState.Playing;
+            status = paused ? "Paused" : "On air";
         }
 
         private bool PrepareAudioSources()
@@ -568,6 +696,7 @@ namespace BoscaliSummer.Features.Radio.Runtime
 
         private void StopInternal(bool destroying)
         {
+            restoreTime = -1f;
             CancelPendingLoad();
             if (currentSource != null)
             {
@@ -625,6 +754,7 @@ namespace BoscaliSummer.Features.Radio.Runtime
 
         private RadioStationTrack CurrentTrack()
         {
+            if (huntTrack != null) return huntTrack;
             RadioStation channel = CurrentChannel();
             if (channel == null || channel.Tracks.Length == 0) return null;
             selectedTrack = Mathf.Clamp(selectedTrack, 0, channel.Tracks.Length - 1);

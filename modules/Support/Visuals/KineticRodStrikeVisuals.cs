@@ -13,9 +13,9 @@ namespace BoscaliSummer.Features.Support.Visuals
     /// <summary>
     /// Delivers the cinematic visual, lighting, atmospheric, and acoustic effects for the
     /// "Rod from God" orbital kinetic strike during both descent and ground impact phases.
-    /// Incorporates reverse-engineered shockwave, decal projection, vapor cloud, and acoustic
-    /// assets from the game's tactical nuclear warhead while styling for authentic hypervelocity
-    /// tungsten rod kinetic impact physics.
+    /// Incorporates authentic hypersonic tungsten rod aerodynamics (incandescent bow shock,
+    /// flame sheath, massive columnar contrail) and mini-nuke ground impact physics
+    /// (building demolition, lethal overpressure shockwave, vertical ejecta geyser).
     /// </summary>
     internal static class KineticRodStrikeVisuals
     {
@@ -31,11 +31,11 @@ namespace BoscaliSummer.Features.Support.Visuals
             descent.Initialize(target);
         }
 
-        public static void TriggerImpact(Vector3 impactPosition)
+        public static void TriggerImpact(Vector3 impactPosition, PersistentID ownerID = default)
         {
             if (GameManager.IsHeadless) return;
 
-            // Deduplication guard: ignore redundant triggers within 1.5 seconds and 400m
+            // Deduplication guard: ignore redundant triggers within 2.0 seconds and 350m
             float now = Time.time;
             for (int i = recentStrikes.Count - 1; i >= 0; i--)
             {
@@ -43,14 +43,14 @@ namespace BoscaliSummer.Features.Support.Visuals
                 {
                     recentStrikes.RemoveAt(i);
                 }
-                else if (Vector3.Distance(recentStrikes[i].pos, impactPosition) < 400f)
+                else if (Vector3.Distance(recentStrikes[i].pos, impactPosition) < 350f)
                 {
                     return; // Duplicate trigger suppressed
                 }
             }
             recentStrikes.Add((impactPosition, now));
 
-            KineticRodImpactEffect.Spawn(impactPosition);
+            KineticRodImpactEffect.Spawn(impactPosition, ownerID);
         }
     }
 
@@ -223,22 +223,171 @@ namespace BoscaliSummer.Features.Support.Visuals
     }
 
     /// <summary>
-    /// Attached to the plunging kinetic rod missile during atmospheric re-entry.
-    /// Creates a blinding white-hot spearhead light, hypervelocity ionization/plasma trail,
-    /// re-entry spark spall particles, and a screaming Mach-8 hypersonic tearing audio.
+    /// Procedural mesh and material generator for the authentic heavy tungsten penetrator rod.
+    /// </summary>
+    internal static class RodModelAssets
+    {
+        private static Mesh rodMesh;
+        private static Material rodMaterial;
+
+        public static Mesh TungstenRodMesh
+        {
+            get
+            {
+                if (rodMesh == null) rodMesh = BuildRodMesh();
+                return rodMesh;
+            }
+        }
+
+        public static Material TungstenRodMaterial
+        {
+            get
+            {
+                if (rodMaterial == null)
+                {
+                    Shader shader = Shader.Find("Universal Render Pipeline/Lit")
+                                 ?? Shader.Find("Standard")
+                                 ?? Shader.Find("Universal Render Pipeline/Unlit")
+                                 ?? Shader.Find("Unlit/Color");
+                    rodMaterial = new Material(shader) { name = "TungstenCarbideMat" };
+                    rodMaterial.SetColor("_Color", new Color(0.18f, 0.19f, 0.22f, 1f));
+                    if (rodMaterial.HasProperty("_Metallic")) rodMaterial.SetFloat("_Metallic", 0.88f);
+                    if (rodMaterial.HasProperty("_Smoothness")) rodMaterial.SetFloat("_Smoothness", 0.65f);
+                }
+                return rodMaterial;
+            }
+        }
+
+        private static Mesh BuildRodMesh()
+        {
+            var mesh = new Mesh { name = "ProceduralTungstenRod" };
+            const int segments = 24;
+            const int rings = 6;
+
+            // Profile along Z axis (0=nose, 6=tail)
+            float[] zOffsets = { 3.4f, 3.1f, 2.7f, 0.0f, -2.7f, -3.1f };
+            float[] radii = { 0.04f, 0.22f, 0.35f, 0.35f, 0.35f, 0.26f };
+
+            int vertCount = rings * segments + 2; // + nose tip, + tail cap
+            Vector3[] vertices = new Vector3[vertCount];
+            Vector3[] normals = new Vector3[vertCount];
+            Vector2[] uvs = new Vector2[vertCount];
+
+            // Nose tip vertex
+            int noseIdx = 0;
+            vertices[noseIdx] = new Vector3(0f, 0f, 3.6f);
+            normals[noseIdx] = Vector3.forward;
+            uvs[noseIdx] = new Vector2(0.5f, 1f);
+
+            int v = 1;
+            for (int r = 0; r < rings; r++)
+            {
+                float z = zOffsets[r];
+                float radius = radii[r];
+                float vCoord = r / (float)(rings - 1);
+
+                for (int s = 0; s < segments; s++)
+                {
+                    float angle = (s / (float)segments) * Mathf.PI * 2f;
+                    float x = Mathf.Cos(angle) * radius;
+                    float y = Mathf.Sin(angle) * radius;
+
+                    vertices[v] = new Vector3(x, y, z);
+                    normals[v] = new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), (r == 0 || r == 1) ? 0.4f : 0f).normalized;
+                    uvs[v] = new Vector2(s / (float)segments, vCoord);
+                    v++;
+                }
+            }
+
+            // Tail cap vertex
+            int tailIdx = v;
+            vertices[tailIdx] = new Vector3(0f, 0f, -3.2f);
+            normals[tailIdx] = Vector3.back;
+            uvs[tailIdx] = new Vector2(0.5f, 0f);
+
+            // Build triangles
+            int triCount = (segments * (rings - 1) * 2 + segments * 2) * 3;
+            int[] triangles = new int[triCount];
+            int t = 0;
+
+            // Nose cone fan
+            for (int s = 0; s < segments; s++)
+            {
+                int next = (s + 1) % segments;
+                triangles[t++] = noseIdx;
+                triangles[t++] = 1 + s;
+                triangles[t++] = 1 + next;
+            }
+
+            // Cylinder body quads
+            for (int r = 0; r < rings - 1; r++)
+            {
+                int ringStart = 1 + r * segments;
+                int nextRingStart = 1 + (r + 1) * segments;
+
+                for (int s = 0; s < segments; s++)
+                {
+                    int next = (s + 1) % segments;
+                    int v0 = ringStart + s;
+                    int v1 = ringStart + next;
+                    int v2 = nextRingStart + s;
+                    int v3 = nextRingStart + next;
+
+                    triangles[t++] = v0;
+                    triangles[t++] = v2;
+                    triangles[t++] = v1;
+
+                    triangles[t++] = v1;
+                    triangles[t++] = v2;
+                    triangles[t++] = v3;
+                }
+            }
+
+            // Tail cap fan
+            int lastRingStart = 1 + (rings - 1) * segments;
+            for (int s = 0; s < segments; s++)
+            {
+                int next = (s + 1) % segments;
+                triangles[t++] = tailIdx;
+                triangles[t++] = lastRingStart + next;
+                triangles[t++] = lastRingStart + s;
+            }
+
+            mesh.vertices = vertices;
+            mesh.normals = normals;
+            mesh.uv = uvs;
+            mesh.triangles = triangles;
+            mesh.RecalculateBounds();
+            return mesh;
+        }
+    }
+
+    /// <summary>
+    /// Attached to the plunging kinetic rod missile during atmospheric hypersonic descent.
+    /// Perfectly recreates Photo 2:
+    /// - Sleek physical tungsten cylinder projectile (stock missile hidden).
+    /// - Searing incandescent white-hot nose cone & bow shock plasma sheath.
+    /// - Aerodynamic tongues of flame licking backwards along the cylinder flanks.
+    /// - Hypersonic spark shedding / ionization spall.
+    /// - Massive billowing columnar contrail & condensation trail stretching miles into the sky.
+    /// - Screaming Mach-8 hypersonic acoustic tear.
     /// </summary>
     internal sealed class KineticRodDescentEffect : MonoBehaviour
     {
         private const int SampleRate = 44100;
-        private static Material plasmaTrailMaterial;
+        private static Material flameMaterial;
         private static Material sparkMaterial;
+        private static Material contrailMaterial;
         private static AudioClip hypersonicSoundClip;
 
         private Missile missile;
         private Vector3 targetPosition;
         private Light headLight;
-        private TrailRenderer plasmaTrail;
+        private GameObject rodMeshObj;
+        private ParticleSystem flameSheath;
         private ParticleSystem sparkSystem;
+        private TrailRenderer plasmaTrail;
+        private TrailRenderer contrailTrail;
         private AudioSource audioSource;
         private Vector3 lastPosition;
         private bool hasDetonated;
@@ -257,85 +406,163 @@ namespace BoscaliSummer.Features.Support.Visuals
             NukeEffectAssets.EnsureResolved();
             EnsureAssets();
 
-            // 1. Blinding incandescent white-cyan kinetic spearhead light (~12,000K ionization sheath)
+            // 1. Hide stock missile renderers so the rod looks authentic
+            Renderer[] renderers = GetComponentsInChildren<Renderer>();
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                renderers[i].enabled = false;
+            }
+
+            // 2. Attach physical heavy tungsten carbide penetrator cylinder
+            rodMeshObj = new GameObject("TungstenRodMesh");
+            rodMeshObj.transform.SetParent(transform, false);
+            rodMeshObj.transform.localPosition = Vector3.zero;
+            // Point forward along missile flight path
+            rodMeshObj.transform.localRotation = Quaternion.identity;
+            var mf = rodMeshObj.AddComponent<MeshFilter>();
+            mf.sharedMesh = RodModelAssets.TungstenRodMesh;
+            var mr = rodMeshObj.AddComponent<MeshRenderer>();
+            mr.sharedMaterial = RodModelAssets.TungstenRodMaterial;
+
+            // 3. Searing incandescent white-hot nose cone bow shock light (~14,000K ionization sheath)
             var lightObj = new GameObject("RodHeadLight");
             lightObj.transform.SetParent(transform, false);
-            lightObj.transform.localPosition = Vector3.forward * 2.5f;
+            lightObj.transform.localPosition = Vector3.forward * 3.6f;
             headLight = lightObj.AddComponent<Light>();
             headLight.type = LightType.Point;
-            headLight.color = new Color(0.92f, 0.97f, 1f);
-            headLight.range = 22000f;
-            headLight.intensity = 48f;
+            headLight.color = new Color(0.96f, 0.98f, 1f);
+            headLight.range = 28000f;
+            headLight.intensity = 65f;
             headLight.shadows = LightShadows.None;
 
-            // 2. Hypervelocity re-entry ionization plasma trail
+            // 4. Aerodynamic ionization plasma trail (Photo 2 incandescent core)
             plasmaTrail = gameObject.AddComponent<TrailRenderer>();
-            plasmaTrail.sharedMaterial = plasmaTrailMaterial;
-            plasmaTrail.time = 1.45f;
-            plasmaTrail.minVertexDistance = 7f;
-            plasmaTrail.startWidth = 14f;
-            plasmaTrail.endWidth = 1.6f;
+            plasmaTrail.sharedMaterial = flameMaterial;
+            plasmaTrail.time = 0.95f;
+            plasmaTrail.minVertexDistance = 6f;
+            plasmaTrail.startWidth = 9.5f;
+            plasmaTrail.endWidth = 1.2f;
             plasmaTrail.widthCurve = new AnimationCurve(
                 new Keyframe(0f, 1f),
-                new Keyframe(0.18f, 0.75f),
-                new Keyframe(0.55f, 0.35f),
-                new Keyframe(1f, 0.04f));
+                new Keyframe(0.2f, 0.85f),
+                new Keyframe(0.6f, 0.4f),
+                new Keyframe(1f, 0.05f));
 
-            Gradient trailGradient = new Gradient();
-            trailGradient.SetKeys(
+            Gradient plasmaGradient = new Gradient();
+            plasmaGradient.SetKeys(
                 new[]
                 {
-                    new GradientColorKey(new Color(0.95f, 0.98f, 1.0f), 0.0f),    // Blinding incandescent white core
-                    new GradientColorKey(new Color(0.40f, 0.78f, 1.0f), 0.18f),   // Atmospheric ionization cyan sheath
-                    new GradientColorKey(new Color(1.00f, 0.58f, 0.12f), 0.45f),   // Friction thermal amber/orange
-                    new GradientColorKey(new Color(0.85f, 0.18f, 0.02f), 0.75f),   // Dissipating re-entry wake
-                    new GradientColorKey(new Color(0.25f, 0.25f, 0.25f), 1.0f)    // Atmospheric smoke vacuum
+                    new GradientColorKey(new Color(1.00f, 1.00f, 1.00f), 0.0f),  // Pure white incandescent bow shock
+                    new GradientColorKey(new Color(1.00f, 0.78f, 0.25f), 0.15f), // Searing thermal gold
+                    new GradientColorKey(new Color(1.00f, 0.42f, 0.05f), 0.45f), // Intense hypersonic friction orange
+                    new GradientColorKey(new Color(0.85f, 0.15f, 0.02f), 0.75f), // Darkening plasma wake
+                    new GradientColorKey(new Color(0.30f, 0.30f, 0.30f), 1.0f)   // Atmospheric vacuum
                 },
                 new[]
                 {
                     new GradientAlphaKey(1.0f, 0.0f),
-                    new GradientAlphaKey(0.9f, 0.4f),
-                    new GradientAlphaKey(0.4f, 0.8f),
+                    new GradientAlphaKey(0.95f, 0.35f),
+                    new GradientAlphaKey(0.5f, 0.8f),
                     new GradientAlphaKey(0.0f, 1.0f)
                 });
-            plasmaTrail.colorGradient = trailGradient;
+            plasmaTrail.colorGradient = plasmaGradient;
 
-            // 3. Hypervelocity spark spall particle emitter
+            // 5. Massive columnar condensation contrail (Photo 2 towering white pillar)
+            var contrailObj = new GameObject("RodContrail");
+            contrailObj.transform.SetParent(transform, false);
+            contrailObj.transform.localPosition = Vector3.back * 2.5f;
+            contrailTrail = contrailObj.AddComponent<TrailRenderer>();
+            contrailTrail.sharedMaterial = contrailMaterial;
+            contrailTrail.time = 3.8f; // Lingers high in the sky
+            contrailTrail.minVertexDistance = 12f;
+            contrailTrail.startWidth = 12f;
+            contrailTrail.endWidth = 45f; // Billows wide at altitude
+            contrailTrail.widthCurve = new AnimationCurve(
+                new Keyframe(0f, 0.2f),
+                new Keyframe(0.15f, 0.55f),
+                new Keyframe(0.5f, 0.85f),
+                new Keyframe(1f, 1.0f));
+
+            Gradient contrailGradient = new Gradient();
+            contrailGradient.SetKeys(
+                new[]
+                {
+                    new GradientColorKey(new Color(1f, 0.95f, 0.85f), 0.0f),
+                    new GradientColorKey(new Color(0.92f, 0.92f, 0.94f), 0.2f),
+                    new GradientColorKey(new Color(0.85f, 0.85f, 0.88f), 1.0f)
+                },
+                new[]
+                {
+                    new GradientAlphaKey(0.75f, 0.0f),
+                    new GradientAlphaKey(0.85f, 0.25f),
+                    new GradientAlphaKey(0.45f, 0.75f),
+                    new GradientAlphaKey(0.0f, 1.0f)
+                });
+            contrailTrail.colorGradient = contrailGradient;
+
+            // 6. Aerodynamic flame sheath licking back along the cylinder (Photo 2)
+            var flameObj = new GameObject("FlameSheath");
+            flameObj.transform.SetParent(transform, false);
+            flameObj.transform.localPosition = Vector3.forward * 2.8f;
+            flameSheath = flameObj.AddComponent<ParticleSystem>();
+            var flameRenderer = flameObj.GetComponent<ParticleSystemRenderer>();
+            flameRenderer.sharedMaterial = flameMaterial;
+
+            var flameMain = flameSheath.main;
+            flameMain.simulationSpace = ParticleSystemSimulationSpace.World;
+            flameMain.startLifetime = new ParticleSystem.MinMaxCurve(0.25f, 0.65f);
+            flameMain.startSpeed = new ParticleSystem.MinMaxCurve(40f, 120f);
+            flameMain.startSize = new ParticleSystem.MinMaxCurve(3.5f, 7.5f);
+            flameMain.startColor = new ParticleSystem.MinMaxGradient(
+                new Color(1f, 0.95f, 0.8f, 1f),
+                new Color(1f, 0.45f, 0.05f, 0.85f));
+            flameMain.maxParticles = 500;
+
+            var flameEmission = flameSheath.emission;
+            flameEmission.rateOverTime = 160f;
+
+            var flameShape = flameSheath.shape;
+            flameShape.shapeType = ParticleSystemShapeType.Cone;
+            flameShape.angle = 8f;
+            flameShape.radius = 0.6f;
+            flameShape.rotation = new Vector3(0f, 180f, 0f); // Stream backwards along rod
+
+            // 7. Hypersonic spark spall particle emitter
             var sparkObj = new GameObject("RodSparks");
             sparkObj.transform.SetParent(transform, false);
-            sparkObj.transform.localPosition = Vector3.back * 1.5f;
+            sparkObj.transform.localPosition = Vector3.back * 1.0f;
             sparkSystem = sparkObj.AddComponent<ParticleSystem>();
-            var renderer = sparkObj.GetComponent<ParticleSystemRenderer>();
-            renderer.sharedMaterial = sparkMaterial;
+            var sparkRenderer = sparkObj.GetComponent<ParticleSystemRenderer>();
+            sparkRenderer.sharedMaterial = sparkMaterial;
 
-            var main = sparkSystem.main;
-            main.simulationSpace = ParticleSystemSimulationSpace.World;
-            main.startLifetime = new ParticleSystem.MinMaxCurve(0.45f, 0.95f);
-            main.startSpeed = new ParticleSystem.MinMaxCurve(60f, 180f);
-            main.startSize = new ParticleSystem.MinMaxCurve(2.5f, 6f);
-            main.startColor = new ParticleSystem.MinMaxGradient(
-                new Color(1f, 0.95f, 0.7f, 1f),
-                new Color(1f, 0.45f, 0.05f, 0.8f));
-            main.maxParticles = 600;
+            var sparkMain = sparkSystem.main;
+            sparkMain.simulationSpace = ParticleSystemSimulationSpace.World;
+            sparkMain.startLifetime = new ParticleSystem.MinMaxCurve(0.35f, 0.85f);
+            sparkMain.startSpeed = new ParticleSystem.MinMaxCurve(80f, 220f);
+            sparkMain.startSize = new ParticleSystem.MinMaxCurve(1.8f, 5.0f);
+            sparkMain.startColor = new ParticleSystem.MinMaxGradient(
+                new Color(1f, 1f, 0.9f, 1f),
+                new Color(1f, 0.6f, 0.1f, 0.9f));
+            sparkMain.maxParticles = 600;
 
-            var emission = sparkSystem.emission;
-            emission.rateOverTime = 120f;
+            var sparkEmission = sparkSystem.emission;
+            sparkEmission.rateOverTime = 140f;
 
-            var shape = sparkSystem.shape;
-            shape.shapeType = ParticleSystemShapeType.Cone;
-            shape.angle = 12f;
-            shape.radius = 1.2f;
-            shape.rotation = new Vector3(0f, 180f, 0f); // Spray backwards
+            var sparkShape = sparkSystem.shape;
+            sparkShape.shapeType = ParticleSystemShapeType.Cone;
+            sparkShape.angle = 14f;
+            sparkShape.radius = 0.8f;
+            sparkShape.rotation = new Vector3(0f, 180f, 0f);
 
-            // 4. Spatialized hypersonic screaming atmospheric tear audio
+            // 8. Spatialized hypersonic screaming atmospheric tear audio
             if (hypersonicSoundClip != null)
             {
                 audioSource = gameObject.AddComponent<AudioSource>();
                 audioSource.clip = hypersonicSoundClip;
                 audioSource.loop = true;
                 audioSource.spatialBlend = 0.75f;
-                audioSource.minDistance = 300f;
-                audioSource.maxDistance = 45000f;
+                audioSource.minDistance = 400f;
+                audioSource.maxDistance = 55000f;
                 audioSource.volume = 1.0f;
                 audioSource.dopplerLevel = 1.8f;
                 audioSource.rolloffMode = AudioRolloffMode.Logarithmic;
@@ -349,19 +576,19 @@ namespace BoscaliSummer.Features.Support.Visuals
             {
                 lastPosition = transform.position;
 
-                // Pre-impact tremor: building atmospheric rumble in final kilometer
+                // Pre-impact tremor: building atmospheric rumble in final 2.5 km
                 float distToGround = transform.position.y - targetPosition.y;
-                if (distToGround < 2200f && distToGround > 0f)
+                if (distToGround < 2500f && distToGround > 0f)
                 {
                     var csm = SceneSingleton<CameraStateManager>.i;
                     Camera cam = csm?.mainCamera ?? Camera.main;
                     if (cam != null)
                     {
                         float camDist = Vector3.Distance(cam.transform.position, targetPosition);
-                        if (camDist < 12000f)
+                        if (camDist < 14000f)
                         {
-                            float factor = Mathf.Clamp01(1f - (camDist / 12000f)) * Mathf.Clamp01(1f - (distToGround / 2200f));
-                            if (csm != null) csm.ShakeCamera(0.25f * factor, 0.5f * factor);
+                            float factor = Mathf.Clamp01(1f - (camDist / 14000f)) * Mathf.Clamp01(1f - (distToGround / 2500f));
+                            if (csm != null) csm.ShakeCamera(0.35f * factor, 0.65f * factor);
                         }
                     }
                 }
@@ -384,46 +611,54 @@ namespace BoscaliSummer.Features.Support.Visuals
         {
             if (hasDetonated) return;
             hasDetonated = true;
-            KineticRodStrikeVisuals.TriggerImpact(lastPosition);
+            PersistentID owner = missile != null ? missile.ownerID : default;
+            KineticRodStrikeVisuals.TriggerImpact(lastPosition, owner);
         }
 
         private static void EnsureAssets()
         {
-            if (plasmaTrailMaterial != null && sparkMaterial != null && hypersonicSoundClip != null) return;
+            if (flameMaterial != null && sparkMaterial != null && contrailMaterial != null && hypersonicSoundClip != null) return;
 
-            Shader shader = Shader.Find("Universal Render Pipeline/Unlit")
+            Shader shader = Shader.Find("Universal Render Pipeline/Particles/Unlit")
+                         ?? Shader.Find("Universal Render Pipeline/Unlit")
                          ?? Shader.Find("Sprites/Default")
                          ?? Shader.Find("Unlit/Color");
 
-            if (plasmaTrailMaterial == null)
+            if (flameMaterial == null)
             {
-                plasmaTrailMaterial = new Material(shader) { name = "KineticRodPlasmaTrailMat" };
-                plasmaTrailMaterial.SetColor("_Color", new Color(1f, 0.85f, 0.5f, 1f));
-                if (plasmaTrailMaterial.HasProperty("_Surface")) plasmaTrailMaterial.SetFloat("_Surface", 1f);
-                if (plasmaTrailMaterial.HasProperty("_Blend")) plasmaTrailMaterial.SetFloat("_Blend", 1f);
+                flameMaterial = new Material(shader) { name = "KineticRodFlameMat" };
+                flameMaterial.SetColor("_Color", new Color(1f, 0.82f, 0.45f, 1f));
+                if (flameMaterial.HasProperty("_Surface")) flameMaterial.SetFloat("_Surface", 1f);
+                if (flameMaterial.HasProperty("_Blend")) flameMaterial.SetFloat("_Blend", 1f);
             }
 
             if (sparkMaterial == null)
             {
                 sparkMaterial = new Material(shader) { name = "KineticRodSparkMat" };
-                sparkMaterial.SetColor("_Color", new Color(1f, 0.7f, 0.2f, 1f));
+                sparkMaterial.SetColor("_Color", new Color(1f, 0.72f, 0.25f, 1f));
                 if (sparkMaterial.HasProperty("_Surface")) sparkMaterial.SetFloat("_Surface", 1f);
                 if (sparkMaterial.HasProperty("_Blend")) sparkMaterial.SetFloat("_Blend", 1f);
             }
 
+            if (contrailMaterial == null)
+            {
+                contrailMaterial = NukeEffectAssets.SmokeParticleMaterial != null
+                    ? new Material(NukeEffectAssets.SmokeParticleMaterial) { name = "KineticRodContrailMat" }
+                    : new Material(shader) { name = "KineticRodContrailMat" };
+                contrailMaterial.SetColor("_Color", new Color(0.9f, 0.9f, 0.92f, 0.85f));
+                if (contrailMaterial.HasProperty("_Surface")) contrailMaterial.SetFloat("_Surface", 1f);
+                if (contrailMaterial.HasProperty("_Blend")) contrailMaterial.SetFloat("_Blend", 1f);
+            }
+
             if (hypersonicSoundClip == null)
             {
-                // Synthesize screaming Mach-8 atmospheric air-shear & turbine shock roar
                 int length = (int)(SampleRate * 3.5f);
                 float[] samples = new float[length];
                 for (int i = 0; i < length; i++)
                 {
                     float t = i / (float)SampleRate;
-                    // High-velocity aerodynamic screech (1400Hz - 2200Hz whistling vortex)
                     float screech = Mathf.Sin(2f * Mathf.PI * (1650f + Mathf.Sin(2f * Mathf.PI * 8f * t) * 220f) * t) * 0.35f;
-                    // Supersonic air shear turbulent noise
                     float noise = (UnityEngine.Random.value * 2f - 1f) * 0.45f;
-                    // Deep aerodynamic displacement rumble (65Hz)
                     float rumble = Mathf.Sin(2f * Mathf.PI * 65f * t) * 0.4f;
                     samples[i] = Mathf.Clamp(screech + noise + rumble, -1f, 1f);
                 }
@@ -434,9 +669,19 @@ namespace BoscaliSummer.Features.Support.Visuals
     }
 
     /// <summary>
-    /// Delivers the ground-zero kinetic impact: blinding incandescent flash, URP DecalProjector
-    /// ground shockwave conforming to terrain, towering vertical ejecta geyser/spire,
-    /// persistent BlastManager crater scorch, physical blast force, and multi-layered acoustic design.
+    /// Delivers the ground-zero kinetic impact:
+    /// - Mini-nuke destruction mechanics with a focused kinetic killzone:
+    ///   * 150m lethal collapse zone: catastrophic building demolition (RegisterRecentExplosion)
+    ///     and immediate vehicle destruction.
+    ///   * 420m supersonic shockwave blast zone: overpressure damage and physical impulse tossing.
+    ///   * Attribute kills to requesting player PersistentID.
+    /// - Kinetic impact visuals (Photo 2 & prompt):
+    ///   * Blinding daylight prompt kinetic conversion flash.
+    ///   * Towering vertical supersonic ejecta spire (pulverized rock & earth geyser 700m+ high).
+    ///   * Radial ground-hugging base surge dust curtain.
+    ///   * Ballistic incandescent spall streamers.
+    ///   * URP DecalProjector terrain-conforming shockwave & persistent BlastManager crater.
+    ///   * Multi-layered seismic acoustics and bedrock P-wave camera shake.
     /// </summary>
     internal sealed class KineticRodImpactEffect : MonoBehaviour
     {
@@ -444,6 +689,7 @@ namespace BoscaliSummer.Features.Support.Visuals
         private static AudioClip impactAudioClip;
         private static Material fallbackSmokeMaterial;
         private static Material fallbackEjectaMaterial;
+        private static readonly Collider[] colliderBuffer = new Collider[512];
 
         private static readonly int id_decalSize = Shader.PropertyToID("_DecalSize");
         private static readonly int id_opacity = Shader.PropertyToID("_Opacity");
@@ -453,16 +699,17 @@ namespace BoscaliSummer.Features.Support.Visuals
         private static readonly int id_Size = Shader.PropertyToID("_Size");
         private static readonly int id_ShockwaveSoftness = Shader.PropertyToID("_ShockwaveSoftness");
 
-        public static void Spawn(Vector3 impactPosition)
+        public static void Spawn(Vector3 impactPosition, PersistentID ownerID = default)
         {
             var go = new GameObject("BoscaliSummer.KineticRodImpact");
             go.transform.position = impactPosition;
             go.transform.SetParent(Datum.origin, true);
             var effect = go.AddComponent<KineticRodImpactEffect>();
-            effect.Initialize(impactPosition);
+            effect.Initialize(impactPosition, ownerID);
         }
 
         private Vector3 groundZero;
+        private PersistentID ownerPersistentId;
         private Light impactLight;
         private GameObject groundDecalObj;
         private DecalProjector decalProjector;
@@ -473,14 +720,32 @@ namespace BoscaliSummer.Features.Support.Visuals
         private ParticleSystem baseSurge;
         private ParticleSystem spallStreamers;
         private AudioSource audioSource;
+
         private float startTime;
         private float blastPropagation = 15f;
         private float dustOpacity = 1f;
-        private const float BlastRadius = 2400f;
+
+        // Mini-nuke tuned killzone
+        private const float LethalCoreRadius = 150f;
+        private const float BlastRadius = 420f;
+        private const float YieldKilotons = 0.025f; // 25 tons TNT equivalent (mini-nuke)
+        private const float BlastPower = 29.24f;     // (25,000)^0.3333
         private const float EffectDuration = 7.5f;
 
-        private void Initialize(Vector3 point)
+        private struct InfluencedTarget
         {
+            public Collider collider;
+            public Rigidbody rb;
+            public IDamageable damageable;
+            public float distance;
+            public bool processed;
+        }
+
+        private readonly List<InfluencedTarget> targets = new List<InfluencedTarget>(128);
+
+        private void Initialize(Vector3 point, PersistentID ownerID)
+        {
+            ownerPersistentId = ownerID;
             NukeEffectAssets.EnsureResolved();
             EnsureFallbackMaterials();
 
@@ -496,57 +761,84 @@ namespace BoscaliSummer.Features.Support.Visuals
             // 2. Persistent crater scorch and vegetation clearing via BlastManager
             try
             {
-                SceneSingleton<BlastManager>.i?.AddBlast(groundZero.ToGlobalPosition(), 55f);
+                SceneSingleton<BlastManager>.i?.AddBlast(groundZero.ToGlobalPosition(), 70f);
             }
-            catch (Exception)
-            {
-                // Non-critical if detail renderer is not present
-            }
+            catch (Exception) { }
 
-            // 3. Physical shockwave impulse and damage simulation
+            // 3. Ground-zero immediate devastation within 60m
             try
             {
-                Explosion.SimulateForce(groundZero, 350f);
-                DamageEffects.BlastFrag(350f, groundZero, PersistentID.None, PersistentID.None);
+                Explosion.SimulateForce(groundZero, 380f);
+                DamageEffects.BlastFrag(450f, groundZero, PersistentID.None, ownerPersistentId);
             }
-            catch (Exception)
-            {
-                // Non-critical
-            }
+            catch (Exception) { }
 
-            // 4. Blinding cataclysmic incandescent flash (peak 0.12s, decays to molten pit glow)
+            // 4. Index nearby targets for mini-nuke shockwave & structural building demolition
+            IndexShockwaveTargets();
+
+            // 5. Blinding prompt kinetic energy conversion flash
             var lightObj = new GameObject("ImpactFlash");
             lightObj.transform.SetParent(transform, false);
             lightObj.transform.localPosition = Vector3.up * 6f;
             impactLight = lightObj.AddComponent<Light>();
             impactLight.type = LightType.Point;
-            impactLight.color = new Color(0.95f, 0.98f, 1.0f);
-            impactLight.range = 120000f;
-            impactLight.intensity = 180f;
+            impactLight.color = new Color(0.96f, 0.98f, 1.0f);
+            impactLight.range = 130000f;
+            impactLight.intensity = 220f;
             impactLight.shadows = LightShadows.None;
 
-            // 5. Ground compression shockwave using native URP Decal Projector
+            // 6. Ground compression shockwave using native URP Decal Projector
             SetupGroundDecalShockwave();
 
-            // 6. Atmospheric condensation vapor cloud (Wilson cloud dome)
+            // 7. Atmospheric condensation vapor cloud (Wilson cloud dome)
             SetupVaporCloud();
 
-            // 7. Towering vertical kinetic ejecta spire (pulverized rock & earth geyser)
+            // 8. Towering vertical kinetic ejecta spire (pulverized rock & earth geyser 700m+ high)
             SetupVerticalEjectaSpire();
 
-            // 8. Ground-hugging radial base surge
+            // 9. Ground-hugging radial base surge dust curtain
             SetupRadialBaseSurge();
 
-            // 9. Hypervelocity incandescent spall streamers
+            // 10. Hypervelocity incandescent spall streamers
             SetupSpallStreamers();
 
-            // 10. Multi-layered acoustic design
+            // 11. Multi-layered acoustic design
             SetupAcoustics();
 
-            // 11. Seismic bedrock camera shake
+            // 12. Bedrock P-wave camera shake
             TriggerSeismicShock();
 
             StartCoroutine(Animate());
+        }
+
+        private void IndexShockwaveTargets()
+        {
+            try
+            {
+                int count = Physics.OverlapSphereNonAlloc(groundZero, BlastRadius, colliderBuffer);
+                for (int i = 0; i < count; i++)
+                {
+                    Collider col = colliderBuffer[i];
+                    if (col == null) continue;
+
+                    IDamageable dmg = col.gameObject.GetComponent<IDamageable>();
+                    Rigidbody rb = col.attachedRigidbody;
+
+                    if (dmg != null || rb != null)
+                    {
+                        float dist = Vector3.Distance(col.bounds.center, groundZero);
+                        targets.Add(new InfluencedTarget
+                        {
+                            collider = col,
+                            rb = rb,
+                            damageable = dmg,
+                            distance = dist,
+                            processed = false
+                        });
+                    }
+                }
+            }
+            catch (Exception) { }
         }
 
         private void SetupGroundDecalShockwave()
@@ -617,24 +909,24 @@ namespace BoscaliSummer.Features.Support.Visuals
 
             var mainCol = ejectaColumn.main;
             mainCol.simulationSpace = ParticleSystemSimulationSpace.World;
-            mainCol.duration = 2.0f;
-            mainCol.startLifetime = new ParticleSystem.MinMaxCurve(3.8f, 6.8f);
-            mainCol.startSpeed = new ParticleSystem.MinMaxCurve(280f, 520f); // Reaches 350m - 550m vertically!
-            mainCol.startSize = new ParticleSystem.MinMaxCurve(16f, 44f);
-            mainCol.gravityModifier = 0.95f; // Shoots high into sky, billows, and falls back
+            mainCol.duration = 2.5f;
+            mainCol.startLifetime = new ParticleSystem.MinMaxCurve(4.2f, 7.5f);
+            mainCol.startSpeed = new ParticleSystem.MinMaxCurve(350f, 620f); // Rockets 600m - 800m vertically!
+            mainCol.startSize = new ParticleSystem.MinMaxCurve(20f, 52f);
+            mainCol.gravityModifier = 0.92f;
             mainCol.startColor = new ParticleSystem.MinMaxGradient(
-                new Color(1f, 0.92f, 0.75f, 1f),
-                new Color(0.22f, 0.20f, 0.18f, 0.9f));
-            mainCol.maxParticles = 450;
+                new Color(1f, 0.94f, 0.8f, 1f),
+                new Color(0.20f, 0.18f, 0.16f, 0.95f));
+            mainCol.maxParticles = 550;
 
             var emissionCol = ejectaColumn.emission;
             emissionCol.rateOverTime = 0f;
-            emissionCol.SetBursts(new[] { new ParticleSystem.Burst(0f, 260, 360) });
+            emissionCol.SetBursts(new[] { new ParticleSystem.Burst(0f, 320, 440) });
 
             var shapeCol = ejectaColumn.shape;
             shapeCol.shapeType = ParticleSystemShapeType.Cone;
-            shapeCol.angle = 6.5f; // Narrow high-speed vertical kinetic jet
-            shapeCol.radius = 6.0f;
+            shapeCol.angle = 5.5f; // Extremely focused high-speed vertical kinetic jet
+            shapeCol.radius = 7.0f;
             shapeCol.rotation = new Vector3(-90f, 0f, 0f); // Straight up
         }
 
@@ -649,24 +941,24 @@ namespace BoscaliSummer.Features.Support.Visuals
 
             var mainSurge = baseSurge.main;
             mainSurge.simulationSpace = ParticleSystemSimulationSpace.World;
-            mainSurge.duration = 1.5f;
-            mainSurge.startLifetime = new ParticleSystem.MinMaxCurve(2.8f, 5.0f);
-            mainSurge.startSpeed = new ParticleSystem.MinMaxCurve(120f, 240f);
-            mainSurge.startSize = new ParticleSystem.MinMaxCurve(14f, 32f);
-            mainSurge.gravityModifier = 0.35f;
+            mainSurge.duration = 2.0f;
+            mainSurge.startLifetime = new ParticleSystem.MinMaxCurve(3.2f, 5.8f);
+            mainSurge.startSpeed = new ParticleSystem.MinMaxCurve(140f, 280f);
+            mainSurge.startSize = new ParticleSystem.MinMaxCurve(18f, 38f);
+            mainSurge.gravityModifier = 0.3f;
             mainSurge.startColor = new ParticleSystem.MinMaxGradient(
-                new Color(0.85f, 0.65f, 0.35f, 0.9f),
-                new Color(0.35f, 0.32f, 0.30f, 0.85f));
-            mainSurge.maxParticles = 280;
+                new Color(0.85f, 0.68f, 0.40f, 0.92f),
+                new Color(0.32f, 0.29f, 0.26f, 0.88f));
+            mainSurge.maxParticles = 350;
 
             var emissionSurge = baseSurge.emission;
             emissionSurge.rateOverTime = 0f;
-            emissionSurge.SetBursts(new[] { new ParticleSystem.Burst(0f, 160, 220) });
+            emissionSurge.SetBursts(new[] { new ParticleSystem.Burst(0f, 200, 280) });
 
             var shapeSurge = baseSurge.shape;
             shapeSurge.shapeType = ParticleSystemShapeType.Cone;
-            shapeSurge.angle = 82f; // Low-angle radial blanket hugging the ground
-            shapeSurge.radius = 12.0f;
+            shapeSurge.angle = 84f; // Ground-hugging blanket
+            shapeSurge.radius = 14.0f;
             shapeSurge.rotation = new Vector3(-90f, 0f, 0f);
         }
 
@@ -681,30 +973,30 @@ namespace BoscaliSummer.Features.Support.Visuals
 
             var mainDeb = spallStreamers.main;
             mainDeb.simulationSpace = ParticleSystemSimulationSpace.World;
-            mainDeb.duration = 1.2f;
-            mainDeb.startLifetime = new ParticleSystem.MinMaxCurve(2.5f, 5.2f);
-            mainDeb.startSpeed = new ParticleSystem.MinMaxCurve(220f, 440f);
-            mainDeb.startSize = new ParticleSystem.MinMaxCurve(4.0f, 12f);
-            mainDeb.gravityModifier = 1.25f;
+            mainDeb.duration = 1.5f;
+            mainDeb.startLifetime = new ParticleSystem.MinMaxCurve(2.8f, 5.8f);
+            mainDeb.startSpeed = new ParticleSystem.MinMaxCurve(260f, 500f);
+            mainDeb.startSize = new ParticleSystem.MinMaxCurve(5.0f, 14f);
+            mainDeb.gravityModifier = 1.2f;
             mainDeb.startColor = new ParticleSystem.MinMaxGradient(
-                new Color(1f, 0.9f, 0.4f, 1f),
-                new Color(1f, 0.35f, 0.05f, 0.85f));
-            mainDeb.maxParticles = 260;
+                new Color(1f, 0.92f, 0.45f, 1f),
+                new Color(1f, 0.38f, 0.05f, 0.88f));
+            mainDeb.maxParticles = 320;
 
             var emissionDeb = spallStreamers.emission;
             emissionDeb.rateOverTime = 0f;
-            emissionDeb.SetBursts(new[] { new ParticleSystem.Burst(0f, 140, 200) });
+            emissionDeb.SetBursts(new[] { new ParticleSystem.Burst(0f, 180, 250) });
 
             var shapeDeb = spallStreamers.shape;
             shapeDeb.shapeType = ParticleSystemShapeType.Cone;
-            shapeDeb.angle = 38f;
-            shapeDeb.radius = 8.0f;
+            shapeDeb.angle = 42f;
+            shapeDeb.radius = 9.0f;
             shapeDeb.rotation = new Vector3(-90f, 0f, 0f);
         }
 
         private void SetupAcoustics()
         {
-            // 1. Supersonic crack / shock snap (plays immediately on arrival)
+            // 1. Supersonic crack / shock snap
             if (GameAssets.i?.sonicBoom != null)
             {
                 var snapObj = new GameObject("SonicCrack");
@@ -714,9 +1006,9 @@ namespace BoscaliSummer.Features.Support.Visuals
                 snapSrc.clip = GameAssets.i.sonicBoom;
                 snapSrc.spatialBlend = 0.5f;
                 snapSrc.minDistance = 600f;
-                snapSrc.maxDistance = 65000f;
+                snapSrc.maxDistance = 75000f;
                 snapSrc.volume = 1.0f;
-                snapSrc.pitch = UnityEngine.Random.Range(0.94f, 1.06f);
+                snapSrc.pitch = UnityEngine.Random.Range(0.92f, 1.04f);
                 snapSrc.rolloffMode = AudioRolloffMode.Logarithmic;
                 snapSrc.Play();
             }
@@ -731,19 +1023,19 @@ namespace BoscaliSummer.Features.Support.Visuals
                 boomSrc.clip = NukeEffectAssets.NukeExplosionClip;
                 boomSrc.spatialBlend = 1.0f;
                 boomSrc.minDistance = 800f;
-                boomSrc.maxDistance = 90000f;
+                boomSrc.maxDistance = 95000f;
                 var filter = boomObj.AddComponent<AudioLowPassFilter>();
                 SceneSingleton<ExplosionAudioManager>.i.AddExplosionAudio(boomSrc, filter, 0.35f);
             }
 
-            // 3. Sub-bass seismic earth fracture rumble (travels through bedrock immediately)
+            // 3. Sub-bass seismic earth fracture rumble
             if (impactAudioClip != null)
             {
                 audioSource = gameObject.AddComponent<AudioSource>();
                 audioSource.clip = impactAudioClip;
                 audioSource.spatialBlend = 0.4f;
                 audioSource.minDistance = 800f;
-                audioSource.maxDistance = 100000f;
+                audioSource.maxDistance = 110000f;
                 audioSource.volume = 1.0f;
                 audioSource.rolloffMode = AudioRolloffMode.Logarithmic;
                 audioSource.Play();
@@ -756,13 +1048,12 @@ namespace BoscaliSummer.Features.Support.Visuals
             if (cam == null) return;
 
             float distance = Vector3.Distance(cam.transform.position, groundZero);
-            if (distance > 40000f) return;
+            if (distance > 45000f) return;
 
-            // Seismic wave travels through solid bedrock at ~3400 m/s
             float seismicDelay = distance / 3400f;
-            float intensity = Mathf.Clamp01(1f - (distance / 32000f));
-            float lowFreq = Mathf.Lerp(0.4f, 3.2f, intensity * intensity);
-            float highFreq = Mathf.Lerp(0.5f, 4.2f, intensity);
+            float intensity = Mathf.Clamp01(1f - (distance / 35000f));
+            float lowFreq = Mathf.Lerp(0.5f, 3.8f, intensity * intensity);
+            float highFreq = Mathf.Lerp(0.6f, 4.8f, intensity);
 
             StartCoroutine(DelayedCameraShake(seismicDelay, lowFreq, highFreq, intensity));
         }
@@ -778,9 +1069,8 @@ namespace BoscaliSummer.Features.Support.Visuals
                 csm.ShakeCamera(lowFreq, highFreq);
             }
 
-            // Sustained subterranean tremor decay over 3.0 seconds
             float elapsed = 0f;
-            float duration = 3.0f * intensity;
+            float duration = 3.2f * intensity;
             while (elapsed < duration)
             {
                 elapsed += Time.deltaTime;
@@ -806,26 +1096,83 @@ namespace BoscaliSummer.Features.Support.Visuals
                     if (elapsed < 0.15f)
                     {
                         float t = elapsed / 0.15f;
-                        impactLight.intensity = Mathf.Lerp(180f, 42f, t);
-                        impactLight.color = Color.Lerp(new Color(0.95f, 0.98f, 1f), new Color(1f, 0.55f, 0.15f), t);
+                        impactLight.intensity = Mathf.Lerp(220f, 50f, t);
+                        impactLight.color = Color.Lerp(new Color(0.96f, 0.98f, 1f), new Color(1f, 0.55f, 0.15f), t);
                     }
                     else
                     {
                         float t = Mathf.Clamp01((elapsed - 0.15f) / 2.8f);
-                        impactLight.intensity = Mathf.Lerp(42f, 0f, t * t);
+                        impactLight.intensity = Mathf.Lerp(50f, 0f, t * t);
                         if (impactLight.intensity <= 0.05f) impactLight.enabled = false;
                     }
                 }
 
-                // 2. Animate ground shockwave expansion (conforming URP Decal Projector)
-                blastPropagation += 720f * Time.deltaTime;
+                // 2. Supersonic shockwave expansion & mini-nuke damage simulation
+                blastPropagation += 680f * Time.deltaTime;
+
+                // Apply mini-nuke damage to targets reached by shockwave front
+                for (int i = 0; i < targets.Count; i++)
+                {
+                    InfluencedTarget target = targets[i];
+                    if (target.processed || target.collider == null) continue;
+
+                    if (target.distance <= blastPropagation)
+                    {
+                        target.processed = true;
+                        targets[i] = target;
+
+                        bool isCore = target.distance <= LethalCoreRadius;
+                        float distNorm = Mathf.Max(target.distance / BlastPower, 1f);
+                        float overpressure = 22000f / (distNorm * distNorm * distNorm);
+
+                        if (target.damageable != null)
+                        {
+                            try
+                            {
+                                Unit unit = target.damageable.GetUnit();
+                                Building building = unit as Building;
+
+                                if (building != null)
+                                {
+                                    float yieldParam = isCore ? 25000f : 12000f * Mathf.Clamp01(1f - target.distance / BlastRadius);
+                                    building.RegisterRecentExplosion(groundZero.ToGlobalPosition(), yieldParam);
+
+                                    if (NetworkManagerNuclearOption.i != null && NetworkManagerNuclearOption.i.Server.Active)
+                                    {
+                                        float coreDmg = isCore ? 25000f : overpressure * 1.5f;
+                                        target.damageable.TakeDamage(coreDmg, overpressure, 1.0f, 2000f, 25000f, ownerPersistentId);
+                                    }
+                                }
+                                else if (NetworkManagerNuclearOption.i != null && NetworkManagerNuclearOption.i.Server.Active)
+                                {
+                                    float directDmg = isCore ? 12000f : overpressure;
+                                    target.damageable.TakeDamage(directDmg, overpressure, 0.9f, 1000f, isCore ? 15000f : 2000f, ownerPersistentId);
+                                }
+                            }
+                            catch (Exception) { }
+                        }
+
+                        if (target.rb != null && target.distance > 0.1f)
+                        {
+                            try
+                            {
+                                float impulse = Mathf.Min(overpressure * 28f, isCore ? 150000f : 45000f);
+                                Vector3 forceDir = (target.collider.bounds.center - groundZero).normalized;
+                                target.rb.AddForceAtPosition(forceDir * impulse, target.collider.bounds.center, ForceMode.Impulse);
+                            }
+                            catch (Exception) { }
+                        }
+                    }
+                }
+
+                // 3. Animate ground shockwave decal expansion
                 if (decalMaterial != null)
                 {
                     decalMaterial.SetFloat(id_shockwaveExpansion, (1f * BlastRadius) / Mathf.Max(1f, blastPropagation));
 
                     if (blastPropagation > BlastRadius)
                     {
-                        dustOpacity -= Time.deltaTime * 0.14f;
+                        dustOpacity -= Time.deltaTime * 0.16f;
                         decalMaterial.SetFloat(id_opacity, Mathf.Max(0f, dustOpacity));
 
                         if (dustOpacity <= 0f && groundDecalObj != null)
@@ -836,7 +1183,7 @@ namespace BoscaliSummer.Features.Support.Visuals
                     }
                 }
 
-                // 3. Animate atmospheric vapor cloud
+                // 4. Animate atmospheric vapor cloud
                 if (vaporCloudObj != null && vaporCloudMaterial != null)
                 {
                     Camera cam = SceneSingleton<CameraStateManager>.i?.mainCamera ?? Camera.main;
@@ -845,7 +1192,7 @@ namespace BoscaliSummer.Features.Support.Visuals
                         vaporCloudObj.transform.LookAt(cam.transform.position);
                     }
 
-                    float cloudScale = Mathf.Min(BlastRadius * 0.9f, blastPropagation * 0.85f);
+                    float cloudScale = Mathf.Min(BlastRadius * 0.95f, blastPropagation * 0.88f);
                     vaporCloudObj.transform.localScale = Vector3.one * cloudScale;
 
                     float cloudAlpha = NukeEffectAssets.VaporCloudAlphaCurve != null
@@ -902,7 +1249,6 @@ namespace BoscaliSummer.Features.Support.Visuals
 
             if (impactAudioClip == null)
             {
-                // Synthesize cataclysmic sub-bass earth fracture rumble (18Hz fundamental + acoustic shock reverberation)
                 int length = (int)(SampleRate * 6.5f);
                 float[] samples = new float[length];
 
@@ -910,11 +1256,11 @@ namespace BoscaliSummer.Features.Support.Visuals
                 {
                     float t = i / (float)SampleRate;
 
-                    // 1. Supersonic kinetic fracture crack / transient snap (0.0s - 0.08s)
+                    // 1. Supersonic kinetic fracture crack / transient snap
                     float snapEnvelope = Mathf.Exp(-t * 38f);
                     float snap = (UnityEngine.Random.value * 2f - 1f) * snapEnvelope * 0.9f;
 
-                    // 2. Colossal seismic ground impact thud (22 Hz fundamental dropping to 14 Hz)
+                    // 2. Colossal seismic ground impact thud (22 Hz dropping to 14 Hz)
                     float bassFreq = Mathf.Lerp(24f, 14f, t / 6.5f);
                     float bassEnvelope = Mathf.Pow(Mathf.Clamp01(1f - (t / 5.8f)), 1.5f);
                     float bass = Mathf.Sin(2f * Mathf.PI * bassFreq * t) * bassEnvelope * 0.85f;
@@ -924,7 +1270,7 @@ namespace BoscaliSummer.Features.Support.Visuals
                     float roarEnvelope = Mathf.Pow(Mathf.Clamp01(1f - (t / 4.2f)), 2.2f);
                     float roar = (UnityEngine.Random.value * 2f - 1f) * roarEnvelope * 0.45f;
 
-                    // 4. Rolling mountain thunder echoes (stochastic reverberation)
+                    // 4. Rolling mountain thunder echoes
                     float echo = (Mathf.Sin(2f * Mathf.PI * 42f * t) + Mathf.Sin(2f * Mathf.PI * 58f * t) * 0.5f)
                         * Mathf.Pow(Mathf.Clamp01(1f - (t / 6.2f)), 1.6f) * 0.35f;
 

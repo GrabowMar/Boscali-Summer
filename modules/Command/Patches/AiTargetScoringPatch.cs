@@ -1,4 +1,6 @@
+using System;
 using BoscaliSummer.Features.Command.Runtime;
+using BoscaliSummer.Infrastructure.Diagnostics;
 using HarmonyLib;
 
 namespace BoscaliSummer.Features.Command.Patches
@@ -8,15 +10,24 @@ namespace BoscaliSummer.Features.Command.Patches
     {
         private static void Postfix(Unit analyzer, TrackingInfo trackingInfo, ref OpportunityThreat __result)
         {
-            CommandManager mgr = CommandManager.Active;
-            if (mgr == null || trackingInfo == null || analyzer == null) return;
-
-            if (!trackingInfo.TryGetUnit(out Unit target) || target == null) return;
-
-            float multiplier = mgr.GetTargetScoreMultiplier(analyzer, target);
-            if (multiplier != 1f)
+            // Runs once per AI target evaluation. A fault must leave the vanilla score
+            // untouched, not abort the analyzer's scan.
+            try
             {
-                __result = new OpportunityThreat(__result.opportunity * multiplier, __result.threat);
+                CommandManager mgr = CommandManager.Active;
+                if (mgr == null || trackingInfo == null || analyzer == null) return;
+
+                if (!trackingInfo.TryGetUnit(out Unit target) || target == null) return;
+
+                float multiplier = mgr.GetTargetScoreMultiplier(analyzer, target);
+                if (multiplier != 1f)
+                {
+                    __result = new OpportunityThreat(__result.opportunity * multiplier, __result.threat);
+                }
+            }
+            catch (Exception e)
+            {
+                PatchGuard.Report("Command.AiTargetScoring", e);
             }
         }
     }

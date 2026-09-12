@@ -2,10 +2,36 @@
 
 ## Unreleased
 
-- Split the `OPS` console in two. OPS keeps the player's own board — the perk list is now a
-  **PASSIVE** page and an **AUTH** page instead of two sections sharing one, **SUPPORT** has
-  room for a full description beside its cost and call-in button, and a new **RECORD** page
-  shows rank, the score-per-point budget and what the committed points bought.
+- Ace ingress chooses the nearest qualifying map edge from the shared Command territory grid, including troop pressure and contested cells. Queries work with the map closed; no uncontrolled fallback. Requires Wing Command 0.9.2.6.
+
+- Ace alerts minimize after ten seconds. Enemy wings enter from enemy-held map edges; fixed tier airframes are T/A-30, CT-7, FS-12, FS-20 and KR-67. Wing counts reflect complete native spawns.
+
+- Ace hunt polish: centered portrait aspect fitting, opaque neutral backplates and
+  pixel-aligned UI. Added actual Wing Command ace perks beside the callsign; host
+  masks replicate via Squad protocol 2. Requires Wing Command 0.9.2.6 or newer.
+
+- Reworked the ace-hunt HUD into an amber caution dossier with hazard stripes,
+  Wing Command's ace portrait, combat proficiency/pursuit/formation icons, tier pips,
+  returning-ace identification and live wing strength. The overlay remains passive.
+- Added `SQD` with pilot identity/career, player abilities and enemy wing/ace records;
+  moved perk purchases out of OPS. Friendly wings remain in Wing Command.
+- Wing Command `0.9.2.6`+ is now a hard runtime dependency. Pilot generation, native ace
+  wing spawning/target release and enemy chatter reuse its public Squad API.
+- Added host-authoritative ace hunts after credited hostile damage, five skill tiers,
+  two-to-four-aircraft wings, one bonus perk point per credited leader defeat and bounded
+  return encounters for surviving ejected aces. Target loss releases survivors to normal
+  AI. Four owned wings, 32 history entries and a 900-second lifetime bound the director.
+- Added F1 `Squad.PilotLives`: respawning by default; one-life mode retires a confirmed
+  dead pilot and starts a successor with fresh perks/score progress. Native score,
+  unlocks and aircraft spawning remain unchanged. Ace points add beyond the score cap.
+- Hunt music uses local `Music/Hunt` tracks or the installed tactical soundtrack through
+  the existing radio handoff; prior station/track/time/pause state returns afterward.
+  Manual transport wins, including after a temporary network interruption.
+- Squad uses protocol-2 read-only snapshots while MFDs are closed. Progression protocol
+  advances to 3 for scene/request/pilot-generation validation; peers must use matching builds.
+  Pure encounter/audio transition tests pass. No deployment or flight tests were performed
+  for this change; multiplayer, chase behavior, survivor returns and visual/audio feel
+  require an in-game pass.
 - Added the `STR` strategic screen on its own bezel: **SA** (DEFCON, the air balance and a
   friendly-AI sortie board), **FRONT** (the sector field with contested nodes ranked by
   pressure and the frontline's length), **TASKING** (the faction objective board), **LOG**
@@ -58,7 +84,7 @@
   source as live target video. In-game visual validation remains pending.
 - Restored the full tactical-map GUI under Boscali Command: left dock and event log,
   central map, right bezel rail, and native spawn footer. Enabled by default through
-  `Command.ExpandedMapUi`; Wing Command remains an optional, unchanged companion.
+  `Command.ExpandedMapUi`; its bezel and map-input ownership are shared with Wing Command.
 
 - Shelved Weather at the user's request. Removed its runtime, debug controls, settings,
   shader build integration and tests from the active build. The archival step was never
