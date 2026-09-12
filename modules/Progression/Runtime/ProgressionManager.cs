@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using BepInEx.Configuration;
 using BepInEx.Logging;
@@ -5,6 +6,7 @@ using BoscaliSummer.Features.Progression.Configuration;
 using BoscaliSummer.Features.Progression.Networking;
 using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Lifecycle;
+using BoscaliSummer.Runtime;
 using NuclearOption.Networking;
 using UnityEngine;
 
@@ -23,6 +25,8 @@ namespace BoscaliSummer.Features.Progression.Runtime
         private const float ReplyTimeout = 5f;
 
         private readonly Dictionary<ulong, PerkState> states = new Dictionary<ulong, PerkState>();
+        private readonly Dictionary<ulong, int> generations = new Dictionary<ulong, int>();
+        private ISquadView squad;
         private ProgressionSettings settings;
         private ManualLogSource logger;
         private ProgressionNet network;
@@ -32,8 +36,10 @@ namespace BoscaliSummer.Features.Progression.Runtime
         private int localRank;
         private int localScore;
         private int localEarnedPoints;
+        private int localMaximumPoints, localScorePerPoint;
         private float nextPoll;
-        private bool viewOpen;
+        private int openViews;
+        private int localGeneration = 1;
         private bool unlockPending;
         private float unlockPendingSince;
 
@@ -43,18 +49,20 @@ namespace BoscaliSummer.Features.Progression.Runtime
         int IProgressionView.Score => localScore;
         int IProgressionView.EarnedPoints => localEarnedPoints;
         int IProgressionView.AvailablePoints => localState.AvailablePoints(localEarnedPoints);
-        int IProgressionView.MaximumPoints => settings.MaximumPoints.Value;
-        int IProgressionView.ScorePerPoint => settings.ScorePerPoint.Value;
+        int IProgressionView.MaximumPoints => localMaximumPoints;
+        private int LocalBonus => GameManager.GetLocalPlayer<Player>(out Player local) && local != null ? squad.GetBonusPoints(PlayerIdentity.Of(local)) : 0;
+        int IProgressionView.ScorePerPoint => localScorePerPoint;
         string IProgressionView.Status => LastResult;
         bool IProgressionView.UnlockPending => unlockPending;
 
         public bool BypassRequirements => bypassRequirements != null && bypassRequirements.Value;
 
-        public void Configure(ProgressionSettings progressionSettings, ManualLogSource log, ProgressionNet net)
+        public void Configure(ProgressionSettings progressionSettings, ManualLogSource log, ProgressionNet net, ISquadView squadView)
         {
             settings = progressionSettings;
             logger = log;
             network = net;
+            squad = squadView;
             ProgressionRuntime.Active = this;
         }
 
@@ -74,10 +82,13 @@ namespace BoscaliSummer.Features.Progression.Runtime
         public void ResetForScene()
         {
             states.Clear();
+            generations.Clear(); openViews = 0; localGeneration = 1;
+            network?.ResetScene();
             localState = new PerkState();
             localRank = 0;
             localScore = 0;
             localEarnedPoints = 0;
+            localMaximumPoints = settings.MaximumPoints.Value; localScorePerPoint = settings.ScorePerPoint.Value;
             nextPoll = 0f;
             unlockPending = false;
             unlockPendingSince = 0f;
@@ -92,7 +103,7 @@ namespace BoscaliSummer.Features.Progression.Runtime
                 LastResult = "No response from host.";
             }
             if (unlockPending) return;
-            if (!viewOpen || Time.unscaledTime < nextPoll) return;
+            if (openViews == 0 || Time.unscaledTime < nextPoll) return;
             nextPoll = Time.unscaledTime + PollInterval;
             network.Submit(ProgressionNet.QueryOnly);
         }
@@ -101,7 +112,7 @@ namespace BoscaliSummer.Features.Progression.Runtime
 
         void IProgressionView.SetViewOpen(bool open)
         {
-            viewOpen = open;
+            openViews = Mathf.Max(0, openViews + (open ? 1 : -1));
             if (open) nextPoll = 0f;
         }
 
@@ -163,32 +174,41 @@ namespace BoscaliSummer.Features.Progression.Runtime
             {
                 Protocol = ProgressionNet.ProtocolVersion,
                 PerkMask = state.Mask,
-                Score = (ushort)Mathf.Clamp(Mathf.RoundToInt(Score(player)), 0, ushort.MaxValue),
+                Score = Mathf.Max(0, Mathf.RoundToInt(Score(player))),
                 EarnedPoints = (byte)EarnedPoints(player),
                 Rank = (byte)Mathf.Clamp(player == null ? 0 : player.PlayerRank, 0, byte.MaxValue),
-                Result = result
+                Result = result,
+                Generation = GetGeneration(id),
+                MaximumPoints = (byte)Mathf.Min(20, settings.MaximumPoints.Value + squad.GetBonusPoints(id)),
+                ScorePerPoint = settings.ScorePerPoint.Value
             };
         }
 
-        internal int EarnedPoints(Player player) => PerkPoints.Earned(
-            Mathf.RoundToInt(Score(player)), settings.ScorePerPoint.Value, settings.MaximumPoints.Value);
+        internal int EarnedPoints(Player player) => PerkPoints.EarnedForPilot(Mathf.RoundToInt(Score(player)),
+            squad.GetScoreOrigin(PlayerIdentity.Of(player)), settings.ScorePerPoint.Value,
+            settings.MaximumPoints.Value, squad.GetBonusPoints(PlayerIdentity.Of(player)));
 
         private static float Score(Player player) => player == null ? 0f : player.PlayerScore;
+        internal int Generation(Player player) => GetGeneration(PlayerIdentity.Of(player));
 
         // ---- Client ----------------------------------------------------------------------
 
         internal void Apply(ProgressionSnapshot snapshot, ulong localPlayerId)
         {
+            if (!GameAccess.IsServer() && snapshot.Generation < Mathf.Max(localGeneration, GetGeneration(localPlayerId))) return;
+            localGeneration = snapshot.Generation;
             if (snapshot.Result != ProgressionSnapshot.Snapshot) unlockPending = false;
             localState = new PerkState(snapshot.PerkMask);
             localRank = snapshot.Rank;
             localScore = snapshot.Score;
             localEarnedPoints = snapshot.EarnedPoints;
+            localMaximumPoints = snapshot.MaximumPoints; localScorePerPoint = snapshot.ScorePerPoint;
             // Effect lookups read the shared map, so the local entry has to track every
             // snapshot. Keeping only the first one left a client applying a stale perk mask
             // to its own fuel, rewards and support authorisations for the rest of the mission.
             // The content is server-derived either way, so this is also correct on a host.
-            if (localPlayerId != PlayerIdentity.None) states[localPlayerId] = localState;
+            if (localPlayerId != PlayerIdentity.None)
+            { states[localPlayerId] = localState; generations[localPlayerId] = snapshot.Generation; }
 
             if (snapshot.Result == ProgressionSnapshot.Unlocked) LastResult = "Perk activated.";
             else if (snapshot.Result == ProgressionSnapshot.Denied) LastResult = "Not enough perk points.";
@@ -197,15 +217,19 @@ namespace BoscaliSummer.Features.Progression.Runtime
 
         private string NextPointHint()
         {
-            if (localEarnedPoints >= settings.MaximumPoints.Value) return "All perk points earned.";
-            int perPoint = settings.ScorePerPoint.Value;
-            return (perPoint - localScore % perPoint) + " more score for the next perk point.";
+            if (localEarnedPoints >= 20) return "Pilot perk-point budget complete.";
+            if (localEarnedPoints >= localMaximumPoints)
+                return "Score budget complete. Defeat enemy aces for bonus perk points.";
+            int perPoint = Mathf.Max(1, localScorePerPoint);
+            int origin = GameManager.GetLocalPlayer<Player>(out Player player) && player != null ? squad.GetScoreOrigin(PlayerIdentity.Of(player)) : 0;
+            return (perPoint - Mathf.Max(0, localScore - origin) % perPoint) + " more score for the next perk point.";
         }
 
         // ---- Effects ---------------------------------------------------------------------
 
         public float Multiplier(ulong playerId, PerkEffect effect)
         {
+            RefreshGeneration(playerId);
             if (!states.TryGetValue(playerId, out PerkState state)) return 1f;
             // PerkStrength scales the distance each bonus travels from 1.0, so 0 makes passives
             // cosmetic and 2.0 doubles them without editing the catalogue. Authorisation perks
@@ -223,6 +247,7 @@ namespace BoscaliSummer.Features.Progression.Runtime
 
         public bool Grants(ulong playerId, string capability)
         {
+            RefreshGeneration(playerId);
             if (BypassRequirements) return true;
             if (capability == null || !states.TryGetValue(playerId, out PerkState state)) return false;
             for (int i = 0; i < PerkCatalog.All.Length; i++)
@@ -235,12 +260,25 @@ namespace BoscaliSummer.Features.Progression.Runtime
 
         private PerkState GetOrCreate(ulong id)
         {
+            RefreshGeneration(id);
             if (!states.TryGetValue(id, out PerkState state))
             {
                 state = new PerkState();
-                states.Add(id, state);
+                if (states.Count < 64) states.Add(id, state);
             }
             return state;
+        }
+
+        private int GetGeneration(ulong id) => squad?.GetPilotGeneration(id) ?? 1;
+        private void RefreshGeneration(ulong id)
+        {
+            int generation = GetGeneration(id);
+            if (generations.TryGetValue(id, out int previous))
+            {
+                if (generation < previous) return; // The squad and perk snapshots may arrive in either order.
+                if (previous != generation) states.Remove(id);
+            }
+            if (generations.Count < 64 || generations.ContainsKey(id)) generations[id] = generation;
         }
     }
 

@@ -24,10 +24,10 @@ namespace BoscaliSummer.Features.Command.Presentation
         private Texture2D overlayTexture;
         private TacticalSectorGrid sectorGrid;
         private MissionMapCompatibilityEngine compatibilityEngine;
+        private TerritoryControlView territory;
 
-        private const int MaximumObservedUnits = 4096;
+
         private float nextGridUpdate;
-        private float lastGridTime = -1f;
         private FactionHQ gridHq;
         private bool isMapMaximized;
         private bool initialized;
@@ -36,20 +36,16 @@ namespace BoscaliSummer.Features.Command.Presentation
         public bool ShowFrontlines = true;
 
         /// <summary>
-        /// The live control field, for anything that wants to read it rather than draw it.
-        ///
-        /// <para>The overlay owns the grid because the overlay is what advances it, and it
-        /// only advances while the maximised map is open. Every reader is therefore a
-        /// map-MFD surface, and a reader that is not will see the last state from when the
-        /// map was last up — which is stale, not wrong, but it is stale.</para>
+        /// The faction control field shared with host ingress queries.
         /// </summary>
         public TacticalSectorGrid Grid => sectorGrid;
 
-        public void Configure(CommandSettings config, CommandManager manager, MissionMapCompatibilityEngine compat, ManualLogSource log)
+        public void Configure(CommandSettings config, CommandManager manager, MissionMapCompatibilityEngine compat, ManualLogSource log, TerritoryControlView control)
         {
             settings = config;
             command = manager;
             compatibilityEngine = compat;
+            territory = control;
             logger = log;
 
             ShowSectors = settings.FrontlinesOverlay.Value;
@@ -86,7 +82,6 @@ namespace BoscaliSummer.Features.Command.Presentation
             initialized = false;
             isMapMaximized = false;
             nextGridUpdate = 0f;
-            lastGridTime = -1f;
             gridHq = null;
         }
 
@@ -101,7 +96,6 @@ namespace BoscaliSummer.Features.Command.Presentation
         {
             isMapMaximized = true;
             nextGridUpdate = 0f;
-            lastGridTime = -1f;
             if (overlayObj != null) overlayObj.SetActive(true);
         }
 
@@ -115,7 +109,6 @@ namespace BoscaliSummer.Features.Command.Presentation
         {
             if (settings == null || !settings.Enabled.Value)
             {
-                lastGridTime = -1f;
                 if (overlayObj != null) overlayObj.SetActive(false);
                 return;
             }
@@ -138,7 +131,6 @@ namespace BoscaliSummer.Features.Command.Presentation
 
             if (!isMapMaximized)
             {
-                lastGridTime = -1f;
                 return;
             }
 
@@ -295,9 +287,7 @@ namespace BoscaliSummer.Features.Command.Presentation
                     : dynamicMap.HQ;
                 if (localHq != gridHq)
                 {
-                    sectorGrid.ResetAll();
                     gridHq = localHq;
-                    lastGridTime = -1f;
                 }
                 if (overlayImage != null) overlayImage.enabled = localHq != null;
                 if (localHq == null)
@@ -306,32 +296,12 @@ namespace BoscaliSummer.Features.Command.Presentation
                     return;
                 }
 
-                // Dimensions are resolved once per scene; map zoom must not resize history.
-                sectorGrid.Clear();
+                TacticalSectorGrid current = territory.Read(localHq);
+                if (current == null) return;
+                sectorGrid = current;
                 GetTextureSize(out int texW, out int texH);
                 EnsureTexture(texW, texH);
-                compatibilityEngine?.ReconcileMissionNodes(sectorGrid, localHq);
-
-                List<Unit> units = UnitRegistry.allUnits;
-                if (units != null)
-                {
-                    int count = Math.Min(units.Count, MaximumObservedUnits);
-                    for (int i = 0; i < count; i++)
-                    {
-                        if (!MissionMapCompatibilityEngine.TryGetGroundObservation(units[i], localHq,
-                            out Vector3 pos, out float weight, out bool hostile)) continue;
-                        sectorGrid.AddTroopPresence(pos.x, pos.z, weight, hostile);
-                    }
-                }
-
-                float now = Time.timeSinceLevelLoad;
-                // No catch-up from a new observation across a closed-map gap. Mission time
-                // also prevents paused gameplay from advancing territorial control.
-                float elapsed = lastGridTime >= 0f ? Math.Max(0f, now - lastGridTime) : 0f;
-                sectorGrid.EvaluateSectors(elapsed);
-                lastGridTime = now;
                 command?.SyncSectorTelemetry(sectorGrid);
-
                 // 4. Fast Procedural Texture Bake
                 Color32[] pixels = sectorGrid.BakeTexture(
                     texW,

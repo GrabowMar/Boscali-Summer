@@ -69,6 +69,9 @@ Assembly pluginAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(plugi
     ("MFDScreen", "CloseScreen"),
     ("FactionHQ", "RewardPlayer"),
     ("Aircraft", "UseFuel"),
+    ("Unit", "RecordDamage"),
+    ("Unit", "ReportKilled"),
+    ("Pilot", "ApplyDamage"),
     ("DynamicMap", "TryGetCursorCoordinates"),
     ("Spawner", "SpawnVehicle"),
     ("Spawner", "SpawnBuilding"),
@@ -206,6 +209,7 @@ foreach (string cameraState in new[] { "CameraOrbitState", "CameraChaseState" })
     ("ControlsFilter", "GetAim", new[] { "target", "aimPoint", "impactPoint" }),
     ("Aircraft", "UseFuel", new[] { "fuelDrawn" }),
     ("FactionHQ", "RewardPlayer", new[] { "player", "rewardAllocation", "missionType" })
+    ,("Unit", "RecordDamage", new[] { "lastDamagedBy", "damageAmount" })
 };
 foreach ((string typeName, string methodName, string[] expected) in parameterNames)
 {
@@ -254,6 +258,9 @@ string[] patchTypes =
     "BoscaliSummer.Features.QoL.Patches.ThirdPersonChasePatch",
     "BoscaliSummer.Features.QoL.Patches.GunAimSolutionPatch",
     "BoscaliSummer.Features.QoL.Patches.GunAimInputPatch"
+    ,"BoscaliSummer.Features.Squad.Patches.SquadDamagePatch"
+    ,"BoscaliSummer.Features.Squad.Patches.SquadKillPatch"
+    ,"BoscaliSummer.Features.Squad.Patches.SquadPilotDeathPatch"
 };
 
 foreach (string patchType in patchTypes)
@@ -269,6 +276,7 @@ string[] featureTypes =
     "BoscaliSummer.Features.Support.SupportFeature",
     "BoscaliSummer.Features.QoL.QoLFeature",
     "BoscaliSummer.Features.Command.CommandFeature"
+    ,"BoscaliSummer.Features.Squad.SquadFeature"
 };
 foreach (string featureType in featureTypes)
     if (pluginAssembly.GetType(featureType, false) == null)
@@ -304,10 +312,13 @@ foreach (string resource in radioResources)
     ,("BoscaliSummer.Features.Progression.Networking.ProgressionSubmit", "Perk", typeof(byte))
     ,("BoscaliSummer.Features.Progression.Networking.ProgressionSnapshot", "Protocol", typeof(byte))
     ,("BoscaliSummer.Features.Progression.Networking.ProgressionSnapshot", "PerkMask", typeof(uint))
-    ,("BoscaliSummer.Features.Progression.Networking.ProgressionSnapshot", "Score", typeof(ushort))
+    ,("BoscaliSummer.Features.Progression.Networking.ProgressionSnapshot", "Score", typeof(int))
     ,("BoscaliSummer.Features.Progression.Networking.ProgressionSnapshot", "EarnedPoints", typeof(byte))
     ,("BoscaliSummer.Features.Progression.Networking.ProgressionSnapshot", "Rank", typeof(byte))
     ,("BoscaliSummer.Features.Progression.Networking.ProgressionSnapshot", "Result", typeof(byte))
+    ,("BoscaliSummer.Features.Progression.Networking.ProgressionSnapshot", "Generation", typeof(int))
+    ,("BoscaliSummer.Features.Progression.Networking.ProgressionSnapshot", "ScorePerPoint", typeof(int))
+    ,("BoscaliSummer.Features.Progression.Networking.ProgressionSnapshot", "MaximumPoints", typeof(byte))
     ,("BoscaliSummer.Features.Support.Networking.SupportRequestMessage", "RequestId", typeof(int))
     ,("BoscaliSummer.Features.Support.Networking.SupportRequestMessage", "Protocol", typeof(byte))
     ,("BoscaliSummer.Features.Support.Networking.SupportRequestMessage", "Action", typeof(byte))
@@ -370,6 +381,11 @@ string operationAssembly = Path.Combine(managedDir, "Assembly-CSharp.dll");
     ("NuclearOption.Networking.Player", "AddAllocation", "System.Void(System.Single)"),
     ("MissionManager", "get_IsRunning", "System.Boolean()"),
     ("MissionManager", "get_MissionTime", "System.Single()")
+    ,("Unit", "RecordDamage", "System.Void(PersistentID,System.Single)")
+    ,("Unit", "ReportKilled", "System.Void()")
+    ,("Pilot", "ApplyDamage", "System.Void(System.Single,System.Single,System.Single,System.Single)")
+    ,("UnitRegistry", "TryGetPersistentUnit", "System.Boolean(PersistentID,PersistentUnit&)")
+    ,("FactionHelper", "EmptyOrNoFactionOrNeutral", "System.Boolean(System.String)")
 };
 foreach (var seam in operationMethods)
     RequireMetadataSignature(operationAssembly, seam.Type, seam.Method, seam.Signature);
@@ -387,6 +403,11 @@ RequireMetadataSignature(Path.Combine(managedDir, "Mirage.dll"), "Mirage.ServerO
     ("RoadPathfinding.Road", "points", "System.Collections.Generic.List`1<GlobalPosition>"),
     ("Encyclopedia", "vehicles", "System.Collections.Generic.List`1<VehicleDefinition>"),
     ("Encyclopedia", "buildings", "System.Collections.Generic.List`1<BuildingDefinition>")
+    ,("PersistentUnit", "player", "NuclearOption.Networking.Player")
+    ,("Pilot", "dead", "System.Boolean")
+    ,("Pilot", "ejected", "System.Boolean")
+    ,("Pilot", "aircraft", "Aircraft")
+    ,("Aircraft", "pilots", "Pilot[]")
 };
 foreach (var seam in operationFields)
     RequireMetadataField(operationAssembly, seam.Type, seam.Field, seam.FieldType);
@@ -400,7 +421,11 @@ foreach (string type in new[] {
     if (pluginAssembly.GetType(type, false) == null) throw new TypeLoadException(type);
 foreach (var contract in new[] {
     ("BoscaliSummer.Features.DynamicOperations.Networking.OperationsQuery", new[] { "Protocol:System.Byte", "Scene:System.UInt32", "Token:System.UInt32" }),
-    ("BoscaliSummer.Features.DynamicOperations.Networking.OperationsSnapshot", new[] { "Protocol:System.Byte", "Scene:System.UInt32", "Token:System.UInt32", "Status:System.String", "Cards:BoscaliSummer.Framework.Contracts.SecondaryObjectiveView[]" }) })
+    ("BoscaliSummer.Features.DynamicOperations.Networking.OperationsSnapshot", new[] { "Protocol:System.Byte", "Scene:System.UInt32", "Token:System.UInt32", "Status:System.String", "Cards:BoscaliSummer.Framework.Contracts.SecondaryObjectiveView[]" }),
+    ("BoscaliSummer.Features.Progression.Networking.ProgressionSubmit", new[] { "Protocol:System.Byte", "Perk:System.Byte", "Scene:System.UInt32", "Token:System.UInt32", "Generation:System.Int32" }),
+    ("BoscaliSummer.Features.Progression.Networking.ProgressionSnapshot", new[] { "Protocol:System.Byte", "PerkMask:System.UInt32", "Score:System.Int32", "EarnedPoints:System.Byte", "Rank:System.Byte", "Result:System.Byte", "Generation:System.Int32", "Scene:System.UInt32", "Token:System.UInt32", "ScorePerPoint:System.Int32", "MaximumPoints:System.Byte" }),
+    ("BoscaliSummer.Features.Squad.Networking.SquadQuery", new[] { "Protocol:System.Byte", "Scene:System.UInt32", "Token:System.UInt32" }),
+    ("BoscaliSummer.Features.Squad.Networking.SquadSnapshot", new[] { "Protocol:System.Byte", "Scene:System.UInt32", "Token:System.UInt32", "Event:System.UInt32", "Pilot:BoscaliSummer.Framework.Contracts.PilotView", "Hunt:System.Boolean", "Bonus:System.Int32", "Origin:System.Int32", "ActiveIndex:System.Int32", "HuntId:System.Int32", "Status:System.String", "Speaker:System.String", "Chatter:System.String", "Wings:BoscaliSummer.Framework.Contracts.EnemyWingView[]" }) })
 {
     Type type = pluginAssembly.GetType(contract.Item1, true)!;
     string[] actual = type.GetFields(BindingFlags.Public | BindingFlags.Instance).OrderBy(field => field.MetadataToken)
@@ -408,6 +433,13 @@ foreach (var contract in new[] {
     if (!actual.SequenceEqual(contract.Item2)) throw new InvalidOperationException(contract.Item1 + " wire fields changed");
 }
 ProbeOperationSerialization(pluginAssembly, mirageAssembly);
+ProbeSquadSerialization(pluginAssembly, mirageAssembly);
+CustomAttributeData dependency = pluginAssembly.GetType("BoscaliSummer.Plugin", true)!.CustomAttributes
+    .FirstOrDefault(attribute => attribute.AttributeType.FullName == "BepInEx.BepInDependency" &&
+        attribute.ConstructorArguments.Count == 2 &&
+        Equals(attribute.ConstructorArguments[0].Value, "com.marci.wingcommand"));
+if (dependency == null || !Equals(dependency.ConstructorArguments[1].Value, "0.9.2.6"))
+    throw new InvalidOperationException("Wing Command minimum hard dependency must be 0.9.2.6");
 Console.WriteLine($"Patch target probe: game methods/fields, Harmony parameters, {patchTypes.Length} patch classes, {featureTypes.Length + 1} features, radio assets, wire contracts, dynamic operation reward/road signatures, and Mirage seams resolved.");
 return 0;
 
@@ -572,6 +604,116 @@ static void ProbeOperationSerialization(Assembly plugin, Assembly mirage)
     writerType.GetMethod("WriteByte")!.Invoke(excessiveCount, new object[] { (byte)4 });
     Reject(excessiveCount);
     Console.WriteLine("  Dynamic operations serializers: query/card roundtrip, 3-card/128-char bounds, non-finite/range/count rejection");
+}
+
+static void ProbeSquadSerialization(Assembly plugin, Assembly mirage)
+{
+    const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance;
+    Type net = plugin.GetType("BoscaliSummer.Features.Squad.Networking.SquadNet", true)!;
+    if ((byte)net.GetField("ProtocolVersion", flags)!.GetRawConstantValue()! != 2)
+        throw new InvalidOperationException("Squad protocol changed without updating its probe");
+    net.GetMethod("InstallSerializers", flags)!.Invoke(null, null);
+    Type progression = plugin.GetType("BoscaliSummer.Features.Progression.Networking.ProgressionNet", true)!;
+    if ((byte)progression.GetField("ProtocolVersion", flags)!.GetRawConstantValue()! != 3)
+        throw new InvalidOperationException("Progression protocol changed without updating its probe");
+    progression.GetMethod("InstallSerializers", flags)!.Invoke(null, null);
+    Type writerType = mirage.GetType("Mirage.Serialization.NetworkWriter", true)!;
+    Type readerType = mirage.GetType("Mirage.Serialization.NetworkReader", true)!;
+    Type queryType = plugin.GetType("BoscaliSummer.Features.Squad.Networking.SquadQuery", true)!;
+    Type snapshotType = plugin.GetType("BoscaliSummer.Features.Squad.Networking.SquadSnapshot", true)!;
+    Type pilotType = plugin.GetType("BoscaliSummer.Framework.Contracts.PilotView", true)!;
+    Type wingType = plugin.GetType("BoscaliSummer.Framework.Contracts.EnemyWingView", true)!;
+    object Encode(Type type, object value)
+    {
+        object writer = Activator.CreateInstance(writerType, 8192)!;
+        Type holder = mirage.GetType("Mirage.Serialization.Writer`1", true)!.MakeGenericType(type);
+        ((Delegate)holder.GetProperty("Write", flags)!.GetValue(null)!).DynamicInvoke(writer, value);
+        return writer;
+    }
+    object Decode(Type type, object writer)
+    {
+        object reader = Activator.CreateInstance(readerType)!;
+        try
+        {
+            byte[] bytes = (byte[])writerType.GetMethod("ToArray")!.Invoke(writer, null)!;
+            readerType.GetMethod("Reset", new[] { typeof(byte[]) })!.Invoke(reader, new object[] { bytes });
+            Type holder = mirage.GetType("Mirage.Serialization.Reader`1", true)!.MakeGenericType(type);
+            return ((Delegate)holder.GetProperty("Read", flags)!.GetValue(null)!).DynamicInvoke(reader)!;
+        }
+        finally { ((IDisposable)reader).Dispose(); }
+    }
+    void Set(object value, string field, object data) => value.GetType().GetField(field)!.SetValue(value, data);
+    object Get(object value, string field) => value.GetType().GetField(field)!.GetValue(value)!;
+    object Wing(int tier = 5, int alive = 3, int members = 4, int returns = 2, int abilities = 15) =>
+        Activator.CreateInstance(wingType, "ACE", "Viper", "Cinder", tier, "Veteran", "Hunting", alive, members, "Player", returns, abilities)!;
+    object Snapshot(int count, object wing)
+    {
+        object snapshot = Activator.CreateInstance(snapshotType)!;
+        Set(snapshot, "Protocol", (byte)2); Set(snapshot, "Scene", 345u); Set(snapshot, "Token", 678u); Set(snapshot, "Event", uint.MaxValue);
+        Set(snapshot, "Pilot", Activator.CreateInstance(pilotType, "Pilot Name", "CALDER", "Alive", true, 4, 5, "background")!);
+        Set(snapshot, "Hunt", true); Set(snapshot, "Bonus", 20); Set(snapshot, "Origin", 1000); Set(snapshot, "ActiveIndex", count == 0 ? -1 : 0); Set(snapshot, "HuntId", 41);
+        Set(snapshot, "Status", new string('S', 240)); Set(snapshot, "Speaker", "Cinder"); Set(snapshot, "Chatter", "Contact.");
+        Array wings = Array.CreateInstance(wingType, count);
+        for (int i = 0; i < count; i++) wings.SetValue(wing, i);
+        Set(snapshot, "Wings", wings);
+        return snapshot;
+    }
+    void Reject(object writer)
+    {
+        try { Decode(snapshotType, writer); }
+        catch (TargetInvocationException error) when (error.InnerException is InvalidOperationException) { return; }
+        throw new InvalidOperationException("Malformed Squad snapshot was accepted");
+    }
+    object query = Activator.CreateInstance(queryType)!;
+    Set(query, "Protocol", (byte)2); Set(query, "Scene", uint.MaxValue); Set(query, "Token", 987654u);
+    object queryResult = Decode(queryType, Encode(queryType, query));
+    foreach (FieldInfo field in queryType.GetFields(BindingFlags.Public | BindingFlags.Instance))
+        if (!Equals(field.GetValue(query), field.GetValue(queryResult))) throw new InvalidOperationException("Squad query roundtrip changed " + field.Name);
+    object decoded = Decode(snapshotType, Encode(snapshotType, Snapshot(9, Wing())));
+    Array output = (Array)Get(decoded, "Wings");
+    if (output.Length != 8 || (string)Get(decoded, "Status") != new string('S', 192) ||
+        (uint)Get(decoded, "Scene") != 345u || (uint)Get(decoded, "Token") != 678u || (uint)Get(decoded, "Event") != uint.MaxValue ||
+        (int)Get(decoded, "Bonus") != 20 || (int)Get(decoded, "Origin") != 1000 || (int)Get(decoded, "ActiveIndex") != 0 || (int)Get(decoded, "HuntId") != 41 || !(bool)Get(decoded, "Hunt"))
+        throw new InvalidOperationException("Squad snapshot bounds/header roundtrip failed");
+    Reject(Encode(snapshotType, Snapshot(1, Wing(abilities: 16))));
+    Reject(Encode(snapshotType, Snapshot(1, Wing(abilities: -1))));
+    object expectedWing = Wing();
+    foreach (FieldInfo field in wingType.GetFields(BindingFlags.Public | BindingFlags.Instance))
+        if (!Equals(field.GetValue(expectedWing), field.GetValue(output.GetValue(0)))) throw new InvalidOperationException("Squad wing roundtrip changed " + field.Name);
+    object expectedPilot = Get(Snapshot(0, Wing()), "Pilot");
+    foreach (FieldInfo field in pilotType.GetFields(BindingFlags.Public | BindingFlags.Instance))
+        if (!Equals(field.GetValue(expectedPilot), field.GetValue(Get(decoded, "Pilot")))) throw new InvalidOperationException("Squad pilot roundtrip changed " + field.Name);
+    Reject(Encode(snapshotType, Snapshot(1, Wing(tier: 6))));
+    Reject(Encode(snapshotType, Snapshot(1, Wing(alive: 4, members: 3))));
+    Reject(Encode(snapshotType, Snapshot(1, Wing(members: 5))));
+    Reject(Encode(snapshotType, Snapshot(1, Wing(returns: 3))));
+    foreach (var invalid in new[] { ("Bonus", 21), ("Origin", -1), ("ActiveIndex", 8), ("HuntId", -1) })
+    {
+        object snapshot = Snapshot(1, Wing()); Set(snapshot, invalid.Item1, invalid.Item2);
+        Reject(Encode(snapshotType, snapshot));
+    }
+    object excessiveCount = Encode(snapshotType, Snapshot(0, Wing()));
+    int bitPosition = (int)writerType.GetProperty("BitPosition")!.GetValue(excessiveCount)!;
+    writerType.GetField("_bitPosition", flags)!.SetValue(excessiveCount, bitPosition - 8);
+    writerType.GetMethod("WriteByte")!.Invoke(excessiveCount, new object[] { (byte)9 });
+    Reject(excessiveCount);
+    Type progressType = plugin.GetType("BoscaliSummer.Features.Progression.Networking.ProgressionSnapshot", true)!;
+    object progress = Activator.CreateInstance(progressType)!;
+    Set(progress, "Protocol", (byte)3); Set(progress, "Generation", 10001); Set(progress, "PerkMask", 123u);
+    Set(progress, "Score", 70000); Set(progress, "Scene", 456u); Set(progress, "Token", 789u);
+    Set(progress, "ScorePerPoint", 10000); Set(progress, "MaximumPoints", (byte)20);
+    object progressResult = Decode(progressType, Encode(progressType, progress));
+    if ((int)Get(progressResult, "Generation") != 10001 || (uint)Get(progressResult, "PerkMask") != 123u ||
+        (int)Get(progressResult, "Score") != 70000 || (uint)Get(progressResult, "Scene") != 456u || (uint)Get(progressResult, "Token") != 789u ||
+        (int)Get(progressResult, "ScorePerPoint") != 10000 || (byte)Get(progressResult, "MaximumPoints") != 20)
+        throw new InvalidOperationException("Progression generation roundtrip failed");
+    Type submitType = plugin.GetType("BoscaliSummer.Features.Progression.Networking.ProgressionSubmit", true)!;
+    object submit = Activator.CreateInstance(submitType)!;
+    Set(submit, "Protocol", (byte)3); Set(submit, "Perk", (byte)4); Set(submit, "Scene", 456u); Set(submit, "Token", 789u); Set(submit, "Generation", 10001);
+    object submitResult = Decode(submitType, Encode(submitType, submit));
+    foreach (FieldInfo field in submitType.GetFields(BindingFlags.Public | BindingFlags.Instance))
+        if (!Equals(field.GetValue(submit), field.GetValue(submitResult))) throw new InvalidOperationException("Progression intent roundtrip changed " + field.Name);
+    Console.WriteLine("  Squad serializers: pilot/wing/query roundtrip, 8-wing/192-char bounds, invalid strength/tier/return/header/count rejection; progression generation v3");
 }
 
 sealed class ProbeSignatureNames : ISignatureTypeProvider<string, object>

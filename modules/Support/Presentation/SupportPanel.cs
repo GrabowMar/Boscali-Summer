@@ -15,9 +15,8 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Features.Support.Presentation
 {
     /// <summary>
-    /// "OPS" — the pilot operations console on the maximised map. Perks, tactical support,
-    /// observation and the current service record share one screen so Boscali keeps its
-    /// four-bezel coexistence contract with Wing Command.
+    /// "OPS" — tactical support, observation, and battle status on the maximised map.
+    /// Pilot abilities and enemy ace records live on SQD.
     /// </summary>
     internal sealed class SupportPanel : MonoBehaviour, ISceneService
     {
@@ -30,21 +29,9 @@ namespace BoscaliSummer.Features.Support.Presentation
 
         private const int ChipCount = 3;
 
-        private const int TabPerks = 0;
-        private const int TabSupport = 1;
-        private const int TabObserve = 2;
-        private const int TabStatus = 3;
-
-        private sealed class PerkRow
-        {
-            public byte Id;
-            public AvButton Select;
-            public AvButton Confirm;
-            public Image Rail;
-            public Image Background;
-            public TMP_Text Code;
-            public TMP_Text Name;
-        }
+        private const int TabSupport = 0;
+        private const int TabObserve = 1;
+        private const int TabStatus = 2;
 
         private sealed class StrikeRow
         {
@@ -74,11 +61,7 @@ namespace BoscaliSummer.Features.Support.Presentation
         private AvStyled.Metric allocMetric;
         private AvStyled.Metric scoreMetric;
 
-        private readonly List<PerkRow> perkRows = new List<PerkRow>();
         private readonly List<StrikeRow> strikeRows = new List<StrikeRow>();
-        private byte? perkAwaitingConfirmation;
-        private byte? perkRequestId;
-        private float perkConfirmationUntil;
 
         // ---- Observe Page Controls -------------------------------------------------------
 
@@ -136,11 +119,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             scoreMetric = null;
             observations = null;
             thirdPersonHud = null;
-            perkRows.Clear();
             strikeRows.Clear();
-            perkAwaitingConfirmation = null;
-            perkRequestId = null;
-            perkConfirmationUntil = 0f;
 
             observeStatusRail = null;
             observeStatusTitle = null;
@@ -180,8 +159,9 @@ namespace BoscaliSummer.Features.Support.Presentation
                 return;
             }
 
-            SetViewOpen(screen.isActive);
-            if (screen.isActive && Time.unscaledTime >= nextRefresh)
+            bool visible = screen.isActive && SceneSingleton<DynamicMap>.i?.maximizedMapCanvas?.isActiveAndEnabled == true;
+            SetViewOpen(visible);
+            if (visible && Time.unscaledTime >= nextRefresh)
             {
                 nextRefresh = Time.unscaledTime + RefreshInterval;
                 Refresh();
@@ -285,7 +265,7 @@ namespace BoscaliSummer.Features.Support.Presentation
 
             shell = AvScreen.Build(
                 content, "OPS",
-                new[] { "PERKS", "SUPPORT", "OBSERVE", "STATUS" },
+                new[] { "SUPPORT", "OBSERVE", "STATUS" },
                 new[]
                 {
                     new[] { "ALLOCATION", "ALLOC" },
@@ -299,7 +279,6 @@ namespace BoscaliSummer.Features.Support.Presentation
 
             Rect body = shell.Body;
 
-            BuildPerksPage((RectTransform)shell.CreatePage(TabPerks, "PerksPage").transform, body);
             BuildStrikesPage((RectTransform)shell.CreatePage(TabSupport, "SupportPage").transform, body);
             BuildObservePage((RectTransform)shell.CreatePage(TabObserve, "ObservePage").transform, body);
             BuildStatusPage((RectTransform)shell.CreatePage(TabStatus, "StatusPage").transform, body);
@@ -390,113 +369,6 @@ namespace BoscaliSummer.Features.Support.Presentation
                                   "—", "kv-value", align: TextAlignmentOptions.MidlineRight);
         }
 
-        // ---- Tab 0: PERKS ---------------------------------------------------------------
-
-        private static string PerkCode(PerkView perk) =>
-            perk.Group != null &&
-            perk.Group.IndexOf("AUTHORIS", StringComparison.OrdinalIgnoreCase) >= 0
-                ? "AUT"
-                : "PAS";
-
-        private void BuildPerksPage(RectTransform parent, Rect body)
-        {
-            PerkView[] perks = progression != null ? progression.GetPerks() : Array.Empty<PerkView>();
-            if (perks.Length == 0)
-            {
-                AvStyled.Spine(parent, new Rect(body.x, body.y, 3f, body.height));
-                AvStyled.Label(parent,
-                    new Rect(body.x + SpineInset, body.y, body.width - SpineInset, 40f),
-                    "No pilot perks are configured on this host.", "row-sub");
-                return;
-            }
-
-            var descriptions = new List<string>(perks.Length);
-            for (int i = 0; i < perks.Length; i++) descriptions.Add(perks[i].Description);
-
-            AvNode page = AvBox.Column("perks").Gaps(0f)
-                .Add(Section("list", descriptions))
-                .Add(AvBox.Filler());
-            page.Arrange(body);
-
-            if (page.At("list").height > body.height)
-            {
-                parent = AvScreen.Scroll(parent, body, page.At("list").height, out Rect scrolled);
-                page.Arrange(scrolled);
-                body = scrolled;
-            }
-
-            AvStyled.Spine(parent, new Rect(body.x, body.y, 3f, body.height));
-            AvNode section = page.Find("list");
-            DrawSectionHeader(parent, section, page.At("list"),
-                              "PILOT SYSTEMS", "SCROLL · SELECT ROW, THEN CONFIRM", band: false);
-
-            for (int i = 0; i < perks.Length; i++)
-                AddPerkRow(parent, section.Find("r" + i), perks[i]);
-        }
-
-        private void AddPerkRow(RectTransform parent, AvNode row, PerkView view)
-        {
-            Rect area = row.Rect.ToUnity();
-            var perk = new PerkRow { Id = view.Id };
-
-            perk.Background = AvKit.Panel(parent, area, Color.clear);
-            RowSeparator(parent, area);
-            perk.Rail = AvStyled.Rail(parent, row.At("rail"), "locked");
-            perk.Code = AvStyled.Label(parent, row.At("code"), PerkCode(view), "row-sub",
-                                       align: TextAlignmentOptions.MidlineLeft);
-            perk.Name = AvStyled.Label(parent, row.At("text.name"),
-                                       view.Name.ToUpperInvariant(), "row-name");
-            AvStyled.Label(parent, row.At("text.desc"), view.Description, "row-sub");
-
-            byte id = view.Id;
-            Rect trail = row.At("trail");
-            Rect selectArea = new Rect(
-                area.x, area.y, Mathf.Max(0f, trail.x - area.x - 2f), area.height);
-            perk.Select = AvKit.HitButton(parent, selectArea, () => SelectPerk(id));
-            perk.Select.SetRowHighlight(perk.Background, Color.clear, HoverFill());
-            perk.Select.WithTooltip(
-                view.Name.ToUpperInvariant() + " — costs " + view.Cost +
-                (view.Cost == 1 ? " point. " : " points. ") + view.Description +
-                " Select this row, then use the separate confirm control.");
-
-            float actionHeight = Mathf.Min(AvTokens.RowHeight, trail.height);
-            perk.Confirm = AvStyled.Button(parent,
-                new Rect(trail.x, trail.y - Mathf.Max(0f, (trail.height - actionHeight) * 0.5f),
-                         trail.width, actionHeight),
-                "SELECT", "btn", () => CommitSelectedPerk(id), AvButtonStyle.Primary);
-            perk.Confirm.SetEnabled(false);
-            perkRows.Add(perk);
-        }
-
-        private void SelectPerk(byte id)
-        {
-            if (progression == null) return;
-            if (progression.UnlockPending ||
-                !TryFind(progression.GetPerks(), id, out PerkView view) ||
-                view.Unlocked || !view.Affordable) return;
-
-            perkAwaitingConfirmation = id;
-            perkConfirmationUntil = Time.unscaledTime + 6f;
-            nextRefresh = 0f;
-        }
-
-        private void CommitSelectedPerk(byte id)
-        {
-            if (progression == null || progression.UnlockPending ||
-                perkAwaitingConfirmation != id || Time.unscaledTime > perkConfirmationUntil ||
-                !TryFind(progression.GetPerks(), id, out PerkView view) ||
-                view.Unlocked || !view.Affordable) return;
-
-            perkAwaitingConfirmation = null;
-            perkConfirmationUntil = 0f;
-            perkRequestId = id;
-            progression.RequestUnlock(id);
-            nextRefresh = 0f;
-        }
-
-        private static Color HoverFill() =>
-            AvStyleHost.Resolve(AvStyleHost.Style("row", "hover").Background, AvTheme.SurfaceRaised);
-
         // ---- Tab 1: SUPPORT -------------------------------------------------------------
 
         private static string ActionCode(SupportActionId id)
@@ -524,7 +396,7 @@ namespace BoscaliSummer.Features.Support.Presentation
                 string perkName = progression != null
                     ? progression.PerkNameFor(actions[i].Capability)
                     : "COMBAT ENGINEERING";
-                descriptions.Add("LOCKED · UNLOCK ON PERKS ('" +
+                descriptions.Add("LOCKED · UNLOCK IN SQD / ABILITIES ('" +
                                  perkName.ToUpperInvariant() + "')\n" + actions[i].Description);
             }
 
@@ -580,7 +452,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             strike.Action.WithTooltip(
                 definition.Name.ToUpperInvariant() + " — " +
                 support.Cost(definition).ToString("0") + " alloc. " + definition.Description +
-                " Unlocked on OPS / PERKS ('" + perkHint + "').");
+                " Unlocked in SQD / ABILITIES ('" + perkHint + "').");
 
             strikeRows.Add(strike);
         }
@@ -715,7 +587,6 @@ namespace BoscaliSummer.Features.Support.Presentation
 
             RefreshDataBar(bypass);
             RefreshMetrics(bypass);
-            RefreshPerkRows();
             RefreshStrikeRows(bypass);
             RefreshObservation();
             RefreshStatusPage(bypass);
@@ -802,9 +673,8 @@ namespace BoscaliSummer.Features.Support.Presentation
             allocMetric.Set(allocation.ToString("N0"), allocCaption, allocFraction, allocFill);
 
             int score = progression != null ? progression.Score : 0;
-            int perPoint = Math.Max(1, progression != null ? progression.ScorePerPoint : 1);
-            int intoPoint = score % perPoint;
             int available = progression != null ? progression.AvailablePoints : 0;
+            int maximum = Math.Max(1, progression != null ? progression.MaximumPoints : 1);
             int rank = progression != null ? progression.Rank : 0;
 
             bool unlockPending = progression != null && progression.UnlockPending;
@@ -814,101 +684,10 @@ namespace BoscaliSummer.Features.Support.Presentation
                     ? "ALL PERKS UNLOCKED"
                     : unlockPending
                         ? "PERK REQUEST · AWAITING HOST"
-                        : available + (available == 1 ? " PT · " : " PTS · ") +
-                          (perPoint - intoPoint) + " TO NEXT",
-                bypass ? 1f : intoPoint / (float)perPoint,
+                        : available + "P AVAILABLE · ABILITIES IN SQD",
+                bypass ? 1f : available / (float)maximum,
                 bypass ? AvTheme.Warning : unlockPending ? AvTheme.RailInfo : AvTheme.RailReady);
             scoreMetric.Unit.text = bypass ? "BYPASS" : "PTS · RANK " + rank;
-        }
-
-        private void RefreshPerkRows()
-        {
-            if (progression == null) return;
-            if (perkAwaitingConfirmation.HasValue && Time.unscaledTime > perkConfirmationUntil)
-            {
-                perkAwaitingConfirmation = null;
-                perkConfirmationUntil = 0f;
-            }
-
-            PerkView[] perks = progression.GetPerks();
-            bool requestPending = progression.UnlockPending;
-            if (requestPending)
-            {
-                perkAwaitingConfirmation = null;
-                perkConfirmationUntil = 0f;
-            }
-            else perkRequestId = null;
-
-            for (int i = 0; i < perkRows.Count; i++)
-            {
-                PerkRow row = perkRows[i];
-                if (!TryFind(perks, row.Id, out PerkView view)) continue;
-
-                bool confirming = perkAwaitingConfirmation == row.Id;
-                row.Select.SetEnabled(!requestPending && view.Affordable && !view.Unlocked);
-
-                if (view.Unlocked)
-                {
-                    PaintPerk(row, "ready", AvTheme.TextPrimary);
-                    PaintPerkAction(row, "ACTIVE", false, false,
-                        view.Name.ToUpperInvariant() + " is active.");
-                    row.Select.WithTooltip(view.Name.ToUpperInvariant() + " is active.");
-                }
-                else if (requestPending && perkRequestId == row.Id)
-                {
-                    const string pending = "Waiting for the host to accept or deny this perk request.";
-                    PaintPerk(row, "cooling", AvTheme.TextPrimary);
-                    PaintPerkAction(row, "PENDING", false, true, pending);
-                    row.Select.WithTooltip(pending);
-                }
-                else if (requestPending)
-                {
-                    const string wait = "Wait for the host to answer the current perk request.";
-                    PaintPerk(row, "locked", AvTheme.Dim);
-                    PaintPerkAction(row, "WAIT", false, false, wait);
-                    row.Select.WithTooltip(wait);
-                }
-                else if (confirming)
-                {
-                    string confirm = "Confirm this separate action to commit " + view.Cost +
-                                     (view.Cost == 1 ? " perk point." : " perk points.");
-                    PaintPerk(row, "armed", AvTheme.TextPrimary);
-                    PaintPerkAction(row, "CONFIRM " + view.Cost + "P", true, true, confirm);
-                    row.Select.WithTooltip("Selected. Use the separate CONFIRM control to commit it.");
-                }
-                else if (view.Affordable)
-                {
-                    const string select = "Select the row first; the separate confirm control will then enable.";
-                    PaintPerk(row, "armed", AvTheme.TextPrimary);
-                    PaintPerkAction(row, "CONFIRM " + view.Cost + "P", false, false, select);
-                    row.Select.WithTooltip(select);
-                }
-                else
-                {
-                    string required = "Requires " + view.Cost +
-                                      (view.Cost == 1 ? " unspent perk point." : " unspent perk points.");
-                    PaintPerk(row, "locked", AvTheme.Dim);
-                    PaintPerkAction(row, view.Cost + "P REQ", false, false, required);
-                    row.Select.WithTooltip(required);
-                }
-            }
-        }
-
-        private static void PaintPerk(PerkRow row, string railState, Color name)
-        {
-            Color rail = RailColour(railState);
-            row.Rail.color = rail;
-            row.Code.color = rail;
-            row.Name.color = name;
-        }
-
-        private static void PaintPerkAction(
-            PerkRow row, string text, bool enabled, bool latched, string tooltip)
-        {
-            row.Confirm.SetText(text);
-            row.Confirm.SetEnabled(enabled);
-            row.Confirm.SetLatched(latched);
-            row.Confirm.WithTooltip(tooltip);
         }
 
         private void RefreshStrikeRows(bool bypass)
@@ -943,7 +722,7 @@ namespace BoscaliSummer.Features.Support.Presentation
                 {
                     string perkName = progression != null ? progression.PerkNameFor(row.Definition.Capability) : "Perk";
                     SetRowState(row, "locked",
-                        "LOCKED · UNLOCK ON PERKS ('" + perkName.ToUpperInvariant() + "')",
+                        "LOCKED · UNLOCK IN SQD / ABILITIES ('" + perkName.ToUpperInvariant() + "')",
                         AvTheme.Warning, "LOCKED", false, false);
                 }
                 else if (cooldown > 0.5f)
@@ -1131,7 +910,7 @@ namespace BoscaliSummer.Features.Support.Presentation
                 if (perks[i].Unlocked) committed.Add(perks[i].Name.ToUpperInvariant());
 
             committedValue.text = committed.Count == 0
-                ? "Nothing committed yet. Unlock pilot systems on the PERKS page."
+                ? "Nothing committed yet. Unlock pilot abilities in SQD / ABILITIES."
                 : string.Join("  ·  ", committed.ToArray());
             committedValue.color = committed.Count == 0 ? AvTheme.Dim : AvTheme.TextPrimary;
         }
@@ -1148,18 +927,6 @@ namespace BoscaliSummer.Features.Support.Presentation
                 baseAlarm != null ? baseAlarm.ActiveAlertTicker : null,
                 MapPicker.Prompt,
                 string.IsNullOrEmpty(fire) ? baseLine : baseLine + " · " + fire);
-        }
-
-        private static bool TryFind(PerkView[] perks, byte id, out PerkView view)
-        {
-            for (int i = 0; i < perks.Length; i++)
-            {
-                if (perks[i].Id != id) continue;
-                view = perks[i];
-                return true;
-            }
-            view = default;
-            return false;
         }
 
         // ---- Highlights ------------------------------------------------------------------

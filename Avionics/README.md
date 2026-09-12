@@ -1,8 +1,8 @@
 # Dual-mod rules (Wing Command × Boscali Summer)
 
-This folder is compiled into **both** plugins (`NOAvionics`). It is the only shared
-runtime contract they have. There is no third BepInEx plugin and no project reference
-either way.
+This folder is compiled into **both** plugins (`NOAvionics`) for shared avionics
+coordination. Wing Command also exposes its versioned public `WingSquad` API for
+Boscali's pilot/ace integration. There is no third BepInEx plugin or project reference.
 
 Read this before adding an MFD screen, an armed map click, an AI scoring patch, or
 anything that would need the other mod to exist.
@@ -12,19 +12,21 @@ anything that would need the other mod to exist.
 | | Wing Command | Boscali Summer |
 |---|---|---|
 | Promise | Flight lead of *your* aircraft | A living battlefield |
-| Owns | Recruited wing, orders, formations, ROE, loadouts, shop, squadron pilots, chatter, takeover | Fire/ruins, occupancy, music radio, score perks, support call-ins, theater SA |
+| Owns | Recruited wing, orders, formations, ROE, loadouts, shop, pilot generation, chatter, takeover, public enemy-ace wing API | Fire/ruins, occupancy, music radio, perks, support, theater SA, player careers and enemy ace encounter policy |
 | Must not own | World destruction, garrisons, music player, faction-wide aircraft command | Recruited wing, formations, loadouts, squadron shop, standing aircraft orders |
 
-**Only Wing Command may task aircraft, and only recruited wingmen.** Boscali doctrine may
-bias *friendly, non-wing* mission AI. It must not retask a unit whose persistent-id hash
-is on the presence board.
+**Boscali never commands recruited, friendly or player-owned aircraft.** Its ace
+director may target/release only enemy wings created and owned by Wing Command's
+public ace API. Boscali doctrine may bias *friendly, non-wing* mission AI; it must
+not retask any unit whose persistent-id hash is on the presence board.
 
-Each mod is complete alone. Together they should read as flight lead + air command, not
-two directors.
+Boscali now requires Wing Command `0.9.2.6`+ as a hard BepInEx runtime dependency,
+as requested for Squad integration. Wing Command does not depend on Boscali.
+Use public APIs, never copy/decompile Wing Command implementation or its DLL.
 
 **KREW** (`com.marci.wingcommand.krew`) is a Wing Command *companion*: hard BepInEx
-dependency on WC, soft detect of KAR/BOTE. It is not this protocol. Do not make Boscali
-or WC hard-depend on each other the way KREW depends on WC.
+dependency on WC, soft detect of KAR/BOTE. It is separate from this protocol and
+from Boscali's required Wing Command dependency.
 
 ## How they talk
 
@@ -54,23 +56,25 @@ entries inside the list**, not indices past its end.
 | Id | Column | Notes |
 |---|---|---|
 | `BezelRegistry.Wmc` | left | Wing Command |
-| `BezelRegistry.Ops` | left | Boscali perks, support call-ins, career record |
+| `BezelRegistry.Ops` | left | Boscali support call-ins, observation, battle status |
+| Boscali `MfdSlots.Sqd` | left, may spill right | Pilot, abilities and enemy ace wings |
 | `BezelRegistry.Str` | left | Boscali strategic layer: theater SA, frontline, tasking, logistics, doctrine |
 | `BezelRegistry.Rad` | right | Boscali music radio |
 | `BezelRegistry.Set` | right | Boscali saved map settings |
 
-That is four Boscali screens against roughly three free slots per column, so the left
-column is full and `TryClaim` will spill to the right. A fifth would evict one of
-these; add a tab to an existing screen instead.
+Five Boscali screens plus WMC fill the six unused slots (three per column) in the
+supported vanilla layout. `TryClaim` spills from a full preferred column and never
+evicts another owner. Boscali's `SqdPanelTests` verifies all six claims coexist and
+an additional claim fails without replacement. Additional screens need another
+verified free slot or a tab in an existing page.
 
 OPS and STR are the two command screens. Theater SA used to be a tab *inside* OPS,
 mounted through an `ITheaterPage` contract; that contract is gone. They now share only
 the shell factory (`AvScreen`), which is a widget, not a seam.
 
-They are separate because they answer different questions. OPS is about the player —
-what they have earned and what they may call in. STR is about the battlefield — who
-holds what, who is flying, what the theater can still pay for. Neither needs the
-other to install, and either may fail to claim a slot without taking the other down.
+SQD presents the pilot, abilities and enemy aces. OPS presents support calls,
+observation and battle status. STR presents the theater picture and mission-AI
+doctrine. A failed bezel claim must not evict another panel or stop its services.
 
 **A new screen claims with `MfdBezel.TryClaim` / `BezelRegistry.TryClaim`, then
 `Bind`.** A private first-null `TryClaimSlot` will race the other plugin in the same
@@ -131,7 +135,7 @@ Shared pure tokens live in `shared/avionics/AvionicsTokens.cs` (`NOAvionics.AvTo
 The shared Unity widget kit lives in `shared/avionics-ui/` (`NOAvionics.Ui`), linked by
 plugin csprojs only.
 
-Live panels are **green-glass** (WMC / OPS / STR / RAD), chamfered SDF (`AvSprites`),
+Live panels are **green-glass** (WMC / SQD / OPS / STR / RAD / SET), chamfered SDF (`AvSprites`),
 unified at `AvTokens.PanelWidth`. Height is `AvTokens.PanelHeight` at the floor and up to
 `AvTokens.PanelHeightMax` where the column measures taller — `AvScreen.ResolveHeight`
 measures the slot a panel was parented into, so no screen hard-codes a canvas size.
@@ -144,10 +148,10 @@ else ambient page status. A disabled control states *why* on that strip.
 
 ## Do not
 
-- `BepInDependency` or a project reference between WC and Boscali
+- A reverse Wing Command dependency on Boscali, or a compile-time implementation reference
 - A third shared BepInEx plugin for this protocol
 - `MessageUI.GameMessage` for wing chatter or doctrine (frameless HUD / OPS terminal)
 - Vanilla `PlayerRank` as a Boscali HQ lock (Progression already abandoned that budget)
 - Support vehicle airdrops as a second aircraft shop
-- Add a fifth Boscali bezel, or copy WMC pages into Boscali
+- Add a seventh shared screen without verified space, or copy WMC pages into Boscali
 - Commandeer `aircraft.Player != null`

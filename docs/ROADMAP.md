@@ -40,6 +40,10 @@ codecs and snapshot providers; garrison catalogue/selection/spawning/lifecycle.
 
 ## Feature direction
 
+- **Ace hunt soundtrack validation** — local Hunt station selection, installed tactical
+  fallback and prior radio/native state restoration are implemented. Live-play gate:
+  playing/paused/off starts, unreadable imports, manual Stop, remote hunt notifications
+  while SQD is closed, and scene reload. See [ACE_HUNTS.md](ACE_HUNTS.md).
 - **Dynamic operations** — capture/defense/interdiction director, secondary MIS panel,
   finite convoy/fortification awards and snapshot protocol implemented behind default-off
   `DynamicOperations.Enabled`. Current frontlines use elapsed-time observed pressure.

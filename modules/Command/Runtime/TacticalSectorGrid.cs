@@ -240,6 +240,44 @@ namespace BoscaliSummer.Features.Command.Runtime
             return sectorStates[row * ResolutionX + col];
         }
 
+        public bool TryNearestControlledEdge(float playerX, float playerZ, out float x, out float z)
+        {
+            x = z = 0;
+            if (!IsFinite(playerX) || !IsFinite(playerZ) || WorldSizeX < 8000 || WorldSizeY < 8000) return false;
+            const float inset = 1200f, footprint = 900f, minimumDistance = 9000f;
+            float halfX = WorldSizeX * 0.5f - inset, halfZ = WorldSizeY * 0.5f - inset;
+            double best = double.MaxValue;
+            // Project onto every boundary cell as well as its endpoints. Choose by distance,
+            // not iteration order, so a far enemy edge cannot win over a nearer eligible one.
+            for (int side = 0; side < 4; side++)
+            {
+                int cells = side < 2 ? ResolutionY : ResolutionX;
+                float half = side < 2 ? halfZ : halfX;
+                float playerAxis = side < 2 ? playerZ : playerX;
+                for (int cell = 0; cell < cells; cell++)
+                {
+                    float low = -half + 2 * half * cell / cells;
+                    float high = -half + 2 * half * (cell + 1) / cells;
+                    for (int sample = 0; sample < 3; sample++)
+                    {
+                        float along = sample == 0 ? Math.Clamp(playerAxis, low, high) : sample == 1 ? low : high;
+                        float cx = side < 2 ? (side == 0 ? -halfX : halfX) : along;
+                        float cz = side >= 2 ? (side == 2 ? -halfZ : halfZ) : along;
+                        double dx = cx - playerX, dz = cz - playerZ, distance = dx * dx + dz * dz;
+                        if (distance < minimumDistance * minimumDistance || distance >= best) continue;
+                        bool controlled = true;
+                        for (int a = -1; a <= 1 && controlled; a++)
+                        for (int b = -1; b <= 1; b++)
+                            if (!WorldToCell(cx + a * footprint, cz + b * footprint, out int col, out int row) ||
+                                GetSectorControl(col, row) != SectorControl.Friendly) { controlled = false; break; }
+                        if (!controlled) continue;
+                        best = distance; x = cx; z = cz;
+                    }
+                }
+            }
+            return best < double.MaxValue;
+        }
+
         public float GetSectorHoldStrength(int col, int row)
         {
             if (col < 0 || col >= ResolutionX || row < 0 || row >= ResolutionY)

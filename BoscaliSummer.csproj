@@ -22,11 +22,9 @@
     <Compile Include="Core\**\*.cs" />
     <Compile Include="Framework\**\*.cs" />
     <Compile Include="Infrastructure\**\*.cs" />
-    <!-- SQD is a preserved local prototype. Shipping it would violate the four-screen
-         shared-bezel contract; its useful progression views live on OPS instead. The
-         local TheaterBias draft duplicates the shared cross-mod scoring policy. -->
+    <!-- The local TheaterBias draft duplicates the shared cross-mod scoring policy. -->
     <Compile Include="modules\**\*.cs"
-             Exclude="modules\Progression\Presentation\SqdMfdPanel.cs;modules\Command\Domain\TheaterBias.cs" />
+             Exclude="modules\Command\Domain\TheaterBias.cs" />
     <!-- Vendored avionics protocol, widget kit, and pure design tokens (namespace
          NOAvionics / NOAvionics.Ui). Wing Command carries a parallel source copy; the
          BCL-only AppDomain protocol coordinates bezel and map-input ownership without a

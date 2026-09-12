@@ -72,6 +72,11 @@ Decisions that cost an argument. Kept so they are not made again the other way.
   audio — no bytes, URLs, paths, filenames or metadata on the wire, and custom messages
   register only after a Boscali handshake proves the peer supports them. Not enabled in this
   release.
+- **Ace hunts borrow the same player.** Radio observes the local Squad hunt state through
+  a read-only contract. A validated local `Music/Hunt` station takes priority over the
+  installed map's tactical clip. The existing two sources and vanilla handoff preserve
+  prior station/track/position/pause state; manual transport takes ownership for the rest
+  of the hunt. Radio sends no music metadata or additional multiplayer messages.
 
 ## Progression and support
 

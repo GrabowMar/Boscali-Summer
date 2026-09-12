@@ -1,5 +1,6 @@
 using BoscaliSummer.Features.Progression.Runtime;
 using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Runtime;
 using NOAvionics;
 
 namespace BoscaliSummer.Tests.Features.Progression
@@ -10,6 +11,7 @@ namespace BoscaliSummer.Tests.Features.Progression
         {
             TestPerkClassification();
             TestWingmanPresenceTracking();
+            TestSquadBezelCoexistence();
         }
 
         private static void TestPerkClassification()
@@ -53,6 +55,31 @@ namespace BoscaliSummer.Tests.Features.Progression
                 PresenceBoard.SetString(PresenceBoard.WingGuid, prevGuid);
                 PresenceBoard.SetInts(PresenceBoard.WingMemberIds, prevIds);
             }
+        }
+
+        private static void TestSquadBezelCoexistence()
+        {
+            string[] screens = { BezelRegistry.Wmc, MfdSlots.Sqd, MfdSlots.Ops,
+                MfdSlots.Str, MfdSlots.Rad, MfdSlots.Set };
+            BezelRegistry.Reset();
+            try
+            {
+                var occupied = new System.Collections.Generic.HashSet<string>();
+                foreach (string screen in screens)
+                {
+                    TestAssert.That(BezelRegistry.TryClaim(screen, true, 6, 6,
+                        (_, index) => index >= 3, out bool left, out int slot),
+                        screen + " must fit alongside the other screens in the six unused vanilla slots");
+                    TestAssert.That(occupied.Add(left + ":" + slot), "SQD must never replace another bezel claim");
+                }
+                TestAssert.That(!BezelRegistry.TryClaim("EXTRA", true, 6, 6,
+                    (_, index) => index >= 3, out _, out _), "a full bezel must reject an extra screen without eviction");
+                BezelRegistry.Release(MfdSlots.Sqd);
+                TestAssert.That(!BezelRegistry.IsClaimed(MfdSlots.Sqd), "SQD reset must release its reservation");
+                TestAssert.That(BezelRegistry.IsClaimed(BezelRegistry.Wmc) && BezelRegistry.IsClaimed(MfdSlots.Ops),
+                    "SQD reset must preserve Wing Command and OPS reservations");
+            }
+            finally { BezelRegistry.Reset(); }
         }
     }
 }

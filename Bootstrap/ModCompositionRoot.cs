@@ -7,6 +7,7 @@ using BoscaliSummer.Features.Progression;
 using BoscaliSummer.Features.QoL;
 using BoscaliSummer.Features.Radio;
 using BoscaliSummer.Features.Support;
+using BoscaliSummer.Features.Squad;
 using BoscaliSummer.Features.Trenches;
 using BoscaliSummer.Features.UrbanCombat;
 using BoscaliSummer.Framework.Features;
@@ -33,6 +34,7 @@ namespace BoscaliSummer.Bootstrap
                     features.Add(new QoLFeature());
                 if (settings.Progression.Enabled.Value)
                 {
+                    features.Add(new SquadFeature());
                     features.Add(new ProgressionFeature());
                     if (settings.Support.Enabled.Value) features.Add(new SupportFeature());
                     if (settings.Command.Enabled.Value) features.Add(new CommandFeature());

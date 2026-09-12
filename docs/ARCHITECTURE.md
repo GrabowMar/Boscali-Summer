@@ -2,7 +2,8 @@
 
 One BepInEx assembly, explicitly registered features. Source is modular so a feature can be disabled or
 replaced without destabilising the others; deployment stays a single DLL so installation is
-simple and no feature is a binary dependency.
+simple. Wing Command `0.9.2.6`+ is a required runtime companion; no Wing Command source
+or compile-time assembly reference is included.
 
 ## Source layout
 
@@ -20,7 +21,8 @@ Interop/          public reflection-safe theater/doctrine façade for Wing Comma
 modules/
   QoL/                local HUD/camera conveniences, observation marks and freshness readout
   FireAndDestruction/  ignition, forest index, spread, impact scorch, ruins, wreck persistence, replication
-  Progression/         score-earned perk choices, capabilities, reward/fuel effects
+  Squad/               player pilot careers, enemy ace hunts, rewards, read-only snapshots
+  Progression/         SQD MFD/HUD, score/ace-earned perk choices, capabilities, reward/fuel effects
   Radio/               local music catalogue, playback ownership, map-MFD panel
   Support/             OPS MFD, validated requests, costs/cooldowns, support jobs
   Command/             STR MFD, expanded map GUI, map overlays, doctrine, AI target scoring
@@ -50,7 +52,8 @@ Radio                         independent, client-local
 QoL                           independent, client-local; optional observation/HUD contracts for OPS
 Fire and destruction          independent
 Urban Combat  ──publishes──►  IBuildingOccupancy, IZoneFortificationService
-Progression   ──required by─►  Support, Command
+Squad         ──required by─►  Progression ──required by─► Support, Command
+Squad         ──publishes───►  ISquadView (Progression and optional Radio consumer)
 Command       ──owns────────►  STR bezel screen (theater SA, frontline, tasking, doctrine)
 ```
 
@@ -62,8 +65,8 @@ never a sibling's manager, singleton, patch class, or settings object.
 The host owns one hidden `DontDestroyOnLoad` object. Persistent managers implement
 `ISceneService`; `SceneLifecycle` resets them once at composition and on every loaded scene,
 isolating reset exceptions per service. Reset order: fire (10) → impact scorch (15) → ruin
-aftermath (20) → zone garrison (30) → radio (40) → progression (45) → support (50) → operations (51) →
-command (52) → COM overlay (53) → OPS MFD (55) → STR MFD (56) → map UI (57) →
+aftermath (20) → zone garrison (30) → radio (40) → squad (44) → progression (45) → support (50) → operations (51) →
+command (52) → COM overlay (53) → SQD MFD/HUD (54) → OPS MFD (55) → STR MFD (56) → map UI (57) →
 SET MFD (58) → trench networks (60) → trench map overlay (61) → fire-network per-scene state (100). Teardown unpatches in reverse, unregisters the
 scene callback and Mirage handlers, clears the registry, and destroys the root.
 
@@ -77,11 +80,20 @@ generate per-frame network traffic.
 
 - **Radio** is client-local and sends nothing. It owns file discovery, three embedded PNG
   identities, references to the map's installed soundtrack clips, decoded local clips, the
-  music-bus handoff, and its MFD screen.
+  music-bus handoff, and its MFD screen. It reads `ISquadView` for local hunt transitions;
+  a local Hunt station or installed tactical clip temporarily uses the same two sources.
+  Prior audio state is restored unless manual transport has taken ownership.
+- **Squad** owns the host's pilot generations, threat, ace encounters and one-time bonus
+  points. It reuses Wing Command's public pilot/wing/chatter API via the cached `WingLink`
+  adapter. Aircraft use native spawning/networking. Its own protocol-2 summaries poll at
+  1 Hz even with SQD closed and carry the eight most recent hostile wings, pilot state and
+  deduplicated notices. Clients never nominate an ace, faction, skill, damage or reward.
 - **Progression** never touches Nuclear Option's score thresholds, six ranks, or unlocks. It
-  reads `Player.PlayerScore` and grants one point per configured score tier, capped. The host
-  stores only the selected-perk mask and sends the accepted mask, score, points and rank to
-  the owning client, which polls only while the OPS page is open. Fuel/reward effects hook the
+  reads `Player.PlayerScore` above the current pilot's score origin and grants score points
+  up to the configured ceiling, plus Squad ace bonuses up to twenty total points. Pilot
+  generation changes reset selected perks. The host sends the accepted mask, score, points,
+  rank and pilot generation to the owning client while SQD is open. Scene/request tokens
+  reject stale replies after a career transition. Fuel/reward effects hook the
   verified `Aircraft.UseFuel` and `FactionHQ.RewardPlayer` seams; reward categories are mapped
   by enum member, not by ordinal range.
 - **Support** requests carry only a protocol byte, request id, action id and target coord.
@@ -101,7 +113,7 @@ generate per-frame network traffic.
 Mirage derives message ids from full type names, so these must not be renamed without a
 deliberate protocol break: `BoscaliSummer.Runtime.FireIgnitedMessage`,
 `BoscaliSummer.Runtime.RuinCreatedMessage`. The progression and support contracts are not in
-that protected set: they were reshaped and their protocol bytes bumped to `2`, so mixed peers
+that protected set: progression is protocol `3`, support is protocol `2`, so mixed peers
 fail closed on those two channels while fire and ruin keep interoperating. A third,
 `BoscaliSummer.Runtime.BuildingDamagedMessage`, was removed on purpose when building damage
 became a local-only scorch mark — replicated channels went from three to two, and old/new
@@ -124,6 +136,7 @@ holding both remaining channels.
 | Forest spread per site | 2 attempts, ≤3 generations |
 | Garrison zones processed | 1/frame |
 | Radio | 32 channels, 512 tracks, ≤30 soundtrack refs, 1 active decode, ≤2 clips mid-crossfade; icons ≤256×256, ≤256 KiB |
+| Squad | 64 player careers, 4 owned wings, ≤4 aircraft/wing, 32 history entries, 8 snapshot rows, 900s aircraft lifetime |
 | Trench networks / nodes / chunks | 16 networks, 32 nodes/network, 3-tier camera LOD (≤250m, 250m–1200m, 1200m–3500m) |
 
 No feature scans the whole scene per frame: catalogue once, queue event work, use slow
@@ -193,7 +206,8 @@ the left MFD dock and event log, right bezel rail, central map, and native spawn
 footer. `MapUiManager` handles delayed page installation and canvas-size changes;
 the three MFD patch classes are explicitly registered by Command. Closing the map
 restores native transforms and page bindings. The layout discovers WMC through the
-game's MFD lists and has no Wing Command assembly dependency.
+game's MFD lists; the plugin's required Wing Command dependency is declared at BepInEx
+startup while runtime calls remain behind its public API adapter.
 
 All maximised-map bezel screens use the vendored `NOAvionics.Ui.AvScreen` shell: green-glass
 tokens, resolved dock height, a shared metric/tab/body grid, and one pinned status strip
@@ -234,3 +248,10 @@ a module missing its `<Name>Feature.cs` descriptor, and moves of Fire networking
 helpers back into shared folders. See [MODULE_BOUNDARIES.md](MODULE_BOUNDARIES.md) for the
 routing map. Local `AGENTS.md` / `CLAUDE.md` files (git-ignored) may add per-folder notes
 for coding agents but are not required and enforce nothing.
+
+Command now publishes `ITerritoryIngress` through `TerritoryControlView`. This owns
+up to eight faction control fields shared with `ComMapOverlay`, refreshed on demand
+at 2 Hz. Squad resolves it at spawn time (Command installs after Progression) and
+fails closed if unavailable. No module imports another module's implementation.
+The spawn seam delegates host-selected global coordinates to Wing Command 0.9.2.6
+`SpawnWingAt`; native aircraft creation/ownership remain in that companion.

@@ -8,6 +8,8 @@ live mission. This is a planning aid, not a spec — [ARCHITECTURE](ARCHITECTURE
 Last swept: 2026-09-10, against `main` (dev build `0.1.1`). Updated after the
 September repo reorganization (flatten to `modules/` at the root, AGENTS.md
 consolidation, README/doc drift fixes).
+Squad-focused update: 2026-09-12. Ace career and radio transition assertions pass with
+the full pure suite; the new Squad/UI/audio integration has not been deployed or flown.
 Release build: **passes**, 0 warnings. Pure test suite (`dotnet run --project
 tests/BoscaliSummer.Tests -c Release`): **passes** (module + framework + architecture).
 
@@ -28,18 +30,21 @@ tests/BoscaliSummer.Tests -c Release`): **passes** (module + framework + archite
 |---|---|---|---|---|
 | Fire & destruction | `fire-and-destruction` | on | — | **Stable** (minor drift) |
 | Urban combat | `urban-combat` | on | — | **In-flight** |
-| Radio | `radio` | on (client-local) | — | **Stable** |
+| Radio | `radio` | on (client-local) | optional `ISquadView` | **Stable / Unverified** hunt override |
 | Quality of life | `qol` | on (client-local) | — | **Unverified** (new module) |
-| Progression | `progression` | on (host-auth) | — | **Stable** (minor drift) |
+| Squad / ace hunts | `squad` | on (host-auth) | — | **Unverified** |
+| Progression | `progression` | on (host-auth) | `squad` | **Unverified** SQD/career integration |
 | Support operations | `support` | on | `progression` | **In-flight** (drift) |
 | Tactical command | `command` | on | `progression` | **In-flight / Unverified** |
 | Dynamic operations | `dynamic-operations` | **off** | — | **Experimental** |
 | Trenches | `trenches` | on | — | **Stable / In-flight** |
 | Weather | — | — | — | **Absent** (archived) |
 
-Load order (composition root): fire → urban → radio → qol → progression → support →
+Load order (composition root): fire → urban → radio → qol → squad → progression → support →
 command → dynamic-operations → trenches. Progression/Support/Command are simply not constructed when
-disabled; `qol`, `dynamic-operations`, and `trenches` are gated on their own `Enabled` flag.
+disabled; Squad is installed with Progression. `qol`, `dynamic-operations`, and `trenches`
+are gated on their own `Enabled` flag. The whole plugin now requires Wing Command `0.9.2.6`+
+with its public Squad API.
 
 ---
 
@@ -111,6 +116,7 @@ servers skip it.
 | MFD panel — transport, shuffle, repeat, rescan, folder shortcut | `Presentation/RadioPanel.cs`, `Presentation/PngIconHeader.cs` | Stable | |
 | Custom `station.png` loading (≤256×256, ≤256 KiB) | `Presentation/RadioStationIconCache.cs` | Stable | |
 | Vanilla-music ownership handoff (defer while on air, restore on stop) | `Patches/VanillaMusicPatches.cs` | Stable | Play / CrossFade / Queue patches |
+| Hunt soundtrack and previous station/position/pause restoration | `Runtime/RadioManager.cs`, `Runtime/HuntMusicGate.cs` | Unverified | Local Hunt station or installed tactical clip; manual transport wins, including snapshot recovery |
 | MP3 support | — | Absent | Unadvertised until a real target-runtime decode test passes |
 | Synchronized stations across peers | — | Absent | Designed (`RadioHello`/`RadioTuneIntent`/`RadioState`), gated, not enabled — see DESIGN_NOTES |
 
@@ -148,10 +154,32 @@ Config: `QoL.Enabled`, `QoL.GunAimAssist`, `QoL.GunAimAssistStrength` (0–0.08)
 
 ---
 
+## Squad / ace hunts — `squad`
+
+**Purpose:** host-owned pilot careers, enemy ace encounters and bonus points, exposed
+through `ISquadView`. Public Wing Command API reuse; no copied generator or wing AI.
+
+| Feature | Where | Status | Notes |
+|---|---|---|---|
+| Pilot identity and F1 respawn/one-life career | `Runtime/SquadManager.cs`, `Configuration/SquadSettings.cs` | Unverified | Confirmed death retires a one-life pilot; ejection alone does not |
+| Hostile damage threat and escalating ace-led pursuit | `Domain/AceCareer.cs`, `Runtime/SquadManager.cs`, `Patches/SquadPatches.cs` | Unverified | 25 credited damage, 60s grace, 180s cooldown; pure policy assertions pass |
+| One-time ace bonus and surviving rival returns | `Runtime/SquadManager.cs` | Unverified | Bonuses beyond score-point cap; bounded mission history |
+| Read-only snapshots and encounter notices | `Networking/SquadNet.cs` | Unverified | Protocol 1, 1Hz while panels closed, eight hostile wing summaries |
+
+Hard caps: 64 careers, four owned wings, four aircraft/wing, 32 encounter records,
+900-second aircraft lifetime. After pursuit, surviving aircraft resume normal AI
+within that lifetime. Friendly wings remain managed in WMC.
+
+**Needs attention:** single-player/listen-host/client/late-join, target ejection and
+respawn, both life modes, survivor return evidence, music transitions and scene cleanup.
+No deployment or flight testing was performed for this change. See [ACE_HUNTS](ACE_HUNTS.md).
+
+---
+
 ## Progression — `progression`
 
-**Purpose:** score-earned, session-scoped perk board (OPS `PERKS` / `STATUS`).
-Rebuilt from scratch this cycle. Never touches vanilla rank/unlocks. Required by Support and
+**Purpose:** session-scoped perk board and pilot/enemy-wing presentation in `SQD`.
+Depends on Squad's read-only career/bonus state. Never touches vanilla rank/unlocks. Required by Support and
 Command (they consume `IPlayerPerks` / `IProgressionView` only).
 
 | Feature | Where | Status | Notes |
@@ -159,8 +187,9 @@ Command (they consume `IPlayerPerks` / `IProgressionView` only).
 | Score → points (1 per `ScorePerPoint`, cap `MaximumPoints`) | `Runtime/PerkCatalog.cs` (`PerkPoints`), `Runtime/ProgressionManager.cs` | Stable | Reads `Player.PlayerScore`; rank shown as flavour only |
 | Flat 9-perk catalogue, per-perk cost, no prerequisites | `Runtime/PerkCatalog.cs` | Stable | 5 passives + 4 support authorisations; 12 points to buy the whole board |
 | Passive effects — fuel use, combat/service/objective reward, support cost | `Patches/ProgressionPatches.cs` | Stable | Hooks `Aircraft.UseFuel` + `FactionHQ.RewardPlayer`; reward mapped by enum member |
-| OPS presentation — rank, score-per-point budget, deliberate perk confirmation, committed systems | `Runtime/ProgressionManager.cs`, OPS panel | In-flight | Shared with Support only through `IProgressionView` |
-| Networking — protocol byte `2`, client polls only while OPS open | `Networking/ProgressionNet.cs` | Stable | Host sends accepted mask/score/points/rank; host fast-path in-process |
+| SQD presentation — pilot, abilities, enemy wings and pursuit HUD | `Presentation/SqdMfdPanel.cs`, `Presentation/AceHuntHud.cs` | Unverified | Uses `IProgressionView` and `ISquadView`; friendly wings remain in WMC |
+| Ace bonuses and one-life successor perk reset | `Runtime/ProgressionManager.cs` | Unverified | Score points plus server-owned bonuses, 20 total point ceiling |
+| Networking — protocol byte `3`, client polls while SQD open | `Networking/ProgressionNet.cs` | Unverified | Scene/request/pilot generation validation; host fast-path in-process |
 | `PerkStrength` scaling of passives | `Runtime/ProgressionManager.cs` | Stable | 0 = cosmetic, 2.0 = double |
 | Persistent cross-mission profiles | — | Absent | Gated on the persistence service (schema-versioned atomic writes) |
 
