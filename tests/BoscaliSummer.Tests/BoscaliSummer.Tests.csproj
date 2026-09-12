@@ -26,6 +26,7 @@
     <Compile Include="..\..\modules\Progression\Runtime\PerkCatalog.cs" Link="Features\Progression\PerkCatalog.cs" />
     <Compile Include="..\..\modules\Support\Runtime\SupportModel.cs" Link="Features\Support\SupportModel.cs" />
     <Compile Include="..\..\modules\UrbanCombat\Runtime\TroopDeploymentMath.cs" Link="Features\UrbanCombat\TroopDeploymentMath.cs" />
+    <Compile Include="..\..\modules\Trenches\Domain\TrenchTacticalMath.cs" Link="Features\Trenches\TrenchTacticalMath.cs" />
     <Compile Include="..\..\Framework\Features\FeatureMetadata.cs" Link="Framework\FeatureMetadata.cs" />
     <Compile Include="..\..\Framework\Features\FeatureGraph.cs" Link="Framework\FeatureGraph.cs" />
     <Compile Include="..\..\Framework\Features\ServiceRegistry.cs" Link="Framework\ServiceRegistry.cs" />
@@ -33,6 +34,7 @@
     <Compile Include="..\..\modules\Command\Runtime\TacticalSectorGrid.cs" Link="Features\Command\TacticalSectorGrid.cs" />
     <Compile Include="..\..\modules\Command\Domain\SortieClassifier.cs" Link="Features\Command\SortieClassifier.cs" />
     <Compile Include="..\..\modules\Command\Domain\TheaterReadout.cs" Link="Features\Command\TheaterReadout.cs" />
-    <Compile Include="..\..\..\nomodkit\shared\avionics\*.cs" LinkBase="Avionics" />
+    <Compile Include="..\..\Infrastructure\GameInterop\MfdSlots.cs" Link="Infrastructure\MfdSlots.cs" />
+    <Compile Include="..\..\Avionics\*.cs" LinkBase="Avionics" />
   </ItemGroup>
 </Project>

@@ -7,7 +7,8 @@ using BoscaliSummer.Features.Support.Configuration;
 using BoscaliSummer.Features.Support.Networking;
 using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Lifecycle;
-using NOAvionics;
+using BoscaliSummer.Interop;
+using BoscaliSummer.Runtime;
 using NuclearOption.Networking;
 using UnityEngine;
 
@@ -22,6 +23,9 @@ namespace BoscaliSummer.Features.Support.Runtime
     {
         private const int MaximumStrikeJobs = 2;
         private const int RequestsPerSecond = 2;
+
+        /// <summary>Release travel, in pixels, still read as a click rather than a map drag.</summary>
+        private const float ClickSlopPixels = 8f;
 
         /// <summary>How long a client waits for a reply before reporting the host silent.</summary>
         private const float ReplyTimeout = 5f;
@@ -94,6 +98,7 @@ namespace BoscaliSummer.Features.Support.Runtime
         public IReadOnlyList<SupportActionDefinition> Actions => catalog.Actions;
         public bool BypassRequirements => bypassRequirements != null && bypassRequirements.Value;
         public bool DisableCooldowns => disableCooldowns != null && disableCooldowns.Value;
+        public bool RequestPending => pending;
 
         private IFireSuppressionService fireSuppressionService;
 
@@ -138,13 +143,21 @@ namespace BoscaliSummer.Features.Support.Runtime
             ArmedAction = null;
             ArmedFrame = 0;
             mapGesture.Reset();
+            SupportMapMode.GestureArmed = false;
             Status = "Select support option, then right-click on map.";
         }
 
-        private void OnDestroy() => mapGesture.Reset();
+        private void OnDestroy()
+        {
+            mapGesture.Reset();
+            SupportMapMode.GestureArmed = false;
+        }
 
         private void Update()
         {
+            // Publish the armed state for Wing Command to read (BoscaliLink), so a wing
+            // point-order and a support call-in never both fire on one right-click.
+            SupportMapMode.GestureArmed = ArmedAction.HasValue && mapGesture.Armed;
             mapGesture.Advance(Time.frameCount);
             if (pending && Time.unscaledTime - pendingSince > ReplyTimeout)
             {
@@ -160,16 +173,29 @@ namespace BoscaliSummer.Features.Support.Runtime
                     return;
                 }
 
-                if (Time.frameCount > ArmedFrame + 1 && Input.GetMouseButtonDown(1) &&
-                    MapPicker.IsOwner(MapPicker.Support))
+                if (Time.frameCount > ArmedFrame + 1 && mapGesture.Armed)
                 {
-                    DynamicMap map = SceneSingleton<DynamicMap>.i;
-                    if (map != null && DynamicMap.mapMaximized && map.TryGetCursorCoordinates(out GlobalPosition target))
+                    // Commit on release, not press, and only when the pointer barely moved.
+                    // A right-drag pans the maximised map; it must not also drop a strike at
+                    // the point where the drag began.
+                    if (Input.GetMouseButtonDown(1))
                     {
-                        SupportActionId action = ArmedAction.Value;
-                        ArmedAction = null;
-                        mapGesture.Complete(Time.frameCount);
-                        RequestAt(action, target);
+                        Vector3 down = Input.mousePosition;
+                        mapGesture.NotePointerDown(down.x, down.y);
+                    }
+                    else if (Input.GetMouseButtonUp(1))
+                    {
+                        Vector3 up = Input.mousePosition;
+                        DynamicMap map = SceneSingleton<DynamicMap>.i;
+                        if (mapGesture.ReleasedAsClick(up.x, up.y, ClickSlopPixels) &&
+                            map != null && DynamicMap.mapMaximized &&
+                            map.TryGetCursorCoordinates(out GlobalPosition target))
+                        {
+                            SupportActionId action = ArmedAction.Value;
+                            ArmedAction = null;
+                            mapGesture.Complete(Time.frameCount);
+                            RequestAt(action, target);
+                        }
                     }
                 }
             }
@@ -205,9 +231,21 @@ namespace BoscaliSummer.Features.Support.Runtime
 
         public void Arm(SupportActionId action)
         {
+            if (pending)
+            {
+                Status = "REQUEST PENDING — wait for host acknowledgement.";
+                return;
+            }
+
             if (ArmedAction.HasValue && ArmedAction.Value == action)
             {
                 Disarm();
+                return;
+            }
+
+            if (WingLink.WingMapGestureArmed)
+            {
+                Status = "WING ORDER ARMED — cancel it in WMC before calling in support.";
                 return;
             }
 
@@ -216,7 +254,7 @@ namespace BoscaliSummer.Features.Support.Runtime
             string prompt = name + " ARMED · RIGHT-CLICK MAP";
             if (!mapGesture.TryArm(prompt))
             {
-                Status = MapPicker.Prompt ?? "MAP BUSY";
+                Status = "MAP INPUT BUSY — cancel the armed Wing Command order first.";
                 return;
             }
 
@@ -247,7 +285,7 @@ namespace BoscaliSummer.Features.Support.Runtime
         public void RequestAtMark(IObservationSource observations)
         {
             if (GameplayUI.GameIsPaused || pending || !ArmedAction.HasValue ||
-                !MapPicker.IsOwner(MapPicker.Support)) return;
+                !mapGesture.Armed) return;
             if (observations == null || !observations.TryGet(out ObservationPoint point))
             {
                 Status = "Camera mark unavailable. Mark again or right-click the map.";
@@ -260,6 +298,12 @@ namespace BoscaliSummer.Features.Support.Runtime
 
         public void RequestAt(SupportActionId action, GlobalPosition target)
         {
+            if (pending)
+            {
+                Status = "REQUEST PENDING — wait for host acknowledgement.";
+                return;
+            }
+
             SupportActionDefinition def = catalog != null ? catalog.Find(action) : null;
             if (def == null || !def.Enabled)
             {

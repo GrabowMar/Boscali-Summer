@@ -26,6 +26,7 @@ modules/
   Command/             STR MFD, expanded map GUI, map overlays, doctrine, AI target scoring
   DynamicOperations/   secondary mission director, faction awards, native reinforcement batches
   UrbanCombat/         occupancy, defensive proxies, capture cleanup
+  Trenches/            dynamic node-based modular trench networks, procedural berms, tactical map overlay
 ```
 
 ## Composition
@@ -63,7 +64,7 @@ The host owns one hidden `DontDestroyOnLoad` object. Persistent managers impleme
 isolating reset exceptions per service. Reset order: fire (10) → impact scorch (15) → ruin
 aftermath (20) → zone garrison (30) → radio (40) → progression (45) → support (50) → operations (51) →
 command (52) → COM overlay (53) → OPS MFD (55) → STR MFD (56) → map UI (57) →
-SET MFD (58) → fire-network per-scene state (100). Teardown unpatches in reverse, unregisters the
+SET MFD (58) → trench networks (60) → trench map overlay (61) → fire-network per-scene state (100). Teardown unpatches in reverse, unregisters the
 scene callback and Mirage handlers, clears the registry, and destroys the root.
 
 ## Authority and replication
@@ -123,6 +124,7 @@ holding both remaining channels.
 | Forest spread per site | 2 attempts, ≤3 generations |
 | Garrison zones processed | 1/frame |
 | Radio | 32 channels, 512 tracks, ≤30 soundtrack refs, 1 active decode, ≤2 clips mid-crossfade; icons ≤256×256, ≤256 KiB |
+| Trench networks / nodes / chunks | 16 networks, 32 nodes/network, 3-tier camera LOD (≤250m, 250m–1200m, 1200m–3500m) |
 
 No feature scans the whole scene per frame: catalogue once, queue event work, use slow
 ticks, reuse buffers, pool visuals, release scene references on reset. Performance ceilings
@@ -192,6 +194,30 @@ footer. `MapUiManager` handles delayed page installation and canvas-size changes
 the three MFD patch classes are explicitly registered by Command. Closing the map
 restores native transforms and page bindings. The layout discovers WMC through the
 game's MFD lists and has no Wing Command assembly dependency.
+
+All maximised-map bezel screens use the vendored `NOAvionics.Ui.AvScreen` shell: green-glass
+tokens, resolved dock height, a shared metric/tab/body grid, and one pinned status strip
+whose priority is hovered explanation → armed-map prompt → alert → ambient state. The
+BCL-only `NOAvionics` protocol coordinates named bezel claims and exclusive map gestures
+through `AppDomain` data, so independently compiled Boscali Summer and Wing Command copies
+cannot claim the same slot or consume the same armed click in one frame.
+
+### Dynamic trenches
+
+`Trenches` owns autonomous node-based trench networks, geometric growth simulation,
+procedural parapet/berm meshes, and tactical map crenellations.
+Its exact patch list is empty: airbase discovery hooks into `Airbase.AllAirbases`,
+and map markings hook into `DynamicMap.mapImage`.
+World mutation is non-destructive: it never carves Unity `TerrainData` heightmaps or
+cuts terrain holes at runtime, avoiding PhysX BVH rebuild stalls and resolution mismatches.
+Instead, raised parapets with downward skirts (0.8m–1.2m) provide physical line-of-sight
+cover and ground blending without terrain modification.
+Procedural meshes scavenge native URP materials (`pillbox` concrete, `gabionBunker1`
+sandbags) without external asset bundles or third-party loaders.
+Flight-sim performance is maintained via 3-tier camera distance LOD (full 3D geometry +
+box colliders < 250m, simplified berms 250m–1200m, flat ground scars 1200m–3500m, culled > 3500m)
+parented under `Datum.origin`. Map rendering uses native Canvas UI mesh rendering with
+NATO APP-6 crenellations (`---|---|---|---`) facing hostile forward lines.
 
 Cached game reflection initialises once. Optional patches use Harmony `Prepare` when a
 target may move; the startup capability report exposes resolved targets. The metadata patch

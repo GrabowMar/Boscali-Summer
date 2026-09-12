@@ -35,14 +35,14 @@ Nuclear Option** — every expensive system pooled, event-driven, and globally b
   only; vanilla emplacements own the combat).
 - **Radio** — a client-local map-MFD music player (`RAD` bezel) for your own OGG/WAV
   stations, routed through the game's music mixer. Three starter stations; no bundled audio.
-- **Perks & support** — an `OPS` map-MFD: a flat, score-earned perk board (**PASSIVE**
-  systems and strike **AUTH**orisations), server-validated **SUPPORT** requests (satellite
-  scan, zone fortification, Rod from God, EMP shock, flare barrage) that spend your normal
-  allocation, and a **RECORD** page of where the points came from.
+- **Perks & support** — one `OPS` map-MFD for the score-earned **PERKS** board,
+  server-validated **SUPPORT** requests (satellite scan, zone fortification, Rod from God,
+  EMP shock, flare barrage), camera **OBSERVE** targeting, and live battle/career **STATUS**.
+  Perk purchases require selecting the row and then using its separate confirm control.
 - **Strategic layer** — an `STR` map-MFD with the theater picture: DEFCON and the air
   balance with a friendly-AI sortie board (**SA**), the live sector field and contested
   nodes (**FRONT**), the faction objective board (**TASKING**), the theater account and
-  stockpile (**LOG**), and mission-AI doctrine plus priority targets (**CMD**). Aircraft
+  stockpile (**LOG**), and mission-AI doctrine plus map overlays (**CMD**). Aircraft
   command stays Wing Command's job; this mod never tasks a recruited wing.
 - **Expanded tactical map** — `Command.ExpandedMapUi` (default on): left-side MFD pages and
   event log, central map, right-side bezel rail, native spawn footer. Works with or without
@@ -93,8 +93,9 @@ in-game with [ConfigurationManager](https://github.com/BepInEx/BepInEx.Configura
    look but behave as defensive positions.
 4. Maximise the tactical map. Press **`RAD`** for the radio (**FOLDER** adds OGG/WAV
    stations). Press **`OPS`** to spend perk points and call in support with the map cursor
-   over a valid target. Press **`STR`** for the theater picture and friendly-AI doctrine.
-   With Wing Command installed it claims **WMC** on the left bezel; radio stays on **RAD**.
+   over a valid target. Press **`STR`** for the theater picture and friendly-AI doctrine;
+   **`SET`** holds map-display settings. With Wing Command installed it claims **WMC** and
+   shares bezel and map-input ownership without becoming a hard dependency.
 
 ## Configuration
 
@@ -131,34 +132,33 @@ Removed experimental keys are migrated out automatically on upgrade.
 
 ## Building from source
 
-References the locally installed Nuclear Option assemblies. Override `GameDir` for another
-Steam library:
+The repo is self-contained: no package feed, no external source. It references the locally
+installed Nuclear Option and BepInEx assemblies only. Override `GameDir` for another Steam
+library:
 
 ```powershell
 dotnet build .\BoscaliSummer.sln -c Release -p:GameDir='D:\SteamLibrary\steamapps\common\Nuclear Option'
 ```
 
-Build, package and deploy go through [nomodkit](../nomodkit):
+The Release build drops `bin\Release\netstandard2.1\BoscaliSummer.dll`; copy it, with the
+`Avionics.avss` default and the starter radio PNGs it embeds, to `BepInEx\plugins\`.
+
+Run the deterministic checks before shipping a build:
 
 ```bash
-nomod build --mod boscalisummer
+dotnet run --project tests/BoscaliSummer.Tests -c Release
+dotnet run --project tests/BoscaliSummer.PatchProbe -c Release -- "<game dir>" bin/Release/netstandard2.1/BoscaliSummer.dll
 ```
 
-```bash
-nomod package --mod boscalisummer
-```
-
-`package` builds the solution, runs the deterministic tests and the patch probe against the
-installed game, then produces a bare DLL plus a game-directory ZIP with the starter radio
-stations. `nomod deploy --mod boscalisummer` deploys an existing Release build and is never
-run automatically. Check Harmony targets and private fields on their own with:
-
-```bash
-nomod asm verify --mod boscalisummer
-```
+The first runs the module, framework and architecture assertions. The second reflects over
+the installed game and the built plugin to confirm every Harmony target, private field,
+bound parameter name and wire contract still resolves — the check to run after a game
+update.
 
 The `netstandard2.1` plugin and the two `net8.0` test projects live in one solution;
-`BoscaliSummer.csproj` is at the repo root and lists its source roots explicitly.
+`BoscaliSummer.csproj` is at the repo root and lists its source roots explicitly. The
+engine-free avionics protocol and widget kit (`namespace NOAvionics`) live in `Avionics/`
+and `AvionicsUi/`, compiled straight into the plugin.
 
 ## Scope and docs
 

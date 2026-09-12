@@ -37,8 +37,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             protected override void BuildContent()
             {
-                Shell.ConfigureTabs(new[] { "FILTERS", "PRESETS", "SELECTED" }, SelectPage);
-                pages = new[] { Shell.CreatePage("Filters"), Shell.CreatePage("Presets"), Shell.CreatePage("Selected") };
+                ConfigureTabs(new[] { "FILTERS", "PRESETS", "SELECTED" }, SelectPage);
+                pages = new[] { CreatePage("Filters"), CreatePage("Presets"), CreatePage("Selected") };
                 BuildFiltersPage(pages[0]);
                 BuildPresetsPage(pages[1]);
                 BuildSelectedPage(pages[2]);
@@ -226,7 +226,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private void SelectPage(int selected)
             {
                 for (int i = 0; i < pages.Length; i++) pages[i].gameObject.SetActive(i == selected);
-                Shell.SetSelectedTab(selected);
+                SetSelectedTab(selected);
                 RequestRefresh();
             }
 

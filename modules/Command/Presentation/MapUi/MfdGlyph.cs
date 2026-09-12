@@ -137,7 +137,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             AvKit.Place(label.rectTransform, new Rect(28f, 0f, area.width - 38f, area.height));
             label.alignment = TextAlignmentOptions.MidlineLeft;
             label.fontSizeMax = label.fontSize;
-            label.fontSizeMin = 8f;
+            label.fontSizeMin = AvTokens.FontMicro;
             label.enableAutoSizing = true;
             var go = new GameObject("Symbol", typeof(RectTransform), typeof(MfdGlyph));
             go.transform.SetParent(root, false);

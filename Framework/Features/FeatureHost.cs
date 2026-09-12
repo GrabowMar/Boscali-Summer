@@ -193,7 +193,6 @@ namespace BoscaliSummer.Framework.Features
             if (sceneLifecycle != null) sceneLifecycle.enabled = false;
             services.Clear();
             if (ReferenceEquals(ModServices.Active, services)) ModServices.Active = null;
-            TheaterInteropPush.Clear();
             if (runtimeRoot != null) UnityEngine.Object.Destroy(runtimeRoot);
         }
     }

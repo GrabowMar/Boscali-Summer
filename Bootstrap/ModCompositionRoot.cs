@@ -1,12 +1,13 @@
 using System.Collections.Generic;
 using BepInEx.Logging;
-using BoscaliSummer.Features.DynamicOperations;
 using BoscaliSummer.Features.Command;
-using BoscaliSummer.Features.QoL;
+using BoscaliSummer.Features.DynamicOperations;
 using BoscaliSummer.Features.FireAndDestruction;
-using BoscaliSummer.Features.Radio;
 using BoscaliSummer.Features.Progression;
+using BoscaliSummer.Features.QoL;
+using BoscaliSummer.Features.Radio;
 using BoscaliSummer.Features.Support;
+using BoscaliSummer.Features.Trenches;
 using BoscaliSummer.Features.UrbanCombat;
 using BoscaliSummer.Framework.Features;
 using BoscaliSummer.Runtime;
@@ -37,6 +38,7 @@ namespace BoscaliSummer.Bootstrap
                     if (settings.Command.Enabled.Value) features.Add(new CommandFeature());
                 }
                 if (settings.DynamicOperations.Enabled.Value) features.Add(new DynamicOperationsFeature());
+                if (settings.Trenches.Enabled.Value) features.Add(new TrenchesFeature());
                 host.Load(features.ToArray());
                 CapabilityReport.Log();
                 return host;

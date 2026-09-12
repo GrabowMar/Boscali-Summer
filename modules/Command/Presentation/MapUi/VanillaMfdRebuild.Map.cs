@@ -33,7 +33,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             protected override void BuildContent()
             {
-                RectTransform page = Shell.CreatePage("MapOptions");
+                RectTransform page = CreatePage("MapOptions");
                 DrawSpine(page);
 
                 float y = -AvTokens.Space1;

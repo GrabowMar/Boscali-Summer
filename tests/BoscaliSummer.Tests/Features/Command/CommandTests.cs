@@ -44,6 +44,8 @@ namespace BoscaliSummer.Tests.Features.Command
 
         private static void TestLogSpace()
         {
+            TestAssert.That(LogSpace(LogSpace(1038f, 180f), 364f) == 128f,
+                "The visible MFD frame must shrink the log even when its content starts lower");
             TestAssert.That(LogSpace(1064f, -564f + 596f) == 460f,
                 "A bottom-aligned 596px display leaves room for the kill log on a 1080px canvas");
             TestAssert.That(LogSpace(1000f, 400f) == 92f,
@@ -65,7 +67,7 @@ namespace BoscaliSummer.Tests.Features.Command
 
         private static void TestMapPanelOwnership()
         {
-            foreach (string name in new[] { "WMC", "OPS", "RAD", "SET", "", null })
+            foreach (string name in new[] { "WMC", "OPS", "RAD", "SET", "SQD", "", null })
                 TestAssert.That(BoscaliSummer.Features.Command.Presentation.MapUi.VanillaMfdPanelCatalog.FromShortName(name) ==
                     BoscaliSummer.Features.Command.Presentation.MapUi.VanillaMfdPanelId.Unknown,
                     "The vanilla UI adapter must not rebuild a companion mod's page");
@@ -81,17 +83,19 @@ namespace BoscaliSummer.Tests.Features.Command
             try
             {
                 NOAvionics.PresenceBoard.SetInts(NOAvionics.PresenceBoard.WingMemberIds, new[] { 42 });
+                int[] wing = NOAvionics.PresenceBoard.GetInts(NOAvionics.PresenceBoard.WingMemberIds);
                 for (int doctrine = 0; doctrine <= 4; doctrine++)
                 {
-                    TestAssert.That(CommandScoring.Bias(true, 42, 99, doctrine, true, true, false, true) == 1f,
+                    TestAssert.That(CommandScoring.Bias(true, NOAvionics.PresenceBoard.Contains(wing, 42), NOAvionics.PresenceBoard.Contains(wing, 99), doctrine, true, true, false, true) == 1f,
                         "Boscali doctrine must not alter a recruited wingman's target scoring");
-                    TestAssert.That(CommandScoring.Bias(false, 10, 99, doctrine, true, true, false, true) == 1f,
+                    TestAssert.That(CommandScoring.Bias(false, NOAvionics.PresenceBoard.Contains(wing, 10), NOAvionics.PresenceBoard.Contains(wing, 99), doctrine, true, true, false, true) == 1f,
                         "Enemy analyzers must remain unaffected");
                 }
-                TestAssert.That(CommandScoring.Bias(true, 10, 99, 1, false, true, false, false) > 1f,
+                TestAssert.That(CommandScoring.Bias(true, NOAvionics.PresenceBoard.Contains(wing, 10), NOAvionics.PresenceBoard.Contains(wing, 99), 1, false, true, false, false) > 1f,
                     "Friendly mission AI must still receive doctrine with Wing Command present");
                 NOAvionics.PresenceBoard.SetInts(NOAvionics.PresenceBoard.WingMemberIds, null);
-                TestAssert.That(CommandScoring.Bias(true, 42, 99, 1, false, true, false, false) > 1f,
+                int[] noWing = NOAvionics.PresenceBoard.GetInts(NOAvionics.PresenceBoard.WingMemberIds);
+                TestAssert.That(CommandScoring.Bias(true, NOAvionics.PresenceBoard.Contains(noWing, 42), NOAvionics.PresenceBoard.Contains(noWing, 99), 1, false, true, false, false) > 1f,
                     "Doctrine must work without Wing Command or after wing membership is cleared");
             }
             finally { NOAvionics.PresenceBoard.SetInts(NOAvionics.PresenceBoard.WingMemberIds, previous); }

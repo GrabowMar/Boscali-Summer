@@ -20,7 +20,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
     /// authority, while no native layout participates in the rendered panel.
     ///
     /// Split by concern across partial files: this file holds the attach/detach lifecycle
-    /// and the shared Presenter/MfdShell harness. Each vanilla screen's presenter lives in
+    /// and the shared Presenter/AvScreen harness. Each vanilla screen's presenter lives in
     /// its own file - see VanillaMfdRebuild.Map.cs, .Hud.cs, .Faction.cs, .Target.cs,
     /// .Mission.cs - and the shared MfdPagingGrid widget lives in .PagingGrid.cs.
     /// </summary>
@@ -137,7 +137,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             rt.SetParent(parent, worldPositionStays: false);
             rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0f, 1f);
             rt.anchoredPosition = Vector2.zero;
-            rt.sizeDelta = new Vector2(AvTokens.PanelWidth, AvTokens.PanelHeight);
+            float height = AvScreen.ResolveHeight(
+                parent.parent as RectTransform, AvTokens.PanelHeight, AvTokens.PanelHeightMax);
+            rt.sizeDelta = new Vector2(AvTokens.PanelWidth, height);
             rt.localScale = Vector3.one;
             rt.SetAsLastSibling();
 
@@ -362,88 +364,12 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             }
         }
 
-        // ------------------------------------------------------------------- shell
-
-        private sealed class MfdShell
-        {
-            private const float Height = AvTokens.PanelHeight;
-
-            private readonly AvButton[] tabs;
-
-            public readonly RectTransform Content;
-            public readonly AvStyled.DataBar DataBar;
-            public readonly TMP_Text Status;
-            public readonly Rect Body;
-
-            public MfdShell(RectTransform root, VanillaMfdPanelId id, int tabCount)
-            {
-                var contentObject = new GameObject("Content", typeof(RectTransform));
-                Content = contentObject.GetComponent<RectTransform>();
-                Content.SetParent(root, worldPositionStays: false);
-                AvKit.Stretch(Content);
-
-                float width = AvTokens.PanelWidth;
-                float inner = width - AvTokens.Pad * 2f;
-                var bar = new Rect(AvTokens.Pad, -AvTokens.Pad, inner, AvTokens.TitleBarHeight + 2f);
-                DataBar = AvStyled.TopBar(Content, bar, VanillaMfdPanelCatalog.Label(id), 3);
-
-                float y = bar.y - bar.height - AvTokens.Space2;
-                if (tabCount > 0)
-                {
-                    tabs = new AvButton[tabCount];
-                    float tabWidth = (inner - AvTokens.Gap * (tabCount - 1)) / tabCount;
-                    for (int i = 0; i < tabCount; i++)
-                    {
-                        int index = i;
-                        tabs[i] = PanelButton(Content,
-                            new Rect(AvTokens.Pad + i * (tabWidth + AvTokens.Gap), y,
-                                     tabWidth, AvTokens.TabHeight),
-                            "—", "tab", () => OnTabPressed?.Invoke(index), AvButtonStyle.Tab);
-                    }
-                    y -= AvTokens.TabHeight + AvTokens.Space3;
-                }
-
-                float statusY = -(Height - AvTokens.Pad - AvTokens.StatusStripHeight);
-                Status = AvStyled.StatusStrip(Content,
-                    new Rect(AvTokens.Pad, statusY, inner, AvTokens.StatusStripHeight));
-                Body = new Rect(AvTokens.Pad, y, inner, y - (statusY + AvTokens.Space2));
-
-                AvKit.CornerTicks(Content, new Rect(0f, 0f, width, Height), AvTheme.Hairline);
-            }
-
-            public Action<int> OnTabPressed { get; set; }
-
-            public RectTransform CreatePage(string name)
-            {
-                var go = new GameObject(name, typeof(RectTransform));
-                RectTransform page = go.GetComponent<RectTransform>();
-                page.SetParent(Content, worldPositionStays: false);
-                AvKit.Place(page, Body);
-                return page;
-            }
-
-            public void ConfigureTabs(string[] labels, Action<int> onTab)
-            {
-                OnTabPressed = onTab;
-                if (tabs == null || labels == null) return;
-                int count = Mathf.Min(tabs.Length, labels.Length);
-                for (int i = 0; i < count; i++) PaintButton(tabs[i], labels[i], false);
-            }
-
-            public void SetSelectedTab(int selected)
-            {
-                if (tabs == null) return;
-                for (int i = 0; i < tabs.Length; i++) {
-                    tabs[i].SetLatched(i == selected);
-                    MfdGlyph glyph = tabs[i].GetComponentInChildren<MfdGlyph>(true);
-                    if (glyph != null) glyph.Selection.enabled = i == selected;
-                }
-            }
-        }
-
         private abstract class Presenter
         {
             private float nextRefresh;
+            private int nextPage;
+            private Action<int> tabHandler;
+            private bool selectingPage;
 
             protected Presenter(MFDScreen screen, VanillaMfdPanelId id)
             {
@@ -453,11 +379,20 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             protected readonly MFDScreen Screen;
             public readonly VanillaMfdPanelId Id;
-            protected MfdShell Shell;
+            protected AvScreen Shell;
 
             public void Build(RectTransform root)
             {
-                Shell = new MfdShell(root, Id, TabCount);
+                var contentObject = new GameObject("Content", typeof(RectTransform));
+                RectTransform content = contentObject.GetComponent<RectTransform>();
+                content.SetParent(root, worldPositionStays: false);
+                AvKit.Stretch(content);
+
+                string[] tabs = new string[Mathf.Max(0, TabCount)];
+                for (int i = 0; i < tabs.Length; i++) tabs[i] = "—";
+                Shell = AvScreen.Build(
+                    content, VanillaMfdPanelCatalog.Label(Id), tabs, null, 3,
+                    root.rect.width, root.rect.height, HandleTabPressed);
                 BuildContent();
             }
 
@@ -478,7 +413,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 }
                 catch (Exception e)
                 {
-                    Shell.Status.text = "> NATIVE ADAPTER ERROR — " + e.GetType().Name;
+                    Shell.WriteStatus("NATIVE ADAPTER ERROR — " + e.GetType().Name,
+                                      MapPicker.Prompt, null);
                     Plugin.Logger.LogWarning("MFD " + VanillaMfdPanelCatalog.Label(Id) +
                                              " refresh failed: " + e.Message);
                 }
@@ -489,6 +425,36 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             protected abstract void RefreshContent();
             protected abstract string AmbientStatus();
 
+            protected RectTransform CreatePage(string name)
+            {
+                GameObject page = Shell.CreatePage(nextPage++, name);
+                RectTransform pageRect = page.GetComponent<RectTransform>();
+                AvKit.Place(pageRect, Shell.Body);
+                if (TabCount <= 0) page.SetActive(true);
+                return pageRect;
+            }
+
+            protected void ConfigureTabs(string[] labels, Action<int> onTab)
+            {
+                tabHandler = onTab;
+                if (labels == null) return;
+                int count = Mathf.Min(Shell.Tabs.Length, labels.Length);
+                for (int i = 0; i < count; i++) Shell.Tabs[i].SetText(labels[i]);
+            }
+
+            protected void SetSelectedTab(int selected)
+            {
+                if (Shell.Page == selected) return;
+                selectingPage = true;
+                try { Shell.SetPage(selected); }
+                finally { selectingPage = false; }
+            }
+
+            private void HandleTabPressed(int selected)
+            {
+                if (!selectingPage) tabHandler?.Invoke(selected);
+            }
+
             protected void RequestRefresh()
             {
                 nextRefresh = 0f;
@@ -497,10 +463,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             protected void UpdateStatus(string ambient)
             {
-                string text = AvButton.HoveredTooltip;
-                if (string.IsNullOrEmpty(text)) text = MapPicker.Prompt;
-                if (string.IsNullOrEmpty(text)) text = ambient;
-                Shell.Status.text = "> " + (text ?? "READY");
+                Shell.WriteStatus(null, MapPicker.Prompt, ambient ?? "READY");
             }
 
             protected static void DrawSpine(RectTransform page) =>

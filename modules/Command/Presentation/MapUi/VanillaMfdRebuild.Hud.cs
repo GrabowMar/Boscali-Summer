@@ -31,12 +31,12 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             protected override void BuildContent()
             {
-                Shell.ConfigureTabs(new[] { "MODE", "VEHICLES", "BUILDINGS" }, SelectPage);
+                ConfigureTabs(new[] { "MODE", "VEHICLES", "BUILDINGS" }, SelectPage);
                 pages = new[]
                 {
-                    Shell.CreatePage("HudModes"),
-                    Shell.CreatePage("HudVehicles"),
-                    Shell.CreatePage("HudBuildings"),
+                    CreatePage("HudModes"),
+                    CreatePage("HudVehicles"),
+                    CreatePage("HudBuildings"),
                 };
 
                 BuildModePage(pages[0]);
@@ -129,7 +129,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private void SelectPage(int next)
             {
                 for (int i = 0; i < pages.Length; i++) pages[i].gameObject.SetActive(i == next);
-                Shell.SetSelectedTab(next);
+                SetSelectedTab(next);
                 RequestRefresh();
             }
 

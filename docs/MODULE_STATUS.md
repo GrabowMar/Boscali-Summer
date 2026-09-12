@@ -34,11 +34,12 @@ tests/BoscaliSummer.Tests -c Release`): **passes** (module + framework + archite
 | Support operations | `support` | on | `progression` | **In-flight** (drift) |
 | Tactical command | `command` | on | `progression` | **In-flight / Unverified** |
 | Dynamic operations | `dynamic-operations` | **off** | — | **Experimental** |
+| Trenches | `trenches` | on | — | **Stable / In-flight** |
 | Weather | — | — | — | **Absent** (archived) |
 
 Load order (composition root): fire → urban → radio → qol → progression → support →
-command → dynamic-operations. Progression/Support/Command are simply not constructed when
-disabled; `qol` and `dynamic-operations` are gated on their own `Enabled` flag.
+command → dynamic-operations → trenches. Progression/Support/Command are simply not constructed when
+disabled; `qol`, `dynamic-operations`, and `trenches` are gated on their own `Enabled` flag.
 
 ---
 
@@ -149,7 +150,7 @@ Config: `QoL.Enabled`, `QoL.GunAimAssist`, `QoL.GunAimAssistStrength` (0–0.08)
 
 ## Progression — `progression`
 
-**Purpose:** score-earned, session-scoped perk board (OPS `PASSIVE` / `AUTH` / `RECORD`).
+**Purpose:** score-earned, session-scoped perk board (OPS `PERKS` / `STATUS`).
 Rebuilt from scratch this cycle. Never touches vanilla rank/unlocks. Required by Support and
 Command (they consume `IPlayerPerks` / `IProgressionView` only).
 
@@ -158,7 +159,7 @@ Command (they consume `IPlayerPerks` / `IProgressionView` only).
 | Score → points (1 per `ScorePerPoint`, cap `MaximumPoints`) | `Runtime/PerkCatalog.cs` (`PerkPoints`), `Runtime/ProgressionManager.cs` | Stable | Reads `Player.PlayerScore`; rank shown as flavour only |
 | Flat 9-perk catalogue, per-perk cost, no prerequisites | `Runtime/PerkCatalog.cs` | Stable | 5 passives + 4 support authorisations; 12 points to buy the whole board |
 | Passive effects — fuel use, combat/service/objective reward, support cost | `Patches/ProgressionPatches.cs` | Stable | Hooks `Aircraft.UseFuel` + `FactionHQ.RewardPlayer`; reward mapped by enum member |
-| `RECORD` page — rank, score-per-point budget, what points bought | `Runtime/ProgressionManager.cs`, OPS panel | Stable | New this cycle |
+| OPS presentation — rank, score-per-point budget, deliberate perk confirmation, committed systems | `Runtime/ProgressionManager.cs`, OPS panel | In-flight | Shared with Support only through `IProgressionView` |
 | Networking — protocol byte `2`, client polls only while OPS open | `Networking/ProgressionNet.cs` | Stable | Host sends accepted mask/score/points/rank; host fast-path in-process |
 | `PerkStrength` scaling of passives | `Runtime/ProgressionManager.cs` | Stable | 0 = cosmetic, 2.0 = double |
 | Persistent cross-mission profiles | — | Absent | Gated on the persistence service (schema-versioned atomic writes) |
@@ -225,8 +226,8 @@ recruited Wing Command wing.
 | Dynamic frontline / sector-control overlay | `Runtime/TacticalSectorGrid.cs`, `Runtime/MissionMapCompatibilityEngine.cs`, `Presentation/ComMapOverlay.cs`, `Patches/DynamicMapHooks.cs` | Unverified | Elapsed-time pressure/recovery, base-ownership anchored, hostile pressure fades at 30s. Advisory only — vanilla capture unchanged. In-game validation pending |
 | Mission-AI target scoring by doctrine | `Patches/AiTargetScoringPatch.cs`, `Domain/CommandDoctrine.cs`, `Runtime/CommandManager.cs` | In-flight | Biases friendly mission AI only |
 | `MIS → SECONDARY` objectives view | `Presentation/MapUi/MfdSecondaryObjectives.cs` | Experimental | Reads `ISecondaryObjectivesView`; only live when `dynamic-operations` is enabled |
-| `SET` MFD settings page | `Presentation/MapUi/SettingsMfdPanel.cs` | In-flight | New |
-| Wing Command coexistence (NOAvionics, no assembly dep) | `Presentation/MapUi/` | Stable | WMC discovered through the game's MFD lists |
+| `SET` MFD settings page | `Presentation/MapUi/SettingsMfdPanel.cs` | In-flight | Shared `AvScreen`; bounded steppers explain disabled limits |
+| Wing Command coexistence (NOAvionics, no assembly dep) | `Presentation/MapUi/`, `Infrastructure/GameInterop/MfdBezel.cs` | Stable | Named same-frame bezel claims plus exclusive armed map gestures |
 
 Config: `Command.Enabled`, `ExpandedMapUi`, `FrontlinesOverlay`, `OverlayOpacity` (0.35),
 `GridResolution` (32), `GridRefreshInterval` (0.5s).
@@ -239,8 +240,8 @@ Config: `Command.Enabled`, `ExpandedMapUi`, `FrontlinesOverlay`, `OverlayOpacity
   a lot of the last few commits were "produced rather than declared and left at zero".
 - `Presentation/MapUi/` is ~30 files and the main source of bloat. Worth a pass to see what
   is dead after the COM→STR migration.
-- Roadmap item 6 (shared menu shell): fold the vanilla-panel rebuild's private `MfdShell`
-  and the RAD/SET screens onto `AvScreen` so they match WMC chrome exactly — not done.
+- Live visual certification is still needed for the unified `AvScreen` shell at each
+  supported resolution and with Wing Command present.
 
 ---
 
@@ -270,6 +271,32 @@ Full MIS panel also needs `Progression.Enabled` + `Command.Enabled` + `Command.E
 
 ---
 
+## Trenches — `trenches`
+
+**Purpose:** autonomous node-based modular trench networks, geometric growth simulation,
+procedural parapet/berm meshes, and tactical map crenellations. Non-destructive terrain
+solution designed for high flight-sim performance.
+
+| Feature | Where | Status | Notes |
+|---|---|---|---|
+| Domain math — zigzag traverses, sapping criteria, flank hooks, stage progression | `Domain/TrenchTacticalMath.cs` | Stable | Pure C#, verified by unit tests |
+| Graph data model — nodes, edges, network bounding | `Runtime/TrenchNode.cs`, `Runtime/TrenchEdge.cs`, `Runtime/TrenchNetwork.cs` | Stable | 16 networks / 32 nodes per network hard ceiling |
+| Growth simulator — 5 lifecycle stages, sapping, hardening, flank hooks, rear communications | `Runtime/TrenchGrowthSimulator.cs` | Stable | Server-authoritative slow tick (default 45s) |
+| Scene manager — base perimeter seeding, visual chunk sync, cleanup | `Runtime/TrenchManager.cs` | Stable | Reset order 60; seeds from `Airbase.AllAirbases` |
+| Procedural mesh generator — raised berms with downward skirts, octagonal weapon pits, bunkers | `Visuals/TrenchMeshBuilder.cs` | Stable | Zero terrain edits; prevents PhysX stalls and resolution artifacts |
+| Material resolver — scavenges native `pillbox` concrete & `gabionBunker1` sandbags | `Visuals/TrenchMaterialResolver.cs` | Stable | Zero external asset bundle dependencies; native URP lighting |
+| 3-tier flight LOD chunks — LOD0/1/2 + collider distance culling | `Visuals/TrenchVisualChunk.cs` | Stable | Full 3D + colliders < 250m, berms 250m–1.2km, ground scar 1.2km–3.5km, culled > 3.5km |
+| Tactical map overlay — NATO APP-6 crenellated trench lines & strongpoint marks | `Presentation/TrenchMapOverlay.cs` | Stable | Reset order 61; hooks `DynamicMap.mapImage` |
+
+Config: `Trenches.Enabled` (true), `GrowthIntervalSeconds` (45s), `MaxTrenchNetworks` (8, max 16),
+`LODDistanceNear` (250m), `LODDistanceFar` (1200m), `ShowOnTacticalMap` (true).
+
+**Needs attention**
+- In-game flight session verification (visual appearance across altitudes, map overlay toggle, airbase defense placement).
+- Future high-poly custom asset injection pipeline via AssetBundles when artist models are authored.
+
+---
+
 ## Weather — absent
 
 Shelved at the user's request. Runtime, debug controls, settings, shader build integration
@@ -287,7 +314,7 @@ scheduled.
 | Cross-feature contracts | `Framework/Contracts/` | In-flight | New this cycle: `IObservationSource`, `ISecondaryObjectivesView`, `IThirdPersonHud`. Deleted: `ITheaterPage` |
 | Cached game reflection, capability report | `Infrastructure/GameInterop/` | Stable | Startup logs resolved patch list, capabilities, forest index size — first place to look after a game update |
 | Config composition + legacy-key migration | `Configuration/`, `Infrastructure/Diagnostics/DiagnosticSettings.cs` | Stable | |
-| NOAvionics shared kit (bezel claims, map picker, `AvScreen`) | `../nomodkit/shared/avionics` | In-flight | Compiled into both this mod and Wing Command; `MfdShell` + RAD/SET not yet on `AvScreen` |
+| NOAvionics kit (bezel claims, map picker, `AvScreen`) | `Avionics/`, `AvionicsUi/` | In-flight | Unified across OPS/STR/RAD/SET and rebuilt vanilla panels; live resolution/coexistence pass pending |
 | Large managers not yet split | `ImpactFireManager`, `ZoneGarrisonManager`, `ModNet` | In-flight | Roadmap: only split behind tested seams |
 
 ### Test coverage (pure suite)
@@ -328,7 +355,6 @@ Still open:
 
 - `modules/Command/Presentation/MapUi/` (~30 files) — audit for dead code after COM→STR.
 - Split `ImpactFireManager`, `ZoneGarrisonManager`, `ModNet` (roadmap, behind seams only).
-- Fold `MfdShell` + RAD + SET screens onto shared `AvScreen`.
 - Decide keep-or-cut: gun aim assist, Chimera paradrop, Urban Combat encampment builders.
 - Persistence service (schema-versioned atomic JSON) — blocks persistent perk profiles and
   any other saved state.

@@ -40,17 +40,30 @@ namespace BoscaliSummer.Runtime
 
             buttons = left ? leftButtons : rightButtons;
             screens = left ? leftScreens : rightScreens;
-            return buttons != null && screens != null && slot >= 0 && slot < buttons.Count;
+            if (buttons != null && screens != null && IsFree(buttons, screens, slot)) return true;
+
+            BezelRegistry.Release(id);
+            buttons = null;
+            screens = null;
+            slot = -1;
+            left = preferLeft;
+            return false;
         }
 
-        public static void Bind(VirtualMFD mfd, List<Button> buttons, List<MFDScreen> screens,
+        public static void Release(string id) => BezelRegistry.Release(id);
+
+        public static bool Bind(VirtualMFD mfd, List<Button> buttons, List<MFDScreen> screens,
             int slot, bool left, MFDScreen screen)
         {
+            if (mfd == null || screens == null || screen == null || !IsFree(buttons, screens, slot))
+                return false;
+
             while (screens.Count <= slot) screens.Add(null);
             screens[slot] = screen;
             mfd.SetupButtons();
 
             Button bezel = buttons[slot];
+            bezel.gameObject.SetActive(true);
             bezel.enabled = true;
             bezel.interactable = true;
             if (bezel.onClick.GetPersistentEventCount() == 0)
@@ -65,6 +78,7 @@ namespace BoscaliSummer.Runtime
             }
 
             screen.CloseScreen(Screen.width * (left ? Vector3.left : Vector3.right));
+            return true;
         }
 
         public static MFDScreen FindTemplate(VirtualMFD mfd)

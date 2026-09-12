@@ -20,6 +20,7 @@ namespace BoscaliSummer.Features.Progression.Runtime
     {
         /// <summary>Snapshot poll cadence while a view is open. Nothing is sent while it is closed.</summary>
         private const float PollInterval = 2f;
+        private const float ReplyTimeout = 5f;
 
         private readonly Dictionary<ulong, PerkState> states = new Dictionary<ulong, PerkState>();
         private ProgressionSettings settings;
@@ -33,6 +34,8 @@ namespace BoscaliSummer.Features.Progression.Runtime
         private int localEarnedPoints;
         private float nextPoll;
         private bool viewOpen;
+        private bool unlockPending;
+        private float unlockPendingSince;
 
         public string LastResult { get; private set; } = "Fly to earn perk points.";
 
@@ -43,6 +46,7 @@ namespace BoscaliSummer.Features.Progression.Runtime
         int IProgressionView.MaximumPoints => settings.MaximumPoints.Value;
         int IProgressionView.ScorePerPoint => settings.ScorePerPoint.Value;
         string IProgressionView.Status => LastResult;
+        bool IProgressionView.UnlockPending => unlockPending;
 
         public bool BypassRequirements => bypassRequirements != null && bypassRequirements.Value;
 
@@ -61,7 +65,11 @@ namespace BoscaliSummer.Features.Progression.Runtime
             if (ProgressionRuntime.Active == this) ProgressionRuntime.Active = null;
         }
 
-        internal void ReportOffline() => LastResult = "No host connection.";
+        internal void ReportOffline()
+        {
+            unlockPending = false;
+            LastResult = "No host connection.";
+        }
 
         public void ResetForScene()
         {
@@ -71,11 +79,19 @@ namespace BoscaliSummer.Features.Progression.Runtime
             localScore = 0;
             localEarnedPoints = 0;
             nextPoll = 0f;
+            unlockPending = false;
+            unlockPendingSince = 0f;
             LastResult = "Fly to earn perk points.";
         }
 
         private void Update()
         {
+            if (unlockPending && Time.unscaledTime - unlockPendingSince > ReplyTimeout)
+            {
+                unlockPending = false;
+                LastResult = "No response from host.";
+            }
+            if (unlockPending) return;
             if (!viewOpen || Time.unscaledTime < nextPoll) return;
             nextPoll = Time.unscaledTime + PollInterval;
             network.Submit(ProgressionNet.QueryOnly);
@@ -100,7 +116,8 @@ namespace BoscaliSummer.Features.Progression.Runtime
                 bool unlocked = localState.Has(definition.Id);
                 result[i] = new PerkView(
                     definition.Id, definition.Group, definition.Name, definition.Description,
-                    definition.Cost, unlocked, !unlocked && (bypass || available >= definition.Cost));
+                    definition.Cost, unlocked,
+                    !unlockPending && !unlocked && (bypass || available >= definition.Cost));
             }
             return result;
         }
@@ -114,9 +131,11 @@ namespace BoscaliSummer.Features.Progression.Runtime
 
         void IProgressionView.RequestUnlock(byte perkId)
         {
-            if (!PerkCatalog.IsDefined(perkId)) return;
-            network.Submit(perkId);
+            if (unlockPending || !PerkCatalog.IsDefined(perkId)) return;
+            unlockPending = true;
+            unlockPendingSince = Time.unscaledTime;
             LastResult = "Unlock request sent.";
+            network.Submit(perkId);
         }
 
         // ---- Server ----------------------------------------------------------------------
@@ -160,6 +179,7 @@ namespace BoscaliSummer.Features.Progression.Runtime
 
         internal void Apply(ProgressionSnapshot snapshot, ulong localPlayerId)
         {
+            if (snapshot.Result != ProgressionSnapshot.Snapshot) unlockPending = false;
             localState = new PerkState(snapshot.PerkMask);
             localRank = snapshot.Rank;
             localScore = snapshot.Score;

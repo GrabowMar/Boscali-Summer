@@ -1,11 +1,12 @@
 using BepInEx.Configuration;
-using BoscaliSummer.Features.DynamicOperations.Configuration;
 using BoscaliSummer.Features.Command.Configuration;
-using BoscaliSummer.Features.QoL.Configuration;
+using BoscaliSummer.Features.DynamicOperations.Configuration;
 using BoscaliSummer.Features.FireAndDestruction.Configuration;
-using BoscaliSummer.Features.Radio.Configuration;
 using BoscaliSummer.Features.Progression.Configuration;
+using BoscaliSummer.Features.QoL.Configuration;
+using BoscaliSummer.Features.Radio.Configuration;
 using BoscaliSummer.Features.Support.Configuration;
+using BoscaliSummer.Features.Trenches.Configuration;
 using BoscaliSummer.Features.UrbanCombat.Configuration;
 using BoscaliSummer.Infrastructure.Diagnostics;
 
@@ -24,6 +25,7 @@ namespace BoscaliSummer
         public SupportSettings Support { get; }
         public CommandSettings Command { get; }
         public DynamicOperationsSettings DynamicOperations { get; }
+        public TrenchesSettings Trenches { get; }
         public QoLSettings QoL { get; }
         public DiagnosticSettings Diagnostics { get; }
 
@@ -40,6 +42,7 @@ namespace BoscaliSummer
                 Support = new SupportSettings(config);
                 Command = new CommandSettings(config);
                 DynamicOperations = new DynamicOperationsSettings(config);
+                Trenches = new TrenchesSettings(config);
                 QoL = new QoLSettings(config);
                 Diagnostics = new DiagnosticSettings(config);
                 LegacyConfigMigration.RemoveEntries(config);

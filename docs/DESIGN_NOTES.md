@@ -132,5 +132,4 @@ screen (SA / FRONT / TASKING / LOG / CMD) — it installs and fails on its own a
 borrow an OPS tab or a slot from Wing Command. Doctrine biases friendly mission AI only and
 never retasks a wingman.
 
-Maintenance rules (how to change bezels, the picker, the protocol):
-`C:\Users\marci\dev\nomodkit\shared\avionics\README.md`.
+Maintenance rules (how to change bezels, the picker, the protocol): [`Avionics/README.md`](../Avionics/README.md).

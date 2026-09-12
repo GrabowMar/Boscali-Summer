@@ -5,7 +5,6 @@ using BoscaliSummer.Features.Command.Domain;
 using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Lifecycle;
 using BoscaliSummer.Runtime;
-using NOAvionics;
 using NuclearOption.Networking;
 using UnityEngine;
 
@@ -44,7 +43,6 @@ namespace BoscaliSummer.Features.Command.Runtime
             SectorStrikeTarget = null;
             TheaterState.Reset();
             emitterCache.Clear();
-            PublishInterop();
         }
 
         private void OnDestroy()
@@ -55,7 +53,6 @@ namespace BoscaliSummer.Features.Command.Runtime
         public bool TrySetDoctrine(CommandDoctrine doctrine)
         {
             ActiveDoctrine = doctrine;
-            PublishInterop();
             logger?.LogInfo("[COM] Friendly mission-AI doctrine: " + CommandDoctrineHelper.GetName(doctrine));
             return true;
         }
@@ -73,7 +70,6 @@ namespace BoscaliSummer.Features.Command.Runtime
             if (PriorityTargets.Contains(target.persistentID))
             {
                 PriorityTargets.Remove(target.persistentID);
-                PublishInterop();
                 return true;
             }
 
@@ -83,7 +79,6 @@ namespace BoscaliSummer.Features.Command.Runtime
             }
 
             PriorityTargets.Add(target.persistentID);
-            PublishInterop();
             logger?.LogInfo("[COM] Designated priority target: " + target.unitName);
             return true;
         }
@@ -113,22 +108,13 @@ namespace BoscaliSummer.Features.Command.Runtime
             bool targetIsAntiAir = target.definition != null && target.definition.roleIdentity.antiAir > 0.1f;
             return CommandScoring.Bias(
                 analyzerIsFriendly,
-                searcher.persistentID.GetHashCode(),
-                target.persistentID.GetHashCode(),
+                WingLink.IsWingMember(searcher.persistentID.GetHashCode()),
+                WingLink.IsWingMember(target.persistentID.GetHashCode()),
                 (int)ActiveDoctrine,
                 PriorityTargets.Contains(target.persistentID),
                 target is Aircraft,
                 target is Building,
                 targetIsAntiAir);
-        }
-
-        public void PublishInterop()
-        {
-            TheaterInteropPush.PublishGuid();
-            var hashes = new int[PriorityTargets.Count];
-            for (int i = 0; i < PriorityTargets.Count; i++)
-                hashes[i] = PriorityTargets[i].GetHashCode();
-            TheaterInteropPush.PublishDoctrine((int)ActiveDoctrine, hashes);
         }
 
         public void SyncSectorTelemetry(TacticalSectorGrid grid)
@@ -207,15 +193,12 @@ namespace BoscaliSummer.Features.Command.Runtime
         }
 
         /// <summary>
-        /// Whether this aircraft is on the wing another plugin has published. Absent that
-        /// plugin the board is empty and every AI jet counts, which is correct.
+        /// Whether this aircraft is a live Wing Command wingman. Absent Wing Command this is
+        /// always false and every AI jet counts, which is correct.
         /// </summary>
         private static bool IsPublishedWingMember(Aircraft aircraft)
         {
-            if (aircraft == null) return false;
-            int[] wing = PresenceBoard.GetInts(PresenceBoard.WingMemberIds);
-            return wing.Length != 0 &&
-                   PresenceBoard.Contains(wing, aircraft.persistentID.GetHashCode());
+            return aircraft != null && WingLink.IsWingMember(aircraft.persistentID.GetHashCode());
         }
 
         /// <summary>
