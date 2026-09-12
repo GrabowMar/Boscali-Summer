@@ -53,6 +53,60 @@ namespace BoscaliSummer.Features.Support.Runtime
         private float inboundStrikeConfirmedUntil;
         private string statusText = "Designate a grid on the maximised map.";
 
+        private GlobalPosition pendingTarget;
+        private SupportActionId pendingAction;
+        private readonly List<ActiveStrikeInfo> activeStrikes = new List<ActiveStrikeInfo>(8);
+
+        public IReadOnlyList<ActiveStrikeInfo> ActiveStrikes => activeStrikes;
+        public SupportActionId? PendingAction => pending ? (SupportActionId?)pendingAction : null;
+        public SupportSettings Settings => settings;
+
+        public float GetEffectRadius(SupportActionId action)
+        {
+            switch (action)
+            {
+                case SupportActionId.Artillery:
+                    return 400f; // Mini-nuke shockwave & destruction killzone
+                case SupportActionId.Emp:
+                    return settings != null ? settings.EmpRadius.Value : 12000f;
+                case SupportActionId.Recon:
+                    return settings != null ? settings.ReconRadius.Value : 6000f;
+                case SupportActionId.FlareMissile:
+                    return settings != null ? settings.FlareBarrageRadius.Value : 4000f;
+                case SupportActionId.Fortify:
+                    return 1500f;
+                default:
+                    return 1000f;
+            }
+        }
+
+        public void RegisterActiveStrike(
+            int requestId, SupportActionId action, GlobalPosition target, float radius, float etaSeconds, string name)
+        {
+            float now = Time.timeSinceLevelLoad;
+            float impact = now + etaSeconds;
+            float linger = action == SupportActionId.Artillery ? 7f :
+                           action == SupportActionId.Emp ? 9f :
+                           action == SupportActionId.FlareMissile ? (settings != null ? settings.FlareBarrageDuration.Value : 15f) : 10f;
+            float expiry = impact + linger;
+
+            for (int i = activeStrikes.Count - 1; i >= 0; i--)
+            {
+                if (activeStrikes[i].RequestId == requestId)
+                {
+                    activeStrikes.RemoveAt(i);
+                }
+            }
+
+            if (activeStrikes.Count >= 16)
+            {
+                activeStrikes.RemoveAt(0);
+            }
+
+            activeStrikes.Add(new ActiveStrikeInfo(requestId, action, target, radius, now, impact, expiry, name));
+            RegisterInboundStrike(name, etaSeconds);
+        }
+
         public void RegisterInboundStrike(string strikeName, float etaSeconds)
         {
             inboundStrikeName = strikeName;
@@ -142,6 +196,7 @@ namespace BoscaliSummer.Features.Support.Runtime
             localCooldownUntil = 0f;
             ArmedAction = null;
             ArmedFrame = 0;
+            activeStrikes.Clear();
             mapGesture.Reset();
             SupportMapMode.GestureArmed = false;
             Status = "Select support option, then right-click on map.";
@@ -155,6 +210,14 @@ namespace BoscaliSummer.Features.Support.Runtime
 
         private void Update()
         {
+            // Prune expired active strikes
+            float now = Time.timeSinceLevelLoad;
+            for (int i = activeStrikes.Count - 1; i >= 0; i--)
+            {
+                if (!activeStrikes[i].IsActive(now))
+                    activeStrikes.RemoveAt(i);
+            }
+
             // Publish the armed state for Wing Command to read (BoscaliLink), so a wing
             // point-order and a support call-in never both fire on one right-click.
             SupportMapMode.GestureArmed = ArmedAction.HasValue && mapGesture.Armed;
@@ -338,6 +401,8 @@ namespace BoscaliSummer.Features.Support.Runtime
 
             pending = true;
             pendingSince = Time.unscaledTime;
+            pendingTarget = target;
+            pendingAction = action;
             Status = "Request sent to grid " + Mathf.RoundToInt(target.x) + " / " + Mathf.RoundToInt(target.z) + ".";
             network.Request(++nextRequestId, action, target);
         }
@@ -359,11 +424,11 @@ namespace BoscaliSummer.Features.Support.Runtime
             {
                 localCooldownUntil = DisableCooldowns ? 0f : Time.unscaledTime + message.CooldownSeconds;
                 Status = name + " accepted.";
-                if (action != null && (action.Id == SupportActionId.Artillery || action.Id == SupportActionId.Emp || action.Id == SupportActionId.FlareMissile))
-                {
-                    float eta = action.Id == SupportActionId.Artillery ? 8f : action.Id == SupportActionId.Emp ? 12f : 5.5f;
-                    RegisterInboundStrike(name, eta);
-                }
+                float eta = action != null && action.Id == SupportActionId.Artillery ? 8f :
+                            action != null && action.Id == SupportActionId.Emp ? 12f :
+                            action != null && action.Id == SupportActionId.FlareMissile ? 5.5f : 0f;
+                float radius = action != null ? GetEffectRadius(action.Id) : 1000f;
+                RegisterActiveStrike(message.RequestId, (SupportActionId)message.Action, pendingTarget, radius, eta, name);
             }
             else
             {
@@ -430,6 +495,10 @@ namespace BoscaliSummer.Features.Support.Runtime
 
             if (!bypass) player.SetAllocation(Mathf.Max(0f, player.Allocation - cost));
             ledger.Accept(playerId, request.RequestId, now);
+            float eta = action.Id == SupportActionId.Artillery ? 8f :
+                        action.Id == SupportActionId.Emp ? 12f :
+                        action.Id == SupportActionId.FlareMissile ? 5.5f : 0f;
+            RegisterActiveStrike(request.RequestId, action.Id, context.Target, GetEffectRadius(action.Id), eta, action.Name);
             logger.LogInfo("[Support] Accepted " + action.Name + " request " + request.RequestId +
                 " from " + player + " at " + context.Target + " for " + Mathf.RoundToInt(cost) + " alloc.");
             return SupportResult.Accepted;

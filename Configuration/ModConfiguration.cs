@@ -6,6 +6,7 @@ using BoscaliSummer.Features.Progression.Configuration;
 using BoscaliSummer.Features.QoL.Configuration;
 using BoscaliSummer.Features.Radio.Configuration;
 using BoscaliSummer.Features.Support.Configuration;
+using BoscaliSummer.Features.Squad.Configuration;
 using BoscaliSummer.Features.Trenches.Configuration;
 using BoscaliSummer.Features.UrbanCombat.Configuration;
 using BoscaliSummer.Infrastructure.Diagnostics;
@@ -22,6 +23,7 @@ namespace BoscaliSummer
         public UrbanCombatSettings UrbanCombat { get; }
         public RadioSettings Radio { get; }
         public ProgressionSettings Progression { get; }
+        public SquadSettings Squad { get; }
         public SupportSettings Support { get; }
         public CommandSettings Command { get; }
         public DynamicOperationsSettings DynamicOperations { get; }
@@ -39,6 +41,7 @@ namespace BoscaliSummer
                 UrbanCombat = new UrbanCombatSettings(config);
                 Radio = new RadioSettings(config);
                 Progression = new ProgressionSettings(config);
+                Squad = new SquadSettings(config);
                 Support = new SupportSettings(config);
                 Command = new CommandSettings(config);
                 DynamicOperations = new DynamicOperationsSettings(config);

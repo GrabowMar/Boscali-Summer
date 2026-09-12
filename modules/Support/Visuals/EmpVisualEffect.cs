@@ -34,6 +34,10 @@ namespace BoscaliSummer.Features.Support.Visuals
         private static readonly int id_decalSize = Shader.PropertyToID("_DecalSize");
         private static readonly int id_opacity = Shader.PropertyToID("_Opacity");
         private static readonly int id_shockwaveExpansion = Shader.PropertyToID("_ShockwaveExpansion");
+        private static readonly int id_ShockwaveAlpha = Shader.PropertyToID("_ShockwaveAlpha");
+        private static readonly int id_Emission = Shader.PropertyToID("_Emission");
+        private static readonly int id_Size = Shader.PropertyToID("_Size");
+        private static readonly int id_ShockwaveSoftness = Shader.PropertyToID("_ShockwaveSoftness");
 
         public static void Trigger(Vector3 detonationPoint, float radiusMeters)
         {
@@ -72,16 +76,30 @@ namespace BoscaliSummer.Features.Support.Visuals
         private MeshRenderer sphereRenderer;
         private Mesh sphereMesh;
 
-        // Equatorial & Tilted Compression Rings
+        // Equatorial, Secondary, Tertiary & Tilted Compression Rings
         private GameObject ringObj;
         private MeshFilter ringFilter;
         private MeshRenderer ringRenderer;
         private Mesh ringMesh;
 
+        private GameObject secondaryRingObj;
+        private MeshFilter secondaryRingFilter;
+        private MeshRenderer secondaryRingRenderer;
+        private Mesh secondaryRingMesh;
+
+        private GameObject tertiaryRingObj;
+        private MeshFilter tertiaryRingFilter;
+        private MeshRenderer tertiaryRingRenderer;
+        private Mesh tertiaryRingMesh;
+
         private GameObject tiltedRingObj;
         private MeshFilter tiltedRingFilter;
         private MeshRenderer tiltedRingRenderer;
         private Mesh tiltedRingMesh;
+
+        // Atmospheric Condensation Vapor Cloud (Wilson cloud dome)
+        private GameObject vaporCloudObj;
+        private Material vaporCloudMaterial;
 
         // Ground Decal Projector Shockwave
         private GameObject groundDecalObj;
@@ -92,13 +110,14 @@ namespace BoscaliSummer.Features.Support.Visuals
         private float groundShockwaveProgression;
         private float groundDecalOpacity = 1f;
 
-        // Coronal ionization sparks
+        // Coronal ionization sparks & drifting embers
         private ParticleSystem sparkSystem;
+        private ParticleSystem emberSystem;
 
         private readonly List<LineRenderer> lightningArcs = new List<LineRenderer>();
         private AudioSource audioSource;
         private float startTime;
-        private const float ShockwaveDuration = 5.0f;
+        private const float ShockwaveDuration = 5.5f;
 
         private void Initialize(Vector3 point, float radius)
         {
@@ -115,18 +134,18 @@ namespace BoscaliSummer.Features.Support.Visuals
             lightObj.transform.SetParent(transform, false);
             burstLight = lightObj.AddComponent<Light>();
             burstLight.type = LightType.Point;
-            burstLight.color = new Color(0.82f, 0.96f, 1.0f);
-            burstLight.range = Mathf.Max(radius * 4f, 110000f);
-            burstLight.intensity = 160f;
+            burstLight.color = new Color(0.85f, 0.96f, 1.0f);
+            burstLight.range = Mathf.Max(radius * 4.2f, 120000f);
+            burstLight.intensity = 180f;
             burstLight.shadows = LightShadows.None;
 
             var auroraObj = new GameObject("AuroraLight");
             auroraObj.transform.SetParent(transform, false);
             auroraLight = auroraObj.AddComponent<Light>();
             auroraLight.type = LightType.Point;
-            auroraLight.color = new Color(0.35f, 0.58f, 1.0f);
-            auroraLight.range = Mathf.Max(radius * 2.8f, 75000f);
-            auroraLight.intensity = 32f;
+            auroraLight.color = new Color(0.3f, 0.65f, 1.0f);
+            auroraLight.range = Mathf.Max(radius * 3.0f, 85000f);
+            auroraLight.intensity = 38f;
             auroraLight.shadows = LightShadows.None;
 
             // 2. 3D Volumetric Expanding Ionization Sphere (smoothed 32x48 mesh)
@@ -138,7 +157,8 @@ namespace BoscaliSummer.Features.Support.Visuals
             sphereMesh = BuildSphereMesh(32, 48);
             sphereFilter.sharedMesh = sphereMesh;
 
-            // 3. Equatorial & Tilted Plasma Shockwave Rings
+            // 3. Concentric Equatorial Compression Rings (Photo 1)
+            // Primary intense electric-cyan shockwave rim
             ringObj = new GameObject("EquatorialShockwave");
             ringObj.transform.SetParent(transform, false);
             ringFilter = ringObj.AddComponent<MeshFilter>();
@@ -147,32 +167,54 @@ namespace BoscaliSummer.Features.Support.Visuals
             ringMesh = new Mesh { name = "EmpEquatorialMesh" };
             ringFilter.sharedMesh = ringMesh;
 
+            // Secondary atmospheric condensation ripple ring
+            secondaryRingObj = new GameObject("SecondaryRippleShockwave");
+            secondaryRingObj.transform.SetParent(transform, false);
+            secondaryRingFilter = secondaryRingObj.AddComponent<MeshFilter>();
+            secondaryRingRenderer = secondaryRingObj.AddComponent<MeshRenderer>();
+            secondaryRingRenderer.sharedMaterial = ringMaterial;
+            secondaryRingMesh = new Mesh { name = "EmpSecondaryRippleMesh" };
+            secondaryRingFilter.sharedMesh = secondaryRingMesh;
+
+            // Tertiary atmospheric condensation ripple ring
+            tertiaryRingObj = new GameObject("TertiaryRippleShockwave");
+            tertiaryRingObj.transform.SetParent(transform, false);
+            tertiaryRingFilter = tertiaryRingObj.AddComponent<MeshFilter>();
+            tertiaryRingRenderer = tertiaryRingObj.AddComponent<MeshRenderer>();
+            tertiaryRingRenderer.sharedMaterial = ringMaterial;
+            tertiaryRingMesh = new Mesh { name = "EmpTertiaryRippleMesh" };
+            tertiaryRingFilter.sharedMesh = tertiaryRingMesh;
+
+            // Tilted 3D spherical shockwave ring
             tiltedRingObj = new GameObject("TiltedShockwave");
             tiltedRingObj.transform.SetParent(transform, false);
-            tiltedRingObj.transform.localRotation = Quaternion.Euler(32f, 42f, 18f);
+            tiltedRingObj.transform.localRotation = Quaternion.Euler(34f, 44f, 16f);
             tiltedRingFilter = tiltedRingObj.AddComponent<MeshFilter>();
             tiltedRingRenderer = tiltedRingObj.AddComponent<MeshRenderer>();
             tiltedRingRenderer.sharedMaterial = ringMaterial;
             tiltedRingMesh = new Mesh { name = "EmpTiltedMesh" };
             tiltedRingFilter.sharedMesh = tiltedRingMesh;
 
-            // 4. Ground Decal Projector Shockwave (conforming to terrain below)
+            // 4. Atmospheric Wilson Condensation Vapor Cloud
+            SetupVaporCloud();
+
+            // 5. Ground Decal Projector Shockwave (conforming to terrain below)
             SetupGroundDecal(point, radius);
 
-            // 5. Coronal ionization spark particle burst
+            // 6. Coronal ionization spark particle burst & drifting embers
             SetupSparkBurst();
 
-            // 6. 3D Atmospheric Fractal Branching Lightning Arcs
-            int arcCount = UnityEngine.Random.Range(24, 32);
+            // 7. 3D Atmospheric Fractal Branching Lightning Arcs (38-46 arcs)
+            int arcCount = UnityEngine.Random.Range(38, 46);
             for (int i = 0; i < arcCount; i++)
             {
                 CreateLightningBranch(i, origin, radius);
             }
 
-            // 7. Multi-layered Acoustic Design
+            // 8. Multi-layered Acoustic Design
             SetupAcoustics();
 
-            // 8. Camera Electromagnetic Shudder
+            // 9. Camera Electromagnetic Shudder
             TriggerCameraShudder();
 
             StartCoroutine(Animate());
@@ -215,6 +257,34 @@ namespace BoscaliSummer.Features.Support.Visuals
             }
         }
 
+        private void SetupVaporCloud()
+        {
+            if (NukeEffectAssets.VaporCloudPrefab != null)
+            {
+                vaporCloudObj = Instantiate(NukeEffectAssets.VaporCloudPrefab, origin, Quaternion.identity);
+                vaporCloudObj.transform.SetParent(Datum.origin, true);
+                var rend = vaporCloudObj.GetComponent<Renderer>();
+                if (rend != null)
+                {
+                    vaporCloudMaterial = new Material(rend.sharedMaterial);
+                    rend.material = vaporCloudMaterial;
+                    vaporCloudMaterial.SetColor("_Color", new Color(0.25f, 0.75f, 1.0f, 0.9f));
+                }
+            }
+            else if (NukeEffectAssets.VaporCloudMesh != null && NukeEffectAssets.VaporCloudMaterial != null)
+            {
+                vaporCloudObj = new GameObject("EmpVaporCloud");
+                vaporCloudObj.transform.position = origin;
+                vaporCloudObj.transform.SetParent(Datum.origin, true);
+                var mf = vaporCloudObj.AddComponent<MeshFilter>();
+                mf.sharedMesh = NukeEffectAssets.VaporCloudMesh;
+                var mr = vaporCloudObj.AddComponent<MeshRenderer>();
+                vaporCloudMaterial = new Material(NukeEffectAssets.VaporCloudMaterial);
+                vaporCloudMaterial.SetColor("_Color", new Color(0.25f, 0.75f, 1.0f, 0.9f));
+                mr.material = vaporCloudMaterial;
+            }
+        }
+
         private void SetupSparkBurst()
         {
             var sparkObj = new GameObject("CoronalSparks");
@@ -243,6 +313,33 @@ namespace BoscaliSummer.Features.Support.Visuals
             var shape = sparkSystem.shape;
             shape.shapeType = ParticleSystemShapeType.Sphere;
             shape.radius = 40f;
+
+            // Drifting electric-cyan coronal embers
+            var emberObj = new GameObject("CoronalEmbers");
+            emberObj.transform.SetParent(transform, false);
+            emberSystem = emberObj.AddComponent<ParticleSystem>();
+            var emberRenderer = emberObj.GetComponent<ParticleSystemRenderer>();
+            emberRenderer.sharedMaterial = NukeEffectAssets.EjectaParticleMaterial ?? sparkMaterial;
+
+            var emberMain = emberSystem.main;
+            emberMain.simulationSpace = ParticleSystemSimulationSpace.World;
+            emberMain.duration = 3.5f;
+            emberMain.startLifetime = new ParticleSystem.MinMaxCurve(2.5f, 5.0f);
+            emberMain.startSpeed = new ParticleSystem.MinMaxCurve(80f, 240f);
+            emberMain.startSize = new ParticleSystem.MinMaxCurve(16f, 36f);
+            emberMain.gravityModifier = -0.02f; // ionized buoyancy
+            emberMain.startColor = new ParticleSystem.MinMaxGradient(
+                new Color(0.4f, 0.9f, 1.0f, 0.9f),
+                new Color(0.15f, 0.5f, 1.0f, 0.7f));
+            emberMain.maxParticles = 350;
+
+            var emberEmission = emberSystem.emission;
+            emberEmission.rateOverTime = 0f;
+            emberEmission.SetBursts(new[] { new ParticleSystem.Burst(0f, 200, 300) });
+
+            var emberShape = emberSystem.shape;
+            emberShape.shapeType = ParticleSystemShapeType.Sphere;
+            emberShape.radius = 80f;
         }
 
         private void SetupAcoustics()
@@ -386,14 +483,62 @@ namespace BoscaliSummer.Features.Support.Visuals
                     if (sphereProgress >= 1f && sphereObj.activeSelf) sphereObj.SetActive(false);
                 }
 
-                // 3. Animate plasma shockwave rings expansion
+                // 3. Animate concentric plasma shockwave rings expansion (Photo 1)
                 float currentRadius = Mathf.Lerp(150f, maxRadius, Mathf.Sqrt(progress));
                 float thickness = Mathf.Lerp(120f, 850f, progress);
                 float alpha = Mathf.Pow(1f - progress, 1.5f);
-                UpdateRingMesh(ringMesh, currentRadius, thickness, alpha, true);
-                UpdateRingMesh(tiltedRingMesh, currentRadius * 0.88f, thickness * 0.85f, alpha * 0.75f, false);
 
-                // 4. Animate ground shockwave decal expansion
+                // Primary equatorial ring
+                UpdateRingMesh(ringMesh, currentRadius, thickness, alpha, true);
+
+                // Secondary atmospheric condensation ripple ring
+                float secRadius = currentRadius * 0.82f;
+                float secThickness = thickness * 0.6f;
+                float secAlpha = alpha * 0.75f;
+                UpdateRingMesh(secondaryRingMesh, secRadius, secThickness, secAlpha, true);
+
+                // Tertiary atmospheric condensation ripple ring
+                float tertRadius = currentRadius * 0.64f;
+                float tertThickness = thickness * 0.45f;
+                float tertAlpha = alpha * 0.55f;
+                UpdateRingMesh(tertiaryRingMesh, tertRadius, tertThickness, tertAlpha, true);
+
+                // Tilted 3D spherical ring
+                UpdateRingMesh(tiltedRingMesh, currentRadius * 0.92f, thickness * 0.85f, alpha * 0.7f, false);
+
+                // 4. Animate atmospheric condensation Wilson vapor cloud dome
+                if (vaporCloudObj != null && vaporCloudMaterial != null)
+                {
+                    Camera cam = SceneSingleton<CameraStateManager>.i?.mainCamera ?? Camera.main;
+                    if (cam != null)
+                    {
+                        vaporCloudObj.transform.LookAt(cam.transform.position);
+                    }
+
+                    float cloudScale = Mathf.Min(maxRadius * 0.9f, currentRadius * 0.95f);
+                    vaporCloudObj.transform.localScale = Vector3.one * cloudScale;
+
+                    float cloudAlpha = Mathf.Pow(1f - progress, 2.0f);
+                    vaporCloudMaterial.SetFloat(id_ShockwaveAlpha, cloudAlpha);
+
+                    float emissive = burstLight != null && burstLight.isActiveAndEnabled ? burstLight.intensity * 0.1f : 0f;
+                    if (emissive > 0f)
+                    {
+                        vaporCloudMaterial.SetFloat(id_Emission, emissive);
+                    }
+
+                    float detailScale = NukeEffectAssets.VaporCloudDetailScale > 0f ? NukeEffectAssets.VaporCloudDetailScale : 30f;
+                    vaporCloudMaterial.SetFloat(id_Size, cloudScale / detailScale);
+                    vaporCloudMaterial.SetFloat(id_ShockwaveSoftness, 4f / Mathf.Max(1f, vaporCloudObj.transform.localScale.x));
+
+                    if (cloudAlpha <= 0f)
+                    {
+                        Destroy(vaporCloudObj);
+                        vaporCloudObj = null;
+                    }
+                }
+
+                // 5. Animate ground shockwave decal expansion
                 if (hasGroundDecal && decalMaterial != null)
                 {
                     groundShockwaveProgression += 1350f * Time.deltaTime;
@@ -411,7 +556,7 @@ namespace BoscaliSummer.Features.Support.Visuals
                     }
                 }
 
-                // 5. Animate lightning arcs flickering and decaying
+                // 6. Animate lightning arcs flickering and decaying
                 for (int i = 0; i < lightningArcs.Count; i++)
                 {
                     LineRenderer lr = lightningArcs[i];
@@ -427,6 +572,7 @@ namespace BoscaliSummer.Features.Support.Visuals
             }
 
             if (groundDecalObj != null) Destroy(groundDecalObj);
+            if (vaporCloudObj != null) Destroy(vaporCloudObj);
             Destroy(gameObject, 2.0f);
         }
 
@@ -651,9 +797,13 @@ namespace BoscaliSummer.Features.Support.Visuals
         {
             if (sphereMesh != null) Destroy(sphereMesh);
             if (ringMesh != null) Destroy(ringMesh);
+            if (secondaryRingMesh != null) Destroy(secondaryRingMesh);
+            if (tertiaryRingMesh != null) Destroy(tertiaryRingMesh);
             if (tiltedRingMesh != null) Destroy(tiltedRingMesh);
             if (decalMaterial != null) Destroy(decalMaterial);
             if (groundDecalObj != null) Destroy(groundDecalObj);
+            if (vaporCloudMaterial != null) Destroy(vaporCloudMaterial);
+            if (vaporCloudObj != null) Destroy(vaporCloudObj);
         }
     }
 }

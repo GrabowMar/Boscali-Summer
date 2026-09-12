@@ -20,6 +20,7 @@ namespace BoscaliSummer.Tests
             ImpactScorchTests.Run();
             TroopDeploymentTests.Run();
             RadioTests.Run();
+            Features.Squad.AceCareerTests.Run();
             ProgressionTests.Run();
             ProgressionPresentationTests.Run();
             SupportTests.Run();

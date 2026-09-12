@@ -37,8 +37,11 @@ namespace BoscaliSummer.Features.Command
             context.AddSceneService<SettingsMfdPanel>(58).Configure(context.Settings.Command, context.Logger);
 
             compat.Configure(context.Logger);
+            TerritoryControlView territory = context.AddSceneService<TerritoryControlView>(52);
+            territory.Configure(compat, context.Settings.Command.GridResolution.Value);
+            context.AddService<ITerritoryIngress>(territory);
             manager.Configure(progression, context.Logger);
-            overlay.Configure(context.Settings.Command, manager, compat, context.Logger);
+            overlay.Configure(context.Settings.Command, manager, compat, context.Logger, territory);
             strategic.Configure(context.Settings.Command, manager, overlay, context.Logger);
         }
     }

@@ -9,6 +9,7 @@ namespace BoscaliSummer.Tests.Features.Radio
     {
         public static void Run()
         {
+            HuntMusicTransitions();
             string root = Path.Combine(
                 Path.GetTempPath(), "BoscaliSummer.RadioTests." + Guid.NewGuid().ToString("N"));
             try
@@ -69,6 +70,26 @@ namespace BoscaliSummer.Tests.Features.Radio
                 "Agrapol fallback was not replaced by local tracks");
             TestAssert.That(BuiltInStationRules.UsesVanillaTracks(BuiltInStationRules.BaseId, 1),
                 "Base station stopped using the original soundtrack when local files existed");
+        }
+
+        private static void HuntMusicTransitions()
+        {
+            var gate = new HuntMusicGate();
+            TestAssert.That(!gate.Begin(false, 0) && !gate.Begin(true, 0) && gate.Begin(true, 1) && !gate.Begin(true, 1),
+                "hunt music must start exactly once on the active transition");
+            gate.Suppress(1);
+            TestAssert.That(!gate.Begin(true, 1) && !gate.Begin(true, 1),
+                "active hunt polling restarted manually stopped music");
+            TestAssert.That(!gate.Begin(false, 0) && !gate.Begin(true, 1),
+                "recovering the same hunt after a timeout must not replay its music");
+            TestAssert.That(!gate.Begin(false, 0) && gate.Begin(true, 2),
+                "manual stop prevented the next distinct hunt from changing music");
+            gate.Reset();
+            gate.Suppress(3);
+            TestAssert.That(!gate.Begin(true, 3),
+                "manual stop just before the first hunt poll lost to automatic playback");
+            gate.Reset();
+            TestAssert.That(gate.Begin(true, 3), "scene reset retained the previous hunt latch");
         }
 
         private static byte[] MakePngHeader(uint width, uint height)

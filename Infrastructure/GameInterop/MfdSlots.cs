@@ -7,6 +7,7 @@ namespace BoscaliSummer.Runtime
     internal static class MfdSlots
     {
         public const string Ops = "OPS";
+        public const string Sqd = "SQD";
         public const string Str = "STR";
         public const string Rad = "RAD";
         public const string Set = "SET";

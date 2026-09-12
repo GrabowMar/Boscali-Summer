@@ -15,54 +15,51 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Features.Progression.Presentation
 {
     /// <summary>
-    /// "SQD" — the flight lead, squadron operations, and pilot progression console on the maximised map.
-    ///
-    /// <para>SQD answers three core questions:
-    /// 1. <b>PERKS</b>: What combat traits, fuel discipline, and strike authorisations has your pilot unlocked?
-    /// 2. <b>WING LINK</b>: What is the live status of your recruited wingmen and squadron formation (via Wing Command)?
-    /// 3. <b>SORTIE</b>: How is your current run and deployed airframe performing in this mission?</para>
+    /// "SQD" — the pilot identity, ability budget, and enemy ace encounter roster.
+    /// Reads encounter snapshots only; Wing Command owns aircraft orders and pilot generation.
     /// </summary>
     internal sealed class SqdMfdPanel : MonoBehaviour, ISceneService
     {
         private const float Width = AvTokens.PanelWidth;
-        private const float Pad = AvTokens.Pad;
         private const float PanelHeight = AvTokens.PanelHeight;
         private const float RefreshInterval = 0.20f;
         private const float SpineInset = 14f;
 
-        private const float ChipWidth = 74f;
-        private const float ChipGap = 2f;
         private const int ChipCount = 3;
 
-        private const int TabPerks = 0;
-        private const int TabWing = 1;
-        private const int TabSortie = 2;
+        private const int TabPilot = 0;
+        private const int TabPerks = 1;
+        private const int TabEnemy = 2;
 
-        private const int MaximumBudgetPips = 16;
-        private const int MaxWingmanRows = 4;
+        private const int MaximumBudgetPips = 20;
+        private const int EnemyRowsPerPage = 2;
 
         private sealed class PerkRow
         {
             public byte Id;
-            public AvButton Button;
+            public AvButton Select;
+            public AvButton Confirm;
             public Image Rail;
             public Image Background;
             public TMP_Text Code;
             public TMP_Text Name;
-            public TMP_Text Badge;
         }
 
-        private sealed class WingmanRow
+        private sealed class EnemyWingRow
         {
             public RectTransform Root;
             public Image Rail;
-            public TMP_Text CallSign;
-            public TMP_Text Airframe;
+            public TMP_Text Symbol;
+            public TMP_Text Wing;
+            public TMP_Text Ace;
+            public TMP_Text Skill;
             public TMP_Text Status;
-            public TMP_Text Distance;
+            public TMP_Text Members;
+            public TMP_Text Target;
         }
 
         private ProgressionManager progression;
+        private ISquadView squad;
         private ManualLogSource logger;
 
         private MFDScreen screen;
@@ -74,7 +71,9 @@ namespace BoscaliSummer.Features.Progression.Presentation
         private AvStyled.Metric scoreMetric;
         private AvStyled.Metric budgetMetric;
 
-        private string activeHoverTooltip;
+        private byte? perkAwaitingConfirmation;
+        private byte? perkRequestId;
+        private float perkConfirmationUntil;
         private readonly List<PerkRow> perkRows = new List<PerkRow>();
 
         // ---- Perks Page ------------------------------------------------------------------
@@ -82,21 +81,32 @@ namespace BoscaliSummer.Features.Progression.Presentation
         private TMP_Text earnedValue;
         private TMP_Text spentValue;
         private TMP_Text availableValue;
+        private TMP_Text abilityBudgetValue;
+        private TMP_Text pilotScoreValue;
+        private TMP_Text aceBonusValue;
         private Image[] budgetPips;
+        private GameObject[] budgetPipSlots;
 
-        // ---- Wing Link Page --------------------------------------------------------------
+        // ---- Enemy roster ---------------------------------------------------------------
 
-        private Image wingStatusRail;
-        private TMP_Text wingStatusTitle;
-        private TMP_Text wingStatusSubtitle;
-        private readonly List<WingmanRow> wingRows = new List<WingmanRow>();
-        private TMP_Text wingCountValue;
-        private TMP_Text leadAirframeValue;
-        private TMP_Text leadStatusValue;
-        private TMP_Text leadSpeedValue;
-        private TMP_Text leadAltValue;
-        private TMP_Text leadFuelValue;
-        private TMP_Text wingTipLabel;
+        private Image huntRail;
+        private TMP_Text huntTitle;
+        private TMP_Text huntDetails;
+        private readonly List<EnemyWingRow> enemyRows = new List<EnemyWingRow>();
+        private TMP_Text rosterPage;
+        private AvButton previousWings;
+        private AvButton nextWings;
+        private int enemyPage;
+
+        // ---- Pilot identity -------------------------------------------------------------
+
+        private TMP_Text pilotCallsign;
+        private TMP_Text pilotName;
+        private TMP_Text pilotBackground;
+        private TMP_Text pilotMode;
+        private TMP_Text pilotStatus;
+        private TMP_Text pilotDeaths;
+        private TMP_Text pilotGeneration;
 
         // ---- Sortie / Run Page -----------------------------------------------------------
 
@@ -115,14 +125,16 @@ namespace BoscaliSummer.Features.Progression.Presentation
         private bool failed;
         private bool viewOpen;
 
-        public void Configure(ProgressionManager manager, ManualLogSource log)
+        public void Configure(ProgressionManager manager, ISquadView squadView, ManualLogSource log)
         {
             progression = manager;
+            squad = squadView;
             logger = log;
         }
 
         public void ResetForScene()
         {
+            MfdBezel.Release(MfdSlots.Sqd);
             if (screenRoot != null) UnityEngine.Object.Destroy(screenRoot);
             screenRoot = null;
             screen = null;
@@ -131,17 +143,21 @@ namespace BoscaliSummer.Features.Progression.Presentation
             dataBar = null;
             scoreMetric = null;
             budgetMetric = null;
-            activeHoverTooltip = null;
+            perkAwaitingConfirmation = perkRequestId = null;
+            perkConfirmationUntil = 0f;
             perkRows.Clear();
-            wingRows.Clear();
+            enemyRows.Clear();
 
             earnedValue = spentValue = availableValue = null;
+            abilityBudgetValue = pilotScoreValue = aceBonusValue = null;
             budgetPips = null;
+            budgetPipSlots = null;
 
-            wingStatusRail = null;
-            wingStatusTitle = wingStatusSubtitle = null;
-            wingCountValue = leadAirframeValue = leadStatusValue = null;
-            leadSpeedValue = leadAltValue = leadFuelValue = wingTipLabel = null;
+            huntRail = null;
+            huntTitle = huntDetails = rosterPage = null;
+            previousWings = nextWings = null;
+            enemyPage = 0;
+            pilotCallsign = pilotName = pilotBackground = pilotMode = pilotStatus = pilotDeaths = pilotGeneration = null;
 
             runAirframeValue = runTimeValue = runSortieScoreValue = null;
             runMissionScoreValue = runRankValue = runNextPerkValue = null;
@@ -153,7 +169,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             SetViewOpen(false);
         }
 
-        private void OnDestroy() => SetViewOpen(false);
+        private void OnDestroy() => ResetForScene();
 
         private void Update()
         {
@@ -169,8 +185,9 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 return;
             }
 
-            SetViewOpen(screen.isActive);
-            if (screen.isActive && Time.unscaledTime >= nextRefresh)
+            bool visible = screen.isActive && SceneSingleton<DynamicMap>.i?.maximizedMapCanvas?.isActiveAndEnabled == true;
+            SetViewOpen(visible);
+            if (visible && Time.unscaledTime >= nextRefresh)
             {
                 nextRefresh = Time.unscaledTime + RefreshInterval;
                 Refresh();
@@ -203,21 +220,29 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 }
 
                 MFDScreen template = MfdBezel.FindTemplate(screens) ?? MfdBezel.FindTemplate(mfd);
-                if (template == null) return;
+                if (template == null) { MfdBezel.Release(MfdSlots.Sqd); return; }
 
                 screen = Build(template, buttons[slot]);
                 if (screen == null)
                 {
+                    MfdBezel.Release(MfdSlots.Sqd);
                     failed = true;
                     return;
                 }
 
-                MfdBezel.Bind(mfd, buttons, screens, slot, left, screen);
+                if (!MfdBezel.Bind(mfd, buttons, screens, slot, left, screen))
+                {
+                    ResetForScene();
+                    failed = true;
+                    logger.LogWarning("SQD MFD unavailable: bezel changed during installation.");
+                    return;
+                }
                 logger.LogInfo("SQD MFD installed on " + (left ? "left" : "right") +
                     " bezel slot " + (slot + 1) + ".");
             }
             catch (Exception e)
             {
+                ResetForScene();
                 failed = true;
                 logger.LogError("SQD MFD install failed: " + e);
             }
@@ -230,6 +255,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             if (font != null) AvFont.Font = font;
 
             var root = new GameObject("BoscaliSquadron.Screen", typeof(RectTransform), typeof(Image));
+            screenRoot = root;
             RectTransform rootRect = root.GetComponent<RectTransform>();
             rootRect.SetParent(template.transform.parent, false);
 
@@ -242,6 +268,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             float height = AvScreen.ResolveHeight(
                 templateRect.parent as RectTransform, PanelHeight, AvTokens.PanelHeightMax);
             rootRect.sizeDelta = new Vector2(Width, height);
+            AvKit.ClampIntoCanvas(rootRect);
 
             Image background = root.GetComponent<Image>();
             background.sprite = AvSprites.Panel;
@@ -256,13 +283,18 @@ namespace BoscaliSummer.Features.Progression.Presentation
 
             shell = AvScreen.Build(
                 content, "SQD",
-                new[] { "PERKS", "WING LINK", "SORTIE" },
+                new[] { "PILOT", "ABILITIES", "ENEMY WINGS" },
                 new[]
                 {
-                    new[] { "MISSION SCORE", "PTS" },
+                    new[] { "PILOT SCORE", "PTS" },
                     new[] { "PERK BUDGET", "BUDGET" },
                 },
-                ChipCount, Width, height, _ => nextRefresh = 0f);
+                ChipCount, Width, height, _ =>
+                {
+                    perkAwaitingConfirmation = null;
+                    perkConfirmationUntil = 0f;
+                    nextRefresh = 0f;
+                });
 
             dataBar = shell.DataBar;
             scoreMetric = shell.Metrics[0];
@@ -271,8 +303,8 @@ namespace BoscaliSummer.Features.Progression.Presentation
             Rect body = shell.Body;
 
             BuildPerksPage((RectTransform)shell.CreatePage(TabPerks, "PerksPage").transform, body);
-            BuildWingPage((RectTransform)shell.CreatePage(TabWing, "WingPage").transform, body);
-            BuildSortiePage((RectTransform)shell.CreatePage(TabSortie, "SortiePage").transform, body);
+            BuildEnemyPage((RectTransform)shell.CreatePage(TabEnemy, "EnemyPage").transform, body);
+            BuildPilotPage((RectTransform)shell.CreatePage(TabPilot, "PilotPage").transform, body);
 
             MFDScreen result = root.AddComponent<MFDScreen>();
             result.shortName = MfdSlots.Sqd;
@@ -287,7 +319,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             }
 
             screenRoot = root;
-            shell.SetPage(TabPerks);
+            shell.SetPage(TabPilot);
             return result;
         }
 
@@ -309,7 +341,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 .Add(AvBox.Column("text").Grow().Gaps(3f)
                     .Add(AvBox.Cell("name").Height(15f))
                     .Add(AvBox.Text("desc", description, "row-sub")))
-                .Add(AvBox.Cell("trail").Width(96f));
+                .Add(AvBox.Cell("trail").Width(96f).Intrinsic(46f));
 
         private void DrawSectionHeader(RectTransform parent, AvNode node, Rect area,
                                        string title, string note, bool band)
@@ -366,175 +398,212 @@ namespace BoscaliSummer.Features.Progression.Presentation
         private static Color HoverFill() =>
             AvStyleHost.Resolve(AvStyleHost.Style("row", "hover").Background, AvTheme.SurfaceRaised);
 
-        // ---- Tab 0: PERKS ----------------------------------------------------------------
+        // ---- ABILITIES ---------------------------------------------------------------
 
-        private static string PerkKindCode(PerkDefinition perk)
-        {
-            if (perk.Capability != null) return "AUT";
-            if (perk.Effect == PerkEffect.FuelUse) return "FLT";
-            if (perk.Effect == PerkEffect.CombatReward) return "CMB";
-            if (perk.Effect == PerkEffect.ServiceReward) return "LOG";
-            if (perk.Effect == PerkEffect.ObjectiveReward) return "OBJ";
-            if (perk.Effect == PerkEffect.SupportCost) return "SUP";
-            return "PAS";
-        }
+        private static string PerkCode(PerkView perk) =>
+            perk.Group != null &&
+            perk.Group.IndexOf("AUTHORIS", StringComparison.OrdinalIgnoreCase) >= 0
+                ? "AUT"
+                : "PAS";
 
         private void BuildPerksPage(RectTransform parent, Rect body)
         {
-            IProgressionView view = progression;
-            PerkView[] perks = view.GetPerks();
+            PerkView[] perks = progression != null ? ((IProgressionView)progression).GetPerks() : Array.Empty<PerkView>();
+            if (perks.Length == 0)
+            {
+                AvStyled.Spine(parent, new Rect(body.x, body.y, 3f, body.height));
+                AvStyled.Label(parent,
+                    new Rect(body.x + SpineInset, body.y, body.width - SpineInset, 40f),
+                    "No pilot perks are configured on this host.", "row-sub");
+                return;
+            }
 
-            var descriptions = new List<string>();
+            var descriptions = new List<string>(perks.Length);
             for (int i = 0; i < perks.Length; i++) descriptions.Add(perks[i].Description);
 
             AvNode page = AvBox.Column("perks").Gaps(0f)
+                .Add(AvBox.Cell("budget").Height(38f))
                 .Add(Section("list", descriptions))
                 .Add(AvBox.Filler());
             page.Arrange(body);
 
-            if (page.At("list").height > body.height)
+            float contentHeight = page.At("budget").height + page.At("list").height;
+            if (contentHeight > body.height)
             {
-                parent = AvScreen.Scroll(parent, body, page.At("list").height, out Rect scrolled);
+                parent = AvScreen.Scroll(parent, body, contentHeight, out Rect scrolled);
                 page.Arrange(scrolled);
                 body = scrolled;
             }
 
             AvStyled.Spine(parent, new Rect(body.x, body.y, 3f, body.height));
-
+            Rect budget = page.At("budget");
+            abilityBudgetValue = AvStyled.Label(parent,
+                new Rect(budget.x + SpineInset, budget.y, budget.width - SpineInset, budget.height),
+                "Awaiting current pilot point budget.", "row-main");
             AvNode section = page.Find("list");
             DrawSectionHeader(parent, section, page.At("list"),
-                              "PILOT & SQUADRON PERKS", "CLICK TO UNLOCK", band: false);
+                              "PILOT ABILITIES", "SELECT ROW · CONFIRM", band: false);
 
             for (int i = 0; i < perks.Length; i++)
-            {
-                PerkDefinition def = PerkCatalog.Get(perks[i].Id);
-                AddPerkRow(parent, section.Find("r" + i), perks[i], PerkKindCode(def));
-            }
+                AddPerkRow(parent, section.Find("r" + i), perks[i]);
         }
 
-        private void AddPerkRow(RectTransform parent, AvNode row, PerkView view, string code)
+        private void AddPerkRow(RectTransform parent, AvNode row, PerkView view)
         {
             Rect area = row.Rect.ToUnity();
             var perk = new PerkRow { Id = view.Id };
 
             perk.Background = AvKit.Panel(parent, area, Color.clear);
             RowSeparator(parent, area);
-
             perk.Rail = AvStyled.Rail(parent, row.At("rail"), "locked");
-            perk.Code = AvStyled.Label(parent, row.At("code"), code, "row-sub",
+            perk.Code = AvStyled.Label(parent, row.At("code"), PerkCode(view), "row-sub",
                                        align: TextAlignmentOptions.MidlineLeft);
             perk.Name = AvStyled.Label(parent, row.At("text.name"),
                                        view.Name.ToUpperInvariant(), "row-name");
             AvStyled.Label(parent, row.At("text.desc"), view.Description, "row-sub");
-            perk.Badge = AvStyled.Label(parent, row.At("trail"), "", "badge",
-                                        align: TextAlignmentOptions.MidlineRight);
 
             byte id = view.Id;
-            perk.Button = AvKit.HitButton(parent, area, () =>
-            {
-                AvInput.Deselect(perk.Background.gameObject);
-                ((IProgressionView)progression)?.RequestUnlock(id);
-                nextRefresh = 0f;
-            });
-            perk.Button.SetRowHighlight(perk.Background, Color.clear, HoverFill());
-            perk.Button.WithTooltip(
+            Rect trail = row.At("trail");
+            Rect selectArea = new Rect(
+                area.x, area.y, Mathf.Max(0f, trail.x - area.x - 2f), area.height);
+            perk.Select = AvKit.HitButton(parent, selectArea, () => SelectPerk(id));
+            perk.Select.SetRowHighlight(perk.Background, Color.clear, HoverFill());
+            perk.Select.WithTooltip(
                 view.Name.ToUpperInvariant() + " — costs " + view.Cost +
-                (view.Cost == 1 ? " point" : " points") + ". " + view.Description);
+                (view.Cost == 1 ? " point. " : " points. ") + view.Description +
+                " Select this row, then use the separate confirm control.");
 
+            float actionHeight = Mathf.Min(AvTokens.RowHeight, trail.height);
+            perk.Confirm = AvStyled.Button(parent,
+                new Rect(trail.x, trail.y - Mathf.Max(0f, (trail.height - actionHeight) * 0.5f),
+                         trail.width, actionHeight),
+                "SELECT", "btn", () => CommitSelectedPerk(id), AvButtonStyle.Primary);
+            perk.Confirm.SetEnabled(false);
             perkRows.Add(perk);
         }
 
-        // ---- Tab 1: WING LINK ------------------------------------------------------------
-
-        private void BuildWingPage(RectTransform parent, Rect body)
+        private void SelectPerk(byte id)
         {
-            AvStyled.Spine(parent, new Rect(body.x, body.y, 3f, body.height));
+            if (progression == null) return;
+            if (((IProgressionView)progression).UnlockPending ||
+                !TryFind(((IProgressionView)progression).GetPerks(), id, out PerkView view) ||
+                view.Unlocked || !view.Affordable) return;
 
-            float x = body.x + SpineInset;
-            float width = body.width - SpineInset;
-            float y = body.y;
-
-            y = DrawSectionTitle(parent, x, y, width, "COMPANION STATUS", "WING COMMAND LINK", band: false);
-
-            AvStyled.Box(parent, new Rect(x, y - 56f, width, 56f), "section band");
-            AvStyled.SpineTick(parent, x - SpineInset + 3f, y - 14f);
-            wingStatusRail = AvStyled.Rail(parent, new Rect(x + 6f, y - 50f, 3f, 44f), "ready");
-            wingStatusTitle = AvStyled.Label(parent, new Rect(x + 16f, y - 18f, width - 24f, 16f),
-                "WING COMMAND LINK ACTIVE", "section-title");
-            wingStatusSubtitle = AvStyled.Label(parent, new Rect(x + 16f, y - 46f, width - 24f, 26f),
-                "Squadron telemetry synchronized.", "row-sub");
-
-            y -= 70f;
-
-            y = DrawSectionTitle(parent, x, y, width, "FLIGHT LEAD READOUT", "LOCAL AIRCRAFT", band: true);
-
-            leadAirframeValue = KeyValue(parent, x, y, width, "LEAD AIRFRAME");
-            y -= 18f;
-            leadStatusValue = KeyValue(parent, x, y, width, "FLIGHT STATUS");
-            y -= 18f;
-            leadSpeedValue = KeyValue(parent, x, y, width, "AIRSPEED");
-            y -= 18f;
-            leadAltValue = KeyValue(parent, x, y, width, "RADAR ALTITUDE");
-            y -= 18f;
-            leadFuelValue = KeyValue(parent, x, y, width, "FUEL RESERVES");
-            y -= 26f;
-
-            y = DrawSectionTitle(parent, x, y, width, "SQUADRON ROSTER", "RECRUITED WINGMEN", band: false);
-
-            wingCountValue = KeyValue(parent, x, y, width, "ACTIVE WINGMEN");
-            y -= 20f;
-
-            // Up to MaxWingmanRows slots
-            wingRows.Clear();
-            for (int i = 0; i < MaxWingmanRows; i++)
-            {
-                var rowObj = new GameObject("WingRow_" + i, typeof(RectTransform));
-                RectTransform rt = rowObj.GetComponent<RectTransform>();
-                rt.SetParent(parent, false);
-                rt.anchoredPosition = new Vector2(x, y);
-                rt.sizeDelta = new Vector2(width, 24f);
-
-                Image rail = AvStyled.Rail(rt, new Rect(0f, 0f, 3f, 20f), "ready");
-                TMP_Text callsign = AvStyled.Label(rt, new Rect(10f, 2f, 120f, 16f), "WINGMAN " + (i + 1), "row-name");
-                TMP_Text airframe = AvStyled.Label(rt, new Rect(135f, 2f, 90f, 16f), "REVOKER", "row-sub");
-                TMP_Text status = AvStyled.Label(rt, new Rect(230f, 2f, 90f, 16f), "AIRBORNE", "row-sub");
-                TMP_Text dist = AvStyled.Label(rt, new Rect(325f, 2f, width - 325f, 16f), "1.2 km", "kv-value",
-                                              align: TextAlignmentOptions.MidlineRight);
-
-                wingRows.Add(new WingmanRow
-                {
-                    Root = rt,
-                    Rail = rail,
-                    CallSign = callsign,
-                    Airframe = airframe,
-                    Status = status,
-                    Distance = dist
-                });
-
-                y -= 26f;
-            }
-
-            y -= 6f;
-            wingTipLabel = AvStyled.Label(parent, new Rect(x, y - 48f, width, 48f),
-                "Wing Command integrates seamlessly: combat perks amplify wing turnaround, service rewards, and battlefield lethality.",
-                "row-sub");
+            perkAwaitingConfirmation = id;
+            perkConfirmationUntil = Time.unscaledTime + 6f;
+            nextRefresh = 0f;
         }
 
-        // ---- Tab 2: SORTIE ---------------------------------------------------------------
-
-        private void BuildSortiePage(RectTransform parent, Rect body)
+        private void CommitSelectedPerk(byte id)
         {
-            AvStyled.Spine(parent, new Rect(body.x, body.y, 3f, body.height));
+            if (progression == null || ((IProgressionView)progression).UnlockPending ||
+                perkAwaitingConfirmation != id || Time.unscaledTime > perkConfirmationUntil ||
+                !TryFind(((IProgressionView)progression).GetPerks(), id, out PerkView view) ||
+                view.Unlocked || !view.Affordable) return;
 
+            perkAwaitingConfirmation = null;
+            perkConfirmationUntil = 0f;
+            perkRequestId = id;
+            ((IProgressionView)progression).RequestUnlock(id);
+            nextRefresh = 0f;
+        }
+
+        // ---- Enemy wings ----------------------------------------------------------------
+
+        private void BuildEnemyPage(RectTransform parent, Rect body)
+        {
+            parent = AvScreen.Scroll(parent, body, 418f, out body);
+            AvStyled.Spine(parent, new Rect(body.x, body.y, 3f, body.height));
             float x = body.x + SpineInset;
             float width = body.width - SpineInset;
             float y = body.y;
 
-            y = DrawSectionTitle(parent, x, y, width, "SORTIE PERFORMANCE", "ACTIVE RUN", band: false);
+            AvStyled.Box(parent, new Rect(x, y, width, 78f), "section band");
+            huntRail = AvStyled.Rail(parent, new Rect(x + 6f, y - 8f, 3f, 60f), "ready");
+            huntTitle = PlainLabel(parent, new Rect(x + 18f, y - 8f, width - 28f, 18f), "ACE HUNT STANDBY", "section-title");
+            huntDetails = PlainLabel(parent, new Rect(x + 18f, y - 30f, width - 28f, 40f), "Awaiting enemy wing reports.", "row-sub");
+            y -= 86f;
+
+            previousWings = AvStyled.Button(parent, new Rect(x, y, 78f, 28f), "< PREV", "btn", () =>
+            {
+                enemyPage = Math.Max(0, enemyPage - 1);
+                nextRefresh = 0f;
+            }, AvButtonStyle.Quiet);
+            previousWings.WithTooltip("Show the previous two enemy wings.");
+            rosterPage = PlainLabel(parent, new Rect(x + 84f, y, width - 168f, 28f), "NO WINGS", "kv-value");
+            rosterPage.alignment = TextAlignmentOptions.Center;
+            nextWings = AvStyled.Button(parent, new Rect(x + width - 78f, y, 78f, 28f), "NEXT >", "btn", () =>
+            {
+                int count = squad != null ? squad.EnemyWingCount : 0;
+                if ((enemyPage + 1) * EnemyRowsPerPage < count) enemyPage++;
+                nextRefresh = 0f;
+            }, AvButtonStyle.Quiet);
+            nextWings.WithTooltip("Show the next two enemy wings, including previous encounters.");
+            y -= 38f;
+
+            for (int i = 0; i < EnemyRowsPerPage; i++)
+            {
+                var rowObject = new GameObject("EnemyWing_" + i, typeof(RectTransform));
+                var root = (RectTransform)rowObject.transform;
+                root.SetParent(parent, false);
+                AvKit.Place(root, new Rect(x, y, width, 110f));
+                AvStyled.Box(root, new Rect(0f, 0f, width, 106f), "section");
+                var row = new EnemyWingRow
+                {
+                    Root = root,
+                    Rail = AvStyled.Rail(root, new Rect(4f, -8f, 3f, 88f), "locked"),
+                    Symbol = PlainLabel(root, new Rect(14f, -8f, 40f, 26f), "", "section-title"),
+                    Wing = PlainLabel(root, new Rect(60f, -8f, width - 70f, 18f), "", "row-name"),
+                    Ace = PlainLabel(root, new Rect(60f, -30f, width - 70f, 16f), "", "kv-value"),
+                    Skill = PlainLabel(root, new Rect(14f, -51f, width - 28f, 16f), "", "row-sub"),
+                    Status = PlainLabel(root, new Rect(14f, -71f, width * 0.6f, 16f), "", "kv-value"),
+                    Members = PlainLabel(root, new Rect(width * 0.62f, -71f, width * 0.38f - 14f, 16f), "", "kv-value"),
+                    Target = PlainLabel(root, new Rect(14f, -89f, width - 28f, 16f), "", "row-sub")
+                };
+                row.Members.alignment = TextAlignmentOptions.MidlineRight;
+                enemyRows.Add(row);
+                y -= 116f;
+            }
+
+            AvStyled.Label(parent, new Rect(x, y - 6f, width, 50f),
+                "ACE KILL: +1 PERK POINT. Downed aces may return stronger.\nFriendly wings and friendly aces: roster not implemented yet. Use WMC for recruited wingmen.", "row-sub");
+        }
+
+        private static TMP_Text PlainLabel(RectTransform parent, Rect area, string text, string classes)
+        {
+            TMP_Text label = AvStyled.Label(parent, area, text, classes, align: TextAlignmentOptions.MidlineLeft);
+            label.richText = false;
+            return label;
+        }
+
+        // ---- Pilot record ---------------------------------------------------------------
+
+        private void BuildPilotPage(RectTransform parent, Rect body)
+        {
+            parent = AvScreen.Scroll(parent, body, 644f, out body);
+            AvStyled.Spine(parent, new Rect(body.x, body.y, 3f, body.height));
+            float x = body.x + SpineInset;
+            float width = body.width - SpineInset;
+            float y = body.y;
+            AvStyled.Box(parent, new Rect(x, y, width, 116f), "section band");
+            pilotCallsign = PlainLabel(parent, new Rect(x + 10f, y - 8f, width - 20f, 22f), "PILOT RECORD PENDING", "section-title");
+            pilotName = PlainLabel(parent, new Rect(x + 10f, y - 34f, width - 20f, 18f), "Awaiting host pilot record.", "kv-value");
+            pilotBackground = PlainLabel(parent, new Rect(x + 10f, y - 60f, width - 20f, 48f), "", "row-sub");
+            y -= 126f;
+            pilotMode = KeyValue(parent, x, y, width, "PILOT LIFE MODE (F1)");
+            y -= 20f;
+            pilotStatus = KeyValue(parent, x, y, width, "PILOT STATUS");
+            y -= 20f;
+            pilotDeaths = KeyValue(parent, x, y, width, "PILOT DEATHS");
+            y -= 20f;
+            pilotGeneration = KeyValue(parent, x, y, width, "PILOT GENERATION");
+            y -= 28f;
+
+            y = DrawSectionTitle(parent, x, y, width, "SORTIE PERFORMANCE", "CURRENT AIRCRAFT", band: false);
 
             runAirframeValue = KeyValue(parent, x, y, width, "ACTIVE AIRFRAME");
             y -= 18f;
-            runTimeValue = KeyValue(parent, x, y, width, "SORTIE DURATION");
+            runTimeValue = KeyValue(parent, x, y, width, "MISSION ELAPSED");
             y -= 18f;
             runFlightStatusValue = KeyValue(parent, x, y, width, "FLIGHT CONDITION");
             y -= 18f;
@@ -549,6 +618,10 @@ namespace BoscaliSummer.Features.Progression.Presentation
             y -= 18f;
             runMissionScoreValue = KeyValue(parent, x, y, width, "MISSION SCORE");
             y -= 18f;
+            pilotScoreValue = KeyValue(parent, x, y, width, "CURRENT PILOT SCORE");
+            y -= 18f;
+            aceBonusValue = KeyValue(parent, x, y, width, "ACE BONUS POINTS");
+            y -= 18f;
             runNextPerkValue = KeyValue(parent, x, y, width, "SCORE TO NEXT PERK");
             y -= 18f;
             earnedValue = KeyValue(parent, x, y, width, "POINTS EARNED");
@@ -559,18 +632,22 @@ namespace BoscaliSummer.Features.Progression.Presentation
             y -= 26f;
 
             // Budget Pips Row
-            int ceiling = Mathf.Clamp(((IProgressionView)progression).MaximumPoints, 1, MaximumBudgetPips);
-            budgetPips = new Image[ceiling];
-            for (int i = 0; i < ceiling; i++)
+            budgetPips = new Image[MaximumBudgetPips];
+            budgetPipSlots = new GameObject[MaximumBudgetPips];
+            for (int i = 0; i < MaximumBudgetPips; i++)
             {
-                var pip = new Rect(x + i * 15f, y, 12f, 12f);
-                AvKit.Outline(parent, pip, AvTheme.Hairline);
-                budgetPips[i] = AvKit.Panel(parent, new Rect(pip.x + 2f, pip.y - 2f, 8f, 8f), Color.clear);
+                var slot = new GameObject("BudgetPoint_" + i, typeof(RectTransform));
+                var rect = (RectTransform)slot.transform;
+                rect.SetParent(parent, false);
+                AvKit.Place(rect, new Rect(x + i * 15f, y, 12f, 12f));
+                AvKit.Outline(rect, new Rect(0f, 0f, 12f, 12f), AvTheme.Hairline);
+                budgetPips[i] = AvKit.Panel(rect, new Rect(2f, -2f, 8f, 8f), Color.clear);
+                budgetPipSlots[i] = slot;
             }
             y -= 26f;
 
             y = DrawSectionTitle(parent, x, y, width, "COMMITTED SYSTEMS", null, band: false);
-            committedSystemsList = AvStyled.Label(parent, new Rect(x, y - 64f, width, 64f),
+            committedSystemsList = AvStyled.Label(parent, new Rect(x, y, width, 72f),
                 "No perks committed yet.", "row-sub");
         }
 
@@ -581,217 +658,205 @@ namespace BoscaliSummer.Features.Progression.Presentation
             if (scoreMetric == null || progression == null) return;
 
             bool bypass = progression.BypassRequirements;
+            int score = ((IProgressionView)progression).Score;
+            int bonus = 0;
+            if (squad != null && GameManager.GetLocalPlayer<Player>(out Player local) && local != null)
+            {
+                ulong id = PlayerIdentity.Of(local);
+                score = Math.Max(0, score - squad.GetScoreOrigin(id));
+                bonus = squad.GetBonusPoints(id);
+            }
 
             RefreshDataBar(bypass);
-            RefreshMetrics(bypass);
+            RefreshMetrics(bypass, score, bonus);
             RefreshPerkRows();
-            RefreshWingPage();
-            RefreshSortiePage(bypass);
+            RefreshEnemyPage();
+            RefreshPilotPage(bypass, score, bonus);
 
             UpdateStatusStrip();
         }
 
         private void RefreshDataBar(bool bypass)
         {
-            bool wingPresent = !string.IsNullOrEmpty(PresenceBoard.GetString(PresenceBoard.WingGuid));
-            int[] wingIds = PresenceBoard.GetInts(PresenceBoard.WingMemberIds);
-            int wingCount = wingIds != null ? wingIds.Length : 0;
             IProgressionView view = progression;
-
-            if (bypass)
-            {
-                dataBar.State.text = "DEBUG BYPASS — ALL PERKS UNLOCKED";
-                dataBar.State.color = AvTheme.Warning;
-            }
-            else if (wingPresent)
-            {
-                dataBar.State.text = "WING COMMAND LINKED · FLIGHT LEAD";
-                dataBar.State.color = AvTheme.RailReady;
-            }
-            else
-            {
-                dataBar.State.text = "SQUADRON & PILOT CONSOLE";
-                dataBar.State.color = AvTheme.Dim;
-            }
-
-            dataBar.SetChip(0, wingPresent ? (wingCount > 0 ? $"WING: {wingCount}" : "WING: 0") : "SOLO", wingPresent && wingCount > 0);
+            bool hunted = squad != null && squad.HuntActive;
+            dataBar.State.text = hunted ? "ACE WING HUNTING YOU" : bypass ? "DEBUG BYPASS — ALL ABILITIES ACTIVE" : "PILOT & ENEMY WING RECORDS";
+            dataBar.State.color = hunted ? AvTheme.Alert : bypass ? AvTheme.Warning : AvTheme.RailReady;
+            dataBar.SetChip(0, hunted ? "HUNT ACTIVE" : "NO HUNT", hunted);
             dataBar.SetChip(1, "RANK " + view.Rank, true);
-            int avail = view.AvailablePoints;
-            dataBar.SetChip(2, bypass ? "ALL UNLOCKED" : avail > 0 ? $"{avail}P AVAIL" : "0P AVAIL", avail > 0 || bypass);
+            int available = view.AvailablePoints;
+            dataBar.SetChip(2, bypass ? "ALL ACTIVE" : available + "P AVAIL", available > 0 || bypass);
         }
 
-        private void RefreshMetrics(bool bypass)
+        private void RefreshMetrics(bool bypass, int score, int bonus)
         {
             IProgressionView view = progression;
-            int score = view.Score;
             int perPoint = Math.Max(1, view.ScorePerPoint);
             int intoPoint = score % perPoint;
             int ceiling = Mathf.Max(1, view.MaximumPoints);
             int avail = view.AvailablePoints;
+            bool capped = view.EarnedPoints >= ceiling;
 
             scoreMetric.Set(
                 bypass ? "BYPASS" : score.ToString("N0"),
-                bypass ? "ALL PERKS ACTIVE" : (perPoint - intoPoint) + " PTS TO NEXT PERK",
-                bypass ? 1f : intoPoint / (float)perPoint,
+                bypass ? "ALL PERKS ACTIVE" : capped ? "SCORE BUDGET COMPLETE" : (perPoint - intoPoint) + " PTS TO NEXT PERK",
+                bypass || capped ? 1f : intoPoint / (float)perPoint,
                 bypass ? AvTheme.Warning : AvTheme.RailReady);
-            scoreMetric.Unit.text = "PTS · RANK " + view.Rank;
+            scoreMetric.Unit.text = "PTS · THIS PILOT";
 
             int earned = view.EarnedPoints;
             budgetMetric.Set(
                 bypass ? "FREE" : avail + "P",
-                bypass ? "UNLIMITED POINTS" : $"{earned} / {ceiling} EARNED",
+                bypass ? "UNLIMITED POINTS" : $"{earned}/{ceiling} EARNED · {bonus} ACE BONUS",
                 bypass ? 1f : earned / (float)ceiling,
                 avail > 0 ? AvTheme.RailReady : AvTheme.RailInfo);
             budgetMetric.Unit.text = "UNSPENT";
+            if (abilityBudgetValue != null)
+                abilityBudgetValue.text = bypass ? "DEBUG BYPASS: ALL ABILITIES AVAILABLE" :
+                    "PILOT SCORE " + score.ToString("N0") + " · +" + bonus + " ACE BONUS POINTS · " + avail + "P AVAILABLE";
         }
 
         private void RefreshPerkRows()
         {
-            IProgressionView view = progression;
-            PerkView[] perks = view.GetPerks();
+            if (progression == null) return;
+            if (perkAwaitingConfirmation.HasValue && Time.unscaledTime > perkConfirmationUntil)
+            {
+                perkAwaitingConfirmation = null;
+                perkConfirmationUntil = 0f;
+            }
+
+            PerkView[] perks = ((IProgressionView)progression).GetPerks();
+            bool requestPending = ((IProgressionView)progression).UnlockPending;
+            if (requestPending)
+            {
+                perkAwaitingConfirmation = null;
+                perkConfirmationUntil = 0f;
+            }
+            else perkRequestId = null;
 
             for (int i = 0; i < perkRows.Count; i++)
             {
                 PerkRow row = perkRows[i];
-                if (!TryFind(perks, row.Id, out PerkView pView)) continue;
+                if (!TryFind(perks, row.Id, out PerkView view)) continue;
 
-                row.Button.SetEnabled(pView.Affordable && !pView.Unlocked);
+                bool confirming = perkAwaitingConfirmation == row.Id;
+                row.Select.SetEnabled(!requestPending && view.Affordable && !view.Unlocked);
 
-                if (pView.Unlocked)
-                    PaintPerk(row, "ready", AvTheme.TextPrimary, "ACTIVE", AvTheme.RailReady);
-                else if (pView.Affordable)
-                    PaintPerk(row, "armed", AvTheme.TextPrimary, "UNLOCK " + pView.Cost + "P", AvTheme.RailCaution);
+                if (view.Unlocked)
+                {
+                    PaintPerk(row, "ready", AvTheme.TextPrimary);
+                    PaintPerkAction(row, "ACTIVE", false, false,
+                        view.Name.ToUpperInvariant() + " is active.");
+                    row.Select.WithTooltip(view.Name.ToUpperInvariant() + " is active.");
+                }
+                else if (requestPending && perkRequestId == row.Id)
+                {
+                    const string pending = "Waiting for the host to accept or deny this perk request.";
+                    PaintPerk(row, "cooling", AvTheme.TextPrimary);
+                    PaintPerkAction(row, "PENDING", false, true, pending);
+                    row.Select.WithTooltip(pending);
+                }
+                else if (requestPending)
+                {
+                    const string wait = "Wait for the host to answer the current perk request.";
+                    PaintPerk(row, "locked", AvTheme.Dim);
+                    PaintPerkAction(row, "WAIT", false, false, wait);
+                    row.Select.WithTooltip(wait);
+                }
+                else if (confirming)
+                {
+                    string confirm = "Confirm this separate action to commit " + view.Cost +
+                                     (view.Cost == 1 ? " perk point." : " perk points.");
+                    PaintPerk(row, "armed", AvTheme.TextPrimary);
+                    PaintPerkAction(row, "CONFIRM " + view.Cost + "P", true, true, confirm);
+                    row.Select.WithTooltip("Selected. Use the separate CONFIRM control to commit it.");
+                }
+                else if (view.Affordable)
+                {
+                    const string select = "Select the row first; the separate confirm control will then enable.";
+                    PaintPerk(row, "armed", AvTheme.TextPrimary);
+                    PaintPerkAction(row, "CONFIRM " + view.Cost + "P", false, false, select);
+                    row.Select.WithTooltip(select);
+                }
                 else
-                    PaintPerk(row, "locked", AvTheme.Dim, pView.Cost + "P REQ", AvTheme.Dim);
+                {
+                    string required = "Requires " + view.Cost +
+                                      (view.Cost == 1 ? " unspent perk point." : " unspent perk points.");
+                    PaintPerk(row, "locked", AvTheme.Dim);
+                    PaintPerkAction(row, view.Cost + "P REQ", false, false, required);
+                    row.Select.WithTooltip(required);
+                }
             }
         }
 
-        private static void PaintPerk(PerkRow row, string railState, Color name, string badge, Color badgeColor)
+        private static void PaintPerk(PerkRow row, string railState, Color name)
         {
             Color rail = RailColour(railState);
             row.Rail.color = rail;
             row.Code.color = rail;
             row.Name.color = name;
-            row.Badge.text = badge;
-            row.Badge.color = badgeColor;
         }
 
-        private void RefreshWingPage()
+        private static void PaintPerkAction(
+            PerkRow row, string text, bool enabled, bool latched, string tooltip)
         {
-            if (wingStatusTitle == null) return;
-
-            string wingGuid = PresenceBoard.GetString(PresenceBoard.WingGuid);
-            bool wingPresent = !string.IsNullOrEmpty(wingGuid);
-            int[] wingIds = PresenceBoard.GetInts(PresenceBoard.WingMemberIds);
-            int wingCount = wingIds != null ? wingIds.Length : 0;
-
-            if (wingPresent)
-            {
-                wingStatusRail.color = AvTheme.RailReady;
-                wingStatusTitle.text = "WING COMMAND LINK ACTIVE";
-                wingStatusTitle.color = AvTheme.RailReady;
-                wingStatusSubtitle.text = $"{wingCount} wingmen tracked via PresenceBoard.";
-                wingTipLabel.text = "Wing Command synchronizes recruited wingmen, formation stance, and flight orders.";
-            }
-            else
-            {
-                wingStatusRail.color = AvTheme.RailCaution;
-                wingStatusTitle.text = "STANDALONE SQUADRON MODE";
-                wingStatusTitle.color = AvTheme.RailCaution;
-                wingStatusSubtitle.text = "Solo flight operations. Wing Command companion mod not detected.";
-                wingTipLabel.text = "Install Wing Command to recruit wingmen, issue orders, and view live squadron formation data.";
-            }
-
-            wingCountValue.text = wingPresent ? wingCount.ToString() : "SOLO (0)";
-            wingCountValue.color = wingCount > 0 ? AvTheme.RailReady : AvTheme.Dim;
-
-            // Player Flight Lead Data
-            Aircraft playerAircraft = null;
-            if (GameManager.GetLocalPlayer<Player>(out Player player) && player != null)
-                playerAircraft = player.Aircraft;
-
-            if (playerAircraft != null)
-            {
-                string name = playerAircraft.definition != null ? playerAircraft.definition.unitName : playerAircraft.unitName;
-                leadAirframeValue.text = string.IsNullOrEmpty(name) ? "ACTIVE AIRCRAFT" : name.ToUpperInvariant();
-                leadStatusValue.text = playerAircraft.disabled ? "DISABLED" : playerAircraft.IsLanded() ? "LANDED" : "AIRBORNE";
-                leadStatusValue.color = playerAircraft.disabled ? AvTheme.Alert : playerAircraft.IsLanded() ? AvTheme.RailCaution : AvTheme.RailReady;
-
-                leadSpeedValue.text = $"{playerAircraft.speed * 1.94384f:0} kts";
-                leadAltValue.text = $"{playerAircraft.radarAlt:0} m AGL";
-                leadFuelValue.text = $"{playerAircraft.fuelLevel * 100f:0}%";
-            }
-            else
-            {
-                leadAirframeValue.text = "NO AIRCRAFT";
-                leadStatusValue.text = "STANDBY";
-                leadStatusValue.color = AvTheme.Dim;
-                leadSpeedValue.text = "—";
-                leadAltValue.text = "—";
-                leadFuelValue.text = "—";
-            }
-
-            // Wingmen rows resolution
-            for (int i = 0; i < wingRows.Count; i++)
-            {
-                WingmanRow row = wingRows[i];
-                if (wingPresent && wingIds != null && i < wingIds.Length)
-                {
-                    row.Root.gameObject.SetActive(true);
-                    int hash = wingIds[i];
-                    Aircraft wingAc = FindAircraftByHash(hash);
-
-                    row.CallSign.text = $"WINGMAN {i + 1}";
-                    if (wingAc != null)
-                    {
-                        string acName = wingAc.definition != null ? wingAc.definition.unitName : wingAc.unitName;
-                        row.Airframe.text = string.IsNullOrEmpty(acName) ? "AIRCRAFT" : acName.ToUpperInvariant();
-                        bool disabled = wingAc.disabled || wingAc.HasEjected();
-                        row.Status.text = disabled ? "LOST / EJECTED" : wingAc.IsLanded() ? "LANDED" : "AIRBORNE";
-                        row.Status.color = disabled ? AvTheme.Alert : wingAc.IsLanded() ? AvTheme.RailCaution : AvTheme.RailReady;
-                        row.Rail.color = disabled ? AvTheme.Alert : AvTheme.RailReady;
-
-                        if (playerAircraft != null)
-                        {
-                            float distKm = Vector3.Distance(playerAircraft.transform.position, wingAc.transform.position) / 1000f;
-                            row.Distance.text = $"{distKm:0.0} km";
-                        }
-                        else
-                        {
-                            row.Distance.text = "—";
-                        }
-                    }
-                    else
-                    {
-                        row.Airframe.text = "EN ROUTE";
-                        row.Status.text = "DEPLOYED";
-                        row.Status.color = AvTheme.RailInfo;
-                        row.Rail.color = AvTheme.RailInfo;
-                        row.Distance.text = "—";
-                    }
-                }
-                else
-                {
-                    row.Root.gameObject.SetActive(false);
-                }
-            }
+            row.Confirm.SetText(text);
+            row.Confirm.SetEnabled(enabled);
+            row.Confirm.SetLatched(latched);
+            row.Confirm.WithTooltip(tooltip);
         }
 
-        private static Aircraft FindAircraftByHash(int persistentIdHash)
+        private void RefreshEnemyPage()
         {
-            if (UnitRegistry.allUnits == null) return null;
-            for (int i = 0; i < UnitRegistry.allUnits.Count; i++)
+            if (huntTitle == null) return;
+            bool hunted = squad != null && squad.HuntActive;
+            huntTitle.text = hunted ? "ACE HUNT ACTIVE — YOU ARE THE TARGET" : "ACE HUNT STANDBY";
+            huntTitle.color = huntRail.color = hunted ? AvTheme.Alert : AvTheme.RailInfo;
+            huntDetails.text = squad != null ? squad.Status : "Enemy wing reports are unavailable.";
+            int count = Math.Max(0, squad != null ? squad.EnemyWingCount : 0);
+            enemyPage = Math.Min(enemyPage, Math.Max(0, (count - 1) / EnemyRowsPerPage));
+            int first = enemyPage * EnemyRowsPerPage;
+            rosterPage.text = count == 0 ? "NO ENEMY WINGS ENCOUNTERED" :
+                (first + 1) + "–" + Math.Min(first + EnemyRowsPerPage, count) + " OF " + count + " WINGS";
+            previousWings.SetEnabled(enemyPage > 0);
+            nextWings.SetEnabled(first + EnemyRowsPerPage < count);
+            for (int i = 0; i < enemyRows.Count; i++)
             {
-                Unit u = UnitRegistry.allUnits[i];
-                if (u != null && u.persistentID.GetHashCode() == persistentIdHash)
-                    return u as Aircraft;
+                EnemyWingRow row = enemyRows[i];
+                bool visible = first + i < count;
+                row.Root.gameObject.SetActive(visible);
+                if (!visible) continue;
+                EnemyWingView wing = squad.GetEnemyWing(first + i);
+                row.Symbol.text = wing.Symbol;
+                row.Wing.text = wing.WingName;
+                row.Ace.text = "ACE: " + wing.AceName;
+                row.Skill.text = "TIER " + wing.Tier + " · SKILL " + wing.Skill +
+                    (wing.Returns > 0 ? " · RETURN #" + wing.Returns : " · FIRST ENCOUNTER");
+                row.Status.text = wing.Status;
+                row.Members.text = wing.MembersAlive + " / " + wing.MemberCount + " ALIVE";
+                row.Target.text = wing.MembersAlive <= 0 ? "WING NO LONGER ACTIVE" :
+                    string.IsNullOrEmpty(wing.TargetName) ? "TARGET: NORMAL MISSION ORDERS" : "TARGET: " + wing.TargetName;
+                Color color = wing.MembersAlive <= 0 ? AvTheme.Dim :
+                    !string.IsNullOrEmpty(wing.TargetName) ? AvTheme.Alert : AvTheme.RailInfo;
+                row.Status.color = row.Rail.color = row.Symbol.color = color;
             }
-            return null;
         }
 
-        private void RefreshSortiePage(bool bypass)
+        private void RefreshPilotPage(bool bypass, int pilotScore, int bonus)
         {
             if (runAirframeValue == null) return;
+            if (squad != null)
+            {
+                PilotView pilot = squad.Pilot;
+                pilotCallsign.text = string.IsNullOrEmpty(pilot.Callsign) ? "PILOT RECORD PENDING" : pilot.Callsign;
+                pilotName.text = pilot.Name;
+                pilotBackground.text = pilot.Background;
+                pilotMode.text = pilot.Respawns ? "RESPAWNING" : "ONE LIFE";
+                pilotMode.color = pilot.Respawns ? AvTheme.RailInfo : AvTheme.RailCaution;
+                pilotStatus.text = pilot.Status;
+                pilotDeaths.text = pilot.Deaths.ToString();
+                pilotGeneration.text = pilot.Generation.ToString();
+            }
 
             IProgressionView view = progression;
             Aircraft playerAircraft = null;
@@ -823,10 +888,12 @@ namespace BoscaliSummer.Features.Progression.Presentation
 
             runRankValue.text = view.Rank.ToString();
             runMissionScoreValue.text = view.Score.ToString("N0");
+            pilotScoreValue.text = pilotScore.ToString("N0");
+            aceBonusValue.text = "+" + bonus + "P";
 
             int perPoint = Math.Max(1, view.ScorePerPoint);
-            int toNext = perPoint - (view.Score % perPoint);
-            runNextPerkValue.text = bypass ? "BYPASS ACTIVE" : toNext.ToString("N0");
+            int toNext = perPoint - (pilotScore % perPoint);
+            runNextPerkValue.text = bypass ? "BYPASS ACTIVE" : view.EarnedPoints >= view.MaximumPoints ? "BUDGET COMPLETE" : toNext.ToString("N0");
 
             int earned = view.EarnedPoints;
             int available = view.AvailablePoints;
@@ -842,6 +909,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             {
                 for (int i = 0; i < budgetPips.Length; i++)
                 {
+                    budgetPipSlots[i].SetActive(i < ceiling);
                     budgetPips[i].color = bypass || i < spent ? AvTheme.Accent
                                         : i < earned ? AvTheme.RailReady
                                         : Color.clear;
@@ -856,7 +924,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             }
 
             committedSystemsList.text = committed.Count == 0
-                ? "No perks committed yet. Unlock traits in the PERKS tab."
+                ? "No abilities committed yet. Select one in ABILITIES."
                 : string.Join("  ·  ", committed.ToArray());
             committedSystemsList.color = committed.Count == 0 ? AvTheme.Dim : AvTheme.TextPrimary;
         }
@@ -864,8 +932,10 @@ namespace BoscaliSummer.Features.Progression.Presentation
         private void UpdateStatusStrip()
         {
             if (shell == null) return;
-            string baseLine = progression != null ? progression.LastResult : "";
-            shell.WriteStatus(null, activeHoverTooltip, baseLine);
+            string baseLine = shell.Page == TabEnemy
+                ? (squad != null ? squad.Status : "Enemy wing reports are unavailable.")
+                : progression != null ? progression.LastResult : "";
+            shell.WriteStatus(null, MapPicker.Prompt, baseLine);
         }
 
         private static bool TryFind(PerkView[] perks, byte id, out PerkView view)

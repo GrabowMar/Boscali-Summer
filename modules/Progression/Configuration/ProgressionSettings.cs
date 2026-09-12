@@ -13,7 +13,7 @@ namespace BoscaliSummer.Features.Progression.Configuration
         {
             Enabled = config.Bind("Progression", "Enabled", true,
                 "Enable the session-scoped Boscali perk board. Turning this off skips the whole " +
-                "feature - its Harmony patches, network handlers and the OPS page - and also " +
+                "feature - its Harmony patches, network handlers and the SQD page - and also " +
                 "disables Support, which depends on it. " +
                 "Host-authoritative: on a server, only the host's value applies.");
             ScorePerPoint = config.Bind("Progression", "ScorePerPoint", 500,

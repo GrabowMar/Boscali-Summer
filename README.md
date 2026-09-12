@@ -8,7 +8,7 @@ Nuclear Option** — every expensive system pooled, event-driven, and globally b
 |---|---|
 | **Development build** | `0.1.1` (unreleased) |
 | **Game** | Nuclear Option `0.34.2` |
-| **Requires** | BepInEx `5.4.23.4`+ |
+| **Requires** | BepInEx `5.4.23.4`+ and Wing Command `0.9.2.6`+ with its Squad API |
 | **Play** | Single-player, and multiplayer with the mod on **every** peer |
 | **Licence** | MIT |
 
@@ -17,7 +17,7 @@ Nuclear Option** — every expensive system pooled, event-driven, and globally b
 > `BoscaliSummer.dll` from source (below).
 
 > [!NOTE]
-> Ignition, destruction, garrison, progression and support decisions are host-authoritative.
+> Ignition, destruction, garrison, pilot careers, ace hunts, progression and support decisions are host-authoritative.
 > In multiplayer the host and every client must run the same version. Balance, effects and
 > config may change between releases.
 
@@ -35,18 +35,24 @@ Nuclear Option** — every expensive system pooled, event-driven, and globally b
   only; vanilla emplacements own the combat).
 - **Radio** — a client-local map-MFD music player (`RAD` bezel) for your own OGG/WAV
   stations, routed through the game's music mixer. Three starter stations; no bundled audio.
-- **Perks & support** — one `OPS` map-MFD for the score-earned **PERKS** board,
-  server-validated **SUPPORT** requests (satellite scan, zone fortification, Rod from God,
-  EMP shock, flare barrage), camera **OBSERVE** targeting, and live battle/career **STATUS**.
-  Perk purchases require selecting the row and then using its separate confirm control.
+- **Squad & aces** — `SQD` holds **PILOT**, **ABILITIES** and **ENEMY WINGS**. Wing
+  Command generates the player pilot and enemy ace identities. F1 offers respawning
+  pilots (default) or one-life careers; a confirmed pilot death creates a successor in
+  one-life mode without blocking native aircraft respawns. Hostile damage attracts
+  escalating ace-led wings, with symbols, pursuit status, enemy chatter and hunt music.
+  A credited ace defeat grants one bonus perk point; surviving ejected rivals may return.
+  Friendly wing management stays in WMC. See [docs/ACE_HUNTS.md](docs/ACE_HUNTS.md).
+- **Support** — `OPS` holds server-validated requests (satellite scan, zone fortification,
+  Rod from God, EMP shock, flare barrage), camera observation and battle status. Perk
+  purchases moved to SQD and retain a separate confirm control.
 - **Strategic layer** — an `STR` map-MFD with the theater picture: DEFCON and the air
   balance with a friendly-AI sortie board (**SA**), the live sector field and contested
   nodes (**FRONT**), the faction objective board (**TASKING**), the theater account and
   stockpile (**LOG**), and mission-AI doctrine plus map overlays (**CMD**). Aircraft
   command stays Wing Command's job; this mod never tasks a recruited wing.
 - **Expanded tactical map** — `Command.ExpandedMapUi` (default on): left-side MFD pages and
-  event log, central map, right-side bezel rail, native spawn footer. Works with or without
-  Wing Command.
+  event log, central map, right-side bezel rail, native spawn footer, with shared Wing
+  Command bezel and map-input ownership.
 - **Quality of life** (`QoL.Enabled`, client-local, independent of Support/Progression) —
   smooth third-person orbit/chase framing with a steady horizon and room to aim, HUD and
   native-minimap restore in external views, a framed target-camera feed while targets are
@@ -65,7 +71,8 @@ transitions go on the wire. Hard global budgets keep large city battles practica
 
 1. Install [BepInEx 5](https://github.com/BepInEx/BepInEx/releases) into the Nuclear Option
    directory and launch the game once.
-2. Build `BoscaliSummer.dll` from source (below) and copy it to:
+2. Install Wing Command `0.9.2.6` or newer with its Squad API. It is now a required
+   runtime dependency on every peer. Build `BoscaliSummer.dll` from source (below) and copy it to:
 
    ```text
    Nuclear Option/BepInEx/plugins/BoscaliSummer/BoscaliSummer.dll
@@ -92,10 +99,14 @@ in-game with [ConfigurationManager](https://github.com/BepInEx/BepInEx.Configura
 3. Capture an airbase and inspect nearby civilian buildings — selected shells keep their
    look but behave as defensive positions.
 4. Maximise the tactical map. Press **`RAD`** for the radio (**FOLDER** adds OGG/WAV
-   stations). Press **`OPS`** to spend perk points and call in support with the map cursor
-   over a valid target. Press **`STR`** for the theater picture and friendly-AI doctrine;
-   **`SET`** holds map-display settings. With Wing Command installed it claims **WMC** and
-   shares bezel and map-input ownership without becoming a hard dependency.
+   stations). Press **`SQD`** for your pilot, perk points and enemy aces; press **`OPS`**
+   to call support over a valid map target. Press **`STR`** for the theater picture and
+   friendly-AI doctrine; **`SET`** holds map-display settings and **`WMC`** your friendly wing.
+5. After the first 60 mission seconds, inflict hostile damage to draw an ace hunt. The
+   default trigger is 25 credited part-damage points. Put your own OGG/WAV tracks in
+   `BepInEx/plugins/BoscaliSummer/Music/Hunt` for hunt music; otherwise the installed
+   tactical soundtrack plays. The previous music state returns at hunt end, and manual
+   radio controls take priority. Flight balance and multiplayer play remain unverified.
 
 ## Configuration
 
@@ -111,13 +122,16 @@ anything) or **client-local**. This table is a curated subset; F1 shows the rest
 | Buildings | `ImpactScorchEnabled` | `true` | Local scorch decal where an explosive hit meets a wall (client-local) |
 | Garrisons | `Enabled` / `BuildingsPerZone` | `true` / `3` | Occupy civilian shells around controlled zones |
 | Radio | `Enabled` / `CrossfadeSeconds` | `true` / `1.5` | Client-local map radio; blend between tracks |
+| Squad | `PilotLives` | `Respawning` | `OneLife` retires a confirmed dead pilot and starts a fresh successor career |
+| Squad | `EnemyAceHunts` | `true` | Enemy ace wings, pursuit, return encounters and bonus points |
+| Squad | `DamageThreshold` / `HuntCooldown` | `25` / `180` | Initial credited part damage; seconds before fresh threat can accumulate |
 | QoL | `Enabled` | `true` | Local HUD/camera conveniences + observation marks |
 | QoL | `GunAimAssist` / `GunAimAssistStrength` | `false` / `0.04` | Experimental gun nudge; input ceiling before falloff |
 | QoL | `CameraMarks` / `MarkCameraKey` | `true` / `F8` | Camera observation mark |
 | Avionics | `ThirdPersonFlightCameraEnabled` | `true` | Smooth orbit/rear-chase framing (disable → native motion) |
 | Avionics | `ThirdPersonHudEnabled` / `ThirdPersonHudKey` | `true` / `F7` | Keep the flight HUD in external views; toggle key |
 | Progression | `Enabled` | `true` | Score-earned perk board (off also disables Support) |
-| Progression | `ScorePerPoint` / `MaximumPoints` | `500` / `6` | Score per perk point; points one pilot can earn (board costs 12) |
+| Progression | `ScorePerPoint` / `MaximumPoints` | `500` / `6` | Score per point and score-point cap; ace bonuses add beyond it (board costs 12) |
 | Progression | `PerkStrength` | `1.0` | Scale every passive perk without editing the board |
 | Support | `Enabled` / `CostMultiplier` | `true` / `1.0` | OPS support pipeline; scale every cost at once |
 | Support | `ReconSweep` `Fortification` `RodFromGod` `EmpShock` `FlareBarrage` | `true` | Per-action toggles (flare barrage shares the Satellite Scan authorisation) |
@@ -139,6 +153,9 @@ library:
 ```powershell
 dotnet build .\BoscaliSummer.sln -c Release -p:GameDir='D:\SteamLibrary\steamapps\common\Nuclear Option'
 ```
+
+The build uses Wing Command's public runtime API without compiling against or copying
+its implementation. Wing Command must still be installed at the required version to run.
 
 The Release build drops `bin\Release\netstandard2.1\BoscaliSummer.dll`; copy it, with the
 `Avionics.avss` default and the starter radio PNGs it embeds, to `BepInEx\plugins\`.

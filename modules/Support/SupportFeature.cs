@@ -29,12 +29,14 @@ namespace BoscaliSummer.Features.Support
             SupportManager manager = context.AddSceneService<SupportManager>(50);
             SupportNet network = context.AddComponent<SupportNet>();
             SupportPanel panel = context.AddSceneService<SupportPanel>(55);
+            SupportMapOverlay mapOverlay = context.AddSceneService<SupportMapOverlay>(58);
 
             network.Configure(manager);
             manager.Configure(context.Settings.Support, perks, fortifications, network, context.Logger, fireSuppression);
             manager.ConfigureBypass(context.Settings.Diagnostics.BypassRequirements);
             manager.ConfigureDisableCooldowns(context.Settings.Diagnostics.DisableOpsCooldowns);
             panel.Configure(manager, progression, context.Logger, baseAlarm);
+            mapOverlay.Configure(context.Settings.Support, manager, context.Logger);
         }
     }
 }

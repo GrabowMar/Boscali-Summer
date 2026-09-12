@@ -7,6 +7,7 @@ using NOAvionics.Ui;
 namespace BoscaliSummer
 {
     [BepInPlugin(PluginGuid, PluginName, PluginVersion)]
+    [BepInDependency("com.marci.wingcommand", "0.9.2.6")]
     public sealed class Plugin : BaseUnityPlugin
     {
         public const string PluginGuid = "com.marci.boscalisummer";

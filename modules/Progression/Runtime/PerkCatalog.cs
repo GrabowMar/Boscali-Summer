@@ -97,6 +97,14 @@ namespace BoscaliSummer.Features.Progression.Runtime
             if (scorePerPoint <= 0 || maximumPoints <= 0 || score <= 0) return 0;
             return Math.Min(maximumPoints, score / scorePerPoint);
         }
+
+        public static int EarnedForPilot(int score, int origin, int scorePerPoint, int maximumPoints, int bonus)
+        {
+            // Normalize before subtracting or adding so extreme inputs cannot wrap into rewards.
+            int pilotScore = Math.Max(0, Math.Max(0, score) - Math.Max(0, origin));
+            int scorePoints = Earned(pilotScore, scorePerPoint, Math.Min(20, maximumPoints));
+            return Math.Min(20, scorePoints + Math.Max(0, Math.Min(20, bonus)));
+        }
     }
 
     internal sealed class PerkState

@@ -48,7 +48,7 @@ namespace BoscaliSummer.Features.Support.Patches
                     r.enabled = false;
                 }
 
-                Visuals.KineticRodStrikeVisuals.TriggerImpact(world);
+                Visuals.KineticRodStrikeVisuals.TriggerImpact(world, __instance.ownerID);
             }
             else if (unique.StartsWith("BoscaliSummer:Support:Emp:", StringComparison.Ordinal))
             {

@@ -38,10 +38,28 @@ namespace BoscaliSummer.Tests.Features.Command
             }
 
             TestTacticalSectorGrid();
+            TestControlledIngress();
             FrontlineTests.Run();
             StrPanelTests.Run();
         }
 
+        private static void TestControlledIngress()
+        {
+            var grid = new TacticalSectorGrid(32, 100000f, 60000f);
+            TestAssert.That(!grid.TryNearestControlledEdge(-30000, 0, out _, out _), "neutral control must not admit ace ingress");
+            grid.RegisterNode(1, "Enemy base", 0, 0, SectorControl.Friendly, 100000, true);
+            grid.EvaluateSectors(0);
+            TestAssert.That(grid.TryNearestControlledEdge(-30000, 0, out float x, out float z), "owned perimeter admits ingress");
+            TestAssert.That(System.Math.Abs(x + 48800) < 1 && System.Math.Abs(z) < 1,
+                "nearest controlled edge must win over farther map edges");
+            TestAssert.That(grid.TryNearestControlledEdge(30000, 0, out x, out z) && System.Math.Abs(x - 48800) < 1,
+                "moving the player must change the selected ingress side");
+            TestAssert.That(!grid.TryNearestControlledEdge(float.NaN, 0, out _, out _), "invalid coordinates fail closed");
+            grid.ResetAll();
+            grid.RegisterNode(2, "Opposing base", 0, 0, SectorControl.Hostile, 100000, true);
+            grid.EvaluateSectors(0);
+            TestAssert.That(!grid.TryNearestControlledEdge(-30000, 0, out _, out _), "opposing territory must reject ingress");
+        }
         private static void TestLogSpace()
         {
             TestAssert.That(LogSpace(LogSpace(1038f, 180f), 364f) == 128f,
