@@ -48,6 +48,16 @@ namespace BoscaliSummer.Features.Squad.Runtime
             public HuntOutcome Outcome;
         }
 
+        private sealed class RivalRecord
+        {
+            public int Seed;
+            public string Name, Callsign, Symbol, Wing;
+            public int Tier, Returns;
+            public PersistentID AceId;
+            public FactionHQ EnemyHq;
+        }
+
+        private static readonly List<RivalRecord> survivingRivals = new List<RivalRecord>(16);
         private readonly Dictionary<ulong, Career> careers = new Dictionary<ulong, Career>();
         private readonly List<Hunt> hunts = new List<Hunt>(AceCareer.MaximumHistory);
         private readonly HashSet<Player> connected = new HashSet<Player>();
@@ -60,6 +70,9 @@ namespace BoscaliSummer.Features.Squad.Runtime
         private uint lastEvent;
         private ulong localIdentity;
         private int localBonus, localOrigin;
+        private float pendingChatterRelease;
+        private string pendingChatterSpeaker, pendingChatterStatus, pendingChatterMessage;
+        private int lastChatterHuntId;
         private EnemyWingView[] enemies = Array.Empty<EnemyWingView>();
         private static readonly string[] Symbols = { "<>", "[+]", "/\\", "[X]", "><", "||" };
         private static readonly string[] Wings = { "LANCE", "CROWN", "TALON", "WRAITH", "VIPER", "REVENANT" };
@@ -93,6 +106,9 @@ namespace BoscaliSummer.Features.Squad.Runtime
             hunts.Clear(); careers.Clear(); connected.Clear(); missionIdentity = null;
             nextTick = lastTime = 0; sequence = 0; lastEvent = 0;
             localIdentity = 0; localBonus = localOrigin = 0;
+            pendingChatterRelease = 0f;
+            pendingChatterSpeaker = pendingChatterStatus = pendingChatterMessage = null;
+            lastChatterHuntId = 0;
             ClearLocal("Waiting for a running mission."); network?.ResetScene();
         }
 
@@ -138,24 +154,24 @@ namespace BoscaliSummer.Features.Squad.Runtime
             TickCareer(career, mission.MissionTime, allowSpawn: false); // Synchronize the seat without spawning a natural hunt.
             if (career.Rules.Hunting || career.Rules.ReplacementPending) return "Wait for the current pilot/hunt transition.";
             career.ProvokedHq = enemy;
-            bool spawned = Spawn(career, player.Aircraft, mission.MissionTime, tier);
+            bool spawned = Spawn(career, player.Aircraft, Time.unscaledTime, tier);
             if (spawned) Apply(Snapshot(player), PlayerIdentity.Of(player));
-            return spawned ? "Tier " + tier + " wing spawned: " + AceCareer.WingSize(tier) + " aircraft hunting you." :
-                "Spawn unavailable: requires Command territory control, the tier aircraft/loadout, and an enemy-controlled edge at least 9 km away.";
+            return spawned ? "Spawned tier " + tier + " adversary wing." : "Wing Command rejected adversary spawn.";
         }
 
         private string DebugClearWings()
         {
-            if (!GameAccess.IsServer()) return "Host only: remote clients cannot clear wings.";
-            if (!GameManager.GetLocalPlayer<Player>(out Player player) || player == null ||
-                !careers.TryGetValue(PlayerIdentity.Of(player), out Career career)) return "No local pilot career.";
-            int count = ClearDebugWings(career, NetworkSceneSingleton<MissionManager>.i?.MissionTime ?? lastTime);
+            if (!GameAccess.IsServer()) return "Host only.";
+            if (!GameManager.GetLocalPlayer<Player>(out Player player) || player == null)
+                return "No local player found.";
+            if (!careers.TryGetValue(PlayerIdentity.Of(player), out Career career)) return "No local pilot career.";
+            int count = ClearDebugWings(career, NetworkSceneSingleton<MissionManager>.i?.MissionTime ?? 0);
             if (count > 0)
             {
-                Notice(career, "Debug wings cleared without kill rewards.", "SQUAD", "");
                 Apply(Snapshot(player), PlayerIdentity.Of(player));
+                logger.LogInfo("[Squad] Cleared " + count + " debug adversary wings for local player.");
             }
-            return count > 0 ? "Cleared " + count + " debug wing(s)." : "No debug wings to clear.";
+            return count > 0 ? "Cleared " + count + " debug wings." : "No active debug wings owned by this player.";
         }
 
         private int ClearDebugWings(Career career, float now)
@@ -173,6 +189,12 @@ namespace BoscaliSummer.Features.Squad.Runtime
 
         private void Update()
         {
+            if (pendingChatterRelease > 0f && Time.unscaledTime >= pendingChatterRelease)
+            {
+                pendingChatterRelease = 0f;
+                if (!string.IsNullOrEmpty(pendingChatterMessage) && !Application.isBatchMode)
+                    WingLink.EnemyChatter(pendingChatterSpeaker, pendingChatterStatus, pendingChatterMessage);
+            }
             if (settings == null || Time.unscaledTime < nextTick) return;
             nextTick = Time.unscaledTime + 1f;
             var current = MissionManager.CurrentMission;
@@ -280,10 +302,36 @@ namespace BoscaliSummer.Features.Squad.Runtime
         internal void RecordDamage(Unit victim, PersistentID dealer, float amount)
         {
             if (!GameAccess.IsServer() || !MissionManager.IsRunning || victim == null || victim.disabled ||
-                victim is Missile || victim is Scenery || !AceCareer.Finite(amount) || amount <= 0f ||
-                !UnitRegistry.TryGetPersistentUnit(dealer, out PersistentUnit source) || source.player == null) return;
+                victim is Missile || victim is Scenery || !AceCareer.Finite(amount) || amount <= 0f) return;
+
+            Hunt aceHunt = null;
+            for (int i = 0; i < hunts.Count; i++)
+            {
+                Hunt h = hunts[i];
+                if (h.Aircraft != null && h.Aircraft.Length > 0 && h.Aircraft[0] == victim && h.Outcome == HuntOutcome.Hunting)
+                {
+                    aceHunt = h;
+                    break;
+                }
+            }
+
+            if (!UnitRegistry.TryGetPersistentUnit(dealer, out PersistentUnit source)) return;
             Player player = source.player;
-            if (!connected.Contains(player) || !Hostile(victim.NetworkHQ, player.HQ) || source.GetHQ() != player.HQ) return;
+
+            if (aceHunt != null)
+            {
+                if (player != null && aceHunt.Owner != null && player == aceHunt.Owner.Player)
+                {
+                    aceHunt.PlayerHitAce = true;
+                }
+                else if (aceHunt.Owner?.Player != null && source.GetHQ() == aceHunt.Owner.Player.HQ)
+                {
+                    // Mitigate friendly AI damage on the ace by 75% to preserve the duel for the player
+                    MitigateFriendlyDamage(victim, amount * 0.75f);
+                }
+            }
+
+            if (player == null || !connected.Contains(player) || !Hostile(victim.NetworkHQ, player.HQ) || source.GetHQ() != player.HQ) return;
             Career career = GetCareer(player);
             if (career == null) return;
             for (int i = 0; i < hunts.Count; i++)
@@ -296,6 +344,20 @@ namespace BoscaliSummer.Features.Squad.Runtime
             float now = NetworkSceneSingleton<MissionManager>.i?.MissionTime ?? 0;
             if (career.Rules.Damage(amount, now, career.Rules.Threshold(settings.DamageThreshold.Value)))
                 career.ProvokedHq = victim.NetworkHQ;
+        }
+
+        private static void MitigateFriendlyDamage(Unit victim, float amountToRestore)
+        {
+            if (victim == null || !(victim is Aircraft aircraft) || aircraft.partLookup == null) return;
+            for (int i = 0; i < aircraft.partLookup.Count; i++)
+            {
+                UnitPart part = aircraft.partLookup[i];
+                if (part != null && part.hitPoints > 0f)
+                {
+                    part.hitPoints += amountToRestore;
+                    break;
+                }
+            }
         }
 
         internal void RecordKill(Unit victim)
@@ -318,33 +380,107 @@ namespace BoscaliSummer.Features.Squad.Runtime
             if (ReferenceEquals(career.Seat, seat)) career.SeatDeathObserved = true;
         }
 
+        private static bool IsTooCloseToFriendlies(FactionHQ playerHq, float x, float z, float minDistance)
+        {
+            if (playerHq == null || FactionRegistry.airbaseLookup == null) return false;
+            float minSqr = minDistance * minDistance;
+            foreach (Airbase ab in FactionRegistry.airbaseLookup.Values)
+            {
+                if (ab == null || ab.CurrentHQ != playerHq || ab.UnitDestroyed()) continue;
+                GlobalPosition pos = ab.transform.position.ToGlobalPosition();
+                float dx = x - pos.x, dz = z - pos.z;
+                if (dx * dx + dz * dz < minSqr) return true;
+            }
+            return false;
+        }
+
+        private static bool TryCalculateEnemyIngress(Aircraft target, FactionHQ enemyHq, out float ingressX, out float ingressZ)
+        {
+            ingressX = ingressZ = 0f;
+            var map = NetworkSceneSingleton<LevelInfo>.i?.LoadedMapSettings;
+            if (map == null || target == null || enemyHq == null) return false;
+            GlobalPosition player = target.GlobalPosition();
+            Vector2 enemyCenter = Vector2.zero;
+            int count = 0;
+            if (FactionRegistry.airbaseLookup != null)
+            {
+                foreach (Airbase ab in FactionRegistry.airbaseLookup.Values)
+                {
+                    if (ab == null || ab.CurrentHQ != enemyHq || ab.UnitDestroyed()) continue;
+                    GlobalPosition pos = ab.transform.position.ToGlobalPosition();
+                    enemyCenter += new Vector2(pos.x, pos.z);
+                    count++;
+                }
+            }
+            if (count > 0) enemyCenter /= count;
+            else
+            {
+                GlobalPosition hqPos = enemyHq.transform.position.ToGlobalPosition();
+                enemyCenter = new Vector2(hqPos.x, hqPos.z);
+            }
+            Vector2 dir = enemyCenter - new Vector2(player.x, player.z);
+            if (dir.sqrMagnitude < 100f) dir = Vector2.up;
+            else dir.Normalize();
+
+            float halfX = map.MapSize.x * 0.5f - 1200f;
+            float halfZ = map.MapSize.y * 0.5f - 1200f;
+            ingressX = Mathf.Clamp(player.x + dir.x * 22000f, -halfX, halfX);
+            ingressZ = Mathf.Clamp(player.z + dir.y * 22000f, -halfZ, halfZ);
+            return true;
+        }
+
         private bool Spawn(Career career, Aircraft target, float now, int debugTier = 0)
         {
-            Hunt returning = null;
-            for (int i = hunts.Count - 1; debugTier == 0 && i >= 0; i--)
+            RivalRecord chosenRival = null;
+            List<RivalRecord> candidates = new List<RivalRecord>();
+            for (int i = 0; debugTier == 0 && i < survivingRivals.Count; i++)
             {
-                Hunt old = hunts[i];
-                if (old.Owner == career && old.ReturnCandidate && !old.Returned && old.EnemyHq == career.ProvokedHq &&
-                    old.Outcome == HuntOutcome.Defeated && now >= old.Ended + 300f &&
-                    Survived(old.AceId)) { returning = old; break; }
+                RivalRecord r = survivingRivals[i];
+                if (r.EnemyHq == career.ProvokedHq && Survived(r.AceId))
+                    candidates.Add(r);
             }
+            // 30% chance to reuse a previously met surviving ace, or randomly generate
+            if (candidates.Count > 0 && UnityEngine.Random.value < 0.30f)
+            {
+                chosenRival = candidates[UnityEngine.Random.Range(0, candidates.Count)];
+            }
+
             int id = ++sequence;
-            int seed = returning?.Seed ?? unchecked(id * 104729 ^ (int)PlayerIdentity.Of(career.Player));
-            int returns = returning == null ? 0 : returning.Returns + 1;
-            int tier = AceCareer.SpawnTier(career.Rules.Tier, returning?.Tier ?? 0, debugTier);
+            int seed = chosenRival != null ? chosenRival.Seed : UnityEngine.Random.Range(1, int.MaxValue);
+            int returns = chosenRival != null ? chosenRival.Returns + 1 : 0;
+            int tier = AceCareer.SpawnTier(career.Rules.Tier, chosenRival?.Tier ?? 0, debugTier);
             if (!WingLink.TryCreatePilot(seed, out string name, out string callsign, out _, out _)) return false;
+            if (chosenRival != null)
+            {
+                name = chosenRival.Name;
+                callsign = chosenRival.Callsign;
+            }
+
             GlobalPosition playerPosition = target.GlobalPosition();
-            if (!services.TryGet<ITerritoryIngress>(out var territory) ||
-                !territory.TryNearestEdge(career.ProvokedHq.GetInstanceID(), playerPosition.x, playerPosition.z,
-                    out float ingressX, out float ingressZ)) return false;
+            float ingressX = 0f, ingressZ = 0f;
+            bool validIngress = false;
+            if (services.TryGet<ITerritoryIngress>(out var territory) &&
+                territory.TryNearestEdge(career.ProvokedHq.GetInstanceID(), playerPosition.x, playerPosition.z,
+                    out ingressX, out ingressZ))
+            {
+                validIngress = !IsTooCloseToFriendlies(career.Player?.HQ, ingressX, ingressZ, 15000f);
+            }
+            if (!validIngress && !TryCalculateEnemyIngress(target, career.ProvokedHq, out ingressX, out ingressZ))
+                return false;
+
             Aircraft[] aircraft = WingLink.SpawnAceWing(target, career.ProvokedHq, seed, tier, AceCareer.WingSize(tier), callsign, ingressX, ingressZ);
             if (aircraft == null || aircraft.Length != AceCareer.WingSize(tier))
             { if (aircraft != null) WingLink.ReleaseAceWing(aircraft, true); return false; }
-            if (returning != null)
+
+            if (chosenRival != null)
             {
-                if (!WingLink.RecoverSurvivor(returning.AceId)) { WingLink.ReleaseAceWing(aircraft, true); return false; }
-                returning.Returned = true;
+                if (WingLink.SurvivorStatus(chosenRival.AceId) == 1)
+                    WingLink.RecoverSurvivor(chosenRival.AceId);
+                chosenRival.Returns = returns;
+                chosenRival.Tier = tier;
+                chosenRival.AceId = aircraft[0].persistentID;
             }
+
             while (hunts.Count >= AceCareer.MaximumHistory)
             {
                 int oldest = hunts.FindIndex(h => h.Aircraft == null);
@@ -354,11 +490,10 @@ namespace BoscaliSummer.Features.Squad.Runtime
             int emblem = (seed & int.MaxValue) % Wings.Length;
             var hunt = new Hunt { Id = id, Owner = career, EnemyHq = career.ProvokedHq, Target = target,
                 Aircraft = aircraft, AcePilot = Primary(aircraft[0]), AceId = aircraft[0].persistentID, Name = name, Callsign = callsign,
-                Symbol = Symbols[emblem], Wing = Wings[emblem] + " " + (sequence % 100).ToString("00"),
-                Seed = seed, Tier = tier, Returns = returns, Generation = career.Rules.Generation,
-                Began = now, NextChatter = now + 25f, Alive = aircraft.Length, SpawnedCount = aircraft.Length, Outcome = HuntOutcome.Hunting,
+                Symbol = chosenRival?.Symbol ?? Symbols[emblem], Wing = chosenRival?.Wing ?? (Wings[emblem] + " " + (sequence % 100).ToString("00")),
+                Seed = seed, Tier = tier, Returns = returns, Returned = chosenRival != null, Generation = career.Rules.Generation,
+                Began = now, NextChatter = now + 35f, Alive = aircraft.Length, SpawnedCount = aircraft.Length, Outcome = HuntOutcome.Hunting,
                 DebugSpawn = debugTier != 0 };
-            if (returning != null) hunt.Wing = returning.Wing;
             hunts.Add(hunt); career.Rules.Begin();
             Notice(career, hunt.Symbol + " " + hunt.Wing + " / " + callsign + " — HUNT ACTIVE. Tier " + tier + ", " + aircraft.Length + " aircraft.",
                 callsign, returns > 0 ? "Remember me? This time you are not getting away." : "We have your signature. Wing, concentrate on the marked aircraft.");
@@ -384,7 +519,7 @@ namespace BoscaliSummer.Features.Squad.Runtime
                     hunt.Outcome = HuntOutcome.Defeated; hunt.Ended = now;
                     if (credit) hunt.Owner.Rules.CreditVictory();
                 }
-                hunt.ReturnCandidate = !hunt.DebugSpawn && hunt.Returns < 2 && (hunt.Seed & 3) != 0;
+                hunt.ReturnCandidate = !hunt.DebugSpawn && hunt.Returns < 3;
                 Notice(hunt.Owner, hunt.Symbol + " " + hunt.Wing + " ace defeated." +
                     (hunt.Owner.Rules.BonusPoints > previousBonus ? " +1 bonus perk point." : credit ? " Bonus budget complete." : " No player damage credit."),
                     hunt.Callsign, "Wing, break off. You have command.");
@@ -416,11 +551,34 @@ namespace BoscaliSummer.Features.Squad.Runtime
                     }
                 }
             }
-            if (hunt.ReturnCandidate && !hunt.EjectionAnnounced && Survived(hunt.AceId))
+            if (hunt.ReturnCandidate && Survived(hunt.AceId))
             {
-                hunt.EjectionAnnounced = true;
-                Notice(hunt.Owner, hunt.Symbol + " " + hunt.Wing + " ace ejected. MIA — may return stronger.",
-                    hunt.Callsign, "Punching out. We are not finished.");
+                if (!hunt.EjectionAnnounced)
+                {
+                    hunt.EjectionAnnounced = true;
+                    Notice(hunt.Owner, hunt.Symbol + " " + hunt.Wing + " ace ejected. MIA — may return stronger.",
+                        hunt.Callsign, "Punching out. We are not finished.");
+                }
+                int rIdx = survivingRivals.FindIndex(r => r.Seed == hunt.Seed);
+                if (rIdx >= 0)
+                {
+                    survivingRivals[rIdx].Returns = hunt.Returns;
+                    survivingRivals[rIdx].Tier = hunt.Tier;
+                    survivingRivals[rIdx].AceId = hunt.AceId;
+                }
+                else if (survivingRivals.Count < 16)
+                {
+                    survivingRivals.Add(new RivalRecord
+                    {
+                        Seed = hunt.Seed, Name = hunt.Name, Callsign = hunt.Callsign,
+                        Symbol = hunt.Symbol, Wing = hunt.Wing, Tier = hunt.Tier,
+                        Returns = hunt.Returns, AceId = hunt.AceId, EnemyHq = hunt.EnemyHq
+                    });
+                }
+            }
+            else if (hunt.KillReported && !Survived(hunt.AceId))
+            {
+                survivingRivals.RemoveAll(r => r.Seed == hunt.Seed || r.AceId == hunt.AceId);
             }
             // Native ejection is asynchronous; leave a downed airframe long enough to spawn its survivor.
             if ((hunt.Alive == 0 && hunt.Outcome != HuntOutcome.Hunting && now - hunt.Ended >= 30f) ||
@@ -493,8 +651,21 @@ namespace BoscaliSummer.Features.Squad.Runtime
             if (snapshot.Event != lastEvent)
             {
                 lastEvent = snapshot.Event;
-                if (snapshot.Event != 0 && !Application.isBatchMode)
-                    WingLink.EnemyChatter(snapshot.Speaker, snapshot.Status, snapshot.Chatter);
+                if (snapshot.Event != 0 && !Application.isBatchMode && !string.IsNullOrEmpty(snapshot.Chatter))
+                {
+                    if (snapshot.ActiveIndex >= 0 && ActiveHuntId != lastChatterHuntId)
+                    {
+                        lastChatterHuntId = ActiveHuntId;
+                        pendingChatterSpeaker = snapshot.Speaker;
+                        pendingChatterStatus = snapshot.Status;
+                        pendingChatterMessage = snapshot.Chatter;
+                        pendingChatterRelease = Time.unscaledTime + 10.4f;
+                    }
+                    else
+                    {
+                        WingLink.EnemyChatter(snapshot.Speaker, snapshot.Status, snapshot.Chatter);
+                    }
+                }
             }
         }
 

@@ -18,9 +18,9 @@ namespace BoscaliSummer.Garrisons
         {
             if (__instance == null) return;
             Aircraft aircraft = owner as Aircraft ?? __instance.GetComponentInParent<Aircraft>();
-            if (aircraft != null && (aircraft.LocalSim || aircraft.IsLocalPlayer))
+            if (aircraft != null)
             {
-                AirAssaultController.Instance?.DeployFromWeaponStation(aircraft, __instance, inheritedVelocity);
+                AirAssaultController.Instance?.DeployFromWeaponStation(aircraft, __instance, inheritedVelocity, weaponStation);
             }
         }
     }

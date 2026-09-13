@@ -30,6 +30,7 @@ namespace BoscaliSummer.Garrisons
             public int Troops;
             public int Id;
             public EncampmentType Type;
+            public bool Rappel;
             public readonly HashSet<int> SpawnedSlots = new HashSet<int>();
             public readonly List<Building> Emplacements = new List<Building>();
         }
@@ -113,13 +114,33 @@ namespace BoscaliSummer.Garrisons
         public static bool DeployOrReinforce(Vector3 dropPos, FactionHQ owner, Airbase airbase, int troopCount)
         {
             EncampmentSite existing = FindNearbySite(dropPos, 150f);
-            if (existing != null)
+            if (existing != null && existing.Owner == owner)
             {
                 ReinforceSite(existing, troopCount);
                 return true;
             }
             if (ActiveSites.Count >= MaximumSites) return false;
             return CreateNewSite(dropPos, owner, airbase, troopCount);
+        }
+
+        public static bool DeployRappelEncampment(Vector3 position, FactionHQ owner, Airbase airbase)
+        {
+            if (!BoscaliSummer.Runtime.GameAccess.IsServer() || owner == null || ActiveSites.Count >= MaximumSites)
+                return false;
+            // Repeated insertions at the same LZ get distinct four-position camps.
+            // At most twelve candidate positions, matching the site ceiling.
+            for (int i = 0; i < MaximumSites; i++)
+            {
+                float angle = i * (2f * Mathf.PI / (MaximumSites - 1));
+                Vector3 candidate = i == 0 ? position : position +
+                    new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * 32f;
+                if (FindNearbySite(candidate, 28f) != null) continue;
+                if (!Physics.Raycast(candidate + Vector3.up * 10f, Vector3.down, out RaycastHit ground,
+                    60f, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore) ||
+                    ground.point.y <= Datum.LocalSeaY + 1f || ground.normal.y < 0.8f) continue;
+                return CreateNewSite(ground.point, owner, airbase, TroopDeploymentMath.DefaultSquadSize, true);
+            }
+            return false;
         }
 
         private struct SlotSpec
@@ -166,7 +187,7 @@ namespace BoscaliSummer.Garrisons
             }
         }
 
-        private static bool CreateNewSite(Vector3 center, FactionHQ owner, Airbase airbase, int troopCount)
+        private static bool CreateNewSite(Vector3 center, FactionHQ owner, Airbase airbase, int troopCount, bool rappel = false)
         {
             Spawner spawner = NetworkSceneSingleton<Spawner>.i;
             if (spawner == null) return false;
@@ -187,9 +208,10 @@ namespace BoscaliSummer.Garrisons
                 Airbase = airbase,
                 Troops = Math.Max(1, troopCount),
                 Id = ActiveSites.Count,
-                Type = (EncampmentType)(ActiveSites.Count % 3)
+                Rappel = rappel,
+                Type = rappel ? EncampmentType.MGNest : (EncampmentType)(ActiveSites.Count % 3)
             };
-            site.Tier = TroopDeploymentMath.ComputeTier(site.Troops);
+            site.Tier = site.Rappel ? 4 : TroopDeploymentMath.ComputeTier(site.Troops);
 
             SpawnEmplacements(site, spawner);
             if (site.Emplacements.Count == 0) return false;
@@ -205,7 +227,7 @@ namespace BoscaliSummer.Garrisons
             if (spawner == null || site == null) return;
 
             site.Troops += Math.Max(1, troopCount);
-            site.Tier = TroopDeploymentMath.ComputeTier(site.Troops);
+            site.Tier = site.Rappel ? 4 : TroopDeploymentMath.ComputeTier(site.Troops);
 
             SpawnEmplacements(site, spawner);
             if (site.Tier >= 4)
@@ -217,7 +239,13 @@ namespace BoscaliSummer.Garrisons
         private static void SpawnEmplacements(EncampmentSite site, Spawner spawner)
         {
             Vector3 right = Vector3.Cross(Vector3.up, site.Forward).normalized;
-            SlotSpec[] slots = GetSlotsForType(site.Type);
+            SlotSpec[] slots = site.Rappel ? new[]
+            {
+                new SlotSpec("Emplacement1_MG", "MG", "MG"),
+                new SlotSpec("Emplacement1_ATGM", "ATGM", "AT"),
+                new SlotSpec("Emplacement1_MANPADS", "MANPADS", "AA"),
+                new SlotSpec("Emplacement1_MG", "MG", "MG2")
+            } : GetSlotsForType(site.Type);
 
             for (int slot = 0; slot < slots.Length; slot++)
             {

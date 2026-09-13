@@ -11,6 +11,7 @@ namespace BoscaliSummer.Tests.Features.Command
             AvionicsProtocolTests.Run(TestAssert.That);
             TestWingScoring();
             TestMapPanelOwnership();
+            SettingsTests.Run();
             MfdPanelTests.Run();
             TestLogSpace();
             AvionicsTokenTests.Run(TestAssert.That);
@@ -41,6 +42,7 @@ namespace BoscaliSummer.Tests.Features.Command
             TestControlledIngress();
             FrontlineTests.Run();
             StrPanelTests.Run();
+            GridLabelsTests.Run();
         }
 
         private static void TestControlledIngress()

@@ -1,4 +1,5 @@
 using BepInEx.Configuration;
+using BoscaliSummer.Features.Autopilot.Configuration;
 using BoscaliSummer.Features.Command.Configuration;
 using BoscaliSummer.Features.DynamicOperations.Configuration;
 using BoscaliSummer.Features.FireAndDestruction.Configuration;
@@ -29,6 +30,7 @@ namespace BoscaliSummer
         public DynamicOperationsSettings DynamicOperations { get; }
         public TrenchesSettings Trenches { get; }
         public QoLSettings QoL { get; }
+        public AutopilotSettings Autopilot { get; }
         public DiagnosticSettings Diagnostics { get; }
 
         public ModConfiguration(ConfigFile config)
@@ -47,6 +49,7 @@ namespace BoscaliSummer
                 DynamicOperations = new DynamicOperationsSettings(config);
                 Trenches = new TrenchesSettings(config);
                 QoL = new QoLSettings(config);
+                Autopilot = new AutopilotSettings(config);
                 Diagnostics = new DiagnosticSettings(config);
                 LegacyConfigMigration.RemoveEntries(config);
             }

@@ -6,6 +6,20 @@ namespace BoscaliSummer.Features.QoL.Patches
     [HarmonyPatch]
     internal static class ThirdPersonHudPatches
     {
+        [HarmonyPatch(typeof(FlightHud), "Update")]
+        [HarmonyPrefix]
+        private static bool FlightHudUpdatePrefix() => RunNativeHud();
+
+        [HarmonyPatch(typeof(HeadMountedDisplay), "Update")]
+        [HarmonyPrefix]
+        private static bool HelmetUpdatePrefix() => RunNativeHud();
+
+        [HarmonyPatch(typeof(CombatHUD), "LateUpdate")]
+        [HarmonyPrefix]
+        private static bool CombatHudUpdatePrefix() => RunNativeHud();
+
+        private static bool RunNativeHud() => ThirdPersonHudController.Instance?.DeferNativeHud != true;
+
         [HarmonyPatch(typeof(CameraStateManager), nameof(CameraStateManager.SwitchState))]
         [HarmonyPrefix]
         private static void SwitchStatePrefix() => ReleaseBeforeTransition();

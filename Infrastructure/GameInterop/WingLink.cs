@@ -27,6 +27,15 @@ namespace BoscaliSummer.Runtime
         private static MethodInfo createPilot, portrait, spawnWing, setTarget, releaseWing, chatter;
         private static MethodInfo survivorStatus, recoverSurvivor, abilityMask;
 
+        // Additive companion pilot API. Resolved separately from the squad API so an older
+        // Wing Command build keeps every existing feature and only the SQD studio is disabled.
+        private static bool studioResolved;
+        private static string studioUnavailableReason = "Wing Command companion pilot API has not been checked.";
+        private static MethodInfo portraitForSelection, listCustomPilots, getCustomPilot, getCustomPilots, saveCustomPilot;
+        private static MethodInfo deleteCustomPilot, isPilotRecruited, recruitCustomPilot, dischargeCustomPilot;
+        private static MethodInfo importAllCustomPilots, personaLabel, rankNameForXp, bodyLabel, uniformLabel;
+        private static PropertyInfo bodyCount, faceCount, hairCount, uniformCount, backdropCount;
+
         public static int AceAbilityMask(Aircraft aircraft)
         {
             if (aircraft == null || !ResolveSquad()) return 0;
@@ -122,6 +131,145 @@ namespace BoscaliSummer.Runtime
             catch (Exception error) { FailSquad(error); return false; }
         }
 
+        // ---- Companion pilot profile and roster editor -----------------------------------
+
+        public static bool PilotStudioAvailable
+        {
+            get { ResolveStudio(); return string.IsNullOrEmpty(studioUnavailableReason); }
+        }
+
+        public static string PilotStudioUnavailableReason
+        {
+            get { ResolveStudio(); return studioUnavailableReason; }
+        }
+
+        public static int PortraitBodyCount => StudioCount(bodyCount);
+        public static int PortraitFaceCount => StudioCount(faceCount);
+        public static int PortraitHairCount => StudioCount(hairCount);
+        public static int PortraitUniformCount => StudioCount(uniformCount);
+        public static int PortraitBackdropCount => StudioCount(backdropCount);
+
+        public static string PortraitBodyLabel(int body)
+        {
+            if (!ResolveStudio()) return "BODY";
+            try { return bodyLabel.Invoke(null, new object[] { body }) as string ?? "BODY"; }
+            catch (Exception error) { FailStudio(error); return "BODY"; }
+        }
+
+        public static string PortraitUniformLabel(int uniform)
+        {
+            if (!ResolveStudio()) return "SUIT";
+            try { return uniformLabel.Invoke(null, new object[] { uniform }) as string ?? "SUIT"; }
+            catch (Exception error) { FailStudio(error); return "SUIT"; }
+        }
+
+        public static string PersonaLabel(int persona)
+        {
+            if (!ResolveStudio()) return "PROFESSIONAL";
+            try { return personaLabel.Invoke(null, new object[] { persona }) as string ?? "PROFESSIONAL"; }
+            catch (Exception error) { FailStudio(error); return "PROFESSIONAL"; }
+        }
+
+        public static string RankNameForXp(int xp)
+        {
+            if (!ResolveStudio()) return "ROOKIE";
+            try { return rankNameForXp.Invoke(null, new object[] { xp }) as string ?? "ROOKIE"; }
+            catch (Exception error) { FailStudio(error); return "ROOKIE"; }
+        }
+
+        /// <summary>Borrow a Wing Command-owned portrait; never destroy the sprite.</summary>
+        public static Sprite PilotPortraitForSelection(
+            int body, int face, int hair, int uniform, int accessory, int backdrop)
+        {
+            if (!ResolveStudio()) return null;
+            try
+            {
+                return portraitForSelection.Invoke(null,
+                    new object[] { body, face, hair, uniform, accessory, backdrop }) as Sprite;
+            }
+            catch (Exception error) { FailStudio(error); return null; }
+        }
+
+        public static string[] ListCustomPilots()
+        {
+            if (!ResolveStudio()) return Array.Empty<string>();
+            try { return listCustomPilots.Invoke(null, null) as string[] ?? Array.Empty<string>(); }
+            catch (Exception error) { FailStudio(error); return Array.Empty<string>(); }
+        }
+
+        public static bool TryGetCustomPilot(string callsign, out WingPilotRecord record)
+        {
+            record = default;
+            if (!ResolveStudio() || string.IsNullOrEmpty(callsign)) return false;
+            try
+            {
+                return WingPilotRecord.TryParse(
+                    getCustomPilot.Invoke(null, new object[] { callsign }) as object[], out record);
+            }
+            catch (Exception error) { FailStudio(error); return false; }
+        }
+
+        public static bool TryListCustomPilots(out WingPilotRecord[] records)
+        {
+            records = Array.Empty<WingPilotRecord>();
+            if (!ResolveStudio()) return false;
+            try
+            {
+                if (!(getCustomPilots.Invoke(null, null) is object[][] raw) || raw.Length == 0) return true;
+                var parsed = new System.Collections.Generic.List<WingPilotRecord>(Math.Min(raw.Length, 128));
+                for (int i = 0; i < raw.Length; i++)
+                    if (WingPilotRecord.TryParse(raw[i], out WingPilotRecord record)) parsed.Add(record);
+                records = parsed.ToArray();
+                return true;
+            }
+            catch (Exception error) { FailStudio(error); return false; }
+        }
+
+        public static bool SaveCustomPilot(WingPilotRecord record)
+        {
+            if (!ResolveStudio()) return false;
+            try
+            {
+                return saveCustomPilot.Invoke(null, new object[] { record.ToValues() }) is bool saved && saved;
+            }
+            catch (Exception error) { FailStudio(error); return false; }
+        }
+
+        public static bool DeleteCustomPilot(string callsign)
+        {
+            if (!ResolveStudio()) return false;
+            try { return deleteCustomPilot.Invoke(null, new object[] { callsign }) is bool deleted && deleted; }
+            catch (Exception error) { FailStudio(error); return false; }
+        }
+
+        public static bool IsPilotRecruited(string callsign)
+        {
+            if (!ResolveStudio()) return false;
+            try { return isPilotRecruited.Invoke(null, new object[] { callsign }) is bool recruited && recruited; }
+            catch (Exception error) { FailStudio(error); return false; }
+        }
+
+        public static bool RecruitCustomPilot(string callsign)
+        {
+            if (!ResolveStudio()) return false;
+            try { return recruitCustomPilot.Invoke(null, new object[] { callsign }) is bool recruited && recruited; }
+            catch (Exception error) { FailStudio(error); return false; }
+        }
+
+        public static bool DischargeCustomPilot(string callsign)
+        {
+            if (!ResolveStudio()) return false;
+            try { return dischargeCustomPilot.Invoke(null, new object[] { callsign }) is bool removed && removed; }
+            catch (Exception error) { FailStudio(error); return false; }
+        }
+
+        public static int ImportAllCustomPilots()
+        {
+            if (!ResolveStudio()) return 0;
+            try { return importAllCustomPilots.Invoke(null, null) is int count ? count : 0; }
+            catch (Exception error) { FailStudio(error); return 0; }
+        }
+
         public static bool IsWingMember(int persistentIdHash)
         {
             int[] ids = PresenceBoard.GetInts(PresenceBoard.WingMemberIds);
@@ -202,6 +350,65 @@ namespace BoscaliSummer.Runtime
                 return true;
             }
             catch (Exception error) { FailSquad(error); return false; }
+        }
+
+        private static bool ResolveStudio()
+        {
+            if (studioResolved) return string.IsNullOrEmpty(studioUnavailableReason);
+            studioResolved = true;
+            studioUnavailableReason = "Update Wing Command to the companion build with the pilot studio API.";
+            if (!Chainloader.PluginInfos.ContainsKey(WingCommandGuid)) return false;
+            try
+            {
+                Type type = Type.GetType(SquadType, throwOnError: false);
+                if (!(type?.GetProperty("ApiVersion", BindingFlags.Public | BindingFlags.Static)
+                          ?.GetValue(null) is int version) || version != 1) return false;
+                const BindingFlags flags = BindingFlags.Public | BindingFlags.Static;
+                portraitForSelection = type.GetMethod("PortraitForSelection", flags, null,
+                    new[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int) }, null);
+                listCustomPilots = type.GetMethod("ListCustomPilots", flags, null, Type.EmptyTypes, null);
+                getCustomPilot = type.GetMethod("GetCustomPilot", flags, null, new[] { typeof(string) }, null);
+                getCustomPilots = type.GetMethod("GetCustomPilots", flags, null, Type.EmptyTypes, null);
+                saveCustomPilot = type.GetMethod("SaveCustomPilot", flags, null, new[] { typeof(object[]) }, null);
+                deleteCustomPilot = type.GetMethod("DeleteCustomPilot", flags, null, new[] { typeof(string) }, null);
+                isPilotRecruited = type.GetMethod("IsPilotRecruited", flags, null, new[] { typeof(string) }, null);
+                recruitCustomPilot = type.GetMethod("RecruitCustomPilot", flags, null, new[] { typeof(string) }, null);
+                dischargeCustomPilot = type.GetMethod("DischargeCustomPilot", flags, null, new[] { typeof(string) }, null);
+                importAllCustomPilots = type.GetMethod("ImportAllCustomPilots", flags, null, Type.EmptyTypes, null);
+                personaLabel = type.GetMethod("PersonaLabel", flags, null, new[] { typeof(int) }, null);
+                rankNameForXp = type.GetMethod("RankNameForXp", flags, null, new[] { typeof(int) }, null);
+                bodyLabel = type.GetMethod("PortraitBodyLabel", flags, null, new[] { typeof(int) }, null);
+                uniformLabel = type.GetMethod("PortraitUniformLabel", flags, null, new[] { typeof(int) }, null);
+                bodyCount = type.GetProperty("PortraitBodyCount", flags);
+                faceCount = type.GetProperty("PortraitFaceCount", flags);
+                hairCount = type.GetProperty("PortraitHairCount", flags);
+                uniformCount = type.GetProperty("PortraitUniformCount", flags);
+                backdropCount = type.GetProperty("PortraitBackdropCount", flags);
+                if (portraitForSelection == null || listCustomPilots == null || getCustomPilot == null ||
+                    getCustomPilots == null || saveCustomPilot == null || deleteCustomPilot == null || isPilotRecruited == null ||
+                    recruitCustomPilot == null || dischargeCustomPilot == null || importAllCustomPilots == null ||
+                    personaLabel == null || rankNameForXp == null || bodyLabel == null || uniformLabel == null ||
+                    bodyCount == null || faceCount == null || hairCount == null || uniformCount == null ||
+                    backdropCount == null) return false;
+                studioUnavailableReason = string.Empty;
+                return true;
+            }
+            catch (Exception error) { FailStudio(error); return false; }
+        }
+
+        private static int StudioCount(PropertyInfo property)
+        {
+            if (property == null || !ResolveStudio()) return 0;
+            try { return property.GetValue(null) is int value ? value : 0; }
+            catch (Exception error) { FailStudio(error); return 0; }
+        }
+
+        private static void FailStudio(Exception error)
+        {
+            bool firstFailure = string.IsNullOrEmpty(studioUnavailableReason);
+            studioUnavailableReason = "Wing Command pilot studio API failed; check the BepInEx log.";
+            if (firstFailure) Plugin.Logger?.LogWarning("WingLink pilot studio API disabled: " +
+                (error.InnerException?.Message ?? error.Message));
         }
 
         private static void FailSquad(Exception error)

@@ -10,7 +10,8 @@ namespace BoscaliSummer.Features.Support.Runtime
     /// <summary>Bounded concurrency pools the host hands out to actions.</summary>
     internal enum SupportPool : byte
     {
-        Strike = 0
+        Strike = 0,
+        Cyber = 1
     }
 
     /// <summary>
@@ -21,12 +22,19 @@ namespace BoscaliSummer.Features.Support.Runtime
     internal interface ISupportHost
     {
         SupportSettings Settings { get; }
+        SpaceOperations Space { get; }
         ManualLogSource Logger { get; }
         VanillaSupportCatalog Vanilla { get; }
 
         bool TryReserve(SupportPool pool);
         void Release(SupportPool pool);
         void Run(IEnumerator routine);
+
+        /// <summary>Number of contacts a sweep produced, echoed to the requester's reply.</summary>
+        void ReportContacts(int requestId, int contacts);
+
+        /// <summary>Host-side entry for the two track-deception operations.</summary>
+        bool BeginDeception(Player caster, HackKind kind, GlobalPosition target, float duration);
     }
 
     internal readonly struct SupportContext
@@ -48,6 +56,16 @@ namespace BoscaliSummer.Features.Support.Runtime
 
         public SupportSettings Settings => Host.Settings;
         public ManualLogSource Logger => Host.Logger;
+
+        /// <summary>Requester's faction infrastructure (null until the theater is loaded).</summary>
+        public InfoNetwork Info => Host.Space.InfoFor(Owner);
+
+        /// <summary>True when a satellite of this role covers the requested point right now.</summary>
+        public bool HasCoverage(SatelliteRole role)
+        {
+            Constellation constellation = Host.Space.ConstellationFor(Owner);
+            return constellation != null && constellation.Covers(role, Target.x, Target.z);
+        }
     }
 
     /// <summary>
@@ -90,6 +108,9 @@ namespace BoscaliSummer.Features.Support.Runtime
         public readonly string Capability;
         public readonly ISupportAction Action;
 
+        /// <summary>Facility gate for cyber operations; null for perk-authorised actions.</summary>
+        public readonly HackKind? Hack;
+
         private readonly ConfigEntry<bool> enabled;
 
         public SupportActionDefinition(
@@ -102,8 +123,23 @@ namespace BoscaliSummer.Features.Support.Runtime
             Capability = capability;
             this.enabled = enabled;
             Action = action;
+            Hack = null;
         }
 
+        public SupportActionDefinition(
+            SupportActionId id, HackKind hack,
+            ConfigEntry<bool> enabled, ISupportAction action)
+        {
+            Id = id;
+            Name = CyberCatalog.Name(hack);
+            Description = CyberCatalog.Description(hack);
+            Capability = null;
+            this.enabled = enabled;
+            Action = action;
+            Hack = hack;
+        }
+
+        public bool IsHack => Hack.HasValue;
         public bool Enabled => enabled == null || enabled.Value;
     }
 }

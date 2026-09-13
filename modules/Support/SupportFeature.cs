@@ -15,7 +15,9 @@ namespace BoscaliSummer.Features.Support
         public FeatureMetadata Metadata => Feature;
         public Type[] PatchTypes => new[]
         {
-            typeof(Patches.SupportMissileDetonatePatch)
+            typeof(Patches.SupportMissileDetonatePatch),
+            typeof(Patches.SupportMissileAuthorityPatch),
+            typeof(Patches.SupportMissileDescentPatch)
         };
 
         public void Install(FeatureContext context)
@@ -35,6 +37,7 @@ namespace BoscaliSummer.Features.Support
             manager.Configure(context.Settings.Support, perks, fortifications, network, context.Logger, fireSuppression);
             manager.ConfigureBypass(context.Settings.Diagnostics.BypassRequirements);
             manager.ConfigureDisableCooldowns(context.Settings.Diagnostics.DisableOpsCooldowns);
+            context.AddService<ICameraTargetService>(manager);
             panel.Configure(manager, progression, context.Logger, baseAlarm);
             mapOverlay.Configure(context.Settings.Support, manager, context.Logger);
         }

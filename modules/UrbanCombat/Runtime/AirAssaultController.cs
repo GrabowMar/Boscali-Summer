@@ -1,5 +1,6 @@
 using System;
 using System.Reflection;
+using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Lifecycle;
 using BoscaliSummer.Runtime;
 using NuclearOption.Networking;
@@ -10,9 +11,19 @@ namespace BoscaliSummer.Garrisons
     /// <summary>
     /// Fires Chimera paratroops and Ibis fast-rope from the troops weapon trigger.
     /// </summary>
-    internal sealed class AirAssaultController : MonoBehaviour, ISceneService
+    internal sealed class AirAssaultController : MonoBehaviour, ISceneService, IAirAssaultObservation
     {
         public static AirAssaultController Instance { get; private set; }
+        public bool Available => TroopAccountingAvailable;
+        public event Action<int, float, float, int> Landed;
+        public bool TryRooftop(float x, float z, out int shellId, out float roofX, out float roofZ)
+        {
+            shellId = 0; roofX = roofZ = 0f;
+            return Available && ZoneGarrisonManager.Instance != null &&
+                ZoneGarrisonManager.Instance.TryMissionRooftop(x, z, out shellId, out roofX, out roofZ);
+        }
+        public bool IsRooftopAvailable(int shellId) => ZoneGarrisonManager.Instance != null &&
+            ZoneGarrisonManager.Instance.IsMissionRooftopAvailable(shellId);
 
         private float nextDropTime;
         private const float MinFireInterval = 0.8f;
@@ -28,9 +39,9 @@ namespace BoscaliSummer.Garrisons
             AirAssaultVisuals.ResetForScene();
         }
 
-        public void DeployFromWeaponStation(Aircraft aircraft, MountedTroops mountedTroops, Vector3 inheritedVelocity)
+        public void DeployFromWeaponStation(Aircraft aircraft, MountedTroops mountedTroops, Vector3 inheritedVelocity, WeaponStation station)
         {
-            if (aircraft == null) return;
+            if (aircraft == null || !TroopAccountingAvailable) return;
 
             if (Time.unscaledTime < nextDropTime)
                 return;
@@ -42,6 +53,7 @@ namespace BoscaliSummer.Garrisons
             bool isIbis = IsIbis(name, def);
 
             if (!isChimera && !isIbis) return;
+            if (AirAssaultVisuals.HasActiveRappel(aircraft) || !AirAssaultVisuals.HasOperationCapacity) return;
 
             // Ensure door state and auto-open for immediate paradrop/roping.
             if (!IsCargoDoorOpen(aircraft, out string doorReason))
@@ -66,8 +78,15 @@ namespace BoscaliSummer.Garrisons
             if (mountedTroops == null)
                 mountedTroops = aircraft.GetComponentInChildren<MountedTroops>();
 
-            int aboard = mountedTroops != null ? Mathf.Max(0, mountedTroops.ammo)
-                : Plugin.Settings.UrbanCombat.TroopsPerDeploy.Value;
+            // Vanilla keeps its station index on the first troop mount, even when empty.
+            if (station != null)
+                foreach (Weapon weapon in station.Weapons)
+                    if (weapon is MountedTroops troops && troops.IsAttached() && troops.ammo >= (isIbis ? TroopDeploymentMath.DefaultSquadSize : 1))
+                    {
+                        mountedTroops = troops;
+                        break;
+                    }
+            int aboard = mountedTroops != null ? Mathf.Max(0, mountedTroops.ammo) : 0;
             if (aboard <= 0)
             {
                 Plugin.Logger.LogInfo($"[Air Assault] Cannot deploy: 0 infantry remaining aboard {name}! Rearm at an airbase.");
@@ -82,7 +101,7 @@ namespace BoscaliSummer.Garrisons
                 // MC-260 Chimera: Deploy out rear cargo hold ramp like cargo/vehicles
                 int dropCount = TroopDeploymentMath.ComputeDropSize(aboard, Plugin.Settings.UrbanCombat.TroopsPerDeploy.Value);
                 if (mountedTroops != null)
-                    mountedTroops.ammo = Mathf.Max(0, mountedTroops.ammo - dropCount);
+                    ConsumeTroops(aircraft, mountedTroops, station, dropCount);
 
                 nextDropTime = Time.unscaledTime + MinFireInterval;
                 Vector3 rampPos = ComputeCargoDropExitPosition(aircraft, dropCount);
@@ -118,9 +137,9 @@ namespace BoscaliSummer.Garrisons
 
                 // Fast-rope deploys a squad per trigger. The drop only costs the
                 // infantry once the insertion is confirmed feasible.
-                int dropCount = TroopDeploymentMath.ComputeDropSize(aboard, Plugin.Settings.UrbanCombat.TroopsPerDeploy.Value);
-                if (mountedTroops != null)
-                    mountedTroops.ammo = Mathf.Max(0, mountedTroops.ammo - dropCount);
+                int dropCount = TroopDeploymentMath.DefaultSquadSize;
+                if (aboard < dropCount) return;
+                ConsumeTroops(aircraft, mountedTroops, station, dropCount);
 
                 nextDropTime = Time.unscaledTime + MinFireInterval;
                 if (shell != null)
@@ -128,37 +147,19 @@ namespace BoscaliSummer.Garrisons
                 else
                     Plugin.Logger.LogInfo($"[IBIS] Fast-rope rappelling squadron of {dropCount} infantry descending to LZ ({hit.point.x:0}, {hit.point.z:0}). {mountedTroops?.ammo ?? 0} infantry remaining aboard.");
 
+                GlobalPosition landing = hit.point.ToGlobalPosition();
+                int landingShellId = shell != null ? shell.GetInstanceID() : 0;
                 AirAssaultVisuals.SpawnFastRopeRappelling(aircraft, hit.point, owner, dropCount, () =>
                 {
-                    bool occupied = false;
-                    if (shell != null && ZoneGarrisonManager.Instance != null)
-                    {
-                        occupied = ZoneGarrisonManager.Instance.TryOccupyBuilding(shell, owner, airbase);
-                        if (occupied)
-                            Plugin.Logger.LogInfo($"[AIR ASSAULT] Fast-rope squadron secured and fortified {shell.name}!");
-                    }
-
-                    if (!occupied)
-                    {
-                        bool deployed = false;
-                        if (ZoneGarrisonManager.Instance != null)
-                        {
-                            deployed = ZoneGarrisonManager.Instance.TryDeployEncampment(hit.point, owner, airbase, dropCount);
-                        }
-                        else if (GameAccess.IsServer() && owner != null)
-                        {
-                            deployed = InfantryEncampmentBuilder.DeployOrReinforce(hit.point, owner, airbase, dropCount);
-                        }
-
-                        if (deployed)
-                        {
-                            Plugin.Logger.LogInfo($"[AIR ASSAULT] Fast-rope squadron of {dropCount} established combat encampment at ({hit.point.x:0}, {hit.point.z:0})!");
-                        }
-                        else
-                        {
-                            Plugin.Logger.LogInfo($"[AIR ASSAULT] Fast-rope squadron of {dropCount} deployed to LZ perimeter at ({hit.point.x:0}, {hit.point.z:0}).");
-                        }
-                    }
+                    if (!GameAccess.IsServer() || owner == null || aircraft == null || aircraft.disabled || aircraft.NetworkHQ != owner) return;
+                    if (landingShellId != 0 && (shell == null || !shell.activeInHierarchy ||
+                        shell.GetComponentInParent<Building>() is Building building && building.disabled)) return;
+                    Vector3 global = landing.AsVector3();
+                    Landed?.Invoke(owner.GetInstanceID(), global.x, global.z, landingShellId);
+                    bool deployed = InfantryEncampmentBuilder.DeployRappelEncampment(landing.ToLocalPosition(), owner, airbase);
+                    Plugin.Logger.LogInfo(deployed
+                        ? "[AIR ASSAULT] Eight troops established MG / AT / AA / MG encampment."
+                        : "[AIR ASSAULT] Encampment placement unavailable after insertion.");
                 });
             }
         }
@@ -173,6 +174,30 @@ namespace BoscaliSummer.Garrisons
                    name.IndexOf("tarantulla", StringComparison.OrdinalIgnoreCase) >= 0 ||
                    name.IndexOf("aryx", StringComparison.OrdinalIgnoreCase) >= 0 ||
                    (def != null && def.jsonKey != null && def.jsonKey.IndexOf("chimera", StringComparison.OrdinalIgnoreCase) >= 0);
+        }
+
+        private static readonly FieldInfo CaptureStrengthField = HarmonyLib.AccessTools.Field(typeof(MountedTroops), "captureStrength");
+        private static readonly FieldInfo CaptureActiveField = HarmonyLib.AccessTools.Field(typeof(MountedTroops), "captureActive");
+        private static readonly FieldInfo TroopMassField = HarmonyLib.AccessTools.Field(typeof(MountedTroops), "mass");
+        private static readonly FieldInfo TroopHardpointField = HarmonyLib.AccessTools.Field(typeof(Weapon), "hardpoint");
+
+        internal static bool TroopAccountingAvailable => CaptureStrengthField != null &&
+            CaptureActiveField != null && TroopMassField != null && TroopHardpointField != null;
+
+        private static void ConsumeTroops(Aircraft aircraft, MountedTroops troops, WeaponStation station, int count)
+        {
+            troops.ammo = Mathf.Max(0, troops.ammo - count);
+            CaptureStrengthField.SetValue(troops, (float)troops.ammo);
+            if ((bool)CaptureActiveField.GetValue(troops)) aircraft.ModifyCaptureStrength(-count);
+            float removedMass = count * (troops.info != null ? troops.info.massPerRound : 0f);
+            TroopMassField.SetValue(troops, (float)TroopMassField.GetValue(troops) - removedMass);
+            (TroopHardpointField.GetValue(troops) as Hardpoint)?.ModifyMass(-removedMass);
+            // Each native Ibis mount is one eight-man bench. Keep its weapon alive
+            // for station bookkeeping while removing the disembarked passengers.
+            if (troops.ammo == 0)
+                foreach (Renderer renderer in troops.GetComponentsInChildren<Renderer>(true))
+                    renderer.enabled = false;
+            station?.AccountAmmo();
         }
 
         private static Vector3 ComputeCargoDropExitPosition(Aircraft aircraft, int dropCount)

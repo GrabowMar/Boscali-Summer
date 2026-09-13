@@ -36,6 +36,11 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
                     return SupportResult.OutOfRange;
             }
             if (!context.Host.TryReserve(SupportPool.Strike)) return SupportResult.Busy;
+            if (!context.HasCoverage(SatelliteRole.Strike))
+            {
+                context.Host.Release(SupportPool.Strike);
+                return SupportResult.OutOfCoverage;
+            }
 
             context.Logger.LogInfo("[Support] Rod from God using " + definition.jsonKey);
             context.Host.Run(Strike(context.Host, context.Player, context.Owner, definition, ground,
@@ -64,6 +69,12 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
                     missile.SetAimpoint(target.ToGlobalPosition(), Vector3.zero);
                     missile.Arm();
                     Visuals.KineticRodStrikeVisuals.Track(missile, target);
+                    float deadline = Time.time + 30f;
+                    while (missile != null && !missile.disabled && Time.time < deadline)
+                        yield return null;
+                    if (missile != null && !missile.disabled)
+                        Object.Destroy(missile.gameObject); // Expiry is not an impact; native network object teardown.
+
                 }
             }
             finally

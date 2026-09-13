@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using BepInEx.Logging;
+using BoscaliSummer.Features.Autopilot;
 using BoscaliSummer.Features.Command;
 using BoscaliSummer.Features.DynamicOperations;
 using BoscaliSummer.Features.FireAndDestruction;
@@ -32,6 +33,8 @@ namespace BoscaliSummer.Bootstrap
                 };
                 if (settings.QoL.Enabled.Value && !UnityEngine.Application.isBatchMode)
                     features.Add(new QoLFeature());
+                if (settings.Autopilot.Enabled.Value && !UnityEngine.Application.isBatchMode)
+                    features.Add(new AutopilotFeature());
                 if (settings.Progression.Enabled.Value)
                 {
                     features.Add(new SquadFeature());

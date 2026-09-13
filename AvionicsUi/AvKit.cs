@@ -412,7 +412,7 @@ namespace NOAvionics.Ui
         public static TMP_InputField InputField(
             RectTransform parent, Rect area, int characterLimit,
             Action<string> onChanged, Action onFocus = null, Action onBlur = null,
-            string tooltip = null, string placeholderText = "NAME")
+            string tooltip = null, string placeholderText = "NAME", bool multiline = false)
         {
             var go = new GameObject("InputField", typeof(RectTransform), typeof(Image));
             var rt = go.GetComponent<RectTransform>();
@@ -437,12 +437,22 @@ namespace NOAvionics.Ui
                                          AvTheme.Disabled, AvTokens.FontBody, FontStyles.Italic, TextAlignmentOptions.Left);
             placeholder.raycastTarget = false;
 
+            if (multiline)
+            {
+                text.alignment = TextAlignmentOptions.TopLeft;
+                text.overflowMode = TextOverflowModes.Overflow;
+                placeholder.alignment = TextAlignmentOptions.TopLeft;
+                placeholder.overflowMode = TextOverflowModes.Overflow;
+            }
+
             var field = go.AddComponent<TMP_InputField>();
             field.textViewport = viewport;
             field.textComponent = text;
             field.placeholder = placeholder;
             AvInput.StripNavigation(field);
-            field.lineType = TMP_InputField.LineType.SingleLine;
+            field.lineType = multiline
+                ? TMP_InputField.LineType.MultiLineNewline
+                : TMP_InputField.LineType.SingleLine;
             field.characterLimit = characterLimit;
             field.richText = false;
             field.restoreOriginalTextOnEscape = true;

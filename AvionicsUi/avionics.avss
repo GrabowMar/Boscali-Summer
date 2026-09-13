@@ -45,7 +45,7 @@
   ink:             #02120B;
 
   /* Geometry */
-  panel-width:     512;
+  panel-width:     480;
   pad:             14;
   gap:             8;
 }
@@ -68,6 +68,13 @@
 
 .section-title      { font: micro bold; color: text-dim; tracking: 18; }
 .section-title-note  { font: micro; color: text-dim; tracking: 10; }
+
+/* ------------------------------------------------------- 2b. page heading */
+
+/* The panel's own headline: large enough to name the page at a glance, with a
+   tracked subtitle under it. Sits above the scroll area and never moves. */
+.page-title    { font: 21 bold; color: text-primary; tracking: 4; }
+.page-subtitle { font: 10.5; color: text-dim; tracking: 16; }
 
 /* ------------------------------------------------------------ 4. data bar */
 

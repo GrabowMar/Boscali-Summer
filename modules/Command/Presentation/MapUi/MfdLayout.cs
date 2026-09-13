@@ -74,16 +74,49 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             };
         }
 
+        /// <summary>
+        /// The UI area the layout divides up.
+        ///
+        /// <para><b>Why not <c>canvas.rect</c>.</b> <c>DynamicMap.maximizedMapCanvas</c> is a
+        /// screen-space canvas whose <c>RectTransform</c> only takes its new size on the canvas
+        /// update after the GameObject is activated; on the first open of a mission it can
+        /// still report the size it had the last time it was enabled, and it keeps that value
+        /// for as long as the map stays open. The CanvasScaler, however, stamps
+        /// <c>canvas.scaleFactor</c> from the live screen as soon as it is enabled, and a
+        /// screen-space canvas is exactly <c>Screen / scaleFactor</c> units across. Resolving
+        /// from that is the size Unity is about to apply and never inherits a stale rect.
+        /// World-space canvases keep their authored rect.</para>
+        /// </summary>
+        public static Vector2 CanvasSize(Canvas canvas)
+        {
+            if (canvas == null) return Vector2.zero;
+
+            Canvas root = canvas.rootCanvas != null ? canvas.rootCanvas : canvas;
+            if (root.renderMode == RenderMode.ScreenSpaceOverlay && root.scaleFactor > 0f &&
+                Screen.width > 1 && Screen.height > 1)
+            {
+                return new Vector2(Screen.width, Screen.height) / root.scaleFactor;
+            }
+
+            Vector2 size = RectSize(root);
+            if (size.x <= 1f || size.y <= 1f) size = RectSize(canvas);
+            return size;
+        }
+
+        private static Vector2 RectSize(Canvas canvas)
+        {
+            if (canvas == null) return Vector2.zero;
+            var rt = canvas.transform as RectTransform;
+            return rt == null ? Vector2.zero : rt.rect.size;
+        }
+
         /// <summary>Resolve against a live canvas, or report failure if there is not one yet.</summary>
         public static bool TryResolve(Canvas canvas, out Columns columns, float panelWidth = AvTokens.PanelWidth)
         {
             columns = default;
             if (canvas == null) return false;
 
-            var rt = canvas.transform as RectTransform;
-            if (rt == null) return false;
-
-            Vector2 size = rt.rect.size;
+            Vector2 size = CanvasSize(canvas);
             if (size.x <= 1f || size.y <= 1f) return false;
 
             columns = Resolve(size, panelWidth);

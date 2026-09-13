@@ -19,36 +19,39 @@ namespace BoscaliSummer.Features.Support.Visuals
     /// </summary>
     internal static class KineticRodStrikeVisuals
     {
-        private static readonly List<(Vector3 pos, float time)> recentStrikes =
-            new List<(Vector3 pos, float time)>();
+        private static readonly List<KineticRodDescentEffect> descents = new List<KineticRodDescentEffect>(4);
+        private static readonly List<GameObject> impacts = new List<GameObject>(4);
+
+        public static void Reset()
+        {
+            for (int i = descents.Count - 1; i >= 0; i--)
+                if (descents[i] != null) UnityEngine.Object.Destroy(descents[i]);
+            for (int i = impacts.Count - 1; i >= 0; i--)
+                if (impacts[i] != null) UnityEngine.Object.Destroy(impacts[i]);
+            descents.Clear(); impacts.Clear();
+        }
+
+        internal static void Untrack(KineticRodDescentEffect effect) => descents.Remove(effect);
+        internal static void Untrack(GameObject effect) => impacts.Remove(effect);
+        internal static bool ReserveImpact(GameObject effect)
+        {
+            if (impacts.Count >= 4) return false;
+            impacts.Add(effect); return true;
+        }
 
         public static void Track(Missile missile, Vector3 target)
         {
-            if (missile == null || GameManager.IsHeadless) return;
+            if (missile == null || GameManager.IsHeadless || descents.Count >= 4) return;
             if (missile.GetComponent<KineticRodDescentEffect>() != null) return;
 
             var descent = missile.gameObject.AddComponent<KineticRodDescentEffect>();
+            descents.Add(descent);
             descent.Initialize(target);
         }
 
         public static void TriggerImpact(Vector3 impactPosition, PersistentID ownerID = default)
         {
             if (GameManager.IsHeadless) return;
-
-            // Deduplication guard: ignore redundant triggers within 2.0 seconds and 350m
-            float now = Time.time;
-            for (int i = recentStrikes.Count - 1; i >= 0; i--)
-            {
-                if (now - recentStrikes[i].time > 3.0f)
-                {
-                    recentStrikes.RemoveAt(i);
-                }
-                else if (Vector3.Distance(recentStrikes[i].pos, impactPosition) < 350f)
-                {
-                    return; // Duplicate trigger suppressed
-                }
-            }
-            recentStrikes.Add((impactPosition, now));
 
             KineticRodImpactEffect.Spawn(impactPosition, ownerID);
         }
@@ -364,7 +367,7 @@ namespace BoscaliSummer.Features.Support.Visuals
 
     /// <summary>
     /// Attached to the plunging kinetic rod missile during atmospheric hypersonic descent.
-    /// Perfectly recreates Photo 2:
+    /// Reference direction: glowing penetrator and trailing condensation:
     /// - Sleek physical tungsten cylinder projectile (stock missile hidden).
     /// - Searing incandescent white-hot nose cone & bow shock plasma sheath.
     /// - Aerodynamic tongues of flame licking backwards along the cylinder flanks.
@@ -381,7 +384,7 @@ namespace BoscaliSummer.Features.Support.Visuals
         private static AudioClip hypersonicSoundClip;
 
         private Missile missile;
-        private Vector3 targetPosition;
+        private GlobalPosition targetPosition;
         private Light headLight;
         private GameObject rodMeshObj;
         private ParticleSystem flameSheath;
@@ -389,27 +392,30 @@ namespace BoscaliSummer.Features.Support.Visuals
         private TrailRenderer plasmaTrail;
         private TrailRenderer contrailTrail;
         private AudioSource audioSource;
-        private Vector3 lastPosition;
-        private bool hasDetonated;
+        private Renderer[] stockRenderers;
+        private bool[] stockEnabled;
 
         public void MarkDetonated()
         {
-            hasDetonated = true;
+            if (audioSource != null) audioSource.Stop();
+            if (headLight != null) headLight.enabled = false;
         }
 
         public void Initialize(Vector3 target)
         {
-            targetPosition = target;
+            targetPosition = target.ToGlobalPosition();
             missile = GetComponent<Missile>();
-            lastPosition = transform.position;
 
             NukeEffectAssets.EnsureResolved();
             EnsureAssets();
 
             // 1. Hide stock missile renderers so the rod looks authentic
             Renderer[] renderers = GetComponentsInChildren<Renderer>();
+            stockRenderers = renderers;
+            stockEnabled = new bool[renderers.Length];
             for (int i = 0; i < renderers.Length; i++)
             {
+                stockEnabled[i] = renderers[i].enabled;
                 renderers[i].enabled = false;
             }
 
@@ -431,7 +437,7 @@ namespace BoscaliSummer.Features.Support.Visuals
             headLight = lightObj.AddComponent<Light>();
             headLight.type = LightType.Point;
             headLight.color = new Color(0.96f, 0.98f, 1f);
-            headLight.range = 28000f;
+            headLight.range = 800f;
             headLight.intensity = 65f;
             headLight.shadows = LightShadows.None;
 
@@ -509,7 +515,8 @@ namespace BoscaliSummer.Features.Support.Visuals
             flameRenderer.sharedMaterial = flameMaterial;
 
             var flameMain = flameSheath.main;
-            flameMain.simulationSpace = ParticleSystemSimulationSpace.World;
+            flameMain.simulationSpace = ParticleSystemSimulationSpace.Custom;
+            flameMain.customSimulationSpace = Datum.origin;
             flameMain.startLifetime = new ParticleSystem.MinMaxCurve(0.25f, 0.65f);
             flameMain.startSpeed = new ParticleSystem.MinMaxCurve(40f, 120f);
             flameMain.startSize = new ParticleSystem.MinMaxCurve(3.5f, 7.5f);
@@ -536,7 +543,8 @@ namespace BoscaliSummer.Features.Support.Visuals
             sparkRenderer.sharedMaterial = sparkMaterial;
 
             var sparkMain = sparkSystem.main;
-            sparkMain.simulationSpace = ParticleSystemSimulationSpace.World;
+            sparkMain.simulationSpace = ParticleSystemSimulationSpace.Custom;
+            sparkMain.customSimulationSpace = Datum.origin;
             sparkMain.startLifetime = new ParticleSystem.MinMaxCurve(0.35f, 0.85f);
             sparkMain.startSpeed = new ParticleSystem.MinMaxCurve(80f, 220f);
             sparkMain.startSize = new ParticleSystem.MinMaxCurve(1.8f, 5.0f);
@@ -574,17 +582,16 @@ namespace BoscaliSummer.Features.Support.Visuals
         {
             if (missile != null && !missile.disabled)
             {
-                lastPosition = transform.position;
 
                 // Pre-impact tremor: building atmospheric rumble in final 2.5 km
-                float distToGround = transform.position.y - targetPosition.y;
+                float distToGround = transform.position.y - targetPosition.ToLocalPosition().y;
                 if (distToGround < 2500f && distToGround > 0f)
                 {
                     var csm = SceneSingleton<CameraStateManager>.i;
                     Camera cam = csm?.mainCamera ?? Camera.main;
                     if (cam != null)
                     {
-                        float camDist = Vector3.Distance(cam.transform.position, targetPosition);
+                        float camDist = Vector3.Distance(cam.transform.position, targetPosition.ToLocalPosition());
                         if (camDist < 14000f)
                         {
                             float factor = Mathf.Clamp01(1f - (camDist / 14000f)) * Mathf.Clamp01(1f - (distToGround / 2500f));
@@ -593,26 +600,22 @@ namespace BoscaliSummer.Features.Support.Visuals
                     }
                 }
             }
-            else if (!hasDetonated)
-            {
-                TriggerDetonation();
-            }
         }
 
+        // Only the detonation RPC creates an impact; destruction also happens on scene unload.
         private void OnDestroy()
         {
-            if (!hasDetonated)
-            {
-                TriggerDetonation();
-            }
-        }
-
-        private void TriggerDetonation()
-        {
-            if (hasDetonated) return;
-            hasDetonated = true;
-            PersistentID owner = missile != null ? missile.ownerID : default;
-            KineticRodStrikeVisuals.TriggerImpact(lastPosition, owner);
+            KineticRodStrikeVisuals.Untrack(this);
+            if (missile != null && !missile.disabled && stockRenderers != null)
+                for (int i = 0; i < stockRenderers.Length; i++)
+                    if (stockRenderers[i] != null) stockRenderers[i].enabled = stockEnabled[i];
+            if (headLight != null) Destroy(headLight.gameObject);
+            if (rodMeshObj != null) Destroy(rodMeshObj);
+            if (flameSheath != null) Destroy(flameSheath.gameObject);
+            if (sparkSystem != null) Destroy(sparkSystem.gameObject);
+            if (contrailTrail != null) Destroy(contrailTrail.gameObject);
+            if (plasmaTrail != null) Destroy(plasmaTrail);
+            if (audioSource != null) Destroy(audioSource);
         }
 
         private static void EnsureAssets()
@@ -630,6 +633,9 @@ namespace BoscaliSummer.Features.Support.Visuals
                 flameMaterial.SetColor("_Color", new Color(1f, 0.82f, 0.45f, 1f));
                 if (flameMaterial.HasProperty("_Surface")) flameMaterial.SetFloat("_Surface", 1f);
                 if (flameMaterial.HasProperty("_Blend")) flameMaterial.SetFloat("_Blend", 1f);
+                if (flameMaterial.HasProperty("_BaseMap")) flameMaterial.SetTexture("_BaseMap", ProceduralVfxTextures.SoftPuffTexture);
+                if (flameMaterial.HasProperty("_MainTex")) flameMaterial.SetTexture("_MainTex", ProceduralVfxTextures.SoftPuffTexture);
+                flameMaterial.mainTexture = ProceduralVfxTextures.SoftPuffTexture;
             }
 
             if (sparkMaterial == null)
@@ -638,6 +644,9 @@ namespace BoscaliSummer.Features.Support.Visuals
                 sparkMaterial.SetColor("_Color", new Color(1f, 0.72f, 0.25f, 1f));
                 if (sparkMaterial.HasProperty("_Surface")) sparkMaterial.SetFloat("_Surface", 1f);
                 if (sparkMaterial.HasProperty("_Blend")) sparkMaterial.SetFloat("_Blend", 1f);
+                if (sparkMaterial.HasProperty("_BaseMap")) sparkMaterial.SetTexture("_BaseMap", ProceduralVfxTextures.SoftPuffTexture);
+                if (sparkMaterial.HasProperty("_MainTex")) sparkMaterial.SetTexture("_MainTex", ProceduralVfxTextures.SoftPuffTexture);
+                sparkMaterial.mainTexture = ProceduralVfxTextures.SoftPuffTexture;
             }
 
             if (contrailMaterial == null)
@@ -648,7 +657,14 @@ namespace BoscaliSummer.Features.Support.Visuals
                 contrailMaterial.SetColor("_Color", new Color(0.9f, 0.9f, 0.92f, 0.85f));
                 if (contrailMaterial.HasProperty("_Surface")) contrailMaterial.SetFloat("_Surface", 1f);
                 if (contrailMaterial.HasProperty("_Blend")) contrailMaterial.SetFloat("_Blend", 1f);
+                if (contrailMaterial.HasProperty("_BaseMap")) contrailMaterial.SetTexture("_BaseMap", ProceduralVfxTextures.SoftPuffTexture);
+                if (contrailMaterial.HasProperty("_MainTex")) contrailMaterial.SetTexture("_MainTex", ProceduralVfxTextures.SoftPuffTexture);
+                contrailMaterial.mainTexture = ProceduralVfxTextures.SoftPuffTexture;
             }
+
+            SupportParticles.Configure(flameMaterial, true);
+            SupportParticles.Configure(sparkMaterial, true);
+            SupportParticles.Configure(contrailMaterial, false);
 
             if (hypersonicSoundClip == null)
             {
@@ -687,9 +703,6 @@ namespace BoscaliSummer.Features.Support.Visuals
     {
         private const int SampleRate = 44100;
         private static AudioClip impactAudioClip;
-        private static Material fallbackSmokeMaterial;
-        private static Material fallbackEjectaMaterial;
-        private static readonly Collider[] colliderBuffer = new Collider[512];
 
         private static readonly int id_decalSize = Shader.PropertyToID("_DecalSize");
         private static readonly int id_opacity = Shader.PropertyToID("_Opacity");
@@ -702,6 +715,7 @@ namespace BoscaliSummer.Features.Support.Visuals
         public static void Spawn(Vector3 impactPosition, PersistentID ownerID = default)
         {
             var go = new GameObject("BoscaliSummer.KineticRodImpact");
+            if (!KineticRodStrikeVisuals.ReserveImpact(go)) { Destroy(go); return; }
             go.transform.position = impactPosition;
             go.transform.SetParent(Datum.origin, true);
             var effect = go.AddComponent<KineticRodImpactEffect>();
@@ -709,16 +723,12 @@ namespace BoscaliSummer.Features.Support.Visuals
         }
 
         private Vector3 groundZero;
-        private PersistentID ownerPersistentId;
         private Light impactLight;
         private GameObject groundDecalObj;
         private DecalProjector decalProjector;
         private Material decalMaterial;
         private GameObject vaporCloudObj;
         private Material vaporCloudMaterial;
-        private ParticleSystem ejectaColumn;
-        private ParticleSystem baseSurge;
-        private ParticleSystem spallStreamers;
         private AudioSource audioSource;
 
         private float startTime;
@@ -726,28 +736,13 @@ namespace BoscaliSummer.Features.Support.Visuals
         private float dustOpacity = 1f;
 
         // Mini-nuke tuned killzone
-        private const float LethalCoreRadius = 150f;
-        private const float BlastRadius = 420f;
-        private const float YieldKilotons = 0.025f; // 25 tons TNT equivalent (mini-nuke)
-        private const float BlastPower = 29.24f;     // (25,000)^0.3333
+        private const float BlastRadius = Runtime.SupportEffectPolicy.RodBlastRadius;
         private const float EffectDuration = 7.5f;
-
-        private struct InfluencedTarget
-        {
-            public Collider collider;
-            public Rigidbody rb;
-            public IDamageable damageable;
-            public float distance;
-            public bool processed;
-        }
-
-        private readonly List<InfluencedTarget> targets = new List<InfluencedTarget>(128);
 
         private void Initialize(Vector3 point, PersistentID ownerID)
         {
-            ownerPersistentId = ownerID;
             NukeEffectAssets.EnsureResolved();
-            EnsureFallbackMaterials();
+            EnsureImpactAudio();
 
             // 1. Precise terrain surface alignment via StaticsMask raycast
             groundZero = point;
@@ -765,17 +760,6 @@ namespace BoscaliSummer.Features.Support.Visuals
             }
             catch (Exception) { }
 
-            // 3. Ground-zero immediate devastation within 60m
-            try
-            {
-                Explosion.SimulateForce(groundZero, 380f);
-                DamageEffects.BlastFrag(450f, groundZero, PersistentID.None, ownerPersistentId);
-            }
-            catch (Exception) { }
-
-            // 4. Index nearby targets for mini-nuke shockwave & structural building demolition
-            IndexShockwaveTargets();
-
             // 5. Blinding prompt kinetic energy conversion flash
             var lightObj = new GameObject("ImpactFlash");
             lightObj.transform.SetParent(transform, false);
@@ -783,7 +767,7 @@ namespace BoscaliSummer.Features.Support.Visuals
             impactLight = lightObj.AddComponent<Light>();
             impactLight.type = LightType.Point;
             impactLight.color = new Color(0.96f, 0.98f, 1.0f);
-            impactLight.range = 130000f;
+            impactLight.range = 3500f;
             impactLight.intensity = 220f;
             impactLight.shadows = LightShadows.None;
 
@@ -793,14 +777,8 @@ namespace BoscaliSummer.Features.Support.Visuals
             // 7. Atmospheric condensation vapor cloud (Wilson cloud dome)
             SetupVaporCloud();
 
-            // 8. Towering vertical kinetic ejecta spire (pulverized rock & earth geyser 700m+ high)
-            SetupVerticalEjectaSpire();
-
-            // 9. Ground-hugging radial base surge dust curtain
-            SetupRadialBaseSurge();
-
-            // 10. Hypervelocity incandescent spall streamers
-            SetupSpallStreamers();
+            // 8. Single monolithic vertical kinetic soil ejection geyser
+            SupportParticles.Impact(transform);
 
             // 11. Multi-layered acoustic design
             SetupAcoustics();
@@ -809,36 +787,6 @@ namespace BoscaliSummer.Features.Support.Visuals
             TriggerSeismicShock();
 
             StartCoroutine(Animate());
-        }
-
-        private void IndexShockwaveTargets()
-        {
-            try
-            {
-                int count = Physics.OverlapSphereNonAlloc(groundZero, BlastRadius, colliderBuffer);
-                for (int i = 0; i < count; i++)
-                {
-                    Collider col = colliderBuffer[i];
-                    if (col == null) continue;
-
-                    IDamageable dmg = col.gameObject.GetComponent<IDamageable>();
-                    Rigidbody rb = col.attachedRigidbody;
-
-                    if (dmg != null || rb != null)
-                    {
-                        float dist = Vector3.Distance(col.bounds.center, groundZero);
-                        targets.Add(new InfluencedTarget
-                        {
-                            collider = col,
-                            rb = rb,
-                            damageable = dmg,
-                            distance = dist,
-                            processed = false
-                        });
-                    }
-                }
-            }
-            catch (Exception) { }
         }
 
         private void SetupGroundDecalShockwave()
@@ -895,103 +843,6 @@ namespace BoscaliSummer.Features.Support.Visuals
                 vaporCloudMaterial = new Material(NukeEffectAssets.VaporCloudMaterial);
                 mr.material = vaporCloudMaterial;
             }
-        }
-
-        private void SetupVerticalEjectaSpire()
-        {
-            var ejectaObj = new GameObject("VerticalEjectaSpire");
-            ejectaObj.transform.SetParent(transform, false);
-            ejectaColumn = ejectaObj.AddComponent<ParticleSystem>();
-            var colRenderer = ejectaObj.GetComponent<ParticleSystemRenderer>();
-            colRenderer.sharedMaterial = NukeEffectAssets.SmokeParticleMaterial
-                                      ?? NukeEffectAssets.EjectaParticleMaterial
-                                      ?? fallbackSmokeMaterial;
-
-            var mainCol = ejectaColumn.main;
-            mainCol.simulationSpace = ParticleSystemSimulationSpace.World;
-            mainCol.duration = 2.5f;
-            mainCol.startLifetime = new ParticleSystem.MinMaxCurve(4.2f, 7.5f);
-            mainCol.startSpeed = new ParticleSystem.MinMaxCurve(350f, 620f); // Rockets 600m - 800m vertically!
-            mainCol.startSize = new ParticleSystem.MinMaxCurve(20f, 52f);
-            mainCol.gravityModifier = 0.92f;
-            mainCol.startColor = new ParticleSystem.MinMaxGradient(
-                new Color(1f, 0.94f, 0.8f, 1f),
-                new Color(0.20f, 0.18f, 0.16f, 0.95f));
-            mainCol.maxParticles = 550;
-
-            var emissionCol = ejectaColumn.emission;
-            emissionCol.rateOverTime = 0f;
-            emissionCol.SetBursts(new[] { new ParticleSystem.Burst(0f, 320, 440) });
-
-            var shapeCol = ejectaColumn.shape;
-            shapeCol.shapeType = ParticleSystemShapeType.Cone;
-            shapeCol.angle = 5.5f; // Extremely focused high-speed vertical kinetic jet
-            shapeCol.radius = 7.0f;
-            shapeCol.rotation = new Vector3(-90f, 0f, 0f); // Straight up
-        }
-
-        private void SetupRadialBaseSurge()
-        {
-            var surgeObj = new GameObject("RadialBaseSurge");
-            surgeObj.transform.SetParent(transform, false);
-            baseSurge = surgeObj.AddComponent<ParticleSystem>();
-            var surgeRenderer = surgeObj.GetComponent<ParticleSystemRenderer>();
-            surgeRenderer.sharedMaterial = NukeEffectAssets.SmokeParticleMaterial
-                                        ?? fallbackSmokeMaterial;
-
-            var mainSurge = baseSurge.main;
-            mainSurge.simulationSpace = ParticleSystemSimulationSpace.World;
-            mainSurge.duration = 2.0f;
-            mainSurge.startLifetime = new ParticleSystem.MinMaxCurve(3.2f, 5.8f);
-            mainSurge.startSpeed = new ParticleSystem.MinMaxCurve(140f, 280f);
-            mainSurge.startSize = new ParticleSystem.MinMaxCurve(18f, 38f);
-            mainSurge.gravityModifier = 0.3f;
-            mainSurge.startColor = new ParticleSystem.MinMaxGradient(
-                new Color(0.85f, 0.68f, 0.40f, 0.92f),
-                new Color(0.32f, 0.29f, 0.26f, 0.88f));
-            mainSurge.maxParticles = 350;
-
-            var emissionSurge = baseSurge.emission;
-            emissionSurge.rateOverTime = 0f;
-            emissionSurge.SetBursts(new[] { new ParticleSystem.Burst(0f, 200, 280) });
-
-            var shapeSurge = baseSurge.shape;
-            shapeSurge.shapeType = ParticleSystemShapeType.Cone;
-            shapeSurge.angle = 84f; // Ground-hugging blanket
-            shapeSurge.radius = 14.0f;
-            shapeSurge.rotation = new Vector3(-90f, 0f, 0f);
-        }
-
-        private void SetupSpallStreamers()
-        {
-            var spallObj = new GameObject("SpallStreamers");
-            spallObj.transform.SetParent(transform, false);
-            spallStreamers = spallObj.AddComponent<ParticleSystem>();
-            var debRenderer = spallObj.GetComponent<ParticleSystemRenderer>();
-            debRenderer.sharedMaterial = NukeEffectAssets.EjectaParticleMaterial
-                                      ?? fallbackEjectaMaterial;
-
-            var mainDeb = spallStreamers.main;
-            mainDeb.simulationSpace = ParticleSystemSimulationSpace.World;
-            mainDeb.duration = 1.5f;
-            mainDeb.startLifetime = new ParticleSystem.MinMaxCurve(2.8f, 5.8f);
-            mainDeb.startSpeed = new ParticleSystem.MinMaxCurve(260f, 500f);
-            mainDeb.startSize = new ParticleSystem.MinMaxCurve(5.0f, 14f);
-            mainDeb.gravityModifier = 1.2f;
-            mainDeb.startColor = new ParticleSystem.MinMaxGradient(
-                new Color(1f, 0.92f, 0.45f, 1f),
-                new Color(1f, 0.38f, 0.05f, 0.88f));
-            mainDeb.maxParticles = 320;
-
-            var emissionDeb = spallStreamers.emission;
-            emissionDeb.rateOverTime = 0f;
-            emissionDeb.SetBursts(new[] { new ParticleSystem.Burst(0f, 180, 250) });
-
-            var shapeDeb = spallStreamers.shape;
-            shapeDeb.shapeType = ParticleSystemShapeType.Cone;
-            shapeDeb.angle = 42f;
-            shapeDeb.radius = 9.0f;
-            shapeDeb.rotation = new Vector3(-90f, 0f, 0f);
         }
 
         private void SetupAcoustics()
@@ -1107,63 +958,8 @@ namespace BoscaliSummer.Features.Support.Visuals
                     }
                 }
 
-                // 2. Supersonic shockwave expansion & mini-nuke damage simulation
+                // 2. Supersonic visual shockwave expansion
                 blastPropagation += 680f * Time.deltaTime;
-
-                // Apply mini-nuke damage to targets reached by shockwave front
-                for (int i = 0; i < targets.Count; i++)
-                {
-                    InfluencedTarget target = targets[i];
-                    if (target.processed || target.collider == null) continue;
-
-                    if (target.distance <= blastPropagation)
-                    {
-                        target.processed = true;
-                        targets[i] = target;
-
-                        bool isCore = target.distance <= LethalCoreRadius;
-                        float distNorm = Mathf.Max(target.distance / BlastPower, 1f);
-                        float overpressure = 22000f / (distNorm * distNorm * distNorm);
-
-                        if (target.damageable != null)
-                        {
-                            try
-                            {
-                                Unit unit = target.damageable.GetUnit();
-                                Building building = unit as Building;
-
-                                if (building != null)
-                                {
-                                    float yieldParam = isCore ? 25000f : 12000f * Mathf.Clamp01(1f - target.distance / BlastRadius);
-                                    building.RegisterRecentExplosion(groundZero.ToGlobalPosition(), yieldParam);
-
-                                    if (NetworkManagerNuclearOption.i != null && NetworkManagerNuclearOption.i.Server.Active)
-                                    {
-                                        float coreDmg = isCore ? 25000f : overpressure * 1.5f;
-                                        target.damageable.TakeDamage(coreDmg, overpressure, 1.0f, 2000f, 25000f, ownerPersistentId);
-                                    }
-                                }
-                                else if (NetworkManagerNuclearOption.i != null && NetworkManagerNuclearOption.i.Server.Active)
-                                {
-                                    float directDmg = isCore ? 12000f : overpressure;
-                                    target.damageable.TakeDamage(directDmg, overpressure, 0.9f, 1000f, isCore ? 15000f : 2000f, ownerPersistentId);
-                                }
-                            }
-                            catch (Exception) { }
-                        }
-
-                        if (target.rb != null && target.distance > 0.1f)
-                        {
-                            try
-                            {
-                                float impulse = Mathf.Min(overpressure * 28f, isCore ? 150000f : 45000f);
-                                Vector3 forceDir = (target.collider.bounds.center - groundZero).normalized;
-                                target.rb.AddForceAtPosition(forceDir * impulse, target.collider.bounds.center, ForceMode.Impulse);
-                            }
-                            catch (Exception) { }
-                        }
-                    }
-                }
 
                 // 3. Animate ground shockwave decal expansion
                 if (decalMaterial != null)
@@ -1226,26 +1022,9 @@ namespace BoscaliSummer.Features.Support.Visuals
             Destroy(gameObject, 2.5f);
         }
 
-        private static void EnsureFallbackMaterials()
+        private static void EnsureImpactAudio()
         {
-            if (fallbackSmokeMaterial != null && fallbackEjectaMaterial != null && impactAudioClip != null) return;
-
-            Shader shader = Shader.Find("Universal Render Pipeline/Particles/Unlit")
-                         ?? Shader.Find("Particles/Standard Unlit")
-                         ?? Shader.Find("Sprites/Default")
-                         ?? Shader.Find("Unlit/Color");
-
-            if (fallbackSmokeMaterial == null)
-            {
-                fallbackSmokeMaterial = new Material(shader) { name = "KineticFallbackSmokeMat" };
-                fallbackSmokeMaterial.SetColor("_Color", new Color(0.25f, 0.23f, 0.21f, 0.85f));
-            }
-
-            if (fallbackEjectaMaterial == null)
-            {
-                fallbackEjectaMaterial = new Material(shader) { name = "KineticFallbackEjectaMat" };
-                fallbackEjectaMaterial.SetColor("_Color", new Color(1f, 0.6f, 0.15f, 1f));
-            }
+            if (impactAudioClip != null) return;
 
             if (impactAudioClip == null)
             {
@@ -1284,6 +1063,7 @@ namespace BoscaliSummer.Features.Support.Visuals
 
         private void OnDestroy()
         {
+            KineticRodStrikeVisuals.Untrack(gameObject);
             if (decalMaterial != null) Destroy(decalMaterial);
             if (vaporCloudMaterial != null) Destroy(vaporCloudMaterial);
             if (groundDecalObj != null) Destroy(groundDecalObj);

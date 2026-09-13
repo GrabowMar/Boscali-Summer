@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using BepInEx.Logging;
 using BoscaliSummer.Features.Command.Domain;
 using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Framework.Features;
 using BoscaliSummer.Framework.Lifecycle;
 using BoscaliSummer.Runtime;
 using NuclearOption.Networking;
@@ -16,11 +17,28 @@ namespace BoscaliSummer.Features.Command.Runtime
 
         private IProgressionView progression;
         private ManualLogSource logger;
+        private IOperationOutcomeSource operationOutcomes;
+
+        private void Update()
+        {
+            ModServices.TryGet(out IOperationOutcomeSource source);
+            if (ReferenceEquals(source, operationOutcomes)) return;
+            if (operationOutcomes != null) operationOutcomes.MoraleAwarded -= OnOperationMorale;
+            operationOutcomes = source;
+            if (operationOutcomes != null) operationOutcomes.MoraleAwarded += OnOperationMorale;
+        }
+
+        private void OnOperationMorale(int faction, float delta)
+        {
+            if (GameAccess.IsServer() && Morale.TryGet(faction, out float value))
+                Morale.TrySet(faction, Mathf.Clamp(value + delta, 0f, 100f));
+        }
 
         public CommandDoctrine ActiveDoctrine { get; private set; } = CommandDoctrine.Balanced;
         public readonly List<PersistentID> PriorityTargets = new List<PersistentID>(4);
         public Airbase SectorStrikeTarget { get; private set; }
         public readonly TacticalTheaterState TheaterState = new TacticalTheaterState();
+        internal readonly FactionMoraleState Morale = new FactionMoraleState();
 
         public int PlayerRank => progression != null ? progression.Rank : 0;
 
@@ -34,6 +52,7 @@ namespace BoscaliSummer.Features.Command.Runtime
             progression = progressionView;
             logger = log;
             Active = this;
+            logger?.LogInfo("[COM] Faction Morale storage ready: host-only, 0–100, mission-scoped; no gameplay effects.");
         }
 
         public void ResetForScene()
@@ -42,11 +61,13 @@ namespace BoscaliSummer.Features.Command.Runtime
             PriorityTargets.Clear();
             SectorStrikeTarget = null;
             TheaterState.Reset();
+            Morale.Reset();
             emitterCache.Clear();
         }
 
         private void OnDestroy()
         {
+            if (operationOutcomes != null) operationOutcomes.MoraleAwarded -= OnOperationMorale;
             if (Active == this) Active = null;
         }
 

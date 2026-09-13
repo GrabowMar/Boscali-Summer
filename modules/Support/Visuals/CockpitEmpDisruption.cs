@@ -24,11 +24,7 @@ namespace BoscaliSummer.Features.Support.Visuals
         {
             if (aircraft == null || GameManager.IsHeadless) return;
 
-            // Jam aircraft's radar and sensors directly
-            aircraft.Jam(new Unit.JamEventArgs
-            {
-                jamAmount = 1000f * severity
-            });
+            if (!GameManager.GetLocalPlayer<Player>(out Player local) || local?.Aircraft != aircraft) return;
 
             var disruption = aircraft.gameObject.GetComponent<CockpitEmpDisruption>()
                           ?? aircraft.gameObject.AddComponent<CockpitEmpDisruption>();
@@ -40,18 +36,10 @@ namespace BoscaliSummer.Features.Support.Visuals
             if (GameManager.IsHeadless) return;
             if (GameManager.GetLocalPlayer<Player>(out Player localPlayer) && localPlayer != null && localPlayer.Aircraft != null)
             {
-                float dist = Vector3.Distance(localPlayer.Aircraft.transform.position, burstPoint);
-                if (dist <= radius)
-                {
-                    float severity = Mathf.Lerp(1.5f, 0.7f, dist / radius);
-                    TriggerForPlayer(localPlayer.Aircraft, severity);
-                }
-                else if (dist <= radius * 1.5f)
-                {
-                    // Mild peripheral disruption
-                    float severity = Mathf.Lerp(0.6f, 0.2f, (dist - radius) / (radius * 0.5f));
-                    TriggerForPlayer(localPlayer.Aircraft, severity);
-                }
+                Vector3 delta = localPlayer.Aircraft.transform.position - burstPoint;
+                float dist = new Vector2(delta.x, delta.z).magnitude;
+                if (dist <= radius && localPlayer.Aircraft.transform.position.y <= Datum.LocalSeaY + 25000f)
+                    TriggerForPlayer(localPlayer.Aircraft, Mathf.Lerp(1.5f, 0.7f, dist / radius));
             }
         }
 
@@ -62,11 +50,12 @@ namespace BoscaliSummer.Features.Support.Visuals
         private AudioSource radioStaticSource;
         private Light cockpitSparkLight;
         private VirtualMFD virtualMfd;
+        private Coroutine disruptionRoutine;
 
         private void Disrupt(float severity)
         {
             currentSeverity = severity;
-            disruptionDuration = Mathf.Clamp(severity * 3.8f, 1.8f, 6.5f);
+            disruptionDuration = Mathf.Clamp(severity * 5.5f, 4f, 10f);
             endTime = Time.time + disruptionDuration;
             virtualMfd = GetComponentInChildren<VirtualMFD>();
 
@@ -123,7 +112,10 @@ namespace BoscaliSummer.Features.Support.Visuals
                 csm.ShakeCamera(0.9f * severity, 1.8f * severity);
             }
 
-            StartCoroutine(DisruptionRoutine());
+            if (disruptionRoutine == null)
+            {
+                disruptionRoutine = StartCoroutine(DisruptionRoutine());
+            }
         }
 
         private IEnumerator DisruptionRoutine()
@@ -227,6 +219,7 @@ namespace BoscaliSummer.Features.Support.Visuals
             {
                 cockpitSparkLight.enabled = false;
             }
+            disruptionRoutine = null;
         }
 
         private static void EnsureAudio()

@@ -22,7 +22,8 @@ namespace BoscaliSummer.Features.Command
             typeof(MfdScreenChromePatch),
             typeof(MfdSinglePanelPatch),
             typeof(DynamicMapMaximizePatch),
-            typeof(DynamicMapMinimizePatch)
+            typeof(DynamicMapMinimizePatch),
+            typeof(GridLabelsPatch)
         };
 
         public void Install(FeatureContext context)
@@ -35,6 +36,7 @@ namespace BoscaliSummer.Features.Command
             StrMfdPanel strategic = context.AddSceneService<StrMfdPanel>(56);
             context.AddSceneService<MapUiManager>(57);
             context.AddSceneService<SettingsMfdPanel>(58).Configure(context.Settings.Command, context.Logger);
+            context.AddSceneService<FactionResourceRecorder>(59);
 
             compat.Configure(context.Logger);
             TerritoryControlView territory = context.AddSceneService<TerritoryControlView>(52);

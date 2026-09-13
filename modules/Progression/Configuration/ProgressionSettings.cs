@@ -8,6 +8,10 @@ namespace BoscaliSummer.Features.Progression.Configuration
         public ConfigEntry<int> ScorePerPoint { get; }
         public ConfigEntry<int> MaximumPoints { get; }
         public ConfigEntry<float> PerkStrength { get; }
+        public ConfigEntry<string> SquadronName { get; }
+        public ConfigEntry<string> Emblem { get; }
+        public ConfigEntry<string> EmblemFile { get; }
+        public ConfigEntry<string> PilotProfile { get; }
 
         public ProgressionSettings(ConfigFile config)
         {
@@ -39,6 +43,21 @@ namespace BoscaliSummer.Features.Progression.Configuration
                     "authorise a support action are unaffected - they are on or off. " +
                     "Host-authoritative: on a server, only the host's value applies.",
                     new AcceptableValueRange<float>(0f, 2f)));
+
+            SquadronName = config.Bind("Squadron", "Name", "BOSCALI SUMMER",
+                "Local squadron name shown on the SQD pilot dossier. Cosmetic and client-local; " +
+                "it is never sent to other players.");
+            Emblem = config.Bind("Squadron", "Emblem", Runtime.EmblemDesign.DefaultText,
+                "Local procedural emblem, encoded as shape.charge.palette. Edit it in SQD's " +
+                "STUDIO tab. Cosmetic and client-local.");
+            EmblemFile = config.Bind("Squadron", "EmblemFile", "",
+                "Optional PNG path used instead of the procedural emblem. Only files inside " +
+                "BepInEx/config/BoscaliSummer/Emblems are offered; the mod never downloads or " +
+                "bundles art. Cosmetic and client-local.");
+            PilotProfile = config.Bind("Squadron", "PilotProfile", "",
+                "Callsign of a Wing Command custom pilot used as your local SQD profile " +
+                "(name, callsign, background and portrait). Leave blank to show the " +
+                "host-generated squadron record.");
         }
     }
 }

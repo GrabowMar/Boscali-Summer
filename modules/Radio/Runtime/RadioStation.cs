@@ -56,6 +56,7 @@ namespace BoscaliSummer.Features.Radio.Runtime
     internal sealed class VanillaSoundtrackCatalog
     {
         public const int MaximumClips = 30;
+        private const int MaximumMapSources = 16;
 
         public AudioClip AgrapolSeed { get; private set; }
         public AudioClip MarisSeed { get; private set; }
@@ -86,23 +87,18 @@ namespace BoscaliSummer.Features.Radio.Runtime
             AudioClip agrapol = null;
             AudioClip maris = null;
 
-            for (int i = 0; i < factions.Count; i++)
-            {
-                Faction faction = factions[i];
-                if (faction == null) continue;
-                AudioClip start = map.GetStartMusic(faction);
-                AudioClip strategic = map.GetStrategicMusic(faction);
-                AudioClip tactical = map.GetTacticalMusic(faction);
-                AddUnique(clips, clipIds, start);
-                AddUnique(clips, clipIds, strategic);
-                AddUnique(clips, clipIds, tactical);
+            AddMapTracks(map, factions, clips, clipIds, ref agrapol, ref maris, true);
 
-                string name = faction.factionName ?? string.Empty;
-                if (agrapol == null && name.IndexOf("Boscali", StringComparison.OrdinalIgnoreCase) >= 0)
-                    agrapol = strategic ?? tactical ?? start;
-                if (maris == null && name.IndexOf("Primeva", StringComparison.OrdinalIgnoreCase) >= 0)
-                    maris = strategic ?? tactical ?? start;
+            try
+            {
+                MapSettingsManager manager = MapSettingsManager.i;
+                MapSettingsManager.Map[] maps = manager == null ? null : manager.Maps;
+                for (int i = 0; maps != null && i < maps.Length && i < MaximumMapSources &&
+                    clips.Count < MaximumClips; i++)
+                    AddMapTracks(maps[i]?.Prefab, factions, clips, clipIds,
+                        ref agrapol, ref maris, false);
             }
+            catch { }
 
             if (clips.Count == 0) return false;
             if (agrapol == null) agrapol = clips[0];
@@ -120,6 +116,40 @@ namespace BoscaliSummer.Features.Radio.Runtime
         {
             if (clips.Count < MaximumClips && clip != null && ids.Add(clip.GetInstanceID()))
                 clips.Add(clip);
+        }
+
+        private static void AddMapTracks(
+            MapSettings map,
+            List<Faction> factions,
+            List<AudioClip> clips,
+            HashSet<int> clipIds,
+            ref AudioClip agrapol,
+            ref AudioClip maris,
+            bool selectStationSeeds)
+        {
+            if (map == null) return;
+            for (int i = 0; i < factions.Count && clips.Count < MaximumClips; i++)
+            {
+                Faction faction = factions[i];
+                if (faction == null) continue;
+                try
+                {
+                    AudioClip start = map.GetStartMusic(faction);
+                    AudioClip strategic = map.GetStrategicMusic(faction);
+                    AudioClip tactical = map.GetTacticalMusic(faction);
+                    AddUnique(clips, clipIds, start);
+                    AddUnique(clips, clipIds, strategic);
+                    AddUnique(clips, clipIds, tactical);
+
+                    if (!selectStationSeeds) continue;
+                    string name = faction.factionName ?? string.Empty;
+                    if (agrapol == null && name.IndexOf("Boscali", StringComparison.OrdinalIgnoreCase) >= 0)
+                        agrapol = strategic ?? tactical ?? start;
+                    if (maris == null && name.IndexOf("Primeva", StringComparison.OrdinalIgnoreCase) >= 0)
+                        maris = strategic ?? tactical ?? start;
+                }
+                catch { }
+            }
         }
     }
 }

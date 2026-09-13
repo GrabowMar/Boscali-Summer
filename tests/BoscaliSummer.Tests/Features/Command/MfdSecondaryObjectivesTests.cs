@@ -6,6 +6,12 @@ namespace BoscaliSummer.Tests.Features.Command
     {
         public static void Run()
         {
+            TestAssert.That(MfdSecondaryObjectives.PageCount(3, 1) == 3 && MfdSecondaryObjectives.ClampPage(9, 3, 1) == 2,
+                "Compact MFDs page one readable card at a time");
+            TestAssert.That(MfdSecondaryObjectives.PlainObjective("_BDF_PUSH - <color=#B2B2B2>Capture\n airstrip</color>") == "BDF PUSH - Capture airstrip",
+                "Markup is removed before rendering and internal separators become readable spaces");
+            TestAssert.That(MfdSecondaryObjectives.PlainObjective("<color=#B2B2") == "" && MfdSecondaryObjectives.PlainObjective(null) == "OBJECTIVE",
+                "Incomplete markup never leaks into objective labels");
             TestAssert.That(MfdSecondaryObjectives.PageCount(0) == 1 &&
                 MfdSecondaryObjectives.PageCount(3) == 2, "Secondary cards keep a bounded two-card page");
             TestAssert.That(MfdSecondaryObjectives.ClampPage(1, 5) == 1 &&

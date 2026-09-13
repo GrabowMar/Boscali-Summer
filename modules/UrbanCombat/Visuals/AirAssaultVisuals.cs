@@ -16,6 +16,23 @@ namespace BoscaliSummer.Garrisons
         private const int MaximumActiveOperations = 8;
         private static readonly List<GameObject> ActiveOperations = new List<GameObject>(MaximumActiveOperations);
 
+        public static bool HasOperationCapacity
+        {
+            get
+            {
+                ActiveOperations.RemoveAll(operation => operation == null);
+                return ActiveOperations.Count < MaximumActiveOperations;
+            }
+        }
+
+        public static bool HasActiveRappel(Aircraft aircraft)
+        {
+            foreach (GameObject operation in ActiveOperations)
+                if (operation != null && operation.GetComponent<FastRopeRappellingOperation>() is FastRopeRappellingOperation rappel &&
+                    rappel.transform.IsChildOf(aircraft.transform)) return true;
+            return false;
+        }
+
         public static void ResetForScene()
         {
             for (int i = 0; i < ActiveOperations.Count; i++)
@@ -511,6 +528,7 @@ namespace BoscaliSummer.Garrisons
             private LineRenderer ropeRight;
             private AudioSource audioSource;
 
+            private Vector3 rearExitLocal;
             private Vector3 doorLeft;
             private Vector3 doorRight;
             private Vector3 groundLeft;
@@ -529,6 +547,8 @@ namespace BoscaliSummer.Garrisons
                 public float Progress;
                 public bool Landed;
                 public Vector3 FanDir;
+                public Vector3 LandingPosition;
+                public float LandedAt;
             }
 
             public void Initialize(Aircraft currentAircraft, Vector3 targetPos, FactionHQ owner, int soldierCount, Action onLanded)
@@ -549,6 +569,7 @@ namespace BoscaliSummer.Garrisons
                 ropeLeft = CreateRopeLine("Rope_Left", ropeMat);
                 ropeRight = CreateRopeLine("Rope_Right", ropeMat);
 
+                rearExitLocal = helo.InverseTransformPoint(ComputeRearExit());
                 ComputeInitialAnchors();
                 BuildSoldiers();
 
@@ -710,7 +731,7 @@ namespace BoscaliSummer.Garrisons
 
             private void UpdateDoorAnchors()
             {
-                Vector3 rearCenter = ComputeRearExit();
+                Vector3 rearCenter = helo.TransformPoint(rearExitLocal);
                 doorLeft = rearCenter - helo.right * RopeHalfSpread;
                 doorRight = rearCenter + helo.right * RopeHalfSpread;
             }
@@ -839,6 +860,12 @@ namespace BoscaliSummer.Garrisons
                     {
                         RappellingSoldier s = soldiers[i];
                         if (s.Root == null) continue;
+                        if (s.Landed)
+                        {
+                            s.Root.transform.position = Vector3.Lerp(s.LandingPosition,
+                                s.LandingPosition + s.FanDir * 3f, Mathf.Clamp01((elapsed - s.LandedAt) / 2f));
+                            continue;
+                        }
                         if (descentElapsed < s.StartDelay) continue;
 
                         if (!s.Root.activeSelf)
@@ -855,10 +882,7 @@ namespace BoscaliSummer.Garrisons
                             if (s.Progress < 1f)
                             {
                                 Vector3 pos = EvaluateRopeCurve(s.Rope, s.Progress, 1f, elapsed);
-                                Vector3 nextPos = EvaluateRopeCurve(s.Rope, Mathf.Min(1f, s.Progress + 0.04f), 1f, elapsed);
-                                Vector3 descentDir = (nextPos - pos).normalized;
-                                Vector3 faceDir = Vector3.ProjectOnPlane(descentDir, Vector3.up);
-                                if (faceDir.sqrMagnitude < 0.001f) faceDir = -helo.forward;
+                                Vector3 faceDir = -helo.forward;
 
                                 s.Root.transform.position = pos;
                                 s.Root.transform.rotation = Quaternion.LookRotation(faceDir.normalized, Vector3.up);
@@ -875,12 +899,10 @@ namespace BoscaliSummer.Garrisons
                             if (landedAnim != null)
                                 landedAnim.SetInteger("PilotState", (int)PilotDismounted.PilotState.landing);
 
-                            float spread = UnityEngine.Random.Range(2.4f, 4.2f);
-                            Vector3 perimeterPos = touchGround + s.FanDir * spread;
-                            if (Physics.Raycast(perimeterPos + Vector3.up * 4f, Vector3.down, out RaycastHit pHit, 10f, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore))
-                                perimeterPos = pHit.point;
-
-                            s.Root.transform.position = perimeterPos;
+                            s.Root.transform.SetParent(Datum.origin, true);
+                            s.LandingPosition = touchGround;
+                            s.LandedAt = elapsed;
+                            s.Root.transform.position = touchGround;
                             s.Root.transform.rotation = Quaternion.LookRotation(s.FanDir, Vector3.up);
 
                             // Soldiers dismount and cleanly despawn into the established encampment/building
@@ -888,7 +910,7 @@ namespace BoscaliSummer.Garrisons
                         }
                     }
 
-                    if (landedCount > 0 && !callbackFired)
+                    if (landedCount == soldiers.Count && !callbackFired)
                     {
                         callbackFired = true;
                         callback?.Invoke();
@@ -897,7 +919,7 @@ namespace BoscaliSummer.Garrisons
                     yield return null;
                 }
 
-                if (!callbackFired)
+                if (!callbackFired && landedCount == soldiers.Count)
                 {
                     callbackFired = true;
                     callback?.Invoke();

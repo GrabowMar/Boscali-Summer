@@ -84,6 +84,8 @@ namespace BoscaliSummer.Features.Support.Visuals
         private IEnumerator BarrageRoutine(Vector3 impactPoint, float radius, float duration, int initialFlares)
         {
             EnsureAudio();
+            var bloom = SupportParticles.Layer(transform, "Flare ignition bloom", true, 96, 2f, 16f, new Color(3f, 1.7f, 0.4f));
+            SupportParticles.Ring(bloom, 96, 4f, 65f, 35f);
             GameObject flarePrefab = ResolveFlarePrefab();
             float endTime = Time.time + duration;
             var activeSources = new List<IRSource>(64);

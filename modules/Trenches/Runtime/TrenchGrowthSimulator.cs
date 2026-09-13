@@ -1,285 +1,282 @@
 using System;
 using System.Collections.Generic;
+using BoscaliSummer.Features.Trenches.Domain;
 using UnityEngine;
 
 namespace BoscaliSummer.Features.Trenches.Runtime
 {
     /// <summary>
-    /// Executes the autonomous tactical evolution of trench networks from hasty scrapes
-    /// into fortified, zig-zagging defense-in-depth belts based on combat time and threat pressure.
+    /// Grows a trench network from a 7-bay frontline seed into a sector fortress belt:
+    /// extended fire trench, a rear support line with a dugout, and a rear redoubt line.
+    /// Every stage is atomic: an invalid terrain sample leaves the graph untouched and the
+    /// stage is simply retried on the next growth tick.
     /// </summary>
     internal static class TrenchGrowthSimulator
     {
-        public static bool AdvanceSimulation(TrenchNetwork network, Func<Vector3, Vector3> terrainSampler = null)
+        /// <summary>Human-readable reason the last advance attempt was rejected; diagnostic only.</summary>
+        internal static string LastFailure { get; private set; }
+
+        private static bool Fail(string reason)
         {
-            if (network == null || network.NodeCount == 0) return false;
-
-            // Remove destroyed elements before advancing
-            network.RemoveDestroyedElements();
-            if (network.NodeCount == 0) return false;
-
-            bool changed = false;
-
-            switch (network.Stage)
-            {
-                case TrenchStage.Stage0_Scrape:
-                    changed = AdvanceStage0To1(network, terrainSampler);
-                    break;
-
-                case TrenchStage.Stage1_Crawl:
-                    changed = AdvanceStage1To2(network, terrainSampler);
-                    break;
-
-                case TrenchStage.Stage2_FireTrench:
-                    changed = AdvanceStage2To3(network, terrainSampler);
-                    break;
-
-                case TrenchStage.Stage3_Hardened:
-                    changed = AdvanceStage3To4(network, terrainSampler);
-                    break;
-
-                case TrenchStage.Stage4_Integrated:
-                    changed = MaintainAndRepair(network);
-                    break;
-            }
-
-            return changed;
-        }
-
-        /// <summary>
-        /// Stage 0 -> 1: Sapping adjacent foxholes into crawl trenches.
-        /// </summary>
-        private static bool AdvanceStage0To1(TrenchNetwork net, Func<Vector3, Vector3> terrainSampler)
-        {
-            bool edgeAdded = false;
-            var nodeList = new List<TrenchNode>(net.Nodes);
-
-            for (int i = 0; i < nodeList.Count; i++)
-            {
-                for (int j = i + 1; j < nodeList.Count; j++)
-                {
-                    TrenchNode a = nodeList[i];
-                    TrenchNode b = nodeList[j];
-
-                    float dist = Vector3.Distance(a.Position, b.Position);
-                    if (dist >= 8f && dist <= 55f && !a.ConnectedNodeIds.Contains(b.Id))
-                    {
-                        var edge = net.AddEdge(a.Id, b.Id, TrenchEdgeType.CrawlTrench, TrenchStage.Stage1_Crawl, terrainSampler);
-                        if (edge != null)
-                        {
-                            edgeAdded = true;
-                            a.Stage = TrenchStage.Stage1_Crawl;
-                            b.Stage = TrenchStage.Stage1_Crawl;
-                        }
-                    }
-                }
-            }
-
-            if (edgeAdded || net.EdgeCount >= Math.Max(1, net.NodeCount - 1))
-            {
-                net.Stage = TrenchStage.Stage1_Crawl;
-                return true;
-            }
-
+            LastFailure = reason;
             return false;
         }
 
-        /// <summary>
-        /// Stage 1 -> 2: Deepening crawlways into zig-zagging fire trenches with parapets.
-        /// </summary>
-        private static bool AdvanceStage1To2(TrenchNetwork net, Func<Vector3, Vector3> terrainSampler)
+        public static bool Seed(TrenchNetwork net, Func<Vector3, Vector3> sample)
         {
-            bool changed = false;
-
-            foreach (var edge in net.Edges)
+            int bays = TrenchTacticalMath.SeedBayCount;
+            TrenchNode previous = null;
+            for (int i = 0; i < bays; i++)
             {
-                if (edge.Type == TrenchEdgeType.CrawlTrench)
-                {
-                    edge.Type = TrenchEdgeType.ZigzagFireTrench;
-                    edge.Stage = TrenchStage.Stage2_FireTrench;
-                    edge.TrenchWidth = TrenchEdge.GetDefaultWidth(edge.Type);
-                    edge.ParapetHeight = TrenchEdge.GetDefaultParapetHeight(edge.Type, edge.Stage);
-
-                    // Re-generate path with authentic zig-zag traverse offsets
-                    TrenchNode a = net.GetNode(edge.NodeAId);
-                    TrenchNode b = net.GetNode(edge.NodeBId);
-                    if (a != null && b != null)
-                    {
-                        edge.PathPoints = TrenchEdge.GeneratePathPoints(
-                            a.Position, b.Position, net.ThreatDirection, edge.Type, terrainSampler);
-                    }
-                    changed = true;
-                }
+                float forward = i % 2 == 0 ? 0f : -7f;
+                var node = net.AddNode(Position(net, TrenchTacticalMath.LineOffset(i, bays), forward, sample),
+                    TrenchNodeType.RifleBay, TrenchStage.Stage1_Crawl);
+                if (node == null) return false;
+                if (previous != null && net.AddEdge(previous.Id, node.Id, TrenchEdgeType.ZigzagFireTrench,
+                    TrenchStage.Stage1_Crawl, sample) == null) return false;
+                previous = node;
             }
-
-            foreach (var node in net.Nodes)
-            {
-                if (node.Type == TrenchNodeType.Foxhole)
-                {
-                    node.Type = TrenchNodeType.RifleBay;
-                    node.Stage = TrenchStage.Stage2_FireTrench;
-                    node.MaxHealth = TrenchNode.GetDefaultHealth(node.Type);
-                    node.Health = node.MaxHealth;
-                    changed = true;
-                }
-            }
-
-            net.Stage = TrenchStage.Stage2_FireTrench;
-            return changed;
-        }
-
-        /// <summary>
-        /// Stage 2 -> 3: Hardening strongpoints, bunkers, weapon pits, and flank hooks.
-        /// </summary>
-        private static bool AdvanceStage2To3(TrenchNetwork net, Func<Vector3, Vector3> terrainSampler)
-        {
-            bool changed = false;
-
-            // 1. Upgrade central junction nodes into Bunkers and Heavy Weapon Pits
-            int bunkerCount = 0;
-            int weaponPitCount = 0;
-
-            foreach (var node in net.Nodes)
-            {
-                if (node.ConnectedEdgeIds.Count >= 2 && bunkerCount < 2 && node.Type == TrenchNodeType.RifleBay)
-                {
-                    node.Type = TrenchNodeType.BunkerBlindage;
-                    node.Stage = TrenchStage.Stage3_Hardened;
-                    node.MaxHealth = TrenchNode.GetDefaultHealth(node.Type);
-                    node.Health = node.MaxHealth;
-                    bunkerCount++;
-                    changed = true;
-                }
-                else if (weaponPitCount < 2 && node.Type == TrenchNodeType.RifleBay)
-                {
-                    node.Type = TrenchNodeType.HeavyWeaponPit;
-                    node.Stage = TrenchStage.Stage3_Hardened;
-                    node.MaxHealth = TrenchNode.GetDefaultHealth(node.Type);
-                    node.Health = node.MaxHealth;
-                    weaponPitCount++;
-                    changed = true;
-                }
-            }
-
-            // 2. Flank Hook Rule: Protect exposed ends by curving them rearward
-            var terminalNodes = new List<TrenchNode>();
-            foreach (var node in net.Nodes)
-            {
-                if (node.ConnectedEdgeIds.Count == 1 && node.Type != TrenchNodeType.TerminalRamp)
-                {
-                    terminalNodes.Add(node);
-                }
-            }
-
-            Vector3 rearward = -net.ThreatDirection;
-            for (int i = 0; i < terminalNodes.Count; i++)
-            {
-                if (net.NodeCount >= TrenchNetwork.MaxNodesPerNetwork - 2) break;
-
-                TrenchNode endNode = terminalNodes[i];
-                // Project hook 16m to the rear
-                Vector3 hookPos = endNode.Position + rearward * 16f;
-                if (terrainSampler != null) hookPos = terrainSampler(hookPos);
-
-                var hookNode = net.AddNode(hookPos, TrenchNodeType.TerminalRamp, TrenchStage.Stage3_Hardened);
-                if (hookNode != null)
-                {
-                    net.AddEdge(endNode.Id, hookNode.Id, TrenchEdgeType.ZigzagFireTrench, TrenchStage.Stage3_Hardened, terrainSampler);
-                    changed = true;
-                }
-            }
-
-            net.Stage = TrenchStage.Stage3_Hardened;
-            return changed;
-        }
-
-        /// <summary>
-        /// Stage 3 -> 4: Establishing rearward communication trenches toward logistics/cover.
-        /// </summary>
-        private static bool AdvanceStage3To4(TrenchNetwork net, Func<Vector3, Vector3> terrainSampler)
-        {
-            bool changed = false;
-            Vector3 rearward = -net.ThreatDirection;
-
-            // Find up to 2 bunkers or junctions to extend communication lines from
-            int commLines = 0;
-            foreach (var node in net.Nodes)
-            {
-                if (commLines >= 2 || net.NodeCount >= TrenchNetwork.MaxNodesPerNetwork - 2) break;
-
-                if (node.Type == TrenchNodeType.BunkerBlindage || node.ConnectedEdgeIds.Count >= 2)
-                {
-                    // Extend 35m to the rear
-                    Vector3 commEndPos = node.Position + rearward * 35f;
-                    if (terrainSampler != null) commEndPos = terrainSampler(commEndPos);
-
-                    var commNode = net.AddNode(commEndPos, TrenchNodeType.TerminalRamp, TrenchStage.Stage4_Integrated);
-                    if (commNode != null)
-                    {
-                        net.AddEdge(node.Id, commNode.Id, TrenchEdgeType.CommunicationTrench, TrenchStage.Stage4_Integrated, terrainSampler);
-                        commLines++;
-                        changed = true;
-                    }
-                }
-            }
-
-            net.Stage = TrenchStage.Stage4_Integrated;
-            return changed;
-        }
-
-        /// <summary>
-        /// Stage 4 maintenance: repairs damaged nodes and reinforces low-health sectors.
-        /// </summary>
-        private static bool MaintainAndRepair(TrenchNetwork net)
-        {
-            bool repaired = false;
-
-            foreach (var node in net.Nodes)
-            {
-                if (node.Health < node.MaxHealth)
-                {
-                    node.Health = Math.Min(node.MaxHealth, node.Health + 25f);
-                    repaired = true;
-                }
-            }
-            foreach (var edge in net.Edges)
-            {
-                if (edge.Health < edge.MaxHealth)
-                {
-                    edge.Health = Math.Min(edge.MaxHealth, edge.Health + 40f);
-                    repaired = true;
-                }
-            }
-
-            return repaired;
-        }
-
-        /// <summary>
-        /// Under-Attack Retrenchment: If a frontline node suffers critical damage,
-        /// creates an emergency fallback chord 25m behind the breach to contain enemy breakthrough.
-        /// </summary>
-        public static bool TriggerEmergencyRetrenchment(TrenchNetwork net, int threatenedNodeId, Func<Vector3, Vector3> terrainSampler)
-        {
-            if (net == null || net.NodeCount >= TrenchNetwork.MaxNodesPerNetwork - 2) return false;
-
-            TrenchNode threatened = net.GetNode(threatenedNodeId);
-            if (threatened == null) return false;
-
-            Vector3 rear = -net.ThreatDirection;
-            Vector3 fallbackPos = threatened.Position + rear * 25f;
-            if (terrainSampler != null) fallbackPos = terrainSampler(fallbackPos);
-
-            var fallbackNode = net.AddNode(fallbackPos, TrenchNodeType.HeavyWeaponPit, TrenchStage.Stage3_Hardened);
-            if (fallbackNode == null) return false;
-
-            // Connect fallback node to neighbours of the threatened node
-            for (int i = 0; i < threatened.ConnectedNodeIds.Count; i++)
-            {
-                int neighbourId = threatened.ConnectedNodeIds[i];
-                net.AddEdge(fallbackNode.Id, neighbourId, TrenchEdgeType.ZigzagFireTrench, TrenchStage.Stage3_Hardened, terrainSampler);
-            }
-
+            net.FrontHalfSpan = TrenchTacticalMath.LineSpan(bays) * 0.5f;
+            net.Stage = TrenchStage.Stage1_Crawl;
             return true;
+        }
+
+        public static bool AdvanceSimulation(TrenchNetwork net, Func<Vector3, Vector3> sample = null)
+        {
+            LastFailure = null;
+            if (net == null || net.Overrun || net.NodeCount == 0) return false;
+            if (TrenchTacticalMath.EvaluateNextStage((int)net.Stage, net.NodeCount, net.EdgeCount, net.BunkerCount)
+                != (int)net.Stage + 1) return Fail($"stage gate blocked at {net.Stage} ({(int)net.Stage}n/{net.NodeCount}n/{net.EdgeCount}e)");
+
+            switch (net.Stage)
+            {
+                case TrenchStage.Stage1_Crawl: return DeepenFireTrench(net, sample);
+                case TrenchStage.Stage2_FireTrench: return ExtendLine(net, sample);
+                case TrenchStage.Stage3_Hardened: return BuildSupportLine(net, sample);
+                case TrenchStage.Stage4_Integrated: return BuildRedoubt(net, sample);
+                default: return false; // A finished belt never grows endless filler.
+            }
+        }
+
+        private static bool DeepenFireTrench(TrenchNetwork net, Func<Vector3, Vector3> sample)
+        {
+            var paths = new Dictionary<int, Vector3[]>(net.EdgeCount);
+            foreach (var edge in net.Edges)
+            {
+                var path = TrenchEdge.GeneratePathPoints(net.GetNode(edge.NodeAId).Position,
+                    net.GetNode(edge.NodeBId).Position, net.ThreatDirection, TrenchEdgeType.ZigzagFireTrench, sample);
+                if (!net.CanPlacePath(path)) return Fail("deepen path rejected");
+                paths.Add(edge.Id, path);
+            }
+            foreach (var edge in net.Edges)
+            {
+                edge.Type = TrenchEdgeType.ZigzagFireTrench;
+                edge.Stage = TrenchStage.Stage2_FireTrench;
+                edge.TrenchWidth = TrenchEdge.GetDefaultWidth(edge.Type);
+                edge.ParapetHeight = TrenchEdge.GetDefaultParapetHeight(edge.Type, edge.Stage);
+                edge.PathPoints = paths[edge.Id];
+            }
+            Upgrade(net, -44f, 0f, TrenchNodeType.HeavyWeaponPit);
+            Upgrade(net, 44f, 0f, TrenchNodeType.HeavyWeaponPit);
+            net.Stage = TrenchStage.Stage2_FireTrench;
+            return true;
+        }
+
+        private static bool ExtendLine(TrenchNetwork net, Func<Vector3, Vector3> sample)
+        {
+            float target = Math.Min(88f, net.FlankLimit);
+            var created = new List<TrenchNode>(2);
+            if (!ExtendFlank(net, -target, 0f, sample, created) ||
+                !ExtendFlank(net, target, 0f, sample, created))
+            {
+                Rollback(net, created);
+                return Fail("flank extension rejected");
+            }
+            net.FrontHalfSpan = target;
+            Upgrade(net, -target, 0f, TrenchNodeType.HeavyWeaponPit);
+            Upgrade(net, target, 0f, TrenchNodeType.HeavyWeaponPit);
+            net.Stage = TrenchStage.Stage3_Hardened;
+            return true;
+        }
+
+        private static bool BuildSupportLine(TrenchNetwork net, Func<Vector3, Vector3> sample)
+        {
+            float depth = -TrenchTacticalMath.SupportLineDepth;
+            var createdNodes = new List<TrenchNode>(3);
+            var createdEdges = new List<TrenchEdge>(5);
+            TrenchNode left = AddNode(net, -66f, depth, TrenchNodeType.TrenchJunction, TrenchStage.Stage4_Integrated, sample, createdNodes);
+            TrenchNode center = AddNode(net, 0f, depth, TrenchNodeType.BunkerBlindage, TrenchStage.Stage4_Integrated, sample, createdNodes);
+            TrenchNode right = AddNode(net, 66f, depth, TrenchNodeType.TrenchJunction, TrenchStage.Stage4_Integrated, sample, createdNodes);
+            TrenchNode frontLeft = Nearest(net, -66f, 0f, 16f);
+            TrenchNode frontCenter = Nearest(net, 0f, 0f, 16f);
+            TrenchNode frontRight = Nearest(net, 66f, 0f, 16f);
+            if (left == null || center == null || right == null ||
+                !Link(net, frontLeft, left, sample, createdEdges) ||
+                !Link(net, frontCenter, center, sample, createdEdges) ||
+                !Link(net, frontRight, right, sample, createdEdges) ||
+                !Link(net, left, center, sample, createdEdges) ||
+                !Link(net, center, right, sample, createdEdges))
+            {
+                Rollback(net, createdNodes, createdEdges);
+                return Fail("support line rejected");
+            }
+            net.Stage = TrenchStage.Stage4_Integrated;
+            return true;
+        }
+
+        private static bool BuildRedoubt(TrenchNetwork net, Func<Vector3, Vector3> sample)
+        {
+            float supportDepth = -TrenchTacticalMath.SupportLineDepth;
+            float rearDepth = -TrenchTacticalMath.RearLineDepth;
+            float frontTarget = Math.Min(132f, net.FlankLimit);
+            float supportTarget = Math.Min(110f, net.FlankLimit);
+            var createdNodes = new List<TrenchNode>(9);
+            var createdEdges = new List<TrenchEdge>(9);
+
+            if (!ExtendFlank(net, -frontTarget, 0f, sample, createdNodes) ||
+                !ExtendFlank(net, frontTarget, 0f, sample, createdNodes) ||
+                !ExtendFlank(net, -supportTarget, supportDepth, sample, createdNodes) ||
+                !ExtendFlank(net, supportTarget, supportDepth, sample, createdNodes))
+            {
+                Rollback(net, createdNodes, createdEdges);
+                return Fail("redoubt flanks rejected");
+            }
+
+            // Flank hooks close the perimeter: each fire-trench end bends back to its support end.
+            TrenchNode frontLeft = Nearest(net, -frontTarget, 0f, 16f);
+            TrenchNode frontRight = Nearest(net, frontTarget, 0f, 16f);
+            TrenchNode supportLeft = Nearest(net, -supportTarget, supportDepth, 16f);
+            TrenchNode supportRight = Nearest(net, supportTarget, supportDepth, 16f);
+            if (!Link(net, frontLeft, supportLeft, sample, createdEdges) ||
+                !Link(net, frontRight, supportRight, sample, createdEdges))
+            {
+                Rollback(net, createdNodes, createdEdges);
+                return false;
+            }
+
+            TrenchNode rearLeft = AddNode(net, -44f, rearDepth, TrenchNodeType.HeavyWeaponPit, TrenchStage.Stage5_Redoubt, sample, createdNodes);
+            TrenchNode rearCenter = AddNode(net, 0f, rearDepth, TrenchNodeType.BunkerBlindage, TrenchStage.Stage5_Redoubt, sample, createdNodes);
+            TrenchNode rearRight = AddNode(net, 44f, rearDepth, TrenchNodeType.HeavyWeaponPit, TrenchStage.Stage5_Redoubt, sample, createdNodes);
+            TrenchNode supportCenter = Nearest(net, 0f, supportDepth, 16f);
+            if (!Link(net, rearLeft, rearCenter, sample, createdEdges) ||
+                !Link(net, rearCenter, rearRight, sample, createdEdges) ||
+                !Link(net, supportCenter, rearCenter, sample, createdEdges))
+            {
+                Rollback(net, createdNodes, createdEdges);
+                return Fail("redoubt rear line rejected");
+            }
+
+            net.FrontHalfSpan = frontTarget;
+            net.Stage = TrenchStage.Stage5_Redoubt;
+            return true;
+        }
+
+        /// <summary>Adds bay nodes one step at a time until the flank reaches <paramref name="lateral"/>.</summary>
+        private static bool ExtendFlank(TrenchNetwork net, float lateral, float forward,
+            Func<Vector3, Vector3> sample, List<TrenchNode> created)
+        {
+            float sign = Math.Sign(lateral);
+            float current = CurrentFlankEnd(net, forward, sign);
+            int guard = 0;
+            while (Math.Abs(lateral) - current > 1f && ++guard <= 4)
+            {
+                float next = Math.Min(Math.Abs(lateral), current + TrenchTacticalMath.FrontBaySpacing) * sign;
+                TrenchNode from = Nearest(net, current * sign, forward, 20f);
+                if (from == null) return Fail($"extension anchor missing at {current:0}m/{forward:0}m");
+                if (!Extend(net, from, next, forward, TrenchNodeType.RifleBay,
+                    TrenchStage.Stage5_Redoubt, sample, created)) return Fail($"extension rejected at {next:0}m/{forward:0}m");
+                current = Math.Abs(next);
+            }
+            return true;
+        }
+
+        /// <summary>Furthest node on one signed flank of a line at <paramref name="forward"/>.</summary>
+        private static float CurrentFlankEnd(TrenchNetwork net, float forward, float sign)
+        {
+            float end = 0f;
+            foreach (var node in net.Nodes)
+            {
+                float nodeForward = Vector3.Dot(node.Position - net.SeedCenter, net.ThreatDirection);
+                if (Math.Abs(nodeForward - forward) > 14f) continue;
+                float lateral = Vector3.Dot(node.Position - net.SeedCenter, net.LateralAxis) * sign;
+                if (lateral > end) end = lateral;
+            }
+            return end;
+        }
+
+        private static bool Extend(TrenchNetwork net, TrenchNode from, float lateral, float forward,
+            TrenchNodeType type, TrenchStage stage, Func<Vector3, Vector3> sample, List<TrenchNode> created)
+        {
+            Vector3 position = Position(net, lateral, forward, sample);
+            if ((from.Position - position).sqrMagnitude < 4f) return true;
+            var path = TrenchEdge.GeneratePathPoints(from.Position, position, net.ThreatDirection,
+                TrenchEdgeType.ZigzagFireTrench, sample);
+            if (!net.CanPlacePath(path)) return Fail($"extension path blocked at {lateral:0}m/{forward:0}m");
+            var node = AddNode(net, lateral, forward, type, stage, sample, created);
+            if (node == null) return Fail($"extension node blocked at {lateral:0}m/{forward:0}m");
+            return net.AddEdge(from.Id, node.Id, TrenchEdgeType.ZigzagFireTrench, stage, sample) != null
+                || Fail($"extension edge blocked at {lateral:0}m/{forward:0}m");
+        }
+
+        private static bool Link(TrenchNetwork net, TrenchNode a, TrenchNode b,
+            Func<Vector3, Vector3> sample, List<TrenchEdge> created)
+        {
+            if (a == null || b == null) return false;
+            var path = TrenchEdge.GeneratePathPoints(a.Position, b.Position, net.ThreatDirection,
+                TrenchEdgeType.CommunicationTrench, sample);
+            if (!net.CanPlacePath(path)) return Fail($"link path blocked {a.Position.x:0},{a.Position.z:0} -> {b.Position.x:0},{b.Position.z:0}");
+            var edge = net.AddEdge(a.Id, b.Id, TrenchEdgeType.CommunicationTrench,
+                TrenchStage.Stage4_Integrated, sample);
+            if (edge == null) return Fail($"link edge blocked {a.Position.x:0},{a.Position.z:0} -> {b.Position.x:0},{b.Position.z:0}");
+            created?.Add(edge);
+            return true;
+        }
+
+        private static TrenchNode AddNode(TrenchNetwork net, float lateral, float forward, TrenchNodeType type,
+            TrenchStage stage, Func<Vector3, Vector3> sample, List<TrenchNode> created)
+        {
+            Vector3 position = Position(net, lateral, forward, sample);
+            foreach (var existing in net.Nodes)
+                if ((existing.Position - position).sqrMagnitude < 4f) return null;
+            var node = net.AddNode(position, type, stage);
+            if (node == null) return null;
+            created?.Add(node);
+            return node;
+        }
+
+        private static void Upgrade(TrenchNetwork net, float lateral, float forward, TrenchNodeType type)
+        {
+            TrenchNode node = Nearest(net, lateral, forward, 14f);
+            if (node != null && node.Type != type) node.Type = type;
+        }
+
+        private static TrenchNode Nearest(TrenchNetwork net, float lateral, float forward, float tolerance)
+        {
+            Vector3 target = net.SeedCenter + net.LateralAxis * lateral + net.ThreatDirection * forward;
+            TrenchNode best = null;
+            float bestSq = tolerance * tolerance;
+            foreach (var node in net.Nodes)
+            {
+                float dx = node.Position.x - target.x, dz = node.Position.z - target.z;
+                float sq = dx * dx + dz * dz;
+                if (sq < bestSq) { bestSq = sq; best = node; }
+            }
+            return best;
+        }
+
+        private static void Rollback(TrenchNetwork net, List<TrenchNode> nodes, List<TrenchEdge> edges = null)
+        {
+            if (edges != null)
+                for (int i = 0; i < edges.Count; i++) edges[i]?.TakeDamage(edges[i].MaxHealth);
+            if (nodes != null)
+                for (int i = 0; i < nodes.Count; i++) nodes[i].TakeDamage(nodes[i].MaxHealth);
+            net.RemoveDestroyedElements();
+        }
+
+        private static Vector3 Position(TrenchNetwork net, float lateral, float forward, Func<Vector3, Vector3> sample)
+        {
+            Vector3 position = net.SeedCenter + net.LateralAxis * lateral + net.ThreatDirection * forward;
+            return sample != null ? sample(position) : position;
         }
     }
 }

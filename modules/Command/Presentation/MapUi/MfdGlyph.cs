@@ -8,6 +8,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 {
     // Small vector fallback for actions without a native game sprite. No textures,
     // font glyph dependencies, frame callbacks, or external icon package.
+    [RequireComponent(typeof(CanvasRenderer))]
     internal sealed class MfdGlyph : MaskableGraphic
     {
         private string kind;

@@ -20,14 +20,15 @@ Infrastructure/   Diagnostics/, GameInterop/ (cached reflection, capability repo
 Interop/          public reflection-safe theater/doctrine façade for Wing Command
 modules/
   QoL/                local HUD/camera conveniences, observation marks and freshness readout
+  Autopilot/          local ownship autopilot landing, Boscali Summer native-radial entry
   FireAndDestruction/  ignition, forest index, spread, impact scorch, ruins, wreck persistence, replication
   Squad/               player pilot careers, enemy ace hunts, rewards, read-only snapshots
-  Progression/         SQD MFD/HUD, score/ace-earned perk choices, capabilities, reward/fuel effects
+  Progression/         SQD MFD/HUD (dossier, shared skills, aces, pilot studio), score/ace-earned perk choices, capabilities, reward/fuel effects
   Radio/               local music catalogue, playback ownership, map-MFD panel
   Support/             OPS MFD, validated requests, costs/cooldowns, support jobs
-  Command/             STR MFD, expanded map GUI, map overlays, doctrine, AI target scoring
+  Command/             STR and SET MFDs, expanded map GUI, map overlays, doctrine, AI target scoring
   DynamicOperations/   secondary mission director, faction awards, native reinforcement batches
-  UrbanCombat/         occupancy, defensive proxies, capture cleanup
+  UrbanCombat/         occupancy, native rooftop defenses, capture cleanup
   Trenches/            dynamic node-based modular trench networks, procedural berms, tactical map overlay
 ```
 
@@ -50,6 +51,7 @@ only its dependants, continuing to load the rest.
 ```text
 Radio                         independent, client-local
 QoL                           independent, client-local; optional observation/HUD contracts for OPS
+Autopilot                     independent, client-local; ownship only, native radial entry
 Fire and destruction          independent
 Urban Combat  ──publishes──►  IBuildingOccupancy, IZoneFortificationService
 Squad         ──required by─►  Progression ──required by─► Support, Command
@@ -65,7 +67,7 @@ never a sibling's manager, singleton, patch class, or settings object.
 The host owns one hidden `DontDestroyOnLoad` object. Persistent managers implement
 `ISceneService`; `SceneLifecycle` resets them once at composition and on every loaded scene,
 isolating reset exceptions per service. Reset order: fire (10) → impact scorch (15) → ruin
-aftermath (20) → zone garrison (30) → radio (40) → squad (44) → progression (45) → support (50) → operations (51) →
+aftermath (20) → zone garrison (30) → radio (40) → squad (44) → progression (45) → autopilot (48) → support (50) → operations (51) →
 command (52) → COM overlay (53) → SQD MFD/HUD (54) → OPS MFD (55) → STR MFD (56) → map UI (57) →
 SET MFD (58) → trench networks (60) → trench map overlay (61) → fire-network per-scene state (100). Teardown unpatches in reverse, unregisters the
 scene callback and Mirage handlers, clears the registry, and destroys the root.
@@ -96,6 +98,15 @@ generate per-frame network traffic.
   reject stale replies after a career transition. Fuel/reward effects hook the
   verified `Aircraft.UseFuel` and `FactionHQ.RewardPlayer` seams; reward categories are mapped
   by enum member, not by ordinal range.
+
+  SQD's four pages are presentation over those host snapshots plus `ISquadView`. `AceSkillCatalog`
+  names the four combat skills Wing Command applies to AI and aces — it is display metadata and
+  grants nothing. The **STUDIO** page may edit Wing Command custom-pilot files and recruit them
+  through the additive companion API, refreshed through `WingLink`'s separate optional resolve;
+  when that API is absent the page fails closed and every other page keeps working. Squadron
+  name, emblem design, the optional PNG emblem (`BepInEx/config/BoscaliSummer/Emblems`, bounded
+  and user-supplied only) and the local pilot profile are client-local cosmetics: they are
+  never validated, replicated, or allowed to change authoritative identity, score or skills.
 - **Support** requests carry only a protocol byte, request id, action id and target coord.
   The server derives player, faction, authorisation, cost, stock, definition, yield, cooldown
   and caps. Actions live behind one `ISupportAction` interface and one catalogue row; an
@@ -104,16 +115,34 @@ generate per-frame network traffic.
   state, and fortification calls Urban Combat through `IZoneFortificationService`, which
   returns false unless it has verified it can place defenders. Every denial is typed; only
   accepted ids are remembered for replay; each player has a token-bucket rate limit.
+- **Orbital and cyber operations** remain inside Support. `SpaceOperations` holds at most
+  eight factions; each keeps up to four satellites and four facility levels.
+  `OrbitalConstellation` is real geometry — shells, angles, footprints, fuel, burns — whose
+  host mutates and charges while clients mirror snapshots and extrapolate locally, so
+  coverage reads live without a per-frame round trip. Satellite scan, Rod from God and EMP
+  require coverage by a matching-role satellite. Cyber operations are gated by facility
+  level rather than perks; `CyberEffects` rewrites hostile tracking entries for at most four
+  live effects and 64 aircraft on the host and on mirrored peers. Camera surface marks are
+  owned by QoL and hosted on Command's TGT screen through `ICameraTargetService`; delivery
+  into an armed support action stays in Support. Protocol-5 query snapshots are
+  faction-filtered, rate-limited and fixed-size; requester identity comes from the
+  authenticated connection. The panel polls while visible; no per-frame state is sent.
 - **Both features resolve locally when this process is the server**, so single-player and
   listen-host never depend on the custom-message pipe, and a request that cannot leave the
   machine says so instead of hanging.
+
+Air assault consumes native mounted troop ammo and capture strength together, updates
+station accounting and carried mass, and hides emptied troop benches. Native troop fire
+commands/RPCs drive peer presentation; only the server places emplacements after landing.
+Ibis insertions use eight troops and four two-person positions (MG / AT / AA / MG);
+active rope operations prevent another insertion on the same helicopter.
 
 ### Compatibility-sensitive wire names
 
 Mirage derives message ids from full type names, so these must not be renamed without a
 deliberate protocol break: `BoscaliSummer.Runtime.FireIgnitedMessage`,
 `BoscaliSummer.Runtime.RuinCreatedMessage`. The progression and support contracts are not in
-that protected set: progression is protocol `3`, support is protocol `2`, so mixed peers
+that protected set: progression is protocol `3`, support is protocol `3`, so mixed peers
 fail closed on those two channels while fire and ruin keep interoperating. A third,
 `BoscaliSummer.Runtime.BuildingDamagedMessage`, was removed on purpose when building damage
 became a local-only scorch mark — replicated channels went from three to two, and old/new
@@ -134,10 +163,12 @@ holding both remaining channels.
 | Logical ruins / nearest smoke visuals | 256 / 24 |
 | Simultaneous collapse bursts | 4 |
 | Forest spread per site | 2 attempts, ≤3 generations |
-| Garrison zones processed | 1/frame |
+| Garrison zones processed | 1/frame; at most 128 candidates × 49 placements × 9 support samples (up to 8 mesh probes) per zone |
+| Occupied rooftop defenses | 1/shell, 6/zone, 96 total; 128 pending captures |
+| Rooftop decoration | 36 sandbags, pole and flag; 4 renderers, <3,000 vertices per defense; no lights/colliders |
 | Radio | 32 channels, 512 tracks, ≤30 soundtrack refs, 1 active decode, ≤2 clips mid-crossfade; icons ≤256×256, ≤256 KiB |
 | Squad | 64 player careers, 4 owned wings, ≤4 aircraft/wing, 32 history entries, 8 snapshot rows, 900s aircraft lifetime |
-| Trench networks / nodes / chunks | 16 networks, 32 nodes/network, 3-tier camera LOD (≤250m, 250m–1200m, 1200m–3500m) |
+| Trench networks / nodes / chunks | 16 networks, 64 nodes/96 edges per network, 3-tier camera LOD (≤250m, 250m–1200m, 1200m–3500m) |
 
 No feature scans the whole scene per frame: catalogue once, queue event work, use slow
 ticks, reuse buffers, pool visuals, release scene references on reset. Performance ceilings
@@ -149,10 +180,36 @@ are derived constants — high-level tuning only moves intensity/counts *within*
 
 `DynamicOperations` owns an independent, default-off descriptor, configuration,
 1 Hz host director, three-card faction boards, one-time native money/mission-score
-awards, physical reward batches and protocol-1 query/snapshot transport. Its exact
-patch list is empty: bounded native registry reads and per-target disable events
-cover its needs. Reset order is 51. Command's MIS presenter reads only
-`ISecondaryObjectivesView`; no sibling implementation imports are added.
+awards, physical reward batches and protocol-2 intent/snapshot transport. A server-only
+`Unit.Jam` observation patch measures jamming; bounded registries and disable events
+cover target selection and destruction. Reset order is 51 (marker bridge 52, zone HUD 53).
+Command's MIS presenter uses `ISecondaryObjectivesView` for snapshots and accept/dismiss
+requests. `IAirAssaultObservation` exposes UrbanCombat's cached roof candidates and completed
+landings; `IOperationOutcomeSource` publishes morale awards consumed by Command.
+No sibling implementation imports are added. Three cards, two accepted contracts per faction;
+offers never progress. Host IDs remain monotonic across resets, fencing stale intents.
+
+The pool has 17 families. `OperationMissionPool` is the director's partial implementation
+for shared candidate selection and native service/observation missions. Four additional
+postfix observations cover pilot capture/rescue, completed building repair, ammunition
+resupply and rearmer-to-rearmer transfers. Service completion is latched at the native
+event, with payment through the existing board tick. Rescue/report return stages retain
+the aircraft identity and cancel when that aircraft or the friendly return base is lost.
+Recon uses fresh faction tracking plus bounded terrain sightlines; strike assessment
+uses stationary buildings and a frozen last-known site after a real combat disable.
+All unit families fit two 4096-candidate passes per generation. Sightlines have a two-query
+per-objective / 32-query per-tick ceiling; hostile jammer history has 32 entries with 60s
+freshness. No new mission roots, sibling contracts or wire fields are introduced.
+
+Accepted contracts deliberately stay out of `MissionRunner.activeByFaction`: vanilla AI
+(`ShipAI`, `AIPilotCombatModes`, `GroundVehicle`, transport and artillery states) reads that
+dictionary as navigation and combat tasking. Instead a postfix on the UI-only
+`MissionPosition.GetAllPositionsResults` appends synthetic objective positions for the local
+faction, so the game draws its own map marker, cockpit pointer, distance and sized area ring,
+and `MapOptions.showObjectives` still governs them. `OperationZoneHud` adds a bottom-centre
+readout for distance to the area edge, hold progress and enter/leave transitions. Synthetic
+objectives are presentation-only, are not ticked by the runner, and disappear with the
+module. Protocol 2 is unchanged.
 
 The director selects capturable forward bases, threatened friendly bases, and known
 hostile ground targets. Boards, issue history, player accounting, scans, road input
@@ -162,10 +219,12 @@ reject old responses. Native Mirage replicates and destroys reinforcement object
 
 Command's grid retains pressure history between fresh observation snapshots and
 uses elapsed-time control/recovery. Fixed base ownership anchors strategic influence;
-hostile ground pressure reads recorded tracking positions and fades to zero at 30s.
-The grid fits its longest axis within 64 cells and at most 128 strategic nodes.
-Rendering sleeps while closed; the mission director keeps running independently.
-The field is advisory and does not mutate vanilla capture rules.
+ground pressure reads actual unit positions from the synced world state rather than
+either side's tracking records, so spotting does not change cell occupation and both
+sides derive the same cells regardless of knowledge. The grid fits its longest axis
+within 64 cells and at most 128 strategic nodes. Rendering sleeps while closed; the
+mission director keeps running independently. The field is advisory and does not mutate
+vanilla capture rules.
 
 QoL's `ThirdPersonHudController` owns one passive camera-feed overlay, destroyed on
 scene reset and teardown. It reads the verified `TargetCam.cam` seam and borrows its
@@ -175,6 +234,11 @@ QoL at installation. Visibility requires the local followed aircraft in orbit/ch
 with the HUD enabled, live targets selected and map/menu closed. Landing feeds are excluded.
 The controller snapshots and restores the native FlightHud canvas, DynamicMap root and
 pitch ladder visibility around external-view ownership and before native transitions.
+While the local external HUD is enabled and map/menu are closed, QoL defers native
+FlightHud.Update, HeadMountedDisplay.Update and CombatHUD.LateUpdate to its late
+controller pass (execution order 10000), in that order. Cached delegates retain native
+logic, including a single combat input/weapon update, after the camera pose and Datum shift.
+Other camera contexts keep their native scheduling.
 QoL's orbit/rear-chase postfixes retain native state/input updates, then apply a local
 camera pose with bounded smoothing and one static-world collision cast. Pose history is
 aircraft-relative across Datum shifts. Native target look-at, alternate chase presets,
@@ -201,7 +265,18 @@ OPS consumes `IObservationSource` and `IThirdPersonHud` optionally. CALL AT MARK
 an explicitly armed support action and a still-valid mark, then uses the same server
 request path and economy as a map click. No custom observation messages or extra rendering.
 
-The Command module owns the expanded tactical-map GUI in `Presentation/MapUi`:
+The Command module owns the expanded tactical-map GUI in `Presentation/MapUi`.
+
+Faction resource panels consume native HQ funds/warheads and mission-stat manpower.
+`CommandManager` owns mission-scoped `FactionMoraleState` independently of panel lifetime:
+eight faction IDs maximum, initial 100, finite 0–100 writes, reset through its existing
+scene service. Public module API `FactionResources` checks host authority on reads/writes.
+Remote clients return unavailable; no Morale messages or gameplay effects exist yet.
+Future sibling consumers require a narrow Framework contract when actually introduced.
+Each faction presenter retains at most 60 local five-second resource observations;
+faction switches, long observation gaps and presenter teardown discard history.
+
+The expanded map layout comprises
 the left MFD dock and event log, right bezel rail, central map, and native spawn
 footer. `MapUiManager` handles delayed page installation and canvas-size changes;
 the three MFD patch classes are explicitly registered by Command. Closing the map
@@ -219,15 +294,39 @@ cannot claim the same slot or consume the same armed click in one frame.
 ### Dynamic trenches
 
 `Trenches` owns autonomous node-based trench networks, geometric growth simulation,
-procedural parapet/berm meshes, and tactical map crenellations.
-Its exact patch list is empty: airbase discovery hooks into `Airbase.AllAirbases`,
-and map markings hook into `DynamicMap.mapImage`.
+procedural earthwork meshes, and tactical map crenellations.
+Its exact patch list is empty. It depends on Command and reads owned frontline border
+sites through the existing `ITerritoryIngress` contract (also consumed by Squad).
+Each border cell side expands into a chain of sector slots up to 380m apart, and the host
+validates the exact fortified corridor — front line through the rear redoubt line — for
+ownership, dry buildable ground, per-row height variation (≤4m) and row-to-row drift
+(≤12m). Same-faction networks keep 360m spacing, other factions 250m; a cleared site
+blocks 300m. Candidate work is bounded to eight factions, 256 border sites per faction,
+four slots per site, 2048 candidates and one sector slot per frame.
+Growth checks the actual paths independently of placement scans. Each seeded network is a
+seven-bay, 132m frontline fire trench; four growth ticks extend it to a full sector belt:
+flanks up to ±176m, a support line at 58m with a dugout, and a rear redoubt line at 116m
+with a second dugout, flank weapon pits and communication trenches linking all three
+lines. `TrenchGarrison` owns up to six native buildings per network (96 total), spread
+along the sector line and spawning through vanilla `Spawner.SpawnBuilding`.
+Damage polls read up to 32 cached parts per defense at 2Hz. Damage pauses growth for
+60s; a committed defender slot never respawns or heals. Frontline proximity gates seeding;
+existing positions persist if their defenders advance the border, until their ownership
+is lost or all defenders are neutralized. Neutralized/abandoned positions
+retain their earthworks for 300s, then clean up; up to 64 cleared locations prevent
+re-seeding at the same spot for the rest of the scene. At that history limit new seeding stops.
+Network geometry uses global coordinates under `Datum.origin`; map markings use
+`DynamicMap.mapImage`. Native defenders use the game's replication; procedural earthworks
+and map marks remain host-local. Runtime combat/placement acceptance remains pending.
 World mutation is non-destructive: it never carves Unity `TerrainData` heightmaps or
 cuts terrain holes at runtime, avoiding PhysX BVH rebuild stalls and resolution mismatches.
-Instead, raised parapets with downward skirts (0.8m–1.2m) provide physical line-of-sight
-cover and ground blending without terrain modification.
-Procedural meshes scavenge native URP materials (`pillbox` concrete, `gabionBunker1`
-sandbags) without external asset bundles or third-party loaders.
+Instead, raised parapets and parados with downward skirts (1.4m) provide physical
+line-of-sight cover and ground blending without terrain modification.
+LOD0 is a continuous earthwork extrusion per edge using one shared cross-section profile
+(grass fringe, berm, timber revetment, firing step, sandbag parapet) and a procedurally
+baked palette texture, so no external bundles or third-party loaders are needed. An
+artist `trenches.bundle`, when present, replaces LOD0 with modular prefabs. Native
+emplacements retain their own models/materials.
 Flight-sim performance is maintained via 3-tier camera distance LOD (full 3D geometry +
 box colliders < 250m, simplified berms 250m–1200m, flat ground scars 1200m–3500m, culled > 3500m)
 parented under `Datum.origin`. Map rendering uses native Canvas UI mesh rendering with
@@ -255,3 +354,22 @@ at 2 Hz. Squad resolves it at spawn time (Command installs after Progression) an
 fails closed if unavailable. No module imports another module's implementation.
 The spawn seam delegates host-selected global coordinates to Wing Command 0.9.2.6
 `SpawnWingAt`; native aircraft creation/ownership remain in that companion.
+
+Support impact presentation is separate from rod damage: a server-only `Missile.Detonate` prefix records eligibility and its postfix applies one bounded blast query after vanilla marks the missile disabled, including on headless servers. Each blast owns its query/deduplication buffers so chained detonations cannot corrupt the outer call; disabled units are excluded and non-convex colliders use bounds distance. The native detonation RPC creates local particles; missile destruction alone does not create an impact. An `OnStartClient` postfix installs rod descent visuals on observers. EMP radius travels in the host-generated native missile name; its jamming remains in the host action, while the visual updates only local cockpit feedback. Protocol-4 acknowledgements include effect position, radius and duration for requester-only map markers. Armed previews use local settings. Support retains two strike reservations through rod flight, capped at 30 seconds even with cooldowns disabled. Rod/EMP presentation roots are capped at four each and cleared on scene reset.
+
+UrbanCombat chooses native MG, AT-145 and 23 mm AA definitions by exact keys, using one
+emplacement per occupied shell. Nine collider support samples validate each candidate roof
+footprint, including sandbags/flag; missing definitions or unsuitable roofs fail closed.
+The existing `Building.OnStartClient` patch recognises `BoscaliSummer:Garrison:Roof:` and
+builds local decoration on the native networked emplacement. It disables only native
+terrain dugout/grass-blocker children for roofs; weapon, crew, main hitbox and AI remain
+vanilla. No new messages or Harmony targets. Matching clients reconstruct decoration on
+late join. Server lifecycle removes destroyed defenses and clears shell occupancy; capture
+and scene teardown remove the prior positions. Fortification validates and spawns one
+additional roof synchronously before reporting success. Unity fixture checks cover placement
+and decoration; in-game combat, remote-client/late-join and scene-reload acceptance remain pending.
+
+Rooftop placement reuses cooked native mesh colliders and creates mesh probes only for readable meshes. Non-readable box-backed props use temporary boxes with the native footprint and rendered top height; this is approximate on complex roofs. At most eight support colliders use direct Collider.Raycast. A 7x7 grid chooses the highest supported patch, preferring central positions on ties.
+Query objects are deactivated in finally before simulation, then destroyed. Original
+colliders and native weapon parenting are unchanged. Disabled renderers contribute bounds.
+Physics transforms synchronise only for same-frame placement, never in an Update loop.

@@ -63,7 +63,7 @@ namespace BoscaliSummer.Runtime
             mfd.SetupButtons();
 
             Button bezel = buttons[slot];
-            bezel.gameObject.SetActive(true);
+            bezel.gameObject.SetActive(DynamicMap.mapMaximized);
             bezel.enabled = true;
             bezel.interactable = true;
             if (bezel.onClick.GetPersistentEventCount() == 0)

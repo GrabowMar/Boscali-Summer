@@ -62,8 +62,9 @@ namespace BoscaliSummer.Features.Support.Patches
                 if (world.y < Datum.LocalSeaY + 2000f)
                     world = new Vector3(world.x, Datum.LocalSeaY + 6000f, world.z);
 
-                Visuals.EmpVisualEffect.Trigger(world, 12000f);
-                Visuals.CockpitEmpDisruption.CheckLocalDisruption(world, 12000f);
+                float radius = Runtime.SupportEffectPolicy.EmpRadius(unique);
+                Visuals.EmpVisualEffect.Trigger(world, radius);
+                Visuals.CockpitEmpDisruption.CheckLocalDisruption(world, radius);
             }
             else if (unique.StartsWith("BoscaliSummer:Support:Flare:", StringComparison.Ordinal))
             {
@@ -95,6 +96,35 @@ namespace BoscaliSummer.Features.Support.Patches
 
                 Visuals.FlareMissileBurstVisuals.TriggerBarrage(burstPos, radius, duration, count);
             }
+        }
+    }
+
+    [HarmonyPatch(typeof(Missile), "Detonate")]
+    internal static class SupportMissileAuthorityPatch
+    {
+        private static void Prefix(Missile __instance, out bool __state)
+        {
+            __state = __instance != null && !__instance.disabled &&
+                BoscaliSummer.Runtime.GameAccess.IsServer() &&
+                __instance.UniqueName?.StartsWith("BoscaliSummer:Support:Rod:", StringComparison.Ordinal) == true;
+        }
+
+        private static void Postfix(Missile __instance, bool __state)
+        {
+            // Vanilla must set Networkdisabled before damage can call Missile.Detonate again.
+            if (__state && __instance != null && __instance.disabled)
+                Runtime.RodBlast.Apply(__instance.transform.position, __instance.ownerID);
+        }
+    }
+
+    [HarmonyPatch(typeof(Missile), "OnStartClient")]
+    internal static class SupportMissileDescentPatch
+    {
+        private static void Postfix(Missile __instance)
+        {
+            if (__instance?.UniqueName?.StartsWith("BoscaliSummer:Support:Rod:", StringComparison.Ordinal) == true)
+                Visuals.KineticRodStrikeVisuals.Track(__instance,
+                    new Vector3(__instance.transform.position.x, Datum.LocalSeaY, __instance.transform.position.z));
         }
     }
 }

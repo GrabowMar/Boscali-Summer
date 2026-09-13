@@ -6,11 +6,12 @@ maintainers and coding agents; runtime design is in [ARCHITECTURE.md](ARCHITECTU
 | Change concerns | Folder | Tests | Normal deps |
 |---|---|---|---|
 | Local HUD/camera conveniences, observation marks, contact-age readout | `modules/QoL` | `Features/QoL` | Framework lifecycle/contracts, game interop; no feature dependency |
+| Local ownship autopilot landing, Boscali Summer native-radial entry | `modules/Autopilot` | `Features/Autopilot` | Framework lifecycle, game interop; no feature dependency |
 | Fire, impact scorch, ruins, smoke, wreck persistence, fire replication | `modules/FireAndDestruction` | `Features/FireAndDestruction` | Framework, game interop |
 | Occupied shells, defensive proxies, capture cleanup | `modules/UrbanCombat` | `Features/UrbanCombat` | Framework, game interop |
 | Local music, stations, hunt soundtrack override, MFD radio UI | `modules/Radio` | `Features/Radio` | Framework lifecycle, optional `ISquadView`, game interop |
 | Player pilot careers, enemy ace hunts, bonus awards and roster snapshots | `modules/Squad` | `Features/Squad` | Framework lifecycle/contracts, cached Wing Command public API adapter |
-| SQD MFD/HUD, score/ace-earned perks, capabilities, reward/fuel effects | `modules/Progression` | `Features/Progression` | Squad through `ISquadView`, Framework lifecycle/contracts, game interop |
+| SQD MFD (dossier, shared skills, aces, pilot studio, local emblems), score/ace-earned perks, capabilities, reward/fuel effects | `modules/Progression` | `Features/Progression` | Squad through `ISquadView`, Framework lifecycle/contracts, game interop (Wing Command public API via `WingLink`) |
 | OPS MFD (support, observation, battle status), request validation, costs, cooldowns, spawn jobs | `modules/Support` | `Features/Support` | Progression + optional zone-fortification contracts, game interop |
 | STR MFD, expanded map GUI, map overlays, doctrine, AI target scoring | `modules/Command` | `Features/Command` | Progression contracts, game interop |
 | Secondary objectives, faction awards, finite reinforcement batches | `modules/DynamicOperations` | `Features/DynamicOperations` | Framework lifecycle/contracts, native game interop |

@@ -51,6 +51,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private static readonly List<Entry> history = new List<Entry>();
         private static readonly List<string> previousMessages = new List<string>();
         private static readonly List<string> previousKills = new List<string>();
+        internal static event Action<string> OnLineAdded;
 
         public static void Ensure(Canvas canvas, MfdLayout.Columns layout, VirtualMFD virtualMfd)
         {
@@ -62,12 +63,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             columns = layout;
             ResolveSources();
 
-            if (panel == null)
-            {
-                Transform existing = canvas.transform.Find(PanelName);
-                panel = existing as RectTransform;
-            }
-
+            // Restore may have queued the previous panel for destruction this frame.
+            // Only reuse our live reference; a name lookup can resurrect that doomed panel.
             if (panel == null)
             {
                 var go = new GameObject(PanelName, typeof(RectTransform), typeof(Image));
@@ -392,6 +389,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 ExpiresAt = now + RetentionSeconds,
             });
             while (history.Count > MaximumEntries) history.RemoveAt(history.Count - 1);
+            OnLineAdded?.Invoke(text);
         }
 
         private static void PruneHistory()

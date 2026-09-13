@@ -57,7 +57,7 @@ entries inside the list**, not indices past its end.
 |---|---|---|
 | `BezelRegistry.Wmc` | left | Wing Command |
 | `BezelRegistry.Ops` | left | Boscali support call-ins, observation, battle status |
-| Boscali `MfdSlots.Sqd` | left, may spill right | Pilot, abilities and enemy ace wings |
+| Boscali `MfdSlots.Sqd` | left, may spill right | Pilot dossier, shared skills, enemy ace wings and the local pilot/emblem studio |
 | `BezelRegistry.Str` | left | Boscali strategic layer: theater SA, frontline, tasking, logistics, doctrine |
 | `BezelRegistry.Rad` | right | Boscali music radio |
 | `BezelRegistry.Set` | right | Boscali saved map settings |
@@ -72,9 +72,11 @@ OPS and STR are the two command screens. Theater SA used to be a tab *inside* OP
 mounted through an `ITheaterPage` contract; that contract is gone. They now share only
 the shell factory (`AvScreen`), which is a widget, not a seam.
 
-SQD presents the pilot, abilities and enemy aces. OPS presents support calls,
-observation and battle status. STR presents the theater picture and mission-AI
-doctrine. A failed bezel claim must not evict another panel or stop its services.
+SQD presents the pilot dossier, the shared skill board (player passives and support
+authorisations beside the AI/ace combat skills), the enemy ace roster and a client-local
+pilot/emblem studio. OPS presents support calls, observation and battle status. STR
+presents the theater picture and mission-AI doctrine. A failed bezel claim must not evict
+another panel or stop its services.
 
 **A new screen claims with `MfdBezel.TryClaim` / `BezelRegistry.TryClaim`, then
 `Bind`.** A private first-null `TryClaimSlot` will race the other plugin in the same

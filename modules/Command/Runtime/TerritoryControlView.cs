@@ -59,6 +59,27 @@ namespace BoscaliSummer.Features.Command.Runtime
             }
             return false;
         }
+        private TacticalSectorGrid ReadFaction(int factionId)
+        {
+            int count = 0;
+            foreach (FactionHQ hq in FactionRegistry.GetAllHQs())
+            {
+                if (++count > 8) break;
+                if (hq != null && hq.GetInstanceID() == factionId) return Read(hq);
+            }
+            return null;
+        }
+
+        public int CopyFrontlineSites(int factionId, FrontlineSite[] destination)
+            => ReadFaction(factionId)?.CopyFrontlineSites(destination) ?? 0;
+
+        public bool OwnsPosition(int factionId, float x, float z)
+        {
+            TacticalSectorGrid grid = ReadFaction(factionId);
+            return grid != null && grid.WorldToCell(x, z, out int c, out int r) &&
+                grid.GetSectorControl(c, r) == SectorControl.Friendly;
+        }
+
         public void ResetForScene() => fields.Clear();
         private void OnDestroy() => ResetForScene();
     }

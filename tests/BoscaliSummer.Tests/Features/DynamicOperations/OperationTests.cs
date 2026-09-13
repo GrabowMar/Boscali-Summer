@@ -13,6 +13,90 @@ namespace BoscaliSummer.Tests.Features.DynamicOperations
             BoardRetainsHistoryAndBounds();
             InvalidTimeCannotChangeState();
             InterdictionDistinguishesDespawnFromCombat();
+            AcceptanceAndContinuousTasks();
+            ExtendedMissionsRequireTheirOwnEvidence();
+            ReturnMissionsRetainStagesAndFailClosed();
+        }
+
+        private static void ExtendedMissionsRequireTheirOwnEvidence()
+        {
+            foreach (OperationKind kind in new[] { OperationKind.SupplyInterdict, OperationKind.ElectronicWarfare })
+            {
+                Operation op = Create(1, kind, now: 0f);
+                op.Observe(1f, 1f, true, true, false, true, true, true, true);
+                TestAssert.That(op.State == OperationState.Active, "Unrelated service/return evidence cannot finish " + kind);
+                op.Observe(2f, 1f, true, true, true);
+                TestAssert.That(op.TryTakeAward() && !op.TryTakeAward(), "Native neutralization pays once for " + kind);
+            }
+            foreach (OperationKind kind in new[] { OperationKind.Recon, OperationKind.BattlefieldSurvey, OperationKind.DamageAssessment })
+            {
+                Operation op = Create(2, kind, now: 0f);
+                bool killed = kind == OperationKind.DamageAssessment;
+                if (killed)
+                {
+                    op.Observe(1f, 2f, true, true, false, true);
+                    TestAssert.That(op.HoldSeconds == 0f, "BDA cannot survey before the actual strike");
+                }
+                op.Observe(2f, 1f, true, true, killed, true);
+                op.Observe(3f, 1f, true, true, killed, false);
+                TestAssert.That(op.HoldSeconds == 0f, "Lost observation resets " + kind);
+                for (int i = 1; i < op.HoldRequired; i++) op.Observe(3f + i, 1f, true, true, killed, true);
+                TestAssert.That(!op.TryTakeAward(), "Partial survey never pays for " + kind);
+                op.Observe(3f + op.HoldRequired, 1f, true, true, killed, true);
+                TestAssert.That(op.TryTakeAward() && !op.TryTakeAward(), "Full verified survey pays once for " + kind);
+            }
+            foreach (OperationKind kind in new[] { OperationKind.SupplyEscort, OperationKind.RepairCover })
+            {
+                Operation op = Create(3, kind, now: 0f);
+                op.Observe(1f, 1f, true, true, false, true, serviced: true);
+                TestAssert.That(!op.TryTakeAward(), "Service without sufficient cover cannot pay for " + kind);
+                for (int i = 2; i <= op.HoldRequired; i++) op.Observe(i, 1f, true, true, false, true);
+                TestAssert.That(op.State == OperationState.Active && op.Progress < 1f, "Cover alone cannot fabricate service for " + kind);
+                op.Observe(100f, 1f, true, true, false, false, serviced: true);
+                TestAssert.That(op.HoldSeconds == 0f && !op.TryTakeAward(), "No present cover means no service reward for " + kind);
+                for (int i = 1; i <= op.HoldRequired; i++) op.Observe(100f + i, 1f, true, true, false, true);
+                op.Observe(200f, 1f, true, true, false, true, serviced: true);
+                TestAssert.That(op.TryTakeAward() && !op.TryTakeAward(), "Cover plus native completion pays once for " + kind);
+            }
+            Operation recon = Create(4, OperationKind.Recon);
+            recon.Observe(11f, 1f, true, true, true, true);
+            TestAssert.That(recon.State == OperationState.Cancelled, "Destroying the reconnaissance subject cancels it");
+            var offer = new Operation(5, 1, OperationKind.DamageAssessment, OperationReward.None, 0f, 1, 1);
+            offer.Observe(1f, 1f, true, true, true);
+            TestAssert.That(offer.State == OperationState.Cancelled, "A strike before accepting BDA cannot be cashed in later");
+        }
+
+        private static void ReturnMissionsRetainStagesAndFailClosed()
+        {
+            foreach (OperationKind kind in new[] { OperationKind.Rescue, OperationKind.SortieReport })
+            {
+                var offer = new Operation(1, 1, kind, OperationReward.None, 0f, 1, 1);
+                TestAssert.That(!offer.BeginReturn(1f), "Unaccepted return missions cannot capture events");
+                Operation op = Create(2, kind, now: 0f);
+                op.Observe(1f, 1f, true, true, false, returned: true);
+                TestAssert.That(op.State == OperationState.Active, "Landing before acquisition does not complete " + kind);
+                if (kind == OperationKind.SortieReport)
+                {
+                    TestAssert.That(!op.BeginReturn(2f), "Sortie reports require the observation stage");
+                    for (int i = 1; i <= op.HoldRequired; i++) op.Observe(1f + i, 1f, true, true, false, true);
+                    TestAssert.That(!op.TryTakeAward(), "An acquired report still needs delivery");
+                }
+                TestAssert.That(op.BeginReturn(100f) && !op.BeginReturn(101f), "Return stage is latched exactly once for " + kind);
+                op.Observe(101f, 1f, true, true, true, false);
+                TestAssert.That(op.Returning && op.State == OperationState.Active && op.Progress == 0.75f,
+                    "Losing the original subject or observation does not erase acquired evidence for " + kind);
+                op.Observe(102f, 1f, true, true, false, false, returned: true);
+                TestAssert.That(op.TryTakeAward() && !op.TryTakeAward() && !op.BeginReturn(103f), "Returning pays only once for " + kind);
+            }
+            Operation lost = Create(3, OperationKind.Rescue, now: 0f);
+            lost.BeginReturn(1f);
+            lost.Observe(2f, 1f, false, true, false, returned: true);
+            TestAssert.That(lost.State == OperationState.Cancelled && !lost.TryTakeAward(), "Lost carrier/base beats return completion");
+            Operation late = Create(4, OperationKind.Rescue, now: 0f);
+            TestAssert.That(!late.BeginReturn(float.NaN) && !late.BeginReturn(late.Deadline), "Invalid or expired pickup cannot begin return");
+            late.BeginReturn(1f);
+            late.Observe(late.Deadline, 1f, true, true, false, returned: true);
+            TestAssert.That(late.State == OperationState.Expired && !late.TryTakeAward(), "Expired return cannot pay");
         }
 
         private static void InterdictionDistinguishesDespawnFromCombat()
@@ -33,8 +117,52 @@ namespace BoscaliSummer.Tests.Features.DynamicOperations
                 "Destroying a target after an allegiance change cannot satisfy the original interdiction");
         }
 
-        private static Operation Create(int id, OperationKind kind, int target = 100, float now = 10f) =>
-            new Operation(id, target, kind, OperationReward.None, now, 1200, 100);
+        private static Operation Create(int id, OperationKind kind, int target = 100, float now = 10f)
+        {
+            var operation = new Operation(id, target, kind, OperationReward.None, now, 1200, 100);
+            operation.Accept(now);
+            return operation;
+        }
+
+        private static void AcceptanceAndContinuousTasks()
+        {
+            var board = new OperationBoard();
+            for (int i = 1; i <= 3; i++) board.TryAdd(new Operation(i, i, OperationKind.Patrol, OperationReward.None, 0f, 700, 60));
+            Operation offer = board.Operations[0];
+            offer.Observe(10f, 2f, true, true, true, true, true);
+            TestAssert.That(offer.State == OperationState.Offered && offer.Progress == 0f && !offer.TryTakeAward(), "Offers cannot progress or pay before acceptance");
+            board.Prune(70f);
+            TestAssert.That(board.Operations.Count == 3, "Live offers survive result pruning");
+            TestAssert.That(!board.TryAccept(99, 100f) && board.TryAccept(1, 100f) && board.TryAccept(2, 100f) &&
+                !board.TryAccept(3, 100f) && !board.TryAccept(1, 101f), "Acceptance validates identity, duplicate transitions and two-active limit");
+            TestAssert.That(offer.Deadline == 1300f, "Acceptance starts a fresh execution timer");
+            offer.Cancel(101f);
+            TestAssert.That(!offer.TryTakeAward() && board.TryAccept(3, 102f), "Aborting releases capacity without an award");
+            var expired = new Operation(4, 4, OperationKind.Capture, OperationReward.None, 0f, 1, 1);
+            TestAssert.That(!expired.Accept(300f) && !expired.Accept(float.NaN), "Expired and invalid-time offers cannot be accepted");
+            expired.Observe(300f, 1f, true, true, true);
+            TestAssert.That(expired.State == OperationState.Expired && !expired.TryTakeAward(), "Offer expiry beats automatic completion");
+            foreach (OperationKind kind in new[] { OperationKind.Patrol, OperationKind.Jam, OperationKind.Defend })
+            {
+                Operation task = Create(8, kind, now: 0f);
+                task.Observe(1f, 1f, true, true, false, true);
+                task.Observe(2f, 1f, true, true, false, false);
+                TestAssert.That(task.HoldSeconds == 0f, "Interrupted holds reset for " + kind);
+                for (int second = 1; second <= task.HoldRequired; second++) task.Observe(2f + second, 1f, true, true, false, true);
+                TestAssert.That(task.State == OperationState.Completed && task.TryTakeAward() && !task.TryTakeAward(), "Full continuous hold pays once for " + kind);
+            }
+            foreach (OperationKind kind in new[] { OperationKind.Rappel, OperationKind.Rooftop })
+            {
+                Operation task = Create(9, kind);
+                task.Observe(11f, 1f, true, true, false, true, false);
+                TestAssert.That(task.State == OperationState.Active, "Hovering cannot complete insertion");
+                task.Observe(12f, 1f, true, true, false, true, true);
+                TestAssert.That(task.TryTakeAward(), "Verified landing completes insertion");
+            }
+            Operation jam = Create(10, OperationKind.Jam);
+            jam.Observe(11f, 1f, true, true, true, true);
+            TestAssert.That(jam.State == OperationState.Cancelled && !jam.TryTakeAward(), "Destroying an emitter cannot complete a jamming contract");
+        }
 
         private static void CaptureAndInterdictionAwardOnce()
         {

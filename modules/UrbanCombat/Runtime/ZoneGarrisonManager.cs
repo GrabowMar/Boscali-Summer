@@ -22,7 +22,6 @@ namespace BoscaliSummer.Garrisons
             public FactionHQ Owner;
             public float ExecuteAt;
             public int Attempts;
-            public int MinimumCount;
         }
 
         private sealed class GarrisonRecord
@@ -49,23 +48,19 @@ namespace BoscaliSummer.Garrisons
 
             if (!Urban.GarrisonsEnabled.Value || NetworkSceneSingleton<Spawner>.i == null)
                 return false;
-            BuildingDefinition defense = ResolveDefenseDefinition();
+            BuildingDefinition defense = RooftopPlacement.ResolveDefinition(0);
             if (defense == null || defense.unitPrefab == null) return false;
-            if (FindCandidates(airbase).Count == 0)
-            {
-                RebuildShellCatalogue();
-                if (FindCandidates(airbase).Count == 0) return false;
-            }
-
             int key = airbase.GetInstanceID();
             int floor = records.TryGetValue(key, out GarrisonRecord existing)
                 ? existing.Defenses.Count + 1
                 : 1;
-            ClearRecord(key);
-            ScheduleCapture(airbase, owner);
-            for (int i = 0; i < pending.Count; i++)
-                if (pending[i].Airbase == airbase) pending[i].MinimumCount = floor;
-            return true;
+            if (floor > RooftopPlacement.MaxPerZone || CountDefenses() >= RooftopPlacement.MaxBuildings)
+                return false;
+            List<GameObject> candidates = FindCandidates(airbase);
+            if (candidates.Count == 0) { RebuildShellCatalogue(); candidates = FindCandidates(airbase); }
+            for (int i = 0; i < Mathf.Min(candidates.Count, 128); i++)
+                if (TryOccupyBuilding(candidates[i], owner, airbase)) return true;
+            return false;
         }
 
         public bool TryOccupyBuilding(GameObject shell, FactionHQ owner, Airbase airbase)
@@ -74,48 +69,35 @@ namespace BoscaliSummer.Garrisons
                 NetworkSceneSingleton<Spawner>.i == null || GarrisonOccupancy.IsOccupied(shell))
                 return false;
 
-            BuildingDefinition defense = ResolveDefenseDefinition();
-            if (defense == null || defense.unitPrefab == null) return false;
-
             int key = airbase != null ? airbase.GetInstanceID() : shell.scene.handle;
             if (records.TryGetValue(key, out GarrisonRecord previous) && previous.Owner != owner)
-                ClearRecord(key);
-            if (!records.TryGetValue(key, out GarrisonRecord record))
-            {
-                record = new GarrisonRecord { Owner = owner };
-                records[key] = record;
-            }
-
+                return false;
+            int slot = previous?.Defenses.Count ?? 0;
+            if (slot >= RooftopPlacement.MaxPerZone || CountDefenses() >= RooftopPlacement.MaxBuildings)
+                return false;
             Bounds bounds = GetShellBounds(shell);
-            int slot = record.Defenses.Count;
-            int generation = generations.TryGetValue(key, out int current) ? current : 1;
+            BuildingDefinition defense = RooftopPlacement.ResolveDefinition(slot);
+            if (defense == null || !RooftopPlacement.TryPlace(shell, bounds, defense,
+                out Vector3 position, out Quaternion rotation)) return false;
+            int generation = generations.TryGetValue(key, out int current) ? current + 1 : 1;
+            generations[key] = generation;
             Building core = NetworkSceneSingleton<Spawner>.i.SpawnBuilding(
-                defense.unitPrefab,
-                (bounds.center + Vector3.up * Mathf.Min(bounds.extents.y * 0.35f, 3.5f)).ToGlobalPosition(),
-                shell.transform.rotation,
-                owner,
-                airbase,
-                $"{NamePrefix}Assault:{generation}:{slot}",
-                false,
-                null);
+                defense.unitPrefab, position.ToGlobalPosition(), rotation, owner, airbase,
+                $"{RooftopPlacement.NamePrefix}Assault:{shell.GetInstanceID()}:{generation}:{slot}", false, null);
             if (core == null) return false;
-
-            GarrisonVisual.Apply(core);
-            record.Defenses.Add(core);
-            record.Shells.Add(shell);
-
-            List<Building> perimeter = MakeshiftFortificationBuilder.DeployGroundFortifications(
-                shell, bounds, owner, airbase, slot, generation);
-            for (int i = 0; i < perimeter.Count; i++)
+            if (previous == null)
             {
-                record.Defenses.Add(perimeter[i]);
-                record.Shells.Add(shell);
+                previous = new GarrisonRecord { Owner = owner };
+                records[key] = previous;
             }
+            GarrisonVisual.Apply(core);
+            previous.Defenses.Add(core);
+            previous.Shells.Add(shell);
 
             Building shellBuilding = shell.GetComponentInParent<Building>();
             if (shellBuilding != null && !shellBuilding.disabled) shellBuilding.NetworkHQ = owner;
             GarrisonOccupancy.Set(shell, owner);
-            Plugin.Logger.LogInfo($"[Air Assault] Occupied {shell.name} with one hidden defense proxy and {perimeter.Count} visible perimeter emplacement(s).");
+            Plugin.Logger.LogInfo($"[Air Assault] Occupied {shell.name} with visible rooftop {defense.jsonKey}.");
             return true;
         }
 
@@ -130,26 +112,23 @@ namespace BoscaliSummer.Garrisons
         private readonly Dictionary<int, int> generations = new Dictionary<int, int>();
         private readonly List<GameObject> shellCatalogue = new List<GameObject>(512);
         private readonly Dictionary<int, Bounds> shellBounds = new Dictionary<int, Bounds>(512);
-        private BuildingDefinition cachedDefenseDefinition;
         private float nextLifecycleCheck;
         private bool missingDefinitionReported;
-        private bool definitionInventoryReported;
         private bool initialScanComplete;
         private float initialScanAt;
 
         private void Awake() => Instance = this;
-        private void OnDestroy() { if (Instance == this) Instance = null; }
+        private void OnDestroy() { ResetForScene(); if (Instance == this) Instance = null; }
 
         public void ResetForScene()
         {
             pending.Clear();
+            foreach (int key in new List<int>(records.Keys)) ClearRecord(key);
             records.Clear();
             generations.Clear();
             shellCatalogue.Clear();
             shellBounds.Clear();
-            cachedDefenseDefinition = null;
             missingDefinitionReported = false;
-            definitionInventoryReported = false;
             initialScanComplete = false;
             initialScanAt = Time.unscaledTime + 3f;
 
@@ -165,6 +144,7 @@ namespace BoscaliSummer.Garrisons
 
             for (int i = pending.Count - 1; i >= 0; i--)
                 if (pending[i].Airbase == airbase) pending.RemoveAt(i);
+            if (pending.Count >= 128) return;
             pending.Add(new PendingCapture
             {
                 Airbase = airbase,
@@ -218,14 +198,14 @@ namespace BoscaliSummer.Garrisons
             ClearRecord(key);
             if (owner == null || !Urban.GarrisonsEnabled.Value || airbase.AttachedAirbase) return;
 
-            BuildingDefinition defense = ResolveDefenseDefinition();
+            BuildingDefinition defense = RooftopPlacement.ResolveDefinition(0);
             if (defense == null || defense.unitPrefab == null || NetworkSceneSingleton<Spawner>.i == null)
             {
                 if (capture.Attempts < 4) { Retry(capture); return; }
                 if (!missingDefinitionReported)
                 {
                     missingDefinitionReported = true;
-                    Plugin.Logger.LogWarning("Garrisons disabled for this scene: no usable vanilla DEF building definition was loaded.");
+                    Plugin.Logger.LogWarning("Garrisons disabled for this scene: no usable vanilla MG rooftop emplacement definition was loaded.");
                 }
                 return;
             }
@@ -253,41 +233,39 @@ namespace BoscaliSummer.Garrisons
                 (int)Deterministic.HashString(GetAirbaseName(airbase)),
                 owner.GetInstanceID(), generation);
             Shuffle(candidates, seed);
-            int count = Mathf.Clamp(
-                Mathf.Max(Urban.GarrisonsPerZone.Value, capture.MinimumCount), 0, candidates.Count);
-
+            int count = Mathf.Clamp(Urban.GarrisonsPerZone.Value,
+                0, Mathf.Min(RooftopPlacement.MaxPerZone, RooftopPlacement.MaxBuildings - CountDefenses()));
             var record = new GarrisonRecord { Owner = owner };
             records[key] = record;
-            for (int slot = 0; slot < count; slot++)
+            // Try the remaining catalogue candidates when a roof is too small or stepped.
+            for (int candidate = 0; candidate < Mathf.Min(candidates.Count, 128) && record.Defenses.Count < count; candidate++)
             {
-                GameObject shell = candidates[slot];
-                if (shell == null) continue;
-                Building shellBuilding = shell.GetComponentInParent<Building>();
-                Bounds shellBounds = GetShellBounds(shell);
-                // Anchor defensive proxy logic inside the building core (slightly elevated
-                // for realistic embrasure sightlines) rather than perched on the roof.
-                Vector3 local = shellBounds.center + Vector3.up * Mathf.Min(shellBounds.extents.y * 0.35f, 3.5f);
-                string unique = NamePrefix + Sanitize(GetAirbaseName(airbase)) + ":" + generation + ":" + slot;
+                GameObject shell = candidates[candidate];
+                if (shell == null || GarrisonOccupancy.IsOccupied(shell)) continue;
+                int slot = record.Defenses.Count;
+                BuildingDefinition roofDefense = RooftopPlacement.ResolveDefinition(slot);
+                if (roofDefense == null || !RooftopPlacement.TryPlace(shell, GetShellBounds(shell), roofDefense,
+                    out Vector3 position, out Quaternion rotation)) continue;
                 Building spawned = NetworkSceneSingleton<Spawner>.i.SpawnBuilding(
-                    defense.unitPrefab,
-                    local.ToGlobalPosition(),
-                    shell.transform.rotation,
-                    owner,
-                    airbase,
-                    unique,
-                    false,
-                    null);
+                    roofDefense.unitPrefab, position.ToGlobalPosition(), rotation, owner, airbase,
+                    RooftopPlacement.NamePrefix + Sanitize(GetAirbaseName(airbase)) + ":" + generation + ":" + slot,
+                    false, null);
                 if (spawned == null) continue;
-                if (shellBuilding != null && !shellBuilding.disabled)
-                    shellBuilding.NetworkHQ = owner;
-
+                Building shellBuilding = shell.GetComponentInParent<Building>();
+                if (shellBuilding != null && !shellBuilding.disabled) shellBuilding.NetworkHQ = owner;
                 GarrisonOccupancy.Set(shell, owner);
                 GarrisonVisual.Apply(spawned);
                 record.Defenses.Add(spawned);
                 record.Shells.Add(shell);
             }
+            Plugin.Logger.LogInfo($"Occupied {record.Defenses.Count} building(s) around {GetAirbaseName(airbase)} for {owner} with visible MG/AT/AA rooftop nests (requested {count}).");
+        }
 
-            Plugin.Logger.LogInfo($"Occupied {record.Defenses.Count} building(s) around {GetAirbaseName(airbase)} for {owner} using hidden {defense.jsonKey} defense proxies.");
+        private int CountDefenses()
+        {
+            int count = 0;
+            foreach (GarrisonRecord record in records.Values) count += record.Defenses.Count;
+            return count;
         }
 
         private void Retry(PendingCapture capture)
@@ -300,22 +278,22 @@ namespace BoscaliSummer.Garrisons
         private void CheckShellLifecycle()
         {
             foreach (GarrisonRecord record in records.Values)
-            {
-                int count = Mathf.Min(record.Defenses.Count, record.Shells.Count);
-                for (int i = 0; i < count; i++)
+                for (int i = record.Defenses.Count - 1; i >= 0; i--)
                 {
                     GameObject shell = record.Shells[i];
                     Building shellBuilding = shell != null ? shell.GetComponentInParent<Building>() : null;
-                    bool shellAlive = shell != null &&
-                        (shellBuilding == null || !shellBuilding.disabled);
-
-                    if (shellAlive && record.Defenses[i] != null)
+                    Building defense = record.Defenses[i];
+                    if (shell != null && shell.activeInHierarchy &&
+                        (shellBuilding == null || !shellBuilding.disabled) &&
+                        defense != null && !defense.disabled && defense.NetworkHQ == record.Owner)
                         continue;
-
-                    DestroyNetworked(record.Defenses[i]);
-                    record.Defenses[i] = null;
+                    DestroyNetworked(defense);
+                    if (shellBuilding != null && shellBuilding.NetworkHQ == record.Owner)
+                        shellBuilding.NetworkHQ = null;
+                    GarrisonOccupancy.Clear(shell, record.Owner);
+                    record.Defenses.RemoveAt(i);
+                    record.Shells.RemoveAt(i);
                 }
-            }
         }
 
         private void ClearRecord(int key)
@@ -334,43 +312,9 @@ namespace BoscaliSummer.Garrisons
 
         private static void DestroyNetworked(Building building)
         {
-            if (building == null || NetworkManagerNuclearOption.i == null) return;
+            if (building == null || !GameAccess.IsServer() ||
+                NetworkManagerNuclearOption.i?.ServerObjectManager == null) return;
             NetworkManagerNuclearOption.i.ServerObjectManager.Destroy(building.Identity, true);
-        }
-
-        private BuildingDefinition ResolveDefenseDefinition()
-        {
-            if (cachedDefenseDefinition != null) return cachedDefenseDefinition;
-            if (Encyclopedia.i == null || Encyclopedia.i.buildings == null) return null;
-            var defs = new List<BuildingDefinition>();
-            for (int i = 0; i < Encyclopedia.i.buildings.Count; i++)
-            {
-                BuildingDefinition definition = Encyclopedia.i.buildings[i];
-                if (definition != null && definition.buildingType == BuildingType.DEF &&
-                    definition.unitPrefab != null) defs.Add(definition);
-            }
-            if (!definitionInventoryReported)
-            {
-                definitionInventoryReported = true;
-                var labels = new string[defs.Count];
-                for (int i = 0; i < defs.Count; i++)
-                    labels[i] = defs[i].jsonKey + " (" + defs[i].unitName + ")";
-                Plugin.Logger.LogInfo("Loaded DEF building definitions: " +
-                    (defs.Count == 0 ? "none" : string.Join(", ", labels)));
-            }
-
-            BuildingDefinition smallest = null;
-            float smallestArea = float.MaxValue;
-            for (int i = 0; i < defs.Count; i++)
-            {
-                BuildingDefinition definition = defs[i];
-                if ((definition.unitName?.IndexOf("bunker", StringComparison.OrdinalIgnoreCase) ?? -1) >= 0 ||
-                    (definition.jsonKey?.IndexOf("bunker", StringComparison.OrdinalIgnoreCase) ?? -1) >= 0)
-                    return cachedDefenseDefinition = definition;
-                float area = Mathf.Max(1f, definition.width) * Mathf.Max(1f, definition.length);
-                if (area < smallestArea) { smallestArea = area; smallest = definition; }
-            }
-            return cachedDefenseDefinition = smallest;
         }
 
         private List<GameObject> FindCandidates(Airbase airbase)
@@ -402,11 +346,49 @@ namespace BoscaliSummer.Garrisons
                 TryAddCandidate(shellCatalogue[i], airbase, center, radius, seen, result);
         }
 
+        internal bool IsMissionRooftopAvailable(int id)
+        {
+            for (int i = 0; i < Math.Min(512, shellCatalogue.Count); i++)
+            {
+                GameObject shell = shellCatalogue[i];
+                if (shell == null || shell.GetInstanceID() != id) continue;
+                Building building = shell.GetComponentInParent<Building>();
+                return shell.activeInHierarchy && !GarrisonOccupancy.IsOccupied(shell) &&
+                    (building == null || !building.disabled);
+            }
+            return false;
+        }
+
+        internal bool TryMissionRooftop(float x, float z, out int id, out float roofX, out float roofZ)
+        {
+            id = 0; roofX = roofZ = 0f;
+            if (!GameAccess.IsServer()) return false;
+            float best = 2500f * 2500f;
+            for (int i = 0; i < Math.Min(512, shellCatalogue.Count); i++)
+            {
+                GameObject shell = shellCatalogue[i];
+                if (shell == null || !shell.activeInHierarchy || GarrisonOccupancy.IsOccupied(shell) || IsCriticalName(shell.name)) continue;
+                Building building = shell.GetComponentInParent<Building>();
+                if (building != null && (building.disabled || building.NetworkHQ != null)) continue;
+                Bounds bounds = GetShellBounds(shell);
+                if (bounds.size.x < 10f || bounds.size.z < 10f || bounds.size.y < 3f) continue;
+                Vector3 global = bounds.center.ToGlobalPosition().AsVector3();
+                float distance = (global.x - x) * (global.x - x) + (global.z - z) * (global.z - z);
+                if (distance >= best || !Physics.Raycast(bounds.center + Vector3.up * (bounds.extents.y + 20f), Vector3.down,
+                    out RaycastHit hit, 60f, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore) ||
+                    hit.normal.y < 0.95f || hit.point.y <= Datum.LocalSeaY + 1f ||
+                    !(hit.collider.transform == shell.transform || hit.collider.transform.IsChildOf(shell.transform))) continue;
+                best = distance; id = shell.GetInstanceID(); roofX = global.x; roofZ = global.z;
+            }
+            return id != 0;
+        }
+
         private void TryAddCandidate(
             GameObject shell, Airbase airbase, Vector3 center, float radius,
             HashSet<int> seen, List<GameObject> result)
         {
-            if (shell == null || !shell.scene.IsValid() || shell.scene != airbase.gameObject.scene) return;
+            if (shell == null || !shell.activeInHierarchy || GarrisonOccupancy.IsOccupied(shell) ||
+                !shell.scene.IsValid() || shell.scene != airbase.gameObject.scene) return;
             Building networkBuilding = shell.GetComponentInParent<Building>();
             if (networkBuilding != null && (networkBuilding.disabled || networkBuilding.NetworkHQ != null)) return;
             int id = shell.GetInstanceID();
@@ -454,8 +436,12 @@ namespace BoscaliSummer.Garrisons
             if (!shellBounds.TryGetValue(id, out bounds))
             {
                 bounds = CalculateBounds(shell);
+                // Static shells translate with Datum's floating origin. Cache the
+                // centre relative to the shell so later captures probe its current roof.
+                bounds.center -= shell.transform.position;
                 shellBounds[id] = bounds;
             }
+            bounds.center += shell.transform.position;
             return bounds;
         }
 
@@ -479,7 +465,7 @@ namespace BoscaliSummer.Garrisons
             for (int i = 0; i < renderers.Length; i++)
             {
                 Renderer renderer = renderers[i];
-                if (renderer == null || renderer is ParticleSystemRenderer || !renderer.enabled) continue;
+                if (renderer == null || renderer is ParticleSystemRenderer || !renderer.gameObject.activeInHierarchy) continue;
                 if (!found) { bounds = renderer.bounds; found = true; }
                 else bounds.Encapsulate(renderer.bounds);
             }

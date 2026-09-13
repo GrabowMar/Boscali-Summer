@@ -1,4 +1,5 @@
 using System;
+using System.Text;
 
 namespace BoscaliSummer.Features.Command.Presentation.MapUi
 {
@@ -6,9 +7,26 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
     {
         public const int CardsPerPage = 2;
 
-        public static int PageCount(int count) => count <= 0 ? 1 : 1 + (count - 1) / CardsPerPage;
+        public static string PlainObjective(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return "OBJECTIVE";
+            var text = new StringBuilder(value.Length);
+            bool tag = false, space = true;
+            foreach (char c in value)
+            {
+                if (c == '<') { tag = true; continue; }
+                if (c == '>') { tag = false; continue; }
+                if (tag) continue;
+                if (char.IsWhiteSpace(c) || c == '_')
+                { if (!space) text.Append(' '); space = true; }
+                else { text.Append(c); space = false; }
+            }
+            return text.ToString().Trim();
+        }
 
-        public static int ClampPage(int page, int count) => Math.Max(0, Math.Min(page, PageCount(count) - 1));
+        public static int PageCount(int count, int perPage = CardsPerPage) => count <= 0 ? 1 : 1 + (count - 1) / Math.Max(1, perPage);
+
+        public static int ClampPage(int page, int count, int perPage = CardsPerPage) => Math.Max(0, Math.Min(page, PageCount(count, perPage) - 1));
 
         public static string TimeLabel(bool complete, float secondsRemaining)
         {
