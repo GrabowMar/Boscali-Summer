@@ -1,3 +1,6 @@
+using System.IO;
+using BepInEx;
+using BoscaliSummer.Features.Command.Configuration;
 using NOAvionics;
 using NOAvionics.Ui;
 using UnityEngine;
@@ -32,24 +35,41 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private const float GridCell = 64f;
         private const int MajorGridStride = 4;
 
+        private static CommandSettings settings;
         private static GameObject backdrop;
         private static GameObject tray;
         private static Vector2 backdropCanvasSize;
 
         private static Image backdropBaseImage;
         private static Image backdropUserImage;
+        private static RawImage backdropCheckerImage;
         private static Image backdropGradientImage;
         private static RectTransform backdropGridTransform;
         private static Image trayBaseImage;
         private static Image trayGradientImage;
 
-        /// <summary>Apply live opacity, grid, and user wallpaper appearance.</summary>
-        public static void ApplyAppearance()
-        {
-            float opacity = 0.95f;
-            bool showGrid = true;
+        private static Texture2D checkerTexture;
+        private static readonly Sprite[] presetSprites = new Sprite[3];
+        private static Sprite customWallpaperSprite;
+        private static string customWallpaperPath;
 
-            Sprite userSprite = null;
+        public static void Configure(CommandSettings config)
+        {
+            settings = config;
+        }
+
+        /// <summary>Apply live opacity, grid, checkerboard, and wallpaper appearance.</summary>
+        public static void ApplyAppearance(CommandSettings config = null)
+        {
+            if (config != null) settings = config;
+
+            float opacity = settings != null ? settings.DeckOpacity.Value : 0.95f;
+            bool showGrid = settings == null || settings.DeckGrid.Value;
+            bool showChecker = settings != null && settings.CheckerboardOverlay.Value;
+            float checkerOpacity = settings != null ? settings.CheckerboardOpacity.Value : 0.08f;
+            bool showWallpaper = settings != null && settings.BackgroundImage.Value;
+            int wallpaperPreset = settings != null ? settings.BackgroundImagePreset.Value : 0;
+            float wallpaperOpacity = settings != null ? settings.BackgroundImageOpacity.Value : 0.25f;
 
             if (backdropBaseImage != null)
             {
@@ -58,15 +78,41 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             if (backdropUserImage != null)
             {
-                if (userSprite != null)
+                if (showWallpaper)
                 {
-                    backdropUserImage.gameObject.SetActive(true);
-                    backdropUserImage.sprite = userSprite;
-                    backdropUserImage.color = new Color(1f, 1f, 1f, opacity);
+                    Sprite sprite = GetWallpaperSprite(wallpaperPreset, out bool isTiled);
+                    if (sprite != null)
+                    {
+                        backdropUserImage.gameObject.SetActive(true);
+                        backdropUserImage.sprite = sprite;
+                        backdropUserImage.type = isTiled ? Image.Type.Tiled : Image.Type.Simple;
+                        backdropUserImage.preserveAspect = !isTiled;
+                        backdropUserImage.color = new Color(1f, 1f, 1f, wallpaperOpacity);
+                    }
+                    else
+                    {
+                        backdropUserImage.gameObject.SetActive(false);
+                    }
                 }
                 else
                 {
                     backdropUserImage.gameObject.SetActive(false);
+                }
+            }
+
+            if (backdropCheckerImage != null)
+            {
+                if (showChecker && checkerOpacity > 0.001f)
+                {
+                    backdropCheckerImage.gameObject.SetActive(true);
+                    backdropCheckerImage.color = AvTheme.Frame.WithAlpha(checkerOpacity);
+                    float uvW = backdropCanvasSize.x > 0f ? backdropCanvasSize.x / GridCell : 30f;
+                    float uvH = backdropCanvasSize.y > 0f ? backdropCanvasSize.y / GridCell : 18f;
+                    backdropCheckerImage.uvRect = new Rect(0f, 0f, uvW, uvH);
+                }
+                else
+                {
+                    backdropCheckerImage.gameObject.SetActive(false);
                 }
             }
 
@@ -88,6 +134,29 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             if (trayGradientImage != null)
             {
                 trayGradientImage.color = new Color(1f, 1f, 1f, 0.50f * opacity);
+            }
+
+            // Sync DynamicMap terrain image and background
+            var dynamicMap = SceneSingleton<DynamicMap>.i;
+            if (dynamicMap != null)
+            {
+                if (dynamicMap.mapImage != null)
+                {
+                    Image terrainImg = dynamicMap.mapImage.GetComponent<Image>();
+                    if (terrainImg != null)
+                    {
+                        bool showTerrain = settings == null || settings.MapTerrainImage.Value;
+                        float terrainAlpha = settings != null ? settings.MapTerrainOpacity.Value : 1f;
+                        terrainImg.enabled = showTerrain;
+                        Color tc = terrainImg.color;
+                        tc.a = showTerrain ? terrainAlpha : 0f;
+                        terrainImg.color = tc;
+                    }
+                }
+                if (dynamicMap.mapBackground != null)
+                {
+                    dynamicMap.mapBackground.color = new Color(1f, 1f, 1f, 0.68f * opacity);
+                }
             }
         }
 
@@ -121,11 +190,20 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             DestroyOwned(ref tray);
             backdropBaseImage = null;
             backdropUserImage = null;
+            backdropCheckerImage = null;
             backdropGradientImage = null;
             backdropGridTransform = null;
             trayBaseImage = null;
             trayGradientImage = null;
             backdropCanvasSize = Vector2.zero;
+
+            if (customWallpaperSprite != null)
+            {
+                if (customWallpaperSprite.texture != null) Object.Destroy(customWallpaperSprite.texture);
+                Object.Destroy(customWallpaperSprite);
+                customWallpaperSprite = null;
+                customWallpaperPath = null;
+            }
         }
 
         /// <summary>Mission-end counterpart to <see cref="Restore"/>.</summary>
@@ -258,6 +336,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             backdropCanvasSize = canvasSize;
 
             backdropUserImage = CreateUserImageLayer(root, "UserImageLayer");
+            backdropCheckerImage = CreateCheckerLayer(root, "CheckerboardOverlay");
             backdropGradientImage = CreateGradient(root, "ScreenGradient", new Color(1f, 1f, 1f, 0.38f));
             backdropGridTransform = CreateLayer(root, "DatumGrid");
             BuildDatumGrid(backdropGridTransform, canvasSize);
@@ -347,6 +426,171 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             return image;
         }
 
+        private static RawImage CreateCheckerLayer(RectTransform parent, string name)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(RawImage));
+            RectTransform rt = go.GetComponent<RectTransform>();
+            rt.SetParent(parent, worldPositionStays: false);
+            AvKit.Stretch(rt);
+
+            RawImage raw = go.GetComponent<RawImage>();
+            raw.texture = GetCheckerTexture();
+            raw.raycastTarget = false;
+            go.SetActive(false);
+            return raw;
+        }
+
+        private static Texture2D GetCheckerTexture()
+        {
+            if (checkerTexture != null) return checkerTexture;
+            checkerTexture = new Texture2D(2, 2, TextureFormat.RGBA32, mipChain: false)
+            {
+                filterMode = FilterMode.Point,
+                wrapMode = TextureWrapMode.Repeat,
+                name = "Avionics_Checkerboard",
+                hideFlags = HideFlags.HideAndDontSave
+            };
+            Color light = new Color(1f, 1f, 1f, 1f);
+            Color dark = new Color(0f, 0f, 0f, 0f);
+            checkerTexture.SetPixel(0, 0, light);
+            checkerTexture.SetPixel(1, 0, dark);
+            checkerTexture.SetPixel(0, 1, dark);
+            checkerTexture.SetPixel(1, 1, light);
+            checkerTexture.Apply(updateMipmaps: false, makeNoLongerReadable: true);
+            return checkerTexture;
+        }
+
+        private static Sprite GetWallpaperSprite(int preset, out bool isTiled)
+        {
+            isTiled = true;
+            if (preset >= 0 && preset < presetSprites.Length)
+            {
+                if (presetSprites[preset] == null)
+                    presetSprites[preset] = CreatePresetSprite(preset);
+                return presetSprites[preset];
+            }
+
+            if (preset == 3)
+            {
+                Sprite custom = LoadCustomWallpaper(out isTiled);
+                if (custom != null) return custom;
+                isTiled = true;
+                if (presetSprites[0] == null)
+                    presetSprites[0] = CreatePresetSprite(0);
+                return presetSprites[0];
+            }
+
+            return null;
+        }
+
+        private static Sprite CreatePresetSprite(int preset)
+        {
+            int size = preset == 1 ? 16 : (preset == 2 ? 64 : 32);
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, mipChain: false)
+            {
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Repeat,
+                name = "Avionics_WallpaperPreset_" + preset,
+                hideFlags = HideFlags.HideAndDontSave
+            };
+
+            Color clear = new Color(0f, 0f, 0f, 0f);
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    Color pixel = clear;
+                    if (preset == 0) // Hexagon / geometric matrix
+                    {
+                        int hx = (x + (y % 16 < 8 ? 0 : 8)) % 16;
+                        int hy = y % 8;
+                        bool edge = hx == 0 || hy == 0 || (hx + hy) == 7 || ((hx - hy + 8) % 8 == 0);
+                        if (edge) pixel = new Color(0.25f, 0.70f, 0.45f, 0.45f);
+                    }
+                    else if (preset == 1) // Carbon micro-weave
+                    {
+                        bool block = ((x / 4) + (y / 4)) % 2 == 0;
+                        bool stripe = (x % 2 == 0);
+                        pixel = block ^ stripe
+                            ? new Color(0.12f, 0.28f, 0.20f, 0.60f)
+                            : new Color(0.04f, 0.08f, 0.06f, 0.45f);
+                    }
+                    else if (preset == 2) // Radar sweep rings & crosshairs
+                    {
+                        float dx = x - 31.5f;
+                        float dy = y - 31.5f;
+                        float d = Mathf.Sqrt(dx * dx + dy * dy);
+                        bool ring = Mathf.Abs(d - 10f) < 0.9f || Mathf.Abs(d - 20f) < 0.9f || Mathf.Abs(d - 30f) < 0.9f;
+                        bool cross = (Mathf.Abs(dx) < 0.7f && d <= 31f) || (Mathf.Abs(dy) < 0.7f && d <= 31f);
+                        if (ring || cross) pixel = new Color(0.20f, 0.85f, 0.50f, 0.50f);
+                    }
+                    tex.SetPixel(x, y, pixel);
+                }
+            }
+
+            tex.Apply(updateMipmaps: false, makeNoLongerReadable: true);
+            var sprite = Sprite.Create(
+                tex,
+                new Rect(0f, 0f, size, size),
+                new Vector2(0.5f, 0.5f),
+                32f,
+                0u,
+                SpriteMeshType.FullRect);
+            sprite.name = "Avionics_WallpaperSprite_" + preset;
+            sprite.hideFlags = HideFlags.HideAndDontSave;
+            return sprite;
+        }
+
+        private static Sprite LoadCustomWallpaper(out bool isTiled)
+        {
+            isTiled = false;
+            string[] candidates = {
+                Path.Combine(Paths.ConfigPath, "BoscaliSummer", "wallpaper.png"),
+                Path.Combine(Paths.ConfigPath, "BoscaliSummer", "wallpaper.jpg"),
+                Path.Combine(Paths.PluginPath, "BoscaliSummer", "wallpaper.png"),
+                Path.Combine(Paths.PluginPath, "BoscaliSummer", "wallpaper.jpg")
+            };
+
+            string found = null;
+            foreach (string path in candidates)
+            {
+                if (File.Exists(path)) { found = path; break; }
+            }
+
+            if (found == null) return null;
+            if (customWallpaperSprite != null && customWallpaperPath == found) return customWallpaperSprite;
+
+            try
+            {
+                byte[] data = File.ReadAllBytes(found);
+                var tex = new Texture2D(2, 2, TextureFormat.RGBA32, mipChain: false)
+                {
+                    filterMode = FilterMode.Bilinear,
+                    wrapMode = TextureWrapMode.Clamp,
+                    hideFlags = HideFlags.HideAndDontSave
+                };
+                if (!ImageConversion.LoadImage(tex, data, markNonReadable: true))
+                {
+                    Object.Destroy(tex);
+                    return null;
+                }
+                customWallpaperSprite = Sprite.Create(
+                    tex,
+                    new Rect(0f, 0f, tex.width, tex.height),
+                    new Vector2(0.5f, 0.5f),
+                    100f,
+                    0u,
+                    SpriteMeshType.FullRect);
+                customWallpaperSprite.hideFlags = HideFlags.HideAndDontSave;
+                customWallpaperPath = found;
+                return customWallpaperSprite;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
         private static RectTransform CreateLayer(RectTransform parent, string name)
         {
             var go = new GameObject(name, typeof(RectTransform));
@@ -361,6 +605,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             for (int i = root.childCount - 1; i >= 0; i--)
                 Object.Destroy(root.GetChild(i).gameObject);
             backdropUserImage = null;
+            backdropCheckerImage = null;
             backdropGradientImage = null;
             backdropGridTransform = null;
         }

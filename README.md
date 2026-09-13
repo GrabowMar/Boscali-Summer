@@ -23,16 +23,23 @@ Nuclear Option** — every expensive system pooled, event-driven, and globally b
 
 ## What it does
 
+- **Dynamic trenches (experimental)** — connected 72m fighting lines near faction-owned frontline borders, preferring roads and dry, level ground. Start with two native MG emplacements; undamaged positions deepen, add AT and AA defenses, and extend rear communications (six defenders/site, 96 total). Hits pause construction for a minute; lost defenders stay lost. Requires Command. Vanilla combat units replicate; procedural earthworks and trench map marks remain host-local. Combat/placement acceptance in-game is pending.
+
 - **Fire & destruction** — guns, missiles and destroyed ground vehicles can ignite civilian
   buildings or procedural forests (deliberately low, probabilistic chance). Forest fires
   grow, throw wind-biased downwind fronts, clear trees and leave ash scars. Buildings pass
   intact → burning → ruined; an explosive hit also stamps a local scorch decal. Ruins get
   pooled collapse dust and permanent intermittent smoulder. Destroyed aircraft wreckage
   lingers and smokes instead of vanishing after 30 s.
-- **Occupied buildings** — a few civilian shells around controlled airbases become logic-only
-  defensive positions backed by hidden vanilla `DEF` proxies; the shell keeps its normal
-  look and ownership. Air assault adds bounded, visible insertion sequences (presentation
-  only; vanilla emplacements own the combat).
+- **Occupied buildings** — suitable civilian roofs receive visible native MG, AT-145 or
+  23 mm AA nests, sandbag cover and faction-coloured flags. One weapon per occupied building,
+  capped at six buildings per zone and 96 overall; small, obstructed or sloping roofs are
+  skipped. Native spawning carries weapons to clients and late joiners; matching builds
+  reconstruct the decoration. In-game/multiplayer acceptance is pending.
+  Air assault adds bounded, visible insertion sequences (presentation
+  only; vanilla emplacements own the combat). Ibis fast-rope insertions consume eight
+  troops each, allowing two drops from a sixteen-man load, with MG / AT / AA / MG
+  encampments. Empty troop benches disappear and the ammunition display decreases.
 - **Radio** — a client-local map-MFD music player (`RAD` bezel) for your own OGG/WAV
   stations, routed through the game's music mixer. Three starter stations; no bundled audio.
 - **Squad & aces** — `SQD` holds **PILOT**, **ABILITIES** and **ENEMY WINGS**. Wing
@@ -53,14 +60,22 @@ Nuclear Option** — every expensive system pooled, event-driven, and globally b
 - **Expanded tactical map** — `Command.ExpandedMapUi` (default on): left-side MFD pages and
   event log, central map, right-side bezel rail, native spawn footer, with shared Wing
   Command bezel and map-input ownership.
+  MAP separates **Layers** from **Readability**, with larger labeled controls, explicit
+  ON/OFF states, Show all / Hide all, and native hover-detail/symbol-size settings.
+- **Faction resources** — larger funds, warheads and active-asset manpower readouts, with
+  selectable recent-history graphs. Morale is stored per faction for the mission: 0–100,
+  initially 100, with host-side read/write access and no gameplay effects yet. Remote
+  clients show Morale as unavailable. In-game panel acceptance remains pending.
 - **Quality of life** (`QoL.Enabled`, client-local, independent of Support/Progression) —
   smooth third-person orbit/chase framing with a steady horizon and room to aim, HUD and
   native-minimap restore in external views, a framed target-camera feed while targets are
   selected, one expiring camera-observation mark (**F8** / OPS **MARK CAMERA**), and an
   opt-in gun aim-assist nudge (`GunAimAssist`, default off, pending flight testing).
 - **Dynamic operations** (`DynamicOperations.Enabled`, **default off**, experimental) —
-  automatic secondary missions (capture / defend / interdict) with one-time faction money
-  and XP awards and finite convoy/fortification spawns. See
+  randomized, acceptance-based contracts: capture, defense, ground/air hunts, patrol,
+  sustained jamming and Ibis ground/rooftop insertions. MIS → SECONDARY has Available,
+  Active and Results tabs; accepted objectives receive map markers. One-time faction money,
+  mission-score XP (feeding existing perk progression), morale and finite convoy/fortification rewards. See
   [docs/DYNAMIC_OPERATIONS.md](docs/DYNAMIC_OPERATIONS.md).
 
 Active fires, ruins and garrisons sync for multiplayer and late joiners; only authoritative
@@ -137,6 +152,7 @@ anything) or **client-local**. This table is a curated subset; F1 shows the rest
 | Support | `ReconSweep` `Fortification` `RodFromGod` `EmpShock` `FlareBarrage` | `true` | Per-action toggles (flare barrage shares the Satellite Scan authorisation) |
 | Support | `MaximumRangeMeters` / `RequestCooldownSeconds` | `30000` / `30` | Strike delivery reach; cooldown per player |
 | Support | `FireMissionDefinitionKey` | *(empty)* | Missile for Rod from God / EMP; empty auto-picks a yield ≤ 200 vanilla missile |
+| Support | Map effect areas | — | All five abilities show icons and radii; rod has a 150 m core inside a 420 m blast boundary. Active markers use host-approved values (support protocol 3; matching peers required). |
 | Command | `Enabled` / `ExpandedMapUi` | `true` / `true` | STR screen + overlays + AI target scoring; full tactical map GUI |
 | Command | `FrontlinesOverlay` / `OverlayOpacity` | `true` / `0.35` | Sector-control grid on the map |
 | DynamicOperations | `Enabled` / `RewardMultiplier` | `false` / `1.0` | Experimental secondary missions; scale money & XP |

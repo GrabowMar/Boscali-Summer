@@ -26,6 +26,10 @@ namespace BoscaliSummer.Features.Trenches.Visuals
 
         private int currentLod = -1;
         private float nextLodCheckTime;
+        public float CameraDistance { get; private set; }
+        public Vector3 WorldCenter => network != null ? transform.TransformPoint(network.Center) : transform.position;
+        public string EarthMaterial { get; private set; }
+        public int MeshCount => proceduralMeshes.Count;
 
         public void Initialize(TrenchNetwork net)
         {
@@ -34,9 +38,9 @@ namespace BoscaliSummer.Features.Trenches.Visuals
 
             if (Datum.origin != null)
             {
-                transform.SetParent(Datum.origin, true);
+                transform.SetParent(Datum.origin, false);
             }
-            transform.position = Vector3.zero;
+            transform.localPosition = Vector3.zero;
             transform.rotation = Quaternion.identity;
 
             Rebuild();
@@ -50,6 +54,7 @@ namespace BoscaliSummer.Features.Trenches.Visuals
 
             Material earthMat = TrenchMaterialResolver.GetEarthBermMaterial();
             Material concreteMat = TrenchMaterialResolver.GetConcreteMaterial();
+            EarthMaterial = earthMat != null ? earthMat.name + " / " + earthMat.shader?.name : "MISSING";
 
             // 1. Create LOD roots if needed
             if (lod0Root == null)
@@ -115,6 +120,16 @@ namespace BoscaliSummer.Features.Trenches.Visuals
                     mf.sharedMesh = edgeMesh1;
                     mr.sharedMaterial = earthMat;
                 }
+                Mesh ribbon = TrenchMeshBuilder.BuildEdgeMesh(edge.PathPoints,
+                    edge.TrenchWidth + 1f, 0.08f, 0.05f, network.ThreatDirection);
+                if (ribbon != null)
+                {
+                    proceduralMeshes.Add(ribbon);
+                    var scar = new GameObject($"Edge_{edge.Id}_LOD2");
+                    scar.transform.SetParent(lod2Root.transform, false);
+                    scar.AddComponent<MeshFilter>().sharedMesh = ribbon;
+                    scar.AddComponent<MeshRenderer>().sharedMaterial = earthMat;
+                }
             }
 
             // 3. Build Node Meshes (Bunkers, Weapon Pits, Foxholes)
@@ -134,7 +149,8 @@ namespace BoscaliSummer.Features.Trenches.Visuals
                         break;
                     case TrenchNodeType.Foxhole:
                     case TrenchNodeType.RifleBay:
-                        nodeMesh = TrenchMeshBuilder.BuildFoxholeMesh();
+                    case TrenchNodeType.TrenchJunction:
+                        nodeMesh = TrenchMeshBuilder.BuildFightingBayMesh();
                         break;
                 }
 
@@ -143,13 +159,22 @@ namespace BoscaliSummer.Features.Trenches.Visuals
                     proceduralMeshes.Add(nodeMesh);
                     var nodeObj = new GameObject($"Node_{node.Id}_{node.Type}");
                     nodeObj.transform.SetParent(lod0Root.transform, false);
-                    nodeObj.transform.position = node.Position;
+                    nodeObj.transform.localPosition = node.Position;
                     nodeObj.transform.rotation = node.Rotation;
 
                     var mf = nodeObj.AddComponent<MeshFilter>();
                     var mr = nodeObj.AddComponent<MeshRenderer>();
                     mf.sharedMesh = nodeMesh;
                     mr.sharedMaterial = nodeMat;
+                    for (int lod = 1; lod <= 2; lod++)
+                    {
+                        var marker = new GameObject($"Node_{node.Id}_LOD{lod}");
+                        marker.transform.SetParent(lod == 1 ? lod1Root.transform : lod2Root.transform, false);
+                        marker.transform.localPosition = node.Position;
+                        marker.transform.localRotation = node.Rotation;
+                        marker.AddComponent<MeshFilter>().sharedMesh = nodeMesh;
+                        marker.AddComponent<MeshRenderer>().sharedMaterial = nodeMat;
+                    }
 
                     // Simple box collider for bunker
                     if (node.Type == TrenchNodeType.BunkerBlindage)
@@ -179,14 +204,17 @@ namespace BoscaliSummer.Features.Trenches.Visuals
                 Vector3 mid = (p0 + p1) * 0.5f;
                 Vector3 fwd = (p1 - p0).normalized;
 
-                var colObj = new GameObject($"Collider_{i}");
-                colObj.transform.SetParent(parent.transform, false);
-                colObj.transform.position = mid + Vector3.up * (height * 0.5f);
-                colObj.transform.rotation = Quaternion.LookRotation(fwd, Vector3.up);
-
-                var box = colObj.AddComponent<BoxCollider>();
-                box.size = new Vector3(width + 2.0f, height + 0.4f, len);
-                colliders.Add(box);
+                Vector3 side = Vector3.Cross(Vector3.up, fwd).normalized;
+                for (int wall = -1; wall <= 1; wall += 2)
+                {
+                    var colObj = new GameObject($"BermCollider_{i}_{wall}");
+                    colObj.transform.SetParent(parent.transform, false);
+                    colObj.transform.localPosition = mid + side * (wall * (width * 0.5f + 0.6f)) + Vector3.up * (height * 0.5f);
+                    colObj.transform.localRotation = Quaternion.LookRotation(fwd, Vector3.up);
+                    var box = colObj.AddComponent<BoxCollider>();
+                    box.size = new Vector3(1.2f, height, len);
+                    colliders.Add(box);
+                }
             }
         }
 
@@ -209,8 +237,9 @@ namespace BoscaliSummer.Features.Trenches.Visuals
             if (cam == null) return;
 
             Vector3 camPos = cam.transform.position;
-            Vector3 center = (network != null) ? network.Center : transform.position;
+            Vector3 center = WorldCenter;
             float dist = Vector3.Distance(camPos, center);
+            CameraDistance = dist;
 
             int newLod;
             if (dist < Lod0Distance) newLod = 0;
@@ -226,7 +255,7 @@ namespace BoscaliSummer.Features.Trenches.Visuals
             if (lod2Root != null) lod2Root.SetActive(currentLod == 2);
 
             // Colliders only active at close distance (LOD0) to minimize PhysX overhead
-            bool collidersActive = (currentLod == 0);
+            bool collidersActive = (currentLod == 0 && network != null && !network.Overrun);
             for (int i = 0; i < colliders.Count; i++)
             {
                 if (colliders[i] != null) colliders[i].enabled = collidersActive;

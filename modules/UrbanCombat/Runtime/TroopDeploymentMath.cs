@@ -15,7 +15,7 @@ namespace BoscaliSummer.Garrisons
         public static int ComputeDropSize(int ammo, int desiredPerDeploy)
         {
             int desired = Math.Max(1, desiredPerDeploy);
-            int available = Math.Max(1, ammo);
+            int available = Math.Max(0, ammo);
             return Math.Min(desired, available);
         }
 

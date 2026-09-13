@@ -64,6 +64,12 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
                     missile.SetAimpoint(target.ToGlobalPosition(), Vector3.zero);
                     missile.Arm();
                     Visuals.KineticRodStrikeVisuals.Track(missile, target);
+                    float deadline = Time.time + 30f;
+                    while (missile != null && !missile.disabled && Time.time < deadline)
+                        yield return null;
+                    if (missile != null && !missile.disabled)
+                        Object.Destroy(missile.gameObject); // Expiry is not an impact; native network object teardown.
+
                 }
             }
             finally

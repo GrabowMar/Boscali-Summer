@@ -11,6 +11,43 @@ namespace BoscaliSummer.Features.Trenches.Visuals
     /// </summary>
     internal static class TrenchMeshBuilder
     {
+        /// <summary>Rectangular revetted fighting bay with an open front, not a buried ring.</summary>
+        public static Mesh BuildFightingBayMesh()
+        {
+            var vertices = new List<Vector3>();
+            var triangles = new List<int>();
+            // Raised timber-sized courses in a U, with staggered ends and a dry floor.
+            for (int row = 0; row < 3; row++)
+            {
+                float y = 0.2f + row * 0.35f;
+                Box(vertices, triangles, new Vector3(-2.1f, y, 0), new Vector3(0.85f, 0.36f, 5.2f - row * 0.25f));
+                Box(vertices, triangles, new Vector3(2.1f, y, 0), new Vector3(0.85f, 0.36f, 5.2f - row * 0.25f));
+                Box(vertices, triangles, new Vector3(0, y, -2.2f), new Vector3(4.2f, 0.36f, 0.85f));
+            }
+            for (int plank = 0; plank < 9; plank++)
+                Box(vertices, triangles, new Vector3(0, 0.09f, -1.6f + plank * 0.4f), new Vector3(3.3f, 0.12f, 0.34f));
+            var mesh = new Mesh { name = "Trench_RevettedBay" };
+            mesh.SetVertices(vertices);
+            mesh.SetTriangles(triangles, 0);
+            var uv = new Vector2[vertices.Count];
+            for (int i = 0; i < uv.Length; i++) uv[i] = new Vector2(vertices[i].x, vertices[i].z);
+            mesh.uv = uv;
+            mesh.RecalculateNormals();
+            mesh.RecalculateTangents();
+            mesh.RecalculateBounds();
+            return mesh;
+        }
+
+        private static void Box(List<Vector3> vertices, List<int> triangles, Vector3 center, Vector3 size)
+        {
+            int start = vertices.Count;
+            for (int corner = 0; corner < 8; corner++)
+                vertices.Add(center + new Vector3((corner & 1) == 0 ? -size.x : size.x,
+                    (corner & 2) == 0 ? -size.y : size.y, (corner & 4) == 0 ? -size.z : size.z) * 0.5f);
+            int[] indices = { 0,2,1, 1,2,3, 4,5,6, 5,7,6, 0,4,2, 2,4,6,
+                1,3,5, 3,7,5, 2,6,3, 3,6,7, 0,1,4, 1,5,4 };
+            foreach (int index in indices) triangles.Add(start + index);
+        }
         /// <summary>
         /// Extrudes a continuous raised berm and trench trough along a path polyline.
         /// </summary>
@@ -41,6 +78,9 @@ namespace BoscaliSummer.Features.Trenches.Visuals
             var triangles = new List<int>((ringCount - 1) * (ringSize - 1) * 6);
 
             float accumulatedLength = 0f;
+            // Choose the parapet side once for the whole strip. Flipping individual
+            // rings on an S-curve twists the walls through the corridor.
+            bool flipProfile = Vector3.Dot(Vector3.Cross(Vector3.up, path[1] - path[0]), threatDir) < 0f;
 
             for (int r = 0; r < ringCount; r++)
             {
@@ -60,7 +100,7 @@ namespace BoscaliSummer.Features.Trenches.Visuals
                 if (right.sqrMagnitude < 0.001f) right = Vector3.right;
 
                 // Ensure right points toward threat direction for the parapet
-                if (Vector3.Dot(right, threatDir) < 0f)
+                if (flipProfile)
                 {
                     right = -right;
                 }
@@ -92,6 +132,10 @@ namespace BoscaliSummer.Features.Trenches.Visuals
             {
                 int r0 = r * ringSize;
                 int r1 = (r + 1) * ringSize;
+                // Facing the threat can mirror the cross-section. Mirror triangle
+                // winding too, otherwise the entire berm is back-face culled from above.
+                bool mirrored = Vector3.Cross(path[r + 1] - path[r],
+                    vertices[r0 + 6] - vertices[r0]).y < 0f;
 
                 for (int s = 0; s < ringSize - 1; s++)
                 {
@@ -101,12 +145,12 @@ namespace BoscaliSummer.Features.Trenches.Visuals
                     int d = r0 + s + 1;
 
                     triangles.Add(a);
-                    triangles.Add(b);
-                    triangles.Add(c);
+                    triangles.Add(mirrored ? c : b);
+                    triangles.Add(mirrored ? b : c);
 
                     triangles.Add(a);
-                    triangles.Add(c);
-                    triangles.Add(d);
+                    triangles.Add(mirrored ? d : c);
+                    triangles.Add(mirrored ? c : d);
                 }
             }
 
@@ -114,6 +158,7 @@ namespace BoscaliSummer.Features.Trenches.Visuals
             mesh.uv = uvs;
             mesh.triangles = triangles.ToArray();
             mesh.RecalculateNormals();
+            mesh.RecalculateTangents();
             mesh.RecalculateBounds();
 
             return mesh;

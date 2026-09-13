@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using BoscaliSummer.Framework.Contracts;
 #if !NET8_0_OR_GREATER
 using UnityEngine;
 #endif
@@ -456,6 +457,31 @@ namespace BoscaliSummer.Features.Command.Runtime
             }
 
             FrontlineSegmentCount = segments;
+        }
+
+        public int CopyFrontlineSites(FrontlineSite[] destination)
+        {
+            if (destination == null || destination.Length == 0) return 0;
+            int count = 0;
+            for (int r = 0; r < ResolutionY; r++)
+            for (int c = 0; c < ResolutionX; c++)
+            {
+                if (GetSectorControl(c, r) != SectorControl.Friendly) continue;
+                CellToWorldBounds(c, r, out float x0, out float z0, out float x1, out float z1);
+                byte borders = frontlineBorders[r * ResolutionX + c];
+                for (int side = 0; side < 4; side++)
+                {
+                    if ((borders & (1 << side)) == 0) continue;
+                    float dx = side == 1 ? 1 : side == 3 ? -1 : 0;
+                    float dz = side == 0 ? 1 : side == 2 ? -1 : 0;
+                    float x = (x0 + x1) * 0.5f + dx * ((x1 - x0) * 0.5f - 150f);
+                    float z = (z0 + z1) * 0.5f + dz * ((z1 - z0) * 0.5f - 150f);
+                    destination[count++] = new FrontlineSite(x, z, dx, dz,
+                        (dx == 0 ? x1 - x0 : z1 - z0) * 0.5f);
+                    if (count == destination.Length) return count;
+                }
+            }
+            return count;
         }
 
         private static bool IsOpposing(SectorControl a, SectorControl b)

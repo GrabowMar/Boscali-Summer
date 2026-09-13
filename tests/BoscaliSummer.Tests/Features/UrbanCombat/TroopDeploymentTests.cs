@@ -16,8 +16,18 @@ namespace BoscaliSummer.Tests.Features.UrbanCombat
                 "short ammo caps the squad to what remains");
             TestAssert.That(TroopDeploymentMath.ComputeDropSize(1, 8) == 1,
                 "one remaining infantry drops a single soldier");
-            TestAssert.That(TroopDeploymentMath.ComputeDropSize(0, 8) == 1,
-                "zero ammo never yields a negative/zero drop");
+            TestAssert.That(TroopDeploymentMath.ComputeDropSize(0, 8) == 0,
+                "empty mounts cannot create troops");
+
+            int aboard = 16;
+            for (int insertion = 0; insertion < 2; insertion++)
+            {
+                int deployed = TroopDeploymentMath.ComputeDropSize(aboard, TroopDeploymentMath.DefaultSquadSize);
+                TestAssert.That(deployed == 8, "each of two insertions uses eight troops");
+                aboard -= deployed;
+            }
+            TestAssert.That(aboard == 0 && TroopDeploymentMath.ComputeDropSize(aboard, 8) == 0,
+                "a sixteen-man load cannot perform a third insertion");
 
             // Tier: bigger committed force -> bigger encampment.
             TestAssert.That(TroopDeploymentMath.ComputeTier(0) == 1, "no troops still garrisons a tier-1 outpost");

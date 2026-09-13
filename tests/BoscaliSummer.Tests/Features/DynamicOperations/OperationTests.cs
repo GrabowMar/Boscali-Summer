@@ -13,6 +13,7 @@ namespace BoscaliSummer.Tests.Features.DynamicOperations
             BoardRetainsHistoryAndBounds();
             InvalidTimeCannotChangeState();
             InterdictionDistinguishesDespawnFromCombat();
+            AcceptanceAndContinuousTasks();
         }
 
         private static void InterdictionDistinguishesDespawnFromCombat()
@@ -33,8 +34,52 @@ namespace BoscaliSummer.Tests.Features.DynamicOperations
                 "Destroying a target after an allegiance change cannot satisfy the original interdiction");
         }
 
-        private static Operation Create(int id, OperationKind kind, int target = 100, float now = 10f) =>
-            new Operation(id, target, kind, OperationReward.None, now, 1200, 100);
+        private static Operation Create(int id, OperationKind kind, int target = 100, float now = 10f)
+        {
+            var operation = new Operation(id, target, kind, OperationReward.None, now, 1200, 100);
+            operation.Accept(now);
+            return operation;
+        }
+
+        private static void AcceptanceAndContinuousTasks()
+        {
+            var board = new OperationBoard();
+            for (int i = 1; i <= 3; i++) board.TryAdd(new Operation(i, i, OperationKind.Patrol, OperationReward.None, 0f, 700, 60));
+            Operation offer = board.Operations[0];
+            offer.Observe(10f, 2f, true, true, true, true, true);
+            TestAssert.That(offer.State == OperationState.Offered && offer.Progress == 0f && !offer.TryTakeAward(), "Offers cannot progress or pay before acceptance");
+            board.Prune(70f);
+            TestAssert.That(board.Operations.Count == 3, "Live offers survive result pruning");
+            TestAssert.That(!board.TryAccept(99, 100f) && board.TryAccept(1, 100f) && board.TryAccept(2, 100f) &&
+                !board.TryAccept(3, 100f) && !board.TryAccept(1, 101f), "Acceptance validates identity, duplicate transitions and two-active limit");
+            TestAssert.That(offer.Deadline == 1300f, "Acceptance starts a fresh execution timer");
+            offer.Cancel(101f);
+            TestAssert.That(!offer.TryTakeAward() && board.TryAccept(3, 102f), "Aborting releases capacity without an award");
+            var expired = new Operation(4, 4, OperationKind.Capture, OperationReward.None, 0f, 1, 1);
+            TestAssert.That(!expired.Accept(300f) && !expired.Accept(float.NaN), "Expired and invalid-time offers cannot be accepted");
+            expired.Observe(300f, 1f, true, true, true);
+            TestAssert.That(expired.State == OperationState.Expired && !expired.TryTakeAward(), "Offer expiry beats automatic completion");
+            foreach (OperationKind kind in new[] { OperationKind.Patrol, OperationKind.Jam, OperationKind.Defend })
+            {
+                Operation task = Create(8, kind, now: 0f);
+                task.Observe(1f, 1f, true, true, false, true);
+                task.Observe(2f, 1f, true, true, false, false);
+                TestAssert.That(task.HoldSeconds == 0f, "Interrupted holds reset for " + kind);
+                for (int second = 1; second <= task.HoldRequired; second++) task.Observe(2f + second, 1f, true, true, false, true);
+                TestAssert.That(task.State == OperationState.Completed && task.TryTakeAward() && !task.TryTakeAward(), "Full continuous hold pays once for " + kind);
+            }
+            foreach (OperationKind kind in new[] { OperationKind.Rappel, OperationKind.Rooftop })
+            {
+                Operation task = Create(9, kind);
+                task.Observe(11f, 1f, true, true, false, true, false);
+                TestAssert.That(task.State == OperationState.Active, "Hovering cannot complete insertion");
+                task.Observe(12f, 1f, true, true, false, true, true);
+                TestAssert.That(task.TryTakeAward(), "Verified landing completes insertion");
+            }
+            Operation jam = Create(10, OperationKind.Jam);
+            jam.Observe(11f, 1f, true, true, true, true);
+            TestAssert.That(jam.State == OperationState.Cancelled && !jam.TryTakeAward(), "Destroying an emitter cannot complete a jamming contract");
+        }
 
         private static void CaptureAndInterdictionAwardOnce()
         {

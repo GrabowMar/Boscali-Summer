@@ -62,12 +62,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             columns = layout;
             ResolveSources();
 
-            if (panel == null)
-            {
-                Transform existing = canvas.transform.Find(PanelName);
-                panel = existing as RectTransform;
-            }
-
+            // Restore may have queued the previous panel for destruction this frame.
+            // Only reuse our live reference; a name lookup can resurrect that doomed panel.
             if (panel == null)
             {
                 var go = new GameObject(PanelName, typeof(RectTransform), typeof(Image));

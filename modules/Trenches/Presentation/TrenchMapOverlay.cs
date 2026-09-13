@@ -150,7 +150,7 @@ namespace BoscaliSummer.Features.Trenches.Presentation
         {
             try
             {
-                MapSettings ms = FindObjectOfType<MapSettings>();
+                MapSettings ms = NetworkSceneSingleton<LevelInfo>.i?.LoadedMapSettings;
                 if (ms != null && ms.MapSize.x > 1000f && ms.MapSize.y > 1000f)
                 {
                     theaterDimensions = ms.MapSize;
@@ -187,14 +187,16 @@ namespace BoscaliSummer.Features.Trenches.Presentation
             int h = overlayTexture.height;
             Color32[] pixels = new Color32[w * h]; // Initialized to (0,0,0,0)
 
-            Color32 trenchColor = new Color32(45, 38, 28, 240);       // Dark earth brown
             Color32 crenellationColor = new Color32(20, 18, 14, 255); // Sharp charcoal
-            Color32 bunkerColor = new Color32(210, 175, 80, 255);     // Tactical amber strongpoint
 
             var networks = trenchManager.Networks;
             for (int n = 0; n < networks.Count; n++)
             {
                 TrenchNetwork net = networks[n];
+                Color32 factionColor = net.OwnerHq == dynamicMap?.HQ
+                    ? new Color32(65, 210, 255, 255) : new Color32(255, 100, 80, 255);
+                if (net.Overrun) factionColor = new Color32(130, 130, 130, 180);
+                else if (net.Suppressed) factionColor = new Color32(255, 195, 65, 255);
 
                 // 1. Draw Edges (Continuous trench polyline)
                 foreach (var edge in net.Edges)
@@ -206,7 +208,7 @@ namespace BoscaliSummer.Features.Trenches.Presentation
                         Vector2 p0 = WorldToTex(edge.PathPoints[p], w, h);
                         Vector2 p1 = WorldToTex(edge.PathPoints[p + 1], w, h);
 
-                        DrawLine(pixels, w, h, (int)p0.x, (int)p0.y, (int)p1.x, (int)p1.y, trenchColor, 2);
+                        DrawLine(pixels, w, h, (int)p0.x, (int)p0.y, (int)p1.x, (int)p1.y, factionColor, 2);
 
                         // Draw perpendicular NATO crenellations / tick marks on fire trenches
                         if (edge.Type == TrenchEdgeType.ZigzagFireTrench)
@@ -224,12 +226,20 @@ namespace BoscaliSummer.Features.Trenches.Presentation
                 // 2. Draw Nodes (Bunkers, Heavy Weapon Pits)
                 foreach (var node in net.Nodes)
                 {
-                    if (node.Type == TrenchNodeType.BunkerBlindage || node.Type == TrenchNodeType.HeavyWeaponPit)
-                    {
-                        Vector2 nodePos = WorldToTex(node.Position, w, h);
-                        DrawFilledSquare(pixels, w, h, (int)nodePos.x, (int)nodePos.y, 4, bunkerColor);
-                    }
+                    Vector2 nodePos = WorldToTex(node.Position, w, h);
+                    DrawFilledSquare(pixels, w, h, (int)nodePos.x, (int)nodePos.y, 2, factionColor);
                 }
+                // Stage ticks and a crossed-out neutralized position remain legible
+                // without relying only on red/blue/amber colour differences.
+                Vector2 center = WorldToTex(net.Center, w, h);
+                int cx = (int)center.x, cy = (int)center.y;
+                if (net.Overrun)
+                {
+                    DrawLine(pixels, w, h, cx - 4, cy - 4, cx + 4, cy + 4, factionColor, 1);
+                    DrawLine(pixels, w, h, cx - 4, cy + 4, cx + 4, cy - 4, factionColor, 1);
+                }
+                else for (int tick = 0; tick < (int)net.Stage; tick++)
+                    DrawLine(pixels, w, h, cx - 6 + tick * 4, cy + 6, cx - 6 + tick * 4, cy + 9, factionColor, 1);
             }
 
             overlayTexture.SetPixels32(pixels);

@@ -31,7 +31,8 @@ namespace BoscaliSummer.Runtime
                 new[] { typeof(PersistentID), typeof(GlobalPosition), typeof(float) }) != null;
             bool dynamicOperations = AccessTools.Property(typeof(MissionManager), nameof(MissionManager.IsRunning)) != null &&
                 AccessTools.Method(typeof(FactionHQ), nameof(FactionHQ.RewardPlayer)) != null &&
-                AccessTools.Method(typeof(FactionHQ), nameof(FactionHQ.GetTrackingData)) != null && supportSpawning;
+                  AccessTools.Method(typeof(FactionHQ), nameof(FactionHQ.GetTrackingData)) != null &&
+                  AccessTools.Method(typeof(Unit), nameof(Unit.Jam), new[] { typeof(Unit.JamEventArgs) }) != null && supportSpawning;
             Plugin.Logger.LogInfo(
                 "Capabilities: " +
                 $"BulletImpacts={bullet}, MissileImpacts={missile}, VehicleLosses={vehicle}, " +
@@ -56,6 +57,9 @@ namespace BoscaliSummer.Runtime
                     }
                     string defs = string.Join(", ", labels.ToArray());
                     Plugin.Logger.LogInfo("Vanilla DEF building candidates: " + (string.IsNullOrEmpty(defs) ? "none loaded yet" : defs));
+                    Plugin.Logger.LogInfo("Trench native defense seams: spawn=" +
+                        (AccessTools.Method(typeof(Spawner), nameof(Spawner.SpawnBuilding)) != null) +
+                        ", damage polling=" + (AccessTools.Field(typeof(UnitPart), nameof(UnitPart.hitPoints)) != null));
                 }
             }
             catch (Exception e)

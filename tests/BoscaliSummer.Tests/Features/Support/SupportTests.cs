@@ -72,6 +72,18 @@ namespace BoscaliSummer.Tests.Features.Support
 
         public static void Run()
         {
+            TestAssert.That(SupportEffectPolicy.RodDamage(0f) == 12000f &&
+                SupportEffectPolicy.RodDamage(150f) == 12000f, "rod core must retain its compact lethal plateau");
+            TestAssert.That(SupportEffectPolicy.RodDamage(200f) > SupportEffectPolicy.RodDamage(300f) &&
+                SupportEffectPolicy.RodDamage(300f) > SupportEffectPolicy.RodDamage(419f), "rod blast must fall off with distance");
+            TestAssert.That(SupportEffectPolicy.RodDamage(420f) == 0f &&
+                SupportEffectPolicy.RodDamage(421f) == 0f && SupportEffectPolicy.RodDamage(float.NaN) == 0f,
+                "rod blast must not damage outside the displayed radius");
+            string emp = SupportEffectPolicy.EmpName("BoscaliSummer:Support:Emp:42", 37500.5f);
+            TestAssert.That(SupportEffectPolicy.EmpRadius(emp) == 37500.5f, "EMP radius must survive native name replication");
+            TestAssert.That(SupportEffectPolicy.EmpRadius("bad:r=NaN") == 12000f &&
+                SupportEffectPolicy.EmpRadius("bad:r=Infinity") == 12000f &&
+                SupportEffectPolicy.EmpRadius("bad:r=999999") == 12000f, "invalid EMP metadata must use bounded fallback");
             TestMapGesture();
             TestClickVsDrag();
 

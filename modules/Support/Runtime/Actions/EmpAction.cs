@@ -13,7 +13,7 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
     {
         private const float ReleaseAltitude = 15000f;
         private const float ReleaseSpeed = 2000f;
-        private const float DischargeDelay = 3f;
+        private const float DischargeDelay = SupportEffectPolicy.EmpDelay;
         private const float JamAmount = 1000f;
 
         public float BaseCost(in SupportContext context) =>
@@ -44,7 +44,7 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
                                    " at " + ground.y.ToString("F0") + " m AGL-local, release +" +
                                    ReleaseAltitude.ToString("F0") + " m");
             context.Host.Run(Discharge(context.Host, context.Player, context.Owner, definition, ground,
-                context.Settings.EmpRadius.Value, SupportNaming.Unique("Emp", context)));
+                context.Settings.EmpRadius.Value, SupportEffectPolicy.EmpName(SupportNaming.Unique("Emp", context), context.Settings.EmpRadius.Value)));
             return SupportResult.Accepted;
         }
 
@@ -53,6 +53,7 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
             Vector3 target, float radius, string unique)
         {
             Missile missile = null;
+            GlobalPosition targetGlobal = target.ToGlobalPosition();
             Vector3 dropPoint = target + Vector3.up * ReleaseAltitude;
 
             try
@@ -75,7 +76,8 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
                     }
                 }
 
-                yield return new WaitForSecondsRealtime(DischargeDelay);
+                yield return new WaitForSeconds(DischargeDelay);
+                target = targetGlobal.ToLocalPosition();
 
                 // The burst is an airburst over the mark, not wherever the delivery
                 // missile has wandered. A terrain-following prefab used to put this on
@@ -84,38 +86,53 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
 
                 if (missile != null && !missile.disabled)
                 {
-                    try { missile.Detonate(Vector3.up, false, false); } catch { }
+                    missile.transform.position = burstPoint;
+                    if (missile.rb != null) missile.rb.position = burstPoint;
+                    missile.Detonate(Vector3.up, false, false);
                 }
 
-                // Trigger spectacular custom EMP visual and audio effects
-                Visuals.EmpVisualEffect.Trigger(burstPoint, radius);
 
-                var units = UnitRegistry.allUnits;
-                if (units != null)
+                float radiusSquared = radius * radius;
+                float duration = SupportEffectPolicy.EmpDuration;
+                float elapsed = 0f;
+
+                while (elapsed < duration)
                 {
-                    float radiusSquared = radius * radius;
-                    for (int i = 0; i < units.Count; i++)
+                    target = targetGlobal.ToLocalPosition();
+                    var units = UnitRegistry.allUnits;
+                    if (units != null)
                     {
-                        Unit unit = units[i];
-                        if (unit == null || unit.disabled) continue;
-                        if ((unit.transform.position - target).sqrMagnitude > radiusSquared) continue;
-
-                        unit.Jam(new Unit.JamEventArgs
+                        for (int i = 0; i < units.Count; i++)
                         {
-                            jammingUnit = player != null ? player.Aircraft : null,
-                            jamAmount = JamAmount
-                        });
+                            Unit unit = units[i];
+                            if (unit == null || unit.disabled) continue;
 
-                        // Check if this unit is an aircraft and disruption should apply
-                        if (unit is Aircraft ac)
-                        {
-                            Visuals.CockpitEmpDisruption.TriggerForPlayer(ac, 1f);
+                            float dx = unit.transform.position.x - target.x;
+                            float dz = unit.transform.position.z - target.z;
+                            if (dx * dx + dz * dz > radiusSquared) continue;
+                            if (unit.transform.position.y > Datum.LocalSeaY + 25000f) continue;
+
+                            unit.Jam(new Unit.JamEventArgs
+                            {
+                                jammingUnit = player != null ? player.Aircraft : null,
+                                jamAmount = JamAmount
+                            });
+
+                            if (unit is Aircraft ac && elapsed < 0.5f)
+                            {
+                                Visuals.CockpitEmpDisruption.TriggerForPlayer(ac, 1f);
+                            }
                         }
                     }
-                }
 
-                // Check local player aircraft for cockpit disruption
-                Visuals.CockpitEmpDisruption.CheckLocalDisruption(burstPoint, radius);
+                    if (elapsed < 0.5f)
+                    {
+                        Visuals.CockpitEmpDisruption.CheckLocalDisruption(burstPoint, radius);
+                    }
+
+                    yield return new WaitForSeconds(0.25f);
+                    elapsed += 0.25f;
+                }
             }
             finally
             {

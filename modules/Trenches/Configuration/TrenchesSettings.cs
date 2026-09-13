@@ -24,7 +24,7 @@ namespace BoscaliSummer.Features.Trenches.Configuration
             MaxTrenchNetworks = config.Bind("Trenches", "MaxNetworks", 16,
                 new ConfigDescription(
                     "Maximum concurrent trench networks per theater.",
-                    new AcceptableValueRange<int>(1, 32)));
+                    new AcceptableValueRange<int>(1, 16)));
 
             LODDistanceNear = config.Bind("Trenches", "LODNearDistance", 250f,
                 new ConfigDescription(

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using BoscaliSummer.Features.Command.Runtime;
 using NOAvionics;
 using NOAvionics.Ui;
 using TMPro;
@@ -50,6 +51,15 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private bool definitionsLoaded;
             private LedgerMode ledgerMode;
             private InfoMode infoMode;
+            private int selectedPage;
+            private int resourceSeries;
+            private int renderedResourceSeries = -1;
+            private static readonly string[] ResourceLabels = { "FUNDS", "WARHEADS", "MANPOWER", "MORALE" };
+            private FactionHQ observedHq;
+            private readonly MfdResourceHistory resourceHistory = new MfdResourceHistory();
+            private AvStyled.Metric[] resourceMetrics;
+            private AvButton[] resourceTabs;
+            private MfdResourceChart resourceChart;
 
             public FactionPresenter(MFDScreen screen, InfoPanel_Faction source, VanillaMfdPanelId id)
                 : base(screen, id)
@@ -57,21 +67,23 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 this.source = source;
             }
 
-            protected override int TabCount => 3;
+            protected override int TabCount => 4;
 
             protected override void BuildContent()
             {
-                ConfigureTabs(new[] { "FORCES", "LEDGER", "STATUS" }, SelectPage);
+                ConfigureTabs(new[] { "RESOURCES", "FORCES", "LEDGER", "STATUS" }, SelectPage);
                 pages = new[]
                 {
+                    CreatePage("Resources"),
                     CreatePage("Forces"),
                     CreatePage("Ledger"),
                     CreatePage("Status"),
                 };
 
-                BuildForcesPage(pages[0]);
-                BuildLedgerPage(pages[1]);
-                BuildStatusPage(pages[2]);
+                BuildResourcesPage(pages[0]);
+                BuildForcesPage(pages[1]);
+                BuildLedgerPage(pages[2]);
+                BuildStatusPage(pages[3]);
                 SelectDefinitions(0);
                 SelectPage(0);
             }
@@ -79,14 +91,24 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             protected override void RefreshContent()
             {
                 FactionHQ hq = source == null ? null : source.factionHQ;
+                if (hq != observedHq)
+                {
+                    observedHq = hq;
+                    resourceHistory.Clear();
+                    definitionGrid.ResetPage();
+                    infoGrid.ResetPage();
+                }
                 if (hq == null)
                 {
+                    resourceHistory.Clear();
+                    foreach (RectTransform page in pages) page.gameObject.SetActive(false);
                     Shell.DataBar.State.text = "WAITING FOR FACTION HQ";
                     Shell.DataBar.SetChip(0, "LINK", false);
                     Shell.DataBar.SetChip(1, "DATA", false);
                     Shell.DataBar.SetChip(2, "—", false);
                     return;
                 }
+                pages[selectedPage].gameObject.SetActive(true);
 
                 string name = hq.faction == null ? "FACTION" : hq.faction.factionName;
                 Shell.DataBar.State.text = AvTheme.Truncate((name ?? "FACTION").ToUpperInvariant(), 18);
@@ -99,21 +121,87 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 factionLogo.sprite = logo;
                 factionLogo.enabled = logo != null;
 
-                SetForceTotals(hq.missionStatsTracker == null
-                    ? default(MissionStatsTracker.TypeStat)
-                    : hq.missionStatsTracker.units);
-                RefreshDefinitionGrid(hq);
-                RefreshLedger(hq);
-                RefreshInfo(hq);
+                RefreshResources(hq);
+                if (selectedPage == 1)
+                {
+                    SetForceTotals(hq.missionStatsTracker);
+                    RefreshDefinitionGrid(hq);
+                }
+                else if (selectedPage == 2) RefreshLedger(hq);
+                else if (selectedPage == 3) RefreshInfo(hq);
                 UpdateButtonRows();
             }
 
             protected override string AmbientStatus()
             {
-                return infoMode == InfoMode.Airbases
-                    ? "FACTION FORCE INVENTORY — AIRBASE STATUS"
-                    : "FACTION FORCE INVENTORY — PLAYER STATUS";
+                if (observedHq == null) return "WAITING FOR FACTION HQ";
+                switch (selectedPage)
+                {
+                    case 0: return "MORALE STORED ON HOST • NO GAMEPLAY EFFECTS YET";
+                    case 1: return "FORCES • CURRENT / LOST UNITS BY CLASS";
+                    case 2: return "LEDGER • " + ledgerMode.ToString().ToUpperInvariant() + " BY ASSET CLASS";
+                    default: return infoMode == InfoMode.Airbases ? "STATUS • ACTIVE AIRBASES" : "STATUS • ACTIVE PLAYERS";
+                }
             }
+
+            private void BuildResourcesPage(RectTransform page)
+            {
+                DrawSpine(page);
+                float y = Heading(page, -AvTokens.Space1, Shell.Body.width, "FACTION RESOURCES", "LIVE STOCKPILES");
+                string[] labels = ResourceLabels;
+                string[] units = { "", "WHD", "PAX", "/ 100" };
+                float width = (Shell.Body.width - AvTokens.Space3 - AvTokens.Gap) / 2f;
+                resourceMetrics = new AvStyled.Metric[4];
+                for (int i = 0; i < 4; i++)
+                {
+                    Rect area = new Rect(AvTokens.Space3 + i % 2 * (width + AvTokens.Gap),
+                        y - i / 2 * 90f, width, 82f);
+                    AvKit.TacticalCard(page, area, i == 3 ? AvTheme.RailReady : AvTheme.RailInfo);
+                    resourceMetrics[i] = AvStyled.MetricCell(page, area, labels[i], units[i]);
+                    // Only morale has a meaningful maximum. Other resources are absolute stocks.
+                    if (i != 3) resourceMetrics[i].Fill.enabled = false;
+                }
+                y -= 184f;
+                y = Heading(page, y, Shell.Body.width, "RESOURCE HISTORY", "LOCAL OBSERVATIONS");
+                resourceTabs = CreateButtonRow(page, y, labels, selected =>
+                {
+                    resourceSeries = selected;
+                    RequestRefresh();
+                });
+                y -= AvTokens.RowHeight + AvTokens.Space3;
+                resourceChart = new MfdResourceChart(page, y, Shell.Body.width, Shell.Body.height + y - AvTokens.Space2);
+            }
+
+            private void RefreshResources(FactionHQ hq)
+            {
+                float manpower = float.NaN;
+                if (hq.missionStatsTracker != null)
+                {
+                    var stats = hq.missionStatsTracker.manpower;
+                    manpower = stats.buildings.current + stats.vehicles.current + stats.ships.current + stats.aircraft.current;
+                }
+                float morale = FactionResources.TryGetMorale(hq, out float stored) ? stored : float.NaN;
+                float funds = hq.factionFunds;
+                int warheads = hq.GetWarheadStockpile();
+                resourceMetrics[0].Set(UnitConverter.ValueReading(funds), funds < 0f ? "NEGATIVE BALANCE" : "AVAILABLE FUNDS", 0f, AvTheme.Accent);
+                resourceMetrics[0].Value.color = funds < 0f ? AvTheme.Warning : AvTheme.TextPrimary;
+                resourceMetrics[1].Set(warheads.ToString(), "STOCKPILE", 0f, AvTheme.Accent);
+                resourceMetrics[2].Set(MfdResourceHistory.Finite(manpower) ? manpower.ToString("0") : "—",
+                    "IN ACTIVE ASSETS", 0f, AvTheme.Accent);
+                resourceMetrics[3].Set(MfdResourceHistory.Finite(morale) ? morale.ToString("0.#") : "—",
+                    MfdResourceHistory.Finite(morale) ? "STORED • INACTIVE" : "HOST DATA UNAVAILABLE",
+                    MfdResourceHistory.Finite(morale) ? morale / 100f : 0f, AvTheme.Accent);
+                bool sampled = resourceHistory.Sample(Time.time, funds, warheads, manpower, morale);
+                if (sampled || renderedResourceSeries != resourceSeries)
+                {
+                    resourceChart.Set(resourceHistory, resourceSeries, ResourceLabels[resourceSeries], FormatResource);
+                    renderedResourceSeries = resourceSeries;
+                }
+                SetRow(resourceTabs, resourceSeries);
+            }
+
+            private string FormatResource(float value) => resourceSeries == 0
+                ? UnitConverter.ValueReading(value) : value.ToString("0.#");
 
             private void BuildForcesPage(RectTransform page)
             {
@@ -162,7 +250,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     new[] { "BUILDINGS", "VEHICLES", "SHIPS", "AIRCRAFT" }, SelectDefinitions);
                 y -= AvTokens.RowHeight + AvTokens.Space3;
                 y = Heading(page, y, Shell.Body.width, "UNIT READOUT", "CURRENT / LOST");
-                definitionGrid = new MfdPagingGrid(page, y, Shell.Body.width, 3, 4, readOnly: true);
+                int rows = Mathf.Clamp(Mathf.FloorToInt((Shell.Body.height + y - 44f) / 38f), 3, 12);
+                definitionGrid = new MfdPagingGrid(page, y, Shell.Body.width, 2, rows, readOnly: true);
             }
 
             private void BuildLedgerPage(RectTransform page)
@@ -189,7 +278,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                         new Rect(AvTokens.Space3 + column * (cellWidth + gap),
                                  y - row * 92f, cellWidth, 82f), labels[i], "UNIT");
                 }
-                ledgerChart = new MfdLedgerChart(page, y-184f, Shell.Body.width);
+                ledgerChart = new MfdLedgerChart(page, y-184f, Shell.Body.width,
+                    Shell.Body.height + y - 184f - AvTokens.Space2);
             }
 
             private void BuildStatusPage(RectTransform page)
@@ -200,7 +290,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 infoTabs = CreateButtonRow(page, y, new[] { "AIRBASES", "PLAYERS" }, SelectInfo);
                 y -= AvTokens.RowHeight + AvTokens.Space3;
                 y = Heading(page, y, Shell.Body.width, "ACTIVE ENTRIES", "DIRECTORY");
-                infoGrid = new MfdPagingGrid(page, y, Shell.Body.width, 1, 8, readOnly: true);
+                int rows = Mathf.Clamp(Mathf.FloorToInt((Shell.Body.height + y - 44f) / 38f), 4, 16);
+                infoGrid = new MfdPagingGrid(page, y, Shell.Body.width, 1, rows, readOnly: true);
             }
 
             private AvButton[] CreateButtonRow(RectTransform parent, float y, string[] labels,
@@ -222,6 +313,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             private void SelectPage(int selected)
             {
+                selectedPage = selected;
                 for (int i = 0; i < pages.Length; i++) pages[i].gameObject.SetActive(i == selected);
                 SetSelectedTab(selected);
                 RequestRefresh();
@@ -282,10 +374,16 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 definitionsLoaded = true;
             }
 
-            private void SetForceTotals(MissionStatsTracker.TypeStat stats)
+            private void SetForceTotals(MissionStatsTracker tracker)
             {
                 if (forceTotals == null) return;
                 for (int i = 0; i < forceTotals.Length; i++) forceTotals[i].text = "—";
+                if (tracker == null)
+                {
+                    foreach (Image bar in forceBars) bar.rectTransform.sizeDelta = new Vector2(0f, 3f);
+                    return;
+                }
+                MissionStatsTracker.TypeStat stats = tracker.units;
                 forceTotals[0].text = stats.buildings.current.ToString("0");
                 forceTotals[1].text = stats.vehicles.current.ToString("0");
                 forceTotals[2].text = stats.ships.current.ToString("0");
@@ -311,18 +409,24 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private string DefinitionLabel(UnitDefinition definition, FactionHQ hq)
             {
                 if (definition == null) return "UNKNOWN";
-                int current = hq.missionStatsTracker == null ? 0 :
-                    hq.missionStatsTracker.GetCurrentUnits(definition);
-                int lost = hq.missionStatsTracker == null ? 0 :
-                    hq.missionStatsTracker.GetLostUnits(definition);
+                if (hq.missionStatsTracker == null) return (definition.code ?? "UNIT") + " — / —";
+                int current = hq.missionStatsTracker.GetCurrentUnits(definition);
+                int lost = hq.missionStatsTracker.GetLostUnits(definition);
                 string code = string.IsNullOrEmpty(definition.code) ? definition.unitName : definition.code;
                 return AvTheme.Truncate((code ?? "UNIT").ToUpperInvariant(), 11) + " " +
-                       current + "/" + lost;
+                       current + " / " + lost;
             }
 
             private void RefreshLedger(FactionHQ hq)
             {
-                if (ledgerMetrics == null || hq.missionStatsTracker == null) return;
+                if (ledgerMetrics == null) return;
+                if (hq.missionStatsTracker == null)
+                {
+                    foreach (AvStyled.Metric metric in ledgerMetrics)
+                        metric.Set("—", "DATA UNAVAILABLE", 0f, AvTheme.Accent);
+                    ledgerChart.Clear();
+                    return;
+                }
                 MissionStatsTracker.TypeStat category = LedgerCategory(hq.missionStatsTracker);
                 MissionStatsTracker.Stat[] values =
                 {

@@ -6,10 +6,14 @@
     <RootNamespace>BoscaliSummer.Tests</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="..\..\modules\Command\Domain\FactionMoraleState.cs" Link="Features\Command\FactionMoraleState.cs" />
+    <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdResourceHistory.cs" Link="Features\Command\MfdResourceHistory.cs" />
+    <Compile Include="..\..\modules\Support\Runtime\SupportEffectPolicy.cs" Link="Features\Support\SupportEffectPolicy.cs" />
     <Compile Include="..\..\modules\QoL\Runtime\GunAimAssistPolicy.cs" Link="Features\QoL\GunAimAssistPolicy.cs" />
     <Compile Include="..\..\modules\DynamicOperations\Domain\OperationBoard.cs" Link="Features\DynamicOperations\OperationBoard.cs" />
     <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdSecondaryObjectives.cs" Link="Features\Command\MfdSecondaryObjectives.cs" />
     <Compile Include="..\..\Framework\Contracts\IObservationSource.cs" Link="Framework\IObservationSource.cs" />
+    <Compile Include="..\..\Framework\Contracts\ITerritoryIngress.cs" Link="Framework\ITerritoryIngress.cs" />
     <Compile Include="..\..\modules\QoL\Runtime\ObservationStore.cs" Link="Features\QoL\ObservationStore.cs" />
     <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdTargetPresets.cs" Link="Features\Command\MfdTargetPresets.cs" />
     <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdChartScale.cs" Link="Features\Command\MfdChartScale.cs" />

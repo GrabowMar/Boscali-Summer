@@ -15,7 +15,9 @@ namespace BoscaliSummer.Features.Support
         public FeatureMetadata Metadata => Feature;
         public Type[] PatchTypes => new[]
         {
-            typeof(Patches.SupportMissileDetonatePatch)
+            typeof(Patches.SupportMissileDetonatePatch),
+            typeof(Patches.SupportMissileAuthorityPatch),
+            typeof(Patches.SupportMissileDescentPatch)
         };
 
         public void Install(FeatureContext context)

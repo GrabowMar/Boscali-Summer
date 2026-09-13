@@ -8,6 +8,22 @@ namespace BoscaliSummer.Garrisons
         public static void Apply(Building building)
         {
             if (building == null) return;
+            if (building.NetworkUniqueName?.StartsWith(RooftopPlacement.NamePrefix, StringComparison.Ordinal) == true)
+            {
+                // Vanilla emplacement prefabs include excavated earth and terrain grass
+                // blockers. Keep their weapon, crew and hitbox; replace the earth with
+                // rooftop cover. Inactive children also stay hidden through native LOD changes.
+                Transform dugout = building.transform.Find("dugout");
+                if (dugout != null) dugout.gameObject.SetActive(false);
+                for (int i = 0; i < building.transform.childCount; i++)
+                {
+                    Transform child = building.transform.GetChild(i);
+                    if (child.name.StartsWith("GrassBlocker_Proxy", StringComparison.Ordinal))
+                        child.gameObject.SetActive(false);
+                }
+                OccupiedBuildingMarking.Apply(building.gameObject, building.NetworkHQ);
+                return;
+            }
             Renderer[] renderers = building.GetComponentsInChildren<Renderer>(true);
             for (int i = 0; i < renderers.Length; i++)
             {

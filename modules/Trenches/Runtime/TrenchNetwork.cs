@@ -13,10 +13,17 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         public string Name { get; set; }
         public FactionHQ OwnerHq { get; set; }
         public Vector3 Center { get; private set; }
+        public Vector3 SeedCenter { get; }
+        public Func<Vector3, bool> PlacementValidator { get; set; }
         public float Radius { get; private set; }
         public Vector3 ThreatDirection { get; set; }
         public TrenchStage Stage { get; set; }
         public float LastSimTime { get; set; }
+        public bool Overrun { get; set; }
+        public bool Suppressed { get; set; }
+        public int DefenderCount { get; set; }
+        public float NextGrowthAt { get; set; }
+        public float RetireAt { get; set; }
 
         private readonly Dictionary<int, TrenchNode> nodes = new Dictionary<int, TrenchNode>(MaxNodesPerNetwork);
         private readonly Dictionary<int, TrenchEdge> edges = new Dictionary<int, TrenchEdge>(MaxEdgesPerNetwork);
@@ -35,6 +42,7 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             Name = name;
             OwnerHq = owner;
             Center = center;
+            SeedCenter = center;
             ThreatDirection = threatDir.sqrMagnitude > 0.001f ? threatDir.normalized : Vector3.forward;
             Stage = TrenchStage.Stage0_Scrape;
             Radius = 25f;
@@ -43,6 +51,7 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         public TrenchNode AddNode(Vector3 position, TrenchNodeType type, TrenchStage stage = TrenchStage.Stage0_Scrape)
         {
             if (nodes.Count >= MaxNodesPerNetwork) return null;
+            if (PlacementValidator != null && !PlacementValidator(position)) return null;
 
             int id = nextNodeId++;
             var node = new TrenchNode(id, position, ThreatDirection, type, stage);
@@ -67,9 +76,11 @@ namespace BoscaliSummer.Features.Trenches.Runtime
                 }
             }
 
+            Vector3[] path = TrenchEdge.GeneratePathPoints(nodeA.Position, nodeB.Position, ThreatDirection, type, terrainSampler);
+            if (!CanPlacePath(path)) return null;
             int id = nextEdgeId++;
             var edge = new TrenchEdge(id, nodeAId, nodeBId, type, stage);
-            edge.PathPoints = TrenchEdge.GeneratePathPoints(nodeA.Position, nodeB.Position, ThreatDirection, type, terrainSampler);
+            edge.PathPoints = path;
 
             edges[id] = edge;
             nodeA.Connect(id, nodeBId);
@@ -77,6 +88,22 @@ namespace BoscaliSummer.Features.Trenches.Runtime
 
             RecalculateBounds();
             return edge;
+        }
+
+        public bool CanPlacePath(Vector3[] path)
+        {
+            if (PlacementValidator == null) return true;
+            for (int i = 1; i < path.Length; i++)
+            {
+                Vector3 side = Vector3.Cross(Vector3.up, path[i] - path[i - 1]).normalized * 3f;
+                int steps = Math.Max(1, (int)Math.Ceiling(Vector3.Distance(path[i - 1], path[i]) / 2f));
+                for (int s = 0; s <= steps; s++)
+                {
+                    Vector3 p = Vector3.Lerp(path[i - 1], path[i], (float)s / steps);
+                    if (!PlacementValidator(p) || !PlacementValidator(p - side) || !PlacementValidator(p + side)) return false;
+                }
+            }
+            return true;
         }
 
         public TrenchNode GetNode(int id)

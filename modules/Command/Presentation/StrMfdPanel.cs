@@ -776,7 +776,7 @@ namespace BoscaliSummer.Features.Command.Presentation
                 }
 
                 SecondaryObjectiveView card = cards[i];
-                bool active = string.Equals(card.Status, "ACTIVE", StringComparison.OrdinalIgnoreCase);
+                bool active = card.IsActive;
 
                 string rail = card.IsComplete ? "ready" : active ? "armed" : "locked";
                 Color tint = card.IsComplete ? AvTheme.RailReady

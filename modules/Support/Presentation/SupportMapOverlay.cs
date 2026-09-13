@@ -38,6 +38,7 @@ namespace BoscaliSummer.Features.Support.Presentation
         private RectTransform armedGroupRect;
         private Image armedRingImage;
         private Image armedFillImage;
+        private Image armedCore;
         private GameObject armedCenterObj;
         private Image armedCenterIcon;
         private GameObject armedCardObj;
@@ -52,6 +53,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             public RectTransform RootRect;
             public Image DangerRing;
             public Image DangerFill;
+            public Image Core;
             public GameObject CenterObj;
             public Image CenterIcon;
             public GameObject BadgeObj;
@@ -200,6 +202,8 @@ namespace BoscaliSummer.Features.Support.Presentation
             armedRingImage.type = Image.Type.Simple;
             armedRingImage.raycastTarget = false;
 
+            armedCore = CreateCore(armedGroup.transform);
+
             // Center cursor ability icon & crosshair (counter-scaled so it stays crisp on screen)
             armedCenterObj = new GameObject("CenterMarker", typeof(RectTransform), typeof(Image));
             armedCenterObj.transform.SetParent(armedGroup.transform, false);
@@ -214,7 +218,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             armedCardObj = new GameObject("TelemetryCard", typeof(RectTransform), typeof(Image));
             armedCardObj.transform.SetParent(armedGroup.transform, false);
             armedCardRect = armedCardObj.GetComponent<RectTransform>();
-            armedCardRect.sizeDelta = new Vector2(170f, 54f);
+            armedCardRect.sizeDelta = new Vector2(224f, 74f);
             armedCardRect.pivot = new Vector2(0f, 1f); // Top-left anchor for offset placement
             armedCardBg = armedCardObj.GetComponent<Image>();
             armedCardBg.sprite = SupportTacticalIcons.BadgeBgSprite;
@@ -276,7 +280,7 @@ namespace BoscaliSummer.Features.Support.Presentation
                 var badgeObj = new GameObject("CountdownBadge", typeof(RectTransform), typeof(Image));
                 badgeObj.transform.SetParent(markerObj.transform, false);
                 var badgeRect = badgeObj.GetComponent<RectTransform>();
-                badgeRect.sizeDelta = new Vector2(100f, 22f);
+                badgeRect.sizeDelta = new Vector2(180f, 40f);
                 badgeRect.pivot = new Vector2(0.5f, 1f); // sits directly below center icon
                 var badgeBg = badgeObj.GetComponent<Image>();
                 badgeBg.sprite = SupportTacticalIcons.BadgeBgSprite;
@@ -303,6 +307,7 @@ namespace BoscaliSummer.Features.Support.Presentation
                 {
                     Root = markerObj,
                     RootRect = rootRect,
+                    Core = CreateCore(markerObj.transform),
                     DangerRing = ringImg,
                     DangerFill = fillImg,
                     CenterObj = centerObj,
@@ -335,8 +340,11 @@ namespace BoscaliSummer.Features.Support.Presentation
             Runtime.SupportActionId action = supportManager.ArmedAction.Value;
             float radius = supportManager.GetEffectRadius(action);
 
+            GlobalPosition areaCenter = cursorCoord;
+            supportManager.ResolveMapArea(action, ref areaCenter, ref radius);
+
             // Position reticle exactly at terrain cursor coordinate in map local space
-            Vector3 localPos = new Vector3(cursorCoord.x * mapFactor, cursorCoord.z * mapFactor, 0f);
+            Vector3 localPos = new Vector3(areaCenter.x * mapFactor, areaCenter.z * mapFactor, 0f);
             armedGroup.transform.localPosition = localPos;
 
             // Physical diameter of effect on the map
@@ -345,6 +353,7 @@ namespace BoscaliSummer.Features.Support.Presentation
 
             armedRingImage.rectTransform.sizeDelta = diameterVector;
             armedFillImage.rectTransform.sizeDelta = diameterVector;
+            SetCore(armedCore, action, mapFactor);
 
             // Counter-scale center icon and telemetry card so they stay constant pixel size on screen
             armedCenterObj.transform.localScale = Vector3.one * invZoom;
@@ -359,7 +368,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             bool hasPlayerAircraft = false;
             if (GameManager.GetLocalPlayer<Player>(out Player localPlayer) && localPlayer?.Aircraft != null)
             {
-                distMeters = Vector3.Distance(localPlayer.Aircraft.transform.position, cursorCoord.AsVector3());
+                distMeters = Vector3.Distance(localPlayer.Aircraft.transform.position, cursorCoord.ToLocalPosition());
                 hasPlayerAircraft = true;
             }
 
@@ -367,7 +376,7 @@ namespace BoscaliSummer.Features.Support.Presentation
                 ? (settings != null ? settings.ReconRange.Value : 120000f)
                 : (settings != null ? settings.MaximumRange.Value : 30000f);
 
-            bool outOfRange = hasPlayerAircraft && action != Runtime.SupportActionId.Recon && distMeters > maxRange;
+            bool outOfRange = hasPlayerAircraft && action != Runtime.SupportActionId.Fortify && distMeters > maxRange;
 
             // Theme colors
             Color themeColor = GetActionColor(action);
@@ -376,23 +385,30 @@ namespace BoscaliSummer.Features.Support.Presentation
             armedRingImage.color = new Color(hudAccent.r, hudAccent.g, hudAccent.b, 0.85f);
             armedFillImage.color = new Color(hudAccent.r, hudAccent.g, hudAccent.b, outOfRange ? 0.08f : 0.16f);
             armedCenterIcon.color = hudAccent;
-            armedCardBg.color = hudAccent;
+            armedCardBg.color = new Color(0.025f, 0.05f, 0.06f, 0.95f);
 
             string actionCode = GetActionCode(action);
             string actionName = GetActionName(action);
-            string rangeStr = distMeters >= 1000f ? $"{distMeters / 1000f:F1} km" : $"{distMeters:F0} m";
+            string rangeStr = !hasPlayerAircraft ? "—" : distMeters >= 1000f ? $"{distMeters / 1000f:F1} km" : $"{distMeters:F0} m";
             string radiusStr = radius >= 1000f ? $"{radius / 1000f:F1} km" : $"{radius:F0} m";
 
+            string areaLabel = action == Runtime.SupportActionId.Fortify ? "ZONE" : "RADIUS";
+            if (action == Runtime.SupportActionId.Artillery) radiusStr += "\nCORE: 150 m";
+            if (action == Runtime.SupportActionId.Fortify && radius <= 0f)
+            {
+                armedCardText.text = "<b>FTF · SELECT AN OWNED ZONE</b>\nFortification reinforces a base garrison.";
+                return;
+            }
             if (outOfRange)
             {
                 armedCardText.text = $"<color=#FF4433><b>[{actionCode}] OUT OF RANGE</b></color>\n" +
                                      $"DIST: <color=#FFAA44>{rangeStr}</color> (MAX {maxRange / 1000f:F0}km)\n" +
-                                     $"EFFECT RADIUS: {radiusStr}";
+                                     $"EFFECT {areaLabel}: {radiusStr}";
             }
             else
             {
                 armedCardText.text = $"<b>[{actionCode}] {actionName}</b>\n" +
-                                     $"DIST: {rangeStr} · RADIUS: {radiusStr}\n" +
+                                     $"DIST: {rangeStr} · {areaLabel}: {radiusStr}\n" +
                                      $"<color=#88DDFF>RIGHT-CLICK TO CONFIRM</color>";
             }
         }
@@ -434,6 +450,8 @@ namespace BoscaliSummer.Features.Support.Presentation
                     marker.DangerRing.rectTransform.sizeDelta = new Vector2(diameter, diameter);
                     marker.DangerFill.rectTransform.sizeDelta = new Vector2(diameter, diameter);
 
+                    SetCore(marker.Core, strike.ActionId, mapFactor);
+
                     // Counter-scale icon and badge
                     marker.CenterObj.transform.localScale = Vector3.one * invZoom;
                     marker.BadgeObj.transform.localScale = Vector3.one * invZoom;
@@ -442,7 +460,7 @@ namespace BoscaliSummer.Features.Support.Presentation
                     Color strikeColor = GetActionColor(strike.ActionId);
                     marker.CenterIcon.sprite = SupportTacticalIcons.GetIcon(strike.ActionId);
                     marker.CenterIcon.color = strikeColor;
-                    marker.BadgeBg.color = strikeColor;
+                    marker.BadgeBg.color = new Color(0.025f, 0.05f, 0.06f, 0.95f);
 
                     // Animated breathing/pulsing danger ring
                     float pulse = 0.55f + Mathf.Sin(now * 6.5f) * 0.25f;
@@ -455,15 +473,16 @@ namespace BoscaliSummer.Features.Support.Presentation
                     if (remaining > 0f)
                     {
                         int sec = Mathf.CeilToInt(remaining);
-                        marker.BadgeText.text = $"<b>{code}</b>  T-{sec:D2}s";
+                        marker.BadgeText.text = $"<b>{code}</b>  ETA ~{sec:D2}s\nRADIUS {strike.Radius / 1000f:0.00} km";
                         marker.BadgeText.color = Color.white;
                     }
                     else
                     {
                         // Impact confirmed / active effect phase
-                        float flash = Mathf.Sin(now * 14f) > 0f ? 1f : 0.4f;
-                        marker.BadgeText.text = $"<color=#FF5533><b>{code} SPLASH</b></color>";
-                        marker.BadgeText.color = new Color(1f, 0.35f, 0.2f, flash);
+                        string phase = strike.ActionId == SupportActionId.Recon ? "SCAN COMPLETE" :
+                            strike.ActionId == SupportActionId.Fortify ? "REINFORCED" : "EST. ACTIVE";
+                        marker.BadgeText.text = $"<b>{code}</b> {phase}\nRADIUS {strike.Radius / 1000f:0.00} km";
+                        marker.BadgeText.color = Color.white;
                     }
                 }
                 else if (marker.IsInUse)
@@ -472,6 +491,24 @@ namespace BoscaliSummer.Features.Support.Presentation
                     marker.IsInUse = false;
                 }
             }
+        }
+
+        private static Image CreateCore(Transform parent)
+        {
+            var go = new GameObject("Lethal core", typeof(RectTransform), typeof(Image));
+            go.transform.SetParent(parent, false);
+            go.transform.SetAsFirstSibling();
+            var image = go.GetComponent<Image>();
+            image.sprite = SupportTacticalIcons.DottedRingSprite;
+            image.raycastTarget = false;
+            image.color = new Color(1f, 0.8f, 0.4f, 0.9f);
+            return image;
+        }
+
+        private static void SetCore(Image image, SupportActionId action, float factor)
+        {
+            image.gameObject.SetActive(action == SupportActionId.Artillery);
+            image.rectTransform.sizeDelta = Vector2.one * (SupportEffectPolicy.RodCoreRadius * 2f * factor);
         }
 
         private static Color GetActionColor(Runtime.SupportActionId action)

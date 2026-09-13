@@ -2,6 +2,41 @@
 
 ## Unreleased
 
+- Replaced isolated trench rings with connected fighting bays and native combat defenses: two MGs initially, then AT/AA as the position develops, capped at six defenders per site. Growth no longer stalls during placement scans. Damage suppresses construction for 60 seconds; destroyed slots never refill, neutralized positions stop growing, and cleared sites cannot be immediately reseeded. Native weapons/health/replication remain unchanged; earthwork geometry is still host-local. Added actual growth and combat-adapter regression checks in Unity; in-game acceptance pending.
+
+- Fixed Rod from God impact re-entry: blast damage now runs after native detonation disables the missile, with isolated buffers for chained rods. Disabled sources are skipped, and terrain/non-convex colliders no longer receive unsupported `ClosestPoint` queries.
+
+- Reworked MIS secondary missions into a randomized contract board with Available / Active / Results, explicit acceptance, offer expiry, two active contracts per faction and accepted-objective map markers. Added aircraft interception, patrol holds, sustained emitter jamming and Ibis ground/rooftop insertions alongside capture, defense and ground interdiction. Holds require uninterrupted activity; parked aircraft cannot complete patrol/defense. Rewards include normal taxed money, mission score, host-side faction morale and existing bounded convoy/fortification spawns. Larger adaptive mission cards, readable primary objectives and corrected progress bars. Operations protocol **2** requires matching peers; experimental/default off, gameplay and multiplayer acceptance pending.
+
+- Fixed occupied-building spawn regression: never cook non-readable native meshes. Reuse cooked mesh colliders or readable geometry; box-backed props use their footprint corrected to the visible top (approximate on complex roofs). Inspect 49 positions and choose the highest flat supported surface. Include culled renderers in building bounds and synchronise transforms before same-frame queries. Native-mesh and collider-mismatch regression checks added; in-game acceptance pending.
+
+- Fixed mirrored trench berms facing underground: threat-facing cross-sections now also reverse triangle winding, preventing back-face culling from above. Added a Unity rendering regression check and world-chunk diagnostics (mesh count, camera distance, material).
+
+- Revamped MAP into Layers and Readability: larger controls, persistent descriptions, explicit ON/OFF and selected-state text, Show all / Hide all layer actions, and clearer hover/size choices. Native settings remain authoritative; unavailable map controls disable safely. In-game acceptance pending.
+
+- Frontline cells no longer treat downed pilots as capture infantry. Ground vehicles and buildings retain their existing pressure; aircraft, including parked aircraft, remain excluded. In-game acceptance pending.
+
+- Third-person flight, helmet and combat HUD updates now run once after the external camera pose and floating-origin shift, avoiding stale movement projections. Cockpit/spectator update timing is unchanged. In-game movement acceptance pending.
+
+- Occupied buildings now use visible native MG / AT-145 / 23 mm AA rooftop nests with sandbag cover and faction flags. Placement checks nine roof samples and rejects overhangs, obstructions and slopes; native earth dugouts are hidden on roofs. One weapon per shell, six shells per zone and 96 overall. Fortification adds an eligible building without replacing existing defenders; destruction clears occupancy and decoration. Unity placement/mesh checks passed; in-game and multiplayer acceptance remains pending.
+
+- Faction panels now open on Resources: larger funds, warhead, manpower and Morale readouts, selectable observation-history graphs, wider force rows and clearer ledger comparisons. Morale is stored per faction for the mission (0–100, initially 100), with public host-side read/write access and no gameplay effects; remote-client replication is not implemented. In-game acceptance pending.
+
+- Dynamic trenches now seed on their faction's side of Command's orange frontline borders, preferring nearby non-bridge roads and rejecting water, steep or uneven ground across their growth reserve. Fixed missing far-distance geometry, floating-origin placement, initial map markers, and collection mutation during rearward growth. Requires Command; currently single-player/listen-host only, with remote-client replication still unavailable. In-game acceptance pending.
+
+- Rebuilt support particle bursts: electrical EMP fronts and branching arcs, a compact rod fireball with soil/ejecta and ground dust, and warm flare ignition. Rod damage is server-owned, including headless, with a 150 m core and falloff ending at 420 m. Destruction without detonation no longer creates a rod impact.
+- All five support actions show map icons and labeled areas; rod core has a separate ring and fortification resolves its owned base. Active areas use host-approved coordinates/radius/duration; arrival timers are explicitly estimates. Support protocol is now **3**, requiring matching peers.
+- EMP's visual no longer mutates radars on clients. Jamming stays in the host action; cockpit feedback is local, and configured EMP radius accompanies native missile replication. Particle previews were checked in standalone Unity 2022.3; in-game/multiplayer acceptance remains pending.
+
+- Fixed the MFD killfeed disappearing on first open when the initial layout refresh
+  reused a log panel already queued for destruction.
+
+- Fixed Ibis fast-rope troop accounting and selection of the next loaded bench: two
+  eight-man insertions from sixteen troops, with matching HUD counts and empty-bench
+  visuals. Each insertion establishes MG / AT / AA / MG positions after all soldiers
+  land. Rappel sequences cannot overlap on one helicopter; stable exit anchors,
+  consistent facing and gradual touchdown movement reduce visual jitter.
+
 - Ace ingress chooses the nearest qualifying map edge from the shared Command territory grid, including troop pressure and contested cells. Queries work with the map closed; no uncontrolled fallback. Requires Wing Command 0.9.2.6.
 
 - Ace alerts minimize after ten seconds. Enemy wings enter from enemy-held map edges; fixed tier airframes are T/A-30, CT-7, FS-12, FS-20 and KR-67. Wing counts reflect complete native spawns.

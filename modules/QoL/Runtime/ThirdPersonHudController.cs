@@ -1,3 +1,4 @@
+using System;
 using System.Reflection;
 using HarmonyLib;
 using NuclearOption.MissionEditorScripts;
@@ -13,15 +14,29 @@ namespace BoscaliSummer.Features.QoL.Runtime
     {
         private static readonly FieldInfo CanvasField = AccessTools.Field(typeof(FlightHud), "canvas");
         private static readonly FieldInfo PitchField = AccessTools.Field(typeof(FlightHud), "pitchCompassCenter");
+        private static readonly Action<FlightHud> UpdateFlightHud = AccessTools.MethodDelegate<Action<FlightHud>>(
+            AccessTools.Method(typeof(FlightHud), "Update"));
+        private static readonly Action<HeadMountedDisplay> UpdateHelmet = AccessTools.MethodDelegate<Action<HeadMountedDisplay>>(
+            AccessTools.Method(typeof(HeadMountedDisplay), "Update"));
+        private static readonly Action<CombatHUD> UpdateCombatHud = AccessTools.MethodDelegate<Action<CombatHUD>>(
+            AccessTools.Method(typeof(CombatHUD), "LateUpdate"));
         public static ThirdPersonHudController Instance { get; private set; }
         private QoLSettings settings;
         private GameObject hudCanvas, mapRoot, pitch;
         private bool hudWasActive, mapWasActive, pitchWasActive, ownsVisibility;
+        private bool refreshingHud;
+        private int refreshedHudFrame = -1;
         private readonly Presentation.ThirdPersonCameraPanel cameraPanel = new Presentation.ThirdPersonCameraPanel();
         private readonly ThirdPersonFlightCamera flightCamera = new ThirdPersonFlightCamera();
         public ThirdPersonFlightCamera FlightCamera => flightCamera;
         public bool IsEnabled => settings != null && settings.ThirdPersonHudEnabled.Value;
         public bool FlightCameraEnabled => settings != null && settings.ThirdPersonFlightCameraEnabled.Value;
+
+        // Unity's Update runs before the orbit/chase pose and floating-origin shift in LateUpdate.
+        // Keep native input/weapon updates single-pass as well as fixing their projections.
+        public bool DeferNativeHud => isActiveAndEnabled && !refreshingHud && IsEnabled &&
+            !DynamicMap.mapMaximized && !GameplayUI.GameIsPaused &&
+            IsLocalExternal(SceneSingleton<CameraStateManager>.i, out _);
 
         private void Awake() => Instance = this;
         public void Configure(QoLSettings config) => settings = config;
@@ -54,6 +69,7 @@ namespace BoscaliSummer.Features.QoL.Runtime
         private void LateUpdate()
         {
             ApplyVisibility();
+            RefreshHudAfterCamera();
             CameraStateManager cam = SceneSingleton<CameraStateManager>.i;
             bool local = IsLocalExternal(cam, out Aircraft aircraft);
             var targets = local && aircraft.weaponManager != null ? aircraft.weaponManager.GetTargetList() : null;
@@ -63,6 +79,23 @@ namespace BoscaliSummer.Features.QoL.Runtime
                 DynamicMap.mapMaximized, GameplayUI.GameIsPaused, selected);
             cameraPanel.Refresh(visible ? aircraft : null, transform);
             if (!local || !FlightCameraEnabled) flightCamera.Reset();
+        }
+
+        private void RefreshHudAfterCamera()
+        {
+            if (!DeferNativeHud || refreshedHudFrame == Time.frameCount) return;
+            refreshedHudFrame = Time.frameCount;
+            refreshingHud = true;
+            try
+            {
+                FlightHud hud = SceneSingleton<FlightHud>.i;
+                HeadMountedDisplay helmet = SceneSingleton<HeadMountedDisplay>.i;
+                CombatHUD combat = SceneSingleton<CombatHUD>.i;
+                if (hud != null && hud.isActiveAndEnabled) UpdateFlightHud(hud);
+                if (helmet != null && helmet.isActiveAndEnabled) UpdateHelmet(helmet);
+                if (combat != null && combat.isActiveAndEnabled) UpdateCombatHud(combat);
+            }
+            finally { refreshingHud = false; }
         }
 
         public void Toggle() => SetEnabled(!IsEnabled);

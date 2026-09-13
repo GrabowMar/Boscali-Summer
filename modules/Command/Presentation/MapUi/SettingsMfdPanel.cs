@@ -30,6 +30,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         {
             settings = config;
             logger = log;
+            MfdMapDeck.Configure(config);
         }
 
         private void Update()
@@ -104,12 +105,20 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             AvKit.Stretch(body);
 
             shell = AvScreen.Build(
-                body, "SET", new[] { "DISPLAY" }, null, 0,
-                AvTokens.PanelWidth, height, _ => nextTick = 0f);
+                body, "SET", new[] { "DISPLAY", "DECK" }, null, 0,
+                AvTokens.PanelWidth, height, _ =>
+                {
+                    nextTick = 0f;
+                    RefreshPanel();
+                });
             shell.DataBar.State.text = "MAP SETTINGS";
 
-            RectTransform page = (RectTransform)shell.CreatePage(0, "DisplayPage").transform;
-            BuildPage(page, shell.Body);
+            RectTransform displayPage = (RectTransform)shell.CreatePage(0, "DisplayPage").transform;
+            BuildDisplayPage(displayPage, shell.Body);
+
+            RectTransform deckPage = (RectTransform)shell.CreatePage(1, "DeckPage").transform;
+            BuildDeckPage(deckPage, shell.Body);
+
             shell.SetPage(0);
 
             screen = root.AddComponent<MFDScreen>();
@@ -129,26 +138,30 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 if (dynMap != null) MfdRailPatch.Refresh(dynMap);
             }
 
+            MfdMapDeck.ApplyAppearance(settings);
             RefreshPanel();
             logger?.LogInfo("SET MFD installed on " + (left ? "left" : "right") + " bezel slot " + (slot + 1) + ".");
         }
 
-        private void BuildPage(RectTransform parent, Rect body)
+        private void BuildDisplayPage(RectTransform parent, Rect body)
         {
-            AvNode layout = AvBox.Column("settings")
+            AvNode layout = AvBox.Column("displaySettings")
                 .Pad(AvScreen.SpineInset, 0f, 0f, 0f)
                 .Gaps(6f)
-                .Add(AvBox.Cell("heading").Height(24f))
+                .Add(AvBox.Cell("tacticalHeading").Height(24f))
                 .Add(ToggleRow("expanded"))
                 .Add(ToggleRow("frontlines"))
                 .Add(StepperRow("opacity"))
                 .Add(StepperRow("resolution"))
                 .Add(StepperRow("refresh"))
+                .Add(AvBox.Cell("terrainHeading").Height(24f))
+                .Add(ToggleRow("terrainImage"))
+                .Add(StepperRow("terrainOpacity"))
                 .Add(AvBox.Filler());
             layout.Arrange(body);
 
             AvStyled.Spine(parent, body);
-            AvStyled.Label(parent, layout.At("heading"), "TACTICAL DISPLAY", "section-title");
+            AvStyled.Label(parent, layout.At("tacticalHeading"), "TACTICAL DISPLAY", "section-title");
 
             Toggle(parent, layout.At("expanded"), "EXPANDED MAP", "Expand or restore the maximized map layout.",
                 () => settings.ExpandedMapUi.Value,
@@ -182,6 +195,124 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 delta => settings.GridRefreshInterval.Value = Mathf.Clamp(
                     settings.GridRefreshInterval.Value + delta * 0.1f, 0.2f, 2f),
                 "0.1 s", "0.2 s", "2.0 s", band: true);
+
+            AvStyled.Label(parent, layout.At("terrainHeading"), "MAP TERRAIN", "section-title");
+
+            Toggle(parent, layout.At("terrainImage"), "TERRAIN IMAGE", "Show or hide satellite terrain map texture.",
+                () => settings.MapTerrainImage.Value,
+                value =>
+                {
+                    settings.MapTerrainImage.Value = value;
+                    MfdMapDeck.ApplyAppearance(settings);
+                });
+
+            Stepper(parent, layout.At("terrainOpacity"), "TERRAIN OPACITY",
+                () => settings.MapTerrainOpacity.Value.ToString("P0"),
+                () => settings.MapTerrainOpacity.Value > 0.1f,
+                () => settings.MapTerrainOpacity.Value < 1f,
+                delta =>
+                {
+                    settings.MapTerrainOpacity.Value = Mathf.Clamp(
+                        settings.MapTerrainOpacity.Value + delta * 0.1f, 0.1f, 1f);
+                    MfdMapDeck.ApplyAppearance(settings);
+                },
+                "10%", "10%", "100%", band: true);
+        }
+
+        private void BuildDeckPage(RectTransform parent, Rect body)
+        {
+            AvNode layout = AvBox.Column("deckSettings")
+                .Pad(AvScreen.SpineInset, 0f, 0f, 0f)
+                .Gaps(6f)
+                .Add(AvBox.Cell("deckHeading").Height(24f))
+                .Add(StepperRow("deckOpacity"))
+                .Add(ToggleRow("datumGrid"))
+                .Add(ToggleRow("checkerOverlay"))
+                .Add(StepperRow("checkerOpacity"))
+                .Add(AvBox.Cell("wallpaperHeading").Height(24f))
+                .Add(ToggleRow("wallpaper"))
+                .Add(StepperRow("wallpaperPreset"))
+                .Add(StepperRow("wallpaperOpacity"))
+                .Add(AvBox.Filler());
+            layout.Arrange(body);
+
+            AvStyled.Spine(parent, body);
+            AvStyled.Label(parent, layout.At("deckHeading"), "DECK SURFACE", "section-title");
+
+            Stepper(parent, layout.At("deckOpacity"), "DECK OPACITY",
+                () => settings.DeckOpacity.Value.ToString("P0"),
+                () => settings.DeckOpacity.Value > 0.10f,
+                () => settings.DeckOpacity.Value < 1f,
+                delta =>
+                {
+                    settings.DeckOpacity.Value = Mathf.Clamp(
+                        settings.DeckOpacity.Value + delta * 0.05f, 0.10f, 1f);
+                    MfdMapDeck.ApplyAppearance(settings);
+                },
+                "5%", "10%", "100%", band: true);
+
+            Toggle(parent, layout.At("datumGrid"), "DATUM GRID", "Show coordinate datum grid on tactical backdrop.",
+                () => settings.DeckGrid.Value,
+                value =>
+                {
+                    settings.DeckGrid.Value = value;
+                    MfdMapDeck.ApplyAppearance(settings);
+                });
+
+            Toggle(parent, layout.At("checkerOverlay"), "CHECKER OVERLAY", "Show subtle tactical checkerboard overlay matrix.",
+                () => settings.CheckerboardOverlay.Value,
+                value =>
+                {
+                    settings.CheckerboardOverlay.Value = value;
+                    MfdMapDeck.ApplyAppearance(settings);
+                }, band: true);
+
+            Stepper(parent, layout.At("checkerOpacity"), "CHECKER OPACITY",
+                () => settings.CheckerboardOpacity.Value.ToString("P0"),
+                () => settings.CheckerboardOpacity.Value > 0.02f,
+                () => settings.CheckerboardOpacity.Value < 0.40f,
+                delta =>
+                {
+                    settings.CheckerboardOpacity.Value = Mathf.Clamp(
+                        settings.CheckerboardOpacity.Value + delta * 0.02f, 0.02f, 0.40f);
+                    MfdMapDeck.ApplyAppearance(settings);
+                },
+                "2%", "2%", "40%");
+
+            AvStyled.Label(parent, layout.At("wallpaperHeading"), "BACKGROUND IMAGE", "section-title");
+
+            Toggle(parent, layout.At("wallpaper"), "WALLPAPER", "Display background wallpaper on tactical deck.",
+                () => settings.BackgroundImage.Value,
+                value =>
+                {
+                    settings.BackgroundImage.Value = value;
+                    MfdMapDeck.ApplyAppearance(settings);
+                }, band: true);
+
+            string[] presetNames = { "HEXAGON", "CARBON", "RADAR", "CUSTOM" };
+            Stepper(parent, layout.At("wallpaperPreset"), "PATTERN PRESET",
+                () => presetNames[Mathf.Clamp(settings.BackgroundImagePreset.Value, 0, presetNames.Length - 1)],
+                () => settings.BackgroundImagePreset.Value > 0,
+                () => settings.BackgroundImagePreset.Value < presetNames.Length - 1,
+                delta =>
+                {
+                    settings.BackgroundImagePreset.Value = Mathf.Clamp(
+                        settings.BackgroundImagePreset.Value + delta, 0, presetNames.Length - 1);
+                    MfdMapDeck.ApplyAppearance(settings);
+                },
+                "1", "HEXAGON", "CUSTOM");
+
+            Stepper(parent, layout.At("wallpaperOpacity"), "IMAGE OPACITY",
+                () => settings.BackgroundImageOpacity.Value.ToString("P0"),
+                () => settings.BackgroundImageOpacity.Value > 0.05f,
+                () => settings.BackgroundImageOpacity.Value < 1f,
+                delta =>
+                {
+                    settings.BackgroundImageOpacity.Value = Mathf.Clamp(
+                        settings.BackgroundImageOpacity.Value + delta * 0.05f, 0.05f, 1f);
+                    MfdMapDeck.ApplyAppearance(settings);
+                },
+                "5%", "5%", "100%", band: true);
         }
 
         private static AvNode ToggleRow(string name) =>

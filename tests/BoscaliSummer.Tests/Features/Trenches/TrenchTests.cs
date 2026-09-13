@@ -11,6 +11,15 @@ namespace BoscaliSummer.Tests.Features.Trenches
             TestSappingDistance();
             TestFlankHookMath();
             TestStageProgressionRules();
+            TestAssert.That(TrenchTacticalMath.DefenderBudget(1) == 2 && TrenchTacticalMath.DefenderBudget(2) == 4 &&
+                TrenchTacticalMath.DefenderBudget(3) == 6 && TrenchTacticalMath.DefenderBudget(4) == 6, "Defenses grow 2/4/6 then stop");
+            TestAssert.That(!TrenchTacticalMath.CanConstruct(false, 59, 60, 45), "Damage suppresses construction");
+            TestAssert.That(TrenchTacticalMath.CanConstruct(false, 60, 60, 45), "Survivors resume after a full quiet minute");
+            TestAssert.That(!TrenchTacticalMath.CanConstruct(true, 600, 60, 45), "An overrun position never rebuilds defenders");
+            TestAssert.That(TrenchTacticalMath.IsBuildableGround(20f, 1f), "Dry level ground accepts trenches");
+            TestAssert.That(!TrenchTacticalMath.IsBuildableGround(2f, 1f), "Shore and water reject trenches");
+            TestAssert.That(!TrenchTacticalMath.IsBuildableGround(20f, 0.98f), "Steep ground rejects trenches");
+            TestAssert.That(!TrenchTacticalMath.IsBuildableGround(float.NaN, 1f), "Unknown ground fails closed");
         }
 
         private static void TestZigzagOffsets()

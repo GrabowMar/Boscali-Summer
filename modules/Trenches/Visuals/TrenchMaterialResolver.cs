@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace BoscaliSummer.Features.Trenches.Visuals
@@ -12,9 +13,12 @@ namespace BoscaliSummer.Features.Trenches.Visuals
         private static Material cachedConcrete;
         private static Material cachedSandbag;
         private static Material cachedEarth;
+        private static readonly List<Material> owned = new List<Material>(3);
 
         public static void ResetForScene()
         {
+            foreach (var material in owned) if (material != null) UnityEngine.Object.Destroy(material);
+            owned.Clear();
             cachedConcrete = null;
             cachedSandbag = null;
             cachedEarth = null;
@@ -65,10 +69,7 @@ namespace BoscaliSummer.Features.Trenches.Visuals
         {
             if (cachedEarth != null) return cachedEarth;
 
-            Material sandbag = GetSandbagMaterial();
-            if (sandbag != null) return cachedEarth = sandbag;
-
-            return cachedEarth = CreateFallbackMaterial(new Color(0.38f, 0.32f, 0.22f));
+            return cachedEarth = CreateFallbackMaterial(new Color(0.34f, 0.23f, 0.13f));
         }
 
         private static Material CreateFallbackMaterial(Color albedo)
@@ -80,6 +81,9 @@ namespace BoscaliSummer.Features.Trenches.Visuals
 
             var mat = new Material(shader);
             mat.color = albedo;
+            mat.name = "BoscaliSummer.TrenchEarthwork";
+            if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.1f);
+            owned.Add(mat);
             return mat;
         }
 

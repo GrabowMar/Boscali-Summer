@@ -41,6 +41,8 @@ namespace BoscaliSummer.Garrisons
             }
         }
 
+        private void OnDestroy() => occupiedShells.Remove(gameObject);
+
         public static void Reset()
         {
             occupiedShells.Clear();

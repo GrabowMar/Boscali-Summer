@@ -37,8 +37,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private Func<int, Sprite> icon;
 
             public MfdPagingGrid(RectTransform parent, float y, float width, int columns, int rows,
-                                  bool pager = true, bool readOnly = false, bool progressBars = false)
+                                  bool pager = true, bool readOnly = false, bool progressBars = false, float rowHeight = 0f)
             {
+                if (rowHeight <= 0f) rowHeight = AvTokens.RowHeight;
                 this.readOnly = readOnly;
                 empty = AvStyled.Label(parent, new Rect(AvTokens.Space3, y, width-AvTokens.Space3, AvTokens.RowHeight),
                     "NO ENTRIES", "row-sub");
@@ -54,8 +55,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     int column = i % columns;
                     buttons[i] = PanelButton(parent,
                         new Rect(AvTokens.Space3 + column * (cellWidth + gap),
-                                 y - row * (AvTokens.RowHeight + gap),
-                                 cellWidth, AvTokens.RowHeight),
+                                 y - row * (rowHeight + gap),
+                                 cellWidth, rowHeight),
                         "", "toggle", () => Click(slot), readOnly ? AvButtonStyle.Quiet : AvButtonStyle.Toggle);
                     if (readOnly)
                     {
@@ -66,13 +67,13 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     {
                         progressWidth = cellWidth-14f;
                         progressFills[i] = AvKit.Rule((RectTransform)buttons[i].transform,
-                            new Rect(7f, -AvTokens.RowHeight+3f, 0f, 2f), AvTheme.RailInfo);
+                            new Rect(7f, -rowHeight+3f, 0f, 2f), AvTheme.RailInfo);
                     }
                 }
 
                 if (pager)
                 {
-                    float pagerY = y - rows * (AvTokens.RowHeight + gap) - AvTokens.Space1;
+                    float pagerY = y - rows * (rowHeight + gap) - AvTokens.Space1;
                     var go = new GameObject("Pager", typeof(RectTransform));
                     pagerRoot = go.GetComponent<RectTransform>();
                     pagerRoot.SetParent(parent, false);

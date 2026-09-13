@@ -1,5 +1,6 @@
 using System;
 using BoscaliSummer.Features.Command.Runtime;
+using BoscaliSummer.Framework.Contracts;
 
 namespace BoscaliSummer.Tests.Features.Command
 {
@@ -8,6 +9,19 @@ namespace BoscaliSummer.Tests.Features.Command
         public static void Run()
         {
             TacticalSectorGrid fast = MakeFront(), slow = MakeFront();
+            var sites = new FrontlineSite[256];
+            int siteCount = fast.CopyFrontlineSites(sites);
+            TestAssert.That(siteCount > 0, "Opposing territory supplies frontline trench sites");
+            for (int i = 0; i < siteCount; i++)
+            {
+                var site = sites[i];
+                TestAssert.That(fast.WorldToCell(site.X, site.Z, out int c, out int r) &&
+                    fast.GetSectorControl(c, r) == SectorControl.Friendly, "Trench sites remain on their owner's side");
+                fast.WorldToCell(site.X + site.ThreatX * 200f, site.Z + site.ThreatZ * 200f, out c, out r);
+                TestAssert.That(fast.GetSectorControl(c, r) != SectorControl.Friendly,
+                    "Trench threat faces the same boundary drawn on the map");
+            }
+            TestAssert.That(fast.CopyFrontlineSites(new FrontlineSite[1]) == 1, "Frontline copies respect caller capacity");
             fast.WorldToCell(5000f, 0f, out int col, out int row);
             float initial = fast.GetSectorHoldStrength(col, row);
             int originalTerritory = fast.FriendlySectorCount;
@@ -40,6 +54,7 @@ namespace BoscaliSummer.Tests.Features.Command
             TestAssert.That(fast.TotalNodesCount == 2, "Ownership updates must replace the same node, not duplicate it");
             fast.EvaluateSectors(300f);
             TestAssert.That(fast.HostileSectorCount == 0, "Actual base capture must move strategic influence");
+            TestAssert.That(fast.CopyFrontlineSites(sites) == 0, "No trenches without an opposing frontline");
             fast.ResetAll();
             TestAssert.That(fast.FriendlySectorCount == 0 && fast.NeutralSectorCount == fast.TotalSectors &&
                 fast.TotalNodesCount == 0 && fast.GetSectorHoldStrength(col, row) == 0f,

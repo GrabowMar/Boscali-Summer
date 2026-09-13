@@ -9,7 +9,7 @@ namespace BoscaliSummer.Features.DynamicOperations
     internal sealed class DynamicOperationsFeature : IModFeature
     {
         public FeatureMetadata Metadata { get; } = new FeatureMetadata("dynamic-operations", "Dynamic secondary operations");
-        public Type[] PatchTypes => Array.Empty<Type>();
+        public Type[] PatchTypes => new[] { typeof(OperationJamPatch) };
 
         public void Install(FeatureContext context)
         {
@@ -18,7 +18,9 @@ namespace BoscaliSummer.Features.DynamicOperations
             network.Configure(manager);
             manager.Configure(context.Settings.DynamicOperations, network, context.Logger);
             context.AddService<ISecondaryObjectivesView>(manager);
-            context.Logger.LogInfo("[Operations] Server-owned capture/defense/interdiction; 3 objectives/faction, 24 reward units; experimental.");
+            context.AddService<IOperationOutcomeSource>(manager);
+            context.AddSceneService<OperationMapOverlay>(52).Configure(manager);
+            context.Logger.LogInfo("[Operations] Eight contract families; acceptance required, 3 cards/2 active per faction, 24 reward units; experimental.");
         }
     }
 }

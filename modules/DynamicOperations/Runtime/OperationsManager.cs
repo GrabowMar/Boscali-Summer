@@ -5,6 +5,7 @@ using BoscaliSummer.Features.DynamicOperations.Configuration;
 using BoscaliSummer.Features.DynamicOperations.Domain;
 using BoscaliSummer.Features.DynamicOperations.Networking;
 using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Framework.Features;
 using BoscaliSummer.Framework.Lifecycle;
 using BoscaliSummer.Runtime;
 using NuclearOption.Networking;
@@ -12,7 +13,7 @@ using UnityEngine;
 
 namespace BoscaliSummer.Features.DynamicOperations.Runtime
 {
-    internal sealed class OperationsManager : MonoBehaviour, ISceneService, ISecondaryObjectivesView
+    internal sealed class OperationsManager : MonoBehaviour, ISceneService, ISecondaryObjectivesView, IOperationOutcomeSource
     {
         private sealed class Target
         {
@@ -21,6 +22,10 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
             public Unit Unit;
             public FactionHQ OriginalOwner;
             public string Name, Outcome;
+            public Vector3 Position;
+            public float Radius = 1500f, LastJam = -100f;
+            public int ShellId;
+            public bool Inserted;
             public readonly InterdictionState Life = new InterdictionState();
 
             public void Watch()
@@ -59,6 +64,10 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
         private FactionHQ viewHq;
         private bool wasEnabled;
         private bool generatedThisTick;
+        private IAirAssaultObservation assault;
+        private readonly System.Random random = new System.Random();
+        public static OperationsManager Active { get; private set; }
+        public event Action<int, float> MoraleAwarded;
 
         public IReadOnlyList<SecondaryObjectiveView> Objectives { get; private set; } = Array.Empty<SecondaryObjectiveView>();
         public string Status { get; private set; } = "Waiting for a running mission.";
@@ -68,6 +77,7 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
             settings = configuration; network = transport; logger = log;
             rewards.Configure(log);
             wasEnabled = settings.Enabled.Value;
+            Active = this;
         }
 
         public void ResetForScene()
@@ -75,13 +85,18 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
             foreach (FactionBoard board in boards.Values)
                 for (int i = 0; i < board.Targets.Count; i++) board.Targets[i].Unwatch();
             rewards.ResetForScene(); boards.Clear(); bases.Clear(); paidPlayers.Clear();
-            missionIdentity = null; previousTime = 0f; nextTick = 0f; nextId = 0;
+            missionIdentity = null; previousTime = 0f; nextTick = 0f;
             viewHq = null;
             network?.ResetScene();
             SetLocalStatus("Waiting for a running mission.");
         }
 
-        private void OnDestroy() => ResetForScene();
+        private void OnDestroy()
+        {
+            if (assault != null) assault.Landed -= OnLanded;
+            if (Active == this) Active = null;
+            ResetForScene();
+        }
 
         private void Update()
         {
@@ -94,6 +109,13 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
                 return;
             }
             wasEnabled = true;
+            ModServices.TryGet(out IAirAssaultObservation currentAssault);
+            if (!ReferenceEquals(currentAssault, assault))
+            {
+                if (assault != null) assault.Landed -= OnLanded;
+                assault = currentAssault;
+                if (assault != null) assault.Landed += OnLanded;
+            }
             var current = MissionManager.CurrentMission;
             MissionManager mission = NetworkSceneSingleton<MissionManager>.i;
             if (!ReferenceEquals(missionIdentity, current))
@@ -155,16 +177,19 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
             {
                 Target target = board.Targets[i];
                 Operation op = target.Mission;
-                if (op.State != OperationState.Active && now - op.EndedAt >= 60f)
+                if (!op.IsLive && now - op.EndedAt >= 60f)
                 { target.Unwatch(); board.Targets.RemoveAt(i); continue; }
-                bool interdict = op.Kind == OperationKind.Interdict;
+                bool interdict = op.IsStrike || op.Kind == OperationKind.Jam;
                 bool valid = interdict ? !target.Life.Despawned &&
                     (target.Life.Neutralized || target.Unit != null && target.Unit.NetworkHQ == target.OriginalOwner) :
                     Usable(target.Base) && (target.Base.CurrentHQ == target.OriginalOwner || target.Base.CurrentHQ == hq);
                 bool owned = target.Base != null && target.Base.CurrentHQ == hq;
                 bool neutralized = target.Life.Neutralized || target.Unit != null && target.Unit.disabled;
-                op.Observe(now, elapsed, valid, owned, neutralized);
-                if (op.State != OperationState.Active) target.Unwatch();
+                if (op.Kind == OperationKind.Rappel || op.Kind == OperationKind.Rooftop)
+                    valid &= assault?.Available == true && (target.Inserted || target.ShellId == 0 || assault.IsRooftopAvailable(target.ShellId));
+                bool present = op.Kind == OperationKind.Jam ? now - target.LastJam <= 1.5f : HasPlayerOnStation(hq, target);
+                op.Observe(now, elapsed, valid, owned, neutralized, present, target.Inserted);
+                if (!op.IsLive) target.Unwatch();
                 if (op.TryTakeAward()) Pay(hq, target, participant);
             }
             board.Rules.Prune(now);
@@ -216,42 +241,100 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
                 float score = role / (1000000f + distance);
                 if (score > bestThreat) { bestThreat = score; strike = unit; strikeBase = anchor; }
             }
-            if (defend != null && !HasKind(board, OperationKind.Defend))
-                Add(board, now, OperationKind.Defend, defend, null, hq,
-                    rewards.CanOffer(OperationReward.Convoy, hq) ? OperationReward.Convoy : OperationReward.None, 1200, 100);
-            if (capture != null && !HasKind(board, OperationKind.Capture))
-                Add(board, now, OperationKind.Capture, capture, null, hq,
-                    rewards.CanOffer(OperationReward.Fortification, hq) ? OperationReward.Fortification : OperationReward.None, 1800, 150);
-            if (strike != null && !HasKind(board, OperationKind.Interdict))
-                Add(board, now, OperationKind.Interdict, strikeBase, strike, hq, OperationReward.None, 800, 75);
+            // Shuffle viable mission families so a capture/defense pair cannot monopolize every board.
+            var kinds = new[] { OperationKind.Capture, OperationKind.Defend, OperationKind.Interdict,
+                OperationKind.Intercept, OperationKind.Patrol, OperationKind.Jam, OperationKind.Rappel, OperationKind.Rooftop };
+            for (int i = kinds.Length - 1; i > 0; i--)
+            { int j = random.Next(i + 1); OperationKind swap = kinds[i]; kinds[i] = kinds[j]; kinds[j] = swap; }
+            foreach (OperationKind kind in kinds)
+            {
+                if (!board.Rules.HasCapacity) break;
+                if (HasKind(board, kind)) continue;
+                if (kind == OperationKind.Capture && capture != null)
+                    Add(board, now, kind, capture, null, hq, rewards.CanOffer(OperationReward.Fortification, hq) ? OperationReward.Fortification : OperationReward.None, 1800, 150);
+                else if (kind == OperationKind.Defend && defend != null)
+                    Add(board, now, kind, defend, null, hq, rewards.CanOffer(OperationReward.Convoy, hq) ? OperationReward.Convoy : OperationReward.None, 1200, 100);
+                else if (kind == OperationKind.Interdict && strike != null)
+                    Add(board, now, kind, strikeBase, strike, hq, OperationReward.None, 800, 75);
+                else if (kind == OperationKind.Intercept || kind == OperationKind.Jam)
+                {
+                    // Reservoir sampling chooses among known, recent contacts without keeping a second registry.
+                    Unit chosen = null; Airbase anchor = null; int eligible = 0;
+                    for (int i = 0; i < count; i++)
+                    {
+                        Unit unit = units[i];
+                        if (unit == null || unit.disabled || unit.NetworkHQ == null || unit.NetworkHQ == hq ||
+                            (kind == OperationKind.Intercept ? !(unit is Aircraft) : !(unit is GroundVehicle || unit is Building) || !unit.HasRadarEmission()) ||
+                            board.Rules.WasIssued(kind, unit.GetInstanceID()) || !TryKnownPosition(hq, unit, out Vector3 known)) continue;
+                        if (DistanceToOwnedBase(known, hq, out Airbase near) > 25000f * 25000f || near == null) continue;
+                        if (random.Next(++eligible) == 0) { chosen = unit; anchor = near; }
+                    }
+                    if (chosen != null) Add(board, now, kind, anchor, chosen, hq, OperationReward.None,
+                        kind == OperationKind.Intercept ? 1600 : 1400, 125);
+                }
+                else if (kind == OperationKind.Patrol || kind == OperationKind.Rappel || kind == OperationKind.Rooftop)
+                {
+                    if (kind != OperationKind.Patrol && assault?.Available != true) continue;
+                    int start = random.Next(Math.Max(1, bases.Count));
+                    for (int i = 0; i < bases.Count; i++)
+                    {
+                        Airbase anchor = bases[(start + i) % bases.Count];
+                        if (anchor.CurrentHQ != hq || board.Rules.WasIssued(kind, anchor.GetInstanceID())) continue;
+                        Vector3 position = anchor.center.GlobalPosition().AsVector3();
+                        int shellId = 0;
+                        if (kind == OperationKind.Rooftop && (!assault.TryRooftop(position.x, position.z, out shellId, out position.x, out position.z) ||
+                            board.Rules.WasIssued(kind, shellId))) continue;
+                        if (kind == OperationKind.Rappel)
+                        {
+                            Vector3 local = anchor.center.position + new Vector3(250f, 0f, 250f);
+                            if (!Physics.Raycast(local + Vector3.up * 300f, Vector3.down, out RaycastHit hit, 1000f,
+                                PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore) || hit.point.y <= Datum.LocalSeaY + 1f ||
+                                hit.normal.y < 0.95f || GameAssets.i?.terrainMaterial == null || hit.collider.sharedMaterial != GameAssets.i.terrainMaterial) continue;
+                            position = hit.point.ToGlobalPosition().AsVector3();
+                        }
+                        Target added = Add(board, now, kind, anchor, null, hq, OperationReward.None,
+                            kind == OperationKind.Patrol ? 700 : 1500, kind == OperationKind.Patrol ? 60 : 125, shellId);
+                        if (added != null)
+                        { added.Position = position; added.ShellId = shellId; added.Radius = kind == OperationKind.Patrol ? 1500f : kind == OperationKind.Rooftop ? 40f : 100f; }
+                        break;
+                    }
+                }
+            }
         }
 
-        private void Add(FactionBoard board, float now, OperationKind kind, Airbase airbase, Unit unit,
-            FactionHQ hq, OperationReward reward, int money, int xp)
+        private Target Add(FactionBoard board, float now, OperationKind kind, Airbase airbase, Unit unit,
+            FactionHQ hq, OperationReward reward, int money, int xp, int shellId = 0)
         {
-            int targetId = unit != null ? unit.GetInstanceID() : airbase.GetInstanceID();
+            int targetId = shellId != 0 ? shellId : unit != null ? unit.GetInstanceID() : airbase.GetInstanceID();
             float multiplier = settings.RewardMultiplier.Value;
             if (!Operation.Finite(multiplier)) multiplier = 1f;
             multiplier = Mathf.Clamp(multiplier, 0.25f, 4f);
             var op = new Operation(++nextId, targetId, kind, reward, now,
                 Mathf.RoundToInt(money * multiplier), Mathf.RoundToInt(xp * multiplier));
-            if (!board.Rules.TryAdd(op)) return;
+            if (!board.Rules.TryAdd(op)) return null;
             var target = new Target
             {
                 Mission = op, Base = airbase, Unit = unit,
                 OriginalOwner = unit != null ? unit.NetworkHQ : airbase.CurrentHQ,
                 Name = OperationsNet.Text(unit != null ? unit.unitName : airbase.name),
-                Outcome = reward == OperationReward.Convoy ? "SPECIAL: 6-vehicle reinforcement convoy (space/route permitting)." :
-                    reward == OperationReward.Fortification ? "SPECIAL: defensive positions at the captured base (space permitting)." : "Money and XP; no special deployment."
+                Outcome = reward == OperationReward.Convoy ? "6-vehicle convoy if route/space permit; faction morale +3." :
+                    reward == OperationReward.Fortification ? "3 defenses if space permits; faction morale +3 / enemy -3." :
+                    (unit != null && unit.NetworkHQ != hq || airbase.CurrentHQ != hq) ? "Faction morale +3; hostile target faction -3." : "Faction morale +3. XP contributes to score-based perk points."
             };
+            target.Position = unit != null && TryKnownPosition(hq, unit, out Vector3 known) ? known : airbase.center.GlobalPosition().AsVector3();
+            if (kind == OperationKind.Interdict || kind == OperationKind.Intercept || kind == OperationKind.Jam) target.Radius = 0f;
             target.Watch();
             board.Targets.Add(target);
+            return target;
         }
 
         private void Pay(FactionHQ hq, Target target, Player participant)
         {
             // Marked taken before any side effects: neither another poll nor a callback may pay twice.
             Operation op = target.Mission;
+            MoraleAwarded?.Invoke(hq.GetInstanceID(), 3f);
+            if (target.OriginalOwner != null && target.OriginalOwner != hq)
+                MoraleAwarded?.Invoke(target.OriginalOwner.GetInstanceID(), -3f);
             int credited = 0, failures = 0;
             paidPlayers.Clear();
             for (int i = 0; i < Math.Min(64, hq.factionPlayers.Count); i++)
@@ -296,7 +379,7 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
         private static bool HasKind(FactionBoard board, OperationKind kind)
         {
             for (int i = 0; i < board.Targets.Count; i++)
-                if (board.Targets[i].Mission.Kind == kind && board.Targets[i].Mission.State == OperationState.Active) return true;
+                if (board.Targets[i].Mission.Kind == kind && board.Targets[i].Mission.IsLive) return true;
             return false;
         }
 
@@ -315,6 +398,86 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
         }
 
         public void Refresh() => network.Request();
+        public void RequestAccept(int id) => network.Request(id, false);
+        public void RequestCancel(int id) => network.Request(id, true);
+
+        internal string Act(Player player, int id, bool cancel)
+        {
+            if (!GameAccess.IsServer() || !settings.Enabled.Value || !MissionManager.IsRunning ||
+                !ReferenceEquals(missionIdentity, MissionManager.CurrentMission) || player?.HQ == null ||
+                !boards.TryGetValue(player.HQ, out FactionBoard board)) return "Contract unavailable.";
+            float now = NetworkSceneSingleton<MissionManager>.i.MissionTime;
+            foreach (Target target in board.Targets)
+            {
+                if (target.Mission.Id != id) continue;
+                if (cancel && target.Mission.IsLive)
+                { target.Mission.Cancel(now); return "Contract dismissed. No reward or penalty."; }
+                bool combat = target.Mission.IsStrike || target.Mission.Kind == OperationKind.Jam;
+                bool valid = combat ? !target.Life.Despawned && target.Unit != null && target.Unit.NetworkHQ == target.OriginalOwner :
+                    Usable(target.Base) && (target.Base.CurrentHQ == target.OriginalOwner || target.Base.CurrentHQ == player.HQ);
+                if (target.ShellId != 0) valid &= assault?.IsRooftopAvailable(target.ShellId) == true;
+                if (target.Mission.State == OperationState.Offered)
+                    target.Mission.Observe(now, 0f, valid, target.Base != null && target.Base.CurrentHQ == player.HQ,
+                        target.Life.Neutralized || target.Unit != null && target.Unit.disabled);
+                if (cancel || !board.Rules.TryAccept(id, now)) return "Cannot accept: offer ended, target unavailable or two contracts already active.";
+                target.LastJam = -100f; target.Inserted = false;
+                return "Contract accepted for your faction. Objective marked on map.";
+            }
+            return "Offer no longer available to your faction.";
+        }
+
+        private static bool TryKnownPosition(FactionHQ hq, Unit unit, out Vector3 position)
+        {
+            position = default;
+            if (hq == null || unit == null || !hq.IsTargetBeingTracked(unit)) return false;
+            TrackingInfo tracking = hq.GetTrackingData(unit.persistentID);
+            if (tracking == null) return false;
+            float age = Time.timeSinceLevelLoad - tracking.lastSpottedTime;
+            if (!Operation.Finite(age) || age < 0f || age > 30f) return false;
+            position = tracking.lastKnownPosition.AsVector3();
+            return Finite(position);
+        }
+
+        private static bool HasPlayerOnStation(FactionHQ hq, Target target)
+        {
+            for (int i = 0; i < Math.Min(64, hq.factionPlayers.Count); i++)
+            {
+                Player player = hq.factionPlayers[i].Player;
+                Aircraft aircraft = player != null && player.HQ == hq ? player.Aircraft : null;
+                if (aircraft == null || aircraft.disabled || aircraft.NetworkHQ != hq) continue;
+                Vector3 position = aircraft.transform.position.ToGlobalPosition().AsVector3();
+                Vector3 delta = position - target.Position;
+                if (Finite(position) && delta.y >= 50f && delta.sqrMagnitude <= target.Radius * target.Radius) return true;
+            }
+            return false;
+        }
+
+        private void OnLanded(int factionId, float x, float z, int shellId)
+        {
+            if (!GameAccess.IsServer() || !Operation.Finite(x) || !Operation.Finite(z)) return;
+            foreach (var pair in boards)
+            {
+                if (pair.Key == null || pair.Key.GetInstanceID() != factionId) continue;
+                foreach (Target target in pair.Value.Targets)
+                {
+                    if (target.Mission.State != OperationState.Active ||
+                        !(target.Mission.Kind == OperationKind.Rappel || target.Mission.Kind == OperationKind.Rooftop)) continue;
+                    float dx = target.Position.x - x, dz = target.Position.z - z;
+                    if (dx * dx + dz * dz <= target.Radius * target.Radius &&
+                        (target.ShellId == 0 ? shellId == 0 : target.ShellId == shellId)) target.Inserted = true;
+                }
+            }
+        }
+
+        internal void ObserveJam(Unit unit, Unit.JamEventArgs args)
+        {
+            if (!GameAccess.IsServer() || !MissionManager.IsRunning || unit == null || args.jammingUnit == null ||
+                args.jammingUnit.NetworkHQ == null || !Operation.Finite(args.jamAmount) || args.jamAmount <= 0f ||
+                !boards.TryGetValue(args.jammingUnit.NetworkHQ, out FactionBoard board)) return;
+            foreach (Target target in board.Targets)
+                if (target.Unit == unit && target.Mission.Kind == OperationKind.Jam && target.Mission.State == OperationState.Active)
+                    target.LastJam = NetworkSceneSingleton<MissionManager>.i.MissionTime;
+        }
 
         public OperationsSnapshot Snapshot(Player player)
         {
@@ -328,19 +491,20 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
             { snapshot.Status = "Join a faction to see its secondary objectives."; return snapshot; }
             if (!boards.TryGetValue(player.HQ, out FactionBoard board)) return snapshot;
             float now = NetworkSceneSingleton<MissionManager>.i.MissionTime;
-            snapshot.Status = "Faction objectives. Connected faction players earn money (before tax) + XP; specials deploy once.";
+            snapshot.Status = "Accept up to 2 faction contracts. Holds reset when interrupted. Money is before tax; XP is mission score.";
             snapshot.Cards = new SecondaryObjectiveView[board.Targets.Count];
             for (int i = 0; i < board.Targets.Count; i++)
             {
                 Target target = board.Targets[i]; Operation op = target.Mission;
                 bool active = op.State == OperationState.Active;
+                bool marker = active && (target.Unit == null || TryKnownPosition(player.HQ, target.Unit, out target.Position));
                 snapshot.Cards[i] = new SecondaryObjectiveView(op.Id,
-                    op.Kind == OperationKind.Capture ? "SECURE THE FRONT" : op.Kind == OperationKind.Defend ? "HOLD THE LINE" : "BREAK ENEMY PRESSURE",
-                    op.Kind == OperationKind.Capture ? "Capture this forward base to expand friendly territory." :
-                    op.Kind == OperationKind.Defend ? "Keep this threatened base under faction control for 3 minutes." : "Neutralize this known ground threat near friendly territory.",
-                    target.Name, op.State.ToString().ToUpperInvariant(), active || op.State == OperationState.Completed ? target.Outcome : "No reward: " + op.State.ToString().ToLowerInvariant() + ".",
-                    op.Progress, active ? Mathf.Clamp(op.Deadline - now, 0f, 1200f) : 0f, op.Money, op.Xp,
-                    op.State == OperationState.Completed);
+                    Title(op.Kind), Description(op.Kind), target.Name,
+                    active && !marker ? "ACTIVE / CONTACT LOST" : op.State.ToString().ToUpperInvariant(),
+                    op.IsLive || op.State == OperationState.Completed ? target.Outcome : "No reward: " + op.State.ToString().ToLowerInvariant() + ".",
+                    op.Progress, op.IsLive ? Mathf.Clamp(op.Deadline - now, 0f, 1200f) : 0f, op.Money, op.Xp,
+                    op.State == OperationState.Completed, op.State == OperationState.Offered, active, marker,
+                    marker ? target.Position.x : 0f, marker ? target.Position.z : 0f, marker ? target.Radius : 0f);
             }
             return snapshot;
         }
@@ -354,5 +518,26 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
         }
 
         public void SetLocalStatus(string status) { Objectives = Array.Empty<SecondaryObjectiveView>(); Status = status; }
+        internal void ReportStatus(string status) => Status = status;
+
+        private static string Title(OperationKind kind) => kind switch
+        {
+            OperationKind.Capture => "SECURE THE FRONT", OperationKind.Defend => "HOLD THE LINE",
+            OperationKind.Interdict => "BREAK ENEMY PRESSURE", OperationKind.Intercept => "AIR INTERCEPT",
+            OperationKind.Patrol => "WATCH THE APPROACH", OperationKind.Jam => "SILENCE THE RADAR",
+            OperationKind.Rappel => "ESTABLISH A BEACHHEAD", _ => "ROOFTOP INSERTION"
+        };
+
+        private static string Description(OperationKind kind) => kind switch
+        {
+            OperationKind.Capture => "Capture this forward base. Faction effort counts after acceptance.",
+            OperationKind.Defend => "Keep base friendly; fly within 1.5 km, 50+ m above base, for 180 continuous seconds.",
+            OperationKind.Interdict => "Neutralize this known vehicle or installation before the deadline.",
+            OperationKind.Intercept => "Bring down the marked hostile aircraft within 10 minutes. Keep it tracked.",
+            OperationKind.Patrol => "Fly within 1.5 km, 50+ m above this point, for 90 continuous seconds. Parking does not count.",
+            OperationKind.Jam => "Jam this emitter for 45 continuous seconds with a directed jammer. Keep target alive.",
+            OperationKind.Rappel => "Ibis + 8 troops: hover below 45 m and fast-rope onto ground within 100 m of the mark.",
+            _ => "Ibis + 8 troops: hover below 45 m above the marked roof and finish fast-roping onto that building."
+        };
     }
 }

@@ -8,6 +8,14 @@ namespace BoscaliSummer.Features.Trenches.Domain
     /// </summary>
     internal static class TrenchTacticalMath
     {
+        public const float ConstructionSuppressionSeconds = 60f;
+        public static int DefenderBudget(int stage) => stage >= 3 ? 6 : stage >= 2 ? 4 : 2;
+        public static bool CanConstruct(bool overrun, float now, float suppressedUntil, float nextGrowth)
+            => !overrun && now >= suppressedUntil && now >= nextGrowth;
+        public static bool IsBuildableGround(float heightAboveSea, float normalY)
+            => !float.IsNaN(heightAboveSea) && !float.IsInfinity(heightAboveSea) &&
+                heightAboveSea > 2f && normalY >= 0.985f && normalY <= 1f;
+
         public const float DefaultSegmentLength = 7.5f;
         public const float MinSappingDistance = 8.0f;
         public const float MaxSappingDistance = 55.0f;

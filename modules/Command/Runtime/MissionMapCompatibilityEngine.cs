@@ -127,8 +127,10 @@ namespace BoscaliSummer.Features.Command.Runtime
             position = default;
             weight = 0f;
             hostile = false;
+            // Dismounted pilots are survivors, not capture infantry. Aircraft (including
+            // parked aircraft) likewise never contribute ground-control pressure.
             if (unit == null || unit.disabled || localHq == null || unit.NetworkHQ == null ||
-                !(unit is GroundVehicle || unit is Building || unit is PilotDismounted)) return false;
+                !(unit is GroundVehicle || unit is Building)) return false;
             hostile = unit.NetworkHQ != localHq;
             float confidence = 1f;
             if (hostile)
@@ -141,7 +143,7 @@ namespace BoscaliSummer.Features.Command.Runtime
                 position = track.lastKnownPosition.AsVector3();
             }
             else position = unit.GlobalPosition().AsVector3();
-            weight = (unit is PilotDismounted ? 0.8f : 2.5f) * confidence;
+            weight = 2.5f * confidence;
             return true;
         }
     }

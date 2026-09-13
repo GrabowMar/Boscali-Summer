@@ -3,9 +3,9 @@ using System.Collections.Generic;
 
 namespace BoscaliSummer.Features.DynamicOperations.Domain
 {
-    internal enum OperationKind : byte { Capture, Defend, Interdict }
+    internal enum OperationKind : byte { Capture, Defend, Interdict, Intercept, Patrol, Jam, Rappel, Rooftop }
     internal enum OperationReward : byte { None, Convoy, Fortification }
-    internal enum OperationState : byte { Active, Completed, Expired, Cancelled }
+    internal enum OperationState : byte { Active, Completed, Expired, Cancelled, Offered }
 
     internal sealed class InterdictionState
     {
@@ -29,11 +29,14 @@ namespace BoscaliSummer.Features.DynamicOperations.Domain
         public OperationReward Reward { get; }
         public int Money { get; }
         public int Xp { get; }
-        public float Deadline { get; }
+        public float Deadline { get; private set; }
         public float EndedAt { get; private set; }
         public float HoldSeconds { get; private set; }
-        public float Progress => State == OperationState.Completed ? 1f : Math.Min(1f, HoldSeconds / RequiredHold);
-        public OperationState State { get; private set; }
+        public float Progress => State == OperationState.Completed ? 1f : Math.Min(1f, HoldSeconds / HoldRequired);
+        public float HoldRequired => Kind == OperationKind.Jam ? 45f : Kind == OperationKind.Patrol ? 90f : RequiredHold;
+        public OperationState State { get; private set; } = OperationState.Offered;
+        public bool IsLive => State == OperationState.Offered || State == OperationState.Active;
+        public bool IsStrike => Kind == OperationKind.Interdict || Kind == OperationKind.Intercept;
         public bool AwardTaken { get; private set; }
         public const float RequiredHold = 180f;
 
@@ -42,22 +45,43 @@ namespace BoscaliSummer.Features.DynamicOperations.Domain
         {
             if (!Finite(now)) throw new ArgumentOutOfRangeException(nameof(now));
             Id = id; TargetId = targetId; Kind = kind; Reward = reward;
-            Deadline = now + 1200f; Money = Math.Clamp(money, 0, 100000); Xp = Math.Clamp(xp, 0, 10000);
+            Deadline = now + 300f; Money = Math.Clamp(money, 0, 100000); Xp = Math.Clamp(xp, 0, 10000);
+        }
+
+        public bool Accept(float now)
+        {
+            if (State != OperationState.Offered || !Finite(now) || now >= Deadline) return false;
+            State = OperationState.Active;
+            Deadline = now + (Kind == OperationKind.Intercept ? 600f : 1200f);
+            return true;
+        }
+
+        public void Cancel(float now)
+        {
+            if (IsLive && Finite(now)) End(OperationState.Cancelled, now);
         }
 
         // Observe only authoritative facts. Elapsed mission time, never render frames, advances defense.
-        public void Observe(float now, float elapsed, bool valid, bool owned, bool neutralized)
+        public void Observe(float now, float elapsed, bool valid, bool owned, bool neutralized, bool present = true, bool inserted = false)
         {
-            if (State != OperationState.Active || !Finite(now)) return;
+            if (!IsLive || !Finite(now)) return;
             if (now >= Deadline) End(OperationState.Expired, now);
             else if (!valid || (Kind == OperationKind.Defend && !owned)) End(OperationState.Cancelled, now);
-            else if ((Kind == OperationKind.Capture && owned) || (Kind == OperationKind.Interdict && neutralized))
-                End(OperationState.Completed, now);
-            else if (Kind == OperationKind.Defend)
+            else if (State == OperationState.Offered)
             {
+                if ((Kind == OperationKind.Capture && owned) || ((IsStrike || Kind == OperationKind.Jam) && neutralized))
+                    End(OperationState.Cancelled, now);
+            }
+            else if ((Kind == OperationKind.Capture && owned) || (IsStrike && neutralized) ||
+                ((Kind == OperationKind.Rappel || Kind == OperationKind.Rooftop) && inserted))
+                End(OperationState.Completed, now);
+            else if (Kind == OperationKind.Jam && neutralized) End(OperationState.Cancelled, now);
+            else if (Kind == OperationKind.Defend || Kind == OperationKind.Patrol || Kind == OperationKind.Jam)
+            {
+                if (!present) { HoldSeconds = 0f; return; }
                 // A scheduling stall cannot count minutes of unobserved defense.
                 if (Finite(elapsed) && elapsed > 0f) HoldSeconds += Math.Min(elapsed, 2f);
-                if (HoldSeconds >= RequiredHold) End(OperationState.Completed, now);
+                if (HoldSeconds >= HoldRequired) End(OperationState.Completed, now);
             }
         }
 
@@ -76,12 +100,25 @@ namespace BoscaliSummer.Features.DynamicOperations.Domain
     {
         public const int MaximumCards = 3;
         public const int MaximumIssued = 128;
+        public const int MaximumActive = 2;
         private readonly HashSet<long> issued = new HashSet<long>();
         private readonly List<Operation> operations = new List<Operation>(MaximumCards);
         public IReadOnlyList<Operation> Operations => operations;
         public bool HasCapacity => operations.Count < MaximumCards && issued.Count < MaximumIssued;
 
         public bool WasIssued(OperationKind kind, int targetId) => issued.Contains(Key(kind, targetId));
+
+        public bool TryAccept(int id, float now)
+        {
+            int active = 0;
+            Operation selected = null;
+            foreach (Operation operation in operations)
+            {
+                if (operation.State == OperationState.Active) active++;
+                if (operation.Id == id) selected = operation;
+            }
+            return active < MaximumActive && selected != null && selected.Accept(now);
+        }
 
         public bool TryAdd(Operation operation)
         {
@@ -94,7 +131,7 @@ namespace BoscaliSummer.Features.DynamicOperations.Domain
         {
             if (!Operation.Finite(now)) return;
             for (int i = operations.Count - 1; i >= 0; i--)
-                if (operations[i].State != OperationState.Active && now - operations[i].EndedAt >= 60f)
+                if (!operations[i].IsLive && now - operations[i].EndedAt >= 60f)
                     operations.RemoveAt(i);
         }
 

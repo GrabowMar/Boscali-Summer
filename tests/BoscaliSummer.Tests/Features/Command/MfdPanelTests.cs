@@ -6,6 +6,7 @@ namespace BoscaliSummer.Tests.Features.Command
     {
         public static void Run()
         {
+            FactionResourceTests.Run();
             string[] classes = { "AircraftDefinition", "VehicleDefinition", "BuildingDefinition", "ShipDefinition", "MissileDefinition" };
             foreach (string type in classes)
             {
@@ -42,6 +43,7 @@ namespace BoscaliSummer.Tests.Features.Command
                 "Bars cannot escape their track");
             TestAssert.That(MfdChartScale.Fraction(float.NaN, 100f) == 0f &&
                 MfdChartScale.Fraction(10f, float.PositiveInfinity) == 0f, "Unavailable chart data cannot corrupt geometry");
+            TestAssert.That(BoscaliSummer.Runtime.MfdSlots.Set == "SET", "SET slot identifier is canonical");
         }
     }
 }

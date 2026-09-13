@@ -53,7 +53,6 @@ namespace BoscaliSummer.Features.Support.Runtime
         private float inboundStrikeConfirmedUntil;
         private string statusText = "Designate a grid on the maximised map.";
 
-        private GlobalPosition pendingTarget;
         private SupportActionId pendingAction;
         private readonly List<ActiveStrikeInfo> activeStrikes = new List<ActiveStrikeInfo>(8);
 
@@ -66,7 +65,7 @@ namespace BoscaliSummer.Features.Support.Runtime
             switch (action)
             {
                 case SupportActionId.Artillery:
-                    return 400f; // Mini-nuke shockwave & destruction killzone
+                    return SupportEffectPolicy.RodBlastRadius;
                 case SupportActionId.Emp:
                     return settings != null ? settings.EmpRadius.Value : 12000f;
                 case SupportActionId.Recon:
@@ -74,20 +73,28 @@ namespace BoscaliSummer.Features.Support.Runtime
                 case SupportActionId.FlareMissile:
                     return settings != null ? settings.FlareBarrageRadius.Value : 4000f;
                 case SupportActionId.Fortify:
-                    return 1500f;
+                    return 650f; // Selection radius; the overlay resolves the actual owned zone.
                 default:
                     return 1000f;
             }
         }
 
+        public void ResolveMapArea(SupportActionId action, ref GlobalPosition target, ref float radius)
+        {
+            if (action != SupportActionId.Fortify) return;
+            if (!GameManager.GetLocalPlayer<Player>(out Player player)) return;
+            Airbase zone = SupportTargeting.NearestOwnedAirbase(player, target.ToLocalPosition(), out float distance);
+            if (zone == null || distance > Mathf.Max(650f, zone.GetRadius() * 1.5f)) { radius = 0f; return; }
+            target = (zone.center != null ? zone.center.position : zone.transform.position).ToGlobalPosition();
+            radius = zone.GetRadius();
+        }
+
         public void RegisterActiveStrike(
-            int requestId, SupportActionId action, GlobalPosition target, float radius, float etaSeconds, string name)
+            int requestId, SupportActionId action, GlobalPosition target, float radius, float etaSeconds, string name, float duration)
         {
             float now = Time.timeSinceLevelLoad;
             float impact = now + etaSeconds;
-            float linger = action == SupportActionId.Artillery ? 7f :
-                           action == SupportActionId.Emp ? 9f :
-                           action == SupportActionId.FlareMissile ? (settings != null ? settings.FlareBarrageDuration.Value : 15f) : 10f;
+            float linger = duration;
             float expiry = impact + linger;
 
             for (int i = activeStrikes.Count - 1; i >= 0; i--)
@@ -133,7 +140,7 @@ namespace BoscaliSummer.Features.Support.Runtime
 
                     if (now < inboundStrikeConfirmedUntil)
                     {
-                        return $"[IMPACT CONFIRMED // {inboundStrikeName} SPLASH]";
+                        return $"[ESTIMATED ARRIVAL // {inboundStrikeName}]";
                     }
                     else
                     {
@@ -189,6 +196,8 @@ namespace BoscaliSummer.Features.Support.Runtime
 
         public void ResetForScene()
         {
+            Visuals.EmpVisualEffect.Reset();
+            Visuals.KineticRodStrikeVisuals.Reset();
             ledger.Clear();
             Array.Clear(reserved, 0, reserved.Length);
             StopAllCoroutines();
@@ -204,7 +213,7 @@ namespace BoscaliSummer.Features.Support.Runtime
 
         private void OnDestroy()
         {
-            mapGesture.Reset();
+            ResetForScene();
             SupportMapMode.GestureArmed = false;
         }
 
@@ -401,7 +410,6 @@ namespace BoscaliSummer.Features.Support.Runtime
 
             pending = true;
             pendingSince = Time.unscaledTime;
-            pendingTarget = target;
             pendingAction = action;
             Status = "Request sent to grid " + Mathf.RoundToInt(target.x) + " / " + Mathf.RoundToInt(target.z) + ".";
             network.Request(++nextRequestId, action, target);
@@ -416,6 +424,7 @@ namespace BoscaliSummer.Features.Support.Runtime
 
         internal void ReceiveResult(SupportResultMessage message)
         {
+            if (!pending || message.RequestId != nextRequestId || message.Action != (byte)pendingAction) return;
             pending = false;
             SupportResult result = (SupportResult)message.Result;
             SupportActionDefinition action = catalog.Find((SupportActionId)message.Action);
@@ -425,10 +434,13 @@ namespace BoscaliSummer.Features.Support.Runtime
                 localCooldownUntil = DisableCooldowns ? 0f : Time.unscaledTime + message.CooldownSeconds;
                 Status = name + " accepted.";
                 float eta = action != null && action.Id == SupportActionId.Artillery ? 8f :
-                            action != null && action.Id == SupportActionId.Emp ? 12f :
+                            action != null && action.Id == SupportActionId.Emp ? SupportEffectPolicy.EmpDelay :
                             action != null && action.Id == SupportActionId.FlareMissile ? 5.5f : 0f;
-                float radius = action != null ? GetEffectRadius(action.Id) : 1000f;
-                RegisterActiveStrike(message.RequestId, (SupportActionId)message.Action, pendingTarget, radius, eta, name);
+                if (!Finite(message.Radius) || message.Radius < 0f || message.Radius > 200000f ||
+                    !Finite(message.Duration) || message.Duration < 0f || message.Duration > 60f ||
+                    !Finite(message.X) || !Finite(message.Y) || !Finite(message.Z)) return;
+                RegisterActiveStrike(message.RequestId, (SupportActionId)message.Action,
+                    new GlobalPosition(message.X, message.Y, message.Z), message.Radius, eta, name, message.Duration);
             }
             else
             {
@@ -495,10 +507,6 @@ namespace BoscaliSummer.Features.Support.Runtime
 
             if (!bypass) player.SetAllocation(Mathf.Max(0f, player.Allocation - cost));
             ledger.Accept(playerId, request.RequestId, now);
-            float eta = action.Id == SupportActionId.Artillery ? 8f :
-                        action.Id == SupportActionId.Emp ? 12f :
-                        action.Id == SupportActionId.FlareMissile ? 5.5f : 0f;
-            RegisterActiveStrike(request.RequestId, action.Id, context.Target, GetEffectRadius(action.Id), eta, action.Name);
             logger.LogInfo("[Support] Accepted " + action.Name + " request " + request.RequestId +
                 " from " + player + " at " + context.Target + " for " + Mathf.RoundToInt(cost) + " alloc.");
             return SupportResult.Accepted;
@@ -522,7 +530,6 @@ namespace BoscaliSummer.Features.Support.Runtime
 
         bool ISupportHost.TryReserve(SupportPool pool)
         {
-            if (DisableCooldowns) return true;
             if (reserved[(int)pool] >= MaximumStrikeJobs) return false;
             reserved[(int)pool]++;
             return true;

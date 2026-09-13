@@ -28,12 +28,17 @@ namespace BoscaliSummer.Features.Support.Networking
         public byte Action;
         public byte Result;
         public float CooldownSeconds;
+        public float Radius;
+        public float Duration;
+        public float X;
+        public float Y;
+        public float Z;
     }
 
     internal sealed class SupportNet : MonoBehaviour
     {
-        /// <summary>Bumped from 1: the action set changed to capability-addressed ids.</summary>
-        internal const byte ProtocolVersion = 2;
+        /// <summary>Protocol 3 includes host-approved effect area and lifetime for map markers.</summary>
+        internal const byte ProtocolVersion = 3;
 
         private SupportManager manager;
         private MessageHandler serverHandler;
@@ -93,7 +98,7 @@ namespace BoscaliSummer.Features.Support.Networking
             if (GameAccess.IsServer() && GameManager.GetLocalPlayer<Player>(out Player local) && local != null)
             {
                 SupportResult result = manager.Evaluate(local, message);
-                manager.ReceiveResult(Reply(message, result, manager.ServerCooldown));
+                manager.ReceiveResult(Reply(message, result, manager.ServerCooldown, local));
                 return;
             }
 
@@ -106,16 +111,29 @@ namespace BoscaliSummer.Features.Support.Networking
             client.Send(message);
         }
 
-        private static SupportResultMessage Reply(
-            SupportRequestMessage request, SupportResult result, float cooldown) =>
-            new SupportResultMessage
+        private SupportResultMessage Reply(
+            SupportRequestMessage request, SupportResult result, float cooldown, Player player)
+        {
+            var action = (SupportActionId)request.Action;
+            var target = new GlobalPosition(request.X, request.Y, request.Z);
+            float radius = manager.GetEffectRadius(action);
+            if (action == SupportActionId.Fortify && result == SupportResult.Accepted)
             {
-                Protocol = ProtocolVersion,
-                RequestId = request.RequestId,
-                Action = request.Action,
-                Result = (byte)result,
-                CooldownSeconds = result == SupportResult.Accepted ? cooldown : 0f
+                var zone = SupportTargeting.NearestOwnedAirbase(player, target.ToLocalPosition(), out _);
+                if (zone != null)
+                {
+                    target = (zone.center != null ? zone.center.position : zone.transform.position).ToGlobalPosition();
+                    radius = zone.GetRadius();
+                }
+            }
+            return new SupportResultMessage {
+                Protocol = ProtocolVersion, RequestId = request.RequestId, Action = request.Action,
+                Result = (byte)result, CooldownSeconds = result == SupportResult.Accepted ? cooldown : 0f,
+                Radius = radius, X = target.x, Y = target.y, Z = target.z,
+                Duration = action == SupportActionId.Emp ? SupportEffectPolicy.EmpDuration :
+                    action == SupportActionId.FlareMissile ? manager.Settings.FlareBarrageDuration.Value : 10f
             };
+        }
 
         private void ReceiveRequest(INetworkPlayer sender, SupportRequestMessage request)
         {
@@ -124,7 +142,7 @@ namespace BoscaliSummer.Features.Support.Networking
                 !sender.TryGetPlayer<Player>(out Player player) || player == null)
                 return;
             SupportResult result = manager.Evaluate(player, request);
-            sender.Send(Reply(request, result, manager.ServerCooldown));
+            sender.Send(Reply(request, result, manager.ServerCooldown, player));
         }
 
         private void ReceiveResult(INetworkPlayer _, SupportResultMessage result)
@@ -163,14 +181,21 @@ namespace BoscaliSummer.Features.Support.Networking
                 writer.WriteByte(value.Action);
                 writer.WriteByte(value.Result);
                 writer.WriteSingle(value.CooldownSeconds);
+                writer.WriteSingle(value.Radius);
+                writer.WriteSingle(value.Duration);
+                writer.WriteSingle(value.X); writer.WriteSingle(value.Y); writer.WriteSingle(value.Z);
             });
-            SetReader<SupportResultMessage>(reader => new SupportResultMessage
+            SetReader<SupportResultMessage>(reader =>
             {
-                Protocol = reader.ReadByte(),
-                RequestId = reader.ReadPackedInt32(),
-                Action = reader.ReadByte(),
-                Result = reader.ReadByte(),
-                CooldownSeconds = reader.ReadSingle()
+                byte protocol = reader.ReadByte();
+                if (protocol != ProtocolVersion) return new SupportResultMessage { Protocol = protocol };
+                return new SupportResultMessage {
+                    Protocol = protocol, RequestId = reader.ReadPackedInt32(),
+                    Action = reader.ReadByte(), Result = reader.ReadByte(),
+                    CooldownSeconds = reader.ReadSingle(),
+                    Radius = reader.ReadSingle(), Duration = reader.ReadSingle(),
+                    X = reader.ReadSingle(), Y = reader.ReadSingle(), Z = reader.ReadSingle()
+                };
             });
             MessagePacker.RegisterMessage<SupportRequestMessage>();
             MessagePacker.RegisterMessage<SupportResultMessage>();
