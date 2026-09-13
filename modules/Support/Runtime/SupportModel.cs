@@ -9,7 +9,12 @@ namespace BoscaliSummer.Features.Support.Runtime
         Fortify = 5,
         Artillery = 6,
         Emp = 7,
-        FlareMissile = 9
+        FlareMissile = 9,
+        HackPing = 10,
+        HackTrack = 11,
+        HackBlackout = 12,
+        HackGhost = 13,
+        HackSpoof = 14
     }
 
     internal enum SupportResult : byte
@@ -28,7 +33,9 @@ namespace BoscaliSummer.Features.Support.Runtime
         SpawnFailed = 11,
         RateLimited = 12,
         NotAirborne = 13,
-        OutOfRange = 14
+        OutOfRange = 14,
+        OutOfCoverage = 15,
+        NotBuilt = 16
     }
 
     /// <summary>

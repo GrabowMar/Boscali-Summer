@@ -3,6 +3,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 public class FactionHQ : MonoBehaviour { }
+public static class Datum { public static Transform origin; }
 public class UnitPart : MonoBehaviour { public float hitPoints = 100; }
 public class Building : MonoBehaviour { public bool disabled; public FactionHQ NetworkHQ; }
 public enum BuildingType { DEF }

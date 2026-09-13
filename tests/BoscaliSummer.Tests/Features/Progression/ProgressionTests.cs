@@ -12,6 +12,7 @@ namespace BoscaliSummer.Tests.Features.Progression
             Points();
             PilotPoints();
             Spending();
+            SharedSkills();
         }
 
         private static void Catalog()
@@ -24,6 +25,10 @@ namespace BoscaliSummer.Tests.Features.Progression
                 TestAssert.That(definition.Cost >= 1, "perk " + definition.Name + " costs nothing");
                 TestAssert.That(!string.IsNullOrEmpty(definition.Group),
                     "perk " + definition.Name + " has no group heading");
+                TestAssert.That(!string.IsNullOrEmpty(definition.Icon),
+                    "perk " + definition.Name + " has no icon key");
+                TestAssert.That(!string.IsNullOrEmpty(PerkCatalog.CodeOf(definition)),
+                    "perk " + definition.Name + " has no display code");
                 if (definition.Capability == null)
                 {
                     TestAssert.That(definition.Multiplier != 1f,
@@ -115,6 +120,34 @@ namespace BoscaliSummer.Tests.Features.Progression
             var debug = new PerkState();
             TestAssert.That(debug.ForceUnlock(twoCost), "bypass failed to grant a perk");
             TestAssert.That(!debug.ForceUnlock(twoCost), "bypass granted a duplicate perk");
+        }
+
+        private static void SharedSkills()
+        {
+            TestAssert.That(AceSkillCatalog.All.Length == AceSkillCatalog.MaximumSkills,
+                "the shared ace skill catalogue changed size");
+            for (int i = 0; i < AceSkillCatalog.All.Length; i++)
+            {
+                AceSkillDefinition skill = AceSkillCatalog.All[i];
+                TestAssert.That(skill.Bit == i, "ace skill bits must equal their catalogue index");
+                TestAssert.That(!string.IsNullOrEmpty(skill.Code) && !string.IsNullOrEmpty(skill.Name) &&
+                    !string.IsNullOrEmpty(skill.Description),
+                    "ace skill " + i + " is missing presentation metadata");
+                TestAssert.That(AceSkillCatalog.Has(1 << i, i), "an active ace skill bit read as missing");
+                TestAssert.That(!AceSkillCatalog.Has(1 << i, (i + 1) % AceSkillCatalog.All.Length),
+                    "an ace skill bit leaked into its neighbour");
+            }
+            TestAssert.That(AceSkillCatalog.MaximumSkills <= 32 &&
+                (1 << AceSkillCatalog.MaximumSkills) - 1 <= AceSkillCatalog.MaskWindow,
+                "the shared skill catalogue no longer fits the replicated four-bit mask");
+            TestAssert.That(PerkCatalog.CodeOf(PerkCatalog.All[0]) == "PAS",
+                "a passive perk must read as PAS");
+            for (int i = 0; i < PerkCatalog.All.Length; i++)
+            {
+                if (PerkCatalog.All[i].Capability != SupportCapabilities.Emp) continue;
+                TestAssert.That(PerkCatalog.CodeOf(PerkCatalog.All[i]) == "EW",
+                    "the electronic warfare authorisation must read as EW");
+            }
         }
 
         private static byte FindByCost(byte cost)

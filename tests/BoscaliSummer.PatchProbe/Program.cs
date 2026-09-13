@@ -94,7 +94,16 @@ Assembly pluginAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(plugi
     ("WeaponChecker", "GetAvailableWeaponsNonAlloc"),
     ("CombatAI", "AnalyzeTarget"),
     ("DynamicMap", "Maximize"),
-    ("DynamicMap", "Minimize")
+    ("DynamicMap", "Minimize"),
+    ("GridLabels", "GridLabels_OnMapChanged"),
+    ("GridLabels", "UpdateMinorGridLabels"),
+    ("GridLabels", "Maximize"),
+    ("RadialMenuMain", "SetupMain"),
+    ("RadialMenuMain", "OpenMenu"),
+    ("RadialMenuMain", "OnDestroy"),
+    ("RadialMenuAction", "AllowedOnAircraft"),
+    ("RadialMenuAction", "TriggerAction"),
+    ("PilotPlayerState", "FixedUpdateState")
 };
 
 foreach ((string typeName, string methodName) in targets)
@@ -147,6 +156,13 @@ foreach ((string typeName, string methodName) in targets)
     ("RoleIdentity", "antiAir"),
     ("RoleIdentity", "antiSurface")
     ,("GroundVehicle", "parachuteSystem")
+    ,("RadialMenuMain", "actionsMain")
+    ,("RadialMenuMain", "aircraft")
+    ,("RadialMenuAction", "actionType")
+    ,("RadialMenuAction", "iconSprite")
+    ,("RadialMenuAction", "backgroundSprite")
+    ,("RadialMenuAction", "backgroundColorInactive")
+    ,("RadialMenuAction", "backgroundColorActive")
 };
 
 foreach ((string typeName, string fieldName) in fields)
@@ -180,7 +196,14 @@ foreach ((string typeName, string fieldName) in fields)
     ("CameraOrbitState", "viewDistAdjust", "System.Single"),
     ("CameraOrbitState", "lookAtTargetLerp", "System.Single"),
     ("CameraChaseState", "viewDistAdjust", "System.Single"),
-    ("CameraChaseState", "currentPos", "CameraChaseState+ChasePos")
+    ("CameraChaseState", "currentPos", "CameraChaseState+ChasePos"),
+    ("RadialMenuMain", "actionsMain", "RadialMenuAction[]"),
+    ("RadialMenuMain", "aircraft", "Aircraft"),
+    ("RadialMenuAction", "actionType", "RadialMenuAction+ActionType"),
+    ("RadialMenuAction", "iconSprite", "UnityEngine.Sprite"),
+    ("RadialMenuAction", "backgroundSprite", "UnityEngine.Sprite"),
+    ("RadialMenuAction", "backgroundColorInactive", "UnityEngine.Color"),
+    ("RadialMenuAction", "backgroundColorActive", "UnityEngine.Color")
 };
 foreach (var seam in cameraFields)
 {
@@ -221,6 +244,11 @@ foreach (string cameraState in new[] { "CameraOrbitState", "CameraChaseState" })
     ("Aircraft", "UseFuel", new[] { "fuelDrawn" }),
     ("FactionHQ", "RewardPlayer", new[] { "player", "rewardAllocation", "missionType" })
     ,("Unit", "RecordDamage", new[] { "lastDamagedBy", "damageAmount" })
+    ,("PilotDismounted", "Capture", new[] { "capturingUnit" })
+    ,("Building", "Repair", new[] { "repairer" })
+    ,("Rearmer", "ProcessRearmRequest", new[] { "unitToRearm" })
+    ,("Rearmer", "RefillOtherRearmer", new[] { "toRearmer" })
+    ,("PilotPlayerState", "FixedUpdateState", new[] { "pilot" })
 };
 foreach ((string typeName, string methodName, string[] expected) in parameterNames)
 {
@@ -233,6 +261,17 @@ foreach ((string typeName, string methodName, string[] expected) in parameterNam
                 $"{typeName}.{methodName} no longer has a parameter named '{name}' " +
                 $"(found: {string.Join(", ", actual)}). Harmony binds by name.");
 }
+
+// The marker postfix binds this exact overload by parameter name, so pin the overload and its
+// names: the type-only probe above cannot disambiguate the Unit/FactionHQ overload pair.
+MethodInfo markerPositions = gameAssembly.GetType("MissionPosition", true)!.GetMethods(AllMembers)
+    .FirstOrDefault(method => method.Name == "GetAllPositionsResults" &&
+        method.GetParameters() is { Length: 4 } parameters && parameters[0].ParameterType.FullName == "FactionHQ")
+    ?? throw new MissingMethodException("MissionPosition.GetAllPositionsResults(FactionHQ, GlobalPosition, bool, List<PositionResult>)");
+string[] markerPositionParameters = markerPositions.GetParameters().Select(parameter => parameter.Name!).ToArray();
+if (!markerPositionParameters.SequenceEqual(new[] { "factionHQ", "from", "includeHidden", "results" }))
+    throw new MissingMemberException(
+        "MissionPosition.GetAllPositionsResults parameters changed: " + string.Join(", ", markerPositionParameters));
 
 Type levelInfo = gameAssembly.GetType("LevelInfo", true)!;
 if (levelInfo.GetProperty("LoadedMapSettings", AllMembers) == null)
@@ -263,6 +302,7 @@ string[] patchTypes =
     "BoscaliSummer.Features.Command.Presentation.MapUi.MfdSinglePanelPatch",
     "BoscaliSummer.Features.Command.Patches.DynamicMapMaximizePatch",
     "BoscaliSummer.Features.Command.Patches.DynamicMapMinimizePatch",
+    "BoscaliSummer.Features.Command.Patches.GridLabelsPatch",
     "BoscaliSummer.Features.Support.Patches.SupportMissileDetonatePatch",
     "BoscaliSummer.Features.Support.Patches.SupportMissileAuthorityPatch",
     "BoscaliSummer.Features.Support.Patches.SupportMissileDescentPatch",
@@ -270,10 +310,19 @@ string[] patchTypes =
     "BoscaliSummer.Features.QoL.Patches.ThirdPersonOrbitPatch",
     "BoscaliSummer.Features.QoL.Patches.ThirdPersonChasePatch",
     "BoscaliSummer.Features.QoL.Patches.GunAimSolutionPatch",
-    "BoscaliSummer.Features.QoL.Patches.GunAimInputPatch"
+    "BoscaliSummer.Features.QoL.Patches.GunAimInputPatch",
+    "BoscaliSummer.Features.Autopilot.Patches.AutopilotLandInputPatch",
+    "BoscaliSummer.Features.Autopilot.Patches.RadialMenuLifecyclePatches",
+    "BoscaliSummer.Features.Autopilot.Patches.BoscaliMenuActionPatches"
     ,"BoscaliSummer.Features.Squad.Patches.SquadDamagePatch"
     ,"BoscaliSummer.Features.Squad.Patches.SquadKillPatch"
     ,"BoscaliSummer.Features.Squad.Patches.SquadPilotDeathPatch"
+    ,"BoscaliSummer.Features.DynamicOperations.Runtime.OperationJamPatch"
+    ,"BoscaliSummer.Features.DynamicOperations.Runtime.OperationRescuePatch"
+    ,"BoscaliSummer.Features.DynamicOperations.Runtime.OperationRepairPatch"
+    ,"BoscaliSummer.Features.DynamicOperations.Runtime.OperationSupplyPatch"
+    ,"BoscaliSummer.Features.DynamicOperations.Runtime.OperationSupplyTransferPatch"
+    ,"BoscaliSummer.Features.DynamicOperations.Runtime.OperationMarkerPatch"
 };
 
 foreach (string patchType in patchTypes)
@@ -288,6 +337,7 @@ string[] featureTypes =
     "BoscaliSummer.Features.Progression.ProgressionFeature",
     "BoscaliSummer.Features.Support.SupportFeature",
     "BoscaliSummer.Features.QoL.QoLFeature",
+    "BoscaliSummer.Features.Autopilot.AutopilotFeature",
     "BoscaliSummer.Features.Command.CommandFeature"
     ,"BoscaliSummer.Features.Squad.SquadFeature"
 };
@@ -349,6 +399,40 @@ foreach (string resource in radioResources)
     ,("BoscaliSummer.Features.Support.Networking.SupportResultMessage", "Action", typeof(byte))
     ,("BoscaliSummer.Features.Support.Networking.SupportResultMessage", "Result", typeof(byte))
     ,("BoscaliSummer.Features.Support.Networking.SupportResultMessage", "CooldownSeconds", typeof(float))
+    ,("BoscaliSummer.Features.Support.Networking.SupportResultMessage", "Contacts", typeof(int))
+    ,("BoscaliSummer.Features.Support.Networking.OpsQueryMessage", "Protocol", typeof(byte))
+    ,("BoscaliSummer.Features.Support.Networking.OpsCommandMessage", "Protocol", typeof(byte))
+    ,("BoscaliSummer.Features.Support.Networking.OpsCommandMessage", "RequestId", typeof(int))
+    ,("BoscaliSummer.Features.Support.Networking.OpsCommandMessage", "Command", typeof(byte))
+    ,("BoscaliSummer.Features.Support.Networking.OpsCommandMessage", "Arg", typeof(byte))
+    ,("BoscaliSummer.Features.Support.Networking.OpsCommandMessage", "Arg2", typeof(byte))
+    ,("BoscaliSummer.Features.Support.Networking.OpsCommandMessage", "X", typeof(float))
+    ,("BoscaliSummer.Features.Support.Networking.OpsCommandMessage", "Z", typeof(float))
+    ,("BoscaliSummer.Features.Support.Networking.OpsStateMessage", "Protocol", typeof(byte))
+    ,("BoscaliSummer.Features.Support.Networking.OpsStateMessage", "RequestId", typeof(int))
+    ,("BoscaliSummer.Features.Support.Networking.OpsStateMessage", "Result", typeof(byte))
+    ,("BoscaliSummer.Features.Support.Networking.OpsStateMessage", "SatelliteCount", typeof(byte))
+    ,("BoscaliSummer.Features.Support.Networking.OpsStateMessage", "SatelliteIds", typeof(byte[]))
+    ,("BoscaliSummer.Features.Support.Networking.OpsStateMessage", "SatelliteRoles", typeof(byte[]))
+    ,("BoscaliSummer.Features.Support.Networking.OpsStateMessage", "SatelliteAltitudes", typeof(byte[]))
+    ,("BoscaliSummer.Features.Support.Networking.OpsStateMessage", "SatelliteStates", typeof(byte[]))
+    ,("BoscaliSummer.Features.Support.Networking.OpsStateMessage", "SatelliteFuel", typeof(byte[]))
+    ,("BoscaliSummer.Features.Support.Networking.OpsStateMessage", "StationXs", typeof(float[]))
+    ,("BoscaliSummer.Features.Support.Networking.OpsStateMessage", "StationZs", typeof(float[]))
+    ,("BoscaliSummer.Features.Support.Networking.OpsStateMessage", "OriginXs", typeof(float[]))
+    ,("BoscaliSummer.Features.Support.Networking.OpsStateMessage", "OriginZs", typeof(float[]))
+    ,("BoscaliSummer.Features.Support.Networking.OpsStateMessage", "TransitLeft", typeof(float[]))
+    ,("BoscaliSummer.Features.Support.Networking.OpsStateMessage", "TransitTotal", typeof(float[]))
+    ,("BoscaliSummer.Features.Support.Networking.OpsStateMessage", "Sigint", typeof(byte))
+    ,("BoscaliSummer.Features.Support.Networking.OpsStateMessage", "Crypto", typeof(byte))
+    ,("BoscaliSummer.Features.Support.Networking.OpsStateMessage", "Disrupt", typeof(byte))
+    ,("BoscaliSummer.Features.Support.Networking.OpsStateMessage", "Ew", typeof(byte))
+    ,("BoscaliSummer.Features.Support.Networking.CyberEffectMessage", "Protocol", typeof(byte))
+    ,("BoscaliSummer.Features.Support.Networking.CyberEffectMessage", "Kind", typeof(byte))
+    ,("BoscaliSummer.Features.Support.Networking.CyberEffectMessage", "FactionName", typeof(string))
+    ,("BoscaliSummer.Features.Support.Networking.CyberEffectMessage", "X", typeof(float))
+    ,("BoscaliSummer.Features.Support.Networking.CyberEffectMessage", "Z", typeof(float))
+    ,("BoscaliSummer.Features.Support.Networking.CyberEffectMessage", "Duration", typeof(float))
 };
 foreach ((string typeName, string fieldName, Type fieldType) in messageFields)
 {
@@ -381,6 +465,14 @@ string operationAssembly = Path.Combine(managedDir, "Assembly-CSharp.dll");
     ("Unit", "add_onDisableUnit", "System.Void(System.Action`1<Unit>)"),
     ("Unit", "remove_onDisableUnit", "System.Void(System.Action`1<Unit>)"),
     ("Unit", "Jam", "System.Void(Unit+JamEventArgs)"),
+    ("PilotDismounted", "Capture", "System.Void(Unit)"),
+    ("Building", "Repair", "System.Void(Unit,System.Single)"),
+    ("Building", "NeedsRepair", "System.Boolean()"),
+    ("Building", "IsRepairable", "System.Boolean()"),
+    ("Rearmer", "ProcessRearmRequest", "System.Boolean(Unit,System.Int32&)"),
+    ("Rearmer", "RefillOtherRearmer", "System.Void(Rearmer)"),
+    ("Aircraft", "IsLanded", "System.Boolean()"),
+    ("Unit", "get_NetworkunitState", "Unit+UnitState()"),
     ("GroundVehicle", "get_UnitCommand", "UnitCommand()"),
     ("GroundVehicle", "SetHoldPosition", "System.Void(System.Boolean)"),
     ("FactionHQ", "RewardPlayer", "System.Void(NuclearOption.Networking.Player,Unit,System.Single,System.Single,FactionHQ+RewardType)"),
@@ -407,6 +499,13 @@ string operationAssembly = Path.Combine(managedDir, "Assembly-CSharp.dll");
     ,("Pilot", "ApplyDamage", "System.Void(System.Single,System.Single,System.Single,System.Single)")
     ,("UnitRegistry", "TryGetPersistentUnit", "System.Boolean(PersistentID,PersistentUnit&)")
     ,("FactionHelper", "EmptyOrNoFactionOrNeutral", "System.Boolean(System.String)")
+    ,("MissionPosition", "GetAllPositionsResults", "System.Void(FactionHQ,GlobalPosition,System.Boolean,System.Collections.Generic.List`1<MissionPosition+PositionResult>)")
+    ,("MissionPosition", "DistanceTo", "System.Boolean(NuclearOption.SavedMission.Objective,GlobalPosition,MissionPosition+PositionResult&)")
+    ,("NuclearOption.SavedMission.SavedObjective", "CreateSavedObjective", "NuclearOption.SavedMission.SavedObjective(NuclearOption.SavedMission.ObjectiveType,System.String)")
+    ,("GlobalPosition", ".ctor", "System.Void(System.Single,System.Single,System.Single)")
+    ,("NuclearOption.SavedMission.ObjectivePosition", ".ctor", "System.Void(GlobalPosition,System.Nullable`1<System.Single>)")
+    ,("GameManager", "GetLocalAircraft", "System.Boolean(Aircraft&)")
+    ,("Aircraft", "HasEjected", "System.Boolean()")
 };
 foreach (var seam in operationMethods)
     RequireMetadataSignature(operationAssembly, seam.Type, seam.Method, seam.Signature);
@@ -417,6 +516,8 @@ RequireMetadataSignature(Path.Combine(managedDir, "Mirage.dll"), "Mirage.ServerO
     ("FactionHQ", "factionPlayers", "Mirage.Collections.SyncList`1<NuclearOption.Networking.PlayerRef>"),
     ("TrackingInfo", "lastKnownPosition", "GlobalPosition"),
     ("TrackingInfo", "lastSpottedTime", "System.Single"),
+    ("Rearmer", "Unit", "Unit"),
+    ("Rearmer", "Capacity", "System.Single"),
     ("Airbase", "center", "UnityEngine.Transform"),
     ("NuclearOption.SavedMission.SavedAirbase", "Capturable", "System.Boolean"),
     ("RoadPathfinding.RoadNetwork", "roads", "System.Collections.Generic.List`1<RoadPathfinding.Road>"),
@@ -440,6 +541,9 @@ foreach (string type in new[] {
     "BoscaliSummer.Features.DynamicOperations.DynamicOperationsFeature",
     "BoscaliSummer.Features.DynamicOperations.Runtime.OperationsManager",
     "BoscaliSummer.Features.DynamicOperations.Runtime.OperationRewards",
+    "BoscaliSummer.Features.DynamicOperations.Runtime.OperationObjective",
+    "BoscaliSummer.Features.DynamicOperations.Runtime.OperationMarkerBridge",
+    "BoscaliSummer.Features.DynamicOperations.Runtime.OperationZoneHud",
     "BoscaliSummer.Features.DynamicOperations.Networking.OperationsNet" })
     if (pluginAssembly.GetType(type, false) == null) throw new TypeLoadException(type);
 foreach (var contract in new[] {
@@ -748,37 +852,121 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
 {
     const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance;
     Type net = plugin.GetType("BoscaliSummer.Features.Support.Networking.SupportNet", true)!;
-    if ((byte)net.GetField("ProtocolVersion", flags)!.GetRawConstantValue()! != 3)
-        throw new InvalidOperationException("Support protocol differs from the map-area contract");
+    if ((byte)net.GetField("ProtocolVersion", flags)!.GetRawConstantValue()! != 6)
+        throw new InvalidOperationException("Support protocol differs from the constellation contract");
     net.GetMethod("InstallSerializers", flags)!.Invoke(null, null);
-    Type type = plugin.GetType("BoscaliSummer.Features.Support.Networking.SupportResultMessage", true)!;
+
     Type writerType = mirage.GetType("Mirage.Serialization.NetworkWriter", true)!;
     Type readerType = mirage.GetType("Mirage.Serialization.NetworkReader", true)!;
-    var write = (Delegate)mirage.GetType("Mirage.Serialization.Writer`1", true)!.MakeGenericType(type).GetProperty("Write", flags)!.GetValue(null)!;
-    var read = (Delegate)mirage.GetType("Mirage.Serialization.Reader`1", true)!.MakeGenericType(type).GetProperty("Read", flags)!.GetValue(null)!;
-    object source = Activator.CreateInstance(type)!;
-    foreach (FieldInfo field in type.GetFields())
-        field.SetValue(source, field.FieldType == typeof(byte) ? (object)(byte)3 :
-            field.FieldType == typeof(int) ? (object)7123 : 1234.5f);
-    object writer = Activator.CreateInstance(writerType, 256)!;
-    write.DynamicInvoke(writer, source);
-    object Decode(byte[] bytes)
+
+    void Set(object value, string field, object data) =>
+        value.GetType().GetField(field, flags)!.SetValue(value, data);
+
+    object Get(object value, string field) =>
+        value.GetType().GetField(field, flags)!.GetValue(value)!;
+
+    byte[] Encode(Type type, object source)
     {
+        var write = (Delegate)mirage.GetType("Mirage.Serialization.Writer`1", true)!.MakeGenericType(type)
+            .GetProperty("Write", flags)!.GetValue(null)!;
+        object writer = Activator.CreateInstance(writerType, 256)!;
+        write.DynamicInvoke(writer, source);
+        return (byte[])writerType.GetMethod("ToArray")!.Invoke(writer, null)!;
+    }
+
+    object Decode(Type type, byte[] bytes)
+    {
+        var read = (Delegate)mirage.GetType("Mirage.Serialization.Reader`1", true)!.MakeGenericType(type)
+            .GetProperty("Read", flags)!.GetValue(null)!;
         object reader = Activator.CreateInstance(readerType)!;
-        try {
+        try
+        {
             readerType.GetMethod("Reset", new[] { typeof(byte[]) })!.Invoke(reader, new object[] { bytes });
             return read.DynamicInvoke(reader)!;
         }
         finally { ((IDisposable)reader).Dispose(); }
     }
-    object result = Decode((byte[])writerType.GetMethod("ToArray")!.Invoke(writer, null)!);
-    foreach (FieldInfo field in type.GetFields())
-        if (!Equals(field.GetValue(source), field.GetValue(result)))
-            throw new InvalidOperationException("Support map acknowledgement changed " + field.Name);
-    object old = Decode(new byte[] { 2 });
-    if ((byte)type.GetField("Protocol")!.GetValue(old)! != 2)
-        throw new InvalidOperationException("Support did not reject an old header before reading new fields");
-    Console.WriteLine("  Support serializers: protocol-3 map-area roundtrip and short legacy-header rejection");
+
+    object Roundtrip(Type type, object source, string label)
+    {
+        object result = Decode(type, Encode(type, source));
+        foreach (FieldInfo field in type.GetFields())
+        {
+            if (field.FieldType.IsArray) continue;
+            if (!Equals(field.GetValue(source), field.GetValue(result)))
+                throw new InvalidOperationException("Support " + label + " changed " + field.Name);
+        }
+        return result;
+    }
+
+    Type requestType = plugin.GetType("BoscaliSummer.Features.Support.Networking.SupportRequestMessage", true)!;
+    object request = Activator.CreateInstance(requestType)!;
+    Set(request, "Protocol", (byte)6); Set(request, "RequestId", 7123); Set(request, "Action", (byte)6);
+    Set(request, "X", 1234.5f); Set(request, "Y", 2345.5f); Set(request, "Z", -3456.5f);
+    Roundtrip(requestType, request, "request");
+
+    Type resultType = plugin.GetType("BoscaliSummer.Features.Support.Networking.SupportResultMessage", true)!;
+    object resultMessage = Activator.CreateInstance(resultType)!;
+    Set(resultMessage, "Protocol", (byte)6); Set(resultMessage, "RequestId", 7123);
+    Set(resultMessage, "Action", (byte)4); Set(resultMessage, "Result", (byte)1);
+    Set(resultMessage, "CooldownSeconds", 30f); Set(resultMessage, "Radius", 6000f);
+    Set(resultMessage, "Duration", 10f); Set(resultMessage, "Contacts", 48);
+    Set(resultMessage, "X", 1234.5f); Set(resultMessage, "Y", 2345.5f); Set(resultMessage, "Z", -3456.5f);
+    object resultBack = Roundtrip(resultType, resultMessage, "result");
+    if ((int)Get(resultBack, "Contacts") != 48)
+        throw new InvalidOperationException("Support result lost the sweep contact count");
+
+    Type queryType = plugin.GetType("BoscaliSummer.Features.Support.Networking.OpsQueryMessage", true)!;
+    object query = Activator.CreateInstance(queryType)!;
+    Set(query, "Protocol", (byte)6);
+    Roundtrip(queryType, query, "ops query");
+
+    Type commandType = plugin.GetType("BoscaliSummer.Features.Support.Networking.OpsCommandMessage", true)!;
+    object command = Activator.CreateInstance(commandType)!;
+    Set(command, "Protocol", (byte)6); Set(command, "RequestId", 91); Set(command, "Command", (byte)1);
+    Set(command, "Arg", (byte)2); Set(command, "Arg2", (byte)0); Set(command, "X", 1234.5f); Set(command, "Z", -3456.5f);
+    Roundtrip(commandType, command, "ops command");
+
+    Type stateType = plugin.GetType("BoscaliSummer.Features.Support.Networking.OpsStateMessage", true)!;
+    object state = Activator.CreateInstance(stateType)!;
+    Set(state, "Protocol", (byte)6); Set(state, "RequestId", 91); Set(state, "Result", (byte)1);
+    Set(state, "SatelliteCount", (byte)2);
+    Set(state, "SatelliteIds", new byte[] { 1, 2, 0, 0 });
+    Set(state, "SatelliteRoles", new byte[] { 0, 2, 0, 0 });
+    Set(state, "SatelliteAltitudes", new byte[] { 0, 2, 0, 0 });
+    Set(state, "SatelliteStates", new byte[] { 0, 1, 0, 0 });
+    Set(state, "SatelliteFuel", new byte[] { 100, 40, 0, 0 });
+    Set(state, "StationXs", new float[] { 1.5f, -2.5f, 0f, 0f });
+    Set(state, "StationZs", new float[] { -1.5f, 2.5f, 0f, 0f });
+    Set(state, "OriginXs", new float[] { 0.5f, -0.5f, 0f, 0f });
+    Set(state, "OriginZs", new float[] { -0.5f, 0.5f, 0f, 0f });
+    Set(state, "TransitLeft", new float[] { 0f, 12.5f, 0f, 0f });
+    Set(state, "TransitTotal", new float[] { 0f, 25f, 0f, 0f });
+    Set(state, "Sigint", (byte)2); Set(state, "Crypto", (byte)1);
+    Set(state, "Disrupt", (byte)1); Set(state, "Ew", (byte)1);
+    object stateBack = Roundtrip(stateType, state, "ops state");
+    if ((byte)Get(stateBack, "SatelliteCount") != 2 ||
+        ((byte[])Get(stateBack, "SatelliteIds"))[1] != 2 ||
+        ((byte[])Get(stateBack, "SatelliteRoles"))[1] != 2 ||
+        ((byte[])Get(stateBack, "SatelliteAltitudes"))[1] != 2 ||
+        Math.Abs(((float[])Get(stateBack, "StationXs"))[1] + 2.5f) > 0.001f ||
+        Math.Abs(((float[])Get(stateBack, "TransitLeft"))[1] - 12.5f) > 0.001f ||
+        (byte)Get(stateBack, "Ew") != 1)
+        throw new InvalidOperationException("Support ops state bounds/level roundtrip failed");
+    if ((byte)Get(Decode(stateType, new byte[] { 2 }), "Protocol") != 2 ||
+        (byte)Get(Decode(stateType, new byte[] { 2 }), "SatelliteCount") != 0)
+        throw new InvalidOperationException("Support did not reject an old ops state header");
+
+    Type cyberType = plugin.GetType("BoscaliSummer.Features.Support.Networking.CyberEffectMessage", true)!;
+    object cyber = Activator.CreateInstance(cyberType)!;
+    Set(cyber, "Protocol", (byte)6); Set(cyber, "Kind", (byte)3);
+    Set(cyber, "FactionName", "Vulture");
+    Set(cyber, "X", 1234.5f); Set(cyber, "Z", -3456.5f); Set(cyber, "Duration", 15f);
+    object cyberBack = Roundtrip(cyberType, cyber, "cyber effect");
+    if ((string)Get(cyberBack, "FactionName") != "Vulture")
+        throw new InvalidOperationException("Support cyber effect lost the attacker faction");
+
+    Console.WriteLine("  Support protocol-6 serializers: request/result (contacts) roundtrip, ops query/command/state (2 satellites, station/transfer state, 4 facilities) roundtrip, cyber effect faction roundtrip, old-header rejection");
 }
 
 sealed class ProbeSignatureNames : ISignatureTypeProvider<string, object>

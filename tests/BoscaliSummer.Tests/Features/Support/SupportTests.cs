@@ -72,6 +72,10 @@ namespace BoscaliSummer.Tests.Features.Support
 
         public static void Run()
         {
+            ConstellationTests.Run();
+            InfoNetworkTests.Run();
+            TestAssert.That(SupportEffectPolicy.EmpDuration == 30f,
+                "EMP disruption must retain its 30-second operational duration");
             TestAssert.That(SupportEffectPolicy.RodDamage(0f) == 12000f &&
                 SupportEffectPolicy.RodDamage(150f) == 12000f, "rod core must retain its compact lethal plateau");
             TestAssert.That(SupportEffectPolicy.RodDamage(200f) > SupportEffectPolicy.RodDamage(300f) &&

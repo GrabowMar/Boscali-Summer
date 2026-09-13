@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
+using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Framework.Features;
 using NOAvionics;
 using NOAvionics.Ui;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace BoscaliSummer.Features.Command.Presentation.MapUi
 {
@@ -27,26 +30,55 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private MfdPagingGrid presetGrid;
             private TMPro.TMP_Text presetStatus;
 
+            // Camera surface mark: state lives in Support through a narrow contract.
+            private ICameraTargetService cameraService;
+            private Image cameraRail;
+            private TMPro.TMP_Text cameraState;
+            private TMPro.TMP_Text cameraDetails;
+            private AvButton cameraCapture;
+            private AvButton cameraCall;
+            private AvButton cameraClear;
+            private TMPro.TMP_Text cameraPos;
+            private TMPro.TMP_Text cameraRange;
+            private TMPro.TMP_Text cameraAge;
+            private TMPro.TMP_Text cameraArmed;
+
             public TargetPresenter(MFDScreen screen, TargetListSelector selector)
                 : base(screen, VanillaMfdPanelId.Tgt)
             {
                 this.selector = selector;
             }
 
-            protected override int TabCount => 3;
+            private ICameraTargetService Camera
+            {
+                get
+                {
+                    if (cameraService == null) ModServices.TryGet(out cameraService);
+                    return cameraService;
+                }
+            }
+
+            protected override int TabCount => 4;
 
             protected override void BuildContent()
             {
-                ConfigureTabs(new[] { "FILTERS", "PRESETS", "SELECTED" }, SelectPage);
-                pages = new[] { CreatePage("Filters"), CreatePage("Presets"), CreatePage("Selected") };
+                ConfigureTabs(new[] { "FILTERS", "PRESETS", "SELECTED", "CAMERA" }, SelectPage);
+                pages = new[]
+                {
+                    CreatePage("Filters"), CreatePage("Presets"),
+                    CreatePage("Selected"), CreatePage("Camera")
+                };
                 BuildFiltersPage(pages[0]);
                 BuildPresetsPage(pages[1]);
                 BuildSelectedPage(pages[2]);
+                BuildCameraPage(pages[3]);
                 SelectPage(0);
             }
 
             protected override void RefreshContent()
             {
+                RefreshCamera();
+
                 if (!Ready)
                 {
                     SetFilterInput(false);
@@ -221,6 +253,125 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 float y = Heading(page, -AvTokens.Space1, Shell.Body.width,
                                   "SELECTED TARGETS", "MAP ICONS");
                 selectedGrid = new MfdPagingGrid(page, y, Shell.Body.width, 1, 9, readOnly: true);
+            }
+
+            private void BuildCameraPage(RectTransform page)
+            {
+                DrawSpine(page);
+                float width = Shell.Body.width;
+                float y = Heading(page, -AvTokens.Space1, width, "CAMERA MARK", "SURFACE SENSOR TARGET");
+
+                AvStyled.Box(page, new Rect(AvTokens.Space3, y, width - AvTokens.Space3 * 2f, 64f), "section band");
+                cameraRail = AvStyled.Rail(page, new Rect(AvTokens.Space3 + 6f, y - 6f, 3f, 52f), "locked");
+                cameraState = AvStyled.Label(page,
+                    new Rect(AvTokens.Space3 + 16f, y - 6f, width - AvTokens.Space3 * 2f - 24f, 16f),
+                    "NO ACTIVE MARK", "section-title");
+                cameraDetails = AvStyled.Label(page,
+                    new Rect(AvTokens.Space3 + 16f, y - 24f, width - AvTokens.Space3 * 2f - 24f, 36f),
+                    "Aim the cockpit camera at a surface point and press MARK CAMERA.", "row-sub");
+                y -= 76f;
+
+                float gap = AvTokens.Gap;
+                float buttonWidth = (width - AvTokens.Space3 * 2f - gap * 2f) / 3f;
+                cameraCapture = PanelButton(page,
+                    new Rect(AvTokens.Space3, y, buttonWidth, AvTokens.RowHeight),
+                    "MARK CAMERA", "toggle",
+                    () => { Camera?.Capture(); RequestRefresh(); }, AvButtonStyle.Toggle);
+                cameraCall = PanelButton(page,
+                    new Rect(AvTokens.Space3 + buttonWidth + gap, y, buttonWidth, AvTokens.RowHeight),
+                    "CALL AT MARK", "toggle",
+                    () => { Camera?.CallAtMark(); RequestRefresh(); }, AvButtonStyle.Toggle);
+                cameraClear = PanelButton(page,
+                    new Rect(AvTokens.Space3 + (buttonWidth + gap) * 2f, y, buttonWidth, AvTokens.RowHeight),
+                    "CLEAR MARK", "toggle",
+                    () => { Camera?.Clear(); RequestRefresh(); }, AvButtonStyle.Toggle);
+                y -= AvTokens.RowHeight + AvTokens.Space2;
+
+                y = Heading(page, y, width, "TARGET TELEMETRY", "COORDINATES & RANGE");
+                cameraPos = CameraKey(page, y, width, "COORDINATES (X/Z)");
+                y -= 18f;
+                cameraRange = CameraKey(page, y, width, "SLANT RANGE");
+                y -= 18f;
+                cameraAge = CameraKey(page, y, width, "MARK AGE");
+                y -= 18f;
+                cameraArmed = CameraKey(page, y, width, "ARMED CALL-IN");
+                y -= 24f;
+
+                AvStyled.Label(page, new Rect(AvTokens.Space3, y, width - AvTokens.Space3 * 2f, 30f),
+                    "The mark is a surface reference, not a tracked contact. Arm an operation on OPS / SUPPORT, then CALL AT MARK.",
+                    "row-sub");
+            }
+
+            private static TMPro.TMP_Text CameraKey(RectTransform page, float y, float width, string key)
+            {
+                AvStyled.Label(page, new Rect(AvTokens.Space3, y, width * 0.55f, 16f), key, "kv-key");
+                return AvStyled.Label(page,
+                    new Rect(AvTokens.Space3 + width * 0.55f, y, width * 0.45f - AvTokens.Space3, 16f),
+                    "—", "kv-value", align: TMPro.TextAlignmentOptions.MidlineRight);
+            }
+
+            private void RefreshCamera()
+            {
+                if (cameraState == null) return;
+                ICameraTargetService service = Camera;
+                if (service == null || !service.Available)
+                {
+                    cameraRail.color = AvTheme.RailInert;
+                    cameraState.text = "CAMERA MARKING UNAVAILABLE";
+                    cameraState.color = AvTheme.Dim;
+                    cameraDetails.text = "The support module or its observation source is not installed.";
+                    cameraCapture?.SetEnabled(false);
+                    cameraCall?.SetEnabled(false);
+                    cameraClear?.SetEnabled(false);
+                    SetCameraTelemetry("—", "—", "—", "—");
+                    return;
+                }
+
+                bool marked = service.HasMark;
+                bool armed = !string.IsNullOrEmpty(service.ArmedActionName);
+                if (marked)
+                {
+                    ObservationPoint point = service.Mark;
+                    cameraRail.color = AvTheme.RailReady;
+                    cameraState.text = (point.Source ?? "SENSOR").ToUpperInvariant() + " SURFACE MARK";
+                    cameraState.color = AvTheme.RailReady;
+                    cameraDetails.text = "Surface reference recorded; expires 120 seconds after capture.";
+                    SetCameraTelemetry(
+                        "X " + point.X.ToString("0") + " · Z " + point.Z.ToString("0"),
+                        (point.Range / 1000f).ToString("0.0") + " km",
+                        service.AgeSeconds.ToString("0") + "s",
+                        armed ? service.ArmedActionName : "NONE (ARM IN OPS)");
+                }
+                else
+                {
+                    cameraRail.color = AvTheme.RailInert;
+                    cameraState.text = "NO ACTIVE MARK";
+                    cameraState.color = AvTheme.Dim;
+                    cameraDetails.text = service.Status.ToUpperInvariant() + " · AIM AND PRESS MARK CAMERA.";
+                    SetCameraTelemetry("—", "—", "—", armed ? service.ArmedActionName : "NONE (ARM IN OPS)");
+                }
+
+                cameraCapture.SetEnabled(service.CanCapture);
+                cameraCall.SetEnabled(service.CanCallAtMark);
+                cameraCall.SetText(armed ? "CALL AT MARK" : "SELECT IN OPS");
+                cameraClear.SetEnabled(marked);
+                cameraCapture.WithTooltip(service.CanCapture
+                    ? "Record the surface point under the native camera."
+                    : "Requires an active native camera view on your aircraft.");
+                cameraCall.WithTooltip(!marked ? "Capture a mark first."
+                    : !armed ? "Arm an operation on OPS / SUPPORT first."
+                    : "Deliver the armed operation onto this mark.");
+                cameraClear.WithTooltip(marked ? "Clear the active mark." : "No mark to clear.");
+            }
+
+            private void SetCameraTelemetry(string position, string range, string age, string armed)
+            {
+                cameraPos.text = position;
+                cameraRange.text = range;
+                cameraAge.text = age;
+                cameraAge.color = AvTheme.TextPrimary;
+                cameraArmed.text = armed;
+                cameraArmed.color = armed.StartsWith("NONE") ? AvTheme.Dim : AvTheme.RailCaution;
             }
 
             private void SelectPage(int selected)

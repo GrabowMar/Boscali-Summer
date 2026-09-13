@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.IO;
 using BepInEx;
 using BoscaliSummer.Features.Command.Configuration;
@@ -5,6 +7,7 @@ using NOAvionics;
 using NOAvionics.Ui;
 using UnityEngine;
 using UnityEngine.UI;
+using Object = UnityEngine.Object;
 
 namespace BoscaliSummer.Features.Command.Presentation.MapUi
 {
@@ -35,6 +38,12 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private const float GridCell = 64f;
         private const int MajorGridStride = 4;
 
+        public struct WallpaperFileEntry
+        {
+            public string FileName;
+            public string FullPath;
+        }
+
         private static CommandSettings settings;
         private static GameObject backdrop;
         private static GameObject tray;
@@ -52,6 +61,14 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private static readonly Sprite[] presetSprites = new Sprite[3];
         private static Sprite customWallpaperSprite;
         private static string customWallpaperPath;
+        private static string failedWallpaperPath;
+        public static string WallpaperStatus { get; private set; } = "Choose CUSTOM on STYLE to use local PNG/JPEG files.";
+        private static Image terrainImage;
+        private static bool terrainWasEnabled;
+        private static Color terrainColor;
+
+        private static readonly List<WallpaperFileEntry> discoveredWallpapers = new List<WallpaperFileEntry>();
+        private static bool scannedWallpapers;
 
         public static void Configure(CommandSettings config)
         {
@@ -63,6 +80,17 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         {
             if (config != null) settings = config;
 
+            if (!DynamicMap.mapMaximized)
+            {
+                // The backdrop is a root overlay canvas, so any map-close path that skips
+                // the minimize postfix leaves it drawing over the cockpit. Own the
+                // invariant here: no maximised map, no owned decoration.
+                Restore();
+                return;
+            }
+
+            if (backdrop == null) return;
+
             float opacity = settings != null ? settings.DeckOpacity.Value : 0.95f;
             bool showGrid = settings == null || settings.DeckGrid.Value;
             bool showChecker = settings != null && settings.CheckerboardOverlay.Value;
@@ -70,6 +98,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             bool showWallpaper = settings != null && settings.BackgroundImage.Value;
             int wallpaperPreset = settings != null ? settings.BackgroundImagePreset.Value : 0;
             float wallpaperOpacity = settings != null ? settings.BackgroundImageOpacity.Value : 0.25f;
+            float mapTrayOpacity = settings != null ? settings.MapTrayOpacity.Value : 0.15f;
+            int fitMode = settings != null ? settings.WallpaperFitMode.Value : 0;
 
             if (backdropBaseImage != null)
             {
@@ -85,8 +115,32 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     {
                         backdropUserImage.gameObject.SetActive(true);
                         backdropUserImage.sprite = sprite;
-                        backdropUserImage.type = isTiled ? Image.Type.Tiled : Image.Type.Simple;
-                        backdropUserImage.preserveAspect = !isTiled;
+                        RectTransform imgRt = backdropUserImage.rectTransform;
+                        if (isTiled)
+                        {
+                            AvKit.Stretch(imgRt);
+                            backdropUserImage.type = Image.Type.Tiled;
+                            backdropUserImage.preserveAspect = false;
+                        }
+                        else
+                        {
+                            backdropUserImage.type = Image.Type.Simple;
+                            if (fitMode == 0) // Cover (Aspect Fill)
+                            {
+                                backdropUserImage.preserveAspect = false;
+                                ApplyAspectCover(imgRt, sprite, backdropCanvasSize);
+                            }
+                            else if (fitMode == 1) // Fit (Aspect Fit)
+                            {
+                                AvKit.Stretch(imgRt);
+                                backdropUserImage.preserveAspect = true;
+                            }
+                            else // Stretch
+                            {
+                                AvKit.Stretch(imgRt);
+                                backdropUserImage.preserveAspect = false;
+                            }
+                        }
                         backdropUserImage.color = new Color(1f, 1f, 1f, wallpaperOpacity);
                     }
                     else
@@ -128,15 +182,18 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             if (trayBaseImage != null)
             {
-                trayBaseImage.color = AvTheme.Ground.WithAlpha(0.92f * opacity);
+                float trayAlpha = mapTrayOpacity;
+                trayBaseImage.color = AvTheme.Ground.WithAlpha(trayAlpha);
             }
 
             if (trayGradientImage != null)
             {
-                trayGradientImage.color = new Color(1f, 1f, 1f, 0.50f * opacity);
+                float gradAlpha = 0.35f * mapTrayOpacity;
+                trayGradientImage.color = new Color(1f, 1f, 1f, gradAlpha);
             }
 
-            // Sync DynamicMap terrain image and background
+            // Sync DynamicMap terrain image. Map darkening is the tray behind the viewport;
+            // the map bed itself has to stay opaque enough to hide the world camera.
             var dynamicMap = SceneSingleton<DynamicMap>.i;
             if (dynamicMap != null)
             {
@@ -145,6 +202,12 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     Image terrainImg = dynamicMap.mapImage.GetComponent<Image>();
                     if (terrainImg != null)
                     {
+                        if (terrainImage != terrainImg)
+                        {
+                            terrainImage = terrainImg;
+                            terrainWasEnabled = terrainImg.enabled;
+                            terrainColor = terrainImg.color;
+                        }
                         bool showTerrain = settings == null || settings.MapTerrainImage.Value;
                         float terrainAlpha = settings != null ? settings.MapTerrainOpacity.Value : 1f;
                         terrainImg.enabled = showTerrain;
@@ -154,9 +217,32 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     }
                 }
                 if (dynamicMap.mapBackground != null)
-                {
-                    dynamicMap.mapBackground.color = new Color(1f, 1f, 1f, 0.68f * opacity);
-                }
+                    dynamicMap.mapBackground.color = new Color(1f, 1f, 1f, 0.68f);
+            }
+        }
+
+        private static void ApplyAspectCover(RectTransform rt, Sprite sprite, Vector2 canvasSize)
+        {
+            if (rt == null || sprite == null || canvasSize.x <= 1f || canvasSize.y <= 1f) return;
+            float canvasAspect = canvasSize.x / canvasSize.y;
+            float spriteAspect = (float)sprite.rect.width / Mathf.Max(1f, sprite.rect.height);
+
+            rt.anchorMin = new Vector2(0.5f, 0.5f);
+            rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = Vector2.zero;
+
+            if (spriteAspect >= canvasAspect)
+            {
+                float h = canvasSize.y;
+                float w = h * spriteAspect;
+                rt.sizeDelta = new Vector2(w, h);
+            }
+            else
+            {
+                float w = canvasSize.x;
+                float h = w / spriteAspect;
+                rt.sizeDelta = new Vector2(w, h);
             }
         }
 
@@ -165,15 +251,16 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         {
             if (canvas == null) return;
 
-            RectTransform canvasRect = canvas.transform as RectTransform;
-            if (canvasRect == null || canvasRect.rect.width <= 1f || canvasRect.rect.height <= 1f)
-                return;
+            // The nested map canvas can report a stale rect on the first open; the backdrop
+            // grid must span the real UI area, so resolve it the same way the layout does.
+            Vector2 canvasSize = MfdLayout.CanvasSize(canvas);
+            if (canvasSize.x <= 1f || canvasSize.y <= 1f) return;
 
             RectTransform backdropRect = EnsureBackdrop(canvas);
             RectTransform trayRect = EnsureCanvasRoot(ref tray, TrayName, canvas);
             if (backdropRect == null || trayRect == null) return;
 
-            ConfigureBackdrop(backdropRect, canvasRect.rect.size);
+            ConfigureBackdrop(backdropRect, canvasSize);
             ConfigureTray(trayRect, columns);
 
             // The tray shares the map canvas, where sibling order is draw order. Its root is
@@ -197,17 +284,32 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             trayGradientImage = null;
             backdropCanvasSize = Vector2.zero;
 
-            if (customWallpaperSprite != null)
+            if (terrainImage != null)
             {
-                if (customWallpaperSprite.texture != null) Object.Destroy(customWallpaperSprite.texture);
-                Object.Destroy(customWallpaperSprite);
-                customWallpaperSprite = null;
-                customWallpaperPath = null;
+                terrainImage.enabled = terrainWasEnabled;
+                terrainImage.color = terrainColor;
             }
+            terrainImage = null;
         }
 
         /// <summary>Mission-end counterpart to <see cref="Restore"/>.</summary>
-        public static void Reset() => Restore();
+        public static void Reset()
+        {
+            Restore();
+            UnloadCustomWallpaper();
+            failedWallpaperPath = null;
+            discoveredWallpapers.Clear();
+            scannedWallpapers = false;
+            for (int i = 0; i < presetSprites.Length; i++)
+            {
+                if (presetSprites[i] == null) continue;
+                Object.Destroy(presetSprites[i].texture);
+                Object.Destroy(presetSprites[i]);
+                presetSprites[i] = null;
+            }
+            if (checkerTexture != null) Object.Destroy(checkerTexture);
+            checkerTexture = null;
+        }
 
         /// <summary>
         /// Make the full-screen deck a root overlay canvas below both map and gameplay UI.
@@ -251,7 +353,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             deckCanvas.sortingLayerID = source.sortingLayerID;
             // The known order is GameplayUI=1, MaximizedMap=2. Stay below both; retaining
             // this relative calculation also covers a future game build that shifts them.
-            deckCanvas.sortingOrder = source.sortingOrder - 2;
+            // Nested under SceneEssentials/Canvas Unity can clear overrideSorting; set it
+            // after renderMode so the opaque deck still composites over the world camera.
+            deckCanvas.sortingOrder = Mathf.Max(0, source.sortingOrder - 2);
+            deckCanvas.overrideSorting = true;
             deckCanvas.targetDisplay = source.targetDisplay;
 
             CopyScaler(source.GetComponent<CanvasScaler>(), backdrop.GetComponent<CanvasScaler>());
@@ -472,12 +577,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             if (preset == 3)
             {
-                Sprite custom = LoadCustomWallpaper(out isTiled);
-                if (custom != null) return custom;
-                isTiled = true;
-                if (presetSprites[0] == null)
-                    presetSprites[0] = CreatePresetSprite(0);
-                return presetSprites[0];
+                return LoadCustomWallpaper(out isTiled);
             }
 
             return null;
@@ -541,29 +641,197 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             return sprite;
         }
 
+        public static int DiscoveredWallpaperCount
+        {
+            get
+            {
+                EnsureWallpapersScanned();
+                return discoveredWallpapers.Count;
+            }
+        }
+
+        public static string GetCurrentWallpaperFileName()
+        {
+            EnsureWallpapersScanned();
+            if (discoveredWallpapers.Count == 0) return "NONE FOUND";
+            string current = settings?.CustomWallpaperFile?.Value;
+            for (int i = 0; i < discoveredWallpapers.Count; i++)
+            {
+                if (string.Equals(discoveredWallpapers[i].FileName, current, StringComparison.OrdinalIgnoreCase))
+                    return discoveredWallpapers[i].FileName;
+            }
+            return discoveredWallpapers[0].FileName;
+        }
+
+        public static void CycleCustomWallpaper(int delta)
+        {
+            EnsureWallpapersScanned();
+            if (discoveredWallpapers.Count == 0 || settings == null) return;
+
+            string current = settings.CustomWallpaperFile.Value;
+            int index = 0;
+            for (int i = 0; i < discoveredWallpapers.Count; i++)
+            {
+                if (string.Equals(discoveredWallpapers[i].FileName, current, StringComparison.OrdinalIgnoreCase))
+                {
+                    index = i;
+                    break;
+                }
+            }
+
+            int newIndex = (index + delta + discoveredWallpapers.Count) % discoveredWallpapers.Count;
+            settings.CustomWallpaperFile.Value = discoveredWallpapers[newIndex].FileName;
+            UnloadCustomWallpaper();
+            ApplyAppearance();
+        }
+
+        public static void RescanWallpapers()
+        {
+            EnsureWallpapersScanned(forceRescan: true);
+            UnloadCustomWallpaper();
+            failedWallpaperPath = null;
+            ApplyAppearance();
+        }
+
+        public static void EnsureWallpapersScanned(bool forceRescan = false)
+        {
+            if (scannedWallpapers && !forceRescan) return;
+            scannedWallpapers = true;
+            discoveredWallpapers.Clear();
+
+            string primaryDir = Path.Combine(Paths.ConfigPath, "BoscaliSummer", "wallpapers");
+            try
+            {
+                if (!Directory.Exists(primaryDir))
+                {
+                    Directory.CreateDirectory(primaryDir);
+                    string readme = Path.Combine(primaryDir, "README.txt");
+                    if (!File.Exists(readme))
+                    {
+                        File.WriteAllText(readme,
+                            "Boscali Summer - Tactical Map Wallpapers\r\n" +
+                            "========================================\r\n\r\n" +
+                            "Place your custom .png, .jpg, or .jpeg images here.\r\n" +
+                            "Recommended resolution: 1920x1080 (or your display resolution).\r\n" +
+                            "Select them in-game via the MFD SET (Settings) panel.\r\n");
+                    }
+                }
+            }
+            catch { }
+
+            string[] candidateDirs = {
+                primaryDir,
+                Path.Combine(Paths.ConfigPath, "BoscaliSummer", "Backgrounds"),
+                Path.Combine(Paths.ConfigPath, "WingCommand", "Backgrounds"),
+                Path.Combine(Paths.ConfigPath, "BoscaliSummer"),
+                Path.Combine(Paths.PluginPath, "BoscaliSummer", "wallpapers"),
+                Path.Combine(Paths.PluginPath, "BoscaliSummer", "Backgrounds"),
+                Path.Combine(Paths.PluginPath, "BoscaliSummer")
+            };
+
+            var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            int visited = 0;
+            for (int d = 0; d < candidateDirs.Length && visited < 512; d++)
+            {
+                string dir = candidateDirs[d];
+                if (!Directory.Exists(dir)) continue;
+
+                try
+                {
+                    foreach (string path in Directory.EnumerateFiles(dir))
+                    {
+                        if (++visited > 512) break;
+                        string ext = Path.GetExtension(path)?.ToLowerInvariant();
+                        if (ext != ".png" && ext != ".jpg" && ext != ".jpeg") continue;
+
+                        string name = Path.GetFileName(path);
+                        if (seenNames.Add(name))
+                        {
+                            discoveredWallpapers.Add(new WallpaperFileEntry
+                            {
+                                FileName = name,
+                                FullPath = path
+                            });
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            discoveredWallpapers.Sort((a, b) => string.Compare(a.FileName, b.FileName, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static void UnloadCustomWallpaper()
+        {
+            if (customWallpaperSprite != null)
+            {
+                if (customWallpaperSprite.texture != null)
+                    Object.Destroy(customWallpaperSprite.texture);
+                Object.Destroy(customWallpaperSprite);
+                customWallpaperSprite = null;
+                customWallpaperPath = null;
+            }
+        }
+
         private static Sprite LoadCustomWallpaper(out bool isTiled)
         {
             isTiled = false;
-            string[] candidates = {
-                Path.Combine(Paths.ConfigPath, "BoscaliSummer", "wallpaper.png"),
-                Path.Combine(Paths.ConfigPath, "BoscaliSummer", "wallpaper.jpg"),
-                Path.Combine(Paths.PluginPath, "BoscaliSummer", "wallpaper.png"),
-                Path.Combine(Paths.PluginPath, "BoscaliSummer", "wallpaper.jpg")
-            };
-
-            string found = null;
-            foreach (string path in candidates)
+            EnsureWallpapersScanned();
+            if (discoveredWallpapers.Count == 0)
             {
-                if (File.Exists(path)) { found = path; break; }
+                WallpaperStatus = "No images found. Add PNG/JPEG files to BepInEx/config/BoscaliSummer/wallpapers, then RESCAN.";
+                return null;
             }
 
-            if (found == null) return null;
-            if (customWallpaperSprite != null && customWallpaperPath == found) return customWallpaperSprite;
+            string targetName = settings?.CustomWallpaperFile?.Value;
+            WallpaperFileEntry selected = default;
+            bool found = false;
 
+            if (!string.IsNullOrEmpty(targetName))
+            {
+                for (int i = 0; i < discoveredWallpapers.Count; i++)
+                {
+                    if (string.Equals(discoveredWallpapers[i].FileName, targetName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        selected = discoveredWallpapers[i];
+                        found = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!found)
+            {
+                selected = discoveredWallpapers[0];
+                if (settings != null) settings.CustomWallpaperFile.Value = selected.FileName;
+            }
+
+            if (customWallpaperSprite != null && customWallpaperPath == selected.FullPath)
+                return customWallpaperSprite;
+
+            if (failedWallpaperPath == selected.FullPath) return null;
+            UnloadCustomWallpaper();
+            failedWallpaperPath = selected.FullPath;
+            WallpaperStatus = "Image unavailable or unsupported. Limit: 16 MB, 4096 pixels per side. Replace it and RESCAN.";
+            Texture2D tex = null;
             try
             {
-                byte[] data = File.ReadAllBytes(found);
-                var tex = new Texture2D(2, 2, TextureFormat.RGBA32, mipChain: false)
+                byte[] data;
+                using (var stream = File.OpenRead(selected.FullPath))
+                {
+                    if (stream.Length > 16 * 1024 * 1024) return null;
+                    data = new byte[(int)stream.Length];
+                    int read = 0;
+                    while (read < data.Length)
+                    {
+                        int count = stream.Read(data, read, data.Length - read);
+                        if (count == 0) return null;
+                        read += count;
+                    }
+                }
+                if (!SettingsChoices.SupportedImage(data)) return null;
+                tex = new Texture2D(2, 2, TextureFormat.RGBA32, mipChain: false)
                 {
                     filterMode = FilterMode.Bilinear,
                     wrapMode = TextureWrapMode.Clamp,
@@ -582,11 +850,15 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     0u,
                     SpriteMeshType.FullRect);
                 customWallpaperSprite.hideFlags = HideFlags.HideAndDontSave;
-                customWallpaperPath = found;
+                customWallpaperPath = selected.FullPath;
+                failedWallpaperPath = null;
+                WallpaperStatus = "Loaded " + selected.FileName + ". RESCAN reloads replaced files.";
                 return customWallpaperSprite;
             }
             catch
             {
+                if (tex != null) Object.Destroy(tex);
+                UnloadCustomWallpaper();
                 return null;
             }
         }

@@ -30,7 +30,7 @@ namespace BoscaliSummer.Features.Command.Runtime
     }
 
     /// <summary>
-    /// Advisory frontlines from actual strategic ownership and faction-known ground pressure.
+    /// Advisory frontlines from actual strategic ownership and objective ground presence.
     /// Persistent control follows elapsed mission time; no vanilla capture state is mutated.
     /// </summary>
     internal sealed class TacticalSectorGrid
@@ -307,9 +307,6 @@ namespace BoscaliSummer.Features.Command.Runtime
             if (nodes.Count < MaximumNodes)
                 nodes.Add(new TacticalNode(id, name, worldX, worldZ, faction, radius, isAirbase));
         }
-
-        internal static float ObservationConfidence(float ageSeconds)
-            => IsFinite(ageSeconds) && ageSeconds >= 0f ? Math.Max(0f, 1f - ageSeconds / 30f) : 0f;
 
         public void AddTroopPresence(float worldX, float worldZ, float weight, bool isHostile, float influenceRadius = 12000f)
         {

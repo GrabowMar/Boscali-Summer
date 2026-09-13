@@ -187,6 +187,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         /// </summary>
         internal sealed class ButtonSkin
         {
+            public Button Owner;
+            public Selectable.Transition Transition;
+            public ColorBlock Colors;
+
             public Image Background;
             public Sprite Sprite;
             public Image.Type Type;
@@ -201,12 +205,24 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             public bool LabelAutoSize;
             public float LabelSpacing;
 
+            /// <summary>The mod click cue added to a borrowed native button; removed on restore.</summary>
+            public AvClickSound Click;
+
             /// <summary>The crisp frame drawn over the fill, added once the button has its
             /// final rail size; destroyed on restore rather than undone value-by-value.</summary>
             public GameObject Decoration;
 
             public void Restore()
             {
+                if (Owner != null)
+                {
+                    Owner.transition = Transition;
+                    Owner.colors = Colors;
+                }
+
+                if (Click != null) Object.Destroy(Click);
+                Click = null;
+
                 if (Background != null)
                 {
                     Background.sprite = Sprite;
@@ -293,6 +309,28 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             // and fire it. Every control the mods build already disables that; the vanilla
             // ones the rail adopts have to be disarmed too.
             AvInput.StripNavigation(button);
+
+            // The stock transition is SpriteSwap, so hovering would swap the restyled flat
+            // fill for a vanilla highlight frame. ColorTint multiplies the same dark key
+            // instead, keeping hover and press inside the rail's own language.
+            skin.Owner = button;
+            skin.Transition = button.transition;
+            skin.Colors = button.colors;
+            button.transition = Selectable.Transition.ColorTint;
+            button.colors = new ColorBlock
+            {
+                normalColor = Color.white,
+                highlightedColor = new Color(1.35f, 1.35f, 1.35f, 1f),
+                pressedColor = new Color(0.70f, 0.70f, 0.70f, 1f),
+                selectedColor = Color.white,
+                disabledColor = new Color(0.50f, 0.50f, 0.50f, 0.60f),
+                colorMultiplier = 1f,
+                fadeDuration = 0.06f,
+            };
+
+            // The vanilla key has no avionics click; lend it one while the rail wears it.
+            skin.Click = button.GetComponent<AvClickSound>();
+            if (skin.Click == null) skin.Click = button.gameObject.AddComponent<AvClickSound>();
 
             return skin;
         }

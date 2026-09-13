@@ -6,8 +6,9 @@ using UnityEngine;
 namespace BoscaliSummer.Features.Command.Runtime
 {
     /// <summary>
-    /// Read-only adapter for theater dimensions, actual base ownership and faction-known
-    /// ground observations. Neutral missions remain neutral until there is evidence of combat.
+    /// Read-only adapter for theater dimensions, actual base ownership and objective
+    /// ground observations from the synced world state. Neutral missions remain neutral
+    /// until there is evidence of combat.
     /// </summary>
     internal sealed class MissionMapCompatibilityEngine : MonoBehaviour, ISceneService
     {
@@ -132,18 +133,10 @@ namespace BoscaliSummer.Features.Command.Runtime
             if (unit == null || unit.disabled || localHq == null || unit.NetworkHQ == null ||
                 !(unit is GroundVehicle || unit is Building)) return false;
             hostile = unit.NetworkHQ != localHq;
-            float confidence = 1f;
-            if (hostile)
-            {
-                TrackingInfo track = localHq.GetTrackingData(unit.persistentID);
-                if (track == null) return false;
-                confidence = TacticalSectorGrid.ObservationConfidence(Time.timeSinceLevelLoad - track.lastSpottedTime);
-                if (confidence <= 0f) return false;
-                // GetPosition can itself update from the live transform; read the record only.
-                position = track.lastKnownPosition.AsVector3();
-            }
-            else position = unit.GlobalPosition().AsVector3();
-            weight = 2.5f * confidence;
+            // Objective theater state: the frontline reflects actual ground presence, not
+            // either side's tracking knowledge, so both sides see the same cells.
+            position = unit.GlobalPosition().AsVector3();
+            weight = 2.5f;
             return true;
         }
     }

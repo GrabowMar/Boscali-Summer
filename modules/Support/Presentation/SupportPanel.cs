@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using BepInEx.Logging;
 using BoscaliSummer.Features.Support.Runtime;
 using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Features;
 using BoscaliSummer.Framework.Lifecycle;
 using BoscaliSummer.Runtime;
 using NOAvionics;
@@ -15,10 +14,12 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Features.Support.Presentation
 {
     /// <summary>
-    /// "OPS" — tactical support, observation, and battle status on the maximised map.
-    /// Pilot abilities and enemy ace records live on SQD.
+    /// "OPS" — tactical support, the orbital constellation, cyber infrastructure and battle
+    /// status on the maximised map. Pilot abilities and enemy ace records live on SQD; the
+    /// ability list stays on SUPPORT, while SPACE and CYBER only command the systems that
+    /// enable it.
     /// </summary>
-    internal sealed class SupportPanel : MonoBehaviour, ISceneService
+    internal sealed partial class SupportPanel : MonoBehaviour, ISceneService
     {
         private const float Width = AvTokens.PanelWidth;
         private const float PanelHeight = AvTokens.PanelHeight;
@@ -30,8 +31,9 @@ namespace BoscaliSummer.Features.Support.Presentation
         private const int ChipCount = 3;
 
         private const int TabSupport = 0;
-        private const int TabObserve = 1;
-        private const int TabStatus = 2;
+        private const int TabSpace = 1;
+        private const int TabCyber = 2;
+        private const int TabStatus = 3;
 
         private sealed class StrikeRow
         {
@@ -42,6 +44,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             public TMP_Text Code;
             public TMP_Text Name;
             public TMP_Text Status;
+            public TMP_Text Status2;
             public TMP_Text Cost;
         }
 
@@ -49,8 +52,6 @@ namespace BoscaliSummer.Features.Support.Presentation
         private IProgressionView progression;
         private IBaseDefenseAlarmService baseAlarm;
         private ManualLogSource logger;
-        private IObservationSource observations;
-        private IThirdPersonHud thirdPersonHud;
 
         private MFDScreen screen;
         private GameObject screenRoot;
@@ -62,18 +63,6 @@ namespace BoscaliSummer.Features.Support.Presentation
         private AvStyled.Metric scoreMetric;
 
         private readonly List<StrikeRow> strikeRows = new List<StrikeRow>();
-
-        // ---- Observe Page Controls -------------------------------------------------------
-
-        private Image observeStatusRail;
-        private TMP_Text observeStatusTitle;
-        private TMP_Text observeDetails;
-        private AvButton captureMark, callAtMark, clearMark;
-        private TMP_Text observePosValue;
-        private TMP_Text observeRangeValue;
-        private TMP_Text observeAgeValue;
-        private TMP_Text observeArmedValue;
-        private AvButton hudToggle;
 
         // ---- Battle Page Controls --------------------------------------------------------
 
@@ -90,6 +79,8 @@ namespace BoscaliSummer.Features.Support.Presentation
         private TMP_Text missionScoreValue;
         private TMP_Text perkBudgetValue;
         private TMP_Text committedValue;
+        private TMP_Text fleetValue;
+        private TMP_Text networkValue;
 
         private float nextAttempt;
         private float nextRefresh;
@@ -117,16 +108,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             dataBar = null;
             allocMetric = null;
             scoreMetric = null;
-            observations = null;
-            thirdPersonHud = null;
             strikeRows.Clear();
-
-            observeStatusRail = null;
-            observeStatusTitle = null;
-            observeDetails = null;
-            captureMark = callAtMark = clearMark = null;
-            observePosValue = observeRangeValue = observeAgeValue = observeArmedValue = null;
-            hudToggle = null;
 
             baseAlarmRail = null;
             baseAlarmLabel = null;
@@ -136,6 +118,10 @@ namespace BoscaliSummer.Features.Support.Presentation
             strikeTelemetryDetails = null;
             allocAccountValue = cooldownStatusValue = armedSummaryValue = null;
             rankValue = missionScoreValue = perkBudgetValue = committedValue = null;
+            fleetValue = networkValue = null;
+
+            ResetSpacePage();
+            ResetCyberPage();
 
             nextAttempt = 0f;
             nextRefresh = 0f;
@@ -260,12 +246,9 @@ namespace BoscaliSummer.Features.Support.Presentation
             content.SetParent(rootRect, false);
             AvKit.Stretch(content);
 
-            ModServices.TryGet(out observations);
-            ModServices.TryGet(out thirdPersonHud);
-
             shell = AvScreen.Build(
                 content, "OPS",
-                new[] { "SUPPORT", "OBSERVE", "STATUS" },
+                new[] { "SUPPORT", "SPACE", "CYBER", "STATUS" },
                 new[]
                 {
                     new[] { "ALLOCATION", "ALLOC" },
@@ -280,7 +263,8 @@ namespace BoscaliSummer.Features.Support.Presentation
             Rect body = shell.Body;
 
             BuildStrikesPage((RectTransform)shell.CreatePage(TabSupport, "SupportPage").transform, body);
-            BuildObservePage((RectTransform)shell.CreatePage(TabObserve, "ObservePage").transform, body);
+            BuildSpacePage((RectTransform)shell.CreatePage(TabSpace, "SpacePage").transform, body);
+            BuildCyberPage((RectTransform)shell.CreatePage(TabCyber, "CyberPage").transform, body);
             BuildStatusPage((RectTransform)shell.CreatePage(TabStatus, "StatusPage").transform, body);
 
             MFDScreen result = root.AddComponent<MFDScreen>();
@@ -369,30 +353,28 @@ namespace BoscaliSummer.Features.Support.Presentation
                                   "—", "kv-value", align: TextAlignmentOptions.MidlineRight);
         }
 
-        // ---- Tab 1: SUPPORT -------------------------------------------------------------
-
-        private static string ActionCode(SupportActionId id)
+        private bool TryCursor(out float x, out float z)
         {
-            switch (id)
-            {
-                case SupportActionId.Artillery: return "ART";
-                case SupportActionId.Fortify: return "FTF";
-                case SupportActionId.Recon: return "SAT";
-                case SupportActionId.Emp: return "EMP";
-                case SupportActionId.FlareMissile: return "FLR";
-                default: return "OPS";
-            }
+            x = z = 0f;
+            DynamicMap map = SceneSingleton<DynamicMap>.i;
+            if (map == null || !DynamicMap.mapMaximized) return false;
+            if (!map.TryGetCursorCoordinates(out GlobalPosition cursor)) return false;
+            x = cursor.x;
+            z = cursor.z;
+            return true;
         }
+
+        // ---- Tab 1: SUPPORT -------------------------------------------------------------
 
         private void BuildStrikesPage(RectTransform parent, Rect body)
         {
-            IReadOnlyList<SupportActionDefinition> actions = support.Actions;
+            var actions = new List<SupportActionDefinition>();
+            foreach (var action in support.Actions)
+                if (!action.IsHack) actions.Add(action);
 
             var descriptions = new List<string>();
             for (int i = 0; i < actions.Count; i++)
             {
-                // Measure the actual longest per-action availability copy and reserve the
-                // full control stack; the drawn text changes with authority and cooldown.
                 string perkName = progression != null
                     ? progression.PerkNameFor(actions[i].Capability)
                     : "COMBAT ENGINEERING";
@@ -405,9 +387,10 @@ namespace BoscaliSummer.Features.Support.Presentation
                 .Add(AvBox.Filler());
             page.Arrange(body);
 
-            if (page.At("strikes").height > body.height)
+            float contentHeight = page.At("strikes").height + 16f;
+            if (contentHeight > body.height)
             {
-                parent = AvScreen.Scroll(parent, body, page.At("strikes").height, out Rect scrolled);
+                parent = AvScreen.Scroll(parent, body, contentHeight, out Rect scrolled);
                 page.Arrange(scrolled);
                 body = scrolled;
             }
@@ -457,68 +440,20 @@ namespace BoscaliSummer.Features.Support.Presentation
             strikeRows.Add(strike);
         }
 
-        // ---- Tab 2: OBSERVE --------------------------------------------------------------
-
-        private void BuildObservePage(RectTransform parent, Rect body)
+        private static string ActionCode(SupportActionId id)
         {
-            AvStyled.Spine(parent, new Rect(body.x, body.y, 3f, body.height));
-
-            float x = body.x + SpineInset;
-            float width = body.width - SpineInset;
-            float y = body.y;
-
-            y = DrawSectionTitle(parent, x, y, width, "CAMERA TARGETING", "SURFACE SENSOR MARK", band: false);
-
-            AvStyled.Box(parent, new Rect(x, y, width, 76f), "section band");
-            AvStyled.SpineTick(parent, x - SpineInset + 3f, y - 14f);
-            observeStatusRail = AvStyled.Rail(parent, new Rect(x + 6f, y - 6f, 3f, 64f), "locked");
-            observeStatusTitle = AvStyled.Label(parent, new Rect(x + 16f, y - 6f, width - 24f, 16f),
-                "NO ACTIVE CAMERA MARK", "section-title");
-            observeDetails = AvStyled.Label(parent, new Rect(x + 16f, y - 24f, width - 24f, 44f),
-                "Aim cockpit or targeting pod at ground surface and press MARK CAMERA.", "row-sub");
-
-            y -= 88f;
-
-            float buttonWidth = (width - 8f) / 3f;
-            captureMark = AvStyled.Button(parent, new Rect(x, y, buttonWidth, 26f),
-                "MARK CAMERA", "btn", () => { observations?.Capture(); nextRefresh = 0f; },
-                AvButtonStyle.Primary)
-                .WithTooltip("Record the ground surface at the center of the live native camera. Lasts 120s.");
-
-            callAtMark = AvStyled.Button(parent, new Rect(x + buttonWidth + 4f, y, buttonWidth, 26f),
-                "CALL AT MARK", "btn", () => { if (observations != null) support.RequestAtMark(observations); nextRefresh = 0f; },
-                AvButtonStyle.Primary)
-                .WithTooltip("Select a call-in on SUPPORT, then execute it at this recorded camera mark.");
-
-            clearMark = AvStyled.Button(parent, new Rect(x + (buttonWidth + 4f) * 2f, y, buttonWidth, 26f),
-                "CLEAR MARK", "btn", () => { observations?.Clear(); nextRefresh = 0f; },
-                AvButtonStyle.Quiet)
-                .WithTooltip("Clear active observation point.");
-
-            y -= 38f;
-
-            y = DrawSectionTitle(parent, x, y, width, "TARGET TELEMETRY", "COORDINATES & RANGE", band: true);
-
-            observePosValue = KeyValue(parent, x, y, width, "COORDINATES (X/Z)");
-            y -= 18f;
-            observeRangeValue = KeyValue(parent, x, y, width, "SLANT RANGE");
-            y -= 18f;
-            observeAgeValue = KeyValue(parent, x, y, width, "MARK AGE");
-            y -= 18f;
-            observeArmedValue = KeyValue(parent, x, y, width, "ARMED CALL-IN");
-            y -= 26f;
-
-            y = DrawSectionTitle(parent, x, y, width, "AUXILIARY DISPLAY", "THIRD-PERSON HUD", band: false);
-            hudToggle = AvStyled.Button(parent, new Rect(x, y, width, 28f),
-                "THIRD-PERSON HUD", "btn", () =>
-                {
-                    thirdPersonHud?.Toggle();
-                    nextRefresh = 0f;
-                }, AvButtonStyle.Toggle)
-                .WithTooltip("Show or hide Boscali's compact third-person flight overlay.");
+            switch (id)
+            {
+                case SupportActionId.Artillery: return "ART";
+                case SupportActionId.Fortify: return "FTF";
+                case SupportActionId.Recon: return "SAT";
+                case SupportActionId.Emp: return "EMP";
+                case SupportActionId.FlareMissile: return "FLR";
+                default: return "OPS";
+            }
         }
 
-        // ---- Tab 3: STATUS ---------------------------------------------------------------
+        // ---- Tab 4: STATUS ---------------------------------------------------------------
 
         private void BuildStatusPage(RectTransform parent, Rect body)
         {
@@ -560,7 +495,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             y -= 26f;
 
             AvStyled.Label(parent, new Rect(x, y, width, 40f),
-                "Tactical support actions draw from allocation earned through combat and service. Single-battle assets only.",
+                "Tactical support actions draw from allocation earned through combat and service. Satellites and infrastructure are faction assets bought during the mission.",
                 "row-sub");
             y -= 48f;
 
@@ -572,7 +507,13 @@ namespace BoscaliSummer.Features.Support.Presentation
             perkBudgetValue = KeyValue(parent, x, y, width, "PERK POINTS  UNSPENT / EARNED");
             y -= 26f;
 
-            y = DrawSectionTitle(parent, x, y, width, "COMMITTED SYSTEMS", null, band: false);
+            y = DrawSectionTitle(parent, x, y, width, "SYSTEMS", "SPACE & CYBER", band: false);
+            fleetValue = KeyValue(parent, x, y, width, "ORBITAL FLEET");
+            y -= 18f;
+            networkValue = KeyValue(parent, x, y, width, "CYBER NETWORK");
+            y -= 26f;
+
+            y = DrawSectionTitle(parent, x, y, width, "COMMITTED SYSTEMS", null, band: true);
             committedValue = AvStyled.Label(parent, new Rect(x, y, width, 70f),
                                              "NONE", "row-sub");
         }
@@ -588,7 +529,8 @@ namespace BoscaliSummer.Features.Support.Presentation
             RefreshDataBar(bypass);
             RefreshMetrics(bypass);
             RefreshStrikeRows(bypass);
-            RefreshObservation();
+            RefreshSpace(bypass);
+            RefreshCyber(bypass);
             RefreshStatusPage(bypass);
 
             UpdateStatusStrip();
@@ -597,10 +539,11 @@ namespace BoscaliSummer.Features.Support.Presentation
         private void RefreshDataBar(bool bypass)
         {
             bool underAttack = baseAlarm != null && baseAlarm.IsBaseUnderAttack;
-            bool pending = support.RequestPending;
+            bool pending = support.RequestPending || support.CommandPending;
             bool cooling = support.LocalCooldownRemaining > 0.5f;
-            bool marked = observations != null && observations.TryGet(out _);
             bool wingPresent = WingLink.Available;
+            int satellites = support.LocalConstellation?.Satellites.Count ?? 0;
+            int maximum = support.Settings != null ? support.Settings.MaximumSatellites.Value : 4;
 
             if (underAttack)
             {
@@ -614,8 +557,13 @@ namespace BoscaliSummer.Features.Support.Presentation
             }
             else if (bypass)
             {
-                dataBar.State.text = "DEBUG BYPASS — COSTS IGNORED";
+                dataBar.State.text = "DEBUG BYPASS";
                 dataBar.State.color = AvTheme.Warning;
+            }
+            else if (support.CommandArmed)
+            {
+                dataBar.State.text = "FLEET COMMAND ARMED · RIGHT-CLICK MAP";
+                dataBar.State.color = AvTheme.RailCaution;
             }
             else if (support.ArmedAction.HasValue)
             {
@@ -630,7 +578,8 @@ namespace BoscaliSummer.Features.Support.Presentation
 
             dataBar.SetChip(0, pending ? "PENDING" : cooling ? "NET COOL" : "NET READY",
                             pending || cooling ? "warn" : "live");
-            dataBar.SetChip(1, marked ? "CAM MARK" : "NO MARK", marked ? "info" : "inert");
+            dataBar.SetChip(1, satellites + "/" + maximum + " SATS",
+                            satellites > 0 ? "live" : "inert");
             dataBar.SetChip(2, wingPresent ? "WING LINK" : "NO WING",
                             wingPresent ? "info" : "inert");
         }
@@ -694,6 +643,7 @@ namespace BoscaliSummer.Features.Support.Presentation
         {
             float allocation = support.LocalAllocation;
             float cooldown = support.LocalCooldownRemaining;
+            bool cursor = TryCursor(out float cursorX, out float cursorZ);
 
             for (int i = 0; i < strikeRows.Count; i++)
             {
@@ -702,6 +652,7 @@ namespace BoscaliSummer.Features.Support.Presentation
                 bool isAuth = support.IsAuthorised(row.Definition);
                 bool isArmed = support.ArmedAction.HasValue &&
                                support.ArmedAction.Value == row.Definition.Id;
+                SatelliteRole? role = SupportManager.CoverageRole(row.Definition.Id);
 
                 row.Cost.text = cost > 0f ? cost.ToString("N0") : "—";
 
@@ -737,19 +688,60 @@ namespace BoscaliSummer.Features.Support.Presentation
                 }
                 else if (isArmed)
                 {
-                    SetRowState(row, "armed", "ARMED · RIGHT-CLICK MAP OR USE OBSERVE TAB",
+                    SetRowState(row, "armed", "ARMED · RIGHT-CLICK MAP OR CAMERA MARK",
                         AvTheme.RailCaution, "ABORT", true, true);
+                }
+                else if (role.HasValue && !(cursor && support.CoverageNow(row.Definition.Id, cursorX, cursorZ)))
+                {
+                    string coverage = !cursor
+                        ? "MOVE CURSOR OVER TARGET"
+                        : CoverageLine(role.Value, cursorX, cursorZ);
+                    SetRowState(row, "locked", coverage,
+                        cursor ? CoverageColor(role.Value, cursorX, cursorZ) : AvTheme.Warning,
+                        "NO COVER", false, false);
                 }
                 else
                 {
-                    string perkName = progression != null ? progression.PerkNameFor(row.Definition.Capability) : "Perk";
-                    SetRowState(row, "ready",
-                        "AUTH: " + perkName.ToUpperInvariant() + " · CLEARED",
-                        AvTheme.RailReady, "CALL IN", true, false);
+                    string status = role.HasValue
+                        ? CoverageLine(role.Value, cursorX, cursorZ)
+                        : "AUTH: " + ProgressionName(row.Definition);
+                    SetRowState(row, "ready", status, AvTheme.RailReady, "CALL IN", true, false);
                 }
 
                 row.Cost.color = row.Status.color;
             }
+        }
+
+        private string ProgressionName(SupportActionDefinition definition)
+        {
+            string perkName = progression != null ? progression.PerkNameFor(definition.Capability) : "Perk";
+            return perkName.ToUpperInvariant() + " · CLEARED";
+        }
+
+        private string CoverageLine(SatelliteRole role, float x, float z)
+        {
+            Constellation constellation = support.LocalConstellation;
+            if (constellation == null) return "THEATER NOT LOADED";
+            StationCoverage coverage = constellation.Query(role, x, z);
+            if (coverage.Covered)
+                return "COVERED BY " + SatelliteName(constellation, coverage.SatelliteId);
+            if (!coverage.HasSatellite) return "NO SATELLITE IN THIS ROLE";
+            return "NO COVERAGE · NEAREST " + (coverage.NearestGap / 1000f).ToString("0.0") + " KM";
+        }
+
+        private Color CoverageColor(SatelliteRole role, float x, float z)
+        {
+            Constellation constellation = support.LocalConstellation;
+            if (constellation == null) return AvTheme.Dim;
+            StationCoverage coverage = constellation.Query(role, x, z);
+            if (coverage.Covered) return AvTheme.RailReady;
+            return coverage.HasSatellite ? AvTheme.RailCaution : AvTheme.RailDanger;
+        }
+
+        private static string SatelliteName(Constellation constellation, byte id)
+        {
+            Satellite satellite = constellation.Find(id);
+            return satellite == null ? "SAT-" + id : SatelliteNaming.Callsign(satellite.Role, id);
         }
 
         private static void SetRowState(
@@ -760,8 +752,12 @@ namespace BoscaliSummer.Features.Support.Presentation
             row.Rail.color = rail;
             row.Code.color = rail;
 
-            row.Status.text = status + "\n" + row.Definition.Description;
+            row.Status.text = status;
             row.Status.color = statusColor;
+            if (row.Status2 != null)
+                row.Status2.text = row.Definition.Description;
+            else
+                row.Status.text = status + "\n" + row.Definition.Description;
 
             row.Action.SetText(button);
             row.Action.SetEnabled(ready || armed);
@@ -771,85 +767,6 @@ namespace BoscaliSummer.Features.Support.Presentation
 
         private static Color RailColour(string state) =>
             AvStyleHost.Resolve(AvStyleHost.Style("rail " + state).Background, AvTheme.RailInert);
-
-        private void RefreshObservation()
-        {
-            if (observeStatusTitle == null) return;
-
-            bool hasSource = observations != null;
-            ObservationPoint point = default;
-            bool marked = hasSource && observations.TryGet(out point);
-            bool canCapture = hasSource && observations.CanCapture;
-            bool armed = support.ArmedAction.HasValue && MapPicker.IsOwner(MapPicker.Support);
-
-            if (marked)
-            {
-                observeStatusRail.color = AvTheme.RailReady;
-                observeStatusTitle.text = $"{point.Source} SURFACE MARK RECORDED";
-                observeStatusTitle.color = AvTheme.RailReady;
-                float age = Mathf.Max(0f, Time.unscaledTime - point.RecordedAt);
-                observeDetails.text = $"{age:0}s old · range {point.Range / 1000f:0.0} km · Elevation {point.Y:0} m";
-
-                observePosValue.text = $"X {point.X:0}  ·  Z {point.Z:0}";
-                observeRangeValue.text = $"{point.Range / 1000f:0.0} km";
-                observeAgeValue.text = $"{age:0}s  ·  {(120f - age):0}s EXPIRY";
-            }
-            else
-            {
-                observeStatusRail.color = AvTheme.RailInert;
-                observeStatusTitle.text = hasSource ? observations.Status.ToUpperInvariant() : "NO SENSOR ATTACHED";
-                observeStatusTitle.color = AvTheme.Dim;
-                observeDetails.text = "Aim camera at surface and press MARK CAMERA to designate.";
-
-                observePosValue.text = "—";
-                observeRangeValue.text = "—";
-                observeAgeValue.text = "—";
-            }
-
-            observeArmedValue.text = armed
-                ? support.ArmedAction.Value.ToString().ToUpperInvariant()
-                : "NONE (SELECT ON SUPPORT)";
-            observeArmedValue.color = armed ? AvTheme.RailCaution : AvTheme.Dim;
-
-            if (captureMark != null)
-            {
-                captureMark.SetEnabled(canCapture);
-                captureMark.WithTooltip(canCapture
-                    ? "Record ground target from native cockpit/pod camera."
-                    : "Requires an active native camera view on your aircraft.");
-            }
-
-            if (callAtMark != null)
-            {
-                callAtMark.SetEnabled(marked && armed && !support.RequestPending);
-                callAtMark.WithTooltip(!marked ? "Capture a camera mark first."
-                    : !armed ? "Select an action on the SUPPORT page first."
-                    : support.RequestPending ? "Wait for the host to answer the current request."
-                    : "Deliver armed support action directly onto this camera mark.");
-            }
-
-            if (clearMark != null)
-            {
-                clearMark.SetEnabled(marked);
-                clearMark.WithTooltip(marked
-                    ? "Clear the active observation point."
-                    : "No camera mark is available to clear.");
-            }
-
-            if (hudToggle != null)
-            {
-                bool available = thirdPersonHud != null;
-                bool enabled = available && thirdPersonHud.IsEnabled;
-                hudToggle.SetEnabled(available);
-                hudToggle.SetLatched(enabled);
-                hudToggle.SetText(!available ? "THIRD-PERSON HUD · UNAVAILABLE"
-                                             : enabled ? "THIRD-PERSON HUD · ON"
-                                                       : "THIRD-PERSON HUD · OFF");
-                hudToggle.WithTooltip(available
-                    ? "Show or hide Boscali's compact third-person flight overlay."
-                    : "Third-person HUD service is unavailable in this scene.");
-            }
-        }
 
         private void RefreshStatusPage(bool bypass)
         {
@@ -892,10 +809,27 @@ namespace BoscaliSummer.Features.Support.Presentation
             cooldownStatusValue.text = cooldown > 0.5f ? $"{Mathf.CeilToInt(cooldown)}s" : "READY (0s)";
             cooldownStatusValue.color = cooldown > 0.5f ? AvTheme.RailCaution : AvTheme.RailReady;
 
-            armedSummaryValue.text = support.ArmedAction.HasValue
-                ? support.ArmedAction.Value.ToString().ToUpperInvariant()
+            armedSummaryValue.text = support.CommandArmed ? "FLEET COMMAND"
+                : support.ArmedAction.HasValue ? support.ArmedAction.Value.ToString().ToUpperInvariant()
                 : "STANDBY";
-            armedSummaryValue.color = support.ArmedAction.HasValue ? AvTheme.RailCaution : AvTheme.Dim;
+            armedSummaryValue.color = support.ArmedAction.HasValue || support.CommandArmed
+                ? AvTheme.RailCaution : AvTheme.Dim;
+
+            if (fleetValue != null)
+            {
+                Constellation constellation = support.LocalConstellation;
+                int maximum = support.Settings != null ? support.Settings.MaximumSatellites.Value : 0;
+                fleetValue.text = constellation == null ? "—"
+                    : constellation.Satellites.Count + " / " + maximum + " ON ORBIT";
+            }
+            if (networkValue != null)
+            {
+                InfoNetwork info = support.LocalInfo;
+                networkValue.text = info == null ? "—"
+                    : "TIER " + info.Powers.Tier + "  ·  " +
+                      info.Level(FacilityId.Sigint) + "/" + info.Level(FacilityId.Crypto) + "/" +
+                      info.Level(FacilityId.Disrupt) + "/" + info.Level(FacilityId.Ew);
+            }
 
             if (rankValue == null || progression == null) return;
             rankValue.text = progression.Rank.ToString();

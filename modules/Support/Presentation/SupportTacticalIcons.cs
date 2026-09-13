@@ -24,6 +24,15 @@ namespace BoscaliSummer.Features.Support.Presentation
         public static Sprite FlrIcon { get; private set; }
         public static Sprite FtfIcon { get; private set; }
 
+        /// <summary>Soft coverage dome: no hard rim, fades to nothing at the edge.</summary>
+        public static Sprite CoverageDiscSprite { get; private set; }
+
+        /// <summary>Fine dashed orbit ring, lighter than the strike marker ring.</summary>
+        public static Sprite OrbitTrackSprite { get; private set; }
+
+        /// <summary>Horizontal dashed segment, stretched and rotated for transfer paths.</summary>
+        public static Sprite DashedLineSprite { get; private set; }
+
         private static bool initialized;
 
         public static void EnsureInitialized()
@@ -36,6 +45,9 @@ namespace BoscaliSummer.Features.Support.Presentation
             RadialFillSprite = CreateRadialFillSprite(128);
             CrosshairSprite = CreateCrosshairSprite(64);
             BadgeBgSprite = CreateBadgeBgSprite(128, 48);
+            CoverageDiscSprite = CreateCoverageDiscSprite(128);
+            OrbitTrackSprite = CreateOrbitTrackSprite(128);
+            DashedLineSprite = CreateDashedLineSprite(64);
 
             RodIcon = CreateRodIcon(64);
             EmpIcon = CreateEmpIcon(64);
@@ -126,6 +138,88 @@ namespace BoscaliSummer.Features.Support.Presentation
                     float dashAlpha = dashPattern > 0f ? 1f : 0f;
 
                     pixels[y * size + x] = new Color(1f, 1f, 1f, ringAlpha * dashAlpha);
+                }
+            }
+
+            tex.SetPixels(pixels);
+            tex.Apply();
+            return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f);
+        }
+
+        private static Sprite CreateDashedLineSprite(int size)
+        {
+            const int height = 3;
+            var tex = new Texture2D(size, height, TextureFormat.RGBA32, false)
+            {
+                name = "SupportDashedLine",
+                wrapMode = TextureWrapMode.Repeat,
+                filterMode = FilterMode.Point
+            };
+            Color[] pixels = new Color[size * height];
+            for (int x = 0; x < size; x++)
+            {
+                bool on = (x % 8) < 5;
+                for (int y = 0; y < height; y++)
+                    pixels[y * size + x] = on ? new Color(1f, 1f, 1f, 0.9f) : new Color(1f, 1f, 1f, 0f);
+            }
+            tex.SetPixels(pixels);
+            tex.Apply();
+            return Sprite.Create(tex, new Rect(0, 0, size, height), new Vector2(0f, 0.5f), 100f);
+        }
+
+        private static Sprite CreateCoverageDiscSprite(int size)
+        {
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false)
+            {
+                name = "SupportCoverageDisc",
+                wrapMode = TextureWrapMode.Clamp,
+                filterMode = FilterMode.Bilinear
+            };
+
+            Vector2 center = new Vector2(size * 0.5f, size * 0.5f);
+            float maxR = size * 0.5f - 1f;
+            Color[] pixels = new Color[size * size];
+
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    float dist = Vector2.Distance(new Vector2(x + 0.5f, y + 0.5f), center);
+                    float norm = Mathf.Clamp01(dist / maxR);
+                    float alpha = dist > maxR ? 0f : Mathf.Pow(1f - norm, 1.7f) * 0.65f;
+                    pixels[y * size + x] = new Color(1f, 1f, 1f, alpha);
+                }
+            }
+
+            tex.SetPixels(pixels);
+            tex.Apply();
+            return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f);
+        }
+
+        private static Sprite CreateOrbitTrackSprite(int size)
+        {
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false)
+            {
+                name = "SupportOrbitTrack",
+                wrapMode = TextureWrapMode.Clamp,
+                filterMode = FilterMode.Bilinear
+            };
+
+            Vector2 center = new Vector2(size * 0.5f, size * 0.5f);
+            float radius = size * 0.5f - 3f;
+            Color[] pixels = new Color[size * size];
+
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    Vector2 pos = new Vector2(x + 0.5f, y + 0.5f);
+                    float dist = Vector2.Distance(pos, center);
+                    float ring = Mathf.Clamp01(1f - Mathf.Abs(dist - radius) / 0.9f);
+                    float angle = Mathf.Atan2(pos.y - center.y, pos.x - center.x);
+                    if (angle < 0f) angle += Mathf.PI * 2f;
+                    float dash = Mathf.Sin(angle * 72f) > -0.15f ? 1f : 0.12f;
+                    pixels[y * size + x] = new Color(1f, 1f, 1f, ring * dash * 0.9f);
                 }
             }
 

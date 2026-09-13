@@ -33,7 +33,8 @@ namespace BoscaliSummer.Features.Progression
             context.AddService<IProgressionView>(manager);
             if (!UnityEngine.Application.isBatchMode)
             {
-                context.AddSceneService<SqdMfdPanel>(54).Configure(manager, squad, context.Logger);
+                context.AddSceneService<SqdMfdPanel>(54).Configure(
+                    manager, squad, context.Settings.Progression, context.Logger);
                 context.AddSceneService<AceHuntHud>(54).Configure(squad);
             }
         }

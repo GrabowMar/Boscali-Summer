@@ -2,6 +2,78 @@
 
 ## Unreleased
 
+- Added a local ownship autopilot landing and the Boscali Summer entry in the native radial
+  menu. The slice opens a bounded submenu whose **Autopilot: Land** action hands the
+  player's own aircraft to the game's native autopilot for a runway or vertical-pad landing,
+  then returns control; deliberate stick input cancels it and flight assist/auto-hover are
+  restored. Client-local and input-layer only: no other aircraft are commanded and no
+  network messages are sent. Build, pure tests, patch probe and signature verification
+  pass; in-game acceptance remains pending.
+
+- Reworked trench networks into frontline sector belts: each border cell side expands into
+  a chain of sector slots on the owned side of the frontline (no road bias), validated as
+  the full fortified corridor instead of a 120m square, so positions now appear along
+  contested borders instead of being rejected or dragged to roads. A 132m seven-bay fire
+  trench now grows through four atomic stages into a belt up to ±176m wide and 116m deep
+  with a support line, dugout, rear redoubt and flank weapon pits (64 nodes / 96 edges).
+  Trenches were rebuilt visually: a wide shared cross-section (berms, parados, firing step,
+  sandbag parapet) with a procedurally baked palette texture replaces the thin flat-colour
+  strips, and defenders spread along the sector line behind its parapets. Build, pure tests,
+  Unity mesh/growth regression and the patch probe pass; in-game acceptance remains pending.
+
+- Reworked the SQD panel into a four-page pilot experience: **PILOT** (portrait dossier, stat
+  tiles, service background, squadron emblem), **SKILLS** (shared combat skills that AI and
+  enemy aces use, economy passives, and restructured support authorisations with SAT / ENG /
+  STK / EW codes and vector icons), **WINGS** (enemy ace roster with portraits and skill
+  badges), and **STUDIO** (Wing Command custom-pilot editing and a local emblem designer).
+  Custom pilot editing calls an additive public Wing Command companion API through the
+  cached `WingLink` adapter; without that build only the STUDIO page is disabled.
+  Squadron name, procedural or PNG emblem, and the optional local pilot profile are
+  client-local cosmetics; pilot points, skills and the host-authoritative career are
+  unchanged. Pure emblem/draft/catalogue tests, the patch probe and signature verification
+  pass; in-game acceptance remains pending.
+
+- Frontline sector control is now objective: cell occupation reads actual ground-unit positions and real airbase ownership from the synced world state instead of each faction's tracking records. Spotting enemies no longer changes map cells, and both sides derive the same frontline regardless of what they know. Build, pure tests, probe and signature verification pass; in-game acceptance remains pending.
+
+- Fixed and reworked dynamic-operation markers onto the native objective UI: accepted contracts now draw the game's own map marker, cockpit pointer with distance and a sized mission-area ring, plus a compact zone readout with enter/leave feedback, instead of custom map-only pins. Markers are built client-side from protocol-2 snapshots and are never registered with the mission runner, so vanilla AI cannot mistake a contract for a navigation objective. Build, pure tests, probe and signature verification pass; in-game acceptance remains pending.
+
+- Reworked the Theater Wire into a priority-filtered news feed: airbase captures, strategic launches, ace defeats, aircrew rescue/capture, capital losses, warhead interceptions, aircraft shootdowns, demolitions and supply deliveries become headlines, while routine missile intercepts and anonymous armor losses are counted into periodic digests instead of flooding the scroll. Added first-blood and kill-streak flashes, a session casualty ledger, follow-up commentary, a wider LARP pool, bold urgent entries, a breaking-news rewind and an alert-pulse badge/rail. Build, pure tests, probe and signature verification pass; in-game acceptance remains pending.
+
+- Fixed expanded map layout punching through to the world camera: map darkening no longer makes the map bed transparent, SET/structure changes no longer tear down a live dock, escaped screens are re-docked, and the MFD controller is resolved even when it lives on the gameplay canvas rather than under the map canvas.
+
+- Fixed the SET panel outliving the map: its surface now tracks the live MFD screen state, a dock slot destroyed without a scene reset releases the bezel claim so SET reinstalls on the next open, and the owned backdrop restores itself whenever the map is not maximised. SET controls gained whole-row hover help with a row highlight, a status-strip action echo and a quiet synthesized bezel click; rail buttons now use a ColorTint hover/press over the restyled fill instead of the stock SpriteSwap. Build, pure tests, probe and signature verification pass; in-game acceptance remains pending.
+
+- Fixed Base Broadcast only cataloging the current map's score. It now includes distinct
+  installed clips from registered map prefabs, capped at 30, without copying audio.
+
+- Polished OPS and rebuilt the SPACE tab around an orbital schematic: soft coverage domes,
+  orbit trails and call signs (ARGUS / DAMOCLES / VEIL) on the plot and the tactical map,
+  fine dashed orbit tracks, a three-minute coverage-window forecast per role, a platform
+  control card, and a deploy section with role cards and slot status. The orbit stepper/cost
+  overlap and squeezed facility column are gone; SUPPORT coverage copy no longer repeats
+  itself, colours the coverage state and the data bar reports fleet size; facility rows show
+  their next-level effect. Orbital shells were retuned (LOW reaches the map edge, MID/HIGH
+  reach the corners) so coverage is usable with a small constellation. Camera targeting
+  moved off OPS onto the TGT screen's new CAMERA page behind `ICameraTargetService`.
+  Armed fleet commands preview the projected orbit and destination footprint on the
+  tactical map, and Ghost Shield / Spoof Contacts show a fleet-wide (not area) reticle.
+  Track-uplink sweeps log at debug level. Build, pure tests, probe and signature
+  verification pass; in-game acceptance remains pending.
+
+- Redesigned OPS around real space and information warfare. OPS now has SUPPORT / SPACE /
+  CYBER / STATUS: SPACE launches, moves and recalls up to four RECON / STRIKE / EW satellites
+  on three orbital shells with real coverage geometry and fuel burns; satellite scan, Rod
+  from God and EMP require the matching satellite overhead. CYBER invests allocation into
+  four facility lines that unlock and strengthen ping sweep, track uplink, radar blackout,
+  ghost shield and spoof contacts. Abilities stay on SUPPORT; SQD perk purchases are
+  unchanged. Host-authoritative protocol 5 with bounded snapshots; pure-model, serializer
+  and signature checks pass; in-game multiplayer acceptance remains pending.
+
+
+- Rebuilt SET as compact MAP / STYLE / IMAGE pages with readable +/- controls, dependent disabled states, scroll support and change-driven refresh. One background selector replaces overlapping decoration toggles; existing combinations remain MIXED until changed. Map darkening now works independently of wallpaper. Grid resolution remains an advanced initialization-time config setting. Added ticker enable/speed controls, corrected ticker text alignment and frame timing, and stopped newly bound bezels appearing over the closed map. Wallpaper scanning/decoding is bounded, failures are cached and reported, and terrain/telemetry presentation is restored on close. In-game acceptance remains pending.
+
+- Expanded the experimental secondary mission pool from 8 to 17 families: native pilot rescue followed by return to base, reconnaissance, strike assessment, supply escort/interdiction, repair cover, hostile jammer hunts, intelligence delivery and aftermath surveys. Native rescue/repair/supply events determine completion; observation holds, same-aircraft returns, faction ownership, deadlines and once-only awards are host-validated. Existing MIS cards and protocol-2 snapshots carry all stages. No added mission spawns or aircraft orders. Release/pure/compatibility checks pass; deployment and in-game multiplayer acceptance remain pending.
+
 - Replaced isolated trench rings with connected fighting bays and native combat defenses: two MGs initially, then AT/AA as the position develops, capped at six defenders per site. Growth no longer stalls during placement scans. Damage suppresses construction for 60 seconds; destroyed slots never refill, neutralized positions stop growing, and cleared sites cannot be immediately reseeded. Native weapons/health/replication remain unchanged; earthwork geometry is still host-local. Added actual growth and combat-adapter regression checks in Unity; in-game acceptance pending.
 
 - Fixed Rod from God impact re-entry: blast damage now runs after native detonation disables the missile, with isolated buffers for chained rods. Disabled sources are skipped, and terrain/non-convex colliders no longer receive unsupported `ClosestPoint` queries.

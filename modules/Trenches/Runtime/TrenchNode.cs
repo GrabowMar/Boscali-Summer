@@ -19,9 +19,10 @@ namespace BoscaliSummer.Features.Trenches.Runtime
     {
         Stage0_Scrape = 0,       // Hasty prone/kneeling fighting scrapes
         Stage1_Crawl = 1,        // Sapped crawl trench connections
-        Stage2_FireTrench = 2,   // Full 1.5m deep fire trench with parapets
-        Stage3_Hardened = 3,     // Revetted bays, drone shelters, bunkers, flank hooks
-        Stage4_Integrated = 4    // Multi-layered defense with rear communication lines
+        Stage2_FireTrench = 2,   // Full fire trench line with parapets and weapon pits
+        Stage3_Hardened = 3,     // Line extended across the sector
+        Stage4_Integrated = 4,   // Support line and communications behind the front
+        Stage5_Redoubt = 5       // Full belt: extended front, support and rear lines
     }
 
     internal sealed class TrenchNode

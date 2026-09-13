@@ -93,6 +93,11 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             dock.anchoredPosition = MfdLayout.TopLeftOf(columns.Panel);
             dock.localScale = Vector3.one;
 
+            for (int i = 0; i < slots.Count; i++)
+            {
+                if (slots[i] != null) slots[i].sizeDelta = dock.sizeDelta;
+            }
+
             // Do not paint a full-height dock backing. It was the source of the isolated
             // blue-green tint below a 596px MFD: the dock is deliberately taller so it can
             // coexist with the game's bottom spawn strip. MfdMapDeck now supplies one
@@ -208,6 +213,36 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             return slot != null && slot.parent == dock;
         }
 
+        /// <summary>
+        /// Force every screen surface to match its screen's own state.
+        ///
+        /// <para>Vanilla's minimize callback closes every screen, but a screen whose close
+        /// path is skipped keeps rendering its panel over the cockpit. Making "closed means
+        /// hidden" a dock invariant covers custom and stock screens alike instead of relying
+        /// on each screen's own callback firing.</para>
+        /// </summary>
+        public static void SyncSurfaceVisibility(VirtualMFD mfd)
+        {
+            if (mfd == null) return;
+            SyncSurfaces(MapUiAccess.GetLeftScreens(mfd));
+            SyncSurfaces(MapUiAccess.GetRightScreens(mfd));
+        }
+
+        private static void SyncSurfaces(List<MFDScreen> screens)
+        {
+            if (screens == null) return;
+
+            for (int i = 0; i < screens.Count; i++)
+            {
+                MFDScreen screen = screens[i];
+                if (screen == null || screen.displayPanel == null) continue;
+
+                bool show = screen.isActive && DynamicMap.mapMaximized;
+                if (screen.displayPanel.activeSelf != show)
+                    screen.displayPanel.SetActive(show);
+            }
+        }
+
         /// <summary>The height of the surface the player actually sees.</summary>
         public static float VisibleHeight(MFDScreen screen)
         {
@@ -226,6 +261,33 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             if (height <= 1f) height = AvTokens.PanelHeight;
             return dock == null ? height : Mathf.Min(height, dock.rect.height);
+        }
+
+        /// <summary>The width of the surface the player actually sees.</summary>
+        public static float VisibleWidth(MFDScreen screen)
+        {
+            if (screen == null) return AvTokens.PanelWidth;
+
+            var display = screen.displayPanel == null
+                ? null
+                : screen.displayPanel.transform as RectTransform;
+            float width = display == null ? 0f : display.rect.width;
+
+            if (width <= 1f && display != null)
+                width = display.sizeDelta.x;
+
+            if (width <= 1f)
+            {
+                var root = screen.transform as RectTransform;
+                if (root != null)
+                {
+                    width = root.rect.width;
+                    if (width <= 1f) width = root.sizeDelta.x;
+                }
+            }
+
+            if (width <= 1f) width = AvTokens.PanelWidth;
+            return Mathf.Clamp(width, 360f, MaxColumnWidth);
         }
 
         /// <summary>The full left bay, including the map footer's vertical band.</summary>

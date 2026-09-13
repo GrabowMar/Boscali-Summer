@@ -21,6 +21,25 @@ namespace BoscaliSummer.Features.Trenches.Domain
         public const float MaxSappingDistance = 55.0f;
         public const float DefaultFlankHookDistance = 16.0f;
 
+        // Frontline belt layout: a network is a sector garrison, not a cluster.
+        public const float FrontBaySpacing = 22f;
+        public const int SeedBayCount = 7;
+        public const float SupportLineDepth = 58f;
+        public const float RearLineDepth = 116f;
+        public const float MaxFlankHalfLength = 176f;
+        public const float MinFlankHalfLength = 72f;
+        public const float PathClearance = 4.8f;
+
+        /// <summary>Lateral offset of bay <paramref name="index"/> in a symmetric line of <paramref name="bays"/>.</summary>
+        public static float LineOffset(int index, int bays)
+            => (index - (bays - 1) * 0.5f) * FrontBaySpacing;
+
+        public static float LineSpan(int bays) => Math.Max(0, bays - 1) * FrontBaySpacing;
+
+        /// <summary>Frontline half-width a network may fortify, bounded for terrain and performance.</summary>
+        public static float CapFlankLimit(float siteHalfLength)
+            => Math.Min(MaxFlankHalfLength, Math.Max(MinFlankHalfLength, siteHalfLength - 40f));
+
         /// <summary>
         /// Calculates the alternating lateral traverse displacement for a given bay index.
         /// Alternates between forward parapet crests and rearward parados turns.
@@ -78,7 +97,8 @@ namespace BoscaliSummer.Features.Trenches.Domain
         }
 
         /// <summary>
-        /// Evaluates whether a trench network meets the criteria to advance to the next lifecycle stage.
+        /// Evaluates whether a trench network graph is complete enough to attempt the next lifecycle stage.
+        /// The simulator owns the actual additions; this is the pure precondition gate.
         /// </summary>
         public static int EvaluateNextStage(int currentStage, int nodeCount, int edgeCount, int fortifiedBunkers)
         {
@@ -88,17 +108,21 @@ namespace BoscaliSummer.Features.Trenches.Domain
                     if (edgeCount >= Math.Max(1, nodeCount - 1)) return 1;
                     return 0;
 
-                case 1: // Stage 1 (Crawl) -> Stage 2 (Fire Trench)
-                    if (edgeCount >= 2 && nodeCount >= 3) return 2;
+                case 1: // Stage 1 (Crawl) -> Stage 2 (Fire Trench): the seed line is connected
+                    if (nodeCount >= SeedBayCount && edgeCount >= nodeCount - 1) return 2;
                     return 1;
 
-                case 2: // Stage 2 (Fire Trench) -> Stage 3 (Hardened)
-                    if (fortifiedBunkers >= 1 || edgeCount >= 3) return 3;
+                case 2: // Stage 2 (Fire Trench) -> Stage 3 (Hardened): line connected, ready to extend
+                    if (nodeCount >= SeedBayCount && edgeCount >= nodeCount - 1) return 3;
                     return 2;
 
-                case 3: // Stage 3 (Hardened) -> Stage 4 (Integrated)
-                    if (nodeCount >= 4 && edgeCount >= 4) return 4;
+                case 3: // Stage 3 (Hardened) -> Stage 4 (Integrated): both flanks extended
+                    if (nodeCount >= 9 && edgeCount >= 8) return 4;
                     return 3;
+
+                case 4: // Stage 4 (Integrated) -> Stage 5 (Redoubt): support line linked, dugout built
+                    if (nodeCount >= 12 && edgeCount >= 13 && fortifiedBunkers >= 1) return 5;
+                    return 4;
 
                 default:
                     return currentStage;

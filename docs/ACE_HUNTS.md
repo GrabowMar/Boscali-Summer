@@ -192,8 +192,8 @@ then ages normally. The tracking helper never retargets the player's replacement
 
 Squad now queries Command's `ITerritoryIngress` service instead of Wing Command's
 legacy nearest-airbase approximation. The map and ingress queries consume the same
-`TacticalSectorGrid` evaluation, with faction-known troop pressure, strategic nodes,
-contested control and control history. Fields are cached for at most eight factions;
+`TacticalSectorGrid` evaluation, with objective troop pressure from actual unit positions
+(independent of faction tracking), strategic nodes, contested control and control history. Fields are cached for at most eight factions;
 reads refresh at most twice per second, examine at most 4096 units, and work without
 opening/rendering the map. A gap in observations cannot fast-forward capture history.
 

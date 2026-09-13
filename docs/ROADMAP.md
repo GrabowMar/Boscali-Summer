@@ -10,7 +10,8 @@ Fire, forest spread, impact scorch, ruins, aftermath and wreck persistence; occu
 civilian buildings; client-local radio; the expanded tactical map and STR theater screen;
 local QoL camera/HUD conveniences; a session-scoped perk/support slice (nine score-earned
 perks; satellite scan, zone fortification, Rod from God, EMP shock and flare barrage
-support actions). Framework extraction is done and behaviour-preserving: it gave every
+support actions) with constellation command and cyber infrastructure on OPS. Framework
+extraction is done and behaviour-preserving: it gave every
 module a common lifecycle and patch owner without yet splitting the large managers
 (`ImpactFireManager`, `ZoneGarrisonManager`, `ModNet`) into their final services.
 
@@ -46,7 +47,8 @@ codecs and snapshot providers; garrison catalogue/selection/spawning/lifecycle.
   while SQD is closed, and scene reload. See [ACE_HUNTS.md](ACE_HUNTS.md).
 - **Dynamic operations** — capture/defense/interdiction director, secondary MIS panel,
   finite convoy/fortification awards and snapshot protocol implemented behind default-off
-  `DynamicOperations.Enabled`. Current frontlines use elapsed-time observed pressure.
+  `DynamicOperations.Enabled`. Current frontlines use elapsed-time pressure from objective
+  ground presence.
   Enable-by-default gate: mission/scene lifecycle, award attribution and tax/score,
   road/terrain placement, listen-host/client/late join and bounded long-session behavior.
   See [DYNAMIC_OPERATIONS.md](DYNAMIC_OPERATIONS.md) and its pinned research links.
@@ -60,12 +62,16 @@ codecs and snapshot providers; garrison catalogue/selection/spawning/lifecycle.
   under churn/late-join, a global proxy cap (~96), stable references instead of
   nearest-position repair. Excludes interiors, room clearing, breaching, per-floor damage,
   and autonomous roaming infantry.
-- **Radio** — in-game interaction and long-session gates remain; MP3 only after a real decode
-  test; synchronized broadcast stays behind the handshake/manifest gate in
+- **Radio** — Base Broadcast now catalogs the installed score across registered maps (up to
+  30 deduplicated clips); in-game interaction and long-session gates remain; MP3 only after
+  a real decode test; synchronized broadcast stays behind the handshake/manifest gate in
   [DESIGN_NOTES.md](DESIGN_NOTES.md).
 - **Progression** — persistent profiles only after migration + recovery tests; client
   receives only its accepted snapshot. Perk costs and the score-per-point tier are the two
-  balance dials to revisit once mission-length data exists.
+  balance dials to revisit once mission-length data exists. The SQD studio and emblem
+  rendering need in-game acceptance against the companion Wing Command build. Future
+  authorisations (more satellites, electronic warfare, fortifications) graduate by adding
+  one support action plus one `PerkCatalog` row; none are scheduled here.
 - **Support** — multiplayer and long-session gates remain; carrier requisition graduates only
   after a full spawn-to-destruction lifecycle around a live mission is clean.
 - **Experimental modules** — start as capability probes behind default-off flags; promotion

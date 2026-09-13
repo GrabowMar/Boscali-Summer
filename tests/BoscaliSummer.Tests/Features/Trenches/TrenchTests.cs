@@ -11,8 +11,10 @@ namespace BoscaliSummer.Tests.Features.Trenches
             TestSappingDistance();
             TestFlankHookMath();
             TestStageProgressionRules();
+            TestSectorLayout();
             TestAssert.That(TrenchTacticalMath.DefenderBudget(1) == 2 && TrenchTacticalMath.DefenderBudget(2) == 4 &&
-                TrenchTacticalMath.DefenderBudget(3) == 6 && TrenchTacticalMath.DefenderBudget(4) == 6, "Defenses grow 2/4/6 then stop");
+                TrenchTacticalMath.DefenderBudget(3) == 6 && TrenchTacticalMath.DefenderBudget(4) == 6 &&
+                TrenchTacticalMath.DefenderBudget(5) == 6, "Defenses grow 2/4/6 then stop");
             TestAssert.That(!TrenchTacticalMath.CanConstruct(false, 59, 60, 45), "Damage suppresses construction");
             TestAssert.That(TrenchTacticalMath.CanConstruct(false, 60, 60, 45), "Survivors resume after a full quiet minute");
             TestAssert.That(!TrenchTacticalMath.CanConstruct(true, 600, 60, 45), "An overrun position never rebuilds defenders");
@@ -63,20 +65,33 @@ namespace BoscaliSummer.Tests.Features.Trenches
 
         private static void TestStageProgressionRules()
         {
-            // Stage 0 (Scrapes)
             TestAssert.That(TrenchTacticalMath.EvaluateNextStage(0, 3, 0, 0) == 0, "Unlinked scrapes stay Stage 0");
             TestAssert.That(TrenchTacticalMath.EvaluateNextStage(0, 3, 2, 0) == 1, "Linked scrapes advance to Stage 1");
 
-            // Stage 1 (Crawl)
-            TestAssert.That(TrenchTacticalMath.EvaluateNextStage(1, 3, 2, 0) == 2, "Connected crawlways advance to Stage 2");
+            TestAssert.That(TrenchTacticalMath.EvaluateNextStage(1, 5, 4, 0) == 1, "A partial line cannot deepen yet");
+            TestAssert.That(TrenchTacticalMath.EvaluateNextStage(1, 7, 6, 0) == 2, "A connected seed line advances to Stage 2");
 
-            // Stage 2 (Fire Trench)
-            TestAssert.That(TrenchTacticalMath.EvaluateNextStage(2, 3, 2, 0) == 2, "Without bunkers stays Stage 2");
-            TestAssert.That(TrenchTacticalMath.EvaluateNextStage(2, 3, 2, 1) == 3, "Fortified bunker advances to Stage 3");
+            TestAssert.That(TrenchTacticalMath.EvaluateNextStage(2, 7, 6, 0) == 3, "A connected fire line advances to Stage 3");
+            TestAssert.That(TrenchTacticalMath.EvaluateNextStage(3, 9, 8, 0) == 4, "An extended line advances to Stage 4");
+            TestAssert.That(TrenchTacticalMath.EvaluateNextStage(3, 7, 6, 0) == 3, "An unextended line stays Stage 3");
 
-            // Stage 3 (Hardened)
-            TestAssert.That(TrenchTacticalMath.EvaluateNextStage(3, 3, 3, 1) == 3, "Without rear lines stays Stage 3");
-            TestAssert.That(TrenchTacticalMath.EvaluateNextStage(3, 5, 4, 1) == 4, "Integrated network advances to Stage 4");
+            TestAssert.That(TrenchTacticalMath.EvaluateNextStage(4, 12, 13, 0) == 4, "A support line without a dugout stays Stage 4");
+            TestAssert.That(TrenchTacticalMath.EvaluateNextStage(4, 12, 13, 1) == 5, "A linked support line advances to Stage 5");
+            TestAssert.That(TrenchTacticalMath.EvaluateNextStage(5, 21, 24, 2) == 5, "A finished belt never advances further");
+        }
+
+        private static void TestSectorLayout()
+        {
+            TestAssert.That(TrenchTacticalMath.LineSpan(TrenchTacticalMath.SeedBayCount) == 132f,
+                "Seed line spans 132m across the sector");
+            TestAssert.That(TrenchTacticalMath.LineOffset(0, 7) == -66f && TrenchTacticalMath.LineOffset(6, 7) == 66f &&
+                TrenchTacticalMath.LineOffset(3, 7) == 0f, "Seed bays are centered on the sector");
+            TestAssert.That(TrenchTacticalMath.CapFlankLimit(1250f) == TrenchTacticalMath.MaxFlankHalfLength,
+                "Huge border sides cap at the network half-width");
+            TestAssert.That(TrenchTacticalMath.CapFlankLimit(80f) == TrenchTacticalMath.MinFlankHalfLength,
+                "Tight border sides keep the minimum half-width");
+            TestAssert.That(TrenchTacticalMath.SupportLineDepth > 0f && TrenchTacticalMath.RearLineDepth >
+                TrenchTacticalMath.SupportLineDepth, "Support line outranks the rear line in depth");
         }
     }
 }

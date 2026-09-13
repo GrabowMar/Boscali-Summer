@@ -20,6 +20,10 @@ namespace BoscaliSummer.Features.Trenches.Runtime
     internal sealed class TrenchManager : MonoBehaviour, ISceneService
     {
         public const int MaximumActiveNetworks = 16;
+        private const float SeedSlotSpacing = 380f;
+        private const float SameOwnerSpacing = 360f;
+        private const float OtherOwnerSpacing = 250f;
+        private const float ClearedSiteSpacing = 300f;
 
         private TrenchesSettings settings;
         private ManualLogSource logger;
@@ -31,13 +35,13 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         private readonly Dictionary<int, TrenchGarrison> garrisons = new Dictionary<int, TrenchGarrison>(MaximumActiveNetworks);
         private int nextNetworkId = 1;
         private ITerritoryIngress territory;
-        private readonly TrenchPlacement placement = new TrenchPlacement();
         private readonly FrontlineSite[] sites = new FrontlineSite[256];
-        private readonly List<(FactionHQ owner, FrontlineSite site, int rank)> candidates = new List<(FactionHQ, FrontlineSite, int)>(2048);
+        private readonly List<(FactionHQ owner, Vector3 position, Vector3 threat, float flankLimit, int rank)> candidates =
+            new List<(FactionHQ, Vector3, Vector3, float, int)>(2048);
         private int candidateIndex;
-        private bool roadPass;
         private int rejected;
         private float nextGarrisonWarning;
+        private float nextGrowthWarning;
         private readonly List<Vector3> clearedSites = new List<Vector3>(64);
 
         public event Action OnNetworksChanged;
@@ -66,13 +70,14 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             networks.Clear();
 
             TrenchMaterialResolver.ResetForScene();
+            TrenchPrefabResolver.ResetForScene();
 
             nextNetworkId = 1;
             nextGarrisonWarning = 0;
+            nextGrowthWarning = 0;
             nextSimulationTick = 0f;
             candidates.Clear();
             clearedSites.Clear();
-            placement.Reset();
             candidateIndex = rejected = 0;
             nextSeedAttemptAt = Time.unscaledTime + 2.5f;
         }
@@ -104,14 +109,13 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         {
             nextSeedAttemptAt = Time.unscaledTime + 30f;
             candidates.Clear();
-            placement.ReadRoads();
             int factions = 0;
             foreach (FactionHQ owner in FactionRegistry.GetAllHQs())
             {
                 if (owner == null) continue;
                 if (++factions > 8) break;
                 int count = territory.CopyFrontlineSites(owner.GetInstanceID(), sites);
-                for (int i = 0; i < count; i++) candidates.Add((owner, sites[i], i));
+                for (int i = 0; i < count; i++) ExpandSite(owner, sites[i], i);
             }
             // Round-robin factions so a small configured ceiling does not all go to the first HQ.
             candidates.Sort((a, b) =>
@@ -120,54 +124,66 @@ namespace BoscaliSummer.Features.Trenches.Runtime
                 return order != 0 ? order : a.owner.GetInstanceID().CompareTo(b.owner.GetInstanceID());
             });
             candidateIndex = rejected = 0;
-            roadPass = true;
-            logger?.LogInfo($"[TRENCHES] Placement scan: {candidates.Count} owned frontline candidates, {networks.Count} active networks.");
+            logger?.LogInfo($"[TRENCHES] Placement scan: {candidates.Count} frontline sector slots, {networks.Count} active networks.");
+        }
+
+        // One border cell side is kilometres long, so a single site becomes a chain of
+        // sector slots spaced along the border instead of one isolated strongpoint.
+        private void ExpandSite(FactionHQ owner, FrontlineSite site, int rank)
+        {
+            if (candidates.Count >= 2048) return;
+            float flankLimit = TrenchTacticalMath.CapFlankLimit(site.HalfLength);
+            Vector3 center = new Vector3(site.X, 0, site.Z);
+            Vector3 tangent = new Vector3(-site.ThreatZ, 0, site.ThreatX);
+            Vector3 threat = new Vector3(site.ThreatX, 0, site.ThreatZ);
+            int slots = Mathf.Clamp(Mathf.FloorToInt((site.HalfLength * 2f - 120f) / SeedSlotSpacing), 1, 4);
+            for (int i = 0; i < slots; i++)
+            {
+                float offset = (i - (slots - 1) * 0.5f) * SeedSlotSpacing;
+                candidates.Add((owner, center + tangent * offset, threat, flankLimit, rank));
+            }
         }
 
         private void TrySeedInitialNetworks()
         {
             if (clearedSites.Count >= 64) { candidates.Clear(); return; }
-            // One bounded terrain reserve/road search per frame, roads before fallback terrain.
+            // One bounded corridor reserve per frame, always working outward from the frontline.
             if (candidateIndex >= candidates.Count)
             {
-                if (roadPass) { roadPass = false; candidateIndex = 0; }
-                else
-                {
-                    logger?.LogInfo($"[TRENCHES] Placement finished: {networks.Count} networks; {rejected} candidates rejected (terrain, ownership, or spacing).");
-                    candidates.Clear();
-                    return;
-                }
+                logger?.LogInfo($"[TRENCHES] Placement finished: {networks.Count} networks; {rejected} slots rejected (terrain, ownership, or spacing).");
+                candidates.Clear();
+                return;
             }
             var candidate = candidates[candidateIndex++];
             if (candidate.owner == null) return;
-            Vector3 center = new Vector3(candidate.site.X, 0, candidate.site.Z);
-            if (roadPass && !placement.TryRoadSite(candidate.site, out center)) return;
+            Vector3 center = candidate.position;
             foreach (var cleared in clearedSites)
             {
                 Vector3 delta = cleared - center; delta.y = 0;
-                if (delta.sqrMagnitude < 1200f * 1200f) return;
+                if (delta.sqrMagnitude < ClearedSiteSpacing * ClearedSiteSpacing) return;
             }
             foreach (var existing in networks)
             {
-                float spacing = existing.OwnerHq == candidate.owner ? 1200f : 180f;
+                float spacing = existing.OwnerHq == candidate.owner ? SameOwnerSpacing : OtherOwnerSpacing;
                 Vector3 delta = existing.SeedCenter - center;
                 delta.y = 0;
                 if (delta.sqrMagnitude < spacing * spacing) return;
             }
-            var network = CreateTrenchNetwork(center, new Vector3(candidate.site.ThreatX, 0, candidate.site.ThreatZ),
-                candidate.owner, candidate.owner.name + "_Frontline");
+            var network = CreateTrenchNetwork(center, candidate.threat, candidate.flankLimit,
+                candidate.owner, candidate.owner.name + "_Sector");
             if (network == null) { rejected++; return; }
-            logger?.LogInfo($"[TRENCHES] Seeded '{network.Name}' at global {network.Center}; road-preferred={roadPass}.");
+            logger?.LogInfo($"[TRENCHES] Seeded '{network.Name}' at global {network.Center}, flank half-width {candidate.flankLimit:0}m.");
             if (networks.Count >= Math.Min(MaximumActiveNetworks, settings.MaxTrenchNetworks.Value))
             {
                 candidates.Clear();
             }
         }
 
-        public TrenchNetwork CreateTrenchNetwork(Vector3 center, Vector3 threatDir, FactionHQ owner, string name)
+        public TrenchNetwork CreateTrenchNetwork(Vector3 center, Vector3 threatDir, float flankLimit, FactionHQ owner, string name)
         {
             if (!GameAccess.IsServer() || owner == null || territory == null ||
-                !TrenchPlacement.ValidateReserve(center, owner.GetInstanceID(), territory, out Vector3 groundCenter)) return null;
+                !TrenchPlacement.ValidateCorridor(center, threatDir, flankLimit, owner.GetInstanceID(),
+                    territory, out Vector3 groundCenter)) return null;
             if (networks.Count >= Math.Min(MaximumActiveNetworks, settings?.MaxTrenchNetworks?.Value ?? MaximumActiveNetworks))
             {
                 logger?.LogWarning("[TRENCHES] Cannot create network: maximum ceiling reached.");
@@ -175,9 +191,8 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             }
 
             int id = nextNetworkId++;
-            var net = new TrenchNetwork(id, name, owner, groundCenter, threatDir);
-            net.PlacementValidator = p => Math.Abs(p.x - net.SeedCenter.x) <= 60f &&
-                Math.Abs(p.z - net.SeedCenter.z) <= 60f &&
+            var net = new TrenchNetwork(id, name, owner, groundCenter, threatDir, flankLimit);
+            net.PlacementValidator = p => net.Contains(p) &&
                 territory.OwnsPosition(owner.GetInstanceID(), p.x, p.z) && TrenchPlacement.TryGround(p, out _);
 
             if (!TrenchGrowthSimulator.Seed(net, SnapToGround)) return null;
@@ -267,6 +282,11 @@ namespace BoscaliSummer.Features.Trenches.Runtime
                     advancedOne = true;
                     net.NextGrowthAt = Time.time + Math.Max(15f, settings.GrowthIntervalSeconds.Value);
                     rebuild = TrenchGrowthSimulator.AdvanceSimulation(net, SnapToGround);
+                    if (!rebuild && net.Stage != TrenchStage.Stage5_Redoubt && Time.unscaledTime >= nextGrowthWarning)
+                    {
+                        nextGrowthWarning = Time.unscaledTime + 60f;
+                        logger?.LogWarning($"[TRENCHES] '{net.Name}' growth held at {net.Stage}: {TrenchGrowthSimulator.LastFailure}");
+                    }
                     changed |= rebuild;
                     garrison.Reinforce();
                     changed |= garrison.Poll(Time.time);

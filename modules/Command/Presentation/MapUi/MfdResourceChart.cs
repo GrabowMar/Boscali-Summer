@@ -70,7 +70,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             summary.text = name + "  •  CHANGE " + (MfdResourceHistory.Finite(change)
                 ? (change > 0f ? "+" : "") + format(change) : "—");
             window.text = duration > 0f ? "LAST " + duration.ToString("0") + "s   →   NOW  |  5s SAMPLES"
-                : "RECORDS WHILE FACTION PANEL IS VISIBLE";
+                : "RECORDING SINCE MISSION START  |  5s SAMPLES";
             if (!known) upper.text = lower.text = "—";
         }
 

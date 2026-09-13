@@ -162,17 +162,50 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private static readonly List<GameObject> spares = new List<GameObject>();
         private static MapSnapshot map;
         private static bool applied;
+        private static Vector2 appliedCanvasSize;
+        private static float currentPanelWidth = AvTokens.PanelWidth;
+
+        /// <summary>
+        /// The UI area the applied layout was resolved against, exposed so
+        /// <see cref="MapUiManager"/> can re-apply when the live canvas size diverges.
+        /// </summary>
+        public static Vector2 AppliedCanvasSize => appliedCanvasSize;
 
         public static void Reconcile()
         {
             if (DynamicMap.mapMaximized && applied != MfdPresentation.Expanded)
                 MaximizePostfix(SceneSingleton<DynamicMap>.i);
+            else if (DynamicMap.mapMaximized && applied)
+            {
+                var map = SceneSingleton<DynamicMap>.i;
+                VirtualMFD mfd = MapMfdLookup.Resolve(map == null ? null : map.maximizedMapCanvas);
+                MfdPanelDock.DockModScreens(mfd);
+                ReLayoutForActiveScreen(MfdSinglePanelPatch.ActiveScreen);
+            }
         }
 
         public static void Refresh(DynamicMap dynamicMap)
         {
             Restore();
             MaximizePostfix(dynamicMap);
+        }
+
+        /// <summary>
+        /// Install or update layout when a new MFD screen appears. Does not tear down an
+        /// already-applied layout — Restore+rebuild was dropping docked screens back onto
+        /// the gameplay canvas.
+        /// </summary>
+        public static void OnStructureChanged(DynamicMap dynamicMap)
+        {
+            if (dynamicMap == null) return;
+            if (!applied)
+            {
+                MaximizePostfix(dynamicMap);
+                return;
+            }
+            VirtualMFD mfd = MapMfdLookup.Resolve(dynamicMap.maximizedMapCanvas);
+            MfdPanelDock.DockModScreens(mfd);
+            ReLayout(currentPanelWidth);
         }
 
         [HarmonyPostfix]
@@ -190,10 +223,13 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             }
 
             Canvas canvas = __instance.maximizedMapCanvas;
-            if (!MfdLayout.TryResolve(canvas, out MfdLayout.Columns columns)) return;
+            float initialWidth = MfdSinglePanelPatch.ActiveScreen != null && MfdSinglePanelPatch.ActiveScreen.isActive
+                ? MfdPanelDock.VisibleWidth(MfdSinglePanelPatch.ActiveScreen)
+                : AvTokens.PanelWidth;
+            currentPanelWidth = initialWidth;
+            if (!MfdLayout.TryResolve(canvas, out MfdLayout.Columns columns, initialWidth)) return;
 
-            VirtualMFD mfd = canvas.GetComponentInChildren<VirtualMFD>(true) ??
-                             Object.FindObjectOfType<VirtualMFD>();
+            VirtualMFD mfd = MapMfdLookup.Resolve(canvas);
             if (mfd == null) return;
             List<Button> leftButtons = MapUiAccess.GetLeftButtons(mfd);
             List<Button> rightButtons = MapUiAccess.GetRightButtons(mfd);
@@ -215,14 +251,24 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             MfdMapDeck.Ensure(canvas, columns);
             EnsureFooter(canvas, columns);
             EnsureLogPanel(canvas, columns);
+            EnsureNewsTicker(canvas, columns);
 
             applied = true;
+            appliedCanvasSize = columns.Canvas;
             Plugin.Logger.LogDebug("Boscali tactical map layout installed.");
         }
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(DynamicMap), nameof(DynamicMap.Minimize))]
-        public static void MinimizePostfix(DynamicMap __instance) => Restore(onMinimize: true, dynamicMap: __instance);
+        public static void MinimizePostfix(DynamicMap __instance)
+        {
+            // Vanilla hides every screen on this path; enforce the invariant in case a
+            // custom screen's close callback is skipped, then restore the layout.
+            MfdPanelDock.SyncSurfaceVisibility(__instance == null
+                ? null
+                : MapMfdLookup.Resolve(__instance.maximizedMapCanvas));
+            Restore(onMinimize: true, dynamicMap: __instance);
+        }
 
         // ------------------------------------------------------------------------- map
 
@@ -296,6 +342,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             dynamicMap.mapScaleCurrent = Mathf.Min(size.x, size.y);
 
             EnsureMapFrame(dynamicMap.maximizedMapCanvas, columns);
+            Patches.GridLabelsPatch.RepositionCornerReadouts(dynamicMap.gridLabels);
         }
 
         /// <summary>
@@ -342,7 +389,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
         private static void BuildRail(Canvas canvas, MfdLayout.Columns columns)
         {
-            VirtualMFD mfd = canvas.GetComponentInChildren<VirtualMFD>(true) ?? Object.FindObjectOfType<VirtualMFD>();
+            VirtualMFD mfd = MapMfdLookup.Resolve(canvas);
             if (mfd == null) return;
 
             MfdRail.Ensure(canvas, columns);
@@ -479,12 +526,31 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
         private static void DockPanels(Canvas canvas, MfdLayout.Columns columns)
         {
-            VirtualMFD mfd = canvas.GetComponentInChildren<VirtualMFD>(true) ?? Object.FindObjectOfType<VirtualMFD>();
+            VirtualMFD mfd = MapMfdLookup.Resolve(canvas);
             if (mfd == null) return;
 
             MfdPanelDock.Ensure(canvas, columns);
             MfdPanelDock.DockModScreens(mfd);
             MfdSinglePanelPatch.Reconcile(mfd);
+        }
+
+        /// <summary>
+        /// Adapts column geometry to the active screen's visible width, or the token fallback.
+        /// </summary>
+        public static void ReLayoutForActiveScreen(MFDScreen screen)
+        {
+            float targetWidth = screen != null && screen.isActive
+                ? MfdPanelDock.VisibleWidth(screen)
+                : AvTokens.PanelWidth;
+            ReLayoutIfNeeded(targetWidth);
+        }
+
+        public static void ReLayoutIfNeeded(float panelWidth)
+        {
+            if (!applied || map == null || map.Root == null) return;
+            if (Mathf.Abs(currentPanelWidth - panelWidth) < 1f) return;
+            currentPanelWidth = panelWidth;
+            ReLayout(panelWidth);
         }
 
         /// <summary>
@@ -494,11 +560,16 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         {
             if (!applied || map == null || map.Root == null) return;
 
-            Canvas canvas = map.Root.GetComponentInParent<Canvas>();
+            // The map root's nearest Canvas is the viewport itself (DynamicMap sits on
+            // MapCanvas), and this code has already resized that rect to the map column.
+            // Resolve against the canvas MaximizePostfix uses, or a relayout divided the
+            // already-shrunk viewport again (the panel-click map collapse).
+            var dynamicMap = map.Root.GetComponent<DynamicMap>();
+            Canvas canvas = dynamicMap != null ? dynamicMap.maximizedMapCanvas : null;
+            if (canvas == null) canvas = map.Root.GetComponentInParent<Canvas>();
             if (canvas == null) return;
             if (!MfdLayout.TryResolve(canvas, out MfdLayout.Columns columns, panelWidth)) return;
 
-            var dynamicMap = map.Root.GetComponent<DynamicMap>();
             if (dynamicMap != null) ResizeMap(dynamicMap, columns);
 
             MfdRail.Ensure(canvas, columns);
@@ -506,20 +577,26 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             MfdMapDeck.Ensure(canvas, columns);
             EnsureFooter(canvas, columns);
             EnsureLogPanel(canvas, columns);
+            EnsureNewsTicker(canvas, columns);
+
+            appliedCanvasSize = columns.Canvas;
         }
 
         private static void EnsureFooter(Canvas canvas, MfdLayout.Columns columns)
         {
-            VirtualMFD mfd = canvas.GetComponentInChildren<VirtualMFD>(true) ??
-                             Object.FindObjectOfType<VirtualMFD>();
+            VirtualMFD mfd = MapMfdLookup.Resolve(canvas);
             if (mfd != null) MfdMapFooter.Ensure(canvas, columns, mfd);
         }
 
         private static void EnsureLogPanel(Canvas canvas, MfdLayout.Columns columns)
         {
-            VirtualMFD mfd = canvas.GetComponentInChildren<VirtualMFD>(true) ??
-                             Object.FindObjectOfType<VirtualMFD>();
+            VirtualMFD mfd = MapMfdLookup.Resolve(canvas);
             if (mfd != null) MfdLogPanel.Ensure(canvas, columns, mfd);
+        }
+
+        private static void EnsureNewsTicker(Canvas canvas, MfdLayout.Columns columns)
+        {
+            MfdNewsTicker.Ensure(canvas, columns, Plugin.Settings?.Command);
         }
 
         // --------------------------------------------------------------------- restore
@@ -554,6 +631,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             buttons.Clear();
 
             if (mapFrame != null) { Object.Destroy(mapFrame); mapFrame = null; }
+            MfdNewsTicker.Restore();
             MfdLogPanel.Restore();
             MfdMapFooter.Restore();
             MfdMapDeck.Restore();
@@ -574,21 +652,25 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             map = null;
 
             applied = false;
+            appliedCanvasSize = Vector2.zero;
         }
 
         /// <summary>Forget captured state at end of mission so the next scene re-snapshots.</summary>
         public static void Reset()
         {
             Restore();
+            currentPanelWidth = AvTokens.PanelWidth;
             buttons.Clear();
             containers.Clear();
             spares.Clear();
             if (mapFrame != null) { Object.Destroy(mapFrame); mapFrame = null; }
+            MfdNewsTicker.Reset();
             MfdLogPanel.Reset();
             MfdMapFooter.Reset();
             MfdMapDeck.Reset();
             map = null;
             applied = false;
+            appliedCanvasSize = Vector2.zero;
             MfdRail.Reset();
             MfdPanelDock.Reset();
             MfdSinglePanelPatch.Reset();

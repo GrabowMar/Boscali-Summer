@@ -160,6 +160,7 @@ namespace NOAvionics.Ui
             if (!interactable) return;
 
             AvInput.Deselect(gameObject);
+            AvUiSound.Tick(0.3f);
 
             try { onClick?.Invoke(); }
             catch (Exception e) { Debug.LogError("Avionics button click failed: " + e); }
@@ -203,6 +204,69 @@ namespace NOAvionics.Ui
             pressed = false;
             PublishTooltip(entering: false);
             Apply();
+        }
+    }
+
+    /// <summary>
+    /// Publishes status-strip help for interactive areas that are not avionics buttons,
+    /// and optionally tints a row background while the pointer is inside the area.
+    ///
+    /// <para>A row is read as a row, not as its control: the same help text has to appear
+    /// whether the pointer is over the label or the value box, and the row should react as
+    /// one target.</para>
+    /// </summary>
+    public sealed class AvTooltipTarget : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
+    {
+        private string tooltip;
+        private bool hovered;
+        private Graphic tint;
+        private Color tintRest;
+        private Color tintHover;
+
+        public void Initialise(string text) => tooltip = text;
+
+        /// <summary>Help text can change with availability; refresh it without re-hovering.</summary>
+        public void SetText(string text) => tooltip = text;
+
+        /// <summary>Optional background that lights on hover, so the whole row reads as one control.</summary>
+        public void SetTint(Graphic target, Color rest, Color hover)
+        {
+            tint = target;
+            tintRest = rest;
+            tintHover = hover;
+            if (tint != null && !hovered) tint.color = rest;
+        }
+
+        public void OnPointerEnter(PointerEventData eventData)
+        {
+            hovered = true;
+            if (tint != null) tint.color = tintHover;
+            AvButton.PublishExternal(tooltip, entering: true);
+        }
+
+        /// <summary>Rest and hover tint for a state that changes after build, e.g. a latched row.</summary>
+        public void SetColors(Color rest, Color hover)
+        {
+            tintRest = rest;
+            tintHover = hover;
+            if (tint != null && !hovered) tint.color = rest;
+        }
+
+        public void OnPointerExit(PointerEventData eventData)
+        {
+            hovered = false;
+            if (tint != null) tint.color = tintRest;
+            AvButton.PublishExternal(tooltip, entering: false);
+        }
+
+#pragma warning disable IDE0051 // Unity message
+        private void OnDisable()
+#pragma warning restore IDE0051
+        {
+            if (!hovered) return;
+            hovered = false;
+            if (tint != null) tint.color = tintRest;
+            AvButton.PublishExternal(tooltip, entering: false);
         }
     }
 }

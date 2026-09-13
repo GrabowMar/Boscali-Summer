@@ -1,8 +1,12 @@
 using System;
 using System.Collections.Generic;
 using BepInEx.Logging;
+using BepInEx.Configuration;
 using BoscaliSummer.Features.Command.Configuration;
+using BoscaliSummer.Features.Command.Presentation;
 using BoscaliSummer.Framework.Lifecycle;
+using BoscaliSummer.Framework.Features;
+using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Runtime;
 using NOAvionics;
 using NOAvionics.Ui;
@@ -17,6 +21,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private CommandSettings settings;
         private ManualLogSource logger;
         private GameObject root;
+        private GameObject surface;
         private MFDScreen screen;
         private AvScreen shell;
         private List<MFDScreen> boundScreens;
@@ -25,22 +30,54 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private bool failed;
         private float nextTick;
         private readonly List<Action> refreshers = new List<Action>();
+        private bool dirty = true;
+        private bool wasVisible;
+        private bool appearancePending;
+        private bool overlayPending;
+        private bool layoutPending;
+        private bool tickerPending;
+        private string actionEcho;
+        private float actionEchoUntil;
 
         public void Configure(CommandSettings config, ManualLogSource log)
         {
             settings = config;
             logger = log;
             MfdMapDeck.Configure(config);
+            if (configFile != null) configFile.SettingChanged -= OnSettingChanged;
+            configFile = config.ExpandedMapUi.ConfigFile;
+            configFile.SettingChanged += OnSettingChanged;
+        }
+
+        private ConfigFile configFile;
+
+        private void OnSettingChanged(object sender, SettingChangedEventArgs args)
+        {
+            if (args.ChangedSetting.Definition.Section != "Command") return;
+            dirty = true;
+            switch (args.ChangedSetting.Definition.Key)
+            {
+                case "ExpandedMapUi": layoutPending = true; break;
+                case "FrontlinesOverlay":
+                case "OverlayOpacity":
+                case "GridRefreshInterval": overlayPending = true; break;
+                case "NewsTicker": tickerPending = true; break;
+                case "NewsTickerSpeed": break;
+                default: appearancePending = true; break;
+            }
         }
 
         private void Update()
         {
             if (settings == null || failed || Application.isBatchMode || Time.unscaledTime < nextTick) return;
             nextTick = Time.unscaledTime + (screen == null ? 1f : 0.25f);
+            ApplyPending();
             if (screen == null)
             {
-                VirtualMFD mfd = SceneSingleton<DynamicMap>.i?.maximizedMapCanvas?.GetComponentInChildren<VirtualMFD>(true)
-                    ?? UnityEngine.Object.FindObjectOfType<VirtualMFD>();
+                // A torn-down dock slot can destroy the screen root without a scene reset;
+                // release the stale reservation so the panel can install again.
+                if (claimed) ReleaseClaim();
+                VirtualMFD mfd = MapMfdLookup.Resolve(SceneSingleton<DynamicMap>.i?.maximizedMapCanvas);
                 if (mfd == null) return;
                 try { Install(mfd); }
                 catch (Exception error)
@@ -50,7 +87,26 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     logger?.LogWarning("SET panel installation failed: " + error);
                 }
             }
-            if (screen != null && screen.isActive) RefreshPanel();
+            bool mapOpen = DynamicMap.mapMaximized &&
+                SceneSingleton<DynamicMap>.i?.maximizedMapCanvas?.isActiveAndEnabled == true;
+            bool visible = screen != null && screen.isActive && mapOpen;
+
+            // Vanilla's close path is authoritative for showing. This keeps the surface in
+            // step with the screen's own state, so a close path that skips CloseScreen can no
+            // longer leave the settings panel floating over the cockpit.
+            if (surface != null && surface.activeSelf != visible) surface.SetActive(visible);
+
+            if (visible)
+            {
+                if (dirty || !wasVisible) RefreshPanel();
+                string echo = Time.unscaledTime < actionEchoUntil ? actionEcho : null;
+                string ambient = pageScrolls[Mathf.Clamp(shell.Page, 0, pageScrolls.Length - 1)]
+                    ? "Saved automatically. Scroll for more; hover for help."
+                    : "Saved automatically. Hover a control for help.";
+                shell?.WriteStatus(null, echo ?? MapPicker.Prompt,
+                    shell.Page == 2 ? MfdMapDeck.WallpaperStatus : ambient);
+            }
+            wasVisible = visible;
         }
 
         private void Install(VirtualMFD mfd)
@@ -82,7 +138,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             TMP_Text sourceText = template.GetComponentInChildren<TMP_Text>(true);
             if (sourceText != null && sourceText.font != null) AvFont.Font = sourceText.font;
 
-            root = new GameObject("BoscaliSummer.SET", typeof(RectTransform), typeof(Image));
+            root = new GameObject("BoscaliSummer.SET", typeof(RectTransform));
             var rect = (RectTransform)root.transform;
             var source = (RectTransform)template.transform;
             rect.SetParent(source.parent, false);
@@ -91,33 +147,39 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             rect.pivot = source.pivot;
             rect.localScale = source.localScale;
             float height = AvScreen.ResolveHeight(
-                source.parent as RectTransform, AvTokens.PanelHeight, AvTokens.PanelHeightMax);
+                source.parent as RectTransform, AvTokens.PanelHeight, AvTokens.PanelHeight);
             rect.sizeDelta = new Vector2(AvTokens.PanelWidth, height);
-            var background = root.GetComponent<Image>();
+            var content = new GameObject("Content", typeof(RectTransform), typeof(Image));
+            var background = content.GetComponent<Image>();
             background.sprite = AvSprites.Panel;
             background.type = Image.Type.Sliced;
             background.color = Color.white;
             background.raycastTarget = true;
 
-            var content = new GameObject("Content", typeof(RectTransform));
+
             content.transform.SetParent(rect, false);
             var body = (RectTransform)content.transform;
             AvKit.Stretch(body);
+            surface = content;
 
             shell = AvScreen.Build(
-                body, "SET", new[] { "DISPLAY", "DECK" }, null, 0,
-                AvTokens.PanelWidth, height, _ =>
+                body, "SET", new[] { "MAP", "STYLE", "IMAGE" }, null, 1,
+                AvTokens.PanelWidth, height, page =>
                 {
+                    shell.DataBar.State.text = PageName(page);
                     nextTick = 0f;
                     RefreshPanel();
                 });
-            shell.DataBar.State.text = "MAP SETTINGS";
+            shell.DataBar.SetChip(0, "SAVED", true);
+            shell.Status.richText = false;
 
             RectTransform displayPage = (RectTransform)shell.CreatePage(0, "DisplayPage").transform;
-            BuildDisplayPage(displayPage, shell.Body);
+            BuildMapPage(displayPage, shell.Body);
 
             RectTransform deckPage = (RectTransform)shell.CreatePage(1, "DeckPage").transform;
-            BuildDeckPage(deckPage, shell.Body);
+            BuildStylePage(deckPage, shell.Body);
+            var imagePage = (RectTransform)shell.CreatePage(2, "ImagePage").transform;
+            BuildImagePage(imagePage, shell.Body);
 
             shell.SetPage(0);
 
@@ -135,7 +197,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             if (DynamicMap.mapMaximized)
             {
                 var dynMap = SceneSingleton<DynamicMap>.i;
-                if (dynMap != null) MfdRailPatch.Refresh(dynMap);
+                if (dynMap != null) MfdRailPatch.OnStructureChanged(dynMap);
             }
 
             MfdMapDeck.ApplyAppearance(settings);
@@ -143,189 +205,220 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             logger?.LogInfo("SET MFD installed on " + (left ? "left" : "right") + " bezel slot " + (slot + 1) + ".");
         }
 
-        private void BuildDisplayPage(RectTransform parent, Rect body)
+        private static readonly string[] PageNames =
+            { "TACTICAL DISPLAY", "CONSOLE SURFACE", "BACKGROUND IMAGERY" };
+
+        private readonly bool[] pageScrolls = new bool[3];
+
+        private static string PageName(int page) =>
+            page >= 0 && page < PageNames.Length ? PageNames[page] : PageNames[0];
+
+        // Pages are built once. Dependencies disable controls without rebuilding the tree.
+        private RectTransform Page(int page, RectTransform parent, Rect body, string title, string tag,
+            string subtitle, int rows, int sections, out Rect area)
         {
-            AvNode layout = AvBox.Column("displaySettings")
-                .Pad(AvScreen.SpineInset, 0f, 0f, 0f)
-                .Gaps(6f)
-                .Add(AvBox.Cell("tacticalHeading").Height(24f))
-                .Add(ToggleRow("expanded"))
-                .Add(ToggleRow("frontlines"))
-                .Add(StepperRow("opacity"))
-                .Add(StepperRow("resolution"))
-                .Add(StepperRow("refresh"))
-                .Add(AvBox.Cell("terrainHeading").Height(24f))
-                .Add(ToggleRow("terrainImage"))
-                .Add(StepperRow("terrainOpacity"))
-                .Add(AvBox.Filler());
-            layout.Arrange(body);
-
-            AvStyled.Spine(parent, body);
-            AvStyled.Label(parent, layout.At("tacticalHeading"), "TACTICAL DISPLAY", "section-title");
-
-            Toggle(parent, layout.At("expanded"), "EXPANDED MAP", "Expand or restore the maximized map layout.",
-                () => settings.ExpandedMapUi.Value,
-                value =>
-                {
-                    settings.ExpandedMapUi.Value = value;
-                    MfdRailPatch.Reconcile();
-                }, band: true);
-            Toggle(parent, layout.At("frontlines"), "FRONTLINES", "Show or hide the frontline overlay.",
-                () => settings.FrontlinesOverlay.Value,
-                value => settings.FrontlinesOverlay.Value = value);
-
-            Stepper(parent, layout.At("opacity"), "OVERLAY OPACITY",
-                () => settings.OverlayOpacity.Value.ToString("P0"),
-                () => settings.OverlayOpacity.Value > 0.1f,
-                () => settings.OverlayOpacity.Value < 1f,
-                delta => settings.OverlayOpacity.Value = Mathf.Clamp(
-                    settings.OverlayOpacity.Value + delta * 0.05f, 0.1f, 1f),
-                "5%", "10%", "100%", band: true);
-            Stepper(parent, layout.At("resolution"), "GRID RESOLUTION",
-                () => settings.GridResolution.Value.ToString(),
-                () => settings.GridResolution.Value > 16,
-                () => settings.GridResolution.Value < 64,
-                delta => settings.GridResolution.Value = Mathf.Clamp(
-                    settings.GridResolution.Value + delta * 8, 16, 64),
-                "8", "16", "64");
-            Stepper(parent, layout.At("refresh"), "REFRESH INTERVAL",
-                () => settings.GridRefreshInterval.Value.ToString("0.0") + " s",
-                () => settings.GridRefreshInterval.Value > 0.2f,
-                () => settings.GridRefreshInterval.Value < 2f,
-                delta => settings.GridRefreshInterval.Value = Mathf.Clamp(
-                    settings.GridRefreshInterval.Value + delta * 0.1f, 0.2f, 2f),
-                "0.1 s", "0.2 s", "2.0 s", band: true);
-
-            AvStyled.Label(parent, layout.At("terrainHeading"), "MAP TERRAIN", "section-title");
-
-            Toggle(parent, layout.At("terrainImage"), "TERRAIN IMAGE", "Show or hide satellite terrain map texture.",
-                () => settings.MapTerrainImage.Value,
-                value =>
-                {
-                    settings.MapTerrainImage.Value = value;
-                    MfdMapDeck.ApplyAppearance(settings);
-                });
-
-            Stepper(parent, layout.At("terrainOpacity"), "TERRAIN OPACITY",
-                () => settings.MapTerrainOpacity.Value.ToString("P0"),
-                () => settings.MapTerrainOpacity.Value > 0.1f,
-                () => settings.MapTerrainOpacity.Value < 1f,
-                delta =>
-                {
-                    settings.MapTerrainOpacity.Value = Mathf.Clamp(
-                        settings.MapTerrainOpacity.Value + delta * 0.1f, 0.1f, 1f);
-                    MfdMapDeck.ApplyAppearance(settings);
-                },
-                "10%", "10%", "100%", band: true);
+            Rect content = PageHead(parent, body, title, tag, subtitle);
+            float contentHeight = rows * 62f + sections * 30f + 42f;
+            if (page >= 0 && page < pageScrolls.Length) pageScrolls[page] = contentHeight > content.height;
+            return AvScreen.Scroll(parent, content, contentHeight, out area);
         }
 
-        private void BuildDeckPage(RectTransform parent, Rect body)
+        /// <summary>
+        /// The page's own headline, mirroring the theater panels: a big title, a small
+        /// uppercase subtitle and a rule, with the page spine pinned down the left edge.
+        /// The rows scroll beneath it; the title stays put.
+        /// </summary>
+        private static Rect PageHead(RectTransform parent, Rect body, string title, string tag, string subtitle)
         {
-            AvNode layout = AvBox.Column("deckSettings")
-                .Pad(AvScreen.SpineInset, 0f, 0f, 0f)
-                .Gaps(6f)
-                .Add(AvBox.Cell("deckHeading").Height(24f))
-                .Add(StepperRow("deckOpacity"))
-                .Add(ToggleRow("datumGrid"))
-                .Add(ToggleRow("checkerOverlay"))
-                .Add(StepperRow("checkerOpacity"))
-                .Add(AvBox.Cell("wallpaperHeading").Height(24f))
-                .Add(ToggleRow("wallpaper"))
-                .Add(StepperRow("wallpaperPreset"))
-                .Add(StepperRow("wallpaperOpacity"))
-                .Add(AvBox.Filler());
-            layout.Arrange(body);
+            AvStyled.Spine(parent, new Rect(body.x, body.y, 3f, body.height));
 
-            AvStyled.Spine(parent, body);
-            AvStyled.Label(parent, layout.At("deckHeading"), "DECK SURFACE", "section-title");
+            float x = body.x + AvScreen.SpineInset;
+            float width = Mathf.Max(0f, body.width - AvScreen.SpineInset);
+            float y = body.y - 2f;
 
-            Stepper(parent, layout.At("deckOpacity"), "DECK OPACITY",
-                () => settings.DeckOpacity.Value.ToString("P0"),
-                () => settings.DeckOpacity.Value > 0.10f,
-                () => settings.DeckOpacity.Value < 1f,
-                delta =>
-                {
-                    settings.DeckOpacity.Value = Mathf.Clamp(
-                        settings.DeckOpacity.Value + delta * 0.05f, 0.10f, 1f);
-                    MfdMapDeck.ApplyAppearance(settings);
-                },
-                "5%", "10%", "100%", band: true);
+            AvStyled.Label(parent, new Rect(x, y, width, 26f), title, "page-title");
+            AvStyled.Label(parent, new Rect(x, y, width, 26f), tag, "section-title-note",
+                align: TextAlignmentOptions.MidlineRight);
 
-            Toggle(parent, layout.At("datumGrid"), "DATUM GRID", "Show coordinate datum grid on tactical backdrop.",
-                () => settings.DeckGrid.Value,
-                value =>
-                {
-                    settings.DeckGrid.Value = value;
-                    MfdMapDeck.ApplyAppearance(settings);
-                });
+            y -= 26f;
+            AvStyled.Label(parent, new Rect(x, y, width, 12f), subtitle, "page-subtitle");
 
-            Toggle(parent, layout.At("checkerOverlay"), "CHECKER OVERLAY", "Show subtle tactical checkerboard overlay matrix.",
-                () => settings.CheckerboardOverlay.Value,
-                value =>
-                {
-                    settings.CheckerboardOverlay.Value = value;
-                    MfdMapDeck.ApplyAppearance(settings);
-                }, band: true);
+            y -= 15f;
+            AvKit.Rule(parent, new Rect(x, y, width, 1f), AvTheme.Hairline);
+            y -= 9f;
 
-            Stepper(parent, layout.At("checkerOpacity"), "CHECKER OPACITY",
-                () => settings.CheckerboardOpacity.Value.ToString("P0"),
-                () => settings.CheckerboardOpacity.Value > 0.02f,
-                () => settings.CheckerboardOpacity.Value < 0.40f,
-                delta =>
-                {
-                    settings.CheckerboardOpacity.Value = Mathf.Clamp(
-                        settings.CheckerboardOpacity.Value + delta * 0.02f, 0.02f, 0.40f);
-                    MfdMapDeck.ApplyAppearance(settings);
-                },
-                "2%", "2%", "40%");
+            return new Rect(body.x, y, body.width, Mathf.Max(0f, body.height - (body.y - y)));
+        }
 
-            AvStyled.Label(parent, layout.At("wallpaperHeading"), "BACKGROUND IMAGE", "section-title");
+        /// <summary>
+        /// A numbered section heading hanging off the spine, like the theater panels:
+        /// index in accent, name in primary, status on the right, hairline under.
+        /// </summary>
+        private static void Heading(RectTransform parent, ref Rect area, string index, string title, string note)
+        {
+            const float height = 24f;
+            var rect = new Rect(area.x, area.y, area.width, height);
 
-            Toggle(parent, layout.At("wallpaper"), "WALLPAPER", "Display background wallpaper on tactical deck.",
-                () => settings.BackgroundImage.Value,
-                value =>
-                {
-                    settings.BackgroundImage.Value = value;
-                    MfdMapDeck.ApplyAppearance(settings);
-                }, band: true);
+            AvStyled.SpineTick(parent, rect.x, rect.y - 13f);
 
-            string[] presetNames = { "HEXAGON", "CARBON", "RADAR", "CUSTOM" };
-            Stepper(parent, layout.At("wallpaperPreset"), "PATTERN PRESET",
-                () => presetNames[Mathf.Clamp(settings.BackgroundImagePreset.Value, 0, presetNames.Length - 1)],
-                () => settings.BackgroundImagePreset.Value > 0,
-                () => settings.BackgroundImagePreset.Value < presetNames.Length - 1,
-                delta =>
-                {
-                    settings.BackgroundImagePreset.Value = Mathf.Clamp(
-                        settings.BackgroundImagePreset.Value + delta, 0, presetNames.Length - 1);
-                    MfdMapDeck.ApplyAppearance(settings);
-                },
-                "1", "HEXAGON", "CUSTOM");
+            TMP_Text number = AvStyled.Label(parent, new Rect(rect.x + 12f, rect.y, 30f, 16f), index, "section-title");
+            number.color = AvTheme.Accent;
+            AvStyled.Label(parent, new Rect(rect.x + 42f, rect.y, Mathf.Max(0f, rect.width - 42f - 140f), 16f),
+                title, "row-name");
+            if (!string.IsNullOrEmpty(note))
+                AvStyled.Label(parent, new Rect(rect.x + rect.width - 140f, rect.y, 140f, 16f), note,
+                    "section-title-note", align: TextAlignmentOptions.MidlineRight);
+            AvKit.Rule(parent, new Rect(rect.x, rect.y - 20f, rect.width, 1f),
+                AvTheme.Unity(AvTokens.Hairline.WithAlpha(0.5f)));
 
-            Stepper(parent, layout.At("wallpaperOpacity"), "IMAGE OPACITY",
-                () => settings.BackgroundImageOpacity.Value.ToString("P0"),
-                () => settings.BackgroundImageOpacity.Value > 0.05f,
-                () => settings.BackgroundImageOpacity.Value < 1f,
-                delta =>
-                {
-                    settings.BackgroundImageOpacity.Value = Mathf.Clamp(
-                        settings.BackgroundImageOpacity.Value + delta * 0.05f, 0.05f, 1f);
-                    MfdMapDeck.ApplyAppearance(settings);
-                },
-                "5%", "5%", "100%", band: true);
+            area.y -= height + 6f;
+        }
+
+        private static Rect TakeRow(ref Rect area)
+        {
+            var row = new Rect(area.x, area.y, area.width, 56f);
+            area.y -= 62f;
+            return row;
+        }
+
+        private void BuildMapPage(RectTransform parent, Rect body)
+        {
+            parent = Page(0, parent, body, "TACTICAL DISPLAY", "SET / MAP",
+                "TERRAIN · OVERLAYS · UPDATE RATE", 7, 3, out var area);
+            ModServices.TryGet(out IThirdPersonHud hud);
+
+            Heading(parent, ref area, "01", "DISPLAY", "CONSOLE");
+            Toggle(parent, TakeRow(ref area), "THIRD-PERSON HUD", "Show the compact flight overlay.",
+                () => hud != null && hud.IsEnabled, v => { if (hud != null && hud.IsEnabled != v) hud.Toggle(); },
+                () => hud != null, "HUD service unavailable in this scene.");
+            Toggle(parent, TakeRow(ref area), "EXPANDED LAYOUT",
+                "Use the full map console. OFF restores the native layout.",
+                () => settings.ExpandedMapUi.Value, v => settings.ExpandedMapUi.Value = v);
+
+            Heading(parent, ref area, "02", "OVERLAYS", "FRONTLINES");
+            Toggle(parent, TakeRow(ref area), "FRONTLINES",
+                "Show faction control and contested sectors.",
+                () => settings.FrontlinesOverlay.Value, v => settings.FrontlinesOverlay.Value = v);
+            Percent(parent, TakeRow(ref area), "FRONTLINE STRENGTH", settings.OverlayOpacity, .1f, 1f, .05f,
+                () => settings.FrontlinesOverlay.Value, "Turn on frontlines first.");
+            Stepper(parent, TakeRow(ref area), "UPDATE INTERVAL",
+                () => settings.GridRefreshInterval.Value.ToString("0.0") + " s",
+                d => settings.GridRefreshInterval.Value = Mathf.Clamp(
+                    Mathf.Round((settings.GridRefreshInterval.Value + d * .1f) * 10f) / 10f, .2f, 2f),
+                () => settings.GridRefreshInterval.Value > .201f,
+                () => settings.GridRefreshInterval.Value < 1.999f,
+                "Longer intervals reduce CPU work. Recommended: 0.5 s.",
+                () => settings.FrontlinesOverlay.Value, "Turn on frontlines first.");
+
+            Heading(parent, ref area, "03", "TERRAIN", "SATELLITE");
+            Toggle(parent, TakeRow(ref area), "TERRAIN IMAGE",
+                "Show the satellite terrain beneath map symbols.",
+                () => settings.MapTerrainImage.Value, v => settings.MapTerrainImage.Value = v,
+                () => settings.ExpandedMapUi.Value, "Turn on expanded layout first.");
+            Percent(parent, TakeRow(ref area), "TERRAIN STRENGTH", settings.MapTerrainOpacity, .1f, 1f, .1f,
+                () => settings.ExpandedMapUi.Value && settings.MapTerrainImage.Value,
+                "Enable expanded layout and terrain image first.");
+        }
+
+        private void BuildStylePage(RectTransform parent, Rect body)
+        {
+            parent = Page(1, parent, body, "CONSOLE SURFACE", "SET / STYLE",
+                "OPACITY · DECORATION · DISPATCHES", 6, 2, out var area);
+
+            Heading(parent, ref area, "01", "SURFACE", "DECK");
+            Percent(parent, TakeRow(ref area), "CONSOLE OPACITY", settings.DeckOpacity, .1f, 1f, .05f,
+                () => settings.ExpandedMapUi.Value, "Turn on expanded layout first.");
+            Stepper(parent, TakeRow(ref area), "BACKGROUND",
+                () => SettingsChoices.BackgroundName(settings.DeckGrid.Value, settings.CheckerboardOverlay.Value,
+                    settings.BackgroundImage.Value, settings.BackgroundImagePreset.Value),
+                d => SetBackground(SettingsChoices.CycleBackground(settings.DeckGrid.Value,
+                    settings.CheckerboardOverlay.Value, settings.BackgroundImage.Value, settings.BackgroundImagePreset.Value, d)),
+                () => true, () => true,
+                "Choose one decoration: plain, grid, checker, hexagon, carbon, radar or custom image. MIXED preserves your old combination.",
+                () => settings.ExpandedMapUi.Value, "Turn on expanded layout first.");
+            Percent(parent, TakeRow(ref area), "CHECKER STRENGTH", settings.CheckerboardOpacity, .02f, .4f, .02f,
+                () => settings.ExpandedMapUi.Value && settings.CheckerboardOverlay.Value,
+                "Choose CHECKER on STYLE first.");
+            Percent(parent, TakeRow(ref area), "MAP DARKENING", settings.MapTrayOpacity, 0f, 1f, .05f,
+                () => settings.ExpandedMapUi.Value, "Turn on expanded layout first.");
+
+            Heading(parent, ref area, "02", "DISPATCHES", "WIRE");
+            Toggle(parent, TakeRow(ref area), "NEWS TICKER", "Show theater dispatches above the map.",
+                () => settings.NewsTickerEnabled.Value, v => settings.NewsTickerEnabled.Value = v,
+                () => settings.ExpandedMapUi.Value, "Turn on expanded layout first.");
+            Stepper(parent, TakeRow(ref area), "TICKER SPEED",
+                () => settings.NewsTickerSpeed.Value.ToString("0") + " px/s",
+                d => settings.NewsTickerSpeed.Value = Mathf.Clamp(settings.NewsTickerSpeed.Value + d * 15f, 15f, 150f),
+                () => settings.NewsTickerSpeed.Value > 15f, () => settings.NewsTickerSpeed.Value < 150f,
+                "Lower speeds are easier to read. Disable NEWS TICKER to stop motion.",
+                () => settings.ExpandedMapUi.Value && settings.NewsTickerEnabled.Value,
+                "Enable expanded layout and news ticker first.");
+        }
+
+        private void SetBackground(int mode)
+        {
+            settings.DeckGrid.Value = mode == 1;
+            settings.CheckerboardOverlay.Value = mode == 2;
+            settings.BackgroundImage.Value = mode >= 3;
+            if (mode >= 3) settings.BackgroundImagePreset.Value = mode - 3;
+        }
+
+        private bool ImageEnabled() => settings.ExpandedMapUi.Value && settings.BackgroundImage.Value;
+        private bool CustomEnabled() => ImageEnabled() && settings.BackgroundImagePreset.Value == 3;
+
+        private void BuildImagePage(RectTransform parent, Rect body)
+        {
+            parent = Page(2, parent, body, "BACKGROUND IMAGERY", "SET / IMAGE",
+                "LOCAL FILES · FIT · STRENGTH", 5, 1, out var area);
+
+            Heading(parent, ref area, "01", "LOCAL IMAGERY", "PNG / JPEG");
+            Percent(parent, TakeRow(ref area), "IMAGE STRENGTH", settings.BackgroundImageOpacity, .05f, 1f, .05f,
+                ImageEnabled, "Choose an image background on STYLE first.");
+            Stepper(parent, TakeRow(ref area), "IMAGE FILE", MfdMapDeck.GetCurrentWallpaperFileName,
+                MfdMapDeck.CycleCustomWallpaper,
+                () => MfdMapDeck.DiscoveredWallpaperCount > 1,
+                () => MfdMapDeck.DiscoveredWallpaperCount > 1,
+                "Local PNG/JPEG files. Use RESCAN after adding or replacing files.", CustomEnabled,
+                "Choose CUSTOM on STYLE. Add files to BepInEx/config/BoscaliSummer/wallpapers.");
+            string[] fits = { "COVER", "FIT", "STRETCH" };
+            Stepper(parent, TakeRow(ref area), "IMAGE FIT",
+                () => fits[Mathf.Clamp(settings.WallpaperFitMode.Value, 0, 2)],
+                d => settings.WallpaperFitMode.Value = (settings.WallpaperFitMode.Value + d + 3) % 3,
+                () => true, () => true, "COVER crops; FIT keeps the full image; STRETCH fills the screen.",
+                CustomEnabled, "Choose CUSTOM on STYLE first.");
+            var scan = AvStyled.Button(parent, TakeRow(ref area), "RESCAN LOCAL FILES  →", "btn", () =>
+            {
+                MfdMapDeck.RescanWallpapers();
+                Echo("RESCAN — " + MfdMapDeck.WallpaperStatus);
+                Changed();
+            }, AvButtonStyle.Primary)
+                .WithTooltip("Scan up to 512 directory entries; images are limited to 16 MB and 4096 pixels per side.");
+            refreshers.Add(() =>
+            {
+                scan.SetEnabled(CustomEnabled());
+                scan.WithTooltip(CustomEnabled()
+                    ? "Scan up to 512 entries. PNG/JPEG: 16 MB and 4096 pixels per side."
+                    : "Choose CUSTOM on STYLE first.");
+            });
+        }
+
+        private void Percent(RectTransform parent, Rect area, string title, ConfigEntry<float> entry,
+            float min, float max, float step, Func<bool> enabled, string reason)
+        {
+            Stepper(parent, area, title, () => entry.Value.ToString("P0"),
+                d => entry.Value = Mathf.Clamp(Mathf.Round((entry.Value + d * step) * 100f) / 100f, min, max),
+                () => entry.Value > min + .001f, () => entry.Value < max - .001f,
+                "Adjust " + title.ToLowerInvariant() + ".", enabled, reason);
         }
 
         private static AvNode ToggleRow(string name) =>
-            AvBox.Row(name).Height(52f).Pad(14f, 10f, 14f, 10f).Gaps(8f)
-                .Add(AvBox.Cell("label").Grow())
-                .Add(AvBox.Cell("value").Width(116f));
+            AvBox.Row(name).Height(56f).Pad(14f, 6f, 8f, 6f).Gaps(8f)
+                .Add(AvBox.Cell("label").Grow()).Add(AvBox.Cell("value").Width(108f));
 
         private static AvNode StepperRow(string name) =>
-            AvBox.Row(name).Height(52f).Pad(14f, 10f, 14f, 10f).Gaps(6f)
-                .Add(AvBox.Cell("label").Grow())
-                .Add(AvBox.Cell("minus").Width(36f))
-                .Add(AvBox.Cell("value").Width(92f))
-                .Add(AvBox.Cell("plus").Width(36f));
+            AvBox.Row(name).Height(56f).Pad(14f, 6f, 8f, 6f).Gaps(6f)
+                .Add(AvBox.Cell("label").Grow()).Add(AvBox.Cell("minus").Width(44f))
+                .Add(AvBox.Cell("value").Width(100f)).Add(AvBox.Cell("plus").Width(44f));
 
         private static Image FindHighlight(Button button)
         {
@@ -339,84 +432,165 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             return button.GetComponent<Image>();
         }
 
-        private void Toggle(RectTransform parent, Rect area, string title, string tooltip,
-            Func<bool> get, Action<bool> set, bool band = false)
+        private void Changed()
         {
-            AvNode row = ToggleRow("row").Arrange(area);
-            AvStyled.Box(parent, area, band ? "section band" : "section");
-            AvStyled.SpineTick(parent, area.x - AvScreen.SpineInset + 3f, area.y - 16f);
-            AvStyled.Label(parent, row.At("label"), title, "section-title",
-                align: TextAlignmentOptions.MidlineLeft);
+            ApplyPending();
+            dirty = true;
+            RefreshPanel();
+        }
 
+        // The row's own state, before hover: an active control carries an accent marker
+        // and wash, so ON reads at a glance without relying on the value text alone.
+        private static Color LatchedRow => AvTheme.Unity(AvTokens.Wash(AvTheme.Accent.ToRgba(), 0.16f, 0.30f));
+        private static Color LatchedRowHover => AvTheme.Unity(AvTokens.Wash(AvTheme.Accent.ToRgba(), 0.24f, 0.42f));
+        private static Color HoverRow => AvTheme.Unity(AvTokens.SurfaceRaised.WithAlpha(0.5f));
+
+        /// <summary>
+        /// Confirm the action on the status strip for a moment. Text, not colour alone:
+        /// the value label changes too, so the cue survives a colour-blind reading.
+        /// </summary>
+        private void Echo(string text)
+        {
+            actionEcho = text;
+            actionEchoUntil = Time.unscaledTime + 1.6f;
+        }
+
+        /// <summary>
+        /// A full-row hover target behind the controls: the help has to appear whether the
+        /// pointer is over the label or the value box, and the row lights as one control.
+        /// </summary>
+        private static AvTooltipTarget RowHover(RectTransform parent, AvRect area, string tooltip)
+        {
+            Image background = AvKit.Panel(parent, area.ToUnity(), Color.clear);
+            background.raycastTarget = true;
+            var target = background.gameObject.AddComponent<AvTooltipTarget>();
+            target.Initialise(tooltip);
+            target.SetTint(background, Color.clear, HoverRow);
+            return target;
+        }
+
+        private void ApplyPending()
+        {
+            if (layoutPending) MfdRailPatch.Reconcile();
+            if (appearancePending || layoutPending) MfdMapDeck.ApplyAppearance(settings);
+            if (overlayPending) ComMapOverlay.Instance?.SyncSettings();
+            if (tickerPending)
+            {
+                var map = SceneSingleton<DynamicMap>.i;
+                if (settings.ExpandedMapUi.Value && DynamicMap.mapMaximized && map != null &&
+                    MfdLayout.TryResolve(map.maximizedMapCanvas, out var columns))
+                    MfdNewsTicker.Ensure(map.maximizedMapCanvas, columns, settings);
+            }
+            appearancePending = overlayPending = layoutPending = tickerPending = false;
+        }
+
+        private void Toggle(RectTransform parent, Rect area, string title, string tooltip,
+            Func<bool> get, Action<bool> set, Func<bool> enabled = null, string reason = null)
+        {
+            var row = ToggleRow("row").Arrange(area);
+            var hover = RowHover(parent, row.Rect, tooltip);
+            Image marker = AvKit.Rule(parent,
+                new Rect(row.Rect.X + 6f, row.Rect.Y - 8f, 3f, row.Rect.Height - 16f), Color.clear);
+            AvStyled.Label(parent, row.At("label"), title, "row-value", align: TextAlignmentOptions.MidlineLeft);
             var button = AvStyled.Button(parent, row.At("value"), "", "btn", () =>
             {
+                if (enabled != null && !enabled()) return;
                 set(!get());
-                nextTick = 0f;
-            }).WithTooltip(tooltip);
+                Echo(title + " — " + (get() ? "ON" : "OFF"));
+                Changed();
+            });
             refreshers.Add(() =>
             {
+                bool available = enabled == null || enabled();
                 bool on = get();
+                button.SetEnabled(available);
                 button.SetText(on ? "ON" : "OFF");
                 button.SetLatched(on);
+                button.WithTooltip(available ? tooltip : reason);
+                hover.SetText(available ? tooltip : reason);
+                marker.color = on ? AvTheme.Accent : Color.clear;
+                hover.SetColors(on ? LatchedRow : Color.clear, on ? LatchedRowHover : HoverRow);
             });
         }
 
         private void Stepper(RectTransform parent, Rect area, string title, Func<string> get,
-            Func<bool> canDecrease, Func<bool> canIncrease, Action<int> change,
-            string step, string minimum, string maximum, bool band = false)
+            Action<int> change, Func<bool> decrease, Func<bool> increase, string tooltip,
+            Func<bool> enabled = null, string reason = null)
         {
-            AvNode row = StepperRow("row").Arrange(area);
-            AvStyled.Box(parent, area, band ? "section band" : "section");
-            AvStyled.SpineTick(parent, area.x - AvScreen.SpineInset + 3f, area.y - 16f);
-            AvStyled.Label(parent, row.At("label"), title, "section-title",
-                align: TextAlignmentOptions.MidlineLeft);
-
-            string setting = title.ToLowerInvariant();
-            var minus = AvStyled.Button(parent, row.At("minus"), "-", "btn", () =>
+            var row = StepperRow("row").Arrange(area);
+            var hover = RowHover(parent, row.Rect, tooltip);
+            AvStyled.Label(parent, row.At("label"), title, "row-value", align: TextAlignmentOptions.MidlineLeft);
+            Action<int> click = d =>
             {
-                change(-1);
-                nextTick = 0f;
-            }).WithTooltip("Decrease " + setting + " by " + step + "; minimum is " + minimum + ".");
-            var value = AvStyled.Label(parent, row.At("value"), "", "row-value",
-                align: TextAlignmentOptions.Center);
-            var plus = AvStyled.Button(parent, row.At("plus"), "+", "btn", () =>
-            {
-                change(1);
-                nextTick = 0f;
-            }).WithTooltip("Increase " + setting + " by " + step + "; maximum is " + maximum + ".");
-
+                if (enabled != null && !enabled() || !(d < 0 ? decrease() : increase())) return;
+                change(d);
+                Echo(title + " — " + get());
+                Changed();
+            };
+            var minus = AvStyled.Button(parent, row.At("minus"), "-", "btn", () => click(-1));
+            var value = AvStyled.Label(parent, row.At("value"), "", "row-value", align: TextAlignmentOptions.Center);
+            value.enableWordWrapping = false;
+            value.overflowMode = TextOverflowModes.Ellipsis;
+            value.richText = false;
+            var plus = AvStyled.Button(parent, row.At("plus"), "+", "btn", () => click(1));
+            minus.GetComponentInChildren<TMP_Text>().fontSize = 18f;
+            plus.GetComponentInChildren<TMP_Text>().fontSize = 18f;
             refreshers.Add(() =>
             {
-                minus.SetEnabled(canDecrease());
-                plus.SetEnabled(canIncrease());
-                value.text = get();
+                bool available = enabled == null || enabled();
+                minus.SetEnabled(available && decrease());
+                plus.SetEnabled(available && increase());
+                string text = available ? get() : "--";
+                if (value.text != text) value.text = text;
+                minus.WithTooltip(available ? tooltip + " Previous / decrease. " + text : reason);
+                plus.WithTooltip(available ? tooltip + " Next / increase. " + text : reason);
+                hover.SetText(available ? tooltip : reason);
             });
         }
 
         private void RefreshPanel()
         {
             foreach (Action refresh in refreshers) refresh();
-            shell?.WriteStatus(null, MapPicker.Prompt,
-                "Changes save immediately to the Command configuration.");
+            dirty = false;
         }
 
         public void ResetForScene()
         {
-            MfdBezel.Release(MfdSlots.Set);
-            if (boundScreens != null && boundSlot >= 0 && boundSlot < boundScreens.Count &&
-                ReferenceEquals(boundScreens[boundSlot], screen)) boundScreens[boundSlot] = null;
+            ReleaseClaim();
             if (root != null) Destroy(root);
             root = null;
             screen = null;
-            shell = null;
+            failed = false;
+            nextTick = 0f;
+            dirty = true;
+            wasVisible = false;
+            actionEcho = null;
+            actionEchoUntil = 0f;
+            AvUiSound.Reset();
+        }
+
+        /// <summary>
+        /// Drop the bezel reservation and every reference into the screen tree without
+        /// touching the service itself. A torn-down dock slot can destroy the root before a
+        /// scene reset; releasing here lets the next Update install a fresh panel.
+        /// </summary>
+        private void ReleaseClaim()
+        {
+            MfdBezel.Release(MfdSlots.Set);
+            if (boundScreens != null && boundSlot >= 0 && boundSlot < boundScreens.Count &&
+                ReferenceEquals(boundScreens[boundSlot], screen)) boundScreens[boundSlot] = null;
             boundScreens = null;
             boundSlot = -1;
             claimed = false;
-            failed = false;
-            nextTick = 0f;
+            surface = null;
+            shell = null;
             refreshers.Clear();
         }
 
-        private void OnDestroy() => ResetForScene();
+        private void OnDestroy()
+        {
+            if (configFile != null) configFile.SettingChanged -= OnSettingChanged;
+            ResetForScene();
+        }
     }
 }

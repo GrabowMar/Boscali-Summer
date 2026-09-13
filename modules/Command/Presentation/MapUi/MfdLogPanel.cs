@@ -51,6 +51,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private static readonly List<Entry> history = new List<Entry>();
         private static readonly List<string> previousMessages = new List<string>();
         private static readonly List<string> previousKills = new List<string>();
+        internal static event Action<string> OnLineAdded;
 
         public static void Ensure(Canvas canvas, MfdLayout.Columns layout, VirtualMFD virtualMfd)
         {
@@ -388,6 +389,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 ExpiresAt = now + RetentionSeconds,
             });
             while (history.Count > MaximumEntries) history.RemoveAt(history.Count - 1);
+            OnLineAdded?.Invoke(text);
         }
 
         private static void PruneHistory()

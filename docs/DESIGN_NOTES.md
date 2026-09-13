@@ -56,10 +56,10 @@ Decisions that cost an argument. Kept so they are not made again the other way.
 ## Radio
 
 - **Client-local, zero multiplayer data.** The player never downloads, extracts, bundles,
-  logs, or transmits soundtrack audio. Built-in stations hold references to AudioClips
-  Nuclear Option already loaded; imports are the user's own OGG/WAV files under one canonical
-  `Music` root (paths that escape it are rejected). Dedicated/headless servers skip the
-  feature.
+  logs, or transmits soundtrack audio. Base Broadcast holds deduplicated references to up
+  to 30 AudioClips from Nuclear Option's registered map prefabs; imports are the user's own
+  OGG/WAV files under one canonical `Music` root (paths that escape it are rejected).
+  Dedicated/headless servers skip the feature.
 - **Copyright boundary.** Do not bundle, download, mirror, link, log, package or transmit
   Ace Combat soundtracks. Ship only the player, station metadata/icons, an audio-free import
   directory, and instructions. Users are responsible for rights to their own imports.
@@ -102,6 +102,24 @@ Decisions that cost an argument. Kept so they are not made again the other way.
   for messages that were never transmitted, "ready" during a cooldown, and "ready for target
   confirmation" with no target designated. Every card now renders a state the manager
   actually checked, and an unanswered request times out.
+- **One skill language for the player, AI and aces.** The player's board presents the same
+  combat skills Wing Command gives enemy aces (Toughness, Countermeasures, Notch Expert,
+  Ghost) with the same codes and vector badges, beside the player's passives and support
+  authorisations. The shared list is presentation metadata only: Wing Command still owns
+  the four-bit ability mask and Boscali neither grants nor applies ace skills. This keeps
+  one mental model in SQD and the hunt HUD without adding a second authority path.
+- **Authorisations are a first-class group.** Sat / engineering / strike / EW authorisations
+  get their own display codes and icons and name the capability they grant, so adding a
+  future authorisation is one `PerkCatalog` row plus one support action — the pure test that
+  keeps both catalogues in step is unchanged. Capability strings stay the wire-adjacent
+  contract; only names, descriptions and icons are presentation.
+- **Pilot appearance and squadron identity are client-local cosmetics.** The studio edits
+  Wing Command's own custom-pilot files through an additive public API and can set a local
+  profile; the emblem is a pure shape/charge/palette encoding that can be swapped for a
+  user-supplied PNG from a bounded config folder. None of it is replicated, validated as
+  authority, or able to alter score, skills or pilot generations — the same local-only rule
+  as radio music. The companion API resolves separately from the squad API so older Wing
+  Command builds lose only the STUDIO page instead of every squad feature.
 - **Session-scoped first.** Skills reset per mission while balance is moving. Persistent
   profiles wait for schema-versioned, debounced, atomic writes with backup recovery, keyed
   by non-zero SteamID (never display name).
@@ -124,12 +142,36 @@ Decisions that cost an argument. Kept so they are not made again the other way.
   graduates only after a full multiplayer mission can spawn/use/damage/destroy/late-join
   around one without corrupting airbase or objective state.
 
+## Trenches
+
+- **A trench network is a sector, not a dot.** Border cells are kilometres wide, so one
+  seed per border side left most of the front bare, and a 120m square reserve rejected
+  anything but flat fields. Sites now expand into a chain of sector slots, and validation
+  follows the actual corridor (front line through the rear line) row by row — the same
+  rectangle the earthworks will occupy — with gentler height tolerance. Roads are
+  irrelevant to a defensive line and were removed as a placement preference.
+- **Raised earthworks are the only non-destructive shape.** The trench floor sits at grade
+  because cutting `TerrainData` is banned; apparent depth comes from a high parados and
+  sandbag parapet over deep skirts, not from a hole in the terrain. Widening the profile
+  beyond a thin strip is what makes the position read as fieldworks from the air.
+- **One profile, one palette texture.** Every edge shares a ten-point cross-section whose
+  UVs map onto a baked 256px texture (grass fringe, earth, timber, duckboards, sandbags).
+  That gives material variety at one draw call per edge without an artist bundle; an
+  artist `trenches.bundle` still replaces LOD0 when present.
+- **Growth stages are atomic and announced.** A stage either completes entirely or changes
+  nothing and retries; the simulator records the rejection reason so a stalled belt is
+  diagnosable instead of silently stuck. The stage gate is pure and unit-tested.
+
 ## Wing Command reuse boundary
 
-No compile-time or BepInEx hard dependency on Wing Command. The two mods coordinate
+Wing Command `0.9.2.6`+ is a hard BepInEx runtime dependency (declared by GUID and version);
+there is still no compile-time reference and no decompilation. The two mods coordinate
 through `NOAvionics` (source-linked protocol: named bezel claims, exclusive map picker,
-presence board) compiled into both DLLs. Boscali Summer stays functional when Wing Command
-is absent. Do not reference the Wing Command assembly, and do not decompile an installed DLL.
+presence board) compiled into both DLLs, and squad/ace features resolve Wing Command's
+public `WingSquad` façade by reflection through the cached `WingLink` adapter. The additive
+companion pilot API introduced for the SQD studio keeps `ApiVersion` 1 and is probed
+separately: a build without it disables only the STUDIO page, and missing capabilities always
+fail closed.
 
 Product split: Wing Command owns the recruited squadron; Boscali owns the battlefield
 (fire, occupancy, perks/support, theater SA). The theater picture is its own **STR** bezel

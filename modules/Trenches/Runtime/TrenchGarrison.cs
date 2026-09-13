@@ -94,10 +94,22 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             var def = definitions[slot / 2];
             if (def == null) return false;
             Vector3 forward = network.ThreatDirection;
-            Vector3 side = Vector3.Cross(Vector3.up, forward);
-            float lateral = slot / 2 == 0 ? 36 : slot / 2 == 1 ? 18 : 30;
-            Vector3 desired = network.SeedCenter + side * (slot % 2 == 0 ? -lateral : lateral) +
-                forward * (slot < 4 ? 12f : -15f);
+            // Defenders spread along the whole sector line, behind its parapets:
+            // MG pair on the flanks, ATGM pair inboard, MANPADS pair behind support.
+            float span = Math.Max(60f, network.FrontHalfSpan);
+            float lateral;
+            float depth;
+            if (slot < 4)
+            {
+                lateral = (slot % 2 == 0 ? -1f : 1f) * (slot / 2 == 0 ? 0.55f : 0.28f) * span;
+                depth = -16f;
+            }
+            else
+            {
+                lateral = (slot % 2 == 0 ? -1f : 1f) * 0.30f * span;
+                depth = -TrenchTacticalMath.SupportLineDepth - 10f;
+            }
+            Vector3 desired = network.SeedCenter + network.LateralAxis * lateral + forward * depth;
             Quaternion rotation = Quaternion.LookRotation(forward);
             Vector3 offset = rotation * def.spawnOffset;
             desired += new Vector3(offset.x, 0, offset.z);

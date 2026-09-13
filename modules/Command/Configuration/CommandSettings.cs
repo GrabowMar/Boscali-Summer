@@ -18,10 +18,16 @@ namespace BoscaliSummer.Features.Command.Configuration
 
         public ConfigEntry<bool> BackgroundImage { get; }
         public ConfigEntry<int> BackgroundImagePreset { get; }
+        public ConfigEntry<string> CustomWallpaperFile { get; }
+        public ConfigEntry<int> WallpaperFitMode { get; }
         public ConfigEntry<float> BackgroundImageOpacity { get; }
 
         public ConfigEntry<bool> MapTerrainImage { get; }
         public ConfigEntry<float> MapTerrainOpacity { get; }
+        public ConfigEntry<float> MapTrayOpacity { get; }
+
+        public ConfigEntry<bool> NewsTickerEnabled { get; }
+        public ConfigEntry<float> NewsTickerSpeed { get; }
 
         public CommandSettings(ConfigFile config)
         {
@@ -40,7 +46,7 @@ namespace BoscaliSummer.Features.Command.Configuration
 
             GridResolution = config.Bind("Command", "GridResolution", 32,
                 new ConfigDescription(
-                    "Tactical sector grid dimension (32 = 32x32 sectors). Recommended: 32.",
+                    "Advanced: tactical sector grid dimension (32 = 32x32). Applied when the module initializes; restart after changing. Recommended: 32.",
                     new AcceptableValueRange<int>(16, 64)));
 
             GridRefreshInterval = config.Bind("Command", "GridRefreshInterval", 0.5f,
@@ -50,11 +56,11 @@ namespace BoscaliSummer.Features.Command.Configuration
 
             DeckOpacity = config.Bind("Command", "DeckOpacity", 0.95f,
                 new ConfigDescription(
-                    "Alpha opacity of the tactical map console backdrop and map tray (0.1 = see-through, 1.0 = solid).",
+                    "Opacity of the console backdrop (0.1 = see-through, 1.0 = solid). Map darkening is separate.",
                     new AcceptableValueRange<float>(0.10f, 1.0f)));
 
-            DeckGrid = config.Bind("Command", "DeckGrid", true,
-                "Render datum grid lines and coordinate ticks across the tactical backdrop.");
+            DeckGrid = config.Bind("Command", "DeckGrid", false,
+                "Legacy decoration: backdrop grid. The SET background selector chooses one decoration at a time.");
 
             CheckerboardOverlay = config.Bind("Command", "CheckerboardOverlay", false,
                 "Render subtle tactical checkerboard overlay grid on the backdrop surface.");
@@ -64,13 +70,21 @@ namespace BoscaliSummer.Features.Command.Configuration
                     "Alpha opacity of the tactical checkerboard overlay pattern.",
                     new AcceptableValueRange<float>(0.02f, 0.40f)));
 
-            BackgroundImage = config.Bind("Command", "BackgroundImage", true,
+            BackgroundImage = config.Bind("Command", "BackgroundImage", false,
                 "Display custom or procedural tactical wallpaper on the backdrop deck.");
 
             BackgroundImagePreset = config.Bind("Command", "BackgroundImagePreset", 0,
                 new ConfigDescription(
                     "Wallpaper pattern preset (0: Hexagon, 1: Carbon, 2: Radar, 3: Custom file).",
                     new AcceptableValueRange<int>(0, 3)));
+
+            CustomWallpaperFile = config.Bind("Command", "CustomWallpaperFile", "images.jpg",
+                "Filename of custom background wallpaper loaded from wallpapers directory.");
+
+            WallpaperFitMode = config.Bind("Command", "WallpaperFitMode", 0,
+                new ConfigDescription(
+                    "Aspect ratio fit mode for custom wallpaper (0: Cover/AspectFill, 1: Fit/Letterbox, 2: Stretch).",
+                    new AcceptableValueRange<int>(0, 2)));
 
             BackgroundImageOpacity = config.Bind("Command", "BackgroundImageOpacity", 0.25f,
                 new ConfigDescription(
@@ -84,6 +98,19 @@ namespace BoscaliSummer.Features.Command.Configuration
                 new ConfigDescription(
                     "Alpha opacity of the satellite terrain map image.",
                     new AcceptableValueRange<float>(0.10f, 1.0f)));
+
+            NewsTickerEnabled = config.Bind("Command", "NewsTicker", true,
+                "Display the scrolling frontline news and theater dispatch marquee above the tactical map.");
+
+            NewsTickerSpeed = config.Bind("Command", "NewsTickerSpeed", 45f,
+                new ConfigDescription(
+                    "Scrolling speed of the tactical news ticker marquee in pixels per second.",
+                    new AcceptableValueRange<float>(15f, 150f)));
+
+            MapTrayOpacity = config.Bind("Command", "MapTrayOpacity", 0.15f,
+                new ConfigDescription(
+                    "Map darkening beneath terrain and symbols, independent of background choice (0.0 = clear, 1.0 = dark solid).",
+                    new AcceptableValueRange<float>(0.0f, 1.0f)));
         }
     }
 }

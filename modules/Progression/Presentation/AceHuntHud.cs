@@ -31,6 +31,9 @@ namespace BoscaliSummer.Features.Progression.Presentation
         private int shownHuntId = -1;
         private float introducedAt;
 
+        private Canvas chatterCanvas;
+        private CanvasGroup chatterCanvasGroup;
+
         public void Configure(ISquadView view) => squad = view;
 
         private void Update()
@@ -46,6 +49,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 player.Aircraft == null || player.Aircraft.disabled || player.Aircraft.HasEjected())
             {
                 if (root != null) root.SetActive(false);
+                SuppressChatterWhileExpanded(false);
                 return;
             }
 
@@ -60,18 +64,18 @@ namespace BoscaliSummer.Features.Progression.Presentation
             string name = separator < 0 ? ace : ace.Substring(0, separator);
             string handle = separator < 0 ? "UNIDENTIFIED ACE" : ace.Substring(separator + 3);
             callsign.text = handle.ToUpperInvariant();
-            compactStatus.text = "ACE HUNT / " + handle.ToUpperInvariant() + "  ·  " +
-                wing.MembersAlive + "/" + wing.MemberCount;
-            identity.text = name + "  /  " + wing.Symbol + " " + wing.WingName;
+            compactStatus.text = "ACE HUNT // " + handle.ToUpperInvariant() + "  ·  " +
+                wing.MembersAlive + "/" + wing.MemberCount + " WING";
+            identity.text = name + "  //  " + wing.Symbol + " " + wing.WingName;
             proficiency.text = (wing.Skill ?? "UNKNOWN").ToUpperInvariant();
             formation.text = wing.MembersAlive + " / " + wing.MemberCount + " ACTIVE";
-            returning.text = wing.Returns > 0 ? "RETURNING ACE / " + wing.Returns : "ENEMY ACE / T" + wing.Tier;
-            status.text = (wing.Status ?? "HUNTING") + "   //   PRIMARY TARGET: YOU";
+            returning.text = wing.Returns > 0 ? "RETURNING ACE // ENCOUNTER " + (wing.Returns + 1) : "ENEMY ACE // TIER " + wing.Tier;
+            status.text = (wing.Status ?? "HUNTING") + "   //   TARGET: YOU";
             for (int i = 0; i < abilitySlots.Length; i++)
                 abilitySlots[i].SetActive((wing.AbilityMask & (1 << i)) != 0);
             noAbilities.gameObject.SetActive(wing.AbilityMask == 0);
             for (int i = 0; i < tierPips.Length; i++)
-                tierPips[i].color = i < wing.Tier ? Caution : new Color32(63, 65, 57, 255);
+                tierPips[i].color = i < wing.Tier ? Caution : new Color32(50, 55, 60, 255);
             if (portraitIdentity != ace)
             {
                 portraitIdentity = ace;
@@ -96,62 +100,78 @@ namespace BoscaliSummer.Features.Progression.Presentation
             scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
 
             RectTransform panel = AvKit.Panel((RectTransform)root.transform,
-                new Rect(0, -54, 620, 174), Ink).rectTransform;
+                new Rect(0, -48, 640, 184), Ink).rectTransform;
             panel.name = "Ace Threat Dossier";
             panel.anchorMin = panel.anchorMax = new Vector2(0.5f, 1f);
             panel.pivot = new Vector2(0.5f, 1f);
             expandedPanel = panel;
             expandedGroup = panel.gameObject.AddComponent<CanvasGroup>();
             expandedGroup.blocksRaycasts = false;
-            AvKit.Outline(panel, new Rect(0, 0, 620, 174), Caution.WithAlpha(0.65f));
-            Glyph(panel, new Rect(1, -1, 618, 8), HuntMark.Stripes);
-            AvKit.Panel(panel, new Rect(1, -9, 618, 28), Caution);
-            Label(panel, new Rect(14, -10, 410, 26), "WARNING  /  ACE HUNT", 17, Ink, true);
-            Label(panel, new Rect(436, -10, 170, 26), "HOSTILE INTERCEPT", 12, Ink);
+            AvKit.Outline(panel, new Rect(0, 0, 640, 184), Caution.WithAlpha(0.75f));
+            AvKit.CornerTicks(panel, new Rect(0, 0, 640, 184), Caution);
 
-            AvKit.Panel(panel, new Rect(14, -49, 94, 104), new Color32(24, 30, 35, 255));
-            portraitFallback = Label(panel, new Rect(18, -68, 86, 60), "NO\nVISUAL", 15, Secondary);
-            portrait = AvKit.Panel(panel, new Rect(16, -51, 90, 100), Color.white);
+            Glyph(panel, new Rect(2, -2, 636, 7), HuntMark.Stripes);
+            AvKit.Panel(panel, new Rect(2, -9, 636, 26), Caution);
+            Label(panel, new Rect(14, -10, 360, 24), "///  WARNING  :  HOSTILE ACE DETECTED", 14, Ink, true);
+            Label(panel, new Rect(420, -10, 206, 24), "AIR DEFENSE INTERCEPT", 11, Ink, true);
+
+            // Pilot Portrait Box
+            AvKit.Panel(panel, new Rect(16, -44, 98, 114), new Color32(18, 22, 26, 255));
+            portraitFallback = Label(panel, new Rect(20, -70, 90, 50), "NO\nVISUAL", 14, Secondary);
+            portrait = AvKit.Panel(panel, new Rect(18, -46, 94, 110), Color.white);
             portrait.type = Image.Type.Simple;
             portrait.preserveAspect = true;
-            // Image's aspect fit uses its RectTransform pivot. AvKit defaults to top-left,
-            // which pins narrow 2:3 portraits to the left and leaves an uneven empty strip.
             portrait.rectTransform.pivot = new Vector2(0.5f, 0.5f);
-            portrait.rectTransform.anchoredPosition = new Vector2(61f, -101f);
-            AvKit.CornerTicks(panel, new Rect(14, -49, 94, 104), Caution);
-            Label(panel, new Rect(14, -153, 98, 16), "ACE / LEADER", 10, Caution);
+            portrait.rectTransform.anchoredPosition = new Vector2(65f, -101f);
+            AvKit.CornerTicks(panel, new Rect(16, -44, 98, 114), Caution);
+            AvKit.Panel(panel, new Rect(16, -162, 98, 16), new Color32(24, 28, 32, 255));
+            TMP_Text leaderLabel = Label(panel, new Rect(16, -162, 98, 16), "ACE / LEADER", 9, Caution, true);
+            leaderLabel.alignment = TextAlignmentOptions.Center;
 
-            returning = Label(panel, new Rect(124, -43, 470, 17), "", 11, Caution);
-            callsign = Label(panel, new Rect(122, -59, 246, 33), "", 27, Color.white, true);
-            noAbilities = Label(panel, new Rect(380, -65, 224, 24), "NO ACTIVE ABILITIES", 11, Secondary);
+            // Callsign, Rank Badge & Wing Identity
+            AvKit.Panel(panel, new Rect(126, -43, 224, 16), new Color32(28, 32, 36, 255));
+            returning = Label(panel, new Rect(130, -43, 218, 16), "", 9.5f, Caution, true);
+            callsign = Label(panel, new Rect(124, -58, 230, 32), "", 26, Color.white, true);
+            callsign.characterSpacing = 1.2f;
+            identity = Label(panel, new Rect(126, -88, 228, 16), "", 11, Secondary);
+
+            // Ability Badges
+            noAbilities = Label(panel, new Rect(362, -54, 260, 20), "NO ACTIVE THREAT ABILITIES", 10, Secondary);
             string[] names = { "TOUGH", "CM", "NOTCH", "GHOST" };
             for (int i = 0; i < abilitySlots.Length; i++)
             {
-                RectTransform slot = AvKit.Panel(panel, new Rect(374 + i * 58, -59, 54, 33),
-                    new Color32(24, 30, 35, 255)).rectTransform;
+                RectTransform slot = AvKit.Panel(panel, new Rect(362 + i * 66, -43, 62, 35),
+                    new Color32(22, 26, 30, 255)).rectTransform;
                 abilitySlots[i] = slot.gameObject;
-                Glyph(slot, new Rect(17, -1, 20, 20), (HuntMark)((int)HuntMark.Toughness + i));
-                TMP_Text caption = Label(slot, new Rect(0, -21, 54, 12), names[i], 10, Caution);
+                AvKit.Outline(slot, new Rect(0, 0, 62, 35), Caution.WithAlpha(0.35f));
+                Glyph(slot, new Rect(21, -2, 20, 20), (HuntMark)((int)HuntMark.Toughness + i));
+                TMP_Text caption = Label(slot, new Rect(0, -22, 62, 12), names[i], 9, Caution, true);
                 caption.alignment = TextAlignmentOptions.Center;
             }
-            identity = Label(panel, new Rect(124, -91, 480, 20), "", 12, Secondary);
-            proficiency = Skill(panel, 124, HuntMark.Skill, "COMBAT SKILL");
-            Skill(panel, 286, HuntMark.Target, "PURSUIT").text = "HUNTER";
-            formation = Skill(panel, 448, HuntMark.Formation, "WING LEADER");
+
+            // 3 Telemetry Cards
+            proficiency = SkillCard(panel, 126, 158, HuntMark.Skill, "COMBAT SKILL");
+            SkillCard(panel, 290, 158, HuntMark.Target, "PURSUIT").text = "HUNTER";
+            formation = SkillCard(panel, 454, 170, HuntMark.Formation, "WING LEADER");
+
+            // Divider and Footer Status Bar
+            AvKit.Panel(panel, new Rect(126, -149, 498, 1), Caution.WithAlpha(0.3f));
             for (int i = 0; i < tierPips.Length; i++)
-                tierPips[i] = AvKit.Panel(panel, new Rect(124 + i * 12, -164, 8, 3), Caution);
-            status = Label(panel, new Rect(199, -151, 407, 20), "", 11, Caution);
-            compactPanel = AvKit.Panel((RectTransform)root.transform, new Rect(0, 0, 380, 36), Ink).rectTransform;
+                tierPips[i] = AvKit.Panel(panel, new Rect(126 + i * 14, -161, 10, 5), Caution);
+            status = Label(panel, new Rect(206, -156, 418, 16), "", 10.5f, Caution, true);
+
+            // Minimized Compact Panel
+            compactPanel = AvKit.Panel((RectTransform)root.transform, new Rect(0, -8, 420, 36), Ink).rectTransform;
             compactPanel.name = "Minimized Ace Hunt";
             compactPanel.anchorMin = compactPanel.anchorMax = new Vector2(0.5f, 1f);
             compactPanel.pivot = new Vector2(0.5f, 1f);
             compactGroup = compactPanel.gameObject.AddComponent<CanvasGroup>();
             compactGroup.blocksRaycasts = false;
-            AvKit.Outline(compactPanel, new Rect(0, 0, 380, 36), Caution.WithAlpha(0.65f));
-            Glyph(compactPanel, new Rect(1, -1, 378, 4), HuntMark.Stripes);
-            Glyph(compactPanel, new Rect(10, -11, 16, 16), HuntMark.Target);
-            compactStatus = Label(compactPanel, new Rect(36, -7, 334, 27), "", 13, Caution);
-            // No raycaster, input handler or flashing: this remains safe to read while flying.
+            AvKit.Outline(compactPanel, new Rect(0, 0, 420, 36), Caution.WithAlpha(0.75f));
+            Glyph(compactPanel, new Rect(1, -1, 418, 4), HuntMark.Stripes);
+            Glyph(compactPanel, new Rect(12, -10, 16, 16), HuntMark.Target);
+            compactStatus = Label(compactPanel, new Rect(38, -6, 370, 24), "", 12, Caution, true);
+
             foreach (Graphic graphic in root.GetComponentsInChildren<Graphic>(true))
                 graphic.raycastTarget = false;
         }
@@ -166,14 +186,39 @@ namespace BoscaliSummer.Features.Progression.Presentation
             compactPanel.gameObject.SetActive(t > 0);
             compactGroup.alpha = t;
             compactPanel.localScale = Vector3.one * Mathf.Lerp(0.9f, 1, t);
+
+            // When popup is up, suppress radio chatters so they do not overlap; restore once minimized.
+            SuppressChatterWhileExpanded(t < 1);
         }
 
-        private static TMP_Text Skill(RectTransform panel, float x, HuntMark mark, string caption)
+        private void SuppressChatterWhileExpanded(bool suppress)
         {
-            AvKit.Panel(panel, new Rect(x, -114, 154, 34), new Color32(30, 31, 27, 255));
-            Glyph(panel, new Rect(x + 4, -120, 22, 22), mark);
-            Label(panel, new Rect(x + 33, -115, 119, 13), caption, 9, Secondary);
-            return Label(panel, new Rect(x + 33, -128, 119, 18), "", 12, Caution, true);
+            if (chatterCanvas == null && chatterCanvasGroup == null)
+            {
+                GameObject chatterObj = GameObject.Find("WingCommand_Chatter");
+                if (chatterObj != null)
+                {
+                    chatterCanvas = chatterObj.GetComponent<Canvas>();
+                    chatterCanvasGroup = chatterObj.GetComponent<CanvasGroup>();
+                }
+            }
+            if (chatterCanvas != null)
+            {
+                chatterCanvas.enabled = !suppress;
+            }
+            else if (chatterCanvasGroup != null)
+            {
+                chatterCanvasGroup.alpha = suppress ? 0f : 1f;
+            }
+        }
+
+        private static TMP_Text SkillCard(RectTransform panel, float x, float width, HuntMark mark, string caption)
+        {
+            RectTransform card = AvKit.Panel(panel, new Rect(x, -109, width, 35), new Color32(22, 26, 30, 255)).rectTransform;
+            AvKit.Outline(card, new Rect(0, 0, width, 35), Caution.WithAlpha(0.25f));
+            Glyph(panel, new Rect(x + 6, -115, 22, 22), mark);
+            Label(panel, new Rect(x + 32, -111, width - 36, 12), caption, 8.5f, Secondary);
+            return Label(panel, new Rect(x + 32, -123, width - 36, 18), "", 12.5f, Caution, true);
         }
 
         private static TMP_Text Label(RectTransform parent, Rect area, string text, float size, Color color, bool bold = false)
@@ -197,6 +242,9 @@ namespace BoscaliSummer.Features.Progression.Presentation
 
         public void ResetForScene()
         {
+            SuppressChatterWhileExpanded(false);
+            chatterCanvas = null;
+            chatterCanvasGroup = null;
             if (root != null) Destroy(root);
             root = null;
             portrait = null;

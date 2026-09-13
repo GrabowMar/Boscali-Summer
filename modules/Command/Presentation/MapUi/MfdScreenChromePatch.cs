@@ -49,8 +49,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 // VirtualMFD reopens its remembered left and right pages in sequence on
                 // every maximise. Both now share one dock, so the later ShowScreen must win
                 // immediately or the two page surfaces ghost through one another.
-                VirtualMFD mfd = Object.FindObjectOfType<VirtualMFD>();
+                VirtualMFD mfd = MapMfdLookup.Resolve(SceneSingleton<DynamicMap>.i?.maximizedMapCanvas);
                 if (mfd != null) MfdPanelDock.CloseOthers(mfd, __instance);
+                MfdRailPatch.ReLayoutForActiveScreen(__instance);
             }
         }
 

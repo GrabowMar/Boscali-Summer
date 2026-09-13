@@ -4,16 +4,19 @@ using UnityEngine;
 
 namespace BoscaliSummer.Features.Support.Runtime.Actions
 {
+    /// <summary>Which contacts a sweep is allowed to stamp into native faction tracking.</summary>
+    internal enum RevealFilter : byte
+    {
+        All = 0,
+        Ground = 1,
+        Air = 2
+    }
+
     /// <summary>
-    /// Stamps the faction's tracking state with the current position of every hostile unit
-    /// around the designated grid, so they appear on the map for the whole faction.
-    /// ponytail: this drives the private <c>FactionHQ.SetTrackingState</c> through reflection —
-    /// the game exposes no public reveal seam. The action is dropped from the catalogue when
-    /// that method cannot be resolved, so a game update degrades to "recon is absent" rather
-    /// than to a runtime failure. Ceiling: a one-shot stamp of current positions, not a
-    /// persistent sensor; the sightings decay under the game's own rules.
-    /// It scans <c>UnitRegistry.allUnits</c> once per accepted request — an explicit, cooled-down,
-    /// paid-for action, never a per-frame cost — and reveals at most <see cref="MaximumReveals"/>.
+    /// Immediate reconnaissance sweep. The old design queued the sweep for a scheduled pass;
+    /// coverage is now the position of a real reconnaissance satellite, checked by the host
+    /// before anything is charged. Stamps at most 48 contacts through the native tracking
+    /// RPC; sightings subsequently decay under vanilla rules.
     /// </summary>
     internal sealed class ReconAction : ISupportAction
     {
@@ -25,45 +28,63 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
         public SupportResult Execute(in SupportContext context)
         {
             if (!VanillaSupportCatalog.ReconAvailable) return SupportResult.CapabilityUnavailable;
+            if (!context.HasCoverage(SatelliteRole.Recon))
+                return SupportResult.OutOfCoverage;
 
-            Vector3 centre = context.Target.ToLocalPosition();
-            if (SupportTargeting.TryOrigin(context.Player, out Vector3 origin))
+            try
             {
-                if (Vector3.Distance(origin, centre) > context.Settings.ReconRange.Value)
-                    return SupportResult.OutOfRange;
+                int contacts = Reveal(context.Owner, context.Target,
+                    context.Settings.ReconRadius.Value, context.Logger, RevealFilter.All);
+                context.Host.ReportContacts(context.RequestId, contacts);
+                return SupportResult.Accepted;
             }
+            catch (Exception e)
+            {
+                context.Logger.LogWarning("[Support] Satellite scan failed: " + e.Message);
+                return SupportResult.SpawnFailed;
+            }
+        }
 
+        internal static int Reveal(FactionHQ faction, GlobalPosition target, float radius,
+            BepInEx.Logging.ManualLogSource logger, RevealFilter filter, bool quiet = false)
+        {
+            Vector3 centre = target.ToLocalPosition();
             List<Unit> units = UnitRegistry.allUnits;
-            if (units == null) return SupportResult.CapabilityUnavailable;
-
-            float radius = context.Settings.ReconRadius.Value;
+            if (units == null) throw new InvalidOperationException("Unit registry unavailable");
             float radiusSquared = radius * radius;
-            int revealed = 0;
-            for (int i = 0; i < units.Count && revealed < MaximumReveals; i++)
+            int revealed = 0, attempted = 0;
+            for (int i = 0; i < units.Count && attempted < MaximumReveals; i++)
             {
                 Unit unit = units[i];
                 if (unit == null || unit.disabled) continue;
                 FactionHQ owner = unit.NetworkHQ;
-                if (owner == null || owner == context.Owner) continue;
+                if (owner == null || owner == faction) continue;
+                if (filter == RevealFilter.Air && !(unit is Aircraft)) continue;
+                if (filter == RevealFilter.Ground && unit is Aircraft) continue;
                 Vector3 position = unit.transform.position;
                 if ((position - centre).sqrMagnitude > radiusSquared) continue;
+                attempted++;
                 try
                 {
-                    if (context.Owner != null)
+                    if (faction != null)
                     {
-                        context.Owner.RpcUpdateTrackingInfo(unit.persistentID);
+                        faction.RpcUpdateTrackingInfo(unit.persistentID);
                         revealed++;
                     }
                 }
                 catch (Exception e)
                 {
-                    context.Logger.LogWarning("[Support] Satellite scan reveal error: " + e.Message);
+                    logger.LogWarning("[Support] Scan reveal error: " + e.Message);
                 }
             }
 
-            context.Logger.LogInfo("[Support] Satellite scan completed: " + revealed + " contact(s) detected within " +
-                Mathf.RoundToInt(radius) + "m.");
-            return SupportResult.Accepted;
+            if (quiet)
+                logger.LogDebug("[Support] Sweep refresh: " + revealed + " contact(s) within " +
+                    Mathf.RoundToInt(radius) + "m (" + filter + ").");
+            else
+                logger.LogInfo("[Support] Sweep completed: " + revealed + " contact(s) detected within " +
+                    Mathf.RoundToInt(radius) + "m (" + filter + ").");
+            return revealed;
         }
     }
 }

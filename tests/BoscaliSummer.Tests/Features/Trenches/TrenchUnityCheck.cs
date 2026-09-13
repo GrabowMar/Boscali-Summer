@@ -17,26 +17,31 @@ public static class TrenchUnityCheck
             foreach (float side in new[] { -1f, 1f })
             {
                 var mesh = TrenchMeshBuilder.BuildEdgeMesh(new[] { Vector3.zero, heading * 30f },
-                    1.4f, 1.6f, 1f, Vector3.Cross(Vector3.up, heading) * side);
+                    2.6f, 2.4f, 1.4f, Vector3.Cross(Vector3.up, heading) * side);
                 var v = mesh.vertices;
                 var t = mesh.triangles;
-                // The central floor is the third cross-section strip (two triangles per strip).
-                int offset = 2 * 6;
+                // The dry floor is the cross-section strip between profile points 3 and 4.
+                int offset = TrenchMeshBuilder.FloorStrip * 6;
                 Vector3 normal = Vector3.Cross(v[t[offset + 1]] - v[t[offset]], v[t[offset + 2]] - v[t[offset]]);
                 if (normal.y <= 0f) throw new Exception($"Trench floor faces underground: heading={heading}, threat side={side}");
                 Object.DestroyImmediate(mesh);
             }
+            CheckDatumLocalPrefabPlacement();
             CheckGrowthAndCombat();
             var curve = TrenchEdge.GeneratePathPoints(Vector3.zero, Vector3.back * 35f, Vector3.forward,
                 TrenchEdgeType.CommunicationTrench);
-            var curvedMesh = TrenchMeshBuilder.BuildEdgeMesh(curve, 1.8f, 1.1f, 1f, Vector3.forward);
+            var curvedMesh = TrenchMeshBuilder.BuildEdgeMesh(curve, 2.2f, 1.7f, 1.4f, Vector3.forward);
             var curvedVertices = curvedMesh.vertices;
+            int last = TrenchMeshBuilder.ProfilePointCount - 1;
             for (int ring = 1; ring < curve.Length; ring++)
-                Check(Vector3.Dot(curvedVertices[ring * 7 + 6] - curvedVertices[ring * 7],
-                    curvedVertices[(ring - 1) * 7 + 6] - curvedVertices[(ring - 1) * 7]) > 0,
+                Check(Vector3.Dot(curvedVertices[ring * TrenchMeshBuilder.ProfilePointCount + last] -
+                        curvedVertices[ring * TrenchMeshBuilder.ProfilePointCount],
+                    curvedVertices[(ring - 1) * TrenchMeshBuilder.ProfilePointCount + last] -
+                        curvedVertices[(ring - 1) * TrenchMeshBuilder.ProfilePointCount]) > 0,
                     "Communication trench walls must not twist across an S-curve");
+            CheckEarthworkMaterial();
             Render();
-            File.WriteAllText("result.txt", "PASS: eight winding orientations; connected seed, bounded growth, invalid-ground rejection, native-adapter defender budgets, damage suppression and no respawn after destruction. Native AI/networking require in-game acceptance. Stage renders saved.");
+            File.WriteAllText("result.txt", "PASS: eight winding orientations; connected seed, atomic growth through the full belt, invalid-ground rejection, native-adapter defender budgets, damage suppression and no respawn after destruction. Native AI/networking require in-game acceptance. Stage renders saved.");
             EditorApplication.Exit(0);
         }
         catch (Exception ex)
@@ -49,10 +54,34 @@ public static class TrenchUnityCheck
 
     private static void Check(bool value, string message) { if (!value) throw new Exception(message); }
 
+    private static void CheckDatumLocalPrefabPlacement()
+    {
+        var origin = new GameObject("DatumOrigin");
+        origin.transform.position = new Vector3(-10000f, 0f, -5000f);
+        Datum.origin = origin.transform;
+        Vector3 global = new Vector3(-10378f, 125f, -5102f);
+        GameObject module = TrenchPrefabResolver.InstantiateStraight(global, Quaternion.identity, origin.transform);
+        Check(module != null && module.transform.localPosition == global,
+            "Trench modules must use Datum-local coordinates, not Instantiate world coordinates");
+        Object.DestroyImmediate(module);
+        Object.DestroyImmediate(origin);
+        Datum.origin = null;
+        TrenchPrefabResolver.ResetForScene();
+        TrenchMaterialResolver.ResetForScene();
+    }
+
+    private static void CheckEarthworkMaterial()
+    {
+        var material = TrenchMaterialResolver.GetEarthBermMaterial();
+        Check(material != null && material.mainTexture != null && material.mainTexture.width >= 64,
+            "Earthwork material must carry the procedural cross-section palette texture");
+        TrenchMaterialResolver.ResetForScene();
+    }
+
     private static TrenchNetwork Network()
     {
         var net = new TrenchNetwork(1, "Check", new GameObject("HQ").AddComponent<FactionHQ>(), Vector3.zero, Vector3.forward);
-        net.PlacementValidator = p => Mathf.Abs(p.x) <= 60 && Mathf.Abs(p.z) <= 60;
+        net.PlacementValidator = p => Mathf.Abs(p.x) <= 180f && p.z <= 20f && p.z >= -140f;
         Check(TrenchGrowthSimulator.Seed(net, p => p), "Connected seed failed");
         return net;
     }
@@ -60,12 +89,15 @@ public static class TrenchUnityCheck
     private static void CheckGrowthAndCombat()
     {
         var net = Network();
-        Check(net.NodeCount == 5 && net.EdgeCount == 4, "Seed must already have five connected bays");
+        Check(net.NodeCount == 7 && net.EdgeCount == 6, "Seed must be a seven-bay connected line");
+        Check(net.FrontHalfSpan == 66f, "Seed half-span must be 66m");
+
         var blocked = Network();
         Check(TrenchGrowthSimulator.AdvanceSimulation(blocked, p => p), "Deepening failed");
-        blocked.PlacementValidator = p => p.z > -10;
-        Check(!TrenchGrowthSimulator.AdvanceSimulation(blocked, p => p) && blocked.NodeCount == 5,
-            "Invalid rear terrain must not create disconnected nodes");
+        blocked.PlacementValidator = p => Mathf.Abs(p.x) < 60f;
+        Check(!TrenchGrowthSimulator.AdvanceSimulation(blocked, p => p) && blocked.NodeCount == 7,
+            "Invalid flank terrain must not extend the line");
+
         Encyclopedia.i = new Encyclopedia();
         foreach (string key in new[] { "Emplacement1_MG", "Emplacement1_ATGM", "Emplacement1_MANPADS" })
         {
@@ -77,13 +109,16 @@ public static class TrenchUnityCheck
         var spawner = NetworkSceneSingleton<Spawner>.i = new Spawner();
         var garrison = new TrenchGarrison(net);
         Check(garrison.Establish() && spawner.Spawned.Count == 2, "Must start with two actual defense spawns");
-        for (int stage = 2; stage <= 4; stage++)
+        for (int stage = 2; stage <= 5; stage++)
         {
-            Check(TrenchGrowthSimulator.AdvanceSimulation(net, p => p), "Growth failed at stage " + stage);
+            Check(TrenchGrowthSimulator.AdvanceSimulation(net, p => p),
+                "Growth failed at stage " + stage + ": " + TrenchGrowthSimulator.LastFailure);
             garrison.Reinforce(); garrison.Poll(stage);
             Check(garrison.Alive == (stage == 2 ? 4 : 6), "Wrong native defender count");
         }
-        Check(net.NodeCount == 9 && net.EdgeCount == 10, "Mature network must have a connected rear line and hub");
+        Check(net.NodeCount == 17 && net.EdgeCount == 20, "Mature network must fill the sector belt");
+        Check(net.BunkerCount == 2, "Mature belt must include support and rear dugouts");
+        Check(net.FrontHalfSpan == 72f, "Network half-span must match its capped flank limit");
         spawner.Spawned[0].GetComponent<UnitPart>().hitPoints = 70;
         Check(garrison.Poll(10) && garrison.SuppressedUntil == 70, "A hit must stop construction for sixty seconds");
         spawner.Spawned[0].disabled = true;
@@ -98,8 +133,8 @@ public static class TrenchUnityCheck
         // A blocked second slot must roll the first spawn back, not leave a cosmetic
         // site with a leaked defender outside the manager's capacity accounting.
         var obstacle = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        obstacle.transform.position = new Vector3(36, 2, 12);
-        obstacle.transform.localScale = new Vector3(5, 4, 5);
+        obstacle.transform.position = new Vector3(36, 2, -16);
+        obstacle.transform.localScale = new Vector3(6, 4, 6);
         Physics.SyncTransforms();
         var failed = new TrenchGarrison(Network());
         int before = spawner.Spawned.Count;
@@ -112,37 +147,68 @@ public static class TrenchUnityCheck
     private static void Render()
     {
         var camera = new GameObject("Camera").AddComponent<Camera>();
-        camera.transform.position = new Vector3(75, 72, 66);
-        camera.transform.LookAt(new Vector3(0, 0, -15));
+        camera.transform.position = new Vector3(60, 160, 150);
+        camera.transform.LookAt(new Vector3(0, 0, -40));
         camera.clearFlags = CameraClearFlags.SolidColor;
         camera.backgroundColor = new Color(0.12f, 0.18f, 0.23f);
+        RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
+        RenderSettings.ambientLight = new Color(0.40f, 0.43f, 0.47f);
         var light = new GameObject("Sun").AddComponent<Light>();
         light.type = LightType.Directional;
         light.transform.rotation = Quaternion.Euler(45, -30, 0);
-        var material = new Material(Shader.Find("Standard")) { color = new Color(0.48f, 0.34f, 0.19f) };
+        Material earth = TrenchMaterialResolver.GetEarthBermMaterial();
+        if (earth == null) earth = new Material(Shader.Find("Standard")) { color = new Color(0.48f, 0.34f, 0.19f) };
+        Material sandbag = TrenchMaterialResolver.GetSandbagMaterial() ?? earth;
+        Material concrete = TrenchMaterialResolver.GetConcreteMaterial() ?? earth;
         var ground = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        ground.transform.position = new Vector3(0, -0.55f, -20);
-        ground.transform.localScale = new Vector3(110, 1, 100);
+        ground.transform.position = new Vector3(0, -0.6f, -50);
+        ground.transform.localScale = new Vector3(460, 1, 320);
         ground.GetComponent<Renderer>().sharedMaterial = new Material(Shader.Find("Standard")) { color = new Color(0.21f, 0.3f, 0.15f) };
-        var target = new RenderTexture(960, 600, 24);
+        var target = new RenderTexture(1280, 720, 24);
         camera.targetTexture = target;
         var net = Network();
-        for (int stage = 1; stage <= 4; stage++)
+        for (int stage = 1; stage <= 5; stage++)
         {
             var root = new GameObject("Stage" + stage);
             foreach (var edge in net.Edges)
                 DrawMesh(root.transform, TrenchMeshBuilder.BuildEdgeMesh(edge.PathPoints, edge.TrenchWidth,
-                    edge.ParapetHeight, edge.SkirtDepth, net.ThreatDirection), Vector3.zero, material);
+                    edge.ParapetHeight, edge.SkirtDepth, net.ThreatDirection), Vector3.zero, earth);
             foreach (var node in net.Nodes)
-                DrawMesh(root.transform, TrenchMeshBuilder.BuildFightingBayMesh(), node.Position, material);
+                DrawMesh(root.transform, NodeMesh(node.Type), node.Position,
+                    node.Type == TrenchNodeType.RifleBay || node.Type == TrenchNodeType.Foxhole ? sandbag : concrete);
             camera.Render();
             RenderTexture.active = target;
-            var image = new Texture2D(960, 600, TextureFormat.RGB24, false);
-            image.ReadPixels(new Rect(0, 0, 960, 600), 0, 0);
-            image.Apply();
-            File.WriteAllBytes("stage-" + stage + ".png", image.EncodeToPNG());
+            WriteRender(target, "stage-" + stage + ".png");
+            if (stage == 5)
+            {
+                camera.transform.position = new Vector3(34, 9, 34);
+                camera.transform.LookAt(new Vector3(30, 0, -4));
+                camera.Render();
+                RenderTexture.active = target;
+                WriteRender(target, "closeup-stage-5.png");
+            }
             Object.DestroyImmediate(root);
             TrenchGrowthSimulator.AdvanceSimulation(net, p => p);
+        }
+    }
+
+    private static void WriteRender(RenderTexture target, string file)
+    {
+        var image = new Texture2D(target.width, target.height, TextureFormat.RGB24, false);
+        image.ReadPixels(new Rect(0, 0, target.width, target.height), 0, 0);
+        image.Apply();
+        File.WriteAllBytes(file, image.EncodeToPNG());
+        Object.DestroyImmediate(image);
+    }
+
+    private static Mesh NodeMesh(TrenchNodeType type)
+    {
+        switch (type)
+        {
+            case TrenchNodeType.BunkerBlindage: return TrenchMeshBuilder.BuildBunkerMesh();
+            case TrenchNodeType.HeavyWeaponPit: return TrenchMeshBuilder.BuildWeaponPitMesh();
+            case TrenchNodeType.Foxhole: return TrenchMeshBuilder.BuildFoxholeMesh();
+            default: return TrenchMeshBuilder.BuildFightingBayMesh();
         }
     }
 

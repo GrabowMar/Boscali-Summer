@@ -22,14 +22,19 @@ namespace BoscaliSummer.Tests
             RadioTests.Run();
             Features.Squad.AceCareerTests.Run();
             ProgressionTests.Run();
+            EmblemTests.Run();
+            PilotStudioTests.Run();
             ProgressionPresentationTests.Run();
             SupportTests.Run();
             Features.QoL.ObservationTests.Run();
             Features.QoL.CameraTests.Run();
             Features.QoL.GunAimAssistTests.Run();
+            Features.Autopilot.AutopilotLandTests.Run();
             CommandTests.Run();
+            MfdNewsTickerTests.Run();
             MfdSecondaryObjectivesTests.Run();
             Features.DynamicOperations.OperationTests.Run();
+            Features.DynamicOperations.OperationTitlesTests.Run();
             TrenchTests.Run();
             ModuleBoundaryTests.Run();
 

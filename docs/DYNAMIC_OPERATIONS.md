@@ -15,7 +15,11 @@ and `Command.ExpandedMapUi` under the existing Command registration.
 Open the tactical map, select **MIS**, then **SECONDARY → AVAILABLE**. Accept a contract
 for your faction before doing it. **ACTIVE** shows execution progress; **RESULTS** keeps
 recent outcomes. Dismiss an offer, or confirm an active abort, without a penalty.
-Accepted objectives receive numbered map markers. Host-confirmed enemy tracking must
+Accepted objectives render through the native objective UI: a numbered map marker on the
+tactical map, a cockpit pointer with distance and the same sized mission-area ring native
+objectives use. The map's Mission objective markers toggle still controls them. A compact
+zone readout shows distance to the area edge while approaching and hold progress inside,
+with a short banner when entering or leaving the area. Host-confirmed enemy tracking must
 remain recent (30 seconds) to display a moving target; lost contacts hide their marker.
 The original
 briefing and authored objectives remain on their tabs. A host without this module
@@ -31,6 +35,36 @@ cannot supply secondary data; a missing or stale reply clears the panel.
 | Silence the radar | Deliver positive native jamming to the selected emitting ground target for 45 continuous observed seconds; interruptions beyond 1.5 s reset progress, destroying the emitter cancels | $1,400 + 125 XP | None |
 | Establish a beachhead | Ibis fast-rope eight troops onto dry ground within 100 m of the marked landing zone, below 45 m above the surface; completed landing required | $1,500 + 125 XP | Existing insertion mechanics may establish defenses if placement succeeds |
 | Rooftop insertion | Ibis fast-rope eight troops onto the exact marked civilian shell, within 40 m of the mark; completed landing required | $1,500 + 125 XP | Landing is the objective, not a guarantee of roof occupation |
+| Bring them home | Recover the marked friendly dismounted pilot through native rescue, then land the rescuing player aircraft within 1 km of the marked friendly base | $1,800 + 125 XP | Use a native rescue-capable loadout, such as the slingload hook; the return leg is additional to vanilla rescue |
+| Reconnaissance pass | Observe a tracked hostile ground contact from above within 1.5 km for 20 continuous seconds; faction tracking must be ≤2s old and terrain sightline clear | $900 + 75 XP | Does not create new sensor contacts |
+| Confirm the strike | Neutralize a known hostile building after acceptance, then survey its last known site from above within 1.5 km for 20 continuous seconds | $1,200 + 125 XP | Combat disable is remembered; scripted despawn is not a kill |
+| Cover the supply run | Keep the same player aircraft above a friendly supply truck within 1.5 km for 60s, then remain on station when it actually supplies another friendly unit | $1,400 + 125 XP | Observes native ammunition resupply or a positive rearmer-to-rearmer transfer |
+| Cut the supply line | Neutralize a known hostile ground vehicle with a native rearmer | $1,000 + 125 XP | Removing the native truck removes its resupply capability; no artificial economic debuff |
+| Cover the engineers | Cover a damaged friendly building from above within 1.5 km for 30s, then remain while native engineers finish its repairs | $1,400 + 125 XP | Offered only when a live friendly repairer is in the candidate area; native AI still chooses its repair work |
+| Hunt the jammer | Neutralize a tracked hostile unit observed applying positive jamming to this faction within the last 60s | $1,400 + 125 XP | Can target aircraft or ground units; does not spawn a fictional jammer site |
+| Bring back the intelligence | Observe a hostile ground contact for 30s using the reconnaissance rules, then land that same aircraft within 1 km of the marked friendly base | $1,500 + 125 XP | Acquired intelligence survives subsequent contact loss; losing the aircraft cancels delivery |
+| Survey the aftermath | Survey a friendly ground wreck or damaged building from above within 1.5 km for 30 continuous seconds with a clear terrain sightline | $700 + 60 XP | A battlefield survey contract; no fabricated fighting, ambient effects or replay recording |
+
+The pool now contains **17 families**. These additions are secondary contracts inside
+DynamicOperations, using the existing MIS cards, markers and reward path. The debrief idea
+is represented by an intelligence-return sortie; the ambient battlefield idea becomes an
+aftermath survey. They do not add a separate debrief screen or ambient-effects subsystem.
+
+All new aerial cover/survey holds require at least 50 m above the marked subject. Changing
+the observing aircraft resets the hold; a lost sightline or stale reconnaissance contact
+also resets it. Survey and reconnaissance describe an overflight with faction intelligence,
+not a camera-photo or target-lock mechanic. BDA targets stationary buildings so the marked
+last-known site remains meaningful after destruction; it never follows an untracked wreck.
+Only two sightline attempts per objective per tick are made, favoring the existing observer.
+
+Rescue/report markers switch to the return base after acquisition. The rescuing/observing
+aircraft must still be alive, player-controlled and in the same faction; a respawn cannot
+deliver its mission. Losing the return base cancels the task. Native rescue retains its
+normal effects and rewards even if the extra return contract later fails; BS never edits
+Squad's career state from this mission. Native supply/repair must finish after acceptance
+and sufficient cover. Cover alone grants no service award, and no new truck or engineer
+orders are issued. If a building is repaired before sufficient cover, the contract cancels.
+Mission authors must supply appropriate native units and service demand for these tasks.
 
 Every connected player still in the faction at completion receives the base reward,
 including when faction AI completes a capture, strike or jamming task after acceptance.
@@ -87,9 +121,13 @@ module owns its spawned roots and removes them on scene/mission reset and teardo
 Server work runs at 1 Hz; generation runs at most every 30 seconds per faction and
 at most one faction generates in any tick. Hard
 limits are eight faction boards, three cards each, 128 issued objectives per faction
-per mission, 64 registered airbases, at most three passes over 4,096 unit candidates per faction per generation,
+per mission, 64 registered airbases, two passes over 4,096 unit candidates per faction per generation,
 and 64 payment recipients/query records. Road preflight accepts at most 512 nodes,
 2,048 roads and 8,192 road points. Larger road graphs omit convoy awards.
+All extra families share the second unit pass. Observation casts are capped at 32 per host
+tick (two per objective); recent hostile jammer records at 32 with 60-second freshness.
+The new contracts spawn no additional objects. Scene reset clears their candidates,
+service evidence, acquired aircraft references and jammer history.
 
 The client requests only its own faction's snapshot and sends accept/dismiss intent by
 contract ID. Protocol **2** requires matching peers. The host derives identity and faction,
@@ -97,12 +135,22 @@ rate-limits reads/actions, and never accepts completion or reward data from clie
 Request/scene tokens reject old responses; IDs remain monotonic across mission resets,
 so delayed commands cannot accept a different mission's reused ID. Snapshots clear
 after six seconds without a valid refresh. Native Mirage owns spawned objects.
+Protocol 2 remains unchanged: cards already carry title, instructions, status, progress
+and marker coordinates, so return stages need no new fields or client completion messages.
+Markers are built client-side from that snapshot and are never registered with the mission
+runner, so vanilla AI cannot mistake a contract for a navigation objective.
 
-Required runtime checks before enabling by default: all eight contract families, acceptance/
-abort/expiry, marker positions through zoom and floating-origin shifts, jamming on headless
+Required runtime checks before enabling by default: all 17 contract families, acceptance/
+abort/expiry, native map/HUD marker positions through zoom and floating-origin shifts, jamming on headless
 and listen hosts, Ibis completion/abort, and tax/score/morale awards; convoy path and supply behavior; blocked/partial spawn
 cleanup; listen-host/remote-client/late-join faction views; pause/resume, faction switch,
 mission reload and disable cleanup. Build and pure tests cannot prove those behaviors.
+For the new families also test native rescue with a remote player and return-aircraft loss;
+recon behind terrain and after contact expiry; BDA combat loss versus scripted removal;
+real supply transfers versus empty attempts; repair before/after cover qualification;
+jammer source attribution; observer changes; return-base capture; and late joining during
+an acquired return stage. Release build, pure state-machine regressions, the installed-game
+signature/serializer probe and static Harmony verification pass; these are not flight tests.
 
 Research and independent design rationale:
 [builders and logistics](RESEARCH_DYNAMIC_OPERATIONS.md),

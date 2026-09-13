@@ -112,12 +112,6 @@ namespace BoscaliSummer.Tests.Features.Command
             portrait.EvaluateSectors(float.NaN);
             TestAssert.That(portrait.NeutralSectorCount == portrait.TotalSectors && portrait.TotalNodesCount == 0,
                 "Invalid observations cannot create phantom territory");
-            TestAssert.That(TacticalSectorGrid.ObservationConfidence(0f) == 1f &&
-                TacticalSectorGrid.ObservationConfidence(15f) == 0.5f &&
-                TacticalSectorGrid.ObservationConfidence(30f) == 0f &&
-                TacticalSectorGrid.ObservationConfidence(-1f) == 0f &&
-                TacticalSectorGrid.ObservationConfidence(float.NaN) == 0f,
-                "Known contacts lose all pressure by 30 seconds and invalid timestamps are rejected");
             for (int i = 0; i < 1000; i++) portrait.RegisterNode(i, "Node", 0f, 0f, SectorControl.Friendly, 0f, false);
             TestAssert.That(portrait.TotalNodesCount == TacticalSectorGrid.MaximumNodes, "Node growth has a hard ceiling");
             portrait.EvaluateSectors();

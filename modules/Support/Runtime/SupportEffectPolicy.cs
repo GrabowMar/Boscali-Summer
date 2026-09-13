@@ -8,7 +8,7 @@ namespace BoscaliSummer.Features.Support.Runtime
         public const float RodCoreRadius = 150f;
         public const float RodBlastRadius = 420f;
         public const float EmpDelay = 3f;
-        public const float EmpDuration = 18f;
+        public const float EmpDuration = 30f;
 
         public static float RodDamage(float distance)
         {

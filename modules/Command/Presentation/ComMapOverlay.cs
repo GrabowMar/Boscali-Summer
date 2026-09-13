@@ -39,6 +39,12 @@ namespace BoscaliSummer.Features.Command.Presentation
         /// The faction control field shared with host ingress queries.
         /// </summary>
         public TacticalSectorGrid Grid => sectorGrid;
+        internal static ComMapOverlay Instance { get; private set; }
+
+        private void Awake()
+        {
+            Instance = this;
+        }
 
         public void Configure(CommandSettings config, CommandManager manager, MissionMapCompatibilityEngine compat, ManualLogSource log, TerritoryControlView control)
         {
@@ -83,10 +89,26 @@ namespace BoscaliSummer.Features.Command.Presentation
             isMapMaximized = false;
             nextGridUpdate = 0f;
             gridHq = null;
+            if (Instance == this) Instance = null;
+        }
+
+        public void SyncSettings()
+        {
+            if (settings != null)
+            {
+                ShowSectors = settings.FrontlinesOverlay.Value;
+                ShowFrontlines = settings.FrontlinesOverlay.Value;
+            }
+            nextGridUpdate = 0f;
+            if (initialized && isMapMaximized)
+            {
+                UpdateSectorGrid();
+            }
         }
 
         private void OnDestroy()
         {
+            if (Instance == this) Instance = null;
             DynamicMapMaximizePatch.OnMaximized -= HandleMapMaximized;
             DynamicMapMinimizePatch.OnMinimized -= HandleMapMinimized;
             ResetForScene();
@@ -151,7 +173,7 @@ namespace BoscaliSummer.Features.Command.Presentation
 
             if (now >= nextGridUpdate)
             {
-                nextGridUpdate = now + Math.Max(0.5f, settings.GridRefreshInterval.Value);
+                nextGridUpdate = now + Math.Max(0.2f, settings.GridRefreshInterval.Value);
                 UpdateSectorGrid();
             }
         }
@@ -302,13 +324,22 @@ namespace BoscaliSummer.Features.Command.Presentation
                 GetTextureSize(out int texW, out int texH);
                 EnsureTexture(texW, texH);
                 command?.SyncSectorTelemetry(sectorGrid);
+                bool showSectors = settings != null ? settings.FrontlinesOverlay.Value : ShowSectors;
+                bool showFrontlines = settings != null ? settings.FrontlinesOverlay.Value : ShowFrontlines;
+                float overlayAlpha = settings != null ? settings.OverlayOpacity.Value : 0.35f;
+
+                if (overlayImage != null)
+                {
+                    overlayImage.enabled = localHq != null && (showSectors || showFrontlines);
+                }
+
                 // 4. Fast Procedural Texture Bake
                 Color32[] pixels = sectorGrid.BakeTexture(
                     texW,
                     texH,
-                    ShowSectors,
-                    ShowFrontlines,
-                    settings.OverlayOpacity.Value);
+                    showSectors,
+                    showFrontlines,
+                    overlayAlpha);
 
                 overlayTexture.SetPixels32(pixels);
                 overlayTexture.Apply(false);

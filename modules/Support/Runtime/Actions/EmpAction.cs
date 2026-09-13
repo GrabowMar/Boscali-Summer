@@ -38,6 +38,9 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
                     return SupportResult.OutOfRange;
             }
 
+            if (!context.HasCoverage(SatelliteRole.Ew))
+                return SupportResult.OutOfCoverage;
+
             if (!context.Host.TryReserve(SupportPool.Strike)) return SupportResult.Busy;
 
             context.Logger.LogInfo("[Support] EMP shock using " + definition.jsonKey +

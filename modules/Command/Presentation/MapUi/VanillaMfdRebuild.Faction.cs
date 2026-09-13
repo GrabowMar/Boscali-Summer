@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Features.Command.Runtime;
 using NOAvionics;
 using NOAvionics.Ui;
 using TMPro;
@@ -54,9 +53,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private int selectedPage;
             private int resourceSeries;
             private int renderedResourceSeries = -1;
+            private float renderedResourceTime = float.NaN;
             private static readonly string[] ResourceLabels = { "FUNDS", "WARHEADS", "MANPOWER", "MORALE" };
             private FactionHQ observedHq;
-            private readonly MfdResourceHistory resourceHistory = new MfdResourceHistory();
+            private MfdResourceHistory resourceHistory;
             private AvStyled.Metric[] resourceMetrics;
             private AvButton[] resourceTabs;
             private MfdResourceChart resourceChart;
@@ -94,13 +94,14 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 if (hq != observedHq)
                 {
                     observedHq = hq;
-                    resourceHistory.Clear();
+                    resourceHistory = FactionResourceHistoryStore.For(hq);
+                    renderedResourceSeries = -1;
+                    renderedResourceTime = float.NaN;
                     definitionGrid.ResetPage();
                     infoGrid.ResetPage();
                 }
                 if (hq == null)
                 {
-                    resourceHistory.Clear();
                     foreach (RectTransform page in pages) page.gameObject.SetActive(false);
                     Shell.DataBar.State.text = "WAITING FOR FACTION HQ";
                     Shell.DataBar.SetChip(0, "LINK", false);
@@ -174,13 +175,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             private void RefreshResources(FactionHQ hq)
             {
-                float manpower = float.NaN;
-                if (hq.missionStatsTracker != null)
-                {
-                    var stats = hq.missionStatsTracker.manpower;
-                    manpower = stats.buildings.current + stats.vehicles.current + stats.ships.current + stats.aircraft.current;
-                }
-                float morale = FactionResources.TryGetMorale(hq, out float stored) ? stored : float.NaN;
+                float manpower = FactionResourceHistoryStore.Manpower(hq);
+                float morale = FactionResourceHistoryStore.Morale(hq);
                 float funds = hq.factionFunds;
                 int warheads = hq.GetWarheadStockpile();
                 resourceMetrics[0].Set(UnitConverter.ValueReading(funds), funds < 0f ? "NEGATIVE BALANCE" : "AVAILABLE FUNDS", 0f, AvTheme.Accent);
@@ -191,10 +187,14 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 resourceMetrics[3].Set(MfdResourceHistory.Finite(morale) ? morale.ToString("0.#") : "—",
                     MfdResourceHistory.Finite(morale) ? "STORED • INACTIVE" : "HOST DATA UNAVAILABLE",
                     MfdResourceHistory.Finite(morale) ? morale / 100f : 0f, AvTheme.Accent);
-                bool sampled = resourceHistory.Sample(Time.time, funds, warheads, manpower, morale);
-                if (sampled || renderedResourceSeries != resourceSeries)
+                if (resourceHistory == null) resourceHistory = FactionResourceHistoryStore.For(hq);
+                float latest = resourceHistory != null && resourceHistory.Count > 0
+                    ? resourceHistory.Time(resourceHistory.Count - 1) : float.NaN;
+                if (resourceHistory != null &&
+                    (latest != renderedResourceTime || renderedResourceSeries != resourceSeries))
                 {
                     resourceChart.Set(resourceHistory, resourceSeries, ResourceLabels[resourceSeries], FormatResource);
+                    renderedResourceTime = latest;
                     renderedResourceSeries = resourceSeries;
                 }
                 SetRow(resourceTabs, resourceSeries);

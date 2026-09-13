@@ -14,6 +14,18 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         internal float Value(int series, int index) => values[series, (start + index) % Capacity];
         internal float Time(int index) => times[(start + index) % Capacity];
 
+        /// <summary>
+        /// Whether a new observation is due at <paramref name="now"/>. Callers use this to
+        /// avoid reading expensive game state between the 5-second samples.
+        /// </summary>
+        internal bool Due(float now)
+        {
+            if (!Finite(now)) return false;
+            if (Count == 0) return true;
+            float elapsed = now - Time(Count - 1);
+            return elapsed < 0f || elapsed > Interval * 3f || elapsed >= Interval;
+        }
+
         internal bool Sample(float now, float funds, float warheads, float manpower, float morale)
         {
             if (!Finite(now)) return false;

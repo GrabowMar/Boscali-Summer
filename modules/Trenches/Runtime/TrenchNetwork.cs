@@ -1,13 +1,14 @@
 using System;
 using System.Collections.Generic;
+using BoscaliSummer.Features.Trenches.Domain;
 using UnityEngine;
 
 namespace BoscaliSummer.Features.Trenches.Runtime
 {
     internal sealed class TrenchNetwork
     {
-        public const int MaxNodesPerNetwork = 32;
-        public const int MaxEdgesPerNetwork = 48;
+        public const int MaxNodesPerNetwork = 64;
+        public const int MaxEdgesPerNetwork = 96;
 
         public int Id { get; }
         public string Name { get; set; }
@@ -17,6 +18,20 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         public Func<Vector3, bool> PlacementValidator { get; set; }
         public float Radius { get; private set; }
         public Vector3 ThreatDirection { get; set; }
+        public Vector3 LateralAxis { get; }
+        public float FlankLimit { get; }
+        public float DepthLimit { get; }
+        public float FrontHalfSpan { get; set; }
+
+        public int BunkerCount
+        {
+            get
+            {
+                int count = 0;
+                foreach (var node in nodes.Values) if (node.Type == TrenchNodeType.BunkerBlindage) count++;
+                return count;
+            }
+        }
         public TrenchStage Stage { get; set; }
         public float LastSimTime { get; set; }
         public bool Overrun { get; set; }
@@ -36,7 +51,7 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         public int NodeCount => nodes.Count;
         public int EdgeCount => edges.Count;
 
-        public TrenchNetwork(int id, string name, FactionHQ owner, Vector3 center, Vector3 threatDir)
+        public TrenchNetwork(int id, string name, FactionHQ owner, Vector3 center, Vector3 threatDir, float flankLimit = 0f)
         {
             Id = id;
             Name = name;
@@ -44,8 +59,21 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             Center = center;
             SeedCenter = center;
             ThreatDirection = threatDir.sqrMagnitude > 0.001f ? threatDir.normalized : Vector3.forward;
+            LateralAxis = Vector3.Cross(Vector3.up, ThreatDirection).normalized;
+            FlankLimit = flankLimit > 0f ? flankLimit : TrenchTacticalMath.MinFlankHalfLength;
+            DepthLimit = TrenchTacticalMath.RearLineDepth + 20f;
+            FrontHalfSpan = TrenchTacticalMath.LineSpan(TrenchTacticalMath.SeedBayCount) * 0.5f;
             Stage = TrenchStage.Stage0_Scrape;
             Radius = 25f;
+        }
+
+        /// <summary>True when a global position lies inside this network's fortified sector corridor.</summary>
+        public bool Contains(Vector3 global)
+        {
+            Vector3 delta = global - SeedCenter;
+            float lateral = Vector3.Dot(delta, LateralAxis);
+            float forward = Vector3.Dot(delta, ThreatDirection);
+            return Math.Abs(lateral) <= FlankLimit + 10f && forward >= -(DepthLimit + 10f) && forward <= 20f;
         }
 
         public TrenchNode AddNode(Vector3 position, TrenchNodeType type, TrenchStage stage = TrenchStage.Stage0_Scrape)
@@ -90,12 +118,12 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             return edge;
         }
 
-        public bool CanPlacePath(Vector3[] path)
+        public bool CanPlacePath(Vector3[] path, float clearance = TrenchTacticalMath.PathClearance)
         {
             if (PlacementValidator == null) return true;
             for (int i = 1; i < path.Length; i++)
             {
-                Vector3 side = Vector3.Cross(Vector3.up, path[i] - path[i - 1]).normalized * 3f;
+                Vector3 side = Vector3.Cross(Vector3.up, path[i] - path[i - 1]).normalized * clearance;
                 int steps = Math.Max(1, (int)Math.Ceiling(Vector3.Distance(path[i - 1], path[i]) / 2f));
                 for (int s = 0; s <= steps; s++)
                 {

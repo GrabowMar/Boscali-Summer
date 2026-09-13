@@ -10,7 +10,7 @@ namespace BoscaliSummer.Features.DynamicOperations.Configuration
         public DynamicOperationsSettings(ConfigFile config)
         {
             Enabled = config.Bind("DynamicOperations", "Enabled", false,
-                "Experimental optional contracts: capture, defense, ground/air hunts, patrol, jamming and Ibis ground/rooftop insertions. Accept through MIS > SECONDARY; server-owned money, XP, morale and battlefield rewards. Requires an in-game validation pass. Restart after changing. MIS > SECONDARY requires Command.ExpandedMapUi.");
+                "Experimental pool of 17 contracts: combat, patrol, jamming, insertion, rescue/return, reconnaissance, strike assessment, supply escort/interdiction, repair cover, jammer hunts, intelligence return and aftermath surveys. Accept through MIS > SECONDARY; server-owned rewards. In-game validation pending. Restart after changing. MIS > SECONDARY requires Command.ExpandedMapUi.");
             RewardMultiplier = config.Bind("DynamicOperations", "RewardMultiplier", 1f,
                 new ConfigDescription("Scale mission money and XP. Money uses the normal faction tax; XP is vanilla mission score.",
                     new AcceptableValueRange<float>(0.25f, 4f)));

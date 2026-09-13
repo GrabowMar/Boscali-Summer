@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using NOAvionics.Ui;
 using UnityEngine;
 using UnityEngine.UI;
@@ -8,9 +9,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
     /// The ordered instrument strip below the maximised map.
     ///
     /// <para>Vanilla draws the clock/speed/altitude/attitude group above the map and the
-    /// airport or spectator controls on a separate lower canvas. The layout already reserves
-    /// the bottom 120 pixels for those controls; this class turns that reserve into one real
-    /// avionics panel and temporarily hosts the native objects in two centred rows.</para>
+    /// airport, spectator controls, or unit telemetry on a separate lower canvas. The layout
+    /// already reserves the bottom 120 pixels for those controls; this class turns that reserve
+    /// into one real avionics panel and temporarily hosts the native objects in two centred rows.</para>
     ///
     /// <para>The native objects remain authoritative. Their scripts keep updating their text,
     /// active state and button actions; only their parent and RectTransform presentation are
@@ -39,6 +40,19 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             public Quaternion LocalRotation;
             public Vector3 LocalScale;
 
+            private readonly List<ImageState> suppressedImages = new List<ImageState>();
+            private CanvasGroup addedCanvasGroup;
+            private CanvasGroup originalCanvasGroup;
+            private float originalAlpha;
+            private bool originalBlocksRaycasts;
+            private bool imagesSuppressed;
+
+            private struct ImageState
+            {
+                public Image Image;
+                public bool WasEnabled;
+            }
+
             public static RectSnapshot Capture(RectTransform target)
             {
                 if (target == null) return null;
@@ -58,8 +72,81 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 };
             }
 
+            public CanvasGroup EnsureCanvasGroup()
+            {
+                if (Target == null) return null;
+                if (addedCanvasGroup != null) return addedCanvasGroup;
+                if (originalCanvasGroup != null) return originalCanvasGroup;
+                var cg = Target.GetComponent<CanvasGroup>();
+                if (cg == null)
+                {
+                    cg = Target.gameObject.AddComponent<CanvasGroup>();
+                    addedCanvasGroup = cg;
+                }
+                else
+                {
+                    originalCanvasGroup = cg;
+                    originalAlpha = cg.alpha;
+                    originalBlocksRaycasts = cg.blocksRaycasts;
+                }
+                return cg;
+            }
+
+            public void SuppressBackgroundImages()
+            {
+                if (Target == null || imagesSuppressed) return;
+                imagesSuppressed = true;
+                Image[] images = Target.GetComponentsInChildren<Image>(includeInactive: true);
+                for (int i = 0; i < images.Length; i++)
+                {
+                    Image img = images[i];
+                    if (img == null || !img.enabled) continue;
+
+                    // Preserve interactive button visuals (e.g. Select Aircraft button)
+                    if (img.GetComponent<Button>() != null || img.GetComponentInParent<Button>() != null)
+                        continue;
+
+                    bool alreadyTracked = false;
+                    for (int j = 0; j < suppressedImages.Count; j++)
+                    {
+                        if (suppressedImages[j].Image == img)
+                        {
+                            alreadyTracked = true;
+                            break;
+                        }
+                    }
+
+                    if (!alreadyTracked)
+                    {
+                        suppressedImages.Add(new ImageState { Image = img, WasEnabled = img.enabled });
+                    }
+                    img.enabled = false;
+                }
+            }
+
             public void Restore()
             {
+                if (originalCanvasGroup != null)
+                {
+                    originalCanvasGroup.alpha = originalAlpha;
+                    originalCanvasGroup.blocksRaycasts = originalBlocksRaycasts;
+                    originalCanvasGroup = null;
+                }
+                if (addedCanvasGroup != null)
+                {
+                    addedCanvasGroup.alpha = 1f;
+                    addedCanvasGroup.blocksRaycasts = true;
+                    Object.Destroy(addedCanvasGroup);
+                    addedCanvasGroup = null;
+                }
+
+                for (int i = 0; i < suppressedImages.Count; i++)
+                {
+                    if (suppressedImages[i].Image != null)
+                        suppressedImages[i].Image.enabled = suppressedImages[i].WasEnabled;
+                }
+                suppressedImages.Clear();
+
                 if (Target == null || Parent == null) return;
 
                 Target.SetParent(Parent, worldPositionStays: false);
@@ -84,6 +171,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private static RectSnapshot instruments;
         private static RectSnapshot airbase;
         private static RectSnapshot spectator;
+        private static RectSnapshot unitDebug;
+        private static float nextUnitProbe;
 
         public static void Ensure(Canvas canvas, MfdLayout.Columns columns, VirtualMFD mfd)
         {
@@ -106,13 +195,63 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             footer.SetAsLastSibling();
         }
 
+        public static void Tick()
+        {
+            if (footer == null) return;
+
+            // Late adoption if UnitDebug was instantiated or activated after initial layout
+            if ((unitDebug == null || unitDebug.Target == null) && Time.unscaledTime >= nextUnitProbe)
+            {
+                nextUnitProbe = Time.unscaledTime + 1f;
+                UnitDebug ud = Object.FindObjectOfType<UnitDebug>(true);
+                if (ud != null && ud.transform is RectTransform rt && contextSlot != null)
+                {
+                    Adopt(ref unitDebug, rt, contextSlot, new Vector2(contextSlot.rect.width, 48f));
+                    unitDebug?.SuppressBackgroundImages();
+                }
+            }
+
+            bool airbaseActive = airbase != null && airbase.Target != null && airbase.Target.gameObject.activeInHierarchy;
+            bool spectatorActive = spectator != null && spectator.Target != null && spectator.Target.gameObject.activeInHierarchy;
+
+            if (unitDebug != null && unitDebug.Target != null)
+            {
+                CanvasGroup cg = unitDebug.EnsureCanvasGroup();
+                if (cg != null)
+                {
+                    // Prioritize airbase and spectator contextual menus over ambient unit telemetry
+                    bool shouldShow = !airbaseActive && !spectatorActive;
+                    float targetAlpha = shouldShow ? 1f : 0f;
+                    if (!Mathf.Approximately(cg.alpha, targetAlpha))
+                    {
+                        cg.alpha = targetAlpha;
+                        cg.blocksRaycasts = shouldShow;
+                    }
+                }
+
+                unitDebug.SuppressBackgroundImages();
+            }
+
+            if (airbaseActive)
+            {
+                airbase.SuppressBackgroundImages();
+            }
+
+            if (spectatorActive)
+            {
+                spectator.SuppressBackgroundImages();
+            }
+        }
+
         public static void Restore()
         {
             // Restore children before destroying their temporary slots.
+            unitDebug?.Restore();
             spectator?.Restore();
             airbase?.Restore();
             instruments?.Restore();
 
+            unitDebug = null;
             spectator = null;
             airbase = null;
             instruments = null;
@@ -123,6 +262,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             instrumentsSlot = null;
             contextSlot = null;
             chromeSize = Vector2.zero;
+            nextUnitProbe = 0f;
         }
 
         public static void Reset() => Restore();
@@ -206,18 +346,35 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 new Rect(FooterInset, -FooterInset, innerWidth, instrumentsHeight));
             AvKit.Place(contextSlot,
                 new Rect(FooterInset, -(FooterInset + instrumentsHeight + RowGap), innerWidth, contextHeight));
+
+            EnsureMask(instrumentsSlot);
+            EnsureMask(contextSlot);
+        }
+
+        private static void EnsureMask(RectTransform slot)
+        {
+            if (slot == null) return;
+            if (slot.GetComponent<RectMask2D>() == null)
+                slot.gameObject.AddComponent<RectMask2D>();
         }
 
         private static void AdoptNativeSurfaces(VirtualMFD mfd)
         {
             RectTransform top = MapUiAccess.GetMfdTopInstruments(mfd);
-            GameplayUI gameplay = Object.FindObjectOfType<GameplayUI>();
+            GameplayUI gameplay = Object.FindObjectOfType<GameplayUI>(true) ?? Object.FindObjectOfType<GameplayUI>();
             RectTransform airbasePanel = MapUiAccess.GetSelectAirbasePanel(gameplay)?.transform as RectTransform;
             RectTransform spectatorPanel = MapUiAccess.GetSpectatorPanel(gameplay)?.transform as RectTransform;
+            UnitDebug unitDebugComponent = Object.FindObjectOfType<UnitDebug>(true);
+            RectTransform unitDebugPanel = unitDebugComponent != null ? unitDebugComponent.transform as RectTransform : null;
 
             Adopt(ref instruments, top, instrumentsSlot, new Vector2(1000f, 60f));
             Adopt(ref airbase, airbasePanel, contextSlot, null);
             Adopt(ref spectator, spectatorPanel, contextSlot, null);
+            Adopt(ref unitDebug, unitDebugPanel, contextSlot, new Vector2(contextSlot != null ? contextSlot.rect.width : 900f, 48f));
+
+            airbase?.SuppressBackgroundImages();
+            spectator?.SuppressBackgroundImages();
+            unitDebug?.SuppressBackgroundImages();
         }
 
         private static void Adopt(
@@ -237,12 +394,19 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             target.localRotation = Quaternion.identity;
             target.localScale = Vector3.one;
 
+            float maxWidth = Mathf.Max(0f, slot.rect.width);
             if (hostedSize.HasValue)
             {
                 Vector2 requested = hostedSize.Value;
                 target.sizeDelta = new Vector2(
-                    Mathf.Min(requested.x, Mathf.Max(0f, slot.rect.width)),
+                    Mathf.Min(requested.x, maxWidth),
                     requested.y);
+            }
+            else
+            {
+                target.sizeDelta = new Vector2(
+                    Mathf.Min(target.sizeDelta.x, maxWidth),
+                    target.sizeDelta.y);
             }
         }
 

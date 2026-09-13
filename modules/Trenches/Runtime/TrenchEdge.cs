@@ -41,7 +41,7 @@ namespace BoscaliSummer.Features.Trenches.Runtime
 
             TrenchWidth = GetDefaultWidth(type);
             ParapetHeight = GetDefaultParapetHeight(type, stage);
-            SkirtDepth = 1.0f; // 1m skirt to penetrate slopes cleanly
+            SkirtDepth = 1.4f; // Deep skirt so wide earthworks never float on a slope
             MaxHealth = 300f;
             Health = MaxHealth;
         }
@@ -50,19 +50,19 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         {
             switch (type)
             {
-                case TrenchEdgeType.CrawlTrench: return 1.0f;
-                case TrenchEdgeType.CommunicationTrench: return 1.8f;
-                case TrenchEdgeType.BaffleEntry: return 1.2f;
-                default: return 1.4f; // ZigzagFireTrench
+                case TrenchEdgeType.CrawlTrench: return 1.4f;
+                case TrenchEdgeType.CommunicationTrench: return 2.2f;
+                case TrenchEdgeType.BaffleEntry: return 1.8f;
+                default: return 2.6f; // ZigzagFireTrench
             }
         }
 
         public static float GetDefaultParapetHeight(TrenchEdgeType type, TrenchStage stage)
         {
-            if (stage == TrenchStage.Stage0_Scrape) return 0.4f;
-            if (stage == TrenchStage.Stage1_Crawl) return 0.7f;
-            if (type == TrenchEdgeType.CommunicationTrench) return 1.1f;
-            return 1.6f; // Standard fortified parapet
+            if (stage == TrenchStage.Stage0_Scrape) return 0.5f;
+            if (stage == TrenchStage.Stage1_Crawl) return 1.0f;
+            if (type == TrenchEdgeType.CommunicationTrench) return 1.7f;
+            return 2.4f; // Standard fortified parapet
         }
 
         public void TakeDamage(float amount)

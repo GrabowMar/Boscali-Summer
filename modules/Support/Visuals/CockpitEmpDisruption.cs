@@ -50,11 +50,12 @@ namespace BoscaliSummer.Features.Support.Visuals
         private AudioSource radioStaticSource;
         private Light cockpitSparkLight;
         private VirtualMFD virtualMfd;
+        private Coroutine disruptionRoutine;
 
         private void Disrupt(float severity)
         {
             currentSeverity = severity;
-            disruptionDuration = Mathf.Clamp(severity * 3.8f, 1.8f, 6.5f);
+            disruptionDuration = Mathf.Clamp(severity * 5.5f, 4f, 10f);
             endTime = Time.time + disruptionDuration;
             virtualMfd = GetComponentInChildren<VirtualMFD>();
 
@@ -111,7 +112,10 @@ namespace BoscaliSummer.Features.Support.Visuals
                 csm.ShakeCamera(0.9f * severity, 1.8f * severity);
             }
 
-            StartCoroutine(DisruptionRoutine());
+            if (disruptionRoutine == null)
+            {
+                disruptionRoutine = StartCoroutine(DisruptionRoutine());
+            }
         }
 
         private IEnumerator DisruptionRoutine()
@@ -215,6 +219,7 @@ namespace BoscaliSummer.Features.Support.Visuals
             {
                 cockpitSparkLight.enabled = false;
             }
+            disruptionRoutine = null;
         }
 
         private static void EnsureAudio()

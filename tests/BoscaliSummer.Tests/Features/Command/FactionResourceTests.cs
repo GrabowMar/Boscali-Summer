@@ -26,6 +26,9 @@ namespace BoscaliSummer.Tests.Features.Command
             TestAssert.That(history.Sample(0f, -10f, 0f, float.NaN, 100f), "First observation recorded");
             TestAssert.That(!history.Sample(1f, 999f, 0f, 0f, 0f) && history.Value(0, 0) == -10f,
                 "Sampling is throttled without overwriting history");
+            TestAssert.That(history.Due(5f) && !history.Due(4.9f),
+                "Only a full interval makes the next observation due");
+            TestAssert.That(!history.Due(float.NaN), "Invalid timestamps are never due");
             history.Sample(5f, 20f, 2f, float.NaN, 100f);
             history.Range(0, out float min, out float max);
             TestAssert.That(min == -10f && max == 20f, "Signed funds graph covers debt and credit");

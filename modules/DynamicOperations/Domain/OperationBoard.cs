@@ -3,7 +3,12 @@ using System.Collections.Generic;
 
 namespace BoscaliSummer.Features.DynamicOperations.Domain
 {
-    internal enum OperationKind : byte { Capture, Defend, Interdict, Intercept, Patrol, Jam, Rappel, Rooftop }
+    internal enum OperationKind : byte
+    {
+        Capture, Defend, Interdict, Intercept, Patrol, Jam, Rappel, Rooftop,
+        Rescue, Recon, DamageAssessment, SupplyEscort, SupplyInterdict, RepairCover,
+        ElectronicWarfare, SortieReport, BattlefieldSurvey
+    }
     internal enum OperationReward : byte { None, Convoy, Fortification }
     internal enum OperationState : byte { Active, Completed, Expired, Cancelled, Offered }
 
@@ -32,11 +37,21 @@ namespace BoscaliSummer.Features.DynamicOperations.Domain
         public float Deadline { get; private set; }
         public float EndedAt { get; private set; }
         public float HoldSeconds { get; private set; }
-        public float Progress => State == OperationState.Completed ? 1f : Math.Min(1f, HoldSeconds / HoldRequired);
-        public float HoldRequired => Kind == OperationKind.Jam ? 45f : Kind == OperationKind.Patrol ? 90f : RequiredHold;
+        public bool Returning { get; private set; }
+        public float Progress => State == OperationState.Completed ? 1f : Returning ? 0.75f :
+            Math.Min(Kind == OperationKind.SortieReport || Kind == OperationKind.SupplyEscort || Kind == OperationKind.RepairCover ? 0.75f : 1f,
+                HoldSeconds / HoldRequired);
+        public float HoldRequired => Kind switch
+        {
+            OperationKind.Jam => 45f, OperationKind.Patrol => 90f,
+            OperationKind.Recon or OperationKind.DamageAssessment => 20f,
+            OperationKind.SortieReport or OperationKind.BattlefieldSurvey or OperationKind.RepairCover => 30f,
+            OperationKind.SupplyEscort => 60f, _ => RequiredHold
+        };
         public OperationState State { get; private set; } = OperationState.Offered;
         public bool IsLive => State == OperationState.Offered || State == OperationState.Active;
-        public bool IsStrike => Kind == OperationKind.Interdict || Kind == OperationKind.Intercept;
+        public bool IsStrike => Kind == OperationKind.Interdict || Kind == OperationKind.Intercept ||
+            Kind == OperationKind.SupplyInterdict || Kind == OperationKind.ElectronicWarfare;
         public bool AwardTaken { get; private set; }
         public const float RequiredHold = 180f;
 
@@ -61,27 +76,48 @@ namespace BoscaliSummer.Features.DynamicOperations.Domain
             if (IsLive && Finite(now)) End(OperationState.Cancelled, now);
         }
 
+        public bool BeginReturn(float now)
+        {
+            if (State != OperationState.Active || Returning || !Finite(now) || now >= Deadline ||
+                !(Kind == OperationKind.Rescue || Kind == OperationKind.SortieReport) ||
+                Kind == OperationKind.SortieReport && HoldSeconds < HoldRequired) return false;
+            Returning = true;
+            return true;
+        }
+
         // Observe only authoritative facts. Elapsed mission time, never render frames, advances defense.
-        public void Observe(float now, float elapsed, bool valid, bool owned, bool neutralized, bool present = true, bool inserted = false)
+        public void Observe(float now, float elapsed, bool valid, bool owned, bool neutralized, bool present = true, bool inserted = false,
+            bool returned = false, bool serviced = false)
         {
             if (!IsLive || !Finite(now)) return;
             if (now >= Deadline) End(OperationState.Expired, now);
             else if (!valid || (Kind == OperationKind.Defend && !owned)) End(OperationState.Cancelled, now);
             else if (State == OperationState.Offered)
             {
-                if ((Kind == OperationKind.Capture && owned) || ((IsStrike || Kind == OperationKind.Jam) && neutralized))
+                if ((Kind == OperationKind.Capture && owned) || ((IsStrike || Kind == OperationKind.Jam ||
+                    Kind == OperationKind.Recon || Kind == OperationKind.DamageAssessment || Kind == OperationKind.SortieReport) && neutralized))
                     End(OperationState.Cancelled, now);
             }
             else if ((Kind == OperationKind.Capture && owned) || (IsStrike && neutralized) ||
                 ((Kind == OperationKind.Rappel || Kind == OperationKind.Rooftop) && inserted))
                 End(OperationState.Completed, now);
-            else if (Kind == OperationKind.Jam && neutralized) End(OperationState.Cancelled, now);
-            else if (Kind == OperationKind.Defend || Kind == OperationKind.Patrol || Kind == OperationKind.Jam)
+            else if (Returning)
             {
+                if (returned) End(OperationState.Completed, now);
+            }
+            else if ((Kind == OperationKind.Jam || Kind == OperationKind.Recon || Kind == OperationKind.SortieReport) && neutralized)
+                End(OperationState.Cancelled, now);
+            else if (Kind == OperationKind.Defend || Kind == OperationKind.Patrol || Kind == OperationKind.Jam ||
+                Kind == OperationKind.Recon || Kind == OperationKind.DamageAssessment || Kind == OperationKind.SortieReport ||
+                Kind == OperationKind.BattlefieldSurvey || Kind == OperationKind.SupplyEscort || Kind == OperationKind.RepairCover)
+            {
+                if (Kind == OperationKind.DamageAssessment && !neutralized) return;
                 if (!present) { HoldSeconds = 0f; return; }
                 // A scheduling stall cannot count minutes of unobserved defense.
                 if (Finite(elapsed) && elapsed > 0f) HoldSeconds += Math.Min(elapsed, 2f);
-                if (HoldSeconds >= HoldRequired) End(OperationState.Completed, now);
+                if (HoldSeconds >= HoldRequired && Kind != OperationKind.SortieReport &&
+                    (!(Kind == OperationKind.SupplyEscort || Kind == OperationKind.RepairCover) || serviced))
+                    End(OperationState.Completed, now);
             }
         }
 

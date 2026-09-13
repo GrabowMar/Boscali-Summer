@@ -16,23 +16,25 @@ namespace BoscaliSummer.Features.Progression.Runtime
         public readonly PerkEffect Effect;
         public readonly float Multiplier;
         public readonly string Capability;
+        public readonly string Icon;
 
         public PerkDefinition(
             byte id, string group, string name, string description, byte cost,
-            PerkEffect effect, float multiplier)
-            : this(id, group, name, description, cost, effect, multiplier, null)
+            PerkEffect effect, float multiplier, string icon = null)
+            : this(id, group, name, description, cost, effect, multiplier, null, icon)
         {
         }
 
         public PerkDefinition(
-            byte id, string group, string name, string description, byte cost, string capability)
-            : this(id, group, name, description, cost, PerkEffect.FuelUse, 1f, capability)
+            byte id, string group, string name, string description, byte cost,
+            string capability, string icon = null)
+            : this(id, group, name, description, cost, PerkEffect.FuelUse, 1f, capability, icon)
         {
         }
 
         private PerkDefinition(
             byte id, string group, string name, string description, byte cost,
-            PerkEffect effect, float multiplier, string capability)
+            PerkEffect effect, float multiplier, string capability, string icon)
         {
             Id = id;
             Group = group;
@@ -42,6 +44,7 @@ namespace BoscaliSummer.Features.Progression.Runtime
             Effect = effect;
             Multiplier = multiplier;
             Capability = capability;
+            Icon = icon;
         }
     }
 
@@ -58,27 +61,42 @@ namespace BoscaliSummer.Features.Progression.Runtime
         public static readonly PerkDefinition[] All =
         {
             new PerkDefinition(0, FlightSystems, "Fuel Discipline",
-                "8% lower fuel consumption.", 1, PerkEffect.FuelUse, 0.92f),
+                "8% lower fuel consumption.", 1, PerkEffect.FuelUse, 0.92f, "fuel"),
             new PerkDefinition(1, Allocation, "Combat Pay",
-                "15% more allocation from combat rewards.", 1, PerkEffect.CombatReward, 1.15f),
+                "15% more allocation from combat rewards.", 1, PerkEffect.CombatReward, 1.15f, "combat"),
             new PerkDefinition(2, Allocation, "Ground Crew",
-                "20% more allocation from supply, refuel and repair.", 1, PerkEffect.ServiceReward, 1.20f),
+                "20% more allocation from supply, refuel and repair.", 1, PerkEffect.ServiceReward, 1.20f, "ground"),
             new PerkDefinition(3, Allocation, "Objective Focus",
-                "20% more allocation from captures and pilot rescue.", 1, PerkEffect.ObjectiveReward, 1.20f),
+                "20% more allocation from captures and pilot rescue.", 1, PerkEffect.ObjectiveReward, 1.20f, "objective"),
             new PerkDefinition(4, Allocation, "Logistics Officer",
-                "20% cheaper support requests.", 1, PerkEffect.SupportCost, 0.80f),
+                "20% cheaper support requests.", 1, PerkEffect.SupportCost, 0.80f, "logistics"),
             new PerkDefinition(5, Authorisations, "Satellite Scan",
-                "Authorises satellite reconnaissance sweeps.", 1, SupportCapabilities.Recon),
+                "Authorises satellite reconnaissance sweeps.", 1, SupportCapabilities.Recon, "recon"),
             new PerkDefinition(6, Authorisations, "Combat Engineering",
-                "Authorises controlled-zone fortification.", 2, SupportCapabilities.Fortify),
-            new PerkDefinition(7, Authorisations, "Rod from God",
-                "Authorises orbital kinetic strikes.", 2, SupportCapabilities.Artillery),
-            new PerkDefinition(8, Authorisations, "EMP Shock",
-                "Authorises electromagnetic pulse strikes.", 2, SupportCapabilities.Emp)
+                "Authorises controlled-zone fortification.", 2, SupportCapabilities.Fortify, "fortify"),
+            new PerkDefinition(7, Authorisations, "Orbital Strike",
+                "Authorises Rod-from-God kinetic strikes from a STRIKE satellite.", 2,
+                SupportCapabilities.Artillery, "strike"),
+            new PerkDefinition(8, Authorisations, "Electronic Warfare",
+                "Authorises EMP and radar-disruption strikes from an EW satellite.", 2,
+                SupportCapabilities.Emp, "ew")
         };
 
         /// <summary>The perk mask is a uint, so the catalogue cannot exceed 32 entries.</summary>
         public const int MaximumPerks = 32;
+
+        /// <summary>Short display code: PAS for a passive perk, else the authorisation code.</summary>
+        public static string CodeOf(PerkDefinition definition) =>
+            definition.Capability == null ? "PAS" : CapabilityCode(definition.Capability);
+
+        public static string CapabilityCode(string capability)
+        {
+            if (capability == SupportCapabilities.Recon) return "SAT";
+            if (capability == SupportCapabilities.Fortify) return "ENG";
+            if (capability == SupportCapabilities.Artillery) return "STK";
+            if (capability == SupportCapabilities.Emp) return "EW";
+            return "AUT";
+        }
 
         public static bool IsDefined(byte id) => id < All.Length;
 

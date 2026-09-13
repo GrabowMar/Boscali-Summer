@@ -36,6 +36,11 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
                     return SupportResult.OutOfRange;
             }
             if (!context.Host.TryReserve(SupportPool.Strike)) return SupportResult.Busy;
+            if (!context.HasCoverage(SatelliteRole.Strike))
+            {
+                context.Host.Release(SupportPool.Strike);
+                return SupportResult.OutOfCoverage;
+            }
 
             context.Logger.LogInfo("[Support] Rod from God using " + definition.jsonKey);
             context.Host.Run(Strike(context.Host, context.Player, context.Owner, definition, ground,

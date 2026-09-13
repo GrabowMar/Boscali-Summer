@@ -6,11 +6,17 @@
     <RootNamespace>BoscaliSummer.Tests</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="..\..\modules\Support\Runtime\Constellation.cs" Link="Features\Support\Constellation.cs" />
+    <Compile Include="..\..\modules\Support\Runtime\SatelliteNaming.cs" Link="Features\Support\SatelliteNaming.cs" />
+    <Compile Include="..\..\modules\Support\Runtime\InfoNetwork.cs" Link="Features\Support\InfoNetwork.cs" />
+    <Compile Include="..\..\modules\Command\Presentation\MapUi\SettingsChoices.cs" Link="Features\Command\SettingsChoices.cs" />
     <Compile Include="..\..\modules\Command\Domain\FactionMoraleState.cs" Link="Features\Command\FactionMoraleState.cs" />
     <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdResourceHistory.cs" Link="Features\Command\MfdResourceHistory.cs" />
     <Compile Include="..\..\modules\Support\Runtime\SupportEffectPolicy.cs" Link="Features\Support\SupportEffectPolicy.cs" />
     <Compile Include="..\..\modules\QoL\Runtime\GunAimAssistPolicy.cs" Link="Features\QoL\GunAimAssistPolicy.cs" />
+    <Compile Include="..\..\modules\Autopilot\Runtime\AutopilotLandPolicy.cs" Link="Features\Autopilot\AutopilotLandPolicy.cs" />
     <Compile Include="..\..\modules\DynamicOperations\Domain\OperationBoard.cs" Link="Features\DynamicOperations\OperationBoard.cs" />
+    <Compile Include="..\..\modules\DynamicOperations\Domain\OperationTitles.cs" Link="Features\DynamicOperations\OperationTitles.cs" />
     <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdSecondaryObjectives.cs" Link="Features\Command\MfdSecondaryObjectives.cs" />
     <Compile Include="..\..\Framework\Contracts\IObservationSource.cs" Link="Framework\IObservationSource.cs" />
     <Compile Include="..\..\Framework\Contracts\ITerritoryIngress.cs" Link="Framework\ITerritoryIngress.cs" />
@@ -19,7 +25,9 @@
     <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdChartScale.cs" Link="Features\Command\MfdChartScale.cs" />
     <Compile Include="..\..\modules\QoL\Runtime\ThirdPersonCameraPolicy.cs" Link="Features\QoL\ThirdPersonCameraPolicy.cs" />
     <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdLogSpace.cs" Link="Features\Command\MfdLogSpace.cs" />
+    <Compile Include="..\..\modules\Command\Presentation\MapUi\GridLabelsMath.cs" Link="Features\Command\GridLabelsMath.cs" />
     <Compile Include="..\..\modules\Command\Presentation\MapUi\VanillaMfdPanelCatalog.cs" Link="Features\Command\VanillaMfdPanelCatalog.cs" />
+    <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdNewsFeed.cs" Link="Features\Command\MfdNewsFeed.cs" />
     <Compile Include="..\..\modules\Command\Domain\CommandScoring.cs" Link="Features\Command\CommandScoring.cs" />
     <Compile Include="..\..\modules\Support\Runtime\SupportMapGesture.cs" Link="Features\Support\SupportMapGesture.cs" />
     <Compile Include="..\..\Core\Deterministic.cs" Link="Core\Deterministic.cs" />
@@ -30,6 +38,9 @@
     <Compile Include="..\..\modules\Radio\Presentation\PngIconHeader.cs" Link="Features\Radio\PngIconHeader.cs" />
     <Compile Include="..\..\Framework\Contracts\IPlayerPerks.cs" Link="Framework\IPlayerPerks.cs" />
     <Compile Include="..\..\modules\Progression\Runtime\PerkCatalog.cs" Link="Features\Progression\PerkCatalog.cs" />
+    <Compile Include="..\..\modules\Progression\Runtime\AceSkillCatalog.cs" Link="Features\Progression\AceSkillCatalog.cs" />
+    <Compile Include="..\..\modules\Progression\Runtime\EmblemDesign.cs" Link="Features\Progression\EmblemDesign.cs" />
+    <Compile Include="..\..\modules\Progression\Runtime\PilotDraft.cs" Link="Features\Progression\PilotDraft.cs" />
     <Compile Include="..\..\modules\Support\Runtime\SupportModel.cs" Link="Features\Support\SupportModel.cs" />
     <Compile Include="..\..\modules\UrbanCombat\Runtime\TroopDeploymentMath.cs" Link="Features\UrbanCombat\TroopDeploymentMath.cs" />
     <Compile Include="..\..\modules\Trenches\Domain\TrenchTacticalMath.cs" Link="Features\Trenches\TrenchTacticalMath.cs" />

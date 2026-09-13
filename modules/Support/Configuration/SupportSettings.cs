@@ -10,7 +10,14 @@ namespace BoscaliSummer.Features.Support.Configuration
         public ConfigEntry<bool> ArtilleryEnabled { get; }
         public ConfigEntry<bool> EmpEnabled { get; }
         public ConfigEntry<bool> FlareBarrageEnabled { get; }
+        public ConfigEntry<bool> CyberEnabled { get; }
         public ConfigEntry<bool> ShowOnTacticalMap { get; }
+
+        public ConfigEntry<int> MaximumSatellites { get; }
+        public ConfigEntry<float> SatelliteReconCost { get; }
+        public ConfigEntry<float> SatelliteStrikeCost { get; }
+        public ConfigEntry<float> SatelliteEwCost { get; }
+        public ConfigEntry<float> SatelliteRecallRefund { get; }
 
         public ConfigEntry<float> CostMultiplier { get; }
         public ConfigEntry<float> ReconCost { get; }
@@ -40,7 +47,7 @@ namespace BoscaliSummer.Features.Support.Configuration
                 "Host-authoritative: on a server, only the host's value applies.");
 
             ReconEnabled = config.Bind("Support", "ReconSweep", true,
-                "Satellite scan: reveal hostile units around a designated grid for the whole faction. " +
+                "Satellite scan: reserve one faction scan for the next orbital coverage window. Requires an aircraft at request time. " +
                 "Spawns nothing.");
             FortifyEnabled = config.Bind("Support", "Fortification", true,
                 "Reinforce a friendly controlled zone. Requires the Garrisons feature; the " +
@@ -54,8 +61,36 @@ namespace BoscaliSummer.Features.Support.Configuration
             FlareBarrageEnabled = config.Bind("Support", "FlareBarrage", true,
                 "Flare barrage: launches an airburst countermeasure missile that disperses a cluster of " +
                 "intense pyrotechnic flares, seducing and misguiding all IR-seeking missiles in the area.");
+            CyberEnabled = config.Bind("Support", "CyberOperations", true,
+                "Enable the CYBER page: infrastructure investment and the information-warfare " +
+                "operations it unlocks (ping sweep, track uplink, radar blackout, ghost shield, " +
+                "spoof contacts). Host-authoritative.");
             ShowOnTacticalMap = config.Bind("Support", "ShowOnTacticalMap", true,
-                "Show ability range circles, tactical vector icons, and active strike waypoints on the tactical theater map.");
+                "Show ability range circles, tactical vector icons, satellite tracks and active " +
+                "strike waypoints on the tactical theater map.");
+
+            MaximumSatellites = config.Bind("Support", "MaximumSatellites", 4,
+                new ConfigDescription(
+                    "How many satellites one faction may keep on orbit. Host-authoritative.",
+                    new AcceptableValueRange<int>(1, 4)));
+            SatelliteReconCost = config.Bind("Support", "SatelliteReconCost", 900f,
+                new ConfigDescription(
+                    "Allocation to launch a reconnaissance satellite, before CostMultiplier. " +
+                    "One-time purchase; moving it later costs fuel, not allocation.",
+                    new AcceptableValueRange<float>(0f, 20000f)));
+            SatelliteStrikeCost = config.Bind("Support", "SatelliteStrikeCost", 1100f,
+                new ConfigDescription(
+                    "Allocation to launch a strike satellite (Rod from God coverage), before CostMultiplier.",
+                    new AcceptableValueRange<float>(0f, 20000f)));
+            SatelliteEwCost = config.Bind("Support", "SatelliteEwCost", 1100f,
+                new ConfigDescription(
+                    "Allocation to launch an electronic-warfare satellite (EMP coverage), before CostMultiplier.",
+                    new AcceptableValueRange<float>(0f, 20000f)));
+            SatelliteRecallRefund = config.Bind("Support", "SatelliteRecallRefund", 0.4f,
+                new ConfigDescription(
+                    "Fraction of the launch cost refunded when a satellite is recalled to free a slot. " +
+                    "Host-authoritative; refunds use the amount actually charged.",
+                    new AcceptableValueRange<float>(0f, 1f)));
 
             CostMultiplier = config.Bind("Support", "CostMultiplier", 1f,
                 new ConfigDescription(
@@ -66,7 +101,7 @@ namespace BoscaliSummer.Features.Support.Configuration
                     new AcceptableValueRange<float>(0f, 10f)));
             ReconCost = config.Bind("Support", "ReconCost", 600f,
                 new ConfigDescription(
-                    "Allocation charged for one satellite scan, before CostMultiplier and " +
+                    "Allocation reserved for one satellite scan (refunded on cancellation), before CostMultiplier and " +
                     "the Logistics Officer perk. Recon spawns nothing, so it is priced flat.",
                     new AcceptableValueRange<float>(0f, 20000f)));
             FortifyCost = config.Bind("Support", "ZoneFortificationCost", 1200f,

@@ -25,6 +25,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private static MFDScreen lastOpened;
         private static bool hasSelection;
 
+        public static MFDScreen ActiveScreen => lastOpened;
+
         public static void Reset()
         {
             lastOpened = null;
@@ -34,15 +36,18 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         public static void Reconcile(VirtualMFD mfd)
         {
             if (mfd == null || !MfdPresentation.Expanded) return;
+            MfdPanelDock.DockModScreens(mfd);
             if (lastOpened != null && !MfdPanelDock.IsDocked(lastOpened)) Reset();
             if (!hasSelection)
             {
                 FindActive(MapUiAccess.GetLeftScreens(mfd));
                 FindActive(MapUiAccess.GetRightScreens(mfd));
             }
-            MfdPanelDock.CloseOthers(mfd, lastOpened);
+            if (lastOpened != null)
+                MfdPanelDock.CloseOthers(mfd, lastOpened);
             if (lastOpened != null && !lastOpened.isActive)
                 lastOpened.ShowScreen(UnityEngine.Vector3.zero);
+            MfdRailPatch.ReLayoutForActiveScreen(lastOpened);
         }
 
         private static void FindActive(List<MFDScreen> screens)
@@ -79,12 +84,13 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             lastOpened = pressed.isActive ? pressed : null;
             hasSelection = true;
             MfdPanelDock.CloseOthers(mfd, lastOpened);
+            MfdRailPatch.ReLayoutForActiveScreen(lastOpened);
         }
 
         /// <summary>
-        /// The screen the pressed button drives.
+        /// Translates a bezel button back to the <see cref="MFDScreen"/> it opens.
         ///
-        /// Vanilla pairs the two lists purely by index and indexes the screens list without
+        /// Vanilla indexes the screens list by the button's index in the buttons list without
         /// checking its length — a short list throws inside a UI callback. This does the same
         /// lookup with the bounds check vanilla omits, so a mod that has claimed a slot past
         /// the end of the screens list cannot turn a button press into an exception.
