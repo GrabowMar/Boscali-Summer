@@ -117,6 +117,15 @@ namespace BoscaliSummer.Garrisons
             if (Encyclopedia.WeaponLookup != null && !Encyclopedia.WeaponLookup.ContainsKey(cachedChimeraTroopsMount.jsonKey))
                 Encyclopedia.WeaponLookup[cachedChimeraTroopsMount.jsonKey] = cachedChimeraTroopsMount;
 
+            // Mirage serializes loadout mounts by Encyclopedia.IndexLookup position;
+            // DefinitionWriters.GetIndex throws for definitions that were never indexed.
+            if (Encyclopedia.i != null && Encyclopedia.i.IndexLookup != null &&
+                !Encyclopedia.i.IndexLookup.Contains(cachedChimeraTroopsMount))
+            {
+                ((INetworkDefinition)cachedChimeraTroopsMount).LookupIndex = Encyclopedia.i.IndexLookup.Count;
+                Encyclopedia.i.IndexLookup.Add(cachedChimeraTroopsMount);
+            }
+
             Plugin.Logger.LogInfo("[Chimera Loadout] Successfully generated Paratrooper Troops mount for MC-260 Chimera using Ibis troops icon.");
             return cachedChimeraTroopsMount;
         }
@@ -133,9 +142,30 @@ namespace BoscaliSummer.Garrisons
             WeaponMount troops = GetOrCreateChimeraTroopsMount();
             if (troops == null) return;
 
-            for (int i = 0; i < aircraft.weaponManager.hardpointSets.Length; i++)
+            InjectIntoHardpointSets(aircraft.weaponManager.hardpointSets, troops);
+
+            // WeaponChecker.VetLoadout validates a spawn request against the
+            // AircraftDefinition.unitPrefab's hardpoint sets, not the preview/spawned
+            // instance. Keep the source prefab in sync or the server clears the cargo
+            // slot (requestedLoadout.weapons[i] = null) and the station never spawns.
+            AircraftDefinition def = aircraft.definition as AircraftDefinition;
+            GameObject sourcePrefab = def != null ? def.unitPrefab : null;
+            if (sourcePrefab != null)
             {
-                HardpointSet set = aircraft.weaponManager.hardpointSets[i];
+                Aircraft prefabAircraft = sourcePrefab.GetComponent<Aircraft>();
+                if (prefabAircraft != null && prefabAircraft.weaponManager != null &&
+                    prefabAircraft.weaponManager.hardpointSets != null)
+                {
+                    InjectIntoHardpointSets(prefabAircraft.weaponManager.hardpointSets, troops);
+                }
+            }
+        }
+
+        private static void InjectIntoHardpointSets(HardpointSet[] hardpointSets, WeaponMount troops)
+        {
+            for (int i = 0; i < hardpointSets.Length; i++)
+            {
+                HardpointSet set = hardpointSets[i];
                 if (set == null || string.IsNullOrEmpty(set.name)) continue;
 
                 if (ChimeraLoadoutSetRules.IsChimeraCargoSet(set.name))

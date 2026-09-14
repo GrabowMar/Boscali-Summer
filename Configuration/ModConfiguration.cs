@@ -3,6 +3,7 @@ using BoscaliSummer.Features.Autopilot.Configuration;
 using BoscaliSummer.Features.Command.Configuration;
 using BoscaliSummer.Features.DynamicOperations.Configuration;
 using BoscaliSummer.Features.FireAndDestruction.Configuration;
+using BoscaliSummer.Features.HighCommand.Configuration;
 using BoscaliSummer.Features.Progression.Configuration;
 using BoscaliSummer.Features.QoL.Configuration;
 using BoscaliSummer.Features.Radio.Configuration;
@@ -27,6 +28,7 @@ namespace BoscaliSummer
         public SquadSettings Squad { get; }
         public SupportSettings Support { get; }
         public CommandSettings Command { get; }
+        public HighCommandSettings HighCommand { get; }
         public DynamicOperationsSettings DynamicOperations { get; }
         public TrenchesSettings Trenches { get; }
         public QoLSettings QoL { get; }
@@ -46,6 +48,7 @@ namespace BoscaliSummer
                 Squad = new SquadSettings(config);
                 Support = new SupportSettings(config);
                 Command = new CommandSettings(config);
+                HighCommand = new HighCommandSettings(config);
                 DynamicOperations = new DynamicOperationsSettings(config);
                 Trenches = new TrenchesSettings(config);
                 QoL = new QoLSettings(config);

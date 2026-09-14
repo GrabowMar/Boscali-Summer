@@ -34,6 +34,15 @@ namespace BoscaliSummer.Features.Autopilot.Runtime
             return action;
         }
 
+        /// <summary>Re-point a pooled wedge at a contributed page entry without reallocating it.</summary>
+        public void Configure(string label, Action<Aircraft> trigger, Func<Aircraft, bool> isAllowed = null)
+        {
+            name = label;
+            DisplayName = label;
+            triggered = trigger;
+            allowed = isAllowed;
+        }
+
         public bool IsAllowed(Aircraft candidate) => allowed == null || allowed(candidate);
 
         public void Invoke(Aircraft candidate)

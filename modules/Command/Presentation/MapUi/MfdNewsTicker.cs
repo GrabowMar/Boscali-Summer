@@ -36,7 +36,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private static TMP_Text labelA;
         private static TMP_Text labelB;
         private static TMP_Text badgeLabel;
-        private static TMP_Text badgeDot;
+        private static MfdGlyph badgeDot;
         private static Image alertRail;
         private static Vector2 builtSize;
 
@@ -107,9 +107,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             float now = Time.unscaledTime;
 
-            // Periodic theater status updates from CommandManager, plus due digests
+            // Periodic theater status updates from CommandManager
             PollTheaterState();
-            feed.Tick(now);
             HandleFreshUrgent(now);
             UpdateAlertVisuals(now);
 
@@ -239,15 +238,13 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             badgeRt.SetParent(root, worldPositionStays: false);
             AvKit.Place(badgeRt, new Rect(8f, 0f, BadgeWidth - 12f, size.y));
 
-            badgeDot = AvStyled.Label(
-                badgeRt,
-                new Rect(2f, 0f, 14f, size.y),
-                "●",
-                "row-sub",
-                align: TextAlignmentOptions.MidlineLeft);
-            badgeDot.fontSize = 14f;
-            badgeDot.color = AvTheme.Accent;
-            badgeDot.richText = false;
+            var dotObject = new GameObject("Dot", typeof(RectTransform), typeof(MfdGlyph));
+            var dotRect = dotObject.GetComponent<RectTransform>();
+            dotRect.SetParent(badgeRt, worldPositionStays: false);
+            AvKit.Place(dotRect, new Rect(2f, -(size.y - 10f) * 0.5f, 10f, 10f));
+            badgeDot = dotObject.GetComponent<MfdGlyph>();
+            badgeDot.raycastTarget = false;
+            badgeDot.SetKind("dot", AvTheme.Accent);
 
             badgeLabel = AvStyled.Label(
                 badgeRt,

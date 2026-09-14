@@ -44,6 +44,8 @@ namespace BoscaliSummer.Features.Progression.Presentation
 
         private TMP_Text studioStatus;
         private TMP_Text studioPager;
+        private AvButton studioPagerPrev;
+        private AvButton studioPagerNext;
         private TMP_Text studioMessageText;
         private TMP_Text studioBodyValue;
         private TMP_Text studioFaceValue;
@@ -85,6 +87,8 @@ namespace BoscaliSummer.Features.Progression.Presentation
             studioDeleteArmedUntil = 0f;
             studioStatus = null;
             studioPager = null;
+            studioPagerPrev = null;
+            studioPagerNext = null;
             studioMessageText = null;
             studioBodyValue = studioFaceValue = studioHairValue = studioSuitValue = studioBackValue = null;
             studioStyleValue = studioShapeValue = studioChargeValue = studioPaletteValue = studioArtValue = null;
@@ -117,7 +121,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 return;
             }
 
-            parent = AvScreen.Scroll(parent, body, 940f, out body);
+            parent = AvScreen.Scroll(parent, body, 896f, out body);
             AvStyled.Spine(parent, new Rect(body.x, body.y, 3f, body.height));
             float x = body.x + SpineInset;
             float width = body.width - SpineInset;
@@ -171,8 +175,16 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 studioRows[i] = row;
                 y -= 30f;
             }
-            studioPager = PlainLabel(parent, new Rect(x, y - 2f, width, 16f), "", "section-title-note");
-            y -= 24f;
+            const float pagerArrow = 34f;
+            studioPagerPrev = AvStyled.Button(parent, new Rect(x, y - 3f, pagerArrow, 22f), "<", "btn",
+                () => ChangeStudioPage(-1), AvButtonStyle.Quiet).WithTooltip("Previous page of custom pilots.");
+            studioPagerNext = AvStyled.Button(parent, new Rect(x + width - pagerArrow, y - 3f, pagerArrow, 22f),
+                ">", "btn", () => ChangeStudioPage(1), AvButtonStyle.Quiet)
+                .WithTooltip("Next page of custom pilots.");
+            studioPager = PlainLabel(parent, new Rect(x + pagerArrow + AvTokens.Space2, y - 2f,
+                width - (pagerArrow + AvTokens.Space2) * 2f, 16f), "", "section-title-note");
+            studioPager.alignment = TextAlignmentOptions.Center;
+            y -= 30f;
 
             // ---- Editor -------------------------------------------------------------------
             y = DrawSectionTitle(parent, x, y, width, "PILOT EDITOR", "LOCAL FILES · HOST ROSTER", band: true);
@@ -208,7 +220,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             Stepper(parent, stepperX, y - 112f, stepperWidth, out studioBackValue, "BACK",
                 () => CycleDraft(d => d.CycleBackdrop(-1, BackdropCount())),
                 () => CycleDraft(d => d.CycleBackdrop(1, BackdropCount())));
-            y -= 124f;
+            y -= 146f;
 
             float fieldWidth = width - 52f - 66f;
             PlainLabel(parent, new Rect(x, y, 46f, 28f), "CALL", "kv-key");
@@ -259,7 +271,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             studioEmblemFallback = PlainLabel(parent, new Rect(emblemFrame.x + 2f, emblemFrame.y - 22f, 60f, 20f),
                 "NO\nART", "row-sub");
             studioEmblemFallback.alignment = TextAlignmentOptions.Center;
-            studioEmblem = AvKit.Panel(parent, emblemFrame, Color.clear);
+            studioEmblem = AvKit.Panel(parent, emblemFrame, Color.white);
             studioEmblem.type = Image.Type.Simple;
             studioEmblem.preserveAspect = true;
             studioEmblem.raycastTarget = false;
@@ -272,9 +284,9 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 () => CycleEmblem(0, -1, 0), () => CycleEmblem(0, 1, 0));
             Stepper(parent, emblemStepperX, y - 56f, emblemStepperWidth, out studioPaletteValue, "PALETTE",
                 () => CycleEmblem(0, 0, -1), () => CycleEmblem(0, 0, 1));
-            AvStyled.Button(parent, new Rect(emblemStepperX, y - 86f, 108f, 26f), "RANDOMIZE", "btn",
+            AvStyled.Button(parent, new Rect(emblemStepperX, y - 92f, 108f, 26f), "RANDOMIZE", "btn",
                 RandomizeEmblem, AvButtonStyle.Quiet).WithTooltip("Roll a new local emblem.");
-            y -= 120f;
+            y -= 130f;
 
             PlainLabel(parent, new Rect(x, y, 96f, 28f), "SQUADRON", "kv-key");
             studioSquadronField = AvKit.InputField(parent, new Rect(x + 98f, y, width - 98f, 28f), 24,
@@ -324,6 +336,8 @@ namespace BoscaliSummer.Features.Progression.Presentation
 
             int pageCount = Math.Max(1, (studioPilots.Count + StudioRowsPerPage - 1) / StudioRowsPerPage);
             studioPage = Mathf.Clamp(studioPage, 0, pageCount - 1);
+            studioPagerPrev.SetEnabled(studioPage > 0);
+            studioPagerNext.SetEnabled(studioPage < pageCount - 1);
             int first = studioPage * StudioRowsPerPage;
             studioPager.text = studioPilots.Count == 0 ? "NO CUSTOM PILOTS FOUND — PRESS NEW OR IMPORT ALL"
                 : (first + 1) + "–" + Math.Min(first + StudioRowsPerPage, studioPilots.Count) +
@@ -451,6 +465,15 @@ namespace BoscaliSummer.Features.Progression.Presentation
         }
 
         // ---- STUDIO actions --------------------------------------------------------------
+
+        private void ChangeStudioPage(int delta)
+        {
+            int pageCount = Math.Max(1, (studioPilots.Count + StudioRowsPerPage - 1) / StudioRowsPerPage);
+            int wanted = Mathf.Clamp(studioPage + delta, 0, pageCount - 1);
+            if (wanted == studioPage) return;
+            studioPage = wanted;
+            nextRefresh = 0f;
+        }
 
         private void SelectStudio(int index)
         {

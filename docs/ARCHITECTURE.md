@@ -27,6 +27,7 @@ modules/
   Radio/               local music catalogue, playback ownership, map-MFD panel
   Support/             OPS MFD, validated requests, costs/cooldowns, support jobs
   Command/             STR and SET MFDs, expanded map GUI, map overlays, doctrine, AI target scoring
+  HighCommand/         generated staff tree, command posts, VIP convoys, intel, stipends/bounties
   DynamicOperations/   secondary mission director, faction awards, native reinforcement batches
   UrbanCombat/         occupancy, native rooftop defenses, capture cleanup
   Trenches/            dynamic node-based modular trench networks, procedural berms, tactical map overlay
@@ -56,18 +57,24 @@ Fire and destruction          independent
 Urban Combat  ──publishes──►  IBuildingOccupancy, IZoneFortificationService
 Squad         ──required by─►  Progression ──required by─► Support, Command
 Squad         ──publishes───►  ISquadView (Progression and optional Radio consumer)
-Command       ──owns────────►  STR bezel screen (theater SA, frontline, tasking, doctrine)
+Command       ──owns────────►  STR bezel screen (theater SA, frontline, tasking, doctrine),
+                               TGT preset library + quick slots
+Command       ──publishes──►  IRadialMenuPage (hosted by Autopilot's native radial submenu)
+HighCommand   ──publishes──►  IHighCommandView (consumed by Command's STR chain-of-command page)
 ```
 
 Features talk only through `Framework/Contracts` interfaces resolved via `ServiceRegistry` —
-never a sibling's manager, singleton, patch class, or settings object.
+never a sibling's manager, singleton, patch class, or settings object. The native radial wheel
+stays Autopilot-owned: it skips `actionsMain`/`SetupMain`, owns appearance and lifecycle, and
+draws at most one optional `IRadialMenuPage` per open. A contributor supplies labels, per-entry
+availability and actions only.
 
 ## Scene lifecycle
 
 The host owns one hidden `DontDestroyOnLoad` object. Persistent managers implement
 `ISceneService`; `SceneLifecycle` resets them once at composition and on every loaded scene,
 isolating reset exceptions per service. Reset order: fire (10) → impact scorch (15) → ruin
-aftermath (20) → zone garrison (30) → radio (40) → squad (44) → progression (45) → autopilot (48) → support (50) → operations (51) →
+aftermath (20) → zone garrison (30) → radio (40) → squad (44) → progression (45) → high command (46) → autopilot (48) → target preset hotkeys (49) → support (50) → operations (51) →
 command (52) → COM overlay (53) → SQD MFD/HUD (54) → OPS MFD (55) → STR MFD (56) → map UI (57) →
 SET MFD (58) → trench networks (60) → trench map overlay (61) → fire-network per-scene state (100). Teardown unpatches in reverse, unregisters the
 scene callback and Mirage handlers, clears the registry, and destroys the root.
@@ -157,7 +164,8 @@ holding both remaining channels.
 | Queued vehicle losses | 32, 1 spatial query/frame |
 | Active fire sites | 32 |
 | Dynamic fire lights | 3 |
-| Ground scorch requests | 1/frame |
+| Ground scorch requests | 128 queued, 1–2/frame; ≤3 ash stamps (direct `DrawBlast`) and ≤1 tree-clear `AddBlast` per site |
+| Ground soot decals | 64 (oldest recycled) |
 | Impact scorch: queue / pool | 32 (2 impacts/frame, ≤3 marks each) / 64 (oldest recycled) |
 | Air-assault visual operations / encampment sites | 8 / 12 |
 | Logical ruins / nearest smoke visuals | 256 / 24 |
@@ -168,6 +176,7 @@ holding both remaining channels.
 | Rooftop decoration | 36 sandbags, pole and flag; 4 renderers, <3,000 vertices per defense; no lights/colliders |
 | Radio | 32 channels, 512 tracks, ≤30 soundtrack refs, 1 active decode, ≤2 clips mid-crossfade; icons ≤256×256, ≤256 KiB |
 | Squad | 64 player careers, 4 owned wings, ≤4 aircraft/wing, 32 history entries, 8 snapshot rows, 900s aircraft lifetime |
+| High command | 8 factions, 8 posts/faction, 32 watched assets, 8 convoys, 32 snapshot nodes, 64 portraits; one 4096-unit intel pass at 1 Hz |
 | Trench networks / nodes / chunks | 16 networks, 64 nodes/96 edges per network, 3-tier camera LOD (≤250m, 250m–1200m, 1200m–3500m) |
 
 No feature scans the whole scene per frame: catalogue once, queue event work, use slow
@@ -217,6 +226,21 @@ and spawned roots all have fixed ceilings documented in [DYNAMIC_OPERATIONS.md](
 Only authenticated own-faction snapshots leave the server; scene/request tokens
 reject old responses. Native Mirage replicates and destroys reinforcement objects.
 
+### Chain of command
+
+`HighCommand` owns an independent, default-on LARP-plus-economy director: one deterministic
+staff tree per faction (six fixed posts over the faction's airbases), one spawned command
+post building per living post, occasional VIP convoys between two friendly bases, 45-second
+local intel on enemy posts, survival stipends and last-damage kill bounties paid through
+`FactionHQ.AddFunds`/`AddScore`. Reset order is 46. It touches no vanilla AI, spawn rate,
+damage or capture rule; the only Harmony patch is a postfix on `Unit.RecordDamage` that
+records the last damager of a watched asset. Command's STR console adds a COC page and a
+third COMMAND metric and consumes `IHighCommandView` through late `ModServices` resolution,
+so either module installs without the other. Protocol-1 intents (`refresh`, `commend`,
+`relocate`, `bounty`) are validated host-side and answered with a per-faction snapshot whose
+unknown enemy nodes are omitted and position-zeroed; wire fields and ceilings are fixed in
+`HighCommandNet` and pinned by the patch probe.
+
 Command's grid retains pressure history between fresh observation snapshots and
 uses elapsed-time control/recovery. Fixed base ownership anchors strategic influence;
 ground pressure reads actual unit positions from the synced world state rather than
@@ -256,7 +280,9 @@ lost ownership, ejection, ground proximity, auto-hover and disabled flight assis
 No new trajectory simulations, target scans, raycasts or messages. Samples clear on
 ownship/faction/scene changes and teardown. Native aim assist remains in place;
 flight feel, multiplayer and allocation profiling remain unverified in-game.
-Existing `Avionics.ThirdPerson*` configuration keys retain their values. ObservationManager
+Existing `Avionics.ThirdPerson*` configuration keys retain their values; the SET cockpit
+page reads and writes the HUD, pitch-ladder and camera toggles through `IThirdPersonHud`
+rather than QoL's settings object. ObservationManager
 owns one global camera mark, valid for 120 seconds and cleared on ownship/faction/scene
 change, ejection, or disable. Capture performs one 64-hit non-allocating ray query; a full
 buffer or miss clears the prior mark. The panel reads one selected contact's faction
@@ -361,7 +387,10 @@ UrbanCombat chooses native MG, AT-145 and 23 mm AA definitions by exact keys, us
 emplacement per occupied shell. Nine collider support samples validate each candidate roof
 footprint, including sandbags/flag; missing definitions or unsuitable roofs fail closed.
 The existing `Building.OnStartClient` patch recognises `BoscaliSummer:Garrison:Roof:` and
-builds local decoration on the native networked emplacement. It disables only native
+builds local decoration on the native networked emplacement; the server measures the flat
+roof patch around the chosen nest and appends its defense-local extents to the defense's
+networked unique name, so the marker hugs the occupied roof instead of the weapon nest or
+the whole-shell bounding box. It disables only native
 terrain dugout/grass-blocker children for roofs; weapon, crew, main hitbox and AI remain
 vanilla. No new messages or Harmony targets. Matching clients reconstruct decoration on
 late join. Server lifecycle removes destroyed defenses and clears shell occupancy; capture

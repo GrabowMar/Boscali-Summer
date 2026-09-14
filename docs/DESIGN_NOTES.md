@@ -30,8 +30,19 @@ Decisions that cost an argument. Kept so they are not made again the other way.
 - **Fires reuse vanilla effects, not synthetic columns.** Building and forest smoke are
   smoke-only copies of Nuclear Option's Fuel Depot destruction prefab; per-site variation in
   width/height/delay/pulsing/shear lets adjacent fronts merge aloft without looking cloned.
-  Tree removal and ash beds use vanilla blast-map stamps; no persistent decals or
-  fire-damage colliders are added.
+  The burnt ground reads through pooled vanilla soot decals plus a blast-map ash bed drawn
+  with `DrawBlast`; no fire-damage colliders or custom shaders are added.
+- **Tree removal is decoupled from the ash bed.** Vanilla `BlastManager.AddBlast` does both:
+  every ash stamp also cleared procedural trees. With the game's 2.0 blast-radius multiplier
+  and 0.3 tree factor the effective tree radius is 0.6 × the input, so the old 74 m stamps
+  removed a ~45 m radius of trees at each of five lobes per site. The ash bed is now drawn
+  straight into the blast map with `DrawBlast`, which never touches trees; tree removal is
+  one separate small `AddBlast` (~0.4 m cleared radius, 80% smaller than the earlier ~2 m
+  tuning), and a pooled vanilla soot decal marks the ground that actually burned. The ash bed is deliberately
+  nuke-scale (260–338 m radius) because the vanilla blast map resolves one texel per 160 m and
+  smaller stamps vanish into a faint smudge — the whole burnt area should read as gray soil,
+  not a couple of dark spots, so the ash intentionally overshoots the small tree footprint.
+  Same vanilla assets, no new shaders, and a campfire no longer flattens a stand.
 - **Spread is bounded and deterministic.** Two wind-biased attempts per site, at most two
   generations, all under the 24-site global cap. Successful children stay visible as fronts
   rather than merging back into the parent.
@@ -52,6 +63,14 @@ Decisions that cost an argument. Kept so they are not made again the other way.
   duplicate across capture churn / late load / scene reload / late join, vanish when the
   shell is ruined, and return only on a later capture. Critical infrastructure and very small
   structures are excluded. Per-zone cap plus a global proxy cap.
+- **Occupied buildings are marked at shell scale.** The server measures the flat roof patch
+  around the nest and appends its defense-local extents to the networked unique name as a
+  compact `$m` suffix, so every client and late joiner derives the same twin masts,
+  building-sized flags and roof-edge faction band without a cosmetic network message. Using
+  the measured patch instead of the whole-shell bounding box keeps the band on the roof
+  instead of floating past it. The band's accent stripe uses the game's viewer-relative HUD
+  colors; shape carries the meaning, color is redundant. A legacy definition-sized nest
+  marker remains for structures without shell data.
 
 ## Radio
 
@@ -161,6 +180,33 @@ Decisions that cost an argument. Kept so they are not made again the other way.
 - **Growth stages are atomic and announced.** A stage either completes entirely or changes
   nothing and retries; the simulator records the rejection reason so a stalled belt is
   diagnosable instead of silently stuck. The stage gate is pure and unit-tested.
+
+## Chain of command (HighCommand)
+
+- **Economy-only effects were chosen deliberately.** Cohesion, bounties, stipends and
+  command points never mutate vanilla AI limits, spawn rates or damage. That scope makes the
+  feature safe beside any other module and leaves the AI-cap experiment (cohesion scaling
+  `AIAircraftLimit`) available as a separate, gated slice.
+- **Posts own slots; people move between them.** A fixed six-slot tree per faction means
+  succession is a personnel transfer, not tree surgery: the next in line moves up, the
+  vacated post gets a new generated name, and only the destroyed post building is rebuilt.
+  Assets, intel and wire rows stay indexed by a stable slot id.
+- **A commander away in a convoy survives a strike on their post.** The post building and
+  the lead vehicle are separate watched assets; only the asset carrying the person can kill
+  them. That turns strikes on empty posts into a legible LARP beat and makes relocation a
+  real risk decision.
+- **Generated identities are seed functions.** Name, rank, traits, bio and portrait pixels
+  all derive from a synced seed, so nothing cosmetic crosses the wire beyond the seed; the
+  host still sends name/rank/role because those are authoritative.
+- **Command posts are spawned mod buildings, not authored map structures.** User decision:
+  predictable identity (`BoscaliSummer:HighCommand:<faction>:<slot>:<serial>`), the same
+  dry-ground placement checks DynamicOperations uses, and it works on any terrain. Binding
+  to an authored airbase building remains a possible later refinement.
+- **Enemy intel is a server-side sight record with a 45s memory.** One 1 Hz pass over
+  `UnitRegistry.allUnits` (4096 cap) marks posts seen by faction units; unknown nodes are
+  omitted from snapshots and their positions zeroed, so a modified client gains nothing.
+- **Map markers were deliberately cut.** The dossier names the base and the existing sector
+  grid gives navigation; a native marker patch is deferred to avoid a second UI seam.
 
 ## Wing Command reuse boundary
 

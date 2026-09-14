@@ -81,11 +81,23 @@ Nuclear Option** — every expensive system pooled, event-driven, and globally b
   nodes (**FRONT**), the faction objective board (**TASKING**), the theater account and
   stockpile (**LOG**), and mission-AI doctrine plus map overlays (**CMD**). Aircraft
   command stays Wing Command's job; this mod never tasks a recruited wing.
+- **Chain of command** (`HighCommand.Enabled`, new, in-game acceptance pending) — the STR
+  console adds **COC**: a generated faction staff with seed-stable names, dithered
+  portraits, traits and service bios, command posts placed at faction airbases, VIP convoys
+  between bases, intel on enemy posts, and economy-only survival stipends and kill bounties.
+  Destroying an enemy commander promotes a successor and degrades that faction's cohesion;
+  effects are funds/score only — no vanilla AI, spawn or damage behaviour changes.
 - **Expanded tactical map** — `Command.ExpandedMapUi` (default on): left-side MFD pages and
   event log, central map, right-side bezel rail, native spawn footer, with shared Wing
   Command bezel and map-input ownership.
   MAP separates **Layers** from **Readability**, with larger labeled controls, explicit
   ON/OFF states, Show all / Hide all, and native hover-detail/symbol-size settings.
+- **Target presets** — TGT captures the current filter state into a named profile (up to
+  12, editable, delete confirmed), assigns three quick slots, and shows the active profile
+  in the data bar and on the preset card. Quick slots apply with **F6 / F9 / F10** or from
+  the native radial menu (**Boscali Summer → TARGET FILTERS**); the library persists in
+  `Command.TargetPresets` and neutral units keep vanilla filtering rules. Selected contacts
+  can be dropped with a right click on the SELECTED page.
 - **Faction resources** — larger funds, warheads and active-asset manpower readouts, with
   selectable recent-history graphs. Morale is stored per faction for the mission: 0–100,
   initially 100, with host-side read/write access and no gameplay effects yet. Remote
@@ -99,6 +111,7 @@ Nuclear Option** — every expensive system pooled, event-driven, and globally b
   the native radial menu opens a small submenu. **Autopilot: Land** hands your own aircraft
   to the game's own autopilot for a runway or vertical-pad landing, then returns control.
   Any deliberate stick input cancels it; wing and friendly aircraft are never commanded.
+  The submenu also hosts **TARGET FILTERS** when Command presets are assigned to quick slots.
 - **Dynamic operations** (`DynamicOperations.Enabled`, **default off**, experimental) —
   randomized, acceptance-based contracts: capture, defense, ground/air hunts, patrol,
   sustained jamming and Ibis ground/rooftop insertions, plus rescue-and-return, reconnaissance,
@@ -195,6 +208,7 @@ anything) or **client-local**. This table is a curated subset; F1 shows the rest
 | Support | `FireMissionDefinitionKey` | *(empty)* | Missile for Rod from God / EMP; empty auto-picks a yield ≤ 200 vanilla missile |
 | Support | Map effect areas | — | Abilities and hacks show icons and radii; rod has a 150 m core inside a 420 m blast boundary. Active markers use host-approved values (support protocol 5; matching peers required). |
 | Command | `Enabled` / `ExpandedMapUi` | `true` / `true` | STR screen + overlays + AI target scoring; full tactical map GUI |
+| HighCommand | `Enabled` / `EconomyEnabled` | `true` / `true` | Chain-of-command page, command posts, VIP convoys and funds/score payouts |
 | Command | `FrontlinesOverlay` / `OverlayOpacity` | `true` / `0.35` | Sector-control grid on the map |
 | DynamicOperations | `Enabled` / `RewardMultiplier` | `false` / `1.0` | Experimental secondary missions; scale money & XP |
 | Debug | `VerboseLogging` `BypassRequirements` `DisableOpsCooldowns` | `false` | Diagnostics and testing aids |

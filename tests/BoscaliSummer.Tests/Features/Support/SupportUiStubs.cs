@@ -28,7 +28,7 @@ namespace BoscaliSummer.Features.Support.Runtime
             new SupportActionDefinition { Id=SupportActionId.Recon, Name="SATELLITE SCAN", Description="Queue a faction scan for the next satellite pass. Allocation reserved; cancellable in NETWORK." },
             new SupportActionDefinition { Id=SupportActionId.Fortify, Name="ZONE FORTIFICATION", Description="Reinforce a controlled airbase or captured strategic zone." },
             new SupportActionDefinition { Id=SupportActionId.Artillery, Name="ROD FROM GOD", Description="One kinetic projectile. Requires STRIKE-1 coverage and faction capacity; select a map grid to check access." },
-            new SupportActionDefinition { Id=SupportActionId.Emp, Name="EMP SHOCK", Description="Electronic warfare: 30s radar disruption after delivery. WARNING: affects friendly and hostile units." },
+            new SupportActionDefinition { Id=SupportActionId.Emp, Name="EMP SHOCK", Description="High-altitude airburst: prompt electronics shock, then a 30s geomagnetic radar blackout. WARNING: affects friendly and hostile units." },
             new SupportActionDefinition { Id=SupportActionId.FlareMissile, Name="FLARE BARRAGE", Description="Airburst countermeasure rocket deploys a cloud of flares." }
         };
         public float Cost(SupportActionDefinition action) => 10;

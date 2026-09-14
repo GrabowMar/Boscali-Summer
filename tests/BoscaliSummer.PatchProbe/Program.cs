@@ -38,6 +38,7 @@ Assembly pluginAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(plugi
 (string Type, string Method)[] targets =
 {
     ("ControlsFilter", "GetAim"),
+    ("ControlsFilter", "SetFlightAssist"),
     ("PilotPlayerState", "PlayerAxisControls"),
     ("CameraStateManager", "SwitchState"),
     ("CameraStateManager", "SetFollowingUnit"),
@@ -95,6 +96,7 @@ Assembly pluginAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(plugi
     ("CombatAI", "AnalyzeTarget"),
     ("DynamicMap", "Maximize"),
     ("DynamicMap", "Minimize"),
+    ("DynamicMap", "MapControls"),
     ("GridLabels", "GridLabels_OnMapChanged"),
     ("GridLabels", "UpdateMinorGridLabels"),
     ("GridLabels", "Maximize"),
@@ -241,6 +243,7 @@ foreach (string cameraState in new[] { "CameraOrbitState", "CameraChaseState" })
 (string Type, string Method, string[] Parameters)[] parameterNames =
 {
     ("ControlsFilter", "GetAim", new[] { "target", "aimPoint", "impactPoint" }),
+    ("ControlsFilter", "SetFlightAssist", new[] { "enabled", "aircraft" }),
     ("Aircraft", "UseFuel", new[] { "fuelDrawn" }),
     ("FactionHQ", "RewardPlayer", new[] { "player", "rewardAllocation", "missionType" })
     ,("Unit", "RecordDamage", new[] { "lastDamagedBy", "damageAmount" })
@@ -302,6 +305,8 @@ string[] patchTypes =
     "BoscaliSummer.Features.Command.Presentation.MapUi.MfdSinglePanelPatch",
     "BoscaliSummer.Features.Command.Patches.DynamicMapMaximizePatch",
     "BoscaliSummer.Features.Command.Patches.DynamicMapMinimizePatch",
+    "BoscaliSummer.Features.Command.Patches.MapControlsPanelGuardPatch",
+    "BoscaliSummer.Features.Command.Patches.MapCursorPanelGuardPatch",
     "BoscaliSummer.Features.Command.Patches.GridLabelsPatch",
     "BoscaliSummer.Features.Support.Patches.SupportMissileDetonatePatch",
     "BoscaliSummer.Features.Support.Patches.SupportMissileAuthorityPatch",
@@ -312,6 +317,7 @@ string[] patchTypes =
     "BoscaliSummer.Features.QoL.Patches.GunAimSolutionPatch",
     "BoscaliSummer.Features.QoL.Patches.GunAimInputPatch",
     "BoscaliSummer.Features.Autopilot.Patches.AutopilotLandInputPatch",
+    "BoscaliSummer.Features.Autopilot.Patches.FlightAssistReportPatch",
     "BoscaliSummer.Features.Autopilot.Patches.RadialMenuLifecyclePatches",
     "BoscaliSummer.Features.Autopilot.Patches.BoscaliMenuActionPatches"
     ,"BoscaliSummer.Features.Squad.Patches.SquadDamagePatch"
@@ -323,6 +329,7 @@ string[] patchTypes =
     ,"BoscaliSummer.Features.DynamicOperations.Runtime.OperationSupplyPatch"
     ,"BoscaliSummer.Features.DynamicOperations.Runtime.OperationSupplyTransferPatch"
     ,"BoscaliSummer.Features.DynamicOperations.Runtime.OperationMarkerPatch"
+    ,"BoscaliSummer.Features.HighCommand.Patches.HighCommandDamagePatch"
 };
 
 foreach (string patchType in patchTypes)
@@ -340,6 +347,7 @@ string[] featureTypes =
     "BoscaliSummer.Features.Autopilot.AutopilotFeature",
     "BoscaliSummer.Features.Command.CommandFeature"
     ,"BoscaliSummer.Features.Squad.SquadFeature"
+    ,"BoscaliSummer.Features.HighCommand.HighCommandFeature"
 };
 foreach (string featureType in featureTypes)
     if (pluginAssembly.GetType(featureType, false) == null)
@@ -433,6 +441,36 @@ foreach (string resource in radioResources)
     ,("BoscaliSummer.Features.Support.Networking.CyberEffectMessage", "X", typeof(float))
     ,("BoscaliSummer.Features.Support.Networking.CyberEffectMessage", "Z", typeof(float))
     ,("BoscaliSummer.Features.Support.Networking.CyberEffectMessage", "Duration", typeof(float))
+    ,("BoscaliSummer.Features.HighCommand.Networking.HighCommandQuery", "Protocol", typeof(byte))
+    ,("BoscaliSummer.Features.HighCommand.Networking.HighCommandQuery", "Scene", typeof(uint))
+    ,("BoscaliSummer.Features.HighCommand.Networking.HighCommandQuery", "Token", typeof(uint))
+    ,("BoscaliSummer.Features.HighCommand.Networking.HighCommandQuery", "Action", typeof(byte))
+    ,("BoscaliSummer.Features.HighCommand.Networking.HighCommandQuery", "TargetId", typeof(int))
+    ,("BoscaliSummer.Features.HighCommand.Networking.CommanderWire", "Id", typeof(int))
+    ,("BoscaliSummer.Features.HighCommand.Networking.CommanderWire", "ParentId", typeof(int))
+    ,("BoscaliSummer.Features.HighCommand.Networking.CommanderWire", "Tier", typeof(byte))
+    ,("BoscaliSummer.Features.HighCommand.Networking.CommanderWire", "Flags", typeof(byte))
+    ,("BoscaliSummer.Features.HighCommand.Networking.CommanderWire", "Actions", typeof(byte))
+    ,("BoscaliSummer.Features.HighCommand.Networking.CommanderWire", "TraitMask", typeof(byte))
+    ,("BoscaliSummer.Features.HighCommand.Networking.CommanderWire", "Seed", typeof(int))
+    ,("BoscaliSummer.Features.HighCommand.Networking.CommanderWire", "IntelAge", typeof(float))
+    ,("BoscaliSummer.Features.HighCommand.Networking.CommanderWire", "Weight", typeof(float))
+    ,("BoscaliSummer.Features.HighCommand.Networking.CommanderWire", "X", typeof(float))
+    ,("BoscaliSummer.Features.HighCommand.Networking.CommanderWire", "Z", typeof(float))
+    ,("BoscaliSummer.Features.HighCommand.Networking.CommanderWire", "Name", typeof(string))
+    ,("BoscaliSummer.Features.HighCommand.Networking.CommanderWire", "Rank", typeof(string))
+    ,("BoscaliSummer.Features.HighCommand.Networking.CommanderWire", "Role", typeof(string))
+    ,("BoscaliSummer.Features.HighCommand.Networking.CommanderWire", "Location", typeof(string))
+    ,("BoscaliSummer.Features.HighCommand.Networking.CommanderWire", "Decoration", typeof(string))
+    ,("BoscaliSummer.Features.HighCommand.Networking.HighCommandSnapshot", "Protocol", typeof(byte))
+    ,("BoscaliSummer.Features.HighCommand.Networking.HighCommandSnapshot", "Scene", typeof(uint))
+    ,("BoscaliSummer.Features.HighCommand.Networking.HighCommandSnapshot", "Token", typeof(uint))
+    ,("BoscaliSummer.Features.HighCommand.Networking.HighCommandSnapshot", "Status", typeof(string))
+    ,("BoscaliSummer.Features.HighCommand.Networking.HighCommandSnapshot", "Signal", typeof(string))
+    ,("BoscaliSummer.Features.HighCommand.Networking.HighCommandSnapshot", "Cohesion", typeof(float))
+    ,("BoscaliSummer.Features.HighCommand.Networking.HighCommandSnapshot", "CommandPoints", typeof(int))
+    ,("BoscaliSummer.Features.HighCommand.Networking.HighCommandSnapshot", "Active", typeof(int))
+    ,("BoscaliSummer.Features.HighCommand.Networking.HighCommandSnapshot", "Kia", typeof(int))
 };
 foreach ((string typeName, string fieldName, Type fieldType) in messageFields)
 {
@@ -509,6 +547,15 @@ string operationAssembly = Path.Combine(managedDir, "Assembly-CSharp.dll");
 };
 foreach (var seam in operationMethods)
     RequireMetadataSignature(operationAssembly, seam.Type, seam.Method, seam.Signature);
+
+// Fire scorch: the module paints the ash bed straight into the vanilla blast map and sizes
+// tree removal with a separate AddBlast, so both calls and the blast payload are seams.
+RequireMetadataSignature(operationAssembly, "NuclearOption.Effects.BlastManager", "AddBlast",
+    "System.Void(GlobalPosition,System.Single)");
+RequireMetadataSignature(operationAssembly, "NuclearOption.Effects.BlastManager", "DrawBlast",
+    "System.Void(UnityEngine.Rendering.CommandBuffer,NuclearOption.Effects.BlastManager+DetailBlast)");
+RequireMetadataSignature(operationAssembly, "NuclearOption.Effects.BlastManager+DetailBlast", ".ctor",
+    "System.Void(GlobalPosition,System.Single)");
 RequireMetadataSignature(Path.Combine(managedDir, "Mirage.dll"), "Mirage.ServerObjectManager", "Destroy", "System.Void(UnityEngine.GameObject,System.Boolean)");
 (string Type, string Field, string FieldType)[] operationFields =
 {
@@ -546,6 +593,19 @@ foreach (string type in new[] {
     "BoscaliSummer.Features.DynamicOperations.Runtime.OperationZoneHud",
     "BoscaliSummer.Features.DynamicOperations.Networking.OperationsNet" })
     if (pluginAssembly.GetType(type, false) == null) throw new TypeLoadException(type);
+foreach (string type in new[] {
+    "BoscaliSummer.Features.HighCommand.Runtime.HighCommandManager",
+    "BoscaliSummer.Features.HighCommand.Networking.HighCommandNet",
+    "BoscaliSummer.Features.HighCommand.Presentation.CommanderPortraitRenderer",
+    "BoscaliSummer.Features.HighCommand.Domain.CommandTree",
+    "BoscaliSummer.Framework.Contracts.IHighCommandView" })
+    if (pluginAssembly.GetType(type, false) == null) throw new TypeLoadException(type);
+Type highCommandSnapshot = pluginAssembly.GetType("BoscaliSummer.Features.HighCommand.Networking.HighCommandSnapshot", true)!;
+Type commanderWire = pluginAssembly.GetType("BoscaliSummer.Features.HighCommand.Networking.CommanderWire", true)!;
+FieldInfo snapshotNodes = highCommandSnapshot.GetField("Nodes", AllMembers) ??
+    throw new MissingFieldException(highCommandSnapshot.FullName, "Nodes");
+if (snapshotNodes.FieldType != commanderWire.MakeArrayType())
+    throw new InvalidOperationException("High command snapshot node array type changed");
 foreach (var contract in new[] {
     ("BoscaliSummer.Features.DynamicOperations.Networking.OperationsQuery", new[] { "Protocol:System.Byte", "Scene:System.UInt32", "Token:System.UInt32", "OperationId:System.Int32", "Action:System.Byte" }),
     ("BoscaliSummer.Features.DynamicOperations.Networking.OperationsSnapshot", new[] { "Protocol:System.Byte", "Scene:System.UInt32", "Token:System.UInt32", "Status:System.String", "Cards:BoscaliSummer.Framework.Contracts.SecondaryObjectiveView[]" }),

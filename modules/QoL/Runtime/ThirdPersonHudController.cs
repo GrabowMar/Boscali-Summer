@@ -30,7 +30,24 @@ namespace BoscaliSummer.Features.QoL.Runtime
         private readonly ThirdPersonFlightCamera flightCamera = new ThirdPersonFlightCamera();
         public ThirdPersonFlightCamera FlightCamera => flightCamera;
         public bool IsEnabled => settings != null && settings.ThirdPersonHudEnabled.Value;
-        public bool FlightCameraEnabled => settings != null && settings.ThirdPersonFlightCameraEnabled.Value;
+
+        public bool HidePitchLadder
+        {
+            get => settings != null && settings.ThirdPersonHidePitchLadder.Value;
+            set { if (settings != null) settings.ThirdPersonHidePitchLadder.Value = value; }
+        }
+
+        public bool CameraFeedEnabled
+        {
+            get => settings != null && settings.ThirdPersonCameraEnabled.Value;
+            set { if (settings != null) settings.ThirdPersonCameraEnabled.Value = value; }
+        }
+
+        public bool FlightCameraEnabled
+        {
+            get => settings != null && settings.ThirdPersonFlightCameraEnabled.Value;
+            set { if (settings != null) settings.ThirdPersonFlightCameraEnabled.Value = value; }
+        }
 
         // Unity's Update runs before the orbit/chase pose and floating-origin shift in LateUpdate.
         // Keep native input/weapon updates single-pass as well as fixing their projections.

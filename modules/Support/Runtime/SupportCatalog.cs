@@ -40,7 +40,7 @@ namespace BoscaliSummer.Features.Support.Runtime
 
             actions.Add(new SupportActionDefinition(
                 SupportActionId.Emp, "EMP SHOCK",
-                "Radar disruption from an EW satellite. Hits friend and foe.",
+                "High-altitude airburst: prompt electronics shock, then a 30 s geomagnetic radar blackout. Hits friend and foe.",
                 SupportCapabilities.Emp, settings.EmpEnabled, new EmpAction()));
 
             actions.Add(new SupportActionDefinition(

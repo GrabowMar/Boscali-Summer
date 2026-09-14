@@ -56,8 +56,9 @@ namespace BoscaliSummer.Features.Support.Configuration
                 "Orbital kinetic strike: one high-velocity projectile onto the mark. Uses the " +
                 "FireMissionDefinitionKey missile.");
             EmpEnabled = config.Bind("Support", "EmpShock", true,
-                "EMP shock: blinds radars across a wide area, friendly and hostile alike. Uses the " +
-                "FireMissionDefinitionKey missile as a delivery visual.");
+                "EMP shock: a high-altitude airburst. The prompt pulse upsets electronics; the " +
+                "geomagnetic disturbance jams radars across a wide area, friendly and hostile " +
+                "alike. Uses the FireMissionDefinitionKey missile as a delivery visual.");
             FlareBarrageEnabled = config.Bind("Support", "FlareBarrage", true,
                 "Flare barrage: launches an airburst countermeasure missile that disperses a cluster of " +
                 "intense pyrotechnic flares, seducing and misguiding all IR-seeking missiles in the area.");
@@ -122,8 +123,8 @@ namespace BoscaliSummer.Features.Support.Configuration
                     new AcceptableValueRange<float>(0f, 20000f)));
             EmpRadius = config.Bind("Support", "EmpShockRadiusMeters", 12000f,
                 new ConfigDescription(
-                    "Radius around the mark in which radars are jammed by an EMP shock. Affects " +
-                    "friendly and hostile units alike.",
+                    "Radius around the mark whose radars are jammed by the geomagnetic phase of " +
+                    "an EMP shock. Affects friendly and hostile units alike.",
                     new AcceptableValueRange<float>(1000f, 60000f)));
             FlareBarrageCost = config.Bind("Support", "FlareBarrageCost", 500f,
                 new ConfigDescription(

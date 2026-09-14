@@ -18,11 +18,15 @@
     <Compile Include="..\..\modules\DynamicOperations\Domain\OperationBoard.cs" Link="Features\DynamicOperations\OperationBoard.cs" />
     <Compile Include="..\..\modules\DynamicOperations\Domain\OperationTitles.cs" Link="Features\DynamicOperations\OperationTitles.cs" />
     <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdSecondaryObjectives.cs" Link="Features\Command\MfdSecondaryObjectives.cs" />
+    <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdMissionOverview.cs" Link="Features\Command\MfdMissionOverview.cs" />
     <Compile Include="..\..\Framework\Contracts\IObservationSource.cs" Link="Framework\IObservationSource.cs" />
     <Compile Include="..\..\Framework\Contracts\ITerritoryIngress.cs" Link="Framework\ITerritoryIngress.cs" />
     <Compile Include="..\..\modules\QoL\Runtime\ObservationStore.cs" Link="Features\QoL\ObservationStore.cs" />
     <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdTargetPresets.cs" Link="Features\Command\MfdTargetPresets.cs" />
+    <Compile Include="..\..\modules\Command\Presentation\MapUi\TargetPresetModel.cs" Link="Features\Command\TargetPresetModel.cs" />
     <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdChartScale.cs" Link="Features\Command\MfdChartScale.cs" />
+    <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdRailCatalog.cs" Link="Features\Command\MfdRailCatalog.cs" />
+    <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdLogTone.cs" Link="Features\Command\MfdLogTone.cs" />
     <Compile Include="..\..\modules\QoL\Runtime\ThirdPersonCameraPolicy.cs" Link="Features\QoL\ThirdPersonCameraPolicy.cs" />
     <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdLogSpace.cs" Link="Features\Command\MfdLogSpace.cs" />
     <Compile Include="..\..\modules\Command\Presentation\MapUi\GridLabelsMath.cs" Link="Features\Command\GridLabelsMath.cs" />
@@ -32,6 +36,7 @@
     <Compile Include="..\..\modules\Support\Runtime\SupportMapGesture.cs" Link="Features\Support\SupportMapGesture.cs" />
     <Compile Include="..\..\Core\Deterministic.cs" Link="Core\Deterministic.cs" />
     <Compile Include="..\..\modules\FireAndDestruction\Buildings\ImpactScorchPolicy.cs" Link="Features\FireAndDestruction\ImpactScorchPolicy.cs" />
+    <Compile Include="..\..\modules\FireAndDestruction\Runtime\FireScorchPolicy.cs" Link="Features\FireAndDestruction\FireScorchPolicy.cs" />
     <Compile Include="..\..\modules\Radio\Runtime\RadioLibrary.cs" Link="Features\Radio\RadioLibrary.cs" />
     <Compile Include="..\..\modules\Radio\Runtime\HuntMusicGate.cs" Link="Features\Radio\HuntMusicGate.cs" />
     <Compile Include="..\..\modules\Squad\Domain\AceCareer.cs" Link="Features\Squad\AceCareer.cs" />
@@ -43,6 +48,7 @@
     <Compile Include="..\..\modules\Progression\Runtime\PilotDraft.cs" Link="Features\Progression\PilotDraft.cs" />
     <Compile Include="..\..\modules\Support\Runtime\SupportModel.cs" Link="Features\Support\SupportModel.cs" />
     <Compile Include="..\..\modules\UrbanCombat\Runtime\TroopDeploymentMath.cs" Link="Features\UrbanCombat\TroopDeploymentMath.cs" />
+    <Compile Include="..\..\modules\UrbanCombat\Runtime\GarrisonMarkerInfo.cs" Link="Features\UrbanCombat\GarrisonMarkerInfo.cs" />
     <Compile Include="..\..\modules\Trenches\Domain\TrenchTacticalMath.cs" Link="Features\Trenches\TrenchTacticalMath.cs" />
     <Compile Include="..\..\Framework\Features\FeatureMetadata.cs" Link="Framework\FeatureMetadata.cs" />
     <Compile Include="..\..\Framework\Features\FeatureGraph.cs" Link="Framework\FeatureGraph.cs" />
@@ -51,6 +57,15 @@
     <Compile Include="..\..\modules\Command\Runtime\TacticalSectorGrid.cs" Link="Features\Command\TacticalSectorGrid.cs" />
     <Compile Include="..\..\modules\Command\Domain\SortieClassifier.cs" Link="Features\Command\SortieClassifier.cs" />
     <Compile Include="..\..\modules\Command\Domain\TheaterReadout.cs" Link="Features\Command\TheaterReadout.cs" />
+    <Compile Include="..\..\modules\HighCommand\Domain\CommandEconomy.cs" Link="Features\HighCommand\CommandEconomy.cs" />
+    <Compile Include="..\..\modules\HighCommand\Domain\CommanderGenerator.cs" Link="Features\HighCommand\CommanderGenerator.cs" />
+    <Compile Include="..\..\modules\HighCommand\Domain\CommandSlot.cs" Link="Features\HighCommand\CommandSlot.cs" />
+    <Compile Include="..\..\modules\HighCommand\Domain\CommandSnapshotRules.cs" Link="Features\HighCommand\CommandSnapshotRules.cs" />
+    <Compile Include="..\..\modules\HighCommand\Domain\CommandTier.cs" Link="Features\HighCommand\CommandTier.cs" />
+    <Compile Include="..\..\modules\HighCommand\Domain\CommandTraits.cs" Link="Features\HighCommand\CommandTraits.cs" />
+    <Compile Include="..\..\modules\HighCommand\Domain\CommandTree.cs" Link="Features\HighCommand\CommandTree.cs" />
+    <Compile Include="..\..\modules\HighCommand\Domain\PortraitDesign.cs" Link="Features\HighCommand\PortraitDesign.cs" />
+    <Compile Include="..\..\modules\HighCommand\Domain\SeedStream.cs" Link="Features\HighCommand\SeedStream.cs" />
     <Compile Include="..\..\Infrastructure\GameInterop\MfdSlots.cs" Link="Infrastructure\MfdSlots.cs" />
     <Compile Include="..\..\Avionics\*.cs" LinkBase="Avionics" />
   </ItemGroup>

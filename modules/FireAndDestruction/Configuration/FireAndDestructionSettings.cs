@@ -21,8 +21,6 @@ namespace BoscaliSummer.Features.FireAndDestruction.Configuration
         public float FireLifetime => 90f * (0.82f + 0.18f * FireIntensity.Value);
         public float FireMergeRadius => 72f * (0.88f + 0.12f * FireIntensity.Value);
         public float FireCellCooldown => 8f;
-        public float ScorchRadius => 78f;
-        public float ScorchRadiusScale => 0.95f;
         public float ForestCellSize => 32f;
         public bool FireSpreadEnabled => FiresEnabled.Value;
         public float FireSpreadInterval => 11f / (0.88f + 0.12f * FireIntensity.Value);

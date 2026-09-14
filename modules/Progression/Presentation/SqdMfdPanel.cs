@@ -358,6 +358,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             string baseLine = shell.Page == TabWings
                 ? (squad != null ? squad.Status : "Enemy wing reports are unavailable.")
                 : shell.Page == TabStudio ? StudioStatusLine()
+                : progression.BypassRequirements ? "DEBUG BYPASS — ALL SKILLS ACTIVE"
                 : progression.LastResult;
             shell.WriteStatus(null, MapPicker.Prompt, baseLine);
         }

@@ -401,13 +401,14 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
         private static string HistoryText()
         {
-            if (history.Count == 0) return "NO ACTIVE TRAFFIC";
+            if (history.Count == 0)
+                return "<color=#" + MfdLogTone.NeutralHex + ">NO ACTIVE TRAFFIC</color>";
 
             var text = new StringBuilder();
             for (int i = 0; i < history.Count; i++)
             {
                 if (i > 0) text.Append('\n');
-                text.Append(history[i].Text);
+                text.Append(MfdLogTone.Paint(history[i].Text));
             }
             return text.ToString();
         }
@@ -421,7 +422,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             scrollContent.sizeDelta = new Vector2(0f, height);
             AvKit.Place(body.transform as RectTransform, new Rect(0f, 0f, bodyWidth, height));
 
-            if (stickToTop && scroll != null) scroll.verticalNormalizedPosition = 1f;
+            // Follow new traffic only when the reader is at the live edge. Snapping a
+            // scrolled-back reader to the top on every message loses their place.
+            if (stickToTop && scroll != null && scroll.verticalNormalizedPosition >= 0.999f)
+                scroll.verticalNormalizedPosition = 1f;
         }
 
         private static void Stretch(RectTransform rt)

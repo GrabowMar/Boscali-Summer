@@ -30,6 +30,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private sealed class Docked
         {
             public MFDScreen Screen;
+            public bool Left;
             public Transform Parent;
             public Vector2 AnchorMin;
             public Vector2 AnchorMax;
@@ -49,8 +50,21 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 rt.anchorMin = AnchorMin;
                 rt.anchorMax = AnchorMax;
                 rt.pivot = Pivot;
-                rt.anchoredPosition = AnchoredPosition;
-                rt.localPosition = LocalPosition;
+                if (Screen.isActive)
+                {
+                    rt.anchoredPosition = AnchoredPosition;
+                    rt.localPosition = LocalPosition;
+                }
+                else
+                {
+                    // A closed screen belongs off-canvas. The snapshot can hold a shown
+                    // position because the player had the screen open when the dock was
+                    // built; restoring that home position leaves a closed panel parked
+                    // over the cockpit, one skipped close away from showing as an empty
+                    // rectangle. Park it the way vanilla's own hide does instead.
+                    rt.localPosition = UnityEngine.Screen.width *
+                        (Left ? Vector3.left : Vector3.right);
+                }
                 rt.localScale = LocalScale;
             }
         }
@@ -128,7 +142,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         /// Idempotent: a screen already in a slot is left in place, but an adapter that
         /// deferred while the native controller initialized gets another chance to attach.
         /// </summary>
-        public static void Dock(MFDScreen screen)
+        public static void Dock(MFDScreen screen, bool left)
         {
             if (screen == null || dock == null) return;
 
@@ -144,6 +158,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             docked.Add(new Docked
             {
                 Screen = screen,
+                Left = left,
                 Parent = rt.parent,
                 AnchorMin = rt.anchorMin,
                 AnchorMax = rt.anchorMax,
@@ -220,15 +235,22 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         /// path is skipped keeps rendering its panel over the cockpit. Making "closed means
         /// hidden" a dock invariant covers custom and stock screens alike instead of relying
         /// on each screen's own callback firing.</para>
+        ///
+        /// <para>An active screen outside the maximized map is closed for real, not just
+        /// blanked. Deactivating only its <c>displayPanel</c> left the screen's root
+        /// backplate — a sliced avionics panel sprite with a hairline border — drawing at
+        /// its home position over the cockpit: the empty rectangle a player sees after
+        /// spawning. Closing parks the root off-canvas and lets the chrome patch switch its
+        /// border off, so the invariant leaves nothing visible behind.</para>
         /// </summary>
         public static void SyncSurfaceVisibility(VirtualMFD mfd)
         {
             if (mfd == null) return;
-            SyncSurfaces(MapUiAccess.GetLeftScreens(mfd));
-            SyncSurfaces(MapUiAccess.GetRightScreens(mfd));
+            SyncSurfaces(MapUiAccess.GetLeftScreens(mfd), left: true);
+            SyncSurfaces(MapUiAccess.GetRightScreens(mfd), left: false);
         }
 
-        private static void SyncSurfaces(List<MFDScreen> screens)
+        private static void SyncSurfaces(List<MFDScreen> screens, bool left)
         {
             if (screens == null) return;
 
@@ -236,10 +258,17 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             {
                 MFDScreen screen = screens[i];
                 if (screen == null || screen.displayPanel == null) continue;
+                if (!screen.isActive) continue;
 
-                bool show = screen.isActive && DynamicMap.mapMaximized;
-                if (screen.displayPanel.activeSelf != show)
-                    screen.displayPanel.SetActive(show);
+                if (DynamicMap.mapMaximized)
+                {
+                    if (!screen.displayPanel.activeSelf)
+                        screen.displayPanel.SetActive(true);
+                    continue;
+                }
+
+                screen.CloseScreen(UnityEngine.Screen.width *
+                    (left ? Vector3.left : Vector3.right));
             }
         }
 
@@ -294,6 +323,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         public static float AvailableHeight(float fallback) =>
             dock == null || dock.rect.height <= 1f ? fallback : dock.rect.height;
 
+        /// <summary>Whether a screen point lies over the instrument column the dock owns.</summary>
+        public static bool ContainsScreenPoint(Vector2 screenPoint) =>
+            MapUiPointer.Contains(dock, screenPoint);
+
         private static void AlignToBottom(MFDScreen screen, RectTransform slot)
         {
             if (screen == null || slot == null) return;
@@ -333,8 +366,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         {
             if (mfd == null || dock == null) return;
 
-            DockOwned(MapUiAccess.GetLeftScreens(mfd));
-            DockOwned(MapUiAccess.GetRightScreens(mfd));
+            DockOwned(MapUiAccess.GetLeftScreens(mfd), left: true);
+            DockOwned(MapUiAccess.GetRightScreens(mfd), left: false);
         }
 
         /// <summary>
@@ -347,7 +380,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         /// the one column the layout reserves for it, or the column is not a layout — it is
         /// just where some of the panels happen to be.
         /// </summary>
-        private static void DockOwned(List<MFDScreen> screens)
+        private static void DockOwned(List<MFDScreen> screens, bool left)
         {
             if (screens == null) return;
 
@@ -356,7 +389,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 MFDScreen screen = screens[i];
                 if (screen == null) continue;
 
-                Dock(screen);
+                Dock(screen, left);
             }
         }
 

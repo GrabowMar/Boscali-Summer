@@ -15,6 +15,7 @@ maintainers and coding agents; runtime design is in [ARCHITECTURE.md](ARCHITECTU
 | OPS MFD (support, observation, battle status), request validation, costs, cooldowns, spawn jobs | `modules/Support` | `Features/Support` | Progression + optional zone-fortification contracts, game interop |
 | STR MFD, expanded map GUI, map overlays, doctrine, AI target scoring | `modules/Command` | `Features/Command` | Progression contracts, game interop |
 | Secondary objectives, faction awards, finite reinforcement batches | `modules/DynamicOperations` | `Features/DynamicOperations` | Framework lifecycle/contracts, native game interop |
+| Generated staff tree, command posts, VIP convoys, intel, stipends/bounties | `modules/HighCommand` | `Features/HighCommand` | Framework lifecycle/contracts, native game interop; consumed by Command through `IHighCommandView` |
 | Feature graph, host, lifecycle, service contracts | `Framework` | `Framework` | no concrete feature |
 | Cached game/reflection/diagnostic adapters | `Infrastructure` | architecture / patch probe | no feature policy |
 | Registration and plugin startup | `Bootstrap` | Framework / architecture | may name every feature |
@@ -43,6 +44,12 @@ Support and Command declare a dependency on Progression but consume only `IPlaye
 features genuinely interact, define the smallest interface in `Framework/Contracts`,
 implement it in the owner, resolve it through `ServiceRegistry` — never expose a manager,
 singleton, patch class, mutable collection, or settings object as the contract.
+
+Command's STR console consumes HighCommand's read-only `IHighCommandView` for the chain-of-
+command page; HighCommand resolves it late through `ModServices`, imports no sibling
+implementation, and neither module requires the other to install. The view carries a
+generated `Sprite` portrait only because Command may not import the owner's renderer; the
+owner caches and clears it.
 
 Progression depends on Squad's read-only `ISquadView` for pilot generations and ace
 bonus points. Radio observes the same contract optionally for local music transitions.

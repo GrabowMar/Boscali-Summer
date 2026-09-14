@@ -52,6 +52,11 @@ codecs and snapshot providers; garrison catalogue/selection/spawning/lifecycle.
   Enable-by-default gate: mission/scene lifecycle, award attribution and tax/score,
   road/terrain placement, listen-host/client/late join and bounded long-session behavior.
   See [DYNAMIC_OPERATIONS.md](DYNAMIC_OPERATIONS.md) and its pinned research links.
+- **Chain of command** — generated staff, command posts, VIP convoys, intel and
+  economy-only stipends/bounties implemented behind default-on `HighCommand.Enabled`.
+  In-game acceptance is pending for the whole module. Gated next slices: enemy AI interest
+  in command posts, kill-list steering of friendly mission AI, cohesion scaling vanilla
+  `AIAircraftLimit` (authority mode), and native map markers for confirmed contacts.
 - **Weather removed** — the experimental weather code, its shader tooling, tests and
   settings were removed from the active build at the user's request (see the CHANGELOG).
   No development or automatic restoration is scheduled.
@@ -61,7 +66,9 @@ codecs and snapshot providers; garrison catalogue/selection/spawning/lifecycle.
   Neutralized/Ruined` transitions, bounded air-assault presentation, no duplicate proxies
   under churn/late-join, a global proxy cap (~96), stable references instead of
   nearest-position repair. Excludes interiors, room clearing, breaching, per-floor damage,
-  and autonomous roaming infantry.
+  and autonomous roaming infantry. A legibility and warfare proposal — marker scale, roof
+  bands, smoke cue, street dressing, zone tiers — is tracked in
+  [URBAN_COMBAT.md](URBAN_COMBAT.md).
 - **Radio** — Base Broadcast now catalogs the installed score across registered maps (up to
   30 deduplicated clips); in-game interaction and long-session gates remain; MP3 only after
   a real decode test; synchronized broadcast stays behind the handshake/manifest gate in

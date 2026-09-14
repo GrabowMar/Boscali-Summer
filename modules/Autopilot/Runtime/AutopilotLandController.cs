@@ -432,7 +432,10 @@ namespace BoscaliSummer.Features.Autopilot.Runtime
 
             Vector3 direction = runwayUsage.GetDirection().normalized;
             Vector3 ahead = runwayUsage.Runway.GetNearestPoint(aircraft.transform.position, false) + direction * 100f;
-            ahead.y = runwayUsage.GetGlideslopeAimpoint(aircraft, 300f, touchdownTime).y;
+            // Keep the rollout aim level with the aircraft. The native landing state reuses the
+            // glideslope height here, which commands a climb while still fast enough to fly and
+            // makes a landed aircraft lift off again.
+            ahead.y = aircraft.transform.position.y;
             aircraft.autopilot.AutoAim(ahead.ToGlobalPosition(), false, true, true, 1.01f, 5f, false, 0f, Vector3.zero);
 
             if (AutopilotLandPolicy.Stopped(aircraft.speed, aircraft.radarAlt))
@@ -489,6 +492,15 @@ namespace BoscaliSummer.Features.Autopilot.Runtime
                 : 30f;
 
             ControlsFilter filter = aircraft.GetControlsFilter();
+            if (filter != null && !filter.IsAutoHoverEnabled() &&
+                FastMath.InRange(destination, aircraft.GlobalPosition(), 200f))
+            {
+                // Mirror AIHeloLandingState: hand the final descent to the native hover
+                // controller instead of letting the native tiltwing AutoAim keep rewriting
+                // flight assist (and its wing-tilt automation) every fixed step.
+                filter.SetAutoHover(true);
+                aircraft.SetFlightAssist(false);
+            }
             if (filter != null && filter.IsAutoHoverEnabled())
             {
                 Unit attached;

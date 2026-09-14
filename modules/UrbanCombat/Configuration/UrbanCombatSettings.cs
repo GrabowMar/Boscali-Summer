@@ -23,9 +23,9 @@ namespace BoscaliSummer.Features.UrbanCombat.Configuration
                     new AcceptableValueRange<int>(0, 6)));
             TroopsPerDeploy = config.Bind("Air Assault", "InfantryPerInsertion", 8,
                 new ConfigDescription(
-                    "Infantry deployed per transport paradrop. Ibis fast-rope always uses eight troops. Vanilla defense " +
-                    "emplacements provide the authoritative combat behavior.",
-                    new AcceptableValueRange<int>(2, 12)));
+                    "Infantry deployed per transport paradrop, in one stick out the cargo access. Capped at the Ibis " +
+                    "fast-rope squad size of eight. Vanilla defense emplacements provide the authoritative combat behavior.",
+                    new AcceptableValueRange<int>(2, 8)));
         }
     }
 }

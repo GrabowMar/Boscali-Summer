@@ -18,6 +18,8 @@ namespace BoscaliSummer.Features.Support.Visuals
     internal sealed class CockpitEmpDisruption : MonoBehaviour
     {
         private const int SampleRate = 44100;
+        private const float E1Window = 0.3f;
+        private const float E2Window = 2.6f;
         private static AudioClip staticAudioClip;
 
         public static void TriggerForPlayer(Aircraft aircraft, float severity)
@@ -130,14 +132,20 @@ namespace BoscaliSummer.Features.Support.Visuals
                 while (Time.time < endTime)
                 {
                     float remaining = endTime - Time.time;
-                    float progress = 1f - (remaining / disruptionDuration);
+                    float elapsed = disruptionDuration - remaining;
                     float decay = Mathf.Clamp01(remaining / disruptionDuration);
+                    float prompt = Mathf.Clamp01(1f - elapsed / E1Window);
+                    float intermediate = elapsed < E2Window
+                        ? Mathf.Clamp01(1f - (elapsed - E1Window) / (E2Window - E1Window))
+                        : 0f;
+                    float late = Mathf.Clamp01(1f - (elapsed - E2Window) /
+                        Mathf.Max(0.1f, disruptionDuration - E2Window));
 
                     // 1. Screen flash & static pulse on native blackout overlay
                     if (blackout != null)
                     {
                         float flicker = 0.5f + Mathf.Sin(Time.time * 50f) * 0.5f;
-                        float pulse = Mathf.Pow(decay, 1.8f) * 0.38f * flicker;
+                        float pulse = prompt * 0.55f + intermediate * 0.3f * flicker + late * 0.08f;
                         blackout.color = new Color(0.25f, 0.65f, 1f, pulse);
                     }
 
@@ -145,11 +153,12 @@ namespace BoscaliSummer.Features.Support.Visuals
                     var combatHud = SceneSingleton<CombatHUD>.i;
                     if (combatHud != null)
                     {
-                        combatHud.jamAccumulation = Mathf.Max(combatHud.jamAccumulation, 3.5f * currentSeverity * decay);
+                        float strength = currentSeverity * (prompt * 5f + intermediate * 2.6f + late * 0.8f);
+                        combatHud.jamAccumulation = Mathf.Max(combatHud.jamAccumulation, strength);
                     }
 
-                    // 3. Glitch VirtualMFD screens during peak disruption
-                    if (progress < 0.65f && virtualMfd != null)
+                    // 3. Glitch VirtualMFD screens during the prompt and intermediate pulses
+                    if (elapsed < E2Window && virtualMfd != null)
                     {
                         mfdGlitchTimer -= Time.deltaTime;
                         if (mfdGlitchTimer <= 0f)
@@ -170,10 +179,12 @@ namespace BoscaliSummer.Features.Support.Visuals
                     // 4. Cockpit spark light flickering
                     if (cockpitSparkLight != null)
                     {
-                        if (progress < 0.7f && UnityEngine.Random.value > 0.65f)
+                        float sparkChance = prompt > 0f ? 0.2f : intermediate > 0.3f ? 0.55f : 0.8f;
+                        if (elapsed < E2Window + 1.5f && UnityEngine.Random.value > sparkChance)
                         {
                             cockpitSparkLight.enabled = true;
-                            cockpitSparkLight.intensity = UnityEngine.Random.Range(1.8f, 5.0f) * decay;
+                            cockpitSparkLight.intensity = UnityEngine.Random.Range(1.8f, 5.0f) *
+                                (0.4f + 0.6f * decay);
                         }
                         else
                         {
@@ -181,10 +192,25 @@ namespace BoscaliSummer.Features.Support.Visuals
                         }
                     }
 
-                    // 5. Subtle camera electromagnetic jitter
-                    if (csm != null && progress < 0.5f)
+                    // 5. Camera jolt scaled by pulse phase
+                    if (csm != null)
                     {
-                        csm.ShakeCamera(0.35f * decay, 0.75f * decay);
+                        float jitter = prompt * 0.9f + intermediate * 0.35f + late * 0.08f;
+                        if (jitter > 0.02f)
+                        {
+                            csm.ShakeCamera(jitter * currentSeverity, jitter * 1.4f * currentSeverity);
+                        }
+                    }
+
+                    if (staticSource != null)
+                    {
+                        staticSource.volume = 0.85f * (0.35f + 0.65f * Mathf.Max(prompt, intermediate));
+                    }
+
+                    if (radioStaticSource != null)
+                    {
+                        radioStaticSource.volume = 0.75f *
+                            (0.25f + 0.75f * Mathf.Max(intermediate, late * 0.35f));
                     }
 
                     yield return null;

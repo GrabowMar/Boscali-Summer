@@ -21,11 +21,19 @@ namespace BoscaliSummer.Garrisons
             return null;
         }
 
+        internal static string BuildMarkerName(string name, Vector4 roofExtents) =>
+            GarrisonMarkerInfo.Append(name, roofExtents.x, roofExtents.y, roofExtents.z, roofExtents.w);
+
         internal static bool TryPlace(GameObject shell, Bounds bounds, BuildingDefinition definition,
-            out Vector3 position, out Quaternion rotation)
+            out Vector3 position, out Quaternion rotation) =>
+            TryPlace(shell, bounds, definition, out position, out rotation, out _);
+
+        internal static bool TryPlace(GameObject shell, Bounds bounds, BuildingDefinition definition,
+            out Vector3 position, out Quaternion rotation, out Vector4 roofExtents)
         {
             position = default;
             rotation = Quaternion.Euler(0f, shell.transform.eulerAngles.y, 0f);
+            roofExtents = Vector4.zero;
             float halfX = Mathf.Max(4f, definition.width * 0.5f + 1.5f);
             float halfZ = Mathf.Max(4f, definition.length * 0.5f + 1.5f);
             MeshFilter[] filters = shell.GetComponentsInChildren<MeshFilter>(true);
@@ -115,7 +123,9 @@ namespace BoscaliSummer.Garrisons
                     bestDistance = distance;
                     position = new Vector3(center.x, high + 0.03f, center.z);
                 }
-                return bestHeight > float.MinValue;
+                if (bestHeight <= float.MinValue) return false;
+                roofExtents = MeasureRoofExtents(probes, position, rotation);
+                return true;
             }
             finally
             {
@@ -126,6 +136,36 @@ namespace BoscaliSummer.Garrisons
                     if (probe != null) { probe.SetActive(false); UnityEngine.Object.Destroy(probe); }
                 }
             }
+        }
+
+        private static Vector4 MeasureRoofExtents(System.Collections.Generic.List<Collider> probes,
+            Vector3 position, Quaternion rotation)
+        {
+            float minX = -Mathf.Max(2.5f, MeasureRoofExtent(probes, position, rotation, Vector3.left));
+            float maxX = Mathf.Max(2.5f, MeasureRoofExtent(probes, position, rotation, Vector3.right));
+            float minZ = -Mathf.Max(2.5f, MeasureRoofExtent(probes, position, rotation, Vector3.back));
+            float maxZ = Mathf.Max(2.5f, MeasureRoofExtent(probes, position, rotation, Vector3.forward));
+            return new Vector4(minX, maxX, minZ, maxZ);
+        }
+
+        private static float MeasureRoofExtent(System.Collections.Generic.List<Collider> probes,
+            Vector3 position, Quaternion rotation, Vector3 localDirection)
+        {
+            float roofY = position.y - 0.03f;
+            float extent = 0f;
+            Vector3 direction = rotation * localDirection;
+            for (float distance = 2f; distance <= 40f; distance += 2f)
+            {
+                var ray = new Ray(position + direction * distance + Vector3.up * 3f, Vector3.down);
+                bool found = false;
+                RaycastHit top = default;
+                foreach (Collider probe in probes)
+                    if (probe.Raycast(ray, out RaycastHit hit, 8f) && (!found || hit.point.y > top.point.y))
+                    { top = hit; found = true; }
+                if (!found || top.normal.y < 0.98f || Mathf.Abs(top.point.y - roofY) > 0.6f) break;
+                extent = distance;
+            }
+            return extent;
         }
     }
 }

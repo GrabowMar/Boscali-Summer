@@ -21,6 +21,8 @@ namespace BoscaliSummer.Fire
             public float LightScale;
             public float GrowthSeconds;
             public float FlickerSeed;
+            public float SizeScale = 1f;
+            public float LifetimeScale = 1f;
             public float ClusterScale = 1f;
             public bool HasParticles => Systems != null && Systems.Length > 0;
 
@@ -56,6 +58,8 @@ namespace BoscaliSummer.Fire
                 LightScale = forest ? Mathf.Lerp(0.82f, 1f, a) : Mathf.Lerp(0.55f, 0.78f, a);
                 GrowthSeconds = forest ? Mathf.Lerp(5.5f, 9f, b) : Mathf.Lerp(12f, 21f, b);
                 FlickerSeed = a * 13.7f + b * 29.1f;
+                SizeScale = forest ? Mathf.Lerp(1.06f, 1.30f, a) : Mathf.Lerp(0.80f, 0.98f, a);
+                LifetimeScale = forest ? Mathf.Lerp(1.08f, 1.32f, b) : Mathf.Lerp(0.90f, 1.04f, b);
                 if (Root != null)
                 {
                     float scale = forest ? Mathf.Lerp(1.04f, 1.18f, b) : Mathf.Lerp(0.68f, 0.84f, b);
@@ -79,6 +83,9 @@ namespace BoscaliSummer.Fire
                 {
                     ParticleSystem system = Systems[i];
                     if (system == null) continue;
+                    ParticleSystem.MainModule main = system.main;
+                    main.startLifetimeMultiplier = LifetimeScale;
+                    main.startSizeMultiplier = SizeScale;
                     ParticleSystem.EmissionModule emission = system.emission;
                     emission.rateOverTimeMultiplier = BaseRates[i] * FlameIntensity;
                     ParticleSystem.ShapeModule shape = system.shape;
@@ -157,11 +164,17 @@ namespace BoscaliSummer.Fire
 
             if (flameMaterial != null)
             {
+                AddFlameLayer(root.transform, "FlameCore", flameMaterial,
+                    new Vector3(16f, 0.9f, 13f), 18f, 0.4f, 1f, 0.4f, 1.5f, 2.2f, 5.4f,
+                    systems, rates, shapes);
                 AddFlameLayer(root.transform, "SurfaceFlame", flameMaterial,
-                    new Vector3(30f, 1.2f, 23f), 24f, 0.65f, 1.45f, 0.5f, 2.2f, 3.2f, 7.5f,
+                    new Vector3(30f, 1.2f, 23f), 20f, 0.65f, 1.45f, 0.5f, 2.2f, 3.2f, 7.5f,
                     systems, rates, shapes);
                 AddFlameLayer(root.transform, "FlameTongues", flameMaterial,
-                    new Vector3(22f, 1f, 17f), 7.5f, 1.1f, 2.35f, 1.2f, 3.6f, 4.2f, 9.5f,
+                    new Vector3(22f, 1f, 17f), 7f, 1.1f, 2.35f, 1.4f, 3.8f, 4.2f, 9.5f,
+                    systems, rates, shapes);
+                AddEmberLayer(root.transform, "Embers", flameMaterial,
+                    new Vector3(26f, 0.8f, 20f), 9f, 2.4f, 4.6f, 5.5f, 11f, 0.35f, 1.1f,
                     systems, rates, shapes);
             }
             // Fire smoke is emitted through the game's vanilla large-smoke catalogue by
@@ -173,7 +186,7 @@ namespace BoscaliSummer.Fire
             lightObject.transform.localPosition = Vector3.up * 5f;
             Light light = lightObject.AddComponent<Light>();
             light.type = LightType.Point;
-            light.color = new Color(1f, 0.28f, 0.045f);
+            light.color = new Color(1f, 0.33f, 0.05f);
             light.range = 58f;
             light.intensity = 0f;
             light.shadows = LightShadows.None;
@@ -234,8 +247,8 @@ namespace BoscaliSummer.Fire
                 lifeMin, lifeMax, speedMin, speedMax, sizeMin, sizeMax, 220);
             ParticleSystem.MainModule main = system.main;
             main.startColor = new ParticleSystem.MinMaxGradient(
-                new Color(1f, 0.22f, 0.015f, 0.72f),
-                new Color(1f, 0.62f, 0.08f, 0.9f));
+                new Color(1f, 0.30f, 0.02f, 0.68f),
+                new Color(1f, 0.66f, 0.10f, 0.92f));
             main.gravityModifier = -0.05f;
 
             ParticleSystem.NoiseModule noise = system.noise;
@@ -249,6 +262,44 @@ namespace BoscaliSummer.Fire
             ParticleSystem.ColorOverLifetimeModule color = system.colorOverLifetime;
             color.enabled = true;
             color.color = FlameGradient();
+
+            // Flames bloom from a small kernel and taper as they die, which reads far more
+            // like burning fuel than a stream of equally sized billboards.
+            ParticleSystem.SizeOverLifetimeModule sizeOverLife = system.sizeOverLifetime;
+            sizeOverLife.enabled = true;
+            sizeOverLife.size = new ParticleSystem.MinMaxCurve(1f, FlameSizeCurve());
+            Register(system, shapeScale, rate, systems, rates, shapes);
+        }
+
+        private static void AddEmberLayer(
+            Transform parent, string name, Material material, Vector3 shapeScale, float rate,
+            float lifeMin, float lifeMax, float speedMin, float speedMax, float sizeMin, float sizeMax,
+            List<ParticleSystem> systems, List<float> rates, List<Vector3> shapes)
+        {
+            ParticleSystem system = CreateSystem(parent, name, material, shapeScale, rate,
+                lifeMin, lifeMax, speedMin, speedMax, sizeMin, sizeMax, 140);
+            ParticleSystem.MainModule main = system.main;
+            main.startColor = new ParticleSystem.MinMaxGradient(
+                new Color(1f, 0.80f, 0.34f, 1f),
+                new Color(1f, 0.34f, 0.05f, 0.96f));
+            // Embers ride the plume and cool in the air instead of falling like debris.
+            main.gravityModifier = 0.02f;
+
+            ParticleSystem.NoiseModule noise = system.noise;
+            noise.enabled = true;
+            noise.quality = ParticleSystemNoiseQuality.Medium;
+            noise.strength = 2.6f;
+            noise.frequency = 0.46f;
+            noise.scrollSpeed = 0.85f;
+            noise.damping = true;
+
+            ParticleSystem.ColorOverLifetimeModule color = system.colorOverLifetime;
+            color.enabled = true;
+            color.color = EmberGradient();
+
+            ParticleSystem.SizeOverLifetimeModule sizeOverLife = system.sizeOverLifetime;
+            sizeOverLife.enabled = true;
+            sizeOverLife.size = new ParticleSystem.MinMaxCurve(1f, EmberSizeCurve());
             Register(system, shapeScale, rate, systems, rates, shapes);
         }
 
@@ -300,21 +351,60 @@ namespace BoscaliSummer.Fire
             return system;
         }
 
+        private static AnimationCurve FlameSizeCurve()
+        {
+            var curve = new AnimationCurve();
+            curve.AddKey(new Keyframe(0f, 0.35f));
+            curve.AddKey(new Keyframe(0.32f, 1f));
+            curve.AddKey(new Keyframe(1f, 0.18f));
+            return curve;
+        }
+
+        private static AnimationCurve EmberSizeCurve()
+        {
+            var curve = new AnimationCurve();
+            curve.AddKey(new Keyframe(0f, 0.9f));
+            curve.AddKey(new Keyframe(0.55f, 0.55f));
+            curve.AddKey(new Keyframe(1f, 0.12f));
+            return curve;
+        }
+
         private static ParticleSystem.MinMaxGradient FlameGradient()
         {
             var gradient = new Gradient();
             gradient.SetKeys(
                 new[]
                 {
-                    new GradientColorKey(new Color(1f, 0.72f, 0.16f), 0f),
-                    new GradientColorKey(new Color(1f, 0.22f, 0.025f), 0.52f),
-                    new GradientColorKey(new Color(0.18f, 0.055f, 0.02f), 1f)
+                    new GradientColorKey(new Color(1f, 0.86f, 0.34f), 0f),
+                    new GradientColorKey(new Color(1f, 0.50f, 0.07f), 0.30f),
+                    new GradientColorKey(new Color(0.88f, 0.18f, 0.02f), 0.68f),
+                    new GradientColorKey(new Color(0.14f, 0.04f, 0.01f), 1f)
                 },
                 new[]
                 {
                     new GradientAlphaKey(0f, 0f),
-                    new GradientAlphaKey(0.82f, 0.08f),
-                    new GradientAlphaKey(0.58f, 0.62f),
+                    new GradientAlphaKey(0.9f, 0.07f),
+                    new GradientAlphaKey(0.72f, 0.45f),
+                    new GradientAlphaKey(0f, 1f)
+                });
+            return new ParticleSystem.MinMaxGradient(gradient);
+        }
+
+        private static ParticleSystem.MinMaxGradient EmberGradient()
+        {
+            var gradient = new Gradient();
+            gradient.SetKeys(
+                new[]
+                {
+                    new GradientColorKey(new Color(1f, 0.88f, 0.42f), 0f),
+                    new GradientColorKey(new Color(1f, 0.42f, 0.05f), 0.55f),
+                    new GradientColorKey(new Color(0.32f, 0.07f, 0.01f), 1f)
+                },
+                new[]
+                {
+                    new GradientAlphaKey(0f, 0f),
+                    new GradientAlphaKey(0.95f, 0.10f),
+                    new GradientAlphaKey(0.55f, 0.62f),
                     new GradientAlphaKey(0f, 1f)
                 });
             return new ParticleSystem.MinMaxGradient(gradient);

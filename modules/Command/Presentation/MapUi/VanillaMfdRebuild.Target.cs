@@ -15,20 +15,46 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
         private sealed class TargetPresenter : Presenter
         {
+            private enum EditMode { None, SaveAs, Rename }
+
             private readonly TargetListSelector selector;
             private readonly List<Unit> selectedUnits = new List<Unit>();
+            private readonly List<TargetPresetSnapshot> catalog = new List<TargetPresetSnapshot>();
 
             private RectTransform[] pages;
             private MfdPagingGrid factionGrid;
             private MfdPagingGrid unitGrid;
             private MfdPagingGrid vehicleGrid;
             private MfdPagingGrid selectedGrid;
+            private MfdPagingGrid quickGrid;
+            private MfdPagingGrid presetGrid;
             private AvButton resetFilters;
             private AvButton clearTargets;
             private AvButton followHud;
             private AvButton laser;
-            private MfdPagingGrid presetGrid;
+            private AvButton saveAs;
+            private AvButton updatePreset;
+            private AvButton renamePreset;
+            private AvButton deletePreset;
             private TMPro.TMP_Text presetStatus;
+            private TMPro.TMP_Text presetSummary;
+            private TMPro.TMP_Text editorLabel;
+            private TMPro.TMP_InputField nameField;
+            private RectTransform editor;
+
+            private string activePreset = MfdTargetPresets.Names[0];
+            private string selectedPreset = "";
+            private string echo;
+            private float echoUntil;
+            private string confirmDelete;
+            private float confirmDeleteUntil;
+            private int catalogVersion = -1;
+            private int catalogStamp = -1;
+            private int activeStamp = -1;
+            private string activeCached = TargetPresetLibrary.CustomProfile;
+            private EditMode editorMode = EditMode.None;
+            private TMPro.TMP_Text selectedNote;
+            private TMPro.TMP_Text presetNote;
 
             // Camera surface mark: state lives in Support through a narrow contract.
             private ICameraTargetService cameraService;
@@ -89,17 +115,29 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     return;
                 }
 
+                if (confirmDelete != null && Time.unscaledTime > confirmDeleteUntil)
+                {
+                    confirmDelete = null;
+                    Echo("DELETE CANCELLED");
+                }
+
+                activePreset = CachedActive();
+                EnsureCatalog();
+                TrackSelectedPreset();
                 SetFilterInput(true);
+
                 int filters = CountEnabled(selector.toggleFactionItems) +
                               CountEnabled(selector.toggleUnitTypesItems) +
                               CountEnabled(selector.toggleVehicleTypesItems);
                 Shell.DataBar.State.text = "TARGET ACQUISITION";
                 Shell.DataBar.SetChip(0, filters + " FILTERS", filters > 0);
-                Shell.DataBar.SetChip(1, selector.toggleFollowHUD.status ? "HUD LINK" : "MANUAL", true);
-                Shell.DataBar.SetChip(2, selector.toggleLaser.status ? "LASER" : "NO LASER",
-                                      selector.toggleLaser.status);
+                Shell.DataBar.SetChip(1, AvTheme.Truncate(activePreset, 12),
+                                      activePreset != TargetPresetLibrary.CustomProfile);
+                Shell.DataBar.SetChip(2, selector.toggleFollowHUD.status ? "HUD LINK" :
+                                      selector.toggleLaser.status ? "LASER" : "MANUAL",
+                                      selector.toggleFollowHUD.status || selector.toggleLaser.status);
 
-                PaintButton(resetFilters, "RESET", MatchesPreset(MfdTargetPreset.All));
+                PaintButton(resetFilters, "RESET", activePreset == MfdTargetPresets.Names[0]);
                 clearTargets.SetEnabled(SelectedCount() > 0);
                 PaintButton(followHud, "HUD LINK", selector.toggleFollowHUD.status);
                 PaintButton(laser, "LASER", selector.toggleLaser.status);
@@ -108,16 +146,33 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 SetGrid(unitGrid, selector.toggleUnitTypesItems, ToggleUnitType);
                 SetGrid(vehicleGrid, selector.toggleVehicleTypesItems, ToggleVehicleType);
                 RefreshSelectedGrid();
-                presetGrid.SetData(MfdTargetPresets.Names.Length, i => MfdTargetPresets.Names[i],
-                    i => MatchesPreset((MfdTargetPreset)i), ApplyPreset);
-                string active = "CUSTOM";
-                for (int i = 0; i < MfdTargetPresets.Names.Length; i++)
-                    if (MatchesPreset((MfdTargetPreset)i)) { active = MfdTargetPresets.Names[i]; break; }
-                presetStatus.text = selector.toggleFollowHUD.status ? "HUD LINK CONTROLS FILTERS" : "ACTIVE PROFILE  " + active;
+                RefreshQuickSlots();
+                RefreshLibrary();
+
+                presetStatus.text = selector.toggleFollowHUD.status
+                    ? "ACTIVE PROFILE  HUD LINK"
+                    : "ACTIVE PROFILE  " + activePreset;
+                presetSummary.text = DescribeSelected();
             }
 
-            protected override string AmbientStatus() =>
-                "LEFT CLICK TO TOGGLE — RIGHT CLICK TO SHOW ONLY ONE FILTER";
+            protected override string AmbientStatus()
+            {
+                if (!string.IsNullOrEmpty(echo) && Time.unscaledTime < echoUntil) return echo;
+                if (Shell == null) return "LEFT CLICK TO TOGGLE — RIGHT CLICK TO SHOW ONLY ONE FILTER";
+                if (Shell.Page == 1)
+                    return "LEFT CLICK APPLIES — RIGHT CLICK ASSIGNS A QUICK SLOT";
+                if (Shell.Page == 2)
+                    return "RIGHT-CLICK A TRACKED CONTACT TO DROP IT — CLEAR IS ON FILTERS";
+                return "LEFT CLICK TO TOGGLE — RIGHT CLICK TO SHOW ONLY ONE FILTER";
+            }
+
+            private void Echo(string text)
+            {
+                echo = text;
+                echoUntil = Time.unscaledTime + 2.4f;
+            }
+
+            // ------------------------------------------------------------- filters
 
             private void BuildFiltersPage(RectTransform page)
             {
@@ -130,8 +185,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     "RESET", "toggle", () =>
                     {
                         if (!Ready) return;
+                        CancelDeleteConfirm();
                         selector.ResetFilters();
                         selector.NeedUpdateIcons();
+                        Echo("FILTERS RESET");
                         RequestRefresh();
                     }, AvButtonStyle.Toggle);
                 clearTargets = PanelButton(page,
@@ -147,6 +204,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     "HUD LINK", "toggle", () =>
                     {
                         if (!Ready) return;
+                        CancelDeleteConfirm();
                         selector.toggleFollowHUD.Toggle();
                         selector.NeedUpdateIcons();
                         RequestRefresh();
@@ -157,6 +215,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     "LASER", "toggle", () =>
                     {
                         if (!Ready) return;
+                        CancelDeleteConfirm();
                         selector.toggleLaser.Toggle();
                         selector.NeedUpdateIcons();
                         RequestRefresh();
@@ -178,82 +237,505 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 AddRightClickActions(vehicleGrid, OnlyVehicleType);
             }
 
+            // ------------------------------------------------------------- presets
+
             private void BuildPresetsPage(RectTransform page)
             {
                 DrawSpine(page);
-                float y = Heading(page, -AvTokens.Space1, Shell.Body.width, "QUICK ACQUISITION", "ONE CLICK PROFILES");
-                presetGrid = new MfdPagingGrid(page, y, Shell.Body.width, 2, 4, pager: false);
-                y -= 4f * (AvTokens.RowHeight + AvTokens.Gap) + AvTokens.Space3;
-                presetStatus = AvStyled.Label(page, new Rect(AvTokens.Space3, y, Shell.Body.width-AvTokens.Space3, 24f),
-                    "ACTIVE PROFILE", "row-main");
-                y -= 30f;
-                for (int i = 0; i < MfdTargetPresets.Names.Length; i++)
+                float width = Shell.Body.width;
+                string[] keys =
                 {
-                    AvStyled.Label(page, new Rect(AvTokens.Space3, y, Shell.Body.width-AvTokens.Space3, 18f),
-                        MfdTargetPresets.Names[i] + "  " + MfdTargetPresets.Descriptions[i], "row-sub");
-                    y -= 21f;
-                }
-                AvStyled.Label(page, new Rect(AvTokens.Space3, y-4f, Shell.Body.width-AvTokens.Space3, 28f),
-                    "Manual filters. Neutral units use vanilla rules.", "row-sub");
+                    KeyLabel(TargetPresetRuntime.Key(0)),
+                    KeyLabel(TargetPresetRuntime.Key(1)),
+                    KeyLabel(TargetPresetRuntime.Key(2)),
+                };
+                float y = Heading(page, -AvTokens.Space1, width, "QUICK SWITCH",
+                                  "RADIAL · " + string.Join(" ", keys));
+
+                quickGrid = new MfdPagingGrid(page, y, width, TargetPresetLibrary.SlotCount, 1, pager: false);
+                AddSlotActions();
+                y -= AvTokens.RowHeight + AvTokens.Space3;
+
+                float libraryY = y;
+                y = Heading(page, y, width, "PRESET LIBRARY", null);
+                presetNote = AvStyled.Label(page,
+                    new Rect(width * 0.52f, libraryY, width * 0.48f, 14f), SavedNote(),
+                    "section-title-note", align: TMPro.TextAlignmentOptions.MidlineRight);
+                presetGrid = new MfdPagingGrid(page, y, width, 2, 3);
+                AddPresetActions();
+                y -= 3f * (AvTokens.RowHeight + AvTokens.Gap) + AvTokens.Space1 +
+                     AvTokens.RowHeight + AvTokens.Space2;
+
+                presetStatus = AvStyled.Label(page, new Rect(AvTokens.Space3, y, width - AvTokens.Space3, 16f),
+                    "ACTIVE PROFILE", "row-main");
+                y -= 20f;
+
+                presetSummary = AvStyled.Label(page,
+                    new Rect(AvTokens.Space3, y, width - AvTokens.Space3 * 2f, 30f),
+                    "", "row-sub", state: null);
+                y -= 36f;
+
+                float gap = AvTokens.Gap;
+                float buttonWidth = (width - AvTokens.Space3 - gap * 3f) / 4f;
+                saveAs = PanelButton(page, new Rect(AvTokens.Space3, y, buttonWidth, AvTokens.RowHeight),
+                    "SAVE AS", "toggle", BeginSaveAs, AvButtonStyle.Primary);
+                updatePreset = PanelButton(page,
+                    new Rect(AvTokens.Space3 + (buttonWidth + gap), y, buttonWidth, AvTokens.RowHeight),
+                    "UPDATE", "toggle", UpdateSelected, AvButtonStyle.Toggle);
+                renamePreset = PanelButton(page,
+                    new Rect(AvTokens.Space3 + 2f * (buttonWidth + gap), y, buttonWidth, AvTokens.RowHeight),
+                    "RENAME", "toggle", BeginRename, AvButtonStyle.Toggle);
+                deletePreset = PanelButton(page,
+                    new Rect(AvTokens.Space3 + 3f * (buttonWidth + gap), y, buttonWidth, AvTokens.RowHeight),
+                    "DELETE", "toggle", PressDelete, AvButtonStyle.Danger);
+                y -= AvTokens.RowHeight + AvTokens.Space2;
+
+                BuildNameEditor(page, y, width);
             }
 
-            private void ApplyPreset(int index)
+            private string SavedNote() =>
+                TargetPresetRuntime.Library.Count + " / " + TargetPresetLibrary.MaxCustomPresets + " SAVED";
+
+            private static string KeyLabel(KeyCode key) => key == KeyCode.None ? "NONE" : key.ToString();
+
+            private void BuildNameEditor(RectTransform page, float y, float width)
             {
-                if (!Ready || index < 0 || index >= MfdTargetPresets.Names.Length) return;
-                var preset = (MfdTargetPreset)index;
-                // Set raises the native OnToggle event, resetting filters when unlinking.
-                // Unlink first so that callback cannot overwrite the chosen preset.
-                if (selector.toggleFollowHUD.status) selector.toggleFollowHUD.Set(false);
-                selector.ResetFilters();
-                foreach (var entry in selector.toggleFactionItems)
-                    if (entry != null) entry.Set(MfdTargetPresets.Faction(preset, entry.sameFaction));
-                foreach (var entry in selector.toggleUnitTypesItems)
-                    if (entry != null) entry.Set(IncludesClass(preset, entry));
-                foreach (var entry in selector.toggleVehicleTypesItems)
-                    if (entry != null) entry.Set(IncludesVehicle(preset, entry));
-                selector.toggleLaser.Set(preset == MfdTargetPreset.Laser);
-                selector.NeedUpdateIcons();
+                var go = new GameObject("NameEditor", typeof(RectTransform));
+                editor = go.GetComponent<RectTransform>();
+                editor.SetParent(page, worldPositionStays: false);
+                float editorWidth = width - AvTokens.Space3 * 2f;
+                AvKit.Place(editor, new Rect(AvTokens.Space3, y, editorWidth, 52f));
+
+                editorLabel = AvStyled.Label(editor, new Rect(0f, 0f, editorWidth, 14f),
+                    "PRESET NAME", "section-title-note");
+                float gap = AvTokens.Space2;
+                float okWidth = 96f;
+                float cancelWidth = 96f;
+                float fieldWidth = Mathf.Max(80f, editorWidth - (okWidth + cancelWidth + gap * 2f));
+                nameField = AvKit.InputField(editor, new Rect(0f, -18f, fieldWidth, 26f),
+                    TargetPresetLibrary.MaxNameLength, null, null, null,
+                    "A-Z 0-9, 14 characters", "PRESET NAME");
+                PanelButton(editor, new Rect(fieldWidth + gap, -18f, okWidth, 26f),
+                    "CONFIRM", "toggle", CommitEdit, AvButtonStyle.Primary);
+                PanelButton(editor,
+                    new Rect(fieldWidth + gap * 2f + okWidth, -18f, cancelWidth, 26f),
+                    "CANCEL", "toggle", CancelEdit, AvButtonStyle.Toggle);
+                editor.gameObject.SetActive(false);
+            }
+
+            private void AddSlotActions()
+            {
+                for (int slot = 0; slot < TargetPresetLibrary.SlotCount; slot++)
+                {
+                    int index = slot;
+                    AvButton button = quickGrid.ButtonAt(slot);
+                    if (button == null) continue;
+                    button.SetAction(() => ApplyQuickSlot(index));
+                    MfdRightClickAction right = button.gameObject.AddComponent<MfdRightClickAction>();
+                    right.Configure(() => ClearQuickSlot(index));
+                }
+            }
+
+            private void AddPresetActions()
+            {
+                for (int slot = 0; slot < 6; slot++)
+                {
+                    int index = slot;
+                    AvButton button = presetGrid.ButtonAt(slot);
+                    if (button == null) continue;
+                    MfdRightClickAction right = button.gameObject.AddComponent<MfdRightClickAction>();
+                    right.Configure(() => AssignQuickSlot(presetGrid.CurrentIndex(index)));
+                }
+            }
+
+            private void AssignQuickSlot(int catalogIndex)
+            {
+                if (!Ready || catalogIndex < 0 || catalogIndex >= catalog.Count) return;
+                CancelDeleteConfirm();
+                string name = catalog[catalogIndex].Name;
+                if (TargetPresetRuntime.AssignToFirstFreeSlot(name))
+                {
+                    for (int slot = 0; slot < TargetPresetLibrary.SlotCount; slot++)
+                        if (TargetPresetRuntime.QuickSlotName(slot) == name)
+                        {
+                            Echo(name + " → QUICK SLOT " + (slot + 1));
+                            break;
+                        }
+                }
+                else
+                {
+                    Echo("QUICK SLOTS FULL — RIGHT-CLICK A SLOT TO CLEAR");
+                }
                 RequestRefresh();
             }
 
-            private bool MatchesPreset(MfdTargetPreset preset)
+            private void ApplyQuickSlot(int slot)
             {
-                if (!Ready || selector.toggleFollowHUD.status ||
-                    selector.toggleLaser.status != (preset == MfdTargetPreset.Laser)) return false;
-                foreach (var entry in selector.toggleFactionItems)
-                    if (entry != null && entry.status != MfdTargetPresets.Faction(preset, entry.sameFaction)) return false;
-                foreach (var entry in selector.toggleUnitTypesItems)
-                    if (entry != null && entry.status != IncludesClass(preset, entry)) return false;
-                foreach (var entry in selector.toggleVehicleTypesItems)
-                    if (entry != null && entry.status != IncludesVehicle(preset, entry)) return false;
-                return true;
+                if (!Ready) return;
+                CancelDeleteConfirm();
+                string name = TargetPresetRuntime.QuickSlotName(slot);
+                if (name.Length == 0)
+                {
+                    Echo("SLOT " + (slot + 1) + " EMPTY — RIGHT-CLICK A PRESET TO ASSIGN");
+                    RequestRefresh();
+                    return;
+                }
+                TargetPresetRuntime.TryApplyByName(selector, name);
+                selectedPreset = name;
+                Echo("APPLIED " + name);
+                RequestRefresh();
             }
 
-            private static bool IncludesClass(MfdTargetPreset preset, TargetListSelector_ToggleButton entry)
+            private void ClearQuickSlot(int slot)
             {
-                if (entry.listUnitTypes != null)
-                    foreach (var definition in entry.listUnitTypes)
-                        if (definition != null && MfdTargetPresets.UnitClass(preset, definition.GetType().Name)) return true;
-                return MfdTargetPresets.UnitClass(preset, "");
+                if (!Ready) return;
+                CancelDeleteConfirm();
+                Echo(TargetPresetRuntime.ClearQuickSlot(slot)
+                    ? "QUICK SLOT " + (slot + 1) + " CLEARED"
+                    : "QUICK SLOT " + (slot + 1) + " ALREADY EMPTY");
+                RequestRefresh();
             }
 
-            private static bool IncludesVehicle(MfdTargetPreset preset, TargetListSelector_ToggleButton entry)
+            private void RefreshQuickSlots()
             {
-                if (preset != MfdTargetPreset.Sead) return true;
-                if (entry.listDefinitions != null)
-                    foreach (var definition in entry.listDefinitions)
-                        if (definition is VehicleDefinition vehicle &&
-                            MfdTargetPresets.Vehicle(preset, vehicle.vehicleType.ToString())) return true;
-                return false;
+                quickGrid.SetData(TargetPresetLibrary.SlotCount,
+                    slot => (slot + 1) + "  " + SlotLabel(slot),
+                    slot => TargetPresetRuntime.QuickSlotName(slot).Length > 0 &&
+                            TargetPresetRuntime.QuickSlotName(slot) == activePreset,
+                    null);
+                for (int slot = 0; slot < TargetPresetLibrary.SlotCount; slot++)
+                {
+                    AvButton button = quickGrid.ButtonAt(slot);
+                    if (button == null) continue;
+                    string name = TargetPresetRuntime.QuickSlotName(slot);
+                    button.SetEnabled(true);
+                    button.WithTooltip(name.Length == 0
+                        ? "Quick slot " + (slot + 1) + " is empty. Right-click a preset below to assign it."
+                        : "Apply " + name + " (quick slot " + (slot + 1) + ", key " +
+                          KeyLabel(TargetPresetRuntime.Key(slot)) + "). Right-click to clear.");
+                }
             }
+
+            private static string SlotLabel(int slot)
+            {
+                string name = TargetPresetRuntime.QuickSlotName(slot);
+                return name.Length == 0 ? "—" : AvTheme.Truncate(name, 11);
+            }
+
+            private void RefreshLibrary()
+            {
+                EnsureCatalog();
+                if (presetNote != null) presetNote.text = SavedNote();
+                presetGrid.SetData(catalog.Count,
+                    LibraryLabel,
+                    index => catalog[index] != null && catalog[index].Name == activePreset,
+                    ApplyCatalog,
+                    icons: index => null);
+                for (int slot = 0; slot < 6; slot++)
+                {
+                    AvButton button = presetGrid.ButtonAt(slot);
+                    if (button == null) continue;
+                    int index = presetGrid.CurrentIndex(slot);
+                    if (index < 0 || index >= catalog.Count)
+                    {
+                        button.WithTooltip(null);
+                        continue;
+                    }
+                    TargetPresetSnapshot preset = catalog[index];
+                    string badge = PresetSlotBadge(preset.Name);
+                    button.WithTooltip(preset.Name + badge + " — " +
+                        (TargetPresetRuntime.IsBuiltIn(index)
+                            ? MfdTargetPresets.Descriptions[index]
+                            : TargetPresetRules.Summary(preset)) +
+                        "  ·  Left click applies, right click assigns a quick slot.");
+                }
+            }
+
+            private string LibraryLabel(int index)
+            {
+                TargetPresetSnapshot preset = catalog[index];
+                if (preset == null) return "";
+                string label = preset.Name;
+                if (selectedPreset == preset.Name) label = "> " + label;
+                string badge = PresetSlotBadge(preset.Name);
+                return badge.Length == 0 ? label : label + "  " + badge;
+            }
+
+            private static string PresetSlotBadge(string name)
+            {
+                for (int slot = 0; slot < TargetPresetLibrary.SlotCount; slot++)
+                    if (TargetPresetRuntime.QuickSlotName(slot) == name) return "[" + (slot + 1) + "]";
+                return "";
+            }
+
+            private void ApplyCatalog(int index)
+            {
+                if (!Ready || index < 0 || index >= catalog.Count) return;
+                CancelDeleteConfirm();
+                TargetPresetSnapshot preset = catalog[index];
+                if (preset == null) return;
+                TargetPresetRuntime.Apply(selector, preset);
+                selectedPreset = preset.Name;
+                Echo("APPLIED " + preset.Name);
+                RequestRefresh();
+            }
+
+            private void EnsureCatalog()
+            {
+                int stamp = selector.toggleFactionItems.Count * 31 +
+                            selector.toggleUnitTypesItems.Count * 7 +
+                            selector.toggleVehicleTypesItems.Count;
+                if (catalogVersion == TargetPresetRuntime.Version && catalogStamp == stamp) return;
+
+                catalog.Clear();
+                int count = TargetPresetRuntime.CatalogCount;
+                for (int i = 0; i < count; i++) catalog.Add(TargetPresetRuntime.CatalogAt(selector, i));
+                catalogVersion = TargetPresetRuntime.Version;
+                catalogStamp = stamp;
+            }
+
+            /// <summary>Profile matching walks every preset; only redo it when a toggle moved.</summary>
+            private string CachedActive()
+            {
+                int stamp = TargetPresetRuntime.Version;
+                stamp = stamp * 31 + (selector.toggleFollowHUD.status ? 1 : 0);
+                stamp = stamp * 31 + (selector.toggleLaser.status ? 1 : 0);
+                stamp = stamp * 31 + selector.toggleFactionItems.Count;
+                for (int i = 0; i < selector.toggleFactionItems.Count; i++)
+                    stamp = stamp * 31 + EntryHash(selector.toggleFactionItems[i]);
+                stamp = stamp * 31 + selector.toggleUnitTypesItems.Count;
+                for (int i = 0; i < selector.toggleUnitTypesItems.Count; i++)
+                    stamp = stamp * 31 + EntryHash(selector.toggleUnitTypesItems[i]);
+                stamp = stamp * 31 + selector.toggleVehicleTypesItems.Count;
+                for (int i = 0; i < selector.toggleVehicleTypesItems.Count; i++)
+                    stamp = stamp * 31 + EntryHash(selector.toggleVehicleTypesItems[i]);
+
+                if (stamp == activeStamp) return activeCached;
+                activeStamp = stamp;
+                activeCached = TargetPresetRuntime.ActiveName(selector);
+                return activeCached;
+            }
+
+            private static int EntryHash(TargetListSelector_ToggleButton entry) =>
+                entry == null ? 0 : (entry.status ? 1 : 2);
+
+            private void TrackSelectedPreset()
+            {
+                if (string.IsNullOrEmpty(selectedPreset) ||
+                    TargetPresetRuntime.IndexOfCatalogName(selectedPreset) < 0)
+                    selectedPreset = activePreset;
+            }
+
+            private TargetPresetSnapshot SelectedCustom()
+            {
+                int index = TargetPresetRuntime.IndexOfCatalogName(selectedPreset);
+                return index >= TargetPresetRuntime.BuiltInCount ? TargetPresetRuntime.Library.At(
+                    index - TargetPresetRuntime.BuiltInCount) : null;
+            }
+
+            private void BeginSaveAs()
+            {
+                if (!Ready) return;
+                CancelDeleteConfirm();
+                nameField.text = TargetPresetRuntime.SuggestName();
+                OpenEditor(EditMode.SaveAs, "SAVE CURRENT FILTERS AS");
+            }
+
+            private void BeginRename()
+            {
+                if (!Ready) return;
+                TargetPresetSnapshot preset = SelectedCustom();
+                if (preset == null)
+                {
+                    Echo("RENAME WORKS ON SAVED PRESETS — SELECT ONE FIRST");
+                    RequestRefresh();
+                    return;
+                }
+                CancelDeleteConfirm();
+                nameField.text = preset.Name;
+                OpenEditor(EditMode.Rename, "RENAME " + preset.Name);
+            }
+
+            private void OpenEditor(EditMode mode, string label)
+            {
+                editorMode = mode;
+                editorLabel.text = label;
+                editor.gameObject.SetActive(true);
+                nameField.ActivateInputField();
+                nameField.Select();
+                RequestRefresh();
+            }
+
+            private void CloseEditor()
+            {
+                editorMode = EditMode.None;
+                if (editor != null) editor.gameObject.SetActive(false);
+                if (nameField != null) nameField.DeactivateInputField();
+            }
+
+            private void CancelEdit()
+            {
+                CloseEditor();
+                Echo("EDIT CANCELLED");
+                RequestRefresh();
+            }
+
+            private void CommitEdit()
+            {
+                if (editorMode == EditMode.None) return;
+                string name = TargetPresetRules.SanitiseName(nameField.text);
+                if (name.Length == 0)
+                {
+                    Echo("NAME REQUIRED — A-Z, 0-9, 14 CHARACTERS");
+                    RequestRefresh();
+                    return;
+                }
+
+                if (editorMode == EditMode.SaveAs)
+                {
+                    TargetPresetSaveResult result = TargetPresetRuntime.SaveCurrent(selector, name, false);
+                    if (result == TargetPresetSaveResult.Ok)
+                    {
+                        selectedPreset = name;
+                        Echo("SAVED " + name);
+                    }
+                    else
+                    {
+                        Echo(SaveMessage(result, name));
+                        RequestRefresh();
+                        return;
+                    }
+                }
+                else
+                {
+                    if (name == selectedPreset)
+                    {
+                        CloseEditor();
+                        Echo("NO CHANGE");
+                        RequestRefresh();
+                        return;
+                    }
+                    if (!TargetPresetRuntime.Rename(selectedPreset, name))
+                    {
+                        Echo("RENAME REJECTED — NAME IN USE OR RESERVED");
+                        RequestRefresh();
+                        return;
+                    }
+                    Echo("RENAMED TO " + name);
+                    selectedPreset = name;
+                }
+
+                CloseEditor();
+                RequestRefresh();
+            }
+
+            private static string SaveMessage(TargetPresetSaveResult result, string name)
+            {
+                switch (result)
+                {
+                    case TargetPresetSaveResult.NameInUse: return name + " EXISTS — USE UPDATE TO REPLACE IT";
+                    case TargetPresetSaveResult.LibraryFull:
+                        return "LIBRARY FULL (" + TargetPresetLibrary.MaxCustomPresets + " MAX) — DELETE ONE FIRST";
+                    case TargetPresetSaveResult.ReservedName: return name + " IS A BUILT-IN PROFILE NAME";
+                    case TargetPresetSaveResult.NotReady: return "WAITING FOR TARGET FILTERS";
+                    default: return "NAME REQUIRED — A-Z, 0-9, 14 CHARACTERS";
+                }
+            }
+
+            private void UpdateSelected()
+            {
+                if (!Ready) return;
+                CancelDeleteConfirm();
+                TargetPresetSnapshot preset = SelectedCustom();
+                if (preset == null)
+                {
+                    Echo("UPDATE WORKS ON SAVED PRESETS — SELECT ONE FIRST");
+                    RequestRefresh();
+                    return;
+                }
+                TargetPresetSaveResult result = TargetPresetRuntime.SaveCurrent(selector, preset.Name, true);
+                Echo(result == TargetPresetSaveResult.Ok ? "UPDATED " + preset.Name : SaveMessage(result, preset.Name));
+                RequestRefresh();
+            }
+
+            private void PressDelete()
+            {
+                if (!Ready) return;
+                TargetPresetSnapshot preset = SelectedCustom();
+                if (preset == null)
+                {
+                    Echo("DELETE WORKS ON SAVED PRESETS — SELECT ONE FIRST");
+                    RequestRefresh();
+                    return;
+                }
+
+                if (confirmDelete != preset.Name || Time.unscaledTime > confirmDeleteUntil)
+                {
+                    confirmDelete = preset.Name;
+                    confirmDeleteUntil = Time.unscaledTime + 4f;
+                    Echo("DELETE " + preset.Name + "? PRESS DELETE AGAIN");
+                    RequestRefresh();
+                    return;
+                }
+
+                TargetPresetRuntime.Delete(preset.Name);
+                confirmDelete = null;
+                selectedPreset = "";
+                Echo("DELETED " + preset.Name);
+                RequestRefresh();
+            }
+
+            private void CancelDeleteConfirm()
+            {
+                if (confirmDelete == null) return;
+                confirmDelete = null;
+                Echo("DELETE CANCELLED");
+            }
+
+            private string DescribeSelected()
+            {
+                int index = TargetPresetRuntime.IndexOfCatalogName(selectedPreset);
+                if (index < 0) return "Select a preset to apply. SAVE AS stores the current filters.";
+                if (index < TargetPresetRuntime.BuiltInCount)
+                    return "Built-in. " + MfdTargetPresets.Descriptions[index];
+                TargetPresetSnapshot preset = TargetPresetRuntime.Library.At(
+                    index - TargetPresetRuntime.BuiltInCount);
+                return preset == null ? "" : TargetPresetRules.Summary(preset);
+            }
+
+            // ------------------------------------------------------------ selected
 
             private void BuildSelectedPage(RectTransform page)
             {
                 DrawSpine(page);
-                float y = Heading(page, -AvTokens.Space1, Shell.Body.width,
-                                  "SELECTED TARGETS", "MAP ICONS");
-                selectedGrid = new MfdPagingGrid(page, y, Shell.Body.width, 1, 9, readOnly: true);
+                float width = Shell.Body.width;
+                float y = Heading(page, -AvTokens.Space1, width, "SELECTED TARGETS", null);
+                selectedNote = AvStyled.Label(page,
+                    new Rect(width * 0.52f, -AvTokens.Space1, width * 0.48f, 14f),
+                    "0 TRACKED", "section-title-note", align: TMPro.TextAlignmentOptions.MidlineRight);
+                selectedGrid = new MfdPagingGrid(page, y, width, 1, 9, readOnly: true);
+                for (int slot = 0; slot < 9; slot++)
+                {
+                    int index = slot;
+                    AvButton button = selectedGrid.ButtonAt(slot);
+                    if (button == null) continue;
+                    button.SetEnabled(true);
+                    MfdRightClickAction right = button.gameObject.AddComponent<MfdRightClickAction>();
+                    right.Configure(() => DeselectSelected(selectedGrid.CurrentIndex(index)));
+                }
             }
+
+            private void DeselectSelected(int index)
+            {
+                if (index < 0 || index >= selectedUnits.Count) return;
+                Unit unit = selectedUnits[index];
+                if (unit == null) return;
+                selector.ForceDeselect(unit);
+                Echo("DROPPED " + TargetUnitLabel(unit));
+                RequestRefresh();
+            }
+
+            // ------------------------------------------------------------ camera
 
             private void BuildCameraPage(RectTransform page)
             {
@@ -374,8 +856,12 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 cameraArmed.color = armed.StartsWith("NONE") ? AvTheme.Dim : AvTheme.RailCaution;
             }
 
+            // ------------------------------------------------------------ plumbing
+
             private void SelectPage(int selected)
             {
+                CancelDeleteConfirm();
+                CloseEditor();
                 for (int i = 0; i < pages.Length; i++) pages[i].gameObject.SetActive(i == selected);
                 SetSelectedTab(selected);
                 RequestRefresh();
@@ -414,6 +900,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             {
                 if (!Ready) return;
                 if (entries == null || index < 0 || index >= entries.Count || entries[index] == null) return;
+                CancelDeleteConfirm();
                 entries[index].Toggle();
                 selector.NeedUpdateIcons();
                 RequestRefresh();
@@ -423,6 +910,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             {
                 if (!Ready) return;
                 if (entries == null || index < 0 || index >= entries.Count || entries[index] == null) return;
+                CancelDeleteConfirm();
                 selector.SetOnlyItem(entries[index]);
                 selector.NeedUpdateIcons();
                 RequestRefresh();
@@ -444,6 +932,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 selectedGrid.SetData(selectedUnits.Count,
                     i => TargetUnitLabel(selectedUnits[i]), i => false, null,
                     icons: i => selectedUnits[i].definition == null ? null : selectedUnits[i].definition.mapIcon);
+                if (selectedNote != null) selectedNote.text = selectedUnits.Count + " TRACKED";
             }
 
             private int SelectedCount()
@@ -468,7 +957,24 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 unitGrid?.SetInteractable(enabled);
                 vehicleGrid?.SetInteractable(enabled);
                 selectedGrid?.SetInteractable(enabled);
+                quickGrid?.SetInteractable(enabled);
                 presetGrid?.SetInteractable(enabled);
+                saveAs?.SetEnabled(enabled);
+                updatePreset?.SetEnabled(enabled);
+                renamePreset?.SetEnabled(enabled);
+                deletePreset?.SetEnabled(enabled);
+                if (!enabled)
+                {
+                    editorMode = EditMode.None;
+                    if (editor != null) editor.gameObject.SetActive(false);
+                    confirmDelete = null;
+                }
+                else
+                {
+                    updatePreset?.SetEnabled(SelectedCustom() != null);
+                    renamePreset?.SetEnabled(SelectedCustom() != null);
+                    deletePreset?.SetEnabled(SelectedCustom() != null);
+                }
             }
 
             private static int CountEnabled(List<TargetListSelector_ToggleButton> entries)

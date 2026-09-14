@@ -59,8 +59,9 @@ namespace BoscaliSummer.Features.Support.Patches
                     r.enabled = false;
                 }
 
-                if (world.y < Datum.LocalSeaY + 2000f)
-                    world = new Vector3(world.x, Datum.LocalSeaY + 6000f, world.z);
+                float altitude = Datum.LocalSeaY + Runtime.SupportEffectPolicy.EmpBurstAltitude;
+                if (world.y < altitude)
+                    world = new Vector3(world.x, altitude, world.z);
 
                 float radius = Runtime.SupportEffectPolicy.EmpRadius(unique);
                 Visuals.EmpVisualEffect.Trigger(world, radius);

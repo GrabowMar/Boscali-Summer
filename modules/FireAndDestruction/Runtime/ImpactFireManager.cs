@@ -10,6 +10,7 @@ using BoscaliSummer.Runtime;
 using NuclearOption.Effects;
 using NuclearOption.Networking;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace BoscaliSummer.Fire
 {
@@ -25,7 +26,9 @@ namespace BoscaliSummer.Fire
         private struct ScorchMark
         {
             public GlobalPosition Position;
-            public float RadiusScale;
+            public float MarkRadius;
+            public float TreeClearBlastRadius;
+            public float ScarDiameter;
         }
 
         private struct VehicleExplosionEvent
@@ -41,7 +44,6 @@ namespace BoscaliSummer.Fire
             public float Expires;
             public float NextSmoke;
             public float NextSpread;
-            public float NextBurnScorch;
             public int Generation;
             public int SpreadAttempts;
             public bool Forest;
@@ -54,9 +56,11 @@ namespace BoscaliSummer.Fire
 
         public static ImpactFireManager Instance { get; private set; }
 
+        private const int MaximumScorchQueue = 128;
+
         private readonly Queue<ImpactEvent> impacts = new Queue<ImpactEvent>(256);
         private readonly Queue<VehicleExplosionEvent> vehicleExplosions = new Queue<VehicleExplosionEvent>(32);
-        private readonly Queue<ScorchMark> scorches = new Queue<ScorchMark>(128);
+        private readonly Queue<ScorchMark> scorches = new Queue<ScorchMark>(MaximumScorchQueue);
         private readonly List<FireSite> fires = new List<FireSite>(32);
         private readonly Dictionary<long, float> cellCooldowns = new Dictionary<long, float>();
         private readonly Dictionary<int, float> vehicleCooldowns = new Dictionary<int, float>();
@@ -66,7 +70,9 @@ namespace BoscaliSummer.Fire
         private readonly ForestIndex forestIndex = new ForestIndex();
         private readonly FireVisualPool visualPool = new FireVisualPool();
         private readonly FuelDepotSmokePool fuelDepotSmokePool = new FuelDepotSmokePool();
+        private readonly BurnScarPool burnScars = new BurnScarPool();
         private Coroutine indexRoutine;
+        private CommandBuffer burnMarkCommands;
         private ServiceRegistry services;
         private float nextTick;
         private int impactSequence;
@@ -83,6 +89,12 @@ namespace BoscaliSummer.Fire
             if (Instance == this) Instance = null;
             visualPool.Clear();
             fuelDepotSmokePool.Clear();
+            burnScars.Clear();
+            if (burnMarkCommands != null)
+            {
+                burnMarkCommands.Dispose();
+                burnMarkCommands = null;
+            }
         }
 
         public void ResetForScene()
@@ -100,6 +112,7 @@ namespace BoscaliSummer.Fire
             fires.Clear();
             visualPool.Clear();
             fuelDepotSmokePool.Clear();
+            burnScars.Clear();
             impactSequence = 0;
             if (indexRoutine != null) StopCoroutine(indexRoutine);
             indexRoutine = StartCoroutine(RebuildIndexDelayed());
@@ -145,19 +158,12 @@ namespace BoscaliSummer.Fire
 
         private void Update()
         {
-            // The game's detail renderer drains this queue and applies both the persistent
-            // blast texture and procedural-tree removal. One or two calls per frame bounds spikes.
+            // Burn sites are the expensive path: each one paints the vanilla blast map,
+            // queues at most one small tree-clearing blast and stamps a pooled soot decal.
+            // One or two per frame bounds spikes from a spreading front.
             int scorchBudget = scorches.Count > 8 ? 2 : 1;
-            while (scorchBudget-- > 0 && scorches.Count > 0 && SceneSingleton<BlastManager>.i != null)
-            {
-                // Keep the vanilla blast-map path (the same gray ash tint used by nuclear
-                // impacts), leaving visible charred soot marks and clearing the burn footprint.
-                ScorchMark scorch = scorches.Dequeue();
-                float radius = Mathf.Max(32f,
-                    Fire.ScorchRadius * Fire.ScorchRadiusScale) *
-                    scorch.RadiusScale;
-                SceneSingleton<BlastManager>.i.AddBlast(scorch.Position, radius);
-            }
+            while (scorchBudget-- > 0 && scorches.Count > 0)
+                StampBurnSite(scorches.Dequeue());
 
             int budget = 8;
             while (budget-- > 0 && impacts.Count > 0) ProcessImpact(impacts.Dequeue());
@@ -170,6 +176,29 @@ namespace BoscaliSummer.Fire
             if (Time.unscaledTime < nextTick) return;
             nextTick = Time.unscaledTime + 0.25f;
             UpdateFires();
+        }
+
+        private void StampBurnSite(ScorchMark scorch)
+        {
+            // The gray ash bed is drawn straight into the vanilla blast map. DrawBlast paints
+            // the persistent texture only; it never touches procedural trees. Tree removal
+            // is a separate, deliberately small AddBlast, so a campfire no longer flattens a
+            // 90 m stand around every stamp.
+            BlastManager blast = SceneSingleton<BlastManager>.i;
+            if (!GameManager.IsHeadless && blast != null && blast.Texture != null)
+            {
+                float radius = Mathf.Max(scorch.MarkRadius, blast.worldSizeToResolution * 0.5f);
+                if (burnMarkCommands == null)
+                    burnMarkCommands = new CommandBuffer { name = "BoscaliSummer.BurnMark" };
+                burnMarkCommands.Clear();
+                blast.DrawBlast(burnMarkCommands,
+                    new BlastManager.DetailBlast(scorch.Position, radius));
+                Graphics.ExecuteCommandBuffer(burnMarkCommands);
+                if (scorch.TreeClearBlastRadius > 0f)
+                    blast.AddBlast(scorch.Position, scorch.TreeClearBlastRadius);
+            }
+            if (scorch.ScarDiameter > 0f)
+                burnScars.Stamp(scorch.Position, scorch.ScarDiameter);
         }
 
         private void ProcessImpact(ImpactEvent impact)
@@ -359,7 +388,6 @@ namespace BoscaliSummer.Fire
                 // Let the first flame phase establish itself before the large plume starts.
                 NextSmoke = now + 1.75f,
                 NextSpread = now + Fire.FireSpreadInterval * spreadJitter,
-                NextBurnScorch = now + 24f,
                 Generation = generation,
                 SpreadAttempts = 0,
                 Forest = forest,
@@ -413,7 +441,6 @@ namespace BoscaliSummer.Fire
                 Expires = now + Mathf.Min(remainingLifetime, original),
                 NextSmoke = now,
                 NextSpread = float.MaxValue,
-                NextBurnScorch = now + 24f,
                 Generation = 0,
                 SpreadAttempts = 0,
                 Forest = forest,
@@ -470,11 +497,6 @@ namespace BoscaliSummer.Fire
                     Mathf.Clamp01((site.Expires - now) / Fire.FireLifetime),
                     wind);
                 TrySpread(site, now, wind);
-                if (site.Forest && now >= site.NextBurnScorch)
-                {
-                    site.NextBurnScorch = now + 24f;
-                    QueueForestScorch(site.Position, site.ClusterScale, wind);
-                }
                 if (site.BuildingSmoke != null)
                 {
                     site.BuildingSmoke.SetPosition(site.Position);
@@ -564,7 +586,7 @@ namespace BoscaliSummer.Fire
                 uint optionSeed = Deterministic.Hash((int)seed, option, source.Generation, 0x165667b1);
                 float lateral = Deterministic.UnitFloat(optionSeed) * 2f - 1f;
                 Vector3 direction = (windDirection + crosswind * lateral * 0.9f).normalized;
-                float advance = Mathf.Max(baseDistance, Fire.ScorchRadius * 0.9f);
+                float advance = baseDistance;
                 float distance = advance *
                     (0.9f + Deterministic.UnitFloat(optionSeed ^ 0xc2b2ae35u) * 0.45f);
                 GlobalPosition candidate = source.Position + direction * distance;
@@ -604,13 +626,34 @@ namespace BoscaliSummer.Fire
                 cellCooldowns.Remove(expiredCooldownCells[i]);
         }
 
-        private void QueueScorch(GlobalPosition position, float radiusScale)
+        private void QueueScorch(GlobalPosition position, float clusterScale)
         {
-            if (scorches.Count >= 128) return;
+            if (scorches.Count >= MaximumScorchQueue) return;
+            float scale = Mathf.Clamp(clusterScale, 1f, 3f);
             scorches.Enqueue(new ScorchMark
             {
                 Position = position,
-                RadiusScale = radiusScale
+                MarkRadius = FireScorchPolicy.BurnMarkRadius(scale),
+                TreeClearBlastRadius = FireScorchPolicy.TreeClearBlastRadius(scale),
+                ScarDiameter = FireScorchPolicy.ScarDiameter(scale)
+            });
+        }
+
+        /// <summary>
+        /// A lobe widens the ash bed and soot footprint around the core without a second
+        /// tree-clearing blast. Keeping removal to one bounded stamp per site is what stops
+        /// a forest fire from consuming a stand far larger than its visible flames.
+        /// </summary>
+        private void QueueScorchLobe(GlobalPosition position, float clusterScale, float sizeScale)
+        {
+            if (scorches.Count >= MaximumScorchQueue) return;
+            float scale = Mathf.Clamp(clusterScale, 1f, 3f);
+            scorches.Enqueue(new ScorchMark
+            {
+                Position = position,
+                MarkRadius = FireScorchPolicy.BurnMarkRadius(scale) * sizeScale,
+                TreeClearBlastRadius = 0f,
+                ScarDiameter = FireScorchPolicy.ScarDiameter(scale) * sizeScale
             });
         }
 
@@ -626,20 +669,19 @@ namespace BoscaliSummer.Fire
             Vector3 crosswind = new Vector3(-windDir.z, 0f, windDir.x);
 
             float scale = Mathf.Clamp(clusterScale, 1f, 3f);
-            // Core central soot stamp
+            float mark = FireScorchPolicy.BurnMarkRadius(scale);
             QueueScorch(position, scale);
 
             uint seed = Deterministic.Hash(
                 Mathf.RoundToInt(position.x), Mathf.RoundToInt(position.z), 0x61a7, impactSequence++);
 
-            // Multi-lobed irregular blast marks stretched along and across the wind front
-            float downwindOffset = Mathf.Lerp(20f, 38f, Deterministic.UnitFloat(seed)) * scale;
-            float crossOffset = Mathf.Lerp(16f, 30f, Deterministic.UnitFloat(seed ^ 0x9e3779b9u)) * scale;
-
-            QueueScorch(position + windDir * downwindOffset, 0.90f * scale);
-            QueueScorch(position - windDir * (downwindOffset * 0.55f), 0.75f * scale);
-            QueueScorch(position + crosswind * crossOffset + windDir * (downwindOffset * 0.35f), 0.82f * scale);
-            QueueScorch(position - crosswind * (crossOffset * 0.85f) + windDir * (downwindOffset * 0.25f), 0.78f * scale);
+            // Two lighter lobes stretch the ash bed along and across the wind front. They
+            // carry no tree removal, so the consumed stand stays a compact hole while the
+            // gray burnt soil spreads with the front the way a nuclear stamp does.
+            float downwindOffset = mark * Mathf.Lerp(0.30f, 0.52f, Deterministic.UnitFloat(seed));
+            float crossOffset = mark * Mathf.Lerp(0.20f, 0.36f, Deterministic.UnitFloat(seed ^ 0x9e3779b9u));
+            QueueScorchLobe(position + windDir * downwindOffset, scale, 0.85f);
+            QueueScorchLobe(position + crosswind * crossOffset + windDir * (downwindOffset * 0.35f), scale, 0.78f);
         }
 
         private void FindBuildings(

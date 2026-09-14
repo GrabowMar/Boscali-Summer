@@ -115,7 +115,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             float emblemX = x + width - emblemWidth + 6f;
             pilotEmblemFallback = PlainLabel(parent, new Rect(emblemX, y - 42f, 62f, 30f), "NO\nART", "row-sub");
             pilotEmblemFallback.alignment = TextAlignmentOptions.Center;
-            pilotEmblemImage = AvKit.Panel(parent, new Rect(emblemX, y - 8f, 62f, 62f), Color.clear);
+            pilotEmblemImage = AvKit.Panel(parent, new Rect(emblemX, y - 8f, 62f, 62f), Color.white);
             pilotEmblemImage.type = Image.Type.Simple;
             pilotEmblemImage.preserveAspect = true;
             pilotEmblemImage.raycastTarget = false;

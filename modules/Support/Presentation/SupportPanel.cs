@@ -147,10 +147,14 @@ namespace BoscaliSummer.Features.Support.Presentation
 
             bool visible = screen.isActive && SceneSingleton<DynamicMap>.i?.maximizedMapCanvas?.isActiveAndEnabled == true;
             SetViewOpen(visible);
-            if (visible && Time.unscaledTime >= nextRefresh)
+            if (visible)
             {
-                nextRefresh = Time.unscaledTime + RefreshInterval;
-                Refresh();
+                UpdateSpaceMotion();
+                if (Time.unscaledTime >= nextRefresh)
+                {
+                    nextRefresh = Time.unscaledTime + RefreshInterval;
+                    Refresh();
+                }
             }
         }
 
@@ -344,6 +348,62 @@ namespace BoscaliSummer.Features.Support.Presentation
         private static void RowSeparator(RectTransform parent, Rect area) =>
             AvKit.Rule(parent, new Rect(area.x, area.y - area.height, area.width, 1f),
                        AvTheme.Unity(AvTokens.Hairline.WithAlpha(0.13f)));
+
+        /// <summary>A band-backed section title with a right-hand note, at an AvBox-resolved rect.
+        /// Shared by SPACE and CYBER, which both hang numbered bands ("01 / ...") off their
+        /// spine; lives here so neither tab owns a helper the other depends on.</summary>
+        private static TMP_Text DrawBandTitle(RectTransform parent, Rect area, string title, string note)
+        {
+            AvStyled.Box(parent, new Rect(area.x + SpineInset, area.y + 3f,
+                area.width - SpineInset, 15f), "section band");
+            AvStyled.SpineTick(parent, area.x + SpineInset, area.y + 3f);
+            AvStyled.Label(parent, new Rect(area.x + SpineInset + 8f, area.y,
+                area.width - SpineInset - 8f, 15f), title, "section-title");
+            return AvStyled.Label(parent, new Rect(area.x + area.width * 0.40f, area.y,
+                area.width * 0.60f - SpineInset, 15f), note, "section-title-note",
+                align: TextAlignmentOptions.MidlineRight);
+        }
+
+        /// <summary>A key/value stat pair: dim label left, bold value right. Shared by SPACE
+        /// and CYBER for compact stat readouts inside a card.</summary>
+        private static TMP_Text Stat(RectTransform parent, float x, float y, float width, string key)
+        {
+            AvStyled.Label(parent, new Rect(x, y, width * 0.55f, 14f), key, "kv-key");
+            return AvStyled.Label(parent, new Rect(x + width * 0.5f, y, width * 0.5f, 14f),
+                "—", "kv-value", align: TextAlignmentOptions.MidlineRight);
+        }
+
+        /// <summary>
+        /// A faint CRT scanline band tiled over an entire page, drawn first so everything else
+        /// sits on top of it. The one cheap trick that actually reads as "phosphor terminal"
+        /// rather than "flat dark UI" — reused by SPACE and CYBER, the two tabs asked to be
+        /// visually distinctive.
+        /// </summary>
+        private static void AddScanlineOverlay(RectTransform parent, Rect area)
+        {
+            var go = new GameObject("Scanlines", typeof(RectTransform), typeof(Image));
+            var rect = (RectTransform)go.transform;
+            rect.SetParent(parent, false);
+            AvKit.Place(rect, area);
+
+            Image image = go.GetComponent<Image>();
+            image.sprite = SupportTacticalIcons.ScanlineSprite;
+            image.type = Image.Type.Tiled;
+            image.raycastTarget = false;
+        }
+
+        /// <summary>
+        /// A soft halo behind a hero card: a slightly larger, low-alpha copy of the card's own
+        /// rail colour. Cheap layered-glow, the same "second wider low-alpha copy underneath"
+        /// trick <c>MfdResourceChart</c> already uses for its line glow, applied to a card
+        /// instead of a line. Must be built BEFORE the card it sits behind.
+        /// </summary>
+        private static void AddCardGlow(RectTransform parent, Rect cardArea, Color tint, float bleed = 5f)
+        {
+            Rect glowArea = new Rect(cardArea.x - bleed, cardArea.y + bleed,
+                cardArea.width + bleed * 2f, cardArea.height + bleed * 2f);
+            AvKit.Panel(parent, glowArea, tint.WithAlpha(0.10f));
+        }
 
         private static TMP_Text KeyValue(
             RectTransform parent, float x, float y, float width, string key)
@@ -693,12 +753,16 @@ namespace BoscaliSummer.Features.Support.Presentation
                 }
                 else if (role.HasValue && !(cursor && support.CoverageNow(row.Definition.Id, cursorX, cursorZ)))
                 {
+                    // Coverage is advisory here, not a gate: the player arms the call, then
+                    // right-clicks the target, and the host verifies coverage at that point.
+                    // Pre-checking the cursor only stopped every out-of-coverage call from
+                    // ever being attempted, so the typed denial could never be seen.
                     string coverage = !cursor
-                        ? "MOVE CURSOR OVER TARGET"
+                        ? "COVERAGE UNVERIFIED"
                         : CoverageLine(role.Value, cursorX, cursorZ);
-                    SetRowState(row, "locked", coverage,
+                    SetRowState(row, "armed", coverage + " · ARM, THEN RIGHT-CLICK TARGET",
                         cursor ? CoverageColor(role.Value, cursorX, cursorZ) : AvTheme.Warning,
-                        "NO COVER", false, false);
+                        "CALL IN", true, false);
                 }
                 else
                 {

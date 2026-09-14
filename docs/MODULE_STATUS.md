@@ -33,16 +33,18 @@ tests/BoscaliSummer.Tests -c Release`): **passes** (module + framework + archite
 | Radio | `radio` | on (client-local) | optional `ISquadView` | **Stable / Unverified** hunt override |
 | Quality of life | `qol` | on (client-local) | — | **Unverified** (new module) |
 | Autopilot landing | `autopilot` | on (client-local) | - | **Unverified** (new module) |
+| TGT target presets + quick slots + native-radial target page | `Presentation/MapUi/TargetPresetModel.cs`, `TargetPresetRuntime.cs`, `TargetPresetRadialPage.cs`, `Runtime/TargetPresetHotkeys.cs` | In-flight | Player-saved filter profiles (max 12, 14-char names) persist in `Command.TargetPresets`/`TargetPresetSlots`; F6/F9/F10 quick slots; radial host in Autopilot resolves `IRadialMenuPage`. In-game visual/input/MP acceptance pending |
 | Squad / ace hunts | `squad` | on (host-auth) | — | **Unverified** |
 | Progression | `progression` | on (host-auth) | `squad` | **Unverified** SQD/career integration |
 | Support operations | `support` | on | `progression` | **In-flight** (drift) |
 | Tactical command | `command` | on | `progression` | **In-flight / Unverified** |
 | Dynamic operations | `dynamic-operations` | **off** | — | **Experimental** |
+| Chain of command | `high-command` | on | — | **Unverified** (new module) |
 | Trenches | `trenches` | on | Command | **Combat implementation; in-game acceptance pending** |
 | Weather | — | — | — | **Absent** (archived) |
 
 Load order (composition root): fire → urban → radio → qol → squad → progression → support →
-command → dynamic-operations → trenches. Progression/Support/Command are simply not constructed when
+command → dynamic-operations → high-command → trenches. Progression/Support/Command are simply not constructed when
 disabled; Squad is installed with Progression. `qol`, `dynamic-operations`, and `trenches`
 are gated on their own `Enabled` flag. The whole plugin now requires Wing Command `0.9.2.6`+
 with its public Squad API.
@@ -60,7 +62,8 @@ host-authoritative world mutation, two replicated channels.
 | Ground-vehicle destruction secondary ignition | `GroundVehicleDestructionPatch` | Stable | 32-event queue, 1 spatial query/frame |
 | Forest index (built once per scene) | `Runtime/ForestIndex.cs` | Stable | |
 | Wind-biased forest spread, bounded child fronts | `Runtime/ImpactFireManager.cs` | Stable | **Drift:** code `FireSpreadGenerations => 3`; README/ARCHITECTURE say "≤2 generations" |
-| Fire visuals (Fuel Depot smoke clone, 3-light budget) | `Visuals/FireVisualPool.cs`, `Visuals/FuelDepotSmokePool.cs` | Stable | |
+| Fire visuals (flame/ember layers, Fuel Depot smoke clone, 3-light budget) | `Visuals/FireVisualPool.cs`, `Visuals/FuelDepotSmokePool.cs` | Stable | Forest plume tinted lighter/taller with buoyancy and stronger shear |
+| Burn scars — nuke-scale blast-map ash bed, small tree-clear blast, pooled ground soot decal | `Runtime/FireScorchPolicy.cs`, `Visuals/BurnScarPool.cs`, `Runtime/ImpactFireManager.cs` | Stable | Tree removal decoupled from the ash stamp: ≤3 ash stamps (260–338 m) and one ~2 m tree-clearing blast per site; 64 decals, oldest recycled |
 | Impact scorch decals (local cosmetic, 1–3 marks/hit) | `Buildings/ImpactScorch*.cs` | Stable | Replaced the old HP-tier damage model; nothing on the wire |
 | Ruin aftermath: collapse burst → hot smoke → smoulder | `Buildings/RuinAftermathManager.cs`, `Buildings/CollapseBurstPool.cs` | Stable | 256 logical / 24 smoke visuals / 4 bursts |
 | Direct-kill ruin hook | `Buildings/MapBuildingRuinPatch.cs` | Stable | |
@@ -87,12 +90,12 @@ air-assault presentation. Publishes `IBuildingOccupancy`, `IZoneFortificationSer
 |---|---|---|---|
 | Zone garrisons — suitable roofs → native MG/AT/AA nests | `Runtime/ZoneGarrisonManager.cs`, `Runtime/RooftopPlacement.cs`, `Runtime/GarrisonOccupancy.cs` | In-game acceptance pending | 49 roof candidates with nine support samples each; cooked mesh or readable geometry, corrected box fallback for non-readable props; one weapon per shell, six per zone, 96 overall. Native spawn replication; cleanup clears dead occupancy. |
 | Capture cleanup | `Patches/AirbaseCapturePatches.cs` | Stable | Highway strips supported; ship airbases ignored |
-| Garrison visuals / occupied-building marking | `Visuals/GarrisonVisual.cs`, `Visuals/OccupiedBuildingMarking.cs` | Unity preview checked; in-game pending | Visible weapons/crew; local sandbags and faction flag. Terrain dugout hidden on roofs. Four decoration renderers, under 3,000 vertices per position, no cosmetic colliders/lights. |
+| Garrison visuals / occupied-building marking | `Visuals/GarrisonVisual.cs`, `Visuals/OccupiedBuildingMarking.cs`, `Runtime/GarrisonMarkerInfo.cs` | Unity preview checked; in-game pending | Visible weapons/crew; local sandbags; shell-scaled twin masts/flags and roof-edge faction band with viewer-relative accent, rebuilt from the measured flat-roof patch encoded in the defense's unique name; definition-sized nest marker kept as fallback. Six decoration renderers, under 4,000 vertices per position, no cosmetic colliders/lights. Pure `$m` round-trip tests added. |
 | `IZoneFortificationService.TryFortify` (consumed by Support) | `Runtime/ZoneGarrisonManager.cs` | Stable | Verifies definition/spawner/shells before charging |
-| Air assault — visible insertion sequences, bounded outposts | `Runtime/AirAssaultController.cs`, `Visuals/AirAssaultVisuals.cs` | Unverified | 8 visual ops / 12 encampment cap; in-game visual validation pending |
+| Air assault — visible insertion sequences, bounded outposts | `Runtime/AirAssaultController.cs`, `Visuals/AirAssaultVisuals.cs` | Unverified | Cargo access animates open before one eight-troop stick exits over ~8 s at a steady interval; engine-generated parachute mesh (`ParachuteMeshBuilder`: dome + 20 shroud ribbons, double-sided, vanilla fabric/rope materials) on a pendulum above each jumper; per-jumper golden-angle drift, varied chute timing and descent rates plus mission wind fan the stick out; canopy collapses on landing; descent timer scales with drop altitude so sticks do not vanish mid-air; 8 visual ops / 12 encampment cap; in-game visual validation pending |
 | Infantry encampment / makeshift fortification builders | `Runtime/InfantryEncampmentBuilder.cs`, `Runtime/MakeshiftFortificationBuilder.cs` | In-flight | Presentation attached to networked vanilla emplacements |
 | Mounted troops fire | `Patches/MountedTroopsFirePatch.cs` | Stable | |
-| Chimera/Tarantula paratrooper loadout station | `Patches/ChimeraLoadoutPatches.cs` (4 patch classes), `Runtime/ChimeraInfantryLoadoutAdapter.cs` | In-flight | Injects a `MountedTroops` station into MC-260 cargo bays; **undocumented in README/ARCHITECTURE** |
+| Chimera/Tarantula paratrooper loadout station | `Patches/ChimeraLoadoutPatches.cs` (4 patch classes), `Runtime/ChimeraInfantryLoadoutAdapter.cs` | In-flight | Injects a `MountedTroops` station into MC-260/Tarantula cargo bays and mirrors it into the definition prefab so `WeaponChecker.VetLoadout` keeps it at spawn; registered in `Encyclopedia.IndexLookup` for serialization; **undocumented in README/ARCHITECTURE** |
 | Base defense alarm — hostile strike-package detection, OPS ticker | `Runtime/BaseDefenseAlarmService.cs` | In-flight | 2s poll, 7.5 km radius; feeds `SupportPanel`; **undocumented** |
 
 **Needs attention**
@@ -227,7 +230,7 @@ unit value, one `CostMultiplier`, typed denials, verified card state.
 | Satellite Scan | `Recon` | `Recon` / Satellite Scan | In-flight | Immediate coverage-gated native tracking snapshot, capped at 48 contacts; **absent from catalogue** if the seam can't be resolved |
 | Zone Fortification | `Fortify` | `Fortify` / Combat Engineering | Stable | Calls `IZoneFortificationService`; charged only after defenders verified. Absent if Urban Combat missing |
 | Rod from God (kinetic strike) | `Artillery` | `Artillery` / Rod from God | In-flight | Native missile delivery with server-only 150 m core / 420 m blast; requires STRIKE coverage. In-game MP pending |
-| EMP Shock | `Emp` | `Emp` / EMP Shock | In-flight | Particle shock fronts and lightning; requires EW coverage; host-only 18 s jamming, local cockpit feedback. In-game MP pending |
+| EMP Shock | `Emp` | `Emp` / EMP Shock | In-flight | 30 km airburst: light-speed E1 prompt footprint and cockpit upset, E2 branching arcs, E3 geomagnetic heave holds the host-only 30 s jamming; local cockpit feedback. In-game MP pending |
 | Flare Barrage | `FlareMissile` | **`Recon`** (shared) / — | In-flight | Airburst IR countermeasure. **No dedicated perk** — reuses the Recon capability to authorise |
 
 | Cyber operation | Id | Gate | Status | Notes |
@@ -292,11 +295,13 @@ recruited Wing Command wing.
 | Dynamic frontline / sector-control overlay | `Runtime/TacticalSectorGrid.cs`, `Runtime/MissionMapCompatibilityEngine.cs`, `Presentation/ComMapOverlay.cs`, `Patches/DynamicMapHooks.cs` | Unverified | Elapsed-time pressure/recovery, base-ownership anchored, objective ground presence independent of faction tracking (spotting cannot change cell occupation; both sides see the same cells). Advisory only — vanilla capture unchanged. In-game validation pending |
 | Mission-AI target scoring by doctrine | `Patches/AiTargetScoringPatch.cs`, `Domain/CommandDoctrine.cs`, `Runtime/CommandManager.cs` | In-flight | Biases friendly mission AI only |
 | `MIS → SECONDARY` objectives view | `Presentation/MapUi/MfdSecondaryObjectives.cs` | Experimental | Reads `ISecondaryObjectivesView`; only live when `dynamic-operations` is enabled |
-| `SET` MFD settings page | `Presentation/MapUi/SettingsMfdPanel.cs` | In-flight | Shared `AvScreen`; bounded steppers explain disabled limits |
+| `SET` MFD settings page - MAP / STYLE / IMAGE / COCKPIT | `Presentation/MapUi/SettingsMfdPanel.cs` | In-flight | Shared `AvScreen`; compact rows; panel resolves up to `PanelHeightMax`; COCKPIT reads QoL's `IThirdPersonHud`; bounded steppers explain disabled limits |
+| TGT target presets / quick slots / native-radial page | `Presentation/MapUi/TargetPresetModel.cs`, `TargetPresetRuntime.cs`, `TargetPresetRadialPage.cs`, `Runtime/TargetPresetHotkeys.cs` | In-flight | Bounded config-persisted library; F6/F9/F10; Autopilot hosts the page through `IRadialMenuPage`. In-game acceptance pending |
 | Wing Command coexistence (NOAvionics, no assembly dep) | `Presentation/MapUi/`, `Infrastructure/GameInterop/MfdBezel.cs` | Stable | Named same-frame bezel claims plus exclusive armed map gestures |
 
 Config: `Command.Enabled`, `ExpandedMapUi`, `FrontlinesOverlay`, `OverlayOpacity` (0.35),
-`GridResolution` (32), `GridRefreshInterval` (0.5s).
+`GridResolution` (32), `GridRefreshInterval` (0.5s), `TargetPresetWheel` (on),
+`TargetPresetKey1/2/3` (F6/F9/F10), `TargetPresets`/`TargetPresetSlots` (managed by TGT).
 
 **Needs attention**
 - **Drift:** DESIGN_NOTES still says "COM is no longer a fourth bezel — theater SA mounts as
@@ -336,6 +341,36 @@ Full MIS panel also needs `Progression.Enabled` + `Command.Enabled` + `Command.E
   pure tests can't cover any of it.
 - Four `RESEARCH_DYNAMIC_*.md` docs are untracked in git alongside this — decide if they are
   committed reference or scratch.
+
+---
+
+## Chain of command — `high-command`
+
+**Purpose:** generated faction staff, real command posts on the map, VIP convoys and
+economy-only rewards. **Default on.** New module. Publishes `IHighCommandView`; Command's
+STR console adds a COC page and a COMMAND metric. Effects are funds/score only — no vanilla
+AI, spawn or damage behaviour is touched.
+
+| Feature | Where | Status | Notes |
+|---|---|---|---|
+| Deterministic roster — 6 posts, names, traits, bios, portraits | `Domain/CommanderGenerator.cs`, `Domain/CommandTree.cs`, `Domain/PortraitDesign.cs`, `Presentation/CommanderPortraitRenderer.cs` | Pure suite passes | Seed-stable across host/client; 64-entry portrait cache cleared on reset |
+| Spawned command posts, last-damage kill credit, succession | `Runtime/HighCommandManager*.cs`, `Patches/HighCommandDamagePatch.cs` | Awaiting in-game validation | Death via `Unit.onDisableUnit`; bounty to the hostile faction that dealt the last damage; destroyed post rebuilt after `PostRespawnSeconds` |
+| VIP convoys, relocation orders, intel fog | `Runtime/HighCommandManager.Assets.cs` | Awaiting in-game validation | 1 transfer/faction, 8 convoys; lead vehicle carries the VIP; 45s intel memory, 2.6/4.2km reveal |
+| Protocol-1 snapshot/intents, per-faction scoping | `Networking/HighCommandNet.cs` | Awaiting in-game validation | Unknown enemy nodes omitted, positions zeroed; 32-node ceiling; 2s action throttle |
+| STR COC page and third COMMAND metric | `modules/Command/Presentation/StrMfdPanel.Coc.cs` | Awaiting in-game visual check | Tree guides, dossier, portrait, traits, bio, COMMEND / RELOCATE / MARK BOUNTY |
+
+Config: `HighCommand.Enabled` (true), `EconomyEnabled` (true), `StipendIntervalSeconds`
+(120), `MaximumStipends` (10), bounties 1500/3000/6000, `MarkedBountyPercent` (50),
+`CommandPointsMaximum` (12), `TransfersEnabled` (true), `TransferMinSeconds`/`MaxSeconds`
+(180/420), `DisruptionSeconds` (120), `PostRespawnSeconds` (60).
+
+**Needs attention**
+- In-game acceptance is **pending for every behaviour**: post placement on live terrain,
+  convoy pathing and arrival, kill/bounty attribution, intel timing, page layout, and
+  single-player/listen-host/remote-client/late-join snapshots plus scene reload.
+- Enemy AI has no reason to attack command posts; the mechanic currently rewards player
+  strikes (LARP + economy scope). AI interest would be a deliberate future slice.
+- Kill-list marks are economic only; they do not steer friendly AI.
 
 ---
 

@@ -13,6 +13,7 @@ namespace BoscaliSummer.Features.Autopilot
         private static readonly Type[] Patches =
         {
             typeof(AutopilotLandInputPatch),
+            typeof(FlightAssistReportPatch),
             typeof(RadialMenuLifecyclePatches),
             typeof(BoscaliMenuActionPatches)
         };

@@ -76,6 +76,9 @@ namespace BoscaliSummer.Tests.Features.Support
             InfoNetworkTests.Run();
             TestAssert.That(SupportEffectPolicy.EmpDuration == 30f,
                 "EMP disruption must retain its 30-second operational duration");
+            TestAssert.That(SupportEffectPolicy.EmpBurstAltitude >= 20000f &&
+                SupportEffectPolicy.EmpBurstAltitude <= 40000f,
+                "EMP burst must sit in the 20-40 km gamma-deposition band");
             TestAssert.That(SupportEffectPolicy.RodDamage(0f) == 12000f &&
                 SupportEffectPolicy.RodDamage(150f) == 12000f, "rod core must retain its compact lethal plateau");
             TestAssert.That(SupportEffectPolicy.RodDamage(200f) > SupportEffectPolicy.RodDamage(300f) &&

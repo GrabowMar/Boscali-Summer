@@ -43,9 +43,9 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
 
             if (!context.Host.TryReserve(SupportPool.Strike)) return SupportResult.Busy;
 
-            context.Logger.LogInfo("[Support] EMP shock using " + definition.jsonKey +
-                                   " at " + ground.y.ToString("F0") + " m AGL-local, release +" +
-                                   ReleaseAltitude.ToString("F0") + " m");
+            context.Logger.LogInfo("[Support] EMP airburst using " + definition.jsonKey +
+                                   " at " + ground.y.ToString("F0") + " m AGL-local, burst +" +
+                                   SupportEffectPolicy.EmpBurstAltitude.ToString("F0") + " m");
             context.Host.Run(Discharge(context.Host, context.Player, context.Owner, definition, ground,
                 context.Settings.EmpRadius.Value, SupportEffectPolicy.EmpName(SupportNaming.Unique("Emp", context), context.Settings.EmpRadius.Value)));
             return SupportResult.Accepted;
@@ -83,9 +83,9 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
                 target = targetGlobal.ToLocalPosition();
 
                 // The burst is an airburst over the mark, not wherever the delivery
-                // missile has wandered. A terrain-following prefab used to put this on
-                // the deck; the visual and the jam stay at altitude either way.
-                Vector3 burstPoint = target + Vector3.up * Mathf.Max(4000f, ReleaseAltitude * 0.45f);
+                // missile has wandered. The gamma-deposition band puts the prompt pulse
+                // in the 20-40 km stratosphere; the visual and the jam stay at altitude.
+                Vector3 burstPoint = target + Vector3.up * SupportEffectPolicy.EmpBurstAltitude;
 
                 if (missile != null && !missile.disabled)
                 {

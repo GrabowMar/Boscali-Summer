@@ -23,12 +23,18 @@ namespace BoscaliSummer.Features.Command
             typeof(MfdSinglePanelPatch),
             typeof(DynamicMapMaximizePatch),
             typeof(DynamicMapMinimizePatch),
+            typeof(MapControlsPanelGuardPatch),
+            typeof(MapCursorPanelGuardPatch),
             typeof(GridLabelsPatch)
         };
 
         public void Install(FeatureContext context)
         {
             IProgressionView progression = context.Services.GetRequired<IProgressionView>();
+
+            TargetPresetRuntime.Configure(context.Settings.Command);
+            context.AddSceneService<TargetPresetHotkeys>(49).Configure(context.Settings.Command);
+            context.AddService<IRadialMenuPage>(new TargetPresetRadialPage());
 
             MissionMapCompatibilityEngine compat = context.AddSceneService<MissionMapCompatibilityEngine>(51);
             CommandManager manager = context.AddSceneService<CommandManager>(52);

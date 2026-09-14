@@ -1,4 +1,5 @@
 using BepInEx.Configuration;
+using UnityEngine;
 
 namespace BoscaliSummer.Features.Command.Configuration
 {
@@ -28,6 +29,13 @@ namespace BoscaliSummer.Features.Command.Configuration
 
         public ConfigEntry<bool> NewsTickerEnabled { get; }
         public ConfigEntry<float> NewsTickerSpeed { get; }
+
+        public ConfigEntry<bool> TargetPresetWheel { get; }
+        public ConfigEntry<string> TargetPresets { get; }
+        public ConfigEntry<string> TargetPresetSlots { get; }
+        public ConfigEntry<KeyCode> TargetPresetKey1 { get; }
+        public ConfigEntry<KeyCode> TargetPresetKey2 { get; }
+        public ConfigEntry<KeyCode> TargetPresetKey3 { get; }
 
         public CommandSettings(ConfigFile config)
         {
@@ -111,6 +119,24 @@ namespace BoscaliSummer.Features.Command.Configuration
                 new ConfigDescription(
                     "Map darkening beneath terrain and symbols, independent of background choice (0.0 = clear, 1.0 = dark solid).",
                     new AcceptableValueRange<float>(0.0f, 1.0f)));
+
+            TargetPresetWheel = config.Bind("Command", "TargetPresetWheel", true,
+                "Offer the assigned TGT quick-slot presets as a page in the native cockpit radial menu.");
+
+            TargetPresets = config.Bind("Command", "TargetPresets", "",
+                "Saved TGT target-filter presets, stored by the PRESETS page. Internal format; do not hand-edit.");
+
+            TargetPresetSlots = config.Bind("Command", "TargetPresetSlots", "||",
+                "The three TGT quick-slot preset names, in order. Managed by the PRESETS page.");
+
+            TargetPresetKey1 = config.Bind("Command", "TargetPresetKey1", KeyCode.F6,
+                "Apply TGT quick-slot 1 while flying. None disables the shortcut.");
+
+            TargetPresetKey2 = config.Bind("Command", "TargetPresetKey2", KeyCode.F9,
+                "Apply TGT quick-slot 2 while flying. None disables the shortcut.");
+
+            TargetPresetKey3 = config.Bind("Command", "TargetPresetKey3", KeyCode.F10,
+                "Apply TGT quick-slot 3 while flying. None disables the shortcut.");
         }
     }
 }

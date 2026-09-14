@@ -21,9 +21,20 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private TMP_Text missionDescription;
             private UnityEngine.UI.ScrollRect briefingScroll;
             private TMP_Text missionClock;
-            private TMP_Text escalation;
+            private TMP_Text missionMode;
+            private TMP_Text ladderCaption;
+            private UnityEngine.UI.Image escalationFill;
+            private UnityEngine.UI.Image escalationMarker;
+            private UnityEngine.UI.Image escalationTacticalTick;
+            private UnityEngine.UI.Image escalationStrategicTick;
+            private TMP_Text escalationTacticalValue;
+            private TMP_Text escalationStrategicValue;
+            private readonly TMP_Text[] escalationStages = new TMP_Text[3];
+            private readonly UnityEngine.UI.Image[] escalationStageMarks = new UnityEngine.UI.Image[3];
+            private float escalationTrackX;
+            private float escalationTrackWidth;
+            private float escalationMarkerY;
             private MfdPagingGrid objectiveGrid;
-            private readonly UnityEngine.UI.Image[] escalationSteps = new UnityEngine.UI.Image[3];
             private SecondaryObjectiveCard[] secondaryCards;
             private TMP_Text secondaryEmpty;
             private TMP_Text secondaryPageLabel;
@@ -74,22 +85,38 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private void BuildMissionPage(RectTransform page)
             {
                 DrawSpine(page);
-                float y = Heading(page, -AvTokens.Space1, Shell.Body.width,
+                float width = Shell.Body.width;
+                float y = Heading(page, -AvTokens.Space1, width,
                                   "MISSION BRIEF", "SCROLL TO READ BRIEF");
-                float briefHeight = Mathf.Clamp(Shell.Body.height - 166f, 244f, 340f);
+
+                // The brief takes every pixel the fixed blocks below it do not. The ladder
+                // and the contract action are measured up from the page bottom, so the
+                // card grows with the dock instead of leaving the lower half empty.
+                float bottom = -Shell.Body.height;
+                float buttonTop = bottom + AvTokens.Space1 + 44f;
+                float captionTop = buttonTop + AvTokens.Space3 + 14f;
+                float valueTop = captionTop + AvTokens.Space1 + 12f;
+                float trackTop = valueTop + AvTokens.Space1 + 10f;
+                float stageTop = trackTop + AvTokens.Space2 + 14f;
+                float ladderTop = stageTop + AvTokens.Space5;
+                float briefHeight = Mathf.Max(160f, ladderTop - AvTokens.Space6 - y);
+
                 AvKit.TacticalCard(page,
-                    new Rect(AvTokens.Space3, y, Shell.Body.width - AvTokens.Space3, briefHeight), AvTheme.RailInfo);
+                    new Rect(AvTokens.Space3, y, width - AvTokens.Space3, briefHeight), AvTheme.RailInfo);
                 missionName = AvStyled.Label(page,
-                    new Rect(AvTokens.Space4, y - 14f, Shell.Body.width - AvTokens.Space5, 58f),
+                    new Rect(AvTokens.Space4, y - 14f, width - AvTokens.Space5, 56f),
                     "LOADING MISSION", "metric-value");
                 missionName.enableWordWrapping = true;
                 missionName.enableAutoSizing = true;
-                missionName.fontSizeMin = 16f;
+                missionName.fontSizeMin = 15f;
                 missionName.fontSizeMax = 22f;
+                AvKit.Rule(page, new Rect(AvTokens.Space4, y - 74f, width - AvTokens.Space5, 1f), AvTheme.Hairline);
+
                 var viewport = new GameObject("BriefingScroll", typeof(RectTransform), typeof(UnityEngine.UI.Image),
                     typeof(UnityEngine.UI.RectMask2D), typeof(UnityEngine.UI.ScrollRect)).GetComponent<RectTransform>();
                 viewport.SetParent(page, false);
-                AvKit.Place(viewport, new Rect(AvTokens.Space4, y - 76f, Shell.Body.width - AvTokens.Space5, briefHeight - 138f));
+                AvKit.Place(viewport, new Rect(AvTokens.Space4, y - 82f, width - AvTokens.Space5,
+                    Mathf.Max(40f, briefHeight - 116f)));
                 viewport.GetComponent<UnityEngine.UI.Image>().color = Color.clear;
                 briefingScroll = viewport.GetComponent<UnityEngine.UI.ScrollRect>();
                 briefingScroll.viewport = viewport;
@@ -100,28 +127,58 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 briefingScroll.movementType = UnityEngine.UI.ScrollRect.MovementType.Clamped;
                 missionDescription = AvStyled.Label(viewport, new Rect(0f, 0f, viewport.rect.width, viewport.rect.height), "", "row-sub");
                 briefingScroll.content = missionDescription.rectTransform;
-                missionClock = AvStyled.Label(page,
-                    new Rect(AvTokens.Space4, y - briefHeight + 52f, Shell.Body.width - AvTokens.Space5, 18f),
-                    "TIME —", "row-main");
-                escalation = AvStyled.Label(page,
-                    new Rect(AvTokens.Space4, y - briefHeight + 26f, Shell.Body.width - AvTokens.Space5, 18f),
-                    "ESCALATION —", "row-main");
                 missionDescription.enableWordWrapping = true;
                 missionDescription.fontSize = 13f;
                 missionDescription.overflowMode = TextOverflowModes.Overflow;
                 missionDescription.color = AvTheme.TextPrimary;
-                y -= briefHeight + 20f;
-                y = Heading(page, y, Shell.Body.width, "ESCALATION LADDER", "CURRENT THRESHOLD");
+
+                float footerTop = y - briefHeight + 26f;
+                missionClock = AvStyled.Label(page,
+                    new Rect(AvTokens.Space4, footerTop, width * 0.5f - AvTokens.Space2, 16f),
+                    "MISSION TIME  —", "row-sub");
+                missionMode = AvStyled.Label(page,
+                    new Rect(width * 0.5f, footerTop, width * 0.5f - AvTokens.Space5, 16f),
+                    "MODE  —", "row-sub", align: TextAlignmentOptions.MidlineRight);
+
+                Heading(page, ladderTop, width, "ESCALATION LADDER", "CURRENT THRESHOLD");
                 string[] stages = { "CONVENTIONAL", "TACTICAL", "STRATEGIC" };
-                float width = (Shell.Body.width-AvTokens.Space3-AvTokens.Gap*2f)/3f;
+                float third = (width - AvTokens.Space3) / 3f;
                 for (int i = 0; i < stages.Length; i++)
                 {
-                    float x = AvTokens.Space3+i*(width+AvTokens.Gap);
-                    AvStyled.Label(page, new Rect(x, y, width, 20f), stages[i], "row-sub");
-                    escalationSteps[i] = AvKit.Rule(page, new Rect(x, y-24f, width, 5f), AvTheme.SurfaceRaised);
+                    float x = AvTokens.Space3 + i * third;
+                    escalationStages[i] = AvStyled.Label(page, new Rect(x, stageTop, third, 14f),
+                        stages[i], "section-title-note", align: TextAlignmentOptions.Center);
+                    escalationStageMarks[i] = AvKit.Rule(page,
+                        new Rect(x + third * 0.5f - 14f, stageTop - 17f, 28f, 2f), Color.clear);
                 }
-                AvStyled.Button(page, new Rect(AvTokens.Space3, y - 42f, Shell.Body.width - AvTokens.Space3, 44f),
-                    "BROWSE OPTIONAL CONTRACTS", "row-main", () => SelectPage(2), AvButtonStyle.Quiet);
+
+                var track = new Rect(AvTokens.Space3, trackTop, width - AvTokens.Space3, 10f);
+                AvKit.Panel(page, track, AvTheme.SurfaceInert);
+                AvKit.Outline(page, track, AvTheme.Frame);
+                escalationTrackX = track.x + 1f;
+                escalationTrackWidth = track.width - 2f;
+                escalationMarkerY = track.y + 1f;
+                escalationFill = AvKit.Panel(page,
+                    new Rect(escalationTrackX, escalationMarkerY, 0f, 8f), AvTheme.Accent);
+                escalationTacticalTick = AvKit.Rule(page,
+                    new Rect(track.x + track.width / 3f, track.y, 1f, track.height), AvTheme.Frame);
+                escalationStrategicTick = AvKit.Rule(page,
+                    new Rect(track.x + track.width * 2f / 3f, track.y, 1f, track.height), AvTheme.Frame);
+                escalationMarker = AvKit.Rule(page,
+                    new Rect(escalationTrackX, escalationMarkerY, 2f, 12f), AvTheme.TextPrimary);
+
+                escalationTacticalValue = AvStyled.Label(page,
+                    new Rect(track.x + track.width / 3f - 40f, valueTop, 80f, 12f), "",
+                    "section-title-note", align: TextAlignmentOptions.Center);
+                escalationStrategicValue = AvStyled.Label(page,
+                    new Rect(track.x + track.width * 2f / 3f - 40f, valueTop, 80f, 12f), "",
+                    "section-title-note", align: TextAlignmentOptions.Center);
+                ladderCaption = AvStyled.Label(page,
+                    new Rect(AvTokens.Space3, captionTop, width - AvTokens.Space3, 14f), "", "section-title-note");
+
+                AvStyled.Button(page,
+                    new Rect(AvTokens.Space3, buttonTop, width - AvTokens.Space3, 44f),
+                    "BROWSE OPTIONAL CONTRACTS", "row-main", () => SelectPage(2), AvButtonStyle.Primary);
             }
 
             private void BuildObjectivesPage(RectTransform page)
@@ -343,25 +400,81 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 if (mission == null)
                 {
                     missionName.text = "NO MISSION LOADED";
-                    missionDescription.text = "Waiting for mission controller data.";
+                    missionDescription.text = "WAITING FOR MISSION CONTROLLER DATA";
+                    missionDescription.fontStyle = FontStyles.Italic;
+                    missionDescription.color = AvTheme.Disabled;
                 }
                 else
                 {
                     missionName.text = string.IsNullOrEmpty(mission.Name) ? "UNTITLED MISSION" : mission.Name;
-                    missionDescription.text = mission.missionSettings == null ? "" :
-                        string.IsNullOrWhiteSpace(mission.missionSettings.description) ? "No mission briefing supplied." :
-                        mission.missionSettings.description;
+                    bool hasBrief = mission.missionSettings != null &&
+                                    !string.IsNullOrWhiteSpace(mission.missionSettings.description);
+                    missionDescription.text = hasBrief ? mission.missionSettings.description : "NO BRIEFING FILED";
+                    missionDescription.fontStyle = hasBrief ? FontStyles.Normal : FontStyles.Italic;
+                    missionDescription.color = hasBrief ? AvTheme.TextPrimary : AvTheme.Disabled;
                 }
 
                 missionClock.text = "MISSION TIME  " + MissionClock(manager);
+                missionMode.text = ModeLabel(mission);
                 missionDescription.rectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical,
                     Mathf.Max(briefingScroll.viewport.rect.height,
                         missionDescription.GetPreferredValues(missionDescription.text, briefingScroll.viewport.rect.width, 0f).y));
-                escalation.text = "ESCALATION    " + EscalationLabel(manager);
-                int stage = manager == null ? -1 : manager.currentEscalation >= manager.strategicThreshold ? 2 :
-                    manager.currentEscalation >= manager.tacticalThreshold ? 1 : 0;
-                for (int i = 0; i < escalationSteps.Length; i++)
-                    escalationSteps[i].color = i == stage ? AvTheme.Warning : AvTheme.SurfaceRaised;
+                RefreshEscalation(manager);
+            }
+
+            private void RefreshEscalation(MissionManager manager)
+            {
+                if (manager == null)
+                {
+                    ladderCaption.text = "ESCALATION DATA UNAVAILABLE";
+                    escalationTacticalValue.text = escalationStrategicValue.text = "—";
+                    escalationTacticalTick.enabled = escalationStrategicTick.enabled = false;
+                    SetEscalationVisual(0f, AvTheme.RailInert, -1);
+                    return;
+                }
+
+                float current = Mathf.Max(0f, manager.currentEscalation);
+                float tactical = manager.tacticalThreshold;
+                float strategic = manager.strategicThreshold;
+                bool hasTactical = tactical > 0f;
+                bool hasStrategic = strategic > 0f;
+
+                int stage = MfdMissionOverview.Stage(current, tactical, strategic);
+                Color color = stage == 2 ? AvTheme.Alert : stage == 1 ? AvTheme.Warning : AvTheme.Accent;
+                SetEscalationVisual(MfdMissionOverview.Fraction(current, tactical, strategic), color, stage);
+
+                escalationTacticalTick.enabled = hasTactical;
+                escalationStrategicTick.enabled = hasStrategic;
+                escalationTacticalValue.text = hasTactical ? tactical.ToString("N0") : "—";
+                escalationStrategicValue.text = hasStrategic ? strategic.ToString("N0") : "—";
+                ladderCaption.text = MfdMissionOverview.Caption(current, tactical, strategic);
+            }
+
+            private void SetEscalationVisual(float fraction, Color color, int stage)
+            {
+                fraction = Mathf.Clamp01(fraction);
+                escalationFill.color = color;
+                escalationFill.rectTransform.sizeDelta = new Vector2(fraction * escalationTrackWidth, 8f);
+                escalationMarker.color = color;
+                escalationMarker.rectTransform.anchoredPosition =
+                    new Vector2(escalationTrackX + fraction * escalationTrackWidth - 1f, escalationMarkerY);
+                for (int i = 0; i < escalationStages.Length; i++)
+                {
+                    bool active = i == stage;
+                    escalationStages[i].color = active ? color : AvTheme.Dim;
+                    escalationStageMarks[i].color = active ? color : Color.clear;
+                }
+            }
+
+            private static string ModeLabel(Mission mission)
+            {
+                if (mission == null || mission.missionSettings == null) return "MODE  —";
+                switch (mission.missionSettings.playerMode)
+                {
+                    case PlayerMode.Singleplayer: return "MODE  SINGLEPLAYER";
+                    case PlayerMode.Multiplayer: return "MODE  MULTIPLAYER";
+                    default: return "MODE  SINGLE / MULTIPLAYER";
+                }
             }
 
             private void RefreshObjectives()
@@ -385,14 +498,6 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 if (objective == null) return "OBJECTIVE LINK LOST";
                 string prefix = objective.CompletePercent >= 0.999f ? "DONE  " : (Mathf.Clamp01(objective.CompletePercent)*100f).ToString("0") + "%  ";
                     return prefix + MfdSecondaryObjectives.PlainObjective(objective.ToUIString(oneLine: true));
-            }
-
-            private static string EscalationLabel(MissionManager manager)
-            {
-                if (manager == null) return "LINK LOST";
-                if (manager.currentEscalation >= manager.strategicThreshold) return "STRATEGIC";
-                if (manager.currentEscalation >= manager.tacticalThreshold) return "TACTICAL";
-                return "CONVENTIONAL";
             }
 
             private static string MissionClock(MissionManager manager)

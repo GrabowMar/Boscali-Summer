@@ -11,15 +11,11 @@ namespace BoscaliSummer.Tests.Features.Command
             TestAirbaseCaptureParsing();
             TestNuclearEventParsing();
             TestAceDefeatParsing();
-            TestKillFeedParsing();
+            TestIndividualTrafficStaysOffTheWire();
             TestMajorUnitKillParsing();
             TestInterceptionParsing();
-            TestAircraftKillParsing();
             TestPilotRescueAndCaptureParsing();
             TestWarheadDefenseParsing();
-            TestUnattributedLossAndRepairParsing();
-            TestRoutineTrafficSuppressionAndDigest();
-            TestKillStreakAndFirstBlood();
             TestLogisticsThrottle();
             TestMarqueeFormattingAndLoop();
             TestTheaterStatusGeneration();
@@ -69,14 +65,35 @@ namespace BoscaliSummer.Tests.Features.Command
             TestAssert.That(parsed.Text.Contains("HOSTILE ACE PILOT"), "Must reference ace pilot");
         }
 
-        private static void TestKillFeedParsing()
+        private static void TestIndividualTrafficStaysOffTheWire()
         {
-            string line = "Linebreaker TFX destroyed MIG-47 Anvil";
-            var parsed = MfdNewsFeed.ParseEvent(line);
-            TestAssert.That(parsed != null, "Must parse kill feed line");
-            TestAssert.That(parsed.Tag == "COMBAT REPORT", "Combat kill tag must be COMBAT REPORT");
-            TestAssert.That(parsed.Text.Contains("MIG-47 ANVIL"), "Must include victim unit");
-            TestAssert.That(parsed.Text.Contains("LINEBREAKER TFX"), "Must include attacker unit");
+            TestAssert.That(MfdNewsFeed.ParseEvent("Linebreaker TFX destroyed MIG-47 Anvil") == null,
+                "Routine vehicle kills belong in the tactical log");
+            TestAssert.That(MfdNewsFeed.ParseEvent("FGA-57 Anvil shot down MIG-47 Foxbat") == null,
+                "Individual air kills belong in the tactical log");
+            TestAssert.That(MfdNewsFeed.ParseEvent("FGA-57 Anvil intercepted AGM-48") == null,
+                "Routine interceptions belong in the tactical log");
+            TestAssert.That(MfdNewsFeed.ParseEvent("MIG-47 Foxbat crashed") == null,
+                "Crash sites belong in the tactical log");
+            TestAssert.That(MfdNewsFeed.ParseEvent("Linebreaker TFX sank Patrol Boat") == null,
+                "Non-capital vessel losses belong in the tactical log");
+            TestAssert.That(MfdNewsFeed.ParseEvent("Linebreaker SAM was repaired") == null,
+                "Repairs never reach the wire");
+
+            var feed = new MfdNewsFeed();
+            for (int i = 0; i < 3; i++)
+            {
+                feed.IngestGameEvent($"FGA-57 Anvil shot down MIG-{40 + i}", 10f + i * 10f);
+            }
+            feed.IngestGameEvent("FGA-57 Anvil intercepted AGM-61", 40f);
+            feed.IngestGameEvent("SAH-46 Chicane destroyed Type-12 MBT 4", 40f);
+
+            string text = feed.BuildMarqueeText(6);
+            TestAssert.That(!text.Contains("SHOT DOWN"), "Kill feed must not reach the marquee");
+            TestAssert.That(!text.Contains("ACE WATCH"), "Kill streaks must not reach the marquee");
+            TestAssert.That(!text.Contains("OPENING SHOTS"), "First blood must not reach the marquee");
+            TestAssert.That(!text.Contains("ARMOR"), "Armor tallies must not reach the marquee");
+            TestAssert.That(!text.Contains("SESSION TALLY"), "Casualty tallies must not reach the marquee");
         }
 
         private static void TestMajorUnitKillParsing()
@@ -87,30 +104,28 @@ namespace BoscaliSummer.Tests.Features.Command
             TestAssert.That(parsed.Tag == "CRITICAL KILL", "Capital unit kill must be CRITICAL KILL");
             TestAssert.That(parsed.IsUrgent, "Capital unit kill must be marked urgent");
             TestAssert.That(parsed.Text.Contains("SHARD CLASS CORVETTE"), "Must include ship name");
+
+            var sunk = MfdNewsFeed.ParseEvent("Linebreaker TFX sank Shard Class Cruiser");
+            TestAssert.That(sunk != null, "Must parse capital ship loss");
+            TestAssert.That(sunk.Tag == "CRITICAL KILL", "Capital ship loss must be CRITICAL KILL");
+            TestAssert.That(sunk.IsUrgent, "Capital ship loss must be urgent");
+
+            var strategic = MfdNewsFeed.ParseEvent("Linebreaker TFX demolished Radar Station");
+            TestAssert.That(strategic != null, "Strategic demolition must reach the wire");
+            TestAssert.That(strategic.Tag == "DEMOLITION", "Strategic demolition tag must be DEMOLITION");
+            TestAssert.That(strategic.IsUrgent, "Strategic demolition must interrupt the wire");
         }
 
         private static void TestInterceptionParsing()
         {
-            string line = "Shard Class Corvette intercepted AGM-48";
-            var parsed = MfdNewsFeed.ParseEvent(line);
-            TestAssert.That(parsed != null, "Must parse intercept event");
-            TestAssert.That(parsed.Tag == "AIR DEFENSE", "Intercept tag must be AIR DEFENSE");
-            TestAssert.That(parsed.Text.Contains("AGM-48"), "Must include intercepted ordnance");
-        }
+            TestAssert.That(MfdNewsFeed.ParseEvent("Shard Class Corvette intercepted AGM-48") == null,
+                "Routine interceptions must stay in the tactical log");
 
-        private static void TestAircraftKillParsing()
-        {
-            var parsed = MfdNewsFeed.ParseEvent("FGA-57 Anvil shot down MIG-47 Foxbat");
-            TestAssert.That(parsed != null, "Must parse aircraft kill");
-            TestAssert.That(parsed.Tag == "AIR COMBAT", "Aircraft kill tag must be AIR COMBAT");
-            TestAssert.That(!parsed.IsUrgent, "Aircraft kill must queue without interrupting the wire");
-            TestAssert.That(parsed.Text.Contains("MIG-47 FOXBAT"), "Must include downed aircraft");
-            TestAssert.That(parsed.Text.Contains("FGA-57 ANVIL"), "Must include killer");
-
-            var capital = MfdNewsFeed.ParseEvent("Linebreaker TFX sank Shard Class Cruiser");
-            TestAssert.That(capital != null, "Must parse ship sinking");
-            TestAssert.That(capital.Tag == "CRITICAL KILL", "Capital ship loss must be CRITICAL KILL");
-            TestAssert.That(capital.IsUrgent, "Capital ship loss must be urgent");
+            var parsed = MfdNewsFeed.ParseEvent("Shard Class Corvette intercepted Nuclear Warhead");
+            TestAssert.That(parsed != null, "Must parse nuclear interception");
+            TestAssert.That(parsed.Tag == "CRITICAL ALERT", "Nuclear interception tag must be CRITICAL ALERT");
+            TestAssert.That(parsed.IsUrgent, "Nuclear interception must be urgent");
+            TestAssert.That(parsed.Text.Contains("NUCLEAR WARHEAD"), "Must include intercepted ordnance");
         }
 
         private static void TestPilotRescueAndCaptureParsing()
@@ -135,51 +150,6 @@ namespace BoscaliSummer.Tests.Features.Command
             TestAssert.That(parsed.Tag == "BASE DEFENSE", "Warhead defense tag must be BASE DEFENSE");
             TestAssert.That(parsed.IsUrgent, "Warhead defense must be urgent");
             TestAssert.That(parsed.Text.Contains("NORTH COAST ENRICHMENT PLANT"), "Must name the defended base");
-        }
-
-        private static void TestUnattributedLossAndRepairParsing()
-        {
-            var wreck = MfdNewsFeed.ParseEvent("MIG-47 Foxbat crashed");
-            TestAssert.That(wreck != null, "Must parse unattributed loss");
-            TestAssert.That(wreck.Tag == "WRECK", "Unattributed loss tag must be WRECK");
-            TestAssert.That(wreck.Priority == MfdNewsFeed.Priority.Routine, "Unattributed loss is routine traffic");
-
-            var repair = MfdNewsFeed.ParseEvent("Linebreaker SAM was repaired");
-            TestAssert.That(repair == null, "Repairs must never reach the wire");
-        }
-
-        private static void TestRoutineTrafficSuppressionAndDigest()
-        {
-            var feed = new MfdNewsFeed();
-            for (int i = 0; i < 4; i++)
-            {
-                feed.IngestGameEvent($"FGA-57 Anvil intercepted AGM-{60 + i}", 1f + i);
-                feed.IngestGameEvent($"SAH-46 Chicane destroyed Type-12 MBT {i}", 1f + i);
-            }
-
-            string text = feed.BuildMarqueeText(6);
-            TestAssert.That(!text.Contains("CONFIRMED INTERCEPT"), "Single interceptions must not become headlines");
-            TestAssert.That(!text.Contains("INTERCEPTED INCOMING"), "Routine interceptions must not flood the wire");
-            TestAssert.That(!text.Contains("REPORTED DESTROYED IN COMBAT"), "Routine vehicle kills must not flood the wire");
-
-            feed.Tick(120f);
-            text = feed.BuildMarqueeText(6);
-            TestAssert.That(text.Contains("AIR DEFENSE NET REPELS"), "Intercept digest must appear after the window");
-            TestAssert.That(text.Contains("VEHICLES") || text.Contains("ARMORED HULKS"),
-                "Armor digest must appear after the window");
-        }
-
-        private static void TestKillStreakAndFirstBlood()
-        {
-            var feed = new MfdNewsFeed();
-            feed.IngestGameEvent("FGA-57 Anvil shot down MIG-47 Foxbat", 1f);
-            feed.IngestGameEvent("FGA-57 Anvil shot down MIG-29 Fulcrum", 10f);
-            feed.IngestGameEvent("FGA-57 Anvil shot down SU-27 Flanker", 20f);
-
-            string text = feed.BuildMarqueeText(6);
-            TestAssert.That(text.Contains("OPENING SHOTS"), "First air kill must log first blood");
-            TestAssert.That(text.Contains("ACE WATCH"), "Three quick kills must trigger a streak headline");
-            TestAssert.That(text.Contains("FGA-57 ANVIL"), "Streak headline must name the attacker");
         }
 
         private static void TestLogisticsThrottle()

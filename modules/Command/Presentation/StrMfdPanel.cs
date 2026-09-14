@@ -35,7 +35,7 @@ namespace BoscaliSummer.Features.Command.Presentation
     /// the theater account. Where a figure cannot be established, it reads as a dash. A
     /// zero is a claim, and this panel does not make claims it has not verified.</para>
     /// </summary>
-    internal sealed class StrMfdPanel : MonoBehaviour, ISceneService
+    internal sealed partial class StrMfdPanel : MonoBehaviour, ISceneService
     {
         private const float Width = AvTokens.PanelWidth;
         private const float RefreshInterval = 0.25f;
@@ -43,8 +43,9 @@ namespace BoscaliSummer.Features.Command.Presentation
         private const int TabSa = 0;
         private const int TabFront = 1;
         private const int TabTasking = 2;
-        private const int TabLog = 3;
-        private const int TabCmd = 4;
+        private const int TabCoc = 3;
+        private const int TabLog = 4;
+        private const int TabCmd = 5;
 
         private const int ChipCount = 3;
 
@@ -67,6 +68,7 @@ namespace BoscaliSummer.Features.Command.Presentation
         private ManualLogSource logger;
         private ISecondaryObjectivesView tasking;
         private IBaseDefenseAlarmService baseAlarm;
+        private IHighCommandView highCommand;
 
         // ---- Screen ----------------------------------------------------------------------
 
@@ -152,6 +154,7 @@ namespace BoscaliSummer.Features.Command.Presentation
             shell = null;
             tasking = null;
             baseAlarm = null;
+            highCommand = null;
 
             defconLabel = threatLabel = airCountLabel = sortieNote = null;
             airBar = null;
@@ -174,6 +177,8 @@ namespace BoscaliSummer.Features.Command.Presentation
             doctrineButtons.Clear();
             doctrineDescription = null;
             sectorToggle = frontlineToggle = null;
+
+            ResetCoc();
 
             nextAttempt = 0f;
             nextRefresh = 0f;
@@ -296,20 +301,23 @@ namespace BoscaliSummer.Features.Command.Presentation
 
             ModServices.TryGet(out tasking);
             ModServices.TryGet(out baseAlarm);
+            ModServices.TryGet(out highCommand);
 
             shell = AvScreen.Build(
                 content, "STR",
-                new[] { "SA", "FRONT", "TASKING", "LOG", "CMD" },
+                new[] { "SA", "FRONT", "TASKING", "COC", "LOG", "CMD" },
                 new[]
                 {
                     new[] { "THEATER CONTROL", "HELD" },
                     new[] { "AIR DOMINANCE", "ALLIED" },
+                    new[] { "COMMAND", "STAFF" },
                 },
                 ChipCount, Width, height, _ => nextRefresh = 0f);
 
             BuildSaPage(shell.CreatePage(TabSa, "SaPage"));
             BuildFrontPage(shell.CreatePage(TabFront, "FrontPage"));
             BuildTaskingPage(shell.CreatePage(TabTasking, "TaskingPage"));
+            BuildCocPage(shell.CreatePage(TabCoc, "CocPage"));
             BuildLogPage(shell.CreatePage(TabLog, "LogPage"));
             BuildCmdPage(shell.CreatePage(TabCmd, "CmdPage"));
 
@@ -926,12 +934,12 @@ namespace BoscaliSummer.Features.Command.Presentation
             frontlineToggle.WithTooltip("Draw the edges where friendly and hostile control meet.");
             y -= 32f;
 
-            // These two switch the view for this session. Opacity, grid resolution and
-            // refresh rate are saved configuration and live on the SET panel; a second
-            // control writing the same entry from here would just be a second answer.
+            // These two switch the view for this session. Opacity and refresh rate are
+            // saved configuration and live on the SET panel; a second control writing the
+            // same entry from here would just be a second answer.
             AvStyled.Label(parent, new Rect(x, y, width, 28f),
-                           "Overlay opacity, grid resolution and refresh rate are saved " +
-                           "settings — they are on the SET panel.", "row-sub");
+                           "Overlay opacity and refresh rate are saved settings — " +
+                           "they are on the SET panel.", "row-sub");
         }
 
         private void RefreshCmd()
@@ -963,6 +971,8 @@ namespace BoscaliSummer.Features.Command.Presentation
         {
             if (command == null || shell == null) return;
 
+            highCommand?.Refresh();
+
             DynamicMap map = SceneSingleton<DynamicMap>.i;
             FactionHQ hq = map != null ? map.HQ : null;
             if (hq != null) command.UpdateTelemetry(hq);
@@ -976,6 +986,7 @@ namespace BoscaliSummer.Features.Command.Presentation
                 case TabSa: RefreshSa(state); break;
                 case TabFront: RefreshFront(state); break;
                 case TabTasking: RefreshTasking(); break;
+                case TabCoc: RefreshCoc(); break;
                 case TabLog: RefreshLog(hq); break;
                 case TabCmd: RefreshCmd(); break;
             }
@@ -1013,20 +1024,37 @@ namespace BoscaliSummer.Features.Command.Presentation
                 state.FriendlyAircraftCount + " ALLIED · " + state.HostileAircraftCount + " HOSTILE",
                 state.AirSuperiorityRatio,
                 state.AirSuperiorityRatio >= 0.5f ? AvTheme.RailReady : AvTheme.RailCaution);
+
+            // The third pillar of the theater picture: without a staff, no command effect.
+            if (shell.Metrics.Length > 2)
+            {
+                bool staff = highCommand != null && highCommand.Available;
+                float cohesion = staff ? Mathf.Clamp01(highCommand.FriendlyCohesion) : 0f;
+                shell.Metrics[2].Set(
+                    staff ? TheaterReadout.Percent(cohesion) : "—",
+                    staff
+                        ? highCommand.FriendlyActive + " ACTIVE · " + highCommand.FriendlyKia + " KIA"
+                        : "NO STAFF",
+                    cohesion,
+                    !staff ? AvTheme.RailInert
+                    : cohesion >= 0.6f ? AvTheme.RailReady
+                    : cohesion >= 0.3f ? AvTheme.RailCaution
+                    : AvTheme.RailDanger);
+            }
         }
 
         private string Ambient(TacticalTheaterState state)
         {
-            if (state.ContestedSectorCount > 0)
-            {
-                return state.ContestedSectorCount + " contested sector" +
-                       (state.ContestedSectorCount == 1 ? "" : "s") + " · frontline " +
-                       state.FrontlineSegmentCount + " segments · doctrine " +
-                       CommandDoctrineHelper.GetName(command.ActiveDoctrine);
-            }
+            string text = state.ContestedSectorCount > 0
+                ? state.ContestedSectorCount + " contested sector" +
+                  (state.ContestedSectorCount == 1 ? "" : "s") + " · frontline " +
+                  state.FrontlineSegmentCount + " segments · doctrine " +
+                  CommandDoctrineHelper.GetName(command.ActiveDoctrine)
+                : "No contested ground · doctrine " + CommandDoctrineHelper.GetName(command.ActiveDoctrine);
 
-            return "No contested ground · doctrine " +
-                   CommandDoctrineHelper.GetName(command.ActiveDoctrine);
+            if (highCommand != null && highCommand.Available)
+                text += " · command " + TheaterReadout.Percent(Mathf.Clamp01(highCommand.FriendlyCohesion));
+            return text;
         }
 
         /// <summary>A chip-width doctrine label. Chips are 74px; full names do not fit.</summary>
