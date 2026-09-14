@@ -180,7 +180,8 @@ namespace BoscaliSummer.Features.HighCommand.Networking
             float now = Time.unscaledTime;
             if (nextReply.TryGetValue(id, out float next) ? query.Action == ActionRefresh && now < next : nextReply.Count >= 64) return;
             nextReply[id] = now + 1.5f;
-            if (query.Action > ActionBounty || (query.Action != ActionRefresh && query.TargetId <= 0)) return;
+            // Id 0 is a valid post (the faction's theater commander); only a missing target is rejected.
+            if (query.Action > ActionBounty || (query.Action != ActionRefresh && query.TargetId < 0)) return;
             string result = null;
             if (query.Action != ActionRefresh)
             {

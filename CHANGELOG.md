@@ -2,6 +2,97 @@
 
 ## Unreleased
 
+- World events now offer a decision. While a costed event is active, any player may spend
+  allocation once per event to **CONTAIN** a penalty or **LEVERAGE** a discount for the rest
+  of its run: the host derives the price from the event's effective multiplier (200–1200
+  allocation, rounded to 50), validates one response per player, deducts it, and answers the
+  requester directly; the effect is per player, so a client's predicted OPS prices match what
+  the host charges. The active EVN card gained a remaining-time bar, a response button with
+  affordability feedback and a tooltip, and a response-active state; a mid-mission reconnect
+  re-queries the host for the response it already owns. Protocol is now 2 (state + intent +
+  reply) with a wire-field and roundtrip check in the patch probe; a neutral event still
+  offers no decision instead of a fake one. Release build, pure suite, module-boundary checks,
+  the patch probe and `nomod asm verify` pass; in-game acceptance remains pending.
+
+- Added an **Events** module and the `EVN` map-MFD screen: a curated catalog of twelve
+  mission-wide world events (economic, political and hazard) that the host rotates one at a
+  time on a randomized 90–240 s gap, each with title, flavor text, a category icon and a
+  real support-cost modifier. The panel pins the active event with a live countdown and
+  modifier badge and keeps up to 16 finished events as mission history in reverse order.
+  The effect is wired into Support's two shared pricing points — every support action,
+  satellite, facility and EW-truck cost is multiplied by the active event (×0.6 to ×1.5),
+  resolved late through `IActiveEventsView` so either module installs without the other.
+  `Events.EffectStrength` (default 1.0) scales every modifier without editing the catalog;
+  two entries are deliberately flavor-only. Rotation is host-authoritative with a
+  15-second heartbeat resend for late joiners; only the catalog index and mission
+  timestamps cross the wire. Release build, pure suite, module-boundary checks and the
+  patch probe pass; in-game acceptance remains pending.
+
+- The `RAD` panel is now a receiver instead of a music browser. Stations sit on an FM/MW
+  dial with canonical frequencies for the three built-ins and stable name-hashed slots for
+  user folders, so a stored preset still lands on the same station after a rescan. The
+  panel shows a large tabular frequency readout, a ticked dial with a needle that seeks
+  between stations, a segmented signal meter fed by the tuned source's real output level,
+  a programme log of the tuned station's tracks (the playing one lit, click to play), a
+  preset bank (SET arms a store) and SCAN; channel traffic appears as a single rotating
+  wire line in the hero card, including intercepted enemy chatter. Panel content spans the
+  full body width with even margins, and section rules replaced the old left spine. Tuning
+  is a dial: TUNE steps one increment (FM 0.2 MHz, MW
+  10 kHz) and any non-station position is dead air — NO SIGNAL with a synthesized carrier
+  bed — while locking back on resumes the programme that was playing. SEEK jumps stations
+  and crosses bands when the current band runs out, and BAND flips FM/MW at the frequency
+  last used there. Every tuning step plays a synthesized squelch and carrier burst,
+  locking on plays a morse station ident generated in memory, and the dial row carries a
+  volume knob (`Radio / Volume`). Enemy ace chatter is picked up as INTERCEPT through the
+  read-only `ISquadView` contract (text only, client-local, no new messages).
+  A new `BroadcastFilter` setting (default `Broadcast`) colours FM with a measured band
+  limit and a touch of receiver crunch; MW keeps the AM curve regardless. `StationIdents`
+  and `CarrierNoise` switch the generated audio independently, and `ScanDwellSeconds`
+  tunes SCAN. All of it remains client-local; no audio asset is bundled, downloaded or
+  transmitted. Release build, pure suite (dial allocation, programme rotation, tuning
+  math, bounds), patch probe radio inventory and signature verification pass; in-game
+  acceptance remains pending.
+
+- Trench systems were rebuilt as a continuous frontier instead of scattered belts. They dig
+  only on contested sectors where opposing ground forces actually meet, hug the border, and
+  now chain: mature same-faction sectors extend their fire and support lines to the flank
+  limit and a junction trench joins neighbouring ends, so a chain of sectors becomes one
+  unbroken front line spanning kilometres. Grown positions match deliberate field practice:
+  fire and support lines at full sector width, a support line at 110m and a redoubt line at
+  220m behind the fire trench, traversed communication trenches, and a final stage pushing
+  two saps into no man's land ending in listening posts. The white procedural sandbag and
+  concrete bays, pits and dugouts were deleted: works are now small infantry-scale game
+  scenery (HESCO/sandbag/light gabion pieces, selected at runtime by keyword and footprint
+  so vehicle-scale hull-down ramps and shelters are never used) placed on the trench line
+  itself and spawned networked, joined by the carved ditch alone. The ditch now follows the
+  terrain: its outer berms sample the ground on each side of the cross-section, and
+  corridor validation was tightened so broken ground is rejected instead of sculpted over.
+  Shooters are
+  deliberately sparse — four native MG/ATGM/MANPADS per sector, interlocking rather than
+  crowded — and vehicles are stopped by a bounded low obstacle line on the fire trench. The
+  tactical map was decluttered: the fire line is solid with crenellations facing the enemy,
+  support and rear traces read dimmer, strongpoints are single-pixel marks, and the
+  projected contested trace is a dim dashed line. Release build, pure suite, module-boundary
+  tests, the standalone Unity trench render, the patch probe and signature verification
+  pass; in-game acceptance remains pending.
+
+- The SQD WINGS page now opens with YOUR WING: the local career lead and Wing Command's
+  published wingmen as a read-only roster (airframe and airborne/landed/disabled/ejected
+  per slot, NO SIGNAL for a slot with no live aircraft), followed by the HOSTILE WINGS
+  encounter cards. Cards were rebuilt as raised surfaces with a tighter hierarchy: a
+  deterministic generated squadron crest per wing, the ace portrait, tier/skill/meta on
+  one block, status and strength on the right, and full-width ability badges. The same
+  crest now tops the ACE hunt dossier, which widened to 704px to frame it, and the
+  minimised alert carries a small copy. The crest shape/charge come from an FNV-1a hash
+  of the wing identity (stable across sessions and clients) and its palette is confined
+  to caution/danger so an enemy crest never reads as the player's own emblem. Polish pass:
+  every touched label sits on the 10px type floor, the lead card no longer truncates its
+  wing count, hidden hostile slots on the last page read as an inert NO FURTHER HOSTILE
+  CONTACTS placeholder instead of a hole, the pager reads `1 OF 1 WING` for a single
+  contact, and the cards carry corner ticks. Release
+  build, pure suite (including hostile-crest determinism), module-boundary tests, the
+  patch probe and signature verification pass; in-game visual acceptance remains pending.
+
 - Fixed the control rail re-branding its own borrowed buttons and showing fragments like
   `BDFSIZE=` instead of the branded line. A repeated map maximise, or the game's faction
   refresh (`VirtualMFD.SetupButtons`) rewriting every bezel label, made the rail sanitise
@@ -40,16 +131,20 @@
   signature verification pass; in-game acceptance remains pending.
 
 - The STR console gained a **chain-of-command** page (new `high-command` module): every
-  faction fields a generated six-post staff with seed-stable names, dithered portraits,
-  traits and service bios; each living post is a real command post building placed at one
-  of the faction's airbases, and commanders occasionally travel between friendly bases in
-  three-vehicle convoys — the lead vehicle carries the VIP. Destroying an enemy post or
-  convoy kills the commander, promotes the next in line, pays an economy-only bounty
-  (larger while the target is on your kill list) and drops the enemy's cohesion; keeping
-  your own staff alive pays periodic stipends and earns command points for commendations
-  and relocation orders. Enemy posts stay hidden until your units establish local intel.
-  The STR screen adds a COC tab and a third COMMAND metric. Effects are funds/score only —
-  no vanilla AI, spawn or damage behaviour changes. Pure domain tests, Release build,
+  faction fields a generated six-post staff with seed-stable names, portraits from the same
+  generated pilot pool Wing Command draws for aces and wingmen, traits and service bios;
+  each living post is a real command post building placed at one of the faction's airbases,
+  and commanders occasionally travel between friendly bases in three-vehicle convoys — the
+  lead vehicle carries the VIP. Destroying an enemy post or convoy kills the commander,
+  promotes the next in line, pays an economy-only bounty (larger while the target is on your
+  kill list) and drops the enemy's cohesion; keeping your own staff alive pays periodic
+  stipends and earns command points for commendations and relocation orders. The COC page
+  was rebuilt to host both staffs with a state rail and tree guide per post and a dossier
+  with the generated portrait, traits and bio; enemy dispositions — location, movement and
+  kill-list status — stay hidden until your units establish local intel, and a bounty order
+  now resolves to the enemy post instead of a same-numbered post in your own tree. The STR
+  screen adds a COC tab and a third COMMAND metric. Effects are funds/score only — no
+  vanilla AI, spawn or damage behaviour changes. Pure domain tests, Release build,
   module-boundary tests, the patch probe and signature verification pass; in-game
   acceptance remains pending.
 

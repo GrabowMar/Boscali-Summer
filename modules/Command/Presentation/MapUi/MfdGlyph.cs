@@ -44,12 +44,12 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         public void SetKind(string glyphKind, Color tint)
         {
             sourceText = null;
-            kind = string.IsNullOrEmpty(glyphKind) ? "list" : glyphKind;
+            string next = string.IsNullOrEmpty(glyphKind) ? "list" : glyphKind;
+            if (next != kind) { kind = next; SetVerticesDirty(); }
             restColor = tint;
             color = tint;
             // A glyph wearing a native sprite is hidden; a direct kind must bring it back.
             enabled = NativeIcon == null || NativeIcon.sprite == null;
-            SetVerticesDirty();
         }
 
         /// <summary>Latched controls brighten their glyph; colour is never the only signal.</summary>
@@ -70,6 +70,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 case "GROUND": case "GND": case "VEH": case "VEHICLES": case "ARMOR": case "A2G": return "ground";
                 case "MISSILES": case "MSL": case "AMMO": case "WARHEADS": case "GUN": return "missile";
                 case "SEAD": case "EW": case "JAMMING": case "LASER": return "radar";
+                case "RECON": case "SURVEY": case "SCOUT": return "eye";
+                case "REPAIR": case "ENGINEER": case "ENGINEERS": return "repair";
+                case "SUPPLY": case "CONVOY": case "ESCORT": return "convoy";
                 case "FRIENDLY": case "FORCES": case "BDF": case "PALA": return "faction";
                 case "ENEMY": case "HOSTILE": case "TARGETS": case "SELECTED": return "target";
                 case "RESET": return "reset";
@@ -85,7 +88,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 case "MAP": return "map";
                 case "RAD": case "RADIO": return "radio";
                 case "SET": case "SETTINGS": case "CONFIG": return "settings";
-                case "OPS": case "SUPPORT": case "SUPPLY": case "AIRDROP": return "support";
+                case "OPS": case "SUPPORT": case "AIRDROP": return "support";
                 case "STR": case "THEATER": case "FRONT": return "theater";
                 default: return "list";
             }
@@ -159,6 +162,20 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     Ring(mesh,.5f,.5f,.3f,16);
                     Line(mesh,.5f,.06f,.5f,.34f); Line(mesh,.5f,.66f,.5f,.94f);
                     Line(mesh,.06f,.5f,.34f,.5f); Line(mesh,.66f,.5f,.94f,.5f); break;
+                case "eye":
+                    Path(mesh,.04f,.5f,.5f,.88f,.96f,.5f,.5f,.12f,.04f,.5f);
+                    Circle(mesh,.5f,.5f,.19f,12);
+                    Circle(mesh,.5f,.5f,.07f,8); break;
+                case "repair":
+                    Ring(mesh,.5f,.5f,.36f,8);
+                    Ring(mesh,.5f,.5f,.22f,8);
+                    Circle(mesh,.5f,.5f,.08f,8); break;
+                case "convoy":
+                    Path(mesh,.04f,.36f,.04f,.72f,.52f,.72f,.52f,.36f,.04f,.36f);
+                    Path(mesh,.58f,.36f,.58f,.62f,.96f,.62f,.96f,.36f,.58f,.36f);
+                    Circle(mesh,.17f,.26f,.08f,8);
+                    Circle(mesh,.4f,.26f,.08f,8);
+                    Circle(mesh,.78f,.26f,.08f,8); break;
                 case "dot":
                     Circle(mesh,.5f,.5f,.32f,12); break;
                 case "flag": Path(mesh,.15f,.05f,.15f,.95f,.85f,.8f,.15f,.55f); break;

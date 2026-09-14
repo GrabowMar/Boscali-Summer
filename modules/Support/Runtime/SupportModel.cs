@@ -35,7 +35,8 @@ namespace BoscaliSummer.Features.Support.Runtime
         NotAirborne = 13,
         OutOfRange = 14,
         OutOfCoverage = 15,
-        NotBuilt = 16
+        NotBuilt = 16,
+        NoEwAsset = 17
     }
 
     /// <summary>

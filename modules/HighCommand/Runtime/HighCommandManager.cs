@@ -5,7 +5,6 @@ using BoscaliSummer.Core;
 using BoscaliSummer.Features.HighCommand.Configuration;
 using BoscaliSummer.Features.HighCommand.Domain;
 using BoscaliSummer.Features.HighCommand.Networking;
-using BoscaliSummer.Features.HighCommand.Presentation;
 using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Lifecycle;
 using BoscaliSummer.Runtime;
@@ -17,8 +16,8 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
     /// <summary>
     /// Host-authoritative chain of command. Generates one staff per faction, puts each post
     /// on the map as a real building, runs VIP convoys between bases, pays stipends and
-    /// bounties, and hides enemy staff behind local intel. Clients only receive their own
-    /// faction's snapshot; nothing here mutates vanilla AI, spawn rates or damage.
+    /// bounties, and hides enemy dispositions behind local intel. Clients receive both
+    /// staffs by identity; nothing here mutates vanilla AI, spawn rates or damage.
     /// </summary>
     internal sealed partial class HighCommandManager : MonoBehaviour, ISceneService, IHighCommandView
     {
@@ -171,7 +170,6 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
             convoys.Clear();
             Array.Clear(sight, 0, sight.Length);
             viewCommanders.Clear();
-            BoscaliSummer.Features.HighCommand.Presentation.CommanderPortraitRenderer.Clear();
             missionIdentity = null;
             nextTick = 0f;
             viewHq = null;
@@ -335,18 +333,25 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
 
             if (action == HighCommandNet.ActionBounty)
             {
-                CommandSlot target = FindSlot(targetId, out FactionCommand owner);
-                if (target == null || owner == own) return "No such enemy post.";
+                int ownerIndex = FactionOf(targetId);
+                if (ownerIndex < 0 || ownerIndex >= factions.Count || factions[ownerIndex] == own)
+                    return "No such enemy post.";
+                FactionCommand owner = factions[ownerIndex];
+                CommandSlot target = owner.Tree.Find(LocalId(targetId));
+                if (target == null) return "No such enemy post.";
                 if (!IsKnown(own, owner, target, now)) return "No confirmed contact with that commander.";
                 if (!target.Alive) return "That commander is already dead.";
                 bool marked = target.MarkedByFaction == own.FactionToken;
-                if (!own.Tree.Mark(targetId, own.FactionToken, CommandEconomy.MaximumMarks))
+                if (!own.Tree.Mark(target.Id, own.FactionToken, CommandEconomy.MaximumMarks))
                     return "Kill list is full; clear a mark first.";
                 Broadcast(own, (marked ? "BOUNTY MARK CLEARED: " : "BOUNTY MARKED: ") + target.Person.Name, now);
                 return marked ? "Bounty mark cleared." : "Marked for bounty: " + target.Person.Name + ".";
             }
 
-            CommandSlot slot = own.Tree.Find(targetId);
+            // Own-faction orders are addressed by the same global id the board publishes;
+            // a global id belonging to another faction is not a valid target.
+            if (FactionOf(targetId) != factions.IndexOf(own)) return "That post is not on your staff.";
+            CommandSlot slot = own.Tree.Find(LocalId(targetId));
             if (slot == null || !slot.Alive) return "That post is not on your staff.";
 
             if (action == HighCommandNet.ActionCommend)
@@ -417,6 +422,8 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
             return snapshot;
         }
 
+        /// <summary>Every post is listed. An unconfirmed enemy post keeps its identity and
+        /// role — the console hosts both staffs — while disposition stays behind intel.</summary>
         private void AppendFactionNodes(FactionCommand owner, FactionCommand observerCommand, int observer,
             float now, List<CommanderWire> nodes, bool friendly)
         {
@@ -425,7 +432,6 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
             {
                 CommandSlot slot = owner.Tree.Slots[i];
                 bool known = friendly || IsKnown(observerCommand, owner, slot, now);
-                if (!friendly && !known) continue;
                 nodes.Add(BuildWire(owner, observerCommand, slot, friendly, known, total, now));
             }
         }
@@ -437,8 +443,10 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
             if (friendly) flags |= CommanderWire.Friendly;
             if (known) flags |= CommanderWire.Known;
             if (!slot.Alive) flags |= CommanderWire.Kia;
-            if (slot.Status == CommanderStatus.InTransit) flags |= CommanderWire.Transit;
-            if (slot.Status == CommanderStatus.Disrupted) flags |= CommanderWire.Disrupted;
+            // An unconfirmed post is not allowed to leak where its commander is or whether
+            // they are moving; only identity and office cross the wire.
+            if (known && slot.Status == CommanderStatus.InTransit) flags |= CommanderWire.Transit;
+            if (known && slot.Status == CommanderStatus.Disrupted) flags |= CommanderWire.Disrupted;
             if (slot.MarkedByFaction == observer.FactionToken) flags |= CommanderWire.Marked;
 
             byte actions = 0;
@@ -451,14 +459,17 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
 
             AssetWatch asset = FindActiveAsset(owner, slot);
             Vector3 position = asset?.Unit != null ? asset.Unit.transform.position : Vector3.zero;
-            string location = slot.Status == CommanderStatus.InTransit && asset != null
-                ? "EN ROUTE · " + (FindConvoy(owner, slot)?.DestinationName ?? "UNKNOWN")
-                : slot.SiteName;
+            string location = !friendly && !known ? "UNCONFIRMED"
+                : slot.Status == CommanderStatus.InTransit && asset != null
+                    ? "EN ROUTE · " + (FindConvoy(owner, slot)?.DestinationName ?? "UNKNOWN")
+                    : slot.SiteName;
 
             return new CommanderWire
             {
-                Id = slot.Id,
-                ParentId = slot.ParentId,
+                // Global id: slot ids are only unique inside one tree, and the board lists
+                // every faction, so the faction index is folded into the wire identity.
+                Id = GlobalId(factions.IndexOf(owner), slot.Id),
+                ParentId = slot.ParentId < 0 ? -1 : GlobalId(factions.IndexOf(owner), slot.ParentId),
                 Tier = (byte)slot.Tier,
                 Flags = flags,
                 Actions = actions,
@@ -496,9 +507,6 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
                 var traits = (CommandTrait)node.TraitMask;
                 bool friendly = (node.Flags & CommanderWire.Friendly) != 0;
                 bool isKia = (node.Flags & CommanderWire.Kia) != 0;
-                CommanderPortraitRenderer.Tone tone = isKia ? CommanderPortraitRenderer.Tone.Kia
-                    : friendly ? CommanderPortraitRenderer.Tone.Friendly
-                    : CommanderPortraitRenderer.Tone.Hostile;
                 viewCommanders.Add(new CommanderView(
                     node.Id, node.ParentId, node.Tier,
                     friendly,
@@ -512,7 +520,9 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
                     node.Decoration,
                     CommanderGenerator.Bio(node.Seed, traits),
                     node.Seed,
-                    CommanderPortraitRenderer.Get(node.Seed, tone),
+                    // The same generated portrait every ace and wingman uses. Wing Command
+                    // owns the sprite; it is borrowed here and never destroyed.
+                    WingLink.PilotPortrait(node.Name, ""),
                     node.IntelAge, node.Weight, node.X, node.Z,
                     (node.Actions & CommanderWire.ActionCommend) != 0,
                     (node.Actions & CommanderWire.ActionRelocate) != 0,

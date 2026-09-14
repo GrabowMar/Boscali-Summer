@@ -28,6 +28,10 @@ namespace BoscaliSummer.Framework.Contracts
         PilotView Pilot { get; }
         bool HuntActive { get; }
         string Status { get; }
+
+        /// <summary>Most recent local intercept as "speaker: text"; empty when none has arrived.</summary>
+        string LastChatter { get; }
+
         int EnemyWingCount { get; }
         int ActiveEnemyWingIndex { get; }
         int ActiveHuntId { get; }

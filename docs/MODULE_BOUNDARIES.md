@@ -16,6 +16,7 @@ maintainers and coding agents; runtime design is in [ARCHITECTURE.md](ARCHITECTU
 | STR MFD, expanded map GUI, map overlays, doctrine, AI target scoring | `modules/Command` | `Features/Command` | Progression contracts, game interop |
 | Secondary objectives, faction awards, finite reinforcement batches | `modules/DynamicOperations` | `Features/DynamicOperations` | Framework lifecycle/contracts, native game interop |
 | Generated staff tree, command posts, VIP convoys, intel, stipends/bounties | `modules/HighCommand` | `Features/HighCommand` | Framework lifecycle/contracts, native game interop; consumed by Command through `IHighCommandView` |
+| Rotating world events, EVN MFD feed, support-cost modifier | `modules/Events` | `Features/Events` | Framework lifecycle/contracts, native game interop; publishes `IActiveEventsView`, optionally consumed by Support |
 | Feature graph, host, lifecycle, service contracts | `Framework` | `Framework` | no concrete feature |
 | Cached game/reflection/diagnostic adapters | `Infrastructure` | architecture / patch probe | no feature policy |
 | Registration and plugin startup | `Bootstrap` | Framework / architecture | may name every feature |
@@ -55,6 +56,10 @@ Progression depends on Squad's read-only `ISquadView` for pilot generations and 
 bonus points. Radio observes the same contract optionally for local music transitions.
 The plugin requires Wing Command `0.9.2.3`+ at runtime; `WingLink` caches its public
 pilot/ace-wing/chatter API and no feature imports Wing Command implementation types.
+
+Support optionally consumes Events' read-only `IActiveEventsView` for a live world-event
+factor on support pricing. It resolves the contract late through `ModServices`; Events
+imports no sibling, and neither module requires the other to install.
 
 ## Workflow for an ordinary feature request
 

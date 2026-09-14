@@ -10,27 +10,32 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Features.Command.Presentation
 {
     /// <summary>
-    /// COC — the faction's chain of command. A generated staff tree with a dossier for the
-    /// selected post: portrait, traits, bio, kill-list and relocation orders. Enemy posts
-    /// appear only while confirmed by local intel; everything else reads as no contact.
+    /// COC — both factions' chains of command on one page. Each row is a post: rank, name,
+    /// office and state, indented by tier with a quiet elbow; the dossier carries the selected
+    /// commander's generated portrait (the same one every ace and wingman wears), traits,
+    /// service bio and staff orders. Enemy posts are listed by identity; until local intel
+    /// confirms one its disposition reads unconfirmed and it cannot be put on the kill list.
     /// </summary>
     internal sealed partial class StrMfdPanel
     {
         private const int CocOwnRows = 6;
         private const int CocEnemyRows = 4;
         private const int CocRowCount = CocOwnRows + CocEnemyRows;
-        private const float CocContentHeight = 660f;
         private const float CocRowPitch = 36f;
+        private const float CocRowHeight = 30f;
+        private const float CocDossierHeight = 142f;
+        private const float CocContentHeight = 646f;
 
         private readonly CommanderRow[] cocRows = new CommanderRow[CocRowCount];
         private RectTransform cocRoot;
-        private TMP_Text cocSummary, cocSignal, cocOwnLabel, cocEnemyLabel, cocDossierHint;
-        private TMP_Text cocName, cocRole, cocMeta, cocTraits, cocLocation, cocDecor, cocBio;
-        private Image cocPortrait;
+        private GameObject cocDossier;
+        private TMP_Text cocSummary, cocSummaryNote, cocOwnNote, cocEnemyNote, cocDossierNote;
+        private TMP_Text cocName, cocRole, cocMeta, cocTraits, cocBio;
+        private Image cocPortrait, cocDossierRail;
         private TMP_Text cocPortraitFallback;
         private AvButton cocCommend, cocRelocate, cocBounty;
         private int cocSelectedId = -1;
-        private string cocPortraitKey;
+        private int cocPortraitSeed = int.MinValue;
 
         private static readonly Color CocPortraitBack = new Color32(10, 18, 13, 255);
         private static readonly Color CocHover = new Color(1f, 1f, 1f, 0.06f);
@@ -39,13 +44,14 @@ namespace BoscaliSummer.Features.Command.Presentation
         {
             Array.Clear(cocRows, 0, cocRows.Length);
             cocRoot = null;
-            cocSummary = cocSignal = cocOwnLabel = cocEnemyLabel = cocDossierHint = null;
-            cocName = cocRole = cocMeta = cocTraits = cocLocation = cocDecor = cocBio = null;
-            cocPortrait = null;
+            cocDossier = null;
+            cocSummary = cocSummaryNote = cocOwnNote = cocEnemyNote = cocDossierNote = null;
+            cocName = cocRole = cocMeta = cocTraits = cocBio = null;
+            cocPortrait = cocDossierRail = null;
             cocPortraitFallback = null;
             cocCommend = cocRelocate = cocBounty = null;
             cocSelectedId = -1;
-            cocPortraitKey = null;
+            cocPortraitSeed = int.MinValue;
         }
 
         private void BuildCocPage(GameObject page)
@@ -60,70 +66,106 @@ namespace BoscaliSummer.Features.Command.Presentation
 
             y = SectionHeader(cocRoot, x, y, width, "CHAIN OF COMMAND", "FACTION BATTLE STAFF", band: false);
 
-            cocSummary = AvStyled.Label(cocRoot, new Rect(x, y, width, 16f), "", "row-name");
-            y -= 18f;
-            cocSignal = AvStyled.Label(cocRoot, new Rect(x, y, width, 30f), "", "row-sub");
-            y -= 34f;
+            cocSummary = AvStyled.Label(cocRoot, new Rect(x, y, width * 0.55f, 16f), "", "row-name");
+            cocSummaryNote = AvStyled.Label(cocRoot, new Rect(x + width * 0.55f, y, width * 0.45f, 16f),
+                "", "metric-cap");
+            y -= 20f;
 
-            cocOwnLabel = AvStyled.Label(cocRoot, new Rect(x, y, width, 14f), "YOUR STAFF", "section-title-note");
-            y -= 16f;
+            cocOwnNote = CocSection(cocRoot, x, y, width, "ALLIED STAFF", "");
+            y -= 18f;
             for (int i = 0; i < CocOwnRows; i++)
             {
                 cocRows[i] = new CommanderRow(cocRoot, x, y - i * CocRowPitch, width, SelectCoc);
             }
             y -= CocOwnRows * CocRowPitch + 6f;
 
-            cocEnemyLabel = AvStyled.Label(cocRoot, new Rect(x, y, width, 14f), "ENEMY STAFF · CONFIRMED CONTACTS", "section-title-note");
-            y -= 16f;
+            cocEnemyNote = CocSection(cocRoot, x, y, width, "HOSTILE STAFF", "");
+            y -= 18f;
             for (int i = 0; i < CocEnemyRows; i++)
             {
                 cocRows[CocOwnRows + i] = new CommanderRow(cocRoot, x, y - i * CocRowPitch, width, SelectCoc);
             }
-            y -= CocEnemyRows * CocRowPitch + 10f;
+            y -= CocEnemyRows * CocRowPitch + 6f;
 
-            y = SectionHeader(cocRoot, x, y, width, "DOSSIER", "SELECTED POST", band: true);
+            cocDossierNote = CocDossierSection(cocRoot, x, y, width, "DOSSIER");
+            BuildDossier(x, y - 20f, width);
+        }
 
-            cocDossierHint = AvStyled.Label(cocRoot, new Rect(x, y, width, 16f),
-                "SELECT A POST FOR THE DOSSIER.", "row-sub");
+        /// <summary>A staff section title with a live right-hand count, tied to the spine.</summary>
+        private static TMP_Text CocSection(
+            RectTransform parent, float x, float y, float width, string title, string note)
+        {
+            AvStyled.SpineTick(parent, x - AvScreen.SpineInset + 3f, y - 7f);
+            AvStyled.Label(parent, new Rect(x, y, width * 0.55f, 14f), title, "section-title");
+            return AvStyled.Label(parent, new Rect(x + width * 0.55f, y, width * 0.45f, 14f),
+                note, "metric-cap");
+        }
 
-            const float portraitWidth = 56f;
-            const float portraitHeight = 70f;
-            Rect frame = new Rect(x, y - portraitHeight - 4f, portraitWidth, portraitHeight);
-            AvKit.Panel(cocRoot, frame, CocPortraitBack);
-            AvKit.Outline(cocRoot, frame, AvTheme.Frame);
+        /// <summary>The banded dossier header; its note carries the selected post's state.</summary>
+        private static TMP_Text CocDossierSection(
+            RectTransform parent, float x, float y, float width, string title)
+        {
+            AvStyled.Box(parent, new Rect(x - 6f, y + 4f, width + 12f, 22f), "section band");
+            AvStyled.SpineTick(parent, x - AvScreen.SpineInset + 3f, y - 7f);
+            AvStyled.Label(parent, new Rect(x, y, width * 0.5f, 14f), title, "section-title");
+            return AvStyled.Label(parent, new Rect(x + width * 0.5f, y, width * 0.5f, 14f), "",
+                "metric-cap");
+        }
 
-            cocPortraitFallback = AvStyled.Label(cocRoot, new Rect(x + 2f, y - portraitHeight + 8f, portraitWidth - 4f, 40f),
-                "NO\nVISUAL", "row-sub", align: TextAlignmentOptions.Center);
-            cocPortrait = AvKit.Panel(cocRoot, new Rect(x + 3f, y - portraitHeight - 1f, portraitWidth - 6f, portraitHeight - 6f), Color.white);
+        private void BuildDossier(float x, float y, float width)
+        {
+            var root = new GameObject("CocDossier", typeof(RectTransform));
+            var rootRect = (RectTransform)root.transform;
+            rootRect.SetParent(cocRoot, false);
+            AvKit.Place(rootRect, new Rect(x, y, width, CocDossierHeight + 34f));
+            cocDossier = root;
+
+            Rect card = new Rect(0f, 0f, width, CocDossierHeight);
+            AvStyled.Box(rootRect, card, "card");
+            cocDossierRail = AvStyled.Rail(rootRect, new Rect(5f, -8f, 3f, CocDossierHeight - 16f), "locked");
+
+            const float portraitWidth = 64f;
+            const float portraitHeight = 96f;
+            Rect frame = new Rect(14f, -12f, portraitWidth, portraitHeight);
+            AvKit.Panel(rootRect, frame, CocPortraitBack);
+            AvKit.Outline(rootRect, frame, AvTheme.Frame);
+            AvKit.CornerTicks(rootRect, frame, AvTheme.Hairline.WithAlpha(0.5f));
+
+            cocPortraitFallback = AvStyled.Label(rootRect,
+                new Rect(frame.x + 2f, frame.y - 32f, frame.width - 4f, 30f), "NO\nVISUAL", "row-sub",
+                align: TextAlignmentOptions.Center);
+            cocPortrait = AvKit.Panel(rootRect,
+                new Rect(frame.x + 1f, frame.y - 1f, frame.width - 2f, frame.height - 2f), Color.white);
             cocPortrait.type = Image.Type.Simple;
             cocPortrait.preserveAspect = true;
             cocPortrait.raycastTarget = false;
             cocPortrait.enabled = false;
 
-            float textX = x + portraitWidth + 10f;
-            float textWidth = width - portraitWidth - 10f;
-            cocName = AvStyled.Label(cocRoot, new Rect(textX, y - 4f, textWidth, 16f), "", "row-name");
-            cocRole = AvStyled.Label(cocRoot, new Rect(textX, y - 22f, textWidth, 16f), "", "kv-key");
-            cocMeta = AvStyled.Label(cocRoot, new Rect(textX, y - 40f, textWidth, 16f), "", "row-sub");
-            cocTraits = AvStyled.Label(cocRoot, new Rect(textX, y - 58f, textWidth, 16f), "", "row-sub");
-            cocLocation = AvStyled.Label(cocRoot, new Rect(textX, y - 76f, textWidth, 16f), "", "kv-value");
-            cocDecor = AvStyled.Label(cocRoot, new Rect(x, y - portraitHeight - 8f, width, 16f), "", "row-sub");
-            cocBio = AvStyled.Label(cocRoot, new Rect(x, y - portraitHeight - 26f, width, 44f), "", "row-sub");
+            float textX = frame.x + portraitWidth + 12f;
+            float textWidth = width - textX - 14f;
+            cocName = AvStyled.Label(rootRect, new Rect(textX, -12f, textWidth, 17f), "", "row-name");
+            cocName.fontSize = 14f;
+            cocRole = AvStyled.Label(rootRect, new Rect(textX, -31f, textWidth, 12f), "", "section-title");
+            cocMeta = AvStyled.Label(rootRect, new Rect(textX, -45f, textWidth, 12f), "", "section-title-note");
+            cocTraits = AvStyled.Label(rootRect, new Rect(textX, -59f, textWidth, 24f), "", "row-sub");
+            cocBio = AvStyled.Label(rootRect, new Rect(textX, -85f, textWidth, 48f), "", "row-sub");
 
             float buttonWidth = (width - 12f) / 3f;
-            float buttonY = y - portraitHeight - 78f;
-            cocCommend = AvStyled.Button(cocRoot, new Rect(x, buttonY, buttonWidth, 26f), "COMMEND", "btn",
+            float buttonY = -(CocDossierHeight + 6f);
+            cocCommend = AvStyled.Button(rootRect, new Rect(0f, buttonY, buttonWidth, 28f), "COMMEND", "btn",
                 () => { if (cocSelectedId >= 0) highCommand?.RequestCommend(cocSelectedId); nextRefresh = 0f; });
-            cocRelocate = AvStyled.Button(cocRoot, new Rect(x + buttonWidth + 6f, buttonY, buttonWidth, 26f), "RELOCATE", "btn",
+            cocRelocate = AvStyled.Button(rootRect, new Rect(buttonWidth + 6f, buttonY, buttonWidth, 28f), "RELOCATE", "btn",
                 () => { if (cocSelectedId >= 0) highCommand?.RequestRelocate(cocSelectedId); nextRefresh = 0f; });
-            cocBounty = AvStyled.Button(cocRoot, new Rect(x + (buttonWidth + 6f) * 2f, buttonY, buttonWidth, 26f), "MARK BOUNTY", "btn",
-                () => { if (cocSelectedId >= 0) highCommand?.RequestBounty(cocSelectedId); nextRefresh = 0f; });
+            cocBounty = AvStyled.Button(rootRect, new Rect((buttonWidth + 6f) * 2f, buttonY, buttonWidth, 28f),
+                "MARK BOUNTY", "btn",
+                () => { if (cocSelectedId >= 0) highCommand?.RequestBounty(cocSelectedId); nextRefresh = 0f; },
+                AvButtonStyle.Danger);
         }
 
         private void SelectCoc(int id)
         {
             cocSelectedId = id;
-            cocPortraitKey = null;
+            cocPortraitSeed = int.MinValue;
             nextRefresh = 0f;
         }
 
@@ -132,56 +174,65 @@ namespace BoscaliSummer.Features.Command.Presentation
             if (cocSummary == null) return;
 
             bool available = highCommand != null && highCommand.Available;
+            cocDossier.SetActive(available);
+
             if (!available)
             {
                 cocSummary.text = highCommand == null
                     ? "CHAIN OF COMMAND IS NOT RUNNING ON THIS HOST."
                     : (highCommand.Status ?? "CHAIN OF COMMAND IS FORMING.");
                 cocSummary.color = AvTheme.Dim;
-                cocSignal.text = "";
-                cocOwnLabel.text = "";
-                cocEnemyLabel.text = "";
+                cocSummaryNote.text = "";
+                cocDossierNote.text = "";
+                cocOwnNote.text = "";
+                cocEnemyNote.text = "";
                 for (int i = 0; i < cocRows.Length; i++) cocRows[i].Hide();
                 BindDossier(null);
                 return;
             }
 
             float cohesion = Mathf.Clamp01(highCommand.FriendlyCohesion);
-            cocSummary.text = "COHESION " + Mathf.RoundToInt(cohesion * 100f) + "%  ·  " +
-                              highCommand.FriendlyActive + " ACTIVE  ·  " + highCommand.FriendlyKia + " KIA  ·  " +
-                              "COMMAND POINTS " + highCommand.CommandPoints;
+            cocSummary.text = "COHESION " + Mathf.RoundToInt(cohesion * 100f) + "%";
             cocSummary.color = cohesion >= 0.6f ? AvTheme.TextPrimary : AvTheme.RailCaution;
-
-            cocSignal.text = highCommand.Signal ?? "";
-            cocSignal.color = AvTheme.Dim;
+            cocSummaryNote.text = highCommand.FriendlyActive + " ACTIVE  ·  " + highCommand.FriendlyKia +
+                                  " KIA  ·  " + highCommand.CommandPoints + " CP";
 
             IReadOnlyList<CommanderView> list = highCommand.Commanders;
-            int ownCount = 0, enemyCount = 0;
+            int ownCount = 0, enemyCount = 0, enemyKnown = 0, enemyTotal = 0;
             CommanderView selected = null;
             if (list != null)
             {
                 for (int i = 0; i < list.Count; i++)
                 {
                     CommanderView view = list[i];
+                    bool shown = view.IsFriendly ? ownCount < CocOwnRows : enemyCount < CocEnemyRows;
                     if (view.IsFriendly)
                     {
-                        if (ownCount < CocOwnRows) cocRows[ownCount++].Bind(view, view.Id == cocSelectedId, list, i, true);
+                        if (shown) cocRows[ownCount++].Bind(view, view.Id == cocSelectedId);
                     }
-                    else if (enemyCount < CocEnemyRows)
+                    else
                     {
-                        cocRows[CocOwnRows + enemyCount++].Bind(view, view.Id == cocSelectedId, list, i, false);
+                        enemyTotal++;
+                        if (shown)
+                        {
+                            if (view.IsKnown) enemyKnown++;
+                            cocRows[CocOwnRows + enemyCount++].Bind(view, view.Id == cocSelectedId);
+                        }
                     }
-                    if (view.Id == cocSelectedId) selected = view;
+                    if (shown && view.Id == cocSelectedId) selected = view;
                 }
             }
 
             for (int i = ownCount; i < CocOwnRows; i++) cocRows[i].Hide();
             for (int i = enemyCount; i < CocEnemyRows; i++) cocRows[CocOwnRows + i].Hide();
 
-            cocOwnLabel.text = ownCount == 0 ? "YOUR STAFF · AWAITING POST REPORTS" : "YOUR STAFF";
-            cocEnemyLabel.text = enemyCount == 0
-                ? "ENEMY STAFF · NO CONFIRMED CONTACTS"
-                : "ENEMY STAFF · " + enemyCount + " CONFIRMED CONTACT" + (enemyCount == 1 ? "" : "S");
+            cocOwnNote.text = ownCount == 0 ? "NO POSTS REPORTED"
+                : ownCount + (ownCount == 1 ? " POST" : " POSTS");
+            cocEnemyNote.text = enemyTotal == 0 ? "NO POSTS REPORTED"
+                : enemyTotal > enemyCount
+                    ? enemyCount + " OF " + enemyTotal + " POSTS" + (enemyKnown > 0 ? "  ·  " + enemyKnown + " SEEN" : "")
+                    : enemyKnown == 0 ? "NO CONFIRMED CONTACTS"
+                    : enemyKnown + " OF " + enemyCount + " CONFIRMED";
 
             if (selected == null) cocSelectedId = -1;
             BindDossier(selected);
@@ -189,51 +240,59 @@ namespace BoscaliSummer.Features.Command.Presentation
 
         private void BindDossier(CommanderView view)
         {
-            if (cocDossierHint == null) return;
+            if (cocName == null) return;
 
             if (view == null)
             {
-                cocDossierHint.text = "SELECT A POST FOR THE DOSSIER.";
-                cocName.text = cocRole.text = cocMeta.text = cocTraits.text = "";
-                cocLocation.text = cocDecor.text = cocBio.text = "";
-                SetPortrait(null, -1);
+                cocDossierNote.text = "SELECT A POST";
+                cocName.text = "NO POST SELECTED";
+                cocName.color = AvTheme.Dim;
+                cocRole.text = cocMeta.text = cocTraits.text = cocBio.text = "";
+                SetPortrait(null, int.MinValue);
+                cocDossierRail.color = AvTheme.RailInert;
                 cocCommend.SetEnabled(false);
                 cocRelocate.SetEnabled(false);
                 cocBounty.SetEnabled(false);
+                cocBounty.SetText("MARK BOUNTY");
                 return;
             }
 
-            cocDossierHint.text = "";
+            cocDossierNote.text = view.IsFriendly ? "ALLIED POST" : view.IsKnown ? "CONFIRMED CONTACT" : "UNCONFIRMED POST";
             cocName.text = view.IsKia ? view.Name + "  [KIA]" : view.Name;
             cocName.color = view.IsKia ? AvTheme.Disabled : AvTheme.TextPrimary;
-            cocRole.text = view.Rank + " · " + view.Role;
-            cocMeta.text = "SHARE " + Mathf.RoundToInt(view.Weight * 100f) + "% · " + StatusOf(view);
+            cocRole.text = view.Rank + "  ·  " + view.Role;
+            cocMeta.text = view.Location + "  ·  " + StatusOf(view) +
+                           (string.IsNullOrEmpty(view.Decoration) ? "" : "  ·  " + view.Decoration);
             cocTraits.text = view.Traits;
-            cocLocation.text = view.Location;
-            cocDecor.text = view.Decoration;
             cocBio.text = view.Bio;
-
             SetPortrait(view.Portrait, view.PortraitSeed);
+            cocPortrait.color = view.IsKia ? new Color(1f, 1f, 1f, 0.45f) : Color.white;
+            cocDossierRail.color = AvStyleHost.Resolve(
+                AvStyleHost.Style("rail " + StateOf(view)).Background, AvTheme.RailInert);
 
             cocCommend.SetEnabled(view.CanCommend);
-            cocCommend.WithTooltip("Spend 1 command point: a decoration for " + view.Name +
-                                   " and a short cohesion boost for your faction.");
+            cocCommend.WithTooltip(view.CanCommend
+                ? "Spend 1 command point: a decoration for " + view.Name +
+                  " and a short cohesion boost for your faction."
+                : "A commendation needs a command point and a post below maximum honours.");
             cocRelocate.SetEnabled(view.CanRelocate);
-            cocRelocate.WithTooltip("Spend 1 command point: move " + view.Name +
-                                    " to another friendly base in a vulnerable convoy. Interception kills.");
+            cocRelocate.WithTooltip(view.CanRelocate
+                ? "Spend 1 command point: move " + view.Name +
+                  " to another friendly base in a vulnerable convoy. Interception kills."
+                : "A relocation needs a command point and a second friendly base.");
             cocBounty.SetEnabled(view.CanBounty);
             cocBounty.SetText(view.BountyMarked ? "CLEAR MARK" : "MARK BOUNTY");
-            cocBounty.WithTooltip(view.BountyMarked
-                ? "Remove the kill-list bonus on " + view.Name + "."
-                : "Place " + view.Name + " on the kill list: marked targets pay a larger bounty.");
+            cocBounty.WithTooltip(!view.IsFriendly && !view.IsKnown
+                ? "No confirmed contact — local intel must spot this post before it can be marked."
+                : view.BountyMarked
+                    ? "Remove the kill-list bonus on " + view.Name + "."
+                    : "Place " + view.Name + " on the kill list: marked targets pay a larger bounty.");
         }
 
-        private void SetPortrait(Sprite sprite, int key)
+        private void SetPortrait(Sprite sprite, int seed)
         {
-            if (cocPortrait == null) return;
-            string identity = key.ToString();
-            if (identity == cocPortraitKey) return;
-            cocPortraitKey = identity;
+            if (cocPortrait == null || seed == cocPortraitSeed) return;
+            cocPortraitSeed = seed;
             bool has = sprite != null;
             cocPortrait.enabled = has;
             cocPortrait.sprite = sprite;
@@ -243,21 +302,33 @@ namespace BoscaliSummer.Features.Command.Presentation
         private static string StatusOf(CommanderView view)
         {
             if (view.IsKia) return "KIA";
+            if (!view.IsFriendly && !view.IsKnown) return "UNCONFIRMED";
             if (view.InTransit) return "EN ROUTE";
             if (view.Disrupted) return "DISRUPTED";
+            if (view.BountyMarked) return "MARKED";
             if (!view.IsFriendly && view.IntelAge >= 0f) return "SEEN " + Mathf.RoundToInt(view.IntelAge) + "S AGO";
             return "ACTIVE";
         }
 
+        private static string StateOf(CommanderView view)
+        {
+            if (view.IsKia) return "locked";
+            if (!view.IsFriendly && !view.IsKnown) return "locked";
+            if (view.InTransit) return "info";
+            if (view.Disrupted) return "cooling";
+            if (view.BountyMarked) return "hostile";
+            return view.IsFriendly ? "ready" : "hostile";
+        }
+
         private sealed class CommanderRow
         {
+            private const float RankWidth = 46f;
+            private const float StatusWidth = 92f;
+            private const float TierStep = 14f;
+
             private readonly GameObject root;
-            private readonly Image background;
-            private readonly Image rail;
-            private readonly Image[] guides = new Image[2];
-            private readonly Image tick;
-            private readonly TMP_Text rank, name, status, role;
-            private readonly Image bar;
+            private readonly Image background, rail, guide, tick;
+            private readonly TMP_Text rank, name, role, status, meta;
             private readonly AvButton hit;
             private readonly float width;
             private int id = -1;
@@ -268,24 +339,21 @@ namespace BoscaliSummer.Features.Command.Presentation
                 root = new GameObject("CommanderRow", typeof(RectTransform));
                 var rect = root.GetComponent<RectTransform>();
                 rect.SetParent(parent, false);
-                AvKit.Place(rect, new Rect(x, y - 4f, width, 32f));
+                AvKit.Place(rect, new Rect(x, y, width, CocRowHeight));
 
-                background = AvKit.Panel(rect, new Rect(0f, 0f, width, 32f), Color.clear);
-                rail = AvStyled.Rail(rect, new Rect(0f, 0f, 3f, 30f), "locked");
-                for (int i = 0; i < guides.Length; i++)
-                {
-                    guides[i] = AvKit.Rule(rect, new Rect(0f, 0f, 1f, 1f), AvTheme.Hairline.WithAlpha(0.35f));
-                }
-                tick = AvKit.Rule(rect, new Rect(0f, 0f, 6f, 1f), AvTheme.Hairline.WithAlpha(0.35f));
+                background = AvKit.Panel(rect, new Rect(0f, 0f, width, CocRowHeight), Color.clear);
+                rail = AvStyled.Rail(rect, new Rect(0f, 0f, 3f, CocRowHeight - 2f), "locked");
+                guide = AvKit.Rule(rect, new Rect(0f, 0f, 1f, 15f), AvTheme.Hairline.WithAlpha(0.22f));
+                tick = AvKit.Rule(rect, new Rect(0f, 0f, 14f, 1f), AvTheme.Hairline.WithAlpha(0.22f));
 
-                rank = AvStyled.Label(rect, new Rect(12f, 0f, 34f, 14f), "", "row-sub");
-                name = AvStyled.Label(rect, new Rect(48f, 0f, width - 48f - 92f, 14f), "", "row-name");
-                status = AvStyled.Label(rect, new Rect(width - 92f, 0f, 92f, 14f), "", "row-sub",
-                    align: TextAlignmentOptions.MidlineRight);
-                role = AvStyled.Label(rect, new Rect(48f, -14f, width - 48f - 92f, 14f), "", "row-sub");
-                bar = AvKit.ProgressBar(rect, new Rect(width - 88f, -20f, 84f, 4f), 0f, AvTheme.RailInert);
+                rank = AvStyled.Label(rect, new Rect(0f, -1f, RankWidth, 13f), "", "section-title");
+                rank.characterSpacing = 4f;
+                name = AvStyled.Label(rect, new Rect(0f, -1f, 10f, 13f), "", "row-name");
+                status = AvStyled.Label(rect, new Rect(width - StatusWidth, -1f, StatusWidth, 13f), "", "metric-cap");
+                role = AvStyled.Label(rect, new Rect(0f, -14f, 10f, 12f), "", "section-title-note");
+                meta = AvStyled.Label(rect, new Rect(width - StatusWidth, -14f, StatusWidth, 12f), "", "metric-cap");
 
-                hit = AvKit.HitButton(rect, new Rect(0f, 0f, width, 32f), () =>
+                hit = AvKit.HitButton(rect, new Rect(0f, 0f, width, CocRowHeight), () =>
                 {
                     if (id >= 0) select(id);
                 });
@@ -293,51 +361,61 @@ namespace BoscaliSummer.Features.Command.Presentation
                 root.SetActive(false);
             }
 
-            public void Bind(CommanderView view, bool selected, IReadOnlyList<CommanderView> group, int index, bool friendly)
+            public void Bind(CommanderView view, bool selected)
             {
                 id = view.Id;
-                string state = view.IsKia ? "locked"
-                    : friendly ? (view.InTransit ? "info" : view.Disrupted ? "cooling" : "ready")
-                    : (view.InTransit ? "contested" : "hostile");
+                float indent = 10f + view.Tier * TierStep;
+                float textX = indent + RankWidth + 4f;
+                float textWidth = Mathf.Max(40f, width - textX - StatusWidth);
 
-                rail.color = AvStyleHost.Resolve(AvStyleHost.Style("rail " + state).Background, AvTheme.RailInert);
-                name.text = view.IsKia ? view.Name + "  [KIA]" : view.Name;
-                name.color = view.IsKia ? AvTheme.Disabled : friendly ? AvTheme.TextPrimary : AvTheme.Warning;
-                if (selected) name.color = AvTheme.Accent;
+                AvKit.Place(rank.rectTransform, new Rect(indent, -1f, RankWidth, 13f));
+                AvKit.Place(name.rectTransform, new Rect(textX, -1f, textWidth, 13f));
+                AvKit.Place(role.rectTransform, new Rect(textX, -14f, textWidth, 12f));
 
                 rank.text = view.Rank;
+                rank.color = AvTheme.Dim;
+                name.text = view.IsKia ? view.Name + "  [KIA]" : view.Name;
+                name.color = selected ? AvTheme.Accent
+                    : view.IsKia ? AvTheme.Disabled
+                    : !view.IsFriendly && !view.IsKnown ? AvTheme.Disabled
+                    : view.IsFriendly ? AvTheme.TextPrimary
+                    : AvTheme.Warning;
+
+                role.text = view.Role;
+
                 status.text = StatusOf(view);
-                status.color = view.IsKia ? AvTheme.Disabled : view.InTransit ? AvTheme.RailInfo : AvTheme.Dim;
+                status.color = selected ? AvTheme.Accent
+                    : view.IsKia ? AvTheme.Disabled
+                    : !view.IsFriendly && !view.IsKnown ? AvTheme.Dim
+                    : view.InTransit ? AvTheme.RailInfo
+                    : view.Disrupted ? AvTheme.RailCaution
+                    : view.BountyMarked ? AvTheme.RailDanger
+                    : AvTheme.Dim;
+                meta.text = view.Decoration ?? "";
 
-                role.text = view.Role + (string.IsNullOrEmpty(view.Location) ? "" : " · " + view.Location);
-                bar.fillAmount = Mathf.Clamp01(view.Weight);
-                bar.color = friendly ? AvTheme.RailReady : AvTheme.RailCaution;
+                Color rest = selected
+                    ? AvTheme.Unity(AvTokens.Wash(AvTheme.Accent.ToRgba(), AvTokens.SelectedScale, AvTokens.SelectedAlpha))
+                    : Color.clear;
+                hit.SetRowHighlight(background, rest, CocHover);
+                rail.color = selected ? AvTheme.Accent
+                    : AvStyleHost.Resolve(AvStyleHost.Style("rail " + StateOf(view)).Background, AvTheme.RailInert);
 
-                float indent = 12f + view.Tier * 12f;
-                float textWidth = width - indent - 36f - 92f;
-                AvKit.Place(rank.rectTransform, new Rect(indent, 0f, 34f, 14f));
-                AvKit.Place(name.rectTransform, new Rect(indent + 36f, 0f, textWidth, 14f));
-                AvKit.Place(role.rectTransform, new Rect(indent + 36f, -14f, textWidth, 14f));
-
-                for (int depth = 0; depth < guides.Length; depth++)
+                // A quiet elbow: the trunk sits under the parent's own indent, nothing spans rows.
+                bool branch = view.Tier > 0;
+                guide.gameObject.SetActive(branch);
+                tick.gameObject.SetActive(branch);
+                if (branch)
                 {
-                    bool active = depth < view.Tier && group != null;
-                    guides[depth].gameObject.SetActive(active);
-                    if (!active) continue;
-                    float gx = 6f + depth * 12f;
-                    bool continues = HasLaterBranch(group, index, depth, view);
-                    AvKit.Place(guides[depth].rectTransform, new Rect(gx, 0f, 1f, continues ? 30f : 16f));
-                }
-                tick.gameObject.SetActive(view.Tier > 0);
-                if (view.Tier > 0)
-                {
-                    float gx = 6f + (view.Tier - 1) * 12f;
-                    AvKit.Place(tick.rectTransform, new Rect(gx, -15f, 7f, 1f));
+                    float gx = indent - TierStep;
+                    AvKit.Place(guide.rectTransform, new Rect(gx, 0f, 1f, 15f));
+                    AvKit.Place(tick.rectTransform, new Rect(gx, -14f, TierStep, 1f));
                 }
 
                 hit.WithTooltip(view.IsFriendly
-                    ? "Open the dossier for " + view.Name + " · " + view.Role
-                    : "Confirmed contact: " + view.Name + " · " + view.Role);
+                    ? "Open the dossier for " + view.Name + "  ·  " + view.Role
+                    : view.IsKnown
+                        ? "Confirmed contact: " + view.Name + "  ·  " + view.Role
+                        : "Unconfirmed post: " + view.Name + " — no local intel.");
                 if (!root.activeSelf) root.SetActive(true);
             }
 
@@ -345,34 +423,6 @@ namespace BoscaliSummer.Features.Command.Presentation
             {
                 id = -1;
                 if (root.activeSelf) root.SetActive(false);
-            }
-
-            /// <summary>True when another later row still hangs off the same ancestor at this depth.</summary>
-            private static bool HasLaterBranch(IReadOnlyList<CommanderView> group, int index, int depth, CommanderView node)
-            {
-                int ancestor = AncestorAt(group, node, depth);
-                if (ancestor < 0) return false;
-                for (int i = index + 1; i < group.Count; i++)
-                {
-                    if (group[i].Tier > depth && AncestorAt(group, group[i], depth) == ancestor) return true;
-                }
-                return false;
-            }
-
-            private static int AncestorAt(IReadOnlyList<CommanderView> group, CommanderView node, int depth)
-            {
-                CommanderView cursor = node;
-                int guard = 0;
-                while (cursor != null && cursor.Tier > depth && guard++ < 8)
-                    cursor = Find(group, cursor.ParentId);
-                return cursor != null && cursor.Tier == depth ? cursor.Id : -1;
-            }
-
-            private static CommanderView Find(IReadOnlyList<CommanderView> group, int id)
-            {
-                for (int i = 0; i < group.Count; i++)
-                    if (group[i].Id == id) return group[i];
-                return null;
             }
         }
     }

@@ -6,13 +6,11 @@ namespace BoscaliSummer.Features.Trenches.Runtime
 {
     internal enum TrenchNodeType
     {
-        Foxhole = 0,        // Stage 0: 1-2 soldier fighting position
+        Foxhole = 0,        // Stage 0/6: 1-2 soldier fighting scrape or forward listening post
         RifleBay = 1,       // Stage 1-2: standard firing bay with firing step
         HeavyWeaponPit = 2, // Stage 2-3: circular/octagonal revetted position for MG/ATGM
-        DroneShelter = 3,   // Stage 3: undercut wall cave (lisya nora)
         BunkerBlindage = 4, // Stage 3-4: timber/earth command dugout or DOT pillbox
-        TrenchJunction = 5, // T-junction / communication node
-        TerminalRamp = 6    // Sump or entry ramp from ground level
+        TrenchJunction = 5  // T-junction / communication node
     }
 
     internal enum TrenchStage
@@ -22,7 +20,8 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         Stage2_FireTrench = 2,   // Full fire trench line with parapets and weapon pits
         Stage3_Hardened = 3,     // Line extended across the sector
         Stage4_Integrated = 4,   // Support line and communications behind the front
-        Stage5_Redoubt = 5       // Full belt: extended front, support and rear lines
+        Stage5_Redoubt = 5,      // Full belt: extended front, support and rear lines
+        Stage6_Saps = 6          // Forward saps and listening posts pushed toward the enemy
     }
 
     internal sealed class TrenchNode
@@ -57,7 +56,6 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             {
                 case TrenchNodeType.BunkerBlindage: return 800f;
                 case TrenchNodeType.HeavyWeaponPit: return 400f;
-                case TrenchNodeType.DroneShelter: return 350f;
                 case TrenchNodeType.RifleBay: return 200f;
                 case TrenchNodeType.Foxhole: return 120f;
                 default: return 150f;

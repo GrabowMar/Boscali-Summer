@@ -50,7 +50,7 @@ namespace BoscaliSummer.Framework.Contracts
         public string Bio { get; }
         public int PortraitSeed { get; }
 
-        /// <summary>Portrait generated and cached by the owning module; never destroyed by the consumer.</summary>
+        /// <summary>Borrowed from Wing Command's generated pilot pool; never destroyed by the consumer.</summary>
         public Sprite Portrait { get; }
 
         /// <summary>Seconds since last confirmed contact, or -1 for own living staff.</summary>

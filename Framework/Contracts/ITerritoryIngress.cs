@@ -11,7 +11,14 @@ namespace BoscaliSummer.Framework.Contracts
     internal readonly struct FrontlineSite
     {
         public readonly float X, Z, ThreatX, ThreatZ, HalfLength;
-        public FrontlineSite(float x, float z, float threatX, float threatZ, float halfLength)
-        { X = x; Z = z; ThreatX = threatX; ThreatZ = threatZ; HalfLength = halfLength; }
+
+        /// <summary>
+        /// How evenly opposing ground forces actually hold this border, 0..1.
+        /// Zero means one side (or neither) is present — a quiet, unfortified line.
+        /// </summary>
+        public readonly float Pressure;
+
+        public FrontlineSite(float x, float z, float threatX, float threatZ, float halfLength, float pressure = 0f)
+        { X = x; Z = z; ThreatX = threatX; ThreatZ = threatZ; HalfLength = halfLength; Pressure = pressure; }
     }
 }

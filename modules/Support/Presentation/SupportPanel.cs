@@ -30,10 +30,21 @@ namespace BoscaliSummer.Features.Support.Presentation
 
         private const int ChipCount = 3;
 
+        /// <summary>Fixed height for a strike row's dynamic status line, and the hard cap on
+        /// how many lines it may ever render. The row's overall height used to be measured
+        /// from whatever placeholder string was on hand at build time, then a completely
+        /// different (and often longer) status string was drawn into that same space at
+        /// refresh — the two disagreed and the live text bled into the row below. Fixing the
+        /// height and clamping line count makes that structurally impossible regardless of
+        /// what the status string says.</summary>
+        private const float StatusRowHeight = 30f;
+        private const int StatusMaxLines = 2;
+
         private const int TabSupport = 0;
         private const int TabSpace = 1;
         private const int TabCyber = 2;
-        private const int TabStatus = 3;
+        private const int TabEw = 3;
+        private const int TabStatus = 4;
 
         private sealed class StrikeRow
         {
@@ -122,6 +133,7 @@ namespace BoscaliSummer.Features.Support.Presentation
 
             ResetSpacePage();
             ResetCyberPage();
+            ResetEwPage();
 
             nextAttempt = 0f;
             nextRefresh = 0f;
@@ -150,6 +162,8 @@ namespace BoscaliSummer.Features.Support.Presentation
             if (visible)
             {
                 UpdateSpaceMotion();
+                if (shell.Page == TabCyber) TickScanSweep(ref cyberScan, Time.unscaledDeltaTime);
+                else if (shell.Page == TabEw) TickScanSweep(ref ewScan, Time.unscaledDeltaTime);
                 if (Time.unscaledTime >= nextRefresh)
                 {
                     nextRefresh = Time.unscaledTime + RefreshInterval;
@@ -252,7 +266,7 @@ namespace BoscaliSummer.Features.Support.Presentation
 
             shell = AvScreen.Build(
                 content, "OPS",
-                new[] { "SUPPORT", "SPACE", "CYBER", "STATUS" },
+                new[] { "SUPPORT", "SPACE", "CYBER", "EW", "STATUS" },
                 new[]
                 {
                     new[] { "ALLOCATION", "ALLOC" },
@@ -269,6 +283,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             BuildStrikesPage((RectTransform)shell.CreatePage(TabSupport, "SupportPage").transform, body);
             BuildSpacePage((RectTransform)shell.CreatePage(TabSpace, "SpacePage").transform, body);
             BuildCyberPage((RectTransform)shell.CreatePage(TabCyber, "CyberPage").transform, body);
+            BuildEwPage((RectTransform)shell.CreatePage(TabEw, "EwPage").transform, body);
             BuildStatusPage((RectTransform)shell.CreatePage(TabStatus, "StatusPage").transform, body);
 
             MFDScreen result = root.AddComponent<MFDScreen>();
@@ -305,6 +320,7 @@ namespace BoscaliSummer.Features.Support.Presentation
                 .Add(AvBox.Cell("code").Width(30f))
                 .Add(AvBox.Column("text").Grow().Gaps(3f)
                     .Add(AvBox.Cell("name").Height(15f))
+                    .Add(AvBox.Cell("status").Height(StatusRowHeight))
                     .Add(AvBox.Text("desc", description, "row-sub")))
                 .Add(AvBox.Cell("trail").Width(96f).Intrinsic(46f));
 
@@ -349,19 +365,66 @@ namespace BoscaliSummer.Features.Support.Presentation
             AvKit.Rule(parent, new Rect(area.x, area.y - area.height, area.width, 1f),
                        AvTheme.Unity(AvTokens.Hairline.WithAlpha(0.13f)));
 
-        /// <summary>A band-backed section title with a right-hand note, at an AvBox-resolved rect.
-        /// Shared by SPACE and CYBER, which both hang numbered bands ("01 / ...") off their
-        /// spine; lives here so neither tab owns a helper the other depends on.</summary>
+        /// <summary>A band-backed section title with a right-hand note and a bright accent
+        /// underline, at an AvBox-resolved rect. Shared by SPACE, CYBER and EW, which all hang
+        /// numbered bands ("01 / ...") off their spine; lives here so no tab owns a helper the
+        /// others depend on. The underline is deliberately drawn here rather than in the
+        /// shared ".section.band" style — that class is used by other mods' panels too, and
+        /// this accent is specific to Support's own bands.</summary>
         private static TMP_Text DrawBandTitle(RectTransform parent, Rect area, string title, string note)
         {
             AvStyled.Box(parent, new Rect(area.x + SpineInset, area.y + 3f,
                 area.width - SpineInset, 15f), "section band");
+            AvKit.Rule(parent, new Rect(area.x + SpineInset, area.y - 12f, area.width - SpineInset, 1f),
+                AvTheme.RailInfo.WithAlpha(0.45f));
             AvStyled.SpineTick(parent, area.x + SpineInset, area.y + 3f);
             AvStyled.Label(parent, new Rect(area.x + SpineInset + 8f, area.y,
                 area.width - SpineInset - 8f, 15f), title, "section-title");
             return AvStyled.Label(parent, new Rect(area.x + area.width * 0.40f, area.y,
                 area.width * 0.60f - SpineInset, 15f), note, "section-title-note",
                 align: TextAlignmentOptions.MidlineRight);
+        }
+
+        // ---- Scan sweep --------------------------------------------------------------------
+        //
+        // A thin bright line translating down a tab body on a loop: the "this is a live feed"
+        // motion cue CYBER and EW need, since neither has SPACE's natural rotating radar sweep.
+
+        private struct ScanSweep
+        {
+            public Image Bar;
+            public Image Glow;
+            public float Top;
+            public float Bottom;
+            public float Y;
+        }
+
+        private const float ScanSweepSpeed = 70f;
+
+        private ScanSweep cyberScan;
+        private ScanSweep ewScan;
+
+        private static ScanSweep BuildScanSweep(RectTransform parent, Rect area)
+        {
+            var sweep = new ScanSweep { Top = area.y, Bottom = area.y - area.height, Y = area.y };
+            sweep.Glow = AvKit.Panel(parent, new Rect(area.x, area.y, area.width, 14f),
+                AvTheme.RailInfo.WithAlpha(0.07f));
+            sweep.Glow.raycastTarget = false;
+            sweep.Bar = AvKit.Panel(parent, new Rect(area.x, area.y, area.width, 1.5f),
+                AvTheme.RailInfo.WithAlpha(0.6f));
+            sweep.Bar.raycastTarget = false;
+            return sweep;
+        }
+
+        private static void TickScanSweep(ref ScanSweep sweep, float deltaTime)
+        {
+            if (sweep.Bar == null) return;
+            sweep.Y -= ScanSweepSpeed * deltaTime;
+            if (sweep.Y < sweep.Bottom) sweep.Y = sweep.Top;
+            RectTransform barRect = sweep.Bar.rectTransform;
+            barRect.anchoredPosition = new Vector2(barRect.anchoredPosition.x, sweep.Y);
+            RectTransform glowRect = sweep.Glow.rectTransform;
+            glowRect.anchoredPosition = new Vector2(glowRect.anchoredPosition.x, sweep.Y);
         }
 
         /// <summary>A key/value stat pair: dim label left, bold value right. Shared by SPACE
@@ -398,11 +461,11 @@ namespace BoscaliSummer.Features.Support.Presentation
         /// trick <c>MfdResourceChart</c> already uses for its line glow, applied to a card
         /// instead of a line. Must be built BEFORE the card it sits behind.
         /// </summary>
-        private static void AddCardGlow(RectTransform parent, Rect cardArea, Color tint, float bleed = 5f)
+        private static void AddCardGlow(RectTransform parent, Rect cardArea, Color tint, float bleed = 7f)
         {
             Rect glowArea = new Rect(cardArea.x - bleed, cardArea.y + bleed,
                 cardArea.width + bleed * 2f, cardArea.height + bleed * 2f);
-            AvKit.Panel(parent, glowArea, tint.WithAlpha(0.10f));
+            AvKit.Panel(parent, glowArea, tint.WithAlpha(0.16f));
         }
 
         private static TMP_Text KeyValue(
@@ -434,13 +497,7 @@ namespace BoscaliSummer.Features.Support.Presentation
 
             var descriptions = new List<string>();
             for (int i = 0; i < actions.Count; i++)
-            {
-                string perkName = progression != null
-                    ? progression.PerkNameFor(actions[i].Capability)
-                    : "COMBAT ENGINEERING";
-                descriptions.Add("LOCKED · UNLOCK IN SQD / ABILITIES ('" +
-                                 perkName.ToUpperInvariant() + "')\n" + actions[i].Description);
-            }
+                descriptions.Add(actions[i].Description);
 
             AvNode page = AvBox.Column("support").Gaps(0f)
                 .Add(Section("strikes", descriptions))
@@ -478,7 +535,10 @@ namespace BoscaliSummer.Features.Support.Presentation
                                          align: TextAlignmentOptions.MidlineLeft);
             strike.Name = AvStyled.Label(parent, row.At("text.name"),
                                          definition.Name.ToUpperInvariant(), "row-name");
-            strike.Status = AvStyled.Label(parent, row.At("text.desc"), definition.Description, "row-sub");
+            strike.Status = AvStyled.Label(parent, row.At("text.status"), "", "row-sub");
+            strike.Status.maxVisibleLines = StatusMaxLines;
+            strike.Status2 = AvStyled.Label(parent, row.At("text.desc"), definition.Description, "row-sub");
+            strike.Status2.maxVisibleLines = StatusMaxLines;
 
             Rect trail = row.At("trail");
             strike.Cost = AvStyled.Label(parent, new Rect(trail.x, trail.y, trail.width, 15f),
@@ -591,6 +651,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             RefreshStrikeRows(bypass);
             RefreshSpace(bypass);
             RefreshCyber(bypass);
+            RefreshEw(bypass);
             RefreshStatusPage(bypass);
 
             UpdateStatusStrip();
@@ -818,10 +879,6 @@ namespace BoscaliSummer.Features.Support.Presentation
 
             row.Status.text = status;
             row.Status.color = statusColor;
-            if (row.Status2 != null)
-                row.Status2.text = row.Definition.Description;
-            else
-                row.Status.text = status + "\n" + row.Definition.Description;
 
             row.Action.SetText(button);
             row.Action.SetEnabled(ready || armed);

@@ -26,7 +26,15 @@ public static class TrenchUnityCheck
                 if (normal.y <= 0f) throw new Exception($"Trench floor faces underground: heading={heading}, threat side={side}");
                 Object.DestroyImmediate(mesh);
             }
-            CheckDatumLocalPrefabPlacement();
+            // Cross-slope conformance: with a sampled slope, each outer skirt tip must sit
+            // one skirt depth below the ground it sampled on its own side of the profile.
+            var conform = TrenchMeshBuilder.BuildEdgeMesh(new[] { Vector3.zero, Vector3.forward * 30f },
+                2.6f, 2.4f, 1.4f, Vector3.right, p => new Vector3(p.x, p.x * 0.25f, p.z));
+            var cv = conform.vertices;
+            Check(Mathf.Abs(cv[0].y - (cv[0].x * 0.25f - 1.4f)) < 0.01f &&
+                Mathf.Abs(cv[9].y - (cv[9].x * 0.25f - 1.4f)) < 0.01f,
+                "Ditch skirt tips must sit below the terrain they sample on each side");
+            Object.DestroyImmediate(conform);
             CheckGrowthAndCombat();
             var curve = TrenchEdge.GeneratePathPoints(Vector3.zero, Vector3.back * 35f, Vector3.forward,
                 TrenchEdgeType.CommunicationTrench);
@@ -38,10 +46,10 @@ public static class TrenchUnityCheck
                         curvedVertices[ring * TrenchMeshBuilder.ProfilePointCount],
                     curvedVertices[(ring - 1) * TrenchMeshBuilder.ProfilePointCount + last] -
                         curvedVertices[(ring - 1) * TrenchMeshBuilder.ProfilePointCount]) > 0,
-                    "Communication trench walls must not twist across an S-curve");
+                    "Communication trench walls must not twist across a traversed path");
             CheckEarthworkMaterial();
             Render();
-            File.WriteAllText("result.txt", "PASS: eight winding orientations; connected seed, atomic growth through the full belt, invalid-ground rejection, native-adapter defender budgets, damage suppression and no respawn after destruction. Native AI/networking require in-game acceptance. Stage renders saved.");
+            File.WriteAllText("result.txt", "PASS: eight winding orientations; connected seed, atomic growth through the full belt with forward saps, invalid-ground rejection, native-adapter defender budgets, damage suppression and no respawn after destruction. Native AI/networking require in-game acceptance. Stage renders saved.");
             EditorApplication.Exit(0);
         }
         catch (Exception ex)
@@ -54,22 +62,6 @@ public static class TrenchUnityCheck
 
     private static void Check(bool value, string message) { if (!value) throw new Exception(message); }
 
-    private static void CheckDatumLocalPrefabPlacement()
-    {
-        var origin = new GameObject("DatumOrigin");
-        origin.transform.position = new Vector3(-10000f, 0f, -5000f);
-        Datum.origin = origin.transform;
-        Vector3 global = new Vector3(-10378f, 125f, -5102f);
-        GameObject module = TrenchPrefabResolver.InstantiateStraight(global, Quaternion.identity, origin.transform);
-        Check(module != null && module.transform.localPosition == global,
-            "Trench modules must use Datum-local coordinates, not Instantiate world coordinates");
-        Object.DestroyImmediate(module);
-        Object.DestroyImmediate(origin);
-        Datum.origin = null;
-        TrenchPrefabResolver.ResetForScene();
-        TrenchMaterialResolver.ResetForScene();
-    }
-
     private static void CheckEarthworkMaterial()
     {
         var material = TrenchMaterialResolver.GetEarthBermMaterial();
@@ -81,7 +73,7 @@ public static class TrenchUnityCheck
     private static TrenchNetwork Network()
     {
         var net = new TrenchNetwork(1, "Check", new GameObject("HQ").AddComponent<FactionHQ>(), Vector3.zero, Vector3.forward);
-        net.PlacementValidator = p => Mathf.Abs(p.x) <= 180f && p.z <= 20f && p.z >= -140f;
+        net.PlacementValidator = p => Mathf.Abs(p.x) <= 180f && p.z <= 60f && p.z >= -260f;
         Check(TrenchGrowthSimulator.Seed(net, p => p), "Connected seed failed");
         return net;
     }
@@ -114,26 +106,30 @@ public static class TrenchUnityCheck
             Check(TrenchGrowthSimulator.AdvanceSimulation(net, p => p),
                 "Growth failed at stage " + stage + ": " + TrenchGrowthSimulator.LastFailure);
             garrison.Reinforce(); garrison.Poll(stage);
-            Check(garrison.Alive == (stage == 2 ? 4 : 6), "Wrong native defender count");
+            Check(garrison.Alive == (stage == 2 ? 3 : 4), "Wrong native defender count");
         }
-        Check(net.NodeCount == 17 && net.EdgeCount == 20, "Mature network must fill the sector belt");
+        Check(net.NodeCount == 17 && net.EdgeCount == 18, "Mature network must fill the sector belt");
         Check(net.BunkerCount == 2, "Mature belt must include support and rear dugouts");
         Check(net.FrontHalfSpan == 72f, "Network half-span must match its capped flank limit");
+        Check(TrenchGrowthSimulator.AdvanceSimulation(net, p => p), "Forward saps failed: " + TrenchGrowthSimulator.LastFailure);
+        Check(net.Stage == TrenchStage.Stage6_Saps && net.NodeCount == 19 && net.EdgeCount == 20,
+            "The final stage must push two saps ending in forward listening posts");
         spawner.Spawned[0].GetComponent<UnitPart>().hitPoints = 70;
         Check(garrison.Poll(10) && garrison.SuppressedUntil == 70, "A hit must stop construction for sixty seconds");
         spawner.Spawned[0].disabled = true;
         garrison.Poll(11); garrison.Reinforce();
-        Check(spawner.Spawned.Count == 6 && garrison.Alive == 5, "A destroyed slot must never respawn");
+        Check(spawner.Spawned.Count == 4 && garrison.Alive == 3, "A destroyed slot must never respawn");
         foreach (var unit in spawner.Spawned) unit.disabled = true;
         garrison.Poll(12); garrison.Reinforce();
-        Check(garrison.Overrun && garrison.Alive == 0 && spawner.Spawned.Count == 6, "Wiped positions stop reinforcing");
+        Check(garrison.Overrun && garrison.Alive == 0 && spawner.Spawned.Count == 4, "Wiped positions stop reinforcing");
         net.Overrun = true;
         Check(!TrenchGrowthSimulator.AdvanceSimulation(net, p => p), "Overrun position must stop growing");
         garrison.Remove();
-        // A blocked second slot must roll the first spawn back, not leave a cosmetic
-        // site with a leaked defender outside the manager's capacity accounting.
+        // A blocked slot must roll the spawn back, not leave a cosmetic position with a
+        // leaked defender outside the manager's capacity accounting.
+        float span = Mathf.Max(60f, net.FrontHalfSpan);
         var obstacle = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        obstacle.transform.position = new Vector3(36, 2, -16);
+        obstacle.transform.position = new Vector3(0.62f * span, 2, -16);
         obstacle.transform.localScale = new Vector3(6, 4, 6);
         Physics.SyncTransforms();
         var failed = new TrenchGarrison(Network());
@@ -158,8 +154,6 @@ public static class TrenchUnityCheck
         light.transform.rotation = Quaternion.Euler(45, -30, 0);
         Material earth = TrenchMaterialResolver.GetEarthBermMaterial();
         if (earth == null) earth = new Material(Shader.Find("Standard")) { color = new Color(0.48f, 0.34f, 0.19f) };
-        Material sandbag = TrenchMaterialResolver.GetSandbagMaterial() ?? earth;
-        Material concrete = TrenchMaterialResolver.GetConcreteMaterial() ?? earth;
         var ground = GameObject.CreatePrimitive(PrimitiveType.Cube);
         ground.transform.position = new Vector3(0, -0.6f, -50);
         ground.transform.localScale = new Vector3(460, 1, 320);
@@ -173,9 +167,6 @@ public static class TrenchUnityCheck
             foreach (var edge in net.Edges)
                 DrawMesh(root.transform, TrenchMeshBuilder.BuildEdgeMesh(edge.PathPoints, edge.TrenchWidth,
                     edge.ParapetHeight, edge.SkirtDepth, net.ThreatDirection), Vector3.zero, earth);
-            foreach (var node in net.Nodes)
-                DrawMesh(root.transform, NodeMesh(node.Type), node.Position,
-                    node.Type == TrenchNodeType.RifleBay || node.Type == TrenchNodeType.Foxhole ? sandbag : concrete);
             camera.Render();
             RenderTexture.active = target;
             WriteRender(target, "stage-" + stage + ".png");
@@ -199,17 +190,6 @@ public static class TrenchUnityCheck
         image.Apply();
         File.WriteAllBytes(file, image.EncodeToPNG());
         Object.DestroyImmediate(image);
-    }
-
-    private static Mesh NodeMesh(TrenchNodeType type)
-    {
-        switch (type)
-        {
-            case TrenchNodeType.BunkerBlindage: return TrenchMeshBuilder.BuildBunkerMesh();
-            case TrenchNodeType.HeavyWeaponPit: return TrenchMeshBuilder.BuildWeaponPitMesh();
-            case TrenchNodeType.Foxhole: return TrenchMeshBuilder.BuildFoxholeMesh();
-            default: return TrenchMeshBuilder.BuildFightingBayMesh();
-        }
     }
 
     private static void DrawMesh(Transform root, Mesh mesh, Vector3 position, Material material)

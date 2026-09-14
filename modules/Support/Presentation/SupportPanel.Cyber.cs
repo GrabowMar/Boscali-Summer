@@ -9,12 +9,18 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Features.Support.Presentation
 {
     /// <summary>
-    /// CYBER: infrastructure drawn as a node graph instead of a flat row list. Facility nodes
-    /// sit in lanes traced back to each independent root and are linked by edges derived from
+    /// The facility node-graph renderer shared by CYBER and EW: nodes sit in lanes traced
+    /// back to each independent root and are linked by edges derived from
     /// <see cref="InfoNetwork.Facilities"/>' real prerequisite data (<see cref="SupportCyberGraph"/>),
     /// so the drawn tree can never show a dependency the game doesn't actually enforce. Hacks
     /// attach to their gating facility as small chips; a single shared detail card — not five
     /// full rows — carries the active hack's full description, cost and ARM/ABORT control.
+    ///
+    /// CYBER and EW each own one <see cref="FacilityGraphSection"/> — a fully separate set of
+    /// widgets and derived state for their own facility/hack subset — built and refreshed
+    /// through the same methods below. Splitting SIGINT/CRYPTO from DISRUPT/EW into two tabs
+    /// is therefore a filter on which ids each section covers, not two hand-written copies of
+    /// this rendering code.
     /// </summary>
     internal sealed partial class SupportPanel
     {
@@ -30,6 +36,13 @@ namespace BoscaliSummer.Features.Support.Presentation
         private const float NodeChipGap = 4f;
         private const float NodeGapVertical = 18f;
         private const float LaneGap = 12f;
+        private const float DetailStripHeight = 96f;
+        private const int DetailMaxLines = 2;
+
+        private static readonly FacilityId[] CyberFacilities = { FacilityId.Sigint, FacilityId.Crypto };
+        private static readonly HackKind[] CyberHacks = { HackKind.Ping, HackKind.Track };
+        private static readonly FacilityId[] EwFacilities = { FacilityId.Disrupt, FacilityId.Ew };
+        private static readonly HackKind[] EwHacks = { HackKind.Blackout, HackKind.Ghost, HackKind.Spoof };
 
         private sealed class NodeChip
         {
@@ -52,7 +65,7 @@ namespace BoscaliSummer.Features.Support.Presentation
         }
 
         /// <summary>One hack's computed display state, shared between its chip and the detail
-        /// card so the gating logic (identical to the old per-row version) is written once.</summary>
+        /// card so the gating logic is written once.</summary>
         private struct HackDisplayState
         {
             public HackKind Kind;
@@ -66,116 +79,176 @@ namespace BoscaliSummer.Features.Support.Presentation
             public string ButtonText;
         }
 
-        private readonly FacilityRow[] facilityRows = new FacilityRow[InfoNetwork.Facilities.Length];
-        private readonly HackDisplayState[] hackStates = new HackDisplayState[CyberCatalog.All.Length];
+        /// <summary>Everything one tab's facility-graph + hack-detail card needs, kept
+        /// per-tab so CYBER and EW each own a live graph without sharing widgets.</summary>
+        private sealed class FacilityGraphSection
+        {
+            public FacilityId[] FacilityIds;
+            public HackKind[] HackIds;
+            public readonly Dictionary<FacilityId, FacilityRow> Rows = new Dictionary<FacilityId, FacilityRow>();
+            public HackDisplayState[] HackStates;
+            public CyberEdge[] Edges;
+            public TMP_Text Summary;
+            public Image[] Pips;
+            public Image[] EdgeLines;
+            public HackKind? SelectedHack;
+            public Image DetailRail;
+            public TMP_Text DetailName;
+            public TMP_Text DetailStatus;
+            public TMP_Text DetailCost;
+            public AvButton DetailAction;
+        }
 
-        private TMP_Text cyberSummary;
-        private Image[] networkPips;
-        private Image[] edgeLines;
-        private HackKind? selectedHack;
-
-        private Image detailRail;
-        private TMP_Text detailName;
-        private TMP_Text detailStatus;
-        private TMP_Text detailCost;
-        private AvButton detailAction;
+        private FacilityGraphSection cyberGraph;
 
         private void ResetCyberPage()
         {
-            for (int i = 0; i < facilityRows.Length; i++) facilityRows[i] = null;
-            for (int i = 0; i < hackStates.Length; i++) hackStates[i] = default;
-            cyberSummary = null;
-            networkPips = null;
-            edgeLines = null;
-            selectedHack = null;
-            detailRail = null;
-            detailName = null;
-            detailStatus = null;
-            detailCost = null;
-            detailAction = null;
+            cyberGraph = null;
+            cyberScan = default;
         }
 
         private void BuildCyberPage(RectTransform parent, Rect body)
         {
-            int laneCount = SupportCyberGraph.LaneCount;
-            var laneNodes = new List<FacilityId>[laneCount];
-            for (int lane = 0; lane < laneCount; lane++) laneNodes[lane] = new List<FacilityId>();
-            for (int i = 0; i < SupportCyberGraph.Nodes.Length; i++)
-            {
-                CyberNodeLayout layout = SupportCyberGraph.Nodes[i];
-                laneNodes[layout.Lane].Add(layout.Id);
-            }
-            for (int lane = 0; lane < laneCount; lane++)
-                laneNodes[lane].Sort((a, b) =>
-                    SupportCyberGraph.Layout(a).Rank.CompareTo(SupportCyberGraph.Layout(b).Rank));
-
-            float laneWidth = (body.width - SpineInset - LaneGap * (laneCount - 1)) / laneCount;
+            cyberGraph = new FacilityGraphSection { FacilityIds = CyberFacilities, HackIds = CyberHacks };
 
             AvNode page = AvBox.Column("cyber").Gaps(0f)
                 .Add(AvBox.Cell("header").Height(20f))
-                .Add(AvBox.Cell("summary").Height(16f))
-                .Add(AvBox.Cell("graphTitle").Height(20f));
-
-            AvNode graphRow = AvBox.Row("graph").Gaps(LaneGap);
-            for (int lane = 0; lane < laneCount; lane++)
-            {
-                AvNode laneCol = AvBox.Column("lane" + lane).Width(laneWidth).Gaps(NodeGapVertical);
-                List<FacilityId> ids = laneNodes[lane];
-                for (int i = 0; i < ids.Count; i++)
-                    laneCol.Add(AvBox.Cell("node" + (int)ids[i]).Height(NodeHeight(HasChips(ids[i]))));
-                graphRow.Add(laneCol);
-            }
-            page.Add(graphRow);
-
-            page.Add(AvBox.Cell("detailTitle").Height(20f))
-                .Add(AvBox.Cell("detailStrip").Height(96f))
-                .Add(AvBox.Filler());
+                .Add(AvBox.Cell("summary").Height(16f));
+            AppendGraphBlock(page, cyberGraph);
+            page.Add(AvBox.Filler());
 
             page.Arrange(body);
             float graphHeight = page.At("graph").height;
-            float contentHeight = 56f + graphHeight + 20f + 96f + 12f;
+            float contentHeight = 20f + 16f + 18f + graphHeight + 18f + DetailStripHeight + 20f;
             parent = AvScreen.Scroll(parent, body, contentHeight, out body);
             page.Arrange(body);
 
             AddScanlineOverlay(parent, body);
+            cyberScan = BuildScanSweep(parent, body);
             AvStyled.Spine(parent, new Rect(body.x, body.y, 3f, body.height));
 
             Rect header = page.At("header");
             AvStyled.Label(parent, new Rect(header.x + SpineInset, header.y, header.width * 0.5f, 18f),
                 "CYBER INFRASTRUCTURE", "section-title");
             AvStyled.Label(parent, new Rect(header.x + header.width * 0.5f, header.y,
-                header.width * 0.5f - SpineInset, 18f), "SPEND ALLOCATION · INSTANT",
+                header.width * 0.5f - SpineInset, 18f), "SIGNALS INTELLIGENCE · SPEND ALLOCATION",
                 "section-title-note", align: TextAlignmentOptions.MidlineRight);
             AvKit.Rule(parent, new Rect(header.x + SpineInset, header.y - 18f,
                 header.width - SpineInset, 1f), AvTheme.Unity(AvTokens.Hairline.WithAlpha(0.4f)));
 
             Rect summary = page.At("summary");
-            float pipsWidth = hackStates.Length > 0
-                ? InfoNetwork.MaxLevel * InfoNetwork.Facilities.Length * 11f
-                : 0f;
-            cyberSummary = AvStyled.Label(parent, new Rect(summary.x + SpineInset, summary.y,
-                summary.width - SpineInset - pipsWidth - 8f, 15f), "", "row-main");
-            networkPips = new Image[InfoNetwork.MaxLevel * InfoNetwork.Facilities.Length];
-            for (int i = 0; i < networkPips.Length; i++)
-                networkPips[i] = AvKit.Panel(parent,
-                    new Rect(summary.x + summary.width - pipsWidth + i * 11f, summary.y - 4f, 8f, 8f),
+            BuildGraphSummary(parent, summary, cyberGraph);
+
+            BuildGraphBlockWidgets(parent, page, cyberGraph,
+                "INFRASTRUCTURE NETWORK", "BUILD ORDER FLOWS DOWN EACH BRANCH");
+        }
+
+        /// <summary>The network-tier caption plus its level pips, sized to the section's own
+        /// facility subset rather than the game's whole cyber network.</summary>
+        private static void BuildGraphSummary(RectTransform parent, Rect area, FacilityGraphSection section)
+        {
+            int pipCount = InfoNetwork.MaxLevel * section.FacilityIds.Length;
+            float pipsWidth = pipCount * 11f;
+            section.Summary = AvStyled.Label(parent, new Rect(area.x + SpineInset, area.y,
+                area.width - SpineInset - pipsWidth - 8f, 15f), "", "row-main");
+            section.Pips = new Image[pipCount];
+            for (int i = 0; i < section.Pips.Length; i++)
+                section.Pips[i] = AvKit.Panel(parent,
+                    new Rect(area.x + area.width - pipsWidth + i * 11f, area.y - 4f, 8f, 8f),
                     AvTheme.SurfaceInert);
+        }
 
-            DrawBandTitle(parent, page.At("graphTitle"), "INFRASTRUCTURE NETWORK",
-                "BUILD ORDER FLOWS DOWN EACH BRANCH");
+        /// <summary>Phase 1 (before Arrange): appends the graph-title, graph and detail-card
+        /// cells to <paramref name="page"/> for exactly <paramref name="section"/>'s facilities.</summary>
+        private static void AppendGraphBlock(AvNode page, FacilityGraphSection section)
+        {
+            page.Add(AvBox.Cell("graphTitle").Height(18f));
+            AppendGraphRow(page, "graph", section.FacilityIds);
+            page.Add(AvBox.Cell("detailTitle").Height(18f))
+                .Add(AvBox.Cell("detailStrip").Height(DetailStripHeight));
+        }
 
-            BuildCyberEdges(parent, page);
-            for (int lane = 0; lane < laneCount; lane++)
-            {
-                List<FacilityId> ids = laneNodes[lane];
-                for (int i = 0; i < ids.Count; i++)
-                    BuildFacilityNode(parent, page.At("graph.lane" + lane + ".node" + (int)ids[i]), ids[i]);
-            }
-
-            DrawBandTitle(parent, page.At("detailTitle"), "OPERATION DETAIL",
-                "SELECT OR ARM A NODE'S HACK");
+        /// <summary>Phase 2 (after Arrange): the actual widgets for the block appended above.</summary>
+        private void BuildGraphBlockWidgets(RectTransform parent, AvNode page, FacilityGraphSection section,
+            string title, string note)
+        {
+            DrawBandTitle(parent, page.At("graphTitle"), title, note);
+            BuildGraphNodes(parent, page, "graph", section);
+            DrawBandTitle(parent, page.At("detailTitle"), "OPERATION DETAIL", "SELECT OR ARM A NODE'S HACK");
             AddCardGlow(parent, page.At("detailStrip"), AvTheme.RailInfo);
-            BuildOperationDetail(parent, page.At("detailStrip"));
+            BuildOperationDetail(parent, page.At("detailStrip"), section);
+        }
+
+        /// <summary>Groups exactly these facilities by their real <see cref="SupportCyberGraph"/>
+        /// lane (so a filtered tab never has to know the graph's shape) and appends the
+        /// resulting lane columns as a row cell named <paramref name="cellName"/>.</summary>
+        private static AvNode AppendGraphRow(AvNode page, string cellName, FacilityId[] ids)
+        {
+            var laneOrder = new List<int>();
+            var laneNodes = new Dictionary<int, List<FacilityId>>();
+            for (int i = 0; i < ids.Length; i++)
+            {
+                int lane = SupportCyberGraph.Layout(ids[i]).Lane;
+                if (!laneNodes.TryGetValue(lane, out List<FacilityId> list))
+                {
+                    list = new List<FacilityId>();
+                    laneNodes[lane] = list;
+                    laneOrder.Add(lane);
+                }
+                list.Add(ids[i]);
+            }
+            laneOrder.Sort();
+            foreach (List<FacilityId> list in laneNodes.Values)
+                list.Sort((a, b) => SupportCyberGraph.Layout(a).Rank.CompareTo(SupportCyberGraph.Layout(b).Rank));
+
+            AvNode graphRow = AvBox.Row(cellName).Gaps(LaneGap);
+            for (int l = 0; l < laneOrder.Count; l++)
+            {
+                AvNode laneCol = AvBox.Column("lane" + laneOrder[l]).Grow().Gaps(NodeGapVertical);
+                List<FacilityId> list = laneNodes[laneOrder[l]];
+                for (int i = 0; i < list.Count; i++)
+                    laneCol.Add(AvBox.Cell("node" + (int)list[i]).Height(NodeHeight(HasChips(list[i]))));
+                graphRow.Add(laneCol);
+            }
+            page.Add(graphRow);
+            return graphRow;
+        }
+
+        private void BuildGraphNodes(RectTransform parent, AvNode page, string cellName, FacilityGraphSection section)
+        {
+            BuildGraphEdges(parent, page, cellName, section);
+            for (int i = 0; i < section.FacilityIds.Length; i++)
+            {
+                FacilityId id = section.FacilityIds[i];
+                int lane = SupportCyberGraph.Layout(id).Lane;
+                Rect area = page.At(cellName + ".lane" + lane + ".node" + (int)id);
+                BuildFacilityNode(parent, area, id, section);
+            }
+        }
+
+        private void BuildGraphEdges(RectTransform parent, AvNode page, string cellName, FacilityGraphSection section)
+        {
+            var idSet = new HashSet<FacilityId>(section.FacilityIds);
+            CyberEdge[] all = SupportCyberGraph.Edges;
+            var edges = new List<CyberEdge>();
+            for (int i = 0; i < all.Length; i++)
+                if (idSet.Contains(all[i].Parent) && idSet.Contains(all[i].Child)) edges.Add(all[i]);
+
+            section.Edges = edges.ToArray();
+            section.EdgeLines = new Image[edges.Count];
+            for (int i = 0; i < edges.Count; i++)
+            {
+                int parentLane = SupportCyberGraph.Layout(edges[i].Parent).Lane;
+                int childLane = SupportCyberGraph.Layout(edges[i].Child).Lane;
+                Rect parentRect = page.At(cellName + ".lane" + parentLane + ".node" + (int)edges[i].Parent);
+                Rect childRect = page.At(cellName + ".lane" + childLane + ".node" + (int)edges[i].Child);
+
+                float midX = parentRect.x + parentRect.width * 0.5f;
+                float parentBottom = parentRect.y - parentRect.height;
+                float height = Mathf.Max(1f, parentBottom - childRect.y);
+                section.EdgeLines[i] = AvKit.Rule(parent, new Rect(midX - 1f, parentBottom, 2f, height),
+                    AvTheme.RailInert);
+            }
         }
 
         private static bool HasChips(FacilityId id) => HacksFor(id).Count > 0;
@@ -187,6 +260,9 @@ namespace BoscaliSummer.Features.Support.Presentation
             return hasChips ? height + NodeRowGap + NodeChipRowHeight : height;
         }
 
+        /// <summary>Every hack gated on this facility. The facility→hack mapping never crosses
+        /// the CYBER/EW split (Sigint's hacks are never EW's, and vice versa), so this needs no
+        /// section filter — it already returns exactly the right set for whichever tab asks.</summary>
         private static List<HackKind> HacksFor(FacilityId id)
         {
             var result = new List<HackKind>(2);
@@ -195,26 +271,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             return result;
         }
 
-        private void BuildCyberEdges(RectTransform parent, AvNode page)
-        {
-            CyberEdge[] edges = SupportCyberGraph.Edges;
-            edgeLines = new Image[edges.Length];
-            for (int i = 0; i < edges.Length; i++)
-            {
-                int parentLane = SupportCyberGraph.Layout(edges[i].Parent).Lane;
-                int childLane = SupportCyberGraph.Layout(edges[i].Child).Lane;
-                Rect parentRect = page.At("graph.lane" + parentLane + ".node" + (int)edges[i].Parent);
-                Rect childRect = page.At("graph.lane" + childLane + ".node" + (int)edges[i].Child);
-
-                float midX = parentRect.x + parentRect.width * 0.5f;
-                float parentBottom = parentRect.y - parentRect.height;
-                float height = Mathf.Max(1f, parentBottom - childRect.y);
-                edgeLines[i] = AvKit.Rule(parent, new Rect(midX - 1f, parentBottom, 2f, height),
-                    AvTheme.RailInert);
-            }
-        }
-
-        private void BuildFacilityNode(RectTransform parent, Rect area, FacilityId id)
+        private void BuildFacilityNode(RectTransform parent, Rect area, FacilityId id, FacilityGraphSection section)
         {
             FacilityInfo info = InfoNetwork.Facility(id);
             var row = new FacilityRow { Id = id };
@@ -259,41 +316,42 @@ namespace BoscaliSummer.Features.Support.Presentation
                 for (int i = 0; i < hacks.Count; i++)
                 {
                     Rect chipRect = new Rect(chipX, y, NodeChipWidth, NodeChipHeight);
-                    row.Chips[i] = BuildHackChip(parent, chipRect, hacks[i]);
+                    row.Chips[i] = BuildHackChip(parent, chipRect, hacks[i], section);
                     chipX += NodeChipWidth + NodeChipGap;
                 }
             }
 
-            facilityRows[(int)id] = row;
+            section.Rows[id] = row;
         }
 
-        private NodeChip BuildHackChip(RectTransform parent, Rect area, HackKind kind)
+        private NodeChip BuildHackChip(RectTransform parent, Rect area, HackKind kind, FacilityGraphSection section)
         {
             (Image background, TMP_Text label) = AvKit.Chip(
                 parent, CyberCatalog.Code(kind), area, AvTheme.RailInert, AvTheme.Dim, AvTokens.FontMicro);
-            AvButton hit = AvKit.HitButton(parent, area, () => { selectedHack = kind; nextRefresh = 0f; });
+            AvButton hit = AvKit.HitButton(parent, area, () => { section.SelectedHack = kind; nextRefresh = 0f; });
             return new NodeChip { Kind = kind, Background = background, Label = label, Hit = hit };
         }
 
-        private void BuildOperationDetail(RectTransform parent, Rect area)
+        private void BuildOperationDetail(RectTransform parent, Rect area, FacilityGraphSection section)
         {
             var card = AvKit.TacticalCard(parent, area, AvTheme.RailInert);
-            detailRail = card.Rail;
+            section.DetailRail = card.Rail;
 
             float x = area.x + NodePad + 6f;
             float width = area.width - NodePad * 2f - 6f;
             float y = area.y - 8f;
 
-            detailName = AvStyled.Label(parent, new Rect(x, y, width - 100f, 16f),
+            section.DetailName = AvStyled.Label(parent, new Rect(x, y, width - 100f, 16f),
                 "NO OPERATIONS CONFIGURED", "row-name");
-            detailCost = AvStyled.Label(parent, new Rect(x + width - 100f, y, 100f, 16f),
+            section.DetailCost = AvStyled.Label(parent, new Rect(x + width - 100f, y, 100f, 16f),
                 "", "row-value", align: TextAlignmentOptions.MidlineRight);
             y -= 20f;
 
-            detailStatus = AvStyled.Label(parent, new Rect(x, y, width, 42f), "", "row-sub");
+            section.DetailStatus = AvStyled.Label(parent, new Rect(x, y, width, 42f), "", "row-sub");
+            section.DetailStatus.maxVisibleLines = DetailMaxLines;
             y -= 46f;
 
-            detailAction = AvStyled.Button(parent, new Rect(x, y, width, 26f), "—", "btn",
+            section.DetailAction = AvStyled.Button(parent, new Rect(x, y, width, 26f), "—", "btn",
                 null, AvButtonStyle.Primary);
         }
 
@@ -306,43 +364,46 @@ namespace BoscaliSummer.Features.Support.Presentation
 
         // ---- Refresh -----------------------------------------------------------------------
 
-        private void RefreshCyber(bool bypass)
+        private void RefreshCyber(bool bypass) => RefreshGraphSection(support.LocalInfo, bypass, cyberGraph);
+
+        private void RefreshGraphSection(InfoNetwork info, bool bypass, FacilityGraphSection section)
         {
-            InfoNetwork info = support.LocalInfo;
+            if (section == null) return;
+
+            int levelSum = 0;
+            for (int i = 0; i < section.FacilityIds.Length; i++)
+                levelSum += info != null ? info.Level(section.FacilityIds[i]) : 0;
 
             int ready = 0;
-            for (int i = 0; i < CyberCatalog.All.Length; i++)
-                if (info != null && info.Powers.Has(CyberCatalog.All[i])) ready++;
+            for (int i = 0; i < section.HackIds.Length; i++)
+                if (info != null && info.Powers.Has(section.HackIds[i])) ready++;
 
-            if (cyberSummary != null)
+            if (section.Summary != null)
             {
-                cyberSummary.text = info == null ? "NETWORK DATA UNAVAILABLE"
-                    : "NETWORK TIER " + info.Powers.Tier + " · " + ready + "/" + CyberCatalog.All.Length +
-                      " OPERATIONS READY" +
+                section.Summary.text = info == null ? "NETWORK DATA UNAVAILABLE"
+                    : "TIER " + levelSum + " · " + ready + "/" + section.HackIds.Length + " OPERATIONS READY" +
                       (info.Powers.Tier > 0 ? " · HACK COST ×" + info.Powers.CostScale.ToString("0.00") : "");
-                cyberSummary.color = info == null ? AvTheme.Dim
+                section.Summary.color = info == null ? AvTheme.Dim
                     : ready > 0 ? AvTheme.RailReady : AvTheme.Dim;
             }
 
-            int tier = info != null ? info.Powers.Tier : 0;
-            if (networkPips != null)
-                for (int i = 0; i < networkPips.Length; i++)
-                    networkPips[i].color = i < tier ? AvTheme.RailInfo : AvTheme.SurfaceInert;
+            if (section.Pips != null)
+                for (int i = 0; i < section.Pips.Length; i++)
+                    section.Pips[i].color = i < levelSum ? AvTheme.RailInfo : AvTheme.SurfaceInert;
 
-            RefreshFacilityNodes(info, bypass);
-            RefreshEdges(info);
-            ComputeHackStates(info, bypass);
-            RefreshChips();
-            RefreshOperationDetail();
+            RefreshFacilityNodes(info, bypass, section);
+            RefreshEdges(section);
+            ComputeHackStates(info, bypass, section);
+            RefreshChips(section);
+            RefreshOperationDetail(section);
         }
 
-        private void RefreshFacilityNodes(InfoNetwork info, bool bypass)
+        private void RefreshFacilityNodes(InfoNetwork info, bool bypass, FacilityGraphSection section)
         {
-            for (int i = 0; i < facilityRows.Length; i++)
+            foreach (KeyValuePair<FacilityId, FacilityRow> entry in section.Rows)
             {
-                FacilityRow row = facilityRows[i];
-                if (row == null) continue;
-                FacilityId id = (FacilityId)i;
+                FacilityRow row = entry.Value;
+                FacilityId id = entry.Key;
                 int level = info != null ? info.Level(id) : 0;
                 bool canBuild = info != null && info.CanUpgrade(id);
                 float cost = support.FacilityCost(id);
@@ -378,36 +439,44 @@ namespace BoscaliSummer.Features.Support.Presentation
             }
         }
 
-        private void RefreshEdges(InfoNetwork info)
+        private void RefreshEdges(FacilityGraphSection section)
         {
-            if (edgeLines == null) return;
-            CyberEdge[] edges = SupportCyberGraph.Edges;
+            if (section.EdgeLines == null) return;
+            CyberEdge[] edges = section.Edges;
+            InfoNetwork info = support.LocalInfo;
             for (int i = 0; i < edges.Length; i++)
             {
                 int level = info != null ? info.Level(edges[i].Child) : 0;
-                edgeLines[i].color = level >= InfoNetwork.MaxLevel
+                section.EdgeLines[i].color = level >= InfoNetwork.MaxLevel
                     ? AvTheme.RailInfo.WithAlpha(0.55f + 0.35f * Mathf.Sin(Time.unscaledTime * 1.5f))
                     : level > 0 ? AvTheme.RailInfo : AvTheme.RailInert;
             }
         }
 
-        /// <summary>
-        /// One gating pass per hack, identical to what the old per-row build computed —
-        /// shared by the compact chips and the single detail card instead of five full rows.
-        /// </summary>
-        private void ComputeHackStates(InfoNetwork info, bool bypass)
+        /// <summary>One gating pass per hack in this section, shared by its compact chips and
+        /// its single detail card. A Disrupt/Ew hack additionally needs a live EW asset near
+        /// the target — this is an advisory client-side preview only; the host re-checks
+        /// distance authoritatively in <see cref="Actions.HackAction.Execute"/>.</summary>
+        private void ComputeHackStates(InfoNetwork info, bool bypass, FacilityGraphSection section)
         {
+            if (section.HackStates == null || section.HackStates.Length != section.HackIds.Length)
+                section.HackStates = new HackDisplayState[section.HackIds.Length];
+
             float allocation = support.LocalAllocation;
             float cooldown = support.LocalCooldownRemaining;
 
-            for (int i = 0; i < CyberCatalog.All.Length; i++)
+            for (int i = 0; i < section.HackIds.Length; i++)
             {
-                HackKind kind = CyberCatalog.All[i];
+                HackKind kind = section.HackIds[i];
                 SupportActionDefinition definition = FindHackDefinition(kind);
                 bool unlocked = info != null && info.Powers.Has(kind);
                 bool armed = definition != null && support.ArmedAction.HasValue &&
                              support.ArmedAction.Value == definition.Id;
                 float cost = definition != null ? support.Cost(definition) : 0f;
+
+                FacilityId facility = CyberCatalog.Facility(kind);
+                bool needsEwAsset = (facility == FacilityId.Disrupt || facility == FacilityId.Ew) &&
+                                    support.LocalEwAssetState == EwAssetState.None;
 
                 string rail;
                 string status;
@@ -422,7 +491,6 @@ namespace BoscaliSummer.Features.Support.Presentation
                 }
                 else if (!unlocked)
                 {
-                    FacilityId facility = CyberCatalog.Facility(kind);
                     string name = InfoNetwork.Facility(facility).Name;
                     byte level = CyberCatalog.RequiredLevel(kind);
                     rail = "locked"; status = "REQUIRES " + name + " LV" + level;
@@ -448,13 +516,18 @@ namespace BoscaliSummer.Features.Support.Presentation
                     rail = "armed"; status = "ARMED · RIGHT-CLICK TARGET AREA";
                     statusColor = AvTheme.RailCaution; button = "ABORT"; ready = true;
                 }
+                else if (needsEwAsset)
+                {
+                    rail = "cooling"; status = "NEEDS EW ASSET NEARBY · DEPLOY IN 01";
+                    statusColor = AvTheme.RailCaution; button = "NO EW ASSET"; ready = false;
+                }
                 else
                 {
                     rail = "ready"; status = "ONLINE · READY TO ARM"; statusColor = AvTheme.RailReady;
                     button = "ARM"; ready = true;
                 }
 
-                hackStates[i] = new HackDisplayState
+                section.HackStates[i] = new HackDisplayState
                 {
                     Kind = kind,
                     Definition = definition,
@@ -469,23 +542,23 @@ namespace BoscaliSummer.Features.Support.Presentation
             }
         }
 
-        private HackDisplayState HackState(HackKind kind)
+        private static HackDisplayState HackState(FacilityGraphSection section, HackKind kind)
         {
-            for (int i = 0; i < hackStates.Length; i++)
-                if (hackStates[i].Kind == kind) return hackStates[i];
+            if (section.HackStates != null)
+                for (int i = 0; i < section.HackStates.Length; i++)
+                    if (section.HackStates[i].Kind == kind) return section.HackStates[i];
             return default;
         }
 
-        private void RefreshChips()
+        private void RefreshChips(FacilityGraphSection section)
         {
-            for (int i = 0; i < facilityRows.Length; i++)
+            foreach (FacilityRow row in section.Rows.Values)
             {
-                FacilityRow row = facilityRows[i];
-                if (row?.Chips == null) continue;
+                if (row.Chips == null) continue;
                 for (int c = 0; c < row.Chips.Length; c++)
                 {
                     NodeChip chip = row.Chips[c];
-                    HackDisplayState state = HackState(chip.Kind);
+                    HackDisplayState state = HackState(section, chip.Kind);
                     Color color = RailColour(state.RailState);
                     chip.Label.color = color;
                     chip.Background.color = new Color(color.r * 0.18f, color.g * 0.18f, color.b * 0.18f, 0.85f);
@@ -499,59 +572,59 @@ namespace BoscaliSummer.Features.Support.Presentation
             }
         }
 
-        private void RefreshOperationDetail()
+        private void RefreshOperationDetail(FacilityGraphSection section)
         {
-            if (detailName == null) return;
+            if (section.DetailName == null) return;
 
             HackKind? active = null;
-            for (int i = 0; i < hackStates.Length; i++)
-                if (hackStates[i].Armed) { active = hackStates[i].Kind; break; }
+            for (int i = 0; i < section.HackStates.Length; i++)
+                if (section.HackStates[i].Armed) { active = section.HackStates[i].Kind; break; }
 
-            if (active == null && selectedHack.HasValue) active = selectedHack;
+            if (active == null && section.SelectedHack.HasValue) active = section.SelectedHack;
 
             if (active == null)
-                for (int i = 0; i < hackStates.Length; i++)
-                    if (hackStates[i].ButtonReady) { active = hackStates[i].Kind; break; }
+                for (int i = 0; i < section.HackStates.Length; i++)
+                    if (section.HackStates[i].ButtonReady) { active = section.HackStates[i].Kind; break; }
 
-            if (active == null && hackStates.Length > 0) active = hackStates[0].Kind;
+            if (active == null && section.HackStates.Length > 0) active = section.HackStates[0].Kind;
 
             if (active == null)
             {
-                detailRail.color = AvTheme.RailInert;
-                detailName.text = "NO OPERATIONS CONFIGURED";
-                detailStatus.text = "";
-                detailCost.text = "";
-                detailAction.SetEnabled(false);
-                detailAction.SetText("—");
+                section.DetailRail.color = AvTheme.RailInert;
+                section.DetailName.text = "NO OPERATIONS CONFIGURED";
+                section.DetailStatus.text = "";
+                section.DetailCost.text = "";
+                section.DetailAction.SetEnabled(false);
+                section.DetailAction.SetText("—");
                 return;
             }
 
-            HackDisplayState state = HackState(active.Value);
+            HackDisplayState state = HackState(section, active.Value);
             string name = state.Definition != null ? state.Definition.Name : CyberCatalog.Name(active.Value);
             string desc = state.Definition != null
                 ? state.Definition.Description
                 : CyberCatalog.Description(active.Value);
 
-            detailRail.color = RailColour(state.RailState);
-            detailName.text = name;
-            detailStatus.text = state.StatusText + "\n" + desc;
-            detailStatus.color = state.StatusColor;
-            detailCost.text = state.Cost > 0f ? state.Cost.ToString("N0") : "—";
-            detailCost.color = state.StatusColor;
+            section.DetailRail.color = RailColour(state.RailState);
+            section.DetailName.text = name;
+            section.DetailStatus.text = state.StatusText + "\n" + desc;
+            section.DetailStatus.color = state.StatusColor;
+            section.DetailCost.text = state.Cost > 0f ? state.Cost.ToString("N0") : "—";
+            section.DetailCost.color = state.StatusColor;
 
-            detailAction.SetText(state.ButtonText);
-            detailAction.SetEnabled(state.ButtonReady);
-            detailAction.SetLatched(state.Armed);
-            detailAction.WithTooltip(name + " — " + desc);
+            section.DetailAction.SetText(state.ButtonText);
+            section.DetailAction.SetEnabled(state.ButtonReady);
+            section.DetailAction.SetLatched(state.Armed);
+            section.DetailAction.WithTooltip(name + " — " + desc);
 
             if (state.Definition != null)
             {
                 SupportActionId id = state.Definition.Id;
-                detailAction.SetAction(() => { support.Request(id); nextRefresh = 0f; });
+                section.DetailAction.SetAction(() => { support.Request(id); nextRefresh = 0f; });
             }
             else
             {
-                detailAction.SetAction(null);
+                section.DetailAction.SetAction(null);
             }
         }
     }

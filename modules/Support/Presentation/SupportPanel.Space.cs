@@ -770,9 +770,16 @@ namespace BoscaliSummer.Features.Support.Presentation
                     string callsign = SatelliteNaming.Callsign(satellite.Role, satellite.Id);
                     if (!lastStates.TryGetValue(satellite.Id, out SatelliteState previous))
                     {
-                        AddFleetEvent(callsign + (satellite.State == SatelliteState.Transit
+                        bool launching = satellite.State == SatelliteState.Transit;
+                        AddFleetEvent(callsign + (launching
                             ? " LAUNCH CONFIRMED · TRANSFER BURN"
                             : " ON STATION · TELEMETRY NOMINAL"));
+                        if (launching && satellite.TransitTotal > 0f &&
+                            SupportTargeting.TryMapPoint(
+                                new GlobalPosition(satellite.StationX, 0f, satellite.StationZ), out Vector3 launchPoint))
+                        {
+                            Visuals.SatelliteLaunchVisuals.Play(launchPoint, satellite.TransitTotal);
+                        }
                     }
                     else if (previous != satellite.State)
                     {

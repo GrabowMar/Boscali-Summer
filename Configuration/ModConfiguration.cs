@@ -2,6 +2,7 @@ using BepInEx.Configuration;
 using BoscaliSummer.Features.Autopilot.Configuration;
 using BoscaliSummer.Features.Command.Configuration;
 using BoscaliSummer.Features.DynamicOperations.Configuration;
+using BoscaliSummer.Features.Events.Configuration;
 using BoscaliSummer.Features.FireAndDestruction.Configuration;
 using BoscaliSummer.Features.HighCommand.Configuration;
 using BoscaliSummer.Features.Progression.Configuration;
@@ -31,6 +32,7 @@ namespace BoscaliSummer
         public HighCommandSettings HighCommand { get; }
         public DynamicOperationsSettings DynamicOperations { get; }
         public TrenchesSettings Trenches { get; }
+        public EventsSettings Events { get; }
         public QoLSettings QoL { get; }
         public AutopilotSettings Autopilot { get; }
         public DiagnosticSettings Diagnostics { get; }
@@ -51,6 +53,7 @@ namespace BoscaliSummer
                 HighCommand = new HighCommandSettings(config);
                 DynamicOperations = new DynamicOperationsSettings(config);
                 Trenches = new TrenchesSettings(config);
+                Events = new EventsSettings(config);
                 QoL = new QoLSettings(config);
                 Autopilot = new AutopilotSettings(config);
                 Diagnostics = new DiagnosticSettings(config);

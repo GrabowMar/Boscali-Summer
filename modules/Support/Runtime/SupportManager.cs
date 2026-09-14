@@ -36,6 +36,7 @@ namespace BoscaliSummer.Features.Support.Runtime
 
         internal readonly SpaceOperations Space = new SpaceOperations();
         internal readonly CyberEffects Cyber = new CyberEffects();
+        internal readonly EwAssets Ew = new EwAssets();
         SpaceOperations ISupportHost.Space => Space;
 
         public OpsStateMessage OpsState { get; private set; }
@@ -168,6 +169,12 @@ namespace BoscaliSummer.Features.Support.Runtime
                 return player == null ? null : Space.InfoFor(player.HQ);
             }
         }
+
+        /// <summary>The local faction's EW asset state, mirrored from the last snapshot —
+        /// same pattern as <see cref="LocalConstellation"/>/<see cref="LocalInfo"/>, except an
+        /// asset's state is a single byte, so it rides <see cref="OpsState"/> directly rather
+        /// than needing its own per-faction model object.</summary>
+        public EwAssetState LocalEwAssetState => (EwAssetState)Math.Min(OpsState.EwAssetState, (byte)EwAssetState.Encampment);
 
         /// <summary>Which satellite role, if any, an ability needs overhead.</summary>
         public static SatelliteRole? CoverageRole(SupportActionId action)
@@ -304,6 +311,7 @@ namespace BoscaliSummer.Features.Support.Runtime
         SupportSettings ISupportHost.Settings => settings;
         ManualLogSource ISupportHost.Logger => logger;
         VanillaSupportCatalog ISupportHost.Vanilla => vanilla;
+        EwAsset ISupportHost.EwAssetFor(FactionHQ owner) => Ew.ForFaction(owner);
 
         public IReadOnlyList<SupportActionDefinition> Actions => catalog.Actions;
         public bool BypassRequirements => bypassRequirements != null && bypassRequirements.Value;
@@ -349,6 +357,7 @@ namespace BoscaliSummer.Features.Support.Runtime
             Visuals.KineticRodStrikeVisuals.Reset();
             Space.Clear();
             Cyber.Clear();
+            Ew.Clear();
             OpsState = default;
             opsReceived = -100f;
             nextOpsQuery = 0f;
@@ -379,7 +388,11 @@ namespace BoscaliSummer.Features.Support.Runtime
         private void Update()
         {
             bool host = GameAccess.IsServer();
-            if (host) Space.Tick(Time.deltaTime, true);
+            if (host)
+            {
+                Space.Tick(Time.deltaTime, true);
+                Ew.Tick(Time.unscaledTime);
+            }
             else
             {
                 Space.Tick(Time.unscaledDeltaTime, false);
@@ -507,6 +520,13 @@ namespace BoscaliSummer.Features.Support.Runtime
                 : info.UpgradeCost(facility) * Price(player, settings.CostMultiplier.Value);
         }
 
+        public float EwTruckCost()
+        {
+            GameManager.GetLocalPlayer<Player>(out Player player);
+            if (player == null || settings == null) return 0f;
+            return settings.EwTruckCost.Value * Price(player, settings.CostMultiplier.Value);
+        }
+
         private float SatelliteCost(Player player, SatelliteRole role)
         {
             if (player == null || settings == null) return 0f;
@@ -519,8 +539,18 @@ namespace BoscaliSummer.Features.Support.Runtime
         private float Price(Player player, float baseCost)
         {
             if (baseCost <= 0f || player == null) return baseCost;
-            return baseCost * perks.Multiplier(PlayerIdentity.Of(player), PerkEffect.SupportCost);
+            return baseCost * EventsCostMultiplier(player) *
+                   perks.Multiplier(PlayerIdentity.Of(player), PerkEffect.SupportCost);
         }
+
+        /// <summary>
+        /// The Events module's live world modifier for one player, resolved late so neither
+        /// module has to install first. Exactly 1 when Events is absent or the theater is calm.
+        /// </summary>
+        internal static float EventsCostMultiplier(Player player) =>
+            player != null && ModServices.TryGet<IActiveEventsView>(out IActiveEventsView events)
+                ? events.SupportCostMultiplierFor(PlayerIdentity.Of(player))
+                : 1f;
 
         public void Arm(SupportActionId action)
         {
@@ -611,6 +641,10 @@ namespace BoscaliSummer.Features.Support.Runtime
                     return "ORBIT BURN";
                 case OpsCommand.Recall:
                     return "SATELLITE RECALL";
+                case OpsCommand.EwDeploy:
+                    return "DEPLOY EW TRUCK";
+                case OpsCommand.EwReposition:
+                    return "EW TRUCK REPOSITION";
                 default:
                     return "BUILD " + InfoNetwork.Facility((FacilityId)arg).Name;
             }
@@ -749,6 +783,7 @@ namespace BoscaliSummer.Features.Support.Runtime
             {
                 case SupportResult.OutOfCoverage: return "no satellite coverage — task one in SPACE";
                 case SupportResult.NotBuilt: return "infrastructure not built in CYBER";
+                case SupportResult.NoEwAsset: return "needs an EW asset near the target";
                 case SupportResult.Disabled: return "action disabled";
                 case SupportResult.NotUnlocked: return "not authorised";
                 case SupportResult.InvalidTarget: return "unusable target";
@@ -846,7 +881,8 @@ namespace BoscaliSummer.Features.Support.Runtime
                     if (cost <= 0f) return SupportResult.CapabilityUnavailable;
                     if (!bypass && player.Allocation + 0.001f < cost) return SupportResult.InsufficientAllocation;
                     OrbitalFailure failure = Space.Deploy(player.HQ, role, message.Arg, message.X, message.Z,
-                        settings.MaximumSatellites.Value, out Satellite satellite);
+                        settings.MaximumSatellites.Value, settings.SatelliteLaunchTransitSeconds.Value,
+                        out Satellite satellite);
                     if (failure != OrbitalFailure.None)
                         return failure == OrbitalFailure.AtCapacity ? SupportResult.Busy : SupportResult.InvalidTarget;
                     satellite.Paid = bypass ? 0f : cost;
@@ -887,6 +923,48 @@ namespace BoscaliSummer.Features.Support.Runtime
                         info.Level(facility) + " for " + Mathf.RoundToInt(cost) + " alloc.");
                     break;
                 }
+                case OpsCommand.EwDeploy:
+                {
+                    if (!settings.EwEnabled.Value) return SupportResult.Disabled;
+                    if (Ew.ForFaction(player.HQ) != null) return SupportResult.Busy;
+                    if (!SupportTargeting.TryGround(new GlobalPosition(message.X, 0f, message.Z), out Vector3 ground))
+                        return SupportResult.InvalidTarget;
+                    VehicleDefinition definition = vanilla.EwTruck();
+                    if (definition == null || definition.unitPrefab == null || NetworkSceneSingleton<Spawner>.i == null)
+                        return SupportResult.CapabilityUnavailable;
+                    Airbase depot = SupportTargeting.NearestOwnedAirbase(player, ground, out _);
+                    if (depot == null) return SupportResult.InvalidTarget;
+                    Vector3 spawnPoint = depot.center != null ? depot.center.position : depot.transform.position;
+                    float cost = settings.EwTruckCost.Value * Price(player, settings.CostMultiplier.Value);
+                    if (!bypass && player.Allocation + 0.001f < cost) return SupportResult.InsufficientAllocation;
+                    Vector3 facing = ground - spawnPoint;
+                    facing.y = 0f;
+                    Quaternion rotation = facing.sqrMagnitude > 1f
+                        ? Quaternion.LookRotation(facing.normalized) : Quaternion.identity;
+                    GroundVehicle truck = NetworkSceneSingleton<Spawner>.i.SpawnVehicle(
+                        definition.unitPrefab, spawnPoint.ToGlobalPosition(), rotation, Vector3.zero,
+                        player.HQ, "BoscaliSummer:Support:EwTruck:" + PlayerIdentity.Of(player) + ":" + message.RequestId,
+                        1f, true, player);
+                    if (truck == null || truck.UnitCommand == null) return SupportResult.SpawnFailed;
+                    if (!Ew.TryDeployTruck(player.HQ, truck, bypass ? 0f : cost)) return SupportResult.Busy;
+                    truck.UnitCommand.SetDestination(ground.ToGlobalPosition(), false);
+                    if (!bypass) player.SetAllocation(Mathf.Max(0f, player.Allocation - cost));
+                    logger.LogInfo("[Support] EW truck deployed from depot, en route, for " +
+                        Mathf.RoundToInt(cost) + " alloc.");
+                    break;
+                }
+                case OpsCommand.EwReposition:
+                {
+                    if (!settings.EwEnabled.Value) return SupportResult.Disabled;
+                    EwAsset asset = Ew.ForFaction(player.HQ);
+                    if (asset == null || asset.State != EwAssetState.Truck || asset.Truck == null ||
+                        asset.Truck.UnitCommand == null)
+                        return SupportResult.InvalidTarget;
+                    if (!SupportTargeting.TryGround(new GlobalPosition(message.X, 0f, message.Z), out Vector3 ground))
+                        return SupportResult.InvalidTarget;
+                    asset.Truck.UnitCommand.SetDestination(ground.ToGlobalPosition(), false);
+                    break;
+                }
                 default:
                     return SupportResult.InvalidTarget;
             }
@@ -906,7 +984,8 @@ namespace BoscaliSummer.Features.Support.Runtime
             if (player == null) return 0f;
             float baseCost = action.Action.BaseCost(new SupportContext(player, default, 0, this));
             if (baseCost <= 0f) return 0f;
-            return baseCost * perks.Multiplier(PlayerIdentity.Of(player), PerkEffect.SupportCost);
+            return baseCost * EventsCostMultiplier(player) *
+                   perks.Multiplier(PlayerIdentity.Of(player), PerkEffect.SupportCost);
         }
 
         // ---- Host services ---------------------------------------------------------------
@@ -1062,6 +1141,7 @@ namespace BoscaliSummer.Features.Support.Runtime
                 message.Disrupt = (byte)info.Level(FacilityId.Disrupt);
                 message.Ew = (byte)info.Level(FacilityId.Ew);
             }
+            message.EwAssetState = player != null ? Ew.StateByteFor(player.HQ) : (byte)0;
             return message;
         }
 

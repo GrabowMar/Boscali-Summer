@@ -519,7 +519,10 @@ namespace BoscaliSummer.Features.Progression.Presentation
         private sealed class WingRow
         {
             public RectTransform Root;
+            public GameObject Empty;
             public Image Rail;
+            public Image Crest;
+            public string CrestKey;
             public Image Portrait;
             public TMP_Text PortraitFallback;
             public TMP_Text Symbol;

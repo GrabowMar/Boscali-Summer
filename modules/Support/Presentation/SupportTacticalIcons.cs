@@ -400,7 +400,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             Color[] pixels = new Color[size * size];
             for (int y = 0; y < size; y++)
             {
-                float alpha = y == 0 ? 0.10f : 0f;
+                float alpha = y == 0 ? 0.16f : 0f;
                 for (int x = 0; x < size; x++)
                     pixels[y * size + x] = new Color(0f, 0f, 0f, alpha);
             }
