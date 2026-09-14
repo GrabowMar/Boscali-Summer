@@ -7,14 +7,6 @@ using UnityEngine.UI;
 
 namespace BoscaliSummer.Features.Support.Presentation
 {
-    /// <summary>
-    /// EW: a physical electronic-warfare presence the player builds — a mobile radar truck
-    /// (this phase), later "unloadable" into a static, more powerful but more exposed
-    /// encampment (a later phase) — plus the C2 DISRUPTOR/EW DIVISION half of the facility
-    /// graph that used to live on CYBER. Radar Blackout, Ghost Shield and Spoof Contacts
-    /// require both: the facility unlocked here, and this asset physically near the target
-    /// (enforced host-side in <see cref="Actions.HackAction.Execute"/>).
-    /// </summary>
     internal sealed partial class SupportPanel
     {
         /// <summary>The asset card's content is fixed-height text and two buttons, not
@@ -136,12 +128,6 @@ namespace BoscaliSummer.Features.Support.Presentation
                     ewStatusTitle.text = "EW TRUCK · MOBILE";
                     ewStatusTitle.color = AvTheme.TextPrimary;
                     ewStatusDetail.text = "Mobile radar truck on station. Vulnerable; standard EW effect strength.";
-                    break;
-                case EwAssetState.Encampment:
-                    ewStatusRail.color = AvTheme.RailReady;
-                    ewStatusTitle.text = "EW ENCAMPMENT · STATIC";
-                    ewStatusTitle.color = AvTheme.TextPrimary;
-                    ewStatusDetail.text = "Static encampment. More exposed; stronger EW effect radius/duration.";
                     break;
                 default:
                     ewStatusRail.color = AvTheme.RailInert;

@@ -6,10 +6,6 @@ using UnityEngine;
 
 namespace BoscaliSummer.Features.Autopilot.Runtime
 {
-    /// <summary>Flies the local player's own aircraft to a landing with the game's native
-    /// Autopilot (AutoAim/Hover), mirroring the native AI landing states at the input layer.
-    /// Client-local and reversible: manual stick input or the radial action releases control
-    /// and restores the flight-assist and auto-hover state the takeover changed.</summary>
     internal sealed class AutopilotLandController : MonoBehaviour, ISceneService
     {
         private enum Phase

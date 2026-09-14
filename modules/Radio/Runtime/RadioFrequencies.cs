@@ -46,7 +46,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
 
         public string FullText => FrequencyText + " " + UnitText;
 
-        /// <summary>Position on this band's scale, 0 at the low end and 1 at the high end.</summary>
         public float Fraction => IsFm
             ? (Kilohertz - FmMinKilohertz) / (float)(FmMaxKilohertz - FmMinKilohertz)
             : (Kilohertz - MwMinKilohertz) / (float)(MwMaxKilohertz - MwMinKilohertz);
@@ -62,7 +61,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
     /// </summary>
     internal static class RadioDialTuning
     {
-        /// <summary>One fine step in the band's native increment, clamped to the band edges.</summary>
         public static RadioDial Step(RadioDial dial, int direction)
         {
             if (direction == 0) return dial;
@@ -73,7 +71,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
             return dial.IsFm ? RadioDial.Fm(khz) : RadioDial.Mw(khz);
         }
 
-        /// <summary>The index of the station exactly on this frequency, or -1.</summary>
         public static int IndexAt(IReadOnlyList<RadioDial> dials, RadioDial dial)
         {
             if (dials == null) return -1;
@@ -82,10 +79,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
             return -1;
         }
 
-        /// <summary>
-        /// The next station strictly up (direction 1) or down (direction -1) the same band,
-        /// wrapping within the band. Returns -1 when the band has no station at all.
-        /// </summary>
         public static int Seek(IReadOnlyList<RadioDial> dials, RadioDial from, int direction)
         {
             if (dials == null || dials.Count == 0 || direction == 0) return -1;
@@ -119,7 +112,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
             return found;
         }
 
-        /// <summary>The lowest station of a band, or -1 when it holds none.</summary>
         public static int FirstInBand(IReadOnlyList<RadioDial> dials, RadioBand band)
         {
             int found = -1;
@@ -185,7 +177,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
             return RadioDial.Fm(RadioDial.FmMinKilohertz);
         }
 
-        /// <summary>The FM slot a dial position occupies, when it is on the FM band at all.</summary>
         public static bool TryFmSlot(RadioDial dial, out int slot)
         {
             if (dial.IsFm && dial.Kilohertz >= RadioDial.FmMinKilohertz &&

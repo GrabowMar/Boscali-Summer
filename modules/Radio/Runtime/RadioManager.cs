@@ -88,9 +88,8 @@ namespace BoscaliSummer.Features.Radio.Runtime
         private int bulletinCursor;
         private float nextBulletinAt;
         private string lastProgramName;
-        private const int MaximumLogEntries = 12;
         private const float BulletinSeconds = 8f;
-        private readonly List<string> radioLog = new List<string>();
+        private string ticker;
         private string programText = string.Empty;
         private float nextProgramRefresh;
 
@@ -98,7 +97,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
         public bool HasChannels => stations.Length > 0;
         public int SelectedChannel => selectedChannel;
         public int StationRevision => stationRevision;
-        public string LibraryPath => libraryPath ?? string.Empty;
         public string Status => status;
         public bool IsEngaged => state != PlaybackState.Stopped;
         public bool IsPaused => state == PlaybackState.Paused;
@@ -107,11 +105,10 @@ namespace BoscaliSummer.Features.Radio.Runtime
         public RadioDial TunedDial => tunedDial;
         public string BroadcastMode => tunedDial.IsFm ? "STEREO" : "MONO";
         public string CurrentProgram => programText;
-        public string TickerText => radioLog.Count == 0
+        public string TickerText => string.IsNullOrEmpty(ticker)
             ? "Receiver on. Tune the dial."
-            : radioLog[radioLog.Count - 1];
+            : ticker;
 
-        /// <summary>The tuned station's own log: its tracks, in the order it carries them.</summary>
         public int TrackCount => huntTrack != null
             ? 0
             : CurrentChannel() == null ? 0 : CurrentChannel().Tracks.Length;
@@ -131,7 +128,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
         }
 
         public float SignalLevel => fx == null ? 0f : fx.Level;
-        public int PresetSlots => RadioSettings.PresetSlots;
         public bool Shuffle => settings != null && settings.Shuffle.Value;
         public bool RepeatTrack => settings != null && settings.RepeatTrack.Value;
         public float Elapsed => currentSource != null && currentSource.clip != null ? currentSource.time : 0f;
@@ -188,7 +184,7 @@ namespace BoscaliSummer.Features.Radio.Runtime
             bulletinCursor = 0;
             lastProgramName = null;
             lastChatter = string.Empty;
-            radioLog.Clear();
+            ticker = null;
             offStation = false;
             dialResume = false;
             lastFmKilohertz = 88500;
@@ -313,7 +309,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
             RememberBandPosition(tunedDial);
             offStation = false;
             dialResume = false;
-            fx?.SetCarrier(false, Volume);
             SelectChannelInternal(index);
         }
 
@@ -338,14 +333,12 @@ namespace BoscaliSummer.Features.Radio.Runtime
             nextFilterCheck = 0f;
         }
 
-        /// <summary>One fine tuning step on the current band; between stations is dead air.</summary>
         public void StepDial(int direction)
         {
             if (direction == 0) return;
             SetDial(RadioDialTuning.Step(tunedDial, direction));
         }
 
-        /// <summary>Seek to the next station on the band, crossing to the other band when this one ends.</summary>
         public void SeekStation(int direction)
         {
             if (stationDials.Length == 0)
@@ -368,7 +361,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
             SetDial(stationDials[index]);
         }
 
-        /// <summary>Flip to the other band at the frequency last used there.</summary>
         public void ToggleBand()
         {
             bool toMw = tunedDial.IsFm;
@@ -395,10 +387,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
             else lastMwKilohertz = dial.Kilohertz;
         }
 
-        /// <summary>
-        /// Move the receiver to a dial position. Landing exactly on a station locks and (if
-        /// the receiver was on air) resumes it; anything else is dead air with a carrier bed.
-        /// </summary>
         private void SetDial(RadioDial dial)
         {
             if (dial.Equals(tunedDial) && !offStation) return;
@@ -636,7 +624,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
             var usedFmSlots = new HashSet<int>();
             RadioChannel agrapolLocal = FindLocalChannel("Agrapol FM");
             RadioChannel marisLocal = FindLocalChannel("Maris Network");
-            RadioChannel baseLocal = FindLocalChannel("Base Broadcast");
             AddBuiltInStation(result, BuiltInStationRules.AgrapolId, "AF", "Agrapol FM",
                 soundtrackCatalog?.AgrapolSeed == null ? Array.Empty<AudioClip>() :
                     new[] { soundtrackCatalog.AgrapolSeed }, agrapolLocal,
@@ -646,7 +633,7 @@ namespace BoscaliSummer.Features.Radio.Runtime
                     new[] { soundtrackCatalog.MarisSeed }, marisLocal,
                 BuiltInIcon("maris-network.png"), usedFmSlots);
             AddBuiltInStation(result, BuiltInStationRules.BaseId, "BB", "Base Broadcast",
-                soundtrackCatalog?.All ?? Array.Empty<AudioClip>(), baseLocal,
+                soundtrackCatalog?.All ?? Array.Empty<AudioClip>(), null,
                 BuiltInIcon("base-broadcast.png"), usedFmSlots);
 
             if (localLibrary != null)
@@ -837,10 +824,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
             RadioBroadcastFx.ApplyCharacter(incomingSource, mode, amBand);
         }
 
-        /// <summary>
-        /// The wire: events as they happen, and the station's own copy between them. Every
-        /// line is bounded, and the log is a ring so a long session cannot grow it.
-        /// </summary>
         private void BulletinTick()
         {
             if (Time.unscaledTime < nextBulletinAt) return;
@@ -853,8 +836,7 @@ namespace BoscaliSummer.Features.Radio.Runtime
         {
             if (string.IsNullOrEmpty(line)) return;
             if (line.Length > 64) line = line.Substring(0, 64);
-            radioLog.Add(line);
-            if (radioLog.Count > MaximumLogEntries) radioLog.RemoveAt(0);
+            ticker = line;
         }
 
         private IEnumerator LoadTrack(RadioStationTrack track, int generation, UnityWebRequest request)
@@ -914,7 +896,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
             nextHuntPoll = Time.unscaledTime + 0.5f;
             if (squad == null) services?.TryGet(out squad);
             bool hunting = squad != null && squad.HuntActive;
-            // Enemy transmissions land on the wire as they are picked up.
             string chatter = squad?.LastChatter;
             if (!string.IsNullOrEmpty(chatter) &&
                 !string.Equals(chatter, lastChatter, StringComparison.Ordinal))

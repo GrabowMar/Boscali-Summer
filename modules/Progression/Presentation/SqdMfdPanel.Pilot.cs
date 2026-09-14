@@ -50,8 +50,8 @@ namespace BoscaliSummer.Features.Progression.Presentation
         private Image[] budgetPips;
         private GameObject[] budgetPipSlots;
         private TMP_Text committedSkillsEmpty;
-        private readonly SqdGlyph[] committedIcons = new SqdGlyph[PerkCatalog.MaximumPerks];
-        private readonly TMP_Text[] committedLabels = new TMP_Text[PerkCatalog.MaximumPerks];
+        private readonly SqdGlyph[] committedIcons = new SqdGlyph[PerkCatalog.All.Length];
+        private readonly TMP_Text[] committedLabels = new TMP_Text[PerkCatalog.All.Length];
 
         private void ResetPilotPage()
         {

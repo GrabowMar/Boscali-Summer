@@ -6,15 +6,6 @@ using UnityEngine.Audio;
 
 namespace BoscaliSummer.Features.Radio.Runtime
 {
-    /// <summary>
-    /// The receiver's own voice: a synthesized carrier bed, the squelch that answers a
-    /// tuning step, and a morse station ident. Every waveform is generated in memory, so
-    /// the radio can sound like a radio without shipping or downloading a single clip.
-    ///
-    /// <para>It also owns the broadcast colour applied to the music sources — a clean
-    /// pass-through, a light band limit, or the heavy AM-flavoured curve — and the level
-    /// feeding the panel's signal meter.</para>
-    /// </summary>
     internal sealed class RadioBroadcastFx
     {
         private const int SampleRate = 22050;
@@ -44,7 +35,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
             this.host = host ?? throw new ArgumentNullException(nameof(host));
         }
 
-        /// <summary>Smoothed output level of the tuned program, 0..1. Drives the signal meter.</summary>
         public float Level => level;
 
         public void SetMixer(AudioMixerGroup group)
@@ -54,13 +44,8 @@ namespace BoscaliSummer.Features.Radio.Runtime
             if (accent != null) accent.outputAudioMixerGroup = group;
         }
 
-        /// <summary>The receiver's volume knob; scales music, carrier and idents alike.</summary>
         public void SetVolume(float value) => volume = Mathf.Clamp01(value);
 
-        /// <summary>
-        /// Dead air: a continuous carrier bed while the dial sits between stations. The bed
-        /// keeps looping until <see cref="SetCarrier"/> turns it off or a tuning burst ends.
-        /// </summary>
         public void SetCarrier(bool on, float value)
         {
             volume = Mathf.Clamp01(value);
@@ -71,7 +56,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
             if (!bed.isPlaying) bed.Play();
         }
 
-        /// <summary>A tuning step: squelch, a burst of carrier, then the station's ident.</summary>
         public void Tune(string code, bool carrierNoise, bool ident)
         {
             if (!Ensure()) return;
@@ -87,7 +71,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
             identCode = ident ? code : null;
         }
 
-        /// <summary>Carrier only: an empty or unplayable station still answers with static.</summary>
         public void CarrierBurst(float seconds)
         {
             if (!Ensure()) return;
@@ -119,7 +102,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
             }
         }
 
-        /// <summary>Sample the tuned source after playback; returns the smoothed level.</summary>
         public float Sample(AudioSource source)
         {
             if (source == null || !source.isPlaying)
@@ -160,12 +142,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
             squelchClip = null;
         }
 
-        // ------------------------------------------------------------------ filters
-
-        /// <summary>
-        /// Applies the receiver's character. MW is an AM band by nature, so it always gets
-        /// the broadcast curve; <paramref name="mode"/> governs FM alone.
-        /// </summary>
         public static void ApplyCharacter(AudioSource source, BroadcastFilterMode mode, bool amBand)
         {
             if (source == null) return;
@@ -206,8 +182,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
             crunch.enabled = true;
             crunch.distortionLevel = 0.12f;
         }
-
-        // ------------------------------------------------------------------ synthesis
 
         private bool Ensure()
         {
@@ -311,7 +285,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
 
         private static AudioClip BuildIdent(string code)
         {
-            // Morse, at a readable 12 words per minute: dots, dashes, and no drama.
             var marks = new List<(float Start, float Length)>();
             float cursor = 0f;
             const float dot = 0.08f;

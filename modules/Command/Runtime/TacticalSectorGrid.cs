@@ -619,18 +619,7 @@ namespace BoscaliSummer.Features.Command.Runtime
                 }
             }
 
-            // 2. Return rendered pixel buffer
             return pixelBuffer;
         }
-
-        // Backwards compatibility overload
-        public Color32[] BakeTexture(
-            int texWidth,
-            int texHeight,
-            bool showSectors,
-            bool showFrontlines,
-            bool showThreatRings,
-            float globalOpacity)
-            => BakeTexture(texWidth, texHeight, showSectors, showFrontlines, globalOpacity);
     }
 }

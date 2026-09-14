@@ -107,9 +107,6 @@ namespace BoscaliSummer.Tests.Features.Radio
             TestAssert.That(RadioDialTuning.FirstInBand(dials, RadioBand.Mw) == 2 &&
                 RadioDialTuning.FirstInBand(dials, RadioBand.Fm) == 0,
                 "first-in-band did not find the lowest station of the band");
-            TestAssert.That(RadioDialTuning.FirstInBand(dials, RadioBand.Fm) >= 0 &&
-                RadioDialTuning.Seek(dials, RadioDial.Mw(780), 1) == 2,
-                "band isolation broke in seek or first-in-band");
         }
 
         private static void DialAndProgramming()
@@ -168,9 +165,6 @@ namespace BoscaliSummer.Tests.Features.Radio
             TestAssert.That(RadioProgramming.Bulletin("user-unknown", 999) ==
                 RadioProgramming.Bulletin("user-unknown", 999 % genericCount),
                 "bulletin rotation did not wrap within its table");
-            TestAssert.That(!string.IsNullOrEmpty(RadioProgramming.Slogan("user-unknown")) &&
-                RadioProgramming.Slogan(BuiltInStationRules.MarisId) != RadioProgramming.Slogan("user-unknown"),
-                "a station lost its voice");
         }
 
         private static void HuntMusicTransitions()

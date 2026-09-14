@@ -42,7 +42,7 @@ namespace BoscaliSummer.Features.Command.Configuration
             ExpandedMapUi = config.Bind("Command", "ExpandedMapUi", true,
                 "Use Boscali's full tactical display: left panel and log, central map, right button rail, and spawn footer.");
             Enabled = config.Bind("Command", "Enabled", true,
-                "Enable the Tactical COM Panel, map tactical overlays, and AI Battle Director.");
+                "Enable the Tactical STR Panel, map tactical overlays, and AI Battle Director.");
 
             FrontlinesOverlay = config.Bind("Command", "FrontlinesOverlay", true,
                 "Render tactical sector control grid and dynamic contested frontline boundaries on the tactical map.");

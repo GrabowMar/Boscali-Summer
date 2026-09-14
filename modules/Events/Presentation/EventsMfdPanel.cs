@@ -457,7 +457,6 @@ namespace BoscaliSummer.Features.Events.Presentation
 
             private readonly GameObject root;
             private readonly Image rail;
-            private readonly Image icon;
             private readonly EventGlyph glyph;
             private readonly TMP_Text title;
             private readonly TMP_Text category;
@@ -491,13 +490,6 @@ namespace BoscaliSummer.Features.Events.Presentation
                 AvKit.Place(glyph.rectTransform, new Rect(frame.x + 12f, frame.y - 12f, 24f, 24f));
                 glyph.raycastTarget = false;
 
-                icon = AvKit.Panel(rect,
-                    new Rect(frame.x + 1f, frame.y - 1f, frame.width - 2f, frame.height - 2f), Color.white);
-                icon.type = Image.Type.Simple;
-                icon.preserveAspect = true;
-                icon.raycastTarget = false;
-                icon.enabled = false;
-
                 float textWidth = width - TextX - 14f;
                 title = AvStyled.Label(rect, new Rect(TextX, -9f, textWidth - 122f, 18f), "", "row-name");
                 category = AvStyled.Label(rect, new Rect(width - 160f, -9f, 146f, 14f), "",
@@ -524,10 +516,7 @@ namespace BoscaliSummer.Features.Events.Presentation
             public void Bind(ActiveEventView view, string stampText, Color tint, string glyphKind)
             {
                 if (!root.activeSelf) root.SetActive(true);
-                Sprite sprite = EventIconCache.Get(view.IconKey);
-                icon.sprite = sprite;
-                icon.enabled = sprite != null;
-                glyph.gameObject.SetActive(sprite == null);
+                glyph.gameObject.SetActive(true);
                 glyph.SetKind(glyphKind);
                 glyph.color = tint;
 
@@ -546,7 +535,6 @@ namespace BoscaliSummer.Features.Events.Presentation
             public void BindPlaceholder(string note)
             {
                 if (!root.activeSelf) root.SetActive(true);
-                icon.enabled = false;
                 glyph.gameObject.SetActive(true);
                 glyph.SetKind(EventGlyph.Economic);
                 glyph.color = AvTheme.Dim;

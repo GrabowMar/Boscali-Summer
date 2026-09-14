@@ -12,29 +12,20 @@ namespace BoscaliSummer.Features.Support.Runtime
         Encampment = 2
     }
 
-    /// <summary>One faction's electronic-warfare presence: a mobile truck, or the static,
-    /// more powerful encampment it can be unloaded into. At most one per faction.</summary>
+    /// <summary>One faction's electronic-warfare presence: a mobile radar truck.
+    /// At most one per faction. Wire byte 2 (Encampment) is reserved.</summary>
     internal sealed class EwAsset
     {
         public FactionHQ Owner;
         public EwAssetState State;
         public GroundVehicle Truck;
-        public Building Encampment;
         public float Paid;
 
-        public Vector3 Position =>
-            State == EwAssetState.Encampment && Encampment != null ? Encampment.transform.position
-            : Truck != null ? Truck.transform.position
-            : Vector3.zero;
+        public Vector3 Position => Truck != null ? Truck.transform.position : Vector3.zero;
 
-        public bool Alive =>
-            State == EwAssetState.Encampment ? Encampment != null && !Encampment.disabled
-            : Truck != null && !Truck.disabled;
+        public bool Alive => Truck != null && !Truck.disabled;
 
-        /// <summary>Encampments trade mobility for a stronger effect; a truck is the mobile,
-        /// weaker baseline. Deliberately kept local to this class rather than threaded into
-        /// InfoNetwork/InfoPowers, so the shared cost/cooldown-scaling data model stays unsplit.</summary>
-        public float EffectMultiplier => State == EwAssetState.Encampment ? 1.5f : 1.0f;
+        public float EffectMultiplier => 1.0f;
     }
 
     /// <summary>
@@ -64,16 +55,6 @@ namespace BoscaliSummer.Features.Support.Runtime
         {
             if (hq == null || truck == null || ForFaction(hq) != null) return false;
             assets[hq] = new EwAsset { Owner = hq, State = EwAssetState.Truck, Truck = truck, Paid = paid };
-            return true;
-        }
-
-        public bool TryConvertToEncampment(FactionHQ hq, Building encampment)
-        {
-            EwAsset asset = ForFaction(hq);
-            if (asset == null || asset.State != EwAssetState.Truck || encampment == null) return false;
-            asset.Truck = null;
-            asset.Encampment = encampment;
-            asset.State = EwAssetState.Encampment;
             return true;
         }
 

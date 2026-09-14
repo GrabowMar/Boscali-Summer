@@ -6,10 +6,6 @@ using UnityEngine;
 
 namespace BoscaliSummer.Features.Autopilot.Runtime
 {
-    /// <summary>Adds the Boscali Summer root slice and a bounded submenu to the native wheel by
-    /// swapping actionsMain and calling the game's own SetupMain. The submenu also hosts one
-    /// optional page contributed through <see cref="IRadialMenuPage"/> (Command's target
-    /// presets); stock content is restored after a leaf action or the timeout.</summary>
     internal static class BoscaliRadialMenu
     {
         private const string RootLabel = "Boscali Summer";

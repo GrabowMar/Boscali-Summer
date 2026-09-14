@@ -44,7 +44,6 @@ Assembly pluginAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(plugi
     ("CameraStateManager", "SetFollowingUnit"),
     ("CameraOrbitState", "UpdateState"),
     ("CameraChaseState", "UpdateState"),
-    ("GameplayUI", "SelectAircraft"),
     ("GameplayUI", "PauseGame"),
     ("GameplayUI", "ResumeGame"),
     ("FlightHud", "EnableCanvas"),
@@ -57,8 +56,9 @@ Assembly pluginAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(plugi
     ("Building", "OnStartClient"),
     ("BulletSim+Bullet", "TrajectoryTrace"),
     ("GroundVehicle", "UnitDisabled"),
+    ("Aircraft", "UnitDisabled"),
+    ("Aircraft", "WaitRemoveAircraft"),
     ("MapBuilding", "TakeDamage"),
-    ("MapBuilding", "TakeShockwave"),
     ("Missile", "UserCode_RpcDetonate_897349600"),
     ("Missile", "Detonate"),
     ("Missile", "OnStartClient"),
@@ -83,11 +83,9 @@ Assembly pluginAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(plugi
     ("Spawner", "SpawnBuilding"),
     ("Spawner", "SpawnSavedMissile"),
     ("Missile", "GetYield"),
-    ("Missile", "Arm"),
     ("Missile", "SetAimpoint"),
     ("FactionHQ", "SetTrackingState"),
     ("FactionHQ", "GetTrackingData"),
-    ("UnitRegistry", "RegisterUnit"),
     ("MountedTroops", "Fire"),
     ("LoadoutSelector", "AssignAircraft"),
     ("WeaponManager", "InitializeWeaponManager"),
@@ -96,6 +94,7 @@ Assembly pluginAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(plugi
     ("CombatAI", "AnalyzeTarget"),
     ("DynamicMap", "Maximize"),
     ("DynamicMap", "Minimize"),
+    ("DynamicMap", "CenterMinimizedMap"),
     ("DynamicMap", "MapControls"),
     ("GridLabels", "GridLabels_OnMapChanged"),
     ("GridLabels", "UpdateMinorGridLabels"),
@@ -156,15 +155,9 @@ foreach ((string typeName, string methodName) in targets)
     ("UnitDefinition", "value"),
     ("UnitDefinition", "roleIdentity"),
     ("RoleIdentity", "antiAir"),
-    ("RoleIdentity", "antiSurface")
-    ,("GroundVehicle", "parachuteSystem")
-    ,("RadialMenuMain", "actionsMain")
-    ,("RadialMenuMain", "aircraft")
-    ,("RadialMenuAction", "actionType")
-    ,("RadialMenuAction", "iconSprite")
-    ,("RadialMenuAction", "backgroundSprite")
-    ,("RadialMenuAction", "backgroundColorInactive")
-    ,("RadialMenuAction", "backgroundColorActive")
+    ("RoleIdentity", "antiSurface"),
+    ("GridLabels", "gridToolTip"),
+    ("GridLabels", "gridAircraft")
 };
 
 foreach ((string typeName, string fieldName) in fields)
@@ -348,6 +341,8 @@ string[] featureTypes =
     "BoscaliSummer.Features.Command.CommandFeature"
     ,"BoscaliSummer.Features.Squad.SquadFeature"
     ,"BoscaliSummer.Features.HighCommand.HighCommandFeature"
+    ,"BoscaliSummer.Features.Events.EventsFeature"
+    ,"BoscaliSummer.Features.Trenches.TrenchesFeature"
 };
 foreach (string featureType in featureTypes)
     if (pluginAssembly.GetType(featureType, false) == null)

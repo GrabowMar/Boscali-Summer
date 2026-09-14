@@ -1,9 +1,7 @@
 using System;
-using System.Globalization;
 
 namespace BoscaliSummer.Features.Radio.Runtime
 {
-    /// <summary>The four stretches of the broadcast day the station schedule is cut into.</summary>
     internal enum RadioDaypart
     {
         Morning,
@@ -23,14 +21,12 @@ namespace BoscaliSummer.Features.Radio.Runtime
 
         private sealed class StationVoice
         {
-            public string Slogan;
             public string[] Shows;
             public string[] Bulletins;
         }
 
         private static readonly StationVoice Generic = new StationVoice
         {
-            Slogan = "Local transmission",
             Shows = new[] { "Morning Signal", "Day Rotation", "Evening Session", "Night Carrier" },
             Bulletins = new[]
             {
@@ -44,7 +40,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
 
         private static readonly StationVoice Agrapol = new StationVoice
         {
-            Slogan = "All-night rebel radio",
             Shows = new[] { "Sunrise Drive", "Midday Rotation", "Evening Request Line", "Nightwatch Slow Set" },
             Bulletins = new[]
             {
@@ -59,7 +54,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
 
         private static readonly StationVoice Maris = new StationVoice
         {
-            Slogan = "The wire, around the clock",
             Shows = new[] { "Morning Brief", "World Service", "The Six O'Clock Report", "Overnight Wire" },
             Bulletins = new[]
             {
@@ -75,7 +69,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
 
         private static readonly StationVoice Base = new StationVoice
         {
-            Slogan = "Duty, weather and music",
             Shows = new[] { "Reveille and Duty Roster", "Wing Ops Bulletin", "Stand-down Report", "Night Watch" },
             Bulletins = new[]
             {
@@ -101,12 +94,9 @@ namespace BoscaliSummer.Features.Radio.Runtime
         public static string ProgramName(string stationId, DateTime when) =>
             Voice(stationId).Shows[(int)DaypartAt(when)];
 
-        public static string Slogan(string stationId) => Voice(stationId).Slogan;
-
         public static int BulletinCount(string stationId) =>
             Math.Min(MaximumBulletins, Voice(stationId).Bulletins.Length);
 
-        /// <summary>One wire line. The index wraps, so callers can rotate forever within bounds.</summary>
         public static string Bulletin(string stationId, int index)
         {
             string[] lines = Voice(stationId).Bulletins;
@@ -114,10 +104,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
             int wrapped = ((index % lines.Length) + lines.Length) % lines.Length;
             return lines[wrapped];
         }
-
-        public static string ClockLabel(DateTime when) =>
-            when.Hour.ToString("00", CultureInfo.InvariantCulture) + ":" +
-            when.Minute.ToString("00", CultureInfo.InvariantCulture);
 
         private static StationVoice Voice(string stationId)
         {

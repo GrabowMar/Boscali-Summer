@@ -5,9 +5,6 @@ using UnityEngine;
 
 namespace BoscaliSummer.Features.Autopilot.Runtime
 {
-    /// <summary>Delegate-backed native radial slice. Appearance is copied from a stock action so
-    /// the wedge renders identically; the prefixes in BoscaliMenuActionPatches dispatch behaviour
-    /// because the native methods are non-virtual.</summary>
     internal sealed class BoscaliMenuAction : RadialMenuAction
     {
         private static readonly FieldInfo ActionTypeField =

@@ -19,16 +19,14 @@ namespace BoscaliSummer.Fire
             bool visualOnly)
         {
             // Runs on every tracer's trajectory trace: a fault here must not stop the bullet
-            // simulation, only skip the ignition and scorch for this one round.
+            // simulation, only skip the ignition for this one round.
             try
             {
-                if (!__state && ___impacted && info != null)
+                if (!__state && ___impacted && info != null && !visualOnly)
                 {
                     int salt = Mathf.RoundToInt(info.muzzleVelocity) ^ Mathf.RoundToInt(info.pierceDamage * 0.1f);
                     ImpactFireManager.Instance?.SubmitImpact(
                         ___position, false, salt);
-                    ImpactScorchManager.Instance?.SubmitExplosion(
-                        ___position, Mathf.Clamp(info.pierceDamage * 0.05f, 0.35f, 2.5f));
                 }
             }
             catch (Exception e)

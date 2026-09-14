@@ -120,14 +120,6 @@ namespace BoscaliSummer.Fire
 
         public int ActiveFireCount => fires.Count;
 
-        /// <summary>Deploys an artillery smoke marker with a prominent signaling smoke plume.</summary>
-        public void DeploySmokeMarker(GlobalPosition position)
-        {
-            if (!GameAccess.IsServer()) return;
-            Ignite(position, Time.timeSinceLevelLoad, false, 999, false);
-            Plugin.Logger.LogInfo($"[ImpactFireManager] Deployed CAS smoke marker at {position}.");
-        }
-
         public void SubmitImpact(GlobalPosition position, bool explosive, int salt)
         {
             if (!Fire.FiresEnabled.Value || !GameAccess.IsServer() || impacts.Count >= 256) return;

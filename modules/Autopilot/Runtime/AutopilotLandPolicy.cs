@@ -2,9 +2,6 @@ using System;
 
 namespace BoscaliSummer.Features.Autopilot.Runtime
 {
-    /// <summary>Pure rules for the local ownship autopilot landing: input yield thresholds,
-    /// mass-adjusted approach speed and touchdown/stopped gates. No Unity types so the test
-    /// project can compile it.</summary>
     internal static class AutopilotLandPolicy
     {
         public const float ManualAxisThreshold = 0.25f;

@@ -309,7 +309,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 case TabPilot: RefreshPilotPage(bypass, score, bonus); break;
                 case TabSkills: RefreshSkillsPage(); break;
                 case TabWings: RefreshWingsPage(); break;
-                case TabStudio: RefreshStudioPage(bypass); break;
+                case TabStudio: RefreshStudioPage(); break;
             }
 
             UpdateStatusStrip();

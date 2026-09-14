@@ -71,9 +71,8 @@ namespace BoscaliSummer.Features.Support.Configuration
                 "Enable the CYBER page: infrastructure investment and the signals-intelligence " +
                 "operations it unlocks (ping sweep, track uplink). Host-authoritative.");
             EwEnabled = config.Bind("Support", "ElectronicWarfare", true,
-                "Enable the EW page: build a radar truck, unload it into a static encampment, " +
-                "and the electronic-warfare operations it unlocks (radar blackout, ghost shield, " +
-                "spoof contacts). Host-authoritative.");
+                "Enable the EW page: build a radar truck and the electronic-warfare operations " +
+                "it unlocks (radar blackout, ghost shield, spoof contacts). Host-authoritative.");
             ShowOnTacticalMap = config.Bind("Support", "ShowOnTacticalMap", true,
                 "Show ability range circles, tactical vector icons, satellite tracks and active " +
                 "strike waypoints on the tactical theater map.");
@@ -178,11 +177,11 @@ namespace BoscaliSummer.Features.Support.Configuration
             EwTruckCost = config.Bind("Support", "EwTruckCost", 1200f,
                 new ConfigDescription(
                     "Allocation charged to deploy a mobile EW radar truck, before CostMultiplier. " +
-                    "One per faction; unloading it into an encampment is free.",
+                    "One per faction.",
                     new AcceptableValueRange<float>(0f, 20000f)));
             EwProximityRadius = config.Bind("Support", "EwProximityRadiusMeters", 15000f,
                 new ConfigDescription(
-                    "How close the faction's EW truck or encampment must be to a hack's target " +
+                    "How close the faction's EW truck must be to a hack's target " +
                     "for Radar Blackout, Ghost Shield or Spoof Contacts to be authorised.",
                     new AcceptableValueRange<float>(1000f, 60000f)));
             SatelliteLaunchTransitSeconds = config.Bind("Support", "SatelliteLaunchTransitSeconds", 20f,

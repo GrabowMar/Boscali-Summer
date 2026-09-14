@@ -313,7 +313,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
 
         // ---- STUDIO refresh --------------------------------------------------------------
 
-        private void RefreshStudioPage(bool bypass)
+        private void RefreshStudioPage()
         {
             if (studioStatus == null || settings == null) return;
 
@@ -362,7 +362,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 row.Select.SetEnabled(true);
             }
 
-            RefreshStudioEditor(bypass);
+            RefreshStudioEditor();
             if (studioMessageText != null)
             {
                 studioMessageText.text = string.IsNullOrEmpty(studioMessage)
@@ -372,7 +372,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             }
         }
 
-        private void RefreshStudioEditor(bool bypass)
+        private void RefreshStudioEditor()
         {
             studioDraft.Normalize();
 

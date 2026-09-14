@@ -16,7 +16,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
     ///
     /// <para>Postfixing the press handlers rather than prefixing them means vanilla has
     /// already decided what to open; this only closes what should no longer show. Registered
-    /// in <c>Core/Plugin.cs</c>'s explicit patch list — an unlisted patch class is skipped in
+    /// in <c>CommandFeature.PatchTypes</c> — an unlisted patch class is skipped in
     /// total silence.</para>
     /// </summary>
     [HarmonyPatch]

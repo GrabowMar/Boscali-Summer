@@ -6,7 +6,6 @@ namespace BoscaliSummer.Features.QoL.Runtime
             bool hudVisible, bool mapOpen, bool menuOpen, bool hasSelection) =>
             enabled && externalView && localOwnship && hudVisible && !mapOpen && !menuOpen && hasSelection;
 
-        // Exponential response gives the same settling time at different frame rates.
         public static float Response(float seconds, float deltaTime) =>
             seconds <= 0f ? 1f : (float)(1d - System.Math.Exp(-System.Math.Max(0f, deltaTime) / seconds));
 

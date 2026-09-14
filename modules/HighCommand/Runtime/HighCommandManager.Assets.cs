@@ -20,7 +20,6 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
         private int catalogBuildings = -1, catalogVehicles = -1;
         private BuildingDefinition postDefinition;
         private VehicleDefinition convoyDefinition;
-        private readonly List<string> siteScratch = new List<string>(CommandTree.MaximumSites);
         private readonly Vector3[] intelPositions = new Vector3[MaximumFactions * CommandTier.MaximumSlots];
         private readonly float[] intelRadii = new float[MaximumFactions * CommandTier.MaximumSlots];
         private readonly byte[] intelOwners = new byte[MaximumFactions * CommandTier.MaximumSlots];

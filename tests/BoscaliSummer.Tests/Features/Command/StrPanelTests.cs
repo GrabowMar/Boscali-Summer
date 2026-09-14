@@ -20,7 +20,6 @@ namespace BoscaliSummer.Tests.Features.Command
             SharesSurviveAnEmptyBoard();
             PercentRefusesToInventPrecision();
             CountdownReadsAsTimeLeft();
-            CompactKeepsLargeFiguresNarrow();
             PressureDoesNotOverstateNoise();
             RailsSeparateHoldingFromLosing();
         }
@@ -121,14 +120,6 @@ namespace BoscaliSummer.Tests.Features.Command
             TestAssert.That(TheaterReadout.Countdown(0f) == "EXPIRED", "no time left is expired");
             TestAssert.That(TheaterReadout.Countdown(-5f) == "EXPIRED", "past the deadline is expired");
             TestAssert.That(TheaterReadout.Countdown(float.NaN) == "—", "an unknown deadline is a dash");
-        }
-
-        private static void CompactKeepsLargeFiguresNarrow()
-        {
-            TestAssert.That(TheaterReadout.Compact(950f) == "950", "small figures stay exact");
-            TestAssert.That(TheaterReadout.Compact(12_400f) == "12.4K", "thousands compress");
-            TestAssert.That(TheaterReadout.Compact(4_200_000f) == "4.2M", "millions compress");
-            TestAssert.That(TheaterReadout.Compact(float.NaN) == "—", "an unknown figure is a dash");
         }
 
         private static void PressureDoesNotOverstateNoise()

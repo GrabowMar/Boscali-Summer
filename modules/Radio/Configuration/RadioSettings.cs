@@ -2,7 +2,6 @@ using BepInEx.Configuration;
 
 namespace BoscaliSummer.Features.Radio.Configuration
 {
-    /// <summary>How much receiver character is baked onto the music itself.</summary>
     internal enum BroadcastFilterMode
     {
         Clean,
@@ -28,7 +27,6 @@ namespace BoscaliSummer.Features.Radio.Configuration
 
         public RadioSettings(ConfigFile config)
         {
-            // The radio never touches the network, so every value here is yours alone.
             Enabled = config.Bind("Radio", "Enabled", true,
                 "Enable the Boscali radio and its map MFD panel. " +
                 "Client-local: this setting affects only your own game, never other players.");

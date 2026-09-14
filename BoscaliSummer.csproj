@@ -22,9 +22,7 @@
     <Compile Include="Core\**\*.cs" />
     <Compile Include="Framework\**\*.cs" />
     <Compile Include="Infrastructure\**\*.cs" />
-    <!-- The local TheaterBias draft duplicates the shared cross-mod scoring policy. -->
-    <Compile Include="modules\**\*.cs"
-             Exclude="modules\Command\Domain\TheaterBias.cs" />
+    <Compile Include="modules\**\*.cs" />
     <!-- Vendored avionics protocol, widget kit, and pure design tokens (namespace
          NOAvionics / NOAvionics.Ui). Wing Command carries a parallel source copy; the
          BCL-only AppDomain protocol coordinates bezel and map-input ownership without a
@@ -110,11 +108,5 @@
     </EmbeddedResource>
   </ItemGroup>
 
-  <ItemGroup Label="Event icon assets">
-    <!-- Optional: dropping modules\Events\Assets\<icon_key>.png in makes the card use it. -->
-    <EmbeddedResource Include="modules\Events\Assets\*.png">
-      <LogicalName>BoscaliSummer.EventsAssets.%(Filename)%(Extension)</LogicalName>
-    </EmbeddedResource>
-  </ItemGroup>
 
 </Project>

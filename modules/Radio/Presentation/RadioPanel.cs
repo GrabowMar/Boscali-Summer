@@ -11,13 +11,6 @@ using UnityEngine.UI;
 
 namespace BoscaliSummer.Features.Radio.Presentation
 {
-    /// <summary>
-    /// A comms set on the maximised-map MFD: a hero frequency readout, a ticked dial with a
-    /// needle that seeks between stations, a segmented signal meter, the station's ident,
-    /// programme block and wire copy, and a preset bank. It follows the same safe seam as
-    /// Nuclear Option's native screens: claim an unused bezel slot, build known widgets,
-    /// and borrow only the active font and theme colours.
-    /// </summary>
     internal static class RadioPanel
     {
         private const float Width = AvTokens.PanelWidth;
@@ -52,7 +45,6 @@ namespace BoscaliSummer.Features.Radio.Presentation
             public TMP_Text Label;
             public TMP_Text Frequency;
             public TMP_Text Count;
-            public AvButton Button;
         }
 
         private sealed class ProgrammeRow
@@ -63,7 +55,6 @@ namespace BoscaliSummer.Features.Radio.Presentation
             public Image Rule;
             public TMP_Text Number;
             public TMP_Text Title;
-            public AvButton Button;
         }
 
         private static readonly ChannelRow[] rows = new ChannelRow[MaximumRows];
@@ -326,12 +317,10 @@ namespace BoscaliSummer.Features.Radio.Presentation
             pageRoot = (RectTransform)shell.CreatePage(0, "TunerPage").transform;
             float y = body.y;
 
-            // Content spans the full body width: equal margins left and right, no gutter.
             float bodyBottom = body.y - body.height;
             float bodyX = body.x;
             float bodyW = body.width;
 
-            // ---------------------------------------------------------- broadcast card
             float cardTop = y;
             AvKit.TacticalCard(pageRoot, new Rect(bodyX, cardTop, bodyW, HeroHeight), AvTheme.RailReady);
 
@@ -393,7 +382,6 @@ namespace BoscaliSummer.Features.Radio.Presentation
 
             y = cardTop - HeroHeight - AvTokens.Space2;
 
-            // ------------------------------------------------------------------- dial
             dialArea = new Rect(bodyX, y, bodyW - 94f, DialHeight);
             EnsureDialBand(manager == null ? RadioBand.Fm : manager.TunedDial.Band);
             float volumeX = bodyX + bodyW - 90f;
@@ -407,7 +395,6 @@ namespace BoscaliSummer.Features.Radio.Presentation
                 .WithTooltip("Turn the receiver volume up.");
             y -= DialHeight + AvTokens.Space2;
 
-            // -------------------------------------------------------------- transport
             float keyWidth = (bodyW - Gap * 5f) / 6f;
             seekDownButton = AvKit.Button(pageRoot, "< SEEK", new Rect(bodyX, y, keyWidth, ControlHeight),
                 () => manager?.SeekStation(-1), AvTokens.FontSmall, AvButtonStyle.Default)
@@ -453,7 +440,6 @@ namespace BoscaliSummer.Features.Radio.Presentation
                 .WithTooltip("Open Boscali Summer's local music library folder.");
             y -= ModeHeight + AvTokens.Space2;
 
-            // ---------------------------------------------------------------- stations
             SectionTitle(pageRoot, bodyX, bodyW, y, "STATIONS");
             stationsNote = AvStyled.Label(pageRoot, new Rect(bodyX, y, bodyW - 64f, HeaderHeight),
                 "0 FOUND", "section-title-note", align: TextAlignmentOptions.Right);
@@ -491,8 +477,6 @@ namespace BoscaliSummer.Features.Radio.Presentation
             pageNextButton.WithTooltip("Show the next page of stations. Disabled on the last page.");
             y -= AvTokens.RowHeight + AvTokens.Space2;
 
-            // -------------------------------------------------------------- programme
-            // The tuned station's own log: its tracks, the playing one lit, click to play.
             float programmeRoom = y - (presetTop + AvTokens.Space2);
             if (programmeRoom >= HeaderHeight + 6f + TrackLinePitch)
             {
@@ -523,7 +507,6 @@ namespace BoscaliSummer.Features.Radio.Presentation
                 programmeEmptyLabel.gameObject.SetActive(false);
             }
 
-            // ---------------------------------------------------------------- presets
             const float setWidth = 50f;
             float presetWidth = (bodyW - setWidth - Gap * RadioSettings.PresetSlots) /
                                 RadioSettings.PresetSlots;
@@ -558,8 +541,6 @@ namespace BoscaliSummer.Features.Radio.Presentation
             Refresh();
             return result;
         }
-
-        // ------------------------------------------------------------------------ dial
 
         private static void EnsureDialBand(RadioBand band)
         {
@@ -639,8 +620,6 @@ namespace BoscaliSummer.Features.Radio.Presentation
         private static float DialX(float fraction) =>
             dialArea.x + Mathf.Clamp01(fraction) * (dialArea.width - 1f);
 
-        // ------------------------------------------------------------------ animation
-
         private static void Animate()
         {
             if (manager == null || dialRoot == null) return;
@@ -663,7 +642,7 @@ namespace BoscaliSummer.Features.Radio.Presentation
                 {
                     sweeping = true;
                     sweepStart = Time.unscaledTime;
-                    sweepFrom = NeedleFraction();
+                    sweepFrom = manager.TunedDial.Fraction;
                     sweepTo = dial.Fraction;
                 }
                 shownDial = dial;
@@ -698,12 +677,6 @@ namespace BoscaliSummer.Features.Radio.Presentation
             if (Time.unscaledTime < nextMeterAt) return;
             nextMeterAt = Time.unscaledTime + 0.1f;
             UpdateMeter();
-        }
-
-        private static float NeedleFraction()
-        {
-            if (manager == null || !manager.HasChannels) return 0f;
-            return manager.TunedDial.Fraction;
         }
 
         private static string SweepFrequencyText(float fraction)
@@ -793,10 +766,6 @@ namespace BoscaliSummer.Features.Radio.Presentation
 
         private static ChannelRow MakeChannelRow(RectTransform parent, int row, float y)
         {
-            // A station is a dial position, not an object: a hairline underneath and a
-            // selection fill, rather than the outline-plus-corner-ticks card every group
-            // used to wear. Ticks now mean "this is the focused thing", so spending them
-            // on identical rows made them mean nothing.
             float x = Pad;
             float w = Width - Pad * 2f;
 
@@ -834,7 +803,6 @@ namespace BoscaliSummer.Features.Radio.Presentation
             button.SetRowHighlight(ground, Color.clear,
                 AvStyleHost.Resolve(AvStyleHost.Style("row", "hover").Background, AvTheme.SurfaceRaised));
             button.WithTooltip("Tune the receiver to this station.");
-            result.Button = button;
             return result;
         }
 
@@ -867,7 +835,6 @@ namespace BoscaliSummer.Features.Radio.Presentation
             button.SetRowHighlight(ground, Color.clear, AvTheme.Unity(AvTokens.Wash(
                 AvTheme.Accent.ToRgba(), AvTokens.RowHoverScale, AvTokens.RowHoverAlpha)));
             button.WithTooltip("Play this track from the tuned station.");
-            result.Button = button;
             return result;
         }
 
@@ -1006,7 +973,6 @@ namespace BoscaliSummer.Features.Radio.Presentation
                 UpdateMeter();
             }
 
-            // An empty station list reads as a table still loading; say what to do instead.
             if (channelsEmptyLabel != null)
             {
                 if (channelsEmptyLabel.gameObject.activeSelf != !hasChannels)

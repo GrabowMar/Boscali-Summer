@@ -40,9 +40,6 @@ namespace BoscaliSummer.Features.HighCommand.Domain
         public static float BountyMultiplier(CommandTrait mask) =>
             Has(mask, CommandTrait.Veteran) ? 1.2f : 1f;
 
-        public static int PointsPerStipend(CommandTrait mask) =>
-            Has(mask, CommandTrait.Political) ? 1 : 0;
-
         public static float IntelRadiusMultiplier(CommandTrait mask) =>
             Has(mask, CommandTrait.Recluse) ? 0.7f : 1f;
 
@@ -60,20 +57,6 @@ namespace BoscaliSummer.Features.HighCommand.Domain
                 case CommandTrait.Political: return "POLITICAL ANIMAL";
                 case CommandTrait.Recluse: return "RECLUSE";
                 default: return "UNKNOWN";
-            }
-        }
-
-        public static string Effect(CommandTrait trait)
-        {
-            switch (trait)
-            {
-                case CommandTrait.Logistician: return "stipends +15%";
-                case CommandTrait.Beloved: return "command share +25%, long disruption";
-                case CommandTrait.Zealot: return "command share +15%";
-                case CommandTrait.Veteran: return "bounty +20%";
-                case CommandTrait.Political: return "+1 command point per stipend";
-                case CommandTrait.Recluse: return "harder to locate";
-                default: return "";
             }
         }
 

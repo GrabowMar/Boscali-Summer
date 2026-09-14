@@ -24,7 +24,6 @@ namespace BoscaliSummer.Fire
             public float SizeScale = 1f;
             public float LifetimeScale = 1f;
             public float ClusterScale = 1f;
-            public bool HasParticles => Systems != null && Systems.Length > 0;
 
             public void SetPosition(GlobalPosition position)
             {
