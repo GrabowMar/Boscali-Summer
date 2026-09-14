@@ -9,8 +9,9 @@ namespace BoscaliSummer.Features.Trenches.Runtime
     internal sealed class TrenchGarrison
     {
         internal const string Prefix = "BoscaliSummer:Trench:";
-        internal const int MaximumDefenders = 6;
+        internal const int MaximumDefenders = 4;
         private static readonly string[] Keys = { "Emplacement1_MG", "Emplacement1_ATGM", "Emplacement1_MANPADS" };
+        private static readonly int[] SlotKind = { 0, 0, 1, 2 }; // Two MG teams, one ATGM, one MANPADS
         private readonly Building[] defenders = new Building[MaximumDefenders];
         private readonly UnitPart[][] parts = new UnitPart[MaximumDefenders][];
         private readonly float[] previousHealth = new float[MaximumDefenders];
@@ -91,23 +92,19 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             var spawner = NetworkSceneSingleton<Spawner>.i;
             if (spawner == null || !spawner.IsServer || network.OwnerHq == null) return false;
             attempts[slot]++;
-            var def = definitions[slot / 2];
+            var def = definitions[SlotKind[slot]];
             if (def == null) return false;
             Vector3 forward = network.ThreatDirection;
-            // Defenders spread along the whole sector line, behind its parapets:
-            // MG pair on the flanks, ATGM pair inboard, MANPADS pair behind support.
+            // Sparse but spread: MG teams on the front flanks, the ATGM on the fire-line
+            // centre, and the MANPADS back at the support line watching the air.
             float span = Math.Max(60f, network.FrontHalfSpan);
-            float lateral;
-            float depth;
-            if (slot < 4)
+            float lateral, depth;
+            switch (slot)
             {
-                lateral = (slot % 2 == 0 ? -1f : 1f) * (slot / 2 == 0 ? 0.55f : 0.28f) * span;
-                depth = -16f;
-            }
-            else
-            {
-                lateral = (slot % 2 == 0 ? -1f : 1f) * 0.30f * span;
-                depth = -TrenchTacticalMath.SupportLineDepth - 10f;
+                case 0: lateral = -0.62f * span; depth = -16f; break;
+                case 1: lateral = 0.62f * span; depth = -16f; break;
+                case 2: lateral = 0f; depth = -16f; break;
+                default: lateral = 0f; depth = -TrenchTacticalMath.SupportLineDepth - 8f; break;
             }
             Vector3 desired = network.SeedCenter + network.LateralAxis * lateral + forward * depth;
             Quaternion rotation = Quaternion.LookRotation(forward);

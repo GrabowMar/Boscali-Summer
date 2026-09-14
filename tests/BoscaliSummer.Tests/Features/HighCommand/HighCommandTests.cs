@@ -50,15 +50,6 @@ namespace BoscaliSummer.Tests.Features.HighCommand
                 TestAssert.That(CommandTraits.Labels(person.Traits).Length <= 64, "trait labels fit the dossier");
             }
 
-            for (int seed = 0; seed < 64; seed++)
-            {
-                PortraitDesign a = PortraitDesign.FromSeed(seed);
-                PortraitDesign b = PortraitDesign.FromSeed(seed);
-                TestAssert.That(a.Face == b.Face && a.Hair == b.Hair && a.Cap == b.Cap, "portrait features are seed-stable");
-                TestAssert.That(a.Face < 3 && a.Eyes < 3 && a.Nose < 3 && a.Cap < 3 && a.FacialHair < 4,
-                    "portrait features stay inside their palettes");
-            }
-
             var streamA = new SeedStream(7);
             var streamB = new SeedStream(7);
             for (int i = 0; i < 32; i++)

@@ -38,16 +38,12 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
             return null;
         }
 
-        private CommandSlot FindSlot(int id, out FactionCommand owner)
-        {
-            for (int i = 0; i < factions.Count; i++)
-            {
-                CommandSlot slot = factions[i].Tree.Find(id);
-                if (slot != null) { owner = factions[i]; return slot; }
-            }
-            owner = null;
-            return null;
-        }
+        private static int GlobalId(int factionIndex, int slotId) =>
+            factionIndex * CommandTier.MaximumSlots + slotId;
+
+        private static int FactionOf(int globalId) => globalId / CommandTier.MaximumSlots;
+
+        private static int LocalId(int globalId) => globalId % CommandTier.MaximumSlots;
 
         private AssetWatch FindAsset(FactionCommand owner, CommandSlot slot, AssetKind kind)
         {

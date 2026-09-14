@@ -1,3 +1,4 @@
+using BoscaliSummer.Features.Progression.Runtime;
 using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Lifecycle;
 using BoscaliSummer.Runtime;
@@ -17,9 +18,10 @@ namespace BoscaliSummer.Features.Progression.Presentation
         private static readonly Color Secondary = new Color32(194, 201, 201, 255);
         private ISquadView squad;
         private GameObject root;
-        private TMP_Text callsign, identity, status, proficiency, formation, returning;
-        private Image portrait;
+        private TMP_Text callsign, identity, status, proficiency, formation, returning, crestCaption;
+        private Image portrait, crest, compactCrest;
         private TMP_Text portraitFallback;
+        private string crestKey;
         private readonly Image[] tierPips = new Image[5];
         private readonly GameObject[] abilitySlots = new GameObject[4];
         private TMP_Text noAbilities;
@@ -76,6 +78,15 @@ namespace BoscaliSummer.Features.Progression.Presentation
             noAbilities.gameObject.SetActive(wing.AbilityMask == 0);
             for (int i = 0; i < tierPips.Length; i++)
                 tierPips[i].color = i < wing.Tier ? Caution : new Color32(50, 55, 60, 255);
+            string crestIdentity = (wing.Symbol ?? string.Empty) + "|" + (wing.WingName ?? string.Empty);
+            if (crestKey != crestIdentity)
+            {
+                crestKey = crestIdentity;
+                Sprite mark = EmblemRenderer.Procedural(EmblemDesign.Hostile(crestIdentity));
+                crest.sprite = compactCrest.sprite = mark;
+                crest.enabled = compactCrest.enabled = mark != null;
+                crestCaption.text = string.IsNullOrEmpty(wing.WingName) ? "HOSTILE" : wing.WingName;
+            }
             if (portraitIdentity != ace)
             {
                 portraitIdentity = ace;
@@ -100,18 +111,18 @@ namespace BoscaliSummer.Features.Progression.Presentation
             scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
 
             RectTransform panel = AvKit.Panel((RectTransform)root.transform,
-                new Rect(0, -48, 640, 184), Ink).rectTransform;
+                new Rect(0, -48, 704, 184), Ink).rectTransform;
             panel.name = "Ace Threat Dossier";
             panel.anchorMin = panel.anchorMax = new Vector2(0.5f, 1f);
             panel.pivot = new Vector2(0.5f, 1f);
             expandedPanel = panel;
             expandedGroup = panel.gameObject.AddComponent<CanvasGroup>();
             expandedGroup.blocksRaycasts = false;
-            AvKit.Outline(panel, new Rect(0, 0, 640, 184), Caution.WithAlpha(0.75f));
-            AvKit.CornerTicks(panel, new Rect(0, 0, 640, 184), Caution);
+            AvKit.Outline(panel, new Rect(0, 0, 704, 184), Caution.WithAlpha(0.75f));
+            AvKit.CornerTicks(panel, new Rect(0, 0, 704, 184), Caution);
 
-            Glyph(panel, new Rect(2, -2, 636, 7), HuntMark.Stripes);
-            AvKit.Panel(panel, new Rect(2, -9, 636, 26), Caution);
+            Glyph(panel, new Rect(2, -2, 700, 7), HuntMark.Stripes);
+            AvKit.Panel(panel, new Rect(2, -9, 700, 26), Caution);
             Label(panel, new Rect(14, -10, 360, 24), "///  WARNING  :  HOSTILE ACE DETECTED", 14, Ink, true);
             Label(panel, new Rect(420, -10, 206, 24), "AIR DEFENSE INTERCEPT", 11, Ink, true);
 
@@ -125,12 +136,12 @@ namespace BoscaliSummer.Features.Progression.Presentation
             portrait.rectTransform.anchoredPosition = new Vector2(65f, -101f);
             AvKit.CornerTicks(panel, new Rect(16, -44, 98, 114), Caution);
             AvKit.Panel(panel, new Rect(16, -162, 98, 16), new Color32(24, 28, 32, 255));
-            TMP_Text leaderLabel = Label(panel, new Rect(16, -162, 98, 16), "ACE / LEADER", 9, Caution, true);
+            TMP_Text leaderLabel = Label(panel, new Rect(16, -162, 98, 16), "ACE / LEADER", 10, Caution, true);
             leaderLabel.alignment = TextAlignmentOptions.Center;
 
             // Callsign, Rank Badge & Wing Identity
             AvKit.Panel(panel, new Rect(126, -43, 224, 16), new Color32(28, 32, 36, 255));
-            returning = Label(panel, new Rect(130, -43, 218, 16), "", 9.5f, Caution, true);
+            returning = Label(panel, new Rect(130, -43, 218, 16), "", 10, Caution, true);
             callsign = Label(panel, new Rect(124, -58, 230, 32), "", 26, Color.white, true);
             callsign.characterSpacing = 1.2f;
             identity = Label(panel, new Rect(126, -88, 228, 16), "", 11, Secondary);
@@ -145,9 +156,21 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 abilitySlots[i] = slot.gameObject;
                 AvKit.Outline(slot, new Rect(0, 0, 62, 35), Caution.WithAlpha(0.35f));
                 Glyph(slot, new Rect(21, -2, 20, 20), (HuntMark)((int)HuntMark.Toughness + i));
-                TMP_Text caption = Label(slot, new Rect(0, -22, 62, 12), names[i], 9, Caution, true);
+                TMP_Text caption = Label(slot, new Rect(0, -22, 62, 12), names[i], 10, Caution, true);
                 caption.alignment = TextAlignmentOptions.Center;
             }
+
+            // Generated Squadron Crest
+            Rect crestFrame = new Rect(634, -43, 60, 60);
+            AvKit.Panel(panel, crestFrame, new Color32(18, 22, 26, 255));
+            crest = AvKit.Panel(panel, new Rect(crestFrame.x + 2, crestFrame.y - 2, 56, 56), Color.white);
+            crest.type = Image.Type.Simple;
+            crest.preserveAspect = true;
+            crest.enabled = false;
+            AvKit.Outline(panel, crestFrame, Caution.WithAlpha(0.35f));
+            AvKit.CornerTicks(panel, crestFrame, Caution.WithAlpha(0.6f));
+            crestCaption = Label(panel, new Rect(634, -105, 60, 14), "", 10, Secondary);
+            crestCaption.alignment = TextAlignmentOptions.Center;
 
             // 3 Telemetry Cards
             proficiency = SkillCard(panel, 126, 158, HuntMark.Skill, "COMBAT SKILL");
@@ -155,10 +178,10 @@ namespace BoscaliSummer.Features.Progression.Presentation
             formation = SkillCard(panel, 454, 170, HuntMark.Formation, "WING LEADER");
 
             // Divider and Footer Status Bar
-            AvKit.Panel(panel, new Rect(126, -149, 498, 1), Caution.WithAlpha(0.3f));
+            AvKit.Panel(panel, new Rect(126, -149, 562, 1), Caution.WithAlpha(0.3f));
             for (int i = 0; i < tierPips.Length; i++)
                 tierPips[i] = AvKit.Panel(panel, new Rect(126 + i * 14, -161, 10, 5), Caution);
-            status = Label(panel, new Rect(206, -156, 418, 16), "", 10.5f, Caution, true);
+            status = Label(panel, new Rect(206, -156, 482, 16), "", 10.5f, Caution, true);
 
             // Minimized Compact Panel
             compactPanel = AvKit.Panel((RectTransform)root.transform, new Rect(0, -8, 420, 36), Ink).rectTransform;
@@ -170,7 +193,11 @@ namespace BoscaliSummer.Features.Progression.Presentation
             AvKit.Outline(compactPanel, new Rect(0, 0, 420, 36), Caution.WithAlpha(0.75f));
             Glyph(compactPanel, new Rect(1, -1, 418, 4), HuntMark.Stripes);
             Glyph(compactPanel, new Rect(12, -10, 16, 16), HuntMark.Target);
-            compactStatus = Label(compactPanel, new Rect(38, -6, 370, 24), "", 12, Caution, true);
+            compactCrest = AvKit.Panel(compactPanel, new Rect(34, -9, 18, 18), Color.white);
+            compactCrest.type = Image.Type.Simple;
+            compactCrest.preserveAspect = true;
+            compactCrest.enabled = false;
+            compactStatus = Label(compactPanel, new Rect(58, -6, 350, 24), "", 12, Caution, true);
 
             foreach (Graphic graphic in root.GetComponentsInChildren<Graphic>(true))
                 graphic.raycastTarget = false;
@@ -217,7 +244,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             RectTransform card = AvKit.Panel(panel, new Rect(x, -109, width, 35), new Color32(22, 26, 30, 255)).rectTransform;
             AvKit.Outline(card, new Rect(0, 0, width, 35), Caution.WithAlpha(0.25f));
             Glyph(panel, new Rect(x + 6, -115, 22, 22), mark);
-            Label(panel, new Rect(x + 32, -111, width - 36, 12), caption, 8.5f, Secondary);
+            Label(panel, new Rect(x + 32, -111, width - 36, 12), caption, 10, Secondary);
             return Label(panel, new Rect(x + 32, -123, width - 36, 18), "", 12.5f, Caution, true);
         }
 
@@ -248,6 +275,9 @@ namespace BoscaliSummer.Features.Progression.Presentation
             if (root != null) Destroy(root);
             root = null;
             portrait = null;
+            crest = compactCrest = null;
+            crestCaption = null;
+            crestKey = null;
             portraitIdentity = null;
             callsign = identity = status = proficiency = formation = returning = portraitFallback = null;
             System.Array.Clear(tierPips, 0, tierPips.Length);

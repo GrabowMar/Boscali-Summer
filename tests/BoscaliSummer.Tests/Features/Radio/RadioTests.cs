@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using BoscaliSummer.Features.Radio.Presentation;
 using BoscaliSummer.Features.Radio.Runtime;
@@ -10,6 +11,8 @@ namespace BoscaliSummer.Tests.Features.Radio
         public static void Run()
         {
             HuntMusicTransitions();
+            DialAndProgramming();
+            TuningMath();
             string root = Path.Combine(
                 Path.GetTempPath(), "BoscaliSummer.RadioTests." + Guid.NewGuid().ToString("N"));
             try
@@ -70,6 +73,104 @@ namespace BoscaliSummer.Tests.Features.Radio
                 "Agrapol fallback was not replaced by local tracks");
             TestAssert.That(BuiltInStationRules.UsesVanillaTracks(BuiltInStationRules.BaseId, 1),
                 "Base station stopped using the original soundtrack when local files existed");
+        }
+
+        private static void TuningMath()
+        {
+            TestAssert.That(RadioDialTuning.Step(RadioDial.Fm(88500), -1).Equals(RadioDial.Fm(88300)),
+                "an FM tuning step did not move one 200 kHz increment");
+            TestAssert.That(RadioDialTuning.Step(RadioDial.Fm(RadioDial.FmMinKilohertz), -1)
+                .Equals(RadioDial.Fm(RadioDial.FmMinKilohertz)),
+                "the FM dial stepped below its band edge");
+            TestAssert.That(RadioDialTuning.Step(RadioDial.Fm(RadioDial.FmMaxKilohertz), 1)
+                .Equals(RadioDial.Fm(RadioDial.FmMaxKilohertz)),
+                "the FM dial stepped above its band edge");
+            TestAssert.That(RadioDialTuning.Step(RadioDial.Mw(780), 1).Equals(RadioDial.Mw(790)) &&
+                RadioDialTuning.Step(RadioDial.Mw(780), -1).Equals(RadioDial.Mw(770)),
+                "the MW dial stepped by the wrong increment");
+
+            var dials = new[] { RadioDial.Fm(88500), RadioDial.Fm(101900), RadioDial.Mw(780) };
+            TestAssert.That(RadioDialTuning.IndexAt(dials, RadioDial.Fm(101900)) == 1 &&
+                RadioDialTuning.IndexAt(dials, RadioDial.Fm(90000)) == -1,
+                "dial locking did not match exact station frequencies");
+            TestAssert.That(RadioDialTuning.Seek(dials, RadioDial.Fm(88500), 1) == 1,
+                "seek did not find the next FM station up");
+            TestAssert.That(RadioDialTuning.Seek(dials, RadioDial.Fm(101900), 1) == 0,
+                "seek did not wrap to the low end of the band");
+            TestAssert.That(RadioDialTuning.Seek(dials, RadioDial.Fm(101900), -1) == 0,
+                "seek down did not find the previous FM station");
+            TestAssert.That(RadioDialTuning.Seek(dials, RadioDial.Mw(780), 1) == 2,
+                "seek left the current band");
+            TestAssert.That(RadioDialTuning.Seek(dials, RadioDial.Fm(90000), 1) == 1 &&
+                RadioDialTuning.Seek(dials, RadioDial.Fm(90000), -1) == 0,
+                "seek from between stations did not pick the nearest station each way");
+            TestAssert.That(RadioDialTuning.FirstInBand(dials, RadioBand.Mw) == 2 &&
+                RadioDialTuning.FirstInBand(dials, RadioBand.Fm) == 0,
+                "first-in-band did not find the lowest station of the band");
+            TestAssert.That(RadioDialTuning.FirstInBand(dials, RadioBand.Fm) >= 0 &&
+                RadioDialTuning.Seek(dials, RadioDial.Mw(780), 1) == 2,
+                "band isolation broke in seek or first-in-band");
+        }
+
+        private static void DialAndProgramming()
+        {
+            TestAssert.That(RadioDialAllocation.TryBuiltIn(BuiltInStationRules.AgrapolId, out RadioDial agrapol) &&
+                agrapol.IsFm && agrapol.FullText == "88.5 MHz",
+                "Agrapol dial was not the canonical FM frequency");
+            TestAssert.That(RadioDialAllocation.TryBuiltIn(BuiltInStationRules.BaseId, out RadioDial baseDial) &&
+                !baseDial.IsFm && baseDial.FullText == "780 kHz",
+                "Base dial was not the canonical MW frequency");
+            TestAssert.That(RadioDial.Fm(101900).FrequencyText == "101.9" &&
+                RadioDial.Fm(100000).FrequencyText == "100.0",
+                "FM frequency formatting lost a decimal");
+            TestAssert.That(!RadioDialAllocation.TryBuiltIn("user-thing", out _),
+                "a user station id claimed a built-in dial");
+
+            var used = new HashSet<int>();
+            RadioDial first = RadioDialAllocation.Allocate("Alpha Network", used);
+            RadioDial repeated = RadioDialAllocation.Allocate("Alpha Network", new HashSet<int>());
+            TestAssert.That(first.Equals(repeated), "dial allocation was not deterministic");
+            TestAssert.That(first.IsFm && first.Fraction >= 0f && first.Fraction <= 1f,
+                "allocated dial left the FM band");
+            TestAssert.That(RadioDialAllocation.TryFmSlot(first, out int slot) &&
+                slot >= 0 && slot < RadioDialAllocation.FmSlotCount,
+                "allocated dial was not on the FM slot grid");
+            TestAssert.That(!RadioDialAllocation.Allocate("Bravo Network", used).Equals(first),
+                "colliding stations were stacked on one frequency");
+            TestAssert.That(!RadioDialAllocation.TryFmSlot(baseDial, out _),
+                "an MW dial claimed an FM slot");
+
+            var full = new HashSet<int>();
+            for (int i = 0; i < RadioDialAllocation.FmSlotCount; i++)
+                RadioDialAllocation.Allocate("Station " + i, full);
+            TestAssert.That(full.Count == RadioDialAllocation.FmSlotCount,
+                "the dial allocator reused a slot before the band was full");
+
+            DateTime morning = new DateTime(2026, 1, 1, 8, 0, 0);
+            string morningShow = RadioProgramming.ProgramName(BuiltInStationRules.AgrapolId, morning);
+            TestAssert.That(morningShow == RadioProgramming.ProgramName(
+                BuiltInStationRules.AgrapolId, morning.AddHours(1)),
+                "one daypart chose two different programmes");
+            TestAssert.That(morningShow != RadioProgramming.ProgramName(
+                BuiltInStationRules.AgrapolId, new DateTime(2026, 1, 1, 2, 0, 0)),
+                "the night programme matched the morning programme");
+            TestAssert.That(
+                RadioProgramming.DaypartAt(new DateTime(2026, 1, 1, 4, 59, 0)) == RadioDaypart.Night &&
+                RadioProgramming.DaypartAt(new DateTime(2026, 1, 1, 5, 0, 0)) == RadioDaypart.Morning &&
+                RadioProgramming.DaypartAt(new DateTime(2026, 1, 1, 21, 59, 0)) == RadioDaypart.Evening &&
+                RadioProgramming.DaypartAt(new DateTime(2026, 1, 1, 22, 0, 0)) == RadioDaypart.Night,
+                "daypart boundaries drifted");
+
+            int genericCount = RadioProgramming.BulletinCount("user-unknown");
+            TestAssert.That(genericCount > 0 && genericCount <= RadioProgramming.MaximumBulletins &&
+                RadioProgramming.BulletinCount(BuiltInStationRules.MarisId) <= RadioProgramming.MaximumBulletins,
+                "bulletin tables were empty or exceeded their bound");
+            TestAssert.That(RadioProgramming.Bulletin("user-unknown", 999) ==
+                RadioProgramming.Bulletin("user-unknown", 999 % genericCount),
+                "bulletin rotation did not wrap within its table");
+            TestAssert.That(!string.IsNullOrEmpty(RadioProgramming.Slogan("user-unknown")) &&
+                RadioProgramming.Slogan(BuiltInStationRules.MarisId) != RadioProgramming.Slogan("user-unknown"),
+                "a station lost its voice");
         }
 
         private static void HuntMusicTransitions()

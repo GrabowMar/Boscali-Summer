@@ -7,14 +7,12 @@ namespace BoscaliSummer.Tests.Features.Trenches
     {
         public static void Run()
         {
-            TestZigzagOffsets();
-            TestSappingDistance();
-            TestFlankHookMath();
+            TestSappingAndLinking();
             TestStageProgressionRules();
             TestSectorLayout();
-            TestAssert.That(TrenchTacticalMath.DefenderBudget(1) == 2 && TrenchTacticalMath.DefenderBudget(2) == 4 &&
-                TrenchTacticalMath.DefenderBudget(3) == 6 && TrenchTacticalMath.DefenderBudget(4) == 6 &&
-                TrenchTacticalMath.DefenderBudget(5) == 6, "Defenses grow 2/4/6 then stop");
+            TestAssert.That(TrenchTacticalMath.DefenderBudget(1) == 2 && TrenchTacticalMath.DefenderBudget(2) == 3 &&
+                TrenchTacticalMath.DefenderBudget(3) == 4 && TrenchTacticalMath.DefenderBudget(4) == 4 &&
+                TrenchTacticalMath.DefenderBudget(5) == 4, "Defenses grow 2/3/4 and stay sparse");
             TestAssert.That(!TrenchTacticalMath.CanConstruct(false, 59, 60, 45), "Damage suppresses construction");
             TestAssert.That(TrenchTacticalMath.CanConstruct(false, 60, 60, 45), "Survivors resume after a full quiet minute");
             TestAssert.That(!TrenchTacticalMath.CanConstruct(true, 600, 60, 45), "An overrun position never rebuilds defenders");
@@ -24,43 +22,16 @@ namespace BoscaliSummer.Tests.Features.Trenches
             TestAssert.That(!TrenchTacticalMath.IsBuildableGround(float.NaN, 1f), "Unknown ground fails closed");
         }
 
-        private static void TestZigzagOffsets()
+        private static void TestSappingAndLinking()
         {
-            // Edge under 10m has no zigzags
-            TestAssert.That(TrenchTacticalMath.ComputeBayCount(8f) == 1, "Short trench has 1 bay");
-            TestAssert.That(TrenchTacticalMath.ComputeZigzagOffset(1, 8f) == 0f, "Short trench has 0 offset");
-
-            // 40m trench has multiple bays with alternating offsets
-            int bays = TrenchTacticalMath.ComputeBayCount(40f);
-            TestAssert.That(bays >= 4, "40m trench must have at least 4 bays");
-
-            float offset1 = TrenchTacticalMath.ComputeZigzagOffset(1, 40f);
-            float offset2 = TrenchTacticalMath.ComputeZigzagOffset(2, 40f);
-
-            TestAssert.That(offset1 > 0f, "Odd bay must displace forward toward threat");
-            TestAssert.That(offset2 < 0f, "Even bay must displace rearward into parados");
-            TestAssert.That(Math.Abs(offset1) <= 3.2f, "Offset must not exceed max clamp");
-        }
-
-        private static void TestSappingDistance()
-        {
-            TestAssert.That(!TrenchTacticalMath.IsSappingEligible(5f), "5m is too close for sapping link");
-            TestAssert.That(TrenchTacticalMath.IsSappingEligible(15f), "15m is ideal sapping range");
-            TestAssert.That(TrenchTacticalMath.IsSappingEligible(35f), "35m is valid sapping range");
-            TestAssert.That(!TrenchTacticalMath.IsSappingEligible(70f), "70m is too far for direct trench link");
-        }
-
-        private static void TestFlankHookMath()
-        {
-            // Threat is facing North (0, 1). Flank hook must extend South (0, -1).
-            TrenchTacticalMath.ComputeFlankHook(100f, 200f, 0f, 1f, 16f, out float hookX, out float hookZ);
-            TestAssert.That(Math.Abs(hookX - 100f) < 0.001f, "X should remain 100m");
-            TestAssert.That(Math.Abs(hookZ - 184f) < 0.001f, "Z should hook rearward to 184m");
-
-            // Threat is facing East (1, 0). Flank hook must extend West (-1, 0).
-            TrenchTacticalMath.ComputeFlankHook(50f, 50f, 1f, 0f, 20f, out float hookX2, out float hookZ2);
-            TestAssert.That(Math.Abs(hookX2 - 30f) < 0.001f, "X should hook rearward to 30m");
-            TestAssert.That(Math.Abs(hookZ2 - 50f) < 0.001f, "Z should remain 50m");
+            TestAssert.That(!TrenchTacticalMath.IsSappingEligible(5f), "5m is too close for a junction trench");
+            TestAssert.That(TrenchTacticalMath.IsSappingEligible(15f), "15m is ideal junction range");
+            TestAssert.That(TrenchTacticalMath.IsSappingEligible(35f), "35m is still a valid junction");
+            TestAssert.That(TrenchTacticalMath.IsSappingEligible(TrenchTacticalMath.LinkRange),
+                "A full-link gap is joinable");
+            TestAssert.That(!TrenchTacticalMath.IsSappingEligible(70f), "70m is too far for a direct junction");
+            TestAssert.That(TrenchTacticalMath.LinkMargin >= TrenchTacticalMath.LinkRange,
+                "The junction corridor margin covers the whole joinable gap");
         }
 
         private static void TestStageProgressionRules()
@@ -77,7 +48,10 @@ namespace BoscaliSummer.Tests.Features.Trenches
 
             TestAssert.That(TrenchTacticalMath.EvaluateNextStage(4, 12, 13, 0) == 4, "A support line without a dugout stays Stage 4");
             TestAssert.That(TrenchTacticalMath.EvaluateNextStage(4, 12, 13, 1) == 5, "A linked support line advances to Stage 5");
-            TestAssert.That(TrenchTacticalMath.EvaluateNextStage(5, 21, 24, 2) == 5, "A finished belt never advances further");
+            TestAssert.That(TrenchTacticalMath.EvaluateNextStage(5, 17, 18, 1) == 5, "A belt missing a dugout cannot sap forward");
+            TestAssert.That(TrenchTacticalMath.EvaluateNextStage(5, 17, 16, 2) == 5, "An unjoined support span cannot sap forward");
+            TestAssert.That(TrenchTacticalMath.EvaluateNextStage(5, 17, 18, 2) == 6, "A whole belt advances to forward saps");
+            TestAssert.That(TrenchTacticalMath.EvaluateNextStage(6, 19, 20, 2) == 6, "A finished belt never advances further");
         }
 
         private static void TestSectorLayout()
@@ -90,8 +64,13 @@ namespace BoscaliSummer.Tests.Features.Trenches
                 "Huge border sides cap at the network half-width");
             TestAssert.That(TrenchTacticalMath.CapFlankLimit(80f) == TrenchTacticalMath.MinFlankHalfLength,
                 "Tight border sides keep the minimum half-width");
-            TestAssert.That(TrenchTacticalMath.SupportLineDepth > 0f && TrenchTacticalMath.RearLineDepth >
-                TrenchTacticalMath.SupportLineDepth, "Support line outranks the rear line in depth");
+            TestAssert.That(TrenchTacticalMath.SupportLineDepth >= 100f && TrenchTacticalMath.RearLineDepth >= 200f,
+                "Support and rear lines sit at deliberate field-position depth");
+            TestAssert.That(TrenchTacticalMath.ForwardLimit > TrenchTacticalMath.SapDepth &&
+                TrenchTacticalMath.SapDepth > TrenchTacticalMath.SupportLineDepth * 0.2f,
+                "Forward saps push a real listening post toward the enemy");
+            TestAssert.That(TrenchTacticalMath.MaxFlankHalfLength * 2f + TrenchTacticalMath.LinkRange >= 380f,
+                "Flank reach plus a junction trench spans the 380m sector spacing");
         }
     }
 }

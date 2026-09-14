@@ -314,6 +314,11 @@ namespace BoscaliSummer.Features.Command.Presentation
                 },
                 ChipCount, Width, height, _ => nextRefresh = 0f);
 
+            // The command metric's caption carries the staff's active/KIA split; the sheet's
+            // tracking ellipsised it in the cell. Tighter tracking keeps the full reading.
+            if (shell.Metrics.Length > 2 && shell.Metrics[2].Caption != null)
+                shell.Metrics[2].Caption.characterSpacing = 0f;
+
             BuildSaPage(shell.CreatePage(TabSa, "SaPage"));
             BuildFrontPage(shell.CreatePage(TabFront, "FrontPage"));
             BuildTaskingPage(shell.CreatePage(TabTasking, "TaskingPage"));
@@ -1053,7 +1058,13 @@ namespace BoscaliSummer.Features.Command.Presentation
                 : "No contested ground · doctrine " + CommandDoctrineHelper.GetName(command.ActiveDoctrine);
 
             if (highCommand != null && highCommand.Available)
+            {
                 text += " · command " + TheaterReadout.Percent(Mathf.Clamp01(highCommand.FriendlyCohesion));
+                // The staff's own signal (a stipend, a commendation, a kill) is the COC page's
+                // feedback line; it rides the pinned status strip instead of costing a row.
+                if (shell != null && shell.Page == TabCoc && !string.IsNullOrEmpty(highCommand.Signal))
+                    text += " · " + highCommand.Signal;
+            }
             return text;
         }
 

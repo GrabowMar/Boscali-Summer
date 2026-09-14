@@ -96,6 +96,29 @@ Decisions that cost an argument. Kept so they are not made again the other way.
   installed map's tactical clip. The existing two sources and vanilla handoff preserve
   prior station/track/position/pause state; manual transport takes ownership for the rest
   of the hunt. Radio sends no music metadata or additional multiplayer messages.
+- **The panel is a receiver, not a music browser.** Stations live on an FM/MW dial: the
+  three built-ins keep canonical frequencies and user folders take a stable name-hashed FM
+  slot (linear probe on collision), so a stored preset still lands on the same station after
+  a rescan. The hero frequency, programme log and morse ident carry the fiction; carrier
+  static, squelch and idents are generated in memory, never bundled — the copyright boundary
+  from the bullet above is unchanged.
+- **Tuning is a dial, not a list.** TUNE steps the band increment (0.2 MHz FM / 10 kHz MW)
+  and any non-station position is dead air with a carrier bed; SEEK jumps stations and
+  crosses bands when the current band runs out, and locking back on resumes the programme
+  the player left. MW is AM by nature, so it keeps the broadcast curve regardless of the
+  FM filter setting, and the `Volume` knob scales music, carrier and idents together. Enemy
+  ace chatter reaches the hero wire line as an INTERCEPT via the read-only
+  `ISquadView.LastChatter` property: text only, client-local, no new messages and no music
+  metadata.
+- **Broadcast character is a setting, not a cage.** Clean / Light / Broadcast choose how
+  much band-limit and receiver crunch the music gets, and the synthesized carrier and ident
+  can be switched off independently. The signal meter samples the tuned source's real output
+  level; programme blocks, wire copy and signal labels are client-local presentation and
+  never touch playback authority or the network.
+- **The wire is flavour, not a transcript.** Channel traffic (tuning, programme changes,
+  station copy, intercepted chatter) rotates through a single hero line; the panel's spare
+  room goes to the tuned station's programme log of tracks, which is clickable and paged.
+  Nothing in the log is authoritative and nothing is transmitted.
 
 ## Progression and support
 
@@ -169,14 +192,50 @@ Decisions that cost an argument. Kept so they are not made again the other way.
   follows the actual corridor (front line through the rear line) row by row — the same
   rectangle the earthworks will occupy — with gentler height tolerance. Roads are
   irrelevant to a defensive line and were removed as a placement preference.
+- **Trenches are dug where troops actually meet.** Command already tracks objective ground
+  presence for both sides; a border where one force is absent reports zero pressure and is
+  not fortifiable, no matter how the stale control history reads. Candidates sort by that
+  pressure, and sites sit 60m behind the border rather than 150m, so the belt hugs the
+  front instead of decorating a quiet field. The map's projected trace is the same
+  contested-site list, so the icon predicts exactly where earthworks will appear.
+- **Depth follows deliberate field positions, not decoration.** A real position layers a
+  support line roughly 110m and a redoubt line roughly 220m behind the fire trench,
+  linked by communication trenches; a final stage pushes short saps into no man's land
+  ending in listening posts. Saps stay inside the owned corridor, so they stop at the
+  border instead of crossing into ground the network's validator rejects.
+- **A front line is continuous, not a scatter of strongpoints.** Mature same-faction
+  sectors extend their fire and support lines to the flank limit and a junction trench
+  joins their ends whenever the gap is sapping-eligible (8–55m). The 380m sector spacing
+  leaves a 28m seam, tiny next to a 352m sector span, so a chain of sectors reads as one
+  unbroken line spanning kilometres. Flank hooks were removed: for a linear front they
+  built a pointless basket, and junction linking is what actually closes the line.
+- **Strongpoints are the game's own scenery, the ditch stays procedural.** Works are small
+  infantry-scale pieces (HESCO/sandbag/light gabion) filtered at runtime from
+  `Encyclopedia.Lookup` by keyword and footprint — vehicle-scale hull-down ramps, shelters
+  and concrete walls are rejected before they can become encampments in a field. Pieces
+  spawn as networked `Scenery` on the trench line nodes themselves, so they read as part
+  of the position, and replicate to clients. The carved ditch between them is the only
+  generated geometry. Earlier procedural sandbag/concrete bays and pits read as white
+  boxes and were deleted outright; a build with no matching piece stays ditch-only and
+  logs once.
+- **The earthwork follows the ground it sits on.** The ditch centreline is sampled to
+  terrain, and each cross-section's outer berm toe and skirt tip sample the ground on
+  their own side, so a cross-slope meets the berm instead of running under or above it.
+  Corridor validation was tightened (per-row ≤3m, row-to-row ≤8m) so big rolling terrain
+  is rejected up front rather than sculpted over.
 - **Raised earthworks are the only non-destructive shape.** The trench floor sits at grade
   because cutting `TerrainData` is banned; apparent depth comes from a high parados and
-  sandbag parapet over deep skirts, not from a hole in the terrain. Widening the profile
+  parapet over deep skirts, not from a hole in the terrain. Widening the profile
   beyond a thin strip is what makes the position read as fieldworks from the air.
-- **One profile, one palette texture.** Every edge shares a ten-point cross-section whose
-  UVs map onto a baked 256px texture (grass fringe, earth, timber, duckboards, sandbags).
-  That gives material variety at one draw call per edge without an artist bundle; an
-  artist `trenches.bundle` still replaces LOD0 when present.
+- **One profile, one palette texture.** Every ditch edge shares a ten-point cross-section
+  whose UVs map onto a baked 256px texture (grass fringe, excavated spoil, timber
+  revetment, duckboard floor, packed earth crest). That gives material variety at one draw
+  call per edge with no external bundle dependency.
+- **Sparse weapons, interlocking positions.** Four native emplacements per sector (two MG
+  teams on the flanks, an ATGM on the fire-line centre, a MANPADS back at support) are
+  deliberately few: they interlock rather than crowd, and the scenery does the visual
+  work. Vehicles are stopped by a bounded line of low obstacle boxes on the fire trench,
+  not by a collider per ditch segment.
 - **Growth stages are atomic and announced.** A stage either completes entirely or changes
   nothing and retries; the simulator records the rejection reason so a stalled belt is
   diagnosable instead of silently stuck. The stage gate is pure and unit-tested.
@@ -195,16 +254,20 @@ Decisions that cost an argument. Kept so they are not made again the other way.
   the lead vehicle are separate watched assets; only the asset carrying the person can kill
   them. That turns strikes on empty posts into a legible LARP beat and makes relocation a
   real risk decision.
-- **Generated identities are seed functions.** Name, rank, traits, bio and portrait pixels
-  all derive from a synced seed, so nothing cosmetic crosses the wire beyond the seed; the
-  host still sends name/rank/role because those are authoritative.
+- **Generated identities are seed functions.** Name, rank, traits and bio derive from a
+  synced seed, and the portrait is the same generated paper doll Wing Command draws for
+  aces and wingmen, keyed off the authoritative name; the host still sends name/rank/role
+  because those are authoritative, and Boscali borrows the sprite rather than owning one.
 - **Command posts are spawned mod buildings, not authored map structures.** User decision:
   predictable identity (`BoscaliSummer:HighCommand:<faction>:<slot>:<serial>`), the same
   dry-ground placement checks DynamicOperations uses, and it works on any terrain. Binding
   to an authored airbase building remains a possible later refinement.
 - **Enemy intel is a server-side sight record with a 45s memory.** One 1 Hz pass over
-  `UnitRegistry.allUnits` (4096 cap) marks posts seen by faction units; unknown nodes are
-  omitted from snapshots and their positions zeroed, so a modified client gains nothing.
+  `UnitRegistry.allUnits` (4096 cap) marks posts seen by faction units. The console hosts
+  both staffs, so every enemy post is listed by identity; an unconfirmed post's position,
+  movement and kill-list mark stay host-side, and its dossier reads unconfirmed. A global
+  wire id (faction index × slot) keeps a bounty order from resolving to a same-numbered
+  post in the local tree.
 - **Map markers were deliberately cut.** The dossier names the base and the existing sector
   grid gives navigation; a native marker patch is deferred to avoid a second UI seam.
 

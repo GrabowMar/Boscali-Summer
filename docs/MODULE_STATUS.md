@@ -41,10 +41,11 @@ tests/BoscaliSummer.Tests -c Release`): **passes** (module + framework + archite
 | Dynamic operations | `dynamic-operations` | **off** | — | **Experimental** |
 | Chain of command | `high-command` | on | — | **Unverified** (new module) |
 | Trenches | `trenches` | on | Command | **Combat implementation; in-game acceptance pending** |
+| World events | `events` | on | — | **Unverified** (new module) |
 | Weather | — | — | — | **Absent** (archived) |
 
 Load order (composition root): fire → urban → radio → qol → squad → progression → support →
-command → dynamic-operations → high-command → trenches. Progression/Support/Command are simply not constructed when
+command → dynamic-operations → high-command → trenches → events. Progression/Support/Command are simply not constructed when
 disabled; Squad is installed with Progression. `qol`, `dynamic-operations`, and `trenches`
 are gated on their own `Enabled` flag. The whole plugin now requires Wing Command `0.9.2.6`+
 with its public Squad API.
@@ -117,7 +118,10 @@ servers skip it.
 |---|---|---|---|
 | OGG/WAV library, directory channels, async decode | `Runtime/RadioLibrary.cs`, `Runtime/RadioManager.cs` | Stable | 32 channels / 512 tracks / 1 active decode |
 | Three built-in stations (Agrapol FM, Maris Network, Base Broadcast) | `Runtime/RadioStarterLayout.cs`, `Runtime/RadioStation.cs` | Stable | Embedded 256px PNG identities; no bundled audio |
-| MFD panel — transport, shuffle, repeat, rescan, folder shortcut | `Presentation/RadioPanel.cs`, `Presentation/PngIconHeader.cs` | Stable | |
+| Receiver panel — FM/MW dial, signal meter, transport, presets, SCAN | `Presentation/RadioPanel.cs`, `Runtime/RadioFrequencies.cs` | Unverified | In-game visual acceptance pending; frequencies and presets client-local |
+| Fine tuning, dead-air carrier, band switch, volume knob | `Runtime/RadioFrequencies.cs`, `Runtime/RadioManager.cs` | Unverified | FM 0.2 MHz / MW 10 kHz steps; MW always AM; client-local |
+| Programme log (tuned station's tracks, click to play) and rotating wire line | `Runtime/RadioProgramming.cs`, `Runtime/RadioManager.cs`, `Presentation/RadioPanel.cs` | Unverified | Paged list, ring-bounded wire text; intercepts read `ISquadView.LastChatter` (read-only) |
+| Synthesized receiver audio — carrier, squelch, morse ident, broadcast filter | `Runtime/RadioBroadcastFx.cs` | Unverified | Generated in memory; no bundled asset; no music metadata crosses the wire |
 | Custom `station.png` loading (≤256×256, ≤256 KiB) | `Presentation/RadioStationIconCache.cs` | Stable | |
 | Vanilla-music ownership handoff (defer while on air, restore on stop) | `Patches/VanillaMusicPatches.cs` | Stable | Play / CrossFade / Queue patches |
 | Hunt soundtrack and previous station/position/pause restoration | `Runtime/RadioManager.cs`, `Runtime/HuntMusicGate.cs` | Unverified | Local Hunt station or installed tactical clip; manual transport wins, including snapshot recovery |
@@ -172,7 +176,7 @@ through `ISquadView`. Public Wing Command API reuse; no copied generator or wing
 
 Hard caps: 64 careers, four owned wings, four aircraft/wing, 32 encounter records,
 900-second aircraft lifetime. After pursuit, surviving aircraft resume normal AI
-within that lifetime. Friendly wings remain managed in WMC.
+within that lifetime. Friendly wings are read-only here; recruiting and orders remain in WMC.
 
 **Needs attention:** single-player/listen-host/client/late-join, target ejection and
 respawn, both life modes, survivor return evidence, music transitions and scene cleanup.
@@ -192,7 +196,7 @@ Command (they consume `IPlayerPerks` / `IProgressionView` only).
 | Score → points (1 per `ScorePerPoint`, cap `MaximumPoints`) | `Runtime/PerkCatalog.cs` (`PerkPoints`), `Runtime/ProgressionManager.cs` | Stable | Reads `Player.PlayerScore`; rank shown as flavour only |
 | Flat 9-perk catalogue, per-perk cost, no prerequisites | `Runtime/PerkCatalog.cs` | Stable | 5 passives + 4 support authorisations; 12 points to buy the whole board |
 | Passive effects — fuel use, combat/service/objective reward, support cost | `Patches/ProgressionPatches.cs` | Stable | Hooks `Aircraft.UseFuel` + `FactionHQ.RewardPlayer`; reward mapped by enum member |
-| SQD presentation — pilot dossier, shared skill board, enemy wings and pursuit HUD | `Presentation/SqdMfdPanel*.cs`, `Presentation/SqdGlyphs.cs`, `Presentation/EmblemRenderer.cs`, `Presentation/AceHuntHud.cs` | Unverified | Uses `IProgressionView` and `ISquadView`; friendly wings remain in WMC |
+| SQD presentation — pilot dossier, shared skill board, friendly/hostile wings and pursuit HUD | `Presentation/SqdMfdPanel*.cs`, `Presentation/SqdGlyphs.cs`, `Presentation/EmblemRenderer.cs`, `Presentation/AceHuntHud.cs` | Unverified | Uses `IProgressionView` and `ISquadView`; the friendly wing is a read-only roster and hostile wings carry a deterministic generated crest |
 | Shared combat-skill presentation (AI/ace skills beside player skills) | `Runtime/AceSkillCatalog.cs`, `SqdMfdPanel.Skills.cs`, `SqdMfdPanel.Wings.cs` | Unverified | Display metadata over Wing Command's replicated four-bit `AbilityMask`; grants nothing |
 | Wing Command custom-pilot studio (edit/save/recruit) | `Presentation/SqdMfdPanel.Studio.cs`, `Infrastructure/GameInterop/WingLink.cs` | Unverified | Additive companion API resolved separately; page fails closed on older Wing Command builds |
 | Local squadron identity — procedural/PNG emblem, name, local pilot profile | `Runtime/EmblemDesign.cs`, `Presentation/EmblemRenderer.cs`, `Configuration/ProgressionSettings.cs` | Unverified | Client-local cosmetics; never networked |
@@ -353,11 +357,11 @@ AI, spawn or damage behaviour is touched.
 
 | Feature | Where | Status | Notes |
 |---|---|---|---|
-| Deterministic roster — 6 posts, names, traits, bios, portraits | `Domain/CommanderGenerator.cs`, `Domain/CommandTree.cs`, `Domain/PortraitDesign.cs`, `Presentation/CommanderPortraitRenderer.cs` | Pure suite passes | Seed-stable across host/client; 64-entry portrait cache cleared on reset |
+| Deterministic roster — 6 posts, names, traits, bios, Wing Command portraits | `Domain/CommanderGenerator.cs`, `Domain/CommandTree.cs`, `Runtime/HighCommandManager.cs` | Pure suite passes | Seed-stable across host/client; portrait sprite borrowed from Wing Command's generated pilot pool (never destroyed here) |
 | Spawned command posts, last-damage kill credit, succession | `Runtime/HighCommandManager*.cs`, `Patches/HighCommandDamagePatch.cs` | Awaiting in-game validation | Death via `Unit.onDisableUnit`; bounty to the hostile faction that dealt the last damage; destroyed post rebuilt after `PostRespawnSeconds` |
-| VIP convoys, relocation orders, intel fog | `Runtime/HighCommandManager.Assets.cs` | Awaiting in-game validation | 1 transfer/faction, 8 convoys; lead vehicle carries the VIP; 45s intel memory, 2.6/4.2km reveal |
-| Protocol-1 snapshot/intents, per-faction scoping | `Networking/HighCommandNet.cs` | Awaiting in-game validation | Unknown enemy nodes omitted, positions zeroed; 32-node ceiling; 2s action throttle |
-| STR COC page and third COMMAND metric | `modules/Command/Presentation/StrMfdPanel.Coc.cs` | Awaiting in-game visual check | Tree guides, dossier, portrait, traits, bio, COMMEND / RELOCATE / MARK BOUNTY |
+| VIP convoys, relocation orders, intel fog | `Runtime/HighCommandManager.Assets.cs` | Awaiting in-game validation | 1 transfer/faction, 8 convoys; lead vehicle carries the VIP; 45s intel memory, 2.6/4.2km reveal; unconfirmed enemy posts withhold position, transit and bounty |
+| Protocol-1 snapshot/intents, per-faction scoping, global post ids | `Networking/HighCommandNet.cs` | Awaiting in-game validation | Both staffs listed by identity; global id folds in the faction index; 32-node ceiling; 2s action throttle |
+| STR COC page and third COMMAND metric | `modules/Command/Presentation/StrMfdPanel.Coc.cs` | Awaiting in-game visual check | Both-faction roster, tree guides, dossier with generated portrait, traits, bio, COMMEND / RELOCATE / MARK BOUNTY |
 
 Config: `HighCommand.Enabled` (true), `EconomyEnabled` (true), `StipendIntervalSeconds`
 (120), `MaximumStipends` (10), bounties 1500/3000/6000, `MarkedBountyPercent` (50),
@@ -376,29 +380,66 @@ Config: `HighCommand.Enabled` (true), `EconomyEnabled` (true), `StipendIntervalS
 
 ## Trenches — `trenches`
 
-**Purpose:** autonomous node-based modular trench networks, geometric growth simulation,
-procedural parapet/berm meshes, and tactical map crenellations. Non-destructive terrain
-solution designed for high flight-sim performance.
+**Purpose:** contested-frontier trench systems — chain-of-sector placement, geometric growth
+simulation, carved ditch meshes, real game scenery strongpoints, and tactical map
+symbology. Non-destructive terrain solution designed for high flight-sim performance.
 
 | Feature | Where | Status | Notes |
 |---|---|---|---|
-| Domain math — zigzag traverses, sapping criteria, flank hooks, belt stage progression | `Domain/TrenchTacticalMath.cs` | Stable | Pure C#, verified by unit tests |
-| Graph data model — nodes, edges, network corridor bounds | `Runtime/TrenchNode.cs`, `Runtime/TrenchEdge.cs`, `Runtime/TrenchNetwork.cs` | Stable | 16 networks / 64 nodes / 96 edges per network hard ceiling |
-| Growth — 132m seed line, flank extension, support line, rear redoubt | `Runtime/TrenchGrowthSimulator.cs` | Unity regression passed | Five stages / four growth ticks; atomic additions with rejection reasons; default 45s per step |
-| Combat — native MG/AT/AA emplacements, suppression, permanent losses | `Runtime/TrenchGarrison.cs` | Adapter regression passed; in-game acceptance pending | 2/4/6 defenders spread along the sector line, six/site and 96 total; damage pauses construction 60s; no healing or replacement |
-| Scene manager — frontline sector-slot chain, corridor validation, cleanup | `Runtime/TrenchManager.cs`, `Runtime/TrenchPlacement.cs` | Awaiting in-game validation | Reset order 60; Command contract, one slot/frame; 360m/250m spacing; host only |
-| Procedural mesh generator — wide berms, parados, sandbag parapet, pits, dugouts | `Visuals/TrenchMeshBuilder.cs` | Stable | Zero terrain edits; shared 10-point cross-section profile; prevents PhysX stalls and resolution artifacts |
-| Material resolver — procedural cross-section palette + native concrete/sandbags | `Visuals/TrenchMaterialResolver.cs` | Stable | Zero external asset bundle dependencies; native URP lighting; one baked 256px texture per scene |
-| 3-tier flight LOD chunks — continuous LOD0, LOD1/2 + collider distance culling | `Visuals/TrenchVisualChunk.cs` | Stable | Full 3D + colliders < 250m (two-bay boxes), berms 250m–1.2km, ground scar 1.2km–3.5km, culled > 3.5km |
-| Tactical map overlay — NATO APP-6 crenellated trench lines & strongpoint marks | `Presentation/TrenchMapOverlay.cs` | Stable | Reset order 61; hooks `DynamicMap.mapImage` |
+| Domain math — traverses, sapping/junction criteria, belt stage progression | `Domain/TrenchTacticalMath.cs` | Stable | Pure C#, verified by unit tests |
+| Graph data model — nodes, edges, network corridor bounds, junction margin | `Runtime/TrenchNode.cs`, `Runtime/TrenchEdge.cs`, `Runtime/TrenchNetwork.cs` | Stable | 16 networks / 64 nodes / 96 edges per network hard ceiling |
+| Growth — 132m seed line, full-flank fire/support lines, support line (110m), rear redoubt (220m), forward saps | `Runtime/TrenchGrowthSimulator.cs` | Unity regression passed | Six stages / five growth ticks; atomic additions with rejection reasons; default 45s per step |
+| Combat — 4 native MG/ATGM/MANPADS emplacements, suppression, permanent losses | `Runtime/TrenchGarrison.cs` | Adapter regression passed; in-game acceptance pending | Sparse and spread across fire/support lines; damage pauses construction 60s; no healing or replacement |
+| Works — infantry-scale vanilla scenery on the ditch line (HESCO/sandbag/light gabion) | `Runtime/TrenchWorks.cs` | Awaiting in-game validation | 8 works/network on trench-line nodes; runtime keyword+footprint filter (≤6m) rejects vehicle-scale pieces; selected keys logged once; no match stays ditch-only |
+| Scene manager — contested-front sector chain, junction linking, corridor validation, cleanup | `Runtime/TrenchManager.cs`, `Runtime/TrenchPlacement.cs` | Awaiting in-game validation | Reset order 60; Command contract (pressure-ranked), one slot/frame; 8 slots/site; 360m/250m spacing; per-row ≤3m, row-to-row ≤8m; host only |
+| Ditch mesh generator — carved earthwork profile conformed to each side's ground | `Visuals/TrenchMeshBuilder.cs` | Unity render passed | Zero terrain edits; shared 10-point cross-section; outer berm/skirt sample terrain per side; no procedural strongpoints |
+| Material resolver — procedural ditch cross-section palette | `Visuals/TrenchMaterialResolver.cs` | Unity render passed | No external bundles; native URP lighting; one baked 256px texture per scene |
+| 3-tier flight LOD chunks — continuous LOD0, LOD1/2 + front-line obstacle boxes | `Visuals/TrenchVisualChunk.cs` | Stable | Full 3D + ≤48 obstacle boxes < 250m, berms 250m–1.2km, ground scar 1.2km–3.5km, culled > 3.5km |
+| Tactical map overlay — NATO APP-6 crenellated fire line, strongpoints, projected contested trace | `Presentation/TrenchMapOverlay.cs` | Stable | Reset order 61; hooks `DynamicMap.mapImage`; front line solid, rear traces dim, crenellations face the threat |
 
 Config: `Trenches.Enabled` (true), `GrowthIntervalSeconds` (45s), `MaxNetworks` (16, max 16),
 `LODNearDistance` (250m), `LODFarDistance` (3500m), `ShowOnTacticalMap` (true).
 
 **Needs attention**
-- In-game flight session verification (all LODs, map markers, origin shifts, frontline sector-slot placement, corridor ground fit).
-- Native defenders use vanilla replication; procedural earthworks/map marks remain host-local. Verify host/client/late-join targeting, destruction and cleanup in-game.
-- Future high-poly custom asset injection pipeline via AssetBundles when artist models are authored.
+- In-game flight session verification (all LODs, works placement, map markers, origin shifts, sector chain/junction seams, corridor ground fit).
+- Native defenders and scenery works use vanilla replication; carved ditches/map marks remain host-local. Verify host/client/late-join targeting, destruction and cleanup in-game.
+- `TrenchWorks` selects infantry scenery at runtime from the game encyclopedia by keyword
+  (`hesco`/`sandbag`/`gabion`/`dugout`) and footprint (≤6m); it logs the chosen keys once.
+  Verify the selected pieces read as infantry positions in-game; a game update that
+  resizes or renames them degrades safely to ditch-only sectors.
+
+---
+
+## World events — `events`
+
+**Purpose:** a host-rotated feed of curated mission-wide events, each with a real support-cost
+modifier and a bounded mission history on its own `EVN` bezel screen. **Default on.** New
+module. Publishes `IActiveEventsView`; Support optionally multiplies it into support pricing.
+Installs independently and owns no Harmony patches.
+
+| Feature | Where | Status | Notes |
+|---|---|---|---|
+| Curated catalog — 12 economic/political/hazard entries, ids, honest flavor text | `Domain/EventCatalog.cs`, `Domain/EventDefinition.cs` | Pure suite passes | Two flavor-only entries keep the texture from being 100% mechanical |
+| Deterministic selection — avoids the last 3 entries, duration inside each window | `Domain/EventSelector.cs` | Pure suite passes | Seeded from mission generation + rotation counter; `Deterministic.Hash` only |
+| Host rotation, heartbeat, bounded history, client mirror | `Runtime/EventsManager.cs` | Awaiting in-game validation | 1 Hz tick; one event at a time; 15 s heartbeat for late joiners; history ≤ `HistoryLength` (16) |
+| Protocol-2 state + response — catalog index + mission timestamps; intent/reply for the decision | `Networking/EventsNet.cs` | Awaiting in-game validation | -1 = calm; title/flavor stay catalog-local; no backfill; a query converges a mid-mission reconnect |
+| Response decision — CONTAIN/LEVERAGE once per player, host-priced from severity | `Runtime/EventsManager.cs`, `Domain/EventSelector.cs` | Awaiting in-game validation | 200–1200 allocation rounded to 50; `player.SetAllocation` on the host; response map ≤ 64, cleared on rotation |
+| `EVN` screen — pinned active card, countdown bar, response control, reverse-chronological history | `Presentation/EventsMfdPanel.cs` | Awaiting in-game visual check | Reset order 63; fails closed with no free bezel slot (prefers right) |
+| Icon fallback — embedded PNG per icon key, vector category glyph otherwise | `Presentation/EventIconCache.cs`, `Presentation/EventGlyph.cs` | Stable | No PNGs shipped yet; drop `modules/Events/Assets/<icon_key>.png` in to light them up |
+| Support cost seam — both shared pricing points, per player | `modules/Support/Runtime/SupportManager.cs` | Awaiting in-game validation | Action `Cost` and satellite/facility/EW `Price` resolve `IActiveEventsView.SupportCostMultiplierFor(playerId)` late; exactly 1 when calm |
+
+Config: `Events.Enabled` (true), `RotationGapMinSeconds`/`MaxSeconds` (90/240),
+`EffectStrength` (1.0, 0–2), `HistoryLength` (16).
+
+**Needs attention**
+- In-game acceptance is **pending for every behaviour**: the EVN bezel slot claim (the
+  screen prefers the right column and fails closed when the bezel is full), card layout,
+  rotation timing, the heartbeat/late-join path, and a support action price visibly
+  changing with the active event and reverting when it ends.
+- The response path (host pricing, allocation deduction, per-player reply, reconnect query,
+  remote-client pricing agreement) has pure tests for its math but no live multiplayer run.
+- Only support allocation cost is affected. Faction morale and vanilla aircraft/unit prices
+  are deliberate follow-ons; no catalog text may claim them until a real seam exists.
 
 ---
 

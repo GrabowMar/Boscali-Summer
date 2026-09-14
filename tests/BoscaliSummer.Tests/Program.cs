@@ -36,9 +36,11 @@ namespace BoscaliSummer.Tests
             MfdNewsTickerTests.Run();
             MfdSecondaryObjectivesTests.Run();
             MfdMissionOverviewTests.Run();
+            MfdMissionLabelsTests.Run();
             Features.DynamicOperations.OperationTests.Run();
             Features.DynamicOperations.OperationTitlesTests.Run();
             Features.HighCommand.HighCommandTests.Run();
+            Features.Events.EventSelectorTests.Run();
             TrenchTests.Run();
             ModuleBoundaryTests.Run();
 

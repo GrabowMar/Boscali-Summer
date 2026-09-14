@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using BepInEx.Bootstrap;
 using NOAvionics;
@@ -290,6 +291,28 @@ namespace BoscaliSummer.Runtime
                 if (ResolveMembership() == null || count == null) return 0;
                 try { return count.GetValue(null) is int value ? value : 0; }
                 catch (Exception error) { FailMembership(error); return 0; }
+            }
+        }
+
+        /// <summary>Live friendly wingmen in published wing order; a null entry is a slot no
+        /// longer in the scene. The destination list is reused by the caller.</summary>
+        public static void ResolveWingAircraft(List<Aircraft> destination)
+        {
+            if (destination == null) return;
+            destination.Clear();
+            int[] ids = PresenceBoard.GetInts(PresenceBoard.WingMemberIds);
+            if (ids.Length == 0) return;
+            List<Aircraft> all = UnitRegistry.allAircraft;
+            for (int i = 0; i < ids.Length && i < 16; i++)
+            {
+                Aircraft match = null;
+                for (int j = 0; j < all.Count; j++)
+                {
+                    Aircraft aircraft = all[j];
+                    if (aircraft != null && aircraft.persistentID.GetHashCode() == ids[i])
+                    { match = aircraft; break; }
+                }
+                destination.Add(match);
             }
         }
 

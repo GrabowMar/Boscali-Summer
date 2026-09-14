@@ -11,6 +11,7 @@ namespace BoscaliSummer.Features.Support.Configuration
         public ConfigEntry<bool> EmpEnabled { get; }
         public ConfigEntry<bool> FlareBarrageEnabled { get; }
         public ConfigEntry<bool> CyberEnabled { get; }
+        public ConfigEntry<bool> EwEnabled { get; }
         public ConfigEntry<bool> ShowOnTacticalMap { get; }
 
         public ConfigEntry<int> MaximumSatellites { get; }
@@ -34,6 +35,10 @@ namespace BoscaliSummer.Features.Support.Configuration
         public ConfigEntry<float> MaximumRange { get; }
         public ConfigEntry<float> RequestCooldown { get; }
         public ConfigEntry<float> ReconRadius { get; }
+
+        public ConfigEntry<float> EwTruckCost { get; }
+        public ConfigEntry<float> EwProximityRadius { get; }
+        public ConfigEntry<float> SatelliteLaunchTransitSeconds { get; }
 
         public ConfigEntry<string> ArtilleryDefinitionKey { get; }
 
@@ -63,8 +68,11 @@ namespace BoscaliSummer.Features.Support.Configuration
                 "Flare barrage: launches an airburst countermeasure missile that disperses a cluster of " +
                 "intense pyrotechnic flares, seducing and misguiding all IR-seeking missiles in the area.");
             CyberEnabled = config.Bind("Support", "CyberOperations", true,
-                "Enable the CYBER page: infrastructure investment and the information-warfare " +
-                "operations it unlocks (ping sweep, track uplink, radar blackout, ghost shield, " +
+                "Enable the CYBER page: infrastructure investment and the signals-intelligence " +
+                "operations it unlocks (ping sweep, track uplink). Host-authoritative.");
+            EwEnabled = config.Bind("Support", "ElectronicWarfare", true,
+                "Enable the EW page: build a radar truck, unload it into a static encampment, " +
+                "and the electronic-warfare operations it unlocks (radar blackout, ghost shield, " +
                 "spoof contacts). Host-authoritative.");
             ShowOnTacticalMap = config.Bind("Support", "ShowOnTacticalMap", true,
                 "Show ability range circles, tactical vector icons, satellite tracks and active " +
@@ -166,6 +174,23 @@ namespace BoscaliSummer.Features.Support.Configuration
                     "revealed per sweep, so a very large radius reveals a sparser picture rather " +
                     "than more of it.",
                     new AcceptableValueRange<float>(500f, 20000f)));
+
+            EwTruckCost = config.Bind("Support", "EwTruckCost", 1200f,
+                new ConfigDescription(
+                    "Allocation charged to deploy a mobile EW radar truck, before CostMultiplier. " +
+                    "One per faction; unloading it into an encampment is free.",
+                    new AcceptableValueRange<float>(0f, 20000f)));
+            EwProximityRadius = config.Bind("Support", "EwProximityRadiusMeters", 15000f,
+                new ConfigDescription(
+                    "How close the faction's EW truck or encampment must be to a hack's target " +
+                    "for Radar Blackout, Ghost Shield or Spoof Contacts to be authorised.",
+                    new AcceptableValueRange<float>(1000f, 60000f)));
+            SatelliteLaunchTransitSeconds = config.Bind("Support", "SatelliteLaunchTransitSeconds", 20f,
+                new ConfigDescription(
+                    "How long a freshly-launched satellite spends in transit before it reaches " +
+                    "station and starts providing coverage. Reuses the same Transit state and " +
+                    "countdown a repositioning satellite already goes through.",
+                    new AcceptableValueRange<float>(5f, 120f)));
 
             ArtilleryDefinitionKey = config.Bind("Support", "FireMissionDefinitionKey", string.Empty,
                 "Exact jsonKey of the missile used by Rod from God and EMP shock. Empty auto-picks " +

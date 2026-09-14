@@ -20,6 +20,7 @@ namespace BoscaliSummer.Tests.Features.Command
                 fast.WorldToCell(site.X + site.ThreatX * 200f, site.Z + site.ThreatZ * 200f, out c, out r);
                 TestAssert.That(fast.GetSectorControl(c, r) != SectorControl.Friendly,
                     "Trench threat faces the same boundary drawn on the map");
+                TestAssert.That(site.Pressure == 0f, "A quiet front reports no entrenchment pressure");
             }
             TestAssert.That(fast.CopyFrontlineSites(new FrontlineSite[1]) == 1, "Frontline copies respect caller capacity");
             fast.WorldToCell(5000f, 0f, out int col, out int row);
@@ -61,6 +62,24 @@ namespace BoscaliSummer.Tests.Features.Command
                 "A new scene or faction clears nodes, history and telemetry");
 
             TestBoundsAndObservations();
+            TestContestedPressure();
+        }
+
+        private static void TestContestedPressure()
+        {
+            var grid = new TacticalSectorGrid(32, 100000f);
+            Snapshot(grid);
+            grid.AddTroopPresence(2000f, 0f, 10f, false);
+            grid.AddTroopPresence(-2000f, 0f, 10f, true);
+            grid.EvaluateSectors(30f);
+            var sites = new FrontlineSite[256];
+            int count = grid.CopyFrontlineSites(sites);
+            TestAssert.That(count > 0, "An engaged border still supplies trench sites");
+            bool contested = false;
+            for (int i = 0; i < count; i++)
+                if (sites[i].Pressure > 0.5f) contested = true;
+            TestAssert.That(contested,
+                "A border with both sides' ground forces present reports contested pressure");
         }
 
         private static TacticalSectorGrid MakeFront()

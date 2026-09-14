@@ -112,10 +112,13 @@ and the states/formulas/edge-case structure in its
 ## Hunt HUD visual contract
 
 The passive alert answers who is hunting the player, how experienced the ace is,
-and how many aircraft remain. It uses a 620 by 174 reference-pixel dossier at the
+and how many aircraft remain. It uses a 704 by 184 reference-pixel dossier at the
 upper center of a 1920 by 1080 scaling canvas, leaving the aiming area clear.
 An amber warning header and diagonal hazard strip establish caution without flashing.
 The callsign is the largest text; name, wing symbol and wing name are secondary.
+A generated enemy-squadron crest sits framed at the right edge: shape and charge are
+deterministic from the wing identity, and the palette stays in the caution/danger band.
+The same crest marks that wing's card on the SQD WINGS page.
 The portrait is borrowed from Wing Command's identity-based generator and cached for
 that ace; missing art shows NO VISUAL. Scene reset releases the UI without destroying
 Wing Command's sprite. Text is literal, single-line fields truncate with ellipses.

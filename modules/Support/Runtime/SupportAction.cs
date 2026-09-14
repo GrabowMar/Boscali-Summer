@@ -35,6 +35,9 @@ namespace BoscaliSummer.Features.Support.Runtime
 
         /// <summary>Host-side entry for the two track-deception operations.</summary>
         bool BeginDeception(Player caster, HackKind kind, GlobalPosition target, float duration);
+
+        /// <summary>The faction's electronic-warfare presence, or null if none is deployed.</summary>
+        EwAsset EwAssetFor(FactionHQ owner);
     }
 
     internal readonly struct SupportContext
@@ -66,6 +69,9 @@ namespace BoscaliSummer.Features.Support.Runtime
             Constellation constellation = Host.Space.ConstellationFor(Owner);
             return constellation != null && constellation.Covers(role, Target.x, Target.z);
         }
+
+        /// <summary>The requester's EW asset, or null if none is deployed / it has died.</summary>
+        public EwAsset EwAsset => Host.EwAssetFor(Owner);
     }
 
     /// <summary>

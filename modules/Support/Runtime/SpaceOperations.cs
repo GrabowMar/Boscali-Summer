@@ -10,7 +10,9 @@ namespace BoscaliSummer.Features.Support.Runtime
         Launch = 0,
         Move = 1,
         Recall = 2,
-        Upgrade = 3
+        Upgrade = 3,
+        EwDeploy = 4,
+        EwReposition = 5
     }
 
     /// <summary>
@@ -58,13 +60,13 @@ namespace BoscaliSummer.Features.Support.Runtime
         // ---- Host commands -----------------------------------------------------------------
 
         public OrbitalFailure Deploy(FactionHQ hq, SatelliteRole role, byte altitude, float x, float z,
-                                     int capacity, out Satellite satellite)
+                                     int capacity, float launchTransitSeconds, out Satellite satellite)
         {
             satellite = null;
             FactionSystems state = Get(hq);
             if (state == null) return OrbitalFailure.UnknownSatellite;
-            return state.Constellation.TryDeploy(role, altitude, x, z, capacity, out satellite,
-                out OrbitalFailure failure) ? OrbitalFailure.None : failure;
+            return state.Constellation.TryDeploy(role, altitude, x, z, capacity, launchTransitSeconds,
+                out satellite, out OrbitalFailure failure) ? OrbitalFailure.None : failure;
         }
 
         public OrbitalFailure Retask(FactionHQ hq, byte satelliteId, float x, float z, out float fuelCost)

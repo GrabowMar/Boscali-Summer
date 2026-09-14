@@ -19,6 +19,7 @@
     <Compile Include="..\..\modules\DynamicOperations\Domain\OperationTitles.cs" Link="Features\DynamicOperations\OperationTitles.cs" />
     <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdSecondaryObjectives.cs" Link="Features\Command\MfdSecondaryObjectives.cs" />
     <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdMissionOverview.cs" Link="Features\Command\MfdMissionOverview.cs" />
+    <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdMissionLabels.cs" Link="Features\Command\MfdMissionLabels.cs" />
     <Compile Include="..\..\Framework\Contracts\IObservationSource.cs" Link="Framework\IObservationSource.cs" />
     <Compile Include="..\..\Framework\Contracts\ITerritoryIngress.cs" Link="Framework\ITerritoryIngress.cs" />
     <Compile Include="..\..\modules\QoL\Runtime\ObservationStore.cs" Link="Features\QoL\ObservationStore.cs" />
@@ -39,6 +40,8 @@
     <Compile Include="..\..\modules\FireAndDestruction\Runtime\FireScorchPolicy.cs" Link="Features\FireAndDestruction\FireScorchPolicy.cs" />
     <Compile Include="..\..\modules\Radio\Runtime\RadioLibrary.cs" Link="Features\Radio\RadioLibrary.cs" />
     <Compile Include="..\..\modules\Radio\Runtime\HuntMusicGate.cs" Link="Features\Radio\HuntMusicGate.cs" />
+    <Compile Include="..\..\modules\Radio\Runtime\RadioFrequencies.cs" Link="Features\Radio\RadioFrequencies.cs" />
+    <Compile Include="..\..\modules\Radio\Runtime\RadioProgramming.cs" Link="Features\Radio\RadioProgramming.cs" />
     <Compile Include="..\..\modules\Squad\Domain\AceCareer.cs" Link="Features\Squad\AceCareer.cs" />
     <Compile Include="..\..\modules\Radio\Presentation\PngIconHeader.cs" Link="Features\Radio\PngIconHeader.cs" />
     <Compile Include="..\..\Framework\Contracts\IPlayerPerks.cs" Link="Framework\IPlayerPerks.cs" />
@@ -64,8 +67,10 @@
     <Compile Include="..\..\modules\HighCommand\Domain\CommandTier.cs" Link="Features\HighCommand\CommandTier.cs" />
     <Compile Include="..\..\modules\HighCommand\Domain\CommandTraits.cs" Link="Features\HighCommand\CommandTraits.cs" />
     <Compile Include="..\..\modules\HighCommand\Domain\CommandTree.cs" Link="Features\HighCommand\CommandTree.cs" />
-    <Compile Include="..\..\modules\HighCommand\Domain\PortraitDesign.cs" Link="Features\HighCommand\PortraitDesign.cs" />
     <Compile Include="..\..\modules\HighCommand\Domain\SeedStream.cs" Link="Features\HighCommand\SeedStream.cs" />
+    <Compile Include="..\..\modules\Events\Domain\EventDefinition.cs" Link="Features\Events\EventDefinition.cs" />
+    <Compile Include="..\..\modules\Events\Domain\EventCatalog.cs" Link="Features\Events\EventCatalog.cs" />
+    <Compile Include="..\..\modules\Events\Domain\EventSelector.cs" Link="Features\Events\EventSelector.cs" />
     <Compile Include="..\..\Infrastructure\GameInterop\MfdSlots.cs" Link="Infrastructure\MfdSlots.cs" />
     <Compile Include="..\..\Avionics\*.cs" LinkBase="Avionics" />
   </ItemGroup>

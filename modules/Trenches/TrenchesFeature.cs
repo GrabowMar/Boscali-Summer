@@ -19,7 +19,7 @@ namespace BoscaliSummer.Features.Trenches
             TrenchMapOverlay overlay = context.AddSceneService<TrenchMapOverlay>(61);
             overlay.Configure(context.Settings.Trenches, manager, context.Logger);
 
-            context.Logger.LogInfo("[Trenches] Combat fortifications ready: connected lines, native MG/AT/AA defenders (6/site, 96 total), damage suppresses growth, no defender respawns. Native defenders replicate; procedural earthworks/map remain host-local.");
+            context.Logger.LogInfo("[Trenches] Combat fortifications ready: contested sectors chain into a continuous front line, six growth stages (crawl, fire trench, hardened, support, redoubt, forward saps), real game strongpoints joined by carved ditches, four native MG/ATGM/MANPADS per sector, damage suppresses growth, no defender respawns. Native defenders and works replicate; carved ditches and map marks remain host-local.");
         }
     }
 }
