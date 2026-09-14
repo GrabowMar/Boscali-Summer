@@ -30,7 +30,6 @@ namespace BoscaliSummer.Tests
             SupportTests.Run();
             Features.QoL.ObservationTests.Run();
             Features.QoL.CameraTests.Run();
-            Features.QoL.GunAimAssistTests.Run();
             Features.Autopilot.AutopilotLandTests.Run();
             CommandTests.Run();
             MfdNewsTickerTests.Run();

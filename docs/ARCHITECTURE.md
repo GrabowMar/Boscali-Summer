@@ -305,16 +305,6 @@ camera tools, ejection, disabled aircraft and spectator views release the camera
 No networking or bezel reservation is needed.
 
 QoL installs independently of Support and Progression and is skipped on headless servers.
-Its opt-in `GunAimAssist` scene service captures the existing `ControlsFilter.GetAim`
-HUD result and adjusts pitch/yaw after `PilotPlayerState.PlayerAxisControls`, before
-native aircraft control filtering. One global-coordinate sample expires after 0.15s;
-only the first selected enemy with faction tracking at most 0.5s old and a fixed gun
-is eligible. Assistance has a 2.5-degree cone and an 8% hard input ceiling (4% default,
-further reduced by error/input falloff). It yields to deliberate steering, UI, pause,
-lost ownership, ejection, ground proximity, auto-hover and disabled flight assist.
-No new trajectory simulations, target scans, raycasts or messages. Samples clear on
-ownship/faction/scene changes and teardown. Native aim assist remains in place;
-flight feel, multiplayer and allocation profiling remain unverified in-game.
 Existing `Avionics.ThirdPerson*` configuration keys retain their values; the SET cockpit
 page reads and writes the HUD, pitch-ladder and camera toggles through `IThirdPersonHud`
 rather than QoL's settings object. ObservationManager

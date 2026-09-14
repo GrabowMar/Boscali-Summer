@@ -37,9 +37,7 @@ Assembly pluginAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(plugi
 
 (string Type, string Method)[] targets =
 {
-    ("ControlsFilter", "GetAim"),
     ("ControlsFilter", "SetFlightAssist"),
-    ("PilotPlayerState", "PlayerAxisControls"),
     ("CameraStateManager", "SwitchState"),
     ("CameraStateManager", "SetFollowingUnit"),
     ("CameraOrbitState", "UpdateState"),
@@ -177,8 +175,6 @@ foreach ((string typeName, string fieldName) in fields)
 (string Type, string Field, string FieldType)[] cameraFields =
 {
     ("ControlsFilter", "aircraft", "Aircraft"),
-    ("PilotBaseState", "pilot", "Pilot"),
-    ("PilotPlayerState", "pilotStrength", "System.Single"),
     ("FlightHud", "canvas", "UnityEngine.Canvas"),
     ("FlightHud", "pitchCompassCenter", "UnityEngine.GameObject"),
     ("TargetCam", "cam", "UnityEngine.Camera"),
@@ -208,18 +204,6 @@ foreach (var seam in cameraFields)
         throw new InvalidOperationException($"Camera seam {seam.Type}.{seam.Field} changed type");
 }
 Type chasePosition = gameAssembly.GetType("CameraChaseState+ChasePos", true)!;
-MethodInfo gunAim = gameAssembly.GetType("ControlsFilter", true)!.GetMethod("GetAim", AllMembers)!;
-var gunAimParameters = gunAim.GetParameters();
-Type globalPosition = gameAssembly.GetType("GlobalPosition", true)!;
-Type optionalPositionRef = typeof(Nullable<>).MakeGenericType(globalPosition).MakeByRefType();
-if (gunAim.ReturnType != typeof(void) || gunAimParameters.Length != 3 ||
-    gunAimParameters[0].ParameterType.FullName != "Unit" ||
-    gunAimParameters[1].ParameterType != optionalPositionRef || !gunAimParameters[1].IsOut ||
-    gunAimParameters[2].ParameterType != optionalPositionRef || !gunAimParameters[2].IsOut)
-    throw new InvalidOperationException("ControlsFilter.GetAim gun solution signature changed");
-MethodInfo playerAxes = gameAssembly.GetType("PilotPlayerState", true)!.GetMethod("PlayerAxisControls", AllMembers)!;
-if (playerAxes.ReturnType != typeof(void) || playerAxes.GetParameters().Length != 0 || playerAxes.IsStatic)
-    throw new InvalidOperationException("PilotPlayerState.PlayerAxisControls input signature changed");
 if (Convert.ToInt32(Enum.Parse(chasePosition, "Back")) != 0)
     throw new InvalidOperationException("Native rear chase preset changed value");
 foreach (string cameraState in new[] { "CameraOrbitState", "CameraChaseState" })
@@ -235,7 +219,6 @@ foreach (string cameraState in new[] { "CameraOrbitState", "CameraChaseState" })
 // time rather than degrading. Neither probe checked these names before.
 (string Type, string Method, string[] Parameters)[] parameterNames =
 {
-    ("ControlsFilter", "GetAim", new[] { "target", "aimPoint", "impactPoint" }),
     ("ControlsFilter", "SetFlightAssist", new[] { "enabled", "aircraft" }),
     ("Aircraft", "UseFuel", new[] { "fuelDrawn" }),
     ("FactionHQ", "RewardPlayer", new[] { "player", "rewardAllocation", "missionType" })
@@ -307,8 +290,6 @@ string[] patchTypes =
     "BoscaliSummer.Features.QoL.Patches.ThirdPersonHudPatches",
     "BoscaliSummer.Features.QoL.Patches.ThirdPersonOrbitPatch",
     "BoscaliSummer.Features.QoL.Patches.ThirdPersonChasePatch",
-    "BoscaliSummer.Features.QoL.Patches.GunAimSolutionPatch",
-    "BoscaliSummer.Features.QoL.Patches.GunAimInputPatch",
     "BoscaliSummer.Features.Autopilot.Patches.AutopilotLandInputPatch",
     "BoscaliSummer.Features.Autopilot.Patches.FlightAssistReportPatch",
     "BoscaliSummer.Features.Autopilot.Patches.RadialMenuLifecyclePatches",

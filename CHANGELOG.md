@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Removed the unverified, default-off QoL gun aim assist (`GunAimAssist` /
+  `GunAimAssistStrength`). Harmony hooks on `ControlsFilter.GetAim` and
+  `PilotPlayerState.PlayerAxisControls` are gone; native `ControlsFilter`
+  flight-assist aim assist is unchanged. Leftover BepInEx keys are ignored.
+
 - World events now offer a decision. While a costed event is active, any player may spend
   allocation once per event to **CONTAIN** a penalty or **LEVERAGE** a discount for the rest
   of its run: the host derives the price from the event's effective multiplier (200–1200

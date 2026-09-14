@@ -147,9 +147,8 @@ Independent of Progression/Support; skipped on headless.
 | Framed target-camera feed panel (lower-right, only while targets selected) | `Presentation/ThirdPersonCameraPanel.cs` | Unverified | Borrows `TargetCam.cam` texture; never landing mode / disabled source |
 | Camera observation marks — F8 / MARK CAMERA, one point, 120s, coord/range/age | `Runtime/ObservationManager.cs`, `Runtime/ObservationStore.cs` | In-flight | Publishes `IObservationSource`; consumed by OPS "CALL AT MARK" |
 | Selected-contact freshness readout (faction tracking timestamp, 4 Hz) | `Runtime/ObservationManager.cs` | In-flight | Never derived from an enemy Transform |
-| Gun aim assist — 2.5° cone, 4% input ceiling, yields to steering | `Runtime/GunAimAssist.cs`, `Runtime/GunAimAssistPolicy.cs`, `Patches/GunAimAssistPatches.cs` | Experimental | `QoL.GunAimAssist` default **false**; flight feel, MP, allocation profiling all unverified |
 
-Config: `QoL.Enabled`, `QoL.GunAimAssist`, `QoL.GunAimAssistStrength` (0–0.08), `QoL.CameraMarks`,
+Config: `QoL.Enabled`, `QoL.CameraMarks`,
 `QoL.MarkCameraKey` (F8); legacy `Avionics.ThirdPersonHudEnabled` / `ThirdPersonCameraEnabled` /
 `ThirdPersonFlightCameraEnabled` / `ThirdPersonHudKey` (F7) / `ThirdPersonHidePitchLadder`.
 
@@ -157,8 +156,6 @@ Config: `QoL.Enabled`, `QoL.GunAimAssist`, `QoL.GunAimAssistStrength` (0–0.08)
 - The whole camera/HUD stack is code-complete but **never validated in a running game** — this
   is the single biggest untested surface in the mod. Needs one focused flight session:
   orbit/chase framing, minimap restore, target feed show/hide, transitions, teardown.
-- Decide gun aim assist's future: ship opt-in as-is, or cut. It has been "pending flight
-  testing" across multiple changelog entries.
 
 ---
 
@@ -468,7 +465,7 @@ scheduled.
 Present: Command (`CommandTests`, `FrontlineTests`, `MfdPanelTests`,
 `MfdSecondaryObjectivesTests`, `StrPanelTests`), DynamicOperations (`OperationTests`),
 FireAndDestruction (`ImpactScorchTests`), Progression (`ProgressionTests`), QoL
-(`CameraTests`, `GunAimAssistTests`, `ObservationTests`), Radio (`RadioTests`), Support
+(`CameraTests`, `ObservationTests`), Radio (`RadioTests`), Support
 (`SupportTests`), UrbanCombat (`TroopDeploymentTests`), Framework, Architecture boundary.
 `BoscaliSummer.PatchProbe` validates Harmony targets / private fields / wire contracts
 against the installed `Assembly-CSharp.dll`.
@@ -501,7 +498,7 @@ Still open:
 
 - `modules/Command/Presentation/MapUi/` (~30 files) — audit for dead code after COM→STR.
 - Split `ImpactFireManager`, `ZoneGarrisonManager`, `ModNet` (roadmap, behind seams only).
-- Decide keep-or-cut: gun aim assist, Chimera paradrop, Urban Combat encampment builders.
+- Decide keep-or-cut: Chimera paradrop, Urban Combat encampment builders.
 - Persistence service (schema-versioned atomic JSON) — blocks persistent perk profiles and
   any other saved state.
 

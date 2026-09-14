@@ -13,7 +13,6 @@
     <Compile Include="..\..\modules\Command\Domain\FactionMoraleState.cs" Link="Features\Command\FactionMoraleState.cs" />
     <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdResourceHistory.cs" Link="Features\Command\MfdResourceHistory.cs" />
     <Compile Include="..\..\modules\Support\Runtime\SupportEffectPolicy.cs" Link="Features\Support\SupportEffectPolicy.cs" />
-    <Compile Include="..\..\modules\QoL\Runtime\GunAimAssistPolicy.cs" Link="Features\QoL\GunAimAssistPolicy.cs" />
     <Compile Include="..\..\modules\Autopilot\Runtime\AutopilotLandPolicy.cs" Link="Features\Autopilot\AutopilotLandPolicy.cs" />
     <Compile Include="..\..\modules\DynamicOperations\Domain\OperationBoard.cs" Link="Features\DynamicOperations\OperationBoard.cs" />
     <Compile Include="..\..\modules\DynamicOperations\Domain\OperationTitles.cs" Link="Features\DynamicOperations\OperationTitles.cs" />

@@ -134,8 +134,7 @@ Nuclear Option** — every expensive system pooled, event-driven, and globally b
 - **Quality of life** (`QoL.Enabled`, client-local, independent of Support/Progression) —
   smooth third-person orbit/chase framing with a steady horizon and room to aim, HUD and
   native-minimap restore in external views, a framed target-camera feed while targets are
-  selected, one expiring camera-observation mark (**F8** / OPS **MARK CAMERA**), and an
-  opt-in gun aim-assist nudge (`GunAimAssist`, default off, pending flight testing).
+  selected, and one expiring camera-observation mark (**F8** / OPS **MARK CAMERA**).
 - **Autopilot landing** (`Autopilot.Enabled`, client-local) — a **Boscali Summer** entry in
   the native radial menu opens a small submenu. **Autopilot: Land** hands your own aircraft
   to the game's own autopilot for a runway or vertical-pad landing, then returns control.
@@ -221,7 +220,6 @@ anything) or **client-local**. This table is a curated subset; F1 shows the rest
 | Squad | `EnemyAceHunts` | `true` | Enemy ace wings, pursuit, return encounters and bonus points |
 | Squad | `DamageThreshold` / `HuntCooldown` | `25` / `180` | Initial credited part damage; seconds before fresh threat can accumulate |
 | QoL | `Enabled` | `true` | Local HUD/camera conveniences + observation marks |
-| QoL | `GunAimAssist` / `GunAimAssistStrength` | `false` / `0.04` | Experimental gun nudge; input ceiling before falloff |
 | QoL | `CameraMarks` / `MarkCameraKey` | `true` / `F8` | Camera observation mark |
 | Autopilot | `Enabled` | `true` | Native-radial **Autopilot: Land** for your own aircraft (client-local) |
 | Avionics | `ThirdPersonFlightCameraEnabled` | `true` | Smooth orbit/rear-chase framing (disable → native motion) |

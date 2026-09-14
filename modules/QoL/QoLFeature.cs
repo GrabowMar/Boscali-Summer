@@ -13,15 +13,11 @@ namespace BoscaliSummer.Features.QoL
         {
             typeof(Patches.ThirdPersonHudPatches),
             typeof(Patches.ThirdPersonOrbitPatch),
-            typeof(Patches.ThirdPersonChasePatch),
-            typeof(Patches.GunAimSolutionPatch),
-            typeof(Patches.GunAimInputPatch)
+            typeof(Patches.ThirdPersonChasePatch)
         };
 
         public void Install(FeatureContext context)
         {
-            context.AddSceneService<GunAimAssist>(53).Configure(context.Settings.QoL);
-            context.Logger.LogInfo("GunAimAssist=native HUD solution / local player input; enabled=" + context.Settings.QoL.GunAimAssist.Value);
             ThirdPersonHudController hud = context.AddSceneService<ThirdPersonHudController>(52);
             hud.Configure(context.Settings.QoL);
             context.AddService<IThirdPersonHud>(hud);
