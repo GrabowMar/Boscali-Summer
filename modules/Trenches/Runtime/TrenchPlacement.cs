@@ -30,11 +30,11 @@ namespace BoscaliSummer.Features.Trenches.Runtime
                     if (!territory.OwnsPosition(faction, p.x, p.z) || !TryGround(p, out Vector3 sample))
                         return false;
                     if (!hasReference) { rowReference = sample.y; hasReference = true; }
-                    else if (Math.Abs(sample.y - rowReference) > 4f) return false;
+                    else if (Math.Abs(sample.y - rowReference) > 3f) return false;
                 }
                 // A row of the corridor follows one common ground level; the corridor itself
                 // may still descend toward the rear with the frontline ridge.
-                if (!firstRow && Math.Abs(rowReference - previousRow) > 12f) return false;
+                if (!firstRow && Math.Abs(rowReference - previousRow) > 8f) return false;
                 previousRow = rowReference;
                 firstRow = false;
             }

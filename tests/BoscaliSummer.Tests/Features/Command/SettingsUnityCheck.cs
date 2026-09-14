@@ -40,7 +40,7 @@ public static class SettingsUnityCheck
             CheckLayoutCanvas();
             CheckScreenSpaceSizing();
             foreach (int height in new[] { 596, 420 }) CheckPanel(height);
-            File.WriteAllText("result.txt", "PASS: layout resolves the real UI area past stale canvas rects; actual SET pages render at 596 and 420 units; toggles, background replacement, disabled dependencies, +/- bounds, scrolling and cached page trees checked. Game adapters are stubbed; in-game acceptance remains required.");
+            File.WriteAllText("result.txt", "PASS: layout resolves the real UI area past stale canvas rects; all four SET pages render at 596 and 420 units; toggles, background replacement, disabled dependencies, +/- bounds, scrolling and cached page trees checked. Game adapters are stubbed; in-game acceptance remains required.");
             EditorApplication.Exit(0);
         }
         catch (Exception ex)
@@ -86,7 +86,7 @@ public static class SettingsUnityCheck
         Check(MfdLayout.CanvasSize(nestedCanvas) == new Vector2(1920f, 1080f),
             "Layout must resolve the real UI area, not a stale nested-canvas rect");
         Check(MfdLayout.TryResolve(nestedCanvas, out MfdLayout.Columns columns) &&
-              Mathf.Approximately(columns.Map.width, 1312f) &&
+              Mathf.Approximately(columns.Map.width, 1256f) &&
               Mathf.Approximately(columns.Map.height, 920f),
             "Full-area columns must be resolved while the nested rect is stale");
 
@@ -132,10 +132,10 @@ public static class SettingsUnityCheck
         ((RectTransform)canvas.transform).sizeDelta = new Vector2(480, height);
         var panel = canvas.gameObject.AddComponent<SettingsMfdPanel>();
         panel.Configure(config, null);
-        var shell = AvScreen.Build((RectTransform)canvas.transform, "SET", new[] { "MAP", "STYLE", "IMAGE" }, null, 0, 480, height, null);
+        var shell = AvScreen.Build((RectTransform)canvas.transform, "SET", new[] { "MAP", "STYLE", "IMAGE", "COCKPIT" }, null, 0, 480, height, null);
         shell.DataBar.State.text = "MAP SETTINGS";
         typeof(SettingsMfdPanel).GetField("shell", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(panel, shell);
-        string[] methods = { "BuildMapPage", "BuildStylePage", "BuildImagePage" };
+        string[] methods = { "BuildMapPage", "BuildStylePage", "BuildImagePage", "BuildViewPage" };
         for (int i = 0; i < methods.Length; i++)
         {
             var page = shell.CreatePage(i, methods[i]);
@@ -143,7 +143,7 @@ public static class SettingsUnityCheck
                 .Invoke(panel, new object[] { (RectTransform)page.transform, shell.Body });
         }
         int objects = canvas.GetComponentsInChildren<Transform>(true).Length;
-        for (int page = 0; page < 3; page++)
+        for (int page = 0; page < 4; page++)
         {
             shell.SetPage(page);
             Refresh(panel);
@@ -174,7 +174,7 @@ public static class SettingsUnityCheck
         var reloaded = new CommandSettings(new ConfigFile(config.ExpandedMapUi.ConfigFile.ConfigFilePath, false));
         Check(reloaded.BackgroundImagePreset.Value == 3 && reloaded.BackgroundImage.Value && !reloaded.DeckGrid.Value,
             "Settings survive reloading the saved configuration");
-        for (int i = 0; i < 20; i++) { shell.SetPage(i % 3); Refresh(panel); }
+        for (int i = 0; i < 20; i++) { shell.SetPage(i % 4); Refresh(panel); }
         Check(objects == canvas.GetComponentsInChildren<Transform>(true).Length, "Tab changes must reuse the same tree");
         if (height == 420) Check(canvas.GetComponentsInChildren<ScrollRect>(true).Length > 0, "Short panels must scroll");
         Object.DestroyImmediate(canvas.gameObject);

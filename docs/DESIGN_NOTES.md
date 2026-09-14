@@ -30,10 +30,21 @@ Decisions that cost an argument. Kept so they are not made again the other way.
 - **Fires reuse vanilla effects, not synthetic columns.** Building and forest smoke are
   smoke-only copies of Nuclear Option's Fuel Depot destruction prefab; per-site variation in
   width/height/delay/pulsing/shear lets adjacent fronts merge aloft without looking cloned.
-  Tree removal and ash beds use vanilla blast-map stamps; no persistent decals or
-  fire-damage colliders are added.
-- **Spread is bounded and deterministic.** Two wind-biased attempts per site, at most two
-  generations, all under the 24-site global cap. Successful children stay visible as fronts
+  The burnt ground reads through pooled vanilla soot decals plus a blast-map ash bed drawn
+  with `DrawBlast`; no fire-damage colliders or custom shaders are added.
+- **Tree removal is decoupled from the ash bed.** Vanilla `BlastManager.AddBlast` does both:
+  every ash stamp also cleared procedural trees. With the game's 2.0 blast-radius multiplier
+  and 0.3 tree factor the effective tree radius is 0.6 × the input, so the old 74 m stamps
+  removed a ~45 m radius of trees at each of five lobes per site. The ash bed is now drawn
+  straight into the blast map with `DrawBlast`, which never touches trees; tree removal is
+  one separate small `AddBlast` (~0.4 m cleared radius, 80% smaller than the earlier ~2 m
+  tuning), and a pooled vanilla soot decal marks the ground that actually burned. The ash bed is deliberately
+  nuke-scale (260–338 m radius) because the vanilla blast map resolves one texel per 160 m and
+  smaller stamps vanish into a faint smudge — the whole burnt area should read as gray soil,
+  not a couple of dark spots, so the ash intentionally overshoots the small tree footprint.
+  Same vanilla assets, no new shaders, and a campfire no longer flattens a stand.
+- **Spread is bounded and deterministic.** Two wind-biased attempts per site, at most three
+  generations, all under the 32-site global cap. Successful children stay visible as fronts
   rather than merging back into the parent.
 - **Ignition is deliberately probabilistic** — ~0.25% ordinary impact, ~6% explosive at
   intensity 1.0, lower still for vehicle-loss secondaries. Open ground and water are ignored.
@@ -48,10 +59,21 @@ Decisions that cost an argument. Kept so they are not made again the other way.
   appearance and ownership. Air-assault infantry therefore remains presentation attached
   to networked vanilla emplacements; it does not claim independent squad AI. Walkable
   interiors, breaching, and floor-by-floor damage remain out of scope.
+- **MakeshiftFortificationBuilder was never spawned.** That assault-defense dressing is
+  gone. Ibis rappel and Chimera ground-landing encampments (`InfantryEncampmentBuilder`)
+  stay. The Chimera/Tarantula paradrop loadout and the OPS/STR base-defense ticker stay.
 - **Occupancy is a record, not its marker.** Garrisons follow zone ownership, cannot
   duplicate across capture churn / late load / scene reload / late join, vanish when the
   shell is ruined, and return only on a later capture. Critical infrastructure and very small
   structures are excluded. Per-zone cap plus a global proxy cap.
+- **Occupied buildings are marked at shell scale.** The server measures the flat roof patch
+  around the nest and appends its defense-local extents to the networked unique name as a
+  compact `$m` suffix, so every client and late joiner derives the same twin masts,
+  building-sized flags and roof-edge faction band without a cosmetic network message. Using
+  the measured patch instead of the whole-shell bounding box keeps the band on the roof
+  instead of floating past it. The band's accent stripe uses the game's viewer-relative HUD
+  colors; shape carries the meaning, color is redundant. A legacy definition-sized nest
+  marker remains for structures without shell data.
 
 ## Radio
 
@@ -77,6 +99,29 @@ Decisions that cost an argument. Kept so they are not made again the other way.
   installed map's tactical clip. The existing two sources and vanilla handoff preserve
   prior station/track/position/pause state; manual transport takes ownership for the rest
   of the hunt. Radio sends no music metadata or additional multiplayer messages.
+- **The panel is a receiver, not a music browser.** Stations live on an FM/MW dial: the
+  three built-ins keep canonical frequencies and user folders take a stable name-hashed FM
+  slot (linear probe on collision), so a stored preset still lands on the same station after
+  a rescan. The hero frequency, programme log and morse ident carry the fiction; carrier
+  static, squelch and idents are generated in memory, never bundled — the copyright boundary
+  from the bullet above is unchanged.
+- **Tuning is a dial, not a list.** TUNE steps the band increment (0.2 MHz FM / 10 kHz MW)
+  and any non-station position is dead air with a carrier bed; SEEK jumps stations and
+  crosses bands when the current band runs out, and locking back on resumes the programme
+  the player left. MW is AM by nature, so it keeps the broadcast curve regardless of the
+  FM filter setting, and the `Volume` knob scales music, carrier and idents together. Enemy
+  ace chatter reaches the hero wire line as an INTERCEPT via the read-only
+  `ISquadView.LastChatter` property: text only, client-local, no new messages and no music
+  metadata.
+- **Broadcast character is a setting, not a cage.** Clean / Light / Broadcast choose how
+  much band-limit and receiver crunch the music gets, and the synthesized carrier and ident
+  can be switched off independently. The signal meter samples the tuned source's real output
+  level; programme blocks, wire copy and signal labels are client-local presentation and
+  never touch playback authority or the network.
+- **The wire is flavour, not a transcript.** Channel traffic (tuning, programme changes,
+  station copy, intercepted chatter) rotates through a single hero line; the panel's spare
+  room goes to the tuned station's programme log of tracks, which is clickable and paged.
+  Nothing in the log is authoritative and nothing is transmitted.
 
 ## Progression and support
 
@@ -102,6 +147,12 @@ Decisions that cost an argument. Kept so they are not made again the other way.
   for messages that were never transmitted, "ready" during a cooldown, and "ready for target
   confirmation" with no target designated. Every card now renders a state the manager
   actually checked, and an unanswered request times out.
+- **Flare barrage shares Satellite Scan.** It is authorised by the Recon capability, not a
+  fifth perk. Do not add a perk row for it.
+- **CRYPTO discounts hack cost, not cooldown.** Host `RequestCooldown` is unchanged; CYBER
+  copy must not claim a cooldown the host ignores.
+- **EW encampment convert/UI is gone.** `EwAssetState.Encampment = 2` stays on the wire as
+  a reserved value; do not reuse the byte.
 - **One skill language for the player, AI and aces.** The player's board presents the same
   combat skills Wing Command gives enemy aces (Toughness, Countermeasures, Notch Expert,
   Ghost) with the same codes and vector badges, beside the player's passives and support
@@ -150,17 +201,89 @@ Decisions that cost an argument. Kept so they are not made again the other way.
   follows the actual corridor (front line through the rear line) row by row — the same
   rectangle the earthworks will occupy — with gentler height tolerance. Roads are
   irrelevant to a defensive line and were removed as a placement preference.
+- **Trenches are dug where troops actually meet.** Command already tracks objective ground
+  presence for both sides; a border where one force is absent reports zero pressure and is
+  not fortifiable, no matter how the stale control history reads. Candidates sort by that
+  pressure, and sites sit 60m behind the border rather than 150m, so the belt hugs the
+  front instead of decorating a quiet field. The map's projected trace is the same
+  contested-site list, so the icon predicts exactly where earthworks will appear.
+- **Depth follows deliberate field positions, not decoration.** A real position layers a
+  support line roughly 110m and a redoubt line roughly 220m behind the fire trench,
+  linked by communication trenches; a final stage pushes short saps into no man's land
+  ending in listening posts. Saps stay inside the owned corridor, so they stop at the
+  border instead of crossing into ground the network's validator rejects.
+- **A front line is continuous, not a scatter of strongpoints.** Mature same-faction
+  sectors extend their fire and support lines to the flank limit and a junction trench
+  joins their ends whenever the gap is sapping-eligible (8–55m). The 380m sector spacing
+  leaves a 28m seam, tiny next to a 352m sector span, so a chain of sectors reads as one
+  unbroken line spanning kilometres. Flank hooks were removed: for a linear front they
+  built a pointless basket, and junction linking is what actually closes the line.
+- **Strongpoints are the game's own scenery, the ditch stays procedural.** Works are small
+  infantry-scale pieces (HESCO/sandbag/light gabion) filtered at runtime from
+  `Encyclopedia.Lookup` by keyword and footprint — vehicle-scale hull-down ramps, shelters
+  and concrete walls are rejected before they can become encampments in a field. Pieces
+  spawn as networked `Scenery` on the trench line nodes themselves, so they read as part
+  of the position, and replicate to clients. The carved ditch between them is the only
+  generated geometry. Earlier procedural sandbag/concrete bays and pits read as white
+  boxes and were deleted outright; a build with no matching piece stays ditch-only and
+  logs once.
+- **The earthwork follows the ground it sits on.** The ditch centreline is sampled to
+  terrain, and each cross-section's outer berm toe and skirt tip sample the ground on
+  their own side, so a cross-slope meets the berm instead of running under or above it.
+  Corridor validation was tightened (per-row ≤3m, row-to-row ≤8m) so big rolling terrain
+  is rejected up front rather than sculpted over.
 - **Raised earthworks are the only non-destructive shape.** The trench floor sits at grade
   because cutting `TerrainData` is banned; apparent depth comes from a high parados and
-  sandbag parapet over deep skirts, not from a hole in the terrain. Widening the profile
+  parapet over deep skirts, not from a hole in the terrain. Widening the profile
   beyond a thin strip is what makes the position read as fieldworks from the air.
-- **One profile, one palette texture.** Every edge shares a ten-point cross-section whose
-  UVs map onto a baked 256px texture (grass fringe, earth, timber, duckboards, sandbags).
-  That gives material variety at one draw call per edge without an artist bundle; an
-  artist `trenches.bundle` still replaces LOD0 when present.
+- **One profile, one palette texture.** Every ditch edge shares a ten-point cross-section
+  whose UVs map onto a baked 256px texture (grass fringe, excavated spoil, timber
+  revetment, duckboard floor, packed earth crest). That gives material variety at one draw
+  call per edge with no external bundle dependency.
+- **Sparse weapons, interlocking positions.** Four native emplacements per sector (two MG
+  teams on the flanks, an ATGM on the fire-line centre, a MANPADS back at support) are
+  deliberately few: they interlock rather than crowd, and the scenery does the visual
+  work. Vehicles are stopped by a bounded line of low obstacle boxes on the fire trench,
+  not by a collider per ditch segment.
 - **Growth stages are atomic and announced.** A stage either completes entirely or changes
   nothing and retries; the simulator records the rejection reason so a stalled belt is
   diagnosable instead of silently stuck. The stage gate is pure and unit-tested.
+
+## Chain of command (HighCommand)
+
+- **Economy-only effects were chosen deliberately.** Cohesion, bounties, stipends and
+  command points never mutate vanilla AI limits, spawn rates or damage. That scope makes the
+  feature safe beside any other module and leaves the AI-cap experiment (cohesion scaling
+  `AIAircraftLimit`) available as a separate, gated slice.
+- **Posts own slots; people move between them.** A fixed six-slot tree per faction means
+  succession is a personnel transfer, not tree surgery: the next in line moves up, the
+  vacated post gets a new generated name, and only the destroyed post building is rebuilt.
+  Assets, intel and wire rows stay indexed by a stable slot id.
+- **A commander away in a convoy survives a strike on their post.** The post building and
+  the lead vehicle are separate watched assets; only the asset carrying the person can kill
+  them. That turns strikes on empty posts into a legible LARP beat and makes relocation a
+  real risk decision.
+- **Generated identities are seed functions.** Name, rank, traits and bio derive from a
+  synced seed, and the portrait is the same generated paper doll Wing Command draws for
+  aces and wingmen, keyed off the authoritative name; the host still sends name/rank/role
+  because those are authoritative, and Boscali borrows the sprite rather than owning one.
+- **Command posts are spawned mod buildings, not authored map structures.** User decision:
+  predictable identity (`BoscaliSummer:HighCommand:<faction>:<slot>:<serial>`), the same
+  dry-ground placement checks DynamicOperations uses, and it works on any terrain. Binding
+  to an authored airbase building remains a possible later refinement.
+- **Enemy intel is a server-side sight record with a 45s memory.** One 1 Hz pass over
+  `UnitRegistry.allUnits` (4096 cap) marks posts seen by faction units. The console hosts
+  both staffs, so every enemy post is listed by identity; an unconfirmed post's position,
+  movement and kill-list mark stay host-side, and its dossier reads unconfirmed. A global
+  wire id (faction index × slot) keeps a bounty order from resolving to a same-numbered
+  post in the local tree.
+- **Map markers were deliberately cut.** The dossier names the base and the existing sector
+  grid gives navigation; a native marker patch is deferred to avoid a second UI seam.
+
+## World events
+
+- **EVN cards are glyphs.** `EventIconCache` and PNG fallbacks were deleted; there are no
+  event PNG assets. Category marks are `EventGlyph` only.
 
 ## Wing Command reuse boundary
 
@@ -176,7 +299,10 @@ fail closed.
 Product split: Wing Command owns the recruited squadron; Boscali owns the battlefield
 (fire, occupancy, perks/support, theater SA). The theater picture is its own **STR** bezel
 screen (SA / FRONT / TASKING / LOG / CMD) — it installs and fails on its own and does not
-borrow an OPS tab or a slot from Wing Command. Doctrine biases friendly mission AI only and
-never retasks a wingman.
+borrow an OPS tab or a slot from Wing Command. `ITheaterPage` is gone; do not remount
+theater SA as an OPS tab. Doctrine copy is scoring bias for friendly mission AI only —
+not orders — and never retasks a wingman. Empty-board air/territory ratios print "—",
+never a fake 50%. Doctrine math lives in `NOAvionics.TheaterScoring`; do not reintroduce a
+local `TheaterBias` duplicate.
 
 Maintenance rules (how to change bezels, the picker, the protocol): [`Avionics/README.md`](../Avionics/README.md).

@@ -40,8 +40,6 @@ namespace BoscaliSummer.Runtime
     /// </summary>
     internal sealed class ModNet : MonoBehaviour, ISceneService
     {
-        public static ModNet Instance { get; private set; }
-
         private static bool serializersInstalled;
         private MessageHandler registeredClientHandler;
         private NetworkServer subscribedServer;
@@ -49,7 +47,6 @@ namespace BoscaliSummer.Runtime
 
         private void Awake()
         {
-            Instance = this;
             InstallSerializers();
         }
 
@@ -61,7 +58,6 @@ namespace BoscaliSummer.Runtime
                 registeredClientHandler.UnregisterHandler<FireIgnitedMessage>();
                 registeredClientHandler.UnregisterHandler<RuinCreatedMessage>();
             }
-            if (Instance == this) Instance = null;
         }
 
         public void ResetForScene()

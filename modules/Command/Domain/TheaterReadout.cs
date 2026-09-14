@@ -66,29 +66,6 @@ namespace BoscaliSummer.Features.Command.Domain
         }
 
         /// <summary>
-        /// A large figure at instrument width: 4 200 000 becomes "4.2M", because a metric
-        /// cell that has to fit its digits is a cell that shrinks its own type.
-        ///
-        /// <para>Formatted invariantly. A gauge that reads "4.2M" for one pilot and "4,2M"
-        /// for another is a gauge whose decimal point is a guess, and the same digits mean
-        /// different things either side of that comma.</para>
-        /// </summary>
-        public static string Compact(float value)
-        {
-            if (float.IsNaN(value) || float.IsInfinity(value)) return "—";
-
-            float magnitude = Math.Abs(value);
-            string sign = value < 0f ? "-" : "";
-            CultureInfo fixedPoint = CultureInfo.InvariantCulture;
-
-            if (magnitude >= 1_000_000f)
-                return sign + (magnitude / 1_000_000f).ToString("0.#", fixedPoint) + "M";
-            if (magnitude >= 10_000f)
-                return sign + (magnitude / 1_000f).ToString("0.#", fixedPoint) + "K";
-            return sign + magnitude.ToString("N0", fixedPoint);
-        }
-
-        /// <summary>
         /// How a DEFCON level reads as a rail state, so severity is carried by position on
         /// the scale rather than by a colour the caller picked.
         /// </summary>

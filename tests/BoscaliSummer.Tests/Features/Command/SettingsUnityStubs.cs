@@ -11,7 +11,17 @@ public class MFDScreen : MonoBehaviour
     public string shortName; public GameObject displayPanel; public bool aircraftOnly; public bool isActive;
     public TextMeshProUGUI label; public Image highlight;
 }
-namespace BoscaliSummer.Framework.Contracts { internal interface IThirdPersonHud { bool IsEnabled { get; } void Toggle(); } }
+namespace BoscaliSummer.Framework.Contracts
+{
+    internal interface IThirdPersonHud
+    {
+        bool IsEnabled { get; }
+        void Toggle();
+        bool HidePitchLadder { get; set; }
+        bool CameraFeedEnabled { get; set; }
+        bool FlightCameraEnabled { get; set; }
+    }
+}
 namespace BoscaliSummer.Framework.Features { internal static class ModServices { public static bool TryGet<T>(out T service) { service=default; return false; } } }
 namespace BoscaliSummer.Framework.Lifecycle { public interface ISceneService { void ResetForScene(); } }
 namespace BoscaliSummer.Runtime

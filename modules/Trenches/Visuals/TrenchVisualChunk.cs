@@ -6,20 +6,24 @@ using UnityEngine;
 namespace BoscaliSummer.Features.Trenches.Visuals
 {
     /// <summary>
-    /// Renders a trench network in 3D world space using a 3-tier camera distance LOD.
-    /// LOD0 is a continuous earthwork extrusion per edge; an artist AssetBundle, when
-    /// present, replaces it with modular prefabs. Handles spatial parenting under
-    /// Datum.origin to maintain compatibility with Nuclear Option's floating origin shifts.
+    /// Renders a trench network's carved ditches with a 3-tier camera distance LOD.
+    /// LOD0 is the full earthwork extrusion plus the front-line vehicle obstacle;
+    /// LOD1 is a simplified berm and LOD2 a ground scar for high-altitude viewing.
+    /// Strongpoints are real game scenery spawned by TrenchWorks, not built here.
+    /// All geometry is parented under Datum.origin for floating-origin compatibility.
     /// </summary>
     internal sealed class TrenchVisualChunk : MonoBehaviour
     {
+        private const int MaximumColliders = 48;
+        private const float FrontBand = -30f;
+
         private TrenchNetwork network;
         private GameObject lod0Root;
         private GameObject lod1Root;
         private GameObject lod2Root;
 
         private readonly List<Mesh> proceduralMeshes = new List<Mesh>();
-        private readonly List<BoxCollider> colliders = new List<BoxCollider>();
+        private readonly List<BoxCollider> colliders = new List<BoxCollider>(MaximumColliders);
 
         public float Lod0Distance = 250f;
         public float Lod1Distance = 1200f;
@@ -55,6 +59,7 @@ namespace BoscaliSummer.Features.Trenches.Visuals
 
             Material earthMat = TrenchMaterialResolver.GetEarthBermMaterial();
             EarthMaterial = earthMat != null ? earthMat.name + " / " + earthMat.shader?.name : "MISSING";
+            if (earthMat == null) return;
 
             if (lod0Root == null)
             {
@@ -72,159 +77,61 @@ namespace BoscaliSummer.Features.Trenches.Visuals
                 lod2Root.transform.SetParent(transform, false);
             }
 
-            bool modular = TrenchPrefabResolver.HasExternalBundle;
             foreach (var edge in network.Edges)
             {
                 if (edge.PathPoints == null || edge.PathPoints.Length < 2) continue;
+                bool frontLine = Vector3.Dot(edge.PathPoints[0] - network.SeedCenter, network.ThreatDirection) >= FrontBand;
 
-                var edgeObj0 = new GameObject($"Edge_{edge.Id}_LOD0");
-                edgeObj0.transform.SetParent(lod0Root.transform, false);
-                if (modular) BuildModularEdge(edge, edgeObj0, earthMat);
-                else BuildContinuousEdge(edge, edgeObj0, earthMat);
-                AddEdgeColliders(edgeObj0, edge.PathPoints, edge.TrenchWidth, edge.ParapetHeight);
+                AddEdgeMesh(lod0Root.transform, $"Edge_{edge.Id}_LOD0", edge,
+                    edge.TrenchWidth, edge.ParapetHeight, edge.SkirtDepth, earthMat, true);
+                AddEdgeMesh(lod1Root.transform, $"Edge_{edge.Id}_LOD1", edge,
+                    edge.TrenchWidth, edge.ParapetHeight * 0.7f, 0.5f, earthMat, true);
+                AddEdgeMesh(lod2Root.transform, $"Edge_{edge.Id}_LOD2", edge,
+                    edge.TrenchWidth + 1.0f, 0.10f, 0.05f, earthMat, false);
 
-                // Simplified berm mesh for LOD1 (lower parapet, no detail)
-                Mesh edgeMesh1 = TrenchMeshBuilder.BuildEdgeMesh(
-                    edge.PathPoints,
-                    edge.TrenchWidth,
-                    edge.ParapetHeight * 0.7f,
-                    0.5f,
-                    network.ThreatDirection);
-                if (edgeMesh1 != null)
-                {
-                    proceduralMeshes.Add(edgeMesh1);
-                    var edgeObj1 = new GameObject($"Edge_{edge.Id}_LOD1");
-                    edgeObj1.transform.SetParent(lod1Root.transform, false);
-                    edgeObj1.AddComponent<MeshFilter>().sharedMesh = edgeMesh1;
-                    edgeObj1.AddComponent<MeshRenderer>().sharedMaterial = earthMat;
-                }
-
-                // LOD2 ground scar ribbon for high-altitude viewing
-                Mesh ribbon = TrenchMeshBuilder.BuildEdgeMesh(edge.PathPoints,
-                    edge.TrenchWidth + 1.6f, 0.10f, 0.05f, network.ThreatDirection);
-                if (ribbon != null)
-                {
-                    proceduralMeshes.Add(ribbon);
-                    var scar = new GameObject($"Edge_{edge.Id}_LOD2");
-                    scar.transform.SetParent(lod2Root.transform, false);
-                    scar.AddComponent<MeshFilter>().sharedMesh = ribbon;
-                    scar.AddComponent<MeshRenderer>().sharedMaterial = earthMat;
-                }
-            }
-
-            foreach (var node in network.Nodes)
-            {
-                GameObject nodeObj0 = null;
-                switch (node.Type)
-                {
-                    case TrenchNodeType.BunkerBlindage:
-                        nodeObj0 = TrenchPrefabResolver.InstantiateBunker(node.Position, node.Rotation, lod0Root.transform);
-                        if (nodeObj0 != null)
-                        {
-                            var col = nodeObj0.AddComponent<BoxCollider>();
-                            col.size = new Vector3(7.5f, 3.2f, 8.5f);
-                            col.center = new Vector3(0f, 0.7f, 0f);
-                            colliders.Add(col);
-                        }
-                        break;
-
-                    case TrenchNodeType.HeavyWeaponPit:
-                        nodeObj0 = TrenchPrefabResolver.InstantiateWeaponPit(node.Position, node.Rotation, lod0Root.transform);
-                        break;
-
-                    case TrenchNodeType.TrenchJunction:
-                        nodeObj0 = TrenchPrefabResolver.InstantiateJunction(node.Position, node.Rotation, lod0Root.transform);
-                        break;
-
-                    case TrenchNodeType.Foxhole:
-                    case TrenchNodeType.RifleBay:
-                    default:
-                        nodeObj0 = TrenchPrefabResolver.InstantiateRifleBay(node.Position, node.Rotation, lod0Root.transform);
-                        break;
-                }
-
-                TrenchPrefabResolver.InstantiateLOD1Node(node.Position, node.Rotation, lod1Root.transform);
-                TrenchPrefabResolver.InstantiateLOD1Node(node.Position, node.Rotation, lod2Root.transform);
+                if (frontLine) AddFrontColliders(edge);
             }
 
             currentLod = -1;
             UpdateLod(true);
         }
 
-        private void BuildContinuousEdge(TrenchEdge edge, GameObject edgeObj, Material earthMat)
+        private void AddEdgeMesh(Transform parent, string name, TrenchEdge edge, float width, float height, float skirt,
+            Material material, bool conformToGround)
         {
-            Mesh mesh = TrenchMeshBuilder.BuildEdgeMesh(edge.PathPoints, edge.TrenchWidth,
-                edge.ParapetHeight, edge.SkirtDepth, network.ThreatDirection);
+            Mesh mesh = TrenchMeshBuilder.BuildEdgeMesh(edge.PathPoints, width, height, skirt, network.ThreatDirection,
+                conformToGround ? TrenchManager.SnapToGround : (Func<Vector3, Vector3>)null);
             if (mesh == null) return;
             proceduralMeshes.Add(mesh);
-            edgeObj.AddComponent<MeshFilter>().sharedMesh = mesh;
-            edgeObj.AddComponent<MeshRenderer>().sharedMaterial = earthMat;
+            var go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            go.AddComponent<MeshRenderer>().sharedMaterial = material;
         }
 
-        private void BuildModularEdge(TrenchEdge edge, GameObject edgeObj, Material earthMat)
+        /// <summary>
+        /// One low obstacle box every three path points along the fire trench: the front
+        /// line stops vehicles without paying for a collider per ditch segment.
+        /// </summary>
+        private void AddFrontColliders(TrenchEdge edge)
         {
-            const float moduleLength = 8.0f;
-            for (int i = 0; i < edge.PathPoints.Length - 1; i++)
-            {
-                Vector3 p0 = edge.PathPoints[i];
-                Vector3 p1 = edge.PathPoints[i + 1];
-                float dist = Vector3.Distance(p0, p1);
-                if (dist < 0.2f) continue;
-
-                Vector3 fwd = (p1 - p0) / dist;
-                Quaternion rot = Quaternion.LookRotation(fwd, Vector3.up);
-                Vector3 right = rot * Vector3.right;
-                if (Vector3.Dot(right, network.ThreatDirection) < 0f)
-                    rot = Quaternion.LookRotation(-fwd, Vector3.up);
-
-                int count = Mathf.Max(1, Mathf.CeilToInt(dist / moduleLength));
-                float step = dist / count;
-                for (int p = 0; p < count; p++)
-                {
-                    Vector3 pos = Vector3.Lerp(p0, p1, (p + 0.5f) / count);
-                    GameObject straight = TrenchPrefabResolver.InstantiateStraight(pos, rot, edgeObj.transform);
-                    if (straight != null)
-                        straight.transform.localScale = new Vector3(1f, 1f, (step + 0.3f) / moduleLength);
-                }
-
-                if (i < edge.PathPoints.Length - 2)
-                {
-                    Vector3 nextFwd = (edge.PathPoints[i + 2] - p1).normalized;
-                    if (Vector3.Angle(fwd, nextFwd) > 12f)
-                    {
-                        Vector3 bisector = (fwd + nextFwd).normalized;
-                        if (bisector.sqrMagnitude > 0.001f)
-                            TrenchPrefabResolver.InstantiateCorner(p1, Quaternion.LookRotation(bisector, Vector3.up), edgeObj.transform);
-                    }
-                }
-            }
-        }
-
-        private void AddEdgeColliders(GameObject parent, Vector3[] path, float width, float height)
-        {
-            float halfW = width * 0.5f;
-            // One elongated box spans two zigzag segments; a sector belt is a vehicle
-            // obstacle, not a precision mesh, and this halves PhysX object count.
-            for (int i = 0; i < path.Length - 1; i += 2)
+            Vector3[] path = edge.PathPoints;
+            for (int i = 0; i < path.Length - 1 && colliders.Count < MaximumColliders; i += 3)
             {
                 Vector3 p0 = path[i];
-                Vector3 p1 = path[Math.Min(i + 2, path.Length - 1)];
+                Vector3 p1 = path[Math.Min(i + 3, path.Length - 1)];
                 float len = Vector3.Distance(p0, p1);
-                if (len < 1.0f) continue;
+                if (len < 1.5f) continue;
 
                 Vector3 mid = (p0 + p1) * 0.5f;
                 Vector3 fwd = (p1 - p0).normalized;
-                Vector3 side = Vector3.Cross(Vector3.up, fwd).normalized;
-                for (int wall = -1; wall <= 1; wall += 2)
-                {
-                    var colObj = new GameObject($"BermCollider_{i}_{wall}");
-                    colObj.transform.SetParent(parent.transform, false);
-                    colObj.transform.localPosition = mid + side * (wall * (halfW + 0.95f)) + Vector3.up * (height * 0.5f);
-                    colObj.transform.localRotation = Quaternion.LookRotation(fwd, Vector3.up);
-                    var box = colObj.AddComponent<BoxCollider>();
-                    box.size = new Vector3(1.8f, height + 0.4f, len);
-                    colliders.Add(box);
-                }
+                var colObj = new GameObject($"DitchCollider_{edge.Id}_{i}");
+                colObj.transform.SetParent(lod0Root.transform, false);
+                colObj.transform.localPosition = mid + Vector3.up * (edge.ParapetHeight * 0.5f);
+                colObj.transform.localRotation = Quaternion.LookRotation(fwd, Vector3.up);
+                var box = colObj.AddComponent<BoxCollider>();
+                box.size = new Vector3(edge.TrenchWidth + 1.8f, Mathf.Max(1.2f, edge.ParapetHeight * 0.9f), len + 0.5f);
+                colliders.Add(box);
             }
         }
 

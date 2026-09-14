@@ -50,8 +50,8 @@ namespace BoscaliSummer.Features.Progression.Presentation
         private Image[] budgetPips;
         private GameObject[] budgetPipSlots;
         private TMP_Text committedSkillsEmpty;
-        private readonly SqdGlyph[] committedIcons = new SqdGlyph[PerkCatalog.MaximumPerks];
-        private readonly TMP_Text[] committedLabels = new TMP_Text[PerkCatalog.MaximumPerks];
+        private readonly SqdGlyph[] committedIcons = new SqdGlyph[PerkCatalog.All.Length];
+        private readonly TMP_Text[] committedLabels = new TMP_Text[PerkCatalog.All.Length];
 
         private void ResetPilotPage()
         {
@@ -87,7 +87,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             AvStyled.SpineTick(parent, x - SpineInset + 3f, y - 12f);
 
             Rect portraitFrame = new Rect(x + 10f, y - 8f, 92f, 138f);
-            AvKit.Panel(parent, portraitFrame, new Color32(18, 22, 26, 255));
+            AvKit.Panel(parent, portraitFrame, AvTheme.SurfaceInert);
             AvKit.Outline(parent, portraitFrame, AvTheme.Frame);
             pilotPortraitFallback = PlainLabel(parent,
                 new Rect(portraitFrame.x + 4f, portraitFrame.y - 56f, portraitFrame.width - 8f, 40f),
@@ -115,7 +115,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             float emblemX = x + width - emblemWidth + 6f;
             pilotEmblemFallback = PlainLabel(parent, new Rect(emblemX, y - 42f, 62f, 30f), "NO\nART", "row-sub");
             pilotEmblemFallback.alignment = TextAlignmentOptions.Center;
-            pilotEmblemImage = AvKit.Panel(parent, new Rect(emblemX, y - 8f, 62f, 62f), Color.clear);
+            pilotEmblemImage = AvKit.Panel(parent, new Rect(emblemX, y - 8f, 62f, 62f), Color.white);
             pilotEmblemImage.type = Image.Type.Simple;
             pilotEmblemImage.preserveAspect = true;
             pilotEmblemImage.raycastTarget = false;
@@ -125,7 +125,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
 
             // ---- Service tiles -----------------------------------------------------------
             float tileWidth = (width - AvTokens.Space2 * 3f) / 4f;
-            tileSortie = StatTile(parent, x, y, tileWidth, "SORTIE", "0");
+            tileSortie = StatTile(parent, x, y, tileWidth, "SORTIE", "—");
             tileTime = StatTile(parent, x + (tileWidth + AvTokens.Space2), y, tileWidth, "MISSION", "00:00");
             tileFuel = StatTile(parent, x + (tileWidth + AvTokens.Space2) * 2f, y, tileWidth, "FUEL", "—");
             tileDeaths = StatTile(parent, x + (tileWidth + AvTokens.Space2) * 3f, y, tileWidth, "DEATHS", "0");
@@ -271,12 +271,12 @@ namespace BoscaliSummer.Features.Progression.Presentation
             else
             {
                 runAirframeValue.text = "NO AIRCRAFT";
-                runSortieScoreValue.text = "0";
+                runSortieScoreValue.text = "—";
                 runFlightStatusValue.text = "GROUND";
                 runFlightStatusValue.color = AvTheme.Dim;
                 runFuelValue.text = "—";
                 if (tileFuel != null) tileFuel.text = "—";
-                if (tileSortie != null) tileSortie.text = "0";
+                if (tileSortie != null) tileSortie.text = "—";
             }
 
             int minutes = Mathf.FloorToInt(Time.timeSinceLevelLoad / 60f);

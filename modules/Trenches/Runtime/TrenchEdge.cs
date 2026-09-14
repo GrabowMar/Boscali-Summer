@@ -8,8 +8,8 @@ namespace BoscaliSummer.Features.Trenches.Runtime
     {
         CrawlTrench = 0,        // Shallow connector between hasty foxholes
         ZigzagFireTrench = 1,   // Classic zigzag/traverse fire trench with raised parapet
-        CommunicationTrench = 2,// Sinuous artery leading rearward to command/logistics
-        BaffleEntry = 3         // 90-degree dog-leg blast barrier to dugouts/shelters
+        CommunicationTrench = 2,// Traversed artery leading rearward to command/logistics
+        Sap = 3                 // Narrow forward crawl trench toward the enemy wire
     }
 
     internal sealed class TrenchEdge
@@ -52,7 +52,7 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             {
                 case TrenchEdgeType.CrawlTrench: return 1.4f;
                 case TrenchEdgeType.CommunicationTrench: return 2.2f;
-                case TrenchEdgeType.BaffleEntry: return 1.8f;
+                case TrenchEdgeType.Sap: return 1.1f;
                 default: return 2.6f; // ZigzagFireTrench
             }
         }
@@ -62,6 +62,7 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             if (stage == TrenchStage.Stage0_Scrape) return 0.5f;
             if (stage == TrenchStage.Stage1_Crawl) return 1.0f;
             if (type == TrenchEdgeType.CommunicationTrench) return 1.7f;
+            if (type == TrenchEdgeType.Sap) return 0.8f; // Shallow, exposed forward crawl
             return 2.4f; // Standard fortified parapet
         }
 
@@ -73,7 +74,8 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         public bool IsDestroyed => Health <= 0f;
 
         /// <summary>
-        /// Mathematically generates a zigzag traverse or sinuous polyline between two points.
+        /// Generates the traversed ditch polyline between two points. Fire and communication
+        /// trenches turn through fire bays and traverses; a sap is a tight forward crawl.
         /// Raycasting against terrain is delegated to the optional terrainSampler function.
         /// </summary>
         public static Vector3[] GeneratePathPoints(
@@ -104,7 +106,21 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             var points = new List<Vector3>();
             points.Add(terrainSampler != null ? terrainSampler(start) : start);
 
-            if (type == TrenchEdgeType.CrawlTrench || totalDist <= 10f)
+            if (type == TrenchEdgeType.Sap)
+            {
+                // Narrow sap: short zigzag bays so blast and fire cannot sweep the whole ditch.
+                int bays = Math.Max(2, (int)Math.Round(totalDist / 4.5f));
+                float traverseOffset = Math.Min(1.2f, totalDist * 0.12f);
+                for (int i = 1; i < bays; i++)
+                {
+                    float t = (float)i / bays;
+                    Vector3 basePoint = Vector3.Lerp(start, end, t);
+                    float sign = (i % 2 == 1) ? 1.0f : -0.7f;
+                    Vector3 displaced = basePoint + side * (traverseOffset * sign);
+                    points.Add(terrainSampler != null ? terrainSampler(displaced) : displaced);
+                }
+            }
+            else if (type == TrenchEdgeType.CrawlTrench || totalDist <= 10f)
             {
                 // Simple subdivide for terrain conformation
                 int cuts = Math.Max(1, (int)(totalDist / 5.0f));
@@ -134,25 +150,19 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             }
             else if (type == TrenchEdgeType.CommunicationTrench)
             {
-                // Sinuous S-curve (sine wave pattern)
-                int cuts = Math.Max(3, (int)(totalDist / 6.0f));
-                float curveAmplitude = Math.Min(2.5f, totalDist * 0.15f);
+                // Traversed artery: regular zigzag bays keep the ditch safe from enfilade
+                // fire and read as a link trench, not a smooth road.
+                int bays = Math.Max(3, (int)Math.Round(totalDist / 9.0f));
+                float traverseOffset = Math.Min(2.2f, totalDist * 0.12f);
 
-                for (int i = 1; i < cuts; i++)
+                for (int i = 1; i < bays; i++)
                 {
-                    float t = (float)i / cuts;
+                    float t = (float)i / bays;
                     Vector3 basePoint = Vector3.Lerp(start, end, t);
-                    float wave = Mathf.Sin(t * Mathf.PI * 2f);
-                    Vector3 displaced = basePoint + side * (wave * curveAmplitude);
+                    float sign = (i % 2 == 1) ? 1.0f : -0.8f;
+                    Vector3 displaced = basePoint + side * (traverseOffset * sign);
                     points.Add(terrainSampler != null ? terrainSampler(displaced) : displaced);
                 }
-            }
-            else if (type == TrenchEdgeType.BaffleEntry)
-            {
-                // 90-degree dog-leg (start -> corner -> end)
-                Vector3 mid = Vector3.Lerp(start, end, 0.5f);
-                Vector3 dogLeg = mid + side * 3.0f;
-                points.Add(terrainSampler != null ? terrainSampler(dogLeg) : dogLeg);
             }
 
             points.Add(terrainSampler != null ? terrainSampler(end) : end);

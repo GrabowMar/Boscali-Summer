@@ -73,7 +73,26 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             Vector3 delta = global - SeedCenter;
             float lateral = Vector3.Dot(delta, LateralAxis);
             float forward = Vector3.Dot(delta, ThreatDirection);
-            return Math.Abs(lateral) <= FlankLimit + 10f && forward >= -(DepthLimit + 10f) && forward <= 20f;
+            // The lateral margin covers the junction trench to the next sector's end.
+            return Math.Abs(lateral) <= FlankLimit + 10f + TrenchTacticalMath.LinkMargin &&
+                forward >= -(DepthLimit + 10f) && forward <= TrenchTacticalMath.ForwardLimit;
+        }
+
+        /// <summary>Nearest fire-line node to a point, for joining adjacent sectors.</summary>
+        public TrenchNode NearestFrontNode(Vector3 global, out float distance)
+        {
+            TrenchNode best = null;
+            float bestSq = float.MaxValue;
+            foreach (var node in nodes.Values)
+            {
+                float forward = Vector3.Dot(node.Position - SeedCenter, ThreatDirection);
+                if (forward < -24f || forward > TrenchTacticalMath.ForwardLimit) continue;
+                float dx = node.Position.x - global.x, dz = node.Position.z - global.z;
+                float sq = dx * dx + dz * dz;
+                if (sq < bestSq) { bestSq = sq; best = node; }
+            }
+            distance = best == null ? float.MaxValue : Mathf.Sqrt(bestSq);
+            return best;
         }
 
         public TrenchNode AddNode(Vector3 position, TrenchNodeType type, TrenchStage stage = TrenchStage.Stage0_Scrape)

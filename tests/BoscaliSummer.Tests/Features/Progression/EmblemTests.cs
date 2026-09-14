@@ -12,6 +12,7 @@ namespace BoscaliSummer.Tests.Features.Progression
             Bounds();
             RandomIsDeterministic();
             PaletteAccessors();
+            HostileIsDeterministic();
         }
 
         private static void RoundTrip()
@@ -58,6 +59,22 @@ namespace BoscaliSummer.Tests.Features.Progression
                 TestAssert.That(EmblemDesign.Primary(palette).A > 0f, "emblem primary colour is invisible");
                 TestAssert.That(EmblemDesign.Secondary(palette).A > 0f, "emblem secondary colour is invisible");
             }
+        }
+
+        private static void HostileIsDeterministic()
+        {
+            for (int i = 0; i < 128; i++)
+            {
+                string identity = "[+]|CROWN " + i;
+                EmblemDesign first = EmblemDesign.Hostile(identity);
+                TestAssert.That(first == EmblemDesign.Hostile(identity), "a hostile crest is not identity-stable");
+                TestAssert.That(first.Palette == 2 || first.Palette == 3,
+                    "a hostile crest escaped the caution/danger palette band");
+                TestAssert.That(first.Shape < EmblemDesign.ShapeCount && first.Charge < EmblemDesign.ChargeCount,
+                    "a hostile crest escaped its catalogue");
+            }
+            TestAssert.That(EmblemDesign.Hostile("") == EmblemDesign.Hostile(null),
+                "an empty wing identity is not safe to hash");
         }
     }
 }

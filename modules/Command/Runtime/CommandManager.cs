@@ -15,7 +15,6 @@ namespace BoscaliSummer.Features.Command.Runtime
     {
         public static CommandManager Active { get; internal set; }
 
-        private IProgressionView progression;
         private ManualLogSource logger;
         private IOperationOutcomeSource operationOutcomes;
 
@@ -35,21 +34,16 @@ namespace BoscaliSummer.Features.Command.Runtime
         }
 
         public CommandDoctrine ActiveDoctrine { get; private set; } = CommandDoctrine.Balanced;
-        public readonly List<PersistentID> PriorityTargets = new List<PersistentID>(4);
-        public Airbase SectorStrikeTarget { get; private set; }
         public readonly TacticalTheaterState TheaterState = new TacticalTheaterState();
         internal readonly FactionMoraleState Morale = new FactionMoraleState();
-
-        public int PlayerRank => progression != null ? progression.Rank : 0;
 
         /// <summary>Whether a surface target carries a radar, remembered per unit instance.</summary>
         private readonly Dictionary<int, bool> emitterCache = new Dictionary<int, bool>(64);
 
         private const int EmitterCacheLimit = 512;
 
-        public void Configure(IProgressionView progressionView, ManualLogSource log)
+        public void Configure(ManualLogSource log)
         {
-            progression = progressionView;
             logger = log;
             Active = this;
             logger?.LogInfo("[COM] Faction Morale storage ready: host-only, 0–100, mission-scoped; no gameplay effects.");
@@ -58,8 +52,6 @@ namespace BoscaliSummer.Features.Command.Runtime
         public void ResetForScene()
         {
             ActiveDoctrine = CommandDoctrine.Balanced;
-            PriorityTargets.Clear();
-            SectorStrikeTarget = null;
             TheaterState.Reset();
             Morale.Reset();
             emitterCache.Clear();
@@ -78,46 +70,6 @@ namespace BoscaliSummer.Features.Command.Runtime
             return true;
         }
 
-        public bool TryDesignatePriorityTarget(Unit target)
-        {
-            if (target == null) return false;
-            int max = CommandDoctrineHelper.MaxPriorityTargets(PlayerRank);
-            if (max <= 0)
-            {
-                logger?.LogInfo("[COM] Priority target designation denied: requires Rank 1 (Sergeant).");
-                return false;
-            }
-
-            if (PriorityTargets.Contains(target.persistentID))
-            {
-                PriorityTargets.Remove(target.persistentID);
-                return true;
-            }
-
-            if (PriorityTargets.Count >= max)
-            {
-                PriorityTargets.RemoveAt(0);
-            }
-
-            PriorityTargets.Add(target.persistentID);
-            logger?.LogInfo("[COM] Designated priority target: " + target.unitName);
-            return true;
-        }
-
-        public bool TryOrderSectorStrike(Airbase airbase)
-        {
-            if (airbase == null) return false;
-            if (!CommandDoctrineHelper.CanOrderSectorStrike(PlayerRank))
-            {
-                logger?.LogInfo("[COM] Sector strike wave denied: requires Rank 4 (Major).");
-                return false;
-            }
-
-            SectorStrikeTarget = airbase;
-            logger?.LogInfo("[COM] Sector strike is not implemented; recorded " + airbase.name + " as a mark only.");
-            return true;
-        }
-
         public float GetTargetScoreMultiplier(Unit searcher, Unit target)
         {
             if (searcher == null || target == null) return 1f;
@@ -132,7 +84,7 @@ namespace BoscaliSummer.Features.Command.Runtime
                 WingLink.IsWingMember(searcher.persistentID.GetHashCode()),
                 WingLink.IsWingMember(target.persistentID.GetHashCode()),
                 (int)ActiveDoctrine,
-                PriorityTargets.Contains(target.persistentID),
+                false,
                 target is Aircraft,
                 target is Building,
                 targetIsAntiAir);
@@ -285,7 +237,7 @@ namespace BoscaliSummer.Features.Command.Runtime
             int totalAir = TheaterState.FriendlyAircraftCount + TheaterState.HostileAircraftCount;
             TheaterState.AirSuperiorityRatio = totalAir > 0
                 ? (float)TheaterState.FriendlyAircraftCount / totalAir
-                : 0.5f;
+                : float.NaN;
 
             CountAirbases(localHq);
 

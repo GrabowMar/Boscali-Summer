@@ -18,9 +18,6 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         {
             private readonly AvButton[] buttons;
             private readonly bool readOnly;
-            private readonly UnityEngine.UI.Image[] progressFills;
-            private float progressWidth;
-            private Func<int, float> progress;
             private readonly TMP_Text empty;
             private readonly int perPage;
             private readonly TMP_Text pageLabel;
@@ -37,7 +34,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private Func<int, Sprite> icon;
 
             public MfdPagingGrid(RectTransform parent, float y, float width, int columns, int rows,
-                                  bool pager = true, bool readOnly = false, bool progressBars = false, float rowHeight = 0f)
+                                  bool pager = true, bool readOnly = false, float rowHeight = 0f)
             {
                 if (rowHeight <= 0f) rowHeight = AvTokens.RowHeight;
                 this.readOnly = readOnly;
@@ -45,7 +42,6 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     "NO ENTRIES", "row-sub");
                 perPage = Mathf.Max(1, columns * rows);
                 buttons = new AvButton[perPage];
-                if (progressBars) progressFills = new UnityEngine.UI.Image[perPage];
                 float gap = AvTokens.Gap;
                 float cellWidth = (width - AvTokens.Space3 - gap * (columns - 1)) / columns;
                 for (int i = 0; i < perPage; i++)
@@ -62,12 +58,6 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     {
                         buttons[i].InitialiseHit(null);
                         buttons[i].GetComponentInChildren<TMP_Text>().color = AvTheme.TextPrimary;
-                    }
-                    if (progressBars)
-                    {
-                        progressWidth = cellWidth-14f;
-                        progressFills[i] = AvKit.Rule((RectTransform)buttons[i].transform,
-                            new Rect(7f, -rowHeight+3f, 0f, 2f), AvTheme.RailInfo);
                     }
                 }
 
@@ -93,7 +83,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             public void SetData(int newCount, Func<int, string> labels,
                                 Func<int, bool> isSelected, Action<int> onClick,
-                                Func<int, bool> isEnabled = null, Func<int, Sprite> icons = null, Func<int, float> progress = null)
+                                Func<int, bool> isEnabled = null, Func<int, Sprite> icons = null)
             {
                 count = Mathf.Max(0, newCount);
                 label = labels;
@@ -101,7 +91,6 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 clicked = onClick;
                 enabled = isEnabled;
                 icon = icons;
-                this.progress = progress;
                 int maxPage = Mathf.Max(0, PageCount - 1);
                 if (page > maxPage) page = maxPage;
                 Refresh();
@@ -163,9 +152,6 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     PaintButton(buttons[i], text, exists && selected != null && selected(index),
                         exists && icon != null ? icon(index) : null);
                     buttons[i].WithTooltip(text);
-                    if (progressFills != null)
-                        progressFills[i].rectTransform.sizeDelta = new Vector2(progressWidth *
-                            (exists && progress != null ? MfdChartScale.Fraction(progress(index), 1f) : 0f), 2f);
                 }
 
                 empty.gameObject.SetActive(count == 0);

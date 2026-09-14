@@ -63,6 +63,27 @@ namespace BoscaliSummer.Features.Progression.Runtime
                 (byte)random.Next(PaletteCount));
         }
 
+        /// <summary>Deterministic crest for an enemy squadron, derived from its wing identity.
+        /// Shape and charge vary; the palette stays in the caution/danger band so a hostile
+        /// crest never reads as the player's own emblem.</summary>
+        public static EmblemDesign Hostile(string identity)
+        {
+            int seed = Seed(identity);
+            var random = new Random(seed);
+            return new EmblemDesign((byte)random.Next(ShapeCount), (byte)random.Next(ChargeCount),
+                (byte)(2 + (seed & 1)));
+        }
+
+        /// <summary>FNV-1a over ordinal characters: stable across sessions and clients,
+        /// unlike <see cref="string.GetHashCode"/>.</summary>
+        private static int Seed(string identity)
+        {
+            uint hash = 2166136261u;
+            if (!string.IsNullOrEmpty(identity))
+                for (int i = 0; i < identity.Length; i++) hash = (hash ^ identity[i]) * 16777619u;
+            return (int)(hash & 0x7FFFFFFF);
+        }
+
         public static Rgba Primary(byte palette)
         {
             switch (palette % PaletteCount)

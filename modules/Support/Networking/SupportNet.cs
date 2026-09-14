@@ -43,7 +43,7 @@ namespace BoscaliSummer.Features.Support.Networking
         /// Protocol 6 replaces orbital ground tracks with station-keeping satellites and
         /// their transfer state. Older peers must not interpret fleet or hack ids.
         /// </summary>
-        internal const byte ProtocolVersion = 6;
+        internal const byte ProtocolVersion = 7;
 
         private const float QueryInterval = 0.4f;
         private const int MaximumQueries = 64;
@@ -372,6 +372,7 @@ namespace BoscaliSummer.Features.Support.Networking
                 }
                 w.WriteByte(v.Sigint); w.WriteByte(v.Crypto);
                 w.WriteByte(v.Disrupt); w.WriteByte(v.Ew);
+                w.WriteByte(v.EwAssetState);
             });
             SetReader<OpsStateMessage>(r =>
             {
@@ -412,6 +413,7 @@ namespace BoscaliSummer.Features.Support.Networking
                 }
                 message.Sigint = r.ReadByte(); message.Crypto = r.ReadByte();
                 message.Disrupt = r.ReadByte(); message.Ew = r.ReadByte();
+                message.EwAssetState = r.ReadByte();
                 return message;
             });
             SetWriter<CyberEffectMessage>((w, v) =>

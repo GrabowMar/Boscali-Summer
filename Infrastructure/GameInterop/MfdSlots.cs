@@ -11,5 +11,6 @@ namespace BoscaliSummer.Runtime
         public const string Str = "STR";
         public const string Rad = "RAD";
         public const string Set = "SET";
+        public const string Events = "EVN";
     }
 }

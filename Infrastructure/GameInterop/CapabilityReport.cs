@@ -15,6 +15,7 @@ namespace BoscaliSummer.Runtime
             bool vehicle = AccessTools.Method(typeof(GroundVehicle), nameof(GroundVehicle.UnitDisabled)) != null;
             bool capture = AccessTools.Method(typeof(Airbase), "CaptureFaction") != null;
             bool blast = AccessTools.Method(typeof(BlastManager), "AddBlast") != null;
+            bool blastStamp = AccessTools.Method(typeof(BlastManager), "DrawBlast") != null;
             bool scorchDecal = AccessTools.Field(typeof(GameAssets), "scorchMarkDecal") != null;
             bool musicManager = AccessTools.Method(typeof(MusicManager), nameof(MusicManager.PlayMusic)) != null &&
                 AccessTools.Method(typeof(MusicManager), nameof(MusicManager.CrossFadeMusic)) != null;
@@ -47,17 +48,22 @@ namespace BoscaliSummer.Runtime
                 AccessTools.Method(typeof(Airbase), nameof(Airbase.RequestLanding)) != null &&
                 AccessTools.Method(typeof(Airbase.Runway), nameof(Airbase.Runway.IsSuitable)) != null &&
                 AccessTools.Field(typeof(RadialMenuMain), "actionsMain") != null;
+            bool highCommand = supportSpawning &&
+                AccessTools.Method(typeof(UnitRegistry), "TryGetPersistentUnit") != null &&
+                AccessTools.Method(typeof(FactionHQ), nameof(FactionHQ.AddFunds)) != null &&
+                AccessTools.Method(typeof(FactionHQ), nameof(FactionHQ.AddScore)) != null &&
+                AccessTools.Method(typeof(Unit), "add_onDisableUnit") != null;
             Plugin.Logger.LogInfo(
                 "Capabilities: " +
                 $"BulletImpacts={bullet}, MissileImpacts={missile}, VehicleLosses={vehicle}, " +
                 $"MapBuildingHP={GameAccess.MapBuildingHitPointsAvailable}, " +
-                $"ScorchMap={blast}, FacadeScorch={scorchDecal}, AirbaseCapture={capture}, " +
+                $"ScorchMap={blast}, ScorchStamps={blastStamp}, FacadeScorch={scorchDecal}, AirbaseCapture={capture}, " +
                 $"RadioMFD={GameAccess.MfdAvailable}, MusicMixer={musicManager}, " +
                 $"MusicOwnership={GameAccess.MusicSourcesAvailable}, " +
                 $"SoundtrackCatalog={soundtrackCatalog}, Progression={progression}, " +
                 $"SquadWingCommandApi={WingLink.SquadAvailable}, " +
                 $"SupportSpawning={supportSpawning}, SupportRecon={supportRecon}, SupportOrbitalScan={supportRecon}, DynamicOperations={dynamicOperations}, OperationServices={operationServices}, " +
-                $"AutopilotLanding={autopilotLanding}.");
+                $"HighCommand={highCommand}, AutopilotLanding={autopilotLanding}.");
 
             try
             {

@@ -44,6 +44,11 @@ namespace BoscaliSummer.Features.Support.Networking
         public float[] TransitLeft;
         public float[] TransitTotal;
         public byte Sigint, Crypto, Disrupt, Ew;
+
+        /// <summary>The faction's EW asset state (see <c>EwAssetState</c>): none, truck, or
+        /// encampment. Only the state crosses the wire — never the live Unit/Building
+        /// reference, which a client cannot reconstruct anyway.</summary>
+        public byte EwAssetState;
     }
 
     /// <summary>Host broadcast when a track-deception operation starts; all peers mirror it.</summary>

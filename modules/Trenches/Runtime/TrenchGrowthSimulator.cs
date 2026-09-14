@@ -6,8 +6,9 @@ using UnityEngine;
 namespace BoscaliSummer.Features.Trenches.Runtime
 {
     /// <summary>
-    /// Grows a trench network from a 7-bay frontline seed into a sector fortress belt:
-    /// extended fire trench, a rear support line with a dugout, and a rear redoubt line.
+    /// Grows a trench network from a 7-bay frontline seed into a deliberate belt: an
+    /// extended fire trench, a support line with a dugout at field depth, a rear redoubt
+    /// line, and finally forward saps ending in listening posts toward the enemy.
     /// Every stage is atomic: an invalid terrain sample leaves the graph untouched and the
     /// stage is simply retried on the next growth tick.
     /// </summary>
@@ -45,6 +46,7 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         {
             LastFailure = null;
             if (net == null || net.Overrun || net.NodeCount == 0) return false;
+            if (net.Stage == TrenchStage.Stage6_Saps) return false; // A finished belt never grows endless filler.
             if (TrenchTacticalMath.EvaluateNextStage((int)net.Stage, net.NodeCount, net.EdgeCount, net.BunkerCount)
                 != (int)net.Stage + 1) return Fail($"stage gate blocked at {net.Stage} ({(int)net.Stage}n/{net.NodeCount}n/{net.EdgeCount}e)");
 
@@ -54,7 +56,8 @@ namespace BoscaliSummer.Features.Trenches.Runtime
                 case TrenchStage.Stage2_FireTrench: return ExtendLine(net, sample);
                 case TrenchStage.Stage3_Hardened: return BuildSupportLine(net, sample);
                 case TrenchStage.Stage4_Integrated: return BuildRedoubt(net, sample);
-                default: return false; // A finished belt never grows endless filler.
+                case TrenchStage.Stage5_Redoubt: return PushSaps(net, sample);
+                default: return false; // No further stage exists.
             }
         }
 
@@ -128,10 +131,12 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         {
             float supportDepth = -TrenchTacticalMath.SupportLineDepth;
             float rearDepth = -TrenchTacticalMath.RearLineDepth;
-            float frontTarget = Math.Min(132f, net.FlankLimit);
-            float supportTarget = Math.Min(110f, net.FlankLimit);
-            var createdNodes = new List<TrenchNode>(9);
-            var createdEdges = new List<TrenchEdge>(9);
+            // The fire and support trenches run to the full flank limit so the next
+            // sector's ends meet this one and a junction trench can join the front line.
+            float frontTarget = net.FlankLimit;
+            float supportTarget = net.FlankLimit;
+            var createdNodes = new List<TrenchNode>(18);
+            var createdEdges = new List<TrenchEdge>(6);
 
             if (!ExtendFlank(net, -frontTarget, 0f, sample, createdNodes) ||
                 !ExtendFlank(net, frontTarget, 0f, sample, createdNodes) ||
@@ -140,18 +145,6 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             {
                 Rollback(net, createdNodes, createdEdges);
                 return Fail("redoubt flanks rejected");
-            }
-
-            // Flank hooks close the perimeter: each fire-trench end bends back to its support end.
-            TrenchNode frontLeft = Nearest(net, -frontTarget, 0f, 16f);
-            TrenchNode frontRight = Nearest(net, frontTarget, 0f, 16f);
-            TrenchNode supportLeft = Nearest(net, -supportTarget, supportDepth, 16f);
-            TrenchNode supportRight = Nearest(net, supportTarget, supportDepth, 16f);
-            if (!Link(net, frontLeft, supportLeft, sample, createdEdges) ||
-                !Link(net, frontRight, supportRight, sample, createdEdges))
-            {
-                Rollback(net, createdNodes, createdEdges);
-                return false;
             }
 
             TrenchNode rearLeft = AddNode(net, -44f, rearDepth, TrenchNodeType.HeavyWeaponPit, TrenchStage.Stage5_Redoubt, sample, createdNodes);
@@ -171,6 +164,58 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             return true;
         }
 
+        /// <summary>
+        /// Final stage: two saps pushed forward from the fire line into no man's land,
+        /// each ending in a small listening post that watches the enemy wire.
+        /// </summary>
+        private static bool PushSaps(TrenchNetwork net, Func<Vector3, Vector3> sample)
+        {
+            var createdNodes = new List<TrenchNode>(2);
+            var createdEdges = new List<TrenchEdge>(2);
+            for (int side = -1; side <= 1; side += 2)
+            {
+                TrenchNode anchor = Nearest(net, side * TrenchTacticalMath.SapLateralOffset, 0f, 12f);
+                if (anchor == null)
+                {
+                    Rollback(net, createdNodes, createdEdges);
+                    return Fail("sap anchor missing on the fire line");
+                }
+                Vector3 target = anchor.Position + net.ThreatDirection * TrenchTacticalMath.SapDepth;
+                Vector3 position = sample != null ? sample(target) : target;
+                var path = TrenchEdge.GeneratePathPoints(anchor.Position, position, net.ThreatDirection,
+                    TrenchEdgeType.Sap, sample);
+                if (!net.CanPlacePath(path))
+                {
+                    Rollback(net, createdNodes, createdEdges);
+                    return Fail($"sap path blocked at lateral {side * TrenchTacticalMath.SapLateralOffset:0}m");
+                }
+                foreach (var existing in net.Nodes)
+                {
+                    if ((existing.Position - position).sqrMagnitude < 4f)
+                    {
+                        Rollback(net, createdNodes, createdEdges);
+                        return Fail("sap head coincides with an existing position");
+                    }
+                }
+                var node = net.AddNode(position, TrenchNodeType.Foxhole, TrenchStage.Stage6_Saps);
+                if (node == null)
+                {
+                    Rollback(net, createdNodes, createdEdges);
+                    return Fail("sap listening post rejected");
+                }
+                createdNodes.Add(node);
+                var edge = net.AddEdge(anchor.Id, node.Id, TrenchEdgeType.Sap, TrenchStage.Stage6_Saps, sample);
+                if (edge == null)
+                {
+                    Rollback(net, createdNodes, createdEdges);
+                    return Fail("sap trench rejected");
+                }
+                createdEdges.Add(edge);
+            }
+            net.Stage = TrenchStage.Stage6_Saps;
+            return true;
+        }
+
         /// <summary>Adds bay nodes one step at a time until the flank reaches <paramref name="lateral"/>.</summary>
         private static bool ExtendFlank(TrenchNetwork net, float lateral, float forward,
             Func<Vector3, Vector3> sample, List<TrenchNode> created)
@@ -178,7 +223,7 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             float sign = Math.Sign(lateral);
             float current = CurrentFlankEnd(net, forward, sign);
             int guard = 0;
-            while (Math.Abs(lateral) - current > 1f && ++guard <= 4)
+            while (Math.Abs(lateral) - current > 1f && ++guard <= 8)
             {
                 float next = Math.Min(Math.Abs(lateral), current + TrenchTacticalMath.FrontBaySpacing) * sign;
                 TrenchNode from = Nearest(net, current * sign, forward, 20f);

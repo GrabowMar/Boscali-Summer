@@ -78,12 +78,14 @@ namespace BoscaliSummer.Garrisons
             Bounds bounds = GetShellBounds(shell);
             BuildingDefinition defense = RooftopPlacement.ResolveDefinition(slot);
             if (defense == null || !RooftopPlacement.TryPlace(shell, bounds, defense,
-                out Vector3 position, out Quaternion rotation)) return false;
+                out Vector3 position, out Quaternion rotation, out Vector4 roofExtents)) return false;
             int generation = generations.TryGetValue(key, out int current) ? current + 1 : 1;
             generations[key] = generation;
             Building core = NetworkSceneSingleton<Spawner>.i.SpawnBuilding(
                 defense.unitPrefab, position.ToGlobalPosition(), rotation, owner, airbase,
-                $"{RooftopPlacement.NamePrefix}Assault:{shell.GetInstanceID()}:{generation}:{slot}", false, null);
+                RooftopPlacement.BuildMarkerName(
+                    $"{RooftopPlacement.NamePrefix}Assault:{shell.GetInstanceID()}:{generation}:{slot}",
+                    roofExtents), false, null);
             if (core == null) return false;
             if (previous == null)
             {
@@ -244,11 +246,14 @@ namespace BoscaliSummer.Garrisons
                 if (shell == null || GarrisonOccupancy.IsOccupied(shell)) continue;
                 int slot = record.Defenses.Count;
                 BuildingDefinition roofDefense = RooftopPlacement.ResolveDefinition(slot);
-                if (roofDefense == null || !RooftopPlacement.TryPlace(shell, GetShellBounds(shell), roofDefense,
-                    out Vector3 position, out Quaternion rotation)) continue;
+                Bounds bounds = GetShellBounds(shell);
+                if (roofDefense == null || !RooftopPlacement.TryPlace(shell, bounds, roofDefense,
+                    out Vector3 position, out Quaternion rotation, out Vector4 roofExtents)) continue;
                 Building spawned = NetworkSceneSingleton<Spawner>.i.SpawnBuilding(
                     roofDefense.unitPrefab, position.ToGlobalPosition(), rotation, owner, airbase,
-                    RooftopPlacement.NamePrefix + Sanitize(GetAirbaseName(airbase)) + ":" + generation + ":" + slot,
+                    RooftopPlacement.BuildMarkerName(
+                        RooftopPlacement.NamePrefix + Sanitize(GetAirbaseName(airbase)) + ":" + generation + ":" + slot,
+                        roofExtents),
                     false, null);
                 if (spawned == null) continue;
                 Building shellBuilding = shell.GetComponentInParent<Building>();

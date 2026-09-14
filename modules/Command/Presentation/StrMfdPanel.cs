@@ -35,7 +35,7 @@ namespace BoscaliSummer.Features.Command.Presentation
     /// the theater account. Where a figure cannot be established, it reads as a dash. A
     /// zero is a claim, and this panel does not make claims it has not verified.</para>
     /// </summary>
-    internal sealed class StrMfdPanel : MonoBehaviour, ISceneService
+    internal sealed partial class StrMfdPanel : MonoBehaviour, ISceneService
     {
         private const float Width = AvTokens.PanelWidth;
         private const float RefreshInterval = 0.25f;
@@ -43,8 +43,9 @@ namespace BoscaliSummer.Features.Command.Presentation
         private const int TabSa = 0;
         private const int TabFront = 1;
         private const int TabTasking = 2;
-        private const int TabLog = 3;
-        private const int TabCmd = 4;
+        private const int TabCoc = 3;
+        private const int TabLog = 4;
+        private const int TabCmd = 5;
 
         private const int ChipCount = 3;
 
@@ -67,6 +68,7 @@ namespace BoscaliSummer.Features.Command.Presentation
         private ManualLogSource logger;
         private ISecondaryObjectivesView tasking;
         private IBaseDefenseAlarmService baseAlarm;
+        private IHighCommandView highCommand;
 
         // ---- Screen ----------------------------------------------------------------------
 
@@ -127,8 +129,6 @@ namespace BoscaliSummer.Features.Command.Presentation
 
         private readonly List<AvButton> doctrineButtons = new List<AvButton>();
         private TMP_Text doctrineDescription;
-        private AvButton sectorToggle;
-        private AvButton frontlineToggle;
 
         // ==================================================================================
 
@@ -152,6 +152,7 @@ namespace BoscaliSummer.Features.Command.Presentation
             shell = null;
             tasking = null;
             baseAlarm = null;
+            highCommand = null;
 
             defconLabel = threatLabel = airCountLabel = sortieNote = null;
             airBar = null;
@@ -173,7 +174,8 @@ namespace BoscaliSummer.Features.Command.Presentation
 
             doctrineButtons.Clear();
             doctrineDescription = null;
-            sectorToggle = frontlineToggle = null;
+
+            ResetCoc();
 
             nextAttempt = 0f;
             nextRefresh = 0f;
@@ -282,6 +284,7 @@ namespace BoscaliSummer.Features.Command.Presentation
             float height = AvScreen.ResolveHeight(
                 templateRect.parent as RectTransform, AvTokens.PanelHeight, AvTokens.PanelHeightMax);
             rootRect.sizeDelta = new Vector2(Width, height);
+            AvKit.ClampIntoCanvas(rootRect);
 
             Image background = root.GetComponent<Image>();
             background.sprite = AvSprites.Panel;
@@ -296,20 +299,28 @@ namespace BoscaliSummer.Features.Command.Presentation
 
             ModServices.TryGet(out tasking);
             ModServices.TryGet(out baseAlarm);
+            ModServices.TryGet(out highCommand);
 
             shell = AvScreen.Build(
                 content, "STR",
-                new[] { "SA", "FRONT", "TASKING", "LOG", "CMD" },
+                new[] { "SA", "FRONT", "TASKING", "COC", "LOG", "CMD" },
                 new[]
                 {
                     new[] { "THEATER CONTROL", "HELD" },
                     new[] { "AIR DOMINANCE", "ALLIED" },
+                    new[] { "COMMAND", "STAFF" },
                 },
                 ChipCount, Width, height, _ => nextRefresh = 0f);
+
+            // The command metric's caption carries the staff's active/KIA split; the sheet's
+            // tracking ellipsised it in the cell. Tighter tracking keeps the full reading.
+            if (shell.Metrics.Length > 2 && shell.Metrics[2].Caption != null)
+                shell.Metrics[2].Caption.characterSpacing = 0f;
 
             BuildSaPage(shell.CreatePage(TabSa, "SaPage"));
             BuildFrontPage(shell.CreatePage(TabFront, "FrontPage"));
             BuildTaskingPage(shell.CreatePage(TabTasking, "TaskingPage"));
+            BuildCocPage(shell.CreatePage(TabCoc, "CocPage"));
             BuildLogPage(shell.CreatePage(TabLog, "LogPage"));
             BuildCmdPage(shell.CreatePage(TabCmd, "CmdPage"));
 
@@ -517,8 +528,10 @@ namespace BoscaliSummer.Features.Command.Presentation
             airCountLabel.text = "ALLIED " + state.FriendlyAircraftCount +
                                  "  ·  HOSTILE " + state.HostileAircraftCount +
                                  "  ·  " + TheaterReadout.Percent(state.AirSuperiorityRatio) + " DOMINANCE";
-            airBar.fillAmount = Mathf.Clamp01(state.AirSuperiorityRatio);
-            airBar.color = state.AirSuperiorityRatio >= 0.5f ? AvTheme.RailReady : AvTheme.RailCaution;
+            bool airKnown = !float.IsNaN(state.AirSuperiorityRatio);
+            airBar.fillAmount = airKnown ? Mathf.Clamp01(state.AirSuperiorityRatio) : 0f;
+            airBar.color = !airKnown ? AvTheme.RailInert
+                : state.AirSuperiorityRatio >= 0.5f ? AvTheme.RailReady : AvTheme.RailCaution;
 
             SortieTally tally = state.Sorties;
             bool known = tally.Observed > 0;
@@ -902,36 +915,9 @@ namespace BoscaliSummer.Features.Command.Presentation
             doctrineDescription = AvStyled.Label(parent, new Rect(x, y, width, 40f), "", "row-sub");
             y -= 46f;
 
-            y = SectionHeader(parent, x, y, width, "MAP OVERLAYS", "TACTICAL FIELD", band: true);
-
-            sectorToggle = AvStyled.Button(parent, new Rect(x, y, width, 26f),
-                "SECTOR CONTROL GRID", "btn",
-                () =>
-                {
-                    if (overlay != null) overlay.ShowSectors = !overlay.ShowSectors;
-                    nextRefresh = 0f;
-                },
-                AvButtonStyle.Toggle);
-            sectorToggle.WithTooltip("Shade the map by which side holds each sector.");
-            y -= 30f;
-
-            frontlineToggle = AvStyled.Button(parent, new Rect(x, y, width, 26f),
-                "FRONTLINE BARRIER LINES", "btn",
-                () =>
-                {
-                    if (overlay != null) overlay.ShowFrontlines = !overlay.ShowFrontlines;
-                    nextRefresh = 0f;
-                },
-                AvButtonStyle.Toggle);
-            frontlineToggle.WithTooltip("Draw the edges where friendly and hostile control meet.");
-            y -= 32f;
-
-            // These two switch the view for this session. Opacity, grid resolution and
-            // refresh rate are saved configuration and live on the SET panel; a second
-            // control writing the same entry from here would just be a second answer.
             AvStyled.Label(parent, new Rect(x, y, width, 28f),
-                           "Overlay opacity, grid resolution and refresh rate are saved " +
-                           "settings — they are on the SET panel.", "row-sub");
+                           "Frontline grid, opacity and refresh rate are on the SET / MAP page.",
+                           "row-sub");
         }
 
         private void RefreshCmd()
@@ -945,16 +931,6 @@ namespace BoscaliSummer.Features.Command.Presentation
             {
                 doctrineButtons[i].SetLatched(command.ActiveDoctrine == doctrines[i]);
             }
-
-            if (overlay != null)
-            {
-                sectorToggle.SetLatched(overlay.ShowSectors);
-                sectorToggle.SetText(overlay.ShowSectors ? "SECTOR CONTROL GRID · ON"
-                                                         : "SECTOR CONTROL GRID · OFF");
-                frontlineToggle.SetLatched(overlay.ShowFrontlines);
-                frontlineToggle.SetText(overlay.ShowFrontlines ? "FRONTLINE BARRIER LINES · ON"
-                                                               : "FRONTLINE BARRIER LINES · OFF");
-            }
         }
 
         // ---- Refresh ---------------------------------------------------------------------
@@ -962,6 +938,8 @@ namespace BoscaliSummer.Features.Command.Presentation
         private void Refresh()
         {
             if (command == null || shell == null) return;
+
+            highCommand?.Refresh();
 
             DynamicMap map = SceneSingleton<DynamicMap>.i;
             FactionHQ hq = map != null ? map.HQ : null;
@@ -976,6 +954,7 @@ namespace BoscaliSummer.Features.Command.Presentation
                 case TabSa: RefreshSa(state); break;
                 case TabFront: RefreshFront(state); break;
                 case TabTasking: RefreshTasking(); break;
+                case TabCoc: RefreshCoc(); break;
                 case TabLog: RefreshLog(hq); break;
                 case TabCmd: RefreshCmd(); break;
             }
@@ -999,34 +978,61 @@ namespace BoscaliSummer.Features.Command.Presentation
                 state.DefconLevel <= 2 ? "danger" : state.DefconLevel == 3 ? "warn" : "live");
             shell.DataBar.SetChip(1, ShortDoctrine(command.ActiveDoctrine),
                                   command.ActiveDoctrine != CommandDoctrine.Balanced);
-            shell.DataBar.SetChip(2, overlay != null && overlay.ShowSectors ? "GRID ON" : "GRID OFF",
-                                  overlay != null && overlay.ShowSectors);
+            bool grid = settings != null && settings.FrontlinesOverlay.Value;
+            shell.DataBar.SetChip(2, grid ? "GRID ON" : "GRID OFF", grid);
 
+            bool territoryKnown = !float.IsNaN(state.TerritoryControlRatio);
             shell.Metrics[0].Set(
                 TheaterReadout.Percent(state.TerritoryControlRatio),
                 state.FriendlySectorCount + " ALLIED · " + state.HostileSectorCount + " HOSTILE",
-                state.TerritoryControlRatio,
-                state.TerritoryControlRatio >= 0.5f ? AvTheme.RailReady : AvTheme.RailCaution);
+                territoryKnown ? state.TerritoryControlRatio : 0f,
+                !territoryKnown ? AvTheme.RailInert
+                    : state.TerritoryControlRatio >= 0.5f ? AvTheme.RailReady : AvTheme.RailCaution);
 
+            bool airKnown = !float.IsNaN(state.AirSuperiorityRatio);
             shell.Metrics[1].Set(
                 TheaterReadout.Percent(state.AirSuperiorityRatio),
                 state.FriendlyAircraftCount + " ALLIED · " + state.HostileAircraftCount + " HOSTILE",
-                state.AirSuperiorityRatio,
-                state.AirSuperiorityRatio >= 0.5f ? AvTheme.RailReady : AvTheme.RailCaution);
+                airKnown ? state.AirSuperiorityRatio : 0f,
+                !airKnown ? AvTheme.RailInert
+                    : state.AirSuperiorityRatio >= 0.5f ? AvTheme.RailReady : AvTheme.RailCaution);
+
+            // The third pillar of the theater picture: without a staff, no command effect.
+            if (shell.Metrics.Length > 2)
+            {
+                bool staff = highCommand != null && highCommand.Available;
+                float cohesion = staff ? Mathf.Clamp01(highCommand.FriendlyCohesion) : 0f;
+                shell.Metrics[2].Set(
+                    staff ? TheaterReadout.Percent(cohesion) : "—",
+                    staff
+                        ? highCommand.FriendlyActive + " ACTIVE · " + highCommand.FriendlyKia + " KIA"
+                        : "NO STAFF",
+                    cohesion,
+                    !staff ? AvTheme.RailInert
+                    : cohesion >= 0.6f ? AvTheme.RailReady
+                    : cohesion >= 0.3f ? AvTheme.RailCaution
+                    : AvTheme.RailDanger);
+            }
         }
 
         private string Ambient(TacticalTheaterState state)
         {
-            if (state.ContestedSectorCount > 0)
-            {
-                return state.ContestedSectorCount + " contested sector" +
-                       (state.ContestedSectorCount == 1 ? "" : "s") + " · frontline " +
-                       state.FrontlineSegmentCount + " segments · doctrine " +
-                       CommandDoctrineHelper.GetName(command.ActiveDoctrine);
-            }
+            string text = state.ContestedSectorCount > 0
+                ? state.ContestedSectorCount + " contested sector" +
+                  (state.ContestedSectorCount == 1 ? "" : "s") + " · frontline " +
+                  state.FrontlineSegmentCount + " segments · doctrine " +
+                  CommandDoctrineHelper.GetName(command.ActiveDoctrine)
+                : "No contested ground · doctrine " + CommandDoctrineHelper.GetName(command.ActiveDoctrine);
 
-            return "No contested ground · doctrine " +
-                   CommandDoctrineHelper.GetName(command.ActiveDoctrine);
+            if (highCommand != null && highCommand.Available)
+            {
+                text += " · command " + TheaterReadout.Percent(Mathf.Clamp01(highCommand.FriendlyCohesion));
+                // The staff's own signal (a stipend, a commendation, a kill) is the COC page's
+                // feedback line; it rides the pinned status strip instead of costing a row.
+                if (shell != null && shell.Page == TabCoc && !string.IsNullOrEmpty(highCommand.Signal))
+                    text += " · " + highCommand.Signal;
+            }
+            return text;
         }
 
         /// <summary>A chip-width doctrine label. Chips are 74px; full names do not fit.</summary>

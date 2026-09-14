@@ -114,7 +114,7 @@ namespace BoscaliSummer.Features.Command.Runtime
         public int TotalSectors => ResolutionX * ResolutionY;
         public float TerritoryControlRatio => (FriendlySectorCount + HostileSectorCount > 0)
             ? (float)FriendlySectorCount / (FriendlySectorCount + HostileSectorCount)
-            : 0.5f;
+            : float.NaN;
 
         public TacticalSectorGrid(int resolution = DefaultResolution, float worldSize = 100000f)
             : this(resolution, worldSize, worldSize)
@@ -471,14 +471,28 @@ namespace BoscaliSummer.Features.Command.Runtime
                     if ((borders & (1 << side)) == 0) continue;
                     float dx = side == 1 ? 1 : side == 3 ? -1 : 0;
                     float dz = side == 0 ? 1 : side == 2 ? -1 : 0;
-                    float x = (x0 + x1) * 0.5f + dx * ((x1 - x0) * 0.5f - 150f);
-                    float z = (z0 + z1) * 0.5f + dz * ((z1 - z0) * 0.5f - 150f);
+                    float x = (x0 + x1) * 0.5f + dx * ((x1 - x0) * 0.5f - 60f);
+                    float z = (z0 + z1) * 0.5f + dz * ((z1 - z0) * 0.5f - 60f);
                     destination[count++] = new FrontlineSite(x, z, dx, dz,
-                        (dx == 0 ? x1 - x0 : z1 - z0) * 0.5f);
+                        (dx == 0 ? x1 - x0 : z1 - z0) * 0.5f, BorderPressure(c, r, c + (int)dx, r + (int)dz));
                     if (count == destination.Length) return count;
                 }
             }
             return count;
+        }
+
+        /// <summary>
+        /// Opposing ground presence across one border edge. Balanced forces read near 1;
+        /// a border facing an empty sector reads 0, so fortification follows the fighting.
+        /// </summary>
+        private float BorderPressure(int c, int r, int otherCol, int otherRow)
+        {
+            if (otherCol < 0 || otherCol >= ResolutionX || otherRow < 0 || otherRow >= ResolutionY) return 0f;
+            int own = r * ResolutionX + c, other = otherRow * ResolutionX + otherCol;
+            float friendly = friendlyForce[own] + friendlyForce[other];
+            float hostile = hostileForce[own] + hostileForce[other];
+            if (friendly < 0.05f || hostile < 0.05f) return 0f;
+            return 2f * Math.Min(friendly, hostile) / (friendly + hostile);
         }
 
         private static bool IsOpposing(SectorControl a, SectorControl b)
@@ -605,18 +619,7 @@ namespace BoscaliSummer.Features.Command.Runtime
                 }
             }
 
-            // 2. Return rendered pixel buffer
             return pixelBuffer;
         }
-
-        // Backwards compatibility overload
-        public Color32[] BakeTexture(
-            int texWidth,
-            int texHeight,
-            bool showSectors,
-            bool showFrontlines,
-            bool showThreatRings,
-            float globalOpacity)
-            => BakeTexture(texWidth, texHeight, showSectors, showFrontlines, globalOpacity);
     }
 }

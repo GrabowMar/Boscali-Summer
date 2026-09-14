@@ -12,7 +12,7 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(fleet.Satellites.Count == 0, "a fresh constellation is empty");
             TestAssert.That(!fleet.Covers(SatelliteRole.Recon, 0f, 0f), "an empty constellation covers nothing");
 
-            TestAssert.That(fleet.TryDeploy(SatelliteRole.Recon, 0, 20000f, -10000f, 1,
+            TestAssert.That(fleet.TryDeploy(SatelliteRole.Recon, 0, 20000f, -10000f, 1, 0f,
                 out Satellite first, out OrbitalFailure failure) && failure == OrbitalFailure.None,
                 "deploying inside capacity must succeed");
             TestAssert.That(first.Id == 1 && first.Fuel == Constellation.MaximumFuel,
@@ -36,15 +36,31 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(!fleet.Query(SatelliteRole.Ew, 0f, 0f).HasSatellite,
                 "a role with no satellite reports no asset");
 
-            TestAssert.That(!fleet.TryDeploy(SatelliteRole.Strike, 0, 0f, 0f, 1,
+            TestAssert.That(!fleet.TryDeploy(SatelliteRole.Strike, 0, 0f, 0f, 1, 0f,
                 out _, out failure) && failure == OrbitalFailure.AtCapacity,
                 "deploying past capacity must report capacity");
-            TestAssert.That(fleet.TryDeploy(SatelliteRole.Strike, 0, 0f, 0f, 4, out Satellite second, out _),
+            TestAssert.That(fleet.TryDeploy(SatelliteRole.Strike, 0, 0f, 0f, 4, 0f, out Satellite second, out _),
                 "raising capacity must allow a second satellite");
             TestAssert.That(second.Id == 2, "satellite ids must stay monotonic");
-            TestAssert.That(!fleet.TryDeploy(SatelliteRole.Ew, 9, 0f, 0f, 4, out _, out OrbitalFailure badAlt) &&
+            TestAssert.That(!fleet.TryDeploy(SatelliteRole.Ew, 9, 0f, 0f, 4, 0f, out _, out OrbitalFailure badAlt) &&
                             badAlt == OrbitalFailure.UnknownAltitude,
                 "an unknown altitude must be refused");
+
+            // A timed launch spends real time in transit before it covers anything, reusing
+            // the exact same Transit state and coverage-denial a retask already relies on.
+            TestAssert.That(fleet.TryDeploy(SatelliteRole.Ew, 0, 5000f, 5000f, 4, 20f,
+                out Satellite launching, out OrbitalFailure launchFailure) && launchFailure == OrbitalFailure.None,
+                "a timed launch must still succeed");
+            TestAssert.That(launching.State == SatelliteState.Transit && launching.TransitTotal == 20f,
+                "a timed launch starts in transit for the requested duration");
+            TestAssert.That(!fleet.Covers(SatelliteRole.Ew, 5000f, 5000f),
+                "a launching satellite provides no coverage yet");
+            for (int i = 0; i < 200 && launching.State == SatelliteState.Transit; i++)
+                fleet.Tick(0.25f, false);
+            TestAssert.That(launching.State == SatelliteState.Stationed, "a launch must eventually complete");
+            TestAssert.That(fleet.Covers(SatelliteRole.Ew, 5000f, 5000f),
+                "a satellite covers its station once launch completes");
+            TestAssert.That(fleet.TryRecall(launching.Id, out _), "cleanup: recall the launch test satellite");
 
             // A transfer costs fuel by distance, goes dark while moving and completes on tick.
             fleet.Tick(0f, false);

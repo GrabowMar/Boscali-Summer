@@ -18,8 +18,7 @@ namespace BoscaliSummer.Features.Support.Runtime
         private readonly List<SupportActionDefinition> actions = new List<SupportActionDefinition>(10);
 
         public SupportCatalog(
-            SupportSettings settings, IZoneFortificationService fortifications,
-            IFireSuppressionService fireSuppression = null)
+            SupportSettings settings, IZoneFortificationService fortifications)
         {
             if (VanillaSupportCatalog.ReconAvailable)
                 actions.Add(new SupportActionDefinition(
@@ -40,7 +39,7 @@ namespace BoscaliSummer.Features.Support.Runtime
 
             actions.Add(new SupportActionDefinition(
                 SupportActionId.Emp, "EMP SHOCK",
-                "Radar disruption from an EW satellite. Hits friend and foe.",
+                "High-altitude airburst: prompt electronics shock, then a 30 s geomagnetic radar blackout. Hits friend and foe.",
                 SupportCapabilities.Emp, settings.EmpEnabled, new EmpAction()));
 
             actions.Add(new SupportActionDefinition(

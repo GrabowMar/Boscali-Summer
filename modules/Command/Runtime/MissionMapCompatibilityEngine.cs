@@ -12,32 +12,20 @@ namespace BoscaliSummer.Features.Command.Runtime
     /// </summary>
     internal sealed class MissionMapCompatibilityEngine : MonoBehaviour, ISceneService
     {
-        public static MissionMapCompatibilityEngine Active { get; private set; }
-
         private ManualLogSource logger;
 
         public Vector2 ResolvedMapSize { get; private set; } = new Vector2(81920f, 81920f);
-        public Vector2 MapOffset { get; private set; } = Vector2.zero;
-        public bool IsMissionReady { get; private set; }
         private bool dimensionsResolved;
 
         public void Configure(ManualLogSource log)
         {
             logger = log;
-            Active = this;
         }
 
         public void ResetForScene()
         {
             ResolvedMapSize = new Vector2(81920f, 81920f);
-            MapOffset = Vector2.zero;
-            IsMissionReady = false;
             dimensionsResolved = false;
-        }
-
-        private void OnDestroy()
-        {
-            if (Active == this) Active = null;
         }
 
         /// <summary>
@@ -52,7 +40,6 @@ namespace BoscaliSummer.Features.Command.Runtime
                 if (mapSettings != null && mapSettings.MapSize.x > 1000f && mapSettings.MapSize.y > 1000f)
                 {
                     ResolvedMapSize = mapSettings.MapSize;
-                    MapOffset = new Vector2(mapSettings.OffsetX, mapSettings.OffsetY);
                     dimensionsResolved = true;
                     return ResolvedMapSize;
                 }
@@ -120,7 +107,6 @@ namespace BoscaliSummer.Features.Command.Runtime
                     : airbase.CurrentHQ == playerHq ? SectorControl.Friendly : SectorControl.Hostile;
                 grid.RegisterNode(airbase.GetInstanceID(), airbase.name, pos.x, pos.z, faction, 0f, true);
             }
-            IsMissionReady = true;
         }
 
         internal static bool TryGetGroundObservation(Unit unit, FactionHQ localHq, out Vector3 position, out float weight, out bool hostile)

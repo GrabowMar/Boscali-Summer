@@ -52,6 +52,11 @@ codecs and snapshot providers; garrison catalogue/selection/spawning/lifecycle.
   Enable-by-default gate: mission/scene lifecycle, award attribution and tax/score,
   road/terrain placement, listen-host/client/late join and bounded long-session behavior.
   See [DYNAMIC_OPERATIONS.md](DYNAMIC_OPERATIONS.md) and its pinned research links.
+- **Chain of command** — generated staff, command posts, VIP convoys, intel and
+  economy-only stipends/bounties implemented behind default-on `HighCommand.Enabled`.
+  In-game acceptance is pending for the whole module. Gated next slices: enemy AI interest
+  in command posts, kill-list steering of friendly mission AI, cohesion scaling vanilla
+  `AIAircraftLimit` (authority mode), and native map markers for confirmed contacts.
 - **Weather removed** — the experimental weather code, its shader tooling, tests and
   settings were removed from the active build at the user's request (see the CHANGELOG).
   No development or automatic restoration is scheduled.
@@ -61,11 +66,17 @@ codecs and snapshot providers; garrison catalogue/selection/spawning/lifecycle.
   Neutralized/Ruined` transitions, bounded air-assault presentation, no duplicate proxies
   under churn/late-join, a global proxy cap (~96), stable references instead of
   nearest-position repair. Excludes interiors, room clearing, breaching, per-floor damage,
-  and autonomous roaming infantry.
-- **Radio** — Base Broadcast now catalogs the installed score across registered maps (up to
-  30 deduplicated clips); in-game interaction and long-session gates remain; MP3 only after
-  a real decode test; synchronized broadcast stays behind the handshake/manifest gate in
-  [DESIGN_NOTES.md](DESIGN_NOTES.md).
+  and autonomous roaming infantry. A legibility and warfare proposal — marker scale, roof
+  bands, smoke cue, street dressing, zone tiers — is tracked in
+  [URBAN_COMBAT.md](URBAN_COMBAT.md).
+- **Radio** — the `RAD` panel is now a receiver: an FM/MW dial with station frequencies,
+  fine tuning with dead air and seek, a band switch, a volume knob, synthesized
+  carrier/squelch/morse ident, a broadcast filter, presets and SCAN, a clickable programme
+  log of the tuned station's tracks, a rotating wire line and intercepted enemy chatter.
+  Base Broadcast still catalogs the installed score across
+  registered maps (up to 30 deduplicated clips). In-game visual/interaction acceptance and
+  long-session gates remain; MP3 only after a real decode test; synchronized broadcast stays
+  behind the handshake/manifest gate in [DESIGN_NOTES.md](DESIGN_NOTES.md).
 - **Progression** — persistent profiles only after migration + recovery tests; client
   receives only its accepted snapshot. Perk costs and the score-per-point tier are the two
   balance dials to revisit once mission-length data exists. The SQD studio and emblem

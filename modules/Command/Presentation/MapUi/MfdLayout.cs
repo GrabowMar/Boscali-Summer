@@ -16,7 +16,12 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
     /// </summary>
     internal static class MfdLayout
     {
-        public const float RailWidth = 96f;
+        /// <summary>
+        /// Width of the button rail. Wide enough for a glyph, the game's short code and the
+        /// descriptor that says what the code means; the map gives up 54px for a column a
+        /// new player can actually read.
+        /// </summary>
+        public const float RailWidth = 150f;
         public const float Gutter = 8f;
         public const float MapInset = 0f;
         public const float Margin = 8f;

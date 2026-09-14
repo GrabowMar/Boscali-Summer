@@ -2,6 +2,237 @@
 
 ## Unreleased
 
+- Removed the unverified, default-off QoL gun aim assist (`GunAimAssist` /
+  `GunAimAssistStrength`). Harmony hooks on `ControlsFilter.GetAim` and
+  `PilotPlayerState.PlayerAxisControls` are gone; native `ControlsFilter`
+  flight-assist aim assist is unchanged. Leftover BepInEx keys are ignored.
+- STR empty-board air/territory ratios print "—" instead of a fake 50%.
+- CMD doctrine copy is scoring bias for friendly mission AI, not orders; wingmen stay
+  excluded.
+- CRYPTO farm copy no longer claims a support-request cooldown discount the host ignores.
+  Cost scaling is unchanged.
+- Flare barrage copy states that it shares Satellite Scan (Recon) authorisation; no extra
+  perk.
+- Removed the unused EW-truck "convert to encampment" UI. Wire enum value 2 (`Encampment`)
+  stays reserved.
+- Removed never-spawned makeshift-fortification dressing. Ibis/Chimera infantry encampments
+  remain.
+
+- World events now offer a decision. While a costed event is active, any player may spend
+  allocation once per event to **CONTAIN** a penalty or **LEVERAGE** a discount for the rest
+  of its run: the host derives the price from the event's effective multiplier (200–1200
+  allocation, rounded to 50), validates one response per player, deducts it, and answers the
+  requester directly; the effect is per player, so a client's predicted OPS prices match what
+  the host charges. The active EVN card gained a remaining-time bar, a response button with
+  affordability feedback and a tooltip, and a response-active state; a mid-mission reconnect
+  re-queries the host for the response it already owns. Protocol is now 2 (state + intent +
+  reply) with a wire-field and roundtrip check in the patch probe; a neutral event still
+  offers no decision instead of a fake one. Release build, pure suite, module-boundary checks,
+  the patch probe and `nomod asm verify` pass; in-game acceptance remains pending.
+
+- Added an **Events** module and the `EVN` map-MFD screen: a curated catalog of twelve
+  mission-wide world events (economic, political and hazard) that the host rotates one at a
+  time on a randomized 90–240 s gap, each with title, flavor text, a category icon and a
+  real support-cost modifier. The panel pins the active event with a live countdown and
+  modifier badge and keeps up to 16 finished events as mission history in reverse order.
+  The effect is wired into Support's two shared pricing points — every support action,
+  satellite, facility and EW-truck cost is multiplied by the active event (×0.6 to ×1.5),
+  resolved late through `IActiveEventsView` so either module installs without the other.
+  `Events.EffectStrength` (default 1.0) scales every modifier without editing the catalog;
+  two entries are deliberately flavor-only. Rotation is host-authoritative with a
+  15-second heartbeat resend for late joiners; only the catalog index and mission
+  timestamps cross the wire. Release build, pure suite, module-boundary checks and the
+  patch probe pass; in-game acceptance remains pending.
+
+- The `RAD` panel is now a receiver instead of a music browser. Stations sit on an FM/MW
+  dial with canonical frequencies for the three built-ins and stable name-hashed slots for
+  user folders, so a stored preset still lands on the same station after a rescan. The
+  panel shows a large tabular frequency readout, a ticked dial with a needle that seeks
+  between stations, a segmented signal meter fed by the tuned source's real output level,
+  a programme log of the tuned station's tracks (the playing one lit, click to play), a
+  preset bank (SET arms a store) and SCAN; channel traffic appears as a single rotating
+  wire line in the hero card, including intercepted enemy chatter. Panel content spans the
+  full body width with even margins, and section rules replaced the old left spine. Tuning
+  is a dial: TUNE steps one increment (FM 0.2 MHz, MW
+  10 kHz) and any non-station position is dead air — NO SIGNAL with a synthesized carrier
+  bed — while locking back on resumes the programme that was playing. SEEK jumps stations
+  and crosses bands when the current band runs out, and BAND flips FM/MW at the frequency
+  last used there. Every tuning step plays a synthesized squelch and carrier burst,
+  locking on plays a morse station ident generated in memory, and the dial row carries a
+  volume knob (`Radio / Volume`). Enemy ace chatter is picked up as INTERCEPT through the
+  read-only `ISquadView` contract (text only, client-local, no new messages).
+  A new `BroadcastFilter` setting (default `Broadcast`) colours FM with a measured band
+  limit and a touch of receiver crunch; MW keeps the AM curve regardless. `StationIdents`
+  and `CarrierNoise` switch the generated audio independently, and `ScanDwellSeconds`
+  tunes SCAN. All of it remains client-local; no audio asset is bundled, downloaded or
+  transmitted. Release build, pure suite (dial allocation, programme rotation, tuning
+  math, bounds), patch probe radio inventory and signature verification pass; in-game
+  acceptance remains pending.
+
+- Trench systems were rebuilt as a continuous frontier instead of scattered belts. They dig
+  only on contested sectors where opposing ground forces actually meet, hug the border, and
+  now chain: mature same-faction sectors extend their fire and support lines to the flank
+  limit and a junction trench joins neighbouring ends, so a chain of sectors becomes one
+  unbroken front line spanning kilometres. Grown positions match deliberate field practice:
+  fire and support lines at full sector width, a support line at 110m and a redoubt line at
+  220m behind the fire trench, traversed communication trenches, and a final stage pushing
+  two saps into no man's land ending in listening posts. The white procedural sandbag and
+  concrete bays, pits and dugouts were deleted: works are now small infantry-scale game
+  scenery (HESCO/sandbag/light gabion pieces, selected at runtime by keyword and footprint
+  so vehicle-scale hull-down ramps and shelters are never used) placed on the trench line
+  itself and spawned networked, joined by the carved ditch alone. The ditch now follows the
+  terrain: its outer berms sample the ground on each side of the cross-section, and
+  corridor validation was tightened so broken ground is rejected instead of sculpted over.
+  Shooters are
+  deliberately sparse — four native MG/ATGM/MANPADS per sector, interlocking rather than
+  crowded — and vehicles are stopped by a bounded low obstacle line on the fire trench. The
+  tactical map was decluttered: the fire line is solid with crenellations facing the enemy,
+  support and rear traces read dimmer, strongpoints are single-pixel marks, and the
+  projected contested trace is a dim dashed line. Release build, pure suite, module-boundary
+  tests, the standalone Unity trench render, the patch probe and signature verification
+  pass; in-game acceptance remains pending.
+
+- The SQD WINGS page now opens with YOUR WING: the local career lead and Wing Command's
+  published wingmen as a read-only roster (airframe and airborne/landed/disabled/ejected
+  per slot, NO SIGNAL for a slot with no live aircraft), followed by the HOSTILE WINGS
+  encounter cards. Cards were rebuilt as raised surfaces with a tighter hierarchy: a
+  deterministic generated squadron crest per wing, the ace portrait, tier/skill/meta on
+  one block, status and strength on the right, and full-width ability badges. The same
+  crest now tops the ACE hunt dossier, which widened to 704px to frame it, and the
+  minimised alert carries a small copy. The crest shape/charge come from an FNV-1a hash
+  of the wing identity (stable across sessions and clients) and its palette is confined
+  to caution/danger so an enemy crest never reads as the player's own emblem. Polish pass:
+  every touched label sits on the 10px type floor, the lead card no longer truncates its
+  wing count, hidden hostile slots on the last page read as an inert NO FURTHER HOSTILE
+  CONTACTS placeholder instead of a hole, the pager reads `1 OF 1 WING` for a single
+  contact, and the cards carry corner ticks. Release
+  build, pure suite (including hostile-crest determinism), module-boundary tests, the
+  patch probe and signature verification pass; in-game visual acceptance remains pending.
+
+- Fixed the control rail re-branding its own borrowed buttons and showing fragments like
+  `BDFSIZE=` instead of the branded line. A repeated map maximise, or the game's faction
+  refresh (`VirtualMFD.SetupButtons`) rewriting every bezel label, made the rail sanitise
+  its own rich-text output back into a short code. A branded button now carries an
+  ownership mark: repeated adoption passes only re-assert the line, and label resets heal
+  on the next reconciliation tick. The label sanitiser also collapses line breaks to a
+  space instead of deleting them. Release build, pure tests, the standalone Unity rail
+  render, patch probe and signature verification pass; in-game acceptance remains pending.
+
+- The MIS mission overview's main tab now fills the panel instead of leaving its lower
+  third empty. The brief card grows to the page bottom — mission name, scrolling brief,
+  mission time and player mode — and the contract action is pinned to the bottom edge.
+  The escalation ladder shows each mission's real tactical/strategic threshold values, a
+  live position marker and the remaining score to the next nuclear gate, and an unset
+  threshold reads `NO ESCALATION THRESHOLDS SET` rather than lighting STRATEGIC off a
+  zero. Pure escalation-math tests, the Release build, module-boundary tests, the patch
+  probe and signature verification pass; in-game visual acceptance remains pending.
+
+- EMP shock is now a nuclear-pulse event instead of a fireball. The airburst moved to the
+  30 km gamma-deposition band: the prompt E1 pulse snaps the blackout footprint to its
+  radius at light speed and jolts every cockpit inside it, branching E2 lightning cracks
+  through the footprint, and a slow, magnetically biased E3 heave glows for the full
+  30-second jamming window. The shock now arrives as an avionics snap, with the atmospheric
+  thunder scheduled after the distance-delayed flash-to-bang. Gameplay is unchanged — same
+  radius, host-owned jamming, friendly-fire exposure. Release build, pure suite, patch probe
+  and signature verification pass; in-game/multiplayer acceptance remains pending.
+
+- The SET panel's toggles and step buttons are compact now (46-unit rows, full-row hover
+  targets) and the panel takes the same bay height as every sibling screen — 596 units on
+  a short column, up to the shared 896 ceiling on a tall one — instead of a fixed 596. A
+  fourth **COCKPIT** page collects the third-person HUD, pitch ladder, target camera and
+  flight camera (QoL-owned values reached through the existing `IThirdPersonHud` contract)
+  and Command's radial target-preset page; camera rows explain the prerequisite until the
+  HUD is on. Grid resolution stays config-only because it is allocated at module start.
+  The standalone Unity render check, Release build, module-boundary tests, patch probe and
+  signature verification pass; in-game acceptance remains pending.
+
+- The STR console gained a **chain-of-command** page (new `high-command` module): every
+  faction fields a generated six-post staff with seed-stable names, portraits from the same
+  generated pilot pool Wing Command draws for aces and wingmen, traits and service bios;
+  each living post is a real command post building placed at one of the faction's airbases,
+  and commanders occasionally travel between friendly bases in three-vehicle convoys — the
+  lead vehicle carries the VIP. Destroying an enemy post or convoy kills the commander,
+  promotes the next in line, pays an economy-only bounty (larger while the target is on your
+  kill list) and drops the enemy's cohesion; keeping your own staff alive pays periodic
+  stipends and earns command points for commendations and relocation orders. The COC page
+  was rebuilt to host both staffs with a state rail and tree guide per post and a dossier
+  with the generated portrait, traits and bio; enemy dispositions — location, movement and
+  kill-list status — stay hidden until your units establish local intel, and a bounty order
+  now resolves to the enemy post instead of a same-numbered post in your own tree. The STR
+  screen adds a COC tab and a third COMMAND metric. Effects are funds/score only — no
+  vanilla AI, spawn or damage behaviour changes. Pure domain tests, Release build,
+  module-boundary tests, the patch probe and signature verification pass; in-game
+  acceptance remains pending.
+
+- Map mouse input is now isolated from the mod's panels: scrolling a list or dragging its
+  scrollbar no longer zooms or pans the tactical map underneath, and a click that lands on
+  the instrument column or the control rail no longer resolves as a map position for armed
+  support call-ins. The tactical event log also keeps a scrolled-back reader's place instead
+  of snapping to the top on each new line. Build, patch target probe and signature
+  verification pass; in-game acceptance remains pending.
+
+- TGT target acquisition now has player presets. The PRESETS page captures the current
+  faction, class, platform and laser state into a named profile (up to 12, 14-character
+  names), with SAVE AS / UPDATE / RENAME / DELETE, a two-press delete confirmation, and an
+  inline name field; the library persists in `Command.TargetPresets`. Three quick slots
+  (right-click a preset to assign, right-click a slot to clear) apply with **F6 / F9 /
+  F10** or from the native radial menu (**Boscali Summer → TARGET FILTERS**), and the data
+  bar, preset cards and summary line show the active profile instead of leaving it implicit.
+  Selected contacts can be dropped with a right click. Pure codec/library/match tests, the
+  Release build, module-boundary tests, the patch probe and signature verification pass;
+  in-game visual, input-focus and multiplayer acceptance remain pending.
+
+- Rebalanced and restyled wildfire. A fire no longer clears a stand of trees: the gray ash
+  bed is drawn straight into the vanilla blast map (which never touches trees) and removal is
+  a separate small blast, so a fire spawn burns a compact ~0.4 m kernel of trees (80%
+  smaller than the earlier tuning) instead of a ~45 m swath. The ash bed is deliberately nuke-scale so the whole burnt area reads as gray
+  soil — the vanilla blast map is one texel per 160 m, and smaller stamps only left a few dark
+  spots. Flames gained a bright core layer and rising embers with softer growth and death
+  tapers, and the forest plume now reads lighter, taller and more wind-sheared. Build, pure
+  tests, patch probe and signature verification pass; in-game acceptance remains pending.
+
+- Reworked the maximised map's control rail: each bezel button now carries a vector glyph,
+  its game short code and a descriptor (BDF — BOSCALI HQ, MIS — MISSION), the rail is wide
+  enough to show them, and the open screen's button lights up. The Theater Wire's
+  missing-glyph channel dot is now drawn geometry, event-stream lines are toned by meaning,
+  panel tabs and the faction resource cards carry glyphs, and the history chart gained a
+  glow and a latest-sample marker. Build, pure tests, the standalone Unity rail render,
+  patch probe and signature verification pass; in-game acceptance remains pending.
+
+- The maximised map's rail now leads with the faction pair: PALA sits directly below BDF
+  instead of at the top of the right column. The two vanilla bezel columns are stably
+  merged before adoption, so every other button keeps the game's order and each keeps its
+  own click binding. Pure catalog-rank tests, the standalone Unity rail render, the Release
+  build, the patch target probe and signature verification pass; in-game acceptance remains
+  pending.
+
+- Occupied buildings are now marked at building scale: twin masts with flags sized to the
+  shell and a faction-coloured roof-edge band with a viewer-relative accent stripe, rebuilt
+  locally on every client and late join from the flat-roof patch measured around each nest
+  and encoded in the defense's networked unique name. The old nest-scale marking remains as
+  the fallback for structures without footprint data. Build, marker round-trip tests, patch
+  probe and signature verification pass; in-game acceptance remains pending.
+
+- Rebuilt OPS **SPACE** as an orbital tasking console. An **ORBITAL DISPLAY** card draws the
+  theatre bounds, each platform's footprint and shell, transfer tracks with a destination
+  marker, the selected platform's range line and the live cursor, using the same generated
+  sprites as the tactical map; a two-line telemetry strip reports cursor R/S/E coverage and a
+  bounded fleet event log (launch confirmed, transfer burn, transfer complete, deorbit). The
+  roster is a four-bay constellation manifest with callsign, role, shell and Δv reserve;
+  spacecraft control keeps ORBITAL TRANSFER and two-step DEORBIT; the launch pad labels its
+  PAYLOAD and SHELL rows and COMMIT LAUNCH arms the map. The display is omitted below a
+  compact-height threshold, so the page still fits the panel floor without scrolling, and
+  empty bays read as vacant instead of repeating a call to action. Wording now follows
+  spacecraft operations (constellation, shell, swath, Δv reserve, station-keeping, deorbit).
+
+- Support calls are arm-first again. **CALL IN** is enabled whenever the action is
+  authorised, affordable and off cooldown; coverage reads as advisory on the row; the
+  right-click sends the task; the host validates coverage at the clicked grid and the typed
+  denial ("no satellite coverage — task one in SPACE") lands on the status strip. The panel
+  previously disabled CALL IN whenever the cursor lacked coverage, so an out-of-coverage call
+  could never be attempted. Build, pure tests, patch probe and signature verification pass;
+  in-game acceptance remains pending.
+
 - Added a local ownship autopilot landing and the Boscali Summer entry in the native radial
   menu. The slice opens a bounded submenu whose **Autopilot: Land** action hands the
   player's own aircraft to the game's native autopilot for a runway or vertical-pad landing,
@@ -37,7 +268,7 @@
 
 - Fixed and reworked dynamic-operation markers onto the native objective UI: accepted contracts now draw the game's own map marker, cockpit pointer with distance and a sized mission-area ring, plus a compact zone readout with enter/leave feedback, instead of custom map-only pins. Markers are built client-side from protocol-2 snapshots and are never registered with the mission runner, so vanilla AI cannot mistake a contract for a navigation objective. Build, pure tests, probe and signature verification pass; in-game acceptance remains pending.
 
-- Reworked the Theater Wire into a priority-filtered news feed: airbase captures, strategic launches, ace defeats, aircrew rescue/capture, capital losses, warhead interceptions, aircraft shootdowns, demolitions and supply deliveries become headlines, while routine missile intercepts and anonymous armor losses are counted into periodic digests instead of flooding the scroll. Added first-blood and kill-streak flashes, a session casualty ledger, follow-up commentary, a wider LARP pool, bold urgent entries, a breaking-news rewind and an alert-pulse badge/rail. Build, pure tests, probe and signature verification pass; in-game acceptance remains pending.
+- Scoped the Theater Wire to theater-level news only: airbase captures, strategic launches, ace defeats, aircrew rescue/capture, capital losses, warhead interceptions and strategic demolitions become headlines, alongside the LARP pool, supply deliveries, follow-up commentary, bold urgent entries, a breaking-news rewind and an alert-pulse badge/rail. Individual shootdowns, vehicle kills, routine missile intercepts, crash sites, kill streaks and casualty tallies stay in the tactical event log; the previous digests, streaks and session ledger are removed. Build, pure tests, probe and signature verification pass; in-game acceptance remains pending.
 
 - Fixed expanded map layout punching through to the world camera: map darkening no longer makes the map bed transparent, SET/structure changes no longer tear down a live dock, escaped screens are re-docked, and the MFD controller is resolved even when it lives on the gameplay canvas rather than under the map canvas.
 

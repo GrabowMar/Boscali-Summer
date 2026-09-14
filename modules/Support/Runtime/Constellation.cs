@@ -133,8 +133,18 @@ namespace BoscaliSummer.Features.Support.Runtime
             return null;
         }
 
+        /// <summary>
+        /// Deploy a new satellite. It does not appear on station instantly — it launches into
+        /// the same <see cref="SatelliteState.Transit"/> a repositioning satellite already
+        /// uses, for <paramref name="launchTransitSeconds"/>, with no horizontal travel (a
+        /// launch goes up, not sideways across the map). Reusing Transit rather than adding a
+        /// new state means coverage is correctly denied for the whole launch window for free —
+        /// <see cref="Query"/> and <see cref="SatelliteCovers"/> already refuse anything that
+        /// isn't <see cref="SatelliteState.Stationed"/>.
+        /// </summary>
         public bool TryDeploy(SatelliteRole role, byte altitude, float stationX, float stationZ,
-                              int capacity, out Satellite satellite, out OrbitalFailure failure)
+                              int capacity, float launchTransitSeconds,
+                              out Satellite satellite, out OrbitalFailure failure)
         {
             satellite = null;
             if (satellites.Count >= Math.Max(1, Math.Min(MaximumSatellites, capacity)))
@@ -147,6 +157,7 @@ namespace BoscaliSummer.Features.Support.Runtime
                 failure = OrbitalFailure.UnknownAltitude;
                 return false;
             }
+            float transit = Math.Max(0f, launchTransitSeconds);
             satellite = new Satellite
             {
                 Id = nextId++,
@@ -157,7 +168,9 @@ namespace BoscaliSummer.Features.Support.Runtime
                 OriginX = stationX,
                 OriginZ = stationZ,
                 Fuel = MaximumFuel,
-                State = SatelliteState.Stationed
+                TransitTotal = transit,
+                TransitLeft = transit,
+                State = transit > 0f ? SatelliteState.Transit : SatelliteState.Stationed
             };
             nextId = nextId == 0 ? (byte)1 : nextId;
             satellites.Add(satellite);

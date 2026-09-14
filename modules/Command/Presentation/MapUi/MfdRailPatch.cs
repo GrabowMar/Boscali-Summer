@@ -105,6 +105,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private sealed class ButtonSnapshot
         {
             public Button Button;
+            public MFDScreen Screen;
             public Transform Parent;
             public Vector3 LocalPosition;
             public Quaternion LocalRotation;
@@ -181,6 +182,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 VirtualMFD mfd = MapMfdLookup.Resolve(map == null ? null : map.maximizedMapCanvas);
                 MfdPanelDock.DockModScreens(mfd);
                 ReLayoutForActiveScreen(MfdSinglePanelPatch.ActiveScreen);
+                RefreshLatched();
             }
         }
 
@@ -403,14 +405,18 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 Snapshot(right);
             }
 
-            // Both vanilla columns become one rail. The stock parents carry a
-            // VerticalLayoutGroup that would overwrite any position written to a button while
-            // it is still inside them, so reparenting out is what makes placement stick.
+            // Both vanilla columns become one rail, ordered by the catalog so the faction
+            // pair leads it. The stock parents carry a VerticalLayoutGroup that would
+            // overwrite any position written to a button while it is still inside them, so
+            // reparenting out is what makes placement stick.
             var skins = new List<MfdRail.ButtonSkin>();
-            MfdRail.Adopt(left, MapUiAccess.GetLeftScreens(mfd), skins);
-            MfdRail.Adopt(right, MapUiAccess.GetRightScreens(mfd), skins);
+            MfdRail.Adopt(left, MapUiAccess.GetLeftScreens(mfd),
+                          right, MapUiAccess.GetRightScreens(mfd), skins);
 
             AttachSkins(skins);
+            LinkScreens(left, MapUiAccess.GetLeftScreens(mfd));
+            LinkScreens(right, MapUiAccess.GetRightScreens(mfd));
+            RefreshLatched();
             HideSpares(left, MapUiAccess.GetLeftScreens(mfd));
             HideSpares(right, MapUiAccess.GetRightScreens(mfd));
             HideEmptiedContainers();
@@ -519,6 +525,44 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                         break;
                     }
                 }
+            }
+        }
+
+        /// <summary>
+        /// Remember which screen each adopted button opens, so the rail can show which one
+        /// is currently on the panel — vanilla has no state for a button that stays lit.
+        /// </summary>
+        private static void LinkScreens(List<Button> source, List<MFDScreen> screens)
+        {
+            if (source == null || screens == null) return;
+
+            for (int i = 0; i < source.Count && i < screens.Count; i++)
+            {
+                Button button = source[i];
+                if (button == null || screens[i] == null) continue;
+
+                for (int j = 0; j < buttons.Count; j++)
+                {
+                    if (buttons[j].Button != button) continue;
+                    buttons[j].Screen = screens[i];
+                    break;
+                }
+            }
+        }
+
+        /// <summary>Run the rail's lit state after whatever opened or closed a screen.</summary>
+        private static void RefreshLatched()
+        {
+            for (int i = 0; i < buttons.Count; i++)
+            {
+                ButtonSnapshot snapshot = buttons[i];
+                if (snapshot == null || snapshot.Skin == null) continue;
+
+                MFDScreen screen = snapshot.Screen;
+                snapshot.Skin.SetLatched(screen != null && screen.isActive);
+                // The game rewrites every bezel label whenever a faction panel refreshes
+                // (VirtualMFD.SetupButtons); the rail owns its buttons and puts its line back.
+                snapshot.Skin.Reassert();
             }
         }
 

@@ -52,7 +52,8 @@ namespace BoscaliSummer.Features.Support.Visuals
         }
 
         public static ParticleSystem Layer(Transform parent, string name, bool additive,
-            int budget, float lifetime, float size, Color color, float gravity = 0f)
+            int budget, float lifetime, float size, Color color, float gravity = 0f,
+            Gradient fade = null)
         {
             var go = new GameObject(name);
             go.SetActive(false);
@@ -71,12 +72,19 @@ namespace BoscaliSummer.Features.Support.Visuals
             var growth = ps.sizeOverLifetime; growth.enabled = true;
             growth.size = new ParticleSystem.MinMaxCurve(1f,
                 AnimationCurve.Linear(0, 0.45f, 1, additive ? 1.1f : 2.8f));
-            var fade = ps.colorOverLifetime; fade.enabled = true;
-            var gradient = new Gradient();
-            gradient.SetKeys(new[] { new GradientColorKey(Color.white, 0), new GradientColorKey(Color.white, 1) },
-                new[] { new GradientAlphaKey(0, 0), new GradientAlphaKey(1, 0.06f),
-                    new GradientAlphaKey(0.7f, 0.35f), new GradientAlphaKey(0, 1) });
-            fade.color = gradient;
+            var fadeOverLifetime = ps.colorOverLifetime; fadeOverLifetime.enabled = true;
+            if (fade != null)
+            {
+                fadeOverLifetime.color = fade;
+            }
+            else
+            {
+                var gradient = new Gradient();
+                gradient.SetKeys(new[] { new GradientColorKey(Color.white, 0), new GradientColorKey(Color.white, 1) },
+                    new[] { new GradientAlphaKey(0, 0), new GradientAlphaKey(1, 0.06f),
+                        new GradientAlphaKey(0.7f, 0.35f), new GradientAlphaKey(0, 1) });
+                fadeOverLifetime.color = gradient;
+            }
             var renderer = ps.GetComponent<ParticleSystemRenderer>();
             renderer.sharedMaterial = Material(additive);
             renderer.shadowCastingMode = ShadowCastingMode.Off; renderer.receiveShadows = false;

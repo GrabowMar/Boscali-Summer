@@ -5,9 +5,6 @@ using UnityEngine;
 
 namespace BoscaliSummer.Features.Autopilot.Runtime
 {
-    /// <summary>Delegate-backed native radial slice. Appearance is copied from a stock action so
-    /// the wedge renders identically; the prefixes in BoscaliMenuActionPatches dispatch behaviour
-    /// because the native methods are non-virtual.</summary>
     internal sealed class BoscaliMenuAction : RadialMenuAction
     {
         private static readonly FieldInfo ActionTypeField =
@@ -32,6 +29,15 @@ namespace BoscaliSummer.Features.Autopilot.Runtime
             action.triggered = trigger;
             action.allowed = allowed;
             return action;
+        }
+
+        /// <summary>Re-point a pooled wedge at a contributed page entry without reallocating it.</summary>
+        public void Configure(string label, Action<Aircraft> trigger, Func<Aircraft, bool> isAllowed = null)
+        {
+            name = label;
+            DisplayName = label;
+            triggered = trigger;
+            allowed = isAllowed;
         }
 
         public bool IsAllowed(Aircraft candidate) => allowed == null || allowed(candidate);

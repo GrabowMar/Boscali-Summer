@@ -63,13 +63,6 @@ namespace BoscaliSummer.Features.QoL.Patches
             ThirdPersonHudController.Instance?.ApplyVisibility();
         }
 
-        [HarmonyPatch(typeof(GameplayUI), nameof(GameplayUI.SelectAircraft))]
-        [HarmonyPostfix]
-        private static void SelectAircraftPostfix()
-        {
-            ThirdPersonHudController.Instance?.ApplyVisibility();
-        }
-
         [HarmonyPatch(typeof(CameraStateManager), nameof(CameraStateManager.SetFollowingUnit))]
         [HarmonyPostfix]
         private static void SetFollowingUnitPostfix()

@@ -55,6 +55,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private int renderedResourceSeries = -1;
             private float renderedResourceTime = float.NaN;
             private static readonly string[] ResourceLabels = { "FUNDS", "WARHEADS", "MANPOWER", "MORALE" };
+            private static readonly string[] ResourceGlyphs = { "funds", "missile", "person", "gauge" };
             private FactionHQ observedHq;
             private MfdResourceHistory resourceHistory;
             private AvStyled.Metric[] resourceMetrics;
@@ -159,6 +160,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                         y - i / 2 * 90f, width, 82f);
                     AvKit.TacticalCard(page, area, i == 3 ? AvTheme.RailReady : AvTheme.RailInfo);
                     resourceMetrics[i] = AvStyled.MetricCell(page, area, labels[i], units[i]);
+                    CardGlyph(page, area, ResourceGlyphs[i]);
                     // Only morale has a meaningful maximum. Other resources are absolute stocks.
                     if (i != 3) resourceMetrics[i].Fill.enabled = false;
                 }
@@ -202,6 +204,23 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             private string FormatResource(float value) => resourceSeries == 0
                 ? UnitConverter.ValueReading(value) : value.ToString("0.#");
+
+            /// <summary>
+            /// A resource glyph in the card's top-right corner. The metric key names the
+            /// figure; the symbol lets a player who is scanning, not reading, tell funds
+            /// from manpower at a glance.
+            /// </summary>
+            private static void CardGlyph(RectTransform page, Rect area, string kind)
+            {
+                var go = new GameObject("MetricGlyph", typeof(RectTransform), typeof(MfdGlyph));
+                var rt = go.GetComponent<RectTransform>();
+                rt.SetParent(page, worldPositionStays: false);
+                AvKit.Place(rt, new Rect(area.x + area.width - 34f, area.y - 9f, 20f, 20f));
+
+                MfdGlyph glyph = go.GetComponent<MfdGlyph>();
+                glyph.raycastTarget = false;
+                glyph.SetKind(kind, AvTheme.Accent);
+            }
 
             private void BuildForcesPage(RectTransform page)
             {
@@ -568,7 +587,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 for (int i = 0; i < buttons.Length; i++)
                 {
                     buttons[i].SetLatched(i == selected);
-                    buttons[i].GetComponentInChildren<MfdGlyph>(true).Selection.enabled = i == selected;
+                    MfdGlyph glyph = buttons[i].GetComponentInChildren<MfdGlyph>(true);
+                    if (glyph != null) glyph.SetSelected(i == selected);
                 }
             }
         }

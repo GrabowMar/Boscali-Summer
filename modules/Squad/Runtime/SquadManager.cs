@@ -80,6 +80,7 @@ namespace BoscaliSummer.Features.Squad.Runtime
         public PilotView Pilot { get; private set; }
         public bool HuntActive { get; private set; }
         public string Status { get; private set; } = "Waiting for mission and Wing Command.";
+        public string LastChatter { get; private set; } = string.Empty;
         public int EnemyWingCount => enemies.Length;
         public int ActiveEnemyWingIndex { get; private set; } = -1;
         public int ActiveHuntId { get; private set; }
@@ -601,8 +602,12 @@ namespace BoscaliSummer.Features.Squad.Runtime
             WingLink.ReleaseAceWing(hunt.Aircraft, destroy); hunt.Released = true;
         }
 
-        private static void Notice(Career career, string text, string speaker, string chatter)
-        { career.Event++; career.Notice = text; career.Speaker = speaker; career.Chatter = chatter; }
+        private void Notice(Career career, string text, string speaker, string chatter)
+        {
+            career.Event++; career.Notice = text; career.Speaker = speaker; career.Chatter = chatter;
+            if (!string.IsNullOrEmpty(chatter))
+                LastChatter = string.IsNullOrEmpty(speaker) ? chatter : speaker + ": " + chatter;
+        }
 
         internal SquadSnapshot Snapshot(Player player)
         {
@@ -651,6 +656,12 @@ namespace BoscaliSummer.Features.Squad.Runtime
             if (snapshot.Event != lastEvent)
             {
                 lastEvent = snapshot.Event;
+                if (snapshot.Event != 0 && !string.IsNullOrEmpty(snapshot.Chatter))
+                {
+                    LastChatter = string.IsNullOrEmpty(snapshot.Speaker)
+                        ? snapshot.Chatter
+                        : snapshot.Speaker + ": " + snapshot.Chatter;
+                }
                 if (snapshot.Event != 0 && !Application.isBatchMode && !string.IsNullOrEmpty(snapshot.Chatter))
                 {
                     if (snapshot.ActiveIndex >= 0 && ActiveHuntId != lastChatterHuntId)
@@ -670,7 +681,7 @@ namespace BoscaliSummer.Features.Squad.Runtime
         }
 
         internal void ClearLocal(string reason)
-        { Pilot = default; HuntActive = false; ActiveEnemyWingIndex = -1; ActiveHuntId = 0; enemies = Array.Empty<EnemyWingView>(); Status = reason; }
+        { Pilot = default; HuntActive = false; ActiveEnemyWingIndex = -1; ActiveHuntId = 0; enemies = Array.Empty<EnemyWingView>(); Status = reason; LastChatter = string.Empty; }
 
         private static Pilot Primary(Aircraft aircraft) => aircraft != null && aircraft.pilots != null && aircraft.pilots.Length > 0 ? aircraft.pilots[0] : null;
         private static bool Survived(PersistentID id)

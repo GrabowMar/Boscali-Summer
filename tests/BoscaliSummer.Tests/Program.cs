@@ -18,7 +18,9 @@ namespace BoscaliSummer.Tests
         {
             FrameworkTests.Run();
             ImpactScorchTests.Run();
+            FireScorchTests.Run();
             TroopDeploymentTests.Run();
+            GarrisonMarkerInfoTests.Run();
             RadioTests.Run();
             Features.Squad.AceCareerTests.Run();
             ProgressionTests.Run();
@@ -28,13 +30,16 @@ namespace BoscaliSummer.Tests
             SupportTests.Run();
             Features.QoL.ObservationTests.Run();
             Features.QoL.CameraTests.Run();
-            Features.QoL.GunAimAssistTests.Run();
             Features.Autopilot.AutopilotLandTests.Run();
             CommandTests.Run();
             MfdNewsTickerTests.Run();
             MfdSecondaryObjectivesTests.Run();
+            MfdMissionOverviewTests.Run();
+            MfdMissionLabelsTests.Run();
             Features.DynamicOperations.OperationTests.Run();
             Features.DynamicOperations.OperationTitlesTests.Run();
+            Features.HighCommand.HighCommandTests.Run();
+            Features.Events.EventSelectorTests.Run();
             TrenchTests.Run();
             ModuleBoundaryTests.Run();
 

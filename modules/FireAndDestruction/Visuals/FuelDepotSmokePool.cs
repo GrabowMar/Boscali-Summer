@@ -29,6 +29,8 @@ namespace BoscaliSummer.Fire
             public int[] SourceIndices;
             public float[] SourceIntensity;
             public float[] SourceDelay;
+            public ParticleSystem.MinMaxGradient[] BaseColors;
+            public ParticleSystem.MinMaxGradient[] ActiveColors;
             public int ActiveSourceCount;
             public SmokeProfile Profile;
             public bool Active;
@@ -36,6 +38,9 @@ namespace BoscaliSummer.Fire
             public float DriftScale;
             public float GrowthSeconds;
             public float StartLag;
+            public float Buoyancy;
+            public float SizeScale = 1f;
+            public float LifetimeScale = 1f;
             public float Yaw;
             public float PulseSeed;
             public float ExternalIntensity = 1f;
@@ -75,9 +80,9 @@ namespace BoscaliSummer.Fire
                         Quaternion.Euler(0f, Yaw, 0f);
                     if (Profile == SmokeProfile.Forest)
                         Root.transform.localScale = new Vector3(
-                            Mathf.Lerp(1.65f, 2.55f, clusterT),
-                            Mathf.Lerp(1.40f, 2.15f, clusterT),
-                            Mathf.Lerp(1.65f, 2.55f, clusterT));
+                            Mathf.Lerp(1.70f, 2.60f, clusterT),
+                            Mathf.Lerp(1.50f, 2.50f, clusterT),
+                            Mathf.Lerp(1.70f, 2.60f, clusterT));
                 }
                 for (int i = 0; i < Systems.Length && i < BaseRates.Length; i++)
                 {
@@ -115,6 +120,23 @@ namespace BoscaliSummer.Fire
                     velocity.z = new ParticleSystem.MinMaxCurve(
                         BaseVelocityZMin[i] + wind.z * drift,
                         BaseVelocityZMax[i] + wind.z * drift);
+
+                    // Profile-scaled shape and colour: forest plumes read lighter, warmer and
+                    // taller than a dark fuel-tank column, and buoyancy keeps the column
+                    // accelerating into a billow instead of a flat sleeve.
+                    ParticleSystem.MainModule main = system.main;
+                    main.startSizeMultiplier = SizeScale *
+                        (Profile == SmokeProfile.Forest ? Mathf.Lerp(1f, 1.15f, clusterT) : 1f);
+                    main.startLifetimeMultiplier = LifetimeScale;
+                    if (ActiveColors != null && i < ActiveColors.Length)
+                        main.startColor = ActiveColors[i];
+                    ParticleSystem.ForceOverLifetimeModule force = system.forceOverLifetime;
+                    force.enabled = true;
+                    force.space = ParticleSystemSimulationSpace.World;
+                    force.x = new ParticleSystem.MinMaxCurve(0f);
+                    force.y = new ParticleSystem.MinMaxCurve(Buoyancy *
+                        (Profile == SmokeProfile.Forest ? Mathf.Lerp(1f, 1.35f, clusterT) : 1f));
+                    force.z = new ParticleSystem.MinMaxCurve(0f);
                     if (!system.isPlaying) system.Play(true);
                 }
             }
@@ -312,6 +334,7 @@ namespace BoscaliSummer.Fire
             var velocityXMax = new List<float>(retained.Capacity);
             var velocityZMin = new List<float>(retained.Capacity);
             var velocityZMax = new List<float>(retained.Capacity);
+            var baseColors = new List<ParticleSystem.MinMaxGradient>(retained.Capacity);
             var sourceIndices = new List<int>(retained.Capacity);
             var sourceRoots = new Transform[MaximumSmokeSources];
 
@@ -321,7 +344,7 @@ namespace BoscaliSummer.Fire
                 clone.name = "FuelDepotSmokeSource" + source;
                 sourceRoots[source] = clone.transform;
                 PrepareSmokeSource(clone, source, retained, rates,
-                    velocityXMin, velocityXMax, velocityZMin, velocityZMax, sourceIndices);
+                    velocityXMin, velocityXMax, velocityZMin, velocityZMax, baseColors, sourceIndices);
                 clone.SetActive(false);
             }
 
@@ -339,6 +362,8 @@ namespace BoscaliSummer.Fire
                 BaseVelocityXMax = velocityXMax.ToArray(),
                 BaseVelocityZMin = velocityZMin.ToArray(),
                 BaseVelocityZMax = velocityZMax.ToArray(),
+                BaseColors = baseColors.ToArray(),
+                ActiveColors = new ParticleSystem.MinMaxGradient[retained.Count],
                 SourceRoots = sourceRoots,
                 SourceIndices = sourceIndices.ToArray(),
                 SourceIntensity = new float[MaximumSmokeSources],
@@ -351,7 +376,7 @@ namespace BoscaliSummer.Fire
             List<ParticleSystem> retained, List<float> rates,
             List<float> velocityXMin, List<float> velocityXMax,
             List<float> velocityZMin, List<float> velocityZMax,
-            List<int> sourceIndices)
+            List<ParticleSystem.MinMaxGradient> baseColors, List<int> sourceIndices)
         {
             AudioSource[] audio = root.GetComponentsInChildren<AudioSource>(true);
             for (int i = 0; i < audio.Length; i++)
@@ -403,6 +428,7 @@ namespace BoscaliSummer.Fire
                 emission.enabled = true;
                 retained.Add(system);
                 rates.Add(emission.rateOverTimeMultiplier);
+                baseColors.Add(main.startColor);
                 sourceIndices.Add(sourceIndex);
                 ParticleSystem.VelocityOverLifetimeModule velocity = system.velocityOverLifetime;
                 velocityXMin.Add(velocity.x.constantMin);
@@ -429,17 +455,34 @@ namespace BoscaliSummer.Fire
             // Each source is deliberately lighter and smaller than the previous single
             // column; total emission remains in the same bounded range.
             visual.IntensityScale = forest
-                ? Mathf.Lerp(0.14f, 0.20f, a)
+                ? Mathf.Lerp(0.18f, 0.28f, a)
                 : ruin ? Mathf.Lerp(0.10f, 0.16f, a) : Mathf.Lerp(0.16f, 0.24f, a);
             visual.DriftScale = forest
-                ? Mathf.Lerp(1.45f, 2.05f, b)
+                ? Mathf.Lerp(1.70f, 2.30f, b)
                 : ruin ? Mathf.Lerp(0.82f, 1.28f, b) : Mathf.Lerp(0.72f, 1.22f, b);
+            visual.Buoyancy = forest
+                ? Mathf.Lerp(0.9f, 2.2f, b)
+                : ruin ? 0.15f : Mathf.Lerp(0.25f, 0.45f, b);
+            visual.SizeScale = forest ? 1.12f : ruin ? 0.94f : 1f;
+            visual.LifetimeScale = forest ? 1.25f : ruin ? 0.96f : 1.02f;
             visual.GrowthSeconds = forest
                 ? Mathf.Lerp(7f, 13f, c)
                 : ruin ? Mathf.Lerp(7f, 15f, c) : Mathf.Lerp(15f, 27f, c);
             visual.StartLag = Mathf.Lerp(0f, 3.5f, b);
             visual.Yaw = a * 360f;
             visual.PulseSeed = b * 17.3f + c * 31.7f;
+
+            // Wildfire smoke reads lighter and warmer than the dark fuel-tank column; ruin
+            // smoke stays neutral. The vanilla base colour is preserved in BaseColors, so
+            // tinting never fights a prefab gradient or random colour mode.
+            Color tint = forest
+                ? new Color(0.76f, 0.70f, 0.62f)
+                : ruin ? new Color(0.34f, 0.33f, 0.32f) : new Color(0.15f, 0.145f, 0.14f);
+            float tintAmount = forest ? 0.38f : ruin ? 0.12f : 0.18f;
+            if (visual.ActiveColors != null && visual.BaseColors != null)
+                for (int i = 0; i < visual.ActiveColors.Length && i < visual.BaseColors.Length; i++)
+                    visual.ActiveColors[i] = Tint(visual.BaseColors[i], tint, tintAmount);
+
             visual.Root.SetActive(true);
             visual.SetPosition(position);
             visual.Root.transform.localScale = Vector3.one;
@@ -491,6 +534,48 @@ namespace BoscaliSummer.Fire
                 if (visual.BaseRates[i] > 0f) emission.rateOverTimeMultiplier = 0f;
                 system.Play(true);
             }
+        }
+
+        private static ParticleSystem.MinMaxGradient Tint(
+            ParticleSystem.MinMaxGradient source, Color tint, float amount)
+        {
+            switch (source.mode)
+            {
+                case ParticleSystemGradientMode.Color:
+                    return new ParticleSystem.MinMaxGradient(TintColor(source.color, tint, amount));
+                case ParticleSystemGradientMode.TwoColors:
+                case ParticleSystemGradientMode.RandomColor:
+                    return new ParticleSystem.MinMaxGradient(
+                        TintColor(source.colorMin, tint, amount),
+                        TintColor(source.colorMax, tint, amount));
+                case ParticleSystemGradientMode.Gradient:
+                    return new ParticleSystem.MinMaxGradient(TintGradient(source.gradient, tint, amount));
+                case ParticleSystemGradientMode.TwoGradients:
+                    return new ParticleSystem.MinMaxGradient(
+                        TintGradient(source.gradientMin, tint, amount),
+                        TintGradient(source.gradientMax, tint, amount));
+                default:
+                    return source;
+            }
+        }
+
+        private static Color TintColor(Color source, Color tint, float amount)
+        {
+            Color result = Color.Lerp(source, tint, amount);
+            result.a = source.a;
+            return result;
+        }
+
+        private static Gradient TintGradient(Gradient source, Color tint, float amount)
+        {
+            if (source == null) return null;
+            GradientColorKey[] colors = source.colorKeys;
+            GradientAlphaKey[] alphas = source.alphaKeys;
+            for (int i = 0; i < colors.Length; i++)
+                colors[i].color = TintColor(colors[i].color, tint, amount);
+            var tinted = new Gradient();
+            tinted.SetKeys(colors, alphas);
+            return tinted;
         }
 
         private static float Signature(GlobalPosition position, float xScale, float zScale)

@@ -10,9 +10,11 @@ namespace BoscaliSummer.Garrisons
     /// </summary>
     internal static class AirAssaultVisuals
     {
-        private static Mesh cachedCanopyMesh;
-        private static Mesh cachedLinesMesh;
+        private static Mesh cachedParachuteMesh;
         private static Material cachedParachuteMat;
+        private static Material cachedChuteFabricMat;
+        private static Material cachedChuteLineMat;
+
         private const int MaximumActiveOperations = 8;
         private static readonly List<GameObject> ActiveOperations = new List<GameObject>(MaximumActiveOperations);
 
@@ -39,9 +41,11 @@ namespace BoscaliSummer.Garrisons
                 if (ActiveOperations[i] != null) UnityEngine.Object.Destroy(ActiveOperations[i]);
             ActiveOperations.Clear();
 
-            cachedCanopyMesh = null;
-            cachedLinesMesh = null;
+            cachedParachuteMesh = null;
             cachedParachuteMat = null;
+            if (cachedChuteFabricMat != null) UnityEngine.Object.Destroy(cachedChuteFabricMat);
+            cachedChuteFabricMat = null;
+            cachedChuteLineMat = null;
         }
 
         private static bool Track(GameObject operation)
@@ -88,28 +92,22 @@ namespace BoscaliSummer.Garrisons
             op.Initialize(aircraft, landingPos, owner, soldierCount, onLanded);
         }
 
-        public static Mesh GetParachuteCanopyMesh()
+        public static Mesh GetParachuteMesh()
         {
-            if (cachedCanopyMesh != null) return cachedCanopyMesh;
-            Mesh[] all = Resources.FindObjectsOfTypeAll<Mesh>();
-            for (int i = 0; i < all.Length; i++)
-            {
-                if (all[i] != null && all[i].name.IndexOf("canopy", StringComparison.OrdinalIgnoreCase) >= 0)
-                    return cachedCanopyMesh = all[i];
-            }
-            return cachedCanopyMesh = CreateFallbackCanopyMesh();
+            return cachedParachuteMesh ??= ParachuteMeshBuilder.Build();
         }
 
-        public static Mesh GetParachuteLinesMesh()
+        public static GameObject CreateParachuteRig()
         {
-            if (cachedLinesMesh != null) return cachedLinesMesh;
-            Mesh[] all = Resources.FindObjectsOfTypeAll<Mesh>();
-            for (int i = 0; i < all.Length; i++)
-            {
-                if (all[i] != null && all[i].name.IndexOf("lines", StringComparison.OrdinalIgnoreCase) >= 0)
-                    return cachedLinesMesh = all[i];
-            }
-            return null;
+            var rig = new GameObject("BoscaliSummer.ParachuteRig");
+            MeshFilter filter = rig.AddComponent<MeshFilter>();
+            filter.sharedMesh = GetParachuteMesh();
+
+            MeshRenderer renderer = rig.AddComponent<MeshRenderer>();
+            Material fabric = GetChuteFabricMaterial() ?? MaterialProvider.GetConcreteMaterial();
+            Material lines = GetChuteLineMaterial() ?? fabric;
+            renderer.sharedMaterials = new[] { fabric, lines };
+            return rig;
         }
 
         public static Material GetParachuteMaterial()
@@ -124,167 +122,145 @@ namespace BoscaliSummer.Garrisons
             return cachedParachuteMat = MaterialProvider.GetSandbagMaterial() ?? MaterialProvider.GetConcreteMaterial();
         }
 
+        public static Material GetChuteFabricMaterial()
+        {
+            if (cachedChuteFabricMat != null) return cachedChuteFabricMat;
+            Material source = GetParachuteMaterial();
+            if (source == null) return null;
+
+            cachedChuteFabricMat = new Material(source) { name = "BoscaliSummer.ChuteFabric" };
+            if (cachedChuteFabricMat.HasProperty("_wrinkleStrength"))
+                cachedChuteFabricMat.SetFloat("_wrinkleStrength", 0.18f);
+            if (cachedChuteFabricMat.HasProperty("_wrinkleDisplacment"))
+                cachedChuteFabricMat.SetFloat("_wrinkleDisplacment", 0f);
+            return cachedChuteFabricMat;
+        }
+
+        public static Material GetChuteLineMaterial()
+        {
+            return cachedChuteLineMat ??= MaterialProvider.GetCargoHookRopeMaterial();
+        }
+
         private sealed class ParatrooperCargoDropOperation : MonoBehaviour
         {
-            private const float ChuteOpenDelayMin = 0.42f;
-            private const float ChuteOpenDelayMax = 0.94f;
-            private const float FallGravity = 9.6f;
-            private const float ChuteTerminalSpeed = -6.9f;
-            private const float MaxOperationTime = 27f;
-            private const float LandingHoldSeconds = 2.8f;
+            private const float ExitInterval = 1.15f;
+            private const float ExitRearSpeed = 7f;
+            private const float FallGravity = 9.81f;
+            private const float ChuteOpenDelayMin = 0.7f;
+            private const float ChuteDeploySeconds = 0.5f;
+            private const float MinOperationTime = 40f;
+            private const float MaxOperationTime = 110f;
+            private const float LandingHoldSeconds = 3.2f;
             private const float SeaMargin = 0.5f;
             private const int MaxParatroopers = 16;
 
             private FactionHQ owner;
             private Airbase airbase;
-            private Vector3 exitVelocity;
+            private Aircraft aircraft;
+            private Vector3 exitAnchorLocal;
+            private Vector3 aircraftForward = Vector3.forward;
             private int troopCount;
             private bool insertionResolved;
+            private int landedCount;
+            private int groundLandingCount;
+            private Vector3 groundLandingSum;
+            private GameObject firstLandingBuilding;
             private float elapsed;
-            private Vector3 aircraftRight = Vector3.right;
-            private Vector3 aircraftForward = Vector3.forward;
-            private Vector3 aircraftUp = Vector3.up;
+            private float operationTime;
 
             private readonly List<ParatrooperDrop> droppers = new List<ParatrooperDrop>(MaxParatroopers);
 
             private sealed class ParatrooperDrop
             {
                 public GameObject Soldier;
-                public GameObject Canopy;
-                public GameObject Lines;
+                public GameObject Rig;
                 public Vector3 Velocity;
-                public Vector3 SpawnOffset;
-                public int Seed;
-                public float SpawnDelay;
+                public Vector3 ChuteOffset;
+                public Vector3 LandingPosition;
+                public Vector3 DriftDir;
+                public float DriftSpeed;
+                public float TerminalSpeed;
+                public float ExitAt;
                 public float ChuteDelay;
-                public float InFlightTime;
+                public float ChuteOpen;
+                public float ChuteCollapse = 1f;
+                public float ChuteSpin;
                 public float CleanupDelay;
-                public bool Activated;
-                public bool ChuteOpen;
+                public int Seed;
+                public int Slot;
+                public bool Exited;
+                public bool ChuteDeployed;
                 public bool Landed;
+                public bool InWater;
+                public int Index;
                 public Animator Animator;
             }
 
             public void Initialize(
-                Aircraft aircraft,
+                Aircraft aircraftRef,
                 Vector3 exitPos,
                 Vector3 initialVel,
                 FactionHQ faction,
                 Airbase baseObj,
                 int count)
             {
+                aircraft = aircraftRef;
                 owner = faction;
                 airbase = baseObj;
-                exitVelocity = initialVel;
                 troopCount = Mathf.Max(1, Mathf.Min(MaxParatroopers, count));
                 transform.position = exitPos;
-                BuildDroppers(aircraft);
-                StartCoroutine(FlightRoutine(aircraft));
+
+                aircraftForward = aircraft != null ? aircraft.transform.forward : Vector3.forward;
+                exitAnchorLocal = aircraft != null ? aircraft.transform.InverseTransformPoint(exitPos) : exitPos;
+
+                float altitude = Mathf.Max(0f, exitPos.y - Datum.LocalSeaY);
+                operationTime = Mathf.Clamp(altitude / 3.5f + 25f, MinOperationTime, MaxOperationTime);
+
+                BuildDroppers(initialVel);
+                StartCoroutine(FlightRoutine());
             }
 
-            private void BuildDroppers(Aircraft aircraft)
+            private void BuildDroppers(Vector3 initialVel)
             {
                 droppers.Clear();
 
-                Mesh canopyMesh = GetParachuteCanopyMesh();
-                Mesh linesMesh = GetParachuteLinesMesh();
-                Material parachuteMat = GetParachuteMaterial();
-                aircraftRight = Vector3.right;
-                aircraftForward = Vector3.forward;
-                aircraftUp = Vector3.up;
-
-                if (aircraft != null)
-                {
-                    Transform mount = aircraft.transform;
-                    aircraftRight = mount.right;
-                    aircraftForward = mount.forward;
-                    aircraftUp = mount.up;
-                }
-
                 for (int i = 0; i < troopCount; i++)
                 {
-                    Vector3 spawnOffset = Vector3.zero;
-                    if (troopCount <= 1)
-                    {
-                        spawnOffset = Vector3.zero;
-                    }
-                    else if (troopCount <= 4)
-                    {
-                        float angle = (i / (float)troopCount) * Mathf.PI * 2f;
-                        spawnOffset = (aircraftRight * Mathf.Cos(angle) + aircraftForward * Mathf.Sin(angle)) * 0.6f;
-                    }
-                    else
-                    {
-                        float side = (i % 2 == 0 ? -1f : 1f) * 0.42f;
-                        float rear = Mathf.Floor(i / 2f) * 0.24f;
-                        float upOffset = ((i % 3) - 1) * 0.08f;
-                        spawnOffset = (aircraftRight * side) + (-aircraftForward * rear) + (aircraftUp * upOffset);
-                    }
-
-                    Vector3 initialVelocity = exitVelocity
-                        + aircraftRight * ((i % 2 == 0 ? -1f : 1f) * 0.4f)
-                        - aircraftForward * 0.5f;
-                    initialVelocity.y -= 0.6f;
-
                     ParatrooperDrop drop = new ParatrooperDrop
                     {
-                        Seed = i * 17,
-                        SpawnOffset = spawnOffset,
-                        SpawnDelay = i * 0.12f + UnityEngine.Random.Range(0f, 0.08f),
-                        ChuteDelay = UnityEngine.Random.Range(ChuteOpenDelayMin, ChuteOpenDelayMax),
-                        Velocity = initialVelocity
+                        Seed = i * 37 + 11,
+                        Index = i,
+                        Slot = i % 2,
+                        ExitAt = i * ExitInterval,
+                        ChuteDelay = ChuteOpenDelayMin + (i % 3) * 0.14f + UnityEngine.Random.Range(0f, 0.2f),
+                        Velocity = initialVel,
+                        DriftSpeed = 1f + UnityEngine.Random.Range(0f, 0.5f),
+                        // Earlier jumpers hang longer; later ones sink faster, stretching the trail.
+                        TerminalSpeed = -(5.2f + i * 0.1f + UnityEngine.Random.Range(0f, 0.12f))
                     };
 
-                    Vector3 spawnPos = transform.position + spawnOffset;
-                    Quaternion facing = Quaternion.LookRotation(
-                        (exitVelocity == Vector3.zero) ? -aircraftForward : exitVelocity.normalized,
-                        aircraftUp);
-                    drop.Soldier = VanillaSoldierFactory.CreateVisualSoldier(spawnPos, facing, transform);
-
+                    drop.Soldier = VanillaSoldierFactory.CreateVisualSoldier(transform.position, Quaternion.identity, transform);
                     if (drop.Soldier == null)
                     {
                         drop.Soldier = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-                        drop.Soldier.name = "BoscaliSummer.TrooperFallback";
                         drop.Soldier.transform.SetParent(transform, false);
-                        drop.Soldier.transform.position = spawnPos;
                     }
-                    drop.Animator = drop.Soldier.GetComponentInChildren<Animator>();
-
-                    if (canopyMesh != null)
-                    {
-                        drop.Canopy = CreateParachuteMesh(canopyMesh, parachuteMat, "ParachuteCanopy");
-                        drop.Canopy.transform.SetParent(drop.Soldier.transform, false);
-                        drop.Canopy.transform.localPosition = aircraftUp * 2.9f + aircraftForward * 0.18f;
-                        drop.Canopy.SetActive(false);
-                    }
-
-                    if (linesMesh != null)
-                    {
-                        drop.Lines = CreateParachuteMesh(linesMesh, parachuteMat, "ParachuteLines");
-                        drop.Lines.transform.SetParent(drop.Soldier.transform, false);
-                        drop.Lines.transform.localPosition = aircraftUp * 1.5f + aircraftForward * 0.05f;
-                        drop.Lines.SetActive(false);
-                    }
-
                     drop.Soldier.name = $"Paratrooper_{i + 1}";
+                    drop.Animator = drop.Soldier.GetComponentInChildren<Animator>();
                     drop.Soldier.SetActive(false);
+
+                    // The whole chute rig hangs from the operation, never the swinging body.
+                    drop.Rig = CreateParachuteRig();
+                    drop.Rig.transform.SetParent(transform, false);
+                    drop.Rig.SetActive(false);
+
                     droppers.Add(drop);
                 }
             }
 
-            private static GameObject CreateParachuteMesh(Mesh mesh, Material parachuteMaterial, string meshName)
+            private IEnumerator FlightRoutine()
             {
-                GameObject parachute = new GameObject(meshName);
-                MeshFilter filter = parachute.AddComponent<MeshFilter>();
-                MeshRenderer renderer = parachute.AddComponent<MeshRenderer>();
-                filter.sharedMesh = mesh;
-                renderer.sharedMaterial = parachuteMaterial;
-                return parachute;
-            }
-
-            private IEnumerator FlightRoutine(Aircraft aircraft)
-            {
-                while (elapsed < MaxOperationTime)
+                while (elapsed < operationTime)
                 {
                     float dt = Time.deltaTime;
                     if (dt <= 0f)
@@ -294,192 +270,307 @@ namespace BoscaliSummer.Garrisons
                     }
 
                     elapsed += dt;
-                    bool allCleared = true;
+                    bool anyActive = false;
 
                     for (int i = 0; i < droppers.Count; i++)
                     {
-                        ParatrooperDrop drop = droppers[i];
-                        if (drop.Soldier == null)
+                        if (droppers[i].Soldier == null)
                             continue;
 
-                        if (AdvanceDrop(drop, dt, aircraft))
-                            allCleared = false;
+                        if (AdvanceDrop(droppers[i], dt))
+                            anyActive = true;
                     }
 
-                    if (allCleared)
+                    if (!anyActive)
                         break;
 
                     yield return null;
                 }
 
-                if (!insertionResolved)
-                {
-                    insertionResolved = true;
-                }
-
-                for (int i = 0; i < droppers.Count; i++)
-                {
-                    if (droppers[i].Soldier != null)
-                        Destroy(droppers[i].Soldier);
-                    if (droppers[i].Canopy != null)
-                        Destroy(droppers[i].Canopy);
-                    if (droppers[i].Lines != null)
-                        Destroy(droppers[i].Lines);
-                }
-
+                ResolveInsertionIfPending(true);
+                CleanupAll();
                 yield return new WaitForSeconds(1f);
                 Destroy(gameObject);
             }
 
-            private bool AdvanceDrop(ParatrooperDrop drop, float dt, Aircraft aircraft)
+            private bool AdvanceDrop(ParatrooperDrop drop, float dt)
             {
                 if (drop.Soldier == null)
                     return false;
 
                 if (drop.Landed)
                 {
+                    // The canopy deflates over the hold, then the rig fades out.
+                    if (drop.ChuteCollapse > 0f)
+                    {
+                        drop.ChuteCollapse = Mathf.Max(0f, drop.ChuteCollapse - dt / 0.3f);
+                        UpdateChuteRig(drop, drop.Soldier.transform.position, dt);
+                    }
+
                     drop.CleanupDelay -= dt;
                     if (drop.CleanupDelay > 0f)
                         return true;
 
-                    if (drop.Canopy != null) Destroy(drop.Canopy);
-                    if (drop.Lines != null) Destroy(drop.Lines);
+                    if (drop.Rig != null) { Destroy(drop.Rig); drop.Rig = null; }
                     Destroy(drop.Soldier);
                     drop.Soldier = null;
                     return false;
                 }
 
-                if (!drop.Activated)
+                if (!drop.Exited)
                 {
-                    drop.InFlightTime += dt;
-                    if (drop.InFlightTime < drop.SpawnDelay)
+                    if (elapsed < drop.ExitAt)
                         return true;
 
-                    drop.Activated = true;
-                    drop.InFlightTime = 0f;
-                    drop.Soldier.SetActive(true);
+                    ExitDrop(drop);
                 }
 
-                drop.InFlightTime += dt;
-                if (!drop.ChuteOpen && drop.InFlightTime >= drop.ChuteDelay)
-                {
-                    drop.ChuteOpen = true;
-                    if (drop.Canopy != null) drop.Canopy.SetActive(true);
-                    if (drop.Lines != null) drop.Lines.SetActive(true);
-                    if (drop.Animator != null)
-                    {
-                        SetPilotAnimation(drop.Animator, PilotDismounted.PilotState.parachuting);
-                    }
-                    Plugin.Logger.LogInfo("[Paratroopers] Static-line parachute fully deployed.");
-                }
-
-                Vector3 wind = Vector3.zero;
-                if (aircraft != null && aircraft.rb != null)
-                    wind = aircraft.rb.velocity * 0.2f;
-
-                if (!drop.ChuteOpen)
+                float fallTime = elapsed - drop.ExitAt;
+                if (!drop.ChuteDeployed)
                 {
                     drop.Velocity += Vector3.down * FallGravity * dt;
-                    drop.Velocity.x = Mathf.Lerp(drop.Velocity.x, wind.x, dt * 0.3f);
-                    drop.Velocity.z = Mathf.Lerp(drop.Velocity.z, wind.z, dt * 0.3f);
-                }
-                else
-                {
-                    Vector3 target = new Vector3(wind.x * 0.25f, ChuteTerminalSpeed, wind.z * 0.25f);
-                    drop.Velocity = Vector3.MoveTowards(drop.Velocity, target, 11f * dt);
-                    float sway = Mathf.Sin(elapsed * 2.3f + iFromDrop(drop)) * 0.8f;
-                    float side = Mathf.Cos(elapsed * 1.6f + iFromDrop(drop)) * 0.22f;
-                    drop.Velocity += (aircraftUp * side + aircraftForward * sway * 0.25f) * dt;
+
+                    // Slipstream bleeds off the aircraft's speed across the line stretch;
+                    // a little early drift keeps the stick from stacking on itself.
+                    Vector3 slipstream = (aircraft != null && aircraft.rb != null) ? aircraft.rb.velocity * 0.18f : Vector3.zero;
+                    slipstream += drop.DriftDir * (drop.DriftSpeed * 0.45f);
+                    drop.Velocity.x = Mathf.MoveTowards(drop.Velocity.x, slipstream.x, 22f * dt);
+                    drop.Velocity.z = Mathf.MoveTowards(drop.Velocity.z, slipstream.z, 22f * dt);
+
+                    if (fallTime >= drop.ChuteDelay)
+                        DeployChute(drop);
                 }
 
-                float sweep = Mathf.Max(0.4f, drop.Velocity.magnitude * dt + 0.7f);
-                Vector3 nextPos = drop.Soldier.transform.position + drop.Velocity * dt;
-                if (Physics.Raycast(drop.Soldier.transform.position, Vector3.down, out RaycastHit hit, sweep, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore))
+                if (drop.ChuteDeployed)
                 {
-                    Land(drop, hit);
-                    return true;
+                    drop.ChuteOpen = Mathf.Min(1f, drop.ChuteOpen + dt / ChuteDeploySeconds);
+
+                    // Mission wind plus a per-jumper drift fans the stick out naturally.
+                    float driftBlend = Mathf.Clamp01(fallTime / 1.8f);
+                    Vector3 wind = GetWindVector();
+                    Vector3 target = new Vector3(
+                        wind.x * 0.75f + drop.DriftDir.x * drop.DriftSpeed * driftBlend,
+                        drop.TerminalSpeed,
+                        wind.z * 0.75f + drop.DriftDir.z * drop.DriftSpeed * driftBlend);
+                    drop.Velocity = Vector3.MoveTowards(drop.Velocity, target, (drop.ChuteOpen < 1f ? 30f : 6f) * dt);
+                    ApplyCanopySway(drop, dt);
                 }
 
-                if (nextPos.y <= Datum.LocalSeaY + SeaMargin)
-                {
-                    hit.point = new Vector3(nextPos.x, Datum.LocalSeaY, nextPos.z);
-                    Land(drop, hit, true);
-                    return true;
-                }
-
-                drop.Soldier.transform.position = nextPos;
-                Vector3 look = Vector3.ProjectOnPlane(drop.Velocity, aircraftUp);
-                if (look.sqrMagnitude < 0.001f)
-                    look = -aircraftUp;
-                drop.Soldier.transform.rotation = Quaternion.LookRotation(look.normalized, aircraftUp);
+                IntegrateSoldier(drop, dt);
+                CheckLanding(drop);
                 return true;
             }
 
-            private static int iFromDrop(ParatrooperDrop drop)
+            private void ExitDrop(ParatrooperDrop drop)
             {
-                return drop?.Soldier == null ? 0 : drop.Seed;
+                Vector3 forward = aircraftForward;
+                Vector3 right = Vector3.right;
+                Vector3 exitPos = transform.position;
+                Vector3 inheritedVelocity = drop.Velocity;
+
+                if (aircraft != null)
+                {
+                    forward = aircraft.transform.forward;
+                    right = aircraft.transform.right;
+                    exitPos = aircraft.transform.TransformPoint(exitAnchorLocal);
+                    if (aircraft.rb != null)
+                        inheritedVelocity = aircraft.rb.velocity;
+                }
+
+                exitPos += right * (drop.Slot == 0 ? -0.55f : 0.55f);
+                drop.Velocity = inheritedVelocity - forward * ExitRearSpeed + Vector3.up * 0.35f
+                    + right * (drop.Slot == 0 ? -0.55f : 0.55f);
+
+                // Ordered fan behind the flight path: a visible jumped-one-after-another trail.
+                Vector3 trail = Vector3.ProjectOnPlane(-forward, Vector3.up);
+                if (trail.sqrMagnitude < 0.01f) trail = right;
+                trail.Normalize();
+                Vector3 fanRight = Vector3.Cross(Vector3.up, trail).normalized;
+                float side = drop.Slot == 0 ? -1f : 1f;
+                float fanAngle = side * (20f + drop.Index * 4f) * Mathf.Deg2Rad;
+                drop.DriftDir = (trail * Mathf.Cos(fanAngle) + fanRight * Mathf.Sin(fanAngle)).normalized;
+
+                drop.Exited = true;
+                drop.ChuteOffset = Vector3.up * ParachuteMeshBuilder.RimHeight;
+                drop.Soldier.SetActive(true);
+                drop.Soldier.transform.SetPositionAndRotation(exitPos, Quaternion.LookRotation(-forward, Vector3.up));
+                if (drop.Animator != null)
+                    SetPilotAnimation(drop.Animator, PilotDismounted.PilotState.parachuting);
             }
 
-            private void Land(ParatrooperDrop drop, RaycastHit hit, bool inWater = false)
+            private static void DeployChute(ParatrooperDrop drop)
+            {
+                drop.ChuteDeployed = true;
+                drop.ChuteOpen = 0.01f;
+                drop.ChuteCollapse = 1f;
+                if (drop.Velocity.y < -12f)
+                    drop.Velocity.y = -12f;
+
+                // Static line snaps the canopy open and checks the forward speed.
+                drop.Velocity.x *= 0.4f;
+                drop.Velocity.z *= 0.4f;
+
+                if (drop.Rig != null) drop.Rig.SetActive(true);
+                Plugin.Logger.LogInfo("[Paratroopers] Static-line parachute deployed.");
+            }
+
+            private void ApplyCanopySway(ParatrooperDrop drop, float dt)
+            {
+                float phase = elapsed * 1.15f + drop.Seed * 0.17f;
+                Vector3 right = aircraft != null ? aircraft.transform.right : Vector3.right;
+                Vector3 forward = aircraft != null ? aircraft.transform.forward : Vector3.forward;
+                drop.Velocity += (right * Mathf.Sin(phase) + forward * Mathf.Cos(phase * 0.73f)) * 0.35f * dt;
+            }
+
+            private static Vector3 GetWindVector()
+            {
+                LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
+                return level != null ? level.GetWind() : Vector3.zero;
+            }
+
+            private void IntegrateSoldier(ParatrooperDrop drop, float dt)
+            {
+                if (drop == null || drop.Soldier == null) return;
+
+                Vector3 pos = drop.Soldier.transform.position + drop.Velocity * dt;
+                drop.Soldier.transform.position = pos;
+
+                Vector3 motion = drop.Velocity;
+                motion.y = 0f;
+                Vector3 facing = motion.sqrMagnitude > 0.04f
+                    ? motion.normalized
+                    : Vector3.ProjectOnPlane(-aircraftForward, Vector3.up);
+                if (facing.sqrMagnitude < 0.01f) facing = Vector3.forward;
+                float bank = Mathf.Sin(Time.time * 0.8f + drop.Seed) * (drop.ChuteDeployed ? 5f : 2f);
+                drop.Soldier.transform.rotation = Quaternion.LookRotation(facing, Vector3.up) * Quaternion.Euler(0f, 0f, bank);
+
+                UpdateChuteRig(drop, pos, dt);
+            }
+
+            private void UpdateChuteRig(ParatrooperDrop drop, Vector3 soldierPos, float dt)
+            {
+                if (drop.Rig == null) return;
+
+                float scale = Mathf.SmoothStep(0f, 1f, drop.ChuteOpen) * drop.ChuteCollapse;
+                if (scale <= 0.02f)
+                {
+                    if (drop.Rig.activeSelf) drop.Rig.SetActive(false);
+                    return;
+                }
+                if (!drop.Rig.activeSelf) drop.Rig.SetActive(true);
+
+                // The canopy floats on a short pendulum above the harness.
+                Vector3 target = Vector3.up * ParachuteMeshBuilder.RimHeight
+                    + new Vector3(drop.Velocity.x, 0f, drop.Velocity.z) * 0.06f
+                    + new Vector3(
+                        Mathf.Sin(elapsed * 1.1f + drop.Seed) * 0.4f,
+                        0f,
+                        Mathf.Cos(elapsed * 0.83f + drop.Seed) * 0.4f);
+                float follow = 1f - Mathf.Exp(-2.6f * dt);
+                drop.ChuteOffset = drop.ChuteOffset.sqrMagnitude < 0.01f
+                    ? target
+                    : Vector3.Lerp(drop.ChuteOffset, target, follow);
+
+                Vector3 dir = drop.ChuteOffset.sqrMagnitude > 0.001f ? drop.ChuteOffset.normalized : Vector3.up;
+                drop.ChuteSpin += dt * 2.2f;
+                Quaternion yaw = Quaternion.AngleAxis(Mathf.Sin(drop.ChuteSpin + drop.Seed) * 12f, Vector3.up);
+
+                drop.Rig.transform.position = soldierPos + Vector3.up * ParachuteMeshBuilder.HarnessHeight;
+                drop.Rig.transform.rotation = Quaternion.FromToRotation(Vector3.up, dir) * yaw;
+                drop.Rig.transform.localScale = new Vector3(scale, scale, scale);
+            }
+
+            private void CheckLanding(ParatrooperDrop drop)
+            {
+                if (drop == null || drop.Soldier == null || drop.Landed) return;
+
+                Vector3 pos = drop.Soldier.transform.position;
+                float sweep = Mathf.Max(0.6f, drop.Velocity.magnitude * Time.deltaTime + 0.8f);
+                if (Physics.Raycast(pos + Vector3.up * 0.1f, Vector3.down, out RaycastHit hit, sweep + 0.1f, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore))
+                {
+                    Land(drop, hit, false);
+                    return;
+                }
+
+                if (pos.y <= Datum.LocalSeaY + SeaMargin)
+                {
+                    hit.point = new Vector3(pos.x, Datum.LocalSeaY, pos.z);
+                    Land(drop, hit, true);
+                }
+            }
+
+            private void Land(ParatrooperDrop drop, RaycastHit hit, bool inWater)
             {
                 if (drop == null || drop.Soldier == null || drop.Landed)
                     return;
 
                 drop.Landed = true;
-                drop.CleanupDelay = LandingHoldSeconds;
+                drop.InWater = inWater;
+                drop.CleanupDelay = LandingHoldSeconds + drop.Slot * 0.15f;
+                drop.LandingPosition = inWater ? hit.point : SnapToGround(hit.point);
+                drop.ChuteCollapse = 1f;
 
-                Vector3 finalPos = drop.Soldier.transform.position;
-                if (!inWater && Physics.Raycast(drop.Soldier.transform.position + Vector3.up * 0.2f, Vector3.down, out RaycastHit fallback, 8f, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore))
+                if (!inWater && GameAssets.i != null && GameAssets.i.contactDust != null)
                 {
-                    finalPos = fallback.point;
-                }
-
-                if (inWater)
-                {
-                    Plugin.Logger.LogInfo("[Paratroopers] Paratroopers touched down in water.");
-                }
-
-                if (drop.Canopy != null)
-                    drop.Canopy.SetActive(false);
-                if (drop.Lines != null)
-                    drop.Lines.SetActive(false);
-
-                if (GameAssets.i != null && GameAssets.i.contactDust != null && !inWater)
-                {
-                    GameObject dust = Instantiate(GameAssets.i.contactDust, finalPos + Vector3.up * 0.2f, Quaternion.identity);
+                    GameObject dust = Instantiate(GameAssets.i.contactDust, drop.LandingPosition + Vector3.up * 0.2f, Quaternion.identity);
                     dust.SetActive(true);
                     Destroy(dust, 3.5f);
                 }
 
-                if (!insertionResolved)
-                {
-                    insertionResolved = true;
-                    ResolveInsertion(hit, inWater);
-                }
-
+                drop.Soldier.transform.position = drop.LandingPosition;
                 if (drop.Animator != null)
                     SetPilotAnimation(drop.Animator, PilotDismounted.PilotState.landing);
-                drop.Soldier.transform.position = finalPos;
-            }
 
-            private void ResolveInsertion(RaycastHit hit, bool inWater)
-            {
+                landedCount++;
                 if (inWater)
                 {
-                    return;
-                }
-
-                GameObject shell = ResolveCivilianBuilding(hit.collider);
-                if (shell != null)
-                {
-                    Plugin.Logger.LogInfo($"[AIR ASSAULT] Paratrooper squad ({troopCount} troops) secured and fortified building: {shell.name}!");
-                    ZoneGarrisonManager.Instance?.TryOccupyBuilding(shell, owner, airbase);
+                    Plugin.Logger.LogInfo("[Paratroopers] A paratrooper touched down in water.");
                 }
                 else
                 {
-                    Plugin.Logger.LogInfo($"[AIR ASSAULT] Paratroopers ({troopCount} troops) established combat encampment at ({hit.point.x:0}, {hit.point.z:0})!");
-                    ZoneGarrisonManager.Instance?.TryDeployEncampment(hit.point, owner, airbase, troopCount);
+                    groundLandingCount++;
+                    groundLandingSum += drop.LandingPosition;
+                    if (firstLandingBuilding == null)
+                        firstLandingBuilding = ResolveCivilianBuilding(hit.collider);
                 }
+
+                ResolveInsertionIfPending(false);
+            }
+
+            private void ResolveInsertionIfPending(bool force)
+            {
+                if (insertionResolved || (!force && landedCount < troopCount) || groundLandingCount == 0)
+                    return;
+
+                insertionResolved = true;
+                Vector3 center = groundLandingSum / groundLandingCount;
+
+                if (firstLandingBuilding != null)
+                {
+                    Plugin.Logger.LogInfo($"[AIR ASSAULT] Paratrooper squad ({troopCount} troops) secured and fortified building: {firstLandingBuilding.name}!");
+                    ZoneGarrisonManager.Instance?.TryOccupyBuilding(firstLandingBuilding, owner, airbase);
+                    return;
+                }
+
+                Plugin.Logger.LogInfo($"[AIR ASSAULT] Paratroopers ({troopCount} troops) established combat encampment at ({center.x:0}, {center.z:0})!");
+                ZoneGarrisonManager.Instance?.TryDeployEncampment(center, owner, airbase, troopCount);
+            }
+
+            private void CleanupAll()
+            {
+                for (int i = 0; i < droppers.Count; i++)
+                {
+                    ParatrooperDrop drop = droppers[i];
+                    if (drop.Rig != null) Destroy(drop.Rig);
+                    if (drop.Soldier != null) Destroy(drop.Soldier);
+                }
+            }
+
+            private static Vector3 SnapToGround(Vector3 point)
+            {
+                if (Physics.Raycast(point + Vector3.up * 0.5f, Vector3.down, out RaycastHit ground, 8f, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore))
+                    return ground.point;
+                return point;
             }
 
             private static void SetPilotAnimation(Animator anim, PilotDismounted.PilotState state)
@@ -997,34 +1088,5 @@ namespace BoscaliSummer.Garrisons
             return null;
         }
 
-        private static Mesh CreateFallbackCanopyMesh()
-        {
-            Mesh mesh = new Mesh();
-            mesh.name = "FallbackCanopy";
-
-            int segments = 16;
-            var verts = new List<Vector3>();
-            var tris = new List<int>();
-
-            verts.Add(new Vector3(0f, 1.4f, 0f));
-            for (int i = 0; i < segments; i++)
-            {
-                float a = (float)i / segments * Mathf.PI * 2f;
-                verts.Add(new Vector3(Mathf.Cos(a) * 2.8f, 0f, Mathf.Sin(a) * 2.8f));
-            }
-
-            for (int i = 0; i < segments; i++)
-            {
-                int next = (i + 1) % segments;
-                tris.Add(0);
-                tris.Add(i + 1);
-                tris.Add(next + 1);
-            }
-
-            mesh.SetVertices(verts);
-            mesh.SetTriangles(tris, 0);
-            mesh.RecalculateNormals();
-            return mesh;
-        }
     }
 }

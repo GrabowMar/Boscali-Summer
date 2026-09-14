@@ -50,7 +50,6 @@ namespace BoscaliSummer.Features.Progression.Runtime
         int IProgressionView.EarnedPoints => localEarnedPoints;
         int IProgressionView.AvailablePoints => localState.AvailablePoints(localEarnedPoints);
         int IProgressionView.MaximumPoints => localMaximumPoints;
-        private int LocalBonus => GameManager.GetLocalPlayer<Player>(out Player local) && local != null ? squad.GetBonusPoints(PlayerIdentity.Of(local)) : 0;
         int IProgressionView.ScorePerPoint => localScorePerPoint;
         string IProgressionView.Status => LastResult;
         bool IProgressionView.UnlockPending => unlockPending;

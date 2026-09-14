@@ -15,13 +15,15 @@ maintainers and coding agents; runtime design is in [ARCHITECTURE.md](ARCHITECTU
 | OPS MFD (support, observation, battle status), request validation, costs, cooldowns, spawn jobs | `modules/Support` | `Features/Support` | Progression + optional zone-fortification contracts, game interop |
 | STR MFD, expanded map GUI, map overlays, doctrine, AI target scoring | `modules/Command` | `Features/Command` | Progression contracts, game interop |
 | Secondary objectives, faction awards, finite reinforcement batches | `modules/DynamicOperations` | `Features/DynamicOperations` | Framework lifecycle/contracts, native game interop |
+| Generated staff tree, command posts, VIP convoys, intel, stipends/bounties | `modules/HighCommand` | `Features/HighCommand` | Framework lifecycle/contracts, native game interop; consumed by Command through `IHighCommandView` |
+| Rotating world events, EVN MFD feed, support-cost modifier | `modules/Events` | `Features/Events` | Framework lifecycle/contracts, native game interop; publishes `IActiveEventsView`, optionally consumed by Support |
 | Feature graph, host, lifecycle, service contracts | `Framework` | `Framework` | no concrete feature |
 | Cached game/reflection/diagnostic adapters | `Infrastructure` | architecture / patch probe | no feature policy |
 | Registration and plugin startup | `Bootstrap` | Framework / architecture | may name every feature |
 | Config composition and legacy migration | `Configuration` | relevant feature / framework | may compose module settings |
 
 Module folders are `modules/<Feature>/` at the repo root; the shared trees (`Framework`,
-`Infrastructure`, `Bootstrap`, `Configuration`, `Core`, `Interop`) sit beside them. Test
+`Infrastructure`, `Bootstrap`, `Configuration`, `Core`) sit beside them. Test
 folders are under `tests/BoscaliSummer.Tests/`.
 
 ## Dependency direction
@@ -38,16 +40,27 @@ Sibling module A  ──✗──►  Sibling module B implementation
 ```
 
 Support and Command declare a dependency on Progression but consume only `IPlayerPerks` /
-`IProgressionView`; Support's optional Urban Combat integration uses only
-`IZoneFortificationService`. Neither edge permits a concrete sibling import. When two
+`IProgressionView`; Support's optional Urban Combat integration uses
+`IZoneFortificationService` and `IBaseDefenseAlarmService`. Command's STR console also
+reads the alarm ticker. Neither edge permits a concrete sibling import. When two
 features genuinely interact, define the smallest interface in `Framework/Contracts`,
 implement it in the owner, resolve it through `ServiceRegistry` — never expose a manager,
 singleton, patch class, mutable collection, or settings object as the contract.
 
+Command's STR console consumes HighCommand's read-only `IHighCommandView` for the chain-of-
+command page; HighCommand resolves it late through `ModServices`, imports no sibling
+implementation, and neither module requires the other to install. The view carries a
+generated `Sprite` portrait only because Command may not import the owner's renderer; the
+owner caches and clears it.
+
 Progression depends on Squad's read-only `ISquadView` for pilot generations and ace
 bonus points. Radio observes the same contract optionally for local music transitions.
-The plugin requires Wing Command `0.9.2.3`+ at runtime; `WingLink` caches its public
+The plugin requires Wing Command `0.9.2.6`+ at runtime; `WingLink` caches its public
 pilot/ace-wing/chatter API and no feature imports Wing Command implementation types.
+
+Support optionally consumes Events' read-only `IActiveEventsView` for a live world-event
+factor on support pricing. It resolves the contract late through `ModServices`; Events
+imports no sibling, and neither module requires the other to install.
 
 ## Workflow for an ordinary feature request
 

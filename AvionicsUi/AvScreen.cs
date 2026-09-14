@@ -58,7 +58,7 @@ namespace NOAvionics.Ui
         /// Build the chrome into <paramref name="content"/>.
         /// </summary>
         /// <param name="id">Two to four characters for the filled tag, e.g. "OPS".</param>
-        /// <param name="tabLabels">One label per page. A single tab still draws a bar.</param>
+        /// <param name="tabLabels">One label per page. Empty omits the bar; CreatePage(0) still works.</param>
         /// <param name="metrics">{key, unit} per display metric; null or empty omits the row.</param>
         /// <param name="chipCount">Status chips in the top bar.</param>
         public static AvScreen Build(
@@ -70,7 +70,7 @@ namespace NOAvionics.Ui
             string[] labels = tabLabels ?? new string[0];
             int metricCount = metrics == null ? 0 : metrics.Length;
 
-            var screen = new AvScreen(labels.Length, onTab);
+            var screen = new AvScreen(Math.Max(1, labels.Length), onTab);
 
             AvNode shell = AvBox.Column("screen").Pad(AvTokens.Pad).Gaps(AvTokens.Space2)
                 .Add(AvBox.Row("databar").Height(AvTokens.TitleBarHeight + 2f));

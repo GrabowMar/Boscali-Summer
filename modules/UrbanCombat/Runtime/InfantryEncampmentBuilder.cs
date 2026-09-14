@@ -36,7 +36,6 @@ namespace BoscaliSummer.Garrisons
         }
 
         private static readonly List<EncampmentSite> ActiveSites = new List<EncampmentSite>();
-        public static IReadOnlyList<EncampmentSite> GetActiveSites() => ActiveSites;
         private static readonly Dictionary<string, BuildingDefinition> CachedDefs =
             new Dictionary<string, BuildingDefinition>(StringComparer.OrdinalIgnoreCase);
         private static bool catalogInitialized;
@@ -102,13 +101,6 @@ namespace BoscaliSummer.Garrisons
                     return site;
             }
             return null;
-        }
-
-        public static List<Building> DeployEncampment(Airbase airbase, FactionHQ owner, Vector3 targetCenter, int encampmentIndex)
-        {
-            DeployOrReinforce(targetCenter, owner, airbase, TroopDeploymentMath.DefaultSquadSize);
-            EncampmentSite site = FindNearbySite(targetCenter, 150f);
-            return site != null ? site.Emplacements : new List<Building>();
         }
 
         public static bool DeployOrReinforce(Vector3 dropPos, FactionHQ owner, Airbase airbase, int troopCount)

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using NuclearOption.Networking;
 using UnityEngine;
 
 namespace BoscaliSummer.Garrisons
@@ -8,9 +9,10 @@ namespace BoscaliSummer.Garrisons
     internal sealed class OccupiedBuildingMarking : MonoBehaviour
     {
         private GameObject root;
-        private readonly List<Mesh> meshes = new List<Mesh>(4);
-        private readonly List<Material> materials = new List<Material>(3);
+        private readonly List<Mesh> meshes = new List<Mesh>(8);
+        private readonly List<Material> materials = new List<Material>(6);
         private Material flagMaterial;
+        private Material bandMaterial;
         private Building building;
         private float nextCheck;
 
@@ -49,9 +51,20 @@ namespace BoscaliSummer.Garrisons
             float halfX = Mathf.Max(2.5f, (definition?.width ?? 4f) * 0.5f + 0.5f);
             float halfZ = Mathf.Max(2.5f, (definition?.length ?? 4f) * 0.5f + 0.5f);
 
-            var vertices = new List<Vector3>();
-            var triangles = new List<int>();
-            var uvs = new List<Vector2>();
+            AddSandbagNest(sand, halfX, halfZ);
+
+            if (GarrisonMarkerInfo.TryParse(building.NetworkUniqueName,
+                out float minX, out float maxX, out float minZ, out float maxZ))
+                AddShellMarking(owner, sand, steel, minX, maxX, minZ, maxZ);
+            else
+                AddNestMarking(sand, steel, halfX, halfZ);
+        }
+
+        private void AddSandbagNest(Material sand, float halfX, float halfZ)
+        {
+            var vertices = new List<Vector3>(2048);
+            var triangles = new List<int>(4096);
+            var uvs = new List<Vector2>(2048);
             // Three short walls leave the forward firing sector clear. Two staggered
             // courses, 36 rounded bags, combined into one renderer per emplacement.
             for (int course = 0; course < 2; course++)
@@ -67,20 +80,15 @@ namespace BoscaliSummer.Garrisons
                         AddBag(vertices, triangles, uvs, center, size);
                     }
             AddMesh("SandbagCover", vertices, triangles, uvs, sand);
+        }
 
+        private void AddNestMarking(Material sand, Material steel, float halfX, float halfZ)
+        {
             Vector3 pole = new Vector3(-halfX, 0f, -halfZ);
-            vertices.Clear(); triangles.Clear(); uvs.Clear();
-            for (int i = 0; i <= 8; i++)
-            {
-                float angle = i * Mathf.PI / 4f;
-                Vector3 radial = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * 0.065f;
-                vertices.Add(pole + radial); vertices.Add(pole + radial + Vector3.up * 5.1f);
-                uvs.Add(new Vector2(i / 8f, 0f)); uvs.Add(new Vector2(i / 8f, 1f));
-                if (i == 8) continue;
-                int a = i * 2;
-                triangles.Add(a); triangles.Add(a + 1); triangles.Add(a + 2);
-                triangles.Add(a + 1); triangles.Add(a + 3); triangles.Add(a + 2);
-            }
+            var vertices = new List<Vector3>(64);
+            var triangles = new List<int>(128);
+            var uvs = new List<Vector2>(64);
+            AddPole(vertices, triangles, uvs, pole, 5.1f, 0.065f);
             AddMesh("Flagpole", vertices, triangles, uvs, steel);
             vertices.Clear(); triangles.Clear(); uvs.Clear();
             AddFlag(vertices, triangles, uvs, pole + Vector3.up * 4.8f, 2.8f, 1.6f);
@@ -89,6 +97,84 @@ namespace BoscaliSummer.Garrisons
             vertices.Clear(); triangles.Clear(); uvs.Clear();
             AddFlag(vertices, triangles, uvs, pole + Vector3.up * 4.8f, 0.35f, 1.6f, 0.016f);
             AddMesh("FlagHoist", vertices, triangles, uvs, sand);
+        }
+
+        private void AddShellMarking(FactionHQ owner, Material sand, Material steel,
+            float minX, float maxX, float minZ, float maxZ)
+        {
+            float spanX = Mathf.Max(6f, maxX - minX);
+            float spanZ = Mathf.Max(6f, maxZ - minZ);
+            float longSpan = Mathf.Max(spanX, spanZ);
+            float mastHeight = Mathf.Clamp(longSpan * 0.22f, 6f, 12f);
+            float flagWidth = Mathf.Clamp(longSpan * 0.16f, 3f, 7f);
+            float flagHeight = flagWidth * 0.57f;
+            Vector3 center = new Vector3((minX + maxX) * 0.5f, 0f, (minZ + maxZ) * 0.5f);
+            float cornerX = Mathf.Max(1.2f, spanX * 0.5f - 0.4f);
+            float cornerZ = Mathf.Max(1.2f, spanZ * 0.5f - 0.4f);
+            bool twin = longSpan >= 24f;
+            Vector3 first = center + new Vector3(-cornerX, 0f, -cornerZ);
+            Vector3 second = center + new Vector3(cornerX, 0f, cornerZ);
+
+            var vertices = new List<Vector3>(256);
+            var triangles = new List<int>(512);
+            var uvs = new List<Vector2>(256);
+            AddPole(vertices, triangles, uvs, first, mastHeight);
+            if (twin) AddPole(vertices, triangles, uvs, second, mastHeight);
+            AddMesh("Flagpoles", vertices, triangles, uvs, steel);
+
+            vertices.Clear(); triangles.Clear(); uvs.Clear();
+            AddFlag(vertices, triangles, uvs, first + Vector3.up * (mastHeight - 0.3f), flagWidth, flagHeight);
+            if (twin) AddFlag(vertices, triangles, uvs, second + Vector3.up * (mastHeight - 0.3f), flagWidth, flagHeight);
+            AddMesh("FactionFlags", vertices, triangles, uvs, flagMaterial);
+
+            vertices.Clear(); triangles.Clear(); uvs.Clear();
+            AddFlag(vertices, triangles, uvs, first + Vector3.up * (mastHeight - 0.3f), 0.35f, flagHeight, 0.016f);
+            if (twin) AddFlag(vertices, triangles, uvs, second + Vector3.up * (mastHeight - 0.3f), 0.35f, flagHeight, 0.016f);
+            AddMesh("FlagHoists", vertices, triangles, uvs, sand);
+
+            Color faction = FactionColor(owner);
+            bandMaterial = CreateMaterial(faction);
+            var accentMaterial = CreateMaterial(ViewerAccent(owner));
+            if (bandMaterial == null) return;
+            bandMaterial.EnableKeyword("_EMISSION");
+            bandMaterial.SetColor("_EmissionColor", faction * 0.35f);
+            if (accentMaterial != null)
+            {
+                accentMaterial.EnableKeyword("_EMISSION");
+                accentMaterial.SetColor("_EmissionColor", ViewerAccent(owner) * 0.25f);
+            }
+
+            bool alongX = spanX >= spanZ;
+            const float bandHeight = 0.9f;
+            const float inset = 0.35f;
+            float bandY = bandHeight * 0.5f + 0.05f;
+            float bandLength = Mathf.Max(4f, (alongX ? spanX : spanZ) - inset * 2f);
+            Vector3 bandSize = alongX ? new Vector3(bandLength, bandHeight, 0.09f) : new Vector3(0.09f, bandHeight, bandLength);
+            Vector3 stripeSize = alongX ? new Vector3(bandLength, 0.28f, 0.15f) : new Vector3(0.15f, 0.28f, bandLength);
+            float edgeX = Mathf.Max(0.6f, spanX * 0.5f - inset);
+            float edgeZ = Mathf.Max(0.6f, spanZ * 0.5f - inset);
+            Vector3 edgeA = center + (alongX ? new Vector3(0f, 0f, -edgeZ) : new Vector3(-edgeX, 0f, 0f));
+            Vector3 edgeB = center + (alongX ? new Vector3(0f, 0f, edgeZ) : new Vector3(edgeX, 0f, 0f));
+
+            vertices.Clear(); triangles.Clear(); uvs.Clear();
+            AddBox(vertices, triangles, uvs, edgeA + Vector3.up * bandY, bandSize);
+            AddBox(vertices, triangles, uvs, edgeB + Vector3.up * bandY, bandSize);
+            AddMesh("RoofBand", vertices, triangles, uvs, bandMaterial);
+
+            if (accentMaterial == null) return;
+            vertices.Clear(); triangles.Clear(); uvs.Clear();
+            AddBox(vertices, triangles, uvs, edgeA + Vector3.up * bandY, stripeSize);
+            AddBox(vertices, triangles, uvs, edgeB + Vector3.up * bandY, stripeSize);
+            AddMesh("RoofBandStripe", vertices, triangles, uvs, accentMaterial);
+        }
+
+        private static Color ViewerAccent(FactionHQ owner)
+        {
+            if (GameAssets.i == null) return new Color(0.92f, 0.9f, 0.78f);
+            if (owner != null && GameManager.GetLocalPlayer<Player>(out Player local) &&
+                local != null && local.HQ != null)
+                return local.HQ == owner ? GameAssets.i.HUDFriendly : GameAssets.i.HUDHostile;
+            return GameAssets.i.HUDNeutral;
         }
 
         private void Update()
@@ -106,6 +192,11 @@ namespace BoscaliSummer.Garrisons
                 Color color = FactionColor(building.NetworkHQ);
                 flagMaterial.color = color;
                 flagMaterial.SetColor("_EmissionColor", color * 0.18f);
+                if (bandMaterial != null)
+                {
+                    bandMaterial.color = color;
+                    bandMaterial.SetColor("_EmissionColor", color * 0.35f);
+                }
             }
         }
 
@@ -129,6 +220,52 @@ namespace BoscaliSummer.Garrisons
             go.transform.SetParent(root.transform, false);
             go.AddComponent<MeshFilter>().sharedMesh = mesh;
             go.AddComponent<MeshRenderer>().sharedMaterial = material;
+        }
+
+        private static void AddPole(List<Vector3> vertices, List<int> triangles, List<Vector2> uvs,
+            Vector3 basePosition, float height, float radius = 0.075f)
+        {
+            int start = vertices.Count;
+            for (int i = 0; i <= 8; i++)
+            {
+                float angle = i * Mathf.PI / 4f;
+                Vector3 radial = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * radius;
+                vertices.Add(basePosition + radial); vertices.Add(basePosition + radial + Vector3.up * height);
+                uvs.Add(new Vector2(i / 8f, 0f)); uvs.Add(new Vector2(i / 8f, 1f));
+                if (i == 8) continue;
+                int a = start + i * 2;
+                triangles.Add(a); triangles.Add(a + 1); triangles.Add(a + 2);
+                triangles.Add(a + 1); triangles.Add(a + 3); triangles.Add(a + 2);
+            }
+        }
+
+        private static void AddBox(List<Vector3> vertices, List<int> triangles, List<Vector2> uvs,
+            Vector3 center, Vector3 size)
+        {
+            int start = vertices.Count;
+            Vector3 half = size * 0.5f;
+            vertices.Add(center + new Vector3(-half.x, -half.y, -half.z));
+            vertices.Add(center + new Vector3(half.x, -half.y, -half.z));
+            vertices.Add(center + new Vector3(half.x, -half.y, half.z));
+            vertices.Add(center + new Vector3(-half.x, -half.y, half.z));
+            vertices.Add(center + new Vector3(-half.x, half.y, -half.z));
+            vertices.Add(center + new Vector3(half.x, half.y, -half.z));
+            vertices.Add(center + new Vector3(half.x, half.y, half.z));
+            vertices.Add(center + new Vector3(-half.x, half.y, half.z));
+            uvs.Add(new Vector2(0f, 0f)); uvs.Add(new Vector2(1f, 0f));
+            uvs.Add(new Vector2(1f, 0f)); uvs.Add(new Vector2(0f, 0f));
+            uvs.Add(new Vector2(0f, 1f)); uvs.Add(new Vector2(1f, 1f));
+            uvs.Add(new Vector2(1f, 1f)); uvs.Add(new Vector2(0f, 1f));
+            int[] faces =
+            {
+                0, 4, 1, 1, 4, 5,
+                2, 6, 3, 3, 6, 7,
+                4, 7, 5, 5, 7, 6,
+                0, 3, 4, 4, 3, 7,
+                1, 5, 2, 2, 5, 6,
+                0, 1, 3, 3, 1, 2
+            };
+            for (int i = 0; i < faces.Length; i++) triangles.Add(start + faces[i]);
         }
 
         private static void AddBag(List<Vector3> vertices, List<int> triangles, List<Vector2> uvs, Vector3 center, Vector3 size)
@@ -182,7 +319,7 @@ namespace BoscaliSummer.Garrisons
             if (root != null) { root.SetActive(false); Destroy(root); root = null; }
             foreach (Mesh mesh in meshes) if (mesh != null) Destroy(mesh);
             foreach (Material material in materials) if (material != null) Destroy(material);
-            meshes.Clear(); materials.Clear(); flagMaterial = null;
+            meshes.Clear(); materials.Clear(); flagMaterial = null; bandMaterial = null;
         }
 
         private void OnDestroy() => CleanUp();

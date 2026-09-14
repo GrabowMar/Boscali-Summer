@@ -19,15 +19,6 @@ namespace BoscaliSummer.Tests.Features.Command
             AvGridTests.Run(TestAssert.That);
             AvStyleTests.Run(TestAssert.That);
 
-            TestAssert.That(CommandDoctrineHelper.CanSetDoctrine(0),
-                "Doctrine is host-always-on; vanilla rank is not a lock");
-            TestAssert.That(CommandDoctrineHelper.MaxPriorityTargets(0) == 3,
-                "Priority marks are not rank-gated");
-            TestAssert.That(!CommandDoctrineHelper.CanOrderSectorStrike(5),
-                "Unwired sector strike stays unavailable");
-            TestAssert.That(!CommandDoctrineHelper.CanOrderScramble(5),
-                "Unwired scramble stays unavailable");
-
             CommandDoctrine[] doctrines = (CommandDoctrine[])System.Enum.GetValues(typeof(CommandDoctrine));
             TestAssert.That(doctrines.Length == 5, "Must have exactly 5 strategic doctrines");
             for (int i = 0; i < doctrines.Length; i++)
@@ -37,6 +28,15 @@ namespace BoscaliSummer.Tests.Features.Command
                 TestAssert.That(!string.IsNullOrEmpty(CommandDoctrineHelper.GetDescription(doctrines[i])),
                     "Doctrine description must not be empty for " + doctrines[i]);
             }
+
+            string air = CommandDoctrineHelper.GetDescription(CommandDoctrine.AirSuperiority);
+            TestAssert.That(air.IndexOf("45%", System.StringComparison.Ordinal) >= 0,
+                "Air Superiority bias is TheaterScoring +45%, not +200%");
+            TestAssert.That(air.IndexOf("scoring", System.StringComparison.OrdinalIgnoreCase) >= 0,
+                "Doctrine copy must say scoring only");
+            TestAssert.That(air.IndexOf("CAP", System.StringComparison.OrdinalIgnoreCase) < 0 ||
+                            air.IndexOf("No CAP", System.StringComparison.Ordinal) >= 0,
+                "Air Superiority must not claim CAP spawn");
 
             TestTacticalSectorGrid();
             TestControlledIngress();
@@ -148,6 +148,8 @@ namespace BoscaliSummer.Tests.Features.Command
             // 2. Troop presence & sector evaluation
             grid.ResetAll();
             TestAssert.That(grid.FriendlySectorCount == 0 && grid.HostileSectorCount == 0, "Grid starts empty");
+            TestAssert.That(float.IsNaN(grid.TerritoryControlRatio),
+                "empty board territory is unknown, not 50/50");
 
             // Add friendly troops at (0, 0)
             grid.AddTroopPresence(0f, 0f, 1.5f, false, 0f);

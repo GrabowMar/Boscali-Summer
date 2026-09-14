@@ -20,6 +20,21 @@ public sealed class Building : MonoBehaviour
 }
 public sealed class FactionHQ { public Faction faction = new Faction(); }
 public sealed class Faction { public Color color = Color.blue; }
+namespace NuclearOption.Networking
+{
+    public sealed class Player { public FactionHQ HQ; }
+}
+public static class GameManager
+{
+    public static bool GetLocalPlayer<T>(out T player) where T : class { player = null; return false; }
+}
+public sealed class GameAssets
+{
+    public static GameAssets i;
+    public Color HUDFriendly = new Color(0.25f, 0.55f, 1f);
+    public Color HUDHostile = new Color(1f, 0.25f, 0.2f);
+    public Color HUDNeutral = new Color(0.85f, 0.85f, 0.72f);
+}
 public sealed class BuildingDefinition
 {
     public float width = 4f, length = 4f;
@@ -56,7 +71,9 @@ public static class RooftopUnityCheck
         return go;
     }
     private static bool Fits(GameObject go, BuildingDefinition definition, out Vector3 position) =>
-        RooftopPlacement.TryPlace(go, go.GetComponent<Renderer>().bounds, definition, out position, out _);
+        Fits(go, definition, out position, out _);
+    private static bool Fits(GameObject go, BuildingDefinition definition, out Vector3 position, out Vector4 extents) =>
+        RooftopPlacement.TryPlace(go, go.GetComponent<Renderer>().bounds, definition, out position, out _, out extents);
 
 #if UNITY_EDITOR
     public static void BuildPlayer()
@@ -96,6 +113,10 @@ public static class RooftopUnityCheck
             var definition = new BuildingDefinition();
             GameObject roof = Roof(new Vector3(30, 10, 30), new Vector3(0, 37, 0));
             Check(Fits(roof, definition, out Vector3 p) && Mathf.Abs(p.y - 5.03f) < 0.01f, "Rotated flat roof must fit at roof height");
+            Check(Fits(roof, definition, out _, out Vector4 extents) &&
+                Mathf.Abs(extents.x + 14f) < 0.01f && Mathf.Abs(extents.y - 14f) < 0.01f &&
+                Mathf.Abs(extents.z + 14f) < 0.01f && Mathf.Abs(extents.w - 14f) < 0.01f,
+                "Measured roof patch must match the flat supported extent");
             Object.DestroyImmediate(roof);
             roof = Roof(new Vector3(3, 10, 3), Vector3.zero);
             Check(!Fits(roof, definition, out _), "Small roof must reject an overhanging footprint");
@@ -195,6 +216,43 @@ public static class RooftopUnityCheck
             }
             Check(vertices < 3000, "Decoration vertex budget");
 
+            var scaledUnit = new GameObject("ScaledEmplacementFixture");
+            scaledUnit.transform.position = new Vector3(0f, 5.03f, 50f);
+            var scaledBuilding = scaledUnit.AddComponent<Building>();
+            scaledBuilding.definition = definition;
+            scaledBuilding.NetworkHQ = new FactionHQ();
+            scaledBuilding.NetworkHQ.faction.color = new Color(0.16f, 0.40f, 0.75f);
+            scaledBuilding.NetworkUniqueName = GarrisonMarkerInfo.Append(
+                RooftopPlacement.NamePrefix + "Fixture", -18f, 18f, -9f, 9f);
+            GarrisonVisual.Apply(scaledBuilding);
+            Check(scaledUnit.GetComponent<OccupiedBuildingMarking>() != null,
+                "Encoded shell footprint must create a scaled marker");
+            Check(scaledUnit.GetComponentsInChildren<MeshRenderer>().Length == 6,
+                "Scaled marker keeps a bounded renderer count");
+            int scaledVertices = 0;
+            foreach (var filter in scaledUnit.GetComponentsInChildren<MeshFilter>())
+                scaledVertices += filter.sharedMesh.vertexCount;
+            Check(scaledVertices < 4000, "Scaled decoration vertex budget");
+
+            var placedRoof = Roof(new Vector3(70, 10, 34), Vector3.zero);
+            placedRoof.transform.position = new Vector3(0f, 0f, 120f);
+            Physics.SyncTransforms();
+            var placedUnit = new GameObject("MeasuredEmplacementFixture");
+            Check(RooftopPlacement.TryPlace(placedRoof, placedRoof.GetComponent<Renderer>().bounds, definition,
+                out Vector3 placedPosition, out Quaternion placedRotation, out Vector4 placedExtents),
+                "Measured placement must find a supported roof patch");
+            placedUnit.transform.position = placedPosition;
+            placedUnit.transform.rotation = placedRotation;
+            var placedBuilding = placedUnit.AddComponent<Building>();
+            placedBuilding.definition = definition;
+            placedBuilding.NetworkHQ = new FactionHQ();
+            placedBuilding.NetworkHQ.faction.color = new Color(0.55f, 0.25f, 0.75f);
+            placedBuilding.NetworkUniqueName = GarrisonMarkerInfo.Append(RooftopPlacement.NamePrefix + "Measured",
+                placedExtents.x, placedExtents.y, placedExtents.z, placedExtents.w);
+            GarrisonVisual.Apply(placedBuilding);
+            Check(placedExtents.y - placedExtents.x <= 70f && placedExtents.w - placedExtents.z <= 34f,
+                "Measured patch must stay inside the roof");
+
             // Optional locally extracted native meshes improve the illustration, but
             // no game assets are checked in or required to run the physics assertions.
 #if UNITY_EDITOR
@@ -226,6 +284,15 @@ public static class RooftopUnityCheck
             camera.transform.position = new Vector3(-12, 13, -14);
             camera.transform.LookAt(new Vector3(0, 6.5f, 0));
             Render(camera, "roof-back.png");
+            camera.transform.position = new Vector3(6, 22, 2);
+            camera.transform.LookAt(new Vector3(6, 6.5f, 46));
+            Render(camera, "roof-scaled.png");
+            camera.transform.position = new Vector3(0, 45, 40);
+            camera.transform.LookAt(new Vector3(0, 8, 120));
+            Render(camera, "roof-measured.png");
+            Object.DestroyImmediate(placedUnit);
+            Object.DestroyImmediate(placedRoof);
+            Object.DestroyImmediate(scaledUnit);
             marking.CleanUp();
             Check(!unit.transform.Find("BoscaliSummer.OccupiedRoof").gameObject.activeSelf, "Cleanup hides decoration immediately");
             File.WriteAllText(Path.Combine(Application.dataPath, "../results.txt"), "PASS: " + checks + " assertions; actual Unity physics, production placement and decoration meshes. Networking, weapon AI and in-game lighting not exercised.");

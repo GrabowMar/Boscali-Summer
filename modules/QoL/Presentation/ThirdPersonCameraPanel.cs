@@ -144,11 +144,6 @@ namespace BoscaliSummer.Features.QoL.Presentation
             signalRail = AvKit.Rule(panel, new Rect(0f, 0f, 3f, 1f), AvTheme.RailCaution);
         }
 
-        /// <summary>
-        /// Keeps the passive overlay inside the platform safe area and sizes the viewport to
-        /// the native feed. The full texture is always shown; wide feeds make a shorter panel
-        /// and tall feeds shrink until the panel fits vertically.
-        /// </summary>
         private void Layout(RenderTexture texture)
         {
             if (panel == null || canvas == null) return;

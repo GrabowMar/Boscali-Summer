@@ -11,13 +11,6 @@
 
     internal static class CommandDoctrineHelper
     {
-        public const int RankObserver = 0;
-        public const int RankPriorityTarget = 1;
-        public const int RankDoctrine = 2;
-        public const int RankReinforcement = 3;
-        public const int RankSectorStrike = 4;
-        public const int RankTheaterScramble = 5;
-
         public static string GetName(CommandDoctrine doctrine)
         {
             switch (doctrine)
@@ -35,22 +28,16 @@
             switch (doctrine)
             {
                 case CommandDoctrine.AirSuperiority:
-                    return "Prioritizes enemy fighters and air threats (+200% air priority, defensive combat air patrols).";
+                    return "Mission-AI scoring only: +45% vs aircraft, −25% vs other. No CAP spawn. Wingmen excluded.";
                 case CommandDoctrine.StrikeFocus:
-                    return "Directs strike flights against enemy airbases, factories, depots, and power infrastructure.";
+                    return "Mission-AI scoring only: +55% vs buildings, +25% vs other surface. Wingmen excluded.";
                 case CommandDoctrine.SEAD:
-                    return "Prioritizes suppression and destruction of enemy SAM sites, search radars, and AAA.";
+                    return "Mission-AI scoring only: +60% vs anti-air. Wingmen excluded.";
                 case CommandDoctrine.CloseAirSupport:
-                    return "Focuses air assets on attacking enemy ground convoys, armor columns, and artillery.";
+                    return "Mission-AI scoring only: +40% vs ground units. Wingmen excluded.";
                 default:
-                    return "Standard tactical doctrine: autonomous balance across air and surface objectives.";
+                    return "Mission-AI scoring only: no extra bias. Wingmen excluded.";
             }
         }
-
-        public static int MaxPriorityTargets(int rank) => 3;
-
-        public static bool CanSetDoctrine(int rank) => true;
-        public static bool CanOrderSectorStrike(int rank) => false;
-        public static bool CanOrderScramble(int rank) => false;
     }
 }

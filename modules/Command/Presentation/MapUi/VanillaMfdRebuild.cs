@@ -410,6 +410,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 {
                     RefreshContent();
                     UpdateStatus(AmbientStatus());
+                    PaintTabGlyphs();
                 }
                 catch (Exception e)
                 {
@@ -439,7 +440,59 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 tabHandler = onTab;
                 if (labels == null) return;
                 int count = Mathf.Min(Shell.Tabs.Length, labels.Length);
-                for (int i = 0; i < count; i++) Shell.Tabs[i].SetText(labels[i]);
+                for (int i = 0; i < count; i++)
+                {
+                    AvButton tab = Shell.Tabs[i];
+                    if (tab == null) continue;
+                    tab.SetText(labels[i]);
+                    DecorateTab(tab, labels[i]);
+                }
+                PaintTabGlyphs();
+            }
+
+            /// <summary>
+            /// Give a text-only tab a glyph and room for it. The tab is the one control a
+            /// page change starts at, so it carries the same symbol language as the panel
+            /// buttons; a short label keeps its full width, the glyph takes a fixed left
+            /// column instead of pushing the text off the edge.
+            /// </summary>
+            private static void DecorateTab(AvButton tab, string label)
+            {
+                var root = (RectTransform)tab.transform;
+                float width = root.sizeDelta.x > 1f ? root.sizeDelta.x : root.rect.width;
+                float height = root.sizeDelta.y > 1f ? root.sizeDelta.y : root.rect.height;
+                if (width <= 1f) width = 100f;
+                if (height <= 1f) height = AvTokens.TabBarHeight;
+
+                var go = new GameObject("TabIcon", typeof(RectTransform), typeof(MfdGlyph));
+                var rt = go.GetComponent<RectTransform>();
+                rt.SetParent(root, worldPositionStays: false);
+                AvKit.Place(rt, new Rect(7f, -(height - 14f) * 0.5f, 14f, 14f));
+
+                MfdGlyph glyph = go.GetComponent<MfdGlyph>();
+                glyph.raycastTarget = false;
+                glyph.Set(label);
+
+                TMP_Text text = tab.GetComponentInChildren<TMP_Text>();
+                if (text == null) return;
+                AvKit.Place(text.rectTransform, new Rect(23f, 0f, Mathf.Max(0f, width - 27f), height));
+                text.alignment = TextAlignmentOptions.MidlineLeft;
+                text.fontSizeMax = text.fontSize;
+                text.fontSizeMin = AvTokens.FontMicro;
+                text.enableAutoSizing = true;
+            }
+
+            /// <summary>Match each tab glyph to the page it opens; hover stays the tab's own.</summary>
+            protected void PaintTabGlyphs()
+            {
+                if (Shell == null || Shell.Tabs == null) return;
+                for (int i = 0; i < Shell.Tabs.Length; i++)
+                {
+                    AvButton tab = Shell.Tabs[i];
+                    if (tab == null) continue;
+                    MfdGlyph glyph = tab.GetComponentInChildren<MfdGlyph>(true);
+                    if (glyph != null) glyph.SetSelected(i == Shell.Page);
+                }
             }
 
             protected void SetSelectedTab(int selected)

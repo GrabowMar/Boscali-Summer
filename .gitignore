@@ -35,6 +35,7 @@ Thumbs.db
 AGENTS.md
 **/AGENTS.md
 .agents/
+.superpowers/
 .claude/
 .opencode/
 .cursor/

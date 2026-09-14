@@ -12,6 +12,25 @@ using UnityEngine;
 
 namespace BoscaliSummer.Features.Trenches.Runtime
 {
+    /// <summary>Where the next trench sector is expected to be dug, for map symbology.</summary>
+    internal readonly struct PlannedEntrenchment
+    {
+        public readonly FactionHQ Owner;
+        public readonly Vector3 Position;
+        public readonly Vector3 Threat;
+        public readonly float HalfSpan;
+        public readonly float Pressure;
+
+        public PlannedEntrenchment(FactionHQ owner, Vector3 position, Vector3 threat, float halfSpan, float pressure)
+        {
+            Owner = owner;
+            Position = position;
+            Threat = threat;
+            HalfSpan = halfSpan;
+            Pressure = pressure;
+        }
+    }
+
     /// <summary>
     /// Central manager for the dynamic trench system.
     /// Manages network lifecycles, server-authoritative growth ticks, 3D visual chunks,
@@ -33,20 +52,27 @@ namespace BoscaliSummer.Features.Trenches.Runtime
 
         private float nextSimulationTick;
         private readonly Dictionary<int, TrenchGarrison> garrisons = new Dictionary<int, TrenchGarrison>(MaximumActiveNetworks);
+        private readonly Dictionary<int, TrenchWorks> works = new Dictionary<int, TrenchWorks>(MaximumActiveNetworks);
         private int nextNetworkId = 1;
+        private float nextLinkAttempt;
         private ITerritoryIngress territory;
         private readonly FrontlineSite[] sites = new FrontlineSite[256];
-        private readonly List<(FactionHQ owner, Vector3 position, Vector3 threat, float flankLimit, int rank)> candidates =
-            new List<(FactionHQ, Vector3, Vector3, float, int)>(2048);
+        private readonly List<(FactionHQ owner, Vector3 position, Vector3 threat, float flankLimit, int rank, float pressure)> candidates =
+            new List<(FactionHQ, Vector3, Vector3, float, int, float)>(2048);
+        private readonly List<PlannedEntrenchment> plannedSites = new List<PlannedEntrenchment>(2048);
         private int candidateIndex;
         private int rejected;
         private float nextGarrisonWarning;
         private float nextGrowthWarning;
+        private float nextPlannedRefresh;
         private readonly List<Vector3> clearedSites = new List<Vector3>(64);
 
         public event Action OnNetworksChanged;
 
         public IReadOnlyList<TrenchNetwork> Networks => networks;
+
+        /// <summary>Contested frontline sectors where a new trench belt may be dug.</summary>
+        public IReadOnlyList<PlannedEntrenchment> PlannedSites => plannedSites;
 
         public void Configure(TrenchesSettings config, ManualLogSource log, ITerritoryIngress control)
         {
@@ -57,6 +83,8 @@ namespace BoscaliSummer.Features.Trenches.Runtime
 
         public void ResetForScene()
         {
+            foreach (var work in works.Values) work.Remove();
+            works.Clear();
             foreach (var garrison in garrisons.Values) garrison.Remove();
             garrisons.Clear();
             foreach (var chunk in visualChunks.Values)
@@ -70,13 +98,14 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             networks.Clear();
 
             TrenchMaterialResolver.ResetForScene();
-            TrenchPrefabResolver.ResetForScene();
 
             nextNetworkId = 1;
             nextGarrisonWarning = 0;
             nextGrowthWarning = 0;
             nextSimulationTick = 0f;
+            nextPlannedRefresh = 0f;
             candidates.Clear();
+            plannedSites.Clear();
             clearedSites.Clear();
             candidateIndex = rejected = 0;
             nextSeedAttemptAt = Time.unscaledTime + 2.5f;
@@ -108,7 +137,31 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         private void RefreshCandidates()
         {
             nextSeedAttemptAt = Time.unscaledTime + 30f;
+            nextPlannedRefresh = Time.unscaledTime + 5f;
+            ScanPlacement();
+            logger?.LogInfo($"[TRENCHES] Placement scan: {candidates.Count} contested frontline slots, {networks.Count} active networks.");
+        }
+
+        /// <summary>
+        /// Re-reads the frontline for map display (host and clients). Returns true when the
+        /// projected trace changed. Never interrupts an in-progress seeding walk.
+        /// </summary>
+        public bool RefreshPlannedSites()
+        {
+            if (settings == null || !settings.Enabled.Value || territory == null || candidates.Count > 0) return false;
+            if (Time.unscaledTime < nextPlannedRefresh) return false;
+            nextPlannedRefresh = Time.unscaledTime + 5f;
+            ScanPlacement();
+            return true;
+        }
+
+        // One border cell side becomes a chain of sector slots spaced along the border.
+        // Only borders where both sides actually hold ground are fortifiable, and the
+        // hottest (most balanced) sectors sort first, so trenches erupt where troops meet.
+        private void ScanPlacement()
+        {
             candidates.Clear();
+            plannedSites.Clear();
             int factions = 0;
             foreach (FactionHQ owner in FactionRegistry.GetAllHQs())
             {
@@ -117,30 +170,30 @@ namespace BoscaliSummer.Features.Trenches.Runtime
                 int count = territory.CopyFrontlineSites(owner.GetInstanceID(), sites);
                 for (int i = 0; i < count; i++) ExpandSite(owner, sites[i], i);
             }
-            // Round-robin factions so a small configured ceiling does not all go to the first HQ.
             candidates.Sort((a, b) =>
             {
-                int order = a.rank.CompareTo(b.rank);
+                int order = b.pressure.CompareTo(a.pressure);
+                if (order != 0) return order;
+                order = a.rank.CompareTo(b.rank);
                 return order != 0 ? order : a.owner.GetInstanceID().CompareTo(b.owner.GetInstanceID());
             });
             candidateIndex = rejected = 0;
-            logger?.LogInfo($"[TRENCHES] Placement scan: {candidates.Count} frontline sector slots, {networks.Count} active networks.");
         }
 
-        // One border cell side is kilometres long, so a single site becomes a chain of
-        // sector slots spaced along the border instead of one isolated strongpoint.
         private void ExpandSite(FactionHQ owner, FrontlineSite site, int rank)
         {
-            if (candidates.Count >= 2048) return;
+            if (candidates.Count >= 2048 || plannedSites.Count >= 2048 || site.Pressure <= 0f) return;
             float flankLimit = TrenchTacticalMath.CapFlankLimit(site.HalfLength);
             Vector3 center = new Vector3(site.X, 0, site.Z);
             Vector3 tangent = new Vector3(-site.ThreatZ, 0, site.ThreatX);
             Vector3 threat = new Vector3(site.ThreatX, 0, site.ThreatZ);
-            int slots = Mathf.Clamp(Mathf.FloorToInt((site.HalfLength * 2f - 120f) / SeedSlotSpacing), 1, 4);
+            int slots = Mathf.Clamp(Mathf.FloorToInt((site.HalfLength * 2f - 120f) / SeedSlotSpacing), 1, 8);
             for (int i = 0; i < slots; i++)
             {
                 float offset = (i - (slots - 1) * 0.5f) * SeedSlotSpacing;
-                candidates.Add((owner, center + tangent * offset, threat, flankLimit, rank));
+                Vector3 position = center + tangent * offset;
+                candidates.Add((owner, position, threat, flankLimit, rank, site.Pressure));
+                plannedSites.Add(new PlannedEntrenchment(owner, position, threat, flankLimit, site.Pressure));
             }
         }
 
@@ -197,6 +250,7 @@ namespace BoscaliSummer.Features.Trenches.Runtime
 
             if (!TrenchGrowthSimulator.Seed(net, SnapToGround)) return null;
             var garrison = new TrenchGarrison(net);
+            TrenchWorks netWorks = null;
             try
             {
                 if (!garrison.Establish())
@@ -209,9 +263,14 @@ namespace BoscaliSummer.Features.Trenches.Runtime
                     return null;
                 }
                 CreateVisualChunk(net);
+                netWorks = new TrenchWorks(net);
+                works.Add(net.Id, netWorks);
+                netWorks.Deploy(net.Stage);
             }
             catch (Exception ex)
             {
+                netWorks?.Remove();
+                works.Remove(net.Id);
                 garrison.Remove();
                 logger?.LogWarning("[TRENCHES] Site creation rolled back: " + ex.Message);
                 return null;
@@ -250,6 +309,7 @@ namespace BoscaliSummer.Features.Trenches.Runtime
                 TrenchNetwork net = networks[i];
                 TrenchGarrison garrison = garrisons[net.Id];
                 bool changed = garrison.Poll(Time.time);
+                if (works.TryGetValue(net.Id, out TrenchWorks netWorks)) netWorks.Deploy(net.Stage);
                 bool rebuild = false;
                 net.DefenderCount = garrison.Alive;
                 bool suppressed = Time.time < garrison.SuppressedUntil;
@@ -270,6 +330,8 @@ namespace BoscaliSummer.Features.Trenches.Runtime
                 {
                     if (visualChunks.TryGetValue(net.Id, out var obsolete) && obsolete != null) Destroy(obsolete.gameObject);
                     visualChunks.Remove(net.Id);
+                    if (works.TryGetValue(net.Id, out TrenchWorks obsoleteWorks)) obsoleteWorks.Remove();
+                    works.Remove(net.Id);
                     networks.RemoveAt(i);
                     garrison.Remove();
                     garrisons.Remove(net.Id);
@@ -282,7 +344,8 @@ namespace BoscaliSummer.Features.Trenches.Runtime
                     advancedOne = true;
                     net.NextGrowthAt = Time.time + Math.Max(15f, settings.GrowthIntervalSeconds.Value);
                     rebuild = TrenchGrowthSimulator.AdvanceSimulation(net, SnapToGround);
-                    if (!rebuild && net.Stage != TrenchStage.Stage5_Redoubt && Time.unscaledTime >= nextGrowthWarning)
+                    if (!rebuild && net.Stage != TrenchStage.Stage5_Redoubt && net.Stage != TrenchStage.Stage6_Saps &&
+                        Time.unscaledTime >= nextGrowthWarning)
                     {
                         nextGrowthWarning = Time.unscaledTime + 60f;
                         logger?.LogWarning($"[TRENCHES] '{net.Name}' growth held at {net.Stage}: {TrenchGrowthSimulator.LastFailure}");
@@ -303,10 +366,49 @@ namespace BoscaliSummer.Features.Trenches.Runtime
                 }
             }
 
+            if (Time.time >= nextLinkAttempt)
+            {
+                nextLinkAttempt = Time.time + 5f;
+                anyChanged |= TryLinkNeighbors();
+            }
+
             if (anyChanged)
             {
                 OnNetworksChanged?.Invoke();
             }
+        }
+
+        /// <summary>
+        /// Joins the fire-trench ends of adjacent same-faction sectors with a short junction
+        /// trench, so a chain of sectors becomes one continuous front line.
+        /// </summary>
+        private bool TryLinkNeighbors()
+        {
+            bool linked = false;
+            for (int i = 0; i < networks.Count; i++)
+            {
+                TrenchNetwork a = networks[i];
+                if (a.Stage < TrenchStage.Stage5_Redoubt) continue;
+                for (int j = i + 1; j < networks.Count; j++)
+                {
+                    TrenchNetwork b = networks[j];
+                    if (b.OwnerHq != a.OwnerHq || b.Stage < TrenchStage.Stage5_Redoubt) continue;
+                    TrenchNode endA = a.NearestFrontNode(b.SeedCenter, out _);
+                    if (endA == null) continue;
+                    TrenchNode endB = b.NearestFrontNode(endA.Position, out _);
+                    if (endB == null) continue;
+                    float gap = Vector3.Distance(endA.Position, endB.Position);
+                    if (!TrenchTacticalMath.IsSappingEligible(gap)) continue;
+                    int before = a.EdgeCount;
+                    a.AddEdge(endA.Id, endB.Id, TrenchEdgeType.ZigzagFireTrench, TrenchStage.Stage5_Redoubt, SnapToGround);
+                    if (a.EdgeCount == before) continue;
+                    if (visualChunks.TryGetValue(a.Id, out TrenchVisualChunk chunkA) && chunkA != null) chunkA.Rebuild();
+                    if (visualChunks.TryGetValue(b.Id, out TrenchVisualChunk chunkB) && chunkB != null) chunkB.Rebuild();
+                    logger?.LogInfo($"[TRENCHES] Junction trench joined '{a.Name}' to '{b.Name}' ({gap:0}m).");
+                    linked = true;
+                }
+            }
+            return linked;
         }
 
         public static Vector3 SnapToGround(Vector3 position)

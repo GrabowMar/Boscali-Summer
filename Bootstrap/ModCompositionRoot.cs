@@ -3,7 +3,9 @@ using BepInEx.Logging;
 using BoscaliSummer.Features.Autopilot;
 using BoscaliSummer.Features.Command;
 using BoscaliSummer.Features.DynamicOperations;
+using BoscaliSummer.Features.Events;
 using BoscaliSummer.Features.FireAndDestruction;
+using BoscaliSummer.Features.HighCommand;
 using BoscaliSummer.Features.Progression;
 using BoscaliSummer.Features.QoL;
 using BoscaliSummer.Features.Radio;
@@ -43,7 +45,9 @@ namespace BoscaliSummer.Bootstrap
                     if (settings.Command.Enabled.Value) features.Add(new CommandFeature());
                 }
                 if (settings.DynamicOperations.Enabled.Value) features.Add(new DynamicOperationsFeature());
+                if (settings.HighCommand.Enabled.Value) features.Add(new HighCommandFeature());
                 if (settings.Trenches.Enabled.Value) features.Add(new TrenchesFeature());
+                if (settings.Events.Enabled.Value) features.Add(new EventsFeature());
                 host.Load(features.ToArray());
                 CapabilityReport.Log();
                 return host;

@@ -7,6 +7,7 @@ namespace BoscaliSummer.Tests.Features.Command
         public static void Run()
         {
             FactionResourceTests.Run();
+            TargetPresetTests.Run();
             string[] classes = { "AircraftDefinition", "VehicleDefinition", "BuildingDefinition", "ShipDefinition", "MissileDefinition" };
             foreach (string type in classes)
             {
@@ -44,6 +45,59 @@ namespace BoscaliSummer.Tests.Features.Command
             TestAssert.That(MfdChartScale.Fraction(float.NaN, 100f) == 0f &&
                 MfdChartScale.Fraction(10f, float.PositiveInfinity) == 0f, "Unavailable chart data cannot corrupt geometry");
             TestAssert.That(BoscaliSummer.Runtime.MfdSlots.Set == "SET", "SET slot identifier is canonical");
+            RunRailCatalogTests();
+            RunLogToneTests();
+        }
+
+        private static void RunRailCatalogTests()
+        {
+            MfdRailEntry set = MfdRailCatalog.For("SET");
+            TestAssert.That(set.Code == "SET" && set.Name == "SETTINGS" && set.Glyph == "settings",
+                "SET maps to a readable rail entry");
+            MfdRailEntry bdf = MfdRailCatalog.For("bdf");
+            TestAssert.That(bdf.Code == "BDF" && bdf.Glyph == "faction", "codes are case-insensitive");
+            MfdRailEntry unknown = MfdRailCatalog.For("<SUD>");
+            TestAssert.That(unknown.Code == "SUD" && !unknown.HasName && unknown.Glyph == null,
+                "unknown codes survive sanitising without an invented meaning");
+            TestAssert.That(MfdRailCatalog.For(null).Code == "" && MfdRailCatalog.For("  ").Code == "",
+                "empty labels stay empty");
+            TestAssert.That(MfdRailCatalog.OrderRank("BDF") < MfdRailCatalog.OrderRank("PALA"),
+                "BDF leads the rail");
+            TestAssert.That(MfdRailCatalog.OrderRank("PALA") < MfdRailCatalog.OrderRank("MAP"),
+                "PALA sits directly below BDF, ahead of every unranked button");
+            TestAssert.That(MfdRailCatalog.OrderRank("MAP") == MfdRailCatalog.OrderRank("WMC"),
+                "unranked buttons share the tail of the order");
+            TestAssert.That(MfdRailCatalog.OrderRank("<PALA>") == MfdRailCatalog.OrderRank("PALA"),
+                "order rank uses the sanitised code");
+            TestAssert.That(MfdRailCatalog.Sanitise("M<AP>", 8) == "MAP",
+                "markup characters never leak into a composed label");
+            TestAssert.That(MfdRailCatalog.Sanitise("A\t B", 8) == "A B",
+                "control characters collapse into a single space");
+            TestAssert.That(MfdRailCatalog.Sanitise("A\tB", 8) == "A B",
+                "tabs collapse like any other whitespace");
+            TestAssert.That(MfdRailCatalog.Sanitise("BDF\n<size=11>BOSCALI HQ</size>", 8) == "BDF SIZE",
+                "a branded line sanitises to readable text, never to the tag glued onto the code");
+            TestAssert.That(MfdRailCatalog.Sanitise("BDF\n<size=11>", 8) == "BDF SIZE",
+                "a line break before markup survives as a space");
+            TestAssert.That(MfdRailCatalog.Sanitise("ABCDEFGHIJ", 4) == "ABCD",
+                "labels respect the rail's width ceiling");
+        }
+
+        private static void RunLogToneTests()
+        {
+            TestAssert.That(MfdLogTone.Classify("FGA-57 Anvil demolished Vehicle Depot") == MfdLogTone.Kind.Danger,
+                "destruction reads as danger");
+            TestAssert.That(MfdLogTone.Classify("Airbase Alpha captured") == MfdLogTone.Kind.Ready,
+                "capture reads as ready");
+            TestAssert.That(MfdLogTone.Classify("LiveFire SAM intercepted ASK-48") == MfdLogTone.Kind.Caution,
+                "interception reads as caution");
+            TestAssert.That(MfdLogTone.Classify("Weather clear over the strait") == MfdLogTone.Kind.Neutral,
+                "unrecognised lines stay neutral");
+            TestAssert.That(MfdLogTone.Classify(null) == MfdLogTone.Kind.Neutral,
+                "missing text cannot be classified");
+            TestAssert.That(MfdLogTone.Paint(null) == "" &&
+                MfdLogTone.Paint("x").Contains(MfdLogTone.NeutralHex),
+                "painting wraps one line in its tone colour");
         }
     }
 }

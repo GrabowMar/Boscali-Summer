@@ -88,6 +88,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
 
         public void ResetForScene()
         {
+            AvKit.ReleaseKeyboardGuard();
             MfdBezel.Release(MfdSlots.Sqd);
             if (screenRoot != null) UnityEngine.Object.Destroy(screenRoot);
             screenRoot = null;
@@ -150,6 +151,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
         {
             if (viewOpen == open) return;
             viewOpen = open;
+            if (!open) AvKit.ReleaseKeyboardGuard();
             ((IProgressionView)progression)?.SetViewOpen(open);
         }
 
@@ -309,7 +311,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 case TabPilot: RefreshPilotPage(bypass, score, bonus); break;
                 case TabSkills: RefreshSkillsPage(); break;
                 case TabWings: RefreshWingsPage(); break;
-                case TabStudio: RefreshStudioPage(bypass); break;
+                case TabStudio: RefreshStudioPage(); break;
             }
 
             UpdateStatusStrip();
@@ -358,6 +360,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             string baseLine = shell.Page == TabWings
                 ? (squad != null ? squad.Status : "Enemy wing reports are unavailable.")
                 : shell.Page == TabStudio ? StudioStatusLine()
+                : progression.BypassRequirements ? "DEBUG BYPASS — ALL SKILLS ACTIVE"
                 : progression.LastResult;
             shell.WriteStatus(null, MapPicker.Prompt, baseLine);
         }
@@ -518,7 +521,10 @@ namespace BoscaliSummer.Features.Progression.Presentation
         private sealed class WingRow
         {
             public RectTransform Root;
+            public GameObject Empty;
             public Image Rail;
+            public Image Crest;
+            public string CrestKey;
             public Image Portrait;
             public TMP_Text PortraitFallback;
             public TMP_Text Symbol;

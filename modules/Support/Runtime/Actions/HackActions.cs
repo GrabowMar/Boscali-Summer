@@ -36,6 +36,23 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
                 return SupportResult.InvalidTarget;
             GlobalPosition target = ground.ToGlobalPosition();
 
+            // Radar Blackout, Ghost Shield and Spoof Contacts are EW Division/C2 Disruptor
+            // operations: they reach through a physical asset in the world, not pure signals
+            // intelligence, so they additionally require a live EW truck within range of the
+            // target. Ping/Track (Sigint) never hit this — their facility is never Disrupt
+            // or Ew — so this stays a no-op for them.
+            FacilityId facility = CyberCatalog.Facility(kind);
+            if (facility == FacilityId.Disrupt || facility == FacilityId.Ew)
+            {
+                EwAsset asset = context.EwAsset;
+                if (asset == null || !asset.Alive) return SupportResult.NoEwAsset;
+                Vector3 assetPos = asset.Position;
+                float dx = assetPos.x - ground.x;
+                float dz = assetPos.z - ground.z;
+                float radius = context.Settings.EwProximityRadius.Value;
+                if (dx * dx + dz * dz > radius * radius) return SupportResult.NoEwAsset;
+            }
+
             switch (kind)
             {
                 case HackKind.Ping:
@@ -66,7 +83,8 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
 
                 case HackKind.Ghost:
                 case HackKind.Spoof:
-                    return context.Host.BeginDeception(context.Player, kind, target, powers.DeceptionDuration)
+                    return context.Host.BeginDeception(context.Player, kind, target,
+                        powers.DeceptionDuration)
                         ? SupportResult.Accepted
                         : SupportResult.Busy;
 

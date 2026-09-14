@@ -19,6 +19,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
     internal sealed class SettingsMfdPanel : MonoBehaviour, ISceneService
     {
         private CommandSettings settings;
+        private ComMapOverlay overlay;
         private ManualLogSource logger;
         private GameObject root;
         private GameObject surface;
@@ -39,9 +40,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private string actionEcho;
         private float actionEchoUntil;
 
-        public void Configure(CommandSettings config, ManualLogSource log)
+        public void Configure(CommandSettings config, ManualLogSource log, ComMapOverlay mapOverlay = null)
         {
             settings = config;
+            overlay = mapOverlay;
             logger = log;
             MfdMapDeck.Configure(config);
             if (configFile != null) configFile.SettingChanged -= OnSettingChanged;
@@ -147,8 +149,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             rect.pivot = source.pivot;
             rect.localScale = source.localScale;
             float height = AvScreen.ResolveHeight(
-                source.parent as RectTransform, AvTokens.PanelHeight, AvTokens.PanelHeight);
+                source.parent as RectTransform, AvTokens.PanelHeight, AvTokens.PanelHeightMax);
             rect.sizeDelta = new Vector2(AvTokens.PanelWidth, height);
+            AvKit.ClampIntoCanvas(rect);
             var content = new GameObject("Content", typeof(RectTransform), typeof(Image));
             var background = content.GetComponent<Image>();
             background.sprite = AvSprites.Panel;
@@ -163,7 +166,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             surface = content;
 
             shell = AvScreen.Build(
-                body, "SET", new[] { "MAP", "STYLE", "IMAGE" }, null, 1,
+                body, "SET", new[] { "MAP", "STYLE", "IMAGE", "COCKPIT" }, null, 1,
                 AvTokens.PanelWidth, height, page =>
                 {
                     shell.DataBar.State.text = PageName(page);
@@ -180,6 +183,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             BuildStylePage(deckPage, shell.Body);
             var imagePage = (RectTransform)shell.CreatePage(2, "ImagePage").transform;
             BuildImagePage(imagePage, shell.Body);
+            var viewPage = (RectTransform)shell.CreatePage(3, "ViewPage").transform;
+            BuildViewPage(viewPage, shell.Body);
 
             shell.SetPage(0);
 
@@ -206,48 +211,29 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         }
 
         private static readonly string[] PageNames =
-            { "TACTICAL DISPLAY", "CONSOLE SURFACE", "BACKGROUND IMAGERY" };
+            { "TACTICAL DISPLAY", "CONSOLE SURFACE", "BACKGROUND IMAGERY", "COCKPIT VIEW" };
 
-        private readonly bool[] pageScrolls = new bool[3];
+        private readonly bool[] pageScrolls = new bool[4];
 
         private static string PageName(int page) =>
             page >= 0 && page < PageNames.Length ? PageNames[page] : PageNames[0];
 
-        // Pages are built once. Dependencies disable controls without rebuilding the tree.
-        private RectTransform Page(int page, RectTransform parent, Rect body, string title, string tag,
-            string subtitle, int rows, int sections, out Rect area)
-        {
-            Rect content = PageHead(parent, body, title, tag, subtitle);
-            float contentHeight = rows * 62f + sections * 30f + 42f;
-            if (page >= 0 && page < pageScrolls.Length) pageScrolls[page] = contentHeight > content.height;
-            return AvScreen.Scroll(parent, content, contentHeight, out area);
-        }
+        // Compact row geometry: the toggle and step buttons match the inline control size
+        // the other panels use, so a settings page reads as an instrument instead of a
+        // wall of boxes.
+        private const float RowHeight = 46f;
+        private const float RowPitch = 52f;
+        private const float ToggleValueWidth = 78f;
+        private const float StepButtonWidth = 38f;
+        private const float StepValueWidth = 96f;
 
-        /// <summary>
-        /// The page's own headline, mirroring the theater panels: a big title, a small
-        /// uppercase subtitle and a rule, with the page spine pinned down the left edge.
-        /// The rows scroll beneath it; the title stays put.
-        /// </summary>
-        private static Rect PageHead(RectTransform parent, Rect body, string title, string tag, string subtitle)
+        // Pages are built once. Dependencies disable controls without rebuilding the tree.
+        private RectTransform Page(int page, RectTransform parent, Rect body, int rows, int sections, out Rect area)
         {
             AvStyled.Spine(parent, new Rect(body.x, body.y, 3f, body.height));
-
-            float x = body.x + AvScreen.SpineInset;
-            float width = Mathf.Max(0f, body.width - AvScreen.SpineInset);
-            float y = body.y - 2f;
-
-            AvStyled.Label(parent, new Rect(x, y, width, 26f), title, "page-title");
-            AvStyled.Label(parent, new Rect(x, y, width, 26f), tag, "section-title-note",
-                align: TextAlignmentOptions.MidlineRight);
-
-            y -= 26f;
-            AvStyled.Label(parent, new Rect(x, y, width, 12f), subtitle, "page-subtitle");
-
-            y -= 15f;
-            AvKit.Rule(parent, new Rect(x, y, width, 1f), AvTheme.Hairline);
-            y -= 9f;
-
-            return new Rect(body.x, y, body.width, Mathf.Max(0f, body.height - (body.y - y)));
+            float contentHeight = rows * RowPitch + sections * 30f + 42f;
+            if (page >= 0 && page < pageScrolls.Length) pageScrolls[page] = contentHeight > body.height;
+            return AvScreen.Scroll(parent, body, contentHeight, out area);
         }
 
         /// <summary>
@@ -276,21 +262,16 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
         private static Rect TakeRow(ref Rect area)
         {
-            var row = new Rect(area.x, area.y, area.width, 56f);
-            area.y -= 62f;
+            var row = new Rect(area.x, area.y, area.width, RowHeight);
+            area.y -= RowPitch;
             return row;
         }
 
         private void BuildMapPage(RectTransform parent, Rect body)
         {
-            parent = Page(0, parent, body, "TACTICAL DISPLAY", "SET / MAP",
-                "TERRAIN · OVERLAYS · UPDATE RATE", 7, 3, out var area);
-            ModServices.TryGet(out IThirdPersonHud hud);
+            parent = Page(0, parent, body, 6, 3, out var area);
 
             Heading(parent, ref area, "01", "DISPLAY", "CONSOLE");
-            Toggle(parent, TakeRow(ref area), "THIRD-PERSON HUD", "Show the compact flight overlay.",
-                () => hud != null && hud.IsEnabled, v => { if (hud != null && hud.IsEnabled != v) hud.Toggle(); },
-                () => hud != null, "HUD service unavailable in this scene.");
             Toggle(parent, TakeRow(ref area), "EXPANDED LAYOUT",
                 "Use the full map console. OFF restores the native layout.",
                 () => settings.ExpandedMapUi.Value, v => settings.ExpandedMapUi.Value = v);
@@ -322,8 +303,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
         private void BuildStylePage(RectTransform parent, Rect body)
         {
-            parent = Page(1, parent, body, "CONSOLE SURFACE", "SET / STYLE",
-                "OPACITY · DECORATION · DISPATCHES", 6, 2, out var area);
+            parent = Page(1, parent, body, 6, 2, out var area);
 
             Heading(parent, ref area, "01", "SURFACE", "DECK");
             Percent(parent, TakeRow(ref area), "CONSOLE OPACITY", settings.DeckOpacity, .1f, 1f, .05f,
@@ -368,8 +348,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
         private void BuildImagePage(RectTransform parent, Rect body)
         {
-            parent = Page(2, parent, body, "BACKGROUND IMAGERY", "SET / IMAGE",
-                "LOCAL FILES · FIT · STRENGTH", 5, 1, out var area);
+            parent = Page(2, parent, body, 5, 1, out var area);
 
             Heading(parent, ref area, "01", "LOCAL IMAGERY", "PNG / JPEG");
             Percent(parent, TakeRow(ref area), "IMAGE STRENGTH", settings.BackgroundImageOpacity, .05f, 1f, .05f,
@@ -402,6 +381,42 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             });
         }
 
+        /// <summary>
+        /// Cockpit-side presentation: the third-person HUD and cameras published by QoL
+        /// through <see cref="IThirdPersonHud"/>, plus Command's own radial preset page.
+        /// Every row here writes live state; the camera rows wait for the HUD they belong to.
+        /// </summary>
+        private void BuildViewPage(RectTransform parent, Rect body)
+        {
+            parent = Page(3, parent, body, 5, 3, out var area);
+            ModServices.TryGet(out IThirdPersonHud hud);
+
+            Heading(parent, ref area, "01", "HUD", "THIRD PERSON");
+            Toggle(parent, TakeRow(ref area), "THIRD-PERSON HUD",
+                "Show the compact flight overlay in external orbit and chase views.",
+                () => hud != null && hud.IsEnabled, v => { if (hud != null && hud.IsEnabled != v) hud.Toggle(); },
+                () => hud != null, "HUD service unavailable in this scene.");
+            Toggle(parent, TakeRow(ref area), "HIDE PITCH LADDER",
+                "Hide the floating pitch ladder in third person, keeping reticle, ammo and radar.",
+                () => hud != null && hud.HidePitchLadder, v => { if (hud != null) hud.HidePitchLadder = v; },
+                () => hud != null && hud.IsEnabled, "Turn on third-person HUD first.");
+
+            Heading(parent, ref area, "02", "CAMERA", "CHASE");
+            Toggle(parent, TakeRow(ref area), "TARGET CAMERA",
+                "Show the native target camera feed in third person while contacts are selected.",
+                () => hud != null && hud.CameraFeedEnabled, v => { if (hud != null) hud.CameraFeedEnabled = v; },
+                () => hud != null && hud.IsEnabled, "Turn on third-person HUD first.");
+            Toggle(parent, TakeRow(ref area), "FLIGHT CAMERA",
+                "Smooth aircraft-relative orbit and rear chase framing with a steady horizon.",
+                () => hud != null && hud.FlightCameraEnabled, v => { if (hud != null) hud.FlightCameraEnabled = v; },
+                () => hud != null && hud.IsEnabled, "Turn on third-person HUD first.");
+
+            Heading(parent, ref area, "03", "TARGETING", "RADIAL");
+            Toggle(parent, TakeRow(ref area), "RADIAL PRESETS",
+                "Offer the TGT quick slots as a page in the native cockpit radial menu.",
+                () => settings.TargetPresetWheel.Value, v => settings.TargetPresetWheel.Value = v);
+        }
+
         private void Percent(RectTransform parent, Rect area, string title, ConfigEntry<float> entry,
             float min, float max, float step, Func<bool> enabled, string reason)
         {
@@ -412,13 +427,13 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         }
 
         private static AvNode ToggleRow(string name) =>
-            AvBox.Row(name).Height(56f).Pad(14f, 6f, 8f, 6f).Gaps(8f)
-                .Add(AvBox.Cell("label").Grow()).Add(AvBox.Cell("value").Width(108f));
+            AvBox.Row(name).Height(RowHeight).Pad(14f, 5f, 8f, 5f).Gaps(8f)
+                .Add(AvBox.Cell("label").Grow()).Add(AvBox.Cell("value").Width(ToggleValueWidth));
 
         private static AvNode StepperRow(string name) =>
-            AvBox.Row(name).Height(56f).Pad(14f, 6f, 8f, 6f).Gaps(6f)
-                .Add(AvBox.Cell("label").Grow()).Add(AvBox.Cell("minus").Width(44f))
-                .Add(AvBox.Cell("value").Width(100f)).Add(AvBox.Cell("plus").Width(44f));
+            AvBox.Row(name).Height(RowHeight).Pad(14f, 5f, 8f, 5f).Gaps(6f)
+                .Add(AvBox.Cell("label").Grow()).Add(AvBox.Cell("minus").Width(StepButtonWidth))
+                .Add(AvBox.Cell("value").Width(StepValueWidth)).Add(AvBox.Cell("plus").Width(StepButtonWidth));
 
         private static Image FindHighlight(Button button)
         {
@@ -473,7 +488,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         {
             if (layoutPending) MfdRailPatch.Reconcile();
             if (appearancePending || layoutPending) MfdMapDeck.ApplyAppearance(settings);
-            if (overlayPending) ComMapOverlay.Instance?.SyncSettings();
+            if (overlayPending) overlay?.SyncSettings();
             if (tickerPending)
             {
                 var map = SceneSingleton<DynamicMap>.i;
@@ -533,8 +548,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             value.overflowMode = TextOverflowModes.Ellipsis;
             value.richText = false;
             var plus = AvStyled.Button(parent, row.At("plus"), "+", "btn", () => click(1));
-            minus.GetComponentInChildren<TMP_Text>().fontSize = 18f;
-            plus.GetComponentInChildren<TMP_Text>().fontSize = 18f;
+            minus.GetComponentInChildren<TMP_Text>().fontSize = 15f;
+            plus.GetComponentInChildren<TMP_Text>().fontSize = 15f;
             refreshers.Add(() =>
             {
                 bool available = enabled == null || enabled();

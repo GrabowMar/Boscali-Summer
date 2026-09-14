@@ -83,7 +83,6 @@ namespace BoscaliSummer.Features.Support.Runtime
         public float JamRadius => 5000f + 2500f * Disrupt;
         public float JamStrength => 600f + 200f * Disrupt;
         public float DeceptionDuration => 12f + 5f * Ew;
-        public float CooldownScale => Math.Max(0.5f, 1f - 0.15f * Crypto);
         public float CostScale => Math.Max(0.5f, 1f - 0.12f * Crypto);
     }
 
@@ -108,12 +107,12 @@ namespace BoscaliSummer.Features.Support.Runtime
                 },
                 new[] { 0f, 450f, 850f, 1400f }),
             new FacilityInfo(FacilityId.Crypto, "CRY", "CRYPTO FARM",
-                "Codebreaking compute. Cheaper, faster hacks.",
+                "Codebreaking compute. Cheaper hacks.",
                 new[]
                 {
-                    "-12% cost · -15% cooldown",
-                    "-24% cost · -30% cooldown",
-                    "-36% cost · -45% cooldown"
+                    "-12% operation cost",
+                    "-24% operation cost",
+                    "-36% operation cost"
                 },
                 new[] { 0f, 550f, 1000f, 1600f }, FacilityId.Sigint, 1),
             new FacilityInfo(FacilityId.Disrupt, "C2D", "C2 DISRUPTOR",

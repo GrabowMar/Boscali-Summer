@@ -1,10 +1,8 @@
 using System.Collections.Generic;
-using System.Reflection;
 using BoscaliSummer.Core;
 using BoscaliSummer.Features.FireAndDestruction.Configuration;
 using BoscaliSummer.Framework.Lifecycle;
 using BoscaliSummer.Infrastructure.Diagnostics;
-using HarmonyLib;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
 
@@ -31,8 +29,6 @@ namespace BoscaliSummer.Fire
         private readonly Collider[] overlapBuffer = new Collider[32];
         private readonly List<GameObject> marks = new List<GameObject>(64);
         private int ringHead;
-        private Material scorchMaterial;
-        private bool scorchMaterialSearched;
         private bool loggedFirstMark;
 
         private static FireAndDestructionSettings Fire => Plugin.Settings.FireAndDestruction;
@@ -169,7 +165,7 @@ namespace BoscaliSummer.Fire
             projector.fadeFactor = 0.98f;
             projector.drawDistance = 3500f;
 
-            Material scorch = ResolveScorchMaterial();
+            Material scorch = ScorchDecalMaterialResolver.Resolve();
             if (scorch != null) projector.material = scorch;
 
             if (!loggedFirstMark && Diagnostics.VerboseLogging.Value)
@@ -208,51 +204,6 @@ namespace BoscaliSummer.Fire
             return network != null ? network.transform : null;
         }
 
-        private Material ResolveScorchMaterial()
-        {
-            if (scorchMaterialSearched) return scorchMaterial;
-            scorchMaterialSearched = true;
-
-            // Prefer a material actually built on the vanilla scorch-mark decal shader, then
-            // fall back to whatever a DecalSpawner carries, scoring names so a crater or
-            // shockwave decal never wins over real soot.
-            int bestScore = 0;
-            Material[] materials = Resources.FindObjectsOfTypeAll<Material>();
-            for (int i = 0; i < materials.Length; i++)
-                ScoreScorchCandidate(materials[i], ref bestScore);
-
-            FieldInfo field = AccessTools.Field(typeof(DecalSpawner), "decalMaterial");
-            if (field != null)
-            {
-                DecalSpawner[] spawners = Resources.FindObjectsOfTypeAll<DecalSpawner>();
-                for (int i = 0; i < spawners.Length; i++)
-                    if (spawners[i] != null)
-                        ScoreScorchCandidate(field.GetValue(spawners[i]) as Material, ref bestScore);
-            }
-            if (Diagnostics.VerboseLogging.Value)
-                Plugin.Logger.LogInfo(scorchMaterial != null
-                    ? $"Impact scorch decal material resolved: '{scorchMaterial.name}' " +
-                      $"(shader '{scorchMaterial.shader.name}', score {bestScore})."
-                    : "Impact scorch decal material unavailable; keeping prefab default.");
-            return scorchMaterial;
-        }
-
-        private void ScoreScorchCandidate(Material candidate, ref int bestScore)
-        {
-            if (candidate == null || candidate.shader == null) return;
-            string shader = candidate.shader.name.ToLowerInvariant();
-            string name = candidate.name.ToLowerInvariant();
-            int score = 0;
-            if (shader.Contains("scorchmark")) score += 400;
-            if (name.Contains("scorch")) score += 200;
-            if (name.Contains("soot") || name.Contains("burn") || name.Contains("char")) score += 120;
-            if (name.Contains("crater") || shader.Contains("crater")) score -= 300;
-            if (shader.Contains("shockwave") || name.Contains("shockwave")) score -= 300;
-            if (score <= bestScore) return;
-            bestScore = score;
-            scorchMaterial = candidate;
-        }
-
         private void Clear()
         {
             for (int i = 0; i < marks.Count; i++)
@@ -260,9 +211,8 @@ namespace BoscaliSummer.Fire
             marks.Clear();
             pending.Clear();
             ringHead = 0;
-            scorchMaterial = null;
-            scorchMaterialSearched = false;
             loggedFirstMark = false;
+            ScorchDecalMaterialResolver.ResetForScene();
         }
     }
 }
