@@ -18,8 +18,7 @@ namespace BoscaliSummer.Features.Support.Runtime
         private readonly List<SupportActionDefinition> actions = new List<SupportActionDefinition>(10);
 
         public SupportCatalog(
-            SupportSettings settings, IZoneFortificationService fortifications,
-            IFireSuppressionService fireSuppression = null)
+            SupportSettings settings, IZoneFortificationService fortifications)
         {
             if (VanillaSupportCatalog.ReconAvailable)
                 actions.Add(new SupportActionDefinition(

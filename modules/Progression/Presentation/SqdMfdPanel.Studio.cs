@@ -190,7 +190,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             y = DrawSectionTitle(parent, x, y, width, "PILOT EDITOR", "LOCAL FILES · HOST ROSTER", band: true);
 
             Rect portraitFrame = new Rect(x, y - 2f, 76f, 96f);
-            AvKit.Panel(parent, portraitFrame, new Color32(18, 22, 26, 255));
+            AvKit.Panel(parent, portraitFrame, AvTheme.SurfaceInert);
             AvKit.Outline(parent, portraitFrame, AvTheme.Frame);
             studioPortraitFallback = PlainLabel(parent,
                 new Rect(portraitFrame.x + 2f, portraitFrame.y - 38f, portraitFrame.width - 4f, 30f),

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Rewired;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -462,10 +463,62 @@ namespace NOAvionics.Ui
             field.selectionColor = new Color(AvTheme.Accent.r, AvTheme.Accent.g, AvTheme.Accent.b, 0.35f);
 
             if (onChanged != null) field.onEndEdit.AddListener(v => onChanged(v));
-            if (onFocus != null) field.onSelect.AddListener(_ => onFocus());
-            if (onBlur != null) field.onDeselect.AddListener(_ => onBlur());
+            field.onSelect.AddListener(_ =>
+            {
+                KeyboardGuard.Acquire();
+                onFocus?.Invoke();
+            });
+            field.onDeselect.AddListener(_ =>
+            {
+                KeyboardGuard.Release();
+                onBlur?.Invoke();
+            });
 
             return field;
+        }
+
+        /// <summary>Force-release Rewired keyboard after a screen reset or hide.</summary>
+        public static void ReleaseKeyboardGuard() => KeyboardGuard.Reset();
+
+        private static class KeyboardGuard
+        {
+            private static int holds;
+            private static bool previous = true;
+
+            public static void Acquire()
+            {
+                if (holds++ > 0) return;
+                Keyboard keyboard = TryKeyboard();
+                if (keyboard == null) return;
+                previous = keyboard.enabled;
+                keyboard.enabled = false;
+            }
+
+            public static void Release()
+            {
+                if (holds <= 0) return;
+                if (--holds > 0) return;
+                Restore();
+            }
+
+            public static void Reset()
+            {
+                if (holds == 0) return;
+                holds = 0;
+                Restore();
+            }
+
+            private static void Restore()
+            {
+                Keyboard keyboard = TryKeyboard();
+                if (keyboard != null) keyboard.enabled = previous;
+            }
+
+            private static Keyboard TryKeyboard()
+            {
+                if (!ReInput.isReady || ReInput.controllers == null) return null;
+                return ReInput.controllers.Keyboard;
+            }
         }
 
         // ---------------------------------------------------------------- Popup Menu

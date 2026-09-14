@@ -295,6 +295,7 @@ namespace BoscaliSummer.Features.Radio.Presentation
             float height = AvScreen.ResolveHeight(
                 templateRect.parent as RectTransform, PanelHeight, AvTokens.PanelHeightMax);
             rootRect.sizeDelta = new Vector2(Width, height);
+            AvKit.ClampIntoCanvas(rootRect);
             screenRoot = root;
 
             Image background = root.GetComponent<Image>();
@@ -309,7 +310,7 @@ namespace BoscaliSummer.Features.Radio.Presentation
             AvKit.Stretch(content);
 
             shell = AvScreen.Build(
-                content, "RAD", new[] { "TUNER" }, null, 3,
+                content, "RAD", Array.Empty<string>(), null, 3,
                 Width, height, _ => nextRefresh = 0f);
             dataBar = shell.DataBar;
 

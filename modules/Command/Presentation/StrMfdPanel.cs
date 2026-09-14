@@ -129,8 +129,6 @@ namespace BoscaliSummer.Features.Command.Presentation
 
         private readonly List<AvButton> doctrineButtons = new List<AvButton>();
         private TMP_Text doctrineDescription;
-        private AvButton sectorToggle;
-        private AvButton frontlineToggle;
 
         // ==================================================================================
 
@@ -176,7 +174,6 @@ namespace BoscaliSummer.Features.Command.Presentation
 
             doctrineButtons.Clear();
             doctrineDescription = null;
-            sectorToggle = frontlineToggle = null;
 
             ResetCoc();
 
@@ -287,6 +284,7 @@ namespace BoscaliSummer.Features.Command.Presentation
             float height = AvScreen.ResolveHeight(
                 templateRect.parent as RectTransform, AvTokens.PanelHeight, AvTokens.PanelHeightMax);
             rootRect.sizeDelta = new Vector2(Width, height);
+            AvKit.ClampIntoCanvas(rootRect);
 
             Image background = root.GetComponent<Image>();
             background.sprite = AvSprites.Panel;
@@ -530,8 +528,10 @@ namespace BoscaliSummer.Features.Command.Presentation
             airCountLabel.text = "ALLIED " + state.FriendlyAircraftCount +
                                  "  ·  HOSTILE " + state.HostileAircraftCount +
                                  "  ·  " + TheaterReadout.Percent(state.AirSuperiorityRatio) + " DOMINANCE";
-            airBar.fillAmount = Mathf.Clamp01(state.AirSuperiorityRatio);
-            airBar.color = state.AirSuperiorityRatio >= 0.5f ? AvTheme.RailReady : AvTheme.RailCaution;
+            bool airKnown = !float.IsNaN(state.AirSuperiorityRatio);
+            airBar.fillAmount = airKnown ? Mathf.Clamp01(state.AirSuperiorityRatio) : 0f;
+            airBar.color = !airKnown ? AvTheme.RailInert
+                : state.AirSuperiorityRatio >= 0.5f ? AvTheme.RailReady : AvTheme.RailCaution;
 
             SortieTally tally = state.Sorties;
             bool known = tally.Observed > 0;
@@ -915,36 +915,9 @@ namespace BoscaliSummer.Features.Command.Presentation
             doctrineDescription = AvStyled.Label(parent, new Rect(x, y, width, 40f), "", "row-sub");
             y -= 46f;
 
-            y = SectionHeader(parent, x, y, width, "MAP OVERLAYS", "TACTICAL FIELD", band: true);
-
-            sectorToggle = AvStyled.Button(parent, new Rect(x, y, width, 26f),
-                "SECTOR CONTROL GRID", "btn",
-                () =>
-                {
-                    if (overlay != null) overlay.ShowSectors = !overlay.ShowSectors;
-                    nextRefresh = 0f;
-                },
-                AvButtonStyle.Toggle);
-            sectorToggle.WithTooltip("Shade the map by which side holds each sector.");
-            y -= 30f;
-
-            frontlineToggle = AvStyled.Button(parent, new Rect(x, y, width, 26f),
-                "FRONTLINE BARRIER LINES", "btn",
-                () =>
-                {
-                    if (overlay != null) overlay.ShowFrontlines = !overlay.ShowFrontlines;
-                    nextRefresh = 0f;
-                },
-                AvButtonStyle.Toggle);
-            frontlineToggle.WithTooltip("Draw the edges where friendly and hostile control meet.");
-            y -= 32f;
-
-            // These two switch the view for this session. Opacity and refresh rate are
-            // saved configuration and live on the SET panel; a second control writing the
-            // same entry from here would just be a second answer.
             AvStyled.Label(parent, new Rect(x, y, width, 28f),
-                           "Overlay opacity and refresh rate are saved settings — " +
-                           "they are on the SET panel.", "row-sub");
+                           "Frontline grid, opacity and refresh rate are on the SET / MAP page.",
+                           "row-sub");
         }
 
         private void RefreshCmd()
@@ -957,16 +930,6 @@ namespace BoscaliSummer.Features.Command.Presentation
             for (int i = 0; i < doctrineButtons.Count && i < doctrines.Length; i++)
             {
                 doctrineButtons[i].SetLatched(command.ActiveDoctrine == doctrines[i]);
-            }
-
-            if (overlay != null)
-            {
-                sectorToggle.SetLatched(overlay.ShowSectors);
-                sectorToggle.SetText(overlay.ShowSectors ? "SECTOR CONTROL GRID · ON"
-                                                         : "SECTOR CONTROL GRID · OFF");
-                frontlineToggle.SetLatched(overlay.ShowFrontlines);
-                frontlineToggle.SetText(overlay.ShowFrontlines ? "FRONTLINE BARRIER LINES · ON"
-                                                               : "FRONTLINE BARRIER LINES · OFF");
             }
         }
 
@@ -1015,20 +978,24 @@ namespace BoscaliSummer.Features.Command.Presentation
                 state.DefconLevel <= 2 ? "danger" : state.DefconLevel == 3 ? "warn" : "live");
             shell.DataBar.SetChip(1, ShortDoctrine(command.ActiveDoctrine),
                                   command.ActiveDoctrine != CommandDoctrine.Balanced);
-            shell.DataBar.SetChip(2, overlay != null && overlay.ShowSectors ? "GRID ON" : "GRID OFF",
-                                  overlay != null && overlay.ShowSectors);
+            bool grid = settings != null && settings.FrontlinesOverlay.Value;
+            shell.DataBar.SetChip(2, grid ? "GRID ON" : "GRID OFF", grid);
 
+            bool territoryKnown = !float.IsNaN(state.TerritoryControlRatio);
             shell.Metrics[0].Set(
                 TheaterReadout.Percent(state.TerritoryControlRatio),
                 state.FriendlySectorCount + " ALLIED · " + state.HostileSectorCount + " HOSTILE",
-                state.TerritoryControlRatio,
-                state.TerritoryControlRatio >= 0.5f ? AvTheme.RailReady : AvTheme.RailCaution);
+                territoryKnown ? state.TerritoryControlRatio : 0f,
+                !territoryKnown ? AvTheme.RailInert
+                    : state.TerritoryControlRatio >= 0.5f ? AvTheme.RailReady : AvTheme.RailCaution);
 
+            bool airKnown = !float.IsNaN(state.AirSuperiorityRatio);
             shell.Metrics[1].Set(
                 TheaterReadout.Percent(state.AirSuperiorityRatio),
                 state.FriendlyAircraftCount + " ALLIED · " + state.HostileAircraftCount + " HOSTILE",
-                state.AirSuperiorityRatio,
-                state.AirSuperiorityRatio >= 0.5f ? AvTheme.RailReady : AvTheme.RailCaution);
+                airKnown ? state.AirSuperiorityRatio : 0f,
+                !airKnown ? AvTheme.RailInert
+                    : state.AirSuperiorityRatio >= 0.5f ? AvTheme.RailReady : AvTheme.RailCaution);
 
             // The third pillar of the theater picture: without a staff, no command effect.
             if (shell.Metrics.Length > 2)

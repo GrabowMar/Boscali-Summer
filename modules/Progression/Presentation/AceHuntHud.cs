@@ -33,9 +33,6 @@ namespace BoscaliSummer.Features.Progression.Presentation
         private int shownHuntId = -1;
         private float introducedAt;
 
-        private Canvas chatterCanvas;
-        private CanvasGroup chatterCanvasGroup;
-
         public void Configure(ISquadView view) => squad = view;
 
         private void Update()
@@ -51,7 +48,6 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 player.Aircraft == null || player.Aircraft.disabled || player.Aircraft.HasEjected())
             {
                 if (root != null) root.SetActive(false);
-                SuppressChatterWhileExpanded(false);
                 return;
             }
 
@@ -127,7 +123,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             Label(panel, new Rect(420, -10, 206, 24), "AIR DEFENSE INTERCEPT", 11, Ink, true);
 
             // Pilot Portrait Box
-            AvKit.Panel(panel, new Rect(16, -44, 98, 114), new Color32(18, 22, 26, 255));
+            AvKit.Panel(panel, new Rect(16, -44, 98, 114), AvTheme.SurfaceInert);
             portraitFallback = Label(panel, new Rect(20, -70, 90, 50), "NO\nVISUAL", 14, Secondary);
             portrait = AvKit.Panel(panel, new Rect(18, -46, 94, 110), Color.white);
             portrait.type = Image.Type.Simple;
@@ -162,7 +158,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
 
             // Generated Squadron Crest
             Rect crestFrame = new Rect(634, -43, 60, 60);
-            AvKit.Panel(panel, crestFrame, new Color32(18, 22, 26, 255));
+            AvKit.Panel(panel, crestFrame, AvTheme.SurfaceInert);
             crest = AvKit.Panel(panel, new Rect(crestFrame.x + 2, crestFrame.y - 2, 56, 56), Color.white);
             crest.type = Image.Type.Simple;
             crest.preserveAspect = true;
@@ -213,30 +209,6 @@ namespace BoscaliSummer.Features.Progression.Presentation
             compactPanel.gameObject.SetActive(t > 0);
             compactGroup.alpha = t;
             compactPanel.localScale = Vector3.one * Mathf.Lerp(0.9f, 1, t);
-
-            // When popup is up, suppress radio chatters so they do not overlap; restore once minimized.
-            SuppressChatterWhileExpanded(t < 1);
-        }
-
-        private void SuppressChatterWhileExpanded(bool suppress)
-        {
-            if (chatterCanvas == null && chatterCanvasGroup == null)
-            {
-                GameObject chatterObj = GameObject.Find("WingCommand_Chatter");
-                if (chatterObj != null)
-                {
-                    chatterCanvas = chatterObj.GetComponent<Canvas>();
-                    chatterCanvasGroup = chatterObj.GetComponent<CanvasGroup>();
-                }
-            }
-            if (chatterCanvas != null)
-            {
-                chatterCanvas.enabled = !suppress;
-            }
-            else if (chatterCanvasGroup != null)
-            {
-                chatterCanvasGroup.alpha = suppress ? 0f : 1f;
-            }
         }
 
         private static TMP_Text SkillCard(RectTransform panel, float x, float width, HuntMark mark, string caption)
@@ -269,9 +241,6 @@ namespace BoscaliSummer.Features.Progression.Presentation
 
         public void ResetForScene()
         {
-            SuppressChatterWhileExpanded(false);
-            chatterCanvas = null;
-            chatterCanvasGroup = null;
             if (root != null) Destroy(root);
             root = null;
             portrait = null;

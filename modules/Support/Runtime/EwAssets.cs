@@ -24,8 +24,6 @@ namespace BoscaliSummer.Features.Support.Runtime
         public Vector3 Position => Truck != null ? Truck.transform.position : Vector3.zero;
 
         public bool Alive => Truck != null && !Truck.disabled;
-
-        public float EffectMultiplier => 1.0f;
     }
 
     /// <summary>

@@ -132,7 +132,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 row.Empty = emptyObject;
 
                 Rect crestFrame = new Rect(14f, -10f, 54f, 54f);
-                AvKit.Panel(root, crestFrame, new Color32(18, 22, 26, 255));
+                AvKit.Panel(root, crestFrame, AvTheme.SurfaceInert);
                 AvKit.Outline(root, crestFrame, AvTheme.Frame.WithAlpha(0.6f));
                 row.Crest = AvKit.Panel(root,
                     new Rect(crestFrame.x + 1f, crestFrame.y - 1f, crestFrame.width - 2f, crestFrame.height - 2f),
@@ -143,7 +143,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 row.Crest.enabled = false;
 
                 Rect portraitFrame = new Rect(74f, -10f, 42f, 54f);
-                AvKit.Panel(root, portraitFrame, new Color32(18, 22, 26, 255));
+                AvKit.Panel(root, portraitFrame, AvTheme.SurfaceInert);
                 AvKit.Outline(root, portraitFrame, AvTheme.Frame.WithAlpha(0.6f));
                 row.PortraitFallback = PlainLabel(root,
                     new Rect(portraitFrame.x + 2f, portraitFrame.y - 20f, portraitFrame.width - 4f, 20f),
@@ -204,7 +204,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             AvStyled.Rail(parent, new Rect(x + 4f, y - 8f, 3f, 96f), "ready");
 
             Rect portraitFrame = new Rect(x + 14f, y - 10f, 42f, 54f);
-            AvKit.Panel(parent, portraitFrame, new Color32(18, 22, 26, 255));
+            AvKit.Panel(parent, portraitFrame, AvTheme.SurfaceInert);
             AvKit.Outline(parent, portraitFrame, AvTheme.Frame.WithAlpha(0.6f));
             wingPortraitFallback = PlainLabel(parent,
                 new Rect(portraitFrame.x + 2f, portraitFrame.y - 20f, portraitFrame.width - 4f, 20f),

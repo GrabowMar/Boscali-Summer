@@ -83,15 +83,7 @@ namespace BoscaliSummer.Features.Support.Presentation
         private Image strikeTelemetryRail;
         private TMP_Text strikeTelemetryLabel;
         private TMP_Text strikeTelemetryDetails;
-        private TMP_Text allocAccountValue;
-        private TMP_Text cooldownStatusValue;
-        private TMP_Text armedSummaryValue;
-        private TMP_Text rankValue;
-        private TMP_Text missionScoreValue;
-        private TMP_Text perkBudgetValue;
         private TMP_Text committedValue;
-        private TMP_Text fleetValue;
-        private TMP_Text networkValue;
 
         private float nextAttempt;
         private float nextRefresh;
@@ -127,9 +119,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             strikeTelemetryRail = null;
             strikeTelemetryLabel = null;
             strikeTelemetryDetails = null;
-            allocAccountValue = cooldownStatusValue = armedSummaryValue = null;
-            rankValue = missionScoreValue = perkBudgetValue = committedValue = null;
-            fleetValue = networkValue = null;
+            committedValue = null;
 
             ResetSpacePage();
             ResetCyberPage();
@@ -252,6 +242,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             float height = AvScreen.ResolveHeight(
                 templateRect.parent as RectTransform, PanelHeight, AvTokens.PanelHeightMax);
             rootRect.sizeDelta = new Vector2(Width, height);
+            AvKit.ClampIntoCanvas(rootRect);
 
             Image background = root.GetComponent<Image>();
             background.sprite = AvSprites.Panel;
@@ -468,14 +459,6 @@ namespace BoscaliSummer.Features.Support.Presentation
             AvKit.Panel(parent, glowArea, tint.WithAlpha(0.16f));
         }
 
-        private static TMP_Text KeyValue(
-            RectTransform parent, float x, float y, float width, string key)
-        {
-            AvStyled.Label(parent, new Rect(x, y, width * 0.58f, 16f), key, "kv-key");
-            return AvStyled.Label(parent, new Rect(x + width * 0.58f, y, width * 0.42f, 16f),
-                                  "—", "kv-value", align: TextAlignmentOptions.MidlineRight);
-        }
-
         private bool TryCursor(out float x, out float z)
         {
             x = z = 0f;
@@ -552,10 +535,13 @@ namespace BoscaliSummer.Features.Support.Presentation
                 AvButtonStyle.Primary);
 
             string perkHint = progression != null ? progression.PerkNameFor(definition.Capability) : "Perk";
+            string unlockHint = definition.Id == SupportActionId.FlareMissile
+                ? " Shares Recon authorisation (SQD Satellite Scan)."
+                : " Unlocked in SQD / ABILITIES ('" + perkHint + "').";
             strike.Action.WithTooltip(
                 definition.Name.ToUpperInvariant() + " — " +
                 support.Cost(definition).ToString("0") + " alloc. " + definition.Description +
-                " Unlocked in SQD / ABILITIES ('" + perkHint + "').");
+                unlockHint);
 
             strikeRows.Add(strike);
         }
@@ -577,7 +563,7 @@ namespace BoscaliSummer.Features.Support.Presentation
 
         private void BuildStatusPage(RectTransform parent, Rect body)
         {
-            parent = AvScreen.Scroll(parent, body, 528f, out body);
+            parent = AvScreen.Scroll(parent, body, 320f, out body);
             AvStyled.Spine(parent, new Rect(body.x, body.y, 3f, body.height));
 
             float x = body.x + SpineInset;
@@ -606,33 +592,6 @@ namespace BoscaliSummer.Features.Support.Presentation
 
             y -= 88f;
 
-            y = DrawSectionTitle(parent, x, y, width, "TACTICAL LOGISTICS", "ALLOCATION STATUS", band: false);
-            allocAccountValue = KeyValue(parent, x, y, width, "AVAILABLE ALLOCATION");
-            y -= 18f;
-            cooldownStatusValue = KeyValue(parent, x, y, width, "NET COOLDOWN REMAINING");
-            y -= 18f;
-            armedSummaryValue = KeyValue(parent, x, y, width, "ARMED ACTION");
-            y -= 26f;
-
-            AvStyled.Label(parent, new Rect(x, y, width, 40f),
-                "Tactical support actions draw from allocation earned through combat and service. Satellites and infrastructure are faction assets bought during the mission.",
-                "row-sub");
-            y -= 48f;
-
-            y = DrawSectionTitle(parent, x, y, width, "PILOT RECORD", "THIS MISSION", band: true);
-            rankValue = KeyValue(parent, x, y, width, "PILOT RANK");
-            y -= 18f;
-            missionScoreValue = KeyValue(parent, x, y, width, "MISSION SCORE");
-            y -= 18f;
-            perkBudgetValue = KeyValue(parent, x, y, width, "PERK POINTS  UNSPENT / EARNED");
-            y -= 26f;
-
-            y = DrawSectionTitle(parent, x, y, width, "SYSTEMS", "SPACE & CYBER", band: false);
-            fleetValue = KeyValue(parent, x, y, width, "ORBITAL FLEET");
-            y -= 18f;
-            networkValue = KeyValue(parent, x, y, width, "CYBER NETWORK");
-            y -= 26f;
-
             y = DrawSectionTitle(parent, x, y, width, "COMMITTED SYSTEMS", null, band: true);
             committedValue = AvStyled.Label(parent, new Rect(x, y, width, 70f),
                                              "NONE", "row-sub");
@@ -652,7 +611,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             RefreshSpace(bypass);
             RefreshCyber(bypass);
             RefreshEw(bypass);
-            RefreshStatusPage(bypass);
+            RefreshStatusPage();
 
             UpdateStatusStrip();
         }
@@ -793,9 +752,10 @@ namespace BoscaliSummer.Features.Support.Presentation
                 else if (!isAuth)
                 {
                     string perkName = progression != null ? progression.PerkNameFor(row.Definition.Capability) : "Perk";
-                    SetRowState(row, "locked",
-                        "LOCKED · UNLOCK IN SQD / ABILITIES ('" + perkName.ToUpperInvariant() + "')",
-                        AvTheme.Warning, "LOCKED", false, false);
+                    string lockText = row.Definition.Id == SupportActionId.FlareMissile
+                        ? "LOCKED · SHARES RECON AUTHORISATION"
+                        : "LOCKED · UNLOCK IN SQD / ABILITIES ('" + perkName.ToUpperInvariant() + "')";
+                    SetRowState(row, "locked", lockText, AvTheme.Warning, "LOCKED", false, false);
                 }
                 else if (cooldown > 0.5f)
                 {
@@ -839,6 +799,7 @@ namespace BoscaliSummer.Features.Support.Presentation
 
         private string ProgressionName(SupportActionDefinition definition)
         {
+            if (definition.Id == SupportActionId.FlareMissile) return "RECON AUTHORISATION · CLEARED";
             string perkName = progression != null ? progression.PerkNameFor(definition.Capability) : "Perk";
             return perkName.ToUpperInvariant() + " · CLEARED";
         }
@@ -889,7 +850,7 @@ namespace BoscaliSummer.Features.Support.Presentation
         private static Color RailColour(string state) =>
             AvStyleHost.Resolve(AvStyleHost.Style("rail " + state).Background, AvTheme.RailInert);
 
-        private void RefreshStatusPage(bool bypass)
+        private void RefreshStatusPage()
         {
             if (baseAlarmLabel == null) return;
 
@@ -925,39 +886,13 @@ namespace BoscaliSummer.Features.Support.Presentation
                 strikeTelemetryDetails.text = "No active artillery or orbital strikes currently en route.";
             }
 
-            allocAccountValue.text = bypass ? "UNLIMITED (BYPASS)" : support.LocalAllocation.ToString("N0");
-            float cooldown = support.LocalCooldownRemaining;
-            cooldownStatusValue.text = cooldown > 0.5f ? $"{Mathf.CeilToInt(cooldown)}s" : "READY (0s)";
-            cooldownStatusValue.color = cooldown > 0.5f ? AvTheme.RailCaution : AvTheme.RailReady;
-
-            armedSummaryValue.text = support.CommandArmed ? "FLEET COMMAND"
-                : support.ArmedAction.HasValue ? support.ArmedAction.Value.ToString().ToUpperInvariant()
-                : "STANDBY";
-            armedSummaryValue.color = support.ArmedAction.HasValue || support.CommandArmed
-                ? AvTheme.RailCaution : AvTheme.Dim;
-
-            if (fleetValue != null)
+            if (committedValue == null) return;
+            if (progression == null)
             {
-                Constellation constellation = support.LocalConstellation;
-                int maximum = support.Settings != null ? support.Settings.MaximumSatellites.Value : 0;
-                fleetValue.text = constellation == null ? "—"
-                    : constellation.Satellites.Count + " / " + maximum + " ON ORBIT";
+                committedValue.text = "—";
+                committedValue.color = AvTheme.Dim;
+                return;
             }
-            if (networkValue != null)
-            {
-                InfoNetwork info = support.LocalInfo;
-                networkValue.text = info == null ? "—"
-                    : "TIER " + info.Powers.Tier + "  ·  " +
-                      info.Level(FacilityId.Sigint) + "/" + info.Level(FacilityId.Crypto) + "/" +
-                      info.Level(FacilityId.Disrupt) + "/" + info.Level(FacilityId.Ew);
-            }
-
-            if (rankValue == null || progression == null) return;
-            rankValue.text = progression.Rank.ToString();
-            missionScoreValue.text = progression.Score.ToString("N0");
-            perkBudgetValue.text = bypass
-                ? "UNLIMITED"
-                : progression.AvailablePoints + " / " + progression.EarnedPoints;
 
             PerkView[] perks = progression.GetPerks();
             var committed = new List<string>();

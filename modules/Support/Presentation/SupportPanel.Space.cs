@@ -25,7 +25,7 @@ namespace BoscaliSummer.Features.Support.Presentation
         private const float SpaceDisplayGap = 4f;
         private const float SpaceRoomThreshold = 520f;
 
-        private const float SpaceHeaderHeight = 24f;
+        private const float SpaceHeaderHeight = 40f;
         private const float SpaceLogHeight = 38f;
         private const float SpaceRosterTitleHeight = 18f;
         private const float FleetCardHeight = 60f;
@@ -224,6 +224,9 @@ namespace BoscaliSummer.Features.Support.Presentation
             fleetBarSegments = new Image[3];
             for (int i = 0; i < fleetBarSegments.Length; i++)
                 fleetBarSegments[i] = AvKit.Panel(parent, new Rect(area.x, barY, 0f, 6f), Color.clear);
+            AvKit.Label(parent, "RECON · STRIKE · EW",
+                new Rect(area.x, barY - 8f, area.width, 12f),
+                AvTheme.Dim, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
         }
 
         private void BuildTelemetryLog(RectTransform parent, Rect area)
@@ -984,9 +987,9 @@ namespace BoscaliSummer.Features.Support.Presentation
         }
 
         private static Color RoleColor(SatelliteRole role) =>
-            role == SatelliteRole.Recon ? new Color(0.35f, 0.95f, 0.60f)
-            : role == SatelliteRole.Strike ? new Color(1.00f, 0.40f, 0.30f)
-            : new Color(1.00f, 0.78f, 0.25f);
+            role == SatelliteRole.Recon ? AvTheme.RailReady
+            : role == SatelliteRole.Strike ? AvTheme.RailDanger
+            : AvTheme.RailCaution;
 
         private static string RoleName(SatelliteRole role) => SatelliteNaming.RoleTag(role);
 

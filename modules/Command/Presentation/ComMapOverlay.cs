@@ -32,19 +32,10 @@ namespace BoscaliSummer.Features.Command.Presentation
         private bool isMapMaximized;
         private bool initialized;
 
-        public bool ShowSectors = true;
-        public bool ShowFrontlines = true;
-
         /// <summary>
         /// The faction control field shared with host ingress queries.
         /// </summary>
         public TacticalSectorGrid Grid => sectorGrid;
-        internal static ComMapOverlay Instance { get; private set; }
-
-        private void Awake()
-        {
-            Instance = this;
-        }
 
         public void Configure(CommandSettings config, CommandManager manager, MissionMapCompatibilityEngine compat, ManualLogSource log, TerritoryControlView control)
         {
@@ -53,9 +44,6 @@ namespace BoscaliSummer.Features.Command.Presentation
             compatibilityEngine = compat;
             territory = control;
             logger = log;
-
-            ShowSectors = settings.FrontlinesOverlay.Value;
-            ShowFrontlines = settings.FrontlinesOverlay.Value;
 
             int res = settings.GridResolution.Value;
             sectorGrid = new TacticalSectorGrid(res > 0 ? res : TacticalSectorGrid.DefaultResolution, 100000f);
@@ -89,16 +77,10 @@ namespace BoscaliSummer.Features.Command.Presentation
             isMapMaximized = false;
             nextGridUpdate = 0f;
             gridHq = null;
-            if (Instance == this) Instance = null;
         }
 
         public void SyncSettings()
         {
-            if (settings != null)
-            {
-                ShowSectors = settings.FrontlinesOverlay.Value;
-                ShowFrontlines = settings.FrontlinesOverlay.Value;
-            }
             nextGridUpdate = 0f;
             if (initialized && isMapMaximized)
             {
@@ -108,7 +90,6 @@ namespace BoscaliSummer.Features.Command.Presentation
 
         private void OnDestroy()
         {
-            if (Instance == this) Instance = null;
             DynamicMapMaximizePatch.OnMaximized -= HandleMapMaximized;
             DynamicMapMinimizePatch.OnMinimized -= HandleMapMinimized;
             ResetForScene();
@@ -324,8 +305,8 @@ namespace BoscaliSummer.Features.Command.Presentation
                 GetTextureSize(out int texW, out int texH);
                 EnsureTexture(texW, texH);
                 command?.SyncSectorTelemetry(sectorGrid);
-                bool showSectors = settings != null ? settings.FrontlinesOverlay.Value : ShowSectors;
-                bool showFrontlines = settings != null ? settings.FrontlinesOverlay.Value : ShowFrontlines;
+                bool showSectors = settings != null && settings.FrontlinesOverlay.Value;
+                bool showFrontlines = showSectors;
                 float overlayAlpha = settings != null ? settings.OverlayOpacity.Value : 0.35f;
 
                 if (overlayImage != null)

@@ -43,7 +43,7 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(network.TryUpgrade(FacilityId.Ew), "EW DIVISION LV2 must apply");
             TestAssert.That(network.Powers.Has(HackKind.Spoof), "EW LV2 unlocks SPOOF");
 
-            // Power scales with the relevant facility, and crypto discounts both cost and cooldown.
+            // Power scales with the relevant facility; crypto discounts cost only.
             var scaling = new InfoNetwork();
             scaling.TryUpgrade(FacilityId.Sigint);
             float baseRadius = scaling.Powers.RevealRadius;
@@ -55,7 +55,10 @@ namespace BoscaliSummer.Tests.Features.Support
             float baseScale = scaling.Powers.CostScale;
             scaling.TryUpgrade(FacilityId.Crypto);
             TestAssert.That(scaling.Powers.CostScale < baseScale, "CRYPTO must discount operations");
-            TestAssert.That(scaling.Powers.CooldownScale < 1f, "CRYPTO must shorten cooldowns");
+            FacilityInfo crypto = InfoNetwork.Facility(FacilityId.Crypto);
+            for (int i = 0; i < crypto.Levels.Length; i++)
+                TestAssert.That(!crypto.Levels[i].ToLowerInvariant().Contains("cooldown"),
+                    "CRYPTO copy must not claim a cooldown the host does not honour");
 
             TestAssert.That(InfoNetwork.Facilities.Length == 4, "four facility lines are expected");
             TestAssert.That(InfoNetwork.Facility(FacilityId.Sigint).Costs.Length == InfoNetwork.MaxLevel + 1,

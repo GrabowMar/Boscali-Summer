@@ -114,7 +114,7 @@ namespace BoscaliSummer.Features.Command.Runtime
         public int TotalSectors => ResolutionX * ResolutionY;
         public float TerritoryControlRatio => (FriendlySectorCount + HostileSectorCount > 0)
             ? (float)FriendlySectorCount / (FriendlySectorCount + HostileSectorCount)
-            : 0.5f;
+            : float.NaN;
 
         public TacticalSectorGrid(int resolution = DefaultResolution, float worldSize = 100000f)
             : this(resolution, worldSize, worldSize)

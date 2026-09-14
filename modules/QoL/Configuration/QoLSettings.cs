@@ -21,7 +21,7 @@ namespace BoscaliSummer.Features.QoL.Configuration
             ObservationEnabled = config.Bind("QoL", "CameraMarks", true,
                 "Mark the surface at the centre of the live native camera. One local point, expires after 120 seconds. No laser or tracking changes.");
             MarkCameraKey = config.Bind("QoL", "MarkCameraKey", KeyCode.F8,
-                "Capture a camera observation; ignores text entry and pause. None disables the shortcut. Also available in OPS.");
+                "Capture a camera observation; ignores text entry and pause. None disables the shortcut. Also available on TGT CAMERA.");
 
             // Retain the existing keys so moving ownership does not reset user preferences.
             ThirdPersonHudEnabled = config.Bind("Avionics", "ThirdPersonHudEnabled", true,

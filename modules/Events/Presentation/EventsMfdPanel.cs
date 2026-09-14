@@ -187,7 +187,7 @@ namespace BoscaliSummer.Features.Events.Presentation
 
             shell = AvScreen.Build(
                 content, MfdSlots.Events,
-                new[] { "EVENTS" },
+                Array.Empty<string>(),
                 new[]
                 {
                     new[] { "SUPPORT COST", "ALLOCATION" },
@@ -302,14 +302,14 @@ namespace BoscaliSummer.Features.Events.Presentation
                                   history.Count > 0 ? "live" : "inert");
 
             shell.Metrics[0].Set(
-                MultiplierLabel(multiplier),
+                current != null ? MultiplierLabel(multiplier) : "—",
                 current != null ? summary : "NO ACTIVE MODIFIER",
                 current != null ? Mathf.Clamp01(Mathf.Abs(multiplier - 1f)) : 0f,
                 EffectColor(summary));
 
             int logged = history.Count + (current != null ? 1 : 0);
             shell.Metrics[1].Set(
-                logged.ToString(),
+                events.Available ? logged.ToString() : "—",
                 current != null ? "1 ACTIVE · " + history.Count + " ENDED" : history.Count + " ENDED",
                 capacity <= 0 ? 0f : Mathf.Clamp01(history.Count / (float)capacity),
                 logged > 0 ? AvTheme.RailInfo : AvTheme.RailInert);
@@ -481,7 +481,7 @@ namespace BoscaliSummer.Features.Events.Presentation
                 rail = AvStyled.Rail(rect, new Rect(4f, -8f, 3f, height - 16f), "locked");
 
                 Rect frame = new Rect(14f, -10f, 48f, 48f);
-                AvKit.Panel(rect, frame, new Color32(18, 22, 26, 255));
+                AvKit.Panel(rect, frame, AvTheme.SurfaceInert);
                 AvKit.Outline(rect, frame, AvTheme.Frame.WithAlpha(0.6f));
 
                 var glyphObject = new GameObject("Glyph", typeof(RectTransform), typeof(EventGlyph));
@@ -490,9 +490,12 @@ namespace BoscaliSummer.Features.Events.Presentation
                 AvKit.Place(glyph.rectTransform, new Rect(frame.x + 12f, frame.y - 12f, 24f, 24f));
                 glyph.raycastTarget = false;
 
+                const float categoryWidth = 90f;
+                const float gap = 8f;
                 float textWidth = width - TextX - 14f;
-                title = AvStyled.Label(rect, new Rect(TextX, -9f, textWidth - 122f, 18f), "", "row-name");
-                category = AvStyled.Label(rect, new Rect(width - 160f, -9f, 146f, 14f), "",
+                float titleWidth = Mathf.Max(0f, textWidth - categoryWidth - gap);
+                title = AvStyled.Label(rect, new Rect(TextX, -9f, titleWidth, 18f), "", "row-name");
+                category = AvStyled.Label(rect, new Rect(width - 14f - categoryWidth, -9f, categoryWidth, 14f), "",
                                           "section-title-note", align: TextAlignmentOptions.MidlineRight);
                 flavor = AvStyled.Label(rect, new Rect(TextX, -28f, textWidth, 46f), "", "row-sub");
 

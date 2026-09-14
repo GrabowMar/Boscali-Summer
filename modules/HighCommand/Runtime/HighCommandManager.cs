@@ -230,11 +230,28 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
         {
             EnsureFactions();
             SweepAssets();
+            TickDisruption(now);
             TickStipends(now);
             TickTransfers(now);
             SpawnMissingAssets();
             TickConvoys(now);
             TickIntel(now);
+        }
+
+        private void TickDisruption(float now)
+        {
+            for (int i = 0; i < factions.Count; i++)
+            {
+                CommandTree tree = factions[i].Tree;
+                if (tree == null) continue;
+                IReadOnlyList<CommandSlot> slots = tree.Slots;
+                for (int j = 0; j < slots.Count; j++)
+                {
+                    CommandSlot slot = slots[j];
+                    if (slot.Status == CommanderStatus.Disrupted && now >= slot.StatusUntil)
+                        slot.Status = CommanderStatus.Active;
+                }
+            }
         }
 
         private void EnsureFactions()

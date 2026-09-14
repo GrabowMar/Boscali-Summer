@@ -37,12 +37,12 @@ namespace BoscaliSummer.Features.Command.Domain
         /// <summary>Cell edges where friendly and hostile control meet. The frontline's length.</summary>
         public int FrontlineSegmentCount;
 
-        public float TerritoryControlRatio = 0.5f;
+        public float TerritoryControlRatio = float.NaN;
 
         /// <summary>Friendly AI sorties by role. <c>Observed == 0</c> means "not known", not "none".</summary>
         public SortieTally Sorties;
 
-        public float AirSuperiorityRatio = 0.5f;
+        public float AirSuperiorityRatio = float.NaN;
         public int DefconLevel = 3;
         public string PrimaryThreatDescription = "NOMINAL";
         public string ActiveThreatWarning = "AIRSPACE NOMINAL";
@@ -71,10 +71,10 @@ namespace BoscaliSummer.Features.Command.Domain
             TotalSectorCount = 0;
             FrontlineSegmentCount = 0;
 
-            TerritoryControlRatio = 0.5f;
+            TerritoryControlRatio = float.NaN;
             Sorties.Reset();
 
-            AirSuperiorityRatio = 0.5f;
+            AirSuperiorityRatio = float.NaN;
             DefconLevel = 3;
             PrimaryThreatDescription = "NOMINAL";
             ActiveThreatWarning = "AIRSPACE NOMINAL";

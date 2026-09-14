@@ -19,6 +19,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
     internal sealed class SettingsMfdPanel : MonoBehaviour, ISceneService
     {
         private CommandSettings settings;
+        private ComMapOverlay overlay;
         private ManualLogSource logger;
         private GameObject root;
         private GameObject surface;
@@ -39,9 +40,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private string actionEcho;
         private float actionEchoUntil;
 
-        public void Configure(CommandSettings config, ManualLogSource log)
+        public void Configure(CommandSettings config, ManualLogSource log, ComMapOverlay mapOverlay = null)
         {
             settings = config;
+            overlay = mapOverlay;
             logger = log;
             MfdMapDeck.Configure(config);
             if (configFile != null) configFile.SettingChanged -= OnSettingChanged;
@@ -149,6 +151,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             float height = AvScreen.ResolveHeight(
                 source.parent as RectTransform, AvTokens.PanelHeight, AvTokens.PanelHeightMax);
             rect.sizeDelta = new Vector2(AvTokens.PanelWidth, height);
+            AvKit.ClampIntoCanvas(rect);
             var content = new GameObject("Content", typeof(RectTransform), typeof(Image));
             var background = content.GetComponent<Image>();
             background.sprite = AvSprites.Panel;
@@ -225,40 +228,12 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private const float StepValueWidth = 96f;
 
         // Pages are built once. Dependencies disable controls without rebuilding the tree.
-        private RectTransform Page(int page, RectTransform parent, Rect body, string title, string tag,
-            string subtitle, int rows, int sections, out Rect area)
-        {
-            Rect content = PageHead(parent, body, title, tag, subtitle);
-            float contentHeight = rows * RowPitch + sections * 30f + 42f;
-            if (page >= 0 && page < pageScrolls.Length) pageScrolls[page] = contentHeight > content.height;
-            return AvScreen.Scroll(parent, content, contentHeight, out area);
-        }
-
-        /// <summary>
-        /// The page's own headline, mirroring the theater panels: a big title, a small
-        /// uppercase subtitle and a rule, with the page spine pinned down the left edge.
-        /// The rows scroll beneath it; the title stays put.
-        /// </summary>
-        private static Rect PageHead(RectTransform parent, Rect body, string title, string tag, string subtitle)
+        private RectTransform Page(int page, RectTransform parent, Rect body, int rows, int sections, out Rect area)
         {
             AvStyled.Spine(parent, new Rect(body.x, body.y, 3f, body.height));
-
-            float x = body.x + AvScreen.SpineInset;
-            float width = Mathf.Max(0f, body.width - AvScreen.SpineInset);
-            float y = body.y - 2f;
-
-            AvStyled.Label(parent, new Rect(x, y, width, 26f), title, "page-title");
-            AvStyled.Label(parent, new Rect(x, y, width, 26f), tag, "section-title-note",
-                align: TextAlignmentOptions.MidlineRight);
-
-            y -= 26f;
-            AvStyled.Label(parent, new Rect(x, y, width, 12f), subtitle, "page-subtitle");
-
-            y -= 15f;
-            AvKit.Rule(parent, new Rect(x, y, width, 1f), AvTheme.Hairline);
-            y -= 9f;
-
-            return new Rect(body.x, y, body.width, Mathf.Max(0f, body.height - (body.y - y)));
+            float contentHeight = rows * RowPitch + sections * 30f + 42f;
+            if (page >= 0 && page < pageScrolls.Length) pageScrolls[page] = contentHeight > body.height;
+            return AvScreen.Scroll(parent, body, contentHeight, out area);
         }
 
         /// <summary>
@@ -294,8 +269,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
         private void BuildMapPage(RectTransform parent, Rect body)
         {
-            parent = Page(0, parent, body, "TACTICAL DISPLAY", "SET / MAP",
-                "TERRAIN · OVERLAYS · UPDATE RATE", 6, 3, out var area);
+            parent = Page(0, parent, body, 6, 3, out var area);
 
             Heading(parent, ref area, "01", "DISPLAY", "CONSOLE");
             Toggle(parent, TakeRow(ref area), "EXPANDED LAYOUT",
@@ -329,8 +303,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
         private void BuildStylePage(RectTransform parent, Rect body)
         {
-            parent = Page(1, parent, body, "CONSOLE SURFACE", "SET / STYLE",
-                "OPACITY · DECORATION · DISPATCHES", 6, 2, out var area);
+            parent = Page(1, parent, body, 6, 2, out var area);
 
             Heading(parent, ref area, "01", "SURFACE", "DECK");
             Percent(parent, TakeRow(ref area), "CONSOLE OPACITY", settings.DeckOpacity, .1f, 1f, .05f,
@@ -375,8 +348,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
         private void BuildImagePage(RectTransform parent, Rect body)
         {
-            parent = Page(2, parent, body, "BACKGROUND IMAGERY", "SET / IMAGE",
-                "LOCAL FILES · FIT · STRENGTH", 5, 1, out var area);
+            parent = Page(2, parent, body, 5, 1, out var area);
 
             Heading(parent, ref area, "01", "LOCAL IMAGERY", "PNG / JPEG");
             Percent(parent, TakeRow(ref area), "IMAGE STRENGTH", settings.BackgroundImageOpacity, .05f, 1f, .05f,
@@ -416,8 +388,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         /// </summary>
         private void BuildViewPage(RectTransform parent, Rect body)
         {
-            parent = Page(3, parent, body, "COCKPIT VIEW", "SET / VIEW",
-                "HUD · CAMERA · PRESETS", 5, 3, out var area);
+            parent = Page(3, parent, body, 5, 3, out var area);
             ModServices.TryGet(out IThirdPersonHud hud);
 
             Heading(parent, ref area, "01", "HUD", "THIRD PERSON");
@@ -517,7 +488,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         {
             if (layoutPending) MfdRailPatch.Reconcile();
             if (appearancePending || layoutPending) MfdMapDeck.ApplyAppearance(settings);
-            if (overlayPending) ComMapOverlay.Instance?.SyncSettings();
+            if (overlayPending) overlay?.SyncSettings();
             if (tickerPending)
             {
                 var map = SceneSingleton<DynamicMap>.i;

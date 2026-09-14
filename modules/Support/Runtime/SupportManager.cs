@@ -342,7 +342,7 @@ namespace BoscaliSummer.Features.Support.Runtime
             network = net;
             logger = log;
             fireSuppressionService = fireSuppression;
-            catalog = new SupportCatalog(supportSettings, fortifications, fireSuppression);
+            catalog = new SupportCatalog(supportSettings, fortifications);
         }
 
         internal void ConfigureBypass(ConfigEntry<bool> bypass) => bypassRequirements = bypass;

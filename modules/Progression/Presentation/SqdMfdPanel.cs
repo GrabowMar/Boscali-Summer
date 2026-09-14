@@ -88,6 +88,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
 
         public void ResetForScene()
         {
+            AvKit.ReleaseKeyboardGuard();
             MfdBezel.Release(MfdSlots.Sqd);
             if (screenRoot != null) UnityEngine.Object.Destroy(screenRoot);
             screenRoot = null;
@@ -150,6 +151,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
         {
             if (viewOpen == open) return;
             viewOpen = open;
+            if (!open) AvKit.ReleaseKeyboardGuard();
             ((IProgressionView)progression)?.SetViewOpen(open);
         }
 

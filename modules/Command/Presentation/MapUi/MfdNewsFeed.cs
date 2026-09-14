@@ -441,14 +441,14 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 return;
             }
 
-            if (territoryRatio > 0.65f)
+            if (!float.IsNaN(territoryRatio) && territoryRatio > 0.65f)
             {
                 Enqueue(new HeadlineItem("FRONT ADVANCE", "#44EE88",
                     $"STRATEGIC ASSESSMENT: ALLIED GROUND UNITS HOLDING {(int)(territoryRatio * 100f)}% THEATER CONTROL"));
                 return;
             }
 
-            if (territoryRatio < 0.35f)
+            if (!float.IsNaN(territoryRatio) && territoryRatio < 0.35f)
             {
                 Enqueue(new HeadlineItem("DEFENSE ALERT", "#FF6644",
                     "FRONT ASSESSMENT: HEAVY THEATER PRESSURE — ALLIED FORCES RETRENCHING DEFENSE CORRIDORS"));
@@ -458,8 +458,16 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             switch (theaterIndex++ % 3)
             {
                 case 0:
-                    Enqueue(new HeadlineItem("SITREP", "#66CCFF",
-                        $"AIR CORRIDOR DOMINANCE EVALUATED AT {(int)(airSuperiorityRatio * 100f)}% EFFECTIVENESS"));
+                    if (float.IsNaN(airSuperiorityRatio))
+                    {
+                        Enqueue(new HeadlineItem("PATROL", "#88FFAA",
+                            "NO DECISIVE MOVEMENT ON THE FRONT — RECON PATROLS REPORT EMPTY SKIES OVER THE SECTOR"));
+                    }
+                    else
+                    {
+                        Enqueue(new HeadlineItem("SITREP", "#66CCFF",
+                            $"AIR CORRIDOR DOMINANCE EVALUATED AT {(int)(airSuperiorityRatio * 100f)}% EFFECTIVENESS"));
+                    }
                     break;
                 case 1:
                     Enqueue(new HeadlineItem("LOGISTICS", "#FFAA22",

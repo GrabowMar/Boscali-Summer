@@ -13,6 +13,7 @@ namespace BoscaliSummer.Features.HighCommand.Domain
         public CommandPerson(int seed, string name, string rank, CommandTrait traits)
         {
             Seed = seed; Name = name; Rank = rank; Traits = traits;
+            Decorations = 0;
         }
     }
 

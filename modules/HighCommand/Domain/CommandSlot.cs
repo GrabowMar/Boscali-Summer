@@ -35,6 +35,7 @@ namespace BoscaliSummer.Features.HighCommand.Domain
         {
             Id = id; ParentId = parentId; Tier = tier; Role = role;
             SiteIndex = siteIndex; SiteName = siteName ?? "FIELD HQ";
+            StatusUntil = 0f;
         }
     }
 }
