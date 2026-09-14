@@ -23,7 +23,7 @@ maintainers and coding agents; runtime design is in [ARCHITECTURE.md](ARCHITECTU
 | Config composition and legacy migration | `Configuration` | relevant feature / framework | may compose module settings |
 
 Module folders are `modules/<Feature>/` at the repo root; the shared trees (`Framework`,
-`Infrastructure`, `Bootstrap`, `Configuration`, `Core`, `Interop`) sit beside them. Test
+`Infrastructure`, `Bootstrap`, `Configuration`, `Core`) sit beside them. Test
 folders are under `tests/BoscaliSummer.Tests/`.
 
 ## Dependency direction
@@ -40,8 +40,9 @@ Sibling module A  ──✗──►  Sibling module B implementation
 ```
 
 Support and Command declare a dependency on Progression but consume only `IPlayerPerks` /
-`IProgressionView`; Support's optional Urban Combat integration uses only
-`IZoneFortificationService`. Neither edge permits a concrete sibling import. When two
+`IProgressionView`; Support's optional Urban Combat integration uses
+`IZoneFortificationService` and `IBaseDefenseAlarmService`. Command's STR console also
+reads the alarm ticker. Neither edge permits a concrete sibling import. When two
 features genuinely interact, define the smallest interface in `Framework/Contracts`,
 implement it in the owner, resolve it through `ServiceRegistry` — never expose a manager,
 singleton, patch class, mutable collection, or settings object as the contract.
@@ -54,7 +55,7 @@ owner caches and clears it.
 
 Progression depends on Squad's read-only `ISquadView` for pilot generations and ace
 bonus points. Radio observes the same contract optionally for local music transitions.
-The plugin requires Wing Command `0.9.2.3`+ at runtime; `WingLink` caches its public
+The plugin requires Wing Command `0.9.2.6`+ at runtime; `WingLink` caches its public
 pilot/ace-wing/chatter API and no feature imports Wing Command implementation types.
 
 Support optionally consumes Events' read-only `IActiveEventsView` for a live world-event

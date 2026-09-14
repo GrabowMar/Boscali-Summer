@@ -17,7 +17,6 @@ Core/             pure deterministic helpers
 Framework/        Contracts/ (narrow cross-feature interfaces), Features/ (graph, host,
                   metadata, service registry), Lifecycle/ (ordered scene reset)
 Infrastructure/   Diagnostics/, GameInterop/ (cached reflection, capability report)
-Interop/          public reflection-safe theater/doctrine façade for Wing Command
 modules/
   QoL/                local HUD/camera conveniences, observation marks and freshness readout
   Autopilot/          local ownship autopilot landing, Boscali Summer native-radial entry
@@ -55,7 +54,8 @@ Radio                         independent, client-local
 QoL                           independent, client-local; optional observation/HUD contracts for OPS
 Autopilot                     independent, client-local; ownship only, native radial entry
 Fire and destruction          independent
-Urban Combat  ──publishes──►  IBuildingOccupancy, IZoneFortificationService
+Urban Combat  ──publishes──►  IBuildingOccupancy, IZoneFortificationService,
+                               IBaseDefenseAlarmService
 Squad         ──required by─►  Progression ──required by─► Support, Command
 Squad         ──publishes───►  ISquadView (Progression and optional Radio consumer)
 Command       ──owns────────►  STR bezel screen (theater SA, frontline, tasking, doctrine),
@@ -144,14 +144,18 @@ Air assault consumes native mounted troop ammo and capture strength together, up
 station accounting and carried mass, and hides emptied troop benches. Native troop fire
 commands/RPCs drive peer presentation; only the server places emplacements after landing.
 Ibis insertions use eight troops and four two-person positions (MG / AT / AA / MG);
-active rope operations prevent another insertion on the same helicopter.
+active rope operations prevent another insertion on the same helicopter. MC-260 Chimera
+and Tarantula cargo inject a sixteen-troop paradrop station into hangar loadout and the
+definition prefab so spawn keeps it. Infantry encampments stay; makeshift-fortification
+dressing was never spawned and is gone. Urban Combat also publishes
+`IBaseDefenseAlarmService` (OPS STATUS + STR ticker).
 
 ### Compatibility-sensitive wire names
 
 Mirage derives message ids from full type names, so these must not be renamed without a
 deliberate protocol break: `BoscaliSummer.Runtime.FireIgnitedMessage`,
 `BoscaliSummer.Runtime.RuinCreatedMessage`. The progression and support contracts are not in
-that protected set: progression is protocol `3`, support is protocol `3`, so mixed peers
+that protected set: progression is protocol `3`, support is protocol `7`, so mixed peers
 fail closed on those two channels while fire and ruin keep interoperating. A third,
 `BoscaliSummer.Runtime.BuildingDamagedMessage`, was removed on purpose when building damage
 became a local-only scorch mark — replicated channels went from three to two, and old/new
@@ -312,9 +316,10 @@ owns one global camera mark, valid for 120 seconds and cleared on ownship/factio
 change, ejection, or disable. Capture performs one 64-hit non-allocating ray query; a full
 buffer or miss clears the prior mark. The panel reads one selected contact's faction
 tracking timestamp at 4 Hz; it never derives freshness from an enemy Transform.
-OPS consumes `IObservationSource` and `IThirdPersonHud` optionally. CALL AT MARK requires
-an explicitly armed support action and a still-valid mark, then uses the same server
-request path and economy as a map click. No custom observation messages or extra rendering.
+TGT CAMERA consumes `ICameraTargetService` for MARK CAMERA / CALL AT MARK; OPS consumes
+`IObservationSource` and `IThirdPersonHud` optionally. CALL AT MARK requires an explicitly
+armed support action and a still-valid mark, then uses the same server request path and
+economy as a map click. No custom observation messages or extra rendering.
 
 The Command module owns the expanded tactical-map GUI in `Presentation/MapUi`.
 

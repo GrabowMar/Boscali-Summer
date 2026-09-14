@@ -6,6 +6,17 @@
   `GunAimAssistStrength`). Harmony hooks on `ControlsFilter.GetAim` and
   `PilotPlayerState.PlayerAxisControls` are gone; native `ControlsFilter`
   flight-assist aim assist is unchanged. Leftover BepInEx keys are ignored.
+- STR empty-board air/territory ratios print "—" instead of a fake 50%.
+- CMD doctrine copy is scoring bias for friendly mission AI, not orders; wingmen stay
+  excluded.
+- CRYPTO farm copy no longer claims a support-request cooldown discount the host ignores.
+  Cost scaling is unchanged.
+- Flare barrage copy states that it shares Satellite Scan (Recon) authorisation; no extra
+  perk.
+- Removed the unused EW-truck "convert to encampment" UI. Wire enum value 2 (`Encampment`)
+  stays reserved.
+- Removed never-spawned makeshift-fortification dressing. Ibis/Chimera infantry encampments
+  remain.
 
 - World events now offer a decision. While a costed event is active, any player may spend
   allocation once per event to **CONTAIN** a penalty or **LEVERAGE** a discount for the rest

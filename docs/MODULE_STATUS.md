@@ -5,11 +5,11 @@ see at a glance what is solid, what is mid-rework, and what has never been confi
 live mission. This is a planning aid, not a spec — [ARCHITECTURE](ARCHITECTURE.md) and
 [MODULE_BOUNDARIES](MODULE_BOUNDARIES.md) still own the design rules.
 
-Last swept: 2026-09-10, against `main` (dev build `0.1.1`). Updated after the
-September repo reorganization (flatten to `modules/` at the root, AGENTS.md
-consolidation, README/doc drift fixes).
-Squad-focused update: 2026-09-12. Ace career and radio transition assertions pass with
-the full pure suite; the new Squad/UI/audio integration has not been deployed or flown.
+Last swept: 2026-09-14, against `quality/code-pass-2026-09-14` (dev build `0.1.1`) after
+the quality-pass trims (Waves A–C). Gun aim CUT; Chimera paradrop / infantry encampments /
+base-defense alarm KEEP; `TheaterBias`, `MakeshiftFortificationBuilder` and `EventIconCache`
+deleted. Squad-focused update: 2026-09-12. Ace career and radio transition assertions pass
+with the full pure suite; the new Squad/UI/audio integration has not been deployed or flown.
 Release build: **passes**, 0 warnings. Pure test suite (`dotnet run --project
 tests/BoscaliSummer.Tests -c Release`): **passes** (module + framework + architecture).
 
@@ -28,7 +28,7 @@ tests/BoscaliSummer.Tests -c Release`): **passes** (module + framework + archite
 
 | Module | Feature id | Default | Depends on | Overall |
 |---|---|---|---|---|
-| Fire & destruction | `fire-and-destruction` | on | — | **Stable** (minor drift) |
+| Fire & destruction | `fire-and-destruction` | on | — | **Stable** |
 | Urban combat | `urban-combat` | on | — | **In-flight** |
 | Radio | `radio` | on (client-local) | optional `ISquadView` | **Stable / Unverified** hunt override |
 | Quality of life | `qol` | on (client-local) | — | **Unverified** (new module) |
@@ -36,7 +36,7 @@ tests/BoscaliSummer.Tests -c Release`): **passes** (module + framework + archite
 | TGT target presets + quick slots + native-radial target page | `Presentation/MapUi/TargetPresetModel.cs`, `TargetPresetRuntime.cs`, `TargetPresetRadialPage.cs`, `Runtime/TargetPresetHotkeys.cs` | In-flight | Player-saved filter profiles (max 12, 14-char names) persist in `Command.TargetPresets`/`TargetPresetSlots`; F6/F9/F10 quick slots; radial host in Autopilot resolves `IRadialMenuPage`. In-game visual/input/MP acceptance pending |
 | Squad / ace hunts | `squad` | on (host-auth) | — | **Unverified** |
 | Progression | `progression` | on (host-auth) | `squad` | **Unverified** SQD/career integration |
-| Support operations | `support` | on | `progression` | **In-flight** (drift) |
+| Support operations | `support` | on | `progression` | **In-flight** |
 | Tactical command | `command` | on | `progression` | **In-flight / Unverified** |
 | Dynamic operations | `dynamic-operations` | **off** | — | **Experimental** |
 | Chain of command | `high-command` | on | — | **Unverified** (new module) |
@@ -62,20 +62,19 @@ host-authoritative world mutation, two replicated channels.
 | Projectile ignition (bullet + missile) on forests / civilian buildings | `Patches/ImpactPatches.cs`, `Runtime/ImpactFireManager.cs` | Stable | 256-item host queue, 8/frame |
 | Ground-vehicle destruction secondary ignition | `GroundVehicleDestructionPatch` | Stable | 32-event queue, 1 spatial query/frame |
 | Forest index (built once per scene) | `Runtime/ForestIndex.cs` | Stable | |
-| Wind-biased forest spread, bounded child fronts | `Runtime/ImpactFireManager.cs` | Stable | **Drift:** code `FireSpreadGenerations => 3`; README/ARCHITECTURE say "≤2 generations" |
+| Wind-biased forest spread, bounded child fronts | `Runtime/ImpactFireManager.cs` | Stable | 32 sites, 2 attempts, ≤3 generations |
 | Fire visuals (flame/ember layers, Fuel Depot smoke clone, 3-light budget) | `Visuals/FireVisualPool.cs`, `Visuals/FuelDepotSmokePool.cs` | Stable | Forest plume tinted lighter/taller with buoyancy and stronger shear |
 | Burn scars — nuke-scale blast-map ash bed, small tree-clear blast, pooled ground soot decal | `Runtime/FireScorchPolicy.cs`, `Visuals/BurnScarPool.cs`, `Runtime/ImpactFireManager.cs` | Stable | Tree removal decoupled from the ash stamp: ≤3 ash stamps (260–338 m) and one ~2 m tree-clearing blast per site; 64 decals, oldest recycled |
 | Impact scorch decals (local cosmetic, 1–3 marks/hit) | `Buildings/ImpactScorch*.cs` | Stable | Replaced the old HP-tier damage model; nothing on the wire |
 | Ruin aftermath: collapse burst → hot smoke → smoulder | `Buildings/RuinAftermathManager.cs`, `Buildings/CollapseBurstPool.cs` | Stable | 256 logical / 24 smoke visuals / 4 bursts |
 | Direct-kill ruin hook | `Buildings/MapBuildingRuinPatch.cs` | Stable | |
 | Burnout demolition of unoccupied buildings | `Runtime/ImpactFireManager.cs` | Stable | Occupied shells preserved |
-| Aircraft wreck persistence (30s → 180s) | `Patches/AircraftWreckPersistencePatch.cs` | In-flight | Transpiler on `Aircraft.UnitDisabled`; **undocumented in README** |
+| Aircraft wreck persistence (30s → 180s) | `Patches/AircraftWreckPersistencePatch.cs` | In-flight | Transpiler on `Aircraft.UnitDisabled`; README + ARCHITECTURE mention it |
 | Replication: `FireIgnitedMessage`, `RuinCreatedMessage`, late-join snapshots | `Networking/ModNet.cs` | Stable | Protected wire names — do not rename |
 
 **Needs attention**
-- Reconcile the fire caps: code has `MaxActiveFires => 32` and `FireSpreadGenerations => 3`;
-  README + ARCHITECTURE tables say 24 sites and ≤2 generations.
-- Document `AircraftWreckPersistencePatch` in README / ARCHITECTURE (new patch, new behaviour).
+- Fire caps match code: `MaxActiveFires => 32`, `FireSpreadGenerations => 3` (ARCHITECTURE
+  hard-budget table; DESIGN_NOTES spread bullet).
 - Roadmap: split `ImpactFireManager` / `ModNet` behind tested seams (combat-impact bridge,
   building catalogue, network transport) — not started.
 
@@ -94,14 +93,14 @@ air-assault presentation. Publishes `IBuildingOccupancy`, `IZoneFortificationSer
 | Garrison visuals / occupied-building marking | `Visuals/GarrisonVisual.cs`, `Visuals/OccupiedBuildingMarking.cs`, `Runtime/GarrisonMarkerInfo.cs` | Unity preview checked; in-game pending | Visible weapons/crew; local sandbags; shell-scaled twin masts/flags and roof-edge faction band with viewer-relative accent, rebuilt from the measured flat-roof patch encoded in the defense's unique name; definition-sized nest marker kept as fallback. Six decoration renderers, under 4,000 vertices per position, no cosmetic colliders/lights. Pure `$m` round-trip tests added. |
 | `IZoneFortificationService.TryFortify` (consumed by Support) | `Runtime/ZoneGarrisonManager.cs` | Stable | Verifies definition/spawner/shells before charging |
 | Air assault — visible insertion sequences, bounded outposts | `Runtime/AirAssaultController.cs`, `Visuals/AirAssaultVisuals.cs` | Unverified | Cargo access animates open before one eight-troop stick exits over ~8 s at a steady interval; engine-generated parachute mesh (`ParachuteMeshBuilder`: dome + 20 shroud ribbons, double-sided, vanilla fabric/rope materials) on a pendulum above each jumper; per-jumper golden-angle drift, varied chute timing and descent rates plus mission wind fan the stick out; canopy collapses on landing; descent timer scales with drop altitude so sticks do not vanish mid-air; 8 visual ops / 12 encampment cap; in-game visual validation pending |
-| Infantry encampment / makeshift fortification builders | `Runtime/InfantryEncampmentBuilder.cs`, `Runtime/MakeshiftFortificationBuilder.cs` | In-flight | Presentation attached to networked vanilla emplacements |
+| Infantry encampments (Ibis rappel / Chimera ground landing) | `Runtime/InfantryEncampmentBuilder.cs` | Unverified | **KEEP.** Presentation on networked vanilla emplacements. `MakeshiftFortificationBuilder` deleted (never spawned). |
 | Mounted troops fire | `Patches/MountedTroopsFirePatch.cs` | Stable | |
-| Chimera/Tarantula paratrooper loadout station | `Patches/ChimeraLoadoutPatches.cs` (4 patch classes), `Runtime/ChimeraInfantryLoadoutAdapter.cs` | In-flight | Injects a `MountedTroops` station into MC-260/Tarantula cargo bays and mirrors it into the definition prefab so `WeaponChecker.VetLoadout` keeps it at spawn; registered in `Encyclopedia.IndexLookup` for serialization; **undocumented in README/ARCHITECTURE** |
-| Base defense alarm — hostile strike-package detection, OPS ticker | `Runtime/BaseDefenseAlarmService.cs` | In-flight | 2s poll, 7.5 km radius; feeds `SupportPanel`; **undocumented** |
+| Chimera/Tarantula paratrooper loadout station | `Patches/ChimeraLoadoutPatches.cs` (4 patch classes), `Runtime/ChimeraInfantryLoadoutAdapter.cs` | Unverified | **KEEP.** Injects a `MountedTroops` station into MC-260/Tarantula cargo bays and mirrors it into the definition prefab so `WeaponChecker.VetLoadout` keeps it at spawn; registered in `Encyclopedia.IndexLookup` for serialization. README + ARCHITECTURE mention it. In-game acceptance pending. |
+| Base defense alarm — hostile strike-package detection, OPS/STR ticker | `Runtime/BaseDefenseAlarmService.cs` | Unverified | **KEEP.** 2s poll, 7.5 km radius; feeds OPS STATUS and STR. README + ARCHITECTURE mention it. |
 
 **Needs attention**
-- Three subsystems here are undocumented: Chimera loadout injection, `BaseDefenseAlarmService`,
-  and the encampment/fortification builders. Decide which are keepers and write them up, or cut.
+- Keep-or-cut **decided**: Chimera paradrop KEEP, infantry encampments KEEP, base-defense
+  alarm KEEP, makeshift fortification CUT, gun aim CUT.
 - Air assault + Chimera paradrop want an in-game pass together (does the station appear, does
   the drop work, does cleanup follow the emplacement lifecycle).
 - Roadmap "first release" gate: global proxy cap (~96), stable references instead of
@@ -145,7 +144,7 @@ Independent of Progression/Support; skipped on headless.
 | Third-person flight camera — orbit + rear chase smooth follow, steady horizon, orbit return | `Runtime/ThirdPersonFlightCamera.cs`, `Patches/ThirdPersonFlightCameraPatches.cs` | Unverified | Flight feel unverified in-game; `Avionics.ThirdPersonFlightCameraEnabled` restores native motion |
 | Third-person HUD restore (tactical HUD + native minimap in external views) | `Runtime/ThirdPersonHudController.cs`, `Patches/ThirdPersonHudPatches.cs` | Unverified | Publishes `IThirdPersonHud` |
 | Framed target-camera feed panel (lower-right, only while targets selected) | `Presentation/ThirdPersonCameraPanel.cs` | Unverified | Borrows `TargetCam.cam` texture; never landing mode / disabled source |
-| Camera observation marks — F8 / MARK CAMERA, one point, 120s, coord/range/age | `Runtime/ObservationManager.cs`, `Runtime/ObservationStore.cs` | In-flight | Publishes `IObservationSource`; consumed by OPS "CALL AT MARK" |
+| Camera observation marks — F8 / TGT MARK CAMERA, one point, 120s, coord/range/age | `Runtime/ObservationManager.cs`, `Runtime/ObservationStore.cs` | In-flight | Publishes `IObservationSource`; TGT CAMERA hosts MARK CAMERA / CALL AT MARK |
 | Selected-contact freshness readout (faction tracking timestamp, 4 Hz) | `Runtime/ObservationManager.cs` | In-flight | Never derived from an enemy Transform |
 
 Config: `QoL.Enabled`, `QoL.CameraMarks`,
@@ -232,7 +231,7 @@ unit value, one `CostMultiplier`, typed denials, verified card state.
 | Zone Fortification | `Fortify` | `Fortify` / Combat Engineering | Stable | Calls `IZoneFortificationService`; charged only after defenders verified. Absent if Urban Combat missing |
 | Rod from God (kinetic strike) | `Artillery` | `Artillery` / Rod from God | In-flight | Native missile delivery with server-only 150 m core / 420 m blast; requires STRIKE coverage. In-game MP pending |
 | EMP Shock | `Emp` | `Emp` / EMP Shock | In-flight | 30 km airburst: light-speed E1 prompt footprint and cockpit upset, E2 branching arcs, E3 geomagnetic heave holds the host-only 30 s jamming; local cockpit feedback. In-game MP pending |
-| Flare Barrage | `FlareMissile` | **`Recon`** (shared) / — | In-flight | Airburst IR countermeasure. **No dedicated perk** — reuses the Recon capability to authorise |
+| Flare Barrage | `FlareMissile` | **`Recon`** (shared) / Satellite Scan | In-flight | Airburst IR countermeasure. **DECIDED:** no dedicated perk — shares Satellite Scan / Recon authorisation |
 
 | Cyber operation | Id | Gate | Status | Notes |
 |---|---|---|---|---|
@@ -245,14 +244,15 @@ unit value, one `CostMultiplier`, typed denials, verified card state.
 | Supporting piece | Where | Status | Notes |
 |---|---|---|---|
 | Constellation model | `Runtime/OrbitalConstellation.cs` | Pure-tested | Three shells, real angles/footprints/fuel, coverage and next-pass queries, per-satellite windows, merged forward coverage forecast, manoeuvre easing |
-| Infrastructure model | `Runtime/InfoNetwork.cs` | Pure-tested | Four facilities × 3 levels, prereqs, hack scaling, prices |
+| Infrastructure model | `Runtime/InfoNetwork.cs` | Pure-tested | Four facilities × 3 levels, prereqs, hack scaling, prices. CRYPTO `CostScale` discounts hack cost; copy must not claim a host cooldown discount |
+| EW presence | `Runtime/EwAssets.cs` | In-flight | Mobile radar truck only. Convert-to-encampment UI gone; wire `EwAssetState.Encampment = 2` reserved |
 | Track deception | `Runtime/CyberEffects.cs` | In-flight | Bounded: 4 effects, 64 aircraft, hostile tracking dictionaries only |
 | Map overlay | `Presentation/SupportMapOverlay.cs` | In-flight | Satellite tracks, footprints, role badges; coverage warning on the armed reticle |
 | Camera surface mark | `ICameraTargetService` (Support) + Command TGT CAMERA tab | In-flight | Capture/call/clear plus telemetry; OPS no longer hosts it |
 | Map-cursor target resolution | `Runtime/SupportTargeting.cs`, `Runtime/SupportMapGesture.cs` | Stable | Clearance-sphere / slope tolerance retained |
 | Missile visual patch | `Patches/SupportMissileVisualPatch.cs` | Stable | |
 | Request pipeline, cooldown, rate limit, typed denials, 5s silent-host timeout | `Runtime/SupportManager.cs`, `Runtime/SupportModel.cs` | Stable | |
-| Networking — protocol byte `5`, host fast-path | `Networking/SupportNet.cs` | Stable | Request/result, ops query/command/state, cyber effect broadcast; host validates and charges every fleet/infrastructure command |
+| Networking — protocol byte `7`, host fast-path | `Networking/SupportNet.cs` | Stable | Request/result, ops query/command/state, cyber effect broadcast; host validates and charges every fleet/infrastructure command |
 
 Config: `Support.Enabled`, per-action toggles (`ReconSweep`, `Fortification`, `RodFromGod`,
 `EmpShock`, `FlareBarrage`, `CyberOperations`), `CostMultiplier`, per-action cost/range/radius keys,
@@ -261,12 +261,9 @@ Config: `Support.Enabled`, per-action toggles (`ReconSweep`, `Fortification`, `R
 `FireMissionDefinitionKey`. Debug: `Debug.DisableOpsCooldowns`.
 
 **Needs attention**
-- **Flare Barrage** is the loose thread: undocumented, and authorised by the Recon perk
-  instead of its own. Either give it a perk row (and a distinct capability) or document the
-  shared-capability decision.
-- README's config table and "Perks & support" section list only recon/fortify/kinetic/EMP —
-  missing Flare Barrage and the `EmpShockRadiusMeters` / `FlareBarrage*` keys.
-- Reconcile "Rod from God default-off" (DESIGN_NOTES) vs `RodFromGod = true` (code).
+- **Flare Barrage** is **DECIDED**: shares Satellite Scan / Recon authorisation; no extra
+  perk. README, OPS copy and this table document it.
+- CRYPTO copy must not claim a cooldown discount; host `RequestCooldown` is unchanged.
 - Roadmap gates: multiplayer + long-session validation.
 
 ---
@@ -292,9 +289,9 @@ recruited Wing Command wing.
 | Feature | Where | Status | Notes |
 |---|---|---|---|
 | Expanded tactical map UI — left MFD dock + event log, central map, right bezel rail, spawn footer | `Presentation/MapUi/` (~30 files, `MapUiManager.cs`) | In-flight | Patches `MfdRailPatch`, `MfdScreenChromePatch`, `MfdSinglePanelPatch`; `VanillaMfdRebuild.*` partial classes are new; `Command.ExpandedMapUi` default on |
-| `STR` strategic screen — SA / FRONT / TASKING / LOG / CMD pages | `Presentation/StrMfdPanel.cs`, `Domain/TacticalTheaterState.cs`, `Domain/TheaterReadout.cs`, `Domain/CommandScoring.cs`, `Domain/SortieClassifier.cs` | In-flight / Unverified | **Replaced** the old COM 4th bezel + `ITheaterPage` contract (both deleted). Several bugs fixed just now (airbase counts, sortie breakdown, DEFCON) |
+| `STR` strategic screen — SA / FRONT / TASKING / LOG / CMD pages | `Presentation/StrMfdPanel.cs`, `Domain/TacticalTheaterState.cs`, `Domain/TheaterReadout.cs`, `Domain/CommandScoring.cs`, `Domain/SortieClassifier.cs` | In-flight / Unverified | Own bezel; `ITheaterPage` gone. Empty-board air/territory ratios print "—", not 50%. CMD doctrine copy is scoring bias, not orders |
 | Dynamic frontline / sector-control overlay | `Runtime/TacticalSectorGrid.cs`, `Runtime/MissionMapCompatibilityEngine.cs`, `Presentation/ComMapOverlay.cs`, `Patches/DynamicMapHooks.cs` | Unverified | Elapsed-time pressure/recovery, base-ownership anchored, objective ground presence independent of faction tracking (spotting cannot change cell occupation; both sides see the same cells). Advisory only — vanilla capture unchanged. In-game validation pending |
-| Mission-AI target scoring by doctrine | `Patches/AiTargetScoringPatch.cs`, `Domain/CommandDoctrine.cs`, `Runtime/CommandManager.cs` | In-flight | Biases friendly mission AI only |
+| Mission-AI target scoring by doctrine | `Patches/AiTargetScoringPatch.cs`, `Domain/CommandDoctrine.cs`, `Runtime/CommandManager.cs` | In-flight | Scoring bias for friendly mission AI only; `NOAvionics.TheaterScoring` (local `TheaterBias.cs` deleted) |
 | `MIS → SECONDARY` objectives view | `Presentation/MapUi/MfdSecondaryObjectives.cs` | Experimental | Reads `ISecondaryObjectivesView`; only live when `dynamic-operations` is enabled |
 | `SET` MFD settings page - MAP / STYLE / IMAGE / COCKPIT | `Presentation/MapUi/SettingsMfdPanel.cs` | In-flight | Shared `AvScreen`; compact rows; panel resolves up to `PanelHeightMax`; COCKPIT reads QoL's `IThirdPersonHud`; bounded steppers explain disabled limits |
 | TGT target presets / quick slots / native-radial page | `Presentation/MapUi/TargetPresetModel.cs`, `TargetPresetRuntime.cs`, `TargetPresetRadialPage.cs`, `Runtime/TargetPresetHotkeys.cs` | In-flight | Bounded config-persisted library; F6/F9/F10; Autopilot hosts the page through `IRadialMenuPage`. In-game acceptance pending |
@@ -305,11 +302,8 @@ Config: `Command.Enabled`, `ExpandedMapUi`, `FrontlinesOverlay`, `OverlayOpacity
 `TargetPresetKey1/2/3` (F6/F9/F10), `TargetPresets`/`TargetPresetSlots` (managed by TGT).
 
 **Needs attention**
-- **Drift:** DESIGN_NOTES still says "COM is no longer a fourth bezel — theater SA mounts as
-  the OPS **THEATER** tab". Reality: `STR` is its own bezel, `ITheaterPage` is gone,
-  `ComMfdPanel` deleted. Rewrite the "Wing Command reuse boundary" section.
-- `STR` and the frontline overlay are the two things most in need of a live mission pass —
-  a lot of the last few commits were "produced rather than declared and left at zero".
+- COM copy is settled: `STR` is its own bezel, `ITheaterPage` is gone, DESIGN_NOTES matches.
+- `STR` and the frontline overlay still need a live mission pass.
 - `Presentation/MapUi/` is ~30 files and the main source of bloat. Worth a pass to see what
   is dead after the COM→STR migration.
 - Live visual certification is still needed for the unified `AvScreen` shell at each
@@ -422,7 +416,7 @@ Installs independently and owns no Harmony patches.
 | Protocol-2 state + response — catalog index + mission timestamps; intent/reply for the decision | `Networking/EventsNet.cs` | Awaiting in-game validation | -1 = calm; title/flavor stay catalog-local; no backfill; a query converges a mid-mission reconnect |
 | Response decision — CONTAIN/LEVERAGE once per player, host-priced from severity | `Runtime/EventsManager.cs`, `Domain/EventSelector.cs` | Awaiting in-game validation | 200–1200 allocation rounded to 50; `player.SetAllocation` on the host; response map ≤ 64, cleared on rotation |
 | `EVN` screen — pinned active card, countdown bar, response control, reverse-chronological history | `Presentation/EventsMfdPanel.cs` | Awaiting in-game visual check | Reset order 63; fails closed with no free bezel slot (prefers right) |
-| Icon fallback — embedded PNG per icon key, vector category glyph otherwise | `Presentation/EventIconCache.cs`, `Presentation/EventGlyph.cs` | Stable | No PNGs shipped yet; drop `modules/Events/Assets/<icon_key>.png` in to light them up |
+| Category glyphs | `Presentation/EventGlyph.cs` | Stable | Vector category marks only. `EventIconCache` deleted; no event PNG assets |
 | Support cost seam — both shared pricing points, per player | `modules/Support/Runtime/SupportManager.cs` | Awaiting in-game validation | Action `Cost` and satellite/facility/EW `Price` resolve `IActiveEventsView.SupportCostMultiplierFor(playerId)` late; exactly 1 when calm |
 
 Config: `Events.Enabled` (true), `RotationGapMinSeconds`/`MaxSeconds` (90/240),
@@ -454,7 +448,7 @@ scheduled.
 | Area | Where | Status | Notes |
 |---|---|---|---|
 | Feature graph, host, transactional startup, ordered scene reset, reverse teardown | `Framework/` | Stable | "Framework extraction is done and behaviour-preserving" |
-| Cross-feature contracts | `Framework/Contracts/` | In-flight | New this cycle: `IObservationSource`, `ISecondaryObjectivesView`, `IThirdPersonHud`. Deleted: `ITheaterPage` |
+| Cross-feature contracts | `Framework/Contracts/` | In-flight | Includes `IObservationSource`, `ISecondaryObjectivesView`, `IThirdPersonHud`, `IBaseDefenseAlarmService`. Deleted: `ITheaterPage` |
 | Cached game reflection, capability report | `Infrastructure/GameInterop/` | Stable | Startup logs resolved patch list, capabilities, forest index size — first place to look after a game update |
 | Config composition + legacy-key migration | `Configuration/`, `Infrastructure/Diagnostics/DiagnosticSettings.cs` | Stable | |
 | NOAvionics kit (bezel claims, map picker, `AvScreen`) | `Avionics/`, `AvionicsUi/` | In-flight | Unified across OPS/STR/RAD/SET and rebuilt vanilla panels; live resolution/coexistence pass pending |
@@ -486,19 +480,22 @@ Barrage (now in the README action list, with a note that it shares the Satellite
 authorisation), wreck persistence (README + ARCHITECTURE mention it), the README Support
 config table (now an explicitly curated subset), and the untracked docs (committed).
 
-Still open:
+Resolved in the 2026-09-14 quality pass:
 
-1. **Flare Barrage has no perk of its own** — it is authorised by the Satellite Scan perk's
-   `Recon` capability. Either give it a distinct capability + perk row, or keep the
-   shared-capability decision and document it in the Support module. (Support)
-2. **Chimera paratrooper loadout + `BaseDefenseAlarmService` + encampment builders** are not
-   described in any narrative doc — decide keep vs cut, then write them up. (Urban Combat)
+1. **Flare Barrage** — **DECIDED:** shares Satellite Scan / Recon; no extra perk. Documented.
+2. **Keep-or-cut** — Chimera paradrop KEEP, infantry encampments KEEP, base-defense alarm
+   KEEP, gun aim CUT, `MakeshiftFortificationBuilder` CUT, `TheaterBias.cs` CUT,
+   `EventIconCache` CUT (glyphs only).
+3. **COM copy** — STR is the bezel; `ITheaterPage` gone; DESIGN_NOTES matches.
+4. **Fire caps** — MODULE_STATUS no longer claims 24 sites / ≤2 generations.
+5. **CRYPTO** — copy does not claim a host cooldown discount.
+6. **STR empty theater** — dash, not 50%. Doctrine blurbs are scoring bias, not orders.
+7. **EW encampment UI** — gone; wire enum value 2 kept.
 
 ## Refactor / cleanup debt
 
 - `modules/Command/Presentation/MapUi/` (~30 files) — audit for dead code after COM→STR.
 - Split `ImpactFireManager`, `ZoneGarrisonManager`, `ModNet` (roadmap, behind seams only).
-- Decide keep-or-cut: Chimera paradrop, Urban Combat encampment builders.
 - Persistence service (schema-versioned atomic JSON) — blocks persistent perk profiles and
   any other saved state.
 
@@ -509,5 +506,5 @@ Still open:
 2. **Command STR + frontline overlay** — recently made functional; needs a live theater.
 3. **Dynamic operations** — nothing proven in a mission; default-off until it is.
 4. **Air assault + Chimera paradrop** — visual/insertion sequences unconfirmed.
-5. **Multiplayer** — Support/Progression protocol-2 channels, late-join for garrisons and
+5. **Multiplayer** — Support protocol 7 / Progression protocol 3, late-join for garrisons and
    dynamic ops, listen-host vs dedicated.

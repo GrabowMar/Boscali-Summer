@@ -25,8 +25,8 @@ Code-level causes (verified against the current tree):
   `:257` via `Visuals/GarrisonVisual.cs:24`), which is correct for cleanup and late join
   (`Patches/AirbaseCapturePatches.cs:20-36`) but wrong for scale: it inherits the nest's
   footprint instead of the building's.
-- Ground dressing exists only in the air-assault path (`MakeshiftFortificationBuilder`,
-  `VanillaSoldierFactory`); zone garrisons get nothing at street level.
+- Ground dressing exists only in the air-assault path (`InfantryEncampmentBuilder`,
+  `VanillaSoldierFactory`); zone garrisons get nothing at street level. `MakeshiftFortificationBuilder` was never spawned and is gone.
 
 Design target: **a player crossing a zone at any altitude and any light level should know
 within seconds which buildings are occupied and whether they are hostile — without color
@@ -104,9 +104,8 @@ Acceptance: a puff is visible at 3 km in daylight and its light is visible at ni
 
 ### A4 (P1) Street dressing around occupied shells
 
-Reuse the existing builders as local decoration on each occupied shell (same pattern as
-`MakeshiftFortificationBuilder.ApplyPresentation`, triggered from the existing
-`OnStartClient` path):
+Reuse air-assault encampment dressing as local decoration on each occupied shell (same
+pattern as `InfantryEncampmentBuilder`, triggered from the existing `OnStartClient` path):
 
 - two jersey barriers and a sandbag line at the main approach;
 - one or two visual sentries (`VanillaSoldierFactory`, `GameAssets.pilotDismounted`);

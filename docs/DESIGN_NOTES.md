@@ -43,8 +43,8 @@ Decisions that cost an argument. Kept so they are not made again the other way.
   smaller stamps vanish into a faint smudge — the whole burnt area should read as gray soil,
   not a couple of dark spots, so the ash intentionally overshoots the small tree footprint.
   Same vanilla assets, no new shaders, and a campfire no longer flattens a stand.
-- **Spread is bounded and deterministic.** Two wind-biased attempts per site, at most two
-  generations, all under the 24-site global cap. Successful children stay visible as fronts
+- **Spread is bounded and deterministic.** Two wind-biased attempts per site, at most three
+  generations, all under the 32-site global cap. Successful children stay visible as fronts
   rather than merging back into the parent.
 - **Ignition is deliberately probabilistic** — ~0.25% ordinary impact, ~6% explosive at
   intensity 1.0, lower still for vehicle-loss secondaries. Open ground and water are ignored.
@@ -59,6 +59,9 @@ Decisions that cost an argument. Kept so they are not made again the other way.
   appearance and ownership. Air-assault infantry therefore remains presentation attached
   to networked vanilla emplacements; it does not claim independent squad AI. Walkable
   interiors, breaching, and floor-by-floor damage remain out of scope.
+- **MakeshiftFortificationBuilder was never spawned.** That assault-defense dressing is
+  gone. Ibis rappel and Chimera ground-landing encampments (`InfantryEncampmentBuilder`)
+  stay. The Chimera/Tarantula paradrop loadout and the OPS/STR base-defense ticker stay.
 - **Occupancy is a record, not its marker.** Garrisons follow zone ownership, cannot
   duplicate across capture churn / late load / scene reload / late join, vanish when the
   shell is ruined, and return only on a later capture. Critical infrastructure and very small
@@ -144,6 +147,12 @@ Decisions that cost an argument. Kept so they are not made again the other way.
   for messages that were never transmitted, "ready" during a cooldown, and "ready for target
   confirmation" with no target designated. Every card now renders a state the manager
   actually checked, and an unanswered request times out.
+- **Flare barrage shares Satellite Scan.** It is authorised by the Recon capability, not a
+  fifth perk. Do not add a perk row for it.
+- **CRYPTO discounts hack cost, not cooldown.** Host `RequestCooldown` is unchanged; CYBER
+  copy must not claim a cooldown the host ignores.
+- **EW encampment convert/UI is gone.** `EwAssetState.Encampment = 2` stays on the wire as
+  a reserved value; do not reuse the byte.
 - **One skill language for the player, AI and aces.** The player's board presents the same
   combat skills Wing Command gives enemy aces (Toughness, Countermeasures, Notch Expert,
   Ghost) with the same codes and vector badges, beside the player's passives and support
@@ -271,6 +280,11 @@ Decisions that cost an argument. Kept so they are not made again the other way.
 - **Map markers were deliberately cut.** The dossier names the base and the existing sector
   grid gives navigation; a native marker patch is deferred to avoid a second UI seam.
 
+## World events
+
+- **EVN cards are glyphs.** `EventIconCache` and PNG fallbacks were deleted; there are no
+  event PNG assets. Category marks are `EventGlyph` only.
+
 ## Wing Command reuse boundary
 
 Wing Command `0.9.2.6`+ is a hard BepInEx runtime dependency (declared by GUID and version);
@@ -285,7 +299,10 @@ fail closed.
 Product split: Wing Command owns the recruited squadron; Boscali owns the battlefield
 (fire, occupancy, perks/support, theater SA). The theater picture is its own **STR** bezel
 screen (SA / FRONT / TASKING / LOG / CMD) — it installs and fails on its own and does not
-borrow an OPS tab or a slot from Wing Command. Doctrine biases friendly mission AI only and
-never retasks a wingman.
+borrow an OPS tab or a slot from Wing Command. `ITheaterPage` is gone; do not remount
+theater SA as an OPS tab. Doctrine copy is scoring bias for friendly mission AI only —
+not orders — and never retasks a wingman. Empty-board air/territory ratios print "—",
+never a fake 50%. Doctrine math lives in `NOAvionics.TheaterScoring`; do not reintroduce a
+local `TheaterBias` duplicate.
 
 Maintenance rules (how to change bezels, the picker, the protocol): [`Avionics/README.md`](../Avionics/README.md).

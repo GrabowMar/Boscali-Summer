@@ -53,7 +53,9 @@ Nuclear Option** — every expensive system pooled, event-driven, and globally b
   Air assault adds bounded, visible insertion sequences (presentation
   only; vanilla emplacements own the combat). Ibis fast-rope insertions consume eight
   troops each, allowing two drops from a sixteen-man load, with MG / AT / AA / MG
-  encampments. Empty troop benches disappear and the ammunition display decreases.
+  encampments. MC-260 Chimera and Tarantula cargo can load a sixteen-troop paradrop
+  station that survives hangar → spawn. Empty troop benches disappear and the ammunition
+  display decreases.
 - **Radio** — a client-local map-MFD receiver (`RAD` bezel) for your own OGG/WAV
   stations, routed through the game's music mixer. TUNE steps the dial (FM 0.2 MHz /
   MW 10 kHz) with dead air between stations, SEEK jumps stations, BAND flips FM/MW, and
@@ -80,22 +82,27 @@ Nuclear Option** — every expensive system pooled, event-driven, and globally b
   point; surviving ejected rivals may return. Friendly wing management stays in WMC.
   See [docs/ACE_HUNTS.md](docs/ACE_HUNTS.md).
 - **Support** — `OPS` holds server-validated requests (satellite scan, zone fortification,
-  Rod from God, EMP shock, flare barrage). **SPACE** commands the faction constellation:
+  Rod from God, EMP shock, flare barrage). Flare barrage shares the Satellite Scan
+  authorisation; there is no extra perk. **SPACE** commands the faction constellation:
   launch RECON / STRIKE / EW satellites onto three orbital shells, burn fuel to slide a
   satellite's ground track over a target, and recall it for a partial refund. Satellite
   scan, Rod from God and EMP require a satellite of the matching role overhead; the panel
   and the map reticle show live coverage before you commit. **CYBER** invests allocation
   into SIGINT, crypto, C2-disruptor and EW facilities whose levels unlock and strengthen
-  ping sweep, track uplink, radar blackout, ghost shield and spoof contacts. Camera marks
+  ping sweep, track uplink, radar blackout, ghost shield and spoof contacts. CRYPTO
+  discounts hack cost; it does not shorten the host support-request cooldown. Camera marks
   are on the TGT screen's CAMERA page; the third-person HUD toggle is in SET. Perk purchases
-  remain in SQD.
-  Satellites and infrastructure are faction assets, host-authoritative; protocol 5 requires
+  remain in SQD. OPS STATUS and STR surface a base-defense ticker when hostiles approach a
+  friendly airbase.
+  Satellites and infrastructure are faction assets, host-authoritative; protocol 7 requires
   matching peers. New orbital and cyber behavior still needs in-game multiplayer acceptance.
 - **Strategic layer** — an `STR` map-MFD with the theater picture: DEFCON and the air
   balance with a friendly-AI sortie board (**SA**), the live sector field and contested
   nodes (**FRONT**), the faction objective board (**TASKING**), the theater account and
-  stockpile (**LOG**), and mission-AI doctrine plus map overlays (**CMD**). Aircraft
-  command stays Wing Command's job; this mod never tasks a recruited wing.
+  stockpile (**LOG**), and mission-AI scoring doctrine plus map overlays (**CMD**). Empty
+  air or territory ratios read as a dash, not 50%. CMD blurbs are scoring bias for
+  friendly mission AI, not orders. Aircraft command stays Wing Command's job; this mod
+  never tasks a recruited wing.
 - **Chain of command** (`HighCommand.Enabled`, new, in-game acceptance pending) — the STR
   console adds **COC**: both factions' generated staffs with seed-stable names, the same
   generated portraits Wing Command draws for aces and wingmen, traits and service bios,
@@ -134,7 +141,7 @@ Nuclear Option** — every expensive system pooled, event-driven, and globally b
 - **Quality of life** (`QoL.Enabled`, client-local, independent of Support/Progression) —
   smooth third-person orbit/chase framing with a steady horizon and room to aim, HUD and
   native-minimap restore in external views, a framed target-camera feed while targets are
-  selected, and one expiring camera-observation mark (**F8** / OPS **MARK CAMERA**).
+  selected, and one expiring camera-observation mark (**F8** / TGT **MARK CAMERA**).
 - **Autopilot landing** (`Autopilot.Enabled`, client-local) — a **Boscali Summer** entry in
   the native radial menu opens a small submenu. **Autopilot: Land** hands your own aircraft
   to the game's own autopilot for a runway or vertical-pad landing, then returns control.
@@ -236,7 +243,7 @@ anything) or **client-local**. This table is a curated subset; F1 shows the rest
 | Support | `SatelliteRecallRefund` | `0.4` | Fraction of the launch price returned on recall |
 | Support | `MaximumRangeMeters` / `RequestCooldownSeconds` | `30000` / `30` | Strike delivery reach; cooldown per player |
 | Support | `FireMissionDefinitionKey` | *(empty)* | Missile for Rod from God / EMP; empty auto-picks a yield ≤ 200 vanilla missile |
-| Support | Map effect areas | — | Abilities and hacks show icons and radii; rod has a 150 m core inside a 420 m blast boundary. Active markers use host-approved values (support protocol 5; matching peers required). |
+| Support | Map effect areas | — | Abilities and hacks show icons and radii; rod has a 150 m core inside a 420 m blast boundary. Active markers use host-approved values (support protocol 7; matching peers required). |
 | Command | `Enabled` / `ExpandedMapUi` | `true` / `true` | STR screen + overlays + AI target scoring; full tactical map GUI |
 | HighCommand | `Enabled` / `EconomyEnabled` | `true` / `true` | Chain-of-command page, command posts, VIP convoys and funds/score payouts |
 | Events | `Enabled` / `EffectStrength` | `true` / `1.0` | `EVN` rotating world-event feed; scale every event modifier (0 = flavor only) |
