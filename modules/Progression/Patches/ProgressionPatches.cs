@@ -1,5 +1,7 @@
+using System;
 using BoscaliSummer.Features.Progression.Runtime;
 using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Infrastructure.Diagnostics;
 using BoscaliSummer.Runtime;
 using HarmonyLib;
 using NuclearOption.Networking;
@@ -15,10 +17,17 @@ namespace BoscaliSummer.Features.Progression.Patches
     {
         private static void Prefix(Aircraft __instance, ref float fuelDrawn)
         {
-            ProgressionManager manager = ProgressionRuntime.Active;
-            Player player = __instance == null ? null : __instance.Player;
-            if (manager == null || player == null) return;
-            fuelDrawn *= manager.Multiplier(PlayerIdentity.Of(player), PerkEffect.FuelUse);
+            try
+            {
+                ProgressionManager manager = ProgressionRuntime.Active;
+                Player player = __instance == null ? null : __instance.Player;
+                if (manager == null || player == null) return;
+                fuelDrawn *= manager.Multiplier(PlayerIdentity.Of(player), PerkEffect.FuelUse);
+            }
+            catch (Exception e)
+            {
+                PatchGuard.Report("Progression.UseFuel", e);
+            }
         }
     }
 

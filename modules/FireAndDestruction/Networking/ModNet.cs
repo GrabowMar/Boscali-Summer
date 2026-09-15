@@ -63,6 +63,13 @@ namespace BoscaliSummer.Runtime
         public void ResetForScene()
         {
             StopAllCoroutines();
+            if (registeredClientHandler != null)
+            {
+                registeredClientHandler.UnregisterHandler<FireIgnitedMessage>();
+                registeredClientHandler.UnregisterHandler<RuinCreatedMessage>();
+                registeredClientHandler = null;
+            }
+            nextRegistrationCheck = 0f;
         }
 
         private void Update()
@@ -122,12 +129,15 @@ namespace BoscaliSummer.Runtime
             }
 
             MessageHandler handler = manager.Client?.MessageHandler;
-            if (handler != null && handler != registeredClientHandler)
+            if (handler != registeredClientHandler)
             {
-                handler.RegisterHandler<FireIgnitedMessage>(ReceiveFire, false);
-                handler.RegisterHandler<RuinCreatedMessage>(ReceiveRuin, false);
+                registeredClientHandler?.UnregisterHandler<FireIgnitedMessage>();
+                registeredClientHandler?.UnregisterHandler<RuinCreatedMessage>();
                 registeredClientHandler = handler;
-                Plugin.Logger.LogInfo("Registered Boscali Summer multiplayer event handlers.");
+                registeredClientHandler?.RegisterHandler<FireIgnitedMessage>(ReceiveFire, false);
+                registeredClientHandler?.RegisterHandler<RuinCreatedMessage>(ReceiveRuin, false);
+                if (registeredClientHandler != null)
+                    Plugin.Logger.LogInfo("Registered Boscali Summer multiplayer event handlers.");
             }
         }
 

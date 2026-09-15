@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using BoscaliSummer.Core;
@@ -67,6 +68,7 @@ namespace BoscaliSummer.Fire
         private readonly List<long> expiredCooldownCells = new List<long>(128);
         private readonly Collider[] colliderBuffer = new Collider[32];
         private readonly RaycastHit[] roofHitBuffer = new RaycastHit[24];
+        private static readonly List<Renderer> visibleRendererBuffer = new List<Renderer>(32);
         private readonly ForestIndex forestIndex = new ForestIndex();
         private readonly FireVisualPool visualPool = new FireVisualPool();
         private readonly FuelDepotSmokePool fuelDepotSmokePool = new FuelDepotSmokePool();
@@ -110,6 +112,7 @@ namespace BoscaliSummer.Fire
                 fuelDepotSmokePool.Release(fires[i].BuildingSmoke);
             }
             fires.Clear();
+            visibleRendererBuffer.Clear();
             visualPool.Clear();
             fuelDepotSmokePool.Clear();
             burnScars.Clear();
@@ -765,20 +768,24 @@ namespace BoscaliSummer.Fire
 
         private static bool TryGetVisibleBuildingBounds(GameObject shell, out Bounds bounds)
         {
-            Renderer[] renderers = shell.GetComponentsInChildren<Renderer>(false);
             bounds = default(Bounds);
+            if (shell == null) return false;
+            shell.GetComponentsInChildren(false, visibleRendererBuffer);
             bool found = false;
-            for (int i = 0; i < renderers.Length; i++)
+            for (int i = 0; i < visibleRendererBuffer.Count; i++)
             {
-                Renderer renderer = renderers[i];
+                Renderer renderer = visibleRendererBuffer[i];
                 if (renderer == null || !renderer.enabled || renderer is ParticleSystemRenderer ||
                     !renderer.gameObject.activeInHierarchy) continue;
-                string name = renderer.gameObject.name.ToLowerInvariant();
-                if (name.Contains("rubble") || name.Contains("wreck") ||
-                    name.Contains("destroyed") || name.Contains("ruin")) continue;
+                string name = renderer.gameObject.name;
+                if (name.IndexOf("rubble", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    name.IndexOf("wreck", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    name.IndexOf("destroyed", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    name.IndexOf("ruin", StringComparison.OrdinalIgnoreCase) >= 0) continue;
                 if (!found) { bounds = renderer.bounds; found = true; }
                 else bounds.Encapsulate(renderer.bounds);
             }
+            visibleRendererBuffer.Clear();
             return found;
         }
 

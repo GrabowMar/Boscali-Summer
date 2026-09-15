@@ -41,6 +41,7 @@ namespace BoscaliSummer.Garrisons
                 if (ActiveOperations[i] != null) UnityEngine.Object.Destroy(ActiveOperations[i]);
             ActiveOperations.Clear();
 
+            if (cachedParachuteMesh != null) UnityEngine.Object.Destroy(cachedParachuteMesh);
             cachedParachuteMesh = null;
             cachedParachuteMat = null;
             if (cachedChuteFabricMat != null) UnityEngine.Object.Destroy(cachedChuteFabricMat);
@@ -94,7 +95,9 @@ namespace BoscaliSummer.Garrisons
 
         public static Mesh GetParachuteMesh()
         {
-            return cachedParachuteMesh ??= ParachuteMeshBuilder.Build();
+            if (cachedParachuteMesh == null)
+                cachedParachuteMesh = ParachuteMeshBuilder.Build();
+            return cachedParachuteMesh;
         }
 
         public static GameObject CreateParachuteRig()

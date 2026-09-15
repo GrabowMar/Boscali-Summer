@@ -1,4 +1,6 @@
+using System;
 using BoscaliSummer.Features.Autopilot.Runtime;
+using BoscaliSummer.Infrastructure.Diagnostics;
 using HarmonyLib;
 
 namespace BoscaliSummer.Features.Autopilot.Patches
@@ -12,10 +14,18 @@ namespace BoscaliSummer.Features.Autopilot.Patches
     {
         private static bool Prefix(Aircraft aircraft, bool enabled, ref Aircraft ___aircraft)
         {
-            ___aircraft = aircraft;
-            AutopilotLandController controller = AutopilotLandController.Instance;
-            return controller == null || !controller.IsEngagedOn(aircraft) ||
-                aircraft.flightAssist != enabled;
+            try
+            {
+                ___aircraft = aircraft;
+                AutopilotLandController controller = AutopilotLandController.Instance;
+                return controller == null || !controller.IsEngagedOn(aircraft) ||
+                    aircraft.flightAssist != enabled;
+            }
+            catch (Exception e)
+            {
+                PatchGuard.Report("Autopilot.SetFlightAssist", e);
+                return true;
+            }
         }
     }
 }
