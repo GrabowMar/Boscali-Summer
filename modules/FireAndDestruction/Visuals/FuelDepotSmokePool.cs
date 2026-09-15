@@ -163,6 +163,8 @@ namespace BoscaliSummer.Fire
         private static readonly FieldInfo WreckageField =
             typeof(Building).GetField("wreckage", InstanceFields);
 
+        private const int MaximumVisuals = 24;
+
         private readonly List<Visual> visuals = new List<Visual>(16);
         private Template template;
         private float nextResolveAttempt;
@@ -182,6 +184,7 @@ namespace BoscaliSummer.Fire
                 }
             }
 
+            if (visuals.Count >= MaximumVisuals) return null;
             Visual visual = CreateVisual();
             if (visual == null) return null;
             visuals.Add(visual);

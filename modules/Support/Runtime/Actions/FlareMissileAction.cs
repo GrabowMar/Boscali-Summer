@@ -168,10 +168,7 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
 
         private void OnDestroy()
         {
-            if (!hasDetonated)
-            {
-                TriggerDetonation();
-            }
+            hasDetonated = true;
         }
     }
 }

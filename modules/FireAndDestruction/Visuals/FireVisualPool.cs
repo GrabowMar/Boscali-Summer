@@ -110,6 +110,8 @@ namespace BoscaliSummer.Fire
             }
         }
 
+        private const int MaximumVisuals = 32;
+
         private readonly List<Visual> visuals = new List<Visual>(24);
         private Material flameMaterial;
         private bool templatesSearched;
@@ -124,6 +126,7 @@ namespace BoscaliSummer.Fire
                     return visuals[i];
                 }
             }
+            if (visuals.Count >= MaximumVisuals) return null;
             Visual visual = Create();
             visuals.Add(visual);
             Activate(visual, position, forest);

@@ -62,6 +62,7 @@ namespace BoscaliSummer.Runtime
 
         public void ResetForScene()
         {
+            StopAllCoroutines();
         }
 
         private void Update()
@@ -154,6 +155,10 @@ namespace BoscaliSummer.Runtime
 
         private void ReceiveFire(INetworkPlayer player, FireIgnitedMessage message)
         {
+            if (!Finite(message.X) || !Finite(message.Y) || !Finite(message.Z) ||
+                !Finite(message.RemainingLifetime) || message.RemainingLifetime <= 0f ||
+                !Finite(message.ClusterScale) || message.ClusterScale <= 0f)
+                return;
             ImpactFireManager.Instance?.ReceiveIgnition(
                 new GlobalPosition(message.X, message.Y, message.Z),
                 message.RemainingLifetime, message.Forest, message.ClusterScale);
@@ -161,6 +166,11 @@ namespace BoscaliSummer.Runtime
 
         private void ReceiveRuin(INetworkPlayer player, RuinCreatedMessage message)
         {
+            if (!Finite(message.X) || !Finite(message.Y) || !Finite(message.Z) ||
+                !Finite(message.HalfX) || !Finite(message.HalfZ) ||
+                message.HalfX <= 0f || message.HalfZ <= 0f ||
+                !Finite(message.AgeSeconds) || message.AgeSeconds < 0f)
+                return;
             RuinAftermathManager.Instance?.RegisterRuin(
                 new GlobalPosition(message.X, message.Y, message.Z),
                 new Vector2(message.HalfX, message.HalfZ),
@@ -236,5 +246,7 @@ namespace BoscaliSummer.Runtime
             HalfX = halfExtents.x, HalfZ = halfExtents.y,
             AgeSeconds = ageSeconds
         };
+
+        private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
     }
 }

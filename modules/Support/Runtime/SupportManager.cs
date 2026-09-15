@@ -355,6 +355,8 @@ namespace BoscaliSummer.Features.Support.Runtime
         {
             Visuals.EmpVisualEffect.Reset();
             Visuals.KineticRodStrikeVisuals.Reset();
+            Visuals.FlareMissileBurstVisuals.Reset();
+            Visuals.SupportParticles.Reset();
             Space.Clear();
             Cyber.Clear();
             Ew.Clear();

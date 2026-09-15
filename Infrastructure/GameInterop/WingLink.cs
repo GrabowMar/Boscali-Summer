@@ -27,6 +27,10 @@ namespace BoscaliSummer.Runtime
         private static string squadUnavailableReason = "Wing Command squad API has not been checked.";
         private static MethodInfo createPilot, portrait, spawnWing, setTarget, releaseWing, chatter;
         private static MethodInfo survivorStatus, recoverSurvivor, abilityMask;
+        private static bool portraitFailureLogged;
+        private static bool selectionPortraitFailureLogged;
+        private static int cachedWingMemberFrame = int.MinValue;
+        private static int[] cachedWingMemberIds = Array.Empty<int>();
 
         // Additive companion pilot API. Resolved separately from the squad API so an older
         // Wing Command build keeps every existing feature and only the SQD studio is disabled.
@@ -80,7 +84,16 @@ namespace BoscaliSummer.Runtime
         {
             if (!ResolveSquad()) return null;
             try { return portrait.Invoke(null, new object[] { name, callsign }) as Sprite; }
-            catch (Exception error) { FailSquad(error); return null; }
+            catch (Exception error)
+            {
+                if (!portraitFailureLogged)
+                {
+                    portraitFailureLogged = true;
+                    Plugin.Logger?.LogWarning("WingLink portrait failed: " +
+                        (error.InnerException?.Message ?? error.Message));
+                }
+                return null;
+            }
         }
 
         public static Aircraft[] SpawnAceWing(Aircraft target, FactionHQ enemyHq, int seed,
@@ -188,7 +201,16 @@ namespace BoscaliSummer.Runtime
                 return portraitForSelection.Invoke(null,
                     new object[] { body, face, hair, uniform, accessory, backdrop }) as Sprite;
             }
-            catch (Exception error) { FailStudio(error); return null; }
+            catch (Exception error)
+            {
+                if (!selectionPortraitFailureLogged)
+                {
+                    selectionPortraitFailureLogged = true;
+                    Plugin.Logger?.LogWarning("WingLink selection portrait failed: " +
+                        (error.InnerException?.Message ?? error.Message));
+                }
+                return null;
+            }
         }
 
         public static string[] ListCustomPilots()
@@ -273,13 +295,22 @@ namespace BoscaliSummer.Runtime
 
         public static bool IsWingMember(int persistentIdHash)
         {
-            int[] ids = PresenceBoard.GetInts(PresenceBoard.WingMemberIds);
+            int[] ids = WingMemberIdsThisFrame();
             if (ids.Length > 0) return PresenceBoard.Contains(ids, persistentIdHash);
 
             MethodInfo method = ResolveMembership();
             if (method == null) return false;
             try { return method.Invoke(null, new object[] { persistentIdHash }) is bool hit && hit; }
             catch (Exception error) { FailMembership(error); return false; }
+        }
+
+        private static int[] WingMemberIdsThisFrame()
+        {
+            int frame = Time.frameCount;
+            if (cachedWingMemberFrame == frame) return cachedWingMemberIds;
+            cachedWingMemberFrame = frame;
+            cachedWingMemberIds = PresenceBoard.GetInts(PresenceBoard.WingMemberIds);
+            return cachedWingMemberIds;
         }
 
         public static int WingCount
