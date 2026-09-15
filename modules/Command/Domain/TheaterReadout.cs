@@ -48,21 +48,11 @@ namespace BoscaliSummer.Features.Command.Domain
                    .ToString(CultureInfo.InvariantCulture) + "%";
         }
 
-        /// <summary>
-        /// Time left on a tasking, counted down. Minutes while there are minutes, seconds
-        /// once it is close enough that seconds are what you act on.
-        /// </summary>
-        public static string Countdown(float seconds)
+        /// <summary>A length in metres as kilometres, one decimal. The front's honest figure.</summary>
+        public static string Kilometres(float metres)
         {
-            if (float.IsNaN(seconds) || float.IsInfinity(seconds)) return "—";
-            if (seconds <= 0f) return "EXPIRED";
-
-            int total = (int)Math.Ceiling(seconds);
-            if (total < 60) return "T-" + total + "s";
-
-            int minutes = total / 60;
-            int rest = total % 60;
-            return "T-" + minutes + ":" + rest.ToString("00", CultureInfo.InvariantCulture);
+            if (float.IsNaN(metres) || float.IsInfinity(metres)) return "—";
+            return (Math.Max(0f, metres) / 1000f).ToString("0.0", CultureInfo.InvariantCulture) + " km";
         }
 
         /// <summary>
@@ -87,15 +77,16 @@ namespace BoscaliSummer.Features.Command.Domain
         }
 
         /// <summary>
-        /// Pressure on a contested node as copy. Below the noise floor it is not pressure,
-        /// it is a rounding artefact, and saying "1%" about it overstates what is known.
+        /// Pressure as a word, for rows whose figure column already carries the number.
+        /// Below the noise floor it is not pressure, it is a rounding artefact, and calling
+        /// it pressure would overstate what is known.
         /// </summary>
-        public static string Pressure(float captureProgress)
+        public static string PressureState(float captureProgress)
         {
-            if (float.IsNaN(captureProgress) || float.IsInfinity(captureProgress)) return "—";
+            if (float.IsNaN(captureProgress) || float.IsInfinity(captureProgress)) return "UNKNOWN";
             if (captureProgress < 0.05f) return "HOLDING";
-            if (captureProgress >= 0.75f) return "FALLING · " + Percent(captureProgress);
-            return "PRESSURE " + Percent(captureProgress);
+            if (captureProgress >= 0.75f) return "FALLING";
+            return "UNDER PRESSURE";
         }
     }
 }

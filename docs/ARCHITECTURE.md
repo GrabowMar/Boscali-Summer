@@ -23,13 +23,13 @@ modules/
   FireAndDestruction/  ignition, forest index, spread, impact scorch, ruins, wreck persistence, replication
   Squad/               player pilot careers, enemy ace hunts, rewards, read-only snapshots
   Progression/         SQD MFD/HUD (dossier, shared skills, aces, pilot studio), score/ace-earned perk choices, capabilities, reward/fuel effects
-  Radio/               local music catalogue, playback ownership, map-MFD panel
+  Radio/               local music catalogue, receiver + deck playback, map-MFD screens
   Support/             OPS MFD, validated requests, costs/cooldowns, support jobs
-  Command/             STR and SET MFDs, expanded map GUI, map overlays, doctrine, AI target scoring
+  Command/             STR and SET MFDs, expanded map GUI, map overlays, frontline territory field
   HighCommand/         generated staff tree, command posts, VIP convoys, intel, stipends/bounties
-  DynamicOperations/   secondary mission director, faction awards, native reinforcement batches
+  DynamicOperations/   secondary mission director, faction awards, ADM bezel, native reinforcement batches
   UrbanCombat/         occupancy, native rooftop defenses, capture cleanup
-  Trenches/            dynamic node-based modular trench networks, procedural berms, tactical map overlay
+  Trenches/            natural Bezier trench curves fitted to Command's front traces, procedural berms, tactical map overlay
   Events/              rotating mission-wide world events, EVN MFD feed, support-cost modifier
 ```
 
@@ -58,10 +58,11 @@ Urban Combat  ──publishes──►  IBuildingOccupancy, IZoneFortificationSe
                                IBaseDefenseAlarmService
 Squad         ──required by─►  Progression ──required by─► Support, Command
 Squad         ──publishes───►  ISquadView (Progression and optional Radio consumer)
-Command       ──owns────────►  STR bezel screen (theater SA, frontline, tasking, doctrine),
+Command       ──owns────────►  STR bezel screen (merged SA, COC; CMD is a placeholder),
                                TGT preset library + quick slots
 Command       ──publishes──►  IRadialMenuPage (hosted by Autopilot's native radial submenu)
 HighCommand   ──publishes──►  IHighCommandView (consumed by Command's STR chain-of-command page)
+DynamicOperations ──owns──►  ADM bezel (solo/host tasking board)
 Events        ──publishes──►  IActiveEventsView (optionally consumed by Support's cost pricing)
 ```
 
@@ -77,8 +78,8 @@ The host owns one hidden `DontDestroyOnLoad` object. Persistent managers impleme
 `ISceneService`; `SceneLifecycle` resets them once at composition and on every loaded scene,
 isolating reset exceptions per service. Reset order: fire (10) → impact scorch (15) → ruin
 aftermath (20) → zone garrison (30) → radio (40) → squad (44) → progression (45) → high command (46) → autopilot (48) → target preset hotkeys (49) → support (50) → operations (51) →
-command (52) → COM overlay (53) → SQD MFD/HUD (54) → OPS MFD (55) → STR MFD (56) → map UI (57) →
-SET MFD (58) → trench networks (60) → trench map overlay (61) → world-event director (62) → EVN MFD (63) → fire-network per-scene state (100). Teardown unpatches in reverse, unregisters the
+command (52) → COM overlay (53) → SQD MFD/HUD (54) / ADM MFD (54) → OPS MFD (55) → STR MFD (56) → map UI (57) →
+SET MFD (58) → trench positions (60) → trench map overlay (61) → world-event director (62) → EVN MFD (63) → fire-network per-scene state (100). Teardown unpatches in reverse, unregisters the
 scene callback and Mirage handlers, clears the registry, and destroys the root.
 
 ## Authority and replication
@@ -91,8 +92,12 @@ generate per-frame network traffic.
 
 - **Radio** is client-local and sends nothing. It owns file discovery, three embedded PNG
   identities, references to the map's installed soundtrack clips, decoded local clips, the
-  music-bus handoff, and its MFD screen. It reads `ISquadView` for local hunt transitions;
-  a local Hunt station or installed tactical clip temporarily uses the same two sources.
+  music-bus hold, and its two MFD screens (`RAD` receiver, hosted `MUS` deck). Both screens
+  drive one audio engine (`RadioProgram`) and one hold (`VanillaMusicHold`); the receiver's
+  meter, squelch and waterfall are fed by a local link budget (`RadioPropagation`,
+  `RadioTransmitterAnchors`, `RadioSpectrum`). It reads `ISquadView` for local hunt
+  transitions; a local Hunt station or installed tactical clip temporarily uses the same
+  receiver sources.
   Prior audio state is restored unless manual transport has taken ownership.
 - **Squad** owns the host's pilot generations, threat, ace encounters and one-time bonus
   points. It reuses Wing Command's public pilot/wing/chatter API via the cached `WingLink`
@@ -180,10 +185,10 @@ holding both remaining channels.
 | Garrison zones processed | 1/frame; at most 128 candidates × 49 placements × 9 support samples (up to 8 mesh probes) per zone |
 | Occupied rooftop defenses | 1/shell, 6/zone, 96 total; 128 pending captures |
 | Rooftop decoration | 36 sandbags, pole and flag; 4 renderers, <3,000 vertices per defense; no lights/colliders |
-| Radio | 32 channels, 512 tracks, ≤30 soundtrack refs, 1 active decode, ≤2 clips mid-crossfade; icons ≤256×256, ≤256 KiB; receiver audio: 2 generated sources, 2 generated beds, ≤16 cached ident clips |
+| Radio | 32 channels, 512 tracks, ≤30 soundtrack refs, 1 active decode per program (receiver, deck), ≤2 clips mid-crossfade each; icons ≤256×256, ≤256 KiB; receiver audio: 2 generated sources + 2 generated beds, ≤16 cached ident clips; waterfall 96×48, one upload per 0.12 s; reception sampled at 2 Hz with ≤1 terrain linecast per sample |
 | Squad | 64 player careers, 4 owned wings, ≤4 aircraft/wing, 32 history entries, 8 snapshot rows, 900s aircraft lifetime |
 | High command | 8 factions, 8 posts/faction, 32 watched assets, 8 convoys, 32 snapshot nodes, 64 portraits; one 4096-unit intel pass at 1 Hz |
-| Trench networks / nodes / chunks | 16 networks, 64 nodes/96 edges per network, 3-tier camera LOD (≤250m, 250m–1200m, 1200m–3500m) |
+| Trench positions / curves / chunks | 16 positions, 1200m and 320 stations each, 3-tier camera LOD (≤250m, 250m–1200m, 1200m–3500m) |
 
 No feature scans the whole scene per frame: catalogue once, queue event work, use slow
 ticks, reuse buffers, pool visuals, release scene references on reset. Performance ceilings
@@ -260,7 +265,8 @@ labels its `EVN` bezel screen, and it consumes no sibling. Rotation runs at 1 Hz
 timestamps (title and flavor text are catalog-local on every peer), and a 15-second host
 heartbeat resends the active event so a late joiner converges without a backfill protocol.
 History is bounded by `Events.HistoryLength` and is deliberately not backfilled to a late
-joiner. The screen fails closed like STR/SQD when no bezel slot frees.
+joiner. The screen is hosted on an appended vanilla bezel slot rather than claiming one of
+the six shared buttons, so it cannot be crowded out by WMC or the claimed screens.
 
 The one real modifier seam is support allocation cost. Support multiplies
 `IActiveEventsView.SupportCostMultiplierFor(playerId)` into both shared pricing points — the
@@ -347,45 +353,55 @@ BCL-only `NOAvionics` protocol coordinates named bezel claims and exclusive map 
 through `AppDomain` data, so independently compiled Boscali Summer and Wing Command copies
 cannot claim the same slot or consume the same armed click in one frame.
 
+OPS is the deliberate exception: it builds its own chrome (`modules/Support/Presentation/OpsShell.cs`)
+from a fixed, contrast-tested palette (`OpsPalette.cs`) and kit (`OpsLook.cs`) instead of the shared
+theme tokens, so the console keeps one instrument identity while every other screen follows the
+player's live mission theme and the editable stylesheet. The dock height, page objects, scroll
+host, bezel claim and footer priority contract are unchanged.
+
 ### Dynamic trenches
 
-`Trenches` owns contested-frontier trench systems: chain-of-sector placement, geometric
-growth simulation, carved ditch meshes, real game scenery strongpoints, and tactical map
-symbology.
-Its exact patch list is empty. It depends on Command and reads owned frontline border
-sites through the existing `ITerritoryIngress` contract (also consumed by Squad).
-Command reports each border's `Pressure` — how evenly opposing ground forces actually hold
-it — and only contested borders (pressure > 0) become candidates; sites sit 60m inside the
-border and candidates sort hottest first, so fronts form where troops meet. Each border
-cell side expands into a chain of up to eight sector slots 380m apart, and the host
-validates the exact fortified corridor — front line through the rear redoubt line — for
-ownership, dry buildable ground, per-row height variation (≤3m) and row-to-row drift
-(≤8m). Same-faction networks keep 360m spacing, other factions 250m; a cleared site
-blocks 300m. Candidate work is bounded to eight factions, 256 border sites per faction,
-eight slots per site, 2048 candidates and one sector slot per frame.
-Growth checks the actual paths independently of placement scans. Each seeded network is a
-seven-bay, 132m frontline fire trench; five growth ticks extend it to a deliberate field
-position: fire and support lines extended to the flank limit (up to ±176m), a support line
-at 110m with a dugout, a rear redoubt line at 220m with a second dugout, weapon pits and
-traversed communication trenches linking the lines, then two forward saps pushed toward
-the enemy that end in listening posts. Mature same-faction sectors then join their ends
-with a short junction trench whenever the gap is sapping-eligible (8–55m), so a chain of
-sectors becomes one continuous front line spanning kilometres.
-`TrenchGarrison` owns four native buildings per network (2 MG, 1 ATGM, 1 MANPADS), sparse
-by design and spread across the fire and support lines, spawning through vanilla
+`Trenches` owns natural front-line fieldworks: a Bezier trench curve fitted to Command's
+front traces, an owned-side ground search, carved ditch meshes, native-strongpoint defenses,
+real game scenery works, and tactical map symbology.
+Its exact patch list is empty. It depends on Command and reads ordered front traces through
+the `ITerritoryIngress` contract (also consumed by Squad and Command's own map graphic).
+Command extracts the control field's zero contour with marching squares and chains the
+interpolated stretches into ordered traces on demand — the same traces its vector front
+symbol draws — so a beachhead pocket arrives as a closed ring, a diagonal front as a
+diagonal polyline, and a whole frontier as one long chain. Trace geometry is flat,
+pre-allocated and bounded to 4096 points in 64 traces; the hot trace carries its peak
+opposing ground-force pressure.
+The node/edge growth graph is gone. `TrenchPlanner` resamples each trace stretch into a
+smooth cubic Bezier chain (~10m stations, wraparound tangents on a pocket ring), decides
+which side the faction actually holds by probing ownership at ±40m (and ±160m in a
+contested cell), then searches five candidate depths (36–84m behind the trace) per station.
+A dynamic program (`TrenchTraceMath.PlanRoute`) picks each station's depth by ground height
+plus a small stay-near penalty and a height-change penalty against its neighbour, so the
+work settles into the flattest, lowest corridor it can reach: it follows a hollow, bends
+around a rise and stays straight on level ground. Wet, steep or broken ground breaks the
+run and the line continues on the far side. A position is at most 1200m long, 16 positions
+exist per theater, and centres keep 360m same-faction / 250m other-faction spacing. One
+planning attempt runs per two seconds, one faction per scan rotation, so placement never
+stalls the frame.
+Each immature position is a shallow scrape that matures atomically on the growth tick
+(default 45s): FireTrench (full profile), Support (a parallel support trace ~110m behind
+the fire line plus communication links), Redoubt (a rear trace ~220m with weapon pits and
+the air watch) and Saps (two forward listening posts). An invalid belt leaves the position
+untouched and retries next tick.
+`TrenchGarrison` owns four native buildings per position (2 MG, 1 ATGM, 1 MANPADS), sparse
+by design and spread across the curve anchors, spawning through vanilla
 `Spawner.SpawnBuilding`. `TrenchWorks` places up to eight small infantry-scale scenery
-pieces per network on the trench line nodes themselves — filtered at runtime from
+pieces per position on the anchor bays themselves — filtered at runtime from
 `Encyclopedia.Lookup` by keyword (`hesco`, `sandbag`, `gabion`, `dugout`) and footprint
 (≤6m), so vehicle-scale hull-down ramps, shelters and concrete walls are never used — and
 spawns them networked through `Spawner.SpawnScenery`.
 Damage polls read up to 32 cached parts per defense at 2Hz. Damage pauses growth for
-60s; a committed defender slot never respawns or heals. Frontline proximity gates seeding;
-existing positions persist if their defenders advance the border, until their ownership
-is lost or all defenders are neutralized. Neutralized/abandoned positions
-retain their earthworks and works for 300s, then clean up; up to 64 cleared locations
-prevent re-seeding at the same spot for the rest of the scene. At that history limit new
-seeding stops.
-Network geometry uses global coordinates under `Datum.origin`; map markings use
+60s; a committed defender slot never respawns or heals. Frontline proximity gates new
+positions; existing positions persist if their defenders advance the border, until their
+ownership is lost or all defenders are neutralized. Neutralized/abandoned positions
+retain their earthworks and works for 300s, then clean up.
+Geometry uses global coordinates under `Datum.origin`; map markings use
 `DynamicMap.mapImage`. Native defenders and scenery works use the game's replication;
 carved ditches and map marks remain host-local. Runtime combat/placement acceptance remains
 pending.
@@ -395,18 +411,18 @@ Instead, a raised ditch profile with parapet, parados and downward skirts (1.4m)
 physical cover and ground blending without terrain modification; outer berm toes and skirt
 tips sample the ground on each side so the earthwork follows cross-slopes instead of
 bridging them.
-LOD0 is a continuous ditch extrusion per edge using one shared cross-section profile
+LOD0 is a continuous ditch extrusion along the curve using one shared cross-section profile
 (grass fringe, excavated spoil, timber revetment, firing step, packed earth crest) and a
-procedurally baked palette texture. There are no procedural sandbag/concrete strongpoints
-and no external bundle dependency; real scenery and native emplacements keep their own
-models/materials.
+procedurally baked palette texture; the traverse wave is phased off the line's world
+position so neighbouring positions continue one pattern. There are no procedural
+sandbag/concrete strongpoints and no external bundle dependency; real scenery and native
+emplacements keep their own models/materials.
 Flight-sim performance is maintained via 3-tier camera distance LOD (full 3D geometry +
 front-line obstacle boxes < 250m, simplified berms 250m–1200m, flat ground scars
 1200m–3500m, culled > 3500m) parented under `Datum.origin`. Map rendering uses native
 Canvas UI mesh rendering with NATO APP-6 crenellations facing hostile lines: the fire line
-solid, support/rear traces dimmer, strongpoints as single-pixel marks, and sectors queued
-for digging as a dim dashed projected trace, so the contested front reads before the first
-earthwork exists.
+solid, support/redoubt traces dimmer and the strongpoint bays marked; Command's front
+symbol already shows the contested trace before the first earthwork exists.
 
 Cached game reflection initialises once. Optional patches use Harmony `Prepare` when a
 target may move; the startup capability report exposes resolved targets. The metadata patch
@@ -428,6 +444,12 @@ Command now publishes `ITerritoryIngress` through `TerritoryControlView`. This o
 up to eight faction control fields shared with `ComMapOverlay`, refreshed on demand
 at 2 Hz. Squad resolves it at spawn time (Command installs after Progression) and
 fails closed if unavailable. No module imports another module's implementation.
+Every theater-map overlay (Command's control field and Trenches' trace) resolves its
+world span through the single cached `TheaterFrame` probe in `Infrastructure/GameInterop`,
+so the two overlays cannot drift into different reference frames; the field's
+`holdStrength` zero contour is extracted per update in `SectorContour`, and the map
+tints only the forward band, drawing the front as one anti-aliased line instead of
+hazard-filled cells.
 The spawn seam delegates host-selected global coordinates to Wing Command 0.9.2.6
 `SpawnWingAt`; native aircraft creation/ownership remain in that companion.
 

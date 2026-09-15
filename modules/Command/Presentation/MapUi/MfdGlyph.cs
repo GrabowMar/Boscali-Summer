@@ -70,6 +70,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 case "GROUND": case "GND": case "VEH": case "VEHICLES": case "ARMOR": case "A2G": return "ground";
                 case "MISSILES": case "MSL": case "AMMO": case "WARHEADS": case "GUN": return "missile";
                 case "SEAD": case "EW": case "JAMMING": case "LASER": return "radar";
+                case "THEATER": case "FRONTAGE": return "theater";
+                case "CONTROL": case "SECTOR": return "control";
+                case "FRONT": case "FRONTLINE": return "front";
+                case "GRID": case "COORDINATES": return "grid";
                 case "RECON": case "SURVEY": case "SCOUT": return "eye";
                 case "REPAIR": case "ENGINEER": case "ENGINEERS": return "repair";
                 case "SUPPLY": case "CONVOY": case "ESCORT": return "convoy";
@@ -87,9 +91,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 case "FILTERS": case "PRESETS": case "LAYERS": return "filter";
                 case "MAP": return "map";
                 case "RAD": case "RADIO": return "radio";
+                case "MUS": case "MUSIC": return "deck";
                 case "SET": case "SETTINGS": case "CONFIG": return "settings";
                 case "OPS": case "SUPPORT": case "AIRDROP": return "support";
-                case "STR": case "THEATER": case "FRONT": return "theater";
+                case "STR": return "theater";
                 default: return "list";
             }
         }
@@ -100,7 +105,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             switch (kind)
             {
                 case "air":
-                    Path(mesh, .5f,.95f, .6f,.55f, .95f,.3f, .6f,.36f, .6f,.13f, .72f,.04f, .5f,.12f, .28f,.04f, .4f,.13f, .4f,.36f, .05f,.3f, .4f,.55f, .5f,.95f); break;
+                    Poly(mesh, .5f,.97f, .58f,.62f, .96f,.44f, .96f,.31f, .58f,.36f,
+                        .58f,.17f, .74f,.05f, .5f,.12f, .26f,.05f, .42f,.17f,
+                        .42f,.36f, .04f,.31f, .04f,.44f, .42f,.62f); break;
                 case "ship":
                     Path(mesh, .06f,.4f, .25f,.15f, .75f,.15f, .94f,.4f, .06f,.4f);
                     Path(mesh, .3f,.4f, .3f,.65f, .65f,.65f, .65f,.4f); Line(mesh,.5f,.65f,.5f,.9f); break;
@@ -119,8 +126,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 case "shield":
                     Path(mesh,.15f,.9f,.85f,.9f,.8f,.4f,.5f,.08f,.2f,.4f,.15f,.9f); break;
                 case "faction":
-                    Path(mesh,.15f,.9f,.85f,.9f,.8f,.4f,.5f,.08f,.2f,.4f,.15f,.9f);
-                    Line(mesh,.5f,.82f,.5f,.24f); break;
+                    Path(mesh, .5f,.95f, .86f,.80f, .86f,.44f, .5f,.06f, .14f,.44f, .14f,.80f, .5f,.95f);
+                    Path(mesh, .30f,.60f, .5f,.73f, .70f,.60f); break;
                 case "target":
                     Path(mesh,.5f,.9f,.9f,.5f,.5f,.1f,.1f,.5f,.5f,.9f);
                     Line(mesh,.5f,.3f,.5f,.7f); Line(mesh,.3f,.5f,.7f,.5f); break;
@@ -135,8 +142,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     Line(mesh,.5f,.16f,.5f,.84f);
                     Line(mesh,.34f,.68f,.66f,.68f); Line(mesh,.34f,.32f,.66f,.32f); break;
                 case "person":
-                    Path(mesh,.35f,.9f,.65f,.9f,.65f,.6f,.35f,.6f,.35f,.9f);
-                    Path(mesh,.15f,.1f,.2f,.4f,.5f,.5f,.8f,.4f,.85f,.1f); break;
+                    Ring(mesh,.5f,.72f,.17f,12);
+                    Path(mesh,.12f,.06f, .20f,.42f, .5f,.54f, .80f,.42f, .88f,.06f); break;
                 case "gauge":
                     Arc(mesh,.5f,.3f,.42f, 20f, 160f, 8);
                     Line(mesh,.5f,.3f,.55f,.66f);
@@ -155,13 +162,29 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 case "settings":
                     Line(mesh,.1f,.32f,.9f,.32f); Line(mesh,.1f,.7f,.9f,.7f);
                     Circle(mesh,.34f,.32f,.11f,10); Circle(mesh,.66f,.7f,.11f,10); break;
+                case "pulse":
+                    Ring(mesh,.5f,.16f,.10f,8);
+                    Arc(mesh,.5f,.16f,.28f,38f,142f,8);
+                    Arc(mesh,.5f,.16f,.46f,38f,142f,10); break;
                 case "support":
-                    Path(mesh,.15f,.1f,.85f,.1f,.85f,.6f,.15f,.6f,.15f,.1f);
-                    Line(mesh,.15f,.35f,.85f,.35f); Line(mesh,.5f,.1f,.5f,.6f); break;
+                    Path(mesh,.14f,.12f, .86f,.12f, .86f,.84f, .14f,.84f, .14f,.12f);
+                    Line(mesh,.5f,.12f,.5f,.84f); Line(mesh,.14f,.48f,.86f,.48f); break;
                 case "theater":
                     Ring(mesh,.5f,.5f,.3f,16);
                     Line(mesh,.5f,.06f,.5f,.34f); Line(mesh,.5f,.66f,.5f,.94f);
                     Line(mesh,.06f,.5f,.34f,.5f); Line(mesh,.66f,.5f,.94f,.5f); break;
+                case "front":
+                    Path(mesh,.04f,.42f,.28f,.6f,.5f,.38f,.72f,.56f,.96f,.34f);
+                    Line(mesh,.16f,.5f,.16f,.3f); Line(mesh,.38f,.48f,.38f,.28f);
+                    Line(mesh,.6f,.46f,.6f,.26f); Line(mesh,.82f,.44f,.82f,.24f); break;
+                // A ground split in two: the control field's own mark.
+                case "control":
+                    Path(mesh,.08f,.12f,.08f,.88f,.92f,.88f,.92f,.12f,.08f,.12f);
+                    Line(mesh,.5f,.88f,.5f,.12f); break;
+                case "grid":
+                    Path(mesh,.08f,.12f,.08f,.88f,.92f,.88f,.92f,.12f,.08f,.12f);
+                    Line(mesh,.08f,.37f,.92f,.37f); Line(mesh,.08f,.63f,.92f,.63f);
+                    Line(mesh,.36f,.88f,.36f,.12f); Line(mesh,.64f,.88f,.64f,.12f); break;
                 case "eye":
                     Path(mesh,.04f,.5f,.5f,.88f,.96f,.5f,.5f,.12f,.04f,.5f);
                     Circle(mesh,.5f,.5f,.19f,12);
@@ -180,6 +203,15 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     Circle(mesh,.5f,.5f,.32f,12); break;
                 case "flag": Path(mesh,.15f,.05f,.15f,.95f,.85f,.8f,.15f,.55f); break;
                 case "filter": Path(mesh,.05f,.9f,.95f,.9f,.6f,.5f,.6f,.15f,.4f,.05f,.4f,.5f,.05f,.9f); break;
+                case "board":
+                    Path(mesh,.18f,.05f, .82f,.05f, .82f,.90f, .18f,.90f, .18f,.05f);
+                    Path(mesh,.36f,.94f, .64f,.94f, .64f,.82f, .36f,.82f, .36f,.94f);
+                    Line(mesh,.30f,.66f,.70f,.66f); Line(mesh,.30f,.48f,.70f,.48f);
+                    Line(mesh,.30f,.30f,.58f,.30f); break;
+                // A deck: a transport triangle over its plinth.
+                case "deck":
+                    Path(mesh,.30f,.20f, .30f,.86f, .82f,.53f, .30f,.20f);
+                    Line(mesh,.14f,.16f,.86f,.16f); break;
                 default:
                     Line(mesh,.1f,.8f,.9f,.8f); Line(mesh,.1f,.5f,.75f,.5f); Line(mesh,.1f,.2f,.9f,.2f); break;
             }
@@ -189,6 +221,35 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         {
             for (int i = 2; i < points.Length; i += 2)
                 Line(mesh, points[i-2], points[i-1], points[i], points[i+1]);
+        }
+
+        /// <summary>
+        /// Filled silhouette, fanned from the centroid. Small icons read better as one solid
+        /// mass than as a thin outline that blurs into itself; only star-shaped outlines
+        /// (aircraft, ground vehicles) belong here.
+        /// </summary>
+        private void Poly(VertexHelper mesh, params float[] points)
+        {
+            int count = points.Length / 2;
+            if (count < 3) return;
+
+            float cx = 0f, cy = 0f;
+            for (int i = 0; i < count; i++)
+            {
+                cx += points[i * 2];
+                cy += points[i * 2 + 1];
+            }
+            cx /= count;
+            cy /= count;
+
+            Rect r = rectTransform.rect;
+            int start = mesh.currentVertCount;
+            mesh.AddVert(new Vector2(r.x + cx * r.width, r.y + cy * r.height), color, Vector2.zero);
+            for (int i = 0; i < count; i++)
+                mesh.AddVert(new Vector2(r.x + points[i * 2] * r.width, r.y + points[i * 2 + 1] * r.height),
+                             color, Vector2.zero);
+            for (int i = 0; i < count; i++)
+                mesh.AddTriangle(start, start + 1 + i, start + 1 + (i + 1) % count);
         }
 
         private void Circle(VertexHelper mesh, float cx, float cy, float radius, int segments)
@@ -237,7 +298,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             Vector2 a = new Vector2(r.x + x1*r.width, r.y + y1*r.height);
             Vector2 b = new Vector2(r.x + x2*r.width, r.y + y2*r.height);
             Vector2 d = (b-a).normalized;
-            Vector2 n = new Vector2(-d.y,d.x) * .7f;
+            Vector2 n = new Vector2(-d.y,d.x) * 0.95f;
             int start = mesh.currentVertCount;
             mesh.AddVert(a-n, color, Vector2.zero); mesh.AddVert(a+n, color, Vector2.zero);
             mesh.AddVert(b+n, color, Vector2.zero); mesh.AddVert(b-n, color, Vector2.zero);

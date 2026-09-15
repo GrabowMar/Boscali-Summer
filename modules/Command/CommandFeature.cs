@@ -17,7 +17,6 @@ namespace BoscaliSummer.Features.Command
 
         public Type[] PatchTypes => new[]
         {
-            typeof(AiTargetScoringPatch),
             typeof(MfdRailPatch),
             typeof(MfdScreenChromePatch),
             typeof(MfdSinglePanelPatch),
@@ -37,14 +36,16 @@ namespace BoscaliSummer.Features.Command
             MissionMapCompatibilityEngine compat = context.AddSceneService<MissionMapCompatibilityEngine>(51);
             CommandManager manager = context.AddSceneService<CommandManager>(52);
             ComMapOverlay overlay = context.AddSceneService<ComMapOverlay>(53);
+            // The MAP bezel resolves this late to switch the overlay's own layers; it never
+            // reaches for the overlay by searching the scene.
+            context.AddService<ComMapOverlay>(overlay);
             StrMfdPanel strategic = context.AddSceneService<StrMfdPanel>(56);
             context.AddSceneService<MapUiManager>(57);
             context.AddSceneService<SettingsMfdPanel>(58).Configure(context.Settings.Command, context.Logger, overlay);
             context.AddSceneService<FactionResourceRecorder>(59);
 
-            compat.Configure(context.Logger);
             TerritoryControlView territory = context.AddSceneService<TerritoryControlView>(52);
-            territory.Configure(compat, context.Settings.Command.GridResolution.Value);
+            territory.Configure(compat, context.Settings.Command.GridCellSizeMetres.Value);
             context.AddService<ITerritoryIngress>(territory);
             manager.Configure(context.Logger);
             overlay.Configure(context.Settings.Command, manager, compat, context.Logger, territory);

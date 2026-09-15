@@ -8,7 +8,7 @@ namespace BoscaliSummer.Features.Trenches
 {
     internal sealed class TrenchesFeature : IModFeature
     {
-        public FeatureMetadata Metadata { get; } = new FeatureMetadata("trenches", "Dynamic modular trench system", "command");
+        public FeatureMetadata Metadata { get; } = new FeatureMetadata("trenches", "Natural front-line trench curves", "command");
         public Type[] PatchTypes => Array.Empty<Type>();
 
         public void Install(FeatureContext context)
@@ -19,7 +19,7 @@ namespace BoscaliSummer.Features.Trenches
             TrenchMapOverlay overlay = context.AddSceneService<TrenchMapOverlay>(61);
             overlay.Configure(context.Settings.Trenches, manager, context.Logger);
 
-            context.Logger.LogInfo("[Trenches] Combat fortifications ready: contested sectors chain into a continuous front line, six growth stages (crawl, fire trench, hardened, support, redoubt, forward saps), real game strongpoints joined by carved ditches, four native MG/ATGM/MANPADS per sector, damage suppresses growth, no defender respawns. Native defenders and works replicate; carved ditches and map marks remain host-local.");
+            context.Logger.LogInfo("[Trenches] Combat fortifications ready: Command's ordered front traces become natural Bezier trench curves on the owning side, settled into the flattest low ground; each 1200m position matures from a scrape through fire trench, support trace and rear redoubt to forward saps, defended by four native MG/ATGM/MANPADS and runtime-filtered infantry works. Water, cliffs and broken ground split a line instead of cancelling it, damage suppresses growth, and defenders never respawn. Native defenders and works replicate; carved ditches and map marks remain host-local.");
         }
     }
 }

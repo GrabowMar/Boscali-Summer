@@ -15,9 +15,9 @@ namespace BoscaliSummer.Features.Command.Runtime
         }
         private readonly Dictionary<FactionHQ, Field> fields = new Dictionary<FactionHQ, Field>();
         private MissionMapCompatibilityEngine compatibility;
-        private int resolution;
-        internal void Configure(MissionMapCompatibilityEngine adapter, int cells)
-        { compatibility = adapter; resolution = cells; }
+        private float cellSize;
+        internal void Configure(MissionMapCompatibilityEngine adapter, float cellSizeMetres)
+        { compatibility = adapter; cellSize = cellSizeMetres; }
 
         internal TacticalSectorGrid Read(FactionHQ hq)
         {
@@ -26,7 +26,8 @@ namespace BoscaliSummer.Features.Command.Runtime
             if (!fields.TryGetValue(hq, out Field field))
             {
                 if (fields.Count >= 8) return null;
-                field = new Field { Grid = new TacticalSectorGrid(resolution, map.MapSize.x, map.MapSize.y) };
+                // Aligned through the map's own grid offset: one cell is one base-grid square.
+                field = new Field { Grid = new TacticalSectorGrid(cellSize, map.MapSize.x, map.MapSize.y, map.OffsetX, map.OffsetY) };
                 fields.Add(hq, field);
             }
             float now = Time.timeSinceLevelLoad;
@@ -70,8 +71,8 @@ namespace BoscaliSummer.Features.Command.Runtime
             return null;
         }
 
-        public int CopyFrontlineSites(int factionId, FrontlineSite[] destination)
-            => ReadFaction(factionId)?.CopyFrontlineSites(destination) ?? 0;
+        public int CopyFrontlineTraces(int factionId, FrontlineTracePoint[] points, int[] lengths, float[] pressure)
+            => ReadFaction(factionId)?.CopyFrontlineTraces(points, lengths, pressure) ?? 0;
 
         public bool OwnsPosition(int factionId, float x, float z)
         {

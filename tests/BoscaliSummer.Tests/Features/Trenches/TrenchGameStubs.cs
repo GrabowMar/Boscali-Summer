@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using UnityEngine;
 public class FactionHQ : MonoBehaviour { }
 public static class Datum { public static Transform origin; }
+public static class PhysicsLayers { public const int IgnoreRaycast = 2; }
 public class UnitPart : MonoBehaviour { public float hitPoints = 100; }
 public class Building : MonoBehaviour { public bool disabled; public FactionHQ NetworkHQ; }
 public enum BuildingType { DEF }
@@ -42,10 +43,14 @@ public class Spawner
 }
 namespace BoscaliSummer.Features.Trenches.Runtime
 {
-    internal static class TrenchPlacement
+    // The real probe raycasts the game terrain; the regression harness digs on flat ground.
+    internal static class TrenchTerrain
     {
         internal static bool TryGround(Vector3 position, out Vector3 ground)
         { ground = new Vector3(position.x, 0, position.z); return true; }
+        internal static bool TryGround(float x, float z, out Vector3 ground)
+        { ground = new Vector3(x, 0, z); return true; }
+        internal static Vector3 SnapToGround(Vector3 position) => new Vector3(position.x, 0, position.z);
     }
 }
 #endif

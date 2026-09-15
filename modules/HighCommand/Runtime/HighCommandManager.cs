@@ -56,7 +56,8 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
 
             public void Unwatch()
             {
-                if (!ReferenceEquals(Unit, null)) Unit.onDisableUnit -= OnDisabled;
+                if (Unit != null) Unit.onDisableUnit -= OnDisabled;
+                Unit = null;
             }
 
             private void OnDisabled(Unit unit)

@@ -16,8 +16,15 @@ namespace BoscaliSummer.Tests.Features.FireAndDestruction
                 FireScorchPolicy.BurnMarkRadius(1f) >= 200f,
                 "the ash bed must be nuke-scale or it disappears into one blast-map texel");
             TestAssert.That(
-                FireScorchPolicy.ScarDiameter(1f) >= 20f,
+                FireScorchPolicy.ScarDiameter(1f) >= 30f,
                 "a fresh burn site must still leave a readable soot decal");
+            TestAssert.That(
+                FireScorchPolicy.ScarLobeDownwind * 1.2f < 1f &&
+                FireScorchPolicy.ScarLobeCrosswind * 1.2f < 1f,
+                "lobe offsets must stay under one scar diameter so the decals overlap");
+            TestAssert.That(
+                FireScorchPolicy.ScarLobeDownwind >= FireScorchPolicy.ScarLobeCrosswind,
+                "the soot scar must stretch downwind, not across it");
 
             for (float scale = 0f; scale <= 4f; scale += 0.1f)
             {

@@ -17,14 +17,22 @@ namespace BoscaliSummer.Features.Support.Visuals
     ///    - Breaks tracking locks via <c>IRSeeker.LoseLock()</c>.
     ///    - Injects maximum optical/IR dazzle (<c>dazzleAmount = 1500f</c>).
     ///    - Continuously binds missile seekers onto active burning flares in the cluster.
-    ///    - Registers active flare infrared signatures onto all nearby aircraft.
+    ///    - Registers each flare IR signature onto nearby aircraft once at spawn (vanilla
+    ///      <c>AddIRSource</c> has no dedup).
     /// </summary>
     internal sealed class FlareMissileBurstVisuals : MonoBehaviour
     {
         private const int SampleRate = 44100;
         private const int DeduplicationLimit = 16;
+        private const int MaximumLiveBarrages = 2;
+        private const int MaximumIrRegistrations = 256;
         private static readonly List<(Vector3 Position, float Time)> RecentBarrages =
             new List<(Vector3 Position, float Time)>(DeduplicationLimit);
+        private static readonly List<FlareMissileBurstVisuals> Live =
+            new List<FlareMissileBurstVisuals>(MaximumLiveBarrages);
+
+        private readonly List<(Aircraft Aircraft, IRSource Source)> irRegistrations =
+            new List<(Aircraft Aircraft, IRSource Source)>(64);
 
         private static GameObject cachedFlarePrefab;
         private static bool hasSearchedPrefab;
@@ -78,7 +86,33 @@ namespace BoscaliSummer.Features.Support.Visuals
             }
 
             var barrage = barrageObj.AddComponent<FlareMissileBurstVisuals>();
+            if (Live.Count >= MaximumLiveBarrages)
+            {
+                FlareMissileBurstVisuals oldest = Live[0];
+                Live.RemoveAt(0);
+                if (oldest != null) Destroy(oldest.gameObject);
+            }
+            Live.Add(barrage);
             barrage.StartCoroutine(barrage.BarrageRoutine(impactPoint, radius, duration, initialFlares));
+        }
+
+        public static void Reset()
+        {
+            for (int i = Live.Count - 1; i >= 0; i--)
+            {
+                FlareMissileBurstVisuals live = Live[i];
+                if (live == null) continue;
+                live.UnregisterFlareIr();
+                Destroy(live.gameObject);
+            }
+            Live.Clear();
+            RecentBarrages.Clear();
+        }
+
+        private void OnDestroy()
+        {
+            UnregisterFlareIr();
+            Live.Remove(this);
         }
 
         private IEnumerator BarrageRoutine(Vector3 impactPoint, float radius, float duration, int initialFlares)
@@ -142,9 +176,10 @@ namespace BoscaliSummer.Features.Support.Visuals
 
             // 3. Initial Flare Salvo directly from impact point
             Aircraft targetAircraft = FindCandidateAircraft(impactPoint);
-            SpawnFlares(impactPoint, flarePrefab, targetAircraft, initialFlares, 45f, 115f, activeSources);
+            SpawnFlares(impactPoint, radius, flarePrefab, targetAircraft, initialFlares, 45f, 115f, activeSources);
 
             float nextWaveTime = Time.time + 1.25f;
+            float nextMisguideTime = 0f;
 
             // 4. Continuous 15-Second Barrage Loop
             while (Time.time < endTime)
@@ -162,7 +197,7 @@ namespace BoscaliSummer.Features.Support.Visuals
 
                     // Each wave launches 4 to 6 new pyrotechnic flares high into the sky
                     int waveCount = UnityEngine.Random.Range(4, 7);
-                    SpawnFlares(impactPoint, flarePrefab, targetAircraft, waveCount, 55f, 95f, activeSources);
+                    SpawnFlares(impactPoint, radius, flarePrefab, targetAircraft, waveCount, 55f, 95f, activeSources);
                 }
 
                 // Prune dead/destroyed flare IR sources
@@ -174,8 +209,11 @@ namespace BoscaliSummer.Features.Support.Visuals
                     }
                 }
 
-                // Actively misguide any incoming or in-flight IR missiles every frame
-                MisguideVicinity(impactPoint, radius, activeSources);
+                if (Time.time >= nextMisguideTime)
+                {
+                    nextMisguideTime = Time.time + 0.1f;
+                    MisguideVicinity(impactPoint, radius, activeSources);
+                }
 
                 yield return null;
             }
@@ -226,8 +264,9 @@ namespace BoscaliSummer.Features.Support.Visuals
             }
         }
 
-        private static void SpawnFlares(
+        private void SpawnFlares(
             Vector3 originPoint,
+            float radius,
             GameObject flarePrefab,
             Aircraft candidateAircraft,
             int count,
@@ -278,6 +317,7 @@ namespace BoscaliSummer.Features.Support.Visuals
                         if (FlareIrField?.GetValue(irFlare) is IRSource ir && ir != null)
                         {
                             activeSources.Add(ir);
+                            RegisterFlareIr(originPoint, radius, ir, candidateAircraft);
                         }
                     }
                 }
@@ -296,6 +336,7 @@ namespace BoscaliSummer.Features.Support.Visuals
 
                     var irSource = new IRSource(flareObj.transform, 5.0f, true);
                     activeSources.Add(irSource);
+                    RegisterFlareIr(originPoint, radius, irSource, null);
 
                     var runner = flareObj.AddComponent<ProceduralFlareRunner>();
                     runner.Initialize(launchVel, UnityEngine.Random.Range(8.5f, 12.5f), light);
@@ -331,22 +372,37 @@ namespace BoscaliSummer.Features.Support.Visuals
                         MisguideMissile(missile, impactPoint, flareSources);
                     }
                 }
-                // 2. Check for vicinity aircraft to feed flare IR signatures
-                else if (unit is Aircraft ac)
-                {
-                    float acDistSq = (ac.transform.position - impactPoint).sqrMagnitude;
-                    if (acDistSq <= radiusSquared && flareSources != null)
-                    {
-                        for (int f = 0; f < flareSources.Count; f++)
-                        {
-                            if (flareSources[f] != null)
-                            {
-                                ac.AddIRSource(flareSources[f]);
-                            }
-                        }
-                    }
-                }
             }
+        }
+
+        private void RegisterFlareIr(
+            Vector3 originPoint, float radius, IRSource source, Aircraft alreadyRegistered)
+        {
+            if (source == null) return;
+            var allAircraft = UnitRegistry.allAircraft;
+            if (allAircraft == null) return;
+            float radiusSquared = radius * radius;
+            for (int i = 0; i < allAircraft.Count; i++)
+            {
+                Aircraft ac = allAircraft[i];
+                if (ac == null || ac.disabled || ac == alreadyRegistered) continue;
+                if ((ac.transform.position - originPoint).sqrMagnitude > radiusSquared) continue;
+                ac.AddIRSource(source);
+                if (irRegistrations.Count < MaximumIrRegistrations)
+                    irRegistrations.Add((ac, source));
+            }
+        }
+
+        private void UnregisterFlareIr()
+        {
+            for (int i = 0; i < irRegistrations.Count; i++)
+            {
+                Aircraft ac = irRegistrations[i].Aircraft;
+                IRSource source = irRegistrations[i].Source;
+                if (ac != null && source != null)
+                    ac.RemoveIRSource(source);
+            }
+            irRegistrations.Clear();
         }
 
         private static void MisguideMissile(Missile missile, Vector3 impactPoint, List<IRSource> flareSources)

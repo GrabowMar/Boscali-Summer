@@ -15,6 +15,7 @@ namespace BoscaliSummer.Garrisons
         private Material bandMaterial;
         private Building building;
         private float nextCheck;
+        private string bannerIdentity;
 
         public static OccupiedBuildingMarking Apply(GameObject target, FactionHQ owner)
         {
@@ -41,8 +42,10 @@ namespace BoscaliSummer.Garrisons
             if (building == null || building.disabled) return;
             var sand = CreateMaterial(new Color(0.48f, 0.43f, 0.30f));
             var steel = CreateMaterial(new Color(0.18f, 0.21f, 0.19f));
-            flagMaterial = CreateMaterial(FactionColor(owner));
+            // White base: the baked banner texture already carries field/device/border colour.
+            flagMaterial = CreateMaterial(Color.white);
             if (sand == null || steel == null || flagMaterial == null) { CleanUp(); return; }
+            ApplyBanner(owner);
             flagMaterial.EnableKeyword("_EMISSION");
             flagMaterial.SetColor("_EmissionColor", FactionColor(owner) * 0.18f);
             root = new GameObject("BoscaliSummer.OccupiedRoof");
@@ -189,8 +192,9 @@ namespace BoscaliSummer.Garrisons
             }
             if (flagMaterial != null)
             {
-                Color color = FactionColor(building.NetworkHQ);
-                flagMaterial.color = color;
+                FactionHQ owner = building.NetworkHQ;
+                Color color = FactionColor(owner);
+                if (FactionBannerTexture.Identity(owner) != bannerIdentity) ApplyBanner(owner);
                 flagMaterial.SetColor("_EmissionColor", color * 0.18f);
                 if (bandMaterial != null)
                 {
@@ -198,6 +202,18 @@ namespace BoscaliSummer.Garrisons
                     bandMaterial.SetColor("_EmissionColor", color * 0.35f);
                 }
             }
+        }
+
+        /// <summary>Assigns the cached per-faction banner texture (field + device + border) to
+        /// the flag material; re-applied on capture flips when the identity actually changes.</summary>
+        private void ApplyBanner(FactionHQ owner)
+        {
+            if (flagMaterial == null) return;
+            bannerIdentity = FactionBannerTexture.Identity(owner);
+            Texture2D texture = FactionBannerTexture.Get(bannerIdentity, FactionColor(owner));
+            if (flagMaterial.HasProperty("_BaseMap")) flagMaterial.SetTexture("_BaseMap", texture);
+            if (flagMaterial.HasProperty("_MainTex")) flagMaterial.SetTexture("_MainTex", texture);
+            flagMaterial.mainTexture = texture;
         }
 
         private static Color FactionColor(FactionHQ owner)
@@ -319,7 +335,7 @@ namespace BoscaliSummer.Garrisons
             if (root != null) { root.SetActive(false); Destroy(root); root = null; }
             foreach (Mesh mesh in meshes) if (mesh != null) Destroy(mesh);
             foreach (Material material in materials) if (material != null) Destroy(material);
-            meshes.Clear(); materials.Clear(); flagMaterial = null; bandMaterial = null;
+            meshes.Clear(); materials.Clear(); flagMaterial = null; bandMaterial = null; bannerIdentity = null;
         }
 
         private void OnDestroy() => CleanUp();

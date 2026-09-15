@@ -62,6 +62,14 @@ namespace BoscaliSummer.Runtime
 
         public void ResetForScene()
         {
+            StopAllCoroutines();
+            if (registeredClientHandler != null)
+            {
+                registeredClientHandler.UnregisterHandler<FireIgnitedMessage>();
+                registeredClientHandler.UnregisterHandler<RuinCreatedMessage>();
+                registeredClientHandler = null;
+            }
+            nextRegistrationCheck = 0f;
         }
 
         private void Update()
@@ -121,12 +129,15 @@ namespace BoscaliSummer.Runtime
             }
 
             MessageHandler handler = manager.Client?.MessageHandler;
-            if (handler != null && handler != registeredClientHandler)
+            if (handler != registeredClientHandler)
             {
-                handler.RegisterHandler<FireIgnitedMessage>(ReceiveFire, false);
-                handler.RegisterHandler<RuinCreatedMessage>(ReceiveRuin, false);
+                registeredClientHandler?.UnregisterHandler<FireIgnitedMessage>();
+                registeredClientHandler?.UnregisterHandler<RuinCreatedMessage>();
                 registeredClientHandler = handler;
-                Plugin.Logger.LogInfo("Registered Boscali Summer multiplayer event handlers.");
+                registeredClientHandler?.RegisterHandler<FireIgnitedMessage>(ReceiveFire, false);
+                registeredClientHandler?.RegisterHandler<RuinCreatedMessage>(ReceiveRuin, false);
+                if (registeredClientHandler != null)
+                    Plugin.Logger.LogInfo("Registered Boscali Summer multiplayer event handlers.");
             }
         }
 
@@ -154,6 +165,10 @@ namespace BoscaliSummer.Runtime
 
         private void ReceiveFire(INetworkPlayer player, FireIgnitedMessage message)
         {
+            if (!Finite(message.X) || !Finite(message.Y) || !Finite(message.Z) ||
+                !Finite(message.RemainingLifetime) || message.RemainingLifetime <= 0f ||
+                !Finite(message.ClusterScale) || message.ClusterScale <= 0f)
+                return;
             ImpactFireManager.Instance?.ReceiveIgnition(
                 new GlobalPosition(message.X, message.Y, message.Z),
                 message.RemainingLifetime, message.Forest, message.ClusterScale);
@@ -161,6 +176,11 @@ namespace BoscaliSummer.Runtime
 
         private void ReceiveRuin(INetworkPlayer player, RuinCreatedMessage message)
         {
+            if (!Finite(message.X) || !Finite(message.Y) || !Finite(message.Z) ||
+                !Finite(message.HalfX) || !Finite(message.HalfZ) ||
+                message.HalfX <= 0f || message.HalfZ <= 0f ||
+                !Finite(message.AgeSeconds) || message.AgeSeconds < 0f)
+                return;
             RuinAftermathManager.Instance?.RegisterRuin(
                 new GlobalPosition(message.X, message.Y, message.Z),
                 new Vector2(message.HalfX, message.HalfZ),
@@ -236,5 +256,7 @@ namespace BoscaliSummer.Runtime
             HalfX = halfExtents.x, HalfZ = halfExtents.y,
             AgeSeconds = ageSeconds
         };
+
+        private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
     }
 }

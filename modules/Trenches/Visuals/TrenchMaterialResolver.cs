@@ -92,28 +92,28 @@ namespace BoscaliSummer.Features.Trenches.Visuals
 
         private static Color BandColor(float u, float v)
         {
-            Color earth = new Color(0.38f, 0.28f, 0.17f);
-            Color darkSoil = new Color(0.29f, 0.21f, 0.12f);
+            Color earth = new Color(0.37f, 0.29f, 0.19f);
+            Color darkSoil = new Color(0.26f, 0.19f, 0.12f);
             Color grass = new Color(0.29f, 0.35f, 0.16f);
-            Color timber = new Color(0.41f, 0.30f, 0.18f);
-            Color plank = new Color(0.49f, 0.40f, 0.26f);
+            Color spoil = new Color(0.43f, 0.34f, 0.22f);
+            Color duckboard = new Color(0.32f, 0.24f, 0.15f);
 
             if (u < 0.07f) return Color.Lerp(grass, earth, u / 0.07f);
-            if (u < 0.21f) return earth;                       // outer spoil berm
-            if (u < 0.34f) return darkSoil;                    // parados outer slope
-            if (u < 0.41f) return Timber(plank, v, 4f);        // duckboard floor
-            if (u < 0.47f) return earth;                       // firing step
-            if (u < 0.63f) return Timber(timber, v, 5f);       // revetted inner wall
-            if (u < 0.73f) return darkSoil;                    // packed earth crest
+            if (u < 0.21f) return spoil;                       // outer spoil berm
+            if (u < 0.34f) return darkSoil;                    // parados inner slope
+            if (u < 0.41f) return Duckboard(duckboard, v);     // ditch floor
+            if (u < 0.47f) return Color.Lerp(darkSoil, earth, 0.6f); // firing step
+            if (u < 0.63f) return Color.Lerp(earth, darkSoil, 0.25f); // packed inner wall
+            if (u < 0.73f) return spoil;                       // packed earth crest
             if (u < 0.94f) return earth;                       // outer parapet slope
             return Color.Lerp(earth, grass, (u - 0.94f) / 0.06f);
         }
 
-        private static Color Timber(Color baseColor, float v, float count)
+        /// <summary>Barely-there duckboards: one thin seam every few metres of ditch floor.</summary>
+        private static Color Duckboard(Color floor, float v)
         {
-            float seam = Mathf.Abs(Mathf.Repeat(v * count, 1f) - 0.5f) * 2f;
-            float darken = seam > 0.86f ? 0.72f : 1f;
-            return baseColor * darken;
+            float seam = Mathf.Abs(Mathf.Repeat(v * 0.7f, 1f) - 0.5f) * 2f;
+            return floor * (seam > 0.94f ? 0.82f : 1f);
         }
 
         private static float Hash(float x, float y)

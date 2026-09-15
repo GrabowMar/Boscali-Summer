@@ -6,7 +6,7 @@ namespace BoscaliSummer.Features.Trenches.Configuration
     {
         public readonly ConfigEntry<bool> Enabled;
         public readonly ConfigEntry<float> GrowthIntervalSeconds;
-        public readonly ConfigEntry<int> MaxTrenchNetworks;
+        public readonly ConfigEntry<int> MaxTrenchPositions;
         public readonly ConfigEntry<float> LODDistanceNear;
         public readonly ConfigEntry<float> LODDistanceFar;
         public readonly ConfigEntry<bool> ShowOnTacticalMap;
@@ -21,9 +21,9 @@ namespace BoscaliSummer.Features.Trenches.Configuration
                     "Interval in seconds between autonomous trench growth and fortification ticks.",
                     new AcceptableValueRange<float>(15f, 180f)));
 
-            MaxTrenchNetworks = config.Bind("Trenches", "MaxNetworks", 16,
+            MaxTrenchPositions = config.Bind("Trenches", "MaxNetworks", 16,
                 new ConfigDescription(
-                    "Maximum concurrent trench networks per theater.",
+                    "Maximum concurrent trench positions per theater.",
                     new AcceptableValueRange<int>(1, 16)));
 
             LODDistanceNear = config.Bind("Trenches", "LODNearDistance", 250f,

@@ -4,21 +4,30 @@ namespace BoscaliSummer.Framework.Contracts
     internal interface ITerritoryIngress
     {
         bool TryNearestEdge(int factionId, float playerX, float playerZ, out float x, out float z);
-        int CopyFrontlineSites(int factionId, FrontlineSite[] destination);
         bool OwnsPosition(int factionId, float x, float z);
-    }
-
-    internal readonly struct FrontlineSite
-    {
-        public readonly float X, Z, ThreatX, ThreatZ, HalfLength;
 
         /// <summary>
-        /// How evenly opposing ground forces actually hold this border, 0..1.
-        /// Zero means one side (or neither) is present — a quiet, unfortified line.
+        /// Ordered world-space polylines along a faction's front — the control field's zero
+        /// contour, including coastal pockets and diagonal fronts. Trace <c>i</c> occupies
+        /// <c>lengths[i]</c> consecutive points of <paramref name="points"/>, continuing
+        /// where the previous trace ended; <paramref name="pressure"/> is that trace's peak
+        /// opposing ground-force pressure, 0..1. A pocket ring repeats its first point at
+        /// the end. Returns the trace count.
         /// </summary>
-        public readonly float Pressure;
+        int CopyFrontlineTraces(int factionId, FrontlineTracePoint[] points, int[] lengths, float[] pressure);
+    }
 
-        public FrontlineSite(float x, float z, float threatX, float threatZ, float halfLength, float pressure = 0f)
-        { X = x; Z = z; ThreatX = threatX; ThreatZ = threatZ; HalfLength = halfLength; Pressure = pressure; }
+    /// <summary>One point of an ordered front trace; X/Z are global world coordinates.</summary>
+    internal readonly struct FrontlineTracePoint
+    {
+        public readonly float X, Z;
+        public FrontlineTracePoint(float x, float z) { X = x; Z = z; }
+    }
+
+    /// <summary>Fixed capacities of the trace buffers exchanged through <see cref="ITerritoryIngress"/>.</summary>
+    internal static class FrontlineTraceLimits
+    {
+        public const int MaximumTraces = 64;
+        public const int MaximumPoints = 4096 + MaximumTraces;
     }
 }

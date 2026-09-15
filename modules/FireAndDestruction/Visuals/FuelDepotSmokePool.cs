@@ -163,10 +163,17 @@ namespace BoscaliSummer.Fire
         private static readonly FieldInfo WreckageField =
             typeof(Building).GetField("wreckage", InstanceFields);
 
-        private readonly List<Visual> visuals = new List<Visual>(16);
+        private readonly int maximumVisuals;
+        private readonly List<Visual> visuals;
         private Template template;
         private float nextResolveAttempt;
         private bool warnedUnavailable;
+
+        public FuelDepotSmokePool(int maximumVisuals)
+        {
+            this.maximumVisuals = maximumVisuals > 0 ? maximumVisuals : 24;
+            visuals = new List<Visual>(Math.Min(16, this.maximumVisuals));
+        }
 
         public Visual Acquire(
             GlobalPosition position, Vector2 halfExtents,
@@ -182,6 +189,7 @@ namespace BoscaliSummer.Fire
                 }
             }
 
+            if (visuals.Count >= maximumVisuals) return null;
             Visual visual = CreateVisual();
             if (visual == null) return null;
             visuals.Add(visual);

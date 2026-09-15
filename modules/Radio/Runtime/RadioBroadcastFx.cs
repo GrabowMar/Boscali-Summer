@@ -6,6 +6,11 @@ using UnityEngine.Audio;
 
 namespace BoscaliSummer.Features.Radio.Runtime
 {
+    /// <summary>
+    /// The receiver's own voice: carrier hiss that follows the modelled signal, a squelch
+    /// click on tune, and a morse ident on lock. Everything is synthesized in memory at
+    /// runtime — no audio asset is shipped, and no music metadata passes through here.
+    /// </summary>
     internal sealed class RadioBroadcastFx
     {
         private const int SampleRate = 22050;
@@ -23,7 +28,7 @@ namespace BoscaliSummer.Features.Radio.Runtime
         private AudioClip staticClip;
         private AudioClip squelchClip;
         private AudioMixerGroup mixer;
-        private float staticUntil;
+        private float burstUntil;
         private float identAt = -1f;
         private string identCode;
         private float level;
@@ -36,6 +41,11 @@ namespace BoscaliSummer.Features.Radio.Runtime
         }
 
         public float Level => level;
+
+        /// <summary>Modelled reception of the tuned frequency, 0..1. Drives the hiss bed.</summary>
+        public float Reception { get; private set; } = 1f;
+
+        public bool SquelchOpen { get; private set; } = true;
 
         public void SetMixer(AudioMixerGroup group)
         {
@@ -52,21 +62,22 @@ namespace BoscaliSummer.Features.Radio.Runtime
             carrierOn = on;
             if (!on) return;
             if (!Ensure()) return;
-            bed.volume = 0.33f * volume;
+            bed.volume = 0f;
             if (!bed.isPlaying) bed.Play();
+        }
+
+        /// <summary>Reception quality and squelch state, applied to the hiss bed every tick.</summary>
+        public void SetReception(float quality, bool squelchOpen)
+        {
+            Reception = Mathf.Clamp01(quality);
+            SquelchOpen = squelchOpen;
         }
 
         public void Tune(string code, bool carrierNoise, bool ident)
         {
             if (!Ensure()) return;
             accent.PlayOneShot(squelchClip, 0.45f * volume);
-            if (carrierNoise)
-            {
-                bed.volume = 0.4f * volume;
-                if (!bed.isPlaying) bed.Play();
-                staticUntil = Time.unscaledTime + 0.35f;
-            }
-
+            if (carrierNoise) burstUntil = Time.unscaledTime + 0.35f;
             identAt = ident ? Time.unscaledTime + 0.55f : -1f;
             identCode = ident ? code : null;
         }
@@ -74,9 +85,7 @@ namespace BoscaliSummer.Features.Radio.Runtime
         public void CarrierBurst(float seconds)
         {
             if (!Ensure()) return;
-            bed.volume = 0.32f * volume;
-            if (!bed.isPlaying) bed.Play();
-            staticUntil = Time.unscaledTime + Mathf.Clamp(seconds, 0.1f, 2f);
+            burstUntil = Time.unscaledTime + Mathf.Clamp(seconds, 0.1f, 2f);
         }
 
         public void Tick()
@@ -86,9 +95,9 @@ namespace BoscaliSummer.Features.Radio.Runtime
                 if (carrierOn)
                 {
                     if (!bed.isPlaying) bed.Play();
-                    bed.volume = 0.33f * volume;
+                    bed.volume = BedVolume();
                 }
-                else if (bed.isPlaying && Time.unscaledTime >= staticUntil)
+                else if (bed.isPlaying)
                 {
                     bed.Stop();
                 }
@@ -100,6 +109,18 @@ namespace BoscaliSummer.Features.Radio.Runtime
                 AudioClip clip = IdentFor(identCode);
                 if (clip != null) accent.PlayOneShot(clip, 0.3f * volume);
             }
+        }
+
+        /// <summary>
+        /// A quieting curve, not a volume knob: a strong FM carrier is almost silent between
+        /// programmes, a weak one is mostly hiss, and a closed squelch hides it all.
+        /// </summary>
+        private float BedVolume()
+        {
+            float hiss = RadioPropagation.StaticFor(Reception);
+            if (!SquelchOpen) hiss *= 0.12f;
+            float burst = Time.unscaledTime < burstUntil ? 0.4f : 0f;
+            return Mathf.Clamp01(0.04f + 0.45f * hiss + burst) * volume;
         }
 
         public float Sample(AudioSource source)
@@ -122,7 +143,7 @@ namespace BoscaliSummer.Features.Radio.Runtime
         {
             carrierOn = false;
             if (bed != null) bed.Stop();
-            staticUntil = 0f;
+            burstUntil = 0f;
             identAt = -1f;
             level = 0f;
         }
@@ -142,16 +163,21 @@ namespace BoscaliSummer.Features.Radio.Runtime
             squelchClip = null;
         }
 
-        public static void ApplyCharacter(AudioSource source, BroadcastFilterMode mode, bool amBand)
+        /// <summary>
+        /// The receiver's audio character, from the band's modulation and the bandwidth knob.
+        /// FM keeps a wide passband and only tightens on NARROW; the AM curve is a speech
+        /// channel for MW and the aviation band alike.
+        /// </summary>
+        public static void ApplyCharacter(
+            AudioSource source, BroadcastFilterMode mode, RadioModulation modulation, bool narrow)
         {
             if (source == null) return;
-            if (amBand) mode = BroadcastFilterMode.Broadcast;
 
             AudioLowPassFilter low = source.GetComponent<AudioLowPassFilter>();
             AudioHighPassFilter high = source.GetComponent<AudioHighPassFilter>();
             AudioDistortionFilter crunch = source.GetComponent<AudioDistortionFilter>();
 
-            if (mode == BroadcastFilterMode.Clean)
+            if (mode == BroadcastFilterMode.Clean && !narrow)
             {
                 if (low != null) low.enabled = false;
                 if (high != null) high.enabled = false;
@@ -164,7 +190,17 @@ namespace BoscaliSummer.Features.Radio.Runtime
             if (crunch == null) crunch = source.gameObject.AddComponent<AudioDistortionFilter>();
 
             low.enabled = true;
-            if (mode == BroadcastFilterMode.Light)
+            if (modulation == RadioModulation.Fm)
+            {
+                // FM ignores the AM speech curve; NARROW strips the stereo subcarrier hiss.
+                low.cutoffFrequency = narrow ? 5000f : 12000f;
+                low.lowpassResonanceQ = 0.7f;
+                if (high != null) high.enabled = false;
+                if (crunch != null) crunch.enabled = false;
+                return;
+            }
+
+            if (mode == BroadcastFilterMode.Light && !narrow)
             {
                 low.cutoffFrequency = 6500f;
                 low.lowpassResonanceQ = 0.7f;
@@ -173,11 +209,11 @@ namespace BoscaliSummer.Features.Radio.Runtime
                 return;
             }
 
-            // Measured AM speech band, with a touch of receiver crunch over it.
-            low.cutoffFrequency = 3000f;
+            // Measured AM speech band, tight on NARROW, with a touch of receiver crunch.
+            low.cutoffFrequency = narrow ? 2400f : 3000f;
             low.lowpassResonanceQ = 1.1f;
             high.enabled = true;
-            high.cutoffFrequency = 260f;
+            high.cutoffFrequency = narrow ? 400f : 260f;
             high.highpassResonanceQ = 0.7f;
             crunch.enabled = true;
             crunch.distortionLevel = 0.12f;

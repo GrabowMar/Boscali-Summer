@@ -84,6 +84,7 @@ namespace BoscaliSummer.Features.Events.Networking
         {
             serverHandler?.UnregisterHandler<EventIntent>();
             clientHandler?.UnregisterHandler<EventReply>();
+            clientHandler?.UnregisterHandler<ActiveEventChanged>();
             serverHandler = null;
             clientHandler = null;
             nextRegistration = 0f;
@@ -114,8 +115,10 @@ namespace BoscaliSummer.Features.Events.Networking
             if (client != clientHandler)
             {
                 clientHandler?.UnregisterHandler<EventReply>();
+                clientHandler?.UnregisterHandler<ActiveEventChanged>();
                 clientHandler = client;
                 clientHandler?.RegisterHandler<EventReply>(ReceiveReply, false);
+                clientHandler?.RegisterHandler<ActiveEventChanged>(ReceiveChanged, false);
             }
         }
 
@@ -202,10 +205,17 @@ namespace BoscaliSummer.Features.Events.Networking
             manager.ApplyResponseResult(reply.Result, reply.Kind, reply.CatalogIndex, reply.Cost);
         }
 
+        private void ReceiveChanged(INetworkPlayer _, ActiveEventChanged message)
+        {
+            if (GameAccess.IsServer() || message.Protocol != ProtocolVersion) return;
+            manager.ApplyRemote(message.CatalogIndex, message.StartedAtMissionTime, message.EndsAtMissionTime);
+        }
+
         private void OnDestroy()
         {
             serverHandler?.UnregisterHandler<EventIntent>();
             clientHandler?.UnregisterHandler<EventReply>();
+            clientHandler?.UnregisterHandler<ActiveEventChanged>();
         }
 
         /// <summary>Bounded per-player throttle; a query answer is cheap but not free.</summary>

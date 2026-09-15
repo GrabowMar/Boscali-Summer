@@ -1,5 +1,6 @@
 using System;
 using BoscaliSummer.Features.DynamicOperations.Networking;
+using BoscaliSummer.Features.DynamicOperations.Presentation;
 using BoscaliSummer.Features.DynamicOperations.Runtime;
 using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Features;
@@ -23,6 +24,7 @@ namespace BoscaliSummer.Features.DynamicOperations
             context.AddService<IOperationOutcomeSource>(manager);
             context.AddSceneService<OperationMarkerBridge>(52).Configure(manager);
             context.AddSceneService<OperationZoneHud>(53).Configure(manager);
+            context.AddSceneService<AdmMfdPanel>(54).Configure(context.Settings.DynamicOperations, context.Logger);
             context.Logger.LogInfo("[Operations] 17 contract families; native objective markers/HUD via MissionPosition; native rescue/repair/supply observations; acceptance required, 3 cards/2 active per faction, 24 reward units; experimental.");
         }
     }

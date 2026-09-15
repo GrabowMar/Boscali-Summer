@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using BepInEx;
@@ -12,19 +11,19 @@ using BoscaliSummer.Framework.Lifecycle;
 using BoscaliSummer.Runtime;
 using NuclearOption.Networking;
 using UnityEngine;
-using UnityEngine.Networking;
 
 namespace BoscaliSummer.Features.Radio.Runtime
 {
+    /// <summary>
+    /// The receiver and the deck behind the two map screens. One manager owns both audio
+    /// programs so the vanilla soundtrack is held by whichever of them is live, and so a
+    /// measured reception figure can drive the meter, the waterfall and the squelch.
+    /// </summary>
     internal sealed class RadioManager : MonoBehaviour, ISceneService
     {
-        private enum PlaybackState
-        {
-            Stopped,
-            Loading,
-            Playing,
-            Paused
-        }
+        private const int TerrainLayerMask = 8256;
+        private const float BulletinSeconds = 8f;
+        private const float HoldSweepSeconds = 0.5f;
 
         private static RadioManager active;
 
@@ -32,24 +31,57 @@ namespace BoscaliSummer.Features.Radio.Runtime
         private ManualLogSource logger;
         private RadioLibrary localLibrary;
         private RadioStation[] stations = Array.Empty<RadioStation>();
+        private RadioDial[] stationDials = Array.Empty<RadioDial>();
+        private float[] stationStrengths = Array.Empty<float>();
+        private readonly List<RadioSignal> spectrumSignals = new List<RadioSignal>();
+        private readonly float[] spectrum = new float[RadioSpectrum.DefaultBins];
         private VanillaSoundtrackCatalog soundtrackCatalog;
         private string libraryPath;
-        private AudioSource currentSource;
-        private AudioSource incomingSource;
-        private AudioClip currentClip;
-        private AudioClip incomingClip;
-        private bool currentClipOwned;
-        private bool incomingClipOwned;
-        private UnityWebRequest pendingRequest;
-        private Coroutine pendingCoroutine;
-        private PlaybackState state;
+        private RadioProgram receiver;
+        private RadioProgram deck;
+        private RadioBroadcastFx fx;
+        private readonly RadioTransmitterAnchors anchors = new RadioTransmitterAnchors();
+        private readonly RadioLinkStub link = new RadioLinkStub();
+        private ServiceRegistry services;
+        private ISquadView squad;
+        private readonly HuntMusicGate huntMusic = new HuntMusicGate();
+
+        // Receiver
+        private string status = "Stand by";
+        private string programText = string.Empty;
+        private string ticker;
         private int selectedChannel;
         private int selectedTrack;
         private int stationRevision;
-        private int loadGeneration;
-        private bool configured;
-        private float nextSoundtrackProbe;
-        private bool ownsVanillaMusic;
+        private RadioDial tunedDial = RadioDial.Fm(88500);
+        private readonly int[] bandPositions = { 88500, 121500, 780 };
+        private bool offStation;
+        private bool dialResume;
+        private bool scanning;
+        private readonly VanillaMusicHold hold = new VanillaMusicHold();
+        private RadioReception reception = RadioReception.Perfect;
+        private float nextScanTime;
+        private float nextFilterCheck;
+        private float nextLevelSample;
+        private float nextProgramRefresh;
+        private float nextBulletinAt;
+        private float nextSpectrumAt;
+        private float nextPropagationAt;
+        private int bulletinCursor;
+        private string lastProgramName;
+        private BroadcastFilterMode appliedFilter;
+        private RadioModulation appliedModulation;
+        private bool appliedNarrow;
+        private bool filterApplied;
+        private string lastChatter = string.Empty;
+
+        // Deck
+        private string deckStatus = "Deck stopped";
+        private int deckFolder;
+        private int deckTrack;
+
+        // Vanilla soundtrack ownership
+        private bool vanillaHeld;
         private AudioClip interruptedVanillaClip;
         private float interruptedVanillaTime;
         private bool interruptedVanillaLoop;
@@ -57,57 +89,81 @@ namespace BoscaliSummer.Features.Radio.Runtime
         private bool deferredVanillaRepeat;
         private float deferredVanillaPriority;
         private bool deferredVanillaCrossfade;
-        private string status = "Stand by";
-        private ServiceRegistry services;
-        private ISquadView squad;
-        private readonly HuntMusicGate huntMusic = new HuntMusicGate();
+        private float nextVanillaSweep;
+        private float nextSoundtrackProbe;
+        private bool configured;
+
+        // Hunt override
         private float nextHuntPoll;
         private bool huntOverride;
         private RadioStationTrack huntTrack;
         private int savedChannel;
         private int savedTrack;
         private float savedTime;
-        private PlaybackState savedState;
+        private bool savedPaused;
         private float restoreTime = -1f;
         private bool restorePaused;
-        private RadioBroadcastFx fx;
-        private RadioDial tunedDial = RadioDial.Fm(88500);
-        private RadioDial[] stationDials = Array.Empty<RadioDial>();
-        private bool offStation;
-        private bool dialResume;
-        private int lastFmKilohertz = 88500;
-        private int lastMwKilohertz = 780;
-        private string lastChatter = string.Empty;
-        private bool scanning;
-        private float nextScanTime;
-        private float nextFilterCheck;
-        private float nextLevelSample;
-        private BroadcastFilterMode appliedFilter;
-        private bool appliedAmBand;
-        private bool filterApplied;
-        private int bulletinCursor;
-        private float nextBulletinAt;
-        private string lastProgramName;
-        private const float BulletinSeconds = 8f;
-        private string ticker;
-        private string programText = string.Empty;
-        private float nextProgramRefresh;
+
+        // ------------------------------------------------------------------ receiver face
 
         public int ChannelCount => stations.Length;
         public bool HasChannels => stations.Length > 0;
         public int SelectedChannel => selectedChannel;
         public int StationRevision => stationRevision;
         public string Status => status;
-        public bool IsEngaged => state != PlaybackState.Stopped;
-        public bool IsPaused => state == PlaybackState.Paused;
-        public bool IsScanning => scanning;
-        public bool IsOffStation => offStation;
-        public RadioDial TunedDial => tunedDial;
-        public string BroadcastMode => tunedDial.IsFm ? "STEREO" : "MONO";
-        public string CurrentProgram => programText;
         public string TickerText => string.IsNullOrEmpty(ticker)
             ? "Receiver on. Tune the dial."
             : ticker;
+        public string CurrentProgram => programText;
+        public bool IsEngaged => receiver.Engaged;
+        public bool IsPaused => receiver.IsPaused;
+        public bool IsScanning => scanning;
+        public bool IsOffStation => offStation;
+        public RadioDial TunedDial => tunedDial;
+        public RadioReception Reception => reception;
+        public float SignalLevel => fx == null ? 0f : fx.Level;
+        public float[] Spectrum => spectrum;
+        public RadioLinkStub Link => link;
+
+        /// <summary>
+        /// True when the tuned station has a resolved tower and the player has a position, so
+        /// the link budget is actually driving the meter. False means the receiver is reading
+        /// a local archive (or a map with no authored tower) and everything is full-scale.
+        /// </summary>
+        public bool ReceptionModelled
+        {
+            get
+            {
+                if (anchors.HasListener == false) return false;
+                RadioStation station = CurrentChannel();
+                return station != null && huntTrack == null &&
+                    anchors.TryGet(station.Id, out _, out _);
+            }
+        }
+
+        public ReceiverMode Mode => settings == null ? ReceiverMode.Auto : settings.Mode.Value;
+
+        public RadioModulation ReceiverModulation
+        {
+            get
+            {
+                ReceiverMode mode = Mode;
+                if (mode == ReceiverMode.Fm) return RadioModulation.Fm;
+                if (mode == ReceiverMode.Am) return RadioModulation.Am;
+                return tunedDial.Modulation;
+            }
+        }
+
+        public string BroadcastMode => ReceiverModulation == RadioModulation.Fm ? "FM STEREO" : "AM";
+
+        public float Squelch => settings == null ? 0.15f : settings.Squelch.Value;
+        public bool NarrowBandwidth => settings != null && settings.NarrowBandwidth.Value;
+        public bool FineTuning => settings != null && settings.FineTuning.Value;
+        public float VolumeLevel => Volume;
+
+        public float Elapsed => receiver.Elapsed;
+        public float Duration => receiver.Duration;
+        public float Progress => receiver.Progress;
 
         public int TrackCount => huntTrack != null
             ? 0
@@ -115,24 +171,9 @@ namespace BoscaliSummer.Features.Radio.Runtime
         public int CurrentTrackIndex => huntTrack != null || TrackCount == 0
             ? -1
             : Mathf.Clamp(selectedTrack, 0, TrackCount - 1);
+
         public string GetTrackTitle(int index) =>
             index >= 0 && index < TrackCount ? CurrentChannel().Tracks[index].Title : string.Empty;
-
-        public void PlayTrack(int index)
-        {
-            if (huntTrack != null || index < 0 || index >= TrackCount) return;
-            StopScanning();
-            ManualTransport();
-            selectedTrack = index;
-            PlayCurrent();
-        }
-
-        public float SignalLevel => fx == null ? 0f : fx.Level;
-        public bool Shuffle => settings != null && settings.Shuffle.Value;
-        public bool RepeatTrack => settings != null && settings.RepeatTrack.Value;
-        public float Elapsed => currentSource != null && currentSource.clip != null ? currentSource.time : 0f;
-        public float Duration => currentSource != null && currentSource.clip != null ? currentSource.clip.length : 0f;
-        public float Progress => Duration > 0.01f ? Mathf.Clamp01(Elapsed / Duration) : 0f;
 
         public string CurrentChannelName => huntTrack != null ? "HUNT" : ChannelCount == 0
             ? "NO CHANNEL"
@@ -150,127 +191,8 @@ namespace BoscaliSummer.Features.Radio.Runtime
             }
         }
 
-        internal void Configure(RadioSettings radioSettings, ManualLogSource log, ServiceRegistry registry)
-        {
-            settings = radioSettings ?? throw new ArgumentNullException(nameof(radioSettings));
-            logger = log ?? throw new ArgumentNullException(nameof(log));
-            services = registry;
-            libraryPath = System.IO.Path.Combine(Paths.PluginPath, "BoscaliSummer", "Music");
-            configured = true;
-            fx = new RadioBroadcastFx(gameObject);
-            active = this;
-            if (settings.Enabled.Value && !GameManager.IsHeadless)
-            {
-                RadioStarterLayout.Ensure(libraryPath, logger);
-                ScanLibrary();
-            }
-        }
-
-        public void ResetForScene()
-        {
-            huntMusic.Reset();
-            huntOverride = false;
-            huntTrack = null;
-            restoreTime = -1f;
-            nextHuntPoll = 0f;
-            RadioPanel.Reset();
-            scanning = false;
-            nextScanTime = 0f;
-            nextBulletinAt = 0f;
-            nextFilterCheck = 0f;
-            nextLevelSample = 0f;
-            nextProgramRefresh = 0f;
-            filterApplied = false;
-            bulletinCursor = 0;
-            lastProgramName = null;
-            lastChatter = string.Empty;
-            ticker = null;
-            offStation = false;
-            dialResume = false;
-            lastFmKilohertz = 88500;
-            lastMwKilohertz = 780;
-            tunedDial = RadioDial.Fm(88500);
-            fx?.Silence();
-            if (!configured || !settings.Enabled.Value || GameManager.IsHeadless)
-            {
-                enabled = false;
-                return;
-            }
-
-            enabled = true;
-            if (IsEngaged)
-            {
-                // A map transition invalidates the old map's soundtrack clips. Do not
-                // restore one while the new scene is establishing its own music state.
-                interruptedVanillaClip = null;
-                deferredVanillaClip = null;
-                StopInternal(false);
-            }
-            soundtrackCatalog = null;
-            nextSoundtrackProbe = 0f;
-            if (localLibrary == null) ScanLibrary();
-            else BuildStations();
-        }
-
-        private void Update()
-        {
-            if (!configured || GameManager.IsHeadless) return;
-            if (!settings.Enabled.Value)
-            {
-                if (IsEngaged || offStation) Stop();
-                return;
-            }
-            ProbeSoundtrack();
-            PollHunt();
-            fx?.Tick();
-            ScanTick();
-            BulletinTick();
-            ProgramTick();
-            FilterTick();
-
-            if (state == PlaybackState.Playing && fx != null &&
-                Time.unscaledTime >= nextLevelSample)
-            {
-                nextLevelSample = Time.unscaledTime + 0.066f;
-                fx.Sample(currentSource);
-            }
-
-            float volume = Volume;
-            fx?.SetVolume(volume);
-            if (currentSource != null && pendingCoroutine == null &&
-                !Mathf.Approximately(currentSource.volume, volume))
-            {
-                currentSource.volume = volume;
-            }
-
-            RadioPanel.Tick(this);
-
-            if (state == PlaybackState.Playing && pendingCoroutine == null &&
-                currentClip != null && currentSource != null)
-            {
-                float remaining = currentClip.length - currentSource.time;
-                if (!settings.RepeatTrack.Value && currentSource.isPlaying &&
-                    remaining <= Mathf.Max(0.1f, settings.CrossfadeSeconds.Value))
-                {
-                    NextTrack();
-                    return;
-                }
-                if (currentSource.isPlaying) return;
-                if (settings.RepeatTrack.Value) PlayCurrent();
-                else NextTrack();
-            }
-        }
-
-        private void OnDestroy()
-        {
-            huntOverride = false;
-            huntTrack = null;
-            RadioPanel.Reset();
-            StopInternal(true);
-            fx?.Dispose();
-            fx = null;
-            if (ReferenceEquals(active, this)) active = null;
-        }
+        public bool Shuffle => settings != null && settings.Shuffle.Value;
+        public bool RepeatTrack => settings != null && settings.RepeatTrack.Value;
 
         public string GetChannelName(int index) =>
             index >= 0 && index < ChannelCount ? stations[index].Name : string.Empty;
@@ -299,45 +221,255 @@ namespace BoscaliSummer.Features.Radio.Runtime
         public RadioDial GetChannelDial(int index) =>
             index >= 0 && index < ChannelCount ? stations[index].Dial : RadioDial.Fm(88500);
 
+        /// <summary>Modelled carrier strength per station, for the waterfall and the dial markers.</summary>
+        public float GetChannelStrength(int index) =>
+            index >= 0 && index < stationStrengths.Length ? stationStrengths[index] : 1f;
+
+        public bool GetChannelHasTransmitter(int index) =>
+            index >= 0 && index < ChannelCount && anchors.TryGet(stations[index].Id, out _, out _);
+
+        // ---------------------------------------------------------------------- deck face
+
+        public int DeckFolderCount => localLibrary == null ? 0 : localLibrary.Channels.Length;
+        public int DeckFolder => Mathf.Clamp(deckFolder, 0, Mathf.Max(0, DeckFolderCount - 1));
+        public int DeckTrackIndex => DeckTrackCount == 0 ? -1 : Mathf.Clamp(deckTrack, 0, DeckTrackCount - 1);
+        public int DeckTrackCount => DeckFolderTrackCount(DeckFolder);
+        public string DeckStatus => deckStatus;
+        public bool DeckEngaged => deck.Engaged;
+        public bool DeckPlaying => deck.IsPlaying;
+        public bool DeckPaused => deck.IsPaused;
+        public float DeckElapsed => deck.Elapsed;
+        public float DeckDuration => deck.Duration;
+        public float DeckProgress => deck.Progress;
+        public string DeckCurrentTitle
+        {
+            get
+            {
+                RadioTrack track = DeckTrackAt(DeckFolder, deckTrack);
+                return track == null ? "NO TRACK" : track.Title;
+            }
+        }
+
+        public string DeckFolderName(int index) =>
+            index >= 0 && index < DeckFolderCount ? localLibrary.Channels[index].Name : string.Empty;
+
+        public int DeckFolderTrackCount(int index) =>
+            index >= 0 && index < DeckFolderCount ? localLibrary.Channels[index].Tracks.Length : 0;
+
+        public string DeckTrackTitle(int index)
+        {
+            RadioTrack track = DeckTrackAt(DeckFolder, index);
+            return track == null ? string.Empty : track.Title;
+        }
+
+        // ------------------------------------------------------------------- lifecycle
+
+        internal void Configure(RadioSettings radioSettings, ManualLogSource log, ServiceRegistry registry)
+        {
+            settings = radioSettings ?? throw new ArgumentNullException(nameof(radioSettings));
+            logger = log ?? throw new ArgumentNullException(nameof(log));
+            services = registry;
+            libraryPath = Path.Combine(Paths.PluginPath, "BoscaliSummer", "Music");
+            receiver = new RadioProgram(this, gameObject, "BoscaliRadio", logger);
+            deck = new RadioProgram(this, gameObject, "BoscaliDeck", logger);
+            receiver.SetCrossfade(settings.CrossfadeSeconds.Value);
+            deck.SetCrossfade(DeckCrossfadeSeconds);
+            fx = new RadioBroadcastFx(gameObject);
+            configured = true;
+            active = this;
+            if (settings.Enabled.Value && !GameManager.IsHeadless)
+            {
+                RadioStarterLayout.Ensure(libraryPath, logger);
+                ScanLibrary();
+            }
+        }
+
+        public void ResetForScene()
+        {
+            huntMusic.Reset();
+            huntOverride = false;
+            huntTrack = null;
+            restoreTime = -1f;
+            nextHuntPoll = 0f;
+            RadioPanel.Reset();
+            MusicPanel.Reset();
+            scanning = false;
+            nextScanTime = 0f;
+            nextBulletinAt = 0f;
+            nextFilterCheck = 0f;
+            nextLevelSample = 0f;
+            nextProgramRefresh = 0f;
+            nextSpectrumAt = 0f;
+            nextPropagationAt = 0f;
+            nextVanillaSweep = 0f;
+            filterApplied = false;
+            bulletinCursor = 0;
+            lastProgramName = null;
+            lastChatter = string.Empty;
+            ticker = null;
+            programText = string.Empty;
+            offStation = false;
+            dialResume = false;
+            hold.Reset();
+            deckStatus = "Deck stopped";
+            deckTrack = 0;
+            link.Reset();
+            bandPositions[0] = 88500;
+            bandPositions[1] = 121500;
+            bandPositions[2] = 780;
+            tunedDial = RadioDial.Fm(88500);
+            reception = RadioReception.Perfect;
+            anchors.Reset();
+            fx?.Silence();
+            receiver?.Stop();
+            deck?.Stop();
+            if (!configured || !settings.Enabled.Value || GameManager.IsHeadless)
+            {
+                enabled = false;
+                return;
+            }
+
+            enabled = true;
+            if (vanillaHeld)
+            {
+                // A map transition invalidates the old map's soundtrack clips. Do not
+                // restore one while the new scene is establishing its own music state.
+                interruptedVanillaClip = null;
+                deferredVanillaClip = null;
+                vanillaHeld = false;
+            }
+            soundtrackCatalog = null;
+            nextSoundtrackProbe = 0f;
+            if (localLibrary == null) ScanLibrary();
+            else BuildStations();
+        }
+
+        private void Update()
+        {
+            if (!configured || GameManager.IsHeadless) return;
+            if (!settings.Enabled.Value)
+            {
+                hold.ReleaseReceiver();
+                if (receiver.Engaged) receiver.Stop();
+                if (offStation) offStation = false;
+                SyncVanillaHold();
+                return;
+            }
+
+            ProbeSoundtrack();
+            PollHunt();
+            fx?.Tick();
+            ScanTick();
+            BulletinTick();
+            ProgramTick();
+            FilterTick();
+            PropagationTick();
+            SpectrumTick();
+
+            if (receiver.IsPlaying && Time.unscaledTime >= nextLevelSample)
+            {
+                nextLevelSample = Time.unscaledTime + 0.066f;
+                fx?.Sample(receiver.Source);
+            }
+
+            fx?.SetVolume(Volume);
+            fx?.SetReception(offStation ? 0f : reception.Quality,
+                !offStation && reception.Open(Squelch));
+            receiver.SetVolume(Volume * ReceiverGain);
+            deck.SetVolume(Volume);
+
+            SyncVanillaHold();
+            RadioPanel.Tick(this);
+            MusicPanel.Tick(this);
+
+            AdvanceIfDue(receiver, settings.CrossfadeSeconds.Value, AdvanceReceiver);
+            AdvanceIfDue(deck, DeckCrossfadeSeconds, AdvanceDeck);
+        }
+
+        private const float DeckCrossfadeSeconds = 0.4f;
+
+        private void AdvanceReceiver()
+        {
+            if (settings.RepeatTrack.Value) PlayCurrent();
+            else NextTrack();
+        }
+
+        private void AdvanceDeck()
+        {
+            if (settings.RepeatTrack.Value) DeckPlay(DeckTrackIndex);
+            else DeckNext();
+        }
+
+        /// <summary>
+        /// Roll to the next item when the current one ends — starting the blend just before the
+        /// end so the two tracks meet instead of leaving a gap. Only a program in <c>Playing</c>
+        /// is considered, so the load that this starts cannot trigger itself again.
+        /// </summary>
+        private static void AdvanceIfDue(RadioProgram program, float crossfade, Action advance)
+        {
+            if (program == null || !program.IsPlaying) return;
+            float remaining = program.Duration - program.Elapsed;
+            if (remaining > 0f && crossfade > 0.05f && remaining <= crossfade)
+            {
+                advance();
+                return;
+            }
+            if (program.Finished) advance();
+        }
+
+        private void OnDestroy()
+        {
+            huntOverride = false;
+            huntTrack = null;
+            RadioPanel.Reset();
+            MusicPanel.Reset();
+            hold.Reset();
+            StopReceiverInternal(true);
+            deck?.Stop();
+            deck?.Dispose();
+            deck = null;
+            receiver?.Dispose();
+            receiver = null;
+            fx?.Dispose();
+            fx = null;
+            if (vanillaHeld)
+            {
+                vanillaHeld = false;
+                ReleaseVanillaHold();
+            }
+            if (ReferenceEquals(active, this)) active = null;
+        }
+
+        // -------------------------------------------------------------------- receiver
+
+        public void PlayTrack(int index)
+        {
+            if (huntTrack != null || index < 0 || index >= TrackCount) return;
+            StopScanning();
+            ManualTransport();
+            selectedTrack = index;
+            PlayCurrent();
+        }
+
         public void SelectChannel(int index)
         {
             if (index < 0 || index >= ChannelCount) return;
             if (index == selectedChannel && huntTrack == null && !offStation) return;
             StopScanning();
             ManualTransport();
-            tunedDial = stations[index].Dial;
-            RememberBandPosition(tunedDial);
-            offStation = false;
-            dialResume = false;
-            SelectChannelInternal(index);
-        }
-
-        private void SelectChannelInternal(int index)
-        {
-            bool resume = IsEngaged;
-            selectedChannel = index;
-            selectedTrack = 0;
-            BeginTune();
-            if (resume) PlayCurrent();
-        }
-
-        private void BeginTune()
-        {
-            status = "Tuned to " + TunedDial.FullText + " " + BroadcastMode + " · " + CurrentChannelName;
-            fx?.SetCarrier(false, Volume);
-            fx?.Tune(CurrentChannelCode, settings.CarrierNoise.Value, settings.StationIdents.Value);
-            PushLog("TUNED " + TunedDial.FullText + " · " + CurrentChannelName);
-            bulletinCursor = 0;
-            nextBulletinAt = Time.unscaledTime + BulletinSeconds;
-            nextProgramRefresh = 0f;
-            nextFilterCheck = 0f;
+            SetDial(stations[index].Dial);
         }
 
         public void StepDial(int direction)
         {
             if (direction == 0) return;
-            SetDial(RadioDialTuning.Step(tunedDial, direction));
+            RadioDial next = settings.FineTuning.Value
+                ? RadioDialTuning.FineStep(tunedDial, direction, FineStepDivisor)
+                : RadioDialTuning.Step(tunedDial, direction);
+            SetDial(next);
         }
+
+        private int FineStepDivisor => 5;
 
         public void SeekStation(int direction)
         {
@@ -347,12 +479,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
                 return;
             }
             int index = RadioDialTuning.Seek(stationDials, tunedDial, direction);
-            if (index >= 0 && stationDials[index].Equals(tunedDial))
-            {
-                int other = RadioDialTuning.FirstInBand(
-                    stationDials, tunedDial.IsFm ? RadioBand.Mw : RadioBand.Fm);
-                if (other >= 0) index = other;
-            }
             if (index < 0)
             {
                 status = "No stations to seek";
@@ -361,61 +487,97 @@ namespace BoscaliSummer.Features.Radio.Runtime
             SetDial(stationDials[index]);
         }
 
-        public void ToggleBand()
+        /// <summary>Band knob: FM → VHF → MW, each remembering its last frequency.</summary>
+        public void CycleBand()
         {
-            bool toMw = tunedDial.IsFm;
             RememberBandPosition(tunedDial);
-            SetDial(toMw
-                ? RadioDial.Mw(lastMwKilohertz)
-                : RadioDial.Fm(lastFmKilohertz));
+            RadioBand next = RadioBands.Next(tunedDial.Band);
+            SetDial(RadioDial.At(next, bandPositions[(int)next]));
         }
 
-        private float Volume => settings == null ? 1f : settings.Volume.Value;
+        public void CycleMode()
+        {
+            if (settings == null) return;
+            settings.Mode.Value = settings.Mode.Value == ReceiverMode.Auto ? ReceiverMode.Fm
+                : settings.Mode.Value == ReceiverMode.Fm ? ReceiverMode.Am
+                : ReceiverMode.Auto;
+            filterApplied = false;
+            BeginTune();
+        }
 
-        public float VolumeLevel => Volume;
+        public void ToggleBandwidth()
+        {
+            if (settings == null) return;
+            settings.NarrowBandwidth.Value = !settings.NarrowBandwidth.Value;
+            filterApplied = false;
+            status = settings.NarrowBandwidth.Value ? "Narrow bandwidth" : "Wide bandwidth";
+        }
 
-        public void NudgeVolume(float delta)
+        public void ToggleFineTuning()
+        {
+            if (settings == null) return;
+            settings.FineTuning.Value = !settings.FineTuning.Value;
+            status = settings.FineTuning.Value ? "Fine tuning step" : "Channel step";
+        }
+
+        public void NudgeSquelch(float delta)
         {
             if (settings == null || delta == 0f) return;
-            settings.Volume.Value = Mathf.Clamp01(settings.Volume.Value + delta);
-            status = "Volume " + Mathf.RoundToInt(settings.Volume.Value * 100f) + "%";
+            settings.Squelch.Value = Mathf.Clamp01(settings.Squelch.Value + delta);
+            status = "Squelch " + Mathf.RoundToInt(settings.Squelch.Value * 100f) + "%";
         }
 
-        private void RememberBandPosition(RadioDial dial)
+        public void TogglePlayback()
         {
-            if (dial.IsFm) lastFmKilohertz = dial.Kilohertz;
-            else lastMwKilohertz = dial.Kilohertz;
-        }
-
-        private void SetDial(RadioDial dial)
-        {
-            if (dial.Equals(tunedDial) && !offStation) return;
-            StopScanning();
-            ManualTransport();
-            bool wasOnAir = IsEngaged && !offStation;
-            tunedDial = dial;
-            RememberBandPosition(dial);
-
-            int index = RadioDialTuning.IndexAt(stationDials, dial);
-            if (index >= 0)
+            if (offStation)
             {
-                bool resume = wasOnAir || dialResume;
-                selectedChannel = index;
-                selectedTrack = 0;
-                offStation = false;
-                dialResume = false;
-                BeginTune();
-                if (resume) PlayCurrent();
+                status = "No signal to monitor";
                 return;
             }
+            StopScanning();
+            ManualTransport(false);
+            if (receiver.IsPlaying)
+            {
+                receiver.Pause();
+                status = "Paused";
+                return;
+            }
+            if (receiver.IsPaused)
+            {
+                receiver.Resume();
+                status = "On air";
+                return;
+            }
+            PlayCurrent();
+        }
 
-            if (!offStation) dialResume = IsEngaged;
-            if (IsEngaged) StopInternal(false);
-            offStation = true;
-            status = "NO SIGNAL — " + dial.FullText + " " + dial.BandText;
-            fx?.SetCarrier(settings.CarrierNoise.Value, Volume);
-            PushLog("NO SIGNAL · " + dial.FullText);
-            nextFilterCheck = 0f;
+        public void Stop()
+        {
+            StopScanning();
+            ManualTransport();
+            offStation = false;
+            dialResume = false;
+            hold.ReleaseReceiver();
+            fx?.SetCarrier(false, Volume);
+            StopReceiverInternal(false);
+            SyncVanillaHold();
+        }
+
+        public void Previous()
+        {
+            StopScanning();
+            ManualTransport();
+            RadioStation channel = CurrentChannel();
+            if (channel == null || channel.Tracks.Length == 0) return;
+            selectedTrack = (selectedTrack - 1 + channel.Tracks.Length) % channel.Tracks.Length;
+            PlayCurrent();
+        }
+
+        public void Next()
+        {
+            StopScanning();
+            ManualTransport();
+            NextTrack();
         }
 
         public void ToggleScan()
@@ -436,129 +598,43 @@ namespace BoscaliSummer.Features.Radio.Runtime
                 SeekStation(1);
                 if (offStation) return;
             }
-            if (!IsEngaged) PlayCurrent();
-            if (!IsEngaged) return;
+            if (!receiver.Engaged) PlayCurrent();
+            if (!receiver.Engaged) return;
             scanning = true;
             nextScanTime = Time.unscaledTime + settings.ScanDwellSeconds.Value;
             status = "Scanning stations";
-            PushLog("SCAN · seeking stations");
-        }
-
-        private void StopScanning() => scanning = false;
-
-        public int GetPreset(int slot) =>
-            settings == null || slot < 0 || slot >= RadioSettings.PresetSlots
-                ? RadioSettings.NoPreset
-                : settings.Presets[slot].Value;
-
-        public void ApplyPreset(int slot)
-        {
-            int index = GetPreset(slot);
-            if (index < 0 || index >= ChannelCount)
-            {
-                status = "Preset " + (slot + 1) + " is empty";
-                return;
-            }
-            SelectChannel(index);
-        }
-
-        public void StorePreset(int slot)
-        {
-            if (settings == null || slot < 0 || slot >= RadioSettings.PresetSlots) return;
-            settings.Presets[slot].Value = selectedChannel;
-            status = "Stored " + CurrentChannelName + " on preset " + (slot + 1);
-            PushLog("PRESET " + (slot + 1) + " · " + TunedDial.FullText + " " + CurrentChannelName);
-        }
-
-        public void TogglePlayback()
-        {
-            if (offStation) return;
-            StopScanning();
-            ManualTransport(false);
-            if (state == PlaybackState.Loading)
-            {
-                Stop();
-                return;
-            }
-            if (state == PlaybackState.Playing)
-            {
-                if (currentSource != null) currentSource.Pause();
-                state = PlaybackState.Paused;
-                status = "Paused";
-                return;
-            }
-            if (state == PlaybackState.Paused && currentSource != null && currentClip != null)
-            {
-                currentSource.UnPause();
-                state = PlaybackState.Playing;
-                status = "On air";
-                return;
-            }
-            PlayCurrent();
-        }
-
-        public void Stop()
-        {
-            StopScanning();
-            ManualTransport();
-            offStation = false;
-            dialResume = false;
-            fx?.SetCarrier(false, Volume);
-            StopInternal(false);
-        }
-
-        public void Previous()
-        {
-            StopScanning();
-            ManualTransport();
-            RadioStation channel = CurrentChannel();
-            if (channel == null || channel.Tracks.Length == 0) return;
-            selectedTrack = (selectedTrack - 1 + channel.Tracks.Length) % channel.Tracks.Length;
-            PlayCurrent();
-        }
-
-        public void Next()
-        {
-            StopScanning();
-            ManualTransport();
-            NextTrack();
-        }
-
-        private void NextTrack()
-        {
-            if (huntTrack != null) { PlayCurrent(); return; }
-            RadioStation channel = CurrentChannel();
-            if (channel == null || channel.Tracks.Length == 0) return;
-            if (settings.Shuffle.Value && channel.Tracks.Length > 1)
-            {
-                int next = UnityEngine.Random.Range(0, channel.Tracks.Length - 1);
-                if (next >= selectedTrack) next++;
-                selectedTrack = next;
-            }
-            else
-            {
-                selectedTrack = (selectedTrack + 1) % channel.Tracks.Length;
-            }
-            PlayCurrent();
         }
 
         public void ToggleShuffle()
         {
             settings.Shuffle.Value = !settings.Shuffle.Value;
             status = settings.Shuffle.Value ? "Shuffle enabled" : "Shuffle disabled";
+            deckStatus = status;
         }
 
         public void ToggleRepeat()
         {
             settings.RepeatTrack.Value = !settings.RepeatTrack.Value;
             status = settings.RepeatTrack.Value ? "Repeat enabled" : "Repeat disabled";
+            deckStatus = status;
+        }
+
+        public void Transmit()
+        {
+            status = RadioLinkStub.TransmitStatus;
+        }
+
+        public void ToggleSecure()
+        {
+            link.ToggleSecure();
+            status = RadioLinkStub.SecureStatus;
         }
 
         public void Rescan()
         {
             StopScanning();
             ManualTransport();
-            StopInternal(false);
+            StopReceiverInternal(false);
             ScanLibrary();
         }
 
@@ -568,14 +644,104 @@ namespace BoscaliSummer.Features.Radio.Runtime
             {
                 RadioStarterLayout.Ensure(libraryPath, logger);
                 Application.OpenURL(new Uri(libraryPath).AbsoluteUri);
-                status = "Opened station folder";
+                status = "Opened music folder";
+                deckStatus = status;
             }
             catch (Exception e)
             {
-                status = "Could not open station folder";
+                status = "Could not open music folder";
                 logger.LogWarning("Radio station folder could not be opened: " + e.Message);
             }
         }
+
+        public void NudgeVolume(float delta)
+        {
+            if (settings == null || delta == 0f) return;
+            settings.Volume.Value = Mathf.Clamp01(settings.Volume.Value + delta);
+            status = "Volume " + Mathf.RoundToInt(settings.Volume.Value * 100f) + "%";
+        }
+
+        // ------------------------------------------------------------------------ deck
+
+        public void DeckSelectFolder(int index)
+        {
+            if (index < 0 || index >= DeckFolderCount) return;
+            deckFolder = index;
+            deckTrack = 0;
+            deckStatus = DeckFolderName(index) + " · " + DeckFolderTrackCount(index) + " track(s)";
+        }
+
+        public void DeckPlay(int trackIndex)
+        {
+            RadioTrack track = DeckTrackAt(DeckFolder, trackIndex);
+            if (track == null)
+            {
+                deckStatus = "No track on this folder";
+                return;
+            }
+            deckTrack = trackIndex;
+            if (!deck.PlayFile(track.Path, track.Extension, track.Title, 0f, false))
+            {
+                deckStatus = deck.LastError ?? "Could not open " + track.Title;
+                return;
+            }
+            deckStatus = "Playing " + track.Title;
+            ApplyFilters();
+        }
+
+        public void DeckTogglePlayback()
+        {
+            if (deck.IsPlaying)
+            {
+                deck.Pause();
+                deckStatus = "Paused";
+                return;
+            }
+            if (deck.IsPaused)
+            {
+                deck.Resume();
+                deckStatus = "Playing " + DeckCurrentTitle;
+                return;
+            }
+            DeckPlay(deckTrack);
+        }
+
+        public void DeckStop()
+        {
+            deck.Stop();
+            deckStatus = "Deck stopped";
+            SyncVanillaHold();
+        }
+
+        public void DeckNext()
+        {
+            int count = DeckTrackCount;
+            if (count == 0) return;
+            int next = settings.Shuffle.Value && count > 1
+                ? ShuffleIndex(count, DeckTrackIndex)
+                : (DeckTrackIndex + 1) % count;
+            DeckPlay(next);
+        }
+
+        public void DeckPrevious()
+        {
+            int count = DeckTrackCount;
+            if (count == 0) return;
+            DeckPlay((DeckTrackIndex - 1 + count) % count);
+        }
+
+        public void DeckToggleShuffle() => ToggleShuffle();
+
+        public void DeckToggleRepeat() => ToggleRepeat();
+
+        private RadioTrack DeckTrackAt(int folder, int index)
+        {
+            if (localLibrary == null || folder < 0 || folder >= localLibrary.Channels.Length) return null;
+            RadioTrack[] tracks = localLibrary.Channels[folder].Tracks;
+            return index < 0 || index >= tracks.Length ? null : tracks[index];
+        }
+
+        // ------------------------------------------------------------------- registry
 
         private void ScanLibrary()
         {
@@ -586,6 +752,8 @@ namespace BoscaliSummer.Features.Radio.Runtime
                 BuildStations();
                 selectedChannel = Mathf.Clamp(selectedChannel, 0, Math.Max(0, ChannelCount - 1));
                 selectedTrack = 0;
+                deckFolder = Mathf.Clamp(deckFolder, 0, Math.Max(0, DeckFolderCount - 1));
+                deckTrack = 0;
                 status = localLibrary.TrackCount == 0
                     ? "Built-in stations ready; add OGG/WAV for more"
                     : localLibrary.TrackCount + " local track(s) ready";
@@ -596,6 +764,8 @@ namespace BoscaliSummer.Features.Radio.Runtime
             {
                 localLibrary = null;
                 stations = Array.Empty<RadioStation>();
+                stationDials = Array.Empty<RadioDial>();
+                stationStrengths = Array.Empty<float>();
                 status = "Library scan failed";
                 logger.LogWarning("Radio library scan failed: " + e.Message);
             }
@@ -654,12 +824,25 @@ namespace BoscaliSummer.Features.Radio.Runtime
             }
             stations = result.ToArray();
             stationDials = new RadioDial[stations.Length];
-            for (int i = 0; i < stations.Length; i++) stationDials[i] = stations[i].Dial;
+            stationStrengths = new float[stations.Length];
+            for (int i = 0; i < stations.Length; i++)
+            {
+                stationDials[i] = stations[i].Dial;
+                stationStrengths[i] = 1f;
+            }
+            spectrumSignals.Clear();
+            for (int i = 0; i < stations.Length; i++)
+                spectrumSignals.Add(new RadioSignal(stations[i].Dial.Kilohertz, 1f));
             if (!offStation)
+            {
                 tunedDial = ChannelCount == 0
                     ? RadioDial.Fm(88500)
                     : GetChannelDial(Mathf.Clamp(selectedChannel, 0, ChannelCount - 1));
+                RememberBandPosition(tunedDial);
+            }
             stationRevision++;
+            nextPropagationAt = 0f;
+            nextSpectrumAt = 0f;
         }
 
         private void AddBuiltInStation(
@@ -721,6 +904,62 @@ namespace BoscaliSummer.Features.Radio.Runtime
             return clean.Length == 1 ? clean.ToUpperInvariant() : clean.Substring(0, 2).ToUpperInvariant();
         }
 
+        // ------------------------------------------------------------------- tuning
+
+        private void SetDial(RadioDial dial)
+        {
+            if (dial.Equals(tunedDial) && !offStation) return;
+            StopScanning();
+            ManualTransport();
+            bool wasOnAir = receiver.Engaged && !offStation;
+            tunedDial = dial;
+            RememberBandPosition(dial);
+
+            int index = RadioDialTuning.IndexAt(stationDials, dial);
+            if (index >= 0)
+            {
+                bool resume = wasOnAir || dialResume || receiver.IsPaused;
+                selectedChannel = index;
+                selectedTrack = 0;
+                offStation = false;
+                dialResume = false;
+                BeginTune();
+                if (resume) PlayCurrent();
+                return;
+            }
+
+            if (!offStation) dialResume = receiver.Engaged;
+            // Dead air while tuning is not the same as the player stopping the receiver:
+            // keep holding the vanilla soundtrack silent so it does not cut back in every
+            // time the dial sweeps past a gap between stations. It only returns once the
+            // player actually presses STOP (or the deck takes over).
+            StopReceiverInternal(false);
+            offStation = true;
+            status = "NO SIGNAL — " + dial.FullText + " " + dial.BandText;
+            fx?.SetCarrier(settings.CarrierNoise.Value, Volume);
+            nextFilterCheck = 0f;
+        }
+
+        private void RememberBandPosition(RadioDial dial)
+        {
+            int index = Array.IndexOf(RadioBands.All, dial.Band);
+            if (index >= 0) bandPositions[index] = dial.Kilohertz;
+        }
+
+        private void BeginTune()
+        {
+            status = "Tuned " + tunedDial.FullText + " " + BroadcastMode +
+                " · " + CurrentChannelName;
+            fx?.SetCarrier(false, Volume);
+            fx?.Tune(CurrentChannelCode, settings.CarrierNoise.Value, settings.StationIdents.Value);
+            bulletinCursor = 0;
+            nextBulletinAt = Time.unscaledTime + BulletinSeconds;
+            nextProgramRefresh = 0f;
+            nextFilterCheck = 0f;
+            nextPropagationAt = 0f;
+            nextSpectrumAt = 0f;
+        }
+
         private void PlayCurrent()
         {
             RadioStationTrack track = CurrentTrack();
@@ -732,68 +971,142 @@ namespace BoscaliSummer.Features.Radio.Runtime
                 return;
             }
 
-            if (!PrepareAudioSources())
+            bool wasPaused = restorePaused;
+            bool started = track.IsLocal
+                ? receiver.PlayFile(track.LocalPath, track.Extension, track.Title,
+                    restoreTime, wasPaused)
+                : track.VanillaClip != null && receiver.PlayClip(
+                    track.VanillaClip, false, restoreTime, wasPaused);
+            restoreTime = -1f;
+            restorePaused = false;
+
+            if (!started)
             {
-                status = "Music mixer is not ready";
+                status = track.IsLocal
+                    ? (receiver.LastError ?? "Could not open " + track.Title)
+                    : "Original soundtrack is not ready";
+                fx?.CarrierBurst(0.4f);
                 RecoverHuntLoadFailure();
                 return;
             }
 
-            BeginVanillaOwnership();
-            CancelPendingLoad();
-            state = PlaybackState.Loading;
-            status = "Loading " + track.Title;
-            int generation = ++loadGeneration;
-            if (!track.IsLocal)
+            hold.EngageReceiver();
+            BeginVanillaHold();
+            status = "On air · " + track.Title;
+            ApplyFilters();
+            SyncVanillaHold();
+        }
+
+        private void StopReceiverInternal(bool destroying)
+        {
+            restoreTime = -1f;
+            receiver?.Stop();
+            status = destroying ? "Receiver stopped" : "Receiver off";
+            fx?.Silence();
+        }
+
+        private float Volume => settings == null ? 1f : settings.Volume.Value;
+
+        /// <summary>
+        /// Programme gain from the link budget: below squelch the channel is muted and only
+        /// the set's own hiss is heard; above it the audio comes up with the signal.
+        /// </summary>
+        private float ReceiverGain
+        {
+            get
             {
-                if (track.VanillaClip == null)
-                {
-                    state = currentClip != null ? PlaybackState.Playing : PlaybackState.Stopped;
-                    status = "Original soundtrack is not ready";
-                    if (currentClip == null) ReleaseVanillaOwnership();
-                    RecoverHuntLoadFailure();
-                    return;
-                }
-                StartIncomingClip(track.VanillaClip, false, generation);
+                if (offStation) return 0f;
+                if (!reception.Open(Squelch)) return 0f;
+                return Mathf.Lerp(0.35f, 1f, reception.Quality);
+            }
+        }
+
+        private RadioStation CurrentChannel() => ChannelCount == 0
+            ? null
+            : stations[Mathf.Clamp(selectedChannel, 0, ChannelCount - 1)];
+
+        private RadioStationTrack CurrentTrack()
+        {
+            if (huntTrack != null) return huntTrack;
+            RadioStation channel = CurrentChannel();
+            if (channel == null || channel.Tracks.Length == 0) return null;
+            selectedTrack = Mathf.Clamp(selectedTrack, 0, channel.Tracks.Length - 1);
+            return channel.Tracks[selectedTrack];
+        }
+
+        private void NextTrack()
+        {
+            if (huntTrack != null)
+            {
+                PlayCurrent();
                 return;
             }
+            RadioStation channel = CurrentChannel();
+            if (channel == null || channel.Tracks.Length == 0) return;
+            if (settings.Shuffle.Value && channel.Tracks.Length > 1)
+                selectedTrack = ShuffleIndex(channel.Tracks.Length, selectedTrack);
+            else
+                selectedTrack = (selectedTrack + 1) % channel.Tracks.Length;
+            PlayCurrent();
+        }
 
-            AudioType audioType = string.Equals(track.Extension, ".wav", StringComparison.OrdinalIgnoreCase)
-                ? AudioType.WAV
-                : AudioType.OGGVORBIS;
-
-            try
-            {
-                pendingRequest = UnityWebRequestMultimedia.GetAudioClip(new Uri(track.LocalPath), audioType);
-                var handler = pendingRequest.downloadHandler as DownloadHandlerAudioClip;
-                if (handler != null) handler.streamAudio = false;
-                pendingCoroutine = StartCoroutine(LoadTrack(track, generation, pendingRequest));
-            }
-            catch (Exception e)
-            {
-                pendingRequest?.Dispose();
-                pendingRequest = null;
-                pendingCoroutine = null;
-                state = currentClip != null ? PlaybackState.Playing : PlaybackState.Stopped;
-                status = "Could not open " + track.Title;
-                logger.LogWarning("Radio track open failed: " + e.Message);
-                if (currentClip == null) ReleaseVanillaOwnership();
-                RecoverHuntLoadFailure();
-            }
+        private static int ShuffleIndex(int count, int current)
+        {
+            int next = UnityEngine.Random.Range(0, count - 1);
+            return next >= current ? next + 1 : next;
         }
 
         private void ScanTick()
         {
             if (!scanning) return;
-            if (!IsEngaged || ChannelCount < 2)
+            if (!receiver.Engaged || ChannelCount < 2)
             {
                 scanning = false;
                 return;
             }
             if (Time.unscaledTime < nextScanTime) return;
             nextScanTime = Time.unscaledTime + settings.ScanDwellSeconds.Value;
-            ManualTransport();
+            ManualTransport(false);
             SelectChannelInternal((selectedChannel + 1) % ChannelCount);
+        }
+
+        private void SelectChannelInternal(int index)
+        {
+            bool resume = receiver.Engaged;
+            selectedChannel = index;
+            selectedTrack = 0;
+            tunedDial = stationDials[index];
+            RememberBandPosition(tunedDial);
+            offStation = false;
+            BeginTune();
+            if (resume) PlayCurrent();
+        }
+
+        private void StopScanning() => scanning = false;
+
+        // ------------------------------------------------------------------ modes/fx
+
+        private void ApplyFilters()
+        {
+            BroadcastFilterMode mode = settings.BroadcastFilter.Value;
+            RadioModulation modulation = ReceiverModulation;
+            bool narrow = NarrowBandwidth;
+            appliedFilter = mode;
+            appliedModulation = modulation;
+            appliedNarrow = narrow;
+            filterApplied = true;
+            RadioBroadcastFx.ApplyCharacter(receiver.Source, mode, modulation, narrow);
+            RadioBroadcastFx.ApplyCharacter(deck.Source, mode, modulation, narrow);
+        }
+
+        private void FilterTick()
+        {
+            if (Time.unscaledTime < nextFilterCheck) return;
+            nextFilterCheck = Time.unscaledTime + 1f;
+            if (filterApplied && settings.BroadcastFilter.Value == appliedFilter &&
+                ReceiverModulation == appliedModulation && NarrowBandwidth == appliedNarrow)
+                return;
+            ApplyFilters();
         }
 
         private void ProgramTick()
@@ -810,25 +1123,11 @@ namespace BoscaliSummer.Features.Radio.Runtime
             programText = name;
         }
 
-        private void FilterTick()
-        {
-            if (Time.unscaledTime < nextFilterCheck) return;
-            nextFilterCheck = Time.unscaledTime + 2f;
-            BroadcastFilterMode mode = settings.BroadcastFilter.Value;
-            bool amBand = tunedDial.Band == RadioBand.Mw;
-            if (filterApplied && mode == appliedFilter && amBand == appliedAmBand) return;
-            appliedFilter = mode;
-            appliedAmBand = amBand;
-            filterApplied = true;
-            RadioBroadcastFx.ApplyCharacter(currentSource, mode, amBand);
-            RadioBroadcastFx.ApplyCharacter(incomingSource, mode, amBand);
-        }
-
         private void BulletinTick()
         {
             if (Time.unscaledTime < nextBulletinAt) return;
             nextBulletinAt = Time.unscaledTime + BulletinSeconds;
-            if (!HasChannels) return;
+            if (!HasChannels || offStation) return;
             PushLog(RadioProgramming.Bulletin(CurrentStationId, bulletinCursor++));
         }
 
@@ -839,56 +1138,86 @@ namespace BoscaliSummer.Features.Radio.Runtime
             ticker = line;
         }
 
-        private IEnumerator LoadTrack(RadioStationTrack track, int generation, UnityWebRequest request)
+        private string CurrentStationId => huntTrack != null || ChannelCount == 0
+            ? string.Empty
+            : stations[Mathf.Clamp(selectedChannel, 0, ChannelCount - 1)].Id;
+
+        // -------------------------------------------------------------- propagation
+
+        private void PropagationTick()
         {
-            yield return request.SendWebRequest();
+            if (Time.unscaledTime < nextPropagationAt) return;
+            nextPropagationAt = Time.unscaledTime + 0.5f;
+            anchors.Tick(Time.unscaledTime);
 
-            if (generation != loadGeneration || request != pendingRequest) yield break;
-            pendingRequest = null;
-            pendingCoroutine = null;
+            bool listener = anchors.HasListener;
+            Vector3 listenerPosition = anchors.ListenerPosition;
+            float listenerHeight = anchors.ListenerHeight;
 
-            if (request.result != UnityWebRequest.Result.Success)
+            for (int i = 0; i < stations.Length; i++)
             {
-                string error = request.error;
-                request.Dispose();
-                state = currentClip != null ? PlaybackState.Playing : PlaybackState.Stopped;
-                status = "Skipped unreadable track";
-                logger.LogWarning("Radio could not decode a local track: " + error);
-                if (currentClip == null) ReleaseVanillaOwnership();
-                RecoverHuntLoadFailure();
-                yield break;
+                stationStrengths[i] = 1f;
+                if (!listener || !anchors.TryGet(stations[i].Id, out Vector3 tx, out float txHeight))
+                    continue;
+                float distance = Vector3.Distance(listenerPosition, tx) / 1000f;
+                stationStrengths[i] = RadioPropagation.Evaluate(
+                    distance, txHeight, listenerHeight, true,
+                    stations[i].Dial.Modulation, ReceiverModulation).Quality;
             }
 
-            AudioClip clip = DownloadHandlerAudioClip.GetContent(request);
-            request.Dispose();
-            if (clip == null)
+            spectrumSignals.Clear();
+            for (int i = 0; i < stations.Length; i++)
+                spectrumSignals.Add(new RadioSignal(stations[i].Dial.Kilohertz,
+                    Mathf.Max(0.08f, stationStrengths[i])));
+
+            if (offStation)
             {
-                state = currentClip != null ? PlaybackState.Playing : PlaybackState.Stopped;
-                status = "Skipped empty track";
-                if (currentClip == null) ReleaseVanillaOwnership();
-                RecoverHuntLoadFailure();
-                yield break;
+                reception = new RadioReception(0f, 0f, 0f, 0f, RadioPropagation.NoiseFloorDbm);
+                return;
             }
 
-            clip.name = track.Title;
-            StartIncomingClip(clip, true, generation);
+            RadioStation station = CurrentChannel();
+            if (station == null || huntTrack != null ||
+                !anchors.TryGet(station.Id, out Vector3 tower, out float towerHeight) || !listener)
+            {
+                reception = RadioReception.Perfect;
+                return;
+            }
+
+            Vector3 towerTop = tower + Vector3.up * towerHeight;
+            float km = Vector3.Distance(listenerPosition, towerTop) / 1000f;
+            bool lineOfSight = HasLineOfSight(listenerPosition + Vector3.up * 3f, towerTop);
+            reception = RadioPropagation.Evaluate(km, towerHeight, listenerHeight, lineOfSight,
+                station.Dial.Modulation, ReceiverModulation);
         }
 
-        private void StartIncomingClip(AudioClip clip, bool owned, int generation)
+        /// <summary>
+        /// One terrain probe per evaluation — three stations' worth at worst, twice a second.
+        /// The mask is the game's own ground-collision set, so a hill between aircraft and
+        /// transmitter costs the station signal exactly as it would in the air.
+        /// </summary>
+        private bool HasLineOfSight(Vector3 from, Vector3 to)
         {
-            incomingClip = clip;
-            incomingClipOwned = owned;
-            incomingSource.clip = clip;
-            bool paused = restoreTime >= 0f && restorePaused;
-            incomingSource.time = restoreTime < 0f ? 0f :
-                Mathf.Clamp(restoreTime, 0f, Math.Max(0f, clip.length - 0.05f));
-            restoreTime = -1f;
-            incomingSource.loop = false;
-            incomingSource.volume = 0f;
-            incomingSource.Play();
-            if (paused) incomingSource.Pause();
-            pendingCoroutine = StartCoroutine(CrossFadeToIncoming(generation, paused));
+            try
+            {
+                return !Physics.Linecast(from, to, TerrainLayerMask, QueryTriggerInteraction.Ignore);
+            }
+            catch
+            {
+                return true;
+            }
         }
+
+        private void SpectrumTick()
+        {
+            if (Time.unscaledTime < nextSpectrumAt) return;
+            nextSpectrumAt = Time.unscaledTime + 0.12f;
+            RadioSpectrum.Fill(spectrum, spectrumSignals,
+                RadioBands.Min(tunedDial.Band), RadioBands.Max(tunedDial.Band),
+                0.07f, Time.unscaledTime);
+        }
+
+        // ------------------------------------------------------------------- hunts
 
         private void PollHunt()
         {
@@ -913,7 +1242,11 @@ namespace BoscaliSummer.Features.Radio.Runtime
             int channel = -1;
             for (int i = 0; i < stations.Length; i++)
                 if (string.Equals(stations[i].Name, "Hunt", StringComparison.OrdinalIgnoreCase) &&
-                    stations[i].Tracks.Length > 0) { channel = i; break; }
+                    stations[i].Tracks.Length > 0)
+                {
+                    channel = i;
+                    break;
+                }
 
             AudioClip tactical = null;
             if (channel < 0)
@@ -928,16 +1261,22 @@ namespace BoscaliSummer.Features.Radio.Runtime
                 catch { }
                 if (tactical == null) return;
             }
-            if (!PrepareAudioSources()) return;
 
             savedChannel = selectedChannel;
             savedTrack = selectedTrack;
-            savedState = state;
-            savedTime = state == PlaybackState.Loading ? 0f : Elapsed;
+            savedTime = receiver.Engaged ? Elapsed : 0f;
+            savedPaused = receiver.IsPaused;
             restoreTime = -1f;
             huntOverride = true;
-            if (channel >= 0) { selectedChannel = channel; selectedTrack = 0; }
-            else huntTrack = RadioStationTrack.Vanilla(tactical);
+            if (channel >= 0)
+            {
+                selectedChannel = channel;
+                selectedTrack = 0;
+            }
+            else
+            {
+                huntTrack = RadioStationTrack.Vanilla(tactical);
+            }
             tunedDial = ChannelCount == 0
                 ? RadioDial.Fm(88500)
                 : GetChannelDial(Mathf.Clamp(selectedChannel, 0, ChannelCount - 1));
@@ -955,13 +1294,13 @@ namespace BoscaliSummer.Features.Radio.Runtime
                 ? RadioDial.Fm(88500)
                 : GetChannelDial(Mathf.Clamp(selectedChannel, 0, ChannelCount - 1));
             offStation = false;
-            if (savedState == PlaybackState.Stopped || CurrentTrack() == null)
+            if (!receiver.Engaged || CurrentTrack() == null)
             {
-                StopInternal(false);
+                StopReceiverInternal(false);
                 return;
             }
             restoreTime = savedTime;
-            restorePaused = savedState == PlaybackState.Paused;
+            restorePaused = savedPaused;
             PlayCurrent();
         }
 
@@ -971,168 +1310,41 @@ namespace BoscaliSummer.Features.Radio.Runtime
             huntOverride = false;
             if (clearTrack) huntTrack = null;
             restoreTime = -1f;
+            restorePaused = false;
         }
 
         private void RecoverHuntLoadFailure()
         {
-            if (restoreTime >= 0f) StopInternal(false);
+            if (restoreTime >= 0f) StopReceiverInternal(false);
             else if (huntOverride) EndHuntMusic();
         }
 
-        private IEnumerator CrossFadeToIncoming(int generation, bool paused)
+        // ------------------------------------------------------- vanilla soundtrack
+
+        /// <summary>
+        /// Vanilla music is held silent while either program is live — including dead air
+        /// while tuning, which is still the player listening to the receiver. It only comes
+        /// back when the receiver is stopped and the deck is not playing.
+        /// </summary>
+        private void SyncVanillaHold()
         {
-            float duration = settings.CrossfadeSeconds.Value;
-            float elapsed = 0f;
-            float target = Volume;
-            while (generation == loadGeneration && elapsed < duration)
+            hold.SetDeckEngaged(deck != null && deck.Engaged);
+            bool want = hold.Held;
+            if (want != vanillaHeld)
             {
-                elapsed += Time.unscaledDeltaTime;
-                float amount = duration <= 0f ? 1f : Mathf.Clamp01(elapsed / duration);
-                incomingSource.volume = target * amount;
-                if (currentSource != null) currentSource.volume = target * (1f - amount);
-                yield return null;
+                if (want) BeginVanillaHold();
+                else EndVanillaHold();
+                return;
             }
-
-            if (generation != loadGeneration) yield break;
-            if (currentSource != null) currentSource.Stop();
-            DestroyClip(currentClip, currentClipOwned);
-
-            AudioSource oldSource = currentSource;
-            currentSource = incomingSource;
-            incomingSource = oldSource;
-            currentClip = incomingClip;
-            currentClipOwned = incomingClipOwned;
-            incomingClip = null;
-            incomingClipOwned = false;
-            if (incomingSource != null)
-            {
-                incomingSource.clip = null;
-                incomingSource.volume = 0f;
-            }
-            currentSource.volume = 1f;
-            pendingCoroutine = null;
-            state = paused ? PlaybackState.Paused : PlaybackState.Playing;
-            status = paused ? "Paused" : "On air";
+            if (!vanillaHeld || Time.unscaledTime < nextVanillaSweep) return;
+            nextVanillaSweep = Time.unscaledTime + HoldSweepSeconds;
+            EnforceVanillaSilence();
         }
 
-        private bool PrepareAudioSources()
+        private void BeginVanillaHold()
         {
-            if (currentSource == null) currentSource = CreateSource("BoscaliRadio.Current");
-            if (incomingSource == null) incomingSource = CreateSource("BoscaliRadio.Incoming");
-            try
-            {
-                currentSource.outputAudioMixerGroup = SoundManager.i.MusicMixer;
-                incomingSource.outputAudioMixerGroup = SoundManager.i.MusicMixer;
-                bool ready = currentSource.outputAudioMixerGroup != null;
-                if (ready)
-                {
-                    fx?.SetMixer(currentSource.outputAudioMixerGroup);
-                    BroadcastFilterMode mode = settings.BroadcastFilter.Value;
-                    bool amBand = tunedDial.Band == RadioBand.Mw;
-                    appliedFilter = mode;
-                    appliedAmBand = amBand;
-                    filterApplied = true;
-                    RadioBroadcastFx.ApplyCharacter(currentSource, mode, amBand);
-                    RadioBroadcastFx.ApplyCharacter(incomingSource, mode, amBand);
-                    currentSource.volume = Volume;
-                }
-                return ready;
-            }
-            catch (Exception e)
-            {
-                logger.LogDebug("Radio music mixer not ready: " + e.Message);
-                return false;
-            }
-        }
-
-        private AudioSource CreateSource(string sourceName)
-        {
-            AudioSource source = gameObject.AddComponent<AudioSource>();
-            source.name = sourceName;
-            source.playOnAwake = false;
-            source.loop = false;
-            source.ignoreListenerPause = true;
-            source.spatialBlend = 0f;
-            source.volume = 1f;
-            return source;
-        }
-
-        private void StopInternal(bool destroying)
-        {
-            restoreTime = -1f;
-            CancelPendingLoad();
-            if (currentSource != null)
-            {
-                currentSource.Stop();
-                currentSource.clip = null;
-            }
-            if (incomingSource != null)
-            {
-                incomingSource.Stop();
-                incomingSource.clip = null;
-            }
-            DestroyClip(currentClip, currentClipOwned);
-            DestroyClip(incomingClip, incomingClipOwned);
-            currentClip = null;
-            incomingClip = null;
-            currentClipOwned = false;
-            incomingClipOwned = false;
-            state = PlaybackState.Stopped;
-            status = destroying ? "Receiver stopped" : "Receiver off";
-            fx?.Silence();
-            ReleaseVanillaOwnership();
-        }
-
-        private void CancelPendingLoad()
-        {
-            loadGeneration++;
-            if (pendingRequest != null)
-            {
-                pendingRequest.Abort();
-                pendingRequest.Dispose();
-                pendingRequest = null;
-            }
-            if (pendingCoroutine != null)
-            {
-                StopCoroutine(pendingCoroutine);
-                pendingCoroutine = null;
-            }
-            if (incomingSource != null)
-            {
-                incomingSource.Stop();
-                incomingSource.clip = null;
-            }
-            DestroyClip(incomingClip, incomingClipOwned);
-            incomingClip = null;
-            incomingClipOwned = false;
-        }
-
-        private static void DestroyClip(AudioClip clip, bool owned)
-        {
-            if (owned && clip != null) Destroy(clip);
-        }
-
-        private RadioStation CurrentChannel() => ChannelCount == 0
-            ? null
-            : stations[Mathf.Clamp(selectedChannel, 0, ChannelCount - 1)];
-
-        private string CurrentStationId => ChannelCount == 0
-            ? string.Empty
-            : stations[Mathf.Clamp(selectedChannel, 0, ChannelCount - 1)].Id;
-
-        private RadioStationTrack CurrentTrack()
-        {
-            if (huntTrack != null) return huntTrack;
-            RadioStation channel = CurrentChannel();
-            if (channel == null || channel.Tracks.Length == 0) return null;
-            selectedTrack = Mathf.Clamp(selectedTrack, 0, channel.Tracks.Length - 1);
-            return channel.Tracks[selectedTrack];
-        }
-
-        private void BeginVanillaOwnership()
-        {
-            if (ownsVanillaMusic) return;
-            ownsVanillaMusic = true;
+            if (vanillaHeld) return;
+            vanillaHeld = true;
             interruptedVanillaClip = null;
             deferredVanillaClip = null;
 
@@ -1163,14 +1375,45 @@ namespace BoscaliSummer.Features.Radio.Runtime
             }
         }
 
-        private void ReleaseVanillaOwnership()
+        /// <summary>
+        /// The belt to the patches' braces: while the hold is up, nothing vanilla may be
+        /// heard, whatever route it took to a source. Unpatched play paths, a crossfade
+        /// already in flight, or a queued clip resuming are all silenced here.
+        /// </summary>
+        private void EnforceVanillaSilence()
         {
-            if (!ownsVanillaMusic) return;
-            ownsVanillaMusic = false;
-
             try
             {
                 MusicManager music = MusicManager.i;
+                if (music == null) return;
+                AudioSource current = GameAccess.GetCurrentMusicSource(music);
+                AudioSource fade = GameAccess.GetFadeMusicSource(music);
+                bool audible = (current != null && current.isPlaying) ||
+                               (fade != null && fade.isPlaying);
+                if (!audible) return;
+                current?.Stop();
+                if (fade != current) fade?.Stop();
+                music.StopMusic();
+            }
+            catch (Exception e)
+            {
+                logger?.LogDebug("Could not silence vanilla music: " + e.Message);
+            }
+        }
+
+        private void EndVanillaHold()
+        {
+            if (!vanillaHeld) return;
+            vanillaHeld = false;
+            ReleaseVanillaHold();
+        }
+
+        private void ReleaseVanillaHold()
+        {
+            try
+            {
+                MusicManager music = MusicManager.i;
+                if (music == null) return;
                 if (deferredVanillaClip != null)
                 {
                     if (deferredVanillaCrossfade)
@@ -1204,7 +1447,7 @@ namespace BoscaliSummer.Features.Radio.Runtime
             AudioClip clip, bool repeat, float priority, bool crossfade)
         {
             RadioManager radio = active;
-            if (radio == null || !radio.ownsVanillaMusic) return true;
+            if (radio == null || !radio.hold.Held) return true;
             if (clip != null)
             {
                 radio.deferredVanillaClip = clip;

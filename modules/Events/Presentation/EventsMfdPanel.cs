@@ -61,7 +61,7 @@ namespace BoscaliSummer.Features.Events.Presentation
 
         public void ResetForScene()
         {
-            MfdBezel.Release(MfdSlots.Events);
+            MfdScreenHost.Release(MfdSlots.Events);
             if (screenRoot != null) UnityEngine.Object.Destroy(screenRoot);
 
             screenRoot = null;
@@ -110,26 +110,27 @@ namespace BoscaliSummer.Features.Events.Presentation
                     ?? UnityEngine.Object.FindObjectOfType<VirtualMFD>();
                 if (mfd == null) return;
 
-                if (!MfdBezel.TryClaim(MfdSlots.Events, preferLeft: false, mfd,
+                if (!MfdScreenHost.TryHost(MfdSlots.Events, preferLeft: false, mfd,
                     out List<Button> buttons, out List<MFDScreen> screens, out int slot, out bool left))
                 {
-                    // A full bezel is a crowded screen, not a broken mod: the rest still installs.
+                    // The six vanilla slots are for WMC and the claimed screens; this screen
+                    // owns an appended one, so the only failure here is a missing adapter.
                     failed = true;
-                    logger?.LogWarning("EVN MFD unavailable: no free bezel slot.");
+                    logger?.LogWarning("EVN MFD unavailable: could not add a host button.");
                     return;
                 }
 
                 MFDScreen template = MfdBezel.FindTemplate(screens) ?? MfdBezel.FindTemplate(mfd);
                 if (template == null)
                 {
-                    MfdBezel.Release(MfdSlots.Events);
+                    MfdScreenHost.Release(MfdSlots.Events);
                     return;
                 }
 
                 screen = Build(template, buttons[slot]);
                 if (screen == null)
                 {
-                    MfdBezel.Release(MfdSlots.Events);
+                    MfdScreenHost.Release(MfdSlots.Events);
                     failed = true;
                     return;
                 }

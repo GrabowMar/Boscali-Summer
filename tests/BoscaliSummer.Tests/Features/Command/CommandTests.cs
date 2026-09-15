@@ -9,7 +9,6 @@ namespace BoscaliSummer.Tests.Features.Command
         public static void Run()
         {
             AvionicsProtocolTests.Run(TestAssert.That);
-            TestWingScoring();
             TestMapPanelOwnership();
             SettingsTests.Run();
             MfdPanelTests.Run();
@@ -18,25 +17,6 @@ namespace BoscaliSummer.Tests.Features.Command
             AvBoxTests.Run(TestAssert.That);
             AvGridTests.Run(TestAssert.That);
             AvStyleTests.Run(TestAssert.That);
-
-            CommandDoctrine[] doctrines = (CommandDoctrine[])System.Enum.GetValues(typeof(CommandDoctrine));
-            TestAssert.That(doctrines.Length == 5, "Must have exactly 5 strategic doctrines");
-            for (int i = 0; i < doctrines.Length; i++)
-            {
-                TestAssert.That(!string.IsNullOrEmpty(CommandDoctrineHelper.GetName(doctrines[i])),
-                    "Doctrine name must not be empty for " + doctrines[i]);
-                TestAssert.That(!string.IsNullOrEmpty(CommandDoctrineHelper.GetDescription(doctrines[i])),
-                    "Doctrine description must not be empty for " + doctrines[i]);
-            }
-
-            string air = CommandDoctrineHelper.GetDescription(CommandDoctrine.AirSuperiority);
-            TestAssert.That(air.IndexOf("45%", System.StringComparison.Ordinal) >= 0,
-                "Air Superiority bias is TheaterScoring +45%, not +200%");
-            TestAssert.That(air.IndexOf("scoring", System.StringComparison.OrdinalIgnoreCase) >= 0,
-                "Doctrine copy must say scoring only");
-            TestAssert.That(air.IndexOf("CAP", System.StringComparison.OrdinalIgnoreCase) < 0 ||
-                            air.IndexOf("No CAP", System.StringComparison.Ordinal) >= 0,
-                "Air Superiority must not claim CAP spawn");
 
             TestTacticalSectorGrid();
             TestControlledIngress();
@@ -47,7 +27,7 @@ namespace BoscaliSummer.Tests.Features.Command
 
         private static void TestControlledIngress()
         {
-            var grid = new TacticalSectorGrid(32, 100000f, 60000f);
+            var grid = new TacticalSectorGrid(1000f, 100000f, 60000f);
             TestAssert.That(!grid.TryNearestControlledEdge(-30000, 0, out _, out _), "neutral control must not admit ace ingress");
             grid.RegisterNode(1, "Enemy base", 0, 0, SectorControl.Friendly, 100000, true);
             grid.EvaluateSectors(0);
@@ -97,53 +77,29 @@ namespace BoscaliSummer.Tests.Features.Command
                     "All vanilla bezel pages must have an adapter");
         }
 
-        private static void TestWingScoring()
-        {
-            var previous = NOAvionics.PresenceBoard.GetInts(NOAvionics.PresenceBoard.WingMemberIds);
-            try
-            {
-                NOAvionics.PresenceBoard.SetInts(NOAvionics.PresenceBoard.WingMemberIds, new[] { 42 });
-                int[] wing = NOAvionics.PresenceBoard.GetInts(NOAvionics.PresenceBoard.WingMemberIds);
-                for (int doctrine = 0; doctrine <= 4; doctrine++)
-                {
-                    TestAssert.That(CommandScoring.Bias(true, NOAvionics.PresenceBoard.Contains(wing, 42), NOAvionics.PresenceBoard.Contains(wing, 99), doctrine, true, true, false, true) == 1f,
-                        "Boscali doctrine must not alter a recruited wingman's target scoring");
-                    TestAssert.That(CommandScoring.Bias(false, NOAvionics.PresenceBoard.Contains(wing, 10), NOAvionics.PresenceBoard.Contains(wing, 99), doctrine, true, true, false, true) == 1f,
-                        "Enemy analyzers must remain unaffected");
-                }
-                TestAssert.That(CommandScoring.Bias(true, NOAvionics.PresenceBoard.Contains(wing, 10), NOAvionics.PresenceBoard.Contains(wing, 99), 1, false, true, false, false) > 1f,
-                    "Friendly mission AI must still receive doctrine with Wing Command present");
-                NOAvionics.PresenceBoard.SetInts(NOAvionics.PresenceBoard.WingMemberIds, null);
-                int[] noWing = NOAvionics.PresenceBoard.GetInts(NOAvionics.PresenceBoard.WingMemberIds);
-                TestAssert.That(CommandScoring.Bias(true, NOAvionics.PresenceBoard.Contains(noWing, 42), NOAvionics.PresenceBoard.Contains(noWing, 99), 1, false, true, false, false) > 1f,
-                    "Doctrine must work without Wing Command or after wing membership is cleared");
-            }
-            finally { NOAvionics.PresenceBoard.SetInts(NOAvionics.PresenceBoard.WingMemberIds, previous); }
-        }
-
         private static void TestTacticalSectorGrid()
         {
-            // 1. Test square and non-square world initialization
-            TacticalSectorGrid squareGrid = new TacticalSectorGrid(32, 100000f, 100000f);
-            TestAssert.That(squareGrid.Resolution == 32, "Grid resolution must be 32");
-            TestAssert.That(squareGrid.TotalSectors == 1024, "Total sectors for square map must be 1024");
+            // 1. Test square and non-square world initialization at base-grid cell size
+            TacticalSectorGrid squareGrid = new TacticalSectorGrid(1000f, 100000f, 100000f);
+            TestAssert.That(squareGrid.CellSize == 1000f, "Cells match the map's 1 km base grid");
+            TestAssert.That(squareGrid.TotalSectors == 10000, "Total sectors for square map must be 10000");
 
-            TacticalSectorGrid grid = new TacticalSectorGrid(32, 120000f, 80000f);
-            TestAssert.That(grid.ResolutionX == 32, "Grid ResolutionX must be 32");
-            TestAssert.That(grid.ResolutionY == 21, "Grid ResolutionY for 3:2 map must be 21");
-            TestAssert.That(grid.TotalSectors == 32 * 21, "Total sectors must match ResolutionX * ResolutionY");
+            TacticalSectorGrid grid = new TacticalSectorGrid(1000f, 120000f, 80000f);
+            TestAssert.That(grid.ResolutionX == 120, "Grid ResolutionX must be 120");
+            TestAssert.That(grid.ResolutionY == 80, "Grid ResolutionY for 3:2 map must be 80");
+            TestAssert.That(grid.TotalSectors == 120 * 80, "Total sectors must match ResolutionX * ResolutionY");
             TestAssert.That(System.Math.Abs(grid.WorldSizeX - 120000f) < 0.01f, "WorldSizeX must match 120000");
             TestAssert.That(System.Math.Abs(grid.WorldSizeY - 80000f) < 0.01f, "WorldSizeY must match 80000");
 
             // World to Cell mapping across coordinate extremes on non-square map
             TestAssert.That(grid.WorldToCell(0f, 0f, out int midC, out int midR), "Center must map within bounds");
-            TestAssert.That(midC == 16 && midR == 10, "Center must map to sector (16, 10)");
+            TestAssert.That(midC == 60 && midR == 40, "Center must map to sector (60, 40)");
 
             TestAssert.That(grid.WorldToCell(-59999f, -39999f, out int minC, out int minR), "Min bounds must map");
             TestAssert.That(minC == 0 && minR == 0, "Min bounds must map to (0, 0)");
 
             TestAssert.That(grid.WorldToCell(59999f, 39999f, out int maxC, out int maxR), "Max bounds must map");
-            TestAssert.That(maxC == 31 && maxR == 20, "Max bounds must map to (31, 20)");
+            TestAssert.That(maxC == 119 && maxR == 79, "Max bounds must map to (119, 79)");
 
             // 2. Troop presence & sector evaluation
             grid.ResetAll();
@@ -159,12 +115,12 @@ namespace BoscaliSummer.Tests.Features.Command
             grid.EvaluateSectors();
             TestAssert.That(grid.FriendlySectorCount == 1, "Friendly troop creates 1 friendly held sector");
             TestAssert.That(grid.HostileSectorCount == 1, "Hostile troop creates 1 hostile held sector");
-            TestAssert.That(grid.GetSectorControl(16, 10) == SectorControl.Friendly, "Center sector is Friendly");
+            TestAssert.That(grid.GetSectorControl(midC, midR) == SectorControl.Friendly, "Center sector is Friendly");
 
-            // Add hostile troop to same sector (16, 10) -> should become Contested!
+            // Add hostile troop to same sector (60, 40) -> should become Contested!
             grid.AddTroopPresence(0f, 0f, 2.0f, true, 0f);
             grid.EvaluateSectors();
-            TestAssert.That(grid.GetSectorControl(16, 10) == SectorControl.Contested, "Contested battle sector when both troops present");
+            TestAssert.That(grid.GetSectorControl(midC, midR) == SectorControl.Contested, "Contested battle sector when both troops present");
             TestAssert.That(grid.ContestedSectorCount == 1, "Must report 1 contested sector");
 
             // 3. Airbase strategic anchor & Wavefront growth
@@ -172,7 +128,7 @@ namespace BoscaliSummer.Tests.Features.Command
             grid.AddAirbasePresence(0f, 0f, false);
             grid.EvaluateSectors();
             TestAssert.That(grid.FriendlySectorCount >= 9, "Airbase core and perimeter sectors must be secured");
-            TestAssert.That(grid.GetSectorControl(16, 10) == SectorControl.Friendly, "Airbase core is Friendly");
+            TestAssert.That(grid.GetSectorControl(midC, midR) == SectorControl.Friendly, "Airbase core is Friendly");
 
             // 4. Opposing bases, frontline edge detection, and RWR 66% rule
             grid.ResetAll();
@@ -183,7 +139,7 @@ namespace BoscaliSummer.Tests.Features.Command
             TestAssert.That(grid.FriendlySectorCount > 0, "Allied sectors exist");
             TestAssert.That(grid.HostileSectorCount > 0, "Hostile sectors exist");
             TestAssert.That(grid.TotalNodesCount == 2, "2 strategic nodes registered");
-            TestAssert.That(grid.FriendlySectorCount + grid.HostileSectorCount == grid.TotalSectors,
+            TestAssert.That(grid.FriendlySectorCount + grid.HostileSectorCount + grid.ContestedSectorCount == grid.TotalSectors,
                 "Opposing strategic influence divides the theater without gaps");
 
             // 5. Test 66% Force Superiority Rule & Contested Clashes
@@ -195,25 +151,17 @@ namespace BoscaliSummer.Tests.Features.Command
             TestAssert.That(grid.ContestedSectorCount >= 1, "Clash detected at contested contact point");
             TestAssert.That(grid.ActiveClashesCount >= 1, "Clash count reports active battle");
 
-            // 6. Texture baking (RWR tactical grid + frontline borders)
-            var pixels = grid.BakeTexture(128, 128, true, true, 0.35f);
+            // 6. Texture baking (control tint). The front line itself is vector geometry now
+            // (`Presentation/MapUi/FrontlineGraphic`), covered by FrontlineTests.
+            var pixels = grid.BakeTexture(128, 128, true, 0.35f);
             TestAssert.That(pixels != null && pixels.Length == 128 * 128, "BakeTexture generates valid pixel array");
 
             int drawnPixels = 0;
-            int frontlineBorderPixels = 0;
             for (int i = 0; i < pixels.Length; i++)
             {
-                if (pixels[i].a > 0)
-                {
-                    drawnPixels++;
-                    if (pixels[i].a >= 100)
-                    {
-                        frontlineBorderPixels++;
-                    }
-                }
+                if (pixels[i].a > 0) drawnPixels++;
             }
             TestAssert.That(drawnPixels > 50, "Texture baking produces rendered territory pixels");
-            TestAssert.That(frontlineBorderPixels > 0, "Discrete frontline boundary edges rendered");
 
             // 7. Test Neutral Node Non-Expansion & Queue Overflow Immunity
             grid.ResetAll();
@@ -239,7 +187,7 @@ namespace BoscaliSummer.Tests.Features.Command
             grid.EvaluateSectors();
             TestAssert.That(grid.FriendlySectorCount > 0, "Allied territory forms from synthesized depot node");
             TestAssert.That(grid.HostileSectorCount > 0, "Hostile territory forms from synthesized depot node");
-            TestAssert.That(grid.FriendlySectorCount + grid.HostileSectorCount == grid.TotalSectors,
+            TestAssert.That(grid.FriendlySectorCount + grid.HostileSectorCount + grid.ContestedSectorCount == grid.TotalSectors,
                 "Strategic influence covers the theater without airbases");
 
             // 9. Test Ground Force Seeding Fallback (zero nodes registered at all)

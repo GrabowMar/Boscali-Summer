@@ -137,6 +137,12 @@ namespace BoscaliSummer.Runtime
             catch { return false; }
         }
 
+        public static bool IsSoloAuthority()
+        {
+            try { return IsServer() && !NuclearOption.Networking.NetworkManagerNuclearOption.HasOtherPlayers(out _); }
+            catch { return false; }
+        }
+
         private static AccessTools.FieldRef<TInstance, TField> FieldRef<TInstance, TField>(string name)
         {
             FieldInfo field = AccessTools.Field(typeof(TInstance), name) ??

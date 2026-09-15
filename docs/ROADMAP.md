@@ -69,14 +69,16 @@ codecs and snapshot providers; garrison catalogue/selection/spawning/lifecycle.
   and autonomous roaming infantry. A legibility and warfare proposal — marker scale, roof
   bands, smoke cue, street dressing, zone tiers — is tracked in
   [URBAN_COMBAT.md](URBAN_COMBAT.md).
-- **Radio** — the `RAD` panel is now a receiver: an FM/MW dial with station frequencies,
-  fine tuning with dead air and seek, a band switch, a volume knob, synthesized
-  carrier/squelch/morse ident, a broadcast filter, presets and SCAN, a clickable programme
-  log of the tuned station's tracks, a rotating wire line and intercepted enemy chatter.
-  Base Broadcast still catalogs the installed score across
-  registered maps (up to 30 deduplicated clips). In-game visual/interaction acceptance and
-  long-session gates remain; MP3 only after a real decode test; synchronized broadcast stays
-  behind the handshake/manifest gate in [DESIGN_NOTES.md](DESIGN_NOTES.md).
+- **Radio** — the `RAD` screen is a receiver: three bands (FM 100 kHz, VHF air 25 kHz AM,
+  MW 10 kHz) with a spectrum waterfall, an S-meter fed by a local link budget (range, radio
+  horizon, terrain line of sight), squelch, bandwidth, mode override, fine tuning, seek/scan,
+  a clickable programme log of the tuned station's tracks and intercepted enemy chatter. The
+  hosted `MUS` screen is the local deck for the same library. Base Broadcast still catalogs
+  the installed score across registered maps (up to 30 deduplicated clips). Transmit, crypto
+  nets and jamming are inert placeholders (`RadioLinkStub`), and voice would need the
+  handshake/manifest gate in [DESIGN_NOTES.md](DESIGN_NOTES.md) before it exists. In-game
+  visual/interaction acceptance and long-session gates remain; MP3 only after a real decode
+  test; synchronized broadcast stays gated.
 - **Progression** — persistent profiles only after migration + recovery tests; client
   receives only its accepted snapshot. Perk costs and the score-per-point tier are the two
   balance dials to revisit once mission-length data exists. The SQD studio and emblem

@@ -73,7 +73,6 @@ namespace BoscaliSummer.Features.Support.Visuals
         public static float VaporCloudDetailScale { get; private set; } = 30f;
         public static AudioClip NukeExplosionClip { get; private set; }
         public static Material SmokeParticleMaterial { get; private set; }
-        public static Material EjectaParticleMaterial { get; private set; }
 
         public static void EnsureResolved()
         {
@@ -210,10 +209,6 @@ namespace BoscaliSummer.Features.Support.Visuals
                         if (SmokeParticleMaterial == null && (mName.IndexOf("smoke", StringComparison.OrdinalIgnoreCase) >= 0 || mName.IndexOf("dust", StringComparison.OrdinalIgnoreCase) >= 0))
                         {
                             SmokeParticleMaterial = psr.sharedMaterial;
-                        }
-                        if (EjectaParticleMaterial == null && (mName.IndexOf("fire", StringComparison.OrdinalIgnoreCase) >= 0 || mName.IndexOf("blast", StringComparison.OrdinalIgnoreCase) >= 0 || mName.IndexOf("ejecta", StringComparison.OrdinalIgnoreCase) >= 0))
-                        {
-                            EjectaParticleMaterial = psr.sharedMaterial;
                         }
                     }
                 }

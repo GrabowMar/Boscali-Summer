@@ -81,6 +81,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             public GameObject PathObj;
             public Image Path;
             public GameObject DestObj;
+            public Image Dest;
             public bool IsInUse;
         }
 
@@ -639,6 +640,7 @@ namespace BoscaliSummer.Features.Support.Presentation
                     PathObj = pathObj,
                     Path = path,
                     DestObj = destObj,
+                    Dest = destImage,
                     IsInUse = false
                 });
             }
@@ -827,7 +829,7 @@ namespace BoscaliSummer.Features.Support.Presentation
                     marker.DestObj.SetActive(true);
                     marker.DestObj.transform.localPosition = new Vector3(dx, dz, 0f);
                     marker.DestObj.transform.localScale = Vector3.one * invZoom;
-                    marker.DestObj.GetComponent<Image>().color = role;
+                    marker.Dest.color = role;
                 }
                 else
                 {

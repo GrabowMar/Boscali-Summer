@@ -1,8 +1,9 @@
 # Urban combat — legibility and warfare design proposal
 
-Status: **P0 implemented** (A1 shell-scaled masts/flags, A2 roof-edge band); the rest is a
-proposal, nothing here is a README claim. Gated future scope, see [ROADMAP.md](ROADMAP.md).
-Where this doc and the code disagree, the code wins.
+Status: **P0 implemented** (A1 shell-scaled masts/flags, A2 roof-edge band); banner devices
+from B4 implemented early alongside A2. The rest is a proposal, nothing here is a README
+claim. Gated future scope, see [ROADMAP.md](ROADMAP.md). Where this doc and the code
+disagree, the code wins.
 
 Scope owner: `modules/UrbanCombat` (config, patches, runtime, visuals). Proposed work stays
 inside that module and `tests/BoscaliSummer.Tests/Features/UrbanCombat`.
@@ -166,6 +167,21 @@ capture, cleanup on flip) and ship only Part A + B1/B2.
 Variation inside existing budgets: nest loadout per building, sandbag tint per faction,
 camo/banner stencils, one AA nest on the tallest roof in a zone. No new asset pipeline
 required for the first pass.
+
+**Banner device — implemented.** The flag mesh (`AddFlag` in
+`Visuals/OccupiedBuildingMarking.cs`) previously carried a flat faction-colour material plus
+a thin pale hoist stripe; two factions with similar HQ colours could read as the same flag.
+`Visuals/FactionBannerTexture.cs` now bakes a small (64x36) procedural texture per faction
+identity: a solid field in the faction colour, one of five deterministic heraldic devices
+(bend, chevron, cross-cut canton, fess, saltire) picked by hashing the faction's own
+`factionName` (falling back to its colour for an unnamed/modded faction), a dark hoist/edge
+border, and a device colour chosen for contrast against the field's luminance so it reads on
+both light and dark faction colours. This is shape-plus-colour redundant encoding for the
+flag itself, consistent with the legibility model above; it does not touch the roof band,
+which keeps its own viewer-relative HUD accent. Cached per faction identity (never rebuilt
+per building); re-applied on the existing 0.5 s poll only when a capture flip actually
+changes the owning faction. No new renderers, no new asset pipeline, no bundled or
+downloaded art — everything is generated at runtime from data the game already exposes.
 
 ### B5 Recon feedback
 

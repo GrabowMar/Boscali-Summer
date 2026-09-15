@@ -9,11 +9,11 @@ maintainers and coding agents; runtime design is in [ARCHITECTURE.md](ARCHITECTU
 | Local ownship autopilot landing, Boscali Summer native-radial entry | `modules/Autopilot` | `Features/Autopilot` | Framework lifecycle, game interop; no feature dependency |
 | Fire, impact scorch, ruins, smoke, wreck persistence, fire replication | `modules/FireAndDestruction` | `Features/FireAndDestruction` | Framework, game interop |
 | Occupied shells, defensive proxies, capture cleanup | `modules/UrbanCombat` | `Features/UrbanCombat` | Framework, game interop |
-| Local music, stations, hunt soundtrack override, MFD radio UI | `modules/Radio` | `Features/Radio` | Framework lifecycle, optional `ISquadView`, game interop |
+| Local music, stations, receiver (`RAD`) + deck (`MUS`) screens, hunt soundtrack override | `modules/Radio` | `Features/Radio` | Framework lifecycle, optional `ISquadView`, game interop |
 | Player pilot careers, enemy ace hunts, bonus awards and roster snapshots | `modules/Squad` | `Features/Squad` | Framework lifecycle/contracts, cached Wing Command public API adapter |
 | SQD MFD (dossier, shared skills, aces, pilot studio, local emblems), score/ace-earned perks, capabilities, reward/fuel effects | `modules/Progression` | `Features/Progression` | Squad through `ISquadView`, Framework lifecycle/contracts, game interop (Wing Command public API via `WingLink`) |
 | OPS MFD (support, observation, battle status), request validation, costs, cooldowns, spawn jobs | `modules/Support` | `Features/Support` | Progression + optional zone-fortification contracts, game interop |
-| STR MFD, expanded map GUI, map overlays, doctrine, AI target scoring | `modules/Command` | `Features/Command` | Progression contracts, game interop |
+| STR MFD, expanded map GUI, map overlays, territory/frontline field | `modules/Command` | `Features/Command` | Progression contracts, game interop |
 | Secondary objectives, faction awards, finite reinforcement batches | `modules/DynamicOperations` | `Features/DynamicOperations` | Framework lifecycle/contracts, native game interop |
 | Generated staff tree, command posts, VIP convoys, intel, stipends/bounties | `modules/HighCommand` | `Features/HighCommand` | Framework lifecycle/contracts, native game interop; consumed by Command through `IHighCommandView` |
 | Rotating world events, EVN MFD feed, support-cost modifier | `modules/Events` | `Features/Events` | Framework lifecycle/contracts, native game interop; publishes `IActiveEventsView`, optionally consumed by Support |
@@ -52,6 +52,9 @@ command page; HighCommand resolves it late through `ModServices`, imports no sib
 implementation, and neither module requires the other to install. The view carries a
 generated `Sprite` portrait only because Command may not import the owner's renderer; the
 owner caches and clears it.
+
+DynamicOperations' solo-only ADM bezel consumes `ISecondaryObjectivesView` (published by
+the same module) for the faction tasking board that used to live on STR.
 
 Progression depends on Squad's read-only `ISquadView` for pilot generations and ace
 bonus points. Radio observes the same contract optionally for local music transitions.
