@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Performance/stability: flare IR registers once, fire/ruin NaN drops, visual/smoke pool caps, events replicate, portraits fail-closed, parachute meshes dispose, fire handlers unregister, PatchGuard on support/autopilot/fuel prefixes.
+- Performance/stability: flare IR registers once and is removed on barrage end; fire smoke pool cap 32 / ruin smoke 24; fire/ruin NaN drops; events replicate to clients; portraits fail-closed; parachute meshes dispose; fire handlers unregister; PatchGuard on support/autopilot/fuel prefixes.
 
 - Removed the unverified, default-off QoL gun aim assist (`GunAimAssist` /
   `GunAimAssistStrength`). Harmony hooks on `ControlsFilter.GetAim` and

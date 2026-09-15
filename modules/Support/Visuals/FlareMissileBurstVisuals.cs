@@ -25,10 +25,14 @@ namespace BoscaliSummer.Features.Support.Visuals
         private const int SampleRate = 44100;
         private const int DeduplicationLimit = 16;
         private const int MaximumLiveBarrages = 2;
+        private const int MaximumIrRegistrations = 256;
         private static readonly List<(Vector3 Position, float Time)> RecentBarrages =
             new List<(Vector3 Position, float Time)>(DeduplicationLimit);
         private static readonly List<FlareMissileBurstVisuals> Live =
             new List<FlareMissileBurstVisuals>(MaximumLiveBarrages);
+
+        private readonly List<(Aircraft Aircraft, IRSource Source)> irRegistrations =
+            new List<(Aircraft Aircraft, IRSource Source)>(64);
 
         private static GameObject cachedFlarePrefab;
         private static bool hasSearchedPrefab;
@@ -95,12 +99,21 @@ namespace BoscaliSummer.Features.Support.Visuals
         public static void Reset()
         {
             for (int i = Live.Count - 1; i >= 0; i--)
-                if (Live[i] != null) Destroy(Live[i].gameObject);
+            {
+                FlareMissileBurstVisuals live = Live[i];
+                if (live == null) continue;
+                live.UnregisterFlareIr();
+                Destroy(live.gameObject);
+            }
             Live.Clear();
             RecentBarrages.Clear();
         }
 
-        private void OnDestroy() => Live.Remove(this);
+        private void OnDestroy()
+        {
+            UnregisterFlareIr();
+            Live.Remove(this);
+        }
 
         private IEnumerator BarrageRoutine(Vector3 impactPoint, float radius, float duration, int initialFlares)
         {
@@ -251,7 +264,7 @@ namespace BoscaliSummer.Features.Support.Visuals
             }
         }
 
-        private static void SpawnFlares(
+        private void SpawnFlares(
             Vector3 originPoint,
             float radius,
             GameObject flarePrefab,
@@ -362,7 +375,7 @@ namespace BoscaliSummer.Features.Support.Visuals
             }
         }
 
-        private static void RegisterFlareIr(
+        private void RegisterFlareIr(
             Vector3 originPoint, float radius, IRSource source, Aircraft alreadyRegistered)
         {
             if (source == null) return;
@@ -373,9 +386,23 @@ namespace BoscaliSummer.Features.Support.Visuals
             {
                 Aircraft ac = allAircraft[i];
                 if (ac == null || ac.disabled || ac == alreadyRegistered) continue;
-                if ((ac.transform.position - originPoint).sqrMagnitude <= radiusSquared)
-                    ac.AddIRSource(source);
+                if ((ac.transform.position - originPoint).sqrMagnitude > radiusSquared) continue;
+                ac.AddIRSource(source);
+                if (irRegistrations.Count < MaximumIrRegistrations)
+                    irRegistrations.Add((ac, source));
             }
+        }
+
+        private void UnregisterFlareIr()
+        {
+            for (int i = 0; i < irRegistrations.Count; i++)
+            {
+                Aircraft ac = irRegistrations[i].Aircraft;
+                IRSource source = irRegistrations[i].Source;
+                if (ac != null && source != null)
+                    ac.RemoveIRSource(source);
+            }
+            irRegistrations.Clear();
         }
 
         private static void MisguideMissile(Missile missile, Vector3 impactPoint, List<IRSource> flareSources)

@@ -71,7 +71,7 @@ namespace BoscaliSummer.Fire
         private static readonly List<Renderer> visibleRendererBuffer = new List<Renderer>(32);
         private readonly ForestIndex forestIndex = new ForestIndex();
         private readonly FireVisualPool visualPool = new FireVisualPool();
-        private readonly FuelDepotSmokePool fuelDepotSmokePool = new FuelDepotSmokePool();
+        private readonly FuelDepotSmokePool fuelDepotSmokePool = new FuelDepotSmokePool(32);
         private readonly BurnScarPool burnScars = new BurnScarPool();
         private Coroutine indexRoutine;
         private CommandBuffer burnMarkCommands;

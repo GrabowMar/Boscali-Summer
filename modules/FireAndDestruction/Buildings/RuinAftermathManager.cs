@@ -26,7 +26,7 @@ namespace BoscaliSummer.Fire
         public static RuinAftermathManager Instance { get; private set; }
 
         private readonly List<RuinSite> ruins = new List<RuinSite>(128);
-        private readonly FuelDepotSmokePool smokePool = new FuelDepotSmokePool();
+        private readonly FuelDepotSmokePool smokePool = new FuelDepotSmokePool(24);
         private readonly CollapseBurstPool collapsePool = new CollapseBurstPool();
         private float nextSelection;
         private float nextVisualTick;
