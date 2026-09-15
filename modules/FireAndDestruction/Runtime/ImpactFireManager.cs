@@ -217,12 +217,21 @@ namespace BoscaliSummer.Fire
             uint hash = Deterministic.Hash(x, y, z,
                 impact.Salt ^ (impact.Explosive ? 0x51f15e : 0x18b7) ^ impactSequence++);
             if (Deterministic.UnitFloat(hash) >= chance) return;
+            // An aircraft hit, an air-to-air interception or a proximity airburst reports its
+            // impact point in the sky. The forest test is two-dimensional, so without a ground
+            // anchor check the flame column and its plume spawn mid-air.
+            bool forest = mapBuilding == null && networkBuilding == null;
+            GlobalPosition anchor;
+            if (forest)
+            {
+                if (!TrySnapForestFireToGround(impact.Position, ImpactGroundSnapDrop, out anchor)) return;
+            }
+            else
+            {
+                anchor = SnapBuildingFireToRoof(impact.Position, networkBuilding, mapBuilding);
+            }
             PruneCellCooldowns(now);
             cellCooldowns[cell] = now + Fire.FireCellCooldown;
-            bool forest = mapBuilding == null && networkBuilding == null;
-            GlobalPosition anchor = forest
-                ? SnapForestFireToGround(impact.Position)
-                : SnapBuildingFireToRoof(impact.Position, networkBuilding, mapBuilding);
             Ignite(anchor, now, forest,
                 0, true, networkBuilding, mapBuilding);
         }
@@ -297,12 +306,18 @@ namespace BoscaliSummer.Fire
                 Mathf.RoundToInt(explosion.Position.z * 0.25f),
                 explosion.InstanceId, 0x6f2e9a31);
             if (Deterministic.UnitFloat(hash) >= Fire.VehicleExplosionIgnitionChance) return;
+
+            GlobalPosition anchor;
+            if (forest)
+            {
+                if (!TrySnapForestFireToGround(forestAnchor, ImpactGroundSnapDrop, out anchor)) return;
+            }
+            else
+            {
+                anchor = SnapBuildingFireToRoof(explosion.Position, nearestNetwork, nearestMap);
+            }
             PruneCellCooldowns(now);
             cellCooldowns[cell] = now + Fire.FireCellCooldown;
-
-            GlobalPosition anchor = forest
-                ? SnapForestFireToGround(forestAnchor)
-                : SnapBuildingFireToRoof(explosion.Position, nearestNetwork, nearestMap);
             Ignite(anchor, now, forest, 0, true, nearestNetwork, nearestMap);
             if (Diagnostics.VerboseLogging.Value)
                 Plugin.Logger.LogInfo(forest
@@ -587,7 +602,8 @@ namespace BoscaliSummer.Fire
                 GlobalPosition candidate = source.Position + direction * distance;
                 if (!forestIndex.Contains(candidate) || !SeparatedFromExisting(candidate, baseDistance * 0.38f)) continue;
 
-                GlobalPosition grounded = SnapForestFireToGround(candidate);
+                GlobalPosition grounded;
+                if (!TrySnapForestFireToGround(candidate, Fire.FireSpreadDistance, out grounded)) continue;
                 // Spread must create a new visible section of the fire line. Merging here
                 // used the same large radius intended for unrelated impact consolidation,
                 // so every 60-90 m child was swallowed back into its parent and only made
@@ -664,7 +680,7 @@ namespace BoscaliSummer.Fire
             Vector3 crosswind = new Vector3(-windDir.z, 0f, windDir.x);
 
             float scale = Mathf.Clamp(clusterScale, 1f, 3f);
-            float mark = FireScorchPolicy.BurnMarkRadius(scale);
+            float scar = FireScorchPolicy.ScarDiameter(scale);
             QueueScorch(position, scale);
 
             uint seed = Deterministic.Hash(
@@ -672,9 +688,13 @@ namespace BoscaliSummer.Fire
 
             // Two lighter lobes stretch the ash bed along and across the wind front. They
             // carry no tree removal, so the consumed stand stays a compact hole while the
-            // gray burnt soil spreads with the front the way a nuclear stamp does.
-            float downwindOffset = mark * Mathf.Lerp(0.30f, 0.52f, Deterministic.UnitFloat(seed));
-            float crossOffset = mark * Mathf.Lerp(0.20f, 0.36f, Deterministic.UnitFloat(seed ^ 0x9e3779b9u));
+            // gray burnt soil spreads with the front the way a nuclear stamp does. Offsets
+            // are fractions of the soot decal itself, so the three decals overlap into one
+            // ragged scar instead of scattering across the ash radius.
+            float downwindOffset = scar * FireScorchPolicy.ScarLobeDownwind *
+                Mathf.Lerp(0.8f, 1.2f, Deterministic.UnitFloat(seed));
+            float crossOffset = scar * FireScorchPolicy.ScarLobeCrosswind *
+                Mathf.Lerp(0.8f, 1.2f, Deterministic.UnitFloat(seed ^ 0x9e3779b9u));
             QueueScorchLobe(position + windDir * downwindOffset, scale, 0.85f);
             QueueScorchLobe(position + crosswind * crossOffset + windDir * (downwindOffset * 0.35f), scale, 0.78f);
         }
@@ -705,13 +725,30 @@ namespace BoscaliSummer.Fire
             }
         }
 
-        private static GlobalPosition SnapForestFireToGround(GlobalPosition position)
+        // A reported impact on a slope, canopy or vehicle sits within a couple of metres of
+        // the surface. Anything farther below is an air burst that must simply not start a
+        // ground fire. Forest spread reuses the same probe with one spread step of slack, so
+        // the front can still walk down a steep valley side.
+        private const float ImpactGroundSnapDrop = 30f;
+        private const float GroundProbeHeight = 120f;
+        private const float GroundProbeRange = 400f;
+
+        private static bool TrySnapForestFireToGround(
+            GlobalPosition position, float maxDrop, out GlobalPosition grounded)
         {
+            grounded = position;
             Vector3 local = position.ToLocalPosition();
             RaycastHit hit;
-            if (Physics.Raycast(local + Vector3.up * 80f, Vector3.down, out hit, 260f, PhysicsLayers.StaticsMask))
-                return (hit.point + Vector3.up * 0.2f).ToGlobalPosition();
-            return position;
+            // Probe from well above the reported point: the fixed 260 m ray used to miss the
+            // ground under high air bursts and returned the air position unchanged, which is
+            // how a flame column ended up hanging in the sky. Failing closed is the fix.
+            if (!Physics.Raycast(local + Vector3.up * GroundProbeHeight, Vector3.down, out hit,
+                    GroundProbeRange, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore))
+                return false;
+            if (!FireGroundSnapPolicy.CanAnchor(
+                    hit.point.y, local.y, Datum.LocalSeaY, maxDrop)) return false;
+            grounded = (hit.point + Vector3.up * 0.2f).ToGlobalPosition();
+            return true;
         }
 
         private GlobalPosition SnapBuildingFireToRoof(

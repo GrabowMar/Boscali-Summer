@@ -48,6 +48,10 @@ namespace BoscaliSummer
             BindAndRemove(config, "Air Assault", "InfantryPerFastRope", 8);
             BindAndRemove(config, "Radio", "Volume", 0.65f);
 
+            // The sector grid moved from a fixed dimension count to cells on the map's own
+            // base grid, so the old size knob no longer means anything.
+            BindAndRemove(config, "Command", "GridResolution", 32);
+
             // Support costs stopped being hand-picked constants and became vanilla-value
             // derived. The old keys are purged rather than reused: an existing config would
             // otherwise keep charging 10 and 8 allocation against a four-figure balance.

@@ -19,6 +19,7 @@ namespace BoscaliSummer.Tests
             FrameworkTests.Run();
             ImpactScorchTests.Run();
             FireScorchTests.Run();
+            GroundSnapTests.Run();
             TroopDeploymentTests.Run();
             GarrisonMarkerInfoTests.Run();
             RadioTests.Run();

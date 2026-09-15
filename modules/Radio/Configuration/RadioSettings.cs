@@ -9,26 +9,34 @@ namespace BoscaliSummer.Features.Radio.Configuration
         Broadcast
     }
 
+    /// <summary>What the receiver demodulates: the band's own scheme, or a forced one.</summary>
+    internal enum ReceiverMode
+    {
+        Auto,
+        Fm,
+        Am
+    }
+
     internal sealed class RadioSettings
     {
-        public const int PresetSlots = 6;
-        public const int NoPreset = -1;
-
         public readonly ConfigEntry<bool> Enabled;
         public readonly ConfigEntry<float> CrossfadeSeconds;
         public readonly ConfigEntry<bool> Shuffle;
         public readonly ConfigEntry<bool> RepeatTrack;
         public readonly ConfigEntry<BroadcastFilterMode> BroadcastFilter;
+        public readonly ConfigEntry<ReceiverMode> Mode;
+        public readonly ConfigEntry<float> Squelch;
+        public readonly ConfigEntry<bool> NarrowBandwidth;
+        public readonly ConfigEntry<bool> FineTuning;
         public readonly ConfigEntry<float> Volume;
         public readonly ConfigEntry<bool> StationIdents;
         public readonly ConfigEntry<bool> CarrierNoise;
         public readonly ConfigEntry<float> ScanDwellSeconds;
-        public readonly ConfigEntry<int>[] Presets;
 
         public RadioSettings(ConfigFile config)
         {
             Enabled = config.Bind("Radio", "Enabled", true,
-                "Enable the Boscali radio and its map MFD panel. " +
+                "Enable the Boscali radio and its map MFD panels. " +
                 "Client-local: this setting affects only your own game, never other players.");
             CrossfadeSeconds = config.Bind("Radio", "CrossfadeSeconds", 1.5f,
                 new ConfigDescription(
@@ -41,8 +49,21 @@ namespace BoscaliSummer.Features.Radio.Configuration
 
             BroadcastFilter = config.Bind("Radio", "BroadcastFilter", BroadcastFilterMode.Broadcast,
                 "Receiver character on the music: Clean passes it through untouched, Light " +
-                "band-limits it, Broadcast narrows it to an AM speech band with a touch of crunch. " +
-                "MW stations always keep the AM curve; this setting governs FM.");
+                "band-limits it, Broadcast narrows it to a speech band with a touch of crunch. " +
+                "AM bands always keep the AM curve; this setting governs FM.");
+            Mode = config.Bind("Radio", "Mode", ReceiverMode.Auto,
+                "Receiver demodulator. Auto follows the band (FM broadcast is FM, VHF air and MW " +
+                "are AM). Forcing the wrong mode on a station garbles it, as a real set would.");
+            Squelch = config.Bind("Radio", "Squelch", 0.15f,
+                new ConfigDescription(
+                    "Signal floor, 0-1, below which the channel is muted and only the set's own " +
+                    "hiss is heard. The SQ keys on the tuner move it while flying.",
+                    new AcceptableValueRange<float>(0f, 0.95f)));
+            NarrowBandwidth = config.Bind("Radio", "NarrowBandwidth", false,
+                "NARROW cuts the passband: less noise on a weak AM signal, duller audio on FM.");
+            FineTuning = config.Bind("Radio", "FineTuning", false,
+                "FINE halves the tuning step five ways, so the dial can sit between channels. " +
+                "Off-grid positions are dead air, exactly as they are on a real set.");
             Volume = config.Bind("Radio", "Volume", 1f,
                 new ConfigDescription(
                     "Receiver volume knob; scales music, carrier static and station idents. " +
@@ -56,16 +77,6 @@ namespace BoscaliSummer.Features.Radio.Configuration
                 new ConfigDescription(
                     "Seconds SCAN holds on each station before seeking the next.",
                     new AcceptableValueRange<float>(2f, 15f)));
-
-            Presets = new ConfigEntry<int>[PresetSlots];
-            for (int i = 0; i < PresetSlots; i++)
-            {
-                Presets[i] = config.Bind("Radio", "Preset" + (i + 1), NoPreset,
-                    new ConfigDescription(
-                        "Station stored on preset " + (i + 1) + " (-1 is empty). Set in the panel " +
-                        "with SET, or edit here by station index.",
-                        new AcceptableValueRange<int>(NoPreset, 31)));
-            }
         }
     }
 }

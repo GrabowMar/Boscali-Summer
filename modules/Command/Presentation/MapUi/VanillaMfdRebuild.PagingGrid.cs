@@ -32,6 +32,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private Func<int, bool> enabled;
             private Action<int> clicked;
             private Func<int, Sprite> icon;
+            private Func<int, string> detail;
 
             public MfdPagingGrid(RectTransform parent, float y, float width, int columns, int rows,
                                   bool pager = true, bool readOnly = false, float rowHeight = 0f)
@@ -83,7 +84,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             public void SetData(int newCount, Func<int, string> labels,
                                 Func<int, bool> isSelected, Action<int> onClick,
-                                Func<int, bool> isEnabled = null, Func<int, Sprite> icons = null)
+                                Func<int, bool> isEnabled = null, Func<int, Sprite> icons = null,
+                                Func<int, string> details = null)
             {
                 count = Mathf.Max(0, newCount);
                 label = labels;
@@ -91,6 +93,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 clicked = onClick;
                 enabled = isEnabled;
                 icon = icons;
+                detail = details;
                 int maxPage = Mathf.Max(0, PageCount - 1);
                 if (page > maxPage) page = maxPage;
                 Refresh();
@@ -151,7 +154,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     string text = exists && label != null ? label(index) : "";
                     PaintButton(buttons[i], text, exists && selected != null && selected(index),
                         exists && icon != null ? icon(index) : null);
-                    buttons[i].WithTooltip(text);
+                    buttons[i].WithTooltip(exists && detail != null ? detail(index) : text);
                 }
 
                 empty.gameObject.SetActive(count == 0);

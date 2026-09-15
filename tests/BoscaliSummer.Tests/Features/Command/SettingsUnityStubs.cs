@@ -69,4 +69,14 @@ namespace NuclearOption.UIStyleSystem
     public class Theme { public Palette ColorTheme; }
     public class Palette { public Color AllClear, MapIconFriendly, HudUnitFriendly, Warning, Alert; }
 }
+namespace Rewired
+{
+    public sealed class Keyboard { public bool enabled; }
+    public sealed class Controllers { public Keyboard Keyboard => null; }
+    public static class ReInput
+    {
+        public static bool isReady => false;
+        public static Controllers controllers => null;
+    }
+}
 #endif

@@ -8,8 +8,9 @@ namespace BoscaliSummer.Features.Command.Configuration
         public ConfigEntry<bool> Enabled { get; }
         public ConfigEntry<bool> ExpandedMapUi { get; }
         public ConfigEntry<bool> FrontlinesOverlay { get; }
+        public ConfigEntry<bool> FrontlineTrace { get; }
         public ConfigEntry<float> OverlayOpacity { get; }
-        public ConfigEntry<int> GridResolution { get; }
+        public ConfigEntry<int> GridCellSizeMetres { get; }
         public ConfigEntry<float> GridRefreshInterval { get; }
 
         public ConfigEntry<float> DeckOpacity { get; }
@@ -42,20 +43,23 @@ namespace BoscaliSummer.Features.Command.Configuration
             ExpandedMapUi = config.Bind("Command", "ExpandedMapUi", true,
                 "Use Boscali's full tactical display: left panel and log, central map, right button rail, and spawn footer.");
             Enabled = config.Bind("Command", "Enabled", true,
-                "Enable the Tactical STR Panel, map tactical overlays, and AI Battle Director.");
+                "Enable the Tactical STR Panel and map tactical overlays.");
 
             FrontlinesOverlay = config.Bind("Command", "FrontlinesOverlay", true,
-                "Render tactical sector control grid and dynamic contested frontline boundaries on the tactical map.");
+                "Render the sector control tint over the tactical map. The MAP bezel's CONTROL FIELD layer switches it in game.");
+
+            FrontlineTrace = config.Bind("Command", "FrontlineTrace", true,
+                "Draw the front line trace above the control tint. Only drawn while the control field is on; the MAP bezel's FRONT LINE layer switches it in game.");
 
             OverlayOpacity = config.Bind("Command", "OverlayOpacity", 0.35f,
                 new ConfigDescription(
                     "Alpha opacity of the rasterized tactical map modes (0.1 = faint, 1.0 = solid).",
                     new AcceptableValueRange<float>(0.1f, 1.0f)));
 
-            GridResolution = config.Bind("Command", "GridResolution", 32,
+            GridCellSizeMetres = config.Bind("Command", "GridCellSizeMetres", 1000,
                 new ConfigDescription(
-                    "Advanced: tactical sector grid dimension (32 = 32x32). Applied when the module initializes; restart after changing. Recommended: 32.",
-                    new AcceptableValueRange<int>(16, 64)));
+                    "Advanced: tactical sector cell size in metres. 1000 matches the map's own base grid squares (the 10 km major squares are 10000). Applied when the module initializes; very large theaters coarsen it in powers of two.",
+                    new AcceptableValueRange<int>(250, 10000)));
 
             GridRefreshInterval = config.Bind("Command", "GridRefreshInterval", 0.5f,
                 new ConfigDescription(

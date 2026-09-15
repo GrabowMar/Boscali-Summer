@@ -61,6 +61,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             {
                 case "ExpandedMapUi": layoutPending = true; break;
                 case "FrontlinesOverlay":
+                case "FrontlineTrace":
                 case "OverlayOpacity":
                 case "GridRefreshInterval": overlayPending = true; break;
                 case "NewsTicker": tickerPending = true; break;
@@ -277,11 +278,15 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 () => settings.ExpandedMapUi.Value, v => settings.ExpandedMapUi.Value = v);
 
             Heading(parent, ref area, "02", "OVERLAYS", "FRONTLINES");
-            Toggle(parent, TakeRow(ref area), "FRONTLINES",
+            Toggle(parent, TakeRow(ref area), "CONTROL FIELD",
                 "Show faction control and contested sectors.",
                 () => settings.FrontlinesOverlay.Value, v => settings.FrontlinesOverlay.Value = v);
+            Toggle(parent, TakeRow(ref area), "FRONT LINE",
+                "Draw the front line trace above the control field.",
+                () => settings.FrontlineTrace.Value, v => settings.FrontlineTrace.Value = v,
+                () => settings.FrontlinesOverlay.Value, "Turn on the control field first.");
             Percent(parent, TakeRow(ref area), "FRONTLINE STRENGTH", settings.OverlayOpacity, .1f, 1f, .05f,
-                () => settings.FrontlinesOverlay.Value, "Turn on frontlines first.");
+                () => settings.FrontlinesOverlay.Value, "Turn on the control field first.");
             Stepper(parent, TakeRow(ref area), "UPDATE INTERVAL",
                 () => settings.GridRefreshInterval.Value.ToString("0.0") + " s",
                 d => settings.GridRefreshInterval.Value = Mathf.Clamp(
@@ -289,7 +294,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 () => settings.GridRefreshInterval.Value > .201f,
                 () => settings.GridRefreshInterval.Value < 1.999f,
                 "Longer intervals reduce CPU work. Recommended: 0.5 s.",
-                () => settings.FrontlinesOverlay.Value, "Turn on frontlines first.");
+                () => settings.FrontlinesOverlay.Value, "Turn on the control field first.");
 
             Heading(parent, ref area, "03", "TERRAIN", "SATELLITE");
             Toggle(parent, TakeRow(ref area), "TERRAIN IMAGE",

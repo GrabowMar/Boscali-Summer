@@ -2,6 +2,129 @@
 
 ## Unreleased
 
+- Radio split into two screens and rebuilt as an instrument. `RAD` is now a receiver: a
+  scrolled spectrum waterfall over the band, an S-meter in S-units and dBm, squelch with SQ
+  keys, wide/narrow bandwidth, an Auto/FM/AM mode switch that garbles a wrong-demodulator
+  signal, channel vs five-times-fine tuning, three bands (FM 100 kHz, VHF air 25 kHz AM,
+  MW 10 kHz), and TUNE/SEEK/SCAN/AF/PWR/STOP. Reception is modelled locally: a link budget
+  with free-space loss, the radio horizon `4.12·(√h_tx+√h_rx)` km and a terrain line-of-sight
+  probe against the game's ground mask, measured from the player's aircraft to each built-in
+  station's tower (HQ, other faction's HQ, nearest owned airbase), resolved on a 10 s timer;
+  a user folder or an unresolved tower reads full-scale instead of inventing a weak signal.
+  The new hosted `MUS` screen is the local deck: library folders on the left, their tracks
+  below, play/pause/skip/stop, shuffle, repeat, volume and rescan — no dial involved. Both
+  share one audio engine (`RadioProgram`) and one vanilla-soundtrack hold: the receiver keeps
+  the game's music silent from its first on-air play through dead air between stations and
+  only hands it back on STOP, with a 0.5 s sweep that stops any vanilla source that still
+  starts. Transmit and SECURE are inert placeholders (`RadioLinkStub`) and say so on the
+  panel; no network data is sent. Stations list shows modelled carrier strength; the rail
+  brands the new MUS button with its own glyph. FM step is now the real 100 kHz grid and the
+  band spans 87.5–108.0 MHz. Tests cover the propagation maths, spectrum rows, band cycle,
+  fine step and the hold rule.
+
+- Fire soot is measured in scar diameters again. The two lobe decals of a burn site were
+  offset by fractions of the site's 260 m blast-map ash radius, so every burn left three
+  disconnected ~30 m specks roughly 100 m apart and read as no soot at all from the air
+  (the blast map only feeds the vanilla tree/grass compute shaders — it never darkens bare
+  terrain, so those decals are the entire burn mark). Lobe offsets now scale with the soot
+  decal itself, which grew 30 to 45 m (38–58 m with the fire front), so a burn site stamps
+  one ragged overlapping scar and the spread restamps extend it along the front. Same
+  vanilla decal pool and ceilings; visual acceptance in game is pending.
+
+- OPS redesigned as an aerospace field console instead of a green terminal. A real heading
+  ("Operations" plus a functional page subtitle and two live pills), one resource band where
+  allocation leads and mission score follows, and a five-tab strip with a single amber
+  selection mark replace the id tag, chip rail, metric boxes and five outlined tabs. SUPPORT
+  is now five mission cards — pictogram, title, effective price, one-line effect and one
+  state line with a check/warning/clock symbol — followed by content-sized active missions
+  and a bounded activity log, so the old empty committed-missions frame is gone. Test
+  overrides are announced once in the resource band ("costs waived, requirements lifted" /
+  "cooldowns disabled", whichever is actually on) instead of repeated BYPASS labels and a
+  debug banner, and a waived price prints "Free · test override" with the real price kept in
+  the tooltip. SPACE gets a cleaner orbital instrument (hairline graticule, role pictograms,
+  amber selection ring, no CRT sweep), CYBER/EW use slate infrastructure cards with
+  neutrally-filled controls that only turn amber when armed, and STATUS keeps calm wording
+  and colour until a real alarm. Locked, unaffordable, cooling, offline and needs-asset
+  states each keep their own reason. Behaviour, authority, costs, cooldowns, coverage gates,
+  targeting and wire contracts are unchanged; the panel's own palette, kit and chrome
+  (`modules/Support/Presentation/OpsPalette.cs`, `OpsLook.cs`, `OpsShell.cs`) keep the
+  console identity stable across mission-theme changes and stylesheet reloads while leaving
+  the other MFD screens on the shared green-glass shell. Visual acceptance in game is
+  pending.
+- Trenches rebuilt from scratch as natural curves: the node/edge/growth graph, sector slots,
+  junction linking and per-row corridor validation are gone. `CopyFrontlineTraces` hands the
+  module Command's ordered contour (beachhead rings included); `TrenchPlanner` fits a cubic
+  Bezier chain, probes ownership 40m either side to find the ground the faction holds, and
+  chooses each station's depth with a dynamic program weighing low ground, the intended 60m
+  offset and smoothness — a line settles into a hollow, bends around a rise and stays
+  straight on level ground. Water, cliffs and broken ground split the line into runs instead
+  of cancelling the position, and a pocket ring is resampled with wraparound tangents.
+  Positions are capped at 1200m and 16 per theater, one plan attempt every two seconds with
+  the faction scan rotating; the belt (support trace at 110m, redoubt at 220m, communication
+  links, forward saps), the ditch mesh with its world-phased traverse wave, the native
+  MG/ATGM/MANPADS defenders and the runtime-filtered infantry works all anchor to the curve
+  stations. Curve and stage rules are pure and unit-tested.
+- Front line is now a plain vector map line instead of baked pixels
+  (`Presentation/MapUi/FrontlineGraphic`): one anti-aliased stroke per ordered front trace,
+  constant width and colour at every zoom, measured in map pixels so it stays crisp instead
+  of magnifying the 512px overlay texture into blocks. Situation colours, crenellation teeth
+  and chevrons are gone - the line only says where the front is, and the ground says what it
+  is: contested sectors bake as red/blue hatching whose stripe runs follow the cell's own
+  control value, with no third "contested" colour anywhere. Bounded by a 1200-station and
+  16k-vertex ceiling, hottest trace first; `TacticalSectorGrid` no longer rasterises a front
+  line and gains `GetSectorPressure` for the per-cell read.
+- The trench map trace drew one crenellation per ditch station, so every position merged its
+  teeth into a solid bar beside the fire line. Teeth are now spaced on the map (11 map pixels)
+  and the fire line is a single-pixel trace on a 1536px bake, so an entrenchment reads as a
+  crenellated line instead of a railroad.
+- Control grid rework: the frontline is the control field's interpolated zero contour
+  (`Runtime/SectorContour.cs`) instead of cell-edge bitmask borders, so trench sites get
+  real positions, local normals and lengths — diagonal fronts now entrench diagonally
+  instead of snapping to cardinal cell edges. The map draws one anti-aliased front line
+  with a forward-band tint only (no more hazard-filled cells or full-map wash), STR reports
+  front length in kilometres, and Command's overlay and the trench trace resolve the same
+  world span through one cached `TheaterFrame`.
+- STR rework: three tabs (**SA** merges the air picture and frontline, **COC**, **CMD**).
+  LOG is gone (FactionHQ figures stay on the vanilla faction panel). TASKING moved to a
+  new solo/host-only **ADM** bezel (`GameAccess.IsSoloAuthority()`), which tears down
+  when a second client connects and retries a free slot without evicting anyone.
+- Removed the CMD tactical-command system whole: mission-AI doctrine and its target-scoring
+  bias (`AiTargetScoringPatch`), per-cell Sector Focus, the map right-click menu and map
+  selection/reticle, and the `IMapSelectionView` contract. The CMD tab is now a WORK IN
+  PROGRESS placeholder; SA, COC, the control-grid overlay and the frontline symbol are
+  unchanged.
+- COC rework: every post is now a portrait row — rank, name, office, disposition and a
+  track for the post's share of the staff (the weight the survival stipend is paid on) —
+  ordered parents-first under trunk guides, so a base commander is drawn under the
+  commander it answers to rather than under whichever slot the host listed above it. Rows
+  take the pitch the page can afford and the dossier follows the last filled row, so a
+  six-post staff fills the page instead of sitting above four empty rows, and the page no
+  longer carries a second, redundant reading of the COMMAND metric. The dossier reads as a
+  file: disposition chip, generated portrait, site and decorations, traits, service bio.
+- EVN and ADM no longer fight for the six vanilla bezel buttons. Both are **hosted**
+  (`Infrastructure/GameInterop/MfdScreenHost.cs`): a button of their own is appended to the
+  vanilla column lists, so vanilla titles, toggles, shows and closes it exactly like any
+  other slot, and the rail brands it with the rest. That leaves the six vanilla slots for
+  WMC and the five claimed screens, so EVN/ADM can never be crowded out and WMC no longer
+  needs a pre-reservation.
+- Rail button icons were redrawn: a heavier consistent stroke, a solid aircraft silhouette
+  for WMC, a chevroned shield for the faction HQs, a head-and-shoulders squad mark, a
+  strapped crate for OPS, a broadcast mark for the event feed and a tasking-board mark for
+  ADM, which no longer shares MIS's flag.
+
+- OPS `SUPPORT` is a fire-control station, not a spreadsheet. A directive strip states
+  the next action (arm / right-click map / abort), a 2-column grid of tactical cards
+  (NATO glyph, name, effect, cost, whole-card CALL IN) replaces the code/cost/tasking
+  table, and a single live line reports inbound fire or the last host transmission —
+  never four empty committed rows or a reserved traffic log. Copy still comes from one
+  pure `SupportDesk.Capture` snapshot; the page still does not read the cursor or
+  pre-check satellite coverage. Disabled cards say why on the status strip.
+
+- Occupied-building flags now carry a small procedural banner (field colour, one of five
+  deterministic heraldic devices, dark border) baked per faction identity instead of a flat
+  colour rectangle, so BDF and PALA (and any modded faction) read apart by shape as well as
+  colour at distance. No new renderers, no bundled art; see URBAN_COMBAT.md B4.
+
 - Performance/stability: flare IR registers once and is removed on barrage end; fire smoke pool cap 32 / ruin smoke 24; fire/ruin NaN drops; events replicate to clients; portraits fail-closed; parachute meshes dispose; fire handlers unregister; PatchGuard on support/autopilot/fuel prefixes.
 
 - Removed the unverified, default-off QoL gun aim assist (`GunAimAssist` /
@@ -9,8 +132,6 @@
   `PilotPlayerState.PlayerAxisControls` are gone; native `ControlsFilter`
   flight-assist aim assist is unchanged. Leftover BepInEx keys are ignored.
 - STR empty-board air/territory ratios print "—" instead of a fake 50%.
-- CMD doctrine copy is scoring bias for friendly mission AI, not orders; wingmen stay
-  excluded.
 - CRYPTO farm copy no longer claims a support-request cooldown discount the host ignores.
   Cost scaling is unchanged.
 - Flare barrage copy states that it shares Satellite Scan (Recon) authorisation; no extra
@@ -87,7 +208,26 @@
   corridor validation was tightened so broken ground is rejected instead of sculpted over.
   Shooters are
   deliberately sparse — four native MG/ATGM/MANPADS per sector, interlocking rather than
-  crowded — and vehicles are stopped by a bounded low obstacle line on the fire trench. The
+  crowded — and vehicles are stopped by a bounded low obstacle line on the fire trench. Each
+  emplacement is now dug into the ditch itself: it nests in a fire-line or support-line bay
+  just behind the parados instead of standing sixteen metres out in the field, and the
+  MANPADS waits for the support line to exist rather than occupying bare ground. The ditch
+  was also rebuilt for the air picture: cross-sections mitre at every traverse so the
+  earthwork no longer folds over itself at corners, both ends close with a head-cover bank
+  instead of an open pipe mouth, the old metre-scale sawtooth became fire bays and diagonal
+  traverses every 5.5m whose pattern continues across sector joins, and spoil irregularity
+  is smooth instead of per-segment. A sector's fire line is now one continuous cubic Bezier
+  trace instead of a chain of modular edge meshes, and it is routed across the land rather
+  than aimed straight: the ground is sampled across a lateral band between every pair of
+  fire-line nodes and the line settles into the flattest, lowest corridor it can reach, so
+  it runs straight over a level field, bends around a rise and drops into a hollow. The
+  traverses are Bezier-eased too, so a bay runs straight through each turn and the corners
+  curl instead of cutting. Every node stays centred on the cut (each node-to-node run
+  carries a whole number of traverses) because spurs, works and defenders anchor to them,
+  and a route that cannot be fitted inside the fortified corridor falls back to the
+  per-edge ditch. Junction trenches between
+  two sectors are now kept as their own position-to-position edge instead of being resolved
+  against the local node ids, so a join no longer lands on an unrelated bay. The
   tactical map was decluttered: the fire line is solid with crenellations facing the enemy,
   support and rear traces read dimmer, strongpoints are single-pixel marks, and the
   projected contested trace is a dim dashed line. Release build, pure suite, module-boundary
@@ -569,6 +709,17 @@
   memory, removed the unused synthetic smoke path, and reduced routine distance work.
 - Expanded the compatibility probe to cover ground-vehicle destruction and the vanilla
   scorch decal dependency.
+
+- The frontline overlay now draws on the map's own base grid: one sector cell per vanilla
+  grid square (the 1 km lattice, aligned through the map's grid offset; `GridCellSizeMetres`
+  replaces `GridResolution`, and a theater too large for the 16384-cell budget coarsens the
+  cells in powers of two). The bake reads a partition-tree clustering of uniform control
+  blocks (`SectorClusterTree`), so a quiet rear is a few rectangles instead of thousands of
+  squares and only the front stays fine-grained; contested squares never merge and keep their
+  hatch split. Enclosed ground with no opposing presence — no ground troops and no airbase
+  anchor — is claimed for the enclosing side through the normal capture response, so a cut-off
+  pocket fills in on its own. The field stays advisory: vanilla capture is unchanged.
+  In-game acceptance pending.
 
 ## 0.1.1 - Destruction aftermath
 

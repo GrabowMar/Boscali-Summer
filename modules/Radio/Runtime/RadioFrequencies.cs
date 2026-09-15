@@ -7,22 +7,89 @@ namespace BoscaliSummer.Features.Radio.Runtime
     internal enum RadioBand
     {
         Fm,
+        Air,
         Mw
     }
 
-    /// <summary>
-    /// A dial position, kept in integer kilohertz so a station's identity and any stored
-    /// preset survive a rebuild exactly. FM reads out in MHz, MW in kHz, exactly as the
-    /// bands are spoken on air.
-    /// </summary>
-    internal readonly struct RadioDial : IEquatable<RadioDial>
+    internal enum RadioModulation
     {
-        public const int FmMinKilohertz = 87900;
-        public const int FmMaxKilohertz = 107900;
-        public const int FmStepKilohertz = 200;
+        Fm,
+        Am
+    }
+
+    /// <summary>
+    /// The three bands the receiver covers, and the only place their edges, increments and
+    /// modulation are written down. FM is wideband stereo broadcast, VHF AIR is the AM
+    /// aviation band (25 kHz channels, three-decimal megahertz), MW is medium-wave AM.
+    /// </summary>
+    internal static class RadioBands
+    {
+        public const int FmMinKilohertz = 87500;
+        public const int FmMaxKilohertz = 108000;
+        public const int FmStepKilohertz = 100;
+        public const int AirMinKilohertz = 118000;
+        public const int AirMaxKilohertz = 136975;
+        public const int AirStepKilohertz = 25;
         public const int MwMinKilohertz = 530;
         public const int MwMaxKilohertz = 1700;
         public const int MwStepKilohertz = 10;
+
+        public static readonly RadioBand[] All = { RadioBand.Fm, RadioBand.Air, RadioBand.Mw };
+
+        public static int Min(RadioBand band) => band == RadioBand.Fm
+            ? FmMinKilohertz
+            : band == RadioBand.Air ? AirMinKilohertz : MwMinKilohertz;
+
+        public static int Max(RadioBand band) => band == RadioBand.Fm
+            ? FmMaxKilohertz
+            : band == RadioBand.Air ? AirMaxKilohertz : MwMaxKilohertz;
+
+        public static int Step(RadioBand band) => band == RadioBand.Fm
+            ? FmStepKilohertz
+            : band == RadioBand.Air ? AirStepKilohertz : MwStepKilohertz;
+
+        public static RadioModulation Modulation(RadioBand band) =>
+            band == RadioBand.Fm ? RadioModulation.Fm : RadioModulation.Am;
+
+        public static bool IsFm(RadioBand band) => Modulation(band) == RadioModulation.Fm;
+
+        public static string BandText(RadioBand band) => band == RadioBand.Fm
+            ? "FM"
+            : band == RadioBand.Air ? "VHF" : "MW";
+
+        public static string UnitText(RadioBand band) => band == RadioBand.Mw ? "kHz" : "MHz";
+
+        public static string ModulationText(RadioBand band, RadioModulation mode) =>
+            mode == RadioModulation.Fm ? "FM" : "AM";
+
+        public static RadioBand Next(RadioBand band)
+        {
+            int index = Array.IndexOf(All, band);
+            return All[(index + 1 + All.Length) % All.Length];
+        }
+
+        public static string Format(RadioBand band, int kilohertz)
+        {
+            if (band == RadioBand.Mw)
+                return kilohertz.ToString(CultureInfo.InvariantCulture);
+            return band == RadioBand.Air
+                ? (kilohertz / 1000f).ToString("0.000", CultureInfo.InvariantCulture)
+                : (kilohertz / 1000f).ToString("0.0", CultureInfo.InvariantCulture);
+        }
+    }
+
+    /// <summary>
+    /// A dial position, kept in integer kilohertz so a station's identity survives a rebuild
+    /// exactly. FM and VHF read out in MHz, MW in kHz, exactly as the bands are spoken on air.
+    /// </summary>
+    internal readonly struct RadioDial : IEquatable<RadioDial>
+    {
+        public const int FmMinKilohertz = RadioBands.FmMinKilohertz;
+        public const int FmMaxKilohertz = RadioBands.FmMaxKilohertz;
+        public const int FmStepKilohertz = RadioBands.FmStepKilohertz;
+        public const int MwMinKilohertz = RadioBands.MwMinKilohertz;
+        public const int MwMaxKilohertz = RadioBands.MwMaxKilohertz;
+        public const int MwStepKilohertz = RadioBands.MwStepKilohertz;
 
         public RadioBand Band { get; }
         public int Kilohertz { get; }
@@ -35,20 +102,29 @@ namespace BoscaliSummer.Features.Radio.Runtime
 
         public static RadioDial Fm(int kilohertz) => new RadioDial(RadioBand.Fm, kilohertz);
         public static RadioDial Mw(int kilohertz) => new RadioDial(RadioBand.Mw, kilohertz);
+        public static RadioDial Air(int kilohertz) => new RadioDial(RadioBand.Air, kilohertz);
 
-        public bool IsFm => Band == RadioBand.Fm;
-        public string BandText => IsFm ? "FM" : "MW";
-        public string UnitText => IsFm ? "MHz" : "kHz";
+        public static RadioDial At(RadioBand band, int kilohertz) =>
+            new RadioDial(band, kilohertz);
 
-        public string FrequencyText => IsFm
-            ? (Kilohertz / 1000f).ToString("0.0", CultureInfo.InvariantCulture)
-            : Kilohertz.ToString(CultureInfo.InvariantCulture);
+        public bool IsFm => RadioBands.IsFm(Band);
+        public RadioModulation Modulation => RadioBands.Modulation(Band);
+        public string BandText => RadioBands.BandText(Band);
+        public string UnitText => RadioBands.UnitText(Band);
+
+        public string FrequencyText => RadioBands.Format(Band, Kilohertz);
 
         public string FullText => FrequencyText + " " + UnitText;
 
-        public float Fraction => IsFm
-            ? (Kilohertz - FmMinKilohertz) / (float)(FmMaxKilohertz - FmMinKilohertz)
-            : (Kilohertz - MwMinKilohertz) / (float)(MwMaxKilohertz - MwMinKilohertz);
+        public float Fraction
+        {
+            get
+            {
+                int min = RadioBands.Min(Band);
+                int max = RadioBands.Max(Band);
+                return max <= min ? 0f : (Kilohertz - min) / (float)(max - min);
+            }
+        }
 
         public bool Equals(RadioDial other) => Band == other.Band && Kilohertz == other.Kilohertz;
         public override bool Equals(object obj) => obj is RadioDial other && Equals(other);
@@ -61,14 +137,28 @@ namespace BoscaliSummer.Features.Radio.Runtime
     /// </summary>
     internal static class RadioDialTuning
     {
-        public static RadioDial Step(RadioDial dial, int direction)
+        public static RadioDial Step(RadioDial dial, int direction) =>
+            Step(dial, direction, 1);
+
+        public static RadioDial Step(RadioDial dial, int direction, int increments)
         {
             if (direction == 0) return dial;
-            int step = dial.IsFm ? RadioDial.FmStepKilohertz : RadioDial.MwStepKilohertz;
-            int min = dial.IsFm ? RadioDial.FmMinKilohertz : RadioDial.MwMinKilohertz;
-            int max = dial.IsFm ? RadioDial.FmMaxKilohertz : RadioDial.MwMaxKilohertz;
+            int step = RadioBands.Step(dial.Band) * Math.Max(1, increments);
+            int min = RadioBands.Min(dial.Band);
+            int max = RadioBands.Max(dial.Band);
             int khz = Math.Min(max, Math.Max(min, dial.Kilohertz + direction * step));
-            return dial.IsFm ? RadioDial.Fm(khz) : RadioDial.Mw(khz);
+            return RadioDial.At(dial.Band, khz);
+        }
+
+        /// <summary>A reduced increment for the FINE knob: each band keeps its own grid divisor.</summary>
+        public static RadioDial FineStep(RadioDial dial, int direction, int divisor)
+        {
+            if (direction == 0) return dial;
+            int step = Math.Max(1, RadioBands.Step(dial.Band) / Math.Max(1, divisor));
+            int min = RadioBands.Min(dial.Band);
+            int max = RadioBands.Max(dial.Band);
+            int khz = Math.Min(max, Math.Max(min, dial.Kilohertz + direction * step));
+            return RadioDial.At(dial.Band, khz);
         }
 
         public static int IndexAt(IReadOnlyList<RadioDial> dials, RadioDial dial)
@@ -132,12 +222,12 @@ namespace BoscaliSummer.Features.Radio.Runtime
     /// <summary>
     /// Assigns dial positions. The three built-in stations keep canonical frequencies an
     /// operator would recognise; every other station gets a stable slot derived from its
-    /// name, so a preset stored today still lands on the same station tomorrow.
+    /// name, so the same folder always lands on the same frequency.
     /// </summary>
     internal static class RadioDialAllocation
     {
         public const int FmSlotCount =
-            (RadioDial.FmMaxKilohertz - RadioDial.FmMinKilohertz) / RadioDial.FmStepKilohertz + 1;
+            (RadioBands.FmMaxKilohertz - RadioBands.FmMinKilohertz) / RadioBands.FmStepKilohertz + 1;
 
         public static bool TryBuiltIn(string stationId, out RadioDial dial)
         {
@@ -172,18 +262,18 @@ namespace BoscaliSummer.Features.Radio.Runtime
                 int slot = (start + probe) % FmSlotCount;
                 if (!usedSlots.Add(slot))
                     continue;
-                return RadioDial.Fm(RadioDial.FmMinKilohertz + slot * RadioDial.FmStepKilohertz);
+                return RadioDial.Fm(RadioBands.FmMinKilohertz + slot * RadioBands.FmStepKilohertz);
             }
-            return RadioDial.Fm(RadioDial.FmMinKilohertz);
+            return RadioDial.Fm(RadioBands.FmMinKilohertz);
         }
 
         public static bool TryFmSlot(RadioDial dial, out int slot)
         {
-            if (dial.IsFm && dial.Kilohertz >= RadioDial.FmMinKilohertz &&
-                dial.Kilohertz <= RadioDial.FmMaxKilohertz &&
-                (dial.Kilohertz - RadioDial.FmMinKilohertz) % RadioDial.FmStepKilohertz == 0)
+            if (dial.Band == RadioBand.Fm && dial.Kilohertz >= RadioBands.FmMinKilohertz &&
+                dial.Kilohertz <= RadioBands.FmMaxKilohertz &&
+                (dial.Kilohertz - RadioBands.FmMinKilohertz) % RadioBands.FmStepKilohertz == 0)
             {
-                slot = (dial.Kilohertz - RadioDial.FmMinKilohertz) / RadioDial.FmStepKilohertz;
+                slot = (dial.Kilohertz - RadioBands.FmMinKilohertz) / RadioBands.FmStepKilohertz;
                 return true;
             }
             slot = -1;

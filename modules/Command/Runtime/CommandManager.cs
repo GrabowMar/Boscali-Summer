@@ -33,7 +33,6 @@ namespace BoscaliSummer.Features.Command.Runtime
                 Morale.TrySet(faction, Mathf.Clamp(value + delta, 0f, 100f));
         }
 
-        public CommandDoctrine ActiveDoctrine { get; private set; } = CommandDoctrine.Balanced;
         public readonly TacticalTheaterState TheaterState = new TacticalTheaterState();
         internal readonly FactionMoraleState Morale = new FactionMoraleState();
 
@@ -51,7 +50,6 @@ namespace BoscaliSummer.Features.Command.Runtime
 
         public void ResetForScene()
         {
-            ActiveDoctrine = CommandDoctrine.Balanced;
             TheaterState.Reset();
             Morale.Reset();
             emitterCache.Clear();
@@ -61,33 +59,6 @@ namespace BoscaliSummer.Features.Command.Runtime
         {
             if (operationOutcomes != null) operationOutcomes.MoraleAwarded -= OnOperationMorale;
             if (Active == this) Active = null;
-        }
-
-        public bool TrySetDoctrine(CommandDoctrine doctrine)
-        {
-            ActiveDoctrine = doctrine;
-            logger?.LogInfo("[COM] Friendly mission-AI doctrine: " + CommandDoctrineHelper.GetName(doctrine));
-            return true;
-        }
-
-        public float GetTargetScoreMultiplier(Unit searcher, Unit target)
-        {
-            if (searcher == null || target == null) return 1f;
-
-            bool analyzerIsFriendly = false;
-            if (GameManager.GetLocalPlayer<Player>(out Player player) && player != null && player.HQ != null)
-                analyzerIsFriendly = searcher.NetworkHQ == player.HQ;
-
-            bool targetIsAntiAir = target.definition != null && target.definition.roleIdentity.antiAir > 0.1f;
-            return CommandScoring.Bias(
-                analyzerIsFriendly,
-                WingLink.IsWingMember(searcher.persistentID.GetHashCode()),
-                WingLink.IsWingMember(target.persistentID.GetHashCode()),
-                (int)ActiveDoctrine,
-                false,
-                target is Aircraft,
-                target is Building,
-                targetIsAntiAir);
         }
 
         public void SyncSectorTelemetry(TacticalSectorGrid grid)
@@ -102,6 +73,7 @@ namespace BoscaliSummer.Features.Command.Runtime
             TheaterState.TotalNodesCount = grid.TotalNodesCount;
             TheaterState.TotalSectorCount = grid.TotalSectors;
             TheaterState.FrontlineSegmentCount = grid.FrontlineSegmentCount;
+            TheaterState.FrontlineLengthMetres = grid.FrontlineLengthMetres;
 
             // Which bases are being argued over is a property of the field, not of the
             // airbase list: an airbase is contested when the ground around it is.

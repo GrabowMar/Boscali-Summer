@@ -43,10 +43,6 @@ namespace BoscaliSummer.Features.Support.Presentation
         /// <summary>Small soft-glow dot for a data-pulse riding a transfer track or graph edge.</summary>
         public static Sprite DataPulseSprite { get; private set; }
 
-        /// <summary>A one-pixel-in-four CRT scanline band, tiled over a page to read as a
-        /// phosphor terminal rather than a flat dark panel.</summary>
-        public static Sprite ScanlineSprite { get; private set; }
-
         private static bool initialized;
 
         public static void EnsureInitialized()
@@ -64,7 +60,6 @@ namespace BoscaliSummer.Features.Support.Presentation
             DashedLineSprite = CreateDashedLineSprite(64);
             SweepWedgeSprite = CreateSweepWedgeSprite(128);
             DataPulseSprite = CreateDataPulseSprite(32);
-            ScanlineSprite = CreateScanlineSprite(4);
 
             RodIcon = CreateRodIcon(64);
             EmpIcon = CreateEmpIcon(64);
@@ -377,32 +372,6 @@ namespace BoscaliSummer.Features.Support.Presentation
                     float alpha = Mathf.Max(core, glow * glow * 0.5f);
                     pixels[y * size + x] = new Color(1f, 1f, 1f, alpha);
                 }
-            }
-
-            tex.SetPixels(pixels);
-            tex.Apply();
-            return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f);
-        }
-
-        /// <summary>A tileable scanline band: one faint dark row every <paramref name="size"/>
-        /// pixels, transparent elsewhere. Must be sampled with <see cref="TextureWrapMode.Repeat"/>
-        /// and drawn as <see cref="UnityEngine.UI.Image.Type.Tiled"/> so the period stays a fixed
-        /// pixel count regardless of how tall the page it is stretched over ends up being.</summary>
-        private static Sprite CreateScanlineSprite(int size)
-        {
-            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false)
-            {
-                name = "SupportScanlines",
-                wrapMode = TextureWrapMode.Repeat,
-                filterMode = FilterMode.Point
-            };
-
-            Color[] pixels = new Color[size * size];
-            for (int y = 0; y < size; y++)
-            {
-                float alpha = y == 0 ? 0.16f : 0f;
-                for (int x = 0; x < size; x++)
-                    pixels[y * size + x] = new Color(0f, 0f, 0f, alpha);
             }
 
             tex.SetPixels(pixels);

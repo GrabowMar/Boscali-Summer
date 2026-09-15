@@ -1,50 +1,53 @@
 # Trench fortifications: behavior and balance check
 
-Status: sector-belt rework implemented; isolated Unity checks complete; native combat
-acceptance pending. Last reworked 2026-09-13.
+Status: natural-curve rework implemented; pure suite and isolated Unity checks complete;
+native combat acceptance pending. Last reworked 2026-09-15.
 
 ## Intended encounter
 
-A recognizable, connected defensive belt protects its faction's frontline. An early
-attack meets two MG emplacements on a 132m fire trench. Leaving it undisturbed extends
-the line across the sector and builds a support line and rear redoubt with AT and AA
-coverage. Hitting defenders interrupts construction; destroying them has lasting
+A recognizable defensive line follows the real front and protects its faction's ground. An
+early attack meets two MG emplacements on a shallow scrape. Leaving it undisturbed deepens
+it into a full fire trench, then lays a support trace and communication links behind it,
+then a rear redoubt with AT and AA coverage, and finally pushes listening posts into no
+man's land. Hitting defenders interrupts construction; destroying them has lasting
 consequences. Placeholder earthworks are acceptable; cosmetic health, empty rings,
 automatic healing and endless defender replacement are not.
 
 | Default elapsed quiet time | Earthworks | Native defenders |
 |---|---|---|
-| Spawn | Seven bays connected across 132m | 2 MG |
-| 45s | Fire trench with weapon pits | 2 MG + 2 ATGM |
-| 90s | Line extended across the sector | 2 MG + 2 ATGM + 2 MANPADS |
-| 135s | Support line with dugout and communications | Same six |
-| 180s | Rear redoubt line, flank hooks, rear dugout and mortar pits | Same six, no additional weapons |
+| Spawn | Shallow scrape along the fitted curve | 2 MG |
+| 45s | Full fire trench profile with traverses | 2 MG |
+| 90s | Support trace ~110m behind, communication links, works | 2 MG + 1 ATGM |
+| 135s | Rear redoubt trace ~220m, weapon pits | 2 MG + 1 ATGM + 1 MANPADS |
+| 180s | Two forward saps with listening posts | Same four, no additional weapons |
 
-Times follow the configured growth interval (15–180s); damage delays them. One network
+Times follow the configured growth interval (15–180s); damage delays them. One position
 advances per 0.5s poll, so simultaneous positions may advance a few seconds apart.
-Each addition is atomic: invalid ground rejects the whole stage and retries on the next
-tick with a logged reason.
+Each stage is atomic: invalid ground rejects the whole addition and retries on the next
+tick with a logged refusal.
 
 ## Rules and counterplay
 
-- Placement uses the owning faction's frontline field. A border cell side becomes a chain
-  of sector slots up to 380m apart; there is no road preference. The exact corridor from
-  the front line to the rear redoubt must pass ownership, ground and height checks
-  (per-row variation ≤4m, row-to-row drift ≤12m). Same-faction networks keep 360m
-  spacing, other factions 250m.
+- Placement starts from Command's ordered front traces (the control field's interpolated
+  zero contour). Each trace is resampled into a Bezier curve, its owner decided by probing
+  ownership 40m either side of the line (160m when a contested cell answers both ways), and
+  every station searches five candidate depths (36–84m) for the flattest, lowest ground. A
+  position is at most 1200m long; positions keep 360m same-faction spacing, 250m
+  other-faction, and cap at 16 active per theater.
+- Water, cliffs and broken ground break the line into runs; the far side of a gap is still
+  entrenched. A closed trace (beachhead pocket) is resampled with wraparound tangents.
 - Vanilla buildings own weapon behavior, ammunition, detection, health, damage and rewards.
   No custom DPS, immunity, accuracy boost, replenishment or hidden damage multiplier.
 - Any observed part-health loss or defender destruction stops construction for 60s.
 - Committed slots never refill. Zero survivors ends growth; losing territorial ownership
-  withdraws remaining defenses. Advancing the friendly border does not erase the site.
+  withdraws remaining defenses. Advancing the friendly border does not erase the position.
   Neutralized earthworks expire after 300s.
-- Cleared sites block re-seeding within 300m for the scene. History caps at 64 sites;
-  new seeding then stops. Active networks cap at 16, defenders at six each / 96 total,
-  and each network at 64 nodes / 96 edges.
-- The corridor stays open: procedural collision boxes follow its berms, not its floor.
-  Native defenses supply persistent combat collision; procedural colliders retain near LOD.
-- Stage ticks show development; amber indicates suppression and crossed gray marks
-  indicate neutralization. Visible native weapon models show the real threat.
+- Defenders cap at four per position (two MG teams spread along the curve, an ATGM at the
+  centre, a MANPADS at the support centre once that trace exists), four positions
+  neutralized at once cannot exceed 64 total. Each position keeps at most 48 low obstacle
+  boxes, active only at LOD0; they stop vehicles without a collider per ditch segment.
+- Stage ticks show development; amber indicates suppression and a crossed gray mark
+  indicates neutralization. Visible native weapon models show the real threat.
 
 ## Balance health: concerns pending playtest
 
@@ -56,31 +59,37 @@ defense prefab substitutes for a requested weapon. Native spawn retries cap at t
 Actual DPS/TTK and engagement range have not been measured: they are properties of the
 installed vanilla weapons and target matchup. In-game tests must establish that initial
 MGs threaten exposed approaches, AT threatens armor, AA threatens low/slow aircraft, and
-appropriate standoff or area weapons can defeat the site. Do not call this balanced yet.
+appropriate standoff or area weapons can defeat the position. Do not call this balanced yet.
 
 Native units replicate via the game. Procedural earthworks/map marks remain host-local;
 remote visual parity is an existing limitation, not a completed feature.
 
 ## Evidence and acceptance
 
-Production sources: `TrenchManager.cs`, `TrenchGarrison.cs`, `TrenchGrowthSimulator.cs`,
-`TrenchPlacement.cs`, `TrenchTacticalMath.cs`, `TrenchMeshBuilder.cs` in `modules/Trenches`.
+Production sources: `TrenchManager.cs`, `TrenchPlanner.cs`, `TrenchLine.cs`,
+`TrenchTerrain.cs`, `TrenchGarrison.cs`, `TrenchWorks.cs`, `Domain/TrenchTraceMath.cs`,
+`Visuals/TrenchMeshBuilder.cs`, `Visuals/TrenchVisualChunk.cs` in `modules/Trenches`, plus
+`CopyFrontlineTraces` in `modules/Command/Runtime/TacticalSectorGrid.cs`.
 
-The isolated Unity harness exercises the actual graph/garrison adapter with game API
-stubs: connected seed, all four growth advances to the full belt, invalid flank terrain,
-64/96 graph ceilings through the mature counts, six-defender ceiling, health-loss
-suppression, destruction without replacement and an overrun position. It renders all five
-stages plus a close-up with the real earthwork material and checks winding/S-curve
-continuity and the palette texture. Stubs do not verify native AI or Mirage. Build, pure
-assertions and installed-game metadata probes supplement it.
+The pure suite covers Bezier resampling (straight, bent, closed), the depth-planning
+dynamic program (level ground, hollow, rise, blocked runs), traverse wave and ditch
+densification, run splitting, stage gates and defender/works budgets, and the Command-side
+front-trace chaining (ordering, boundary, diagonal contour, capacity, closure). The
+isolated Unity harness exercises the planner, growth and garrison adapter with game API
+stubs: a trace plans a position on owned ground, blocked ground refuses it, all four growth
+advances lay their traces, native defender counts, health-loss suppression, destruction
+without replacement and an overrun position. It renders all five stages plus a close-up
+with the real earthwork material and checks winding, terrain conformance and S-curve
+continuity. Stubs do not verify native AI or Mirage. Build, pure assertions and
+installed-game metadata probes supplement it.
 
-Remaining in-game checks: exact front-line corridor fit; five quiet minutes of belt
-growth; hit a gun and observe a quiet-minute pause; destroy one then all guns; verify no
-replacements; frontline withdrawal; host/client/late-join native defense state; scene
-reload cleanup; LOD0/1/2 transitions and origin shifts during flight.
+Remaining in-game checks: curve fit against a real diagonal front and a beachhead ring;
+five quiet minutes of belt growth; hit a gun and observe a quiet-minute pause; destroy one
+then all guns; verify no replacements; frontline withdrawal; host/client/late-join native
+defense state; scene reload cleanup; LOD0/1/2 transitions and origin shifts during flight.
 
 ## Requested skill sources applied
 
 - [Game Studios balance-check](https://github.com/Donchitos/Claude-Code-Game-Studios/blob/main/.claude/skills/balance-check/SKILL.md): progression, unkillable states, loops and unmeasured balance risks.
 - [UI/UX Pro Max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill): readable progress/state indicators, with shape as well as color.
-- [Ponytail](https://github.com/DietrichGebert/ponytail): native combat/spawning instead of another targeting or damage system; one shared mesh profile and material instead of a bespoke asset pipeline; bounded regression checks.
+- [Ponytail](https://github.com/DietrichGebert/ponytail): native combat/spawning instead of another targeting or damage system; one shared mesh profile and material instead of a bespoke asset pipeline; the node/edge growth graph deleted rather than refactored; bounded regression checks.

@@ -19,9 +19,100 @@ namespace BoscaliSummer.Tests.Features.Command
             SharesAccountForContestedGround();
             SharesSurviveAnEmptyBoard();
             PercentRefusesToInventPrecision();
-            CountdownReadsAsTimeLeft();
-            PressureDoesNotOverstateNoise();
+            KilometresReadsAsDistance();
             RailsSeparateHoldingFromLosing();
+            PressureStateDoesNotOverstateNoise();
+            RosterDrawsTheChainOfCommand();
+            RosterSurvivesAMissingParent();
+        }
+
+        private static void RosterDrawsTheChainOfCommand()
+        {
+            // The generated staff: one theater commander, two component commanders, and
+            // three base commanders that answer to components 2 and 1 alternately. The
+            // host lists slots in generation order, which is not reporting order, so the
+            // console has to re-order before its trunk lines mean anything.
+            int[] ids = { 0, 1, 2, 3, 4, 5 };
+            int[] parents = { -1, 0, 0, 2, 1, 2 };
+            int[] order = new int[6];
+            bool[] visited = new bool[6];
+            int written = CommandRosterOrder.Sort(ids.Length, ids, parents, order, visited);
+
+            TestAssert.That(written == 6, "every post is placed");
+            TestAssert.That(order[0] == 0, "the theater commander leads the chain");
+            TestAssert.That(Before(order, 1, 4), "a component is drawn above the base that answers to it");
+            TestAssert.That(Before(order, 2, 3) && Before(order, 2, 5),
+                "the other component is drawn above its own bases");
+            TestAssert.That(Before(order, 4, 2),
+                "one component's whole branch is drawn before the next component");
+            TestAssert.That(Before(order, 1, 2), "posts that share a parent keep their given order");
+            TestAssert.That(EachOnce(order), "no post is drawn twice");
+        }
+
+        private static void RosterSurvivesAMissingParent()
+        {
+            // An absent parent is a root; a cycle the host does not produce still has to
+            // terminate with every post placed exactly once.
+            int[] ids = { 7, 8, 9 };
+            int[] parents = { 99, 9, 8 };
+            int[] order = new int[3];
+            bool[] visited = new bool[3];
+            int written = CommandRosterOrder.Sort(3, ids, parents, order, visited);
+
+            TestAssert.That(written == 3, "a cycle still places every post");
+            TestAssert.That(order[0] == 0, "a post whose parent is absent leads its own branch");
+            TestAssert.That(EachOnce(order), "a cycle does not duplicate a post");
+            TestAssert.That(CommandRosterOrder.Sort(0, ids, parents, order, visited) == 0,
+                "an empty roster writes nothing");
+            TestAssert.That(CommandRosterOrder.Sort(3, null, parents, order, visited) == 0,
+                "a null roster is not a crash");
+        }
+
+        private static bool Before(int[] order, int first, int second) =>
+            IndexOf(order, first) < IndexOf(order, second);
+
+        private static int IndexOf(int[] order, int value)
+        {
+            for (int i = 0; i < order.Length; i++)
+            {
+                if (order[i] == value) return i;
+            }
+            return int.MaxValue;
+        }
+
+        private static bool EachOnce(int[] order)
+        {
+            for (int i = 0; i < order.Length; i++)
+            {
+                for (int j = i + 1; j < order.Length; j++)
+                {
+                    if (order[i] == order[j]) return false;
+                }
+            }
+            return true;
+        }
+
+        private static void PressureStateDoesNotOverstateNoise()
+        {
+            TestAssert.That(TheaterReadout.PressureState(0.01f) == "HOLDING",
+                "a rounding artefact is not pressure");
+            TestAssert.That(TheaterReadout.PressureState(0.4f) == "UNDER PRESSURE",
+                "real pressure is named, with its number in the figure column");
+            TestAssert.That(TheaterReadout.PressureState(0.9f) == "FALLING",
+                "a node about to change hands says so");
+            TestAssert.That(TheaterReadout.PressureState(float.NaN) == "UNKNOWN",
+                "an unreadable balance is unknown, not holding");
+        }
+
+
+        private static void KilometresReadsAsDistance()
+        {
+            TestAssert.That(TheaterReadout.Kilometres(412500f) == "412.5 km",
+                "metres become one-decimal kilometres");
+            TestAssert.That(TheaterReadout.Kilometres(0f) == "0.0 km",
+                "zero is a measured distance, not a dash");
+            TestAssert.That(TheaterReadout.Kilometres(float.NaN) == "—",
+                "an unknown front length is a dash");
         }
 
         private static void ClassifiesByWhatIsBeingAttacked()
@@ -110,26 +201,6 @@ namespace BoscaliSummer.Tests.Features.Command
                 "an unknown ratio reads as a dash, never as 0%");
             TestAssert.That(TheaterReadout.Percent(float.PositiveInfinity) == "—",
                 "an infinite ratio reads as a dash");
-        }
-
-        private static void CountdownReadsAsTimeLeft()
-        {
-            TestAssert.That(TheaterReadout.Countdown(45f) == "T-45s", "under a minute counts seconds");
-            TestAssert.That(TheaterReadout.Countdown(90f) == "T-1:30", "over a minute counts minutes");
-            TestAssert.That(TheaterReadout.Countdown(600f) == "T-10:00", "ten minutes pads its seconds");
-            TestAssert.That(TheaterReadout.Countdown(0f) == "EXPIRED", "no time left is expired");
-            TestAssert.That(TheaterReadout.Countdown(-5f) == "EXPIRED", "past the deadline is expired");
-            TestAssert.That(TheaterReadout.Countdown(float.NaN) == "—", "an unknown deadline is a dash");
-        }
-
-        private static void PressureDoesNotOverstateNoise()
-        {
-            TestAssert.That(TheaterReadout.Pressure(0.01f) == "HOLDING",
-                "a rounding artefact is not pressure");
-            TestAssert.That(TheaterReadout.Pressure(0.4f).StartsWith("PRESSURE"),
-                "real pressure is named and quantified");
-            TestAssert.That(TheaterReadout.Pressure(0.9f).StartsWith("FALLING"),
-                "a node about to change hands says so");
         }
 
         private static void RailsSeparateHoldingFromLosing()

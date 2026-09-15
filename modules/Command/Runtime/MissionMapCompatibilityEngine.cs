@@ -1,6 +1,5 @@
-using System;
-using BepInEx.Logging;
 using BoscaliSummer.Framework.Lifecycle;
+using BoscaliSummer.Runtime;
 using UnityEngine;
 
 namespace BoscaliSummer.Features.Command.Runtime
@@ -12,78 +11,10 @@ namespace BoscaliSummer.Features.Command.Runtime
     /// </summary>
     internal sealed class MissionMapCompatibilityEngine : MonoBehaviour, ISceneService
     {
-        private ManualLogSource logger;
+        public void ResetForScene() => TheaterFrame.Invalidate();
 
-        public Vector2 ResolvedMapSize { get; private set; } = new Vector2(81920f, 81920f);
-        private bool dimensionsResolved;
-
-        public void Configure(ManualLogSource log)
-        {
-            logger = log;
-        }
-
-        public void ResetForScene()
-        {
-            ResolvedMapSize = new Vector2(81920f, 81920f);
-            dimensionsResolved = false;
-        }
-
-        /// <summary>
-        /// Normalizes theater bounds from MapSettings, DynamicMap, or LevelInfo.
-        /// </summary>
-        public Vector2 ResolveTheaterDimensions(DynamicMap dynamicMap)
-        {
-            if (dimensionsResolved) return ResolvedMapSize;
-            try
-            {
-                MapSettings mapSettings = UnityEngine.Object.FindObjectOfType<MapSettings>();
-                if (mapSettings != null && mapSettings.MapSize.x > 1000f && mapSettings.MapSize.y > 1000f)
-                {
-                    ResolvedMapSize = mapSettings.MapSize;
-                    dimensionsResolved = true;
-                    return ResolvedMapSize;
-                }
-            }
-            catch (Exception ex)
-            {
-                logger?.LogWarning("[COM] Error reading MapSettings: " + ex.Message);
-            }
-
-            try
-            {
-                if (dynamicMap != null && dynamicMap.mapImage != null)
-                {
-                    RectTransform rect = dynamicMap.mapImage.GetComponent<RectTransform>();
-                    if (rect != null && rect.sizeDelta.x > 100f && rect.sizeDelta.y > 100f)
-                    {
-                        float szX = (rect.sizeDelta.x / 900f) * 81920f;
-                        float szY = (rect.sizeDelta.y / 900f) * 81920f;
-                        if (szX > 1000f && szY > 1000f)
-                        {
-                            ResolvedMapSize = new Vector2(szX, szY);
-                            dimensionsResolved = true;
-                            return ResolvedMapSize;
-                        }
-                    }
-                }
-            }
-            catch { }
-
-            try
-            {
-                LevelInfo levelInfo = NetworkSceneSingleton<LevelInfo>.i;
-                if (levelInfo != null && levelInfo.mapSize > 1000f)
-                {
-                    ResolvedMapSize = new Vector2(levelInfo.mapSize * 2f, levelInfo.mapSize);
-                    dimensionsResolved = true;
-                    return ResolvedMapSize;
-                }
-            }
-            catch { }
-
-            ResolvedMapSize = new Vector2(163840f, 81920f);
-            return ResolvedMapSize;
-        }
+        /// <summary>The world span every theater overlay draws against.</summary>
+        public Vector2 ResolveTheaterDimensions(DynamicMap dynamicMap) => TheaterFrame.Resolve(dynamicMap);
 
         /// <summary>Never borrow an arbitrary faction's intelligence for a spectator.</summary>
         public FactionHQ ResolvePlayerHq(DynamicMap dynamicMap)

@@ -1,22 +1,24 @@
 using System;
-using System.Collections.Generic;
 using BepInEx.Logging;
 using BoscaliSummer.Features.Trenches.Configuration;
 using BoscaliSummer.Features.Trenches.Runtime;
 using BoscaliSummer.Framework.Lifecycle;
+using BoscaliSummer.Runtime;
 using UnityEngine;
 using UnityEngine.UI;
 
 namespace BoscaliSummer.Features.Trenches.Presentation
 {
     /// <summary>
-    /// Renders dynamic NATO-standard entrenchment symbology onto the tactical theater map (DynamicMap).
-    /// Features continuous trench traces, perpendicular crenellated teeth facing threat directions,
-    /// and fortified strongpoint markers.
+    /// Renders dynamic NATO-standard entrenchment symbology onto the tactical theater map
+    /// (DynamicMap): the fire line as one solid crenellated trace following the real front
+    /// contour, support and redoubt traces dimmer, native strongpoints marked, and the
+    /// stage of each position ticked. Host-local; never pollutes flight HUDs.
     /// </summary>
     internal sealed class TrenchMapOverlay : MonoBehaviour, ISceneService
     {
-        private const int BaseTextureSize = 1024;
+        private const int BaseTextureSize = 1536;
+        private const float ToothSpacing = 11f;
 
         private TrenchesSettings settings;
         private TrenchManager trenchManager;
@@ -40,7 +42,7 @@ namespace BoscaliSummer.Features.Trenches.Presentation
 
             if (trenchManager != null)
             {
-                trenchManager.OnNetworksChanged += HandleNetworksChanged;
+                trenchManager.OnLinesChanged += HandleLinesChanged;
             }
         }
 
@@ -63,18 +65,19 @@ namespace BoscaliSummer.Features.Trenches.Presentation
             dynamicMap = null;
             initialized = false;
             isMapMaximized = false;
+            TheaterFrame.Invalidate();
         }
 
         private void OnDestroy()
         {
             if (trenchManager != null)
             {
-                trenchManager.OnNetworksChanged -= HandleNetworksChanged;
+                trenchManager.OnLinesChanged -= HandleLinesChanged;
             }
             ResetForScene();
         }
 
-        private void HandleNetworksChanged()
+        private void HandleLinesChanged()
         {
             if (isMapMaximized)
             {
@@ -107,11 +110,6 @@ namespace BoscaliSummer.Features.Trenches.Presentation
                     BakeTrenchMapTexture();
                 }
             }
-            if (currentMaximized && trenchManager != null && trenchManager.RefreshPlannedSites())
-            {
-                BakeTrenchMapTexture();
-            }
-
             isMapMaximized = currentMaximized;
         }
 
@@ -123,7 +121,7 @@ namespace BoscaliSummer.Features.Trenches.Presentation
             RectTransform mapImageRect = dynamicMap.mapImage.GetComponent<RectTransform>();
             if (mapImageRect == null) return;
 
-            ResolveTheaterDimensions();
+            theaterDimensions = TheaterFrame.Resolve();
 
             EnsureTexture(BaseTextureSize, BaseTextureSize);
 
@@ -150,22 +148,6 @@ namespace BoscaliSummer.Features.Trenches.Presentation
             initialized = true;
             BakeTrenchMapTexture();
             logger?.LogInfo("[TRENCHES] Tactical map overlay initialized.");
-        }
-
-        private void ResolveTheaterDimensions()
-        {
-            try
-            {
-                MapSettings ms = NetworkSceneSingleton<LevelInfo>.i?.LoadedMapSettings;
-                if (ms != null && ms.MapSize.x > 1000f && ms.MapSize.y > 1000f)
-                {
-                    theaterDimensions = ms.MapSize;
-                    return;
-                }
-            }
-            catch { }
-
-            theaterDimensions = new Vector2(81920f, 81920f);
         }
 
         private void EnsureTexture(int w, int h)
@@ -197,72 +179,38 @@ namespace BoscaliSummer.Features.Trenches.Presentation
 
             Color32 crenellationColor = new Color32(20, 18, 14, 255); // Sharp charcoal
 
-            // Projected entrenchments: a dim dashed trace of the contested line where
-            // sectors are queued for digging. Drawn first so real networks read on top.
-            var planned = trenchManager.PlannedSites;
-            for (int i = 0; i < planned.Count; i++)
+            var lines = trenchManager.Lines;
+            for (int n = 0; n < lines.Count; n++)
             {
-                PlannedEntrenchment plan = planned[i];
-                Color32 ghost = plan.Owner == dynamicMap?.HQ
-                    ? new Color32(65, 210, 255, 110) : new Color32(255, 100, 80, 110);
-                Vector2 lateral = new Vector2(-plan.Threat.z, plan.Threat.x).normalized;
-                Vector3 offset = new Vector3(lateral.x, 0f, lateral.y) * plan.HalfSpan;
-                Vector2 a = WorldToTex(plan.Position - offset, w, h);
-                Vector2 b = WorldToTex(plan.Position + offset, w, h);
-                DrawDashedLine(pixels, w, h, a, b, ghost);
-                DrawCrenellations(pixels, w, h, a, b, new Vector2(plan.Threat.x, plan.Threat.z),
-                    new Color32(20, 18, 14, 200), Mathf.Clamp((int)(Vector2.Distance(a, b) / 6f), 2, 12));
-            }
-
-            var networks = trenchManager.Networks;
-            for (int n = 0; n < networks.Count; n++)
-            {
-                TrenchNetwork net = networks[n];
-                Color32 factionColor = net.OwnerHq == dynamicMap?.HQ
+                TrenchLine line = lines[n];
+                Color32 factionColor = line.OwnerHq == dynamicMap?.HQ
                     ? new Color32(65, 210, 255, 255) : new Color32(255, 100, 80, 255);
-                if (net.Overrun) factionColor = new Color32(130, 130, 130, 180);
-                else if (net.Suppressed) factionColor = new Color32(255, 195, 65, 255);
+                if (line.Overrun) factionColor = new Color32(130, 130, 130, 180);
+                else if (line.Suppressed) factionColor = new Color32(255, 195, 65, 255);
                 Color32 rearColor = factionColor;
                 rearColor.a = 110;
-                Vector2 threat2D = new Vector2(net.ThreatDirection.x, net.ThreatDirection.z);
 
-                // 1. Draw Edges: the fire line solid, support/rear/communication traces dimmer.
-                foreach (var edge in net.Edges)
-                {
-                    if (edge.PathPoints == null || edge.PathPoints.Length < 2) continue;
-                    bool frontLine = Vector3.Dot(edge.PathPoints[0] - net.SeedCenter, net.ThreatDirection) >= -30f;
-                    Color32 color = frontLine ? factionColor : rearColor;
-                    int thickness = frontLine ? 2 : 1;
+                // 1. The fire line solid with crenellations facing the threat, spaced on the map
+                // rather than on the ditch's own station spacing.
+                DrawTrace(pixels, w, h, line.Curve, line.Threat, factionColor, 1, true, crenellationColor);
+                // 2. Support, redoubt, communication and sap traces dimmer.
+                DrawTrace(pixels, w, h, line.Support, line.Threat, rearColor, 1, false, crenellationColor);
+                DrawTrace(pixels, w, h, line.Redoubt, line.Threat, rearColor, 1, false, crenellationColor);
+                DrawTraces(pixels, w, h, line.Links, rearColor);
+                DrawTraces(pixels, w, h, line.Spurs, rearColor);
+                // 3. Native strongpoints: the bays the emplacements actually hold.
+                DrawStrongpoints(pixels, w, h, line, factionColor);
 
-                    for (int p = 0; p < edge.PathPoints.Length - 1; p++)
-                    {
-                        Vector2 p0 = WorldToTex(edge.PathPoints[p], w, h);
-                        Vector2 p1 = WorldToTex(edge.PathPoints[p + 1], w, h);
-                        DrawLine(pixels, w, h, (int)p0.x, (int)p0.y, (int)p1.x, (int)p1.y, color, thickness);
-
-                        // Half-density crenellations keep the fire line readable, not blocky.
-                        if (frontLine && p % 2 == 0)
-                            DrawCrenellations(pixels, w, h, p0, p1, threat2D, crenellationColor, 1);
-                    }
-                }
-
-                // 2. Strongpoints (dugouts, weapon pits) only; rifle bays stay off the map.
-                foreach (var node in net.Nodes)
-                {
-                    if (node.Type != TrenchNodeType.BunkerBlindage && node.Type != TrenchNodeType.HeavyWeaponPit) continue;
-                    Vector2 nodePos = WorldToTex(node.Position, w, h);
-                    DrawFilledSquare(pixels, w, h, (int)nodePos.x, (int)nodePos.y, 1, factionColor);
-                }
                 // Stage ticks and a crossed-out neutralized position remain legible
                 // without relying only on red/blue/amber colour differences.
-                Vector2 center = WorldToTex(net.Center, w, h);
+                Vector2 center = WorldToTex(line.Center, w, h);
                 int cx = (int)center.x, cy = (int)center.y;
-                if (net.Overrun)
+                if (line.Overrun)
                 {
                     DrawLine(pixels, w, h, cx - 4, cy - 4, cx + 4, cy + 4, factionColor, 1);
                     DrawLine(pixels, w, h, cx - 4, cy + 4, cx + 4, cy - 4, factionColor, 1);
                 }
-                else for (int tick = 0; tick < (int)net.Stage; tick++)
+                else for (int tick = 0; tick < (int)line.Stage; tick++)
                     DrawLine(pixels, w, h, cx - 6 + tick * 4, cy + 6, cx - 6 + tick * 4, cy + 9, factionColor, 1);
             }
 
@@ -270,21 +218,56 @@ namespace BoscaliSummer.Features.Trenches.Presentation
             overlayTexture.Apply();
         }
 
-        private static void DrawDashedLine(Color32[] pixels, int w, int h, Vector2 a, Vector2 b, Color32 color)
+        private void DrawStrongpoints(Color32[] pixels, int w, int h, TrenchLine line, Color32 color)
         {
-            float length = Vector2.Distance(a, b);
-            if (length < 1f)
+            DrawMarks(pixels, w, h, line.Anchors, 0.15f, color);
+            DrawMarks(pixels, w, h, line.Anchors, 0.5f, color);
+            DrawMarks(pixels, w, h, line.Anchors, 0.85f, color);
+            DrawMarks(pixels, w, h, line.SupportAnchors, 0.5f, color);
+        }
+
+        private void DrawMarks(Color32[] pixels, int w, int h, Vector3[] anchors, float fraction, Color32 color)
+        {
+            if (anchors == null || anchors.Length == 0) return;
+            Vector3 anchor = anchors[Mathf.Clamp(Mathf.RoundToInt(fraction * (anchors.Length - 1)), 0, anchors.Length - 1)];
+            Vector2 at = WorldToTex(anchor, w, h);
+            DrawFilledSquare(pixels, w, h, (int)at.x, (int)at.y, 1, color);
+        }
+
+        private void DrawTrace(Color32[] pixels, int w, int h, Vector3[] trace, Vector3[] threat,
+            Color32 color, int thickness, bool crenellate, Color32 tickColor)
+        {
+            if (trace == null || trace.Length < 2) return;
+            float sinceTooth = 0f;
+            for (int p = 0; p < trace.Length - 1; p++)
             {
-                DrawLine(pixels, w, h, (int)a.x, (int)a.y, (int)b.x, (int)b.y, color, 1);
-                return;
+                Vector2 p0 = WorldToTex(trace[p], w, h);
+                Vector2 p1 = WorldToTex(trace[p + 1], w, h);
+                DrawLine(pixels, w, h, (int)p0.x, (int)p0.y, (int)p1.x, (int)p1.y, color, thickness);
+                if (!crenellate) continue;
+
+                // One tooth every ToothSpacing map pixels, not one per path station: the ditch
+                // is laid out every few metres, so a tooth per station merged into a solid bar.
+                sinceTooth += Vector2.Distance(p0, p1);
+                if (sinceTooth < ToothSpacing) continue;
+                sinceTooth = 0f;
+                Vector3 direction = p + 1 < threat.Length ? threat[p] : threat[0];
+                DrawCrenellations(pixels, w, h, p0, p1, new Vector2(direction.x, direction.z), tickColor, 1);
             }
-            const float dash = 3f, gap = 3f;
-            Vector2 dir = (b - a) / length;
-            for (float d = 0f; d < length; d += dash + gap)
+        }
+
+        private void DrawTraces(Color32[] pixels, int w, int h, Vector3[][] traces, Color32 color)
+        {
+            if (traces == null) return;
+            for (int t = 0; t < traces.Length; t++)
             {
-                Vector2 s = a + dir * d;
-                Vector2 e = a + dir * Mathf.Min(length, d + dash);
-                DrawLine(pixels, w, h, (int)s.x, (int)s.y, (int)e.x, (int)e.y, color, 1);
+                Vector3[] trace = traces[t];
+                for (int p = 0; p + 1 < trace.Length; p++)
+                {
+                    Vector2 p0 = WorldToTex(trace[p], w, h);
+                    Vector2 p1 = WorldToTex(trace[p + 1], w, h);
+                    DrawLine(pixels, w, h, (int)p0.x, (int)p0.y, (int)p1.x, (int)p1.y, color, 1);
+                }
             }
         }
 

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using BepInEx.Logging;
 using BoscaliSummer.Features.Command.Configuration;
 using BoscaliSummer.Features.Command.Domain;
+using BoscaliSummer.Features.Command.Presentation.MapUi;
 using BoscaliSummer.Features.Command.Runtime;
 using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Features;
@@ -27,13 +28,16 @@ namespace BoscaliSummer.Features.Command.Presentation
     ///
     /// <para>It is now its own bezel screen with its own bay, and the split follows the
     /// question each answers. OPS is about you: what you have earned, what you may call in.
-    /// STR is about the battlefield: who holds what, who is flying, and what the theater can
-    /// still afford. Neither needs the other to install.</para>
+    /// STR is about the battlefield: merged theater SA (air picture plus frontline), chain
+    /// of command, and mission-AI doctrine. Neither needs the other to install. Faction
+    /// tasking lives on the ADM screen; STR has no tasking board and no theater account.
+    /// The CMD tab is a placeholder: the tactical-command system was removed for a future
+    /// rebuild.</para>
     ///
     /// <para>The pages show what the mod already computed and previously threw away — the
-    /// sortie board, the contested-node list, the frontline's length, the tasking board and
-    /// the theater account. Where a figure cannot be established, it reads as a dash. A
-    /// zero is a claim, and this panel does not make claims it has not verified.</para>
+    /// sortie board, the contested-node list, the frontline's length. Where a figure cannot
+    /// be established, it reads as a dash. A zero is a claim, and this panel does not make
+    /// claims it has not verified.</para>
     /// </summary>
     internal sealed partial class StrMfdPanel : MonoBehaviour, ISceneService
     {
@@ -41,19 +45,19 @@ namespace BoscaliSummer.Features.Command.Presentation
         private const float RefreshInterval = 0.25f;
 
         private const int TabSa = 0;
-        private const int TabFront = 1;
-        private const int TabTasking = 2;
-        private const int TabCoc = 3;
-        private const int TabLog = 4;
-        private const int TabCmd = 5;
+        private const int TabCoc = 1;
+        private const int TabCmd = 2;
 
         private const int ChipCount = 3;
 
         /// <summary>Contested nodes shown before the list defers to a "and n more" line.</summary>
         private const int NodeRowCount = 8;
 
-        /// <summary>The operations board issues at most three cards, so three rows is exact.</summary>
-        private const int TaskRowCount = 3;
+        /// <summary>
+        /// Combined air picture plus frontline. Taller than the MFD body at lower canvas
+        /// heights, so the merged SA page scrolls rather than running under the status strip.
+        /// </summary>
+        private const float MergedSaContentHeight = 920f;
 
         private static readonly SortieRole[] Roles =
         {
@@ -66,7 +70,6 @@ namespace BoscaliSummer.Features.Command.Presentation
         private CommandManager command;
         private ComMapOverlay overlay;
         private ManualLogSource logger;
-        private ISecondaryObjectivesView tasking;
         private IBaseDefenseAlarmService baseAlarm;
         private IHighCommandView highCommand;
 
@@ -111,25 +114,6 @@ namespace BoscaliSummer.Features.Command.Presentation
             new TacticalSectorGrid.TacticalNode[NodeRowCount];
         private TMP_Text nodeNote;
 
-        // ---- TASKING page ----------------------------------------------------------------
-
-        private readonly ListRow[] taskRows = new ListRow[TaskRowCount];
-        private TMP_Text taskNote;
-
-        // ---- LOG page --------------------------------------------------------------------
-
-        private TMP_Text fundsValue;
-        private TMP_Text incomeValue;
-        private TMP_Text scoreValue;
-        private TMP_Text warheadValue;
-        private TMP_Text airframeValue;
-        private TMP_Text aiCapValue;
-
-        // ---- CMD page --------------------------------------------------------------------
-
-        private readonly List<AvButton> doctrineButtons = new List<AvButton>();
-        private TMP_Text doctrineDescription;
-
         // ==================================================================================
 
         public void Configure(
@@ -150,7 +134,6 @@ namespace BoscaliSummer.Features.Command.Presentation
             screenRoot = null;
             screen = null;
             shell = null;
-            tasking = null;
             baseAlarm = null;
             highCommand = null;
 
@@ -165,15 +148,6 @@ namespace BoscaliSummer.Features.Command.Presentation
             alliedSectors = contestedSectors = hostileSectors = neutralSectors = null;
             frontlineValue = nodeValue = nodeNote = null;
             Array.Clear(nodeRows, 0, nodeRows.Length);
-
-            Array.Clear(taskRows, 0, taskRows.Length);
-            taskNote = null;
-
-            fundsValue = incomeValue = scoreValue = null;
-            warheadValue = airframeValue = aiCapValue = null;
-
-            doctrineButtons.Clear();
-            doctrineDescription = null;
 
             ResetCoc();
 
@@ -297,13 +271,12 @@ namespace BoscaliSummer.Features.Command.Presentation
             content.SetParent(rootRect, false);
             AvKit.Stretch(content);
 
-            ModServices.TryGet(out tasking);
             ModServices.TryGet(out baseAlarm);
             ModServices.TryGet(out highCommand);
 
             shell = AvScreen.Build(
                 content, "STR",
-                new[] { "SA", "FRONT", "TASKING", "COC", "LOG", "CMD" },
+                new[] { "SA", "COC", "CMD" },
                 new[]
                 {
                     new[] { "THEATER CONTROL", "HELD" },
@@ -318,10 +291,7 @@ namespace BoscaliSummer.Features.Command.Presentation
                 shell.Metrics[2].Caption.characterSpacing = 0f;
 
             BuildSaPage(shell.CreatePage(TabSa, "SaPage"));
-            BuildFrontPage(shell.CreatePage(TabFront, "FrontPage"));
-            BuildTaskingPage(shell.CreatePage(TabTasking, "TaskingPage"));
             BuildCocPage(shell.CreatePage(TabCoc, "CocPage"));
-            BuildLogPage(shell.CreatePage(TabLog, "LogPage"));
             BuildCmdPage(shell.CreatePage(TabCmd, "CmdPage"));
 
             MFDScreen result = root.AddComponent<MFDScreen>();
@@ -402,13 +372,16 @@ namespace BoscaliSummer.Features.Command.Presentation
         private sealed class ListRow
         {
             public const float Pitch = 50f;
+            private static readonly Color RowHover = new Color(1f, 1f, 1f, 0.06f);
 
             private readonly GameObject root;
+            private readonly Image background;
             private readonly Image rail;
             private readonly TMP_Text name;
             private readonly TMP_Text detail;
             private readonly TMP_Text value;
             private readonly Image bar;
+            private readonly AvButton hit;
 
             public ListRow(RectTransform parent, float x, float y, float width)
             {
@@ -420,6 +393,7 @@ namespace BoscaliSummer.Features.Command.Presentation
                 const float trail = 96f;
                 float textWidth = width - trail - 20f;
 
+                background = AvKit.Panel(rect, new Rect(0f, 0f, width, Pitch - 4f), Color.clear);
                 rail = AvStyled.Rail(rect, new Rect(0f, 0f, 3f, Pitch - 8f), "locked");
                 name = AvStyled.Label(rect, new Rect(12f, 0f, textWidth, 15f), "", "row-name");
                 detail = AvStyled.Label(rect, new Rect(12f, -16f, textWidth, 28f), "", "row-sub");
@@ -429,11 +403,14 @@ namespace BoscaliSummer.Features.Command.Presentation
                                         AvTheme.RailReady);
 
                 Divider(rect, 0f, -(Pitch - 8f), width);
+                hit = AvKit.HitButton(rect, new Rect(0f, 0f, width, Pitch - 4f), null);
+                hit.SetEnabled(false);
                 root.SetActive(false);
             }
 
             public void Bind(string railState, string title, string sub, string figure,
-                             float fraction, Color figureColor, Color barColor)
+                             float fraction, Color figureColor, Color barColor,
+                             Action onClick = null, string tooltip = null)
             {
                 rail.color = AvStyleHost.Resolve(
                     AvStyleHost.Style("rail " + railState).Background, AvTheme.RailInert);
@@ -446,11 +423,19 @@ namespace BoscaliSummer.Features.Command.Presentation
                 bar.color = barColor;
                 bar.fillAmount = Mathf.Clamp01(fraction);
 
+                bool clickable = onClick != null;
+                hit.SetAction(onClick);
+                hit.SetEnabled(clickable);
+                hit.WithTooltip(clickable ? tooltip : null);
+                hit.SetRowHighlight(background, Color.clear, clickable ? RowHover : Color.clear);
+
                 if (!root.activeSelf) root.SetActive(true);
             }
 
             public void Hide()
             {
+                hit.SetAction(null);
+                hit.SetEnabled(false);
                 if (root.activeSelf) root.SetActive(false);
             }
         }
@@ -459,13 +444,23 @@ namespace BoscaliSummer.Features.Command.Presentation
 
         private void BuildSaPage(GameObject page)
         {
-            var parent = (RectTransform)page.transform;
             Rect body = shell.Body;
-            float x = body.x + AvScreen.SpineInset;
-            float width = body.width - AvScreen.SpineInset;
+            // Combined air picture + frontline still exceeds the reduced MFD body at lower
+            // canvas heights. Clip and scroll only when needed so the last rows never run
+            // under the status strip.
+            frontRoot = AvScreen.Scroll((RectTransform)page.transform, body, MergedSaContentHeight, out body);
             float y = body.y;
 
-            AvStyled.Spine(parent, new Rect(body.x, body.y, 3f, body.height));
+            AvStyled.Spine(frontRoot, new Rect(body.x, body.y, 3f, body.height));
+
+            y = BuildSaBody(frontRoot, body, y);
+            BuildFrontBody(frontRoot, body, y);
+        }
+
+        private float BuildSaBody(RectTransform parent, Rect body, float y)
+        {
+            float x = body.x + AvScreen.SpineInset;
+            float width = body.width - AvScreen.SpineInset;
 
             y = SectionHeader(parent, x, y, width, "AIR PICTURE", "C4ISR", band: false);
 
@@ -512,9 +507,16 @@ namespace BoscaliSummer.Features.Command.Presentation
 
             // "SAMS" was this number's old label. It is the friendly radar list, so it says so.
             radarValue = KeyValue(parent, x, y, width, "FRIENDLY RADARS ON NET");
+            return y - 22f;
         }
 
         private void RefreshSa(TacticalTheaterState state)
+        {
+            RefreshSaBody(state);
+            RefreshFrontBody(state);
+        }
+
+        private void RefreshSaBody(TacticalTheaterState state)
         {
             if (defconLabel == null) return;
 
@@ -567,56 +569,48 @@ namespace BoscaliSummer.Features.Command.Presentation
             radarValue.text = GameAccess.HqSensorsAvailable ? state.FriendlyRadarCount.ToString() : "—";
         }
 
-        // ---- FRONT page ------------------------------------------------------------------
+        // ---- Frontline (merged into SA) --------------------------------------------------
 
-        private void BuildFrontPage(GameObject page)
+        private void BuildFrontBody(RectTransform parent, Rect body, float y)
         {
-            Rect body = shell.Body;
-            // Eight bounded rows still exceed the reduced MFD body at lower canvas
-            // heights. Clip and scroll only when needed so the last rows never run under
-            // the status strip.
-            frontRoot = AvScreen.Scroll((RectTransform)page.transform, body, 596f, out body);
             float x = body.x + AvScreen.SpineInset;
             float width = body.width - AvScreen.SpineInset;
-            float y = body.y;
 
-            AvStyled.Spine(frontRoot, new Rect(body.x, body.y, 3f, body.height));
-
-            y = SectionHeader(frontRoot, x, y, width, "SECTOR CONTROL", "LIVE FIELD", band: false);
+            y = SectionHeader(parent, x, y, width, "SECTOR CONTROL", "LIVE FIELD", band: false);
 
             controlBarRect = new Rect(x, y, width, 10f);
-            AvStyled.Box(frontRoot, controlBarRect, "bar");
+            AvStyled.Box(parent, controlBarRect, "bar");
             for (int i = 0; i < controlBarFill.Length; i++)
             {
-                controlBarFill[i] = AvKit.Panel(frontRoot, new Rect(x, y, 0f, 10f), Color.clear);
+                controlBarFill[i] = AvKit.Panel(parent, new Rect(x, y, 0f, 10f), Color.clear);
             }
             y -= 18f;
 
-            alliedSectors = KeyValue(frontRoot, x, y, width, "ALLIED SECTORS");
+            alliedSectors = KeyValue(parent, x, y, width, "ALLIED SECTORS");
             y -= 17f;
-            contestedSectors = KeyValue(frontRoot, x, y, width, "CONTESTED SECTORS");
+            contestedSectors = KeyValue(parent, x, y, width, "CONTESTED SECTORS");
             y -= 17f;
-            hostileSectors = KeyValue(frontRoot, x, y, width, "HOSTILE SECTORS");
+            hostileSectors = KeyValue(parent, x, y, width, "HOSTILE SECTORS");
             y -= 17f;
-            neutralSectors = KeyValue(frontRoot, x, y, width, "UNCLAIMED SECTORS");
+            neutralSectors = KeyValue(parent, x, y, width, "UNCLAIMED SECTORS");
             y -= 17f;
-            frontlineValue = KeyValue(frontRoot, x, y, width, "FRONTLINE LENGTH  (GRID EDGES)");
+            frontlineValue = KeyValue(parent, x, y, width, "FRONTLINE LENGTH");
             y -= 17f;
-            nodeValue = KeyValue(frontRoot, x, y, width, "TRACKED NODES");
+            nodeValue = KeyValue(parent, x, y, width, "TRACKED NODES");
             y -= 22f;
 
-            y = SectionHeader(frontRoot, x, y, width, "CONTESTED GROUND", "BY PRESSURE", band: true);
+            y = SectionHeader(parent, x, y, width, "CONTESTED GROUND", "BY PRESSURE", band: true);
 
-            nodeNote = AvStyled.Label(frontRoot, new Rect(x, y, width, 16f), "", "row-sub");
+            nodeNote = AvStyled.Label(parent, new Rect(x, y, width, 16f), "", "row-sub");
             y -= 20f;
 
             for (int i = 0; i < nodeRows.Length; i++)
             {
-                nodeRows[i] = new ListRow(frontRoot, x, y - i * ListRow.Pitch, width);
+                nodeRows[i] = new ListRow(parent, x, y - i * ListRow.Pitch, width);
             }
         }
 
-        private void RefreshFront(TacticalTheaterState state)
+        private void RefreshFrontBody(TacticalTheaterState state)
         {
             if (alliedSectors == null) return;
 
@@ -650,7 +644,7 @@ namespace BoscaliSummer.Features.Command.Presentation
             neutralSectors.text = state.NeutralSectorCount.ToString();
 
             frontlineValue.text = state.FrontlineSegmentCount > 0
-                ? state.FrontlineSegmentCount.ToString()
+                ? TheaterReadout.Kilometres(state.FrontlineLengthMetres)
                 : "NO CONTACT";
             nodeValue.text = state.TotalNodesCount + " / " + TacticalSectorGrid.MaximumNodes;
 
@@ -674,12 +668,14 @@ namespace BoscaliSummer.Features.Command.Presentation
             // at 128 nodes and the window at 8, so this is a bounded pass with no allocation
             // and no full sort of a list that is mostly not contested.
             int contestedTotal = 0;
+            int pressingTotal = 0;
             int shown = 0;
 
             for (int i = 0; i < nodes.Count; i++)
             {
                 if (!nodes[i].IsContested) continue;
                 contestedTotal++;
+                if (nodes[i].CaptureProgress >= 0.05f) pressingTotal++;
 
                 float pressure = nodes[i].CaptureProgress;
 
@@ -706,14 +702,15 @@ namespace BoscaliSummer.Features.Command.Presentation
                 // thing that says which.
                 Color tint = friendly ? AvTheme.RailCaution : AvTheme.RailReady;
 
+                bool pressing = node.CaptureProgress >= 0.05f;
                 nodeRows[i].Bind(
                     TheaterReadout.NodeRail(friendly, node.IsContested),
                     string.IsNullOrEmpty(node.Name) ? "UNNAMED NODE" : node.Name.ToUpperInvariant(),
                     (node.IsAirbase ? "AIRBASE" : "STRONGPOINT") + " · " +
                     (friendly ? "ALLIED HELD" : "HOSTILE HELD") + " · " +
-                    TheaterReadout.Pressure(node.CaptureProgress),
-                    TheaterReadout.Percent(node.CaptureProgress),
-                    node.CaptureProgress,
+                    TheaterReadout.PressureState(node.CaptureProgress),
+                    pressing ? TheaterReadout.Percent(node.CaptureProgress) : "—",
+                    pressing ? node.CaptureProgress : 0f,
                     tint, tint);
             }
 
@@ -727,210 +724,37 @@ namespace BoscaliSummer.Features.Command.Presentation
             else
             {
                 nodeNote.text = contestedTotal + " NODE" + (contestedTotal == 1 ? "" : "S") +
-                                " UNDER PRESSURE" +
+                                " IN CONTACT" +
+                                (pressingTotal > 0 ? " · " + pressingTotal + " UNDER PRESSURE" : "") +
                                 (contestedTotal > shown ? " · SHOWING TOP " + shown : "");
                 nodeNote.color = AvTheme.RailCaution;
             }
         }
 
-        // ---- TASKING page ----------------------------------------------------------------
-
-        private void BuildTaskingPage(GameObject page)
-        {
-            var parent = (RectTransform)page.transform;
-            Rect body = shell.Body;
-            float x = body.x + AvScreen.SpineInset;
-            float width = body.width - AvScreen.SpineInset;
-            float y = body.y;
-
-            AvStyled.Spine(parent, new Rect(body.x, body.y, 3f, body.height));
-
-            y = SectionHeader(parent, x, y, width, "FACTION TASKING", "SECONDARY OBJECTIVES", band: false);
-
-            if (tasking == null)
-            {
-                AvStyled.Label(parent, new Rect(x, y, width, 40f),
-                               "Dynamic operations are not running on this host. " +
-                               "Nothing is issuing faction tasking.", "row-sub");
-                return;
-            }
-
-            AvStyled.Button(parent, new Rect(x, y - 4f, 110f, 24f), "REQUEST BOARD", "btn",
-                            () => { tasking.Refresh(); nextRefresh = 0f; })
-                    .WithTooltip("Ask the host for the current faction objective board. " +
-                                 "The board is issued by the host; this does not create work.");
-            y -= 32f;
-
-            taskNote = AvStyled.Label(parent, new Rect(x, y, width, 30f), "", "row-sub");
-            y -= 36f;
-
-            for (int i = 0; i < taskRows.Length; i++)
-            {
-                taskRows[i] = new ListRow(parent, x, y - i * ListRow.Pitch, width);
-            }
-        }
-
-        private void RefreshTasking()
-        {
-            if (tasking == null || taskNote == null) return;
-
-            taskNote.text = tasking.Status ?? "";
-            taskNote.color = AvTheme.Dim;
-
-            IReadOnlyList<SecondaryObjectiveView> cards = tasking.Objectives;
-            int count = cards == null ? 0 : cards.Count;
-
-            for (int i = 0; i < taskRows.Length; i++)
-            {
-                if (i >= count)
-                {
-                    taskRows[i].Hide();
-                    continue;
-                }
-
-                SecondaryObjectiveView card = cards[i];
-                bool active = card.IsActive;
-
-                string rail = card.IsComplete ? "ready" : active ? "armed" : "locked";
-                Color tint = card.IsComplete ? AvTheme.RailReady
-                           : active ? AvTheme.RailCaution
-                           : AvTheme.Disabled;
-
-                string detail = card.Target + " · " + card.Status +
-                                (active ? " · " + TheaterReadout.Countdown(card.SecondsRemaining) : "") +
-                                "\n" + card.Reward;
-
-                taskRows[i].Bind(
-                    rail,
-                    card.Title,
-                    detail,
-                    TheaterReadout.Percent(card.Progress),
-                    card.Progress,
-                    tint,
-                    tint);
-            }
-        }
-
-        // ---- LOG page --------------------------------------------------------------------
-
-        private void BuildLogPage(GameObject page)
-        {
-            var parent = (RectTransform)page.transform;
-            Rect body = shell.Body;
-            float x = body.x + AvScreen.SpineInset;
-            float width = body.width - AvScreen.SpineInset;
-            float y = body.y;
-
-            AvStyled.Spine(parent, new Rect(body.x, body.y, 3f, body.height));
-
-            y = SectionHeader(parent, x, y, width, "THEATER ACCOUNT", "FACTION HQ", band: false);
-
-            fundsValue = KeyValue(parent, x, y, width, "AVAILABLE FUNDS");
-            y -= 18f;
-            incomeValue = KeyValue(parent, x, y, width, "REGULAR INCOME");
-            y -= 18f;
-            scoreValue = KeyValue(parent, x, y, width, "FACTION SCORE");
-            y -= 26f;
-
-            y = SectionHeader(parent, x, y, width, "STOCKPILE", "REPLACEMENTS", band: true);
-
-            warheadValue = KeyValue(parent, x, y, width, "WARHEADS IN RESERVE");
-            y -= 18f;
-            airframeValue = KeyValue(parent, x, y, width, "RESERVE AIRFRAMES");
-            y -= 18f;
-            aiCapValue = KeyValue(parent, x, y, width, "AI AIRFRAME CEILING");
-            y -= 26f;
-
-            Divider(parent, x, y + 8f, width);
-
-            AvStyled.Label(parent, new Rect(x, y, width, 40f),
-                           "Per-airframe reserves, the loss ledger and the player roster are on " +
-                           "the faction panel — this page carries only what a strike decision " +
-                           "turns on.", "row-sub");
-        }
-
-        private void RefreshLog(FactionHQ hq)
-        {
-            if (fundsValue == null) return;
-
-            if (hq == null)
-            {
-                fundsValue.text = incomeValue.text = scoreValue.text = "—";
-                warheadValue.text = airframeValue.text = aiCapValue.text = "—";
-                return;
-            }
-
-            fundsValue.text = UnitConverter.ValueReading(hq.factionFunds);
-            incomeValue.text = UnitConverter.ValueReading(hq.regularIncome);
-            scoreValue.text = hq.factionScore.ToString("N0");
-
-            warheadValue.text = hq.GetWarheadStockpile().ToString();
-            airframeValue.text = hq.reserveAirframes.ToString();
-            aiCapValue.text = hq.AIAircraftLimit.ToString();
-        }
-
         // ---- CMD page --------------------------------------------------------------------
 
+        /// <summary>
+        /// The CMD tab is a placeholder. The previous doctrine / per-cell Sector Focus
+        /// system was pulled out whole and will be rebuilt in another form.
+        /// </summary>
         private void BuildCmdPage(GameObject page)
         {
-            var parent = (RectTransform)page.transform;
             Rect body = shell.Body;
+            var parent = (RectTransform)page.transform;
             float x = body.x + AvScreen.SpineInset;
             float width = body.width - AvScreen.SpineInset;
-            float y = body.y;
 
             AvStyled.Spine(parent, new Rect(body.x, body.y, 3f, body.height));
 
-            y = SectionHeader(parent, x, y, width, "MISSION-AI DOCTRINE",
-                              "NOT WING ORDERS", band: false);
-
-            // Two columns of full names. The old single row cut every label to five
-            // characters, so the choice was between "AIRSU" and "STRIK".
-            var doctrines = (CommandDoctrine[])Enum.GetValues(typeof(CommandDoctrine));
-            float buttonWidth = (width - 6f) * 0.5f;
-
-            for (int i = 0; i < doctrines.Length; i++)
-            {
-                CommandDoctrine doctrine = doctrines[i];
-                float bx = x + (i % 2) * (buttonWidth + 6f);
-                float by = y - (i / 2) * 30f;
-
-                AvButton button = AvStyled.Button(
-                    parent, new Rect(bx, by, buttonWidth, 26f),
-                    CommandDoctrineHelper.GetName(doctrine), "btn",
-                    () =>
-                    {
-                        command?.TrySetDoctrine(doctrine);
-                        nextRefresh = 0f;
-                    },
-                    AvButtonStyle.Toggle);
-
-                button.WithTooltip(CommandDoctrineHelper.GetName(doctrine) + " — " +
-                                   CommandDoctrineHelper.GetDescription(doctrine));
-                doctrineButtons.Add(button);
-            }
-
-            y -= Mathf.Ceil(doctrines.Length / 2f) * 30f + 4f;
-
-            doctrineDescription = AvStyled.Label(parent, new Rect(x, y, width, 40f), "", "row-sub");
-            y -= 46f;
-
-            AvStyled.Label(parent, new Rect(x, y, width, 28f),
-                           "Frontline grid, opacity and refresh rate are on the SET / MAP page.",
-                           "row-sub");
-        }
-
-        private void RefreshCmd()
-        {
-            if (doctrineDescription == null || command == null) return;
-
-            doctrineDescription.text = CommandDoctrineHelper.GetDescription(command.ActiveDoctrine);
-
-            var doctrines = (CommandDoctrine[])Enum.GetValues(typeof(CommandDoctrine));
-            for (int i = 0; i < doctrineButtons.Count && i < doctrines.Length; i++)
-            {
-                doctrineButtons[i].SetLatched(command.ActiveDoctrine == doctrines[i]);
-            }
+            float y = SectionHeader(parent, x, body.y, width, "TACTICAL COMMANDS", "REBUILDING", band: false);
+            AvKit.TacticalCard(parent, new Rect(x - 4f, y + 2f, width + 8f, 96f), AvTheme.RailInfo);
+            AvStyled.Label(parent, new Rect(x, y + 2f, width, 30f), "WORK IN PROGRESS", "metric-value",
+                           align: TextAlignmentOptions.Center);
+            AvStyled.Label(parent, new Rect(x, y - 32f, width, 56f),
+                           "The tactical command system was removed and will be rebuilt in a different " +
+                           "form. Theater posture, mission-AI doctrine and map sector focus are " +
+                           "unavailable until then.",
+                           "row-sub", align: TextAlignmentOptions.Center);
         }
 
         // ---- Refresh ---------------------------------------------------------------------
@@ -952,11 +776,7 @@ namespace BoscaliSummer.Features.Command.Presentation
             switch (shell.Page)
             {
                 case TabSa: RefreshSa(state); break;
-                case TabFront: RefreshFront(state); break;
-                case TabTasking: RefreshTasking(); break;
                 case TabCoc: RefreshCoc(); break;
-                case TabLog: RefreshLog(hq); break;
-                case TabCmd: RefreshCmd(); break;
             }
 
             shell.WriteStatus(
@@ -976,23 +796,28 @@ namespace BoscaliSummer.Features.Command.Presentation
                 0,
                 "DEFCON " + state.DefconLevel,
                 state.DefconLevel <= 2 ? "danger" : state.DefconLevel == 3 ? "warn" : "live");
-            shell.DataBar.SetChip(1, ShortDoctrine(command.ActiveDoctrine),
-                                  command.ActiveDoctrine != CommandDoctrine.Balanced);
+            bool frontline = state.ContestedSectorCount > 0;
+            shell.DataBar.SetChip(1, frontline ? "FRONT LIVE" : "FRONT QUIET", frontline);
             bool grid = settings != null && settings.FrontlinesOverlay.Value;
             shell.DataBar.SetChip(2, grid ? "GRID ON" : "GRID OFF", grid);
 
             bool territoryKnown = !float.IsNaN(state.TerritoryControlRatio);
+            // The allied/hostile split rides the unit slot. The caption has room for the pair's
+            // labels or for both counts, not for both — and a reading that gets ellipsised is
+            // a reading the panel did not give.
+            shell.Metrics[0].Unit.text = state.FriendlySectorCount + "/" + state.HostileSectorCount;
             shell.Metrics[0].Set(
                 TheaterReadout.Percent(state.TerritoryControlRatio),
-                state.FriendlySectorCount + " ALLIED · " + state.HostileSectorCount + " HOSTILE",
+                "ALLIED / HOSTILE",
                 territoryKnown ? state.TerritoryControlRatio : 0f,
                 !territoryKnown ? AvTheme.RailInert
                     : state.TerritoryControlRatio >= 0.5f ? AvTheme.RailReady : AvTheme.RailCaution);
 
             bool airKnown = !float.IsNaN(state.AirSuperiorityRatio);
+            shell.Metrics[1].Unit.text = state.FriendlyAircraftCount + "/" + state.HostileAircraftCount;
             shell.Metrics[1].Set(
                 TheaterReadout.Percent(state.AirSuperiorityRatio),
-                state.FriendlyAircraftCount + " ALLIED · " + state.HostileAircraftCount + " HOSTILE",
+                "ALLIED / HOSTILE",
                 airKnown ? state.AirSuperiorityRatio : 0f,
                 !airKnown ? AvTheme.RailInert
                     : state.AirSuperiorityRatio >= 0.5f ? AvTheme.RailReady : AvTheme.RailCaution);
@@ -1020,9 +845,8 @@ namespace BoscaliSummer.Features.Command.Presentation
             string text = state.ContestedSectorCount > 0
                 ? state.ContestedSectorCount + " contested sector" +
                   (state.ContestedSectorCount == 1 ? "" : "s") + " · frontline " +
-                  state.FrontlineSegmentCount + " segments · doctrine " +
-                  CommandDoctrineHelper.GetName(command.ActiveDoctrine)
-                : "No contested ground · doctrine " + CommandDoctrineHelper.GetName(command.ActiveDoctrine);
+                  TheaterReadout.Kilometres(state.FrontlineLengthMetres)
+                : "No contested ground";
 
             if (highCommand != null && highCommand.Available)
             {
@@ -1032,20 +856,15 @@ namespace BoscaliSummer.Features.Command.Presentation
                 if (shell != null && shell.Page == TabCoc && !string.IsNullOrEmpty(highCommand.Signal))
                     text += " · " + highCommand.Signal;
             }
-            return text;
-        }
-
-        /// <summary>A chip-width doctrine label. Chips are 74px; full names do not fit.</summary>
-        private static string ShortDoctrine(CommandDoctrine doctrine)
-        {
-            switch (doctrine)
+            else if (shell != null && shell.Page == TabCoc)
             {
-                case CommandDoctrine.AirSuperiority: return "DOC: AIR";
-                case CommandDoctrine.StrikeFocus: return "DOC: STRIKE";
-                case CommandDoctrine.SEAD: return "DOC: SEAD";
-                case CommandDoctrine.CloseAirSupport: return "DOC: CAS";
-                default: return "DOC: BAL";
+                // The page reads "STAFF NOT RUNNING" in one line. The reason is the host's own
+                // status sentence, which only the strip has room for.
+                text += " · " + (highCommand == null
+                    ? "chain of command is not running on this host"
+                    : highCommand.Status ?? "chain of command is forming");
             }
+            return text;
         }
     }
 }

@@ -23,21 +23,23 @@ Nuclear Option** — every expensive system pooled, event-driven, and globally b
 
 ## What it does
 
-- **Dynamic trenches (experimental)** — trench systems are dug only on contested frontline
-  sectors, where opposing ground forces actually meet near the border, and hug the line.
-  A 132m fire-trench line grows into a deliberate field position (support line at 110m,
-  rear redoubt at 220m, dugouts, weapon pits, traversed communication trenches, forward
-  saps with listening posts, up to ±176m wide), then joins its same-faction neighbours so
-  a chain of sectors becomes one continuous front line spanning kilometres. Works are
-  small infantry-scale game assets — HESCO, sandbag and light gabion pieces selected at
-  runtime by keyword and footprint — placed on the ditch line itself, with four native
-  MG/ATGM/MANPADS emplacements per sector: sparse, interlocking, and lethal. The carved
-  ditch follows the terrain on both sides of its cross-section, and placement rejects
-  ground too broken to hold a line. Hits pause construction for a minute; lost defenders
-  stay lost. Requires Command. Native defenders and scenery replicate; carved ditches and
-  map marks remain host-local. The tactical map draws the fire line with NATO crenellations
-  facing the enemy and previews the contested line where trenches will spawn.
-  Combat/placement acceptance in-game is pending.
+- **Dynamic trenches (experimental)** — a trench line is a Bezier curve fitted to the real
+  front: Command's ordered frontline trace (beachhead rings, diagonal fronts, whole
+  frontiers), offset onto the side each faction actually holds and settled into the
+  flattest low ground the planner can find, so the work follows a hollow and bends around a
+  rise instead of marching along a grid edge. Each 1200m position matures from a scrape into
+  a deliberate field position (support trace at 110m, rear redoubt at 220m, communication
+  trenches, forward saps with listening posts), and trenches appear only on contested
+  stretches where opposing ground forces actually meet. Works are small infantry-scale game
+  assets — HESCO, sandbag and light gabion pieces selected at runtime by keyword and
+  footprint — placed on the ditch line itself, with four native MG/ATGM/MANPADS emplacements
+  per position: sparse, interlocking, and lethal. The carved ditch follows the terrain on
+  both sides of its cross-section; water, cliffs and broken ground interrupt a line rather
+  than cancel it. Hits pause construction for a minute; lost defenders stay lost. Requires
+  Command. Native defenders and scenery replicate; carved ditches and map marks remain
+  host-local. The tactical map draws the fire line with NATO crenellations facing the enemy,
+  and Command's own front symbol previews the contested trace. Combat/placement acceptance
+  in-game is pending.
 
 - **Fire & destruction** — guns, missiles and destroyed ground vehicles can ignite civilian
   buildings or procedural forests (deliberately low, probabilistic chance). Forest fires
@@ -56,15 +58,17 @@ Nuclear Option** — every expensive system pooled, event-driven, and globally b
   encampments. MC-260 Chimera and Tarantula cargo can load a sixteen-troop paradrop
   station that survives hangar → spawn. Empty troop benches disappear and the ammunition
   display decreases.
-- **Radio** — a client-local map-MFD receiver (`RAD` bezel) for your own OGG/WAV
-  stations, routed through the game's music mixer. TUNE steps the dial (FM 0.2 MHz /
-  MW 10 kHz) with dead air between stations, SEEK jumps stations, BAND flips FM/MW, and
-  the panel carries a signal meter, a programme log of the tuned station's tracks (click
-  to play), presets, SCAN, a volume knob and a rotating wire line of channel traffic —
-  including intercepted enemy chatter.
-  Carrier static, squelch and the morse station ident are synthesized in memory, MW keeps
-  the AM curve, and an optional broadcast filter colours FM. Three starter stations; no
-  bundled audio.
+- **Radio & deck** — `RAD` is a client-local receiver for your own OGG/WAV stations and the
+  installed score, routed through the game's music mixer: a spectrum waterfall, an S-meter fed
+  by a real link budget (range, radio horizon and terrain line of sight to each built-in
+  station's tower), TUNE/SEEK/SCAN on FM (100 kHz), VHF air (25 kHz, AM) and MW (10 kHz), a
+  squelch with SQ keys, wide/narrow bandwidth, a MODE override that garbles the wrong
+  demodulator, AF volume and a clickable programme log. `MUS` is the local deck: browse your
+  library folders, play, pause, skip, shuffle, repeat, with its own transport — music you own,
+  no dial involved. While either is live the game's soundtrack stays held (including dead air
+  between stations) and comes back on STOP. Carrier static, squelch and the morse station
+  ident are synthesized in memory; transmit and SECURE are honest placeholders for a later
+  voice link. Three starter stations; no bundled audio.
 - **Squad & aces** — `SQD` holds **PILOT**, **SKILLS**, **WINGS** and **STUDIO**. **PILOT**
   is the dossier: the pilot portrait generated by Wing Command, rank/score record, service
   background and the local squadron emblem. **SKILLS** is the shared skill board — the
@@ -96,13 +100,13 @@ Nuclear Option** — every expensive system pooled, event-driven, and globally b
   friendly airbase.
   Satellites and infrastructure are faction assets, host-authoritative; protocol 7 requires
   matching peers. New orbital and cyber behavior still needs in-game multiplayer acceptance.
-- **Strategic layer** — an `STR` map-MFD with the theater picture: DEFCON and the air
-  balance with a friendly-AI sortie board (**SA**), the live sector field and contested
-  nodes (**FRONT**), the faction objective board (**TASKING**), the theater account and
-  stockpile (**LOG**), and mission-AI scoring doctrine plus map overlays (**CMD**). Empty
-  air or territory ratios read as a dash, not 50%. CMD blurbs are scoring bias for
-  friendly mission AI, not orders. Aircraft command stays Wing Command's job; this mod
-  never tasks a recruited wing.
+- **Strategic layer** — an `STR` map-MFD with the theater picture: DEFCON, the air
+  balance, the friendly-AI sortie board, the live sector field and contested nodes
+  (**SA**), and chain of command (**COC**, allied or hostile roster). Empty air or
+  territory ratios read as a dash, not 50%. The **CMD** tab's tactical-command system
+  was removed and is a work-in-progress placeholder pending a rebuild. The faction
+  objective board lives on the solo/host **ADM** bezel. Aircraft command stays Wing
+  Command's job; this mod never tasks a recruited wing.
 - **Chain of command** (`HighCommand.Enabled`, new, in-game acceptance pending) — the STR
   console adds **COC**: both factions' generated staffs with seed-stable names, the same
   generated portraits Wing Command draws for aces and wingmen, traits and service bios,
@@ -126,8 +130,11 @@ Nuclear Option** — every expensive system pooled, event-driven, and globally b
 - **Expanded tactical map** — `Command.ExpandedMapUi` (default on): left-side MFD pages and
   event log, central map, right-side bezel rail, native spawn footer, with shared Wing
   Command bezel and map-input ownership.
-  MAP separates **Layers** from **Readability**, with larger labeled controls, explicit
-  ON/OFF states, Show all / Hide all, and native hover-detail/symbol-size settings.
+  MAP separates **Layers** from **Readability**. Layers is a two-column switch grid over
+  the six game layers plus Boscali's own **Control field** and **Front line** overlays,
+  with All on / Hide all / Defaults presets and a live overlay readout; Readability carries
+  the native hover-tooltip and symbol-size choices, a scaled symbol preview and the overlay
+  legend.
 - **Target presets** — TGT captures the current filter state into a named profile (up to
   12, editable, delete confirmed), assigns three quick slots, and shows the active profile
   in the data bar and on the preset card. Quick slots apply with **F6 / F9 / F10** or from
@@ -195,12 +202,13 @@ in-game with [ConfigurationManager](https://github.com/BepInEx/BepInEx.Configura
    a town or tree line for a secondary ignition chance.
 3. Capture an airbase and inspect nearby civilian buildings — selected shells keep their
    look but behave as defensive positions.
-4. Maximise the tactical map. Press **`RAD`** for the radio receiver — TUNE/SEEK work the
-   band, SCAN sweeps it, SET then a preset stores one (**FOLDER** adds OGG/WAV
-   stations). Press **`SQD`** for your pilot dossier, shared skill board, enemy aces and the
+4. Maximise the tactical map. Press **`RAD`** for the receiver — TUNE/SEEK/SCAN work the
+   band, SQ sets the squelch, BAND cycles FM / VHF air / MW (**FOLDER** adds OGG/WAV
+   stations); press **`MUS`** for the local deck's folders and transport. Press **`SQD`** for
+   your pilot dossier, shared skill board, enemy aces and the
    pilot/emblem studio; press **`OPS`**
    to call support over a valid map target. Press **`STR`** for the theater picture and
-   friendly-AI doctrine; **`SET`** groups map settings into **MAP / STYLE / IMAGE**, and **`WMC`** holds your friendly wing. SET uses one background selector, separate console opacity and map darkening, and local PNG/JPEG wallpaper controls. Existing layered configurations display as MIXED until you choose a replacement.
+   chain of command; **`SET`** groups map settings into **MAP / STYLE / IMAGE**, and **`WMC`** holds your friendly wing. SET uses one background selector, separate console opacity and map darkening, and local PNG/JPEG wallpaper controls. Existing layered configurations display as MIXED until you choose a replacement.
 5. After the first 60 mission seconds, inflict hostile damage to draw an ace hunt. The
    default trigger is 25 credited part-damage points. Put your own OGG/WAV tracks in
    `BepInEx/plugins/BoscaliSummer/Music/Hunt` for hunt music; otherwise the installed
@@ -220,9 +228,10 @@ anything) or **client-local**. This table is a curated subset; F1 shows the rest
 | Fires | `DemolishUnoccupiedBuildings` | `true` | Leave vanilla ruins after building fires burn out |
 | Buildings | `ImpactScorchEnabled` | `true` | Local scorch decal where an explosive hit meets a wall (client-local) |
 | Garrisons | `Enabled` / `BuildingsPerZone` | `true` / `3` | Occupy civilian shells around controlled zones |
-| Radio | `Enabled` / `CrossfadeSeconds` | `true` / `1.5` | Client-local map receiver; blend between tracks |
+| Radio | `Enabled` / `CrossfadeSeconds` | `true` / `1.5` | Client-local receiver and deck; blend between tracks |
 | Radio | `BroadcastFilter` / `StationIdents` / `CarrierNoise` | `Broadcast` / `true` / `true` | FM receiver colour; synthesized morse ident; tuning and dead-air static (client-local) |
-| Radio | `Volume` / `ScanDwellSeconds` / `Preset1`–`Preset6` | `1.0` / `5` / `-1` | Receiver volume knob; SCAN dwell per station; stored station per preset (`-1` empty) |
+| Radio | `Mode` / `Squelch` / `NarrowBandwidth` / `FineTuning` | `Auto` / `0.15` / `false` / `false` | Demodulator (wrong mode garbles), signal floor, passband, channel vs fine step |
+| Radio | `Volume` / `ScanDwellSeconds` | `1.0` / `5` | Receiver/AF volume knob; SCAN dwell per station |
 | Squad | `PilotLives` | `Respawning` | `OneLife` retires a confirmed dead pilot and starts a fresh successor career |
 | Squad | `EnemyAceHunts` | `true` | Enemy ace wings, pursuit, return encounters and bonus points |
 | Squad | `DamageThreshold` / `HuntCooldown` | `25` / `180` | Initial credited part damage; seconds before fresh threat can accumulate |
@@ -244,12 +253,12 @@ anything) or **client-local**. This table is a curated subset; F1 shows the rest
 | Support | `MaximumRangeMeters` / `RequestCooldownSeconds` | `30000` / `30` | Strike delivery reach; cooldown per player |
 | Support | `FireMissionDefinitionKey` | *(empty)* | Missile for Rod from God / EMP; empty auto-picks a yield ≤ 200 vanilla missile |
 | Support | Map effect areas | — | Abilities and hacks show icons and radii; rod has a 150 m core inside a 420 m blast boundary. Active markers use host-approved values (support protocol 7; matching peers required). |
-| Command | `Enabled` / `ExpandedMapUi` | `true` / `true` | STR screen + overlays + AI target scoring; full tactical map GUI |
+| Command | `Enabled` / `ExpandedMapUi` | `true` / `true` | STR screen + map overlays; full tactical map GUI |
 | HighCommand | `Enabled` / `EconomyEnabled` | `true` / `true` | Chain-of-command page, command posts, VIP convoys and funds/score payouts |
 | Events | `Enabled` / `EffectStrength` | `true` / `1.0` | `EVN` rotating world-event feed; scale every event modifier (0 = flavor only) |
 | Events | `RotationGapMinSeconds` / `MaxSeconds` | `90` / `240` | Calm window between events; one event at a time, 5–15 min each |
 | Events | `HistoryLength` | `16` | Finished events kept on the EVN screen this mission (max 16) |
-| Command | `FrontlinesOverlay` / `OverlayOpacity` | `true` / `0.35` | Sector-control grid on the map |
+| Command | `FrontlinesOverlay` / `FrontlineTrace` / `OverlayOpacity` | `true` / `true` / `0.35` | Sector-control tint and front line trace on the map |
 | DynamicOperations | `Enabled` / `RewardMultiplier` | `false` / `1.0` | Experimental secondary missions; scale money & XP |
 | Debug | `VerboseLogging` `BypassRequirements` `DisableOpsCooldowns` | `false` | Diagnostics and testing aids |
 

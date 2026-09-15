@@ -182,7 +182,7 @@ surface settings that previously existed only in the BepInEx file: the third-per
 ladder, target camera feed and flight camera (all QoL-owned, read and written through the
 existing `IThirdPersonHud` contract, which gained three live properties) and Command's
 radial target-preset page (`Command.TargetPresetWheel`). Camera rows disable with a reason
-until the third-person HUD they belong to is on. `Command.GridResolution` stays excluded:
+until the third-person HUD they belong to is on. `Command.GridCellSizeMetres` stays excluded:
 it is allocated at module initialization and cannot honestly re-apply in flight.
 
 The STR CMD page's claim that grid resolution lives on SET was corrected; overlay opacity
@@ -348,3 +348,91 @@ UX review followed the requested game-studio
 became the brief, the escalation readout states the verified mission data and its
 distance to the next gate, empty and unset states are named rather than guessed, and no
 new dependency or second ladder implementation was added.
+
+## Hosted EVN/ADM buttons and the icon pass (2026-09-15)
+
+Boscali fields seven screens and Wing Command contributes WMC, but the stock layout only
+leaves six free bezel buttons. A seventh and eighth screen therefore could not exist as
+claims: whichever lost the race disappeared, and reserving a slot for WMC starved EVN/ADM.
+Both are now **hosted** instead (`Infrastructure/GameInterop/MfdScreenHost.cs`). A host
+appends its own button to the vanilla column lists and lets vanilla drive it — the button
+and screen are added together so the two lists stay the same length, `SetupButtons` titles
+it, `PressLeftButton`/`PressRightButton` toggle it, `ToggleAllButtons` shows and hides it
+with the map and `HideAll*Screens` closes it. The six vanilla slots stay free for WMC and
+the five claimed screens, so no reservation is needed and EVN/ADM can never be crowded
+out. `MfdRailPatch.OnStructureChanged` now rebuilds the rail, so a hosted button (or ADM
+tearing down when a second client connects) is branded without waiting for the next map
+open.
+
+The hosted button is built to read as vanilla before the rail restyles it: the first
+sibling's fill, typography and size, plus the label and highlight children every panel's
+`Build` resolves from its bezel button. When the expanded layout is off, the vanilla bezel
+shows it in its own column instead; the rail adopts it like any borrowed button.
+
+Rail glyphs were redrawn in the same pass: a heavier consistent stroke (`Line`), a solid
+aircraft silhouette (`air`) now drawn as a filled polygon, a chevroned shield for the
+faction HQs, a head-and-shoulders squad mark, a strapped crate for OPS, a broadcast mark
+(`pulse`) for the event feed and a new tasking-board mark (`board`) for ADM so it no longer
+shares MIS/EVN's flag. The catalog descriptor for ADM is TASKING.
+
+Validation: the rail render check now adopts and brands fourteen keys (six vanilla
+screens, WMC, five claimed, EVN/ADM) and verifies `PrepareCapacity` fits them; pure
+catalog checks in `MfdPanelTests` cover the EVN/ADM entries and glyph distinctness; Release
+build, module-boundary tests, patch probe and `nomod asm verify` pass. In-game visual
+acceptance remains pending for 720p/1080p/ultrawide, EVN/ADM open/close, ADM teardown on a
+second client, expanded/stock transitions and scene reload.
+
+UX review followed the requested game-studio
+[UX review skill](https://github.com/Donchitos/Claude-Code-Game-Studios/blob/main/.claude/skills/ux-review/SKILL.md),
+[Ponytail](https://github.com/DietrichGebert/ponytail) and
+[UI/UX Pro Max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill): every panel stays
+reachable instead of racing for slots, the hosted button degrades to the vanilla column
+when the expanded layout is off, icons gained weight and distinct silhouettes instead of
+new dependencies, and the rail's capacity is verified at its new worst case.
+
+## MAP layer grid and overlay layers (2026-09-15)
+
+The MAP page was six full-width bordered boxes with a persistent description line, two
+oversized Show all / Hide all buttons and most of the body left empty — a wall of identical
+green rectangles that said very little. It now uses the same control language as every other
+rebuilt panel: a section heading on the spine and a two-column grid of toggle cells with a
+state rail, a vector glyph and a latched fill. Descriptions moved into hover help, which the
+status strip already carries for every control.
+
+Layers is now eight switches in two sections — the six game layers, then Boscali's own
+**Control field** and **Front line** overlays. The control tint and the front trace used to
+share one config entry, so the front could not be read without the tint and neither could be
+switched from the map. `Command.FrontlineTrace` splits them; the MAP switches write the two
+overlay entries through `ComMapOverlay`, so the config file stays the only owner of the
+state and the SET screen shows the same values. Cells are enabled only while the overlay has
+resolved a map and a faction headquarters, and the readout card below reports the sector cell
+size in use, whether control data is live, and both layer states. All on / Hide all /
+Defaults replace the old pair, and Defaults restores the game's own answers rather than a
+remembered layout.
+
+Readability keeps the native hover-tooltip and symbol-size choices, now as 4- and 3-cell
+selection rows with a written summary under them, and gains a scaled symbol preview plus a
+legend drawn from the bake's own tint constants and the front line's ink
+(`TacticalSectorGrid.FriendlyTint`/`HostileTint`, `FrontlineGraphic.Ink`), so the legend
+cannot drift from the map. `MfdGlyph` gained `control`, `front` and `grid` shapes for the new
+layer names; the ADM tasking board keeps its own `board` mark.
+
+No new persistence, networking or per-frame work: the panel refreshes on the existing
+visible-only 0.15-second pass, and cell size is derived from the panel height
+(`4 * cell + 264 ≤ body`, verified at `PanelHeight` 596 and `PanelHeightMax` 896).
+
+Validation: Release build (zero warnings), pure tests, the Settings render check with the new
+SET row, the rail render check with the three new glyphs, installed-game patch probe and
+`nomod asm verify` all pass. There is no standalone render check for this page (its presenter
+is one of the `VanillaMfdRebuild` partials, so a render fixture would have to stub the whole
+family); in-game visual acceptance at 720p/1080p/ultrawide, with and without a faction
+headquarters resolved, remains outstanding.
+
+UX review followed the requested game-studio
+[UX review skill](https://github.com/Donchitos/Claude-Code-Game-Studios/blob/main/.claude/skills/ux-review/SKILL.md),
+[Ponytail](https://github.com/DietrichGebert/ponytail) and
+[UI/UX Pro Max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill): the design reuses
+`MfdPagingGrid`/`AvStyled` instead of growing a fourth row widget, the two new glyphs are
+vector meshes rather than icon assets, layer descriptions moved to hover help rather than
+being dropped, disabled cells explain themselves, and no new dependency or saved state was
+introduced.

@@ -34,8 +34,11 @@ namespace BoscaliSummer.Features.Command.Domain
         public int TotalNodesCount;
         public int TotalSectorCount;
 
-        /// <summary>Cell edges where friendly and hostile control meet. The frontline's length.</summary>
+        /// <summary>Interpolated front stretches where friendly and hostile control meet.</summary>
         public int FrontlineSegmentCount;
+
+        /// <summary>Total length of those stretches, in metres.</summary>
+        public float FrontlineLengthMetres;
 
         public float TerritoryControlRatio = float.NaN;
 
@@ -70,6 +73,7 @@ namespace BoscaliSummer.Features.Command.Domain
             TotalNodesCount = 0;
             TotalSectorCount = 0;
             FrontlineSegmentCount = 0;
+            FrontlineLengthMetres = 0f;
 
             TerritoryControlRatio = float.NaN;
             Sorties.Reset();

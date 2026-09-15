@@ -17,8 +17,8 @@ anything that would need the other mod to exist.
 
 **Boscali never commands recruited, friendly or player-owned aircraft.** Its ace
 director may target/release only enemy wings created and owned by Wing Command's
-public ace API. Boscali doctrine may bias *friendly, non-wing* mission AI; it must
-not retask any unit whose persistent-id hash is on the presence board.
+public ace API. Boscali does not bias mission-AI target scoring and must not retask
+any unit whose persistent-id hash is on the presence board.
 
 Boscali now requires Wing Command `0.9.2.6`+ as a hard BepInEx runtime dependency,
 as requested for Squad integration. Wing Command does not depend on Boscali.
@@ -58,15 +58,27 @@ entries inside the list**, not indices past its end.
 | `BezelRegistry.Wmc` | left | Wing Command |
 | `BezelRegistry.Ops` | left | Boscali support call-ins, observation, battle status |
 | Boscali `MfdSlots.Sqd` | left, may spill right | Pilot dossier, shared skills, enemy ace wings and the local pilot/emblem studio |
-| `BezelRegistry.Str` | left | Boscali strategic layer: theater SA, frontline, tasking, logistics, doctrine |
-| `BezelRegistry.Rad` | right | Boscali music radio |
+| `BezelRegistry.Str` | left | Boscali strategic layer: theater SA and chain of command (CMD tab is a rebuild placeholder) |
+| `BezelRegistry.Rad` | right | Boscali radio receiver |
+| Boscali `MfdSlots.Mus` | right, hosted | Boscali local music deck |
 | `BezelRegistry.Set` | right | Boscali saved map settings |
 
 Five Boscali screens plus WMC fill the six unused slots (three per column) in the
 supported vanilla layout. `TryClaim` spills from a full preferred column and never
 evicts another owner. Boscali's `SqdPanelTests` verifies all six claims coexist and
-an additional claim fails without replacement. Additional screens need another
-verified free slot or a tab in an existing page.
+an additional claim fails without replacement. `EVN`, the solo-only `ADM` and the music
+deck `MUS` do not claim: they are **hosted** (`Infrastructure/GameInterop/MfdScreenHost.cs`),
+which appends a button and screen of their own to the vanilla column lists so vanilla drives
+them like any other slot and Wing Command's installer still sees six free slots. ADM re-checks
+solo authority every tick and never latches a failed claim.
+
+The installed Wing Command `0.9.2.6` installs WMC by scanning the live lists for the
+first free button rather than through `BezelRegistry`, so a registry entry alone cannot
+protect its slot. Hosting is what keeps WMC safe: Boscali claims exactly five slots, the
+scanner takes the sixth, and the appended EVN/ADM/MUS slots are already occupied as far as it
+is concerned. Do not add a claim for a screen that can be hosted, and do not append a host
+button without also appending its screen — vanilla indexes screens by button index, so the
+two lists must stay the same length.
 
 OPS and STR are the two command screens. Theater SA used to be a tab *inside* OPS,
 mounted through an `ITheaterPage` contract; that contract is gone. They now share only
@@ -75,8 +87,8 @@ the shell factory (`AvScreen`), which is a widget, not a seam.
 SQD presents the pilot dossier, the shared skill board (player passives and support
 authorisations beside the AI/ace combat skills), the enemy ace roster and a client-local
 pilot/emblem studio. OPS presents support calls, observation and battle status. STR
-presents the theater picture and mission-AI doctrine. A failed bezel claim must not evict
-another panel or stop its services.
+presents the theater picture and chain of command; its CMD tab is a placeholder. A failed
+bezel claim must not evict another panel or stop its services.
 
 **A new screen claims with `MfdBezel.TryClaim` / `BezelRegistry.TryClaim`, then
 `Bind`.** A private first-null `TryClaimSlot` will race the other plugin in the same
@@ -90,6 +102,12 @@ After `SetupButtons()`, re-enable the button (`enabled` + `interactable`) and wi
 
 One owner. `MapPicker.TryArm(owner, gesture, prompt)` fails if someone else is armed.
 `Disarm` is owner-only.
+
+Button split on the maximised map (not an RTS layer):
+
+- **Right-click** is Boscali support while a call-in is armed (`MapPicker.Support`).
+- **Left-click** (click, not drag) is wing orders when WMC TACTICAL is open. Pan remains
+  a left-drag. Wing Command publishes `WingMapMode.GestureArmed` while its menu is open.
 
 Wing point-orders (`MapPicker.WingPoint`, left click) and Boscali support
 (`MapPicker.Support`, right click) already participate. A new armed click that reads
@@ -137,7 +155,7 @@ Shared pure tokens live in `shared/avionics/AvionicsTokens.cs` (`NOAvionics.AvTo
 The shared Unity widget kit lives in `shared/avionics-ui/` (`NOAvionics.Ui`), linked by
 plugin csprojs only.
 
-Live panels are **green-glass** (WMC / SQD / OPS / STR / RAD / SET), chamfered SDF (`AvSprites`),
+Live panels are **green-glass** (WMC / SQD / OPS / STR / RAD / MUS / SET), chamfered SDF (`AvSprites`),
 unified at `AvTokens.PanelWidth`. Height is `AvTokens.PanelHeight` at the floor and up to
 `AvTokens.PanelHeightMax` where the column measures taller — `AvScreen.ResolveHeight`
 measures the slot a panel was parented into, so no screen hard-codes a canvas size.

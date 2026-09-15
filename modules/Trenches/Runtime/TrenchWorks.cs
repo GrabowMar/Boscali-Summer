@@ -6,7 +6,7 @@ using UnityEngine;
 namespace BoscaliSummer.Features.Trenches.Runtime
 {
     /// <summary>
-    /// Places small infantry-scale game scenery along a sector's ditches — HESCO, sandbag
+    /// Places small infantry-scale game scenery along a position's ditches — HESCO, sandbag
     /// and light gabion pieces only, never vehicle-scale encampments. Pieces sit on the
     /// trench line itself, unlocked as the position is built out, bounded, networked and
     /// removed with the position. Assets are resolved from the game's own encyclopedia at
@@ -29,22 +29,21 @@ namespace BoscaliSummer.Features.Trenches.Runtime
 
         private readonly Scenery[] works = new Scenery[MaximumWorks];
         private readonly bool[] spawned = new bool[MaximumWorks];
-        private readonly List<TrenchNode> line = new List<TrenchNode>(48);
-        private readonly TrenchNetwork network;
+        private readonly List<Vector3> line = new List<Vector3>(32);
+        private readonly TrenchLine position;
 
         internal int Count { get; private set; }
 
-        internal TrenchWorks(TrenchNetwork net)
+        internal TrenchWorks(TrenchLine trenchLine)
         {
-            network = net;
+            position = trenchLine;
         }
 
         /// <summary>Adds the works unlocked by <paramref name="stage"/>; safe to call repeatedly.</summary>
         internal void Deploy(TrenchStage stage)
         {
-            if (network == null || network.Overrun) return;
-            int target = stage >= TrenchStage.Stage4_Integrated ? MaximumWorks
-                : stage >= TrenchStage.Stage3_Hardened ? 4 : 0;
+            if (position == null || position.Overrun) return;
+            int target = TrenchTraceMath.WorksBudget(stage);
             if (target == 0) return;
 
             Spawner spawner = NetworkSceneSingleton<Spawner>.i;
@@ -68,13 +67,14 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             if (line.Count == 0) return true; // Nothing to attach to; do not retry forever.
 
             int rank = index % (MaximumWorks / 2);
-            TrenchNode anchor = line[Mathf.Clamp((rank + 1) * line.Count / 5, 0, line.Count - 1)];
-            Vector3 desired = anchor.Position + network.ThreatDirection * 0.8f; // on the parapet line
-            Vector3 ground = TrenchPlacement.TryGround(desired, out Vector3 sampled) ? sampled : anchor.Position;
+            Vector3 anchor = line[Mathf.Clamp((rank + 1) * line.Count / 5, 0, line.Count - 1)];
+            Vector3 forward = position.ThreatAt(anchor);
+            Vector3 desired = anchor + forward * 0.8f; // on the parapet line
+            Vector3 ground = TrenchTerrain.TryGround(desired, out Vector3 sampled) ? sampled : anchor;
 
             UnitDefinition piece = pieces[index % pieces.Count];
-            Scenery scenery = spawner.SpawnScenery(piece.unitPrefab, new GlobalPosition(ground), anchor.Rotation,
-                Prefix + network.Id + ":" + index);
+            Scenery scenery = spawner.SpawnScenery(piece.unitPrefab, new GlobalPosition(ground),
+                Quaternion.LookRotation(forward), Prefix + position.Id + ":" + index);
             if (scenery == null) return false;
             works[index] = scenery;
             Count++;
@@ -84,18 +84,10 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         private void CollectLine(bool support)
         {
             line.Clear();
-            float target = support ? -TrenchTacticalMath.SupportLineDepth : 0f;
-            foreach (var node in network.Nodes)
-            {
-                float forward = Vector3.Dot(node.Position - network.SeedCenter, network.ThreatDirection);
-                if (Mathf.Abs(forward - target) > 16f) continue;
-                line.Add(node);
-            }
-            line.Sort((a, b) => Lateral(a).CompareTo(Lateral(b)));
+            Vector3[] anchors = support ? position.SupportAnchors : position.Anchors;
+            if (anchors == null) return;
+            for (int i = 0; i < anchors.Length && line.Count < 32; i++) line.Add(anchors[i]);
         }
-
-        private float Lateral(TrenchNode node)
-            => Vector3.Dot(node.Position - network.SeedCenter, network.LateralAxis);
 
         private static List<UnitDefinition> ResolveCatalog()
         {

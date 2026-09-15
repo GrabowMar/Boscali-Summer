@@ -196,6 +196,11 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         /// Install or update layout when a new MFD screen appears. Does not tear down an
         /// already-applied layout — Restore+rebuild was dropping docked screens back onto
         /// the gameplay canvas.
+        ///
+        /// <para>The rail is rebuilt here too: a screen can appear or disappear after the
+        /// first maximise — a hosted EVN/ADM button, ADM tearing down when a second client
+        /// connects, a panel that lost its first race — and its button has to be branded
+        /// (or dropped) without waiting for the next map open.</para>
         /// </summary>
         public static void OnStructureChanged(DynamicMap dynamicMap)
         {
@@ -205,7 +210,17 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 MaximizePostfix(dynamicMap);
                 return;
             }
-            VirtualMFD mfd = MapMfdLookup.Resolve(dynamicMap.maximizedMapCanvas);
+
+            Canvas canvas = dynamicMap.maximizedMapCanvas;
+            VirtualMFD mfd = MapMfdLookup.Resolve(canvas);
+            if (mfd != null && MfdLayout.TryResolve(canvas, out MfdLayout.Columns columns, currentPanelWidth))
+            {
+                int activeButtons = MfdRail.Count(MapUiAccess.GetLeftButtons(mfd), MapUiAccess.GetLeftScreens(mfd)) +
+                                    MfdRail.Count(MapUiAccess.GetRightButtons(mfd), MapUiAccess.GetRightScreens(mfd));
+                if (MfdRail.PrepareCapacity(columns.Rail.height, activeButtons))
+                    BuildRail(canvas, columns);
+            }
+
             MfdPanelDock.DockModScreens(mfd);
             ReLayout(currentPanelWidth);
         }

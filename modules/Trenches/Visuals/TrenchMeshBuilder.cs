@@ -56,9 +56,10 @@ namespace BoscaliSummer.Features.Trenches.Visuals
 
             int ringSize = ProfilePointCount;
             int ringCount = path.Length;
-            var vertices = new Vector3[ringCount * ringSize];
-            var uvs = new Vector2[ringCount * ringSize];
-            var triangles = new List<int>((ringCount - 1) * (ringSize - 1) * 6);
+            int capHubStart = ringCount * ringSize;
+            var vertices = new Vector3[capHubStart + 2];   // two end-cap hubs
+            var uvs = new Vector2[capHubStart + 2];
+            var triangles = new List<int>((ringCount - 1) * (ringSize - 1) * 6 + (ringSize - 1) * 6);
 
             float accumulatedLength = 0f;
             Vector3 prevRight = Vector3.zero;
@@ -69,41 +70,52 @@ namespace BoscaliSummer.Features.Trenches.Visuals
                 Vector3 pt = path[r];
                 if (r > 0) accumulatedLength += Vector3.Distance(pt, path[r - 1]);
 
-                Vector3 forward;
-                if (r == 0) forward = (path[1] - path[0]).normalized;
-                else if (r == ringCount - 1) forward = (path[ringCount - 1] - path[ringCount - 2]).normalized;
-                else
+                // Cross-section frame. At a traverse corner the two wall planes of one side
+                // meet on their bisector; extending the profile to that intersection keeps
+                // consecutive rings in contact instead of folding over one another.
+                Vector3 right;
+                float miter = 1f;
+                if (r == 0)
                 {
-                    Vector3 d0 = (pt - path[r - 1]).normalized;
-                    Vector3 d1 = (path[r + 1] - pt).normalized;
-                    Vector3 sum = d0 + d1;
-                    forward = sum.sqrMagnitude > 0.01f ? sum.normalized : d1;
+                    right = Lateral(path[1] - path[0], Vector3.right);
+                    if (flipProfile) right = -right;
                 }
-
-                Vector3 right = Vector3.Cross(Vector3.up, forward).normalized;
-                if (right.sqrMagnitude < 0.001f)
-                    right = prevRight.sqrMagnitude > 0.001f ? prevRight : Vector3.right;
-
-                // Maintain continuous lateral orientation so walls never twist 180 degrees.
-                if (r > 0 && prevRight.sqrMagnitude > 0.001f)
+                else if (r == ringCount - 1)
                 {
+                    right = Lateral(pt - path[r - 1], prevRight);
                     if (Vector3.Dot(right, prevRight) < 0f) right = -right;
                 }
-                else if (flipProfile)
+                else
                 {
-                    right = -right;
+                    Vector3 inRight = Lateral(pt - path[r - 1], prevRight);
+                    Vector3 outRight = Lateral(path[r + 1] - pt, prevRight);
+                    if (Vector3.Dot(inRight, prevRight) < 0f) inRight = -inRight;
+                    if (Vector3.Dot(outRight, prevRight) < 0f) outRight = -outRight;
+                    Vector3 sum = inRight + outRight;
+                    if (sum.sqrMagnitude > 0.0001f)
+                    {
+                        right = sum.normalized;
+                        miter = Mathf.Clamp(1f / Mathf.Max(0.35f, Vector3.Dot(right, inRight)), 1f, 2.5f);
+                    }
+                    else
+                    {
+                        right = inRight;
+                    }
                 }
                 prevRight = right;
                 Vector3 left = -right;
 
-                // Sandbag/traverse jitter breaks the perfectly smooth silhouette.
-                float jitter = Hash(accumulatedLength);
-                float crestJitter = (Hash(accumulatedLength + 17.3f) - 0.5f) * 0.30f;
-                float bermJitter = (Hash(accumulatedLength + 41.7f) - 0.5f) * 0.45f;
+                // Hand-dug irregularity: spoil heaps and a slightly wavy crest, plus a slow
+                // width drift so the earthwork never reads as one uniform extrusion.
+                float spoilJitter = Noise(accumulatedLength * 0.16f, 5.3f);
+                float crestJitter = (Noise(accumulatedLength * 0.22f, 11.7f) - 0.5f) * 0.34f +
+                    (Noise(accumulatedLength * 0.05f, 71.3f) - 0.5f) * 0.30f;
+                float bermJitter = (Noise(accumulatedLength * 0.13f, 29.1f) - 0.5f) * 0.55f;
+                miter *= 1f + (Noise(accumulatedLength * 0.025f, 43.9f) - 0.5f) * 0.16f;
 
                 // Conform the outer sides to the terrain: a cross-slope must meet the
                 // berms, not run under or above them.
-                float outer = halfW + bermW + skirtW;
+                float outer = (halfW + bermW + skirtW) * miter;
                 float leftGround = pt.y, rightGround = pt.y;
                 if (ground != null)
                 {
@@ -115,18 +127,19 @@ namespace BoscaliSummer.Features.Trenches.Visuals
                 vertices[baseIdx + 0] = new Vector3(
                     (pt + left * outer).x, leftGround - skirtDepth, (pt + left * outer).z);
                 vertices[baseIdx + 1] = new Vector3(
-                    (pt + left * (halfW + bermW + bermJitter * 0.4f)).x, leftGround + 0.10f,
-                    (pt + left * (halfW + bermW + bermJitter * 0.4f)).z);
-                vertices[baseIdx + 2] = pt + left * (halfW + 0.85f + bermJitter * 0.2f) +
+                    (pt + left * ((halfW + bermW) * miter + bermJitter * 0.4f)).x, leftGround + 0.10f,
+                    (pt + left * ((halfW + bermW) * miter + bermJitter * 0.4f)).z);
+                vertices[baseIdx + 2] = pt + left * ((halfW + 0.85f) * miter + bermJitter * 0.2f) +
                     Vector3.up * (Mathf.Max(pt.y, leftGround) - pt.y + paradosH + crestJitter * 0.5f);
-                vertices[baseIdx + 3] = pt + left * halfW + Vector3.up * 0.14f;
-                vertices[baseIdx + 4] = pt + right * (halfW - stepW) + Vector3.up * 0.14f;
-                vertices[baseIdx + 5] = pt + right * (halfW - stepW) + Vector3.up * (0.14f + stepH);
-                vertices[baseIdx + 6] = pt + right * (halfW + 0.45f) + Vector3.up * (parapetHeight + crestJitter);
-                vertices[baseIdx + 7] = pt + right * (halfW + 1.05f + jitter * 0.4f) + Vector3.up * (parapetHeight - 0.3f + crestJitter * 0.6f);
+                vertices[baseIdx + 3] = pt + left * (halfW * miter) + Vector3.up * 0.14f;
+                vertices[baseIdx + 4] = pt + right * ((halfW - stepW) * miter) + Vector3.up * 0.14f;
+                vertices[baseIdx + 5] = pt + right * ((halfW - stepW) * miter) + Vector3.up * (0.14f + stepH);
+                vertices[baseIdx + 6] = pt + right * ((halfW + 0.45f) * miter) + Vector3.up * (parapetHeight + crestJitter);
+                vertices[baseIdx + 7] = pt + right * ((halfW + 1.05f) * miter + spoilJitter * 0.4f) +
+                    Vector3.up * (parapetHeight - 0.3f + crestJitter * 0.6f);
                 vertices[baseIdx + 8] = new Vector3(
-                    (pt + right * (halfW + bermW)).x, rightGround + 0.10f,
-                    (pt + right * (halfW + bermW)).z);
+                    (pt + right * ((halfW + bermW) * miter)).x, rightGround + 0.10f,
+                    (pt + right * ((halfW + bermW) * miter)).z);
                 vertices[baseIdx + 9] = new Vector3(
                     (pt + right * outer).x, rightGround - skirtDepth, (pt + right * outer).z);
 
@@ -159,6 +172,20 @@ namespace BoscaliSummer.Features.Trenches.Visuals
                 }
             }
 
+            // Close both ends over the cross-section, so a trench end reads as a head-cover
+            // bank instead of an open pipe mouth.
+            for (int end = 0; end < 2; end++)
+            {
+                int baseIdx = (end == 0 ? 0 : ringCount - 1) * ringSize;
+                Vector3 hub = Vector3.zero;
+                for (int p = 0; p < ringSize; p++) hub += vertices[baseIdx + p];
+                vertices[capHubStart + end] = hub / ringSize;
+                uvs[capHubStart + end] = new Vector2(0.5f, 0.5f);
+            }
+            AddCap(triangles, capHubStart, 0, ringSize, path[0] - path[1], vertices);
+            AddCap(triangles, capHubStart + 1, (ringCount - 1) * ringSize, ringSize,
+                path[ringCount - 1] - path[ringCount - 2], vertices);
+
             mesh.vertices = vertices;
             mesh.uv = uvs;
             mesh.triangles = triangles.ToArray();
@@ -168,10 +195,29 @@ namespace BoscaliSummer.Features.Trenches.Visuals
             return mesh;
         }
 
-        private static float Hash(float value)
+        private static Vector3 Lateral(Vector3 direction, Vector3 fallback)
         {
-            float v = Mathf.Sin(value * 12.9898f + 78.233f) * 43758.5453f;
-            return v - Mathf.Floor(v);
+            Vector3 lateral = Vector3.Cross(Vector3.up, direction);
+            if (lateral.sqrMagnitude < 0.0001f)
+                return fallback.sqrMagnitude > 0.0001f ? fallback : Vector3.right;
+            return lateral.normalized;
         }
+
+        /// <summary>Fans the profile closed at one end; auto-fixes the winding to face outward.</summary>
+        private static void AddCap(List<int> triangles, int hub, int baseIndex, int ringSize, Vector3 outward, Vector3[] vertices)
+        {
+            if (outward.sqrMagnitude < 0.000001f) return;
+            Vector3 wanted = outward.normalized;
+            Vector3 normal = Vector3.Cross(vertices[baseIndex] - vertices[hub], vertices[baseIndex + 1] - vertices[hub]);
+            bool flip = Vector3.Dot(normal, wanted) < 0f;
+            for (int p = 0; p < ringSize - 1; p++)
+            {
+                triangles.Add(hub);
+                triangles.Add(flip ? baseIndex + p + 1 : baseIndex + p);
+                triangles.Add(flip ? baseIndex + p : baseIndex + p + 1);
+            }
+        }
+
+        private static float Noise(float distance, float seed) => Mathf.PerlinNoise(distance, seed);
     }
 }
