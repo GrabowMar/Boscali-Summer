@@ -11,18 +11,20 @@ namespace BoscaliSummer.Features.HighCommand.Domain
         Beloved = 1 << 1,
         Zealot = 1 << 2,
         Veteran = 1 << 3,
-        Political = 1 << 4,
-        Recluse = 1 << 5,
+        Recluse = 1 << 4,
     }
 
     /// <summary>
-    /// Trait effects are intentionally small, additive and economic-only. They change how
-    /// much a live staff is worth and how easily it is found — never spawns, AI or damage.
+    /// What a commander is worth to the faction that keeps them alive. Every effect is
+    /// economic or informational - income, kill value, how far a post's patrols see, how hard
+    /// a loss lands - and is stated to the player as a bonus line on the command page. Trait
+    /// effects never spawn, retask, damage or move a unit.
     /// </summary>
     internal static class CommandTraits
     {
-        public const int All = (1 << 6) - 1;
+        public const int All = (1 << 5) - 1;
         public const int MinimumLabelBudget = 48;
+        public const int MinimumBonusBudget = 96;
 
         public static bool Has(CommandTrait mask, CommandTrait trait) => (mask & trait) == trait;
 
@@ -54,9 +56,22 @@ namespace BoscaliSummer.Features.HighCommand.Domain
                 case CommandTrait.Beloved: return "BELOVED LEADER";
                 case CommandTrait.Zealot: return "ZEALOT";
                 case CommandTrait.Veteran: return "FIELD VETERAN";
-                case CommandTrait.Political: return "POLITICAL ANIMAL";
                 case CommandTrait.Recluse: return "RECLUSE";
                 default: return "UNKNOWN";
+            }
+        }
+
+        /// <summary>The effect one trait carries, in the console's own words.</summary>
+        public static string Effect(CommandTrait trait)
+        {
+            switch (trait)
+            {
+                case CommandTrait.Logistician: return "+15% STIPEND";
+                case CommandTrait.Beloved: return "+25% SHARE, COSTLIER LOSS";
+                case CommandTrait.Zealot: return "+15% SHARE";
+                case CommandTrait.Veteran: return "+20% KILL VALUE";
+                case CommandTrait.Recluse: return "-30% PATROL SIGHT";
+                default: return "";
             }
         }
 
@@ -64,7 +79,7 @@ namespace BoscaliSummer.Features.HighCommand.Domain
         public static string Labels(CommandTrait mask)
         {
             var builder = new StringBuilder(MinimumLabelBudget);
-            for (int bit = 0; bit < 6 && builder.Length < MinimumLabelBudget; bit++)
+            for (int bit = 0; bit < 5 && builder.Length < MinimumLabelBudget; bit++)
             {
                 var trait = (CommandTrait)(1 << bit);
                 if (!Has(mask, trait)) continue;
@@ -72,6 +87,23 @@ namespace BoscaliSummer.Features.HighCommand.Domain
                 builder.Append(Label(trait));
             }
             return builder.Length == 0 ? "NO NOTABLE TRAITS" : builder.ToString();
+        }
+
+        /// <summary>
+        /// One entry per trait: the name and what it pays. This is the page's answer to
+        /// "what is this commander actually worth", so it is the string the board carries.
+        /// </summary>
+        public static string BonusLine(CommandTrait mask)
+        {
+            var builder = new StringBuilder(MinimumBonusBudget);
+            for (int bit = 0; bit < 5 && builder.Length < MinimumBonusBudget; bit++)
+            {
+                var trait = (CommandTrait)(1 << bit);
+                if (!Has(mask, trait)) continue;
+                if (builder.Length > 0) builder.Append(" · ");
+                builder.Append(Label(trait)).Append(' ').Append(Effect(trait));
+            }
+            return builder.Length == 0 ? "NO STAFF BONUS" : builder.ToString();
         }
     }
 }

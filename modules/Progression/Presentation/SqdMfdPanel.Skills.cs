@@ -13,10 +13,24 @@ namespace BoscaliSummer.Features.Progression.Presentation
 {
     internal sealed partial class SqdMfdPanel
     {
+        // The board is a matrix: one row per grade, one column per qualification. Four lanes
+        // fit on one screen, so the player compares classes instead of scrolling a list.
+        private const float SkillCellHeight = 56f;
+        private const float SkillCellGap = 6f;
+        private const float SkillGutterWidth = 30f;
+        private const float SkillLaneHeaderHeight = 34f;
+        private const float SkillFooterHeight = 42f;
+        private const string SkillHint = "SELECT A CELL · one pick per grade, two tools per career.";
+
         private TMP_Text skillsBudgetValue;
         private TMP_Text skillsBudgetCaption;
-        private Image skillsBudgetFill;
-        private readonly List<SkillRow> skillRows = new List<SkillRow>(PerkCatalog.MaximumPerks);
+        private TMP_Text skillDetailText;
+        private AvButton skillConfirmButton;
+        private string skillDetailNote = SkillHint;
+        private Image[] skillBudgetPips;
+        private GameObject[] skillBudgetPipSlots;
+        private readonly List<SkillRow> skillRows = new List<SkillRow>(PerkCatalog.All.Length);
+        private readonly List<SkillBranchRow> skillBranches = new List<SkillBranchRow>(8);
         private byte? skillAwaitingConfirmation;
         private byte? skillRequestId;
         private float skillConfirmationUntil;
@@ -24,9 +38,14 @@ namespace BoscaliSummer.Features.Progression.Presentation
         private void ResetSkillRows()
         {
             skillRows.Clear();
+            skillBranches.Clear();
             skillsBudgetValue = null;
             skillsBudgetCaption = null;
-            skillsBudgetFill = null;
+            skillDetailText = null;
+            skillConfirmButton = null;
+            skillDetailNote = SkillHint;
+            skillBudgetPips = null;
+            skillBudgetPipSlots = null;
             skillAwaitingConfirmation = null;
             skillRequestId = null;
             skillConfirmationUntil = 0f;
@@ -40,195 +59,233 @@ namespace BoscaliSummer.Features.Progression.Presentation
 
         // ---- SKILLS page -----------------------------------------------------------------
 
+        /// <summary>One qualification: its grades in catalogue order, grade 1 first.</summary>
+        private sealed class SkillLane
+        {
+            public string Name;
+            public readonly List<PerkView> Nodes = new List<PerkView>(PerkCatalog.MaximumDepth);
+        }
+
         private void BuildSkillsPage(RectTransform parent, Rect body)
         {
+            clause = 0;
             PerkView[] perks = Progress != null ? Progress.GetPerks() : Array.Empty<PerkView>();
             if (perks.Length == 0)
             {
-                AvStyled.Spine(parent, new Rect(body.x, body.y, 3f, body.height));
+                DossierSpine(parent, new Rect(body.x, body.y, 3f, body.height));
                 AvStyled.Label(parent,
                     new Rect(body.x + SpineInset, body.y, body.width - SpineInset, 40f),
-                    "No pilot skills are configured on this host.", "row-sub");
+                    "No pilot qualifications are configured on this host.", "row-sub");
                 return;
             }
 
-            var passives = new List<PerkView>(perks.Length);
-            var authorisations = new List<PerkView>(perks.Length);
+            var lanes = new List<SkillLane>(4);
             for (int i = 0; i < perks.Length; i++)
-            {
-                if (perks[i].Group != null &&
-                    perks[i].Group.IndexOf("AUTHORIS", StringComparison.OrdinalIgnoreCase) >= 0)
-                    authorisations.Add(perks[i]);
-                else passives.Add(perks[i]);
-            }
+                LaneOf(lanes, perks[i].Branch).Nodes.Add(perks[i]);
+            int grades = 0;
+            for (int l = 0; l < lanes.Count; l++)
+                if (lanes[l].Nodes.Count > grades) grades = lanes[l].Nodes.Count;
 
-            var passiveDescriptions = new List<string>(passives.Count);
-            for (int i = 0; i < passives.Count; i++) passiveDescriptions.Add(passives[i].Description);
-            var authorDescriptions = new List<string>(authorisations.Count);
-            for (int i = 0; i < authorisations.Count; i++) authorDescriptions.Add(authorisations[i].Description);
-
-            AvNode page = AvBox.Column("skills").Gaps(0f)
+            // The masthead, the pick budget and the selected-grade strip stay put; only the
+            // matrix scrolls, so the decision context is on screen while reading the board.
+            const float fixedHeight = 50f + 62f + 42f;
+            AvNode fixedHead = AvBox.Column("fixed").Gaps(0f)
+                .Add(AvBox.Cell("head").Height(50f))
                 .Add(AvBox.Cell("budget").Height(62f))
-                .Add(SkillSection("shared", SharedRowNode, AceSkillCatalog.MaximumSkills, null))
-                .Add(SkillSection("passives", SkillRowNode, passives.Count, passiveDescriptions))
-                .Add(SkillSection("authors", SkillRowNode, authorisations.Count, authorDescriptions))
-                .Add(AvBox.Filler());
-            page.Arrange(body);
+                .Add(AvBox.Cell("detail").Height(42f));
+            fixedHead.Arrange(Inset(body));
 
-            float contentHeight = page.At("budget").height + page.At("shared").height +
-                page.At("passives").height + page.At("authors").height;
-            if (contentHeight > body.height)
+            AvNode page = AvBox.Column("board").Gaps(SkillCellGap)
+                .Add(AvBox.Cell("title").Height(20f))
+                .Add(AvBox.Cell("lanes").Height(SkillLaneHeaderHeight));
+            for (int g = 0; g < grades; g++)
             {
-                parent = AvScreen.Scroll(parent, body, contentHeight, out Rect scrolled);
-                page.Arrange(scrolled);
-                body = scrolled;
+                AvNode row = AvBox.Row("g" + g).Gaps(SkillCellGap);
+                row.Add(AvBox.Cell("gutter").Width(SkillGutterWidth).Height(SkillCellHeight));
+                for (int l = 0; l < lanes.Count; l++)
+                    row.Add(AvBox.Cell("c" + l).Grow().Height(SkillCellHeight));
+                page.Add(row);
+            }
+            page.Add(AvBox.Cell("shared").Height(SkillFooterHeight));
+            page.Add(AvBox.Filler());
+
+            Rect listArea = new Rect(body.x, body.y - fixedHeight, body.width,
+                Mathf.Max(0f, body.height - fixedHeight));
+            page.Arrange(Inset(listArea));
+
+            float contentHeight = page.At("title").height + page.At("lanes").height +
+                                  page.At("shared").height + SkillCellGap * (grades + 2);
+            for (int g = 0; g < grades; g++) contentHeight += page.At("g" + g).height;
+
+            RectTransform list = parent;
+            if (contentHeight > listArea.height)
+            {
+                list = AvScreen.Scroll(parent, listArea, contentHeight, out Rect scrolled);
+                page.Arrange(Inset(scrolled));
             }
 
-            AvStyled.Spine(parent, new Rect(body.x, body.y, 3f, body.height));
-            BuildSkillsBudget(parent, page.At("budget"));
-            DrawSharedSection(parent, page, "shared");
-            DrawSkillSection(parent, page, "passives", "PILOT SKILLS", passives);
-            DrawSkillSection(parent, page, "authors", "SUPPORT AUTHORISATIONS", authorisations);
+            DossierSpine(parent, new Rect(body.x, body.y, 3f, body.height));
+            Rect head = fixedHead.At("head");
+            DrawFileHeader(parent, head.x, head.y, head.width, "FORM SQD-2 · SHEET 2 OF 4",
+                "QUALIFICATION RECORD", "HOST COPY");
+            BuildSkillsBudget(parent, fixedHead.At("budget"));
+            BuildSkillDetail(parent, fixedHead.At("detail"));
+
+            Rect title = page.At("title");
+            DrawSectionTitle(list, title.x, title.y, title.width, "QUALIFICATIONS",
+                "ONE PICK PER GRADE", band: false);
+            for (int g = 0; g < grades; g++) DrawGradeRow(list, page, g, lanes);
+            DrawLaneHeaders(list, page, lanes);
+            DrawSharedFooter(list, page.At("shared"));
+        }
+
+        private static SkillLane LaneOf(List<SkillLane> lanes, string name)
+        {
+            for (int i = 0; i < lanes.Count; i++)
+                if (string.Equals(lanes[i].Name, name, StringComparison.Ordinal)) return lanes[i];
+            var lane = new SkillLane { Name = name };
+            lanes.Add(lane);
+            return lane;
+        }
+
+        /// <summary>
+        /// One grade across every lane: the gutter names the grade, and each cell is a
+        /// qualification's node. Reading across shows what the same pick buys in each class.
+        /// </summary>
+        private void DrawGradeRow(RectTransform parent, AvNode page, int grade, List<SkillLane> lanes)
+        {
+            AvNode row = page.Find("g" + grade);
+            Rect gutter = row.At("gutter");
+            PlainLabel(parent, new Rect(gutter.x + 2f, gutter.y - 3f, gutter.width - 8f, 14f),
+                "G" + (grade + 1), "section-title-note").alignment = TextAlignmentOptions.MidlineRight;
+            if (grade == PerkCatalog.MaximumDepth - 1)
+            {
+                PlainLabel(parent, new Rect(gutter.x + 2f, gutter.y - 17f, gutter.width - 8f, 12f),
+                    "CAP", "row-sub").alignment = TextAlignmentOptions.MidlineRight;
+            }
+
+            for (int l = 0; l < lanes.Count; l++)
+            {
+                if (grade >= lanes[l].Nodes.Count) continue;
+                skillRows.Add(DrawSkillCell(parent, row.At("c" + l), lanes[l].Nodes[grade]));
+            }
+        }
+
+        /// <summary>
+        /// A node: icon and name, its state in words, and the whole cell as the hit target.
+        /// There is no per-cell button - one pinned CONFIRM control commits the selection.
+        /// </summary>
+        private SkillRow DrawSkillCell(RectTransform parent, Rect area, PerkView view)
+        {
+            var cell = new SkillRow { Id = view.Id };
+            cell.Fill = AvKit.Panel(parent, area, Color.clear);
+            cell.Frame = AvKit.Outline(parent, area, AvTheme.Hairline);
+            cell.Icon = SqdGlyph.Create(parent, new Rect(area.x + 7f, area.y - 7f, 15f, 15f),
+                SqdMarks.FromKey(PerkDefinitionOf(view).Icon));
+            cell.Name = PlainLabel(parent, new Rect(area.x + 6f, area.y - 23f, area.width - 12f, 22f),
+                view.Name.ToUpperInvariant(), "row-name");
+            cell.State = PlainLabel(parent, new Rect(area.x + 6f, area.y - 44f, area.width - 12f, 13f),
+                "", "row-sub");
+
+            byte id = view.Id;
+            cell.Select = AvKit.HitButton(parent, area, () => ClickSkill(id));
+            cell.Select.SetRowHighlight(cell.Fill, Color.clear, HoverFill());
+            return cell;
+        }
+
+        private void DrawLaneHeaders(RectTransform parent, AvNode page, List<SkillLane> lanes)
+        {
+            Rect area = page.At("lanes");
+            AvNode firstRow = page.Find("g0");
+            for (int l = 0; l < lanes.Count; l++)
+            {
+                AvNode cellNode = firstRow != null && l < firstRow.ChildCount ? firstRow.Find("c" + l) : null;
+                Rect cell = cellNode != null ? cellNode.Rect.ToUnity() : area;
+                var header = new SkillBranchRow { Name = lanes[l].Name };
+                header.Caption = PlainLabel(parent,
+                    new Rect(cell.x, area.y - 4f, cell.width, 15f), lanes[l].Name, "section-title");
+                header.Note = PlainLabel(parent,
+                    new Rect(cell.x, area.y - 19f, cell.width, 13f), "", "row-sub");
+                skillBranches.Add(header);
+            }
+        }
+
+        /// <summary>
+        /// The shared ace-skill codes as one footer strip: the language SQD, the hunt HUD and
+        /// Wing Command share, kept visible without pretending to be the player's board.
+        /// </summary>
+        private void DrawSharedFooter(RectTransform parent, Rect area)
+        {
+            DrawSectionTitle(parent, area.x, area.y, area.width, "SHARED COMBAT SKILLS",
+                "AI & ACES · WING COMMAND", band: false);
+
+            float chipWidth = area.width / AceSkillCatalog.MaximumSkills;
+            for (int i = 0; i < AceSkillCatalog.MaximumSkills; i++)
+            {
+                AceSkillDefinition skill = AceSkillCatalog.All[i];
+                Rect chip = new Rect(area.x + i * chipWidth, area.y - 26f, chipWidth - 8f, 16f);
+                Glyph(parent, new Rect(chip.x, chip.y - 1f, 14f, 14f),
+                    HuntMark.Toughness + i, AvTheme.RailCaution);
+                TMP_Text code = PlainLabel(parent,
+                    new Rect(chip.x + 18f, chip.y, chip.width - 18f, 14f), skill.Code, "row-sub");
+                code.color = AvTheme.RailCaution;
+                string help = skill.Name + " — " + skill.Description;
+                AvKit.HitButton(parent, chip, () => { }).WithTooltip(help);
+            }
         }
 
         private void BuildSkillsBudget(RectTransform parent, Rect area)
         {
-            AvStyled.Box(parent, new Rect(area.x - 6f, area.y + 4f, area.width + 12f, area.height), "section band");
+            AvStyled.Box(parent, new Rect(area.x - 6f, area.y + 4f, area.width + 6f, area.height), "section band");
             AvStyled.SpineTick(parent, area.x - SpineInset + 3f, area.y - 14f);
             skillsBudgetValue = PlainLabel(parent, new Rect(area.x + 6f, area.y - 8f, area.width - 12f, 20f),
-                "SKILL POINTS", "section-title");
+                "QUALIFICATION PICKS", "section-title");
             skillsBudgetCaption = PlainLabel(parent, new Rect(area.x + 6f, area.y - 28f, area.width - 12f, 14f),
                 "", "row-sub");
-            skillsBudgetFill = AvKit.ProgressBar(parent,
-                new Rect(area.x + 6f, area.y - 50f, area.width - 12f, 5f), 0f, AvTheme.RailReady);
-        }
 
-        private static AvNode SkillSection(
-            string name, Func<string, string, AvNode> rowFactory, int rows, IList<string> descriptions)
-        {
-            AvNode section = AvBox.Column(name).Pad(10f, 14f, 12f, 8f).Gaps(0f)
-                .Add(AvBox.Cell("title").Height(20f));
-            for (int i = 0; i < rows; i++)
+            // One pip per pick the host allows, filled with what is still unspent. The score
+            // bar above already shows progress toward the next grade; this is the balance.
+            skillBudgetPips = new Image[MaximumBudgetPips];
+            skillBudgetPipSlots = new GameObject[MaximumBudgetPips];
+            for (int i = 0; i < MaximumBudgetPips; i++)
             {
-                string description = descriptions != null && i < descriptions.Count
-                    ? descriptions[i]
-                    : AceSkillCatalog.All[i].Description;
-                section.Add(rowFactory("r" + i, description));
-            }
-            return section;
-        }
-
-        private static AvNode SkillRowNode(string name, string description) =>
-            AvBox.Row(name).Pad(9f, 0f, 9f, 0f).Gaps(9f)
-                .Add(AvBox.Cell("rail").Width(3f))
-                .Add(AvBox.Cell("icon").Width(22f))
-                .Add(AvBox.Cell("code").Width(30f))
-                .Add(AvBox.Column("text").Grow().Gaps(3f)
-                    .Add(AvBox.Cell("name").Height(15f))
-                    .Add(AvBox.Text("desc", description, "row-sub")))
-                .Add(AvBox.Cell("trail").Width(96f).Intrinsic(48f));
-
-        private static AvNode SharedRowNode(string name, string description) =>
-            AvBox.Row(name).Pad(9f, 0f, 9f, 0f).Gaps(9f)
-                .Add(AvBox.Cell("rail").Width(3f))
-                .Add(AvBox.Cell("icon").Width(22f))
-                .Add(AvBox.Cell("code").Width(52f))
-                .Add(AvBox.Column("text").Grow().Gaps(3f)
-                    .Add(AvBox.Cell("name").Height(15f))
-                    .Add(AvBox.Text("desc", description, "row-sub")))
-                .Add(AvBox.Cell("trail").Width(56f).Intrinsic(48f));
-
-        private void DrawSharedSection(RectTransform parent, AvNode page, string key)
-        {
-            AvNode section = page.Find(key);
-            Rect sectionArea = page.At(key);
-            AvNode title = section.Find("title");
-            Rect titleRect = title != null ? title.Rect.ToUnity() : sectionArea;
-            DrawSectionTitle(parent, titleRect.x, titleRect.y, sectionArea.width,
-                "SHARED COMBAT SKILLS", "AI & ACES · WING COMMAND", band: false);
-            for (int i = 0; i < AceSkillCatalog.MaximumSkills; i++)
-            {
-                AvNode row = section.Find("r" + i);
-                if (row == null) continue;
-                Rect area = row.Rect.ToUnity();
-                AceSkillDefinition skill = AceSkillCatalog.All[i];
-                AvStyled.Rail(parent, row.At("rail"), "info");
-                Glyph(parent, row.At("icon"), HuntMark.Toughness + i, AvTheme.RailCaution);
-                PlainLabel(parent, row.At("code"), skill.Code, "row-name");
-                PlainLabel(parent, row.At("text.name"), skill.Name.ToUpperInvariant(), "row-name");
-                PlainLabel(parent, row.At("text.desc"), skill.Description, "row-sub");
-                TMP_Text tag = PlainLabel(parent, row.At("trail"), "ACE USE", "section-title-note");
-                tag.alignment = TextAlignmentOptions.MidlineRight;
-                RowSeparator(parent, area);
+                var slot = new GameObject("SkillPick_" + i, typeof(RectTransform));
+                var rect = (RectTransform)slot.transform;
+                rect.SetParent(parent, false);
+                AvKit.Place(rect, new Rect(area.x + 6f + i * 15f, area.y - 46f, 12f, 12f));
+                AvKit.Outline(rect, new Rect(0f, 0f, 12f, 12f), AvTheme.Hairline);
+                skillBudgetPips[i] = AvKit.Panel(rect, new Rect(2f, -2f, 8f, 8f), Color.clear);
+                skillBudgetPipSlots[i] = slot;
             }
         }
 
-        private void DrawSkillSection(
-            RectTransform parent, AvNode page, string key, string title, List<PerkView> perks)
+        /// <summary>The pinned selection strip: what is armed, what it does, and the one commit.</summary>
+        private void BuildSkillDetail(RectTransform parent, Rect area)
         {
-            Rect sectionArea = page.At(key);
-            AvNode section = page.Find(key);
-            if (perks.Count == 0)
-            {
-                AvStyled.Label(parent, new Rect(sectionArea.x, sectionArea.y - 4f, sectionArea.width, 18f),
-                    "No skills in this group on this host.", "row-sub");
-                return;
-            }
+            AvStyled.Box(parent, new Rect(area.x - 6f, area.y + 4f, area.width + 6f, area.height - 6f), "section band");
+            skillDetailText = PlainLabel(parent,
+                new Rect(area.x + 6f, area.y - 11f, Mathf.Max(0f, area.width - 128f), 16f),
+                SkillHint, "row-sub");
+            skillDetailText.enableWordWrapping = false;
+            skillDetailText.overflowMode = TextOverflowModes.Ellipsis;
 
-            string note = key == "authors" ? "AUTH CODE · SELECT ROW · CONFIRM" : "SELECT ROW · CONFIRM";
-            AvNode titleNode = section.Find("title");
-            Rect titleRect = titleNode != null ? titleNode.Rect.ToUnity() : sectionArea;
-            DrawSectionTitle(parent, titleRect.x, titleRect.y, sectionArea.width, title, note, band: false);
-
-            for (int i = 0; i < perks.Count; i++)
-            {
-                AvNode row = section.Find("r" + i);
-                if (row == null) continue;
-                AddSkillRow(parent, row, perks[i]);
-            }
+            float height = Mathf.Min(AvTokens.RowHeight, area.height - 6f);
+            skillConfirmButton = AvStyled.Button(parent,
+                new Rect(area.x + area.width - 112f, area.y - (area.height - height) * 0.5f, 112f, height),
+                "CONFIRM", "btn", CommitSelected, AvButtonStyle.Primary);
+            skillConfirmButton.SetEnabled(false);
         }
 
-        private void AddSkillRow(RectTransform parent, AvNode row, PerkView view)
+        private void CommitSelected()
         {
-            Rect area = row.Rect.ToUnity();
-            var entry = new SkillRow { Id = view.Id };
-
-            entry.Background = AvKit.Panel(parent, area, Color.clear);
-            RowSeparator(parent, area);
-            entry.Rail = AvStyled.Rail(parent, row.At("rail"), "locked");
-            entry.Icon = SqdGlyph.Create(parent, row.At("icon"), SqdMarks.FromKey(perkIcon(view)));
-            entry.Code = AvStyled.Label(parent, row.At("code"), PerkCatalog.CodeOf(PerkDefinitionOf(view)),
-                "row-sub", align: TextAlignmentOptions.MidlineLeft);
-            entry.Name = AvStyled.Label(parent, row.At("text.name"),
-                view.Name.ToUpperInvariant(), "row-name");
-            AvStyled.Label(parent, row.At("text.desc"), view.Description, "row-sub");
-
-            byte id = view.Id;
-            Rect trail = row.At("trail");
-            Rect selectArea = new Rect(
-                area.x, area.y, Mathf.Max(0f, trail.x - area.x - 2f), area.height);
-            entry.Select = AvKit.HitButton(parent, selectArea, () => SelectSkill(id));
-            entry.Select.SetRowHighlight(entry.Background, Color.clear, HoverFill());
-            entry.Select.WithTooltip(
-                view.Name.ToUpperInvariant() + " — costs " + view.Cost +
-                (view.Cost == 1 ? " point. " : " points. ") + view.Description +
-                " Select this row, then use the separate confirm control.");
-
-            float actionHeight = Mathf.Min(AvTokens.RowHeight, trail.height);
-            entry.Confirm = AvStyled.Button(parent,
-                new Rect(trail.x, trail.y - Mathf.Max(0f, (trail.height - actionHeight) * 0.5f),
-                         trail.width, actionHeight),
-                "SELECT", "btn", () => CommitSkill(id), AvButtonStyle.Primary);
-            entry.Confirm.SetEnabled(false);
-            skillRows.Add(entry);
+            if (skillAwaitingConfirmation.HasValue) CommitSkill(skillAwaitingConfirmation.Value);
         }
 
-        private static string perkIcon(PerkView view)
-        {
-            for (int i = 0; i < PerkCatalog.All.Length; i++)
-                if (PerkCatalog.All[i].Id == view.Id) return PerkCatalog.All[i].Icon;
-            return "combat";
-        }
+        private static Rect Inset(Rect area) => new Rect(
+            area.x + SpineInset, area.y, Mathf.Max(0f, area.width - SpineInset), area.height);
+
+        private static bool IsUnlocked(PerkView[] perks, byte id) =>
+            TryFind(perks, id, out PerkView view) && view.Unlocked;
 
         private static PerkDefinition PerkDefinitionOf(PerkView view)
         {
@@ -259,8 +316,38 @@ namespace BoscaliSummer.Features.Progression.Presentation
             skillAwaitingConfirmation = null;
             skillConfirmationUntil = 0f;
             skillRequestId = id;
+            skillDetailNote = SkillHint;
             Progress.RequestUnlock(id);
             nextRefresh = 0f;
+        }
+
+        /// <summary>A cell click either arms the pick or says why the host would refuse it.</summary>
+        private void ClickSkill(byte id)
+        {
+            if (progression == null || Progress.UnlockPending) return;
+            if (!TryFind(Progress.GetPerks(), id, out PerkView view)) return;
+            if (view.Unlocked)
+            {
+                skillDetailNote = view.Name.ToUpperInvariant() + " is active on this career.";
+                nextRefresh = 0f;
+                return;
+            }
+            if (!view.Affordable)
+            {
+                skillDetailNote = view.Name.ToUpperInvariant() + " — " + BlockReason(view);
+                nextRefresh = 0f;
+                return;
+            }
+            SelectSkill(id);
+        }
+
+        private static string BlockReason(PerkView view)
+        {
+            if (view.Block == PerkView.BlockCap)
+                return "this career already holds its two support authorisations.";
+            if (view.Block == PerkView.BlockGrade)
+                return "the grade before it is not committed yet.";
+            return "no unspent pick.";
         }
 
         private static bool TryFind(PerkView[] perks, byte id, out PerkView view)
@@ -291,21 +378,30 @@ namespace BoscaliSummer.Features.Progression.Presentation
             IProgressionView view = Progress;
             bool bypass = progression.BypassRequirements;
             int available = view.AvailablePoints;
-            int perPoint = Math.Max(1, view.ScorePerPoint);
             int score = view.Score;
             if (squad != null && GameManager.GetLocalPlayer<Player>(out Player local) && local != null)
                 score = Math.Max(0, score - squad.GetScoreOrigin(PlayerIdentity.Of(local)));
 
-            skillsBudgetValue.text = bypass ? "DEBUG BYPASS · EVERY SKILL ACTIVE"
-                : available + (available == 1 ? " SKILL POINT AVAILABLE" : " SKILL POINTS AVAILABLE");
+            skillsBudgetValue.text = bypass ? "DEBUG BYPASS · EVERY GRADE OPEN"
+                : available + (available == 1 ? " PICK AVAILABLE" : " PICKS AVAILABLE");
             skillsBudgetValue.color = available > 0 || bypass ? AvTheme.RailReady : AvTheme.TextPrimary;
-            int intoPoint = score % perPoint;
-            skillsBudgetCaption.text = bypass ? "Points are free while bypass is active."
+            // The ramp lives in PerkPoints, so the hint the panel prints is the same arithmetic
+            // the host paid out; the panel never divides score itself.
+            int remaining = PerkPoints.RemainingToNext(score, view.ScorePerPoint);
+            skillsBudgetCaption.text = bypass ? "Picks are free while bypass is active."
                 : view.EarnedPoints >= view.MaximumPoints
-                    ? "Score budget complete — defeat enemy aces for bonus points."
-                    : (perPoint - intoPoint) + " more pilot score for the next skill point.";
-            skillsBudgetFill.fillAmount = bypass || view.EarnedPoints >= view.MaximumPoints
-                ? 1f : intoPoint / (float)perPoint;
+                    ? "Pick ceiling reached — defeat enemy aces for bonus picks."
+                    : remaining < 0
+                        ? "Grade ladder complete — defeat enemy aces for bonus picks."
+                        : remaining + " more pilot score for the next qualification grade.";
+
+            int pips = Mathf.Clamp(view.MaximumPoints, 1, MaximumBudgetPips);
+            for (int i = 0; i < skillBudgetPips.Length; i++)
+            {
+                skillBudgetPipSlots[i].SetActive(i < pips);
+                skillBudgetPips[i].color = bypass ? AvTheme.Accent
+                    : i < available ? AvTheme.RailReady : Color.clear;
+            }
 
             PerkView[] perks = view.GetPerks();
             bool requestPending = view.UnlockPending;
@@ -321,83 +417,68 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 SkillRow row = skillRows[i];
                 if (!TryFind(perks, row.Id, out PerkView perk)) continue;
 
-                bool confirming = skillAwaitingConfirmation == row.Id;
-                row.Select.SetEnabled(!requestPending && perk.Affordable && !perk.Unlocked);
+                bool armed = skillAwaitingConfirmation == row.Id;
+                string word;
+                Color tone;
+                if (perk.Unlocked) { word = "ACTIVE"; tone = AvTheme.RailReady; }
+                else if (armed) { word = "SELECTED"; tone = AvTheme.RailCaution; }
+                else if (perk.Affordable) { word = "PICK"; tone = AvTheme.TextPrimary; }
+                else if (perk.Block == PerkView.BlockCap) { word = "CLOSED"; tone = AvTheme.Dim; }
+                else if (perk.Block == PerkView.BlockGrade) { word = "GRADE FIRST"; tone = AvTheme.Dim; }
+                else { word = "NO PICK"; tone = AvTheme.Dim; }
 
-                if (perk.Unlocked)
-                {
-                    PaintSkill(row, "ready", AvTheme.TextPrimary);
-                    PaintSkillAction(row, "ACTIVE", false, false,
-                        perk.Name.ToUpperInvariant() + " is active.");
-                    row.Select.WithTooltip(perk.Name.ToUpperInvariant() + " is active.");
-                }
-                else if (requestPending && skillRequestId == row.Id)
-                {
-                    const string pending = "Waiting for the host to accept or deny this skill.";
-                    PaintSkill(row, "cooling", AvTheme.TextPrimary);
-                    PaintSkillAction(row, "PENDING", false, true, pending);
-                    row.Select.WithTooltip(pending);
-                }
-                else if (requestPending)
-                {
-                    const string wait = "Wait for the host to answer the current skill request.";
-                    PaintSkill(row, "locked", AvTheme.Dim);
-                    PaintSkillAction(row, "WAIT", false, false, wait);
-                    row.Select.WithTooltip(wait);
-                }
-                else if (confirming)
-                {
-                    string confirm = "Confirm this separate action to commit " + perk.Cost +
-                                     (perk.Cost == 1 ? " skill point." : " skill points.");
-                    PaintSkill(row, "armed", AvTheme.TextPrimary);
-                    PaintSkillAction(row, "CONFIRM " + perk.Cost + "P", true, true, confirm);
-                    row.Select.WithTooltip("Selected. Use the separate CONFIRM control to commit it.");
-                }
-                else if (perk.Affordable)
-                {
-                    const string select = "Select the row first; the separate confirm control will then enable.";
-                    PaintSkill(row, "armed", AvTheme.TextPrimary);
-                    PaintSkillAction(row, "CONFIRM " + perk.Cost + "P", false, false, select);
-                    row.Select.WithTooltip(select);
-                }
-                else
-                {
-                    string required = "Requires " + perk.Cost +
-                                      (perk.Cost == 1 ? " unspent skill point." : " unspent skill points.");
-                    PaintSkill(row, "locked", AvTheme.Dim);
-                    PaintSkillAction(row, perk.Cost + "P REQ", false, false, required);
-                    row.Select.WithTooltip(required);
-                }
+                bool live = perk.Unlocked || perk.Affordable || armed;
+                row.State.text = word;
+                row.State.color = tone;
+                row.Name.color = live ? AvTheme.TextPrimary : AvTheme.Dim;
+                if (row.Icon != null) row.Icon.color = tone;
+                Color frame = tone.WithAlpha(live ? 0.85f : 0.35f);
+                for (int f = 0; f < row.Frame.Length; f++) row.Frame[f].color = frame;
+                row.Fill.color = perk.Unlocked ? AvTheme.SurfaceInert
+                    : armed ? AvTheme.RailCaution.WithAlpha(0.12f) : Color.clear;
+                row.Select.WithTooltip(perk.Name + " · " + word + " — " + perk.Description);
             }
-        }
 
-        private static void Glyph(RectTransform parent, Rect area, HuntMark mark, Color color)
-        {
-            var go = new GameObject(mark.ToString(), typeof(RectTransform), typeof(HuntGlyph));
-            go.transform.SetParent(parent, false);
-            AvKit.Place((RectTransform)go.transform, area);
-            HuntGlyph glyph = go.GetComponent<HuntGlyph>();
-            glyph.Mark = mark;
-            glyph.color = color;
-            glyph.raycastTarget = false;
-        }
+            for (int i = 0; i < skillBranches.Count; i++)
+            {
+                SkillBranchRow lane = skillBranches[i];
+                int taken = 0;
+                for (int n = 0; n < lane.Ids.Count; n++)
+                    if (IsUnlocked(perks, lane.Ids[n])) taken++;
 
-        private static void PaintSkill(SkillRow row, string railState, Color name)
-        {
-            Color rail = RailColour(railState);
-            row.Rail.color = rail;
-            row.Code.color = rail;
-            if (row.Icon != null) row.Icon.color = rail;
-            row.Name.color = name;
-        }
+                // The lane's own state in words: its tool is the grade-1 row, and a lane whose
+                // tool the host refuses on the career cap is closed for good on this career.
+                bool toolHeld = lane.Ids.Count > 0 && IsUnlocked(perks, lane.Ids[0]);
+                bool closed = !toolHeld && lane.Ids.Count > 0 &&
+                    TryFind(perks, lane.Ids[0], out PerkView tool) && tool.Block == PerkView.BlockCap;
+                lane.Note.text = taken + "/" + lane.Ids.Count + (toolHeld ? " · TOOL HELD"
+                    : closed ? " · CLOSED" : " · OPEN");
+                lane.Note.color = toolHeld ? AvTheme.RailReady : closed ? AvTheme.Dim : AvTheme.TextPrimary;
+                lane.Caption.color = closed ? AvTheme.Dim : AvTheme.TextPrimary;
+            }
 
-        private static void PaintSkillAction(
-            SkillRow row, string text, bool enabled, bool latched, string tooltip)
-        {
-            row.Confirm.SetText(text);
-            row.Confirm.SetEnabled(enabled);
-            row.Confirm.SetLatched(latched);
-            row.Confirm.WithTooltip(tooltip);
+            PerkView selected = default;
+            bool hasSelection = skillAwaitingConfirmation.HasValue &&
+                TryFind(perks, skillAwaitingConfirmation.Value, out selected);
+            bool canConfirm = hasSelection && !requestPending &&
+                !selected.Unlocked && selected.Affordable;
+            skillConfirmButton.SetEnabled(canConfirm);
+            if (requestPending)
+            {
+                skillDetailText.text = "Waiting for the host to answer this pick.";
+                skillDetailText.color = AvTheme.RailCaution;
+            }
+            else if (hasSelection)
+            {
+                skillDetailText.text = "G" + PerkDefinitionOf(selected).Grade + " · " +
+                    selected.Name.ToUpperInvariant() + " — " + selected.Description;
+                skillDetailText.color = AvTheme.TextPrimary;
+            }
+            else
+            {
+                skillDetailText.text = skillDetailNote;
+                skillDetailText.color = AvTheme.Dim;
+            }
         }
     }
 }

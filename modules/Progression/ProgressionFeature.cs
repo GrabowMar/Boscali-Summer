@@ -31,6 +31,18 @@ namespace BoscaliSummer.Features.Progression
             manager.ConfigureBypass(context.Settings.Diagnostics.BypassRequirements);
             context.AddService<IPlayerPerks>(manager);
             context.AddService<IProgressionView>(manager);
+
+            context.AddHostSettings(new HostSettingsTable("PROGRESSION")
+                .Number(1, context.Settings.Progression.ScorePerPoint, "SCORE PER GRADE",
+                    "Score for the first qualification grade; grade n costs n x this, so grades get longer as they get better.",
+                    50)
+                .Number(2, context.Settings.Progression.MaximumPoints, "MAXIMUM PICKS",
+                    "Most picks one player can earn in a mission. Score pays the five grades; ace bonus picks go on top.",
+                    1)
+                .Number(3, context.Settings.Progression.PerkStrength, "PERK STRENGTH",
+                    "Scales every passive perk. Support authorisations are on or off and are unaffected.",
+                    0.05f, v => v.ToString("P0")));
+
             if (!UnityEngine.Application.isBatchMode)
             {
                 context.AddSceneService<SqdMfdPanel>(54).Configure(

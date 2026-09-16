@@ -26,8 +26,8 @@ namespace BoscaliSummer.Features.HighCommand.Domain
         public CommanderStatus Status;
         public float StatusUntil;
 
-        /// <summary>0 = nobody's kill list; faction id + 1 while marked.</summary>
-        public byte MarkedByFaction;
+        /// <summary>Mission time the post stops reading as under fire; 0 when never hit.</summary>
+        public float AlertUntil;
 
         public bool Alive => Status != CommanderStatus.Kia;
 

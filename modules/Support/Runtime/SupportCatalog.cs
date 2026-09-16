@@ -22,9 +22,14 @@ namespace BoscaliSummer.Features.Support.Runtime
         {
             if (VanillaSupportCatalog.ReconAvailable)
                 actions.Add(new SupportActionDefinition(
-                    SupportActionId.Recon, "SATELLITE SCAN",
-                    "Reveal hostiles under a recon satellite.",
+                    SupportActionId.Recon, "RADAR SCAN",
+                    "Station radar images a scene; stationary ground contacts are revealed.",
                     SupportCapabilities.Recon, settings.ReconEnabled, new ReconAction()));
+
+            actions.Add(new SupportActionDefinition(
+                SupportActionId.ElintSweep, "ELINT SWEEP",
+                "Station SIGINT array locates enemy ground radars that are emitting.",
+                SupportCapabilities.Recon, settings.ElintEnabled, new ElintAction()));
 
             if (fortifications != null)
                 actions.Add(new SupportActionDefinition(
@@ -34,7 +39,7 @@ namespace BoscaliSummer.Features.Support.Runtime
 
             actions.Add(new SupportActionDefinition(
                 SupportActionId.Artillery, "ROD FROM GOD",
-                "Kinetic strike from a strike satellite overhead.",
+                "Kinetic penetrator from the station's rod magazine.",
                 SupportCapabilities.Artillery, settings.ArtilleryEnabled, new ArtilleryAction()));
 
             actions.Add(new SupportActionDefinition(

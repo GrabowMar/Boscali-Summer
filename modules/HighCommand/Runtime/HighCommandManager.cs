@@ -33,6 +33,7 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
         private const float RefreshSeconds = 4f;
         private const float SignalSeconds = 75f;
         private const float CommendBoostSeconds = 120f;
+        private const float AlertSeconds = 12f;
 
         internal enum AssetKind : byte
         {
@@ -95,13 +96,13 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
             public float NextTransfer;
             public float CohesionBoost;
             public float BoostUntil;
-            public int CommandPoints;
             public int StipendsPaid;
             public int SpawnSerial;
             public int SeedSerial;
             public int RespawnSerial;
             public string Signal;
             public float SignalUntil;
+            public readonly CommandLog Log = new CommandLog();
         }
 
         private readonly List<FactionCommand> factions = new List<FactionCommand>(MaximumFactions);
@@ -111,6 +112,9 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
         private readonly List<Convoy> convoys = new List<Convoy>(MaximumConvoys);
         private readonly float[,] sight = new float[MaximumFactions, MaximumFactions * CommandTier.MaximumSlots];
         private readonly List<CommanderView> viewCommanders = new List<CommanderView>(CommandSnapshotRules.MaximumNodes);
+        private readonly List<CommanderLogLine> viewLog = new List<CommanderLogLine>(CommandLog.Capacity);
+        private readonly List<CommanderLogLine> viewHostileLog = new List<CommanderLogLine>(CommandLog.Capacity);
+        private readonly CommandLogEntry[] hostileScratch = new CommandLogEntry[CommandSnapshotRules.MaximumLogRows];
 
         private HighCommandSettings settings;
         private HighCommandNet network;
@@ -134,20 +138,17 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
         public float FriendlyCohesion => cohesion;
         public int FriendlyActive => active;
         public int FriendlyKia => kia;
-        public int CommandPoints => points;
         public IReadOnlyList<CommanderView> Commanders => viewCommanders;
+        public IReadOnlyList<CommanderLogLine> Log => viewLog;
+        public IReadOnlyList<CommanderLogLine> HostileLog => viewHostileLog;
 
         public void Refresh()
         {
             if (settings == null || !settings.Enabled.Value) return;
             if (Time.unscaledTime - lastRefreshRequest < RefreshSeconds) return;
             lastRefreshRequest = Time.unscaledTime;
-            network?.Request(HighCommandNet.ActionRefresh, 0);
+            network?.Request();
         }
-
-        public void RequestCommend(int id) => network?.Request(HighCommandNet.ActionCommend, id);
-        public void RequestRelocate(int id) => network?.Request(HighCommandNet.ActionRelocate, id);
-        public void RequestBounty(int id) => network?.Request(HighCommandNet.ActionBounty, id);
 
         // ---- Lifecycle --------------------------------------------------------------------
 
@@ -171,6 +172,9 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
             convoys.Clear();
             Array.Clear(sight, 0, sight.Length);
             viewCommanders.Clear();
+            viewLog.Clear();
+            viewHostileLog.Clear();
+            Array.Clear(hostileScratch, 0, hostileScratch.Length);
             missionIdentity = null;
             nextTick = 0f;
             viewHq = null;
@@ -327,75 +331,11 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
                     {
                         command.Hq.AddFunds(amount);
                         command.StipendsPaid++;
-                        Broadcast(command, "STIPEND PAID +" + amount + " · COHESION " + Percent(current), now);
+                        Broadcast(command, -1, CommanderLogTone.Economy,
+                            "STIPEND PAID +" + amount + " · COHESION " + Percent(current), now);
                     }
                 }
-
-                int earned = CommandEconomy.IntervalCommandPoints(current, command.Tree.PoliticalCount);
-                if (earned > 0)
-                {
-                    command.CommandPoints = Math.Min(settings.CommandPointsMaximum.Value, command.CommandPoints + earned);
-                }
             }
-        }
-
-        // ---- Orders (server) --------------------------------------------------------------
-
-        /// <summary>Validates and executes one staff order. Returns a result line, or null for a refresh.</summary>
-        internal string Act(Player player, byte action, int targetId)
-        {
-            if (player == null || player.HQ == null) return "Join a faction first.";
-            FactionCommand own = FindFaction(player.HQ);
-            if (own == null) return "No staff has formed for your faction.";
-            float now = MissionTime;
-
-            if (action == HighCommandNet.ActionBounty)
-            {
-                int ownerIndex = FactionOf(targetId);
-                if (ownerIndex < 0 || ownerIndex >= factions.Count || factions[ownerIndex] == own)
-                    return "No such enemy post.";
-                FactionCommand owner = factions[ownerIndex];
-                CommandSlot target = owner.Tree.Find(LocalId(targetId));
-                if (target == null) return "No such enemy post.";
-                if (!IsKnown(own, owner, target, now)) return "No confirmed contact with that commander.";
-                if (!target.Alive) return "That commander is already dead.";
-                bool marked = target.MarkedByFaction == own.FactionToken;
-                if (!own.Tree.Mark(target.Id, own.FactionToken, CommandEconomy.MaximumMarks))
-                    return "Kill list is full; clear a mark first.";
-                Broadcast(own, (marked ? "BOUNTY MARK CLEARED: " : "BOUNTY MARKED: ") + target.Person.Name, now);
-                return marked ? "Bounty mark cleared." : "Marked for bounty: " + target.Person.Name + ".";
-            }
-
-            // Own-faction orders are addressed by the same global id the board publishes;
-            // a global id belonging to another faction is not a valid target.
-            if (FactionOf(targetId) != factions.IndexOf(own)) return "That post is not on your staff.";
-            CommandSlot slot = own.Tree.Find(LocalId(targetId));
-            if (slot == null || !slot.Alive) return "That post is not on your staff.";
-
-            if (action == HighCommandNet.ActionCommend)
-            {
-                if (slot.Person.Decorations >= 3) return "That commander already holds the maximum honours.";
-                if (own.CommandPoints <= 0) return "No command points available.";
-                own.CommandPoints--;
-                slot.Person.Decorations++;
-                own.CohesionBoost = Mathf.Min(0.1f, own.CohesionBoost + settings.CommendBoostPercent.Value / 100f);
-                own.BoostUntil = now + CommendBoostSeconds;
-                Broadcast(own, "COMMENDED " + slot.Person.Name + " · COHESION " + Percent(own.Tree.Cohesion(Boost(own, now))), now);
-                return "Commendation entered for " + slot.Person.Name + ".";
-            }
-
-            if (action == HighCommandNet.ActionRelocate)
-            {
-                if (!settings.TransfersEnabled.Value) return "VIP transfers are disabled on this host.";
-                if (own.CommandPoints <= 0) return "No command points available.";
-                if (slot.Status == CommanderStatus.InTransit) return "That commander is already en route.";
-                if (HasActiveTransfer(own)) return "A transfer is already under way for your faction.";
-                if (!TryStartTransfer(own, slot)) return "No second friendly base is reachable.";
-                own.CommandPoints--;
-                return "Relocation ordered for " + slot.Person.Name + ".";
-            }
-
-            return null;
         }
 
         // ---- Snapshot ---------------------------------------------------------------------
@@ -408,10 +348,11 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
                 Status = status,
                 Signal = "",
                 Cohesion = 0f,
-                CommandPoints = 0,
                 Active = 0,
                 Kia = 0,
                 Nodes = Array.Empty<CommanderWire>(),
+                Log = Array.Empty<CommanderLogWire>(),
+                HostileLog = Array.Empty<CommanderLogWire>(),
             };
             if (player == null || player.HQ == null) return snapshot;
             FactionCommand own = FindFaction(player.HQ);
@@ -432,8 +373,9 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
             }
 
             snapshot.Nodes = nodes.ToArray();
+            snapshot.Log = BuildLog(own, now);
+            snapshot.HostileLog = BuildHostileLog(own, observer, now);
             snapshot.Cohesion = own.Tree.Cohesion(Boost(own, now));
-            snapshot.CommandPoints = own.CommandPoints;
             snapshot.Active = own.Tree.LiveCount;
             snapshot.Kia = own.Tree.KiaCount;
             snapshot.Signal = now < own.SignalUntil ? own.Signal : "";
@@ -465,15 +407,7 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
             // they are moving; only identity and office cross the wire.
             if (known && slot.Status == CommanderStatus.InTransit) flags |= CommanderWire.Transit;
             if (known && slot.Status == CommanderStatus.Disrupted) flags |= CommanderWire.Disrupted;
-            if (slot.MarkedByFaction == observer.FactionToken) flags |= CommanderWire.Marked;
-
-            byte actions = 0;
-            if (friendly && slot.Alive && slot.Person.Decorations < 3 && observer.CommandPoints > 0)
-                actions |= CommanderWire.ActionCommend;
-            if (friendly && slot.Alive && slot.Status != CommanderStatus.InTransit &&
-                settings.TransfersEnabled.Value && observer.CommandPoints > 0 && HasSecondBase(owner, slot))
-                actions |= CommanderWire.ActionRelocate;
-            if (!friendly && slot.Alive && known) actions |= CommanderWire.ActionBounty;
+            if ((friendly || known) && now < slot.AlertUntil) flags |= CommanderWire.Alert;
 
             AssetWatch asset = FindActiveAsset(owner, slot);
             Vector3 position = asset?.Unit != null ? asset.Unit.transform.position : Vector3.zero;
@@ -490,7 +424,6 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
                 ParentId = slot.ParentId < 0 ? -1 : GlobalId(factions.IndexOf(owner), slot.ParentId),
                 Tier = (byte)slot.Tier,
                 Flags = flags,
-                Actions = actions,
                 TraitMask = (byte)(slot.Person?.Traits ?? CommandTrait.None),
                 Seed = slot.Person?.Seed ?? 0,
                 IntelAge = friendly || !known ? -1f : Mathf.Max(0f, now - LastSight(factions.IndexOf(observer), owner, slot)),
@@ -501,17 +434,91 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
                 Rank = slot.Person?.Rank ?? CommandTier.Rank(slot.Tier),
                 Role = slot.Role,
                 Location = location,
-                Decoration = slot.Person != null && slot.Person.Decorations > 0
-                    ? "DECORATED ×" + slot.Person.Decorations
-                    : "",
             };
+        }
+
+        /// <summary>The local faction's own log, complete: its own staff has no fog.</summary>
+        private CommanderLogWire[] BuildLog(FactionCommand owner, float now)
+        {
+            int count = owner.Log.Count;
+            var rows = new CommanderLogWire[count];
+            for (int i = 0; i < count; i++)
+            {
+                CommandLogEntry entry = owner.Log[i];
+                rows[i] = new CommanderLogWire
+                {
+                    TargetId = entry.TargetId,
+                    Tone = (byte)entry.Tone,
+                    Text = CommandLog.Bounded(entry.Text),
+                    Age = LogAge(entry.Time, now),
+                };
+            }
+            return rows;
+        }
+
+        /// <summary>
+        /// Enemy events this faction had eyes on: an entry is sent when the observer's last
+        /// sight of the subject post is at or after the event, so the log cannot narrate a
+        /// post the roster is still hiding.
+        /// </summary>
+        private CommanderLogWire[] BuildHostileLog(FactionCommand own, int observer, float now)
+        {
+            int shown = 0;
+            for (int f = 0; f < factions.Count; f++)
+            {
+                FactionCommand owner = factions[f];
+                if (owner == own) continue;
+                for (int i = 0; i < owner.Log.Count; i++)
+                {
+                    CommandLogEntry entry = owner.Log[i];
+                    if (entry.TargetId < 0) continue;
+                    // The subject is read from the id, not from the ring's owner: an
+                    // observer's own log also carries contact reports about enemy posts.
+                    int subjectIndex = FactionOf(entry.TargetId);
+                    if (subjectIndex < 0 || subjectIndex >= factions.Count || subjectIndex == observer) continue;
+                    FactionCommand subject = factions[subjectIndex];
+                    CommandSlot slot = subject.Tree.Find(LocalId(entry.TargetId));
+                    if (slot == null || !CommandLog.VisibleToObserver(LastSight(observer, subject, slot), entry.Time))
+                        continue;
+
+                    int at = shown;
+                    while (at > 0 && hostileScratch[at - 1].Time < entry.Time) at--;
+                    if (at >= CommandSnapshotRules.MaximumLogRows) continue;
+                    for (int j = Math.Min(shown, CommandSnapshotRules.MaximumLogRows - 1); j > at; j--)
+                        hostileScratch[j] = hostileScratch[j - 1];
+                    hostileScratch[at] = entry;
+                    if (shown < CommandSnapshotRules.MaximumLogRows) shown++;
+                }
+            }
+
+            var rows = new CommanderLogWire[shown];
+            for (int i = 0; i < shown; i++)
+            {
+                rows[i] = new CommanderLogWire
+                {
+                    TargetId = hostileScratch[i].TargetId,
+                    Tone = (byte)hostileScratch[i].Tone,
+                    Text = CommandLog.Bounded(hostileScratch[i].Text),
+                    Age = LogAge(hostileScratch[i].Time, now),
+                };
+            }
+            return rows;
+        }
+
+        private static float LogAge(float time, float now)
+        {
+            float age = now - time;
+            return Finite(age) && age > 0f ? age : 0f;
         }
 
         internal void Apply(HighCommandSnapshot snapshot)
         {
             viewCommanders.Clear();
+            viewLog.Clear();
+            viewHostileLog.Clear();
+            AppendLog(viewLog, snapshot.Log);
+            AppendLog(viewHostileLog, snapshot.HostileLog);
             cohesion = snapshot.Cohesion;
-            points = snapshot.CommandPoints;
             active = snapshot.Active;
             kia = snapshot.Kia;
             signal = snapshot.Signal ?? "";
@@ -532,19 +539,15 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
                     isKia,
                     (node.Flags & CommanderWire.Transit) != 0,
                     (node.Flags & CommanderWire.Disrupted) != 0,
-                    (node.Flags & CommanderWire.Marked) != 0,
+                    (node.Flags & CommanderWire.Alert) != 0,
                     node.Name, node.Rank, node.Role, node.Location,
-                    CommandTraits.Labels(traits),
-                    node.Decoration,
+                    CommandTraits.BonusLine(traits),
                     CommanderGenerator.Bio(node.Seed, traits),
                     node.Seed,
                     // The same generated portrait every ace and wingman uses. Wing Command
                     // owns the sprite; it is borrowed here and never destroyed.
                     WingLink.PilotPortrait(node.Name, ""),
-                    node.IntelAge, node.Weight, node.X, node.Z,
-                    (node.Actions & CommanderWire.ActionCommend) != 0,
-                    (node.Actions & CommanderWire.ActionRelocate) != 0,
-                    (node.Actions & CommanderWire.ActionBounty) != 0));
+                    node.IntelAge, node.Weight, node.X, node.Z));
             }
 
             if (GameAccess.IsServer() && viewCommanders.Count > 0)
@@ -563,7 +566,17 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
         }
 
         internal void SetLocalStatus(string value) => status = value;
-        internal void ReportStatus(string value) => status = value;
+
+        private static void AppendLog(List<CommanderLogLine> target, CommanderLogWire[] rows)
+        {
+            if (rows == null) return;
+            for (int i = 0; i < rows.Length && target.Count < CommandLog.Capacity; i++)
+            {
+                CommanderLogWire row = rows[i];
+                target.Add(new CommanderLogLine(row.TargetId, (CommanderLogTone)row.Tone,
+                    row.Text ?? "", row.Age));
+            }
+        }
 
         private FactionCommand ViewCommand()
         {

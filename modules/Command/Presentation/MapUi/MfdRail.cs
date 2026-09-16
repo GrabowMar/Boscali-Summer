@@ -320,12 +320,15 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             }
 
             /// <summary>
-            /// Put the rail's line back when the game has reset the label underneath it.
+            /// Put the rail's line and colour back when the game has reset the label
+            /// underneath it.
             ///
             /// <c>InfoPanel_Faction</c> calls <c>VirtualMFD.SetupButtons</c> whenever a
             /// faction panel refreshes, which rewrites every bezel label as its short
-            /// code. The rail owns the borrowed label while the map is maximised, so it
-            /// restores the branded line on the next tick.
+            /// code, and the game's <c>TextStyleApplier</c> repaints the label with the
+            /// vanilla green at its first activation. The rail owns the borrowed label
+            /// while the map is maximised, so it restores the branded line on the next
+            /// tick.
             /// </summary>
             public void Reassert()
             {
@@ -480,6 +483,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             var brand = button.gameObject.AddComponent<MfdRailBrand>();
             brand.Label = skin.Label;
+            brand.LabelColor = skin.Label != null ? skin.Label.color : AvTheme.TextPrimary;
             skin.Brand = brand;
 
             Brand(button, skin, rt, slot);
@@ -668,8 +672,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
     /// adoption over the same buttons. Without a mark the rail brands its own output:
     /// the rich-text line is sanitised into fragments like <c>BDFSIZE=</c> and a second
     /// decoration stacks on the first. The mark makes adoption idempotent, carries the
-    /// clean code for rail ordering, and lets the rail put its own line back after the
-    /// game resets the label.
+    /// clean code for rail ordering, and lets the rail put its own line — and its own
+    /// colour — back after the game resets the label.
     /// </summary>
     internal sealed class MfdRailBrand : MonoBehaviour
     {
@@ -679,12 +683,25 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         /// <summary>The exact text the rail last wrote to the label.</summary>
         public string Text;
 
+        /// <summary>
+        /// The code line's own colour while the rail wears the button.
+        ///
+        /// The vanilla bezel label is pure green, and the game's <c>TextStyleApplier</c>
+        /// re-applies that theme colour to an adopted label whenever its style refreshes
+        /// — long after <c>Restyle</c> painted it. Unlike the text rewrite, the game
+        /// leaves no trace to detect, so the rail re-asserts the colour like it does the
+        /// line.
+        /// </summary>
+        public Color LabelColor = Color.white;
+
         /// <summary>The label the rail restyles; null when the button had no text.</summary>
         public TMP_Text Label;
 
         public void Reassert()
         {
-            if (Label != null && Text != null && Label.text != Text) Label.text = Text;
+            if (Label == null) return;
+            if (Text != null && Label.text != Text) Label.text = Text;
+            if (Label.color != LabelColor) Label.color = LabelColor;
         }
     }
 }

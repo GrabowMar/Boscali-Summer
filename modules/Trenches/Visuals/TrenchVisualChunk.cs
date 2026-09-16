@@ -19,6 +19,10 @@ namespace BoscaliSummer.Features.Trenches.Visuals
         private const int MaximumColliders = 48;
         private const int MaximumRings = 1200;
         private const float TraceStep = 3.5f;
+        private const float CoarseStep = 9f;
+        private const float RidgeStep = 18f;
+        private const float WireForward = 16f;
+        private const float WireHeight = 1.15f;
 
         private TrenchLine line;
         private GameObject lod0Root;
@@ -86,26 +90,34 @@ namespace BoscaliSummer.Features.Trenches.Visuals
 
             float width = WidthFor(line.Stage);
             float parapet = ParapetFor(line.Stage);
-            Vector3[] fire = BuildDitchPath(line.Curve);
+            Vector3[] fire = BuildDitchPath(line.Curve, TraceStep);
             if (fire != null)
             {
-                AddMesh(lod0Root.transform, "Fire_LOD0", fire, width, parapet, 1.4f, earthMat, true);
-                AddMesh(lod1Root.transform, "Fire_LOD1", fire, width, parapet * 0.7f, 0.5f, earthMat, true);
-                AddMesh(lod2Root.transform, "Fire_LOD2", fire, width + 1.0f, 0.10f, 0.05f, earthMat, false);
+                AddMesh(lod0Root.transform, "Fire_LOD0", fire, width, parapet, 2.2f, earthMat, true);
                 AddFrontColliders(fire, width, parapet, "Fire");
+                AddWireBelt(lod0Root.transform, earthMat);
             }
+            // Mid and far LODs stay real earthworks at a coarser ring pitch: a wing flying
+            // over the front must still read the parapet line and the belt behind it. The
+            // far ridge is the silhouette — berms, no skirts — rather than a flat scar.
+            AddPath(lod1Root.transform, "Fire_LOD1", line.Curve, CoarseStep,
+                width, parapet * 0.85f, 1.6f, earthMat, true);
+            AddPath(lod2Root.transform, "Fire_LOD2", line.Curve, RidgeStep,
+                width + 4.5f, 1.6f, 0.8f, earthMat, true);
             if (line.Support != null)
             {
-                AddPath(lod0Root.transform, "Support", line.Support, 2.2f, 1.7f, 1.4f, earthMat, true);
-                AddPath(lod1Root.transform, "Support_LOD1", line.Support, 2.2f, 1.2f, 0.5f, earthMat, true);
+                AddPath(lod0Root.transform, "Support", line.Support, TraceStep, 4.2f, 3.0f, 2.0f, earthMat, true);
+                AddPath(lod1Root.transform, "Support_LOD1", line.Support, CoarseStep, 4.2f, 2.4f, 1.6f, earthMat, true);
+                AddPath(lod2Root.transform, "Support_LOD2", line.Support, RidgeStep, 7.5f, 1.5f, 0.8f, earthMat, true);
             }
             if (line.Redoubt != null)
             {
-                AddPath(lod0Root.transform, "Redoubt", line.Redoubt, 2.2f, 1.4f, 1.4f, earthMat, true);
-                AddPath(lod1Root.transform, "Redoubt_LOD1", line.Redoubt, 2.2f, 1.0f, 0.5f, earthMat, true);
+                AddPath(lod0Root.transform, "Redoubt", line.Redoubt, TraceStep, 4.2f, 2.6f, 2.0f, earthMat, true);
+                AddPath(lod1Root.transform, "Redoubt_LOD1", line.Redoubt, CoarseStep, 4.2f, 2.2f, 1.6f, earthMat, true);
+                AddPath(lod2Root.transform, "Redoubt_LOD2", line.Redoubt, RidgeStep, 7.5f, 1.5f, 0.8f, earthMat, true);
             }
-            AddTraces(lod0Root.transform, line.Links, "Link", 2.0f, 1.5f, earthMat);
-            AddTraces(lod0Root.transform, line.Spurs, "Sap", 1.1f, 0.8f, earthMat);
+            AddTraces(lod0Root.transform, line.Links, "Link", 3.2f, 2.2f, earthMat);
+            AddTraces(lod0Root.transform, line.Spurs, "Sap", 2.0f, 1.4f, earthMat);
 
             currentLod = -1;
             UpdateLod(true);
@@ -116,7 +128,41 @@ namespace BoscaliSummer.Features.Trenches.Visuals
         {
             if (traces == null || parent == null) return;
             for (int i = 0; i < traces.Length; i++)
-                AddPath(parent, $"{name}{i}", traces[i], width, parapet, 1.2f, material, true);
+                AddPath(parent, $"{name}{i}", traces[i], TraceStep, width, parapet, 1.4f, material, true);
+        }
+
+        /// <summary>
+        /// The wire belt in front of the fire trench: pickets and strands offset onto the
+        /// enemy side of the parapet and draped over the ground, so the approach reads as
+        /// wired no man's land instead of bare field.
+        /// </summary>
+        private void AddWireBelt(Transform parent, Material material)
+        {
+            if (parent == null || material == null || line == null) return;
+            Vector3[] wireCurve = OffsetCurve(line.Curve, line.Threat, WireForward);
+            if (wireCurve == null) return;
+            Vector3[] path = BuildDitchPath(wireCurve, CoarseStep);
+            if (path == null) return;
+
+            Mesh mesh = TrenchMeshBuilder.BuildWireBeltMesh(path, WireHeight);
+            if (mesh == null) return;
+            proceduralMeshes.Add(mesh);
+            var go = new GameObject("WireBelt");
+            go.transform.SetParent(parent, false);
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            go.AddComponent<MeshRenderer>().sharedMaterial = material;
+        }
+
+        private static Vector3[] OffsetCurve(Vector3[] curve, Vector3[] threat, float forward)
+        {
+            if (curve == null || threat == null || curve.Length == 0) return null;
+            var offset = new Vector3[curve.Length];
+            for (int i = 0; i < curve.Length; i++)
+            {
+                Vector3 direction = threat.Length > 0 ? threat[Mathf.Min(i, threat.Length - 1)] : Vector3.forward;
+                offset[i] = curve[i] + new Vector3(direction.x, 0f, direction.z).normalized * forward;
+            }
+            return offset;
         }
 
         /// <summary>
@@ -124,10 +170,11 @@ namespace BoscaliSummer.Features.Trenches.Visuals
         /// it. The phase comes from the line's world position, so neighbouring positions
         /// continue one pattern instead of restarting it.
         /// </summary>
-        private Vector3[] BuildDitchPath(Vector3[] curve)
+        private Vector3[] BuildDitchPath(Vector3[] curve, float step)
         {
+            if (curve == null || curve.Length < 2) return null;
             int count = TrenchTraceMath.DensifyTraversed(
-                ToX(curve), ToZ(curve), curve.Length, TraceStep,
+                ToX(curve), ToZ(curve), curve.Length, step,
                 TrenchTraceMath.TraverseSpacing, TrenchTraceMath.TraverseAmplitude,
                 curve[0].x * 0.5f + curve[0].z * 0.5f, pathX, pathZ);
             if (count < 2) return null;
@@ -137,11 +184,11 @@ namespace BoscaliSummer.Features.Trenches.Visuals
             return path;
         }
 
-        private void AddPath(Transform parent, string name, Vector3[] curve, float width, float parapet,
-            float skirt, Material material, bool conform)
+        private void AddPath(Transform parent, string name, Vector3[] curve, float step, float width,
+            float parapet, float skirt, Material material, bool conform)
         {
             if (parent == null || curve == null || curve.Length < 2) return;
-            Vector3[] path = BuildDitchPath(curve);
+            Vector3[] path = BuildDitchPath(curve, step);
             if (path == null) return;
             AddMesh(parent, name, path, width, parapet, skirt, material, conform);
         }
@@ -175,15 +222,16 @@ namespace BoscaliSummer.Features.Trenches.Visuals
         }
 
         /// <summary>
-        /// One low obstacle box every three path points along the fire trench: the front
-        /// line stops vehicles without paying for a collider per ditch segment.
+        /// Low obstacle boxes strung along the whole fire trench (never only its first
+        /// stretch): the front line stops vehicles without paying for a collider per segment.
         /// </summary>
         private void AddFrontColliders(Vector3[] path, float width, float parapetHeight, string tag)
         {
-            for (int i = 0; i < path.Length - 1 && colliders.Count < MaximumColliders; i += 3)
+            int stride = Mathf.Max(3, path.Length / MaximumColliders);
+            for (int i = 0; i < path.Length - 1 && colliders.Count < MaximumColliders; i += stride)
             {
                 Vector3 p0 = path[i];
-                Vector3 p1 = path[Math.Min(i + 3, path.Length - 1)];
+                Vector3 p1 = path[Mathf.Min(i + stride, path.Length - 1)];
                 float len = Vector3.Distance(p0, p1);
                 if (len < 1.5f) continue;
 
@@ -197,22 +245,22 @@ namespace BoscaliSummer.Features.Trenches.Visuals
                 colObj.transform.localPosition = mid + Vector3.up * (parapetHeight * 0.5f);
                 colObj.transform.localRotation = Quaternion.LookRotation(fwd, Vector3.up);
                 var box = colObj.AddComponent<BoxCollider>();
-                box.size = new Vector3(width + 1.8f, Mathf.Max(1.2f, parapetHeight * 0.9f), len + 0.5f);
+                box.size = new Vector3(width + 4f, Mathf.Max(1.2f, parapetHeight * 0.9f), len + 0.5f);
                 colliders.Add(box);
             }
         }
 
         private static float WidthFor(TrenchStage stage)
-            => stage >= TrenchStage.Support ? 2.6f : stage >= TrenchStage.FireTrench ? 2.4f : 1.6f;
+            => stage >= TrenchStage.Support ? 3.6f : stage >= TrenchStage.FireTrench ? 3.0f : 2.0f;
 
         private static float ParapetFor(TrenchStage stage)
         {
             switch (stage)
             {
-                case TrenchStage.Scrape: return 0.5f;
-                case TrenchStage.FireTrench: return 1.3f;
-                case TrenchStage.Support: return 1.8f;
-                default: return 2.4f;
+                case TrenchStage.Scrape: return 0.8f;
+                case TrenchStage.FireTrench: return 2.0f;
+                case TrenchStage.Support: return 2.6f;
+                default: return 3.4f;
             }
         }
 

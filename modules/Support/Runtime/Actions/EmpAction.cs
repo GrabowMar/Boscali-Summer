@@ -1,4 +1,5 @@
 using System.Collections;
+using BoscaliSummer.Features.Support.Domain.Orbital;
 using NuclearOption.Networking;
 using UnityEngine;
 
@@ -38,16 +39,22 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
                     return SupportResult.OutOfRange;
             }
 
-            if (!context.HasCoverage(SatelliteRole.Ew))
-                return SupportResult.OutOfCoverage;
+            OrbitalPlatform platform = context.PlatformAccess(PlatformAbility.EmpBurst, out PlatformDenial denial);
+            if (platform == null) return SupportContext.Refusal(denial);
 
             if (!context.Host.TryReserve(SupportPool.Strike)) return SupportResult.Busy;
+            platform.Consume(PlatformAbility.EmpBurst, context.Host.OrbitNow);
+            context.Logger.LogInfo("[Support] EMP burst package released by " + OrbitalPlatform.Callsign + " from " +
+                                   platform.Orbit.Code + " orbit.");
 
             context.Logger.LogInfo("[Support] EMP airburst using " + definition.jsonKey +
                                    " at " + ground.y.ToString("F0") + " m AGL-local, burst +" +
                                    SupportEffectPolicy.EmpBurstAltitude.ToString("F0") + " m");
+            // The requester's own effect scale and the station's orbit band widen the shock; the
+            // delivery, the altitude band and the jam strength are unchanged.
+            float radius = context.Settings.EmpRadius.Value * context.EffectScale * platform.EmpScale;
             context.Host.Run(Discharge(context.Host, context.Player, context.Owner, definition, ground,
-                context.Settings.EmpRadius.Value, SupportEffectPolicy.EmpName(SupportNaming.Unique("Emp", context), context.Settings.EmpRadius.Value)));
+                radius, SupportEffectPolicy.EmpName(SupportNaming.Unique("Emp", context), radius)));
             return SupportResult.Accepted;
         }
 

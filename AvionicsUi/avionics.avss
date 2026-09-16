@@ -187,7 +187,34 @@
 .card.inert   { background: surface-inert; }
 .card.focused { ticks: on; }
 
-/* ------------------------------------------------ 11. reskinned stock panels */
+/* ------------------------------------------------------------ 11. dossier */
+
+/* The SQD pages are a paper personnel file rendered on glass: form numbers,
+   clause rules with dotted leaders and rubber stamps. These are SQD-only
+   classes — Wing Command never asks for them. */
+
+.file-form     { font: micro; color: text-muted; tracking: 24; }
+.file-title    { font: lead bold; color: text-primary; tracking: 6; }
+.file-meta     { font: micro; color: text-muted; tracking: 10; }
+.leader        { font: micro; color: text-muted; tracking: 1; }
+.form-key      { font: micro; color: text-dim; tracking: 14; }
+.form-value    { font: small bold; color: text-primary; align: right; }
+.photo-cap     { font: micro; color: text-dim; tracking: 4; }
+
+/* A stamp is ink on the file, not a control: inert until a state says otherwise. */
+.stamp         { font: micro bold; color: text-muted; tracking: 18; border: 1 #57706A 99; }
+.stamp.ok      { color: rail-ready; border: 1 #00FF9D 73; background: #00FF9D 0f; }
+.stamp.warn    { color: rail-caution; border: 1 #F59E0B 73; background: #F59E0B 10; }
+.stamp.bad     { color: rail-danger; border: 1 #EF4444 73; background: #EF4444 0f; }
+
+/* A punched filing hole in the binding margin. */
+.punch         { background: #000000 e6; border: 1 frame 99; }
+
+/* What the file will not show: redaction bars, and a watermark behind the record. */
+.redact        { background: #57706A 59; }
+.watermark     { font: 28 bold; color: accent 0d; tracking: 18; }
+
+/* ------------------------------------------------ 12. reskinned stock panels */
 
 /* The game's own map panels — BDF, PALA, TGT, MIS, MAP — docked into the left
    column. Their contents and titles stay the game's; this only supplies the

@@ -53,13 +53,15 @@ namespace BoscaliSummer.Features.DynamicOperations.Domain
         public bool IsStrike => Kind == OperationKind.Interdict || Kind == OperationKind.Intercept ||
             Kind == OperationKind.SupplyInterdict || Kind == OperationKind.ElectronicWarfare;
         public bool AwardTaken { get; private set; }
+        public int ChainDepth { get; }
         public const float RequiredHold = 180f;
 
         public Operation(int id, int targetId, OperationKind kind, OperationReward reward,
-            float now, int money, int xp)
+            float now, int money, int xp, int chainDepth = 0)
         {
             if (!Finite(now)) throw new ArgumentOutOfRangeException(nameof(now));
             Id = id; TargetId = targetId; Kind = kind; Reward = reward;
+            ChainDepth = Math.Clamp(chainDepth, 0, OperationChains.MaximumDepth);
             Deadline = now + 300f; Money = Math.Clamp(money, 0, 100000); Xp = Math.Clamp(xp, 0, 10000);
         }
 

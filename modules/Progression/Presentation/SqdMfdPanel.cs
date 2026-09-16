@@ -38,6 +38,12 @@ namespace BoscaliSummer.Features.Progression.Presentation
         private const int MaximumBudgetPips = 20;
         private const int WingRowsPerPage = 2;
 
+        /// <summary>What each sheet of the SQD file is called, in tab order.</summary>
+        private static readonly string[] SheetNames =
+        {
+            "PERSONNEL FILE", "QUALIFICATION RECORD", "ORDER OF BATTLE", "STUDIO RECORD",
+        };
+
         private ProgressionManager progression;
         private ProgressionSettings settings;
         private ISquadView squad;
@@ -74,6 +80,9 @@ namespace BoscaliSummer.Features.Progression.Presentation
         private float nextRefresh;
         private bool failed;
         private bool viewOpen;
+
+        /// <summary>Clause number, restarted by every page build so the headings read 01, 02, 03.</summary>
+        private int clause;
 
         public void Configure(ProgressionManager manager, ISquadView squadView,
             ProgressionSettings progressionSettings, ManualLogSource log)
@@ -239,11 +248,11 @@ namespace BoscaliSummer.Features.Progression.Presentation
 
             shell = AvScreen.Build(
                 content, "SQD",
-                new[] { "PILOT", "SKILLS", "WINGS", "STUDIO" },
+                new[] { "01 PILOT", "02 SKILLS", "03 WINGS", "04 STUDIO" },
                 new[]
                 {
-                    new[] { "PILOT SCORE", "PTS · THIS PILOT" },
-                    new[] { "SKILL POINTS", "UNSPENT" },
+                    new[] { "PILOT SCORE", "SCORE · THIS PILOT" },
+                    new[] { "QUALIFICATION PICKS", "UNSPENT" },
                 },
                 ChipCount, Width, height, OnTabChanged);
 
@@ -321,34 +330,38 @@ namespace BoscaliSummer.Features.Progression.Presentation
         {
             bool hunted = squad != null && squad.HuntActive;
             dataBar.State.text = hunted ? "ACE WING HUNTING YOU" : bypass
-                ? "DEBUG BYPASS — ALL SKILLS ACTIVE" : "PILOT DOSSIER & SHARED SKILL BOARD";
+                ? "DEBUG BYPASS — EVERY GRADE OPEN" : "PERSONNEL FILE · PILOT & QUALIFICATION RECORD";
             dataBar.State.color = hunted ? AvTheme.Alert : bypass ? AvTheme.Warning : AvTheme.RailReady;
             dataBar.SetChip(0, hunted ? "HUNT ACTIVE" : "NO HUNT", hunted);
             dataBar.SetChip(1, "RANK " + Progress.Rank, true);
             int available = Progress.AvailablePoints;
-            dataBar.SetChip(2, bypass ? "ALL ACTIVE" : available + "P AVAIL", available > 0 || bypass);
+            dataBar.SetChip(2, bypass ? "ALL OPEN" : available + " PICK" + (available == 1 ? "" : "S"),
+                available > 0 || bypass);
         }
 
         private void RefreshMetrics(bool bypass, int score, int bonus)
         {
             IProgressionView view = Progress;
-            int perPoint = Math.Max(1, view.ScorePerPoint);
-            int intoPoint = score % perPoint;
             int ceiling = Mathf.Max(1, view.MaximumPoints);
             int available = view.AvailablePoints;
             bool capped = view.EarnedPoints >= ceiling;
+            // The same ramp the host pays out, so the header never divides score itself.
+            int remaining = PerkPoints.RemainingToNext(score, view.ScorePerPoint);
 
             scoreMetric.Set(
                 bypass ? "BYPASS" : score.ToString("N0"),
-                bypass ? "ALL SKILLS ACTIVE" : capped ? "SCORE BUDGET COMPLETE" : (perPoint - intoPoint) + " PTS TO NEXT PERK",
-                bypass || capped ? 1f : intoPoint / (float)perPoint,
+                bypass ? "EVERY GRADE OPEN" : capped ? "PICK CEILING REACHED"
+                    : remaining < 0 ? "GRADE LADDER COMPLETE"
+                    : remaining + " SCORE TO NEXT GRADE",
+                bypass || capped || remaining < 0 ? 1f
+                    : 1f - remaining / (float)Mathf.Max(1, view.ScorePerPoint * Mathf.Max(1, PerkCatalog.MaximumDepth)),
                 bypass ? AvTheme.Warning : AvTheme.RailReady);
-            scoreMetric.Unit.text = "PTS · THIS PILOT";
+            scoreMetric.Unit.text = "SCORE · THIS PILOT";
 
             int earned = view.EarnedPoints;
             budgetMetric.Set(
-                bypass ? "FREE" : available + "P",
-                bypass ? "UNLIMITED POINTS" : $"{earned}/{ceiling} EARNED · {bonus} ACE BONUS",
+                bypass ? "FREE" : available + " PICK" + (available == 1 ? "" : "S"),
+                bypass ? "UNLIMITED PICKS" : $"{earned}/{ceiling} EARNED · {bonus} ACE BONUS",
                 bypass ? 1f : earned / (float)ceiling,
                 available > 0 ? AvTheme.RailReady : AvTheme.RailInfo);
             budgetMetric.Unit.text = "UNSPENT";
@@ -360,27 +373,153 @@ namespace BoscaliSummer.Features.Progression.Presentation
             string baseLine = shell.Page == TabWings
                 ? (squad != null ? squad.Status : "Enemy wing reports are unavailable.")
                 : shell.Page == TabStudio ? StudioStatusLine()
-                : progression.BypassRequirements ? "DEBUG BYPASS — ALL SKILLS ACTIVE"
+                : progression.BypassRequirements ? "DEBUG BYPASS — EVERY GRADE OPEN"
                 : progression.LastResult;
-            shell.WriteStatus(null, MapPicker.Prompt, baseLine);
+
+            string fileTag = shell.Page >= 0 && shell.Page < SheetNames.Length
+                ? "FILE 0" + (shell.Page + 1) + "/04 · " + SheetNames[shell.Page] + " · "
+                : string.Empty;
+            shell.WriteStatus(null, MapPicker.Prompt, fileTag + baseLine);
         }
 
         // ---- Shared drawing helpers ------------------------------------------------------
 
-        private static float DrawSectionTitle(
+        /// <summary>
+        /// A numbered clause heading: "03 · SERVICE BACKGROUND .......... PILOT LORE".
+        /// The counter runs per page build, so the pages read as sections of one file.
+        /// </summary>
+        private float DrawSectionTitle(
             RectTransform parent, float x, float y, float width, string title, string note, bool band)
         {
-            if (band) AvStyled.Box(parent, new Rect(x - 6f, y + 4f, width + 12f, 22f), "section band");
+            if (band) AvStyled.Box(parent, new Rect(x - 6f, y + 4f, width + 6f, 22f), "section band");
             AvStyled.SpineTick(parent, x - SpineInset + 3f, y - 7f);
 
-            float half = width * 0.50f;
-            AvStyled.Label(parent, new Rect(x, y, half, 14f), title, "section-title");
+            string clauseText = (++clause).ToString("00") + " · " + title;
+            TMP_Text heading = PlainLabel(parent, new Rect(x, y, width, 14f), clauseText, "section-title");
+            float headingWidth = Mathf.Ceil(heading.GetPreferredValues(clauseText).x);
+
             if (!string.IsNullOrEmpty(note))
             {
-                AvStyled.Label(parent, new Rect(x + half, y, width - half, 14f), note,
-                               "section-title-note", align: TextAlignmentOptions.MidlineRight);
+                TMP_Text noteLabel = PlainLabel(parent, new Rect(x, y, width, 14f), note,
+                                                "section-title-note");
+                noteLabel.alignment = TextAlignmentOptions.MidlineRight;
+                float noteWidth = Mathf.Ceil(noteLabel.GetPreferredValues(note).x);
+                DottedLeader(parent, x + headingWidth + 6f, y,
+                    width - headingWidth - noteWidth - 12f);
             }
-            return y - 22f;
+
+            AvKit.Rule(parent, new Rect(x, y - 15f, width, 1f), AvTheme.Hairline.WithAlpha(0.16f));
+            return y - 24f;
+        }
+
+        /// <summary>
+        /// The file masthead: form number over the document title, the file's own note on
+        /// the right, and the double rule a service form is filed under.
+        /// </summary>
+        private static float DrawFileHeader(
+            RectTransform parent, float x, float y, float width, string form, string title, string meta)
+        {
+            PlainLabel(parent, new Rect(x, y, width, 12f), form, "file-form");
+            PlainLabel(parent, new Rect(x, y - 13f, width, 20f), title, "file-title");
+            if (!string.IsNullOrEmpty(meta))
+            {
+                TMP_Text note = PlainLabel(parent, new Rect(x, y - 13f, width, 20f), meta, "file-meta");
+                note.alignment = TextAlignmentOptions.MidlineRight;
+            }
+
+            AvKit.Rule(parent, new Rect(x, y - 37f, width, 1f), AvTheme.Frame.WithAlpha(0.55f));
+            AvKit.Rule(parent, new Rect(x, y - 40f, width, 2f), AvTheme.RailInfo.WithAlpha(0.30f));
+            return y - 50f;
+        }
+
+        /// <summary>Dots filling the gap between a label and what sits to its right.</summary>
+        private static void DottedLeader(RectTransform parent, float x, float y, float width)
+        {
+            if (width < 8f) return;
+
+            TMP_Text leader = PlainLabel(parent, new Rect(x, y, width, 14f), ".", "leader");
+            float dot = leader.GetPreferredValues(".").x;
+            if (dot <= 0.5f) return;
+
+            leader.text = new string('.', Mathf.Max(1, Mathf.FloorToInt(width / dot) - 1));
+        }
+
+        /// <summary>A rotated rubber stamp, the way a file gets marked on receipt.</summary>
+        private static (GameObject Root, Image Fill, TMP_Text Label) Stamp(
+            RectTransform parent, Rect area, string text, string state)
+        {
+            var go = new GameObject("Stamp", typeof(RectTransform));
+            var rect = (RectTransform)go.transform;
+            rect.SetParent(parent, false);
+            rect.localRotation = Quaternion.Euler(0f, 0f, -6f);
+            AvKit.Place(rect, area);
+
+            Image fill = AvStyled.Box(rect, new Rect(0f, 0f, area.width, area.height), "stamp " + state);
+            TMP_Text label = PlainLabel(rect, new Rect(0f, 0f, area.width, area.height), text,
+                                        "stamp " + state);
+            label.alignment = TextAlignmentOptions.Center;
+            return (go, fill, label);
+        }
+
+        /// <summary>Restate a stamp's mark without rebuilding its frame.</summary>
+        private static void PaintStamp(Image fill, TMP_Text label, string state, string text)
+        {
+            AvStyle style = AvStyleHost.Style("stamp " + state);
+            label.text = text;
+            label.color = AvStyleHost.Resolve(style.Color, AvTheme.Dim);
+            if (fill != null) fill.color = AvStyleHost.Resolve(style.Background, Color.clear);
+        }
+
+        /// <summary>
+        /// A record the file will not show: solid bars with a short last line, standing in
+        /// for a photograph or a field that is not on this copy.
+        /// </summary>
+        private static GameObject Redaction(RectTransform parent, Rect area, int lines)
+        {
+            var block = new GameObject("Redaction", typeof(RectTransform));
+            var rect = (RectTransform)block.transform;
+            rect.SetParent(parent, false);
+            AvKit.Place(rect, area);
+
+            Color bar = AvStyleHost.Resolve(AvStyleHost.Style("redact").Background,
+                                            AvTheme.Dim.WithAlpha(0.35f));
+            float gap = 4f;
+            float height = Mathf.Max(2f, (area.height - gap * (lines - 1)) / lines);
+            for (int i = 0; i < lines; i++)
+            {
+                float w = i == lines - 1 ? Mathf.Max(6f, area.width * 0.62f) : area.width;
+                AvKit.Rule(rect, new Rect(0f, -i * (height + gap), w, height), bar);
+            }
+            return block;
+        }
+
+        /// <summary>
+        /// A dog-eared corner: one diagonal cut with its crease, laid into the sheet at the
+        /// angle that points into the form.
+        /// </summary>
+        private static void CornerFold(
+            RectTransform parent, float cornerX, float cornerY, float size, float angle, Color colour)
+        {
+            var go = new GameObject("CornerFold", typeof(RectTransform));
+            var rect = (RectTransform)go.transform;
+            rect.SetParent(parent, false);
+            rect.localRotation = Quaternion.Euler(0f, 0f, angle);
+            AvKit.Place(rect, new Rect(cornerX, cornerY, 1f, 1f));
+
+            AvKit.Rule(rect, new Rect(0f, 0f, size, 1f), colour);
+            AvKit.Rule(rect, new Rect(0f, -3f, size * 0.72f, 1f), colour.WithAlpha(colour.a * 0.45f));
+        }
+
+        /// <summary>The page spine plus punched filing holes, so the stack reads as bound.</summary>
+        private static void DossierSpine(RectTransform parent, Rect body)
+        {
+            AvStyled.Spine(parent, new Rect(body.x, body.y, 3f, body.height));
+            for (int i = 0; i < 3; i++)
+            {
+                float y = body.y - body.height * (0.18f + i * 0.30f);
+                Image hole = AvStyled.Box(parent, new Rect(body.x, y + 2.5f, 5f, 5f), "punch");
+                if (hole != null) hole.raycastTarget = false;
+            }
         }
 
         private static void RowSeparator(RectTransform parent, Rect area) =>
@@ -390,9 +529,16 @@ namespace BoscaliSummer.Features.Progression.Presentation
         private static TMP_Text KeyValue(
             RectTransform parent, float x, float y, float width, string key)
         {
-            AvStyled.Label(parent, new Rect(x, y, width * 0.60f, 16f), key, "kv-key");
-            return AvStyled.Label(parent, new Rect(x + width * 0.60f, y, width * 0.40f, 16f),
-                                  "—", "kv-value", align: TextAlignmentOptions.MidlineRight);
+            const float keyShare = 0.60f;
+            TMP_Text keyLabel = PlainLabel(parent, new Rect(x, y, width * keyShare, 16f), key, "form-key");
+            float keyWidth = Mathf.Min(width * keyShare,
+                Mathf.Ceil(keyLabel.GetPreferredValues(key).x) + 6f);
+            DottedLeader(parent, x + keyWidth, y, width * keyShare - keyWidth - 4f);
+
+            TMP_Text value = PlainLabel(parent, new Rect(x + width * keyShare, y, width * 0.40f, 16f),
+                                        "—", "form-value");
+            value.alignment = TextAlignmentOptions.MidlineRight;
+            return value;
         }
 
         private static Color RailColour(string state) =>
@@ -400,6 +546,18 @@ namespace BoscaliSummer.Features.Progression.Presentation
 
         private static Color HoverFill() =>
             AvStyleHost.Resolve(AvStyleHost.Style("row", "hover").Background, AvTheme.SurfaceRaised);
+
+        /// <summary>Small vector hunt/ace mark, drawn into an area without allocating art.</summary>
+        private static void Glyph(RectTransform parent, Rect area, HuntMark mark, Color color)
+        {
+            var go = new GameObject(mark.ToString(), typeof(RectTransform), typeof(HuntGlyph));
+            go.transform.SetParent(parent, false);
+            AvKit.Place((RectTransform)go.transform, area);
+            HuntGlyph glyph = go.GetComponent<HuntGlyph>();
+            glyph.Mark = mark;
+            glyph.color = color;
+            glyph.raycastTarget = false;
+        }
 
         private static TMP_Text PlainLabel(RectTransform parent, Rect area, string text, string classes)
         {
@@ -497,11 +655,11 @@ namespace BoscaliSummer.Features.Progression.Presentation
             return WingLink.PilotPortrait(name, callsign);
         }
 
-        private static void SetPortrait(Image image, TMP_Text fallback, Sprite sprite)
+        private static void SetPortrait(Image image, GameObject fallback, Sprite sprite)
         {
             image.sprite = sprite;
             image.enabled = sprite != null;
-            fallback.gameObject.SetActive(sprite == null);
+            if (fallback != null) fallback.SetActive(sprite == null);
         }
 
         // ---- Row pooling -----------------------------------------------------------------
@@ -510,12 +668,20 @@ namespace BoscaliSummer.Features.Progression.Presentation
         {
             public byte Id;
             public AvButton Select;
-            public AvButton Confirm;
-            public Image Rail;
-            public Image Background;
+            public Image Fill;
+            public Image[] Frame;
             public SqdGlyph Icon;
-            public TMP_Text Code;
             public TMP_Text Name;
+            public TMP_Text State;
+        }
+
+        /// <summary>One lane's caption and committed count, refreshed as grades are taken.</summary>
+        private sealed class SkillBranchRow
+        {
+            public string Name;
+            public TMP_Text Caption;
+            public TMP_Text Note;
+            public readonly List<byte> Ids = new List<byte>(PerkCatalog.MaximumDepth);
         }
 
         private sealed class WingRow
@@ -526,7 +692,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             public Image Crest;
             public string CrestKey;
             public Image Portrait;
-            public TMP_Text PortraitFallback;
+            public GameObject PortraitFallback;
             public TMP_Text Symbol;
             public TMP_Text Wing;
             public TMP_Text Ace;

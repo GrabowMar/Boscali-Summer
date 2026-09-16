@@ -1,4 +1,5 @@
 using System.Collections;
+using BoscaliSummer.Features.Support.Domain.Orbital;
 using NuclearOption.Networking;
 using UnityEngine;
 
@@ -7,7 +8,9 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
     /// <summary>
     /// "Rod from God": one high-velocity kinetic projectile dropped from high altitude onto
     /// the designated grid. Reuses the verified low-yield vanilla missile seam - the rod is
-    /// a single very fast shot, not a salvo.
+    /// a single very fast shot, not a salvo. The faction's station releases it only while it is
+    /// overhead with a loaded rod magazine; the impact scatters by orbit band (halved by gyros),
+    /// and the strike spends a rod and station energy.
     /// </summary>
     internal sealed class ArtilleryAction : ISupportAction
     {
@@ -35,14 +38,18 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
                 if (Vector3.Distance(origin, ground) > context.Settings.MaximumRange.Value)
                     return SupportResult.OutOfRange;
             }
+            OrbitalPlatform platform = context.PlatformAccess(PlatformAbility.RodStrike, out PlatformDenial denial);
+            if (platform == null) return SupportContext.Refusal(denial);
             if (!context.Host.TryReserve(SupportPool.Strike)) return SupportResult.Busy;
-            if (!context.HasCoverage(SatelliteRole.Strike))
-            {
-                context.Host.Release(SupportPool.Strike);
-                return SupportResult.OutOfCoverage;
-            }
 
-            context.Logger.LogInfo("[Support] Rod from God using " + definition.jsonKey);
+            double now = context.Host.OrbitNow;
+            Vector2 miss = Random.insideUnitCircle * platform.RodScatter(now);
+            Vector3 aim = ground + new Vector3(miss.x, 0f, miss.y);
+            if (SupportTargeting.TryMapPoint(aim.ToGlobalPosition(), out Vector3 scattered)) ground = scattered;
+            platform.Consume(PlatformAbility.RodStrike, now);
+            context.Logger.LogInfo("[Support] Rod from God released by " + OrbitalPlatform.Callsign + " (" +
+                                   platform.Orbit.Code + ", " + Mathf.RoundToInt(miss.magnitude) + " m off the mark) using " +
+                                   definition.jsonKey + "; " + platform.Rods + " rod(s) left.");
             context.Host.Run(Strike(context.Host, context.Player, context.Owner, definition, ground,
                 SupportNaming.Unique("Rod", context)));
             return SupportResult.Accepted;

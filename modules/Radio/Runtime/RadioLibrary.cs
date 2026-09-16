@@ -15,6 +15,11 @@ namespace BoscaliSummer.Features.Radio.Runtime
         public static bool AcceptsLocalTracks(string stationId) =>
             !string.Equals(stationId, BaseId, StringComparison.Ordinal);
 
+        public static bool IsBuiltIn(string stationId) =>
+            string.Equals(stationId, AgrapolId, StringComparison.Ordinal) ||
+            string.Equals(stationId, MarisId, StringComparison.Ordinal) ||
+            string.Equals(stationId, BaseId, StringComparison.Ordinal);
+
         public static bool UsesVanillaTracks(string stationId, int localTrackCount) =>
             string.Equals(stationId, BaseId, StringComparison.Ordinal) || localTrackCount == 0;
     }

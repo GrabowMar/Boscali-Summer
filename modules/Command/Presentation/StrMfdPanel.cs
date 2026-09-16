@@ -29,10 +29,10 @@ namespace BoscaliSummer.Features.Command.Presentation
     /// <para>It is now its own bezel screen with its own bay, and the split follows the
     /// question each answers. OPS is about you: what you have earned, what you may call in.
     /// STR is about the battlefield: merged theater SA (air picture plus frontline), chain
-    /// of command, and mission-AI doctrine. Neither needs the other to install. Faction
-    /// tasking lives on the ADM screen; STR has no tasking board and no theater account.
-    /// The CMD tab is a placeholder: the tactical-command system was removed for a future
-    /// rebuild.</para>
+    /// of command, and the theater operations board. Neither needs the other to install.
+    /// Faction tasking lives on the ADM screen; STR has no tasking board and no theater
+    /// account. CMD names the faction's main effort through TheaterOps; it selects no units
+    /// and issues no waypoints.</para>
     ///
     /// <para>The pages show what the mod already computed and previously threw away — the
     /// sortie board, the contested-node list, the frontline's length. Where a figure cannot
@@ -72,6 +72,8 @@ namespace BoscaliSummer.Features.Command.Presentation
         private ManualLogSource logger;
         private IBaseDefenseAlarmService baseAlarm;
         private IHighCommandView highCommand;
+        private ITheaterPriorityView theaterPriority;
+        private ITheaterLogisticsView theaterLogistics;
 
         // ---- Screen ----------------------------------------------------------------------
 
@@ -136,6 +138,8 @@ namespace BoscaliSummer.Features.Command.Presentation
             shell = null;
             baseAlarm = null;
             highCommand = null;
+            theaterPriority = null;
+            theaterLogistics = null;
 
             defconLabel = threatLabel = airCountLabel = sortieNote = null;
             airBar = null;
@@ -150,6 +154,7 @@ namespace BoscaliSummer.Features.Command.Presentation
             Array.Clear(nodeRows, 0, nodeRows.Length);
 
             ResetCoc();
+            ResetCmd();
 
             nextAttempt = 0f;
             nextRefresh = 0f;
@@ -273,6 +278,8 @@ namespace BoscaliSummer.Features.Command.Presentation
 
             ModServices.TryGet(out baseAlarm);
             ModServices.TryGet(out highCommand);
+            ModServices.TryGet(out theaterPriority);
+            ModServices.TryGet(out theaterLogistics);
 
             shell = AvScreen.Build(
                 content, "STR",
@@ -731,32 +738,6 @@ namespace BoscaliSummer.Features.Command.Presentation
             }
         }
 
-        // ---- CMD page --------------------------------------------------------------------
-
-        /// <summary>
-        /// The CMD tab is a placeholder. The previous doctrine / per-cell Sector Focus
-        /// system was pulled out whole and will be rebuilt in another form.
-        /// </summary>
-        private void BuildCmdPage(GameObject page)
-        {
-            Rect body = shell.Body;
-            var parent = (RectTransform)page.transform;
-            float x = body.x + AvScreen.SpineInset;
-            float width = body.width - AvScreen.SpineInset;
-
-            AvStyled.Spine(parent, new Rect(body.x, body.y, 3f, body.height));
-
-            float y = SectionHeader(parent, x, body.y, width, "TACTICAL COMMANDS", "REBUILDING", band: false);
-            AvKit.TacticalCard(parent, new Rect(x - 4f, y + 2f, width + 8f, 96f), AvTheme.RailInfo);
-            AvStyled.Label(parent, new Rect(x, y + 2f, width, 30f), "WORK IN PROGRESS", "metric-value",
-                           align: TextAlignmentOptions.Center);
-            AvStyled.Label(parent, new Rect(x, y - 32f, width, 56f),
-                           "The tactical command system was removed and will be rebuilt in a different " +
-                           "form. Theater posture, mission-AI doctrine and map sector focus are " +
-                           "unavailable until then.",
-                           "row-sub", align: TextAlignmentOptions.Center);
-        }
-
         // ---- Refresh ---------------------------------------------------------------------
 
         private void Refresh()
@@ -764,6 +745,8 @@ namespace BoscaliSummer.Features.Command.Presentation
             if (command == null || shell == null) return;
 
             highCommand?.Refresh();
+            theaterPriority?.Refresh();
+            theaterLogistics?.Refresh();
 
             DynamicMap map = SceneSingleton<DynamicMap>.i;
             FactionHQ hq = map != null ? map.HQ : null;
@@ -777,6 +760,7 @@ namespace BoscaliSummer.Features.Command.Presentation
             {
                 case TabSa: RefreshSa(state); break;
                 case TabCoc: RefreshCoc(); break;
+                case TabCmd: RefreshCmd(); break;
             }
 
             shell.WriteStatus(
@@ -863,6 +847,17 @@ namespace BoscaliSummer.Features.Command.Presentation
                 text += " · " + (highCommand == null
                     ? "chain of command is not running on this host"
                     : highCommand.Status ?? "chain of command is forming");
+            }
+
+            if (shell != null && shell.Page == TabCmd)
+            {
+                text += " · " + (theaterPriority == null || !theaterPriority.Available
+                    ? "theater operations not running"
+                    : theaterPriority.HasPriority
+                        ? "main effort " + theaterPriority.PriorityLabel
+                        : theaterPriority.CanCommand
+                            ? "no main effort set"
+                            : "main effort is host-set");
             }
             return text;
         }

@@ -1,0 +1,77 @@
+namespace BoscaliSummer.Features.Support.Domain
+{
+    /// <summary>
+    /// The five OPS warfare domains, in tab order. Panel-local identity: nothing here
+    /// crosses the wire, so the order may change without a protocol bump.
+    /// </summary>
+    internal enum OpsDomain : byte
+    {
+        Space = 0,
+        ElectronicWarfare = 1,
+        Information = 2,
+        SpecialOperations = 3,
+        Intelligence = 4
+    }
+
+    /// <summary>Tab labels, headings and one-line mission statements for each domain.</summary>
+    internal static class OpsDomains
+    {
+        public static readonly OpsDomain[] All =
+        {
+            OpsDomain.Space,
+            OpsDomain.ElectronicWarfare,
+            OpsDomain.Information,
+            OpsDomain.SpecialOperations,
+            OpsDomain.Intelligence
+        };
+
+        /// <summary>Short tab label. Eight characters at most so five tabs fit a 480px bezel.</summary>
+        public static string Tab(OpsDomain domain)
+        {
+            switch (domain)
+            {
+                case OpsDomain.Space: return "SPACE";
+                case OpsDomain.ElectronicWarfare: return "EW";
+                case OpsDomain.Information: return "INFO";
+                case OpsDomain.SpecialOperations: return "SPEC OPS";
+                default: return "INTEL";
+            }
+        }
+
+        public static string Title(OpsDomain domain)
+        {
+            switch (domain)
+            {
+                case OpsDomain.Space: return "SPACE WARFARE";
+                case OpsDomain.ElectronicWarfare: return "ELECTRONIC WARFARE";
+                case OpsDomain.Information: return "INFORMATION WARFARE";
+                case OpsDomain.SpecialOperations: return "SPECIAL OPERATIONS";
+                default: return "ESPIONAGE";
+            }
+        }
+
+        public static string Mission(OpsDomain domain)
+        {
+            switch (domain)
+            {
+                case OpsDomain.Space:
+                    return "Responsive launch and constellation command.";
+                case OpsDomain.ElectronicWarfare:
+                    return "Mobile EW station: attack, protect, listen.";
+                case OpsDomain.Information:
+                    return "Cyber operations against hostile C2 and tracks.";
+                case OpsDomain.SpecialOperations:
+                    return "Base of operations, doctrine and task groups for ground action.";
+                default:
+                    return "Intelligence networks staged for theater events.";
+            }
+        }
+
+        public static string[] TabLabels()
+        {
+            var labels = new string[All.Length];
+            for (int i = 0; i < All.Length; i++) labels[i] = Tab(All[i]);
+            return labels;
+        }
+    }
+}

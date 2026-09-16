@@ -7,28 +7,27 @@ using UnityEngine.UI;
 
 namespace BoscaliSummer.Features.Radio.Presentation
 {
-    /// <summary>One built Boscali radio screen: root, chrome and the rectangle to lay out in.</summary>
+    /// <summary>One built Boscali radio screen: root, chrome and the body it lays pages into.</summary>
     internal sealed class RadioScreen
     {
         public GameObject Root;
         public MFDScreen Screen;
         public AvScreen Shell;
-        public RectTransform Page;
-        public Rect Area;
+        public Rect Body;
     }
 
     /// <summary>
-    /// The scaffolding both radio screens share: clone the stock panel's bay, build the
-    /// shared chrome, and hand back a scrollable page rectangle. The receiver and the deck
-    /// differ in every row they draw and in nothing about how they are mounted.
+    /// The scaffolding the radio panel needs: clone the stock panel's bay, build the shared
+    /// chrome with its tab bar, and hand back the body rectangle. The receiver page and the
+    /// deck page differ in every row they draw and in nothing about how they are mounted.
     /// </summary>
     internal static class RadioScreens
     {
-        public static float Width => AvTokens.PanelWidth;
+        private const float Width = AvTokens.PanelWidth;
 
         public static bool TryBuild(
             MFDScreen template, Button bezel, string id, string rootName,
-            float contentHeight, Action onPageChanged, out RadioScreen built)
+            string[] tabs, Action onPageChanged, out RadioScreen built)
         {
             built = null;
             if (template == null) return false;
@@ -63,12 +62,8 @@ namespace BoscaliSummer.Features.Radio.Presentation
             AvKit.Stretch(content);
 
             AvScreen shell = AvScreen.Build(
-                content, id, Array.Empty<string>(), null, 3,
+                content, id, tabs, null, 3,
                 Width, height, _ => onPageChanged?.Invoke());
-
-            RectTransform page = (RectTransform)shell.CreatePage(0, id + "Page").transform;
-            RectTransform target = AvScreen.Scroll(page, shell.Body, contentHeight, out Rect area);
-            page.gameObject.SetActive(true);
 
             MFDScreen screen = root.AddComponent<MFDScreen>();
             screen.shortName = id;
@@ -82,16 +77,24 @@ namespace BoscaliSummer.Features.Radio.Presentation
                 return false;
             }
 
-            shell.SetPage(0);
             built = new RadioScreen
             {
                 Root = root,
                 Screen = screen,
                 Shell = shell,
-                Page = target,
-                Area = area
+                Body = shell.Body
             };
             return true;
+        }
+
+        /// <summary>Wrap one page in a clipped scroll viewport when it is taller than the body.</summary>
+        public static RectTransform ScrollPage(
+            AvScreen shell, int index, string name, float contentHeight, out Rect area)
+        {
+            var page = (RectTransform)shell.CreatePage(index, name).transform;
+            RectTransform target = AvScreen.Scroll(page, shell.Body, contentHeight, out area);
+            page.gameObject.SetActive(true);
+            return target;
         }
 
         public static Image FindHighlight(Button button)
@@ -104,7 +107,7 @@ namespace BoscaliSummer.Features.Radio.Presentation
         }
     }
 
-    /// <summary>A downward layout cursor over the page rectangle, in panel coordinates.</summary>
+    /// <summary>A downward layout cursor over a page rectangle, in panel coordinates.</summary>
     internal struct RadioCursor
     {
         private readonly Rect area;

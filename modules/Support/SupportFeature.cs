@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Features.Support.Configuration;
 using BoscaliSummer.Features.Support.Networking;
 using BoscaliSummer.Features.Support.Presentation;
 using BoscaliSummer.Features.Support.Runtime;
@@ -17,7 +18,9 @@ namespace BoscaliSummer.Features.Support
         {
             typeof(Patches.SupportMissileDetonatePatch),
             typeof(Patches.SupportMissileAuthorityPatch),
-            typeof(Patches.SupportMissileDescentPatch)
+            typeof(Patches.SupportMissileDescentPatch),
+            typeof(Patches.UplinkMapControlsGuardPatch),
+            typeof(Patches.UplinkMapCursorGuardPatch)
         };
 
         public void Install(FeatureContext context)
@@ -32,14 +35,19 @@ namespace BoscaliSummer.Features.Support
             SupportNet network = context.AddComponent<SupportNet>();
             SupportPanel panel = context.AddSceneService<SupportPanel>(55);
             SupportMapOverlay mapOverlay = context.AddSceneService<SupportMapOverlay>(58);
+            Visuals.PlatformSky sky = context.AddSceneService<Visuals.PlatformSky>(59);
 
             network.Configure(manager);
             manager.Configure(context.Settings.Support, perks, fortifications, network, context.Logger, fireSuppression);
             manager.ConfigureBypass(context.Settings.Diagnostics.BypassRequirements);
             manager.ConfigureDisableCooldowns(context.Settings.Diagnostics.DisableOpsCooldowns);
             context.AddService<ICameraTargetService>(manager);
+            context.AddService<IGroundForceReadiness>(manager);
             panel.Configure(manager, progression, context.Logger, baseAlarm);
             mapOverlay.Configure(context.Settings.Support, manager, context.Logger);
+            sky.Configure(manager);
+
+            context.AddHostSettings(SupportHostSettings.Build(context.Settings.Support));
         }
     }
 }

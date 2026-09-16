@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using BepInEx.Logging;
 using BoscaliSummer.Features.Support.Configuration;
+using BoscaliSummer.Features.Support.Domain;
+using BoscaliSummer.Features.Support.Domain.Orbital;
 using BoscaliSummer.Features.Support.Runtime;
 using BoscaliSummer.Framework.Lifecycle;
 using NuclearOption.Networking;
@@ -66,40 +68,24 @@ namespace BoscaliSummer.Features.Support.Presentation
         private readonly List<StrikeMarker> markerPool = new List<StrikeMarker>(MaxActiveMarkers);
         private bool initialized;
 
-        // Constellation overlay: satellite icons, selected swath and transfer preview.
-        private sealed class SatelliteMarker
+        // Orbital overlay: the sub-station point and the chord of the current pass's ground
+        // track that crosses the map, for our station and (as unknown red tracks) foreign ones,
+        // plus the last uplink aim. Everything is pooled and bounded.
+        private const int OrbitMarkers = 1 + SpaceOperations.MaximumForeign;
+        private const int TrackDots = 24;
+        private static readonly Color StationColour = new Color(0.35f, 0.9f, 1f, 1f);
+        private static readonly Color HostileStationColour = new Color(1f, 0.32f, 0.26f, 1f);
+
+        private sealed class OrbitMarker
         {
-            public GameObject Root;
-            public RectTransform RootRect;
-            public Image Swath;
-            public Image Ring;
-            public GameObject IconObj;
-            public Image Icon;
-            public GameObject BadgeObj;
-            public Image BadgeBg;
+            public GameObject Icon;
+            public Image IconImage;
             public TextMeshProUGUI BadgeText;
-            public GameObject PathObj;
-            public Image Path;
-            public GameObject DestObj;
-            public Image Dest;
-            public bool IsInUse;
+            public Image[] Track;
         }
 
-        private readonly List<SatelliteMarker> satellitePool = new List<SatelliteMarker>(4);
-
-        // Armed fleet-command preview: projected orbit and destination footprint.
-        private GameObject commandGroup;
-        private RectTransform commandGroupRect;
-        private Image commandTrack;
-        private RectTransform commandDestRect;
-        private Image commandDestFill;
-        private Image commandDestRing;
-        private GameObject commandCenterObj;
-        private GameObject commandCardObj;
-        private Image commandCardBg;
-        private TextMeshProUGUI commandCardText;
-        private GameObject commandSatObj;
-        private Image commandSatIcon;
+        private readonly List<OrbitMarker> orbitPool = new List<OrbitMarker>(OrbitMarkers);
+        private GameObject aimMarker;
 
         public void Configure(SupportSettings config, SupportManager manager, ManualLogSource log)
         {
@@ -118,8 +104,8 @@ namespace BoscaliSummer.Features.Support.Presentation
             }
 
             markerPool.Clear();
-            satellitePool.Clear();
-            commandGroup = null;
+            orbitPool.Clear();
+            aimMarker = null;
             dynamicMap = null;
             initialized = false;
         }
@@ -160,14 +146,11 @@ namespace BoscaliSummer.Features.Support.Presentation
             // 1. Update Armed Reticle
             UpdateArmedReticle(mapFactor, invZoom);
 
-            // 2. Armed fleet command preview (orbit burn / launch)
-            UpdateCommandReticle(mapFactor, invZoom);
-
             // 3. Update Active Strike Waypoint Beacons
             UpdateActiveStrikes(mapFactor, invZoom);
 
-            // 4. Update the faction constellation: shell tracks, footprints, satellites
-            UpdateConstellation(mapFactor, invZoom);
+            // 3. Station ground tracks, sub-station points and the uplink aim
+            UpdateOrbits(mapFactor, invZoom);
         }
 
         private void TryInitialize()
@@ -194,9 +177,8 @@ namespace BoscaliSummer.Features.Support.Presentation
             overlayRoot.transform.SetAsLastSibling();
 
             BuildArmedReticle();
-            BuildCommandReticle();
             BuildMarkerPool();
-            BuildConstellationOverlay();
+            BuildOrbitOverlay();
 
             initialized = true;
             logger?.LogInfo("[Support] Tactical theater map overlay initialized.");
@@ -289,194 +271,6 @@ namespace BoscaliSummer.Features.Support.Presentation
             armedGroup.SetActive(false);
         }
 
-        private void BuildCommandReticle()
-        {
-            commandGroup = new GameObject("CommandReticleGroup", typeof(RectTransform));
-            commandGroup.transform.SetParent(overlayRoot.transform, false);
-            commandGroupRect = commandGroup.GetComponent<RectTransform>();
-            commandGroupRect.pivot = new Vector2(0.5f, 0.5f);
-            commandGroupRect.localPosition = Vector3.zero;
-            commandGroupRect.localScale = Vector3.one;
-
-            var pathObj = new GameObject("TransferPath", typeof(RectTransform), typeof(Image));
-            pathObj.transform.SetParent(commandGroup.transform, false);
-            var pathRect = pathObj.GetComponent<RectTransform>();
-            pathRect.pivot = new Vector2(0f, 0.5f);
-            pathRect.localPosition = Vector3.zero;
-            commandTrack = pathObj.GetComponent<Image>();
-            commandTrack.sprite = SupportTacticalIcons.DashedLineSprite;
-            commandTrack.raycastTarget = false;
-
-            var satObj = new GameObject("Satellite", typeof(RectTransform), typeof(Image));
-            satObj.transform.SetParent(commandGroup.transform, false);
-            var satRect = satObj.GetComponent<RectTransform>();
-            satRect.sizeDelta = new Vector2(24f, 24f);
-            satRect.pivot = new Vector2(0.5f, 0.5f);
-            commandSatObj = satObj;
-            commandSatIcon = satObj.GetComponent<Image>();
-            commandSatIcon.sprite = SupportTacticalIcons.SatIcon;
-            commandSatIcon.raycastTarget = false;
-
-            var destObj = new GameObject("Destination", typeof(RectTransform));
-            destObj.transform.SetParent(commandGroup.transform, false);
-            commandDestRect = destObj.GetComponent<RectTransform>();
-            commandDestRect.pivot = new Vector2(0.5f, 0.5f);
-            commandDestRect.localScale = Vector3.one;
-
-            var fillObj = new GameObject("FootprintFill", typeof(RectTransform), typeof(Image));
-            fillObj.transform.SetParent(destObj.transform, false);
-            commandDestFill = fillObj.GetComponent<Image>();
-            commandDestFill.sprite = SupportTacticalIcons.CoverageDiscSprite;
-            commandDestFill.raycastTarget = false;
-
-            var ringObj = new GameObject("FootprintRing", typeof(RectTransform), typeof(Image));
-            ringObj.transform.SetParent(destObj.transform, false);
-            commandDestRing = ringObj.GetComponent<Image>();
-            commandDestRing.sprite = SupportTacticalIcons.RingSprite;
-            commandDestRing.raycastTarget = false;
-
-            commandCenterObj = new GameObject("Crosshair", typeof(RectTransform), typeof(Image));
-            commandCenterObj.transform.SetParent(destObj.transform, false);
-            var centerRect = commandCenterObj.GetComponent<RectTransform>();
-            centerRect.sizeDelta = new Vector2(30f, 30f);
-            centerRect.pivot = new Vector2(0.5f, 0.5f);
-            var crosshair = commandCenterObj.GetComponent<Image>();
-            crosshair.sprite = SupportTacticalIcons.CrosshairSprite;
-            crosshair.raycastTarget = false;
-
-            commandCardObj = new GameObject("CommandCard", typeof(RectTransform), typeof(Image));
-            commandCardObj.transform.SetParent(destObj.transform, false);
-            var cardRect = commandCardObj.GetComponent<RectTransform>();
-            cardRect.sizeDelta = new Vector2(208f, 46f);
-            cardRect.pivot = new Vector2(0f, 1f);
-            commandCardBg = commandCardObj.GetComponent<Image>();
-            commandCardBg.sprite = SupportTacticalIcons.BadgeBgSprite;
-            commandCardBg.type = Image.Type.Sliced;
-            commandCardBg.raycastTarget = false;
-
-            var textObj = new GameObject("CommandText", typeof(RectTransform), typeof(TextMeshProUGUI));
-            textObj.transform.SetParent(commandCardObj.transform, false);
-            var textRect = textObj.GetComponent<RectTransform>();
-            textRect.anchorMin = Vector2.zero;
-            textRect.anchorMax = Vector2.one;
-            textRect.offsetMin = new Vector2(8f, 3f);
-            textRect.offsetMax = new Vector2(-6f, -3f);
-            commandCardText = textObj.GetComponent<TextMeshProUGUI>();
-            if (uiFont != null) commandCardText.font = uiFont;
-            commandCardText.fontSize = 9.5f;
-            commandCardText.alignment = TextAlignmentOptions.TopLeft;
-            commandCardText.color = Color.white;
-            commandCardText.raycastTarget = false;
-
-            commandGroup.SetActive(false);
-        }
-
-        private void UpdateCommandReticle(float mapFactor, float invZoom)
-        {
-            if (commandGroup == null) return;
-            bool armed = supportManager != null && supportManager.CommandArmed &&
-                         (supportManager.ArmedCommand == OpsCommand.Move ||
-                          supportManager.ArmedCommand == OpsCommand.Launch);
-            if (!armed || !dynamicMap.TryGetCursorCoordinates(out GlobalPosition cursor))
-            {
-                if (commandGroup.activeSelf) commandGroup.SetActive(false);
-                return;
-            }
-
-            Constellation constellation = supportManager.LocalConstellation;
-            if (constellation == null)
-            {
-                if (commandGroup.activeSelf) commandGroup.SetActive(false);
-                return;
-            }
-
-            Satellite satellite = null;
-            SatelliteRole role;
-            float swath;
-            if (supportManager.ArmedCommand == OpsCommand.Move)
-            {
-                satellite = constellation.Find(supportManager.ArmedCommandArg);
-                if (satellite == null)
-                {
-                    if (commandGroup.activeSelf) commandGroup.SetActive(false);
-                    return;
-                }
-                role = satellite.Role;
-                swath = satellite.Orbit.Swath;
-            }
-            else
-            {
-                byte altitude = supportManager.ArmedCommandArg;
-                if (altitude >= Constellation.AltitudeCount)
-                {
-                    if (commandGroup.activeSelf) commandGroup.SetActive(false);
-                    return;
-                }
-                role = (SatelliteRole)Mathf.Clamp(supportManager.ArmedCommandArg2, 0, 2);
-                swath = Constellation.Altitude(altitude).Swath;
-            }
-
-            if (!commandGroup.activeSelf) commandGroup.SetActive(true);
-
-            Color roleColor = RoleColorFor(role);
-            float destX = cursor.x * mapFactor;
-            float destZ = cursor.z * mapFactor;
-
-            if (satellite != null)
-            {
-                constellation.Position(satellite, out float px, out float pz);
-                float fromX = px * mapFactor;
-                float fromZ = pz * mapFactor;
-                float length = Mathf.Sqrt((destX - fromX) * (destX - fromX) + (destZ - fromZ) * (destZ - fromZ));
-                commandTrack.enabled = true;
-                commandTrack.rectTransform.sizeDelta = new Vector2(length, 3f);
-                commandTrack.rectTransform.localPosition = new Vector3(fromX, fromZ, 0f);
-                commandTrack.rectTransform.localRotation =
-                    Quaternion.Euler(0f, 0f, Mathf.Atan2(destZ - fromZ, destX - fromX) * Mathf.Rad2Deg);
-                commandTrack.color = new Color(roleColor.r, roleColor.g, roleColor.b, 0.85f);
-                commandSatObj.SetActive(true);
-                commandSatObj.transform.localPosition = new Vector3(fromX, fromZ, 0f);
-                commandSatObj.transform.localScale = Vector3.one * invZoom;
-                commandSatIcon.color = RoleColorFor(satellite.Role);
-
-                float cost = Constellation.TransferCost(px, pz, cursor.x, cursor.z, satellite.Altitude);
-                bool enough = satellite.Fuel + 0.01f >= cost;
-                commandCardText.text = "<b>STATION TRANSFER · " +
-                    SatelliteNaming.Callsign(satellite.Role, satellite.Id) + "</b>\n" +
-                    (length / mapFactor / 1000f).ToString("0.0") + " km · " + cost.ToString("0") + "% FUEL" +
-                    (enough ? "" : "  ·  <color=#FFAA44>INSUFFICIENT</color>");
-            }
-            else
-            {
-                commandTrack.enabled = false;
-                commandSatObj.SetActive(false);
-                commandCardText.text = "<b>DEPLOY " + RoleNameFor(role) + "</b>\n" +
-                    "SWATH " + (swath / 1000f).ToString("0.0") + " km · HOLDS THIS STATION";
-            }
-
-            commandDestRect.localPosition = new Vector3(destX, destZ, 0f);
-            float swathDiameter = swath * 2f * mapFactor;
-            Vector2 diameter = new Vector2(swathDiameter, swathDiameter);
-            commandDestFill.rectTransform.sizeDelta = diameter;
-            commandDestRing.rectTransform.sizeDelta = diameter;
-            commandDestFill.color = new Color(roleColor.r, roleColor.g, roleColor.b, 0.22f);
-            commandDestRing.color = roleColor;
-
-            commandCenterObj.transform.localScale = Vector3.one * invZoom;
-            commandCardObj.transform.localScale = Vector3.one * invZoom;
-            commandCardObj.transform.localPosition = new Vector3(26f * invZoom, -20f * invZoom, 0f);
-            commandCardBg.color = new Color(0.025f, 0.05f, 0.06f, 0.95f);
-            commandCardText.color = Color.white;
-        }
-
-        private static Color RoleColorFor(SatelliteRole role) =>
-            role == SatelliteRole.Recon ? new Color(0.35f, 0.95f, 0.6f)
-            : role == SatelliteRole.Strike ? new Color(1f, 0.4f, 0.3f)
-            : new Color(1f, 0.78f, 0.25f);
-
-        private static string RoleNameFor(SatelliteRole role) =>
-            role == SatelliteRole.Recon ? "RECON" : role == SatelliteRole.Strike ? "STRIKE" : "EW";
-
         private void BuildMarkerPool()
         {
             for (int i = 0; i < MaxActiveMarkers; i++)
@@ -554,96 +348,71 @@ namespace BoscaliSummer.Features.Support.Presentation
             }
         }
 
-        private void BuildConstellationOverlay()
+        private void BuildOrbitOverlay()
         {
-            for (int i = 0; i < 4; i++)
+            for (int i = 0; i < OrbitMarkers; i++)
             {
-                var markerObj = new GameObject("SatelliteMarker_" + i, typeof(RectTransform));
-                markerObj.transform.SetParent(overlayRoot.transform, false);
-                var rootRect = markerObj.GetComponent<RectTransform>();
-                rootRect.pivot = new Vector2(0.5f, 0.5f);
+                var marker = new OrbitMarker { Track = new Image[TrackDots] };
+                for (int d = 0; d < TrackDots; d++) marker.Track[d] = Dot(overlayRoot.transform, "GroundTrack");
 
-                var pathObj = new GameObject("TransferPath", typeof(RectTransform), typeof(Image));
-                pathObj.transform.SetParent(markerObj.transform, false);
-                var pathRect = pathObj.GetComponent<RectTransform>();
-                pathRect.pivot = new Vector2(0f, 0.5f);
-                var path = pathObj.GetComponent<Image>();
-                path.sprite = SupportTacticalIcons.DashedLineSprite;
-                path.type = Image.Type.Simple;
-                path.raycastTarget = false;
-
-                var swathObj = new GameObject("Swath", typeof(RectTransform), typeof(Image));
-                swathObj.transform.SetParent(markerObj.transform, false);
-                var swath = swathObj.GetComponent<Image>();
-                swath.sprite = SupportTacticalIcons.CoverageDiscSprite;
-                swath.raycastTarget = false;
-
-                var ringObj = new GameObject("SwathRing", typeof(RectTransform), typeof(Image));
-                ringObj.transform.SetParent(markerObj.transform, false);
-                var ring = ringObj.GetComponent<Image>();
-                ring.sprite = SupportTacticalIcons.RingSprite;
-                ring.raycastTarget = false;
-
-                var destObj = new GameObject("Destination", typeof(RectTransform));
-                destObj.transform.SetParent(markerObj.transform, false);
-                var destRect = destObj.GetComponent<RectTransform>();
-                destRect.pivot = new Vector2(0.5f, 0.5f);
-                var destImage = destObj.AddComponent<Image>();
-                destImage.sprite = SupportTacticalIcons.CrosshairSprite;
-                destImage.raycastTarget = false;
-
-                var iconObj = new GameObject("SatelliteIcon", typeof(RectTransform), typeof(Image));
-                iconObj.transform.SetParent(markerObj.transform, false);
-                var iconRect = iconObj.GetComponent<RectTransform>();
+                marker.Icon = new GameObject("StationPoint", typeof(RectTransform), typeof(Image));
+                marker.Icon.transform.SetParent(overlayRoot.transform, false);
+                var iconRect = (RectTransform)marker.Icon.transform;
                 iconRect.sizeDelta = new Vector2(22f, 22f);
                 iconRect.pivot = new Vector2(0.5f, 0.5f);
-                var icon = iconObj.GetComponent<Image>();
-                icon.sprite = SupportTacticalIcons.SatIcon;
-                icon.raycastTarget = false;
+                marker.IconImage = marker.Icon.GetComponent<Image>();
+                marker.IconImage.sprite = SupportTacticalIcons.SatIcon;
+                marker.IconImage.raycastTarget = false;
 
-                var badgeObj = new GameObject("SatelliteBadge", typeof(RectTransform), typeof(Image));
-                badgeObj.transform.SetParent(markerObj.transform, false);
-                var badgeRect = badgeObj.GetComponent<RectTransform>();
-                badgeRect.sizeDelta = new Vector2(126f, 20f);
+                var badgeObj = new GameObject("StationBadge", typeof(RectTransform), typeof(Image));
+                badgeObj.transform.SetParent(marker.Icon.transform, false);
+                var badgeRect = (RectTransform)badgeObj.transform;
+                badgeRect.sizeDelta = new Vector2(150f, 20f);
                 badgeRect.pivot = new Vector2(0.5f, 1f);
+                badgeRect.anchoredPosition = new Vector2(0f, -14f);
                 var badgeBg = badgeObj.GetComponent<Image>();
                 badgeBg.sprite = SupportTacticalIcons.BadgeBgSprite;
                 badgeBg.type = Image.Type.Sliced;
+                badgeBg.color = new Color(0.025f, 0.05f, 0.06f, 0.92f);
                 badgeBg.raycastTarget = false;
 
                 var textObj = new GameObject("BadgeText", typeof(RectTransform), typeof(TextMeshProUGUI));
                 textObj.transform.SetParent(badgeObj.transform, false);
-                var textRect = textObj.GetComponent<RectTransform>();
+                var textRect = (RectTransform)textObj.transform;
                 textRect.anchorMin = Vector2.zero;
                 textRect.anchorMax = Vector2.one;
                 textRect.offsetMin = new Vector2(4f, 2f);
                 textRect.offsetMax = new Vector2(-4f, -2f);
-                var badgeText = textObj.GetComponent<TextMeshProUGUI>();
-                if (uiFont != null) badgeText.font = uiFont;
-                badgeText.fontSize = 8.5f;
-                badgeText.alignment = TextAlignmentOptions.Center;
-                badgeText.color = Color.white;
-                badgeText.raycastTarget = false;
+                marker.BadgeText = textObj.GetComponent<TextMeshProUGUI>();
+                if (uiFont != null) marker.BadgeText.font = uiFont;
+                marker.BadgeText.fontSize = 8.5f;
+                marker.BadgeText.alignment = TextAlignmentOptions.Center;
+                marker.BadgeText.color = Color.white;
+                marker.BadgeText.raycastTarget = false;
 
-                markerObj.SetActive(false);
-                satellitePool.Add(new SatelliteMarker
-                {
-                    Root = markerObj,
-                    RootRect = rootRect,
-                    Swath = swath,
-                    Ring = ring,
-                    IconObj = iconObj,
-                    Icon = icon,
-                    BadgeObj = badgeObj,
-                    BadgeBg = badgeBg,
-                    BadgeText = badgeText,
-                    PathObj = pathObj,
-                    Path = path,
-                    DestObj = destObj,
-                    Dest = destImage,
-                    IsInUse = false
-                });
+                marker.Icon.SetActive(false);
+                orbitPool.Add(marker);
             }
+
+            aimMarker = new GameObject("UplinkAim", typeof(RectTransform), typeof(Image));
+            aimMarker.transform.SetParent(overlayRoot.transform, false);
+            ((RectTransform)aimMarker.transform).sizeDelta = new Vector2(26f, 26f);
+            Image aim = aimMarker.GetComponent<Image>();
+            aim.sprite = SupportTacticalIcons.CrosshairSprite;
+            aim.color = new Color(1f, 0.72f, 0.22f, 0.95f);
+            aim.raycastTarget = false;
+            aimMarker.SetActive(false);
+        }
+
+        private static Image Dot(Transform parent, string name)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(Image));
+            go.transform.SetParent(parent, false);
+            ((RectTransform)go.transform).sizeDelta = new Vector2(4f, 4f);
+            Image image = go.GetComponent<Image>();
+            image.raycastTarget = false;
+            go.SetActive(false);
+            return image;
         }
 
         private void UpdateArmedReticle(float mapFactor, float invZoom)
@@ -697,11 +466,8 @@ namespace BoscaliSummer.Features.Support.Presentation
                 hasPlayerAircraft = true;
             }
 
-            float maxRange = action == Runtime.SupportActionId.Recon
-                ? (settings != null ? settings.ReconRange.Value : 120000f)
-                : (settings != null ? settings.MaximumRange.Value : 30000f);
-            bool ranged = action == Runtime.SupportActionId.Recon ||
-                          action == Runtime.SupportActionId.Artillery ||
+            float maxRange = settings != null ? settings.MaximumRange.Value : 30000f;
+            bool ranged = action == Runtime.SupportActionId.Artillery ||
                           action == Runtime.SupportActionId.Emp ||
                           action == Runtime.SupportActionId.FlareMissile;
 
@@ -740,17 +506,24 @@ namespace BoscaliSummer.Features.Support.Presentation
             }
             else
             {
-                SatelliteRole? needed = SupportManager.CoverageRole(action);
-                string coverage = !needed.HasValue ? string.Empty
-                    : supportManager.CoverageNow(action, cursorCoord.x, cursorCoord.z)
-                        ? "<color=#66FF99>SATELLITE COVERAGE CONFIRMED</color>\n"
-                        : "<color=#FFAA44>NO COVERAGE — MOVE A SATELLITE IN OPS/SPACE</color>\n";
+                PlatformAbility? needed = SupportManager.OrbitalAbility(action);
+                string coverage = string.Empty;
+                bool noAccess = false;
+                if (needed.HasValue)
+                {
+                    PlatformDenial denial = supportManager.PlatformCheck(needed.Value);
+                    noAccess = denial != PlatformDenial.None;
+                    coverage = noAccess
+                        ? "<color=#FFAA44>" + PlatformWords.Denial(denial, supportManager.LocalPlatform, needed.Value,
+                            supportManager.OrbitNow, supportManager.OrbitClock) + "</color>\n"
+                        : "<color=#66FF99>" + OrbitalPlatform.Callsign + " OVERHEAD · READY</color>\n";
+                }
                 string area = radius <= 0f ? "FLEET-WIDE"
                     : areaLabel + ": " + radiusStr;
                 armedCardText.text = coverage + $"<b>[{actionCode}] {actionName}</b>\n" +
                                      $"DIST: {rangeStr} · {area}\n" +
                                      $"<color=#88DDFF>RIGHT-CLICK TO CONFIRM</color>";
-                if (needed.HasValue && !supportManager.CoverageNow(action, cursorCoord.x, cursorCoord.z))
+                if (noAccess)
                 {
                     armedRingImage.color = new Color(1f, 0.68f, 0.2f, 0.85f);
                     armedFillImage.color = new Color(1f, 0.68f, 0.2f, 0.06f);
@@ -758,84 +531,95 @@ namespace BoscaliSummer.Features.Support.Presentation
             }
         }
 
-        private void UpdateConstellation(float mapFactor, float invZoom)
+        private void UpdateOrbits(float mapFactor, float invZoom)
         {
-            Constellation constellation = supportManager != null ? supportManager.LocalConstellation : null;
-            int selectedId = supportManager != null ? supportManager.SelectedSatelliteId : 0;
-            int count = constellation != null ? constellation.Satellites.Count : 0;
-
-            for (int i = 0; i < satellitePool.Count; i++)
+            int used = 0;
+            float reach = OrbitalBounds.Radius() * 1.42f;
+            if (supportManager != null && reach > 0f)
             {
-                SatelliteMarker marker = satellitePool[i];
-                Satellite satellite = i < count ? constellation.Satellites[i] : null;
-                if (satellite == null)
+                double now = supportManager.OrbitNow;
+                OrbitClock clock = supportManager.OrbitClock;
+
+                OrbitalPlatform platform = supportManager.LocalPlatform;
+                if (platform != null && platform.Exists)
                 {
-                    if (marker.IsInUse)
-                    {
-                        marker.Root.SetActive(false);
-                        marker.IsInUse = false;
-                    }
+                    OrbitState state = platform.State(now, clock);
+                    if (state.InPass)
+                        DrawOrbit(orbitPool[used++], state, reach, mapFactor, invZoom, StationColour,
+                            "<b>" + OrbitalPlatform.Callsign + "</b> " + platform.Orbit.Code + " · LOS " +
+                            PlatformWords.Clock(state.TimeToPassEnd));
+                }
+
+                IReadOnlyList<ForeignPlatform> others = supportManager.Space.Foreign;
+                for (int i = 0; i < others.Count && used < orbitPool.Count; i++)
+                {
+                    OrbitState state = others[i].State(now, clock);
+                    if (!state.InPass) continue;
+                    DrawOrbit(orbitPool[used++], state, reach, mapFactor, invZoom, HostileStationColour,
+                        "<b>UNKNOWN STATION</b> " + OrbitRegimes.Get(others[i].Regime).Code);
+                }
+            }
+
+            for (int i = used; i < orbitPool.Count; i++)
+            {
+                OrbitMarker marker = orbitPool[i];
+                if (marker.Icon.activeSelf) marker.Icon.SetActive(false);
+                for (int d = 0; d < marker.Track.Length; d++)
+                    if (marker.Track[d].gameObject.activeSelf) marker.Track[d].gameObject.SetActive(false);
+            }
+
+            if (aimMarker != null)
+            {
+                bool show = supportManager != null && supportManager.UplinkAimSet;
+                if (aimMarker.activeSelf != show) aimMarker.SetActive(show);
+                if (show)
+                {
+                    GlobalPosition aim = supportManager.UplinkAim;
+                    aimMarker.transform.localPosition = new Vector3(aim.x * mapFactor, aim.z * mapFactor, 0f);
+                    aimMarker.transform.localScale = Vector3.one * invZoom;
+                }
+            }
+        }
+
+        private static void DrawOrbit(OrbitMarker marker, in OrbitState state, float reach, float mapFactor, float invZoom,
+                                      Color colour, string label)
+        {
+            PassPlan pass = state.Pass;
+            double alongNow = state.SubX * pass.DirX + state.SubZ * pass.DirZ;
+            DrawChord(marker.Track, 0, pass, pass.CrossTrack, reach, mapFactor, invZoom, colour, alongNow);
+
+            bool onMap = state.SubX * state.SubX + state.SubZ * state.SubZ <= reach * (double)reach;
+            if (marker.Icon.activeSelf != onMap) marker.Icon.SetActive(onMap);
+            if (!onMap) return;
+            marker.Icon.transform.localPosition = new Vector3((float)state.SubX * mapFactor, (float)state.SubZ * mapFactor, 0f);
+            marker.Icon.transform.localScale = Vector3.one * invZoom;
+            marker.IconImage.color = colour;
+            marker.BadgeText.text = label;
+        }
+
+        /// <summary>Dots along the part of a line parallel to the track that lies within the map.
+        /// Track already flown fades; a NaN position draws the whole chord at one weight.</summary>
+        private static void DrawChord(Image[] dots, int first, in PassPlan pass, double crossTrack, float reach,
+                                      float mapFactor, float invZoom, Color colour, double alongNow, int count = TrackDots)
+        {
+            double halfSquared = reach * (double)reach - crossTrack * crossTrack;
+            for (int k = 0; k < count; k++)
+            {
+                Image dot = dots[first + k];
+                if (halfSquared <= 0.0)
+                {
+                    if (dot.gameObject.activeSelf) dot.gameObject.SetActive(false);
                     continue;
                 }
-
-                if (!marker.IsInUse)
-                {
-                    marker.Root.SetActive(true);
-                    marker.IsInUse = true;
-                }
-
-                bool isSelected = satellite.Id == selectedId;
-                Color role = RoleColorFor(satellite.Role);
-                constellation.Position(satellite, out float px, out float pz);
-                marker.RootRect.localPosition = new Vector3(px * mapFactor, pz * mapFactor, 0f);
-
-                // Only the focused satellite shows its coverage; the map stays readable.
-                float swath = satellite.Orbit.Swath;
-                float diameter = swath * 2f * mapFactor;
-                Vector2 swathSize = new Vector2(diameter, diameter);
-                marker.Swath.rectTransform.sizeDelta = swathSize;
-                marker.Ring.rectTransform.sizeDelta = swathSize;
-                marker.Swath.color = new Color(role.r, role.g, role.b, isSelected ? 0.55f : 0f);
-                marker.Ring.color = new Color(role.r, role.g, role.b, isSelected ? 0.75f : 0f);
-                marker.Swath.enabled = isSelected;
-                marker.Ring.enabled = isSelected;
-
-                marker.Icon.color = role;
-                marker.IconObj.transform.localScale = Vector3.one * invZoom;
-                marker.BadgeObj.SetActive(isSelected);
-                if (isSelected)
-                {
-                    marker.BadgeObj.transform.localScale = Vector3.one * invZoom;
-                    marker.BadgeObj.transform.localPosition = new Vector3(0f, -20f * invZoom, 0f);
-                    marker.BadgeBg.color = new Color(0.025f, 0.05f, 0.06f, 0.95f);
-                    marker.BadgeText.text = "<b>" + SatelliteNaming.Callsign(satellite.Role, satellite.Id) + "</b> " +
-                        satellite.Orbit.Name + " · " + Mathf.RoundToInt(satellite.Fuel) + "%";
-                }
-
-                if (isSelected && satellite.State == SatelliteState.Transit)
-                {
-                    float ox = satellite.OriginX * mapFactor;
-                    float oz = satellite.OriginZ * mapFactor;
-                    float dx = satellite.StationX * mapFactor;
-                    float dz = satellite.StationZ * mapFactor;
-                    float length = Mathf.Sqrt((dx - ox) * (dx - ox) + (dz - oz) * (dz - oz));
-                    marker.PathObj.SetActive(true);
-                    marker.Path.rectTransform.sizeDelta = new Vector2(length, 3f);
-                    marker.Path.rectTransform.localPosition = new Vector3(ox, oz, 0f);
-                    marker.Path.rectTransform.localRotation =
-                        Quaternion.Euler(0f, 0f, Mathf.Atan2(dz - oz, dx - ox) * Mathf.Rad2Deg);
-                    marker.Path.color = new Color(role.r, role.g, role.b, 0.85f);
-
-                    marker.DestObj.SetActive(true);
-                    marker.DestObj.transform.localPosition = new Vector3(dx, dz, 0f);
-                    marker.DestObj.transform.localScale = Vector3.one * invZoom;
-                    marker.Dest.color = role;
-                }
-                else
-                {
-                    marker.PathObj.SetActive(false);
-                    marker.DestObj.SetActive(false);
-                }
+                double half = Math.Sqrt(halfSquared);
+                double along = -half + 2.0 * half * k / (count - 1);
+                double x = pass.DirX * along + pass.RightX * crossTrack;
+                double z = pass.DirZ * along + pass.RightZ * crossTrack;
+                if (!dot.gameObject.activeSelf) dot.gameObject.SetActive(true);
+                dot.transform.localPosition = new Vector3((float)x * mapFactor, (float)z * mapFactor, 0f);
+                dot.transform.localScale = Vector3.one * invZoom;
+                bool flown = !double.IsNaN(alongNow) && along < alongNow;
+                dot.color = new Color(colour.r, colour.g, colour.b, flown ? colour.a * 0.3f : colour.a * 0.9f);
             }
         }
 
@@ -905,7 +689,7 @@ namespace BoscaliSummer.Features.Support.Presentation
                     else
                     {
                         // Impact confirmed / active effect phase
-                        string phase = strike.ActionId == SupportActionId.Recon ? "SCAN COMPLETE" :
+                        string phase = strike.ActionId == SupportActionId.Recon ? "SAR SCENE" :
                             strike.ActionId == SupportActionId.Fortify ? "REINFORCED" : "EST. ACTIVE";
                         marker.BadgeText.text = $"<b>{code}</b> {phase}\nRADIUS {strike.Radius / 1000f:0.00} km";
                         marker.BadgeText.color = Color.white;
@@ -947,6 +731,8 @@ namespace BoscaliSummer.Features.Support.Presentation
                     return new Color(0.2f, 0.85f, 1f, 1f);   // Electric cyan
                 case Runtime.SupportActionId.Recon:
                     return new Color(0.3f, 0.95f, 0.5f, 1f);  // Tactical reconnaissance green
+                case Runtime.SupportActionId.ElintSweep:
+                    return new Color(0.55f, 1f, 0.85f, 1f);  // Signals teal
                 case Runtime.SupportActionId.FlareMissile:
                     return new Color(1f, 0.82f, 0.2f, 1f);   // Pyrotechnic flare yellow
                 case Runtime.SupportActionId.Fortify:
@@ -968,7 +754,8 @@ namespace BoscaliSummer.Features.Support.Presentation
             {
                 case Runtime.SupportActionId.Artillery: return "ROD";
                 case Runtime.SupportActionId.Emp: return "EMP";
-                case Runtime.SupportActionId.Recon: return "SAT";
+                case Runtime.SupportActionId.Recon: return "SAR";
+                case Runtime.SupportActionId.ElintSweep: return "ELT";
                 case Runtime.SupportActionId.FlareMissile: return "FLR";
                 case Runtime.SupportActionId.Fortify: return "FTF";
                 case Runtime.SupportActionId.HackPing: return "PNG";
@@ -986,7 +773,8 @@ namespace BoscaliSummer.Features.Support.Presentation
             {
                 case Runtime.SupportActionId.Artillery: return "ROD FROM GOD";
                 case Runtime.SupportActionId.Emp: return "EMP SHOCK";
-                case Runtime.SupportActionId.Recon: return "SATELLITE SCAN";
+                case Runtime.SupportActionId.Recon: return "RADAR SCAN";
+                case Runtime.SupportActionId.ElintSweep: return "ELINT SWEEP";
                 case Runtime.SupportActionId.FlareMissile: return "FLARE BARRAGE";
                 case Runtime.SupportActionId.Fortify: return "FORTIFICATION";
                 case Runtime.SupportActionId.HackPing: return "PING SWEEP";

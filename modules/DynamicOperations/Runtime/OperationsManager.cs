@@ -52,6 +52,8 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
             public readonly OperationBoard Rules = new OperationBoard();
             public readonly List<Target> Targets = new List<Target>(OperationBoard.MaximumCards);
             public float NextGeneration;
+            public OperationKind? PendingFollowOn;
+            public int PendingChainDepth;
         }
 
         private readonly Dictionary<FactionHQ, FactionBoard> boards = new Dictionary<FactionHQ, FactionBoard>();
@@ -74,6 +76,7 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
 
         public IReadOnlyList<SecondaryObjectiveView> Objectives { get; private set; } = Array.Empty<SecondaryObjectiveView>();
         public string Status { get; private set; } = "Waiting for a running mission.";
+        public int ActiveLimit => OperationBoard.MaximumActive;
 
         public void Configure(DynamicOperationsSettings configuration, OperationsNet transport, ManualLogSource log)
         {
@@ -189,7 +192,7 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
                 {
                     TickExtended(hq, target, now, elapsed);
                     if (!op.IsLive) target.Unwatch();
-                    if (op.TryTakeAward()) Pay(hq, target, participant);
+                    if (op.TryTakeAward()) Pay(hq, board, target, participant);
                     continue;
                 }
                 bool interdict = op.IsStrike || op.Kind == OperationKind.Jam;
@@ -203,20 +206,93 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
                 bool present = op.Kind == OperationKind.Jam ? now - target.LastJam <= 1.5f : HasPlayerOnStation(hq, target);
                 op.Observe(now, elapsed, valid, owned, neutralized, present, target.Inserted);
                 if (!op.IsLive) target.Unwatch();
-                if (op.TryTakeAward()) Pay(hq, target, participant);
+                if (op.TryTakeAward()) Pay(hq, board, target, participant);
             }
             board.Rules.Prune(now);
-            if (participant == null || generatedThisTick || now < board.NextGeneration || !board.Rules.HasCapacity) return;
-            generatedThisTick = true;
-            board.NextGeneration = now + 30f;
-            Generate(hq, board, now);
+            if (participant != null && !generatedThisTick && now >= board.NextGeneration && board.Rules.HasCapacity)
+            {
+                generatedThisTick = true;
+                // The escalation ladder can change at any time; each offer is priced and paced
+                // by the stage read at the tick that creates it, never by a stored plan.
+                MissionManager mission = NetworkSceneSingleton<MissionManager>.i;
+                float interval = mission == null ? OperationTempo.ConventionalInterval :
+                    OperationTempo.Interval(mission.currentEscalation, mission.tacticalThreshold, mission.strategicThreshold);
+                board.NextGeneration = now + interval;
+                Generate(hq, board, now, null, 0);
+            }
+            TryFollowOn(hq, board, now);
         }
 
-        private void Generate(FactionHQ hq, FactionBoard board, float now)
+        private void Generate(FactionHQ hq, FactionBoard board, float now, OperationKind? only, int chainDepth)
         {
-            // ponytail: at most 64 bases and 4096 known-unit candidates per faction/30s;
+            // ponytail: at most 64 bases and two 4096-unit candidate passes per faction/interval;
             // use these native registries until profiling justifies a separate spatial index.
-            Airbase capture = null, defend = null;
+            MissionManager mission = NetworkSceneSingleton<MissionManager>.i;
+            bool validTempo = mission != null &&
+                OperationTempo.Finite(mission.currentEscalation, mission.tacticalThreshold, mission.strategicThreshold);
+            if (!validTempo) logger.LogWarning("[Operations] Nonfinite escalation fields; conventional tempo used for this cycle.");
+            float scale = validTempo
+                ? OperationTempo.RewardScale(mission.currentEscalation, mission.tacticalThreshold, mission.strategicThreshold)
+                : OperationTempo.ConventionalReward;
+            Airbase capture = ClosestCaptureCandidate(hq, board);
+            Unit strike = FindStrikeCandidate(hq, board, out Airbase strikeBase, out Airbase defend);
+            List<Unit> units = UnitRegistry.allUnits;
+            int count = Math.Min(4096, units?.Count ?? 0);
+            GatherMissionCandidates(hq, board, units, count, now);
+            // Shuffle viable mission families so a capture/defense pair cannot monopolize every board.
+            var kinds = (OperationKind[])Enum.GetValues(typeof(OperationKind));
+            for (int i = kinds.Length - 1; i > 0; i--)
+            { int j = random.Next(i + 1); OperationKind swap = kinds[i]; kinds[i] = kinds[j]; kinds[j] = swap; }
+            foreach (OperationKind kind in kinds)
+            {
+                if (only.HasValue && kind != only.Value) continue;
+                if (!board.Rules.HasCapacity) break;
+                if (HasKind(board, kind)) continue;
+                if (kind == OperationKind.Capture && capture != null)
+                    Add(board, now, kind, capture, null, hq, rewards.CanOffer(OperationReward.Fortification, hq) ? OperationReward.Fortification : OperationReward.None, 1800, 150, scale, chainDepth);
+                else if (kind == OperationKind.Defend && defend != null)
+                    Add(board, now, kind, defend, null, hq, rewards.CanOffer(OperationReward.Convoy, hq) ? OperationReward.Convoy : OperationReward.None, 1200, 100, scale, chainDepth);
+                else if (kind == OperationKind.Interdict && strike != null)
+                    Add(board, now, kind, strikeBase, strike, hq, OperationReward.None, 800, 75, scale, chainDepth);
+                else if (kind == OperationKind.Intercept || kind == OperationKind.Jam || IsExtended(kind))
+                {
+                    AddMissionCandidate(hq, board, kind, now, scale, chainDepth);
+                }
+                else if (kind == OperationKind.Patrol || kind == OperationKind.Rappel || kind == OperationKind.Rooftop)
+                {
+                    if (kind != OperationKind.Patrol && assault?.Available != true) continue;
+                    int start = random.Next(Math.Max(1, bases.Count));
+                    for (int i = 0; i < bases.Count; i++)
+                    {
+                        Airbase anchor = bases[(start + i) % bases.Count];
+                        if (anchor.CurrentHQ != hq || board.Rules.WasIssued(kind, anchor.GetInstanceID())) continue;
+                        Vector3 position = anchor.center.GlobalPosition().AsVector3();
+                        int shellId = 0;
+                        if (kind == OperationKind.Rooftop && (!assault.TryRooftop(position.x, position.z, out shellId, out position.x, out position.z) ||
+                            board.Rules.WasIssued(kind, shellId))) continue;
+                        if (kind == OperationKind.Rappel)
+                        {
+                            Vector3 local = anchor.center.position + new Vector3(250f, 0f, 250f);
+                            if (!Physics.Raycast(local + Vector3.up * 300f, Vector3.down, out RaycastHit hit, 1000f,
+                                PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore) || hit.point.y <= Datum.LocalSeaY + 1f ||
+                                hit.normal.y < 0.95f || GameAssets.i?.terrainMaterial == null || hit.collider.sharedMaterial != GameAssets.i.terrainMaterial) continue;
+                            position = hit.point.ToGlobalPosition().AsVector3();
+                        }
+                        Target added = Add(board, now, kind, anchor, null, hq, OperationReward.None,
+                            kind == OperationKind.Patrol ? 700 : 1500, kind == OperationKind.Patrol ? 60 : 125,
+                            scale, chainDepth, shellId);
+                        if (added != null)
+                        { added.Position = position; added.ShellId = shellId; added.Radius = kind == OperationKind.Patrol ? 1500f : kind == OperationKind.Rooftop ? 40f : 100f; }
+                        break;
+                    }
+                }
+            }
+        }
+
+        /// <summary>Capture anchor: the nearest capturable hostile base within 40 km of a friendly one.</summary>
+        private Airbase ClosestCaptureCandidate(FactionHQ hq, FactionBoard board)
+        {
+            Airbase capture = null;
             float nearestFront = 40000f * 40000f;
             for (int i = 0; i < bases.Count; i++)
             {
@@ -227,8 +303,14 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
                 float distance = DistanceToOwnedBase(candidate.center.GlobalPosition().AsVector3(), hq, out _);
                 if (distance < nearestFront) { nearestFront = distance; capture = candidate; }
             }
+            return capture;
+        }
+
+        /// <summary>One hostile-unit pass yields both the interdiction target and the defense anchor.</summary>
+        private Unit FindStrikeCandidate(FactionHQ hq, FactionBoard board, out Airbase strikeBase, out Airbase defend)
+        {
+            strikeBase = null; defend = null;
             Unit strike = null;
-            Airbase strikeBase = null;
             float bestThreat = 0f, closestThreat = 6500f * 6500f;
             List<Unit> units = UnitRegistry.allUnits;
             int count = Math.Min(4096, units?.Count ?? 0);
@@ -254,64 +336,36 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
                 float score = role / (1000000f + distance);
                 if (score > bestThreat) { bestThreat = score; strike = unit; strikeBase = anchor; }
             }
-            GatherMissionCandidates(hq, board, units, count, now);
-            // Shuffle viable mission families so a capture/defense pair cannot monopolize every board.
-            var kinds = (OperationKind[])Enum.GetValues(typeof(OperationKind));
-            for (int i = kinds.Length - 1; i > 0; i--)
-            { int j = random.Next(i + 1); OperationKind swap = kinds[i]; kinds[i] = kinds[j]; kinds[j] = swap; }
-            foreach (OperationKind kind in kinds)
-            {
-                if (!board.Rules.HasCapacity) break;
-                if (HasKind(board, kind)) continue;
-                if (kind == OperationKind.Capture && capture != null)
-                    Add(board, now, kind, capture, null, hq, rewards.CanOffer(OperationReward.Fortification, hq) ? OperationReward.Fortification : OperationReward.None, 1800, 150);
-                else if (kind == OperationKind.Defend && defend != null)
-                    Add(board, now, kind, defend, null, hq, rewards.CanOffer(OperationReward.Convoy, hq) ? OperationReward.Convoy : OperationReward.None, 1200, 100);
-                else if (kind == OperationKind.Interdict && strike != null)
-                    Add(board, now, kind, strikeBase, strike, hq, OperationReward.None, 800, 75);
-                else if (kind == OperationKind.Intercept || kind == OperationKind.Jam || IsExtended(kind))
-                {
-                    AddMissionCandidate(hq, board, kind, now);
-                }
-                else if (kind == OperationKind.Patrol || kind == OperationKind.Rappel || kind == OperationKind.Rooftop)
-                {
-                    if (kind != OperationKind.Patrol && assault?.Available != true) continue;
-                    int start = random.Next(Math.Max(1, bases.Count));
-                    for (int i = 0; i < bases.Count; i++)
-                    {
-                        Airbase anchor = bases[(start + i) % bases.Count];
-                        if (anchor.CurrentHQ != hq || board.Rules.WasIssued(kind, anchor.GetInstanceID())) continue;
-                        Vector3 position = anchor.center.GlobalPosition().AsVector3();
-                        int shellId = 0;
-                        if (kind == OperationKind.Rooftop && (!assault.TryRooftop(position.x, position.z, out shellId, out position.x, out position.z) ||
-                            board.Rules.WasIssued(kind, shellId))) continue;
-                        if (kind == OperationKind.Rappel)
-                        {
-                            Vector3 local = anchor.center.position + new Vector3(250f, 0f, 250f);
-                            if (!Physics.Raycast(local + Vector3.up * 300f, Vector3.down, out RaycastHit hit, 1000f,
-                                PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore) || hit.point.y <= Datum.LocalSeaY + 1f ||
-                                hit.normal.y < 0.95f || GameAssets.i?.terrainMaterial == null || hit.collider.sharedMaterial != GameAssets.i.terrainMaterial) continue;
-                            position = hit.point.ToGlobalPosition().AsVector3();
-                        }
-                        Target added = Add(board, now, kind, anchor, null, hq, OperationReward.None,
-                            kind == OperationKind.Patrol ? 700 : 1500, kind == OperationKind.Patrol ? 60 : 125, shellId);
-                        if (added != null)
-                        { added.Position = position; added.ShellId = shellId; added.Radius = kind == OperationKind.Patrol ? 1500f : kind == OperationKind.Rooftop ? 40f : 100f; }
-                        break;
-                    }
-                }
-            }
+            return strike;
+        }
+
+        /// <summary>
+        /// Deliver the single follow-on a completion may have queued. The candidate scan and
+        /// Add run fresh against the current board, so a follow-on with no valid candidate is
+        /// skipped instead of becoming a placeholder card, and the queue is cleared whether it
+        /// succeeds or not — the chain never retries and never recurses within a tick.
+        /// </summary>
+        private void TryFollowOn(FactionHQ hq, FactionBoard board, float now)
+        {
+            if (!board.PendingFollowOn.HasValue || !board.Rules.HasCapacity) return;
+            OperationKind kind = board.PendingFollowOn.Value;
+            int depth = board.PendingChainDepth;
+            board.PendingFollowOn = null;
+            board.PendingChainDepth = 0;
+            if (HasKind(board, kind)) return;
+            Generate(hq, board, now, kind, depth);
         }
 
         private Target Add(FactionBoard board, float now, OperationKind kind, Airbase airbase, Unit unit,
-            FactionHQ hq, OperationReward reward, int money, int xp, int shellId = 0)
+            FactionHQ hq, OperationReward reward, int money, int xp, float tempoScale, int chainDepth = 0, int shellId = 0)
         {
             int targetId = shellId != 0 ? shellId : unit != null ? unit.GetInstanceID() : airbase.GetInstanceID();
             float multiplier = settings.RewardMultiplier.Value;
             if (!Operation.Finite(multiplier)) multiplier = 1f;
             multiplier = Mathf.Clamp(multiplier, 0.25f, 4f);
+            float scale = multiplier * OperationTempo.Scale(tempoScale);
             var op = new Operation(++nextId, targetId, kind, reward, now,
-                Mathf.RoundToInt(money * multiplier), Mathf.RoundToInt(xp * multiplier));
+                Mathf.RoundToInt(money * scale), Mathf.RoundToInt(xp * scale), chainDepth);
             if (!board.Rules.TryAdd(op)) return null;
             var target = new Target
             {
@@ -329,7 +383,7 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
             return target;
         }
 
-        private void Pay(FactionHQ hq, Target target, Player participant)
+        private void Pay(FactionHQ hq, FactionBoard board, Target target, Player participant)
         {
             // Marked taken before any side effects: neither another poll nor a callback may pay twice.
             Operation op = target.Mission;
@@ -361,6 +415,19 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
                 credited == 0 ? "No connected faction players to credit. " : "Faction players credited (money after tax). ") + deployment;
             target.Outcome = OperationsNet.Text(target.Outcome);
             logger.LogInfo("[Operations] Completed " + op.Kind + " #" + op.Id + ": " + target.Name + ". " + target.Outcome);
+            SeedFollowOn(board, op);
+        }
+
+        /// <summary>
+        /// A paid completion may seed one follow-on for the same board. Cancelled and expired
+        /// contracts never reach Pay, so they can never chain, and a chain stops at
+        /// <see cref="OperationChains.MaximumDepth"/> links.
+        /// </summary>
+        private static void SeedFollowOn(FactionBoard board, Operation completed)
+        {
+            if (board.PendingFollowOn.HasValue || !OperationChains.CanSeed(completed.Kind, completed.ChainDepth)) return;
+            board.PendingFollowOn = OperationChains.FollowOn(completed.Kind);
+            board.PendingChainDepth = completed.ChainDepth + 1;
         }
 
         private float DistanceToOwnedBase(Vector3 position, FactionHQ hq, out Airbase nearest)
@@ -412,7 +479,12 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
             {
                 if (target.Mission.Id != id) continue;
                 if (cancel && target.Mission.IsLive)
-                { target.Mission.Cancel(now); return "Contract dismissed. No reward or penalty."; }
+                {
+                    bool abortingActive = OperationFailure.DeliberateAbort(target.Mission);
+                    target.Mission.Cancel(now);
+                    if (abortingActive) MoraleAwarded?.Invoke(player.HQ.GetInstanceID(), OperationFailure.AbortMoralePenalty);
+                    return OperationFailure.DismissalMessage(abortingActive);
+                }
                 bool combat = target.Mission.IsStrike || target.Mission.Kind == OperationKind.Jam;
                 bool valid = combat ? !target.Life.Despawned && target.Unit != null && target.Unit.NetworkHQ == target.OriginalOwner :
                     Usable(target.Base) && (target.Base.CurrentHQ == target.OriginalOwner || target.Base.CurrentHQ == player.HQ);

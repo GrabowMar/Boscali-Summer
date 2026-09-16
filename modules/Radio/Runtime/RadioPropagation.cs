@@ -109,6 +109,9 @@ namespace BoscaliSummer.Features.Radio.Runtime
         /// <summary>Reception with no transmitter to measure: a local deck or unknown tower.</summary>
         public static RadioReception Local() => RadioReception.Perfect;
 
+        /// <summary>No transmitter at all: a built-in station whose tower is gone.</summary>
+        public static RadioReception OffAir => new RadioReception(0f, 0f, 0f, 0f, NoiseFloorDbm);
+
         /// <summary>Garble from a wrong-mode transmission, used by the mode override.</summary>
         public static bool ModeMismatch(RadioModulation transmit, RadioModulation receive) =>
             transmit != receive;

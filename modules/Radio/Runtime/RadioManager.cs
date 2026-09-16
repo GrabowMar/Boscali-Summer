@@ -58,6 +58,11 @@ namespace BoscaliSummer.Features.Radio.Runtime
         private bool offStation;
         private bool dialResume;
         private bool scanning;
+        private bool offAir;
+        private string towerLabel = "—";
+        private float towerDistanceKm;
+        private float towerHorizonKm;
+        private bool towerLineOfSight = true;
         private readonly VanillaMusicHold hold = new VanillaMusicHold();
         private RadioReception reception = RadioReception.Perfect;
         private float nextScanTime;
@@ -119,6 +124,17 @@ namespace BoscaliSummer.Features.Radio.Runtime
         public bool IsPaused => receiver.IsPaused;
         public bool IsScanning => scanning;
         public bool IsOffStation => offStation;
+
+        /// <summary>
+        /// The tuned built-in station's tower is gone from this mission (a lost airbase, a
+        /// destroyed HQ): the station is off the air, not merely far away.
+        /// </summary>
+        public bool IsOffAir => offAir;
+
+        public string TowerLabel => towerLabel;
+        public float TowerDistanceKm => towerDistanceKm;
+        public float TowerHorizonKm => towerHorizonKm;
+        public bool TowerLineOfSight => towerLineOfSight;
         public RadioDial TunedDial => tunedDial;
         public RadioReception Reception => reception;
         public float SignalLevel => fx == null ? 0f : fx.Level;
@@ -130,14 +146,15 @@ namespace BoscaliSummer.Features.Radio.Runtime
         /// the link budget is actually driving the meter. False means the receiver is reading
         /// a local archive (or a map with no authored tower) and everything is full-scale.
         /// </summary>
-        public bool ReceptionModelled
+        public bool ReceptionModelled => !offAir && anchors.HasListener && HasTower;
+
+        private bool HasTower
         {
             get
             {
-                if (anchors.HasListener == false) return false;
                 RadioStation station = CurrentChannel();
                 return station != null && huntTrack == null &&
-                    anchors.TryGet(station.Id, out _, out _);
+                    anchors.TryGet(station.Id, out _);
             }
         }
 
@@ -226,7 +243,13 @@ namespace BoscaliSummer.Features.Radio.Runtime
             index >= 0 && index < stationStrengths.Length ? stationStrengths[index] : 1f;
 
         public bool GetChannelHasTransmitter(int index) =>
-            index >= 0 && index < ChannelCount && anchors.TryGet(stations[index].Id, out _, out _);
+            index >= 0 && index < ChannelCount && anchors.TryGet(stations[index].Id, out _);
+
+        /// <summary>A built-in station whose tower is gone from this mission reads off air.</summary>
+        public bool GetChannelOffAir(int index) =>
+            index >= 0 && index < ChannelCount &&
+            BuiltInStationRules.IsBuiltIn(stations[index].Id) &&
+            anchors.MapResolved && !anchors.TryGet(stations[index].Id, out _);
 
         // ---------------------------------------------------------------------- deck face
 
@@ -292,7 +315,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
             restoreTime = -1f;
             nextHuntPoll = 0f;
             RadioPanel.Reset();
-            MusicPanel.Reset();
             scanning = false;
             nextScanTime = 0f;
             nextBulletinAt = 0f;
@@ -310,6 +332,11 @@ namespace BoscaliSummer.Features.Radio.Runtime
             programText = string.Empty;
             offStation = false;
             dialResume = false;
+            offAir = false;
+            towerLabel = "—";
+            towerDistanceKm = 0f;
+            towerHorizonKm = 0f;
+            towerLineOfSight = true;
             hold.Reset();
             deckStatus = "Deck stopped";
             deckTrack = 0;
@@ -376,11 +403,11 @@ namespace BoscaliSummer.Features.Radio.Runtime
             fx?.SetReception(offStation ? 0f : reception.Quality,
                 !offStation && reception.Open(Squelch));
             receiver.SetVolume(Volume * ReceiverGain);
-            deck.SetVolume(Volume);
+            // The deck's one piece of world awareness: duck under a received transmission.
+            deck.SetVolume(Volume * RadioLinkStub.DeckGain(link.TransmissionActive));
 
             SyncVanillaHold();
             RadioPanel.Tick(this);
-            MusicPanel.Tick(this);
 
             AdvanceIfDue(receiver, settings.CrossfadeSeconds.Value, AdvanceReceiver);
             AdvanceIfDue(deck, DeckCrossfadeSeconds, AdvanceDeck);
@@ -422,7 +449,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
             huntOverride = false;
             huntTrack = null;
             RadioPanel.Reset();
-            MusicPanel.Reset();
             hold.Reset();
             StopReceiverInternal(true);
             deck?.Stop();
@@ -711,6 +737,13 @@ namespace BoscaliSummer.Features.Radio.Runtime
             deck.Stop();
             deckStatus = "Deck stopped";
             SyncVanillaHold();
+        }
+
+        /// <summary>Both transports down, soundtrack released: the deck page's STOP ALL.</summary>
+        public void StopAll()
+        {
+            Stop();
+            DeckStop();
         }
 
         public void DeckNext()
@@ -1015,7 +1048,7 @@ namespace BoscaliSummer.Features.Radio.Runtime
         {
             get
             {
-                if (offStation) return 0f;
+                if (offStation || offAir) return 0f;
                 if (!reception.Open(Squelch)) return 0f;
                 return Mathf.Lerp(0.35f, 1f, reception.Quality);
             }
@@ -1142,6 +1175,8 @@ namespace BoscaliSummer.Features.Radio.Runtime
             ? string.Empty
             : stations[Mathf.Clamp(selectedChannel, 0, ChannelCount - 1)].Id;
 
+        public string CurrentChannelId => CurrentStationId;
+
         // -------------------------------------------------------------- propagation
 
         private void PropagationTick()
@@ -1157,38 +1192,72 @@ namespace BoscaliSummer.Features.Radio.Runtime
             for (int i = 0; i < stations.Length; i++)
             {
                 stationStrengths[i] = 1f;
-                if (!listener || !anchors.TryGet(stations[i].Id, out Vector3 tx, out float txHeight))
-                    continue;
-                float distance = Vector3.Distance(listenerPosition, tx) / 1000f;
-                stationStrengths[i] = RadioPropagation.Evaluate(
-                    distance, txHeight, listenerHeight, true,
-                    stations[i].Dial.Modulation, ReceiverModulation).Quality;
+                if (!listener) continue;
+                if (anchors.TryGet(stations[i].Id, out RadioTower site))
+                {
+                    float distance = Vector3.Distance(listenerPosition, site.Position) / 1000f;
+                    stationStrengths[i] = RadioPropagation.Evaluate(
+                        distance, site.Height, listenerHeight, true,
+                        stations[i].Dial.Modulation, ReceiverModulation).Quality;
+                }
+                else if (BuiltInStationRules.IsBuiltIn(stations[i].Id) && anchors.MapResolved)
+                {
+                    // Its tower is gone: the station is not weak, it is off the air.
+                    stationStrengths[i] = 0f;
+                }
             }
 
             spectrumSignals.Clear();
             for (int i = 0; i < stations.Length; i++)
                 spectrumSignals.Add(new RadioSignal(stations[i].Dial.Kilohertz,
-                    Mathf.Max(0.08f, stationStrengths[i])));
+                    Mathf.Max(0.02f, stationStrengths[i])));
 
             if (offStation)
             {
+                offAir = false;
                 reception = new RadioReception(0f, 0f, 0f, 0f, RadioPropagation.NoiseFloorDbm);
                 return;
             }
 
             RadioStation station = CurrentChannel();
-            if (station == null || huntTrack != null ||
-                !anchors.TryGet(station.Id, out Vector3 tower, out float towerHeight) || !listener)
+            bool builtIn = station != null && BuiltInStationRules.IsBuiltIn(station.Id);
+            if (station == null || huntTrack != null || !builtIn || !listener)
             {
+                offAir = false;
                 reception = RadioReception.Perfect;
+                towerLabel = builtIn ? "NO FIX" : "LOCAL ARCHIVE";
+                towerDistanceKm = 0f;
+                towerHorizonKm = 0f;
+                towerLineOfSight = true;
                 return;
             }
 
-            Vector3 towerTop = tower + Vector3.up * towerHeight;
-            float km = Vector3.Distance(listenerPosition, towerTop) / 1000f;
-            bool lineOfSight = HasLineOfSight(listenerPosition + Vector3.up * 3f, towerTop);
-            reception = RadioPropagation.Evaluate(km, towerHeight, listenerHeight, lineOfSight,
-                station.Dial.Modulation, ReceiverModulation);
+            if (!anchors.TryGet(station.Id, out RadioTower tower))
+            {
+                bool lost = anchors.MapResolved;
+                if (lost && !offAir)
+                {
+                    status = "TOWER LOST — " + station.Name + " is off air";
+                    PushLog("TOWER LOST · " + station.Name + " off air");
+                    fx?.CarrierBurst(0.5f);
+                }
+                offAir = lost;
+                reception = lost ? RadioPropagation.OffAir : RadioReception.Perfect;
+                towerLabel = lost ? "LOST" : "NO FIX";
+                towerDistanceKm = 0f;
+                towerHorizonKm = 0f;
+                towerLineOfSight = true;
+                return;
+            }
+
+            offAir = false;
+            towerLabel = tower.Label;
+            Vector3 towerTop = tower.Position + Vector3.up * tower.Height;
+            towerDistanceKm = Vector3.Distance(listenerPosition, towerTop) / 1000f;
+            towerHorizonKm = RadioPropagation.HorizonKilometres(tower.Height, listenerHeight);
+            towerLineOfSight = HasLineOfSight(listenerPosition + Vector3.up * 3f, towerTop);
+            reception = RadioPropagation.Evaluate(towerDistanceKm, tower.Height, listenerHeight,
+                towerLineOfSight, station.Dial.Modulation, ReceiverModulation);
         }
 
         /// <summary>

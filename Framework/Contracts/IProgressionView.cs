@@ -2,28 +2,61 @@ namespace BoscaliSummer.Framework.Contracts
 {
     internal readonly struct PerkView
     {
+        /// <summary>Sentinel for "this perk is a branch root".</summary>
+        public const byte NoPrerequisite = 255;
+
+        /// <summary>Nothing in the way, or the grade is simply already owned.</summary>
+        public const byte BlockNone = 0;
+
+        /// <summary>The previous grade in the lane is not committed yet.</summary>
+        public const byte BlockGrade = 1;
+
+        /// <summary>This career already holds its full set of support authorisations.</summary>
+        public const byte BlockCap = 2;
+
+        /// <summary>Not enough unspent points.</summary>
+        public const byte BlockPoints = 3;
+
         public readonly byte Id;
 
         /// <summary>Presentation-only heading. Carries no data-model meaning.</summary>
         public readonly string Group;
 
+        /// <summary>Presentation-only lane inside a group; the mini-tree a row hangs off.</summary>
+        public readonly string Branch;
+
         public readonly string Name;
         public readonly string Description;
         public readonly byte Cost;
+
+        /// <summary>Perk that must be committed first, or <see cref="NoPrerequisite"/>.</summary>
+        public readonly byte Prerequisite;
+
+        /// <summary>
+        /// Why the host would refuse this grade right now, one of the <c>Block</c> constants.
+        /// The host re-checks the same rule on the unlock request.
+        /// </summary>
+        public readonly byte Block;
+
         public readonly bool Unlocked;
 
-        /// <summary>The player has enough unspent points to buy this perk right now.</summary>
+        /// <summary>
+        /// Nothing blocks the grade and it is not owned, so the host would accept it.
+        /// </summary>
         public readonly bool Affordable;
 
         public PerkView(
-            byte id, string group, string name, string description, byte cost,
-            bool unlocked, bool affordable)
+            byte id, string group, string branch, string name, string description, byte cost,
+            byte prerequisite, byte block, bool unlocked, bool affordable)
         {
             Id = id;
             Group = group;
+            Branch = branch;
             Name = name;
             Description = description;
             Cost = cost;
+            Prerequisite = prerequisite;
+            Block = block;
             Unlocked = unlocked;
             Affordable = affordable;
         }

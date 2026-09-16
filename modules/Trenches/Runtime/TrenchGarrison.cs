@@ -10,11 +10,16 @@ namespace BoscaliSummer.Features.Trenches.Runtime
     {
         internal const string Prefix = "BoscaliSummer:Trench:";
         internal const int MaximumDefenders = 4;
-        // Behind the parados and clear of the ditch's rear skirt, so the sandbag ring sits
-        // against the earthwork instead of spanning the cut.
-        private const float NestRearOffset = 4.6f;
+        // Behind the parados and clear of the earthwork's rear skirt, which reaches about
+        // five metres behind the ditch centreline, so the sandbag ring sits against the
+        // reverse slope instead of spanning the cut.
+        private const float NestRearOffset = 7.5f;
         private static readonly string[] Keys = { "Emplacement1_MG", "Emplacement1_ATGM", "Emplacement1_MANPADS" };
         private static readonly int[] SlotKind = { 0, 0, 1, 2 }; // Two MG teams, one ATGM, one MANPADS
+        // Preferred station along the line, and the spread of fallbacks tried when a bay's
+        // native footprint is blocked: one bad emplacement must not cost a whole position.
+        private static readonly float[] FireFractions = { 0.15f, 0.85f, 0.5f };
+        private static readonly float[] FallbackSpread = { 0f, 0.2f, -0.2f };
         private readonly Building[] defenders = new Building[MaximumDefenders];
         private readonly UnitPart[][] parts = new UnitPart[MaximumDefenders][];
         private readonly float[] previousHealth = new float[MaximumDefenders];
@@ -97,12 +102,27 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             attempts[slot]++;
             var def = definitions[SlotKind[slot]];
             if (def == null) return false;
-            Vector3? anchor = FindAnchor(slot);
-            if (!anchor.HasValue) return false;
-            Vector3 forward = line.ThreatAt(anchor.Value);
+            for (int attempt = 0; attempt < FallbackSpread.Length; attempt++)
+            {
+                Vector3? anchor = FindAnchor(slot, attempt);
+                if (!anchor.HasValue) return false;
+                if (TrySpawnAt(slot, def, anchor.Value)) return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Validates the native emplacement footprint at one station and hands the spawn to
+        /// vanilla, which keeps targeting, damage, rewards and Mirage replication.
+        /// </summary>
+        private bool TrySpawnAt(int slot, BuildingDefinition def, Vector3 anchor)
+        {
+            var spawner = NetworkSceneSingleton<Spawner>.i;
+            if (spawner == null || !spawner.IsServer) return false;
+            Vector3 forward = line.ThreatAt(anchor);
             Quaternion rotation = Quaternion.LookRotation(forward);
             Vector3 offset = rotation * def.spawnOffset;
-            Vector3 desired = anchor.Value - forward * NestRearOffset + new Vector3(offset.x, 0, offset.z);
+            Vector3 desired = anchor - forward * NestRearOffset + new Vector3(offset.x, 0, offset.z);
             if (!TrenchTerrain.TryGround(desired, out Vector3 ground)) return false;
             // Validate the actual native emplacement footprint, not just a point.
             float halfWidth = Math.Max(2f, def.width * 0.5f + 1f);
@@ -132,12 +152,11 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         /// the support centre for the air watch. Zero until that line has been dug, so a
         /// slot waits for the belt to grow instead of standing in an empty field.
         /// </summary>
-        private Vector3? FindAnchor(int slot)
+        private Vector3? FindAnchor(int slot, int attempt)
         {
-            // MG teams on the fire-line flanks, the ATGM on the fire-line centre, the
-            // MANPADS at the support centre.
-            if (slot == 3) return Pick(line.SupportAnchors, 0.5f);
-            return Pick(line.Anchors, slot == 0 ? 0.15f : slot == 2 ? 0.5f : 0.85f);
+            float spread = FallbackSpread[attempt % FallbackSpread.Length];
+            if (slot >= 3) return Pick(line.SupportAnchors, Mathf.Clamp01(0.5f + spread * 0.6f));
+            return Pick(line.Anchors, Mathf.Clamp01(FireFractions[slot] + spread));
         }
 
         private static Vector3? Pick(Vector3[] anchors, float fraction)

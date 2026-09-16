@@ -58,6 +58,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             mesh.Clear();
             Rect r = rectTransform.rect;
             if (r.width <= 0f || r.height <= 0f) return;
+            r = Square(r);
 
             switch (Mark)
             {
@@ -71,6 +72,17 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 case SqdMark.Ew: DrawEw(mesh, r); break;
                 default: DrawCombat(mesh, r); break;
             }
+        }
+
+        /// <summary>
+        /// The marks are drawn in normalised units on both axes, so a cell that is taller
+        /// than it is wide stretches them. Draw into the largest square the cell holds.
+        /// </summary>
+        private static Rect Square(Rect rect)
+        {
+            float side = Mathf.Min(rect.width, rect.height);
+            return new Rect(rect.x + (rect.width - side) * 0.5f,
+                            rect.y + (rect.height - side) * 0.5f, side, side);
         }
 
         private void DrawFuel(VertexHelper mesh, Rect r)

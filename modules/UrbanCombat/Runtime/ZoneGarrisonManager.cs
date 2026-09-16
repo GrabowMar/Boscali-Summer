@@ -40,7 +40,7 @@ namespace BoscaliSummer.Garrisons
             GarrisonOccupancy.IsOccupied(shell);
 
         bool IZoneFortificationService.TryFortify(
-            Airbase airbase, FactionHQ owner, NuclearOption.Networking.Player requester)
+            Airbase airbase, FactionHQ owner, NuclearOption.Networking.Player requester, int shells)
         {
             if (!GameAccess.IsServer() || airbase == null || owner == null || requester == null ||
                 airbase.AttachedAirbase || airbase.CurrentHQ != owner || requester.HQ != owner)
@@ -50,17 +50,15 @@ namespace BoscaliSummer.Garrisons
                 return false;
             BuildingDefinition defense = RooftopPlacement.ResolveDefinition(0);
             if (defense == null || defense.unitPrefab == null) return false;
-            int key = airbase.GetInstanceID();
-            int floor = records.TryGetValue(key, out GarrisonRecord existing)
-                ? existing.Defenses.Count + 1
-                : 1;
-            if (floor > RooftopPlacement.MaxPerZone || CountDefenses() >= RooftopPlacement.MaxBuildings)
-                return false;
             List<GameObject> candidates = FindCandidates(airbase);
             if (candidates.Count == 0) { RebuildShellCatalogue(); candidates = FindCandidates(airbase); }
-            for (int i = 0; i < Mathf.Min(candidates.Count, 128); i++)
-                if (TryOccupyBuilding(candidates[i], owner, airbase)) return true;
-            return false;
+            // Base-of-operations doctrine raises how many shells one order secures;
+            // TryOccupyBuilding still enforces the zone and theater ceilings.
+            int placed = 0;
+            int wanted = Mathf.Clamp(shells, 1, RooftopPlacement.MaxPerZone);
+            for (int i = 0; i < Mathf.Min(candidates.Count, 128) && placed < wanted; i++)
+                if (TryOccupyBuilding(candidates[i], owner, airbase)) placed++;
+            return placed > 0;
         }
 
         public bool TryOccupyBuilding(GameObject shell, FactionHQ owner, Airbase airbase)

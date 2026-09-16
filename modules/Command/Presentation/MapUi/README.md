@@ -253,11 +253,15 @@ a soft glow under the line plus a marker on the latest sample.
 
 Restore stays exact: the borrowed label's text, rich-text flag, alignment and rectangle are
 snapshotted and put back, and the glyph is a child of the decoration object minimization
-already destroys.
+already destroys. The rail keeps the label's colour too: an adopted vanilla label is pure
+green, and the game's `TextStyleApplier` re-applies that theme colour at first activation, so
+the rail re-asserts its own text-primary colour alongside the branded line on every
+reconcile tick instead of letting late style passes turn some keys green.
 
 Validation: pure catalog/sanitise and tone-classification checks in `MfdPanelTests`; the new
 `Run-RailUnityCheck.ps1` standalone render (all 16 glyph kinds produce geometry; adopted
-buttons brand, latch and restore; PNG of the rail and the glyph strip); Release build,
+buttons brand, latch and restore; a label reset by the game's style pass has its line and
+colour re-asserted; PNG of the rail and the glyph strip); Release build,
 module-boundary tests, patch probe and `nomod asm verify`. In-game visual acceptance remains
 outstanding.
 
@@ -371,16 +375,17 @@ shows it in its own column instead; the rail adopts it like any borrowed button.
 
 Rail glyphs were redrawn in the same pass: a heavier consistent stroke (`Line`), a solid
 aircraft silhouette (`air`) now drawn as a filled polygon, a chevroned shield for the
-faction HQs, a head-and-shoulders squad mark, a strapped crate for OPS, a broadcast mark
-(`pulse`) for the event feed and a new tasking-board mark (`board`) for ADM so it no longer
-shares MIS/EVN's flag. The catalog descriptor for ADM is TASKING.
+faction HQs, a head-and-shoulders squad mark, a strapped crate for OPS and a broadcast mark
+(`pulse`) for the event feed. That pass also introduced a tasking-board mark (`board`) for
+ADM and the TASKING descriptor; both were removed on 2026-09-16 when the ADM bezel was
+deleted (see "SET CLIENT/SERVER split" below).
 
-Validation: the rail render check now adopts and brands fourteen keys (six vanilla
-screens, WMC, five claimed, EVN/ADM) and verifies `PrepareCapacity` fits them; pure
-catalog checks in `MfdPanelTests` cover the EVN/ADM entries and glyph distinctness; Release
-build, module-boundary tests, patch probe and `nomod asm verify` pass. In-game visual
-acceptance remains pending for 720p/1080p/ultrawide, EVN/ADM open/close, ADM teardown on a
-second client, expanded/stock transitions and scene reload.
+Validation: the rail render check now adopts and brands thirteen keys (six vanilla
+screens, WMC, five claimed, EVN) and verifies `PrepareCapacity` fits them; pure catalog
+checks in `MfdPanelTests` cover the EVN entry and glyph distinctness; Release build,
+module-boundary tests, patch probe and `nomod asm verify` pass. In-game visual acceptance
+remains pending for 720p/1080p/ultrawide, EVN open/close, expanded/stock transitions and
+scene reload.
 
 UX review followed the requested game-studio
 [UX review skill](https://github.com/Donchitos/Claude-Code-Game-Studios/blob/main/.claude/skills/ux-review/SKILL.md),
@@ -415,7 +420,7 @@ selection rows with a written summary under them, and gains a scaled symbol prev
 legend drawn from the bake's own tint constants and the front line's ink
 (`TacticalSectorGrid.FriendlyTint`/`HostileTint`, `FrontlineGraphic.Ink`), so the legend
 cannot drift from the map. `MfdGlyph` gained `control`, `front` and `grid` shapes for the new
-layer names; the ADM tasking board keeps its own `board` mark.
+layer names.
 
 No new persistence, networking or per-frame work: the panel refreshes on the existing
 visible-only 0.15-second pass, and cell size is derived from the panel height
@@ -436,3 +441,48 @@ UX review followed the requested game-studio
 vector meshes rather than icon assets, layer descriptions moved to hover help rather than
 being dropped, disabled cells explain themselves, and no new dependency or saved state was
 introduced.
+
+## SET CLIENT/SERVER split and host settings (2026-09-16)
+
+SET now opens on two main tabs. **CLIENT** keeps the four client-local pages (MAP, STYLE,
+IMAGE, COCKPIT) behind a second, smaller tab strip; the main strip names the audience, the
+sub-strip names the console surface. **SERVER** is the host page: the faction tasking board
+that used to live on the solo-only ADM bezel plus a host-only settings section for every
+installed feature. The ADM bezel, its appended vanilla slot, its rail mapping and the
+`board` glyph are gone.
+
+The board consumes `ISecondaryObjectivesView` (DynamicOperations) late through
+`ModServices`: card rail, title, target/status/clock and progress track, with REQUEST BOARD
+disabled when the host or the module is absent, and an explicit line when dynamic
+operations are not running. The old ADM chrome (its own data bar, metrics and chips) is not
+reproduced; the host's tasking lives under the SET data bar, whose second chip now reads
+HOST or CLIENT.
+
+Host settings are declared by their owning feature through a new framework seam
+(`Framework/Contracts/IHostSettingsView`, built with `Framework/Features/HostSettingsTable`)
+and collected by `HostSettingsBoard`; Command renders them without importing a sibling's
+settings object, and every row writes the module's own config entry, so the config file
+stays the single owner of the value. Only settings the module reads live are exposed —
+module `Enabled` install gates stay in the config file. Row values are re-read each refresh;
+a feature that is not installed simply has no section. On a remote client the whole page is
+read-only: values stay legible, controls are disabled, and the status strip says host only.
+Authority is `GameAccess.IsServer()`, re-read every refresh.
+
+Rows reuse the existing toggle and stepper widgets. The stepper gained a `readOnlyValue`
+flag so a disabled row still shows its value (the SERVER page has to be readable without
+being writable); client pages keep the old `--` for a dependency-gated row.
+
+Validation: the standalone `Run-SettingsUnityCheck.ps1` render now builds CLIENT and SERVER
+at 596 and 420 units and switches CLIENT sub-pages; pure `HostSettingMath` stepping checks
+run in `FrameworkTests`; module boundary tests, the Release build and `git diff --check`
+pass. In-game acceptance remains pending for host/client/listen-host, the tasking board with
+and without DynamicOperations enabled, every provider section, scrolling at both panel
+heights, and scene reload.
+
+UX review followed the requested game-studio
+[UX review skill](https://github.com/Donchitos/Claude-Code-Game-Studios/blob/main/.claude/skills/ux-review/SKILL.md),
+[Ponytail](https://github.com/DietrichGebert/ponytail) and
+[UI/UX Pro Max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill): the second level is
+one reused button style rather than a second navigation widget, host settings reuse the
+existing row controls and the config entries behind them, the deleted bezel is not emulated,
+and the read-only client state is explained rather than hidden.

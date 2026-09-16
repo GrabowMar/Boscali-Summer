@@ -12,6 +12,7 @@ namespace BoscaliSummer.Tests.Features.Progression
             TestPerkClassification();
             TestWingmanPresenceTracking();
             TestSquadBezelCoexistence();
+            TestDossierStylesheet();
         }
 
         private static void TestPerkClassification()
@@ -55,6 +56,31 @@ namespace BoscaliSummer.Tests.Features.Progression
                 PresenceBoard.SetString(PresenceBoard.WingGuid, prevGuid);
                 PresenceBoard.SetInts(PresenceBoard.WingMemberIds, prevIds);
             }
+        }
+
+        /// <summary>
+        /// The dossier look is data in the shipped sheet, and a typo there only logs a
+        /// warning at runtime. Parse it here so a broken class is a red test instead.
+        /// </summary>
+        private static void TestDossierStylesheet()
+        {
+            string text;
+            using (System.IO.Stream stream = typeof(ProgressionPresentationTests).Assembly
+                .GetManifestResourceStream("BoscaliSummer.Tests.avionics.avss"))
+            {
+                TestAssert.That(stream != null, "the shipped avionics sheet must be embedded for this check");
+                using (var reader = new System.IO.StreamReader(stream)) text = reader.ReadToEnd();
+            }
+
+            AvStyleSheet sheet = AvStyleSheet.Parse(text);
+            for (int i = 0; i < sheet.Errors.Count; i++)
+                TestAssert.That(false, "avionics.avss " + sheet.Errors[i]);
+
+            TestAssert.That(sheet.Resolve("stamp ok").Color.HasValue, "the dossier stamp must colour by state");
+            TestAssert.That(sheet.Resolve("stamp bad").Background.HasValue, "a red stamp must carry its own wash");
+            TestAssert.That(sheet.Resolve("form-key").HasFont, "dossier field keys must carry a type size");
+            TestAssert.That(sheet.Resolve("leader").Tracking > 0f, "the dotted leader needs tracking to read as a rule");
+            TestAssert.That(sheet.Resolve("punch").Background.HasValue, "a punched hole needs a fill");
         }
 
         private static void TestSquadBezelCoexistence()

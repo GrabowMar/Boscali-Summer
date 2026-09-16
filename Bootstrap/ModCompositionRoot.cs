@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using BepInEx.Logging;
 using BoscaliSummer.Features.Autopilot;
+using BoscaliSummer.Features.Campaign;
 using BoscaliSummer.Features.Command;
 using BoscaliSummer.Features.DynamicOperations;
 using BoscaliSummer.Features.Events;
@@ -11,8 +12,10 @@ using BoscaliSummer.Features.QoL;
 using BoscaliSummer.Features.Radio;
 using BoscaliSummer.Features.Support;
 using BoscaliSummer.Features.Squad;
+using BoscaliSummer.Features.TheaterOps;
 using BoscaliSummer.Features.Trenches;
 using BoscaliSummer.Features.UrbanCombat;
+using BoscaliSummer.Features.Weather;
 using BoscaliSummer.Framework.Features;
 using BoscaliSummer.Runtime;
 
@@ -46,8 +49,11 @@ namespace BoscaliSummer.Bootstrap
                 }
                 if (settings.DynamicOperations.Enabled.Value) features.Add(new DynamicOperationsFeature());
                 if (settings.HighCommand.Enabled.Value) features.Add(new HighCommandFeature());
+                if (settings.TheaterOps.Enabled.Value) features.Add(new TheaterOpsFeature());
                 if (settings.Trenches.Enabled.Value) features.Add(new TrenchesFeature());
                 if (settings.Events.Enabled.Value) features.Add(new EventsFeature());
+                if (settings.Campaign.Enabled.Value) features.Add(new CampaignFeature());
+                if (settings.Weather.Enabled.Value) features.Add(new WeatherFeature());
                 host.Load(features.ToArray());
                 CapabilityReport.Log();
                 return host;

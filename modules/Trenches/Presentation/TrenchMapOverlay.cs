@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using BepInEx.Logging;
 using BoscaliSummer.Features.Trenches.Configuration;
 using BoscaliSummer.Features.Trenches.Runtime;
@@ -10,29 +11,24 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Features.Trenches.Presentation
 {
     /// <summary>
-    /// Renders dynamic NATO-standard entrenchment symbology onto the tactical theater map
-    /// (DynamicMap): the fire line as one solid crenellated trace following the real front
-    /// contour, support and redoubt traces dimmer, native strongpoints marked, and the
-    /// stage of each position ticked. Host-local; never pollutes flight HUDs.
+    /// Hosts the trench belt's tactical map layer. The layer is a mesh pass over the drawn
+    /// curves (<see cref="TrenchMapGraphic"/>), not a baked texture, and it is active only
+    /// while the map is maximized: the cockpit HUD and MFD surfaces never see it.
     /// </summary>
     internal sealed class TrenchMapOverlay : MonoBehaviour, ISceneService
     {
-        private const int BaseTextureSize = 1536;
-        private const float ToothSpacing = 11f;
-
         private TrenchesSettings settings;
         private TrenchManager trenchManager;
         private ManualLogSource logger;
 
         private DynamicMap dynamicMap;
-        private GameObject overlayObj;
-        private RawImage overlayImage;
-        private Texture2D overlayTexture;
-        private Color32[] bakeBuffer;
+        private GameObject layerObject;
+        private TrenchMapGraphic layer;
 
         private bool initialized;
         private bool isMapMaximized;
-        private Vector2 theaterDimensions = new Vector2(81920f, 81920f);
+        private float lastZoom = -1f;
+        private FactionHQ lastHq;
 
         public void Configure(TrenchesSettings config, TrenchManager manager, ManualLogSource log)
         {
@@ -48,24 +44,17 @@ namespace BoscaliSummer.Features.Trenches.Presentation
 
         public void ResetForScene()
         {
-            if (overlayObj != null)
+            if (layerObject != null)
             {
-                Destroy(overlayObj);
-                overlayObj = null;
+                Destroy(layerObject);
+                layerObject = null;
             }
-            overlayImage = null;
-
-            if (overlayTexture != null)
-            {
-                Destroy(overlayTexture);
-                overlayTexture = null;
-            }
-            bakeBuffer = null;
-
+            layer = null;
             dynamicMap = null;
             initialized = false;
             isMapMaximized = false;
-            TheaterFrame.Invalidate();
+            lastZoom = -1f;
+            lastHq = null;
         }
 
         private void OnDestroy()
@@ -79,9 +68,9 @@ namespace BoscaliSummer.Features.Trenches.Presentation
 
         private void HandleLinesChanged()
         {
-            if (isMapMaximized)
+            if (isMapMaximized && layer != null)
             {
-                BakeTrenchMapTexture();
+                layer.SetVerticesDirty();
             }
         }
 
@@ -89,7 +78,7 @@ namespace BoscaliSummer.Features.Trenches.Presentation
         {
             if (settings == null || !settings.Enabled.Value || !settings.ShowOnTacticalMap.Value)
             {
-                if (overlayObj != null) overlayObj.SetActive(false);
+                if (layerObject != null) layerObject.SetActive(false);
                 return;
             }
 
@@ -102,15 +91,30 @@ namespace BoscaliSummer.Features.Trenches.Presentation
             if (dynamicMap == null) return;
 
             bool currentMaximized = DynamicMap.mapMaximized;
-            if (overlayObj != null && overlayObj.activeSelf != currentMaximized)
+            if (layerObject != null && layerObject.activeSelf != currentMaximized)
             {
-                overlayObj.SetActive(currentMaximized);
-                if (currentMaximized)
-                {
-                    BakeTrenchMapTexture();
-                }
+                layerObject.SetActive(currentMaximized);
+                if (currentMaximized && layer != null) layer.SetVerticesDirty();
             }
             isMapMaximized = currentMaximized;
+            if (!currentMaximized) return;
+
+            // The mesh is cut in map-local units at a constant screen width, so a zoom step
+            // and a faction change are the two things that must re-ink it.
+            if (dynamicMap.mapImage != null)
+            {
+                float zoom = Mathf.Abs(dynamicMap.mapImage.transform.localScale.x);
+                if (Mathf.Abs(zoom - lastZoom) > Mathf.Max(0.0005f, Mathf.Abs(lastZoom) * 0.01f))
+                {
+                    lastZoom = zoom;
+                    if (layer != null) layer.SetVerticesDirty();
+                }
+            }
+            if (dynamicMap.HQ != lastHq)
+            {
+                lastHq = dynamicMap.HQ;
+                if (layer != null) layer.SetVerticesDirty();
+            }
         }
 
         private void TryInitialize()
@@ -121,241 +125,292 @@ namespace BoscaliSummer.Features.Trenches.Presentation
             RectTransform mapImageRect = dynamicMap.mapImage.GetComponent<RectTransform>();
             if (mapImageRect == null) return;
 
-            theaterDimensions = TheaterFrame.Resolve();
+            layerObject = new GameObject("TrenchMapLayer", typeof(RectTransform));
+            layerObject.transform.SetParent(dynamicMap.mapImage.transform, false);
 
-            EnsureTexture(BaseTextureSize, BaseTextureSize);
+            RectTransform layerRect = layerObject.GetComponent<RectTransform>();
+            layerRect.anchorMin = Vector2.zero;
+            layerRect.anchorMax = Vector2.one;
+            layerRect.offsetMin = Vector2.zero;
+            layerRect.offsetMax = Vector2.zero;
+            layerRect.pivot = new Vector2(0.5f, 0.5f);
+            layerRect.localScale = Vector3.one;
+            layerRect.localPosition = Vector3.zero;
 
-            overlayObj = new GameObject("TrenchMapOverlay", typeof(RectTransform), typeof(RawImage));
-            overlayObj.transform.SetParent(dynamicMap.mapImage.transform, false);
+            layer = layerObject.AddComponent<TrenchMapGraphic>();
+            layer.raycastTarget = false;
+            layer.SetSource(trenchManager, dynamicMap);
 
-            RectTransform overlayRect = overlayObj.GetComponent<RectTransform>();
-            overlayRect.anchorMin = Vector2.zero;
-            overlayRect.anchorMax = Vector2.one;
-            overlayRect.offsetMin = Vector2.zero;
-            overlayRect.offsetMax = Vector2.zero;
-            overlayRect.pivot = mapImageRect.pivot;
-            overlayRect.localScale = Vector3.one;
-            overlayRect.localPosition = Vector3.zero;
+            // Command's own front line re-asserts itself as the last sibling; the trench
+            // trace reads under it.
+            layerObject.transform.SetAsLastSibling();
 
-            overlayImage = overlayObj.GetComponent<RawImage>();
-            overlayImage.texture = overlayTexture;
-            overlayImage.raycastTarget = false;
-            overlayObj.SetActive(DynamicMap.mapMaximized);
-
-            // Draw above the terrain image
-            overlayObj.transform.SetAsLastSibling();
-
+            lastZoom = Mathf.Abs(dynamicMap.mapImage.transform.localScale.x);
+            lastHq = dynamicMap.HQ;
             initialized = true;
-            BakeTrenchMapTexture();
+            isMapMaximized = DynamicMap.mapMaximized;
+            layerObject.SetActive(isMapMaximized);
             logger?.LogInfo("[TRENCHES] Tactical map overlay initialized.");
         }
+    }
 
-        private void EnsureTexture(int w, int h)
+    /// <summary>
+    /// The trench belt as curves: one mesh pass over the fire line (solid, crenellated
+    /// toward the enemy), the support and redoubt traces, the communication links and saps,
+    /// a mark per strongpoint and a tick per growth stage. Everything is drawn in map-local
+    /// units — world metres times DynamicMap's own display factor — and every stroke is
+    /// counter-scaled to a constant screen width, so zooming magnifies the curves instead of
+    /// pixelating a texture. Rebuilt on demand, never per frame while the map is closed.
+    /// </summary>
+    internal sealed class TrenchMapGraphic : MaskableGraphic
+    {
+        private const float FireHalfWidth = 1.7f;
+        private const float RearHalfWidth = 1.0f;
+        private const float LinkHalfWidth = 0.8f;
+        private const float UnderExtra = 1.0f;
+        private const float ToothSpacingPixels = 13f;
+        private const float ToothLengthPixels = 6.5f;
+        private const float ToothHalfWidthPixels = 1.1f;
+        private const float MarkHalfSizePixels = 1.7f;
+        private const float StepPixels = 2f;
+        private const int MaximumSegments = 640;
+        private const int MaximumSegmentsPerStroke = 200;
+        private const int MaximumVertices = 12000;
+
+        private static readonly Color32 Under = new Color32(10, 12, 16, 150);
+        private static readonly Color32 FriendlyInk = new Color32(65, 210, 255, 235);
+        private static readonly Color32 HostileInk = new Color32(255, 100, 80, 235);
+        private static readonly Color32 SuppressedInk = new Color32(255, 195, 65, 235);
+        private static readonly Color32 NeutralizedInk = new Color32(150, 150, 150, 190);
+
+        private TrenchManager manager;
+        private DynamicMap map;
+
+        public void SetSource(TrenchManager source, DynamicMap dynamicMap)
         {
-            if (overlayTexture != null && overlayTexture.width == w && overlayTexture.height == h)
-                return;
-
-            if (overlayTexture != null) Destroy(overlayTexture);
-
-            overlayTexture = new Texture2D(w, h, TextureFormat.RGBA32, false)
-            {
-                name = "TrenchMapTexture",
-                filterMode = FilterMode.Bilinear,
-                wrapMode = TextureWrapMode.Clamp
-            };
-
-            if (overlayImage != null) overlayImage.texture = overlayTexture;
+            manager = source;
+            map = dynamicMap;
+            SetVerticesDirty();
         }
 
-        private void BakeTrenchMapTexture()
+        protected override void OnPopulateMesh(VertexHelper vh)
         {
-            if (overlayTexture == null || trenchManager == null) return;
+            vh.Clear();
+            if (manager == null || map == null || !isActiveAndEnabled) return;
 
-            int w = overlayTexture.width;
-            int h = overlayTexture.height;
-            if (bakeBuffer == null || bakeBuffer.Length != w * h) bakeBuffer = new Color32[w * h];
-            Color32[] pixels = bakeBuffer;
-            Array.Clear(pixels, 0, pixels.Length);
+            float factor = map.mapDisplayFactor;
+            if (!(factor > 0.0001f)) return;
 
-            Color32 crenellationColor = new Color32(20, 18, 14, 255); // Sharp charcoal
+            float scale = Mathf.Abs(transform.lossyScale.x);
+            if (!(scale > 1e-4f)) scale = 1f;
+            float pixel = 1f / scale;
 
-            var lines = trenchManager.Lines;
-            for (int n = 0; n < lines.Count; n++)
+            IReadOnlyList<TrenchLine> lines = manager.Lines;
+
+            // Zoomed in, the belt is far longer on screen than the segment budget. Widening
+            // every step keeps all of it drawn, a little coarser, instead of spending the
+            // budget on the first lines and dropping the rest.
+            float step = Mathf.Max(pixel * StepPixels, Measure(lines, factor) / MaximumSegments);
+            for (int i = 0; i < lines.Count; i++)
             {
-                TrenchLine line = lines[n];
-                Color32 factionColor = line.OwnerHq == dynamicMap?.HQ
-                    ? new Color32(65, 210, 255, 255) : new Color32(255, 100, 80, 255);
-                if (line.Overrun) factionColor = new Color32(130, 130, 130, 180);
-                else if (line.Suppressed) factionColor = new Color32(255, 195, 65, 255);
-                Color32 rearColor = factionColor;
-                rearColor.a = 110;
+                TrenchLine line = lines[i];
+                if (line == null || line.Curve == null) continue;
 
-                // 1. The fire line solid with crenellations facing the threat, spaced on the map
-                // rather than on the ditch's own station spacing.
-                DrawTrace(pixels, w, h, line.Curve, line.Threat, factionColor, 1, true, crenellationColor);
-                // 2. Support, redoubt, communication and sap traces dimmer.
-                DrawTrace(pixels, w, h, line.Support, line.Threat, rearColor, 1, false, crenellationColor);
-                DrawTrace(pixels, w, h, line.Redoubt, line.Threat, rearColor, 1, false, crenellationColor);
-                DrawTraces(pixels, w, h, line.Links, rearColor);
-                DrawTraces(pixels, w, h, line.Spurs, rearColor);
-                // 3. Native strongpoints: the bays the emplacements actually hold.
-                DrawStrongpoints(pixels, w, h, line, factionColor);
+                Color32 ink = InkFor(line);
+                Color32 rear = ink;
+                rear.a = 150;
 
-                // Stage ticks and a crossed-out neutralized position remain legible
-                // without relying only on red/blue/amber colour differences.
-                Vector2 center = WorldToTex(line.Center, w, h);
-                int cx = (int)center.x, cy = (int)center.y;
-                if (line.Overrun)
-                {
-                    DrawLine(pixels, w, h, cx - 4, cy - 4, cx + 4, cy + 4, factionColor, 1);
-                    DrawLine(pixels, w, h, cx - 4, cy + 4, cx + 4, cy - 4, factionColor, 1);
-                }
-                else for (int tick = 0; tick < (int)line.Stage; tick++)
-                    DrawLine(pixels, w, h, cx - 6 + tick * 4, cy + 6, cx - 6 + tick * 4, cy + 9, factionColor, 1);
+                Stroke(vh, line.Curve, factor, step, pixel, FireHalfWidth, ink);
+                Teeth(vh, line.Curve, line.Threat, factor, pixel, ink);
+                Stroke(vh, line.Support, factor, step, pixel, RearHalfWidth, rear);
+                Stroke(vh, line.Redoubt, factor, step, pixel, RearHalfWidth, rear);
+                StrokeAll(vh, line.Links, factor, step, pixel, LinkHalfWidth, rear);
+                StrokeAll(vh, line.Spurs, factor, step, pixel, LinkHalfWidth, rear);
+                Marks(vh, line, factor, pixel, ink);
+                States(vh, line, factor, pixel, ink);
+
+                if (vh.currentVertCount > MaximumVertices) return;
             }
-
-            overlayTexture.SetPixels32(pixels);
-            overlayTexture.Apply();
         }
 
-        private void DrawStrongpoints(Color32[] pixels, int w, int h, TrenchLine line, Color32 color)
+        /// <summary>Total drawn length of every stroke, in map-local units.</summary>
+        private static float Measure(IReadOnlyList<TrenchLine> lines, float factor)
         {
-            DrawMarks(pixels, w, h, line.Anchors, 0.15f, color);
-            DrawMarks(pixels, w, h, line.Anchors, 0.5f, color);
-            DrawMarks(pixels, w, h, line.Anchors, 0.85f, color);
-            DrawMarks(pixels, w, h, line.SupportAnchors, 0.5f, color);
+            float total = 0f;
+            for (int i = 0; i < lines.Count; i++)
+            {
+                TrenchLine line = lines[i];
+                if (line == null) continue;
+                total += Length(line.Curve, factor);
+                total += Length(line.Support, factor);
+                total += Length(line.Redoubt, factor);
+                total += LengthAll(line.Links, factor);
+                total += LengthAll(line.Spurs, factor);
+            }
+            return total;
         }
 
-        private void DrawMarks(Color32[] pixels, int w, int h, Vector3[] anchors, float fraction, Color32 color)
+        private static float Length(Vector3[] path, float factor)
+        {
+            if (path == null || path.Length < 2) return 0f;
+            float total = 0f;
+            for (int i = 1; i < path.Length; i++)
+                total += (ToLocal(path[i], factor) - ToLocal(path[i - 1], factor)).magnitude;
+            return total;
+        }
+
+        private static float LengthAll(Vector3[][] traces, float factor)
+        {
+            if (traces == null) return 0f;
+            float total = 0f;
+            for (int t = 0; t < traces.Length; t++) total += Length(traces[t], factor);
+            return total;
+        }
+
+        private Color32 InkFor(TrenchLine line)
+        {
+            if (line.Overrun) return NeutralizedInk;
+            if (line.Suppressed) return SuppressedInk;
+            return line.OwnerHq != null && line.OwnerHq == map.HQ ? FriendlyInk : HostileInk;
+        }
+
+        /// <summary>Strongpoints: the bays the native emplacements actually hold.</summary>
+        private static void Marks(VertexHelper vh, TrenchLine line, float factor, float pixel, Color32 ink)
+        {
+            Mark(vh, line.Anchors, 0.15f, factor, pixel, ink);
+            Mark(vh, line.Anchors, 0.5f, factor, pixel, ink);
+            Mark(vh, line.Anchors, 0.85f, factor, pixel, ink);
+            Mark(vh, line.SupportAnchors, 0.5f, factor, pixel, ink);
+        }
+
+        private static void Mark(VertexHelper vh, Vector3[] anchors, float fraction, float factor,
+            float pixel, Color32 ink)
         {
             if (anchors == null || anchors.Length == 0) return;
             Vector3 anchor = anchors[Mathf.Clamp(Mathf.RoundToInt(fraction * (anchors.Length - 1)), 0, anchors.Length - 1)];
-            Vector2 at = WorldToTex(anchor, w, h);
-            DrawFilledSquare(pixels, w, h, (int)at.x, (int)at.y, 1, color);
+            AddRect(vh, ToLocal(anchor, factor), MarkHalfSizePixels * pixel, ink);
         }
 
-        private void DrawTrace(Color32[] pixels, int w, int h, Vector3[] trace, Vector3[] threat,
-            Color32 color, int thickness, bool crenellate, Color32 tickColor)
+        /// <summary>Stage ticks, or a crossed-out centre once the position is neutralized.</summary>
+        private static void States(VertexHelper vh, TrenchLine line, float factor, float pixel, Color32 ink)
         {
-            if (trace == null || trace.Length < 2) return;
-            float sinceTooth = 0f;
-            for (int p = 0; p < trace.Length - 1; p++)
+            Vector2 at = ToLocal(line.Center, factor);
+            if (line.Overrun)
             {
-                Vector2 p0 = WorldToTex(trace[p], w, h);
-                Vector2 p1 = WorldToTex(trace[p + 1], w, h);
-                DrawLine(pixels, w, h, (int)p0.x, (int)p0.y, (int)p1.x, (int)p1.y, color, thickness);
-                if (!crenellate) continue;
-
-                // One tooth every ToothSpacing map pixels, not one per path station: the ditch
-                // is laid out every few metres, so a tooth per station merged into a solid bar.
-                sinceTooth += Vector2.Distance(p0, p1);
-                if (sinceTooth < ToothSpacing) continue;
-                sinceTooth = 0f;
-                Vector3 direction = p + 1 < threat.Length ? threat[p] : threat[0];
-                DrawCrenellations(pixels, w, h, p0, p1, new Vector2(direction.x, direction.z), tickColor, 1);
+                float arm = 4f * pixel;
+                AddStroke(vh, at + new Vector2(-arm, -arm), at + new Vector2(arm, arm), pixel * 1.2f, ink);
+                AddStroke(vh, at + new Vector2(-arm, arm), at + new Vector2(arm, -arm), pixel * 1.2f, ink);
+                return;
+            }
+            for (int tick = 0; tick < (int)line.Stage; tick++)
+            {
+                float x = at.x + (tick - 2) * 3f * pixel;
+                AddStroke(vh, new Vector2(x, at.y + 6f * pixel), new Vector2(x, at.y + 9f * pixel), pixel, ink);
             }
         }
 
-        private void DrawTraces(Color32[] pixels, int w, int h, Vector3[][] traces, Color32 color)
+        private static void StrokeAll(VertexHelper vh, Vector3[][] traces, float factor, float step,
+            float pixel, float halfWidthPixels, Color32 ink)
         {
             if (traces == null) return;
             for (int t = 0; t < traces.Length; t++)
+                Stroke(vh, traces[t], factor, step, pixel, halfWidthPixels, ink);
+        }
+
+        /// <summary>
+        /// One polyline as anti-aliased strokes: a dark under-stroke for legibility over
+        /// terrain, then the ink. Stations closer than a couple of screen pixels are thinned
+        /// out, so a densely resampled curve costs no more than it reads.
+        /// </summary>
+        private static void Stroke(VertexHelper vh, Vector3[] path, float factor, float step,
+            float pixel, float halfWidthPixels, Color32 ink)
+        {
+            if (path == null || path.Length < 2) return;
+            Vector2 anchor = ToLocal(path[0], factor);
+            int segments = 0;
+            for (int i = 1; i < path.Length; i++)
             {
-                Vector3[] trace = traces[t];
-                for (int p = 0; p + 1 < trace.Length; p++)
-                {
-                    Vector2 p0 = WorldToTex(trace[p], w, h);
-                    Vector2 p1 = WorldToTex(trace[p + 1], w, h);
-                    DrawLine(pixels, w, h, (int)p0.x, (int)p0.y, (int)p1.x, (int)p1.y, color, 1);
-                }
+                Vector2 here = ToLocal(path[i], factor);
+                if (i < path.Length - 1 && (here - anchor).sqrMagnitude < step * step) continue;
+
+                float half = halfWidthPixels * pixel;
+                AddStroke(vh, anchor, here, half + UnderExtra * pixel, Under);
+                AddStroke(vh, anchor, here, half, ink);
+                anchor = here;
+                if (++segments >= MaximumSegmentsPerStroke) return;
             }
         }
 
-        /// <summary>NATO crenellation ticks perpendicular to the trace, facing the threat.</summary>
-        private static void DrawCrenellations(Color32[] pixels, int w, int h, Vector2 a, Vector2 b, Vector2 threat,
-            Color32 tickColor, int count)
+        /// <summary>NATO crenellation teeth, one per screen spacing, facing the enemy.</summary>
+        private static void Teeth(VertexHelper vh, Vector3[] path, Vector3[] threat, float factor,
+            float pixel, Color32 ink)
+        {
+            if (path == null || path.Length < 2) return;
+            float spacing = ToothSpacingPixels * pixel;
+            float sinceTooth = spacing;
+            int teeth = 0;
+            for (int i = 0; i + 1 < path.Length && teeth < MaximumSegmentsPerStroke; i++)
+            {
+                Vector2 a = ToLocal(path[i], factor);
+                Vector2 b = ToLocal(path[i + 1], factor);
+                Vector2 delta = b - a;
+                float length = delta.magnitude;
+                if (length < 1e-4f) continue;
+
+                sinceTooth += length;
+                if (sinceTooth < spacing) continue;
+                sinceTooth = 0f;
+
+                Vector2 side = new Vector2(-delta.y, delta.x) / length;
+                Vector2 enemy = ThreatAt(threat, i);
+                if (enemy.sqrMagnitude > 1e-6f && Vector2.Dot(side, enemy) < 0f) side = -side;
+                AddStroke(vh, b, b + side * (ToothLengthPixels * pixel),
+                    ToothHalfWidthPixels * pixel, ink);
+                teeth++;
+            }
+        }
+
+        private static Vector2 ThreatAt(Vector3[] threat, int index)
+        {
+            if (threat == null || threat.Length == 0) return Vector2.zero;
+            Vector3 direction = threat[Mathf.Min(index, threat.Length - 1)];
+            return new Vector2(direction.x, direction.z);
+        }
+
+        private static Vector2 ToLocal(Vector3 world, float factor)
+            => new Vector2(world.x * factor, world.z * factor);
+
+        private static void AddStroke(VertexHelper vh, Vector2 a, Vector2 b, float halfWidth, Color32 ink)
         {
             Vector2 delta = b - a;
             float length = delta.magnitude;
-            if (length < 0.5f || count < 1) return;
-            Vector2 side = new Vector2(-delta.y, delta.x) / length;
-            if (threat.sqrMagnitude > 0.001f && Vector2.Dot(side, threat) < 0f) side = -side;
-
-            for (int i = 0; i < count; i++)
-            {
-                Vector2 at = Vector2.Lerp(a, b, (i + 0.5f) / count);
-                DrawLine(pixels, w, h, (int)at.x, (int)at.y,
-                    (int)(at.x + side.x * 4f), (int)(at.y + side.y * 4f), tickColor, 1);
-            }
+            if (length < 1e-4f) return;
+            Vector2 side = new Vector2(-delta.y, delta.x) / length * halfWidth;
+            AddQuad(vh, a - side, a + side, b + side, b - side, ink);
         }
 
-        private Vector2 WorldToTex(Vector3 worldPos, int texW, int texH)
+        private static void AddRect(VertexHelper vh, Vector2 center, float half, Color32 ink)
+            => AddQuad(vh,
+                new Vector2(center.x - half, center.y - half),
+                new Vector2(center.x - half, center.y + half),
+                new Vector2(center.x + half, center.y + half),
+                new Vector2(center.x + half, center.y - half), ink);
+
+        private static void AddQuad(VertexHelper vh, Vector2 a, Vector2 b, Vector2 c, Vector2 d, Color32 ink)
         {
-            // Center is (0,0) in world space, spanning +/- half dimension
-            float normX = (worldPos.x + theaterDimensions.x * 0.5f) / theaterDimensions.x;
-            float normY = (worldPos.z + theaterDimensions.y * 0.5f) / theaterDimensions.y;
-
-            return new Vector2(
-                Math.Clamp(normX * (texW - 1), 0, texW - 1),
-                Math.Clamp(normY * (texH - 1), 0, texH - 1)
-            );
-        }
-
-        private static void DrawLine(Color32[] pixels, int w, int h, int x0, int y0, int x1, int y1, Color32 color, int thickness)
-        {
-            int dx = Math.Abs(x1 - x0);
-            int dy = Math.Abs(y1 - y0);
-            int sx = x0 < x1 ? 1 : -1;
-            int sy = y0 < y1 ? 1 : -1;
-            int err = dx - dy;
-
-            while (true)
-            {
-                DrawBrush(pixels, w, h, x0, y0, thickness, color);
-
-                if (x0 == x1 && y0 == y1) break;
-                int e2 = 2 * err;
-                if (e2 > -dy)
-                {
-                    err -= dy;
-                    x0 += sx;
-                }
-                if (e2 < dx)
-                {
-                    err += dx;
-                    y0 += sy;
-                }
-            }
-        }
-
-        private static void DrawBrush(Color32[] pixels, int w, int h, int cx, int cy, int radius, Color32 color)
-        {
-            for (int dy = -radius; dy <= radius; dy++)
-            {
-                int py = cy + dy;
-                if (py < 0 || py >= h) continue;
-
-                for (int dx = -radius; dx <= radius; dx++)
-                {
-                    int px = cx + dx;
-                    if (px < 0 || px >= w) continue;
-
-                    pixels[py * w + px] = color;
-                }
-            }
-        }
-
-        private static void DrawFilledSquare(Color32[] pixels, int w, int h, int cx, int cy, int halfSize, Color32 color)
-        {
-            for (int y = cy - halfSize; y <= cy + halfSize; y++)
-            {
-                if (y < 0 || y >= h) continue;
-                for (int x = cx - halfSize; x <= cx + halfSize; x++)
-                {
-                    if (x < 0 || x >= w) continue;
-                    pixels[y * w + x] = color;
-                }
-            }
+            var vert = UIVertex.simpleVert;
+            vert.color = ink;
+            int index = vh.currentVertCount;
+            vert.position = a;
+            vh.AddVert(vert);
+            vert.position = b;
+            vh.AddVert(vert);
+            vert.position = c;
+            vh.AddVert(vert);
+            vert.position = d;
+            vh.AddVert(vert);
+            vh.AddTriangle(index, index + 1, index + 2);
+            vh.AddTriangle(index, index + 2, index + 3);
         }
     }
 }

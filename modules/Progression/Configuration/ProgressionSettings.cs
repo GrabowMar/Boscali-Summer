@@ -20,20 +20,25 @@ namespace BoscaliSummer.Features.Progression.Configuration
                 "feature - its Harmony patches, network handlers and the SQD page - and also " +
                 "disables Support, which depends on it. " +
                 "Host-authoritative: on a server, only the host's value applies.");
-            ScorePerPoint = config.Bind("Progression", "ScorePerPoint", 500,
+            ScorePerPoint = config.Bind("Progression", "ScorePerPoint", 250,
                 new ConfigDescription(
-                    "Mission score earned per perk point. Lower is a faster board: 250 gives a " +
-                    "full board in a busy sortie, 1000 makes the last perks a long-mission " +
-                    "reward. This reads the vanilla per-player score; Nuclear Option's rank " +
-                    "thresholds, aircraft requirements and weapon access are never modified. " +
-                    "Host-authoritative: on a server, only the host's value applies.",
+                    "Score for the first qualification grade. Grade n costs n x this, so grades " +
+                    "get longer as they get better: 250 gives the tool in the first minutes and " +
+                    "a complete five-grade qualification for 3750 score, 1000 makes even the " +
+                    "first tool a long-mission reward. This reads the vanilla per-player score; " +
+                    "Nuclear Option's rank thresholds, aircraft requirements and weapon access " +
+                    "are never modified. Host-authoritative: on a server, only the host's value " +
+                    "applies.",
                     new AcceptableValueRange<int>(50, 10000)));
             MaximumPoints = config.Bind("Progression", "MaximumPoints", 6,
                 new ConfigDescription(
-                    "Most perk points one player can earn in a mission. The board holds nine " +
-                    "perks costing twelve points in total, so this is the real balance dial: " +
-                    "6 forces a specialisation, 12 lets one pilot take everything. " +
-                    "Host-authoritative: on a server, only the host's value applies.",
+                    "Most picks one player can earn in a mission. The board holds four " +
+                    "qualifications of five grades each, one pick per grade, and a career may " +
+                    "hold at most two support authorisations, so this is the balance dial: 6 " +
+                    "allows one complete qualification plus a second tool, once an ace pays the " +
+                    "sixth pick. Score pays the five grades; ace bonus picks go on top up to " +
+                    "this ceiling. Host-authoritative: on a server, only the host's value " +
+                    "applies.",
                     new AcceptableValueRange<int>(1, 20)));
             PerkStrength = config.Bind("Progression", "PerkStrength", 1f,
                 new ConfigDescription(

@@ -12,6 +12,18 @@ namespace BoscaliSummer.Features.Trenches.Domain
         Saps = 4         // Forward listening posts pushed into no man's land
     }
 
+    /// <summary>Why a planning attempt produced no position, for one bounded log line.</summary>
+    internal enum TrenchRefusal
+    {
+        None = 0,
+        TooShort,    // The trace is shorter than one position
+        NoStations,  // Resampling produced too few curve stations
+        NoSide,      // The control field never resolved which side owns the trace
+        NoGround,    // Terrain refused every candidate depth
+        NoRun,       // Buildable stretches are shorter than the minimum run
+        TooClose     // A position already holds this stretch of front
+    }
+
     /// <summary>
     /// Pure engine-free rules for turning a Command front trace into a natural trench line:
     /// a smooth Bezier chain through the sparse contour, the ground-seeking offset on the
@@ -25,28 +37,76 @@ namespace BoscaliSummer.Features.Trenches.Domain
         public const float CurveSpacing = 10f;
         public const float MeshSpacing = 3.5f;
         public const float TraverseSpacing = 5.5f;
-        public const float TraverseAmplitude = 1.35f;
+        public const float TraverseAmplitude = 1.6f;
         public const float MinRunLength = 140f;
         public const int MaximumStations = 320;
 
         // Belt: the fire trench sits behind the line on the owned side; the support and
-        // redoubt traces sit at deliberate field depths behind it.
-        public const float FireDepth = 60f;
-        public const float SupportDepth = 110f;
-        public const float RedoubtDepth = 220f;
+        // redoubt traces sit at deliberate field depths behind it, so the position reads as
+        // the two-line defence real doctrine digs instead of a single ribbon.
+        public const float FireDepth = 80f;
+        public const float SupportDepth = 150f;
+        public const float RedoubtDepth = 300f;
         public const float DepthSearchStep = 12f;
         public const int DepthSearchLevels = 5;
         public const float DepthStayWeight = 0.045f;
         public const float UndulationWeight = 6f;
         public const float LinkSpacing = 150f;
-        public const float SapDepth = 34f;
+        public const float SapDepth = 45f;
         public const float SapLateralFraction = 0.3f;
-        public const float MinimumLineSpacing = 260f;
 
         // Validated ground: dry, level enough to dig, and a safe trench-side probe distance.
         public const float MinimumGroundHeight = 2f;
-        public const float MinimumNormalY = 0.985f;
+        public const float MinimumNormalY = 0.97f;
         public const float ConstructionSuppressionSeconds = 60f;
+
+        // A front trace runs through contested ground, where cell ownership answers neither
+        // side, so the owning side is read from the sign of the signed control field instead.
+        // The ladder deepens until the field separates, covering coarsened grid cells.
+        public const float HoldSeparation = 1e-4f;
+        private static readonly float[] SideProbeDistances = { 40f, 250f, 1000f, 3000f, 8000f };
+
+        /// <summary>
+        /// Floor of the contested band. A position digs a hundred-ish metres behind the
+        /// trace, well inside the front cell, and the field is one value per kilometre cell:
+        /// on a ragged front that cell can read slightly hostile (a salient, a cell the enemy
+        /// has just pushed into) while the ground is still the faction's own side of the
+        /// line. Only ground clearly inside the enemy's cells refuses.
+        /// </summary>
+        public const float HoldOwnSideFloor = -0.5f;
+
+        /// <summary>True when a signed control value is the faction's own or contested ground.</summary>
+        public static bool HoldsOwnSide(float hold) => !float.IsNaN(hold) && hold >= HoldOwnSideFloor;
+
+        /// <summary>
+        /// Side of the front the faction holds at a station: samples the signed control field
+        /// (positive = the faction's ground) a short distance either way and reads the stronger
+        /// sign, deepening the probe until the field separates so the previous cell's plateau
+        /// cannot decide. <paramref name="holdAt"/> returns NaN where no control value exists;
+        /// a field that never separates fails closed rather than guessing.
+        /// </summary>
+        public static bool TryResolveInward(float x, float z, float nx, float nz,
+            Func<float, float, float> holdAt, out float ix, out float iz)
+        {
+            ix = nx;
+            iz = nz;
+            if (holdAt == null) return false;
+            for (int i = 0; i < SideProbeDistances.Length; i++)
+            {
+                float distance = SideProbeDistances[i];
+                float positive = holdAt(x + nx * distance, z + nz * distance);
+                float negative = holdAt(x - nx * distance, z - nz * distance);
+                if (float.IsNaN(positive) || float.IsNaN(negative)) continue;
+                if (Math.Abs(positive - negative) < HoldSeparation) continue;
+                if (negative > positive)
+                {
+                    ix = -nx;
+                    iz = -nz;
+                }
+                return true;
+            }
+            return false;
+        }
 
         public static bool IsBuildableGround(float heightAboveSea, float normalY)
             => !float.IsNaN(heightAboveSea) && !float.IsInfinity(heightAboveSea) &&
@@ -85,9 +145,37 @@ namespace BoscaliSummer.Features.Trenches.Domain
         /// </summary>
         public static int Resample(float[] x, float[] z, int count, float spacing, bool closed,
             float[] outX, float[] outZ)
+            => Resample(x, z, 0, count, spacing, closed, outX, outZ);
+
+        /// <summary>
+        /// Index of the last trace point a position-length window may span, walking the
+        /// cumulative arc lengths (<c>arc[i]</c> = distance from the first point to point
+        /// <c>i</c>). The window always spans at least one segment while the trace continues,
+        /// so a single cell-sized stride is still a position. <paramref name="count"/> is the
+        /// number of usable points — a closed ring's repeated first point is not one.
+        /// </summary>
+        public static int WindowEnd(float[] arc, int count, int start, float maximumLength)
+        {
+            if (arc == null || count <= 0 || !(maximumLength > 0f)) return -1;
+            start = Math.Clamp(start, 0, count - 1);
+            float end = arc[start] + maximumLength;
+            int last = start;
+            while (last + 1 < count && arc[last + 1] <= end) last++;
+            if (last == start && last + 1 < count) last++;
+            return last;
+        }
+
+        /// <summary>
+        /// Resamples the stretch of a trace that starts at <paramref name="start"/> and is
+        /// <paramref name="count"/> points long, so one planning window can be fitted at the
+        /// real station spacing without dragging the whole trace through the buffer.
+        /// </summary>
+        public static int Resample(float[] x, float[] z, int start, int count, float spacing, bool closed,
+            float[] outX, float[] outZ)
         {
             if (x == null || z == null || outX == null || outZ == null || count < 2 ||
                 outX.Length < 2 || outZ.Length < 2) return 0;
+            if (start < 0 || start + count > x.Length || start + count > z.Length) return 0;
             spacing = Math.Max(1f, spacing);
 
             int written = 0;
@@ -102,24 +190,24 @@ namespace BoscaliSummer.Features.Trenches.Domain
                 if (closed)
                 {
                     int j0 = Neighbour(i - 1, count, true), j3 = Neighbour(i + 2, count, true);
-                    x0 = x[j0]; z0 = z[j0];
-                    x3 = x[j3]; z3 = z[j3];
+                    x0 = x[start + j0]; z0 = z[start + j0];
+                    x3 = x[start + j3]; z3 = z[start + j3];
                 }
                 else
                 {
-                    x0 = i == 0 ? 2f * x[j1] - x[j2] : x[i - 1];
-                    z0 = i == 0 ? 2f * z[j1] - z[j2] : z[i - 1];
-                    x3 = j2 + 1 >= count ? 2f * x[j2] - x[j1] : x[j2 + 1];
-                    z3 = j2 + 1 >= count ? 2f * z[j2] - z[j1] : z[j2 + 1];
+                    x0 = i == 0 ? 2f * x[start + j1] - x[start + j2] : x[start + i - 1];
+                    z0 = i == 0 ? 2f * z[start + j1] - z[start + j2] : z[start + i - 1];
+                    x3 = j2 + 1 >= count ? 2f * x[start + j2] - x[start + j1] : x[start + j2 + 1];
+                    z3 = j2 + 1 >= count ? 2f * z[start + j2] - z[start + j1] : z[start + j2 + 1];
                 }
 
-                float dx = x[j2] - x[j1], dz = z[j2] - z[j1];
+                float dx = x[start + j2] - x[start + j1], dz = z[start + j2] - z[start + j1];
                 float length = (float)Math.Sqrt(dx * dx + dz * dz);
                 int steps = Math.Max(1, (int)Math.Ceiling(length / spacing));
                 for (int s = 0; s < steps && written < outX.Length; s++)
                 {
                     float t = (float)s / steps;
-                    CatmullRom(x0, z0, x[j1], z[j1], x[j2], z[j2], x3, z3, t,
+                    CatmullRom(x0, z0, x[start + j1], z[start + j1], x[start + j2], z[start + j2], x3, z3, t,
                         out outX[written], out outZ[written]);
                     written++;
                 }
@@ -127,7 +215,7 @@ namespace BoscaliSummer.Features.Trenches.Domain
             if (written < outX.Length)
             {
                 // The far end is the last contour point, not a Bezier extrapolation.
-                int last = closed ? 0 : count - 1;
+                int last = closed ? start : start + count - 1;
                 outX[written] = x[last];
                 outZ[written] = z[last];
                 written++;

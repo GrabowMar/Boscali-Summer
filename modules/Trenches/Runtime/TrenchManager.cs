@@ -29,6 +29,8 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         private const float SameOwnerSpacing = 360f;
         private const float OtherOwnerSpacing = 250f;
         private const int MaximumFactions = 8;
+        private const int RefusalReportAttempts = 15;
+        private const float RefusalReportSeconds = 60f;
 
         private TrenchesSettings settings;
         private ManualLogSource logger;
@@ -45,7 +47,6 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         private readonly FactionHQ[] factions = new FactionHQ[MaximumFactions];
         private int factionCount;
         private int factionIndex;
-        private bool factionStarted;
         private int traceCount;
         private int traceIndex;
         private int windowStart;
@@ -57,6 +58,9 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         private float nextSeedDelay;
         private float nextGrowthWarning;
         private float nextGarrisonWarning;
+        private float nextRefusalWarning;
+        private int planRefusals;
+        private readonly int[] lastTraceReport = new int[MaximumFactions];
 
         public event Action OnLinesChanged;
 
@@ -87,13 +91,15 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             nextLineId = 1;
             factionCount = 0;
             factionIndex = 0;
-            factionStarted = false;
             traceCount = traceIndex = windowStart = 0;
             nextTraceRefresh = 0f;
             nextBuildAttempt = 0f;
             nextSimulationTick = 0f;
             nextGrowthWarning = 0f;
             nextGarrisonWarning = 0f;
+            nextRefusalWarning = 0f;
+            planRefusals = 0;
+            Array.Clear(lastTraceReport, 0, lastTraceReport.Length);
             nextSeedDelay = Time.unscaledTime + 2.5f;
         }
 
@@ -111,7 +117,7 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             {
                 nextTraceRefresh = Time.unscaledTime + TraceRefreshSeconds;
                 RebuildFactionList();
-                AdvanceFaction();
+                RefreshTraces();
             }
             int maximum = Math.Min(MaximumActiveLines, settings.MaxTrenchPositions.Value);
             if (lines.Count < maximum && Time.unscaledTime >= nextBuildAttempt)
@@ -128,17 +134,22 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             }
         }
 
+        /// <summary>
+        /// Rebuilds the faction list without restarting the scan. Resetting the index here
+        /// (the first shape of this loop) meant only the first faction's first windows were
+        /// ever planned: every refresh sent the scan back to the start of the same front.
+        /// </summary>
         private void RebuildFactionList()
         {
+            int previousIndex = factionIndex;
             factionCount = 0;
-            factionIndex = 0;
-            factionStarted = false;
             foreach (FactionHQ owner in FactionRegistry.GetAllHQs())
             {
                 if (owner == null) continue;
                 if (factionCount >= MaximumFactions) break;
                 factions[factionCount++] = owner;
             }
+            factionIndex = factionCount > 0 ? previousIndex % factionCount : 0;
         }
 
         private void AdvanceFaction()
@@ -148,9 +159,32 @@ namespace BoscaliSummer.Features.Trenches.Runtime
                 traceCount = traceIndex = windowStart = 0;
                 return;
             }
-            if (factionStarted) factionIndex = (factionIndex + 1) % factionCount;
-            factionStarted = true;
+            factionIndex = (factionIndex + 1) % factionCount;
             CopyTraces();
+        }
+
+        /// <summary>
+        /// Re-reads the current front on the trace refresh timer while keeping the scan
+        /// cursor, so a long front is walked window by window. The cursor only resets when
+        /// its faction has no traces or a trace is exhausted, which rotates the faction.
+        /// </summary>
+        private void RefreshTraces()
+        {
+            if (factionCount <= 0)
+            {
+                traceCount = traceIndex = windowStart = 0;
+                return;
+            }
+            int previousTrace = traceIndex;
+            int previousWindow = windowStart;
+            CopyTraces();
+            if (traceCount <= 0)
+            {
+                AdvanceFaction();
+                return;
+            }
+            traceIndex = Math.Min(previousTrace, traceCount - 1);
+            windowStart = Math.Max(0, previousWindow);
         }
 
         private void CopyTraces()
@@ -159,6 +193,15 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             windowStart = 0;
             traceCount = territory.CopyFrontlineTraces(factions[factionIndex].GetInstanceID(),
                 tracePoints, traceLengths, tracePressure);
+            // A front that is reported but never planned is the one failure that used to be
+            // silent; the intake line makes that state visible in the log.
+            int slot = factionIndex;
+            if (slot < 0 || slot >= lastTraceReport.Length || lastTraceReport[slot] == traceCount) return;
+            lastTraceReport[slot] = traceCount;
+            int stations = 0;
+            for (int t = 0; t < traceCount; t++) stations += traceLengths[t];
+            logger?.LogInfo($"[TRENCHES] Front traces for {factions[factionIndex].name}: " +
+                $"{traceCount} trace(s), {stations} stations.");
         }
 
         /// <summary>One planning attempt per call; the scan advances so nothing stalls.</summary>
@@ -181,15 +224,38 @@ namespace BoscaliSummer.Features.Trenches.Runtime
 
             bool planned = TrenchPlanner.TryPlanWindow(nextLineId, owner.name + "_Front", owner,
                 tracePressure[traceIndex], tracePoints, offset, length, windowStart, territory,
-                out TrenchLine line, out int next);
+                out TrenchLine line, out int next, out TrenchRefusal refusal);
             if (!planned)
             {
+                NotePlanRefusal(refusal);
                 AdvanceWindow(next);
                 return;
             }
             nextLineId++;
-            if (SpacingOk(line)) Commit(line, maximum);
+            if (!SpacingOk(line))
+            {
+                NotePlanRefusal(TrenchRefusal.TooClose);
+                AdvanceWindow(next);
+                return;
+            }
+            planRefusals = 0;
+            Commit(line, maximum);
             AdvanceWindow(next);
+        }
+
+        /// <summary>
+        /// Bounded honesty: a front that keeps refusing positions says so once a minute
+        /// instead of leaving an empty theater unexplained.
+        /// </summary>
+        private void NotePlanRefusal(TrenchRefusal refusal)
+        {
+            planRefusals++;
+            if (lines.Count > 0 || planRefusals < RefusalReportAttempts ||
+                Time.unscaledTime < nextRefusalWarning) return;
+            nextRefusalWarning = Time.unscaledTime + RefusalReportSeconds;
+            planRefusals = 0;
+            logger?.LogWarning($"[TRENCHES] No position accepted yet: the front was refused ({refusal}) " +
+                "on every attempt. Check the control field and terrain probe.");
         }
 
         private void AdvanceWindow(int next)
@@ -264,9 +330,9 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         {
             var go = new GameObject($"TrenchVisual_{line.Id}");
             var chunk = go.AddComponent<TrenchVisualChunk>();
-            chunk.Lod0Distance = settings != null ? settings.LODDistanceNear.Value : 250f;
-            chunk.Lod1Distance = 1200f;
-            chunk.Lod2Distance = settings != null ? settings.LODDistanceFar.Value : 3500f;
+            chunk.Lod2Distance = settings != null ? settings.LODDistanceFar.Value : 12000f;
+            chunk.Lod0Distance = settings != null ? settings.LODDistanceNear.Value : 600f;
+            chunk.Lod1Distance = Mathf.Max(chunk.Lod0Distance * 2f, chunk.Lod2Distance * 0.22f);
 
             try { chunk.Initialize(line); }
             catch { Destroy(go); throw; }
@@ -345,10 +411,12 @@ namespace BoscaliSummer.Features.Trenches.Runtime
 
         private bool StillOwned(TrenchLine line)
         {
-            // Frontline proximity gates new positions. Existing defenders must not erase
-            // their own position when their troop pressure advances the border.
+            // The line sits inside the contested band, where only the signed control field
+            // separates the sides. A line the enemy has pushed past is neutralized; existing
+            // defenders must not erase their own position while pressure advances the border.
             return line.OwnerHq != null &&
-                territory.OwnsPosition(line.OwnerHq.GetInstanceID(), line.Center.x, line.Center.z);
+                territory.TryGetHoldStrength(line.OwnerHq.GetInstanceID(), line.Center.x, line.Center.z,
+                    out float hold) && TrenchTraceMath.HoldsOwnSide(hold);
         }
     }
 }

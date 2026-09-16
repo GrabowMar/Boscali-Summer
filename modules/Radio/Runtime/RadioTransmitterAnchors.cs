@@ -5,30 +5,40 @@ using UnityEngine;
 
 namespace BoscaliSummer.Features.Radio.Runtime
 {
+    /// <summary>One station's transmitting site: where it is, how high, and what it is.</summary>
+    internal readonly struct RadioTower
+    {
+        public Vector3 Position { get; }
+        public float Height { get; }
+        public string Label { get; }
+
+        public RadioTower(Vector3 position, float height, string label)
+        {
+            Position = position;
+            Height = height;
+            Label = label;
+        }
+    }
+
     /// <summary>
     /// Where the built-in stations transmit from. A commercial station sits at the player's
     /// capital, the world service at another faction's, and the forces broadcast at the
     /// nearest base the player's side still holds — so flying away from your own airfield
-    /// really does cost you the station.
+    /// really does cost you the station, and losing the base takes it off the air entirely.
     ///
     /// <para>Resolved on a timer, never per frame, and bounded to the handful of anchors the
     /// three built-ins need. A user folder has no transmitter: it is a local archive, and
-    /// reception for it is always perfect.</para>
+    /// reception (and tower loss) do not apply to it.</para>
     /// </summary>
     internal sealed class RadioTransmitterAnchors
     {
         private const float RefreshSeconds = 10f;
         private const float HqAntennaMetres = 40f;
         private const float BaseAntennaMetres = 25f;
+        private const int MaximumLabel = 28;
 
-        private struct Anchor
-        {
-            public Vector3 Position;
-            public float Height;
-        }
-
-        private readonly Dictionary<string, Anchor> anchors =
-            new Dictionary<string, Anchor>(System.StringComparer.Ordinal);
+        private readonly Dictionary<string, RadioTower> towers =
+            new Dictionary<string, RadioTower>(System.StringComparer.Ordinal);
         private float nextRefresh;
         private bool listenerValid;
         private Vector3 listenerPosition;
@@ -38,11 +48,19 @@ namespace BoscaliSummer.Features.Radio.Runtime
         public Vector3 ListenerPosition => listenerPosition;
         public float ListenerHeight => listenerHeight;
 
+        /// <summary>
+        /// True once the scene produced at least one authored transmitter, which is what makes
+        /// a missing one meaningful (the tower is gone) instead of merely unknown (a menu, a
+        /// map without the anchor, or a player who has not spawned yet).
+        /// </summary>
+        public bool MapResolved { get; private set; }
+
         public void Reset()
         {
-            anchors.Clear();
+            towers.Clear();
             nextRefresh = 0f;
             listenerValid = false;
+            MapResolved = false;
         }
 
         public void Tick(float now, bool force = false)
@@ -52,20 +70,16 @@ namespace BoscaliSummer.Features.Radio.Runtime
             Refresh();
         }
 
-        public bool TryGet(string stationId, out Vector3 position, out float height)
+        public bool TryGet(string stationId, out RadioTower tower)
         {
-            position = Vector3.zero;
-            height = 0f;
-            if (stationId == null || !anchors.TryGetValue(stationId, out Anchor anchor))
-                return false;
-            position = anchor.Position;
-            height = anchor.Height;
-            return true;
+            tower = default;
+            return stationId != null && towers.TryGetValue(stationId, out tower);
         }
 
         private void Refresh()
         {
-            anchors.Clear();
+            towers.Clear();
+            MapResolved = false;
             listenerValid = false;
 
             Player local = null;
@@ -95,14 +109,16 @@ namespace BoscaliSummer.Features.Radio.Runtime
 
             FactionHQ own = local.HQ;
             if (own != null)
-                Add(BuiltInStationRules.AgrapolId, own.transform.position, HqAntennaMetres);
+                Add(BuiltInStationRules.AgrapolId, own.transform.position, HqAntennaMetres,
+                    "HQ " + FactionName(own));
 
             try
             {
                 foreach (FactionHQ hq in FactionRegistry.GetAllHQs())
                 {
                     if (hq == null || hq == own) continue;
-                    Add(BuiltInStationRules.MarisId, hq.transform.position, HqAntennaMetres);
+                    Add(BuiltInStationRules.MarisId, hq.transform.position, HqAntennaMetres,
+                        "HQ " + FactionName(hq));
                     break;
                 }
             }
@@ -110,13 +126,36 @@ namespace BoscaliSummer.Features.Radio.Runtime
 
             Airbase nearest = NearestOwnedAirbase(own);
             if (nearest != null)
-                Add(BuiltInStationRules.BaseId, nearest.transform.position, BaseAntennaMetres);
+                Add(BuiltInStationRules.BaseId, nearest.transform.position, BaseAntennaMetres,
+                    "BASE " + nearest.name);
+
+            MapResolved = towers.Count > 0;
         }
 
-        private void Add(string id, Vector3 position, float height)
+        private void Add(string id, Vector3 position, float height, string label)
         {
-            if (anchors.ContainsKey(id)) return;
-            anchors[id] = new Anchor { Position = position, Height = height };
+            if (towers.ContainsKey(id)) return;
+            towers[id] = new RadioTower(position, height, Clean(label));
+        }
+
+        private static string FactionName(FactionHQ hq)
+        {
+            try
+            {
+                string name = hq.faction == null ? null : hq.faction.factionName;
+                return string.IsNullOrWhiteSpace(name) ? "COMMAND" : name;
+            }
+            catch
+            {
+                return "COMMAND";
+            }
+        }
+
+        private static string Clean(string label)
+        {
+            if (string.IsNullOrWhiteSpace(label)) return "TOWER";
+            string clean = label.Trim();
+            return clean.Length <= MaximumLabel ? clean : clean.Substring(0, MaximumLabel);
         }
 
         private Airbase NearestOwnedAirbase(FactionHQ owner)

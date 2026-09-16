@@ -6,6 +6,14 @@ namespace BoscaliSummer.Framework.Contracts
     {
         IReadOnlyList<SecondaryObjectiveView> Objectives { get; }
         string Status { get; }
+
+        /// <summary>
+        /// How many contracts the local faction may hold accepted at once, or 0 when the
+        /// host does not report a ceiling. A panel reads 0 as "no ceiling to show" and
+        /// prints a plain count rather than inventing a limit.
+        /// </summary>
+        int ActiveLimit { get; }
+
         void Refresh();
         void RequestAccept(int id);
         void RequestCancel(int id);

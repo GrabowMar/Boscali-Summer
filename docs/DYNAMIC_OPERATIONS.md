@@ -14,13 +14,20 @@ and `Command.ExpandedMapUi` under the existing Command registration.
 
 Open the tactical map, select **MIS**, then **SECONDARY → AVAILABLE**. Accept a contract
 for your faction before doing it. **ACTIVE** shows execution progress; **RESULTS** keeps
-recent outcomes. Dismiss an offer, or confirm an active abort, without a penalty.
-Accepted objectives render through the native objective UI: a numbered map marker on the
-tactical map, a cockpit pointer with distance and the same sized mission-area ring native
-objectives use. The map's Mission objective markers toggle still controls them. A compact
-zone readout shows distance to the area edge while approaching and hold progress inside,
-with a short banner when entering or leaving the area. Host-confirmed enemy tracking must
-remain recent (30 seconds) to display a moving target; lost contacts hide their marker.
+recent outcomes. Dismissing an offer has no penalty; confirming the abort of an accepted
+contract costs the faction 1 morale and pays nothing.
+Accepted objectives are drawn by this module, not by the native objective UI: a marker per
+contract on the tactical map (parented to the map image, so it pans and zooms, and hidden with
+the map's own objective-markers toggle) and in the cockpit, where the game camera projects it -
+a pointer turning toward the target, a two-line plate with the contract number and name over
+`FAMILY · DISTANCE · CLOCK`, an edge-clamped copy when the target is off screen or behind, and
+a dotted area ring at the contract's radius. The vicinity card lists up to three contracts
+(inside your area first, then nearest, then a lost contact, which is never dropped), with
+distance or hold progress, the clock, an approach-then-hold bar and a short banner when
+entering or leaving the area. Host-confirmed enemy tracking must remain recent (30 seconds) to
+keep a moving target's position; a lost contact keeps its row and says `CONTACT LOST` instead
+of drawing a stale marker. Nothing is fed into `MissionPosition` or the mission runner, so
+vanilla AI and authored objectives never see a contract.
 The original
 briefing and authored objectives remain on their tabs. A host without this module
 cannot supply secondary data; a missing or stale reply clears the panel.
@@ -85,6 +92,22 @@ Lost defense bases and invalid/despawned targets cancel objectives. A target's a
 disable event is remembered even if its object disappears before the next tick.
 The editor does not run the director.
 
+Generation and pricing follow the front's escalation ladder. A mission at conventional
+posture offers every 30 seconds; tactical every 24; strategic every 18. A fresh offer's
+money and XP are multiplied by 1.0, 1.15 or 1.35 for the same three stages, on top of
+`RewardMultiplier` and inside the existing award limits. Only the mission's own
+`tacticalThreshold`/`strategicThreshold` gate the stages; a zero threshold means the
+mission never gated that stage, exactly as the MIS main tab shows it.
+
+Completing a contract with a paid award may seed one follow-on for the same board:
+a capture leads to a defense; reconnaissance, a sortie report or a confirmed strike lead
+to an interdiction; an escorted supply run leads to cutting the enemy's; jamming leads
+to an intercept. A chain stops after two links, at most one follow-on is pending per
+board, and a follow-on with no valid candidate at that moment is skipped rather than
+offered as an empty card. Cancelled and expired contracts never chain. Aborting an
+accepted contract costs the faction 1 morale; dismissing an offer or letting it expire
+does not.
+
 ## Strategic consequences
 
 Each success adds 3 to the faction's stored Morale and subtracts 3 from the hostile
@@ -118,11 +141,13 @@ module owns its spawned roots and removes them on scene/mission reset and teardo
 
 ## Validation and ceilings
 
-Server work runs at 1 Hz; generation runs at most every 30 seconds per faction and
+Server work runs at 1 Hz; generation runs at most every 30 seconds per faction at
+conventional escalation (24 tactical / 18 strategic) and
 at most one faction generates in any tick. Hard
 limits are eight faction boards, three cards each, 128 issued objectives per faction
 per mission, 64 registered airbases, two passes over 4,096 unit candidates per faction per generation,
-and 64 payment recipients/query records. Road preflight accepts at most 512 nodes,
+and 64 payment recipients/query records. Chains add at most one pending follow-on per
+board and two links per operation, delivered inside the same two candidate passes. Road preflight accepts at most 512 nodes,
 2,048 roads and 8,192 road points. Larger road graphs omit convoy awards.
 All extra families share the second unit pass. Observation casts are capped at 32 per host
 tick (two per objective); recent hostile jammer records at 32 with 60-second freshness.
@@ -141,7 +166,7 @@ Markers are built client-side from that snapshot and are never registered with t
 runner, so vanilla AI cannot mistake a contract for a navigation objective.
 
 Required runtime checks before enabling by default: all 17 contract families, acceptance/
-abort/expiry, native map/HUD marker positions through zoom and floating-origin shifts, jamming on headless
+abort/expiry, marker positions through map zoom and floating-origin shifts, jamming on headless
 and listen hosts, Ibis completion/abort, and tax/score/morale awards; convoy path and supply behavior; blocked/partial spawn
 cleanup; listen-host/remote-client/late-join faction views; pause/resume, faction switch,
 mission reload and disable cleanup. Build and pure tests cannot prove those behaviors.
@@ -149,7 +174,9 @@ For the new families also test native rescue with a remote player and return-air
 recon behind terrain and after contact expiry; BDA combat loss versus scripted removal;
 real supply transfers versus empty attempts; repair before/after cover qualification;
 jammer source attribution; observer changes; return-base capture; and late joining during
-an acquired return stage. Release build, pure state-machine regressions, the installed-game
+an acquired return stage. Also test a chain across its two links, a follow-on whose
+candidate has expired (skipped, not an empty card), escalation changes moving the
+generation interval and offer value, and the morale loss on an active abort only. Release build, pure state-machine regressions, the installed-game
 signature/serializer probe and static Harmony verification pass; these are not flight tests.
 
 Research and independent design rationale:

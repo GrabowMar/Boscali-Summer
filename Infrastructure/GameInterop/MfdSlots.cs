@@ -10,9 +10,8 @@ namespace BoscaliSummer.Runtime
         public const string Sqd = "SQD";
         public const string Str = "STR";
         public const string Rad = "RAD";
-        public const string Mus = "MUS";
         public const string Set = "SET";
         public const string Events = "EVN";
-        public const string Adm = "ADM";
+        public const string Weather = "WEA";
     }
 }

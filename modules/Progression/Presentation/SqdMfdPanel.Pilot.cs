@@ -13,7 +13,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
     internal sealed partial class SqdMfdPanel
     {
         private Image pilotPortraitImage;
-        private TMP_Text pilotPortraitFallback;
+        private GameObject pilotPortraitFallback;
         private TMP_Text pilotCallsign;
         private TMP_Text pilotProfileTag;
         private TMP_Text pilotName;
@@ -24,6 +24,9 @@ namespace BoscaliSummer.Features.Progression.Presentation
         private TMP_Text pilotEmblemFallback;
         private TMP_Text pilotSquadron;
         private Image pilotProgressFill;
+        private Image pilotStampFill;
+        private TMP_Text pilotStamp;
+        private TMP_Text pilotPhotoCaption;
 
         private TMP_Text tileSortie;
         private TMP_Text tileTime;
@@ -61,6 +64,8 @@ namespace BoscaliSummer.Features.Progression.Presentation
             pilotEmblemImage = null;
             pilotEmblemFallback = pilotSquadron = null;
             pilotProgressFill = null;
+            pilotStampFill = null;
+            pilotStamp = pilotPhotoCaption = null;
             tileSortie = tileTime = tileFuel = tileDeaths = null;
             pilotMode = pilotStatus = pilotDeaths = pilotGeneration = null;
             runAirframeValue = runTimeValue = runFlightStatusValue = runFuelValue = runSortieScoreValue = null;
@@ -75,30 +80,47 @@ namespace BoscaliSummer.Features.Progression.Presentation
 
         private void BuildPilotPage(RectTransform parent, Rect body)
         {
-            parent = AvScreen.Scroll(parent, body, 880f, out body);
-            AvStyled.Spine(parent, new Rect(body.x, body.y, 3f, body.height));
+            clause = 0;
+            parent = AvScreen.Scroll(parent, body, PilotContentHeight(), out body);
+            DossierSpine(parent, new Rect(body.x, body.y, 3f, body.height));
             float x = body.x + SpineInset;
             float width = body.width - SpineInset;
             float y = body.y;
+
+            y = DrawFileHeader(parent, x, y, width, "FORM SQD-1 · SHEET 1 OF 4", "PERSONNEL FILE",
+                "HOST COPY");
 
             // ---- Dossier card ------------------------------------------------------------
             const float cardHeight = 150f;
             AvStyled.Box(parent, new Rect(x, y, width, cardHeight), "section band");
             AvStyled.SpineTick(parent, x - SpineInset + 3f, y - 12f);
 
+            TMP_Text watermark = PlainLabel(parent, new Rect(x, y - 112f, width, 34f), "ARCHIVE COPY",
+                "watermark");
+            watermark.alignment = TextAlignmentOptions.Center;
+            watermark.rectTransform.localRotation = Quaternion.Euler(0f, 0f, -4f);
+
             Rect portraitFrame = new Rect(x + 10f, y - 8f, 92f, 138f);
             AvKit.Panel(parent, portraitFrame, AvTheme.SurfaceInert);
             AvKit.Outline(parent, portraitFrame, AvTheme.Frame);
-            pilotPortraitFallback = PlainLabel(parent,
-                new Rect(portraitFrame.x + 4f, portraitFrame.y - 56f, portraitFrame.width - 8f, 40f),
-                "NO\nVISUAL", "row-sub");
-            pilotPortraitFallback.alignment = TextAlignmentOptions.Center;
+            AvKit.CornerTicks(parent, portraitFrame, AvTheme.TextPrimary.WithAlpha(0.22f), 9f);
+            pilotPortraitFallback = Redaction(parent,
+                new Rect(portraitFrame.x + 12f, portraitFrame.y - 30f, portraitFrame.width - 24f, 46f), 3);
             pilotPortraitImage = AvKit.Panel(parent,
                 new Rect(portraitFrame.x + 3f, portraitFrame.y - 3f, portraitFrame.width - 6f, portraitFrame.height - 6f),
                 Color.white);
             pilotPortraitImage.type = Image.Type.Simple;
             pilotPortraitImage.preserveAspect = true;
             pilotPortraitImage.raycastTarget = false;
+            CornerFold(parent, x + width, y - cardHeight, 18f, 135f, AvTheme.Frame);
+
+            AvKit.Panel(parent, new Rect(portraitFrame.x + 3f, portraitFrame.y - portraitFrame.height + 19f,
+                portraitFrame.width - 6f, 16f), AvTheme.Ground.WithAlpha(0.88f));
+            pilotPhotoCaption = PlainLabel(parent,
+                new Rect(portraitFrame.x + 4f, portraitFrame.y - portraitFrame.height + 17f,
+                         portraitFrame.width - 8f, 14f),
+                "NO PHOTO", "photo-cap");
+            pilotPhotoCaption.alignment = TextAlignmentOptions.Center;
 
             float textX = portraitFrame.x + portraitFrame.width + 12f;
             float emblemWidth = 74f;
@@ -111,6 +133,8 @@ namespace BoscaliSummer.Features.Progression.Presentation
             pilotStatusLine = PlainLabel(parent, new Rect(textX, y - 76f, textWidth, 15f), "", "row-sub");
             pilotProgressFill = AvKit.ProgressBar(parent,
                 new Rect(textX, y - 100f, textWidth, 5f), 0f, AvTheme.RailReady);
+            (_, pilotStampFill, pilotStamp) = Stamp(
+                parent, new Rect(x + width - 84f, y - 96f, 80f, 22f), "ACTIVE", "ok");
 
             float emblemX = x + width - emblemWidth + 6f;
             pilotEmblemFallback = PlainLabel(parent, new Rect(emblemX, y - 42f, 62f, 30f), "NO\nART", "row-sub");
@@ -173,7 +197,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             y -= 19f;
             spentValue = KeyValue(parent, x, y, width, "POINTS COMMITTED");
             y -= 19f;
-            availableValue = KeyValue(parent, x, y, width, "POINTS UNSPENT");
+            availableValue = KeyValue(parent, x, y, width, "PICKS UNSPENT");
             y -= 24f;
 
             budgetPips = new Image[MaximumBudgetPips];
@@ -207,6 +231,14 @@ namespace BoscaliSummer.Features.Progression.Presentation
             }
         }
 
+        /// <summary>
+        /// The hand-laid sheet is 950px tall with two rows of committed-skill chips. Every
+        /// six perks beyond that adds a chip row, so the scroll content has to grow with it
+        /// or the last skills sit below the fold.
+        /// </summary>
+        private static float PilotContentHeight() =>
+            950f + Mathf.Max(0, (PerkCatalog.All.Length + 5) / 6 - 2) * 44f;
+
         private static TMP_Text StatTile(
             RectTransform parent, float x, float y, float width, string caption, string value)
         {
@@ -235,9 +267,21 @@ namespace BoscaliSummer.Features.Progression.Presentation
             pilotName.text = string.IsNullOrEmpty(name) ? "—" : name;
             pilotRankLine.text = "RANK " + Progress.Rank + "   ·   GENERATION " + pilot.Generation;
             pilotStatusLine.text = pilot.Status;
-            pilotStatusLine.color = pilot.Status != null && pilot.Status.IndexOf("KIA", StringComparison.OrdinalIgnoreCase) >= 0
-                ? AvTheme.Alert : AvTheme.RailReady;
+            bool kia = pilot.Status != null && pilot.Status.IndexOf("KIA", StringComparison.OrdinalIgnoreCase) >= 0;
+            pilotStatusLine.color = kia ? AvTheme.Alert : AvTheme.RailReady;
             pilotBackground.text = string.IsNullOrEmpty(background) ? "No service background on file." : background;
+
+            if (pilotPhotoCaption != null)
+            {
+                pilotPhotoCaption.text = string.IsNullOrEmpty(callsign)
+                    ? "NO PHOTO" : callsign.ToUpperInvariant();
+            }
+            if (pilotStamp != null)
+            {
+                PaintStamp(pilotStampFill, pilotStamp,
+                    bypass ? "warn" : kia ? "bad" : "ok",
+                    bypass ? "DEBUG" : kia ? "KIA" : "ACTIVE");
+            }
 
             SetPortrait(pilotPortraitImage, pilotPortraitFallback, PlayerPortrait(name, callsign));
 

@@ -14,7 +14,8 @@ namespace BoscaliSummer.Features.Support.Runtime
         HackTrack = 11,
         HackBlackout = 12,
         HackGhost = 13,
-        HackSpoof = 14
+        HackSpoof = 14,
+        ElintSweep = 15
     }
 
     internal enum SupportResult : byte
@@ -34,9 +35,26 @@ namespace BoscaliSummer.Features.Support.Runtime
         RateLimited = 12,
         NotAirborne = 13,
         OutOfRange = 14,
+        /// <summary>The station is not overhead (or is holding in a transfer).</summary>
         OutOfCoverage = 15,
         NotBuilt = 16,
-        NoEwAsset = 17
+        NoEwAsset = 17,
+        WrongPosture = 18,
+        PlatformExpended = 19,
+        PlatformLowPower = 20,
+        PlatformRecharging = 21,
+        ModuleNotFitted = 22,
+        ModuleOffline = 23,
+        NoPlatform = 24,
+        PlatformBrownout = 25,
+        NoFuel = 26,
+        LaunchInFlight = 27,
+        OverMass = 28,
+        CellBlocked = 29,
+        CopyLimit = 30,
+        WouldStrand = 31,
+        PlatformExists = 32,
+        NeedsPropulsion = 33
     }
 
     /// <summary>

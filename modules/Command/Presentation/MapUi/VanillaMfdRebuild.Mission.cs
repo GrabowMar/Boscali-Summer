@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Features;
@@ -41,14 +42,17 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private SecondaryObjectiveCard[] secondaryCards;
             private TMP_Text secondaryEmpty;
             private TMP_Text secondaryPageLabel;
+            private TMP_Text boardSummary;
+            private TMP_Text boardStatus;
             private AvButton secondaryPrevious;
             private AvButton secondaryNext;
             private int selectedPage;
             private int secondaryPage;
             private int secondaryCount;
             private int secondaryActive;
+            private int secondaryLimit;
             private int secondaryFilter;
-            private readonly List<SecondaryObjectiveView> filtered = new List<SecondaryObjectiveView>(3);
+            private readonly List<SecondaryObjectiveView> filtered = new List<SecondaryObjectiveView>(4);
             private readonly AvButton[] secondaryFilters = new AvButton[3];
             private string secondaryStatus = "SECONDARY MISSIONS UNAVAILABLE";
 
@@ -76,7 +80,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
                 Shell.DataBar.State.text = selectedPage == 2 ? "SECONDARY MISSIONS" : "MISSION OVERVIEW";
                 Shell.DataBar.SetChip(0, objectives.Count + " PRIMARY", objectives.Count > 0);
-                Shell.DataBar.SetChip(1, secondaryActive + " SECONDARY", secondaryActive > 0);
+                Shell.DataBar.SetChip(1, MfdSecondaryObjectives.ShortCount(secondaryActive, secondaryLimit) + " SECONDARY", secondaryActive > 0);
                 Shell.DataBar.SetChip(2, MissionClock(manager), manager != null);
             }
 
@@ -212,31 +216,50 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private void BuildSecondaryPage(RectTransform page)
             {
                 DrawSpine(page);
-                float y = Heading(page, -AvTokens.Space1, Shell.Body.width,
-                                  "CONTRACT BOARD", "ACCEPT / EXECUTE / COLLECT");
-                string[] filters = { "AVAILABLE", "ACTIVE", "RESULTS" };
-                float filterWidth = (Shell.Body.width - AvTokens.Space3 - AvTokens.Gap * 2f) / 3f;
+                float width = Shell.Body.width;
+                float height = Shell.Body.height;
+                float y = Heading(page, -AvTokens.Space1, width, "CONTRACT BOARD");
+                // The heading's own note slot is static; the board writes the host's live
+                // status there instead, so a director that is off or unanswered says so on
+                // the page rather than only in the status strip.
+                boardStatus = AvStyled.Label(page,
+                    new Rect(width * 0.34f, -AvTokens.Space1, width * 0.66f - AvTokens.Space3, 14f),
+                    "", "section-title-note", align: TextAlignmentOptions.MidlineRight);
+                boardStatus.enableWordWrapping = false;
+                boardStatus.overflowMode = TextOverflowModes.Ellipsis;
+
+                string[] filters = { "AVAILABLE", "ACTIVE", "CLOSED" };
+                float filterWidth = (width - AvTokens.Space3 - AvTokens.Gap * 2f) / 3f;
                 for (int i = 0; i < filters.Length; i++)
                 {
                     int index = i;
                     secondaryFilters[i] = AvStyled.Button(page,
-                        new Rect(AvTokens.Space3 + i * (filterWidth + AvTokens.Gap), y, filterWidth, 44f),
+                        new Rect(AvTokens.Space3 + i * (filterWidth + AvTokens.Gap), y, filterWidth, 40f),
                         filters[i], "row-main", () => { secondaryFilter = index; secondaryPage = 0; RequestRefresh(); }, AvButtonStyle.Tab);
                 }
-                y -= 52f;
-                secondaryCards = new SecondaryObjectiveCard[Shell.Body.height >= 600f ? 2 : 1];
+                y -= 48f;
+
+                boardSummary = AvStyled.Label(page,
+                    new Rect(AvTokens.Space3, y, width - AvTokens.Space3, 14f), "", "section-title-note");
+                y -= 22f;
+
+                // The grid takes the height the panel actually has: a shallow bezel shows
+                // one dossier at a time, a tall one shows four, and the pager never moves.
+                int rows = MfdSecondaryObjectives.RowsFor(height);
+                float cardHeight = MfdSecondaryObjectives.CardHeightFor(height, rows);
                 secondaryEmpty = AvStyled.Label(page,
-                    new Rect(AvTokens.Space3, y, Shell.Body.width - AvTokens.Space3, 100f),
+                    new Rect(AvTokens.Space3, y, width - AvTokens.Space3, 100f),
                     "Waiting for the mission director.", "row-main");
                 secondaryEmpty.enableWordWrapping = true;
                 secondaryEmpty.richText = false;
-                for (int i = 0; i < secondaryCards.Length; i++)
+                secondaryCards = new SecondaryObjectiveCard[rows];
+                for (int i = 0; i < rows; i++)
                     secondaryCards[i] = new SecondaryObjectiveCard(page,
-                        new Rect(AvTokens.Space3, y - i * (242f + AvTokens.Gap),
-                                 Shell.Body.width - AvTokens.Space3, 242f), RequestRefresh);
+                        new Rect(AvTokens.Space3, y - i * MfdSecondaryObjectives.RowPitch,
+                                 width - AvTokens.Space3, cardHeight), RequestRefresh);
 
-                AvButton[] pager = AvKit.Stepper(page, AvTokens.Space3,
-                    y - secondaryCards.Length * (242f + AvTokens.Gap), Shell.Body.width - AvTokens.Space3,
+                float pagerY = -(height - AvTokens.Space2 - AvTokens.RowHeight);
+                AvButton[] pager = AvKit.Stepper(page, AvTokens.Space3, pagerY, width - AvTokens.Space3,
                     out secondaryPageLabel, () => ChangeSecondaryPage(-1), () => ChangeSecondaryPage(1));
                 secondaryPrevious = pager[0];
                 secondaryNext = pager[1];
@@ -250,15 +273,21 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             private void RefreshSecondaryObjectives()
             {
+                bool installed = ModServices.TryGet(out ISecondaryObjectivesView view);
                 IReadOnlyList<SecondaryObjectiveView> entries = null;
-                if (ModServices.TryGet(out ISecondaryObjectivesView view))
+                if (installed)
                 {
                     view.Refresh();
                     entries = view.Objectives;
+                    secondaryLimit = Math.Max(0, view.ActiveLimit);
                     secondaryStatus = string.IsNullOrWhiteSpace(view.Status)
                         ? "SECONDARY MISSIONS — WAITING FOR HOST" : view.Status;
                 }
-                else secondaryStatus = "SECONDARY MISSIONS UNAVAILABLE — DIRECTOR DISABLED OR NOT INSTALLED";
+                else
+                {
+                    secondaryLimit = 0;
+                    secondaryStatus = "SECONDARY MISSIONS UNAVAILABLE — DIRECTOR DISABLED OR NOT INSTALLED";
+                }
 
                 int available = 0, results = 0;
                 filtered.Clear();
@@ -269,30 +298,38 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     if (entry.IsActive) secondaryActive++;
                     else if (entry.IsOffered) available++;
                     else results++;
-                    if (secondaryFilter == 0 ? entry.IsOffered : secondaryFilter == 1 ? entry.IsActive : !entry.IsActive && !entry.IsOffered)
+                    if (secondaryFilter == MfdSecondaryObjectives.FilterAvailable ? entry.IsOffered :
+                        secondaryFilter == MfdSecondaryObjectives.FilterActive ? entry.IsActive :
+                        !entry.IsActive && !entry.IsOffered)
                         filtered.Add(entry);
                 }
+                MfdSecondaryObjectives.SortForDisplay(filtered, secondaryFilter);
+
                 secondaryFilters[0].SetText("AVAILABLE " + available);
-                secondaryFilters[1].SetText("ACTIVE " + secondaryActive + "/2");
-                secondaryFilters[2].SetText("RESULTS " + results);
+                secondaryFilters[1].SetText("ACTIVE " + MfdSecondaryObjectives.ShortCount(secondaryActive, secondaryLimit));
+                secondaryFilters[2].SetText("CLOSED " + results);
                 for (int i = 0; i < secondaryFilters.Length; i++) secondaryFilters[i].SetLatched(i == secondaryFilter);
-                entries = filtered;
+
                 secondaryCount = filtered.Count;
                 secondaryPage = MfdSecondaryObjectives.ClampPage(secondaryPage, secondaryCount, secondaryCards.Length);
+                bool hasCapacity = secondaryLimit <= 0 || secondaryActive < secondaryLimit;
                 for (int i = 0; i < secondaryCards.Length; i++)
                 {
                     int index = secondaryPage * secondaryCards.Length + i;
                     bool exists = index < secondaryCount;
                     secondaryCards[i].Root.gameObject.SetActive(exists);
-                    if (exists) secondaryCards[i].Refresh(entries[index], secondaryActive < 2);
+                    if (exists) secondaryCards[i].Refresh(filtered[index], hasCapacity);
                 }
 
+                boardSummary.text = MfdSecondaryObjectives.BoardSummary(available, secondaryActive, secondaryLimit, results);
+                boardStatus.text = secondaryStatus;
+                boardStatus.color = installed && entries != null ? AvTheme.Dim : AvTheme.Warning;
                 secondaryEmpty.gameObject.SetActive(secondaryCount == 0);
-                secondaryEmpty.text = secondaryFilter == 0 ? "NO OFFERS ON THE BOARD\nNew contracts are drawn from the battlefield every 30 seconds." :
-                    secondaryFilter == 1 ? "NO ACTIVE CONTRACTS\nAccept an AVAILABLE contract to reveal its map marker." : "NO RECENT RESULTS\nFinished contracts remain here for 60 seconds.";
+                secondaryEmpty.text = MfdSecondaryObjectives.EmptyMessage(secondaryFilter);
                 int pageCount = MfdSecondaryObjectives.PageCount(secondaryCount, secondaryCards.Length);
                 secondaryPageLabel.text = secondaryCount == 0 ? "NO SECONDARY MISSIONS" :
-                    "PAGE " + (secondaryPage + 1) + " / " + pageCount + "  ·  " + secondaryActive + " ACTIVE";
+                    "PAGE " + (secondaryPage + 1) + " / " + pageCount + "  ·  " +
+                    MfdSecondaryObjectives.ShortCount(secondaryActive, secondaryLimit) + " ACTIVE";
                 secondaryPrevious.SetEnabled(secondaryPage > 0);
                 secondaryNext.SetEnabled(secondaryPage + 1 < pageCount);
                 secondaryPrevious.WithTooltip(secondaryPage > 0 ? "Previous secondary missions" : "First page of secondary missions");
@@ -301,12 +338,18 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             /// <summary>
             /// One contract dossier: a family glyph well, the contract number and title,
-            /// an urgency chip, the family/state line, a two-line brief, the target and
-            /// payoff block, progress, and the action row. Rail and chip carry the state
-            /// so colour is never the only signal; the glyph names the contract family.
+            /// an urgency chip, the family/state line, a brief, the target and payoff
+            /// block, progress, and the action row. Rail and chip carry the state so
+            /// colour is never the only signal; the glyph names the contract family.
+            ///
+            /// The card is measured from its bottom edge up, so a shorter dossier drops
+            /// the second brief line instead of pushing the actions off the page.
             /// </summary>
             private sealed class SecondaryObjectiveCard
             {
+                private const float ActionHeight = 34f;
+                private const float LinePitch = 18f;
+
                 public readonly RectTransform Root;
                 private readonly TMP_Text title;
                 private readonly TMP_Text family;
@@ -331,10 +374,18 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
                 public SecondaryObjectiveCard(RectTransform parent, Rect area, System.Action refresh)
                 {
+                    float height = area.height;
+                    float actionTop = -(height - 40f);
+                    float barTop = -(height - 52f);
+                    float effectTop = -(height - 70f);
+                    float payTop = effectTop + LinePitch;
+                    float targetTop = payTop + LinePitch;
+                    float briefHeight = height >= 200f ? 30f : 15f;
+
                     Root = new GameObject("SecondaryObjective", typeof(RectTransform)).GetComponent<RectTransform>();
                     Root.SetParent(parent, false);
                     AvKit.Place(Root, area);
-                    rail = AvKit.TacticalCard(Root, new Rect(0f, 0f, area.width, area.height), AvTheme.RailInfo).Rail;
+                    rail = AvKit.TacticalCard(Root, new Rect(0f, 0f, area.width, height), AvTheme.RailInfo).Rail;
                     float inner = area.width - AvTokens.Space3 * 2f;
 
                     var well = new Rect(AvTokens.Space3, -10f, 30f, 30f);
@@ -346,7 +397,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     glyph.raycastTarget = false;
                     AvKit.Place(glyph.rectTransform, new Rect(AvTokens.Space3 + 6.5f, -16.5f, 17f, 17f));
 
-                    title = AvStyled.Label(Root, new Rect(50f, -8f, area.width - 164f, 20f), "", "row-main");
+                    title = AvStyled.Label(Root, new Rect(48f, -8f, area.width - 152f, 20f), "", "row-main");
                     title.fontSize = 15f;
                     title.fontStyle = FontStyles.Bold;
                     title.richText = false;
@@ -358,41 +409,41 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     deadline = AvStyled.Label(Root, chip, "", "section-title-note", align: TextAlignmentOptions.Center);
                     deadline.characterSpacing = 2f;
 
-                    family = AvStyled.Label(Root, new Rect(50f, -34f, area.width - 192f, 12f), "", "section-title-note");
+                    family = AvStyled.Label(Root, new Rect(48f, -32f, area.width - 192f, 12f), "", "section-title-note");
                     family.richText = false;
-                    state = AvStyled.Label(Root, new Rect(area.width - AvTokens.Space3 - 128f, -34f, 128f, 12f),
+                    state = AvStyled.Label(Root, new Rect(area.width - AvTokens.Space3 - 128f, -32f, 128f, 12f),
                         "", "section-title-note", align: TextAlignmentOptions.MidlineRight);
 
-                    description = AvStyled.Label(Root, new Rect(AvTokens.Space3, -51f, inner, 30f), "", "row-sub");
+                    description = AvStyled.Label(Root, new Rect(AvTokens.Space3, -52f, inner, briefHeight), "", "row-sub");
                     description.fontSize = 11.5f;
                     description.richText = false;
                     description.overflowMode = TextOverflowModes.Ellipsis;
 
-                    AvKit.Rule(Root, new Rect(AvTokens.Space3, -87f, inner, 1f), AvTheme.Hairline);
+                    AvKit.Rule(Root, new Rect(AvTokens.Space3, -48f, inner, 1f), AvTheme.Hairline);
 
-                    Key(-98f, "TARGET");
-                    Key(-117f, "PAY");
-                    Key(-136f, "EFFECT");
+                    Key(targetTop, "TARGET");
+                    Key(payTop, "PAY");
+                    Key(effectTop, "EFFECT");
                     valueWidth = area.width - 78f;
-                    target = Value(-98f, 14f, 11.5f, AvTheme.TextPrimary);
-                    pay = Value(-117f, 15f, 13f, AvTheme.Accent);
-                    effect = Value(-136f, 14f, 10.5f, AvTheme.Dim);
+                    target = Value(targetTop, 14f, 11.5f, AvTheme.TextPrimary);
+                    pay = Value(payTop, 15f, 13f, AvTheme.Accent);
+                    effect = Value(effectTop, 15f, 10.5f, AvTheme.Dim);
 
-                    var track = new Rect(AvTokens.Space3, -158f, inner - 64f, 6f);
+                    var track = new Rect(AvTokens.Space3, barTop, inner - 64f, 6f);
                     AvKit.Panel(Root, track, AvTheme.SurfaceInert);
                     AvKit.Outline(Root, track, AvTheme.Frame);
                     progressWidth = track.width - 2f;
                     progressFill = AvKit.Rule(Root, new Rect(track.x + 1f, track.y - 1f, 0f, 4f), AvTheme.RailInfo);
-                    percent = AvStyled.Label(Root, new Rect(area.width - AvTokens.Space3 - 56f, -159f, 56f, 15f),
+                    percent = AvStyled.Label(Root, new Rect(area.width - AvTokens.Space3 - 56f, barTop - 1f, 56f, 15f),
                         "", "row-value");
 
-                    accept = AvStyled.Button(Root, new Rect(AvTokens.Space3, -196f, (inner - AvTokens.Gap) * .6f, 40f),
+                    accept = AvStyled.Button(Root, new Rect(AvTokens.Space3, actionTop, (inner - AvTokens.Gap) * .6f, ActionHeight),
                         "ACCEPT CONTRACT", "row-main", () =>
                         {
                             if (current != null && ModServices.TryGet(out ISecondaryObjectivesView view)) view.RequestAccept(current.Id);
                             refresh();
                         }, AvButtonStyle.Primary);
-                    dismiss = AvStyled.Button(Root, new Rect(AvTokens.Space3 + inner * .6f, -196f, inner * .4f, 40f),
+                    dismiss = AvStyled.Button(Root, new Rect(AvTokens.Space3 + inner * .6f, actionTop, inner * .4f, ActionHeight),
                         "DISMISS", "row-main", () =>
                         {
                             if (current == null) return;
@@ -422,7 +473,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     if (current?.Id != objective?.Id) confirmCancel = 0;
                     current = objective;
                     accept.SetEnabled(objective != null && objective.IsOffered && hasCapacity);
-                    accept.SetText(objective?.IsOffered == true ? hasCapacity ? "ACCEPT CONTRACT" : "2 ACTIVE / LIMIT" : objective?.IsActive == true ? objective.HasMarker ? "TRACKED ON MAP" : "CONTACT LOST" : "CONTRACT ENDED");
+                    accept.SetText(objective?.IsOffered == true ? hasCapacity ? "ACCEPT CONTRACT" : "ACTIVE LIMIT REACHED" : objective?.IsActive == true ? objective.HasMarker ? "TRACKED ON MAP" : "CONTACT LOST" : "CONTRACT ENDED");
                     dismiss.SetEnabled(objective != null && (objective.IsOffered || objective.IsActive));
                     dismiss.SetText(objective?.IsActive == true ? confirmCancel == objective.Id ? "CONFIRM ABORT" : "ABORT" : "DISMISS");
 
@@ -453,12 +504,11 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     family.text = MfdMissionLabels.ContractFamily(objective.Title);
                     state.text = objective.IsOffered ? "AWAITING ACCEPTANCE" : objective.Status;
                     state.color = color;
-                    deadline.text = MfdSecondaryObjectives.TimeLabel(complete, objective.SecondsRemaining)
-                        .Replace("LEFT", objective.IsOffered ? "OFFER" : "LEFT");
+                    deadline.text = MfdSecondaryObjectives.ChipLabel(objective);
                     SetTimer(color);
                     description.text = objective.Description;
                     target.text = objective.Target;
-                    pay.text = "$" + objective.Money.ToString("N0") + "   +   " + objective.Xp.ToString("N0") + " XP";
+                    pay.text = MfdSecondaryObjectives.PayoutLabel(objective);
                     pay.color = color;
                     effect.text = objective.Reward;
                     percent.text = complete ? "100%" : (fraction * 100f).ToString("0") + "%";

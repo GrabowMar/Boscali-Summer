@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using BoscaliSummer.Core;
 using BoscaliSummer.Features.HighCommand.Domain;
+using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Runtime;
 using NuclearOption.Networking;
 using UnityEngine;
@@ -214,6 +215,19 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
             if (victim == null || !assetLookup.TryGetValue(victim.GetInstanceID(), out AssetWatch watch)) return;
             if (lastDamage.Count >= MaximumAssets && !lastDamage.ContainsKey(victim.GetInstanceID())) return;
             lastDamage[victim.GetInstanceID()] = dealer;
+
+            // The first hit of a window is the beat the page shows; further hits only keep
+            // the window open, so a strafing run is one alert, not one per bullet.
+            float now = MissionTime;
+            bool raised = now >= watch.Slot.AlertUntil;
+            watch.Slot.AlertUntil = now + AlertSeconds;
+            if (raised)
+            {
+                Broadcast(watch.Owner, GlobalId(FactionIndex(watch.Owner.Hq), watch.Slot.Id),
+                    CommanderLogTone.Alert,
+                    (watch.Kind == AssetKind.ConvoyLead ? "VIP CONVOY UNDER FIRE · " : "POST UNDER FIRE · ") +
+                    watch.Slot.SiteName, now);
+            }
         }
 
         private void OnAssetDisabled(AssetWatch watch, Unit unit)
@@ -240,7 +254,8 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
 
             if (slot.Status == CommanderStatus.InTransit)
             {
-                Broadcast(owner, slot.Person.Name + " WAS AFIELD — SURVIVED THE STRIKE ON THEIR POST", now);
+                Broadcast(owner, GlobalId(FactionIndex(owner.Hq), slot.Id), CommanderLogTone.Alert,
+                    slot.Person.Name + " WAS AFIELD — SURVIVED THE STRIKE ON THEIR POST", now);
                 owner.RespawnScheduled[slot.Id] = true;
                 owner.RespawnAt[slot.Id] = now + settings.PostRespawnSeconds.Value;
             }
@@ -258,6 +273,7 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
             int displaced = owner.Tree.Promote(slot.Id, nextSeed);
             slot.Status = CommanderStatus.Disrupted;
             slot.StatusUntil = now + disruption;
+            slot.AlertUntil = 0f;
             if (displaced >= 0)
             {
                 CommandSlot successor = owner.Tree.Find(displaced);
@@ -272,8 +288,9 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
                 owner.RespawnScheduled[slot.Id] = true;
                 owner.RespawnAt[slot.Id] = now + settings.PostRespawnSeconds.Value;
             }
-            Broadcast(owner, dead.Rank + " " + dead.Name + " " + cause + " · " +
-                      slot.Person.Rank + " " + slot.Person.Name + " ASSUMES POST", now);
+            Broadcast(owner, GlobalId(FactionIndex(owner.Hq), slot.Id), CommanderLogTone.Loss,
+                dead.Rank + " " + dead.Name + " " + cause + " · " +
+                slot.Person.Rank + " " + slot.Person.Name + " ASSUMES POST", now);
         }
 
         private void CreditKill(FactionCommand owner, CommandSlot slot, int instanceId)
@@ -285,9 +302,8 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
             if (killer == null || killer == owner.Hq) return;
 
             FactionCommand killerCommand = FindFaction(killer);
-            bool marked = killerCommand != null && slot.MarkedByFaction == killerCommand.FactionToken;
             float trait = CommandTraits.BountyMultiplier(slot.Person.Traits);
-            int funds = CommandEconomy.BountyFunds(slot.Tier, marked, settings.MarkedBountyPercent.Value,
+            int funds = CommandEconomy.BountyFunds(slot.Tier,
                 settings.BountyBaseFunds.Value, settings.BountyComponentFunds.Value,
                 settings.BountyTheaterFunds.Value, trait);
             if (funds <= 0) return;
@@ -296,9 +312,9 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
             killer.AddScore(CommandEconomy.BountyScore(slot.Tier));
             if (killerCommand != null)
             {
-                killerCommand.CommandPoints = Math.Min(settings.CommandPointsMaximum.Value, killerCommand.CommandPoints + 1);
-                Broadcast(killerCommand, "BOUNTY PAID +" + funds + " · " + slot.Person.Rank + " " +
-                          slot.Person.Name + " ELIMINATED", MissionTime);
+                Broadcast(killerCommand, GlobalId(FactionIndex(owner.Hq), slot.Id), CommanderLogTone.Loss,
+                    "KILL PAID +" + funds + " · " + slot.Person.Rank + " " +
+                    slot.Person.Name + " ELIMINATED", MissionTime);
             }
         }
 
@@ -316,8 +332,9 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
 
                 CommandSlot pick = PickTransferSlot(command);
                 if (pick != null && TryStartTransfer(command, pick))
-                    Broadcast(command, pick.Person.Name + " IS TRAVELLING TO " +
-                              (FindConvoy(command, pick)?.DestinationName ?? "A FORWARD BASE"), now);
+                    Broadcast(command, GlobalId(FactionIndex(command.Hq), pick.Id), CommanderLogTone.Contact,
+                        pick.Person.Name + " IS TRAVELLING TO " +
+                        (FindConvoy(command, pick)?.DestinationName ?? "A FORWARD BASE"), now);
             }
         }
 
@@ -488,7 +505,9 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
             if (arrived)
             {
                 convoy.Slot.Status = CommanderStatus.Active;
-                Broadcast(convoy.Owner, convoy.Slot.Person.Name + " RETURNED TO " + convoy.Slot.SiteName, MissionTime);
+                Broadcast(convoy.Owner, GlobalId(FactionIndex(convoy.Owner.Hq), convoy.Slot.Id),
+                    CommanderLogTone.Staff,
+                    convoy.Slot.Person.Name + " RETURNED TO " + convoy.Slot.SiteName, MissionTime);
             }
             else
             {
@@ -560,9 +579,23 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
                     if (intelOwners[c] == observer) continue;
                     float radius = intelRadii[c];
                     if ((position - intelPositions[c]).sqrMagnitude > radius * radius) continue;
-                    sight[observer, intelKeys[c]] = now <= 0f ? 0.01f : now;
+                    int key = intelKeys[c];
+                    bool first = sight[observer, key] <= 0f;
+                    sight[observer, key] = now <= 0f ? 0.01f : now;
+                    if (first) ConfirmContact(observer, intelOwners[c], key, now);
                 }
             }
+        }
+
+        /// <summary>One log beat per observer and post, the first time a patrol reports it.</summary>
+        private void ConfirmContact(int observer, int ownerIndex, int globalId, float now)
+        {
+            if (observer < 0 || observer >= factions.Count ||
+                ownerIndex < 0 || ownerIndex >= factions.Count) return;
+            CommandSlot slot = factions[ownerIndex].Tree.Find(LocalId(globalId));
+            if (slot?.Person == null) return;
+            Broadcast(factions[observer], globalId, CommanderLogTone.Contact,
+                "CONTACT · " + slot.Person.Rank + " " + slot.Person.Name + " AT " + slot.SiteName, now);
         }
 
         private int FactionIndex(FactionHQ hq)
@@ -591,10 +624,19 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
 
         // ---- Signals ----------------------------------------------------------------------
 
-        private void Broadcast(FactionCommand command, string text, float now)
+        /// <summary>A faction-wide line with no single post behind it.</summary>
+        private void Broadcast(FactionCommand command, string text, float now) =>
+            Broadcast(command, -1, CommanderLogTone.Staff, text, now);
+
+        /// <summary>
+        /// The one place a staff event is stated: the status-strip signal and the page's log
+        /// are the same sentence, remembered with its subject and its tone.
+        /// </summary>
+        private void Broadcast(FactionCommand command, int targetId, CommanderLogTone tone, string text, float now)
         {
             command.Signal = text.Length > 96 ? text.Substring(0, 96) : text;
             command.SignalUntil = now + SignalSeconds;
+            command.Log.Append(targetId, tone, text, now);
         }
 
         // ---- Placement and catalogues -----------------------------------------------------

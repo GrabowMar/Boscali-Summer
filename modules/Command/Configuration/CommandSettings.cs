@@ -9,6 +9,7 @@ namespace BoscaliSummer.Features.Command.Configuration
         public ConfigEntry<bool> ExpandedMapUi { get; }
         public ConfigEntry<bool> FrontlinesOverlay { get; }
         public ConfigEntry<bool> FrontlineTrace { get; }
+        public ConfigEntry<bool> ThreatHeat { get; }
         public ConfigEntry<float> OverlayOpacity { get; }
         public ConfigEntry<int> GridCellSizeMetres { get; }
         public ConfigEntry<float> GridRefreshInterval { get; }
@@ -50,6 +51,9 @@ namespace BoscaliSummer.Features.Command.Configuration
 
             FrontlineTrace = config.Bind("Command", "FrontlineTrace", true,
                 "Draw the front line trace above the control tint. Only drawn while the control field is on; the MAP bezel's FRONT LINE layer switches it in game.");
+
+            ThreatHeat = config.Bind("Command", "ThreatHeat", true,
+                "Heat-map tracked hostile sensor coverage: how strongly each tracked enemy radar would see your aircraft at that spot, with its optical/IR range merged in more quietly. Only the local faction's tracked picture is drawn. The MAP bezel's THREAT HEAT layer switches it in game.");
 
             OverlayOpacity = config.Bind("Command", "OverlayOpacity", 0.35f,
                 new ConfigDescription(

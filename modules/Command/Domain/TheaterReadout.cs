@@ -56,6 +56,19 @@ namespace BoscaliSummer.Features.Command.Domain
         }
 
         /// <summary>
+        /// Seconds since an event as a short age stamp. The log needs "how long ago" at a
+        /// glance, so the unit changes with the magnitude rather than printing 738 seconds.
+        /// </summary>
+        public static string Age(float seconds)
+        {
+            if (float.IsNaN(seconds) || float.IsInfinity(seconds)) return "—";
+            int value = (int)Math.Round(Math.Max(0f, seconds), MidpointRounding.AwayFromZero);
+            if (value < 60) return value.ToString(CultureInfo.InvariantCulture) + "s";
+            if (value < 3600) return (value / 60).ToString(CultureInfo.InvariantCulture) + "m";
+            return (value / 3600).ToString(CultureInfo.InvariantCulture) + "h";
+        }
+
+        /// <summary>
         /// How a DEFCON level reads as a rail state, so severity is carried by position on
         /// the scale rather than by a colour the caller picked.
         /// </summary>

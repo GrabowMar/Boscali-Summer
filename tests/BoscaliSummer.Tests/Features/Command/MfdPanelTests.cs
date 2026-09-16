@@ -45,8 +45,6 @@ namespace BoscaliSummer.Tests.Features.Command
             TestAssert.That(MfdChartScale.Fraction(float.NaN, 100f) == 0f &&
                 MfdChartScale.Fraction(10f, float.PositiveInfinity) == 0f, "Unavailable chart data cannot corrupt geometry");
             TestAssert.That(BoscaliSummer.Runtime.MfdSlots.Set == "SET", "SET slot identifier is canonical");
-            TestAssert.That(BoscaliSummer.Runtime.MfdSlots.Adm == "ADM", "ADM slot identifier is canonical");
-            TestAssert.That(BoscaliSummer.Runtime.MfdSlots.Mus == "MUS", "MUS slot identifier is canonical");
             RunRailCatalogTests();
             RunHostedEntryTests();
             RunLogToneTests();
@@ -58,8 +56,8 @@ namespace BoscaliSummer.Tests.Features.Command
             TestAssert.That(set.Code == "SET" && set.Name == "SETTINGS" && set.Glyph == "settings",
                 "SET maps to a readable rail entry");
             MfdRailEntry adm = MfdRailCatalog.For("ADM");
-            TestAssert.That(adm.Code == "ADM" && adm.Name == "TASKING" && adm.Glyph == "board",
-                "ADM maps to the tasking board, not the generic flag");
+            TestAssert.That(adm.Code == "ADM" && !adm.HasName && adm.Glyph == null,
+                "the deleted ADM bezel leaves no rail entry behind");
             MfdRailEntry bdf = MfdRailCatalog.For("bdf");
             TestAssert.That(bdf.Code == "BDF" && bdf.Glyph == "faction", "codes are case-insensitive");
             MfdRailEntry unknown = MfdRailCatalog.For("<SUD>");
@@ -92,15 +90,10 @@ namespace BoscaliSummer.Tests.Features.Command
         private static void RunHostedEntryTests()
         {
             MfdRailEntry events = MfdRailCatalog.For("EVN");
-            MfdRailEntry adm = MfdRailCatalog.For("ADM");
-            MfdRailEntry music = MfdRailCatalog.For("MUS");
-            TestAssert.That(events.HasName && adm.HasName && music.HasName,
-                "the hosted EVN/ADM/MUS buttons carry readable rail entries");
-            TestAssert.That(events.Glyph == "pulse" && adm.Glyph == "board" && music.Glyph == "deck",
-                "hosted screens keep distinct glyphs instead of one generic mark");
-            TestAssert.That(events.Glyph != MfdRailCatalog.For("MIS").Glyph &&
-                music.Glyph != MfdRailCatalog.For("RAD").Glyph,
-                "the deck must not wear the radio's glyph or the mission flag");
+            TestAssert.That(events.HasName && events.Glyph == "pulse",
+                "the hosted EVN button carries a readable rail entry");
+            TestAssert.That(events.Glyph != MfdRailCatalog.For("MIS").Glyph,
+                "the event feed must not wear the mission flag");
         }
 
         private static void RunLogToneTests()

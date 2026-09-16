@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using BoscaliSummer.Features.Support.Configuration;
+using BoscaliSummer.Features.Support.Domain;
+using BoscaliSummer.Features.Support.Domain.Orbital;
 using BoscaliSummer.Features.Support.Networking;
 using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Features;
@@ -18,11 +20,12 @@ namespace BoscaliSummer.Features.Support.Runtime
     /// <summary>
     /// Validates and dispatches support requests. Everything an action does lives in the
     /// action; this class owns only authority, economy, bounded concurrency and the client's
-    /// view of its own request. It also owns the host-authoritative fleet and cyber systems:
-    /// launch, move, recall and upgrade commands are validated and charged here, never in a
-    /// panel.
+    /// view of its own request. It also owns the host-authoritative orbital stations, cyber and
+    /// program systems: launch, jettison, burn, resupply, upgrade and invest commands are
+    /// validated and charged here, never in a panel.
     /// </summary>
-        internal sealed class SupportManager : MonoBehaviour, ISceneService, ISupportHost, ICameraTargetService
+        internal sealed class SupportManager : MonoBehaviour, ISceneService, ISupportHost, ICameraTargetService,
+            IGroundForceReadiness
         {
         private const int MaximumStrikeJobs = 2;
         private const int RequestsPerSecond = 2;
@@ -45,6 +48,8 @@ namespace BoscaliSummer.Features.Support.Runtime
         private float nextOpsQuery;
         private int pendingCommand;
         private string pendingCommandLabel;
+        private OpsCommand? pendingCommandKind;
+        private byte pendingCommandArg;
         private float commandTimeout;
 
         public void PollOps()
@@ -56,28 +61,33 @@ namespace BoscaliSummer.Features.Support.Runtime
 
         internal void ReceiveOps(OpsStateMessage state)
         {
-            if (state.SatelliteCount > SpaceOperations.MaximumSatellites) return;
-            if (!ValidSatelliteArrays(state)) return;
+            if (!OpsStateMessageBuffers.ValidArrays(state)) return;
+            if (state.ProgramTiers == null || state.ProgramTiers.Length < OpsProgramLedger.ProgramCount) return;
+            if (state.GarrisonLevels == null || state.GarrisonLevels.Length < OpsGarrison.UpgradeCount) return;
+            if (!Finite(state.EwX) || !Finite(state.EwZ)) return;
 
             GameManager.GetLocalPlayer<Player>(out Player player);
             if (player != null && player.HQ != null)
             {
                 FactionHQ hq = player.HQ;
-                for (int i = 0; i < state.SatelliteCount; i++)
+                double now = OrbitNow;
+                // The host's own station is the authority: rebasing its clocks from a float
+                // snapshot would only add rounding. Clients rebuild everything from the snapshot.
+                if (!GameAccess.IsServer())
                 {
-                    if (!Finite(state.StationXs[i]) || !Finite(state.StationZs[i]) ||
-                        !Finite(state.OriginXs[i]) || !Finite(state.OriginZs[i]) ||
-                        !Finite(state.TransitLeft[i]) || !Finite(state.TransitTotal[i])) continue;
-                    if (state.SatelliteRoles[i] > (byte)SatelliteRole.Ew) continue;
-                    if (state.SatelliteAltitudes[i] >= Constellation.AltitudeCount) continue;
-                    Space.Mirror(hq, state.SatelliteIds[i], (SatelliteRole)state.SatelliteRoles[i],
-                        state.SatelliteAltitudes[i], state.StationXs[i], state.StationZs[i],
-                        state.OriginXs[i], state.OriginZs[i], state.TransitLeft[i], state.TransitTotal[i],
-                        Mathf.Clamp(state.SatelliteFuel[i], 0f, Constellation.MaximumFuel),
-                        (SatelliteState)Math.Min(state.SatelliteStates[i], (byte)SatelliteState.Transit));
+                    OpsStateMessageBuffers.Read(state, mirrorSnapshot);
+                    Space.MirrorPlatform(hq, mirrorSnapshot, now);
                 }
-                Space.RemoveUnlisted(hq, state.SatelliteIds, state.SatelliteCount);
+                Space.MirrorForeign(state.ForeignRegimes, state.ForeignSeeds, state.ForeignClocks, state.ForeignLayouts,
+                    state.ForeignCount, now);
                 Space.Mirror(hq, state.Sigint, state.Crypto, state.Disrupt, state.Ew);
+                // The host ledger is the authority; mirroring its own quantised bytes back
+                // would round away accrual progress on every poll.
+                if (!GameAccess.IsServer())
+                    Space.MirrorPrograms(hq, state.ProgramTiers, state.SpecOpsTokens, state.IntelTokens,
+                        state.SpecOpsProgress, state.IntelProgress);
+                if (!GameAccess.IsServer())
+                    Space.MirrorGarrison(hq, state.GarrisonLevels);
             }
 
             if (state.RequestId != 0 && state.RequestId == pendingCommand)
@@ -85,29 +95,39 @@ namespace BoscaliSummer.Features.Support.Runtime
                 pendingCommand = 0;
                 SupportResult result = (SupportResult)state.Result;
                 Status = result == SupportResult.Accepted
-                    ? pendingCommandLabel + " accepted."
+                    ? AcceptedStatus()
                     : pendingCommandLabel + " denied: " + Explain(result) + ".";
+                pendingCommandKind = null;
+                pendingCommandArg = 0;
             }
 
             OpsState = state;
             opsReceived = Time.unscaledTime;
         }
 
-        private static bool ValidSatelliteArrays(in OpsStateMessage state)
+        /// <summary>
+        /// A garrison upgrade's reply names the rank and effect that were bought. The client
+        /// has already mirrored the snapshot that carried the new rank; the host reads its
+        /// own ledger.
+        /// </summary>
+        private string AcceptedStatus()
         {
-            int count = state.SatelliteCount;
-            return state.SatelliteIds != null && state.SatelliteRoles != null &&
-                   state.SatelliteAltitudes != null && state.SatelliteStates != null &&
-                   state.SatelliteFuel != null && state.StationXs != null && state.StationZs != null &&
-                   state.OriginXs != null && state.OriginZs != null &&
-                   state.TransitLeft != null && state.TransitTotal != null &&
-                   state.SatelliteIds.Length >= count && state.SatelliteRoles.Length >= count &&
-                   state.SatelliteAltitudes.Length >= count && state.SatelliteStates.Length >= count &&
-                   state.SatelliteFuel.Length >= count && state.StationXs.Length >= count &&
-                   state.StationZs.Length >= count && state.OriginXs.Length >= count &&
-                   state.OriginZs.Length >= count && state.TransitLeft.Length >= count &&
-                   state.TransitTotal.Length >= count;
+            if (pendingCommandKind != OpsCommand.GarrisonUpgrade ||
+                pendingCommandArg >= OpsGarrison.UpgradeCount)
+                return pendingCommandLabel + " accepted.";
+
+            var upgrade = (GarrisonUpgradeId)pendingCommandArg;
+            GameManager.GetLocalPlayer<Player>(out Player player);
+            OpsGarrison garrison = player != null ? Space.GarrisonFor(player.HQ) : null;
+            int rank = garrison != null ? garrison.Rank(upgrade) : 0;
+            return rank > 0
+                ? OpsGarrison.Info(upgrade).Name + " RAISED TO " + OpsGarrison.RankLabel(rank) + " · " +
+                  OpsGarrison.EffectLabel(upgrade, rank) + "."
+                : pendingCommandLabel + " accepted.";
         }
+
+        private readonly PlatformSnapshot mirrorSnapshot = new PlatformSnapshot();
+        private readonly PlatformSnapshot exportSnapshot = new PlatformSnapshot();
 
         private readonly SupportRequestLedger ledger = new SupportRequestLedger();
         private readonly SupportRequestLedger commandLedger = new SupportRequestLedger();
@@ -139,6 +159,7 @@ namespace BoscaliSummer.Features.Support.Runtime
 
         private OpsCommand? armedCommand;
         private byte armedArg, armedArg2;
+        private Action<GlobalPosition> localPick;
 
         public IReadOnlyList<ActiveStrikeInfo> ActiveStrikes => activeStrikes;
         public SupportSettings Settings => settings;
@@ -148,18 +169,41 @@ namespace BoscaliSummer.Features.Support.Runtime
         public byte ArmedCommandArg => armedArg;
         public byte ArmedCommandArg2 => armedArg2;
 
-        /// <summary>Local faction fleet for the panel and the tactical overlay.</summary>
-        public Constellation LocalConstellation
+        /// <summary>The local faction's station for the console, the uplink, the sky and the map.</summary>
+        public OrbitalPlatform LocalPlatform
         {
             get
             {
                 GameManager.GetLocalPlayer<Player>(out Player player);
-                return player == null ? null : Space.ConstellationFor(player.HQ);
+                return player == null ? null : Space.PlatformFor(player.HQ);
             }
         }
 
-        /// <summary>Client-local map focus; the overlay draws this satellite's swath.</summary>
-        public int SelectedSatelliteId { get; set; }
+        /// <summary>The clock passes are computed against. Scene-local and reset with the stations.</summary>
+        public double OrbitNow => Time.timeSinceLevelLoadAsDouble;
+
+        public OrbitClock OrbitClock => settings == null
+            ? OrbitClock.Default
+            : new OrbitClock(settings.OrbitGapScale.Value);
+
+        double ISupportHost.OrbitNow => OrbitNow;
+        OrbitClock ISupportHost.OrbitClock => OrbitClock;
+
+        /// <summary>Client-local uplink aim, remembered between uplink sessions; theatre centre until set.</summary>
+        public GlobalPosition UplinkAim { get; private set; }
+
+        public bool UplinkAimSet { get; private set; }
+
+        public void SetUplinkAim(GlobalPosition point)
+        {
+            UplinkAim = point;
+            UplinkAimSet = true;
+        }
+
+        /// <summary>Latest accepted radar scan of the local player, for the uplink and PLATFORM products.</summary>
+        public int RadarScanSerial { get; private set; }
+        public GlobalPosition RadarScanTarget { get; private set; }
+        public int RadarScanContacts { get; private set; }
 
         public InfoNetwork LocalInfo
         {
@@ -171,29 +215,59 @@ namespace BoscaliSummer.Features.Support.Runtime
         }
 
         /// <summary>The local faction's EW asset state, mirrored from the last snapshot —
-        /// same pattern as <see cref="LocalConstellation"/>/<see cref="LocalInfo"/>, except an
+        /// same pattern as <see cref="LocalFleet"/>/<see cref="LocalInfo"/>, except an
         /// asset's state is a single byte, so it rides <see cref="OpsState"/> directly rather
         /// than needing its own per-faction model object.</summary>
         public EwAssetState LocalEwAssetState => (EwAssetState)Math.Min(OpsState.EwAssetState, (byte)EwAssetState.Encampment);
 
-        /// <summary>Which satellite role, if any, an ability needs overhead.</summary>
-        public static SatelliteRole? CoverageRole(SupportActionId action)
+        /// <summary>The local station posture as the host last reported it.</summary>
+        public EwPosture LocalEwPosture => EwPostures.Clamp(OpsState.EwPosture);
+
+        /// <summary>The local faction SPEC OPS and INTEL programs; mirrored on clients.</summary>
+        public OpsProgramLedger LocalPrograms
+        {
+            get
+            {
+                GameManager.GetLocalPlayer<Player>(out Player player);
+                return player == null ? null : Space.ProgramsFor(player.HQ);
+            }
+        }
+
+        /// <summary>The local faction base of operations; the host's own ledger or a mirror.</summary>
+        public OpsGarrison LocalGarrison
+        {
+            get
+            {
+                GameManager.GetLocalPlayer<Player>(out Player player);
+                return player == null ? null : Space.GarrisonFor(player.HQ);
+            }
+        }
+
+        /// <summary>Which station ability, if any, a support action needs.</summary>
+        public static PlatformAbility? OrbitalAbility(SupportActionId action)
         {
             switch (action)
             {
-                case SupportActionId.Recon: return SatelliteRole.Recon;
-                case SupportActionId.Artillery: return SatelliteRole.Strike;
-                case SupportActionId.Emp: return SatelliteRole.Ew;
+                case SupportActionId.Recon: return PlatformAbility.RadarScan;
+                case SupportActionId.ElintSweep: return PlatformAbility.Elint;
+                case SupportActionId.Artillery: return PlatformAbility.RodStrike;
+                case SupportActionId.Emp: return PlatformAbility.EmpBurst;
                 default: return null;
             }
         }
 
-        public bool CoverageNow(SupportActionId action, float x, float z)
+        /// <summary>Client prediction of the host's station check for an ability, same model and clock rules.</summary>
+        public PlatformDenial PlatformCheck(PlatformAbility ability)
         {
-            SatelliteRole? role = CoverageRole(action);
-            if (!role.HasValue) return true;
-            Constellation constellation = LocalConstellation;
-            return constellation != null && constellation.Covers(role.Value, x, z);
+            OrbitalPlatform platform = LocalPlatform;
+            return platform == null ? PlatformDenial.NoPlatform : platform.Check(ability, OrbitNow, OrbitClock);
+        }
+
+        /// <summary>The station check for a support action; <see cref="PlatformDenial.None"/> when it needs no station.</summary>
+        public PlatformDenial PlatformCheck(SupportActionId action)
+        {
+            PlatformAbility? ability = OrbitalAbility(action);
+            return ability.HasValue ? PlatformCheck(ability.Value) : PlatformDenial.None;
         }
 
         /// <summary>Display snapping for zone-targeted actions (Fortify resolves an owned base).</summary>
@@ -213,14 +287,20 @@ namespace BoscaliSummer.Features.Support.Runtime
         public float GetEffectRadius(SupportActionId action, FactionHQ owner)
         {
             InfoNetwork info = Space.InfoFor(owner);
+            OrbitalPlatform platform = Space.PlatformFor(owner);
+            bool station = platform != null && platform.Exists;
             switch (action)
             {
                 case SupportActionId.Artillery:
                     return SupportEffectPolicy.RodBlastRadius;
                 case SupportActionId.Emp:
-                    return settings != null ? settings.EmpRadius.Value : 12000f;
+                    return (settings != null ? settings.EmpRadius.Value : 12000f) * (station ? platform.EmpScale : 1f);
                 case SupportActionId.Recon:
-                    return settings != null ? settings.ReconRadius.Value : 6000f;
+                    return (settings != null ? settings.SarSceneRadius.Value : 1000f) *
+                           (station ? platform.ScanScale(OrbitNow) : 1f);
+                case SupportActionId.ElintSweep:
+                    return (settings != null ? settings.ElintRadius.Value : 8000f) *
+                           (station ? platform.ElintScale(OrbitNow) : 1f);
                 case SupportActionId.FlareMissile:
                     return settings != null ? settings.FlareBarrageRadius.Value : 4000f;
                 case SupportActionId.Fortify:
@@ -358,6 +438,9 @@ namespace BoscaliSummer.Features.Support.Runtime
             Visuals.FlareMissileBurstVisuals.Reset();
             Visuals.SupportParticles.Reset();
             Space.Clear();
+            mirrorSnapshot.Clear();
+            UplinkAim = default;
+            UplinkAimSet = false;
             Cyber.Clear();
             Ew.Clear();
             OpsState = default;
@@ -365,6 +448,8 @@ namespace BoscaliSummer.Features.Support.Runtime
             nextOpsQuery = 0f;
             pendingCommand = 0;
             pendingCommandLabel = null;
+            pendingCommandKind = null;
+            pendingCommandArg = 0;
             ledger.Clear();
             commandLedger.Clear();
             contactReplies.Clear();
@@ -392,13 +477,14 @@ namespace BoscaliSummer.Features.Support.Runtime
             bool host = GameAccess.IsServer();
             if (host)
             {
-                Space.Tick(Time.deltaTime, true);
+                LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
+                Space.TickHost(OrbitNow, Time.deltaTime, level != null && level.isDayLight, OrbitClock,
+                    settings != null && settings.PlatformDebrisEvents.Value, LogDebris);
                 Ew.Tick(Time.unscaledTime);
             }
             else
             {
-                Space.Tick(Time.unscaledDeltaTime, false);
-                // Keep the mirrored constellation warm for the map overlay, not just the panel.
+                // Keep the mirrored station warm for the sky and the map overlay, not just the panel.
                 PollOps();
             }
             Cyber.Tick(Time.timeSinceLevelLoad);
@@ -413,7 +499,8 @@ namespace BoscaliSummer.Features.Support.Runtime
 
             // Publish the armed state for Wing Command to read (BoscaliLink), so a wing
             // point-order and a support call-in never both fire on one right-click.
-            SupportMapMode.GestureArmed = (ArmedAction.HasValue || armedCommand.HasValue) && mapGesture.Armed;
+            bool anyArmed = ArmedAction.HasValue || armedCommand.HasValue || localPick != null;
+            SupportMapMode.GestureArmed = anyArmed && mapGesture.Armed;
             mapGesture.Advance(Time.frameCount);
             if (pending && Time.unscaledTime - pendingSince > ReplyTimeout)
             {
@@ -423,10 +510,12 @@ namespace BoscaliSummer.Features.Support.Runtime
             if (pendingCommand != 0 && Time.unscaledTime > commandTimeout)
             {
                 pendingCommand = 0;
+                pendingCommandKind = null;
+                pendingCommandArg = 0;
                 Status = "No response from host.";
             }
 
-            if (ArmedAction.HasValue || armedCommand.HasValue)
+            if (anyArmed)
             {
                 if (Input.GetKeyDown(KeyCode.Escape))
                 {
@@ -452,7 +541,13 @@ namespace BoscaliSummer.Features.Support.Runtime
                             map != null && DynamicMap.mapMaximized &&
                             map.TryGetCursorCoordinates(out GlobalPosition target))
                         {
-                            if (ArmedAction.HasValue)
+                            if (localPick != null)
+                            {
+                                Action<GlobalPosition> pick = localPick;
+                                CancelArmed();
+                                pick(target);
+                            }
+                            else if (ArmedAction.HasValue)
                             {
                                 SupportActionId action = ArmedAction.Value;
                                 ArmedAction = null;
@@ -481,8 +576,13 @@ namespace BoscaliSummer.Features.Support.Runtime
         public float LocalCooldownRemaining =>
             DisableCooldowns ? 0f : Mathf.Max(0f, localCooldownUntil - Time.unscaledTime);
 
+        /// <summary>
+        /// The cooldown this peer would show: the host's configured seconds scaled by the
+        /// local player's own re-tasking perk, so the countdown matches what the host applies.
+        /// </summary>
         public float LocalCooldownTotal =>
-            DisableCooldowns ? 0f : settings != null ? settings.RequestCooldown.Value : 0f;
+            DisableCooldowns ? 0f : settings != null ? CooldownFor(
+                GameManager.GetLocalPlayer<Player>(out Player local) ? local : null) : 0f;
 
         public bool IsAuthorised(SupportActionDefinition action)
         {
@@ -507,11 +607,15 @@ namespace BoscaliSummer.Features.Support.Runtime
             return Cost(action, player);
         }
 
-        public float SatelliteCost(SatelliteRole role)
+        /// <summary>Launch price of a module, the core or cargo for the local player.</summary>
+        public float LaunchCost(ModuleKind kind)
         {
             GameManager.GetLocalPlayer<Player>(out Player player);
-            return SatelliteCost(player, role);
+            return LaunchCost(player, kind);
         }
+
+        /// <summary>The share of what was paid a jettison refunds.</summary>
+        public float JettisonRefund => settings != null ? Mathf.Clamp01(settings.PlatformJettisonRefund.Value) : 0f;
 
         public float FacilityCost(FacilityId facility)
         {
@@ -522,6 +626,16 @@ namespace BoscaliSummer.Features.Support.Runtime
                 : info.UpgradeCost(facility) * Price(player, settings.CostMultiplier.Value);
         }
 
+        /// <summary>Next-tier price for the local player, with the same multipliers the host charges.</summary>
+        public float ProgramCost(OpsProgramId program)
+        {
+            OpsProgramLedger programs = LocalPrograms;
+            if (programs == null || settings == null || !programs.CanInvest(program)) return 0f;
+            GameManager.GetLocalPlayer<Player>(out Player player);
+            return player == null ? 0f
+                : programs.NextCost(program) * Price(player, settings.CostMultiplier.Value);
+        }
+
         public float EwTruckCost()
         {
             GameManager.GetLocalPlayer<Player>(out Player player);
@@ -529,13 +643,11 @@ namespace BoscaliSummer.Features.Support.Runtime
             return settings.EwTruckCost.Value * Price(player, settings.CostMultiplier.Value);
         }
 
-        private float SatelliteCost(Player player, SatelliteRole role)
+        private float LaunchCost(Player player, ModuleKind kind)
         {
             if (player == null || settings == null) return 0f;
-            float baseCost = role == SatelliteRole.Recon ? settings.SatelliteReconCost.Value
-                : role == SatelliteRole.Strike ? settings.SatelliteStrikeCost.Value
-                : settings.SatelliteEwCost.Value;
-            return baseCost * Price(player, settings.CostMultiplier.Value);
+            return PlatformModules.LaunchPrice(kind) * settings.PlatformCostScale.Value *
+                   Price(player, settings.CostMultiplier.Value);
         }
 
         private float Price(Player player, float baseCost)
@@ -543,6 +655,25 @@ namespace BoscaliSummer.Features.Support.Runtime
             if (baseCost <= 0f || player == null) return baseCost;
             return baseCost * EventsCostMultiplier(player) *
                    perks.Multiplier(PlayerIdentity.Of(player), PerkEffect.SupportCost);
+        }
+
+        /// <summary>
+        /// The requester's own effect scale for the actions that honour it (EMP shock today).
+        /// Resolved here so an action reads one number instead of the perk state.
+        /// </summary>
+        private float EffectScale(Player player) =>
+            player == null ? 1f : perks.Multiplier(PlayerIdentity.Of(player), PerkEffect.SupportEffectScale);
+
+        /// <summary>
+        /// The cooldown the host will apply to this player's next request. Scaled by the
+        /// requester's re-tasking perk, and used for both the check and the reply, so the
+        /// countdown a client shows is the one the host enforced.
+        /// </summary>
+        private float CooldownFor(Player player)
+        {
+            if (DisableCooldowns || player == null) return 0f;
+            return settings.RequestCooldown.Value *
+                   perks.Multiplier(PlayerIdentity.Of(player), PerkEffect.SupportCooldown);
         }
 
         /// <summary>
@@ -578,7 +709,7 @@ namespace BoscaliSummer.Features.Support.Runtime
             Status = "ARMED: " + name + " — Right-click on map to execute (ESC to cancel).";
         }
 
-        /// <summary>Arms the map for a fleet command: launch at a point, or move a satellite.</summary>
+        /// <summary>Arms the map for a command that needs a point (EW deployment and repositioning).</summary>
         public void ArmCommand(OpsCommand command, byte arg, byte arg2, string label)
         {
             if (!TryArmMap(label + " · RIGHT-CLICK MAP")) return;
@@ -613,14 +744,52 @@ namespace BoscaliSummer.Features.Support.Runtime
             return true;
         }
 
-        public void RequestRecall(byte satelliteId)
+        /// <summary>Arms a right-click on the map that only reports the point back; nothing is sent.</summary>
+        public void ArmLocalPick(string label, Action<GlobalPosition> onPick)
         {
-            SendCommand(OpsCommand.Recall, satelliteId, 0, default);
+            if (onPick == null || !TryArmMap(label + " · RIGHT-CLICK MAP")) return;
+            localPick = onPick;
+            armedCommand = null;
+            ArmedAction = null;
+            ArmedFrame = Time.frameCount;
+            Status = "PICK: " + label + " — Right-click on map (ESC to cancel).";
         }
+
+        public bool LocalPickArmed => localPick != null;
+
+        /// <summary>Launch the core onto <paramref name="band"/>.</summary>
+        public void RequestCoreLaunch(byte band) => SendCommand(OpsCommand.Launch, (byte)ModuleKind.Core, band, default);
+
+        /// <summary>Launch a module to dock at <paramref name="cell"/>.</summary>
+        public void RequestModuleLaunch(ModuleKind kind, int cell) =>
+            SendCommand(OpsCommand.Launch, (byte)kind, (byte)cell, default);
+
+        public void RequestJettison(int cell) => SendCommand(OpsCommand.Jettison, (byte)cell, 0, default);
+
+        public void RequestRephase() => SendCommand(OpsCommand.Rephase, 0, 0, default);
+
+        public void RequestOrbitShift(byte band) => SendCommand(OpsCommand.OrbitShift, band, 0, default);
+
+        public void RequestResupply() => SendCommand(OpsCommand.Resupply, 0, 0, default);
 
         public void RequestUpgrade(FacilityId facility)
         {
             SendCommand(OpsCommand.Upgrade, (byte)facility, 0, default);
+        }
+
+        public void RequestInvest(OpsProgramId program)
+        {
+            SendCommand(OpsCommand.Invest, (byte)program, 0, default);
+        }
+
+        public void RequestEwRetune(EwPosture posture)
+        {
+            SendCommand(OpsCommand.EwRetune, (byte)posture, 0, default);
+        }
+
+        public void RequestGarrisonUpgrade(GarrisonUpgradeId upgrade)
+        {
+            SendCommand(OpsCommand.GarrisonUpgrade, (byte)upgrade, 0, default);
         }
 
         private void SendCommand(OpsCommand command, byte arg, byte arg2, GlobalPosition target)
@@ -628,6 +797,8 @@ namespace BoscaliSummer.Features.Support.Runtime
             int requestId = ++nextRequestId;
             pendingCommand = requestId;
             pendingCommandLabel = CommandLabel(command, arg, arg2);
+            pendingCommandKind = command;
+            pendingCommandArg = arg;
             commandTimeout = Time.unscaledTime + ReplyTimeout;
             Status = pendingCommandLabel + " sent to host.";
             network.Command(requestId, command, arg, arg2, target);
@@ -638,33 +809,48 @@ namespace BoscaliSummer.Features.Support.Runtime
             switch (command)
             {
                 case OpsCommand.Launch:
-                    return "LAUNCH " + RoleName((SatelliteRole)arg2) + " SATELLITE";
-                case OpsCommand.Move:
-                    return "ORBIT BURN";
-                case OpsCommand.Recall:
-                    return "SATELLITE RECALL";
+                    return arg == (byte)ModuleKind.Core
+                        ? "LAUNCH CORE TO " + OrbitRegimes.Get(arg2).Code
+                        : "LAUNCH " + PlatformModules.Info((ModuleKind)arg).Code + " TO " + OrbitalPlatform.CellName(arg2);
+                case OpsCommand.Jettison:
+                {
+                    ModuleKind module = LocalPlatform?.Cell(arg) ?? ModuleKind.None;
+                    return module == ModuleKind.Core
+                        ? "DEORBIT " + OrbitalPlatform.Callsign
+                        : "JETTISON " + PlatformModules.Info(module).Code + " " + OrbitalPlatform.CellName(arg);
+                }
+                case OpsCommand.Rephase:
+                    return "REPHASE BURN";
+                case OpsCommand.OrbitShift:
+                {
+                    OrbitalPlatform platform = LocalPlatform;
+                    string verb = platform != null && arg < platform.Regime ? "LOWER" : "RAISE";
+                    return verb + " TO " + OrbitRegimes.Get(arg).Code;
+                }
+                case OpsCommand.Resupply:
+                    return "CARGO RESUPPLY";
                 case OpsCommand.EwDeploy:
                     return "DEPLOY EW TRUCK";
                 case OpsCommand.EwReposition:
                     return "EW TRUCK REPOSITION";
+                case OpsCommand.Invest:
+                    return arg < OpsProgramLedger.ProgramCount
+                        ? "FUND " + OpsProgramLedger.Info((OpsProgramId)arg).Name
+                        : "PROGRAM FUNDING";
+                case OpsCommand.EwRetune:
+                    return "EW POSTURE " + EwPostures.Info(EwPostures.Clamp(arg)).Name;
+                case OpsCommand.GarrisonUpgrade:
+                    return arg < OpsGarrison.UpgradeCount
+                        ? "IMPROVE " + OpsGarrison.Info((GarrisonUpgradeId)arg).Name
+                        : "BASE OF OPERATIONS";
                 default:
                     return "BUILD " + InfoNetwork.Facility((FacilityId)arg).Name;
             }
         }
 
-        private static string RoleName(SatelliteRole role)
-        {
-            switch (role)
-            {
-                case SatelliteRole.Recon: return "RECON";
-                case SatelliteRole.Strike: return "STRIKE";
-                default: return "EW";
-            }
-        }
-
         public void Disarm()
         {
-            if (!ArmedAction.HasValue && !armedCommand.HasValue) return;
+            if (!ArmedAction.HasValue && !armedCommand.HasValue && localPick == null) return;
             CancelArmed();
             Status = "Support request cancelled.";
         }
@@ -673,12 +859,24 @@ namespace BoscaliSummer.Features.Support.Runtime
         {
             ArmedAction = null;
             armedCommand = null;
+            localPick = null;
             mapGesture.Complete(Time.frameCount);
         }
 
         public void Request(SupportActionId action)
         {
             Arm(action);
+        }
+
+        /// <summary>Deliver the armed action at a point chosen off the map (the uplink
+        /// crosshair). Consumes the arming exactly as a map click would.</summary>
+        public bool CallArmedAt(GlobalPosition target)
+        {
+            if (GameplayUI.GameIsPaused || pending || !ArmedAction.HasValue) return false;
+            SupportActionId action = ArmedAction.Value;
+            CancelArmed();
+            RequestAt(action, target);
+            return true;
         }
 
         public void RequestAtMark(IObservationSource observations)
@@ -718,7 +916,7 @@ namespace BoscaliSummer.Features.Support.Runtime
 
             if (!IsAuthorised(def))
             {
-                Status = def.IsHack ? "Infrastructure not built (see CYBER)." : "Action not authorised.";
+                Status = def.IsHack ? "Infrastructure not built (see INFO)." : "Action not authorised.";
                 return;
             }
 
@@ -746,6 +944,8 @@ namespace BoscaliSummer.Features.Support.Runtime
         {
             pending = false;
             pendingCommand = 0;
+            pendingCommandKind = null;
+            pendingCommandArg = 0;
             Status = "No host connection.";
         }
 
@@ -760,10 +960,20 @@ namespace BoscaliSummer.Features.Support.Runtime
             {
                 localCooldownUntil = DisableCooldowns ? 0f : Time.unscaledTime + message.CooldownSeconds;
                 bool sweep = action != null &&
-                    (action.Id == SupportActionId.Recon || action.Hack == HackKind.Ping);
+                    (action.Id == SupportActionId.Recon || action.Id == SupportActionId.ElintSweep ||
+                     action.Hack == HackKind.Ping);
                 Status = sweep
                     ? name + " complete: " + Mathf.Max(0, message.Contacts) + " contact(s)."
                     : name + " accepted.";
+                if (action != null && action.Id == SupportActionId.ElintSweep)
+                    Status = name + " complete: " + Mathf.Max(0, message.Contacts) + " emitting radar(s) located.";
+                if (action != null && action.Id == SupportActionId.Recon && Finite(message.X) && Finite(message.Z))
+                {
+                    RadarScanTarget = new GlobalPosition(message.X, message.Y, message.Z);
+                    RadarScanContacts = Mathf.Max(0, message.Contacts);
+                    RadarScanSerial++;
+                    Status = name + " accepted: imaging, " + RadarScanContacts + " stationary contact(s) exploited.";
+                }
                 float eta = action != null && action.Id == SupportActionId.Artillery ? 8f :
                             action != null && action.Id == SupportActionId.Emp ? SupportEffectPolicy.EmpDelay :
                             action != null && action.Id == SupportActionId.FlareMissile ? 5.5f : 0f;
@@ -783,16 +993,32 @@ namespace BoscaliSummer.Features.Support.Runtime
         {
             switch (result)
             {
-                case SupportResult.OutOfCoverage: return "no satellite coverage — task one in SPACE";
-                case SupportResult.NotBuilt: return "infrastructure not built in CYBER";
-                case SupportResult.NoEwAsset: return "needs an EW asset near the target";
+                case SupportResult.OutOfCoverage: return "station not overhead — see the pass clock in SPACE";
+                case SupportResult.PlatformExpended: return "rod magazine empty — launch a cargo resupply";
+                case SupportResult.PlatformLowPower: return "station energy too low — let it recharge";
+                case SupportResult.PlatformRecharging: return "station ability recharging";
+                case SupportResult.ModuleNotFitted: return "module not fitted — build it in MISSION PLANNER";
+                case SupportResult.ModuleOffline: return "module offline after a debris strike";
+                case SupportResult.NoPlatform: return "no station on orbit — launch a core in MISSION PLANNER";
+                case SupportResult.PlatformBrownout: return "station browned out — shed load and recharge";
+                case SupportResult.NoFuel: return "not enough fuel";
+                case SupportResult.LaunchInFlight: return "a launch is already in flight";
+                case SupportResult.OverMass: return "station mass limit reached";
+                case SupportResult.CellBlocked: return "that cell cannot take the module";
+                case SupportResult.CopyLimit: return "copy limit for that module reached";
+                case SupportResult.WouldStrand: return "it would strand other modules";
+                case SupportResult.PlatformExists: return "the faction already has a station";
+                case SupportResult.NeedsPropulsion: return "LOW orbit needs propulsion — launch to MID or HIGH";
+                case SupportResult.NotBuilt: return "infrastructure not built in INFO";
+                case SupportResult.NoEwAsset: return "needs an EW station near the target";
+                case SupportResult.WrongPosture: return "EW station in the wrong posture";
                 case SupportResult.Disabled: return "action disabled";
                 case SupportResult.NotUnlocked: return "not authorised";
                 case SupportResult.InvalidTarget: return "unusable target";
                 case SupportResult.OutOfRange: return "target out of range";
                 case SupportResult.NotAirborne: return "you must be in an aircraft";
                 case SupportResult.InsufficientAllocation: return "not enough allocation";
-                case SupportResult.NoStock: return "no stock at HQ";
+                case SupportResult.NoStock: return "not enough SOF tokens banked";
                 case SupportResult.Cooldown: return "cooling down";
                 case SupportResult.Busy: return "too many jobs in flight";
                 case SupportResult.Duplicate: return "already handled";
@@ -823,11 +1049,12 @@ namespace BoscaliSummer.Features.Support.Runtime
             if (!DisableCooldowns && ledger.IsRateLimited(playerId, now, RequestsPerSecond, 1f)) return SupportResult.RateLimited;
             if (!action.Enabled) return SupportResult.Disabled;
             if (!bypass && !HostAuthorised(player, action)) return action.IsHack ? SupportResult.NotBuilt : SupportResult.NotUnlocked;
-            if (!DisableCooldowns && ledger.IsCoolingDown(playerId, now, settings.RequestCooldown.Value))
+            if (!DisableCooldowns && ledger.IsCoolingDown(playerId, now, CooldownFor(player)))
                 return SupportResult.Cooldown;
 
             var context = new SupportContext(
-                player, new GlobalPosition(request.X, request.Y, request.Z), request.RequestId, this);
+                player, new GlobalPosition(request.X, request.Y, request.Z), request.RequestId, this,
+                EffectScale(player));
             float cost = Cost(action, player);
             if (cost <= 0f) return SupportResult.CapabilityUnavailable;
             if (!bypass && player.Allocation + 0.001f < cost) return SupportResult.InsufficientAllocation;
@@ -876,38 +1103,82 @@ namespace BoscaliSummer.Features.Support.Runtime
             {
                 case OpsCommand.Launch:
                 {
-                    SatelliteRole role = (SatelliteRole)message.Arg2;
-                    if (role > SatelliteRole.Ew) return SupportResult.InvalidTarget;
-                    if (message.Arg >= Constellation.AltitudeCount) return SupportResult.InvalidTarget;
-                    float cost = SatelliteCost(player, role);
-                    if (cost <= 0f) return SupportResult.CapabilityUnavailable;
+                    var kind = (ModuleKind)message.Arg;
+                    if (!PlatformModules.Placeable(message.Arg)) return SupportResult.InvalidTarget;
+                    OrbitalPlatform platform = Space.PlatformFor(player.HQ);
+                    if (platform == null) return SupportResult.CapabilityUnavailable;
+                    bool core = kind == ModuleKind.Core;
+                    int cell = core ? OrbitalPlatform.CoreCell : message.Arg2;
+                    byte band = core ? message.Arg2 : (byte)0;
+                    double orbitNow = OrbitNow;
+                    SupportResult placement = Placement(platform.CheckPlacement(kind, cell, band, orbitNow));
+                    if (placement != SupportResult.Accepted) return placement;
+                    float cost = LaunchCost(player, kind);
                     if (!bypass && player.Allocation + 0.001f < cost) return SupportResult.InsufficientAllocation;
-                    OrbitalFailure failure = Space.Deploy(player.HQ, role, message.Arg, message.X, message.Z,
-                        settings.MaximumSatellites.Value, settings.SatelliteLaunchTransitSeconds.Value,
-                        out Satellite satellite);
-                    if (failure != OrbitalFailure.None)
-                        return failure == OrbitalFailure.AtCapacity ? SupportResult.Busy : SupportResult.InvalidTarget;
-                    satellite.Paid = bypass ? 0f : cost;
+                    int seed = UnityEngine.Random.Range(1, int.MaxValue);
+                    placement = Placement(platform.TryLaunch(kind, cell, band, seed, orbitNow, bypass ? 0f : cost,
+                        settings.PlatformInsertionSeconds.Value, settings.PlatformDockingSeconds.Value));
+                    if (placement != SupportResult.Accepted) return placement;
                     if (!bypass) player.SetAllocation(Mathf.Max(0f, player.Allocation - cost));
+                    ModuleInfo info = PlatformModules.Info(kind);
+                    logger.LogInfo("[Support] Liftoff: " + info.Name + " on a " + PlatformModules.VehicleFor(info.Mass).Code +
+                        " vehicle " + (core ? "to " + OrbitRegimes.Get(band).Name : "for cell " + OrbitalPlatform.CellName(cell)) +
+                        ", " + Mathf.RoundToInt(cost) + " alloc.");
                     break;
                 }
-                case OpsCommand.Move:
+                case OpsCommand.Jettison:
                 {
-                    OrbitalFailure failure = Space.Retask(player.HQ, message.Arg, message.X, message.Z, out float fuel);
-                    if (failure != OrbitalFailure.None)
-                        return failure == OrbitalFailure.InsufficientFuel ? SupportResult.Busy : SupportResult.InvalidTarget;
-                    logger.LogInfo("[Support] Station transfer on satellite " + message.Arg + " costing " +
-                        Mathf.RoundToInt(fuel) + "% fuel.");
-                    break;
-                }
-                case OpsCommand.Recall:
-                {
-                    if (!Space.Recall(player.HQ, message.Arg, out Satellite satellite))
-                        return SupportResult.InvalidTarget;
-                    float refund = Mathf.Clamp01(settings.SatelliteRecallRefund.Value) * satellite.Paid;
+                    OrbitalPlatform platform = Space.PlatformFor(player.HQ);
+                    if (platform == null) return SupportResult.CapabilityUnavailable;
+                    SupportResult removal = Placement(platform.TryJettison(message.Arg, out ModuleKind removed,
+                        out float paid));
+                    if (removal != SupportResult.Accepted) return removal;
+                    float refund = JettisonRefund * paid;
                     if (refund > 0f && !bypass) player.SetAllocation(player.Allocation + refund);
-                    logger.LogInfo("[Support] Satellite " + message.Arg + " recalled; refunded " +
-                        Mathf.RoundToInt(refund) + " alloc.");
+                    logger.LogInfo("[Support] " + (removed == ModuleKind.Core
+                        ? OrbitalPlatform.Callsign + " deorbited"
+                        : PlatformModules.Info(removed).Name + " jettisoned from " + OrbitalPlatform.CellName(message.Arg)) +
+                        "; refunded " + Mathf.RoundToInt(refund) + " alloc.");
+                    break;
+                }
+                case OpsCommand.Rephase:
+                {
+                    OrbitalPlatform platform = Space.PlatformFor(player.HQ);
+                    if (platform == null) return SupportResult.CapabilityUnavailable;
+                    PlatformDenial denial = platform.Check(PlatformAbility.Rephase, OrbitNow, OrbitClock);
+                    if (denial != PlatformDenial.None) return SupportContext.Refusal(denial);
+                    if (!platform.TryRephase(OrbitNow, OrbitClock, UnityEngine.Random.Range(1, int.MaxValue)))
+                        return SupportResult.Busy;
+                    logger.LogInfo("[Support] " + OrbitalPlatform.Callsign + " phasing burn; " +
+                        Mathf.RoundToInt(platform.Fuel) + " fuel left.");
+                    break;
+                }
+                case OpsCommand.OrbitShift:
+                {
+                    OrbitalPlatform platform = Space.PlatformFor(player.HQ);
+                    if (platform == null) return SupportResult.CapabilityUnavailable;
+                    PlatformDenial denial = platform.CheckShift(message.Arg, OrbitNow, OrbitClock);
+                    if (denial == PlatformDenial.SameOrbit) return SupportResult.InvalidTarget;
+                    if (denial != PlatformDenial.None) return SupportContext.Refusal(denial);
+                    if (!platform.TryShift(message.Arg, OrbitNow, OrbitClock, UnityEngine.Random.Range(1, int.MaxValue)))
+                        return SupportResult.Busy;
+                    logger.LogInfo("[Support] " + OrbitalPlatform.Callsign + " transfer burn to " +
+                        platform.Orbit.Name + "; " + Mathf.RoundToInt(platform.Fuel) + " fuel left.");
+                    break;
+                }
+                case OpsCommand.Resupply:
+                {
+                    OrbitalPlatform platform = Space.PlatformFor(player.HQ);
+                    if (platform == null) return SupportResult.CapabilityUnavailable;
+                    if (!platform.Exists) return SupportResult.NoPlatform;
+                    if (platform.Pending != ModuleKind.None) return SupportResult.LaunchInFlight;
+                    float cost = LaunchCost(player, ModuleKind.Cargo);
+                    if (!bypass && player.Allocation + 0.001f < cost) return SupportResult.InsufficientAllocation;
+                    SupportResult launch = Placement(platform.TryResupply(OrbitNow, settings.PlatformDockingSeconds.Value));
+                    if (launch != SupportResult.Accepted) return launch;
+                    if (!bypass) player.SetAllocation(Mathf.Max(0f, player.Allocation - cost));
+                    logger.LogInfo("[Support] Cargo resupply launched to " + OrbitalPlatform.Callsign + " for " +
+                        Mathf.RoundToInt(cost) + " alloc.");
                     break;
                 }
                 case OpsCommand.Upgrade:
@@ -955,6 +1226,44 @@ namespace BoscaliSummer.Features.Support.Runtime
                         Mathf.RoundToInt(cost) + " alloc.");
                     break;
                 }
+                case OpsCommand.Invest:
+                {
+                    if (message.Arg >= OpsProgramLedger.ProgramCount) return SupportResult.InvalidTarget;
+                    OpsProgramLedger programs = Space.ProgramsFor(player.HQ);
+                    if (programs == null) return SupportResult.CapabilityUnavailable;
+                    OpsProgramId program = (OpsProgramId)message.Arg;
+                    if (!programs.CanInvest(program)) return SupportResult.Busy;
+                    float cost = programs.NextCost(program) * Price(player, settings.CostMultiplier.Value);
+                    if (!bypass && player.Allocation + 0.001f < cost) return SupportResult.InsufficientAllocation;
+                    if (!programs.TryInvest(program)) return SupportResult.Busy;
+                    if (!bypass) player.SetAllocation(Mathf.Max(0f, player.Allocation - cost));
+                    logger.LogInfo("[Support] " + OpsProgramLedger.Info(program).Name + " funded to tier " +
+                        programs.Tier(program) + " for " + Mathf.RoundToInt(cost) + " alloc.");
+                    break;
+                }
+                case OpsCommand.EwRetune:
+                {
+                    if (!settings.EwEnabled.Value) return SupportResult.Disabled;
+                    if (message.Arg > (byte)EwPosture.GhostSpoofing) return SupportResult.InvalidTarget;
+                    if (!Ew.TryRetune(player.HQ, (EwPosture)message.Arg)) return SupportResult.NoEwAsset;
+                    break;
+                }
+                case OpsCommand.GarrisonUpgrade:
+                {
+                    if (message.Arg >= OpsGarrison.UpgradeCount) return SupportResult.InvalidTarget;
+                    OpsProgramLedger programs = Space.ProgramsFor(player.HQ);
+                    OpsGarrison garrison = Space.GarrisonFor(player.HQ);
+                    if (programs == null || garrison == null) return SupportResult.CapabilityUnavailable;
+                    var upgrade = (GarrisonUpgradeId)message.Arg;
+                    if (!garrison.CanUpgrade(upgrade)) return SupportResult.Busy;
+                    int tokens = garrison.NextCost(upgrade);
+                    if (!bypass && programs.Tokens(OpsReserve.SpecOps) < tokens) return SupportResult.NoStock;
+                    if (!Space.UpgradeGarrison(player.HQ, upgrade)) return SupportResult.Busy;
+                    if (!bypass) programs.TryConsume(OpsReserve.SpecOps, tokens);
+                    logger.LogInfo("[Support] Base of operations: " + OpsGarrison.Info(upgrade).Name +
+                        " raised to rank " + garrison.Rank(upgrade) + " for " + tokens + " SOF token(s).");
+                    break;
+                }
                 case OpsCommand.EwReposition:
                 {
                     if (!settings.EwEnabled.Value) return SupportResult.Disabled;
@@ -975,7 +1284,37 @@ namespace BoscaliSummer.Features.Support.Runtime
             return SupportResult.Accepted;
         }
 
-        internal float ServerCooldown => DisableCooldowns ? 0f : settings.RequestCooldown.Value;
+        internal float ServerCooldownFor(Player player) => CooldownFor(player);
+
+        private static SupportResult Placement(PlacementFailure failure)
+        {
+            switch (failure)
+            {
+                case PlacementFailure.None: return SupportResult.Accepted;
+                case PlacementFailure.NoPlatform: return SupportResult.NoPlatform;
+                case PlacementFailure.PlatformExists: return SupportResult.PlatformExists;
+                case PlacementFailure.LaunchInFlight: return SupportResult.LaunchInFlight;
+                case PlacementFailure.OverMass: return SupportResult.OverMass;
+                case PlacementFailure.CopyLimit: return SupportResult.CopyLimit;
+                case PlacementFailure.WouldStrand: return SupportResult.WouldStrand;
+                case PlacementFailure.NeedsPropulsion: return SupportResult.NeedsPropulsion;
+                case PlacementFailure.OutsideGrid:
+                case PlacementFailure.CellOccupied:
+                case PlacementFailure.NotAttached:
+                case PlacementFailure.EmptyCell:
+                    return SupportResult.CellBlocked;
+                default:
+                    return SupportResult.InvalidTarget;
+            }
+        }
+
+        private void LogDebris(FactionHQ owner, OrbitalPlatform platform)
+        {
+            string module = PlatformModules.Info(platform.Cell(platform.NoticeCell)).Name;
+            logger?.LogInfo("[Support] " + (owner != null && owner.faction != null ? owner.faction.factionName : "?") +
+                " station debris strike on " + module + " (" + OrbitalPlatform.CellName(platform.NoticeCell) + "): " +
+                (platform.Notice == PlatformNotice.DebrisDeflected ? "deflected." : "offline for 45 s."));
+        }
 
         /// <summary>
         /// Price for one player. No action prices itself from the target, so costing uses a
@@ -1099,43 +1438,42 @@ namespace BoscaliSummer.Features.Support.Runtime
             return true;
         }
 
+        // ---- Base of operations read-out ---------------------------------------------------
+
+        /// <summary>
+        /// What Urban Combat may do on the ground for one faction. The host answers from its
+        /// own ledger; a client mirror would be its own faction, which is also correct because
+        /// encampment placement is host-only.
+        /// </summary>
+        int IGroundForceReadiness.FortificationShells(FactionHQ owner)
+        {
+            OpsGarrison garrison = owner != null ? Space.GarrisonFor(owner) : null;
+            return garrison != null ? garrison.FortificationShells : 1;
+        }
+
+        int IGroundForceReadiness.InsertionCamps(FactionHQ owner)
+        {
+            OpsGarrison garrison = owner != null ? Space.GarrisonFor(owner) : null;
+            return garrison != null ? garrison.InsertionCamps : 1;
+        }
+
         internal OpsStateMessage Snapshot(Player player, int requestId, SupportResult result)
         {
-            Constellation constellation = player != null ? Space.ConstellationFor(player.HQ) : null;
+            OrbitalPlatform platform = player != null ? Space.PlatformFor(player.HQ) : null;
             InfoNetwork info = player != null ? Space.InfoFor(player.HQ) : null;
-            int count = constellation != null ? constellation.Satellites.Count : 0;
-            var message = new OpsStateMessage
+            double now = OrbitNow;
+            OpsStateMessage message = OpsStateMessageBuffers.Create();
+            message.RequestId = requestId;
+            message.Result = (byte)result;
+            if (platform != null)
             {
-                SatelliteCount = (byte)count,
-                RequestId = requestId,
-                Result = (byte)result,
-                SatelliteIds = new byte[SpaceOperations.MaximumSatellites],
-                SatelliteRoles = new byte[SpaceOperations.MaximumSatellites],
-                SatelliteAltitudes = new byte[SpaceOperations.MaximumSatellites],
-                SatelliteStates = new byte[SpaceOperations.MaximumSatellites],
-                SatelliteFuel = new byte[SpaceOperations.MaximumSatellites],
-                StationXs = new float[SpaceOperations.MaximumSatellites],
-                StationZs = new float[SpaceOperations.MaximumSatellites],
-                OriginXs = new float[SpaceOperations.MaximumSatellites],
-                OriginZs = new float[SpaceOperations.MaximumSatellites],
-                TransitLeft = new float[SpaceOperations.MaximumSatellites],
-                TransitTotal = new float[SpaceOperations.MaximumSatellites]
-            };
-            for (int i = 0; i < count; i++)
-            {
-                Satellite satellite = constellation.Satellites[i];
-                message.SatelliteIds[i] = satellite.Id;
-                message.SatelliteRoles[i] = (byte)satellite.Role;
-                message.SatelliteAltitudes[i] = satellite.Altitude;
-                message.SatelliteStates[i] = (byte)satellite.State;
-                message.SatelliteFuel[i] = (byte)Mathf.Clamp(Mathf.RoundToInt(satellite.Fuel), 0, 100);
-                message.StationXs[i] = satellite.StationX;
-                message.StationZs[i] = satellite.StationZ;
-                message.OriginXs[i] = satellite.OriginX;
-                message.OriginZs[i] = satellite.OriginZ;
-                message.TransitLeft[i] = satellite.TransitLeft;
-                message.TransitTotal[i] = satellite.TransitTotal;
+                platform.Export(now, exportSnapshot);
+                OpsStateMessageBuffers.Write(exportSnapshot, ref message);
             }
+            message.ForeignCount = player != null
+                ? (byte)Space.CollectForeign(player.HQ, now, message.ForeignRegimes, message.ForeignSeeds,
+                    message.ForeignClocks, message.ForeignLayouts)
+                : (byte)0;
             if (info != null)
             {
                 message.Sigint = (byte)info.Level(FacilityId.Sigint);
@@ -1143,7 +1481,32 @@ namespace BoscaliSummer.Features.Support.Runtime
                 message.Disrupt = (byte)info.Level(FacilityId.Disrupt);
                 message.Ew = (byte)info.Level(FacilityId.Ew);
             }
-            message.EwAssetState = player != null ? Ew.StateByteFor(player.HQ) : (byte)0;
+            EwAsset station = player != null ? Ew.ForFaction(player.HQ) : null;
+            message.EwAssetState = station != null ? (byte)station.State : (byte)0;
+            if (station != null)
+            {
+                message.EwPosture = (byte)station.Posture;
+                if (station.Alive)
+                {
+                    GlobalPosition position = station.Position.ToGlobalPosition();
+                    message.EwX = position.x;
+                    message.EwZ = position.z;
+                }
+            }
+            OpsProgramLedger programs = player != null ? Space.ProgramsFor(player.HQ) : null;
+            if (programs != null)
+            {
+                for (int i = 0; i < OpsProgramLedger.ProgramCount; i++)
+                    message.ProgramTiers[i] = (byte)programs.Tier((OpsProgramId)i);
+                message.SpecOpsTokens = (byte)programs.Tokens(OpsReserve.SpecOps);
+                message.IntelTokens = (byte)programs.Tokens(OpsReserve.Intel);
+                message.SpecOpsProgress = programs.ProgressByte(OpsReserve.SpecOps);
+                message.IntelProgress = programs.ProgressByte(OpsReserve.Intel);
+            }
+            OpsGarrison garrison = player != null ? Space.GarrisonFor(player.HQ) : null;
+            if (garrison != null)
+                for (int i = 0; i < OpsGarrison.UpgradeCount; i++)
+                    message.GarrisonLevels[i] = (byte)garrison.Rank((GarrisonUpgradeId)i);
             return message;
         }
 

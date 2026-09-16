@@ -7,6 +7,15 @@ namespace BoscaliSummer.Framework.Contracts
         bool OwnsPosition(int factionId, float x, float z);
 
         /// <summary>
+        /// Signed control of a point from <paramref name="factionId"/>'s perspective: positive
+        /// is ground the faction holds, negative is the enemy's, and the zero crossing is the
+        /// front trace itself. Unlike <see cref="OwnsPosition"/> this stays meaningful inside
+        /// the contested band a real front digs its fieldworks in. False off-map, for an
+        /// unknown faction, or when no control value exists.
+        /// </summary>
+        bool TryGetHoldStrength(int factionId, float x, float z, out float hold);
+
+        /// <summary>
         /// Ordered world-space polylines along a faction's front — the control field's zero
         /// contour, including coastal pockets and diagonal fronts. Trace <c>i</c> occupies
         /// <c>lengths[i]</c> consecutive points of <paramref name="points"/>, continuing

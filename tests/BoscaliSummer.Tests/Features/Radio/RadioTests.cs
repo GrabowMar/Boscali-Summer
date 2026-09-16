@@ -16,6 +16,7 @@ namespace BoscaliSummer.Tests.Features.Radio
             PropagationMath();
             SpectrumRows();
             VanillaHoldRules();
+            LinkStubs();
             string root = Path.Combine(
                 Path.GetTempPath(), "BoscaliSummer.RadioTests." + Guid.NewGuid().ToString("N"));
             try
@@ -244,6 +245,31 @@ namespace BoscaliSummer.Tests.Features.Radio
             hold.EngageReceiver();
             hold.Reset();
             TestAssert.That(!hold.Held, "a scene reset kept the previous hold");
+        }
+
+        private static void LinkStubs()
+        {
+            TestAssert.That(RadioLinkStub.DeckGain(false) == 1f,
+                "the deck was attenuated with nothing transmitting at the player");
+            TestAssert.That(RadioLinkStub.DeckGain(true) == RadioLinkStub.TransmissionDuck &&
+                RadioLinkStub.TransmissionDuck > 0f && RadioLinkStub.TransmissionDuck < 1f,
+                "a received transmission did not duck the deck");
+
+            var link = new RadioLinkStub();
+            TestAssert.That(!link.CanTransmit() && !link.TransmissionActive && link.JamLevel == 0f,
+                "a radio link stub became active without an implementation");
+            link.ToggleSecure();
+            TestAssert.That(link.Secure, "the crypto placeholder did not latch");
+            link.Reset();
+            TestAssert.That(!link.Secure, "a scene reset kept the crypto placeholder latched");
+
+            TestAssert.That(BuiltInStationRules.IsBuiltIn(BuiltInStationRules.AgrapolId) &&
+                BuiltInStationRules.IsBuiltIn(BuiltInStationRules.BaseId) &&
+                !BuiltInStationRules.IsBuiltIn("user-local"),
+                "the built-in station check did not separate towers from local folders");
+            TestAssert.That(!RadioPropagation.OffAir.Open(0.05f) && RadioPropagation.OffAir.Quality == 0f &&
+                RadioPropagation.OffAir.SUnits < 1f,
+                "an off-air station still read as a usable signal");
         }
 
         private static void DialAndProgramming()

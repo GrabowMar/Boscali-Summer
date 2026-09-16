@@ -1,3 +1,4 @@
+using BoscaliSummer.Features.Support.Domain;
 using BoscaliSummer.Framework.Contracts;
 using UnityEngine;
 
@@ -29,7 +30,10 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
             if (zone == null || distance > Mathf.Max(zone.GetRadius() * 1.5f, MinimumZoneRadius))
                 return SupportResult.InvalidTarget;
 
-            return fortifications.TryFortify(zone, context.Owner, context.Player)
+            // Base-of-operations doctrine decides how much ground one order secures.
+            OpsGarrison garrison = context.Host.Space.GarrisonFor(context.Owner);
+            int shells = garrison != null ? garrison.FortificationShells : 1;
+            return fortifications.TryFortify(zone, context.Owner, context.Player, shells)
                 ? SupportResult.Accepted
                 : SupportResult.SpawnFailed;
         }

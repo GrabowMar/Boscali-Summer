@@ -10,6 +10,7 @@ namespace BoscaliSummer.Tests.Features.Command
         {
             AvionicsProtocolTests.Run(TestAssert.That);
             TestMapPanelOwnership();
+            TestReadoutFormatting();
             SettingsTests.Run();
             MfdPanelTests.Run();
             TestLogSpace();
@@ -25,9 +26,18 @@ namespace BoscaliSummer.Tests.Features.Command
             GridLabelsTests.Run();
         }
 
-        private static void TestControlledIngress()
+        private static void TestReadoutFormatting()
         {
-            var grid = new TacticalSectorGrid(1000f, 100000f, 60000f);
+            TestAssert.That(TheaterReadout.Age(0f) == "0s", "a fresh event reads as zero seconds");
+            TestAssert.That(TheaterReadout.Age(45f) == "45s", "seconds below a minute stay seconds");
+            TestAssert.That(TheaterReadout.Age(180f) == "3m", "minutes roll over");
+            TestAssert.That(TheaterReadout.Age(7200f) == "2h", "hours roll over");
+            TestAssert.That(TheaterReadout.Age(float.NaN) == "—", "an unknown age reads as a dash");
+            TestAssert.That(TheaterReadout.Age(-5f) == "0s", "a future event never reads negative");
+        }
+
+        private static void TestControlledIngress()
+        {            var grid = new TacticalSectorGrid(1000f, 100000f, 60000f);
             TestAssert.That(!grid.TryNearestControlledEdge(-30000, 0, out _, out _), "neutral control must not admit ace ingress");
             grid.RegisterNode(1, "Enemy base", 0, 0, SectorControl.Friendly, 100000, true);
             grid.EvaluateSectors(0);

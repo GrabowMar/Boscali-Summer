@@ -12,17 +12,16 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Features.Radio.Presentation
 {
     /// <summary>
-    /// The receiver: a tuner you fly with, not a music browser. A spectrum waterfall, an
-    /// S-meter fed by a link budget, squelch, bandwidth and mode keys, and the two lists a
-    /// radio operator actually reads — the stations on the dial and the tuned programme.
+    /// The receiver and the deck in one set, on two pages.
     ///
-    /// <para>The deck lives on its own screen (<see cref="MusicPanel"/>); everything here
-    /// assumes the player is operating a set.</para>
+    /// <para>RECEIVER is the radio: a spectrum waterfall, an S-meter fed by a link budget,
+    /// squelch, bandwidth, mode, three bands and the stations on the dial. It behaves like a
+    /// radio — you tune a station and listen to its programme, you do not pick the track.
+    /// The program log lives on the deck page, which is where tracks are chosen.</para>
     /// </summary>
     internal static class RadioPanel
     {
         private const float Width = AvTokens.PanelWidth;
-        private const float Pad = AvTokens.Pad;
         private const float Gap = AvTokens.Gap;
         private const float HeroHeight = 130f;
         private const float WaterfallHeight = 62f;
@@ -34,12 +33,15 @@ namespace BoscaliSummer.Features.Radio.Presentation
         private const float ChannelPitch = RowHeight + 2f;
         private const float TrackLinePitch = 15f;
         private const float TrackLineHeight = 14f;
-        private const float ContentHeight = 720f;
+        private const float RadioContentHeight = 700f;
+        private const float DeckContentHeight = 560f;
         private const float SweepSeconds = 0.45f;
         private const int MeterPips = 12;
-        private const int MaximumRows = 4;
-        private const int MinimumRows = 3;
-        private const int MaximumTrackRows = 5;
+        private const int StationRows = 4;
+        private const int FolderRows = 4;
+        private const int TrackRows = 6;
+        private const int TabReceiver = 0;
+        private const int TabDeck = 1;
 
         private sealed class ChannelRow
         {
@@ -65,8 +67,19 @@ namespace BoscaliSummer.Features.Radio.Presentation
             public TMP_Text Title;
         }
 
-        private static readonly ChannelRow[] rows = new ChannelRow[MaximumRows];
-        private static readonly ProgrammeRow[] programmeRows = new ProgrammeRow[MaximumTrackRows];
+        private sealed class FolderRow
+        {
+            public int Index = -1;
+            public GameObject Root;
+            public Image Ground;
+            public Image SelectionRule;
+            public TMP_Text Name;
+            public TMP_Text Count;
+        }
+
+        private static readonly ChannelRow[] rows = new ChannelRow[StationRows];
+        private static readonly ProgrammeRow[] programmeRows = new ProgrammeRow[TrackRows];
+        private static readonly FolderRow[] folderRows = new FolderRow[FolderRows];
         private static readonly Image[] meterPips = new Image[MeterPips];
         private static readonly List<Image> dialMarkers = new List<Image>();
         private static readonly List<int> dialMarkerStations = new List<int>();
@@ -75,6 +88,9 @@ namespace BoscaliSummer.Features.Radio.Presentation
         private static GameObject screenRoot;
         private static AvScreen shell;
         private static RadioManager manager;
+
+        // Receiver page
+        private static RectTransform radioPage;
         private static TMP_Text frequencyLabel;
         private static TMP_Text unitLabel;
         private static TMP_Text modeLabel;
@@ -86,18 +102,15 @@ namespace BoscaliSummer.Features.Radio.Presentation
         private static TMP_Text timeLabel;
         private static TMP_Text stationsNote;
         private static TMP_Text pageLabel;
-        private static TMP_Text programmeNote;
-        private static TMP_Text programmeEmptyLabel;
-        private static TMP_Text spectrumNote;
         private static TMP_Text squelchLabel;
+        private static TMP_Text volumeLabel;
         private static TMP_Text footerLabel;
+        private static TMP_Text spectrumNote;
+        private static TMP_Text linkLine;
+        private static TMP_Text netLine;
         private static Image stationIconGround;
         private static Image stationIcon;
         private static TMP_Text stationBadge;
-        private static AvButton programmePreviousButton;
-        private static AvButton programmeNextButton;
-        private static AvButton pagePreviousButton;
-        private static AvButton pageNextButton;
         private static AvButton seekDownButton;
         private static AvButton tuneDownButton;
         private static AvButton powerButton;
@@ -113,22 +126,44 @@ namespace BoscaliSummer.Features.Radio.Presentation
         private static AvButton squelchUpButton;
         private static AvButton transmitButton;
         private static AvButton secureButton;
+        private static AvButton volumeDownButton;
+        private static AvButton volumeUpButton;
+        private static AvButton pagePreviousButton;
+        private static AvButton pageNextButton;
         private static AvStyled.DataBar dataBar;
         private static TMP_Text channelsEmptyLabel;
         private static Image progressFill;
+        private static Image volumeFill;
         private static GameObject dialRoot;
-        private static RectTransform pageRoot;
         private static Rect dialArea;
         private static RadioBand dialBand;
         private static Image dialNeedle;
         private static RadioWaterfall waterfall;
         private static Image waterfallNeedle;
         private static Rect waterfallArea;
-        private static int rowsPerPage = MinimumRows;
+
+        // Deck page
+        private static RectTransform deckPage;
+        private static TMP_Text deckFolderLabel;
+        private static TMP_Text deckTrackLabel;
+        private static TMP_Text deckTimeLabel;
+        private static TMP_Text deckFolderNote;
+        private static TMP_Text deckTrackNote;
+        private static TMP_Text deckEmptyLabel;
+        private static TMP_Text deckFooterLabel;
+        private static Image deckProgressFill;
+        private static AvButton deckPlayButton;
+        private static AvButton deckShuffleButton;
+        private static AvButton deckRepeatButton;
+        private static AvButton deckFolderPreviousButton;
+        private static AvButton deckFolderNextButton;
+        private static AvButton deckTrackPreviousButton;
+        private static AvButton deckTrackNextButton;
+
+        private static int rowsPerPage = StationRows;
         private static int page;
-        private static int programmePage;
-        private static int programmeRowsPerPage;
-        private static int lastProgrammeTrack = -1;
+        private static int folderPage;
+        private static int deckTrackPage;
         private static int iconRevision = -1;
         private static int markerRevision = -1;
         private static RadioDial shownDial;
@@ -186,6 +221,8 @@ namespace BoscaliSummer.Features.Radio.Presentation
             screen = null;
             shell = null;
             manager = null;
+            radioPage = null;
+            deckPage = null;
             frequencyLabel = null;
             unitLabel = null;
             modeLabel = null;
@@ -200,16 +237,18 @@ namespace BoscaliSummer.Features.Radio.Presentation
             timeLabel = null;
             stationsNote = null;
             pageLabel = null;
-            programmeNote = null;
-            programmeEmptyLabel = null;
-            spectrumNote = null;
             squelchLabel = null;
+            volumeLabel = null;
             footerLabel = null;
+            spectrumNote = null;
+            linkLine = null;
+            netLine = null;
             pagePreviousButton = null;
             pageNextButton = null;
             dataBar = null;
             channelsEmptyLabel = null;
             progressFill = null;
+            volumeFill = null;
             seekDownButton = null;
             tuneDownButton = null;
             powerButton = null;
@@ -225,22 +264,36 @@ namespace BoscaliSummer.Features.Radio.Presentation
             squelchUpButton = null;
             transmitButton = null;
             secureButton = null;
+            volumeDownButton = null;
+            volumeUpButton = null;
             dialRoot = null;
             dialNeedle = null;
-            pageRoot = null;
-            programmePreviousButton = null;
-            programmeNextButton = null;
+            deckFolderLabel = null;
+            deckTrackLabel = null;
+            deckTimeLabel = null;
+            deckFolderNote = null;
+            deckTrackNote = null;
+            deckEmptyLabel = null;
+            deckFooterLabel = null;
+            deckProgressFill = null;
+            deckPlayButton = null;
+            deckShuffleButton = null;
+            deckRepeatButton = null;
+            deckFolderPreviousButton = null;
+            deckFolderNextButton = null;
+            deckTrackPreviousButton = null;
+            deckTrackNextButton = null;
             dialMarkers.Clear();
             dialMarkerStations.Clear();
             dialBand = RadioBand.Fm;
             for (int i = 0; i < programmeRows.Length; i++) programmeRows[i] = null;
+            for (int i = 0; i < folderRows.Length; i++) folderRows[i] = null;
             for (int i = 0; i < meterPips.Length; i++) meterPips[i] = null;
             for (int i = 0; i < rows.Length; i++) rows[i] = null;
-            rowsPerPage = MinimumRows;
+            rowsPerPage = StationRows;
             page = 0;
-            programmePage = 0;
-            programmeRowsPerPage = 0;
-            lastProgrammeTrack = -1;
+            folderPage = 0;
+            deckTrackPage = 0;
             iconRevision = -1;
             markerRevision = -1;
             shownDial = default;
@@ -277,7 +330,7 @@ namespace BoscaliSummer.Features.Radio.Presentation
                 }
 
                 if (!RadioScreens.TryBuild(template, buttons[slot], MfdSlots.Rad, "BoscaliRadio.Screen",
-                    ContentHeight, () => nextRefresh = 0f, out RadioScreen built))
+                    new[] { "RECEIVER", "DECK" }, () => nextRefresh = 0f, out RadioScreen built))
                 {
                     MfdBezel.Release(MfdSlots.Rad);
                     Fail("bezel label or highlight missing");
@@ -287,17 +340,17 @@ namespace BoscaliSummer.Features.Radio.Presentation
                 screen = built.Screen;
                 screenRoot = built.Root;
                 shell = built.Shell;
-                pageRoot = built.Page;
                 dataBar = shell.DataBar;
 
-                var cursor = new RadioCursor(built.Area);
-                BuildHero(cursor.Take(HeroHeight));
-                BuildSpectrum(ref cursor);
-                BuildDial(ref cursor);
-                BuildControls(ref cursor);
-                BuildStationList(ref cursor);
-                BuildProgrammeLog(ref cursor);
-                BuildFooter(ref cursor);
+                radioPage = RadioScreens.ScrollPage(shell, TabReceiver, "ReceiverPage",
+                    RadioContentHeight, out Rect receiverArea);
+                BuildReceiver(new RadioCursor(receiverArea));
+
+                deckPage = RadioScreens.ScrollPage(shell, TabDeck, "DeckPage",
+                    DeckContentHeight, out Rect deckArea);
+                BuildDeck(new RadioCursor(deckArea));
+
+                shell.SetPage(TabReceiver);
 
                 if (!MfdBezel.Bind(mfd, buttons, screens, slot, left, screen))
                 {
@@ -322,14 +375,41 @@ namespace BoscaliSummer.Features.Radio.Presentation
             }
         }
 
+        // ------------------------------------------------------------------ receiver page
+
+        private static void BuildReceiver(RadioCursor cursor)
+        {
+            BuildHero(cursor.Take(HeroHeight));
+
+            Rect spectrumHeader = cursor.Take(HeaderHeight, 2f);
+            SectionTitle(spectrumHeader.x, spectrumHeader.width, spectrumHeader.y, "SPECTRUM");
+            spectrumNote = AvStyled.Label(radioPage,
+                new Rect(spectrumHeader.x, spectrumHeader.y, spectrumHeader.width, HeaderHeight),
+                "", "section-title-note", align: TextAlignmentOptions.Right);
+
+            waterfallArea = cursor.Take(WaterfallHeight, AvTokens.Space2);
+            waterfall = new RadioWaterfall(radioPage, waterfallArea, RadioSpectrum.DefaultBins, 48);
+            waterfallNeedle = AvKit.Rule(radioPage,
+                new Rect(waterfallArea.x + 1f, waterfallArea.y - 1f, 2f, waterfallArea.height - 2f),
+                AvTheme.Accent);
+            waterfallNeedle.rectTransform.SetAsLastSibling();
+
+            BuildDial(ref cursor);
+            BuildControls(ref cursor);
+            BuildVolume(ref cursor);
+            BuildLink(ref cursor);
+            BuildStationList(ref cursor);
+            BuildReceiverFooter(ref cursor);
+        }
+
         private static void BuildHero(Rect area)
         {
-            AvKit.TacticalCard(pageRoot, area, AvTheme.RailReady);
+            AvKit.TacticalCard(radioPage, area, AvTheme.RailReady);
 
-            stationIconGround = AvKit.Panel(pageRoot,
+            stationIconGround = AvKit.Panel(radioPage,
                 new Rect(area.x + AvTokens.Space2, area.y - AvTokens.Space2, 56f, 56f),
                 AvTheme.SurfaceInert, AvSprites.Card);
-            AvKit.Outline(pageRoot,
+            AvKit.Outline(radioPage,
                 new Rect(area.x + AvTokens.Space2, area.y - AvTokens.Space2, 56f, 56f), AvTheme.Frame);
             stationIcon = AvKit.Panel(stationIconGround.rectTransform,
                 new Rect(AvTokens.Space1 + 1f, -(AvTokens.Space1 + 1f), 48f, 48f), Color.white);
@@ -341,83 +421,56 @@ namespace BoscaliSummer.Features.Radio.Presentation
 
             float infoX = area.x + AvTokens.Space2 + 56f + AvTokens.Space3;
             float infoWidth = area.width - (infoX - area.x) - 186f;
-            frequencyLabel = AvKit.Label(pageRoot, "---.-",
+            frequencyLabel = AvKit.Label(radioPage, "---.-",
                 new Rect(infoX, area.y - AvTokens.Space1, 150f, 40f),
                 AvTheme.TextPrimary, 32f, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
-            unitLabel = AvKit.Label(pageRoot, "MHz",
+            unitLabel = AvKit.Label(radioPage, "MHz",
                 new Rect(infoX + 140f, area.y - AvTokens.Space5, 52f, 16f),
                 AvTheme.Dim, AvTokens.FontSmall, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
 
-            modeLabel = AvStyled.Label(pageRoot,
+            modeLabel = AvStyled.Label(radioPage,
                 new Rect(area.x + area.width - AvTokens.Space2 - 160f, area.y - AvTokens.Space2, 160f, 14f),
                 "FM · STEREO", "section-title", align: TextAlignmentOptions.Right);
 
             float meterX = area.x + area.width - AvTokens.Space2 - MeterPips * 9f;
             for (int i = 0; i < MeterPips; i++)
             {
-                meterPips[i] = AvKit.Rule(pageRoot,
+                meterPips[i] = AvKit.Rule(radioPage,
                     new Rect(meterX + i * 9f, area.y - 32f, 6f, 8f), AvTheme.Hairline);
             }
-            signalLabel = AvStyled.Label(pageRoot,
+            signalLabel = AvStyled.Label(radioPage,
                 new Rect(area.x + area.width - AvTokens.Space2 - 160f, area.y - 46f, 160f, 12f),
                 "S0", "section-title-note", align: TextAlignmentOptions.Right);
 
-            stationNameLabel = AvStyled.Label(pageRoot,
+            stationNameLabel = AvStyled.Label(radioPage,
                 new Rect(infoX, area.y - 58f, infoWidth, 16f),
                 "NO STATIONS", "row-name");
-            wireLabel = AvKit.Label(pageRoot, "",
+            wireLabel = AvKit.Label(radioPage, "",
                 new Rect(infoX, area.y - 72f, infoWidth, 14f),
                 AvTheme.Dim, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
-            programLabel = AvStyled.Label(pageRoot,
+            programLabel = AvStyled.Label(radioPage,
                 new Rect(area.x + area.width - AvTokens.Space2 - 180f, area.y - 70f, 180f, 12f),
                 "", "section-title-note", align: TextAlignmentOptions.Right);
 
-            trackLabel = AvStyled.Label(pageRoot,
+            trackLabel = AvStyled.Label(radioPage,
                 new Rect(area.x + AvTokens.Space2, area.y - 90f, area.width - AvTokens.Space4 - 84f, 16f),
-                "NO LOCAL TRACKS", "row-main");
-            timeLabel = AvKit.Label(pageRoot, "00:00 / 00:00",
+                "ON AIR", "row-main");
+            timeLabel = AvKit.Label(radioPage, "00:00 / 00:00",
                 new Rect(area.x + area.width - AvTokens.Space2 - 84f, area.y - 90f, 84f, 16f),
                 AvTheme.Dim, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineRight);
 
-            squelchLabel = AvStyled.Label(pageRoot,
-                new Rect(area.x + AvTokens.Space2, area.y - 108f, area.width - AvTokens.Space4 - 84f, 12f),
+            squelchLabel = AvStyled.Label(radioPage,
+                new Rect(area.x + AvTokens.Space2, area.y - 108f, area.width - AvTokens.Space4, 12f),
                 "SQL 15 · WIDE · STEP 100k", "section-title-note");
 
-            progressFill = AvKit.ProgressBar(pageRoot,
+            progressFill = AvKit.ProgressBar(radioPage,
                 new Rect(area.x + AvTokens.Space2, area.y - 122f, area.width - AvTokens.Space4, 4f),
                 0f, AvTheme.Accent);
         }
 
-        private static void BuildSpectrum(ref RadioCursor cursor)
-        {
-            Rect header = cursor.Take(HeaderHeight, 2f);
-            SectionTitle(pageRoot, header.x, header.width, header.y, "SPECTRUM");
-            spectrumNote = AvStyled.Label(pageRoot,
-                new Rect(header.x, header.y, header.width, HeaderHeight),
-                "", "section-title-note", align: TextAlignmentOptions.Right);
-
-            waterfallArea = cursor.Take(WaterfallHeight, AvTokens.Space2);
-            waterfall = new RadioWaterfall(pageRoot, waterfallArea, RadioSpectrum.DefaultBins, 48);
-            waterfallNeedle = AvKit.Rule(pageRoot,
-                new Rect(waterfallArea.x + 1f, waterfallArea.y - 1f, 2f, waterfallArea.height - 2f),
-                AvTheme.Accent);
-            waterfallNeedle.rectTransform.SetAsLastSibling();
-        }
-
         private static void BuildDial(ref RadioCursor cursor)
         {
-            // The ticks own the left of the strip; the volume keys reset the right of it.
-            dialArea = new Rect(cursor.X, cursor.Y, cursor.Width - 94f, DialBlock);
-            float volumeX = cursor.X + cursor.Width - 90f;
-            float volumeY = cursor.Y - 30f;
-            AvKit.Button(pageRoot, "-", new Rect(volumeX, volumeY, 22f, 18f),
-                () => manager?.NudgeVolume(-0.1f), AvTokens.FontSmall, AvButtonStyle.Quiet)
-                .WithTooltip("Turn the receiver volume down.");
-            AvKit.Label(pageRoot, "AF", new Rect(volumeX + 24f, volumeY, 42f, 18f),
-                AvTheme.TextPrimary, AvTokens.FontMicro, FontStyles.Bold, TextAlignmentOptions.Center);
-            AvKit.Button(pageRoot, "+", new Rect(volumeX + 68f, volumeY, 22f, 18f),
-                () => manager?.NudgeVolume(0.1f), AvTokens.FontSmall, AvButtonStyle.Quiet)
-                .WithTooltip("Turn the receiver volume up.");
+            dialArea = new Rect(cursor.X, cursor.Y, cursor.Width, DialBlock);
             cursor.Skip(DialBlock + AvTokens.Space2);
             EnsureDialBand(manager == null ? RadioBand.Fm : manager.TunedDial.Band);
         }
@@ -427,83 +480,112 @@ namespace BoscaliSummer.Features.Radio.Presentation
             Rect seekRow = cursor.Take(ControlHeight, 6f);
             float keyWidth = (seekRow.width - Gap * 5f) / 6f;
             float x = seekRow.x;
-            seekDownButton = AvKit.Button(pageRoot, "SEEK<", new Rect(x, seekRow.y, keyWidth, ControlHeight),
+            seekDownButton = AvKit.Button(radioPage, "SEEK<", new Rect(x, seekRow.y, keyWidth, ControlHeight),
                 () => manager?.SeekStation(-1), AvTokens.FontMicro, AvButtonStyle.Default)
                 .WithTooltip("Seek the next station down the band.");
-            tuneDownButton = AvKit.Button(pageRoot, "TUNE<", new Rect(x += keyWidth + Gap, seekRow.y, keyWidth, ControlHeight),
+            tuneDownButton = AvKit.Button(radioPage, "TUNE<", new Rect(x += keyWidth + Gap, seekRow.y, keyWidth, ControlHeight),
                 () => manager?.StepDial(-1), AvTokens.FontMicro, AvButtonStyle.Quiet)
                 .WithTooltip("Tune one step down. Between channels is dead air.");
-            powerButton = AvKit.Button(pageRoot, "PWR", new Rect(x += keyWidth + Gap, seekRow.y, keyWidth, ControlHeight),
+            powerButton = AvKit.Button(radioPage, "PWR", new Rect(x += keyWidth + Gap, seekRow.y, keyWidth, ControlHeight),
                 () => manager?.TogglePlayback(), AvTokens.FontMicro, AvButtonStyle.Primary)
                 .WithTooltip("Monitor or pause the tuned station's programme.");
-            tuneUpButton = AvKit.Button(pageRoot, "TUNE>", new Rect(x += keyWidth + Gap, seekRow.y, keyWidth, ControlHeight),
+            tuneUpButton = AvKit.Button(radioPage, "TUNE>", new Rect(x += keyWidth + Gap, seekRow.y, keyWidth, ControlHeight),
                 () => manager?.StepDial(1), AvTokens.FontMicro, AvButtonStyle.Quiet)
                 .WithTooltip("Tune one step up. Between channels is dead air.");
-            seekUpButton = AvKit.Button(pageRoot, "SEEK>", new Rect(x += keyWidth + Gap, seekRow.y, keyWidth, ControlHeight),
+            seekUpButton = AvKit.Button(radioPage, "SEEK>", new Rect(x += keyWidth + Gap, seekRow.y, keyWidth, ControlHeight),
                 () => manager?.SeekStation(1), AvTokens.FontMicro, AvButtonStyle.Default)
                 .WithTooltip("Seek the next station up the band.");
-            scanButton = AvKit.Button(pageRoot, "SCAN", new Rect(x += keyWidth + Gap, seekRow.y, keyWidth, ControlHeight),
+            scanButton = AvKit.Button(radioPage, "SCAN", new Rect(x += keyWidth + Gap, seekRow.y, keyWidth, ControlHeight),
                 () => manager?.ToggleScan(), AvTokens.FontMicro, AvButtonStyle.Toggle)
                 .WithTooltip("Hold each station in the band for a few seconds as it seeks.");
 
             Rect modeRow = cursor.Take(KeyHeight, AvTokens.Space2);
             float modeWidth = (modeRow.width - Gap * 8f) / 9f;
             x = modeRow.x;
-            bandButton = AvKit.Button(pageRoot, "BAND", new Rect(x, modeRow.y, modeWidth, KeyHeight),
+            bandButton = AvKit.Button(radioPage, "BAND", new Rect(x, modeRow.y, modeWidth, KeyHeight),
                 () => manager?.CycleBand(), AvTokens.FontMicro, AvButtonStyle.Quiet)
                 .WithTooltip("FM broadcast, VHF air band, then MW. Each band keeps its last frequency.");
-            modeButton = AvKit.Button(pageRoot, "MODE", new Rect(x += modeWidth + Gap, modeRow.y, modeWidth, KeyHeight),
+            modeButton = AvKit.Button(radioPage, "MODE", new Rect(x += modeWidth + Gap, modeRow.y, modeWidth, KeyHeight),
                 () => manager?.CycleMode(), AvTokens.FontMicro, AvButtonStyle.Toggle)
                 .WithTooltip("Auto follows the band. A forced mode on the wrong kind of station garbles it.");
-            bandwidthButton = AvKit.Button(pageRoot, "BW", new Rect(x += modeWidth + Gap, modeRow.y, modeWidth, KeyHeight),
+            bandwidthButton = AvKit.Button(radioPage, "BW", new Rect(x += modeWidth + Gap, modeRow.y, modeWidth, KeyHeight),
                 () => manager?.ToggleBandwidth(), AvTokens.FontMicro, AvButtonStyle.Toggle)
                 .WithTooltip("Wide or narrow passband. Narrow trades audio quality for less noise.");
-            stepButton = AvKit.Button(pageRoot, "STEP", new Rect(x += modeWidth + Gap, modeRow.y, modeWidth, KeyHeight),
+            stepButton = AvKit.Button(radioPage, "STEP", new Rect(x += modeWidth + Gap, modeRow.y, modeWidth, KeyHeight),
                 () => manager?.ToggleFineTuning(), AvTokens.FontMicro, AvButtonStyle.Toggle)
                 .WithTooltip("Channel step or a five-times finer tuning step.");
-            squelchDownButton = AvKit.Button(pageRoot, "SQ<", new Rect(x += modeWidth + Gap, modeRow.y, modeWidth, KeyHeight),
+            squelchDownButton = AvKit.Button(radioPage, "SQL<", new Rect(x += modeWidth + Gap, modeRow.y, modeWidth, KeyHeight),
                 () => manager?.NudgeSquelch(-0.05f), AvTokens.FontMicro, AvButtonStyle.Quiet)
                 .WithTooltip("Lower the squelch: a weaker station can open the audio.");
-            squelchUpButton = AvKit.Button(pageRoot, "SQ>", new Rect(x += modeWidth + Gap, modeRow.y, modeWidth, KeyHeight),
+            squelchUpButton = AvKit.Button(radioPage, "SQL>", new Rect(x += modeWidth + Gap, modeRow.y, modeWidth, KeyHeight),
                 () => manager?.NudgeSquelch(0.05f), AvTokens.FontMicro, AvButtonStyle.Quiet)
                 .WithTooltip("Raise the squelch: only a stronger station opens the audio.");
-            transmitButton = AvKit.Button(pageRoot, "TX", new Rect(x += modeWidth + Gap, modeRow.y, modeWidth, KeyHeight),
+            transmitButton = AvKit.Button(radioPage, "TX", new Rect(x += modeWidth + Gap, modeRow.y, modeWidth, KeyHeight),
                 () => manager?.Transmit(), AvTokens.FontMicro, AvButtonStyle.Quiet)
                 .WithTooltip("Transmit key. Voice is not wired yet: this build is receive-only.");
-            secureButton = AvKit.Button(pageRoot, "SEC", new Rect(x += modeWidth + Gap, modeRow.y, modeWidth, KeyHeight),
+            secureButton = AvKit.Button(radioPage, "SEC", new Rect(x += modeWidth + Gap, modeRow.y, modeWidth, KeyHeight),
                 () => manager?.ToggleSecure(), AvTokens.FontMicro, AvButtonStyle.Toggle)
                 .WithTooltip("Crypto switch. A placeholder: no channel or key leaves this machine.");
-            stopButton = AvKit.Button(pageRoot, "STOP", new Rect(x += modeWidth + Gap, modeRow.y, modeWidth, KeyHeight),
+            stopButton = AvKit.Button(radioPage, "STOP", new Rect(x += modeWidth + Gap, modeRow.y, modeWidth, KeyHeight),
                 () => manager?.Stop(), AvTokens.FontMicro, AvButtonStyle.Danger)
                 .WithTooltip("Sign off and hand the soundtrack bus back to the game.");
+        }
+
+        private static void BuildVolume(ref RadioCursor cursor)
+        {
+            Rect row = cursor.Take(28f, AvTokens.Space2);
+            volumeDownButton = AvKit.Button(radioPage, "-", new Rect(row.x, row.y, 26f, 20f),
+                () => manager?.NudgeVolume(-0.1f), AvTokens.FontSmall, AvButtonStyle.Quiet)
+                .WithTooltip("Turn the receiver volume down.");
+            volumeUpButton = AvKit.Button(radioPage, "+", new Rect(row.x + row.width - 26f, row.y, 26f, 20f),
+                () => manager?.NudgeVolume(0.1f), AvTokens.FontSmall, AvButtonStyle.Quiet)
+                .WithTooltip("Turn the receiver volume up.");
+            volumeLabel = AvKit.Label(radioPage, "AF 100%",
+                new Rect(row.x + 30f, row.y, row.width - 60f, 20f),
+                AvTheme.TextPrimary, AvTokens.FontMicro, FontStyles.Bold, TextAlignmentOptions.Center);
+            volumeFill = AvKit.ProgressBar(radioPage,
+                new Rect(row.x + 30f, row.y - 24f, row.width - 60f, 4f), 1f, AvTheme.Accent);
+        }
+
+        private static void BuildLink(ref RadioCursor cursor)
+        {
+            Rect header = cursor.Take(HeaderHeight, 2f);
+            SectionTitle(header.x, header.width, header.y, "LINK");
+            linkLine = AvKit.Label(radioPage, "TOWER —",
+                new Rect(header.x, header.y - 15f, header.width, 13f),
+                AvTheme.Dim, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
+            netLine = AvKit.Label(radioPage, RadioLinkStub.NetStatus,
+                new Rect(header.x, header.y - 28f, header.width, 13f),
+                AvTheme.Disabled, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
+            cursor.Skip(30f);
         }
 
         private static void BuildStationList(ref RadioCursor cursor)
         {
             Rect header = cursor.Take(HeaderHeight, 6f);
-            SectionTitle(pageRoot, header.x, header.width, header.y, "STATIONS");
-            stationsNote = AvStyled.Label(pageRoot, new Rect(header.x, header.y, header.width - 64f, HeaderHeight),
+            SectionTitle(header.x, header.width, header.y, "STATIONS");
+            stationsNote = AvStyled.Label(radioPage, new Rect(header.x, header.y, header.width - 64f, HeaderHeight),
                 "0 FOUND", "section-title-note", align: TextAlignmentOptions.Right);
-            AvKit.Button(pageRoot, "RESCAN",
+            AvKit.Button(radioPage, "RESCAN",
                 new Rect(header.x + header.width - 60f, header.y - 2f, 60f, 16f),
                 () => manager?.Rescan(), AvTokens.FontMicro, AvButtonStyle.Quiet)
                 .WithTooltip("Sign off and rescan the local music library.");
 
-            rowsPerPage = MaximumRows;
+            rowsPerPage = StationRows;
             float listTop = cursor.Y;
             Rect listFrame = new Rect(cursor.X, listTop, cursor.Width, ChannelPitch);
-            channelsEmptyLabel = AvKit.Label(pageRoot, "",
+            channelsEmptyLabel = AvKit.Label(radioPage, "",
                 new Rect(cursor.X + AvTokens.Space4, listTop, cursor.Width - AvTokens.Space4 * 2f,
-                    ChannelPitch * MinimumRows),
+                    ChannelPitch * 3f),
                 AvTheme.Dim, AvTokens.FontMicro, FontStyles.Italic, TextAlignmentOptions.Center, wrap: true);
             channelsEmptyLabel.gameObject.SetActive(false);
 
             for (int i = 0; i < rowsPerPage; i++)
-                rows[i] = MakeChannelRow(pageRoot, listFrame, listTop - i * ChannelPitch);
+                rows[i] = MakeChannelRow(listFrame, listTop - i * ChannelPitch);
             cursor.Skip(ChannelPitch * rowsPerPage + AvTokens.Space2);
 
             AvButton[] pageButtons = AvKit.Stepper(
-                pageRoot, cursor.X, cursor.Y, cursor.Width, out pageLabel,
+                radioPage, cursor.X, cursor.Y, cursor.Width, out pageLabel,
                 PreviousPage, NextPage);
             pagePreviousButton = pageButtons[0];
             pageNextButton = pageButtons[1];
@@ -512,43 +594,133 @@ namespace BoscaliSummer.Features.Radio.Presentation
             cursor.Skip(RowHeight + AvTokens.Space2);
         }
 
-        private static void BuildProgrammeLog(ref RadioCursor cursor)
+        private static void BuildReceiverFooter(ref RadioCursor cursor)
         {
-            Rect header = cursor.Take(HeaderHeight, 6f);
-            SectionTitle(pageRoot, header.x, header.width, header.y, "PROGRAMME");
-            programmePreviousButton = AvKit.Button(pageRoot, "<",
-                new Rect(header.x + header.width - 88f, header.y - 1f, 22f, 16f),
-                () => NudgeProgrammePage(-1), AvTokens.FontMicro, AvButtonStyle.Quiet)
-                .WithTooltip("Show the previous page of tracks.");
-            programmeNote = AvStyled.Label(pageRoot,
-                new Rect(header.x + header.width - 64f, header.y, 40f, HeaderHeight),
-                "1 / 1", "section-title-note", align: TextAlignmentOptions.Center);
-            programmeNextButton = AvKit.Button(pageRoot, ">",
-                new Rect(header.x + header.width - 22f, header.y - 1f, 22f, 16f),
-                () => NudgeProgrammePage(1), AvTokens.FontMicro, AvButtonStyle.Quiet)
-                .WithTooltip("Show the next page of tracks.");
-
-            programmeRowsPerPage = MaximumTrackRows;
-            float rowsTop = cursor.Y;
-            Rect listFrame = new Rect(cursor.X, rowsTop, cursor.Width, TrackLinePitch);
-            for (int i = 0; i < programmeRowsPerPage; i++)
-                programmeRows[i] = MakeProgrammeRow(pageRoot, listFrame, rowsTop - i * TrackLinePitch);
-
-            programmeEmptyLabel = AvKit.Label(pageRoot, "",
-                new Rect(cursor.X, rowsTop, cursor.Width, TrackLineHeight),
-                AvTheme.Dim, AvTokens.FontMicro, FontStyles.Italic, TextAlignmentOptions.Left);
-            programmeEmptyLabel.gameObject.SetActive(false);
-            cursor.Skip(TrackLinePitch * programmeRowsPerPage + AvTokens.Space2);
-        }
-
-        private static void BuildFooter(ref RadioCursor cursor)
-        {
-            Rect area = cursor.Take(AvTokens.Space6);
-            footerLabel = AvKit.Label(pageRoot,
-                "RECEIVE ONLY · NO TRANSMIT · RECEPTION MODELLED FROM RANGE, HORIZON AND TERRAIN",
-                new Rect(area.x, area.y, area.width, 20f),
+            Rect area = cursor.Take(AvTokens.Space5);
+            footerLabel = AvKit.Label(radioPage,
+                "RECEIVE ONLY · NO TRANSMIT · TRACKS ARE CHOSEN ON THE DECK PAGE",
+                new Rect(area.x, area.y, area.width, 18f),
                 AvTheme.Disabled, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
         }
+
+        // --------------------------------------------------------------------- deck page
+
+        private static void BuildDeck(RadioCursor cursor)
+        {
+            Rect hero = cursor.Take(104f);
+            AvKit.TacticalCard(deckPage, hero, AvTheme.RailInfo);
+            deckFolderLabel = AvStyled.Label(deckPage,
+                new Rect(hero.x + AvTokens.Space3, hero.y - AvTokens.Space2, hero.width - AvTokens.Space6, 14f),
+                "DECK · LOCAL FOLDERS", "section-title");
+            deckTrackLabel = AvStyled.Label(deckPage,
+                new Rect(hero.x + AvTokens.Space3, hero.y - 30f, hero.width - AvTokens.Space6 - 96f, 20f),
+                "NO TRACK", "row-main");
+            deckTimeLabel = AvKit.Label(deckPage, "--:-- / --:--",
+                new Rect(hero.x + hero.width - AvTokens.Space3 - 92f, hero.y - 30f, 92f, 20f),
+                AvTheme.Dim, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineRight);
+            deckProgressFill = AvKit.ProgressBar(deckPage,
+                new Rect(hero.x + AvTokens.Space3, hero.y - 60f, hero.width - AvTokens.Space6, 6f),
+                0f, AvTheme.RailInfo);
+            deckEmptyLabel = AvKit.Label(deckPage, "",
+                new Rect(hero.x + AvTokens.Space3, hero.y - 78f, hero.width - AvTokens.Space6, 16f),
+                AvTheme.Warning, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
+            deckEmptyLabel.gameObject.SetActive(false);
+
+            Rect row = cursor.Take(ControlHeight, 6f);
+            float keyWidth = (row.width - Gap * 3f) / 4f;
+            float x = row.x;
+            AvKit.Button(deckPage, "|<", new Rect(x, row.y, keyWidth, ControlHeight),
+                () => manager?.DeckPrevious(), AvTokens.FontSmall, AvButtonStyle.Quiet)
+                .WithTooltip("Previous track in this folder.");
+            deckPlayButton = AvKit.Button(deckPage, "PLAY", new Rect(x += keyWidth + Gap, row.y, keyWidth, ControlHeight),
+                () => manager?.DeckTogglePlayback(), AvTokens.FontSmall, AvButtonStyle.Primary)
+                .WithTooltip("Play or pause the selected track.");
+            AvKit.Button(deckPage, ">|", new Rect(x += keyWidth + Gap, row.y, keyWidth, ControlHeight),
+                () => manager?.DeckNext(), AvTokens.FontSmall, AvButtonStyle.Quiet)
+                .WithTooltip("Next track in this folder.");
+            AvKit.Button(deckPage, "STOP", new Rect(x += keyWidth + Gap, row.y, keyWidth, ControlHeight),
+                () => manager?.DeckStop(), AvTokens.FontSmall, AvButtonStyle.Danger)
+                .WithTooltip("Stop the deck and release the soundtrack bus if the receiver is off.");
+
+            Rect keyRow = cursor.Take(KeyHeight, AvTokens.Space2);
+            float keyWidth2 = (keyRow.width - Gap * 5f) / 6f;
+            x = keyRow.x;
+            deckShuffleButton = AvKit.Button(deckPage, "SHUF", new Rect(x, keyRow.y, keyWidth2, KeyHeight),
+                () => manager?.DeckToggleShuffle(), AvTokens.FontMicro, AvButtonStyle.Toggle)
+                .WithTooltip("Random track order, for the deck and the radio programme.");
+            deckRepeatButton = AvKit.Button(deckPage, "REP", new Rect(x += keyWidth2 + Gap, keyRow.y, keyWidth2, KeyHeight),
+                () => manager?.DeckToggleRepeat(), AvTokens.FontMicro, AvButtonStyle.Toggle)
+                .WithTooltip("Repeat the current track instead of advancing.");
+            AvKit.Button(deckPage, "FOLDER", new Rect(x += keyWidth2 + Gap, keyRow.y, keyWidth2, KeyHeight),
+                () => manager?.OpenLibraryFolder(), AvTokens.FontMicro, AvButtonStyle.Quiet)
+                .WithTooltip("Open Boscali Summer's local music library folder.");
+            AvKit.Button(deckPage, "RESCAN", new Rect(x += keyWidth2 + Gap, keyRow.y, keyWidth2, KeyHeight),
+                () => manager?.Rescan(), AvTokens.FontMicro, AvButtonStyle.Quiet)
+                .WithTooltip("Rescan the local music library for new folders and tracks.");
+            AvKit.Button(deckPage, "RADIO", new Rect(x += keyWidth2 + Gap, keyRow.y, keyWidth2, KeyHeight),
+                () => shell?.SetPage(TabReceiver), AvTokens.FontMicro, AvButtonStyle.Quiet)
+                .WithTooltip("Back to the receiver page. The radio keeps playing underneath.");
+            AvKit.Button(deckPage, "STOP ALL", new Rect(x += keyWidth2 + Gap, keyRow.y, keyWidth2, KeyHeight),
+                () => manager?.StopAll(), AvTokens.FontMicro, AvButtonStyle.Danger)
+                .WithTooltip("Stop the receiver too, and hand the soundtrack bus back to the game.");
+
+            BuildFolderList(ref cursor);
+            BuildTrackList(ref cursor);
+
+            Rect footer = cursor.Take(AvTokens.Space5);
+            deckFooterLabel = AvKit.Label(deckPage,
+                "LOCAL LIBRARY ONLY · OGG/WAV · NOTHING IS DOWNLOADED, BUNDLED OR SENT",
+                new Rect(footer.x, footer.y, footer.width, 18f),
+                AvTheme.Disabled, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
+        }
+
+        private static void BuildFolderList(ref RadioCursor cursor)
+        {
+            Rect header = cursor.Take(HeaderHeight, 6f);
+            SectionTitleAt(deckPage, header.x, header.width, header.y, "FOLDERS");
+            deckFolderPreviousButton = AvKit.Button(deckPage, "<",
+                new Rect(header.x + header.width - 88f, header.y - 1f, 22f, 16f),
+                () => NudgeFolderPage(-1), AvTokens.FontMicro, AvButtonStyle.Quiet)
+                .WithTooltip("Show the previous page of folders.");
+            deckFolderNote = AvStyled.Label(deckPage,
+                new Rect(header.x + header.width - 64f, header.y, 40f, HeaderHeight),
+                "0 / 0", "section-title-note", align: TextAlignmentOptions.Center);
+            deckFolderNextButton = AvKit.Button(deckPage, ">",
+                new Rect(header.x + header.width - 22f, header.y - 1f, 22f, 16f),
+                () => NudgeFolderPage(1), AvTokens.FontMicro, AvButtonStyle.Quiet)
+                .WithTooltip("Show the next page of folders.");
+
+            float top = cursor.Y;
+            Rect frame = new Rect(cursor.X, top, cursor.Width, 30f);
+            for (int i = 0; i < FolderRows; i++)
+                folderRows[i] = MakeFolderRow(frame, top - i * 30f);
+            cursor.Skip(30f * FolderRows + AvTokens.Space2);
+        }
+
+        private static void BuildTrackList(ref RadioCursor cursor)
+        {
+            Rect header = cursor.Take(HeaderHeight, 6f);
+            SectionTitleAt(deckPage, header.x, header.width, header.y, "TRACKS");
+            deckTrackPreviousButton = AvKit.Button(deckPage, "<",
+                new Rect(header.x + header.width - 88f, header.y - 1f, 22f, 16f),
+                () => NudgeDeckTrackPage(-1), AvTokens.FontMicro, AvButtonStyle.Quiet)
+                .WithTooltip("Show the previous page of tracks.");
+            deckTrackNote = AvStyled.Label(deckPage,
+                new Rect(header.x + header.width - 64f, header.y, 40f, HeaderHeight),
+                "0 / 0", "section-title-note", align: TextAlignmentOptions.Center);
+            deckTrackNextButton = AvKit.Button(deckPage, ">",
+                new Rect(header.x + header.width - 22f, header.y - 1f, 22f, 16f),
+                () => NudgeDeckTrackPage(1), AvTokens.FontMicro, AvButtonStyle.Quiet)
+                .WithTooltip("Show the next page of tracks.");
+
+            float top = cursor.Y;
+            Rect frame = new Rect(cursor.X, top, cursor.Width, TrackLinePitch);
+            for (int i = 0; i < TrackRows; i++)
+                programmeRows[i] = MakeTrackRow(frame, top - i * TrackLinePitch);
+            cursor.Skip(TrackLinePitch * TrackRows + AvTokens.Space2);
+        }
+
+        // ------------------------------------------------------------------- dial helpers
 
         private static void EnsureDialBand(RadioBand band)
         {
@@ -558,7 +730,7 @@ namespace BoscaliSummer.Features.Radio.Presentation
 
             dialRoot = new GameObject("Dial", typeof(RectTransform));
             var rootRect = (RectTransform)dialRoot.transform;
-            rootRect.SetParent(pageRoot, false);
+            rootRect.SetParent(radioPage, false);
             rootRect.SetAsLastSibling();
             AvKit.Place(rootRect, new Rect(0f, 0f, Width, 0f));
 
@@ -567,7 +739,7 @@ namespace BoscaliSummer.Features.Radio.Presentation
             int max = RadioBands.Max(band);
             int step = RadioBands.Step(band);
             int minorStep = Mathf.Max(step, (max - min) / 60 / step * step);
-            int labelStep = band == RadioBand.Fm ? 2000 : band == RadioBand.Air ? 2000 : 200;
+            int labelStep = band == RadioBand.Mw ? 200 : 2000;
 
             AvKit.Rule(rootRect, new Rect(dialArea.x, dialArea.y - 14f, dialArea.width, 1f),
                 AvTheme.Unity(AvTokens.Hairline.WithAlpha(0.5f)));
@@ -610,7 +782,7 @@ namespace BoscaliSummer.Features.Radio.Presentation
                 float x = DialX((dial.Kilohertz - min) / (float)(max - min));
                 float strength = Mathf.Clamp01(manager.GetChannelStrength(i));
                 Color marker = Color.Lerp(AvTheme.Unity(AvTokens.RailInert), manager.GetChannelColor(i),
-                    0.35f + 0.65f * strength);
+                    0.25f + 0.75f * strength);
                 Image rule = AvKit.Rule(rootRect,
                     new Rect(x - 2f, dialArea.y - 14f, 4f, 9f), marker);
                 dialMarkers.Add(rule);
@@ -640,7 +812,7 @@ namespace BoscaliSummer.Features.Radio.Presentation
             if (manager == null || dialRoot == null) return;
 
             RadioDial dial = manager.TunedDial;
-            bool off = manager.IsOffStation;
+            bool off = manager.IsOffStation || manager.IsOffAir;
             if (dialBand != dial.Band)
             {
                 EnsureDialBand(dial.Band);
@@ -688,7 +860,8 @@ namespace BoscaliSummer.Features.Radio.Presentation
                 }
             }
 
-            if (Time.unscaledTime >= nextWaterfallAt && waterfall != null && manager.HasChannels)
+            if (Time.unscaledTime >= nextWaterfallAt && waterfall != null &&
+                shell != null && shell.Page == TabReceiver)
             {
                 nextWaterfallAt = Time.unscaledTime + 0.12f;
                 waterfall.Push(manager.Spectrum);
@@ -736,6 +909,13 @@ namespace BoscaliSummer.Features.Radio.Presentation
                 token = "NO SIG";
                 state = "warn";
             }
+            else if (manager.IsOffAir)
+            {
+                level = 0f;
+                signal = "OFF AIR";
+                token = "OFF AIR";
+                state = "danger";
+            }
             else
             {
                 RadioReception reception = manager.Reception;
@@ -763,12 +943,17 @@ namespace BoscaliSummer.Features.Radio.Presentation
             {
                 signalLabel.text = signal;
                 signalLabel.color = state == "live" ? AvTheme.Accent
-                    : state == "warn" ? AvTheme.Warning : AvTheme.Dim;
+                    : state == "warn" ? AvTheme.Warning
+                    : state == "danger" ? AvTheme.Alert : AvTheme.Dim;
             }
-            if (dataBar != null) dataBar.SetChip(2, token, state);
+            if (dataBar != null && shell != null && shell.Page == TabReceiver)
+                dataBar.SetChip(2, token, state);
         }
 
-        private static void SectionTitle(RectTransform parent, float x, float width, float y, string title)
+        private static void SectionTitle(float x, float width, float y, string title) =>
+            SectionTitleAt(radioPage, x, width, y, title);
+
+        private static void SectionTitleAt(RectTransform parent, float x, float width, float y, string title)
         {
             TMP_Text label = AvStyled.Label(parent, new Rect(x, y, 160f, HeaderHeight), title, "section-title");
             float titleWidth = Mathf.Ceil(label.GetPreferredValues(title).x);
@@ -778,12 +963,14 @@ namespace BoscaliSummer.Features.Radio.Presentation
                 AvTheme.Unity(AvTokens.Hairline.WithAlpha(0.35f)));
         }
 
-        private static ChannelRow MakeChannelRow(RectTransform parent, Rect frame, float y)
+        // ----------------------------------------------------------------------- row makers
+
+        private static ChannelRow MakeChannelRow(Rect frame, float y)
         {
             float x = frame.x;
             float w = frame.width;
 
-            Image ground = AvKit.Panel(parent, new Rect(x, y, w, RowHeight), Color.clear);
+            Image ground = AvKit.Panel(radioPage, new Rect(x, y, w, RowHeight), Color.clear);
             RectTransform rect = ground.rectTransform;
             AvKit.Rule(rect, new Rect(0f, -RowHeight, w, 1f),
                        AvTheme.Unity(AvTokens.Hairline.WithAlpha(0.13f)));
@@ -816,16 +1003,13 @@ namespace BoscaliSummer.Features.Radio.Presentation
             });
             button.SetRowHighlight(ground, Color.clear,
                 AvStyleHost.Resolve(AvStyleHost.Style("row", "hover").Background, AvTheme.SurfaceRaised));
-            button.WithTooltip("Tune the receiver to this station.");
+            button.WithTooltip("Tune the receiver to this station. Tracks are picked on the deck page.");
             return result;
         }
 
-        private static ProgrammeRow MakeProgrammeRow(RectTransform parent, Rect frame, float y)
+        private static ProgrammeRow MakeTrackRow(Rect frame, float y)
         {
-            float x = frame.x;
-            float w = frame.width;
-
-            Image ground = AvKit.Panel(parent, new Rect(x, y, w, TrackLineHeight), Color.clear);
+            Image ground = AvKit.Panel(deckPage, new Rect(frame.x, y, frame.width, TrackLineHeight), Color.clear);
             RectTransform rect = ground.rectTransform;
             Image rule = AvKit.Rule(rect, new Rect(0f, 0f, 3f, TrackLineHeight), Color.clear);
 
@@ -838,28 +1022,51 @@ namespace BoscaliSummer.Features.Radio.Presentation
 
             result.Number = AvKit.Label(rect, "1", new Rect(8f, 0f, 26f, TrackLineHeight),
                 AvTheme.Disabled, AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineRight);
-            result.Title = AvStyled.Label(rect, new Rect(40f, 0f, w - 48f, TrackLineHeight), "", "row-sub");
+            result.Title = AvStyled.Label(rect, new Rect(40f, 0f, frame.width - 48f, TrackLineHeight), "", "row-sub");
 
-            AvButton button = AvKit.HitButton(rect, new Rect(0f, 0f, w, TrackLineHeight), () =>
+            AvButton button = AvKit.HitButton(rect, new Rect(0f, 0f, frame.width, TrackLineHeight), () =>
             {
                 AvInput.Deselect(ground.gameObject);
-                if (manager != null && result.Index >= 0) manager.PlayTrack(result.Index);
+                if (manager != null && result.Index >= 0) manager.DeckPlay(result.Index);
                 nextRefresh = 0f;
             });
             button.SetRowHighlight(ground, Color.clear, AvTheme.Unity(AvTokens.Wash(
-                AvTheme.Accent.ToRgba(), AvTokens.RowHoverScale, AvTokens.RowHoverAlpha)));
-            button.WithTooltip("Monitor this track from the tuned station.");
+                AvTheme.RailInfo.ToRgba(), AvTokens.RowHoverScale, AvTokens.RowHoverAlpha)));
+            button.WithTooltip("Play this track on the deck.");
             return result;
         }
 
-        private static void NudgeProgrammePage(int direction)
+        private static FolderRow MakeFolderRow(Rect frame, float y)
         {
-            if (manager == null) return;
-            int perPage = Math.Max(1, programmeRowsPerPage);
-            int pages = Math.Max(1, (manager.TrackCount + perPage - 1) / perPage);
-            programmePage = Mathf.Clamp(programmePage + direction, 0, pages - 1);
-            nextRefresh = 0f;
+            Image ground = AvKit.Panel(deckPage, new Rect(frame.x, y, frame.width, 28f), Color.clear);
+            RectTransform rect = ground.rectTransform;
+            AvKit.Rule(rect, new Rect(0f, -28f, frame.width, 1f),
+                AvTheme.Unity(AvTokens.Hairline.WithAlpha(0.13f)));
+            Image selectionRule = AvKit.Rule(rect, new Rect(0f, 0f, 3f, 28f), Color.clear);
+
+            var result = new FolderRow
+            {
+                Root = ground.gameObject,
+                Ground = ground,
+                SelectionRule = selectionRule
+            };
+            result.Name = AvStyled.Label(rect, new Rect(12f, 0f, frame.width - 80f, 28f), "FOLDER", "row-name");
+            result.Count = AvStyled.Label(rect, new Rect(frame.width - 68f, 0f, 60f, 28f),
+                "0", "row-sub", align: TextAlignmentOptions.Right);
+
+            AvButton button = AvKit.HitButton(rect, new Rect(0f, 0f, frame.width, 28f), () =>
+            {
+                AvInput.Deselect(ground.gameObject);
+                if (manager != null && result.Index >= 0) manager.DeckSelectFolder(result.Index);
+                nextRefresh = 0f;
+            });
+            button.SetRowHighlight(ground, Color.clear,
+                AvStyleHost.Resolve(AvStyleHost.Style("row", "hover").Background, AvTheme.SurfaceRaised));
+            button.WithTooltip("Browse this folder in the track list below.");
+            return result;
         }
+
+        // ------------------------------------------------------------------ page navigation
 
         private static void PreviousPage()
         {
@@ -875,6 +1082,24 @@ namespace BoscaliSummer.Features.Radio.Presentation
             nextRefresh = 0f;
         }
 
+        private static void NudgeFolderPage(int direction)
+        {
+            if (manager == null) return;
+            int pages = Math.Max(1, (manager.DeckFolderCount + FolderRows - 1) / FolderRows);
+            folderPage = Mathf.Clamp(folderPage + direction, 0, pages - 1);
+            nextRefresh = 0f;
+        }
+
+        private static void NudgeDeckTrackPage(int direction)
+        {
+            if (manager == null) return;
+            int pages = Math.Max(1, (manager.DeckTrackCount + TrackRows - 1) / TrackRows);
+            deckTrackPage = Mathf.Clamp(deckTrackPage + direction, 0, pages - 1);
+            nextRefresh = 0f;
+        }
+
+        // ------------------------------------------------------------------------- refresh
+
         private static void Refresh()
         {
             if (manager == null || frequencyLabel == null) return;
@@ -885,8 +1110,15 @@ namespace BoscaliSummer.Features.Radio.Presentation
             }
             if (markerRevision != manager.StationRevision) RefreshDialMarkers();
 
+            RefreshReceiver();
+            RefreshDeck();
+            RefreshDataBar();
+        }
+
+        private static void RefreshReceiver()
+        {
             bool hasChannels = manager.HasChannels;
-            bool offStation = manager.IsOffStation;
+            bool offStation = manager.IsOffStation || manager.IsOffAir;
             RadioDial dial = manager.TunedDial;
             if (dialBand != dial.Band)
             {
@@ -912,8 +1144,10 @@ namespace BoscaliSummer.Features.Radio.Presentation
                 frequencyLabel.text = dial.FrequencyText;
                 unitLabel.text = dial.UnitText;
                 modeLabel.text = dial.BandText + " · " + manager.BroadcastMode;
-                stationNameLabel.text = "NO SIGNAL";
-                wireLabel.text = "Dead air. Tune back to a station.";
+                stationNameLabel.text = manager.IsOffAir ? manager.CurrentChannelName + " — OFF AIR" : "NO SIGNAL";
+                wireLabel.text = manager.IsOffAir
+                    ? "Tower lost. The station is off the air on this mission."
+                    : "Dead air. Tune back to a station.";
                 programLabel.text = string.Empty;
                 stationBadge.text = "--";
                 stationBadge.gameObject.SetActive(true);
@@ -935,10 +1169,19 @@ namespace BoscaliSummer.Features.Radio.Presentation
             }
 
             spectrumNote.text = dial.BandText + " · " + dial.FrequencyText + " " + dial.UnitText;
-            trackLabel.text = offStation ? "DEAD AIR" : manager.CurrentTrackTitle;
+            trackLabel.text = manager.IsOffAir ? "OFF AIR"
+                : offStation ? "DEAD AIR" : "ON AIR · " + manager.CurrentTrackTitle;
             progressFill.fillAmount = offStation ? 0f : manager.Progress;
             timeLabel.text = offStation ? "--:-- / --:--"
                 : FormatTime(manager.Elapsed) + " / " + FormatTime(manager.Duration);
+
+            linkLine.text = LinkText();
+            netLine.text = manager.Link.Secure
+                ? "NET    SECURE LATCHED (PLACEHOLDER) · " + RadioLinkStub.JamStatus
+                : "NET    " + RadioLinkStub.NetStatus + " · TX DISABLED";
+
+            volumeLabel.text = "AF " + Mathf.RoundToInt(manager.VolumeLevel * 100f) + "%";
+            volumeFill.fillAmount = manager.VolumeLevel;
 
             powerButton?.SetText(manager.IsPaused ? "RES" : manager.IsEngaged ? "PAUSE" : "PWR");
             powerButton?.SetLatched(manager.IsEngaged && !manager.IsPaused);
@@ -947,6 +1190,7 @@ namespace BoscaliSummer.Features.Radio.Presentation
             stepButton?.SetLatched(manager.FineTuning);
             modeButton?.SetText(ModeText());
             modeButton?.SetLatched(manager.ReceiverModulation != dial.Modulation);
+            secureButton?.SetLatched(manager.Link.Secure);
 
             int selectedTracks = hasChannels ? manager.GetChannelTrackCount(manager.SelectedChannel) : 0;
             bool selectedChannelHasTracks = selectedTracks > 0;
@@ -956,21 +1200,21 @@ namespace BoscaliSummer.Features.Radio.Presentation
             tuneUpButton?.SetEnabled(hasChannels);
             bandButton?.SetEnabled(hasChannels);
             powerButton?.SetEnabled(selectedChannelHasTracks && !offStation);
-            stopButton?.SetEnabled(manager.IsEngaged || offStation);
+            stopButton?.SetEnabled(manager.IsEngaged || manager.IsOffStation);
             scanButton?.SetEnabled(manager.ChannelCount > 1);
             squelchDownButton?.SetEnabled(manager.Squelch > 0.001f);
             squelchUpButton?.SetEnabled(manager.Squelch < 0.94f);
             transmitButton?.SetEnabled(false);
-            secureButton?.SetLatched(manager.Link.Secure);
+            volumeDownButton?.SetEnabled(manager.VolumeLevel > 0.001f);
+            volumeUpButton?.SetEnabled(manager.VolumeLevel < 0.999f);
             squelchLabel.text = "SQL " + Mathf.RoundToInt(manager.Squelch * 100f) +
                 " · " + (manager.NarrowBandwidth ? "NARROW" : "WIDE") +
                 " · STEP " + StepText(dial.Band);
-            footerLabel.text = !manager.ReceptionModelled
-                ? "RECEIVE ONLY · LOCAL ARCHIVE · NO TOWER FIX ON THIS MAP, SIGNAL READS FULL"
-                : manager.Link.Secure
-                    ? "RECEIVE ONLY · NET " + manager.Link.NetName + " · SECURE LATCHED (PLACEHOLDER)"
-                    : "RECEIVE ONLY · NO TRANSMIT · RECEPTION MODELLED FROM RANGE, HORIZON AND TERRAIN";
-            shell?.WriteStatus(null, MapPicker.Prompt, manager.Status);
+            footerLabel.text = manager.IsOffAir
+                ? "RECEIVE ONLY · TOWER LOST · THE STATION IS OFF AIR UNTIL ITS SITE RETURNS"
+                : manager.ReceptionModelled
+                    ? "RECEIVE ONLY · RECEPTION MODELLED FROM RANGE, HORIZON AND TERRAIN"
+                    : "RECEIVE ONLY · LOCAL ARCHIVE · NO TOWER FIX ON THIS MAP, SIGNAL READS FULL";
 
             int pages = Math.Max(1, (manager.ChannelCount + rowsPerPage - 1) / rowsPerPage);
             page = Mathf.Clamp(page, 0, pages - 1);
@@ -978,30 +1222,14 @@ namespace BoscaliSummer.Features.Radio.Presentation
             pagePreviousButton?.SetEnabled(page > 0);
             pageNextButton?.SetEnabled(page + 1 < pages);
 
-            if (dataBar != null)
-            {
-                bool playing = manager.IsEngaged && !manager.IsPaused;
-                dataBar.State.text = manager.IsScanning ? "SCANNING"
-                                    : offStation ? "DEAD AIR"
-                                    : playing ? "ON AIR"
-                                    : manager.IsPaused ? "PAUSED"
-                                    : hasChannels ? "STANDBY" : "NO LIBRARY";
-                dataBar.State.color = manager.IsScanning || offStation ? AvTheme.Warning
-                                    : playing ? AvTheme.RailReady
-                                    : hasChannels ? AvTheme.Dim : AvTheme.Warning;
-                dataBar.SetChip(0, hasChannels ? dial.FullText : "-- MHz", hasChannels ? "live" : "inert");
-                dataBar.SetChip(1, dial.BandText + " " + StepText(dial.Band), hasChannels ? "info" : "inert");
-                UpdateMeter();
-            }
-
             if (channelsEmptyLabel != null)
             {
                 if (channelsEmptyLabel.gameObject.activeSelf != !hasChannels)
                     channelsEmptyLabel.gameObject.SetActive(!hasChannels);
                 if (!hasChannels)
                     channelsEmptyLabel.text =
-                        "No music folders found. Press RESCAN after adding OGG/WAV folders, " +
-                        "or use the MUS deck screen for the local library.";
+                        "No music folders found. Add OGG/WAV folders then press RESCAN; the deck " +
+                        "page below browses them.";
             }
 
             for (int row = 0; row < rowsPerPage; row++)
@@ -1024,12 +1252,14 @@ namespace BoscaliSummer.Features.Radio.Presentation
                 item.Frequency.text = rowDial.FrequencyText + " " + rowDial.BandText;
                 bool modelled = manager.GetChannelHasTransmitter(index);
                 float strength = Mathf.Clamp01(manager.GetChannelStrength(index));
-                item.Count.text = modelled
-                    ? Mathf.RoundToInt(strength * 100f) + "%"
+                bool offAirRow = manager.GetChannelOffAir(index);
+                item.Count.text = offAirRow ? "OFF AIR"
+                    : modelled ? Mathf.RoundToInt(strength * 100f) + "%"
                     : manager.GetChannelTrackCount(index) + " TRK";
                 bool selected = index == manager.SelectedChannel && !offStation;
                 item.Label.color = AvTheme.TextPrimary;
                 item.Frequency.color = selected ? AvTheme.Accent
+                    : offAirRow ? AvTheme.Alert
                     : modelled && strength < 0.25f ? AvTheme.Warning
                     : AvTheme.Unity(AvTokens.TextDim);
                 item.SelectionRule.color = selected ? AvTheme.Accent : Color.clear;
@@ -1037,61 +1267,139 @@ namespace BoscaliSummer.Features.Radio.Presentation
                     ? AvTheme.Unity(AvTokens.Wash(AvTheme.Accent.ToRgba(), AvTokens.SelectedScale, AvTokens.SelectedAlpha))
                     : Color.clear;
             }
+        }
 
-            if (programmeNote != null)
+        private static string LinkText()
+        {
+            if (!manager.HasChannels) return "TOWER  —";
+            if (!BuiltInStationRules.IsBuiltIn(manager.CurrentChannelId)) return "TOWER  LOCAL ARCHIVE";
+            if (manager.IsOffAir) return "TOWER  LOST · STATION OFF AIR";
+            if (!manager.ReceptionModelled) return "TOWER  NO FIX · SIGNAL READS FULL";
+            return "TOWER  " + manager.TowerLabel +
+                " · " + manager.TowerDistanceKm.ToString("0.0") + " km" +
+                " · HORIZON " + manager.TowerHorizonKm.ToString("0") + " km" +
+                " · " + (manager.TowerLineOfSight ? "LOS CLEAR" : "TERRAIN BLOCKED");
+        }
+
+        private static void RefreshDeck()
+        {
+            if (deckFolderLabel == null) return;
+
+            int folderCount = manager.DeckFolderCount;
+            bool hasFolders = folderCount > 0;
+            bool playing = manager.DeckEngaged;
+
+            deckFolderLabel.text = hasFolders ? manager.DeckFolderName(manager.DeckFolder) : "DECK · LOCAL FOLDERS";
+            deckTrackLabel.text = manager.DeckCurrentTitle;
+            deckTimeLabel.text = "--:-- / --:--";
+            deckProgressFill.fillAmount = 0f;
+            if (playing)
             {
-                int trackCount = manager.TrackCount;
-                int current = manager.CurrentTrackIndex;
-                if (current != lastProgrammeTrack)
-                {
-                    lastProgrammeTrack = current;
-                    if (current >= 0 && programmeRowsPerPage > 0)
-                        programmePage = current / programmeRowsPerPage;
-                }
-                int perPage = Math.Max(1, programmeRowsPerPage);
-                int trackPages = Math.Max(1, (trackCount + perPage - 1) / perPage);
-                programmePage = Mathf.Clamp(programmePage, 0, trackPages - 1);
-                programmeNote.text = trackCount == 0
-                    ? "NO LOG"
-                    : (programmePage + 1) + " / " + trackPages;
-                programmePreviousButton?.SetEnabled(programmePage > 0);
-                programmeNextButton?.SetEnabled(programmePage + 1 < trackPages);
-
-                if (programmeEmptyLabel != null)
-                {
-                    bool empty = trackCount == 0;
-                    if (programmeEmptyLabel.gameObject.activeSelf != empty)
-                        programmeEmptyLabel.gameObject.SetActive(empty);
-                    if (empty)
-                        programmeEmptyLabel.text = offStation
-                            ? "Tune to a station for its programme log."
-                            : "This station carries no local tracks.";
-                }
-
-                for (int i = 0; i < programmeRows.Length; i++)
-                {
-                    ProgrammeRow track = programmeRows[i];
-                    if (track == null) continue;
-                    int index = programmePage * perPage + i;
-                    track.Index = index < trackCount ? index : -1;
-                    if (track.Root.activeSelf != (track.Index >= 0))
-                        track.Root.SetActive(track.Index >= 0);
-                    if (track.Index < 0) continue;
-                    bool playing = index == current;
-                    track.Number.text = (index + 1).ToString();
-                    track.Title.text = manager.GetTrackTitle(index);
-                    track.Number.color = playing ? AvTheme.Accent : AvTheme.Disabled;
-                    track.Title.color = playing ? AvTheme.Accent : AvTheme.Unity(AvTokens.TextDim);
-                    track.Rule.color = playing ? AvTheme.Accent : Color.clear;
-                }
+                deckProgressFill.fillAmount = manager.DeckProgress;
+                deckTimeLabel.text = FormatTime(manager.DeckElapsed) + " / " + FormatTime(manager.DeckDuration);
             }
 
-            for (int i = 0; i < dialMarkers.Count; i++)
+            deckEmptyLabel.gameObject.SetActive(!hasFolders);
+            if (!hasFolders)
+                deckEmptyLabel.text = "No folders with OGG/WAV files yet. Press FOLDER, add some, then RESCAN.";
+
+            deckPlayButton?.SetText(manager.DeckPaused ? "RESUME" : manager.DeckPlaying ? "PAUSE" : hasFolders ? "PLAY" : "NO LIB");
+            deckPlayButton?.SetEnabled(hasFolders);
+            deckShuffleButton?.SetLatched(manager.Shuffle);
+            deckRepeatButton?.SetLatched(manager.RepeatTrack);
+            deckFooterLabel.text = manager.DeckStatus;
+
+            int folderPages = Math.Max(1, (folderCount + FolderRows - 1) / FolderRows);
+            folderPage = Mathf.Clamp(folderPage, 0, folderPages - 1);
+            deckFolderNote.text = hasFolders ? (folderPage + 1) + " / " + folderPages : "0 / 0";
+            deckFolderPreviousButton?.SetEnabled(folderPage > 0);
+            deckFolderNextButton?.SetEnabled(folderPage + 1 < folderPages);
+
+            for (int i = 0; i < FolderRows; i++)
             {
-                if (dialMarkers[i] == null) continue;
-                int station = dialMarkerStations[i];
-                bool tuned = station == manager.SelectedChannel;
-                dialMarkers[i].rectTransform.sizeDelta = new Vector2(tuned ? 5f : 4f, tuned ? 12f : 9f);
+                FolderRow row = folderRows[i];
+                if (row == null) continue;
+                int index = folderPage * FolderRows + i;
+                row.Index = index < folderCount ? index : -1;
+                if (row.Root.activeSelf != (row.Index >= 0)) row.Root.SetActive(row.Index >= 0);
+                if (row.Index < 0) continue;
+
+                bool selected = index == manager.DeckFolder;
+                int count = manager.DeckFolderTrackCount(index);
+                row.Name.text = manager.DeckFolderName(index);
+                row.Count.text = count + " TRK";
+                row.Name.color = selected ? AvTheme.Accent : AvTheme.TextPrimary;
+                row.Count.color = selected ? AvTheme.Accent : AvTheme.Unity(AvTokens.TextDim);
+                row.SelectionRule.color = selected ? AvTheme.RailInfo : Color.clear;
+                row.Ground.color = selected
+                    ? AvTheme.Unity(AvTokens.Wash(AvTheme.RailInfo.ToRgba(), AvTokens.SelectedScale, AvTokens.SelectedAlpha))
+                    : Color.clear;
+            }
+
+            int trackCount = manager.DeckTrackCount;
+            int trackPages = Math.Max(1, (trackCount + TrackRows - 1) / TrackRows);
+            deckTrackPage = Mathf.Clamp(deckTrackPage, 0, trackPages - 1);
+            deckTrackNote.text = trackCount == 0 ? "NO TRACKS" : (deckTrackPage + 1) + " / " + trackPages;
+            deckTrackPreviousButton?.SetEnabled(deckTrackPage > 0);
+            deckTrackNextButton?.SetEnabled(deckTrackPage + 1 < trackPages);
+
+            int current = manager.DeckTrackIndex;
+            for (int i = 0; i < TrackRows; i++)
+            {
+                ProgrammeRow row = programmeRows[i];
+                if (row == null) continue;
+                int index = deckTrackPage * TrackRows + i;
+                row.Index = index < trackCount ? index : -1;
+                if (row.Root.activeSelf != (row.Index >= 0)) row.Root.SetActive(row.Index >= 0);
+                if (row.Index < 0) continue;
+
+                bool active = index == current && manager.DeckEngaged;
+                row.Number.text = (index + 1).ToString();
+                row.Title.text = manager.DeckTrackTitle(index);
+                row.Number.color = active ? AvTheme.RailInfo : AvTheme.Disabled;
+                row.Title.color = active ? AvTheme.RailInfo : AvTheme.Unity(AvTokens.TextDim);
+                row.Rule.color = active ? AvTheme.RailInfo : Color.clear;
+            }
+        }
+
+        private static void RefreshDataBar()
+        {
+            if (dataBar == null || shell == null) return;
+            bool receiverTab = shell.Page == TabReceiver;
+            bool playing = manager.IsEngaged && !manager.IsPaused;
+            bool deckPlaying = manager.DeckPlaying;
+
+            if (receiverTab)
+            {
+                RadioDial dial = manager.TunedDial;
+                dataBar.State.text = manager.IsOffAir ? "OFF AIR"
+                    : manager.IsScanning ? "SCANNING"
+                    : manager.IsOffStation ? "DEAD AIR"
+                    : playing ? "ON AIR"
+                    : manager.IsPaused ? "PAUSED"
+                    : manager.HasChannels ? "STANDBY" : "NO LIBRARY";
+                dataBar.State.color = manager.IsOffAir ? AvTheme.Alert
+                    : manager.IsScanning || manager.IsOffStation ? AvTheme.Warning
+                    : playing ? AvTheme.RailReady
+                    : manager.HasChannels ? AvTheme.Dim : AvTheme.Warning;
+                dataBar.SetChip(0, manager.HasChannels ? dial.FullText : "-- MHz",
+                    manager.HasChannels ? "live" : "inert");
+                dataBar.SetChip(1, dial.BandText + " " + StepText(dial.Band),
+                    manager.HasChannels ? "info" : "inert");
+                UpdateMeter();
+            }
+            else
+            {
+                dataBar.State.text = deckPlaying ? "DECK PLAYING"
+                    : manager.DeckPaused ? "DECK PAUSED"
+                    : manager.DeckFolderCount > 0 ? "DECK READY" : "DECK EMPTY";
+                dataBar.State.color = deckPlaying ? AvTheme.RailInfo
+                    : manager.DeckFolderCount > 0 ? AvTheme.Dim : AvTheme.Warning;
+                dataBar.SetChip(0, "LOCAL", "info");
+                dataBar.SetChip(1, manager.DeckFolderCount + " FOLDERS",
+                    manager.DeckFolderCount > 0 ? "info" : "inert");
+                dataBar.SetChip(2, manager.DeckTrackCount + " TRACKS",
+                    manager.DeckTrackCount > 0 ? "live" : "inert");
             }
         }
 

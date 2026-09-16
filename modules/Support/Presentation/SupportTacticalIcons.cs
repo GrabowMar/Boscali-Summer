@@ -75,7 +75,9 @@ namespace BoscaliSummer.Features.Support.Presentation
             {
                 case Runtime.SupportActionId.Artillery: return RodIcon;
                 case Runtime.SupportActionId.Emp: return EmpIcon;
-                case Runtime.SupportActionId.Recon: return SatIcon;
+                case Runtime.SupportActionId.Recon:
+                case Runtime.SupportActionId.ElintSweep:
+                    return SatIcon;
                 case Runtime.SupportActionId.FlareMissile: return FlrIcon;
                 case Runtime.SupportActionId.Fortify: return FtfIcon;
                 default: return CrosshairSprite;

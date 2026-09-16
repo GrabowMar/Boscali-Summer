@@ -33,14 +33,22 @@ namespace BoscaliSummer.Tests
             Features.QoL.CameraTests.Run();
             Features.Autopilot.AutopilotLandTests.Run();
             CommandTests.Run();
+            ThreatEnvelopeTests.Run();
             MfdNewsTickerTests.Run();
             MfdSecondaryObjectivesTests.Run();
             MfdMissionOverviewTests.Run();
             MfdMissionLabelsTests.Run();
             Features.DynamicOperations.OperationTests.Run();
             Features.DynamicOperations.OperationTitlesTests.Run();
+            Features.DynamicOperations.OperationDirectorTests.Run();
+            Features.DynamicOperations.OperationMarkerCopyTests.Run();
+            Features.DynamicOperations.ContractMarkerTests.Run();
             Features.HighCommand.HighCommandTests.Run();
+            Features.TheaterOps.PriorityTests.Run();
+            Features.TheaterOps.LogisticsTests.Run();
             Features.Events.EventSelectorTests.Run();
+            Features.Campaign.MissionInstallPlanTests.Run();
+            Features.Weather.WeatherTests.Run();
             TrenchTests.Run();
             ModuleBoundaryTests.Run();
 
