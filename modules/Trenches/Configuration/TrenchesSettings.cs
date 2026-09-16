@@ -26,15 +26,16 @@ namespace BoscaliSummer.Features.Trenches.Configuration
                     "Maximum concurrent trench positions per theater.",
                     new AcceptableValueRange<int>(1, 16)));
 
-            LODDistanceNear = config.Bind("Trenches", "LODNearDistance", 250f,
+            LODDistanceNear = config.Bind("Trenches", "LODNearDistance", 600f,
                 new ConfigDescription(
-                    "Distance in meters for full-detail 3D trench geometry with colliders (LOD0).",
-                    new AcceptableValueRange<float>(100f, 600f)));
+                    "Distance in meters for full-detail trench geometry: carved profile, wire belt and colliders (LOD0).",
+                    new AcceptableValueRange<float>(100f, 2000f)));
 
-            LODDistanceFar = config.Bind("Trenches", "LODFarDistance", 3500f,
+            LODDistanceFar = config.Bind("Trenches", "LODFarDistance", 12000f,
                 new ConfigDescription(
-                    "Distance in meters before 3D trench geometry is culled from flight camera.",
-                    new AcceptableValueRange<float>(1500f, 8000f)));
+                    "Distance in meters before trench geometry is culled from the flight camera. The mid LODs keep real " +
+                    "earthwork silhouettes, so a front still reads from cruise altitude.",
+                    new AcceptableValueRange<float>(3000f, 24000f)));
 
             ShowOnTacticalMap = config.Bind("Trenches", "ShowOnTacticalMap", true,
                 "Display NATO APP-6 crenellated entrenchment marks and strongpoints on the theater map.");

@@ -40,7 +40,7 @@ public static class SettingsUnityCheck
             CheckLayoutCanvas();
             CheckScreenSpaceSizing();
             foreach (int height in new[] { 596, 420 }) CheckPanel(height);
-            File.WriteAllText("result.txt", "PASS: layout resolves the real UI area past stale canvas rects; all four SET pages render at 596 and 420 units; toggles, background replacement, disabled dependencies, +/- bounds, scrolling and cached page trees checked. Game adapters are stubbed; in-game acceptance remains required.");
+            File.WriteAllText("result.txt", "PASS: layout resolves the real UI area past stale canvas rects; SET renders CLIENT MAP/STYLE/IMAGE/COCKPIT and SERVER at 596 and 420 units; toggles, background replacement, disabled dependencies, +/- bounds, scrolling and cached page trees checked. Game adapters are stubbed; in-game acceptance remains required.");
             EditorApplication.Exit(0);
         }
         catch (Exception ex)
@@ -132,29 +132,30 @@ public static class SettingsUnityCheck
         ((RectTransform)canvas.transform).sizeDelta = new Vector2(480, height);
         var panel = canvas.gameObject.AddComponent<SettingsMfdPanel>();
         panel.Configure(config, null);
-        var shell = AvScreen.Build((RectTransform)canvas.transform, "SET", new[] { "MAP", "STYLE", "IMAGE", "COCKPIT" }, null, 0, 480, height, null);
-        shell.DataBar.State.text = "MAP SETTINGS";
+        var shell = AvScreen.Build((RectTransform)canvas.transform, "SET", new[] { "CLIENT", "SERVER" }, null, 0, 480, height, null);
+        shell.DataBar.State.text = "TACTICAL DISPLAY";
         typeof(SettingsMfdPanel).GetField("shell", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(panel, shell);
-        string[] methods = { "BuildMapPage", "BuildStylePage", "BuildImagePage", "BuildViewPage" };
-        for (int i = 0; i < methods.Length; i++)
-        {
-            var page = shell.CreatePage(i, methods[i]);
-            typeof(SettingsMfdPanel).GetMethod(methods[i], BindingFlags.NonPublic | BindingFlags.Instance)
-                .Invoke(panel, new object[] { (RectTransform)page.transform, shell.Body });
-        }
+        Invoke(panel, "BuildClientArea", (RectTransform)shell.CreatePage(0, "ClientPage").transform, shell.Body);
+        Invoke(panel, "BuildServerPage", (RectTransform)shell.CreatePage(1, "ServerPage").transform, shell.Body);
         int objects = canvas.GetComponentsInChildren<Transform>(true).Length;
+        shell.SetPage(0);
         for (int page = 0; page < 4; page++)
         {
-            shell.SetPage(page);
+            Invoke(panel, "SetClientPage", page);
             Refresh(panel);
             shell.WriteStatus(null, null, "Saved automatically. Hover a control for help.");
             Render(camera, canvas, height, page);
         }
+        shell.SetPage(1);
+        Refresh(panel);
+        shell.WriteStatus(null, null, "Host only. These settings are read-only on a remote client.");
+        Render(camera, canvas, height, 4);
         shell.SetPage(0);
+        Invoke(panel, "SetClientPage", 0);
         Refresh(panel);
         Click(Find(canvas, "ON"));
         Check(!config.ExpandedMapUi.Value, "Expanded toggle must change persisted config");
-        shell.SetPage(1);
+        Invoke(panel, "SetClientPage", 1);
         Refresh(panel);
         var disabled = Find(canvas, "+");
         float before = config.DeckOpacity.Value;
@@ -174,12 +175,21 @@ public static class SettingsUnityCheck
         var reloaded = new CommandSettings(new ConfigFile(config.ExpandedMapUi.ConfigFile.ConfigFilePath, false));
         Check(reloaded.BackgroundImagePreset.Value == 3 && reloaded.BackgroundImage.Value && !reloaded.DeckGrid.Value,
             "Settings survive reloading the saved configuration");
-        for (int i = 0; i < 20; i++) { shell.SetPage(i % 4); Refresh(panel); }
+        for (int i = 0; i < 20; i++)
+        {
+            shell.SetPage(i % 2);
+            Invoke(panel, "SetClientPage", i % 4);
+            Refresh(panel);
+        }
         Check(objects == canvas.GetComponentsInChildren<Transform>(true).Length, "Tab changes must reuse the same tree");
         if (height == 420) Check(canvas.GetComponentsInChildren<ScrollRect>(true).Length > 0, "Short panels must scroll");
         Object.DestroyImmediate(canvas.gameObject);
         Object.DestroyImmediate(camera.gameObject);
     }
+
+    private static void Invoke(SettingsMfdPanel panel, string method, params object[] args) =>
+        typeof(SettingsMfdPanel).GetMethod(method, BindingFlags.NonPublic | BindingFlags.Instance)
+            .Invoke(panel, args);
 
     private static void Refresh(SettingsMfdPanel panel) => typeof(SettingsMfdPanel)
         .GetMethod("RefreshPanel", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(panel, null);

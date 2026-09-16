@@ -8,12 +8,10 @@ namespace BoscaliSummer.Features.HighCommand.Domain
         public string Name;
         public string Rank;
         public CommandTrait Traits;
-        public int Decorations;
 
         public CommandPerson(int seed, string name, string rank, CommandTrait traits)
         {
             Seed = seed; Name = name; Rank = rank; Traits = traits;
-            Decorations = 0;
         }
     }
 
@@ -69,7 +67,6 @@ namespace BoscaliSummer.Features.HighCommand.Domain
             "Known across the ranks by first name; the staff would follow them into weather.",
             "Quotes doctrine at breakfast and means every word of it.",
             "Has the scars and the silence to go with them.",
-            "A careful reader of people; every favor is entered in a private ledger.",
             "Rarely seen at the airfield; commands from a bunker no map marks.",
         };
 
@@ -85,11 +82,11 @@ namespace BoscaliSummer.Features.HighCommand.Domain
 
         private static CommandTrait RollTraits(SeedStream stream)
         {
-            var first = (CommandTrait)(1 << stream.Range(6));
+            var first = (CommandTrait)(1 << stream.Range(5));
             CommandTrait mask = first;
             if (stream.Chance(40))
             {
-                var second = (CommandTrait)(1 << stream.Range(6));
+                var second = (CommandTrait)(1 << stream.Range(5));
                 if (second != first) mask |= second;
             }
             return mask;
@@ -135,7 +132,7 @@ namespace BoscaliSummer.Features.HighCommand.Domain
 
         private static CommandTrait PrimaryTrait(CommandTrait mask)
         {
-            for (int bit = 0; bit < 6; bit++)
+            for (int bit = 0; bit < 5; bit++)
             {
                 var trait = (CommandTrait)(1 << bit);
                 if (CommandTraits.Has(mask, trait)) return trait;
@@ -145,7 +142,7 @@ namespace BoscaliSummer.Features.HighCommand.Domain
 
         private static int TraitIndex(CommandTrait trait)
         {
-            for (int bit = 0; bit < 6; bit++)
+            for (int bit = 0; bit < 5; bit++)
             {
                 if ((CommandTrait)(1 << bit) == trait) return bit;
             }

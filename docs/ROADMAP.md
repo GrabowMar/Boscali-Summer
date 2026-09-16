@@ -8,8 +8,8 @@ performance design pass its gate.
 
 Fire, forest spread, impact scorch, ruins, aftermath and wreck persistence; occupied
 civilian buildings; client-local radio; the expanded tactical map and STR theater screen;
-local QoL camera/HUD conveniences; a session-scoped perk/support slice (nine score-earned
-perks; satellite scan, zone fortification, Rod from God, EMP shock and flare barrage
+local QoL camera/HUD conveniences; a session-scoped perk/support slice (four OPS
+qualifications of five score-earned grades each, two tools per career; satellite scan, zone fortification, Rod from God, EMP shock and flare barrage
 support actions) with constellation command and cyber infrastructure on OPS. Framework
 extraction is done and behaviour-preserving: it gave every
 module a common lifecycle and patch owner without yet splitting the large managers
@@ -57,9 +57,21 @@ codecs and snapshot providers; garrison catalogue/selection/spawning/lifecycle.
   In-game acceptance is pending for the whole module. Gated next slices: enemy AI interest
   in command posts, kill-list steering of friendly mission AI, cohesion scaling vanilla
   `AIAircraftLimit` (authority mode), and native map markers for confirmed contacts.
-- **Weather removed** — the experimental weather code, its shader tooling, tests and
-  settings were removed from the active build at the user's request (see the CHANGELOG).
-  No development or automatic restoration is scheduled.
+- **Campaign mission** — the authored **Boscali Summer** mission ships in-module (`campaign`,
+  default on) as one embedded vanilla-data file installed into the game's user mission list at
+  startup. Seven acts from the failed PALA coup's morning counter-offensive to the night
+  endgame; both factions joinable; 44 objectives, 112 outcomes, 227 spawned units over 25
+  waves; per-faction score gates at 200/400/625/850/1225 and escalation thresholds 625/1225
+  like the game's own Escalation. Gate before this is more than authored content: in-game
+  acceptance of the install path, timeline pacing, spawn placement, balance and the
+  multi-peer path. The builder, the static validator and the pure install-policy tests are
+  not flight tests.
+- **Weather restored** — a deterministic front schedule drives the vanilla `LevelInfo`
+  sky, the `WEA` environment screen is hosted (no bezel claim), and the debug overlay is
+  opt-in. Genuinely open work: per-position/advecting storm cells instead of one
+  theater-wide reading, volumetric or precipitation rendering, weather-gated objectives
+  and support windows, and a read-only contract another module could consume for the
+  schedule — which needs a named consumer first.
 
 - **Urban combat first release** — deterministic shell selection around controlled ground
   airbases, an authoritative occupancy record separate from its visual, `Occupied →
@@ -69,22 +81,25 @@ codecs and snapshot providers; garrison catalogue/selection/spawning/lifecycle.
   and autonomous roaming infantry. A legibility and warfare proposal — marker scale, roof
   bands, smoke cue, street dressing, zone tiers — is tracked in
   [URBAN_COMBAT.md](URBAN_COMBAT.md).
-- **Radio** — the `RAD` screen is a receiver: three bands (FM 100 kHz, VHF air 25 kHz AM,
-  MW 10 kHz) with a spectrum waterfall, an S-meter fed by a local link budget (range, radio
-  horizon, terrain line of sight), squelch, bandwidth, mode override, fine tuning, seek/scan,
-  a clickable programme log of the tuned station's tracks and intercepted enemy chatter. The
-  hosted `MUS` screen is the local deck for the same library. Base Broadcast still catalogs
-  the installed score across registered maps (up to 30 deduplicated clips). Transmit, crypto
-  nets and jamming are inert placeholders (`RadioLinkStub`), and voice would need the
-  handshake/manifest gate in [DESIGN_NOTES.md](DESIGN_NOTES.md) before it exists. In-game
-  visual/interaction acceptance and long-session gates remain; MP3 only after a real decode
-  test; synchronized broadcast stays gated.
+- **Radio** — the `RAD` screen has two pages. RECEIVER is a set: three bands (FM 100 kHz,
+  VHF air 25 kHz AM, MW 10 kHz) with a spectrum waterfall, an S-meter fed by a local link
+  budget (range, radio horizon, terrain line of sight), squelch, bandwidth, mode override,
+  fine tuning, seek/scan, a LINK block and intercepted enemy chatter; a built-in station
+  whose tower is lost reads off air. DECK is the player's own library: folders, tracks,
+  transport, shuffle, repeat. Base Broadcast still catalogs the installed score across
+  registered maps (up to 30 deduplicated clips). Transmit, crypto, jamming and voice receive
+  are inert placeholders (`RadioLinkStub`); the deck's duck under a received transmission is
+  wired and has no trigger. Voice would need the handshake/manifest gate in
+  [DESIGN_NOTES.md](DESIGN_NOTES.md) before it exists. In-game visual/interaction acceptance
+  and long-session gates remain; MP3 only after a real decode test; synchronized broadcast
+  stays gated.
 - **Progression** — persistent profiles only after migration + recovery tests; client
-  receives only its accepted snapshot. Perk costs and the score-per-point tier are the two
-  balance dials to revisit once mission-length data exists. The SQD studio and emblem
-  rendering need in-game acceptance against the companion Wing Command build. Future
-  authorisations (more satellites, electronic warfare, fortifications) graduate by adding
-  one support action plus one `PerkCatalog` row; none are scheduled here.
+  receives only its accepted snapshot. The grade ramp (`ScorePerPoint`) and the pick ceiling
+  are the two balance dials to revisit once mission-length data exists, along with the
+  question of whether a third tool or a lane-swap rule is ever worth allowing. The SQD studio
+  and emblem rendering need in-game acceptance against the companion Wing Command build.
+  More depth per lane, or a new qualification, graduates by adding one lane's five grades
+  plus one support action; none are scheduled here.
 - **Support** — multiplayer and long-session gates remain; carrier requisition graduates only
   after a full spawn-to-destruction lifecycle around a live mission is clean.
 - **Experimental modules** — start as capability probes behind default-off flags; promotion

@@ -58,7 +58,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
         private TMP_Text studioPaletteValue;
         private TMP_Text studioArtValue;
         private Image studioPortrait;
-        private TMP_Text studioPortraitFallback;
+        private GameObject studioPortraitFallback;
         private Image studioEmblem;
         private TMP_Text studioEmblemFallback;
         private TMP_InputField studioCallsignField;
@@ -110,9 +110,10 @@ namespace BoscaliSummer.Features.Progression.Presentation
 
         private void BuildStudioPage(RectTransform parent, Rect body)
         {
+            clause = 0;
             if (!WingLink.PilotStudioAvailable)
             {
-                AvStyled.Spine(parent, new Rect(body.x, body.y, 3f, body.height));
+                DossierSpine(parent, new Rect(body.x, body.y, 3f, body.height));
                 float px = body.x + SpineInset;
                 AvStyled.Label(parent, new Rect(px, body.y, body.width - SpineInset, 20f),
                     "PILOT STUDIO UNAVAILABLE", "section-title");
@@ -121,12 +122,14 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 return;
             }
 
-            parent = AvScreen.Scroll(parent, body, 896f, out body);
-            AvStyled.Spine(parent, new Rect(body.x, body.y, 3f, body.height));
+            parent = AvScreen.Scroll(parent, body, 960f, out body);
+            DossierSpine(parent, new Rect(body.x, body.y, 3f, body.height));
             float x = body.x + SpineInset;
             float width = body.width - SpineInset;
             float y = body.y;
 
+            y = DrawFileHeader(parent, x, y, width, "FORM SQD-4 · SHEET 4 OF 4", "STUDIO RECORD",
+                "LOCAL FILES · HOST ROSTER");
             y = DrawSectionTitle(parent, x, y, width, "PILOT STUDIO", "WING COMMAND COMPANION API", band: false);
             studioStatus = PlainLabel(parent, new Rect(x, y + 2f, width, 16f), "", "row-sub");
 
@@ -172,6 +175,9 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 int index = i;
                 row.Select = AvKit.HitButton(root, new Rect(0f, 0f, width, 26f), () => SelectStudio(index));
                 row.Select.SetRowHighlight(row.Background, Color.clear, HoverFill());
+
+                // Every slot keeps its rule, so an unfilled register still reads as a form.
+                AvKit.Rule(root, new Rect(0f, -27f, width, 1f), AvTheme.Hairline.WithAlpha(0.10f));
                 studioRows[i] = row;
                 y -= 30f;
             }
@@ -189,22 +195,23 @@ namespace BoscaliSummer.Features.Progression.Presentation
             // ---- Editor -------------------------------------------------------------------
             y = DrawSectionTitle(parent, x, y, width, "PILOT EDITOR", "LOCAL FILES · HOST ROSTER", band: true);
 
-            Rect portraitFrame = new Rect(x, y - 2f, 76f, 96f);
+            // Sized off the editor's stepper block so the portrait is the height of the
+            // record it illustrates, in the same 3:4 mount the pilot dossier uses.
+            Rect portraitFrame = new Rect(x, y - 2f, 92f, 138f);
             AvKit.Panel(parent, portraitFrame, AvTheme.SurfaceInert);
             AvKit.Outline(parent, portraitFrame, AvTheme.Frame);
-            studioPortraitFallback = PlainLabel(parent,
-                new Rect(portraitFrame.x + 2f, portraitFrame.y - 38f, portraitFrame.width - 4f, 30f),
-                "NO\nVISUAL", "row-sub");
-            studioPortraitFallback.alignment = TextAlignmentOptions.Center;
+            AvKit.CornerTicks(parent, portraitFrame, AvTheme.TextPrimary.WithAlpha(0.22f), 9f);
+            studioPortraitFallback = Redaction(parent,
+                new Rect(portraitFrame.x + 14f, portraitFrame.y - 35f, portraitFrame.width - 28f, 68f), 3);
             studioPortrait = AvKit.Panel(parent,
-                new Rect(portraitFrame.x + 2f, portraitFrame.y - 2f, portraitFrame.width - 4f, portraitFrame.height - 4f),
+                new Rect(portraitFrame.x + 3f, portraitFrame.y - 3f, portraitFrame.width - 6f, portraitFrame.height - 6f),
                 Color.white);
             studioPortrait.type = Image.Type.Simple;
             studioPortrait.preserveAspect = true;
             studioPortrait.raycastTarget = false;
 
-            float stepperX = x + 84f;
-            float stepperWidth = width - 84f;
+            float stepperX = x + 100f;
+            float stepperWidth = width - 100f;
             Stepper(parent, stepperX, y, stepperWidth, out studioBodyValue, "BODY",
                 () => CycleDraft(d => d.CycleBody(-1, BodyCount())),
                 () => CycleDraft(d => d.CycleBody(1, BodyCount())));

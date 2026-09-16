@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using BoscaliSummer.Features.Support.Domain.Orbital;
 using UnityEngine;
 
 namespace BoscaliSummer.Features.Support.Runtime.Actions
@@ -9,18 +10,26 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
     {
         All = 0,
         Ground = 1,
-        Air = 2
+        Air = 2,
+
+        /// <summary>Ground and ship units whose radar is switched on and working.</summary>
+        Emitters = 3
     }
 
     /// <summary>
-    /// Immediate reconnaissance sweep. The old design queued the sweep for a scheduled pass;
-    /// coverage is now the position of a real reconnaissance satellite, checked by the host
-    /// before anything is charged. Stamps at most 48 contacts through the native tracking
-    /// RPC; sightings subsequently decay under vanilla rules.
+    /// Radar scan. The faction's station, overhead with a spy imager, images the scene; the host
+    /// reveals the stationary ground contacts in it through the native tracking RPC (at most
+    /// 48; sightings decay under vanilla rules). Movers faster than a walking vehicle smear
+    /// across azimuth in a real SAR image and are not revealed, and aircraft are never imaged.
+    /// The scene grows with the orbit band and a neighbouring relay; the scan spends station
+    /// energy and starts its recharge.
     /// </summary>
     internal sealed class ReconAction : ISupportAction
     {
         private const int MaximumReveals = 48;
+
+        /// <summary>Radial speed above which a SAR target smears rather than focuses, m/s.</summary>
+        public const float StationaryThreshold = 4f;
 
         public float BaseCost(in SupportContext context) =>
             context.Settings.ReconCost.Value * context.Settings.CostMultiplier.Value;
@@ -28,25 +37,29 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
         public SupportResult Execute(in SupportContext context)
         {
             if (!VanillaSupportCatalog.ReconAvailable) return SupportResult.CapabilityUnavailable;
-            if (!context.HasCoverage(SatelliteRole.Recon))
-                return SupportResult.OutOfCoverage;
+            OrbitalPlatform platform = context.PlatformAccess(PlatformAbility.RadarScan, out PlatformDenial denial);
+            if (platform == null) return SupportContext.Refusal(denial);
 
             try
             {
+                double now = context.Host.OrbitNow;
                 int contacts = Reveal(context.Owner, context.Target,
-                    context.Settings.ReconRadius.Value, context.Logger, RevealFilter.All);
+                    context.Settings.SarSceneRadius.Value * platform.ScanScale(now), context.Logger, RevealFilter.Ground,
+                    maximumSpeed: StationaryThreshold);
+                platform.Consume(PlatformAbility.RadarScan, now);
                 context.Host.ReportContacts(context.RequestId, contacts);
                 return SupportResult.Accepted;
             }
             catch (Exception e)
             {
-                context.Logger.LogWarning("[Support] Satellite scan failed: " + e.Message);
+                context.Logger.LogWarning("[Support] Radar scan failed: " + e.Message);
                 return SupportResult.SpawnFailed;
             }
         }
 
         internal static int Reveal(FactionHQ faction, GlobalPosition target, float radius,
-            BepInEx.Logging.ManualLogSource logger, RevealFilter filter, bool quiet = false)
+            BepInEx.Logging.ManualLogSource logger, RevealFilter filter, bool quiet = false,
+            float maximumSpeed = float.PositiveInfinity)
         {
             Vector3 centre = target.ToLocalPosition();
             List<Unit> units = UnitRegistry.allUnits;
@@ -61,6 +74,8 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
                 if (owner == null || owner == faction) continue;
                 if (filter == RevealFilter.Air && !(unit is Aircraft)) continue;
                 if (filter == RevealFilter.Ground && unit is Aircraft) continue;
+                if (filter == RevealFilter.Emitters && !Emitting(unit)) continue;
+                if (unit.speed > maximumSpeed) continue;
                 Vector3 position = unit.transform.position;
                 if ((position - centre).sqrMagnitude > radiusSquared) continue;
                 attempted++;
@@ -86,5 +101,9 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
                     Mathf.RoundToInt(radius) + "m (" + filter + ").");
             return revealed;
         }
+
+        /// <summary>A surface unit whose radar is on and working: what an ELINT receiver hears.</summary>
+        private static bool Emitting(Unit unit) =>
+            !(unit is Aircraft) && unit.radar is Radar radar && radar != null && radar.activated && radar.IsOperational();
     }
 }

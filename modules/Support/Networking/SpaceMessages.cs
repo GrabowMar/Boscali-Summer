@@ -1,15 +1,19 @@
+using System;
+using BoscaliSummer.Features.Support.Domain;
+using BoscaliSummer.Features.Support.Domain.Orbital;
+using BoscaliSummer.Features.Support.Runtime;
 using Mirage;
 
 namespace BoscaliSummer.Features.Support.Networking
 {
-    /// <summary>Client poll for its faction's constellation and infrastructure state.</summary>
+    /// <summary>Client poll for its faction's station and infrastructure state.</summary>
     [NetworkMessage]
     internal struct OpsQueryMessage
     {
         public byte Protocol;
     }
 
-    /// <summary>One client intent: launch, retask, recall or upgrade. The host validates everything.</summary>
+    /// <summary>One client intent: launch, jettison, burn, resupply, upgrade, invest or EW retune. The host validates everything.</summary>
     [NetworkMessage]
     internal struct OpsCommandMessage
     {
@@ -22,8 +26,10 @@ namespace BoscaliSummer.Features.Support.Networking
     }
 
     /// <summary>
-    /// Bounded faction snapshot: at most four satellites and four facility levels. Stations,
-    /// transfer origin and transfer time let the client rebuild the same model locally.
+    /// Bounded faction snapshot: the faction's station (15 cells, 7 recharge timers), up to four
+    /// foreign stations, four facility levels, one EW station, six program tiers and the
+    /// base-of-operations ranks. Station clocks are relative to the moment the host took the
+    /// snapshot, so a client rebuilds the same passes locally.
     /// </summary>
     [NetworkMessage]
     internal struct OpsStateMessage
@@ -31,24 +37,145 @@ namespace BoscaliSummer.Features.Support.Networking
         public byte Protocol;
         public int RequestId;
         public byte Result;
-        public byte SatelliteCount;
-        public byte[] SatelliteIds;
-        public byte[] SatelliteRoles;
-        public byte[] SatelliteAltitudes;
-        public byte[] SatelliteStates;
-        public byte[] SatelliteFuel;
-        public float[] StationXs;
-        public float[] StationZs;
-        public float[] OriginXs;
-        public float[] OriginZs;
-        public float[] TransitLeft;
-        public float[] TransitTotal;
+
+        public bool PlatformActive;
+
+        /// <summary><c>ModuleKind</c> per grid cell, always fifteen entries.</summary>
+        public byte[] PlatformModules;
+
+        /// <summary>Seconds each cell stays offline after a debris strike.</summary>
+        public byte[] PlatformOffline;
+
+        public byte PlatformRegime;
+        public int PlatformSeed;
+
+        /// <summary>Seconds since pass zero's slot began; negative during a hold.</summary>
+        public float PlatformClock;
+
+        public byte PlatformHold;
+        public float PlatformEnergy;
+        public float PlatformFuel;
+        public byte PlatformRods;
+        public bool PlatformBrownout;
+        public byte PlatformPending;
+        public byte PlatformPendingCell;
+        public float PlatformDockIn;
+
+        /// <summary>Seconds of recharge left per <c>PlatformAbility</c>, always seven entries.</summary>
+        public float[] PlatformRecharge;
+
+        /// <summary>Seconds since the core launched.</summary>
+        public float PlatformElapsed;
+
+        public byte PlatformNotice;
+        public byte PlatformNoticeCell;
+        public byte PlatformNoticeSerial;
+
+        /// <summary>Other factions' stations: orbit and occupied-cell mask only.</summary>
+        public byte ForeignCount;
+        public byte[] ForeignRegimes;
+        public int[] ForeignSeeds;
+        public float[] ForeignClocks;
+        public int[] ForeignLayouts;
+
         public byte Sigint, Crypto, Disrupt, Ew;
 
         /// <summary>The faction's EW asset state (see <c>EwAssetState</c>): none, truck, or
         /// encampment. Only the state crosses the wire — never the live Unit/Building
         /// reference, which a client cannot reconstruct anyway.</summary>
         public byte EwAssetState;
+
+        /// <summary>The station's operating posture (see <c>EwPosture</c>). Meaningless while
+        /// <see cref="EwAssetState"/> is none.</summary>
+        public byte EwPosture;
+
+        /// <summary>Station ground position in global metres, for the panel's grid readout.</summary>
+        public float EwX, EwZ;
+
+        /// <summary>Funded tier per <c>OpsProgramId</c>, always six entries.</summary>
+        public byte[] ProgramTiers;
+
+        /// <summary>SPEC OPS / INTEL reserve tokens and progress toward the next (0..255).</summary>
+        public byte SpecOpsTokens, IntelTokens, SpecOpsProgress, IntelProgress;
+
+        /// <summary>Base-of-operations rank per <c>GarrisonUpgradeId</c>.</summary>
+        public byte[] GarrisonLevels;
+    }
+
+    /// <summary>Fixed-size arrays for a snapshot, so the writer, the reader and the host all
+    /// agree on bounds and a short array can never throw mid-serialisation. Also the one
+    /// mapping between the wire fields and the station model's snapshot.</summary>
+    internal static class OpsStateMessageBuffers
+    {
+        public static OpsStateMessage Create() => new OpsStateMessage
+        {
+            PlatformModules = new byte[OrbitalPlatform.CellCount],
+            PlatformOffline = new byte[OrbitalPlatform.CellCount],
+            PlatformRecharge = new float[PlatformAbilities.Count],
+            ForeignRegimes = new byte[SpaceOperations.MaximumForeign],
+            ForeignSeeds = new int[SpaceOperations.MaximumForeign],
+            ForeignClocks = new float[SpaceOperations.MaximumForeign],
+            ForeignLayouts = new int[SpaceOperations.MaximumForeign],
+            ProgramTiers = new byte[OpsProgramLedger.ProgramCount],
+            GarrisonLevels = new byte[OpsGarrison.UpgradeCount]
+        };
+
+        public static bool ValidArrays(in OpsStateMessage state) =>
+            state.PlatformModules != null && state.PlatformModules.Length >= OrbitalPlatform.CellCount &&
+            state.PlatformOffline != null && state.PlatformOffline.Length >= OrbitalPlatform.CellCount &&
+            state.PlatformRecharge != null && state.PlatformRecharge.Length >= PlatformAbilities.Count &&
+            state.ForeignCount <= SpaceOperations.MaximumForeign &&
+            state.ForeignRegimes != null && state.ForeignRegimes.Length >= state.ForeignCount &&
+            state.ForeignSeeds != null && state.ForeignSeeds.Length >= state.ForeignCount &&
+            state.ForeignClocks != null && state.ForeignClocks.Length >= state.ForeignCount &&
+            state.ForeignLayouts != null && state.ForeignLayouts.Length >= state.ForeignCount;
+
+        public static void Write(PlatformSnapshot from, ref OpsStateMessage into)
+        {
+            into.PlatformActive = from.Active;
+            Array.Copy(from.Modules, into.PlatformModules, OrbitalPlatform.CellCount);
+            Array.Copy(from.Offline, into.PlatformOffline, OrbitalPlatform.CellCount);
+            Array.Copy(from.Recharge, into.PlatformRecharge, PlatformAbilities.Count);
+            into.PlatformRegime = from.Regime;
+            into.PlatformSeed = from.Seed;
+            into.PlatformClock = from.CycleClock;
+            into.PlatformHold = from.Hold;
+            into.PlatformEnergy = from.Energy;
+            into.PlatformFuel = from.Fuel;
+            into.PlatformRods = from.Rods;
+            into.PlatformBrownout = from.Brownout;
+            into.PlatformPending = from.Pending;
+            into.PlatformPendingCell = from.PendingCell;
+            into.PlatformDockIn = from.DockIn;
+            into.PlatformElapsed = from.Elapsed;
+            into.PlatformNotice = from.Notice;
+            into.PlatformNoticeCell = from.NoticeCell;
+            into.PlatformNoticeSerial = from.NoticeSerial;
+        }
+
+        public static void Read(in OpsStateMessage from, PlatformSnapshot into)
+        {
+            into.Clear();
+            into.Active = from.PlatformActive;
+            Array.Copy(from.PlatformModules, into.Modules, OrbitalPlatform.CellCount);
+            Array.Copy(from.PlatformOffline, into.Offline, OrbitalPlatform.CellCount);
+            Array.Copy(from.PlatformRecharge, into.Recharge, PlatformAbilities.Count);
+            into.Regime = from.PlatformRegime;
+            into.Seed = from.PlatformSeed;
+            into.CycleClock = from.PlatformClock;
+            into.Hold = from.PlatformHold;
+            into.Energy = from.PlatformEnergy;
+            into.Fuel = from.PlatformFuel;
+            into.Rods = from.PlatformRods;
+            into.Brownout = from.PlatformBrownout;
+            into.Pending = from.PlatformPending;
+            into.PendingCell = from.PlatformPendingCell;
+            into.DockIn = from.PlatformDockIn;
+            into.Elapsed = from.PlatformElapsed;
+            into.Notice = from.PlatformNotice;
+            into.NoticeCell = from.PlatformNoticeCell;
+            into.NoticeSerial = from.PlatformNoticeSerial;
+        }
     }
 
     /// <summary>Host broadcast when a track-deception operation starts; all peers mirror it.</summary>

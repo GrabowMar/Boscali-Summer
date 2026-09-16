@@ -16,11 +16,21 @@ using UnityEngine.UI;
 
 namespace BoscaliSummer.Features.Command.Presentation.MapUi
 {
-    internal sealed class SettingsMfdPanel : MonoBehaviour, ISceneService
+    internal sealed partial class SettingsMfdPanel : MonoBehaviour, ISceneService
     {
+        private const int TabClient = 0;
+        private const int TabServer = 1;
+        private const int ClientPageCount = 4;
+
+        /// <summary>Display index of the SERVER page, after the four CLIENT sub-pages.</summary>
+        private const int ServerDisplay = 4;
+
+        private const int DisplayCount = ServerDisplay + 1;
+
         private CommandSettings settings;
         private ComMapOverlay overlay;
         private ManualLogSource logger;
+        private HostSettingsBoard hostSettings;
         private GameObject root;
         private GameObject surface;
         private MFDScreen screen;
@@ -39,12 +49,17 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private bool tickerPending;
         private string actionEcho;
         private float actionEchoUntil;
+        private GameObject[] clientPages;
+        private AvButton[] clientTabs;
+        private int clientPage;
 
-        public void Configure(CommandSettings config, ManualLogSource log, ComMapOverlay mapOverlay = null)
+        public void Configure(CommandSettings config, ManualLogSource log, ComMapOverlay mapOverlay = null,
+            HostSettingsBoard hostSettingsBoard = null)
         {
             settings = config;
             overlay = mapOverlay;
             logger = log;
+            hostSettings = hostSettingsBoard;
             MfdMapDeck.Configure(config);
             if (configFile != null) configFile.SettingChanged -= OnSettingChanged;
             configFile = config.ExpandedMapUi.ConfigFile;
@@ -101,15 +116,30 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             if (visible)
             {
-                if (dirty || !wasVisible) RefreshPanel();
+                // The SERVER page carries live host state (tasking clocks, host values), so it
+                // refreshes on the tick; the CLIENT pages only when something actually changed.
+                if (dirty || !wasVisible || shell.Page == TabServer) RefreshPanel();
                 string echo = Time.unscaledTime < actionEchoUntil ? actionEcho : null;
-                string ambient = pageScrolls[Mathf.Clamp(shell.Page, 0, pageScrolls.Length - 1)]
-                    ? "Saved automatically. Scroll for more; hover for help."
-                    : "Saved automatically. Hover a control for help.";
-                shell?.WriteStatus(null, echo ?? MapPicker.Prompt,
-                    shell.Page == 2 ? MfdMapDeck.WallpaperStatus : ambient);
+                shell?.WriteStatus(null, echo ?? MapPicker.Prompt, AmbientStatus());
             }
             wasVisible = visible;
+        }
+
+        private static bool HostAuthority() => GameAccess.IsServer();
+
+        private int DisplayIndex =>
+            shell != null && shell.Page == TabServer ? ServerDisplay : clientPage;
+
+        private string AmbientStatus()
+        {
+            if (shell != null && shell.Page == TabServer)
+                return HostAuthority()
+                    ? "Host settings apply immediately and are saved to the configuration file."
+                    : "Host only. These settings are read-only on a remote client.";
+            if (DisplayIndex == 2) return MfdMapDeck.WallpaperStatus;
+            return pageScrolls[Mathf.Clamp(DisplayIndex, 0, DisplayCount - 1)]
+                ? "Saved automatically. Scroll for more; hover for help."
+                : "Saved automatically. Hover a control for help.";
         }
 
         private void Install(VirtualMFD mfd)
@@ -167,27 +197,23 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             surface = content;
 
             shell = AvScreen.Build(
-                body, "SET", new[] { "MAP", "STYLE", "IMAGE", "COCKPIT" }, null, 1,
+                body, "SET", new[] { "CLIENT", "SERVER" }, null, 2,
                 AvTokens.PanelWidth, height, page =>
                 {
-                    shell.DataBar.State.text = PageName(page);
+                    shell.DataBar.State.text = PageName(page == TabServer ? ServerDisplay : clientPage);
                     nextTick = 0f;
                     RefreshPanel();
                 });
             shell.DataBar.SetChip(0, "SAVED", true);
             shell.Status.richText = false;
 
-            RectTransform displayPage = (RectTransform)shell.CreatePage(0, "DisplayPage").transform;
-            BuildMapPage(displayPage, shell.Body);
+            RectTransform clientRoot = (RectTransform)shell.CreatePage(TabClient, "ClientPage").transform;
+            BuildClientArea(clientRoot, shell.Body);
 
-            RectTransform deckPage = (RectTransform)shell.CreatePage(1, "DeckPage").transform;
-            BuildStylePage(deckPage, shell.Body);
-            var imagePage = (RectTransform)shell.CreatePage(2, "ImagePage").transform;
-            BuildImagePage(imagePage, shell.Body);
-            var viewPage = (RectTransform)shell.CreatePage(3, "ViewPage").transform;
-            BuildViewPage(viewPage, shell.Body);
+            RectTransform serverRoot = (RectTransform)shell.CreatePage(TabServer, "ServerPage").transform;
+            BuildServerPage(serverRoot, shell.Body);
 
-            shell.SetPage(0);
+            shell.SetPage(TabClient);
 
             screen = root.AddComponent<MFDScreen>();
             screen.shortName = MfdSlots.Set;
@@ -212,12 +238,78 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         }
 
         private static readonly string[] PageNames =
-            { "TACTICAL DISPLAY", "CONSOLE SURFACE", "BACKGROUND IMAGERY", "COCKPIT VIEW" };
+        {
+            "TACTICAL DISPLAY", "CONSOLE SURFACE", "BACKGROUND IMAGERY", "COCKPIT VIEW",
+            "SERVER SETTINGS"
+        };
 
-        private readonly bool[] pageScrolls = new bool[4];
+        private readonly bool[] pageScrolls = new bool[DisplayCount];
 
         private static string PageName(int page) =>
             page >= 0 && page < PageNames.Length ? PageNames[page] : PageNames[0];
+
+        /// <summary>
+        /// The CLIENT main tab: the four client-local pages behind a second, smaller tab
+        /// strip. The main strip names the audience (CLIENT / SERVER); this one names the
+        /// console surface, so a player reads the hierarchy in one glance.
+        /// </summary>
+        private void BuildClientArea(RectTransform page, Rect body)
+        {
+            const float barHeight = 26f;
+            const float gap = 6f;
+            string[] names = { "MAP", "STYLE", "IMAGE", "COCKPIT" };
+
+            AvNode bar = AvBox.Row("subtabs").Height(barHeight);
+            for (int i = 0; i < names.Length; i++) bar.Add(AvBox.Cell("c" + i).Grow());
+            bar.Arrange(new Rect(body.x, body.y, body.width, barHeight));
+
+            clientTabs = new AvButton[ClientPageCount];
+            for (int i = 0; i < ClientPageCount; i++)
+            {
+                int index = i;
+                clientTabs[i] = AvStyled.Button(page, bar.At("c" + i), names[i], "tab",
+                    () => SetClientPage(index), AvButtonStyle.Tab);
+            }
+
+            var area = new Rect(body.x, body.y - barHeight - gap, body.width, body.height - barHeight - gap);
+            clientPages = new GameObject[ClientPageCount];
+            for (int i = 0; i < ClientPageCount; i++)
+            {
+                var sub = new GameObject("ClientPage" + i, typeof(RectTransform));
+                var rect = (RectTransform)sub.transform;
+                rect.SetParent(page, false);
+                AvKit.Stretch(rect);
+                clientPages[i] = sub;
+            }
+
+            BuildMapPage((RectTransform)clientPages[0].transform, area);
+            BuildStylePage((RectTransform)clientPages[1].transform, area);
+            BuildImagePage((RectTransform)clientPages[2].transform, area);
+            BuildViewPage((RectTransform)clientPages[3].transform, area);
+
+            SetClientPage(0);
+        }
+
+        private void SetClientPage(int page)
+        {
+            clientPage = Mathf.Clamp(page, 0, ClientPageCount - 1);
+            if (clientPages != null)
+            {
+                for (int i = 0; i < clientPages.Length; i++)
+                    if (clientPages[i] != null) clientPages[i].SetActive(i == clientPage);
+            }
+            if (clientTabs != null)
+            {
+                for (int i = 0; i < clientTabs.Length; i++)
+                    if (clientTabs[i] != null) clientTabs[i].SetLatched(i == clientPage);
+            }
+            if (shell == null) return;
+
+            AvButton.ClearTooltip();
+            if (shell.Page != TabServer) shell.DataBar.State.text = PageName(clientPage);
+            nextTick = 0f;
+            RefreshPanel();
+        }
 
         // Compact row geometry: the toggle and step buttons match the inline control size
         // the other panels use, so a settings page reads as an instrument instead of a
@@ -229,11 +321,11 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private const float StepValueWidth = 96f;
 
         // Pages are built once. Dependencies disable controls without rebuilding the tree.
-        private RectTransform Page(int page, RectTransform parent, Rect body, int rows, int sections, out Rect area)
+        private RectTransform Page(int display, RectTransform parent, Rect body, int rows, int sections, out Rect area)
         {
             AvStyled.Spine(parent, new Rect(body.x, body.y, 3f, body.height));
             float contentHeight = rows * RowPitch + sections * 30f + 42f;
-            if (page >= 0 && page < pageScrolls.Length) pageScrolls[page] = contentHeight > body.height;
+            if (display >= 0 && display < pageScrolls.Length) pageScrolls[display] = contentHeight > body.height;
             return AvScreen.Scroll(parent, body, contentHeight, out area);
         }
 
@@ -284,9 +376,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             Toggle(parent, TakeRow(ref area), "FRONT LINE",
                 "Draw the front line trace above the control field.",
                 () => settings.FrontlineTrace.Value, v => settings.FrontlineTrace.Value = v,
-                () => settings.FrontlinesOverlay.Value, "Turn on the control field first.");
+                () => settings.FrontlinesOverlay.Value, () => "Turn on the control field first.");
             Percent(parent, TakeRow(ref area), "FRONTLINE STRENGTH", settings.OverlayOpacity, .1f, 1f, .05f,
-                () => settings.FrontlinesOverlay.Value, "Turn on the control field first.");
+                () => settings.FrontlinesOverlay.Value, () => "Turn on the control field first.");
             Stepper(parent, TakeRow(ref area), "UPDATE INTERVAL",
                 () => settings.GridRefreshInterval.Value.ToString("0.0") + " s",
                 d => settings.GridRefreshInterval.Value = Mathf.Clamp(
@@ -294,16 +386,16 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 () => settings.GridRefreshInterval.Value > .201f,
                 () => settings.GridRefreshInterval.Value < 1.999f,
                 "Longer intervals reduce CPU work. Recommended: 0.5 s.",
-                () => settings.FrontlinesOverlay.Value, "Turn on the control field first.");
+                () => settings.FrontlinesOverlay.Value, () => "Turn on the control field first.");
 
             Heading(parent, ref area, "03", "TERRAIN", "SATELLITE");
             Toggle(parent, TakeRow(ref area), "TERRAIN IMAGE",
                 "Show the satellite terrain beneath map symbols.",
                 () => settings.MapTerrainImage.Value, v => settings.MapTerrainImage.Value = v,
-                () => settings.ExpandedMapUi.Value, "Turn on expanded layout first.");
+                () => settings.ExpandedMapUi.Value, () => "Turn on expanded layout first.");
             Percent(parent, TakeRow(ref area), "TERRAIN STRENGTH", settings.MapTerrainOpacity, .1f, 1f, .1f,
                 () => settings.ExpandedMapUi.Value && settings.MapTerrainImage.Value,
-                "Enable expanded layout and terrain image first.");
+                () => "Enable expanded layout and terrain image first.");
         }
 
         private void BuildStylePage(RectTransform parent, Rect body)
@@ -312,7 +404,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             Heading(parent, ref area, "01", "SURFACE", "DECK");
             Percent(parent, TakeRow(ref area), "CONSOLE OPACITY", settings.DeckOpacity, .1f, 1f, .05f,
-                () => settings.ExpandedMapUi.Value, "Turn on expanded layout first.");
+                () => settings.ExpandedMapUi.Value, () => "Turn on expanded layout first.");
             Stepper(parent, TakeRow(ref area), "BACKGROUND",
                 () => SettingsChoices.BackgroundName(settings.DeckGrid.Value, settings.CheckerboardOverlay.Value,
                     settings.BackgroundImage.Value, settings.BackgroundImagePreset.Value),
@@ -320,24 +412,24 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     settings.CheckerboardOverlay.Value, settings.BackgroundImage.Value, settings.BackgroundImagePreset.Value, d)),
                 () => true, () => true,
                 "Choose one decoration: plain, grid, checker, hexagon, carbon, radar or custom image. MIXED preserves your old combination.",
-                () => settings.ExpandedMapUi.Value, "Turn on expanded layout first.");
+                () => settings.ExpandedMapUi.Value, () => "Turn on expanded layout first.");
             Percent(parent, TakeRow(ref area), "CHECKER STRENGTH", settings.CheckerboardOpacity, .02f, .4f, .02f,
                 () => settings.ExpandedMapUi.Value && settings.CheckerboardOverlay.Value,
-                "Choose CHECKER on STYLE first.");
+                () => "Choose CHECKER on STYLE first.");
             Percent(parent, TakeRow(ref area), "MAP DARKENING", settings.MapTrayOpacity, 0f, 1f, .05f,
-                () => settings.ExpandedMapUi.Value, "Turn on expanded layout first.");
+                () => settings.ExpandedMapUi.Value, () => "Turn on expanded layout first.");
 
             Heading(parent, ref area, "02", "DISPATCHES", "WIRE");
             Toggle(parent, TakeRow(ref area), "NEWS TICKER", "Show theater dispatches above the map.",
                 () => settings.NewsTickerEnabled.Value, v => settings.NewsTickerEnabled.Value = v,
-                () => settings.ExpandedMapUi.Value, "Turn on expanded layout first.");
+                () => settings.ExpandedMapUi.Value, () => "Turn on expanded layout first.");
             Stepper(parent, TakeRow(ref area), "TICKER SPEED",
                 () => settings.NewsTickerSpeed.Value.ToString("0") + " px/s",
                 d => settings.NewsTickerSpeed.Value = Mathf.Clamp(settings.NewsTickerSpeed.Value + d * 15f, 15f, 150f),
                 () => settings.NewsTickerSpeed.Value > 15f, () => settings.NewsTickerSpeed.Value < 150f,
                 "Lower speeds are easier to read. Disable NEWS TICKER to stop motion.",
                 () => settings.ExpandedMapUi.Value && settings.NewsTickerEnabled.Value,
-                "Enable expanded layout and news ticker first.");
+                () => "Enable expanded layout and news ticker first.");
         }
 
         private void SetBackground(int mode)
@@ -357,19 +449,19 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             Heading(parent, ref area, "01", "LOCAL IMAGERY", "PNG / JPEG");
             Percent(parent, TakeRow(ref area), "IMAGE STRENGTH", settings.BackgroundImageOpacity, .05f, 1f, .05f,
-                ImageEnabled, "Choose an image background on STYLE first.");
+                ImageEnabled, () => "Choose an image background on STYLE first.");
             Stepper(parent, TakeRow(ref area), "IMAGE FILE", MfdMapDeck.GetCurrentWallpaperFileName,
                 MfdMapDeck.CycleCustomWallpaper,
                 () => MfdMapDeck.DiscoveredWallpaperCount > 1,
                 () => MfdMapDeck.DiscoveredWallpaperCount > 1,
                 "Local PNG/JPEG files. Use RESCAN after adding or replacing files.", CustomEnabled,
-                "Choose CUSTOM on STYLE. Add files to BepInEx/config/BoscaliSummer/wallpapers.");
+                () => "Choose CUSTOM on STYLE. Add files to BepInEx/config/BoscaliSummer/wallpapers.");
             string[] fits = { "COVER", "FIT", "STRETCH" };
             Stepper(parent, TakeRow(ref area), "IMAGE FIT",
                 () => fits[Mathf.Clamp(settings.WallpaperFitMode.Value, 0, 2)],
                 d => settings.WallpaperFitMode.Value = (settings.WallpaperFitMode.Value + d + 3) % 3,
                 () => true, () => true, "COVER crops; FIT keeps the full image; STRETCH fills the screen.",
-                CustomEnabled, "Choose CUSTOM on STYLE first.");
+                CustomEnabled, () => "Choose CUSTOM on STYLE first.");
             var scan = AvStyled.Button(parent, TakeRow(ref area), "RESCAN LOCAL FILES  →", "btn", () =>
             {
                 MfdMapDeck.RescanWallpapers();
@@ -400,21 +492,21 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             Toggle(parent, TakeRow(ref area), "THIRD-PERSON HUD",
                 "Show the compact flight overlay in external orbit and chase views.",
                 () => hud != null && hud.IsEnabled, v => { if (hud != null && hud.IsEnabled != v) hud.Toggle(); },
-                () => hud != null, "HUD service unavailable in this scene.");
+                () => hud != null, () => "HUD service unavailable in this scene.");
             Toggle(parent, TakeRow(ref area), "HIDE PITCH LADDER",
                 "Hide the floating pitch ladder in third person, keeping reticle, ammo and radar.",
                 () => hud != null && hud.HidePitchLadder, v => { if (hud != null) hud.HidePitchLadder = v; },
-                () => hud != null && hud.IsEnabled, "Turn on third-person HUD first.");
+                () => hud != null && hud.IsEnabled, () => "Turn on third-person HUD first.");
 
             Heading(parent, ref area, "02", "CAMERA", "CHASE");
             Toggle(parent, TakeRow(ref area), "TARGET CAMERA",
                 "Show the native target camera feed in third person while contacts are selected.",
                 () => hud != null && hud.CameraFeedEnabled, v => { if (hud != null) hud.CameraFeedEnabled = v; },
-                () => hud != null && hud.IsEnabled, "Turn on third-person HUD first.");
+                () => hud != null && hud.IsEnabled, () => "Turn on third-person HUD first.");
             Toggle(parent, TakeRow(ref area), "FLIGHT CAMERA",
                 "Smooth aircraft-relative orbit and rear chase framing with a steady horizon.",
                 () => hud != null && hud.FlightCameraEnabled, v => { if (hud != null) hud.FlightCameraEnabled = v; },
-                () => hud != null && hud.IsEnabled, "Turn on third-person HUD first.");
+                () => hud != null && hud.IsEnabled, () => "Turn on third-person HUD first.");
 
             Heading(parent, ref area, "03", "TARGETING", "RADIAL");
             Toggle(parent, TakeRow(ref area), "RADIAL PRESETS",
@@ -423,7 +515,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         }
 
         private void Percent(RectTransform parent, Rect area, string title, ConfigEntry<float> entry,
-            float min, float max, float step, Func<bool> enabled, string reason)
+            float min, float max, float step, Func<bool> enabled, Func<string> reason)
         {
             Stepper(parent, area, title, () => entry.Value.ToString("P0"),
                 d => entry.Value = Mathf.Clamp(Mathf.Round((entry.Value + d * step) * 100f) / 100f, min, max),
@@ -505,7 +597,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         }
 
         private void Toggle(RectTransform parent, Rect area, string title, string tooltip,
-            Func<bool> get, Action<bool> set, Func<bool> enabled = null, string reason = null)
+            Func<bool> get, Action<bool> set, Func<bool> enabled = null, Func<string> reason = null)
         {
             var row = ToggleRow("row").Arrange(area);
             var hover = RowHover(parent, row.Rect, tooltip);
@@ -523,11 +615,12 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             {
                 bool available = enabled == null || enabled();
                 bool on = get();
+                string why = available ? tooltip : reason != null ? reason() : tooltip;
                 button.SetEnabled(available);
                 button.SetText(on ? "ON" : "OFF");
                 button.SetLatched(on);
-                button.WithTooltip(available ? tooltip : reason);
-                hover.SetText(available ? tooltip : reason);
+                button.WithTooltip(why);
+                hover.SetText(why);
                 marker.color = on ? AvTheme.Accent : Color.clear;
                 hover.SetColors(on ? LatchedRow : Color.clear, on ? LatchedRowHover : HoverRow);
             });
@@ -535,7 +628,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
         private void Stepper(RectTransform parent, Rect area, string title, Func<string> get,
             Action<int> change, Func<bool> decrease, Func<bool> increase, string tooltip,
-            Func<bool> enabled = null, string reason = null)
+            Func<bool> enabled = null, Func<string> reason = null, bool readOnlyValue = false)
         {
             var row = StepperRow("row").Arrange(area);
             var hover = RowHover(parent, row.Rect, tooltip);
@@ -560,16 +653,19 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 bool available = enabled == null || enabled();
                 minus.SetEnabled(available && decrease());
                 plus.SetEnabled(available && increase());
-                string text = available ? get() : "--";
+                string text = available || readOnlyValue ? get() : "--";
                 if (value.text != text) value.text = text;
-                minus.WithTooltip(available ? tooltip + " Previous / decrease. " + text : reason);
-                plus.WithTooltip(available ? tooltip + " Next / increase. " + text : reason);
-                hover.SetText(available ? tooltip : reason);
+                string why = available ? tooltip : reason != null ? reason() : tooltip;
+                minus.WithTooltip(available ? tooltip + " Previous / decrease. " + text : why);
+                plus.WithTooltip(available ? tooltip + " Next / increase. " + text : why);
+                hover.SetText(why);
             });
         }
 
         private void RefreshPanel()
         {
+            bool host = HostAuthority();
+            shell?.DataBar.SetChip(1, host ? "HOST" : "CLIENT", host ? "live" : "inert");
             foreach (Action refresh in refreshers) refresh();
             dirty = false;
         }
@@ -586,6 +682,13 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             wasVisible = false;
             actionEcho = null;
             actionEchoUntil = 0f;
+            clientPages = null;
+            clientTabs = null;
+            clientPage = 0;
+            tasking = null;
+            taskRequest = null;
+            taskNote = null;
+            Array.Clear(taskRows, 0, taskRows.Length);
             AvUiSound.Reset();
         }
 
@@ -604,6 +707,11 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             claimed = false;
             surface = null;
             shell = null;
+            clientPages = null;
+            clientTabs = null;
+            Array.Clear(taskRows, 0, taskRows.Length);
+            taskRequest = null;
+            taskNote = null;
             refreshers.Clear();
         }
 

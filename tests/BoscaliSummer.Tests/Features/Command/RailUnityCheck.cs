@@ -28,13 +28,13 @@ public static class RailUnityCheck
     {
         "map", "faction", "hud", "target", "flag", "wing", "support", "theater",
         "person", "radio", "settings", "funds", "gauge", "missile", "radar", "dot",
-        "board", "pulse", "control", "front", "grid",
+        "pulse", "control", "front", "grid",
     };
 
     private static readonly string[] Labels =
     {
         "BDF", "MAP", "MFD", "SUD", "DPS", "PALA", "TGT", "MIS", "RAD", "SET", "WMC", "STR",
-        "EVN", "ADM",
+        "EVN", "WEA",
     };
 
     public static void Run()
@@ -149,7 +149,7 @@ public static class RailUnityCheck
 
         var skins = new List<MfdRail.ButtonSkin>();
         Check(MfdRail.PrepareCapacity(columns.Rail.height, Labels.Length),
-            "fourteen keys (six vanilla screens, WMC, the claimed screens and the hosted EVN/ADM) must fit the rail");
+            "fourteen keys (six vanilla screens, WMC, the claimed screens and the hosted EVN/WEA) must fit the rail");
         int adopted = MfdRail.Adopt(buttons, screens, null, null, skins);
         Check(adopted == Labels.Length, "every slot with a screen must be adopted, adopted=" + adopted);
 
@@ -161,8 +161,8 @@ public static class RailUnityCheck
             "SET must be branded with its descriptor");
         Check(skins[12].Label.text.Contains("EVN") && skins[12].Label.text.Contains("EVENTS"),
             "the hosted EVN button must be branded in the rail");
-        Check(skins[13].Label.text.Contains("ADM") && skins[13].Label.text.Contains("TASKING"),
-            "the hosted ADM button must be branded in the rail");
+        Check(skins[13].Label.text.Contains("WEA") && skins[13].Label.text.Contains("WEATHER"),
+            "the hosted WEA button must be branded in the rail");
         Check(skins[4].Label.text == "SUD", "an unknown code keeps its sanitised code and no invented name");
         Check(skins[4].Icon != null, "an unknown code still gets the neutral glyph");
         Check(skins[2].Icon != null && skins[2].Icon.gameObject.activeSelf,
@@ -185,9 +185,12 @@ public static class RailUnityCheck
             Check(CountDecorations(buttons[i]) == 1, "a borrowed button must carry exactly one rail decoration");
         Check(skins[2].Label.text == branded, "a repeated pass must not rewrite the branded line");
         skins[2].Label.text = "MAP";
+        skins[2].Label.color = Color.green;
         skins[2].Reassert();
         Check(skins[2].Label.text == branded,
             "the rail must put its line back after the game resets the label");
+        Check(skins[2].Label.color == AvTheme.TextPrimary,
+            "the rail must put its label colour back after the game's style applier repaints it");
 
         if (MfdRail.TryGetRail(out RectTransform rail))
         {

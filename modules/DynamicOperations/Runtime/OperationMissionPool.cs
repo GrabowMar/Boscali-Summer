@@ -87,7 +87,7 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
             if (!hasEngineers) candidates[(int)OperationKind.RepairCover].Unit = null;
         }
 
-        private void AddMissionCandidate(FactionHQ hq, FactionBoard board, OperationKind kind, float now)
+        private void AddMissionCandidate(FactionHQ hq, FactionBoard board, OperationKind kind, float now, float scale, int chainDepth)
         {
             Candidate candidate = candidates[(int)kind];
             if (candidate.Unit == null || candidate.Base == null) return;
@@ -99,7 +99,7 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
                 OperationKind.Intercept => 1600, _ => 1400
             };
             Target target = Add(board, now, kind, candidate.Base, candidate.Unit, hq, OperationReward.None, money,
-                kind == OperationKind.BattlefieldSurvey ? 60 : kind == OperationKind.Recon ? 75 : 125);
+                kind == OperationKind.BattlefieldSurvey ? 60 : kind == OperationKind.Recon ? 75 : 125, scale, chainDepth);
             if (target == null) return;
             target.Radius = target.Mission.IsStrike || kind == OperationKind.Jam || kind == OperationKind.Rescue ? 0f : 1500f;
             if (candidate.Unit.NetworkHQ == hq) target.Position = candidate.Unit.transform.position.ToGlobalPosition().AsVector3();

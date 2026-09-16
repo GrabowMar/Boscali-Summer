@@ -30,7 +30,7 @@ tests/BoscaliSummer.Tests -c Release`): **passes** (module + framework + archite
 |---|---|---|---|---|
 | Fire & destruction | `fire-and-destruction` | on | — | **Stable** |
 | Urban combat | `urban-combat` | on | — | **In-flight** |
-| Radio | `radio` | on (client-local) | optional `ISquadView` | **Stable / Unverified** receiver `RAD` + deck `MUS`; hunt override unverified |
+| Radio | `radio` | on (client-local) | optional `ISquadView` | **Stable / Unverified** `RAD` RECEIVER + DECK pages; hunt override unverified |
 | Quality of life | `qol` | on (client-local) | — | **Unverified** (new module) |
 | Autopilot landing | `autopilot` | on (client-local) | - | **Unverified** (new module) |
 | TGT target presets + quick slots + native-radial target page | `Presentation/MapUi/TargetPresetModel.cs`, `TargetPresetRuntime.cs`, `TargetPresetRadialPage.cs`, `Runtime/TargetPresetHotkeys.cs` | In-flight | Player-saved filter profiles (max 12, 14-char names) persist in `Command.TargetPresets`/`TargetPresetSlots`; F6/F9/F10 quick slots; radial host in Autopilot resolves `IRadialMenuPage`. In-game visual/input/MP acceptance pending |
@@ -40,15 +40,17 @@ tests/BoscaliSummer.Tests -c Release`): **passes** (module + framework + archite
 | Tactical command | `command` | on | `progression` | **In-flight / Unverified** |
 | Dynamic operations | `dynamic-operations` | **off** | — | **Experimental** |
 | Chain of command | `high-command` | on | — | **Unverified** (new module) |
+| Theater operations | `theater-ops` | on (host-auth) | — | **Unverified** (new module) |
 | Trenches | `trenches` | on | Command | **Combat implementation; in-game acceptance pending** |
 | World events | `events` | on | — | **Unverified** (new module) |
-| Weather | — | — | — | **Absent** (archived) |
+| Campaign mission | `campaign` | on | — | **Awaiting in-game validation** (new module) |
+| Weather | `weather` | on (host-auth) | optional `IFireSuppressionService` | **Unverified** (new module) |
 
 Load order (composition root): fire → urban → radio → qol → squad → progression → support →
-command → dynamic-operations → high-command → trenches → events. Progression/Support/Command are simply not constructed when
-disabled; Squad is installed with Progression. `qol`, `dynamic-operations`, and `trenches`
-are gated on their own `Enabled` flag. The whole plugin now requires Wing Command `0.9.2.6`+
-with its public Squad API.
+command → dynamic-operations → high-command → theater-ops → trenches → events → campaign → weather. Progression/Support/Command are simply not constructed when
+disabled; Squad is installed with Progression. `campaign`, `qol`, `dynamic-operations`,
+`trenches` and `weather` are gated on their own `Enabled` flag. The whole plugin now requires Wing Command
+`0.9.2.6`+ with its public Squad API.
 
 ---
 
@@ -91,9 +93,9 @@ air-assault presentation. Publishes `IBuildingOccupancy`, `IZoneFortificationSer
 | Zone garrisons — suitable roofs → native MG/AT/AA nests | `Runtime/ZoneGarrisonManager.cs`, `Runtime/RooftopPlacement.cs`, `Runtime/GarrisonOccupancy.cs` | In-game acceptance pending | 49 roof candidates with nine support samples each; cooked mesh or readable geometry, corrected box fallback for non-readable props; one weapon per shell, six per zone, 96 overall. Native spawn replication; cleanup clears dead occupancy. |
 | Capture cleanup | `Patches/AirbaseCapturePatches.cs` | Stable | Highway strips supported; ship airbases ignored |
 | Garrison visuals / occupied-building marking | `Visuals/GarrisonVisual.cs`, `Visuals/OccupiedBuildingMarking.cs`, `Runtime/GarrisonMarkerInfo.cs` | Unity preview checked; in-game pending | Visible weapons/crew; local sandbags; shell-scaled twin masts/flags and roof-edge faction band with viewer-relative accent, rebuilt from the measured flat-roof patch encoded in the defense's unique name; definition-sized nest marker kept as fallback. Six decoration renderers, under 4,000 vertices per position, no cosmetic colliders/lights. Pure `$m` round-trip tests added. |
-| `IZoneFortificationService.TryFortify` (consumed by Support) | `Runtime/ZoneGarrisonManager.cs` | Stable | Verifies definition/spawner/shells before charging |
+| `IZoneFortificationService.TryFortify` (consumed by Support) | `Runtime/ZoneGarrisonManager.cs` | Stable | Verifies definition/spawner/shells before charging; occupies the doctrine's shell count (bounded by the zone/theater ceilings, true when at least one landed) |
 | Air assault — visible insertion sequences, bounded outposts | `Runtime/AirAssaultController.cs`, `Visuals/AirAssaultVisuals.cs` | Unverified | Cargo access animates open before one eight-troop stick exits over ~8 s at a steady interval; engine-generated parachute mesh (`ParachuteMeshBuilder`: dome + 20 shroud ribbons, double-sided, vanilla fabric/rope materials) on a pendulum above each jumper; per-jumper golden-angle drift, varied chute timing and descent rates plus mission wind fan the stick out; canopy collapses on landing; descent timer scales with drop altitude so sticks do not vanish mid-air; 8 visual ops / 12 encampment cap; in-game visual validation pending |
-| Infantry encampments (Ibis rappel / Chimera ground landing) | `Runtime/InfantryEncampmentBuilder.cs` | Unverified | **KEEP.** Presentation on networked vanilla emplacements. `MakeshiftFortificationBuilder` deleted (never spawned). |
+| Infantry encampments (Ibis rappel / Chimera ground landing) | `Runtime/InfantryEncampmentBuilder.cs` | Unverified | **KEEP.** Presentation on networked vanilla emplacements; a rappel insertion establishes the `IGroundForceReadiness` camp count (1..4, absent = 1) within the twelve-site ceiling. `MakeshiftFortificationBuilder` deleted (never spawned). |
 | Mounted troops fire | `Patches/MountedTroopsFirePatch.cs` | Stable | |
 | Chimera/Tarantula paratrooper loadout station | `Patches/ChimeraLoadoutPatches.cs` (4 patch classes), `Runtime/ChimeraInfantryLoadoutAdapter.cs` | Unverified | **KEEP.** Injects a `MountedTroops` station into MC-260/Tarantula cargo bays and mirrors it into the definition prefab so `WeaponChecker.VetLoadout` keeps it at spawn; registered in `Encyclopedia.IndexLookup` for serialization. README + ARCHITECTURE mention it. In-game acceptance pending. |
 | Base defense alarm — hostile strike-package detection, OPS/STR ticker | `Runtime/BaseDefenseAlarmService.cs` | Unverified | **KEEP.** 2s poll, 7.5 km radius; feeds OPS STATUS and STR. README + ARCHITECTURE mention it. |
@@ -110,25 +112,25 @@ air-assault presentation. Publishes `IBuildingOccupancy`, `IZoneFortificationSer
 
 ## Radio — `radio`
 
-**Purpose:** client-local receiver (`RAD` bezel) and music deck (hosted `MUS`). Zero
-multiplayer data. Headless servers skip it.
+**Purpose:** client-local radio (`RAD` bezel: RECEIVER and DECK pages). Zero multiplayer
+data. Headless servers skip it.
 
 | Feature | Where | Status | Notes |
 |---|---|---|---|
 | OGG/WAV library, directory channels, async decode | `Runtime/RadioLibrary.cs`, `Runtime/RadioManager.cs`, `Runtime/RadioProgram.cs` | Stable | 32 channels / 512 tracks / 1 active decode per program (receiver, deck) |
 | Three built-in stations (Agrapol FM, Maris Network, Base Broadcast) | `Runtime/RadioStarterLayout.cs`, `Runtime/RadioStation.cs` | Stable | Embedded 256px PNG identities; no bundled audio |
-| Receiver panel — waterfall, S-meter, dial, transport, SCAN | `Presentation/RadioPanel.cs`, `Presentation/RadioWaterfall.cs`, `Runtime/RadioFrequencies.cs` | Unverified | In-game visual acceptance pending; frequencies client-local |
+| RECEIVER page — waterfall, S-meter, dial, transport, SCAN, LINK block | `Presentation/RadioPanel.cs`, `Presentation/RadioWaterfall.cs`, `Runtime/RadioFrequencies.cs` | Unverified | In-game visual acceptance pending; frequencies client-local; no track switching |
+| DECK page — folders, tracks, transport, shuffle/repeat | `Presentation/RadioPanel.cs`, `Runtime/RadioManager.cs` | Unverified | Player's own library; the one deck rule is the transmission duck |
 | Bands, modulation, fine step, squelch, bandwidth, mode override | `Runtime/RadioFrequencies.cs`, `Runtime/RadioManager.cs`, `Configuration/RadioSettings.cs` | Unverified | FM 87.5–108 @100 kHz, VHF air 118–136.975 @25 kHz AM, MW 530–1700 @10 kHz; FINE divides the step by five |
-| Modelled reception — link budget, horizon, terrain LOS | `Runtime/RadioPropagation.cs`, `Runtime/RadioTransmitterAnchors.cs` | Unverified | 2 Hz, one linecast per evaluation on the game's ground mask; unresolved tower = full scale, never a fake weak signal |
+| Modelled reception — link budget, horizon, terrain LOS, tower loss | `Runtime/RadioPropagation.cs`, `Runtime/RadioTransmitterAnchors.cs`, `Runtime/RadioManager.cs` | Unverified | 2 Hz, one linecast per evaluation on the game's ground mask; lost tower = off air, unresolved map or no listener = full scale |
 | Synthetic spectrum row (carriers + noise) | `Runtime/RadioSpectrum.cs` | Unverified | 96 bins @ 0.12 s; no FFT, no per-row allocation |
-| Music deck — folders, tracks, transport, shuffle/repeat | `Presentation/MusicPanel.cs` | Unverified | Hosted `MUS` slot; `DeckSelectFolder`/`DeckPlay`/`DeckNext` |
-| Programme log (tuned station's tracks, click to play) and rotating wire line | `Runtime/RadioProgramming.cs`, `Runtime/RadioManager.cs`, `Presentation/RadioPanel.cs` | Unverified | Paged list, ring-bounded wire text; intercepts read `ISquadView.LastChatter` (read-only) |
+| Programme caption, rotating wire line, enemy chatter intercepts | `Runtime/RadioProgramming.cs`, `Runtime/RadioManager.cs` | Unverified | Ring-bounded wire text; intercepts read `ISquadView.LastChatter` (read-only) |
 | Synthesized receiver audio — carrier, squelch, morse ident, mode/bandwidth character | `Runtime/RadioBroadcastFx.cs` | Unverified | Generated in memory; no bundled asset; no music metadata crosses the wire |
 | Custom `station.png` loading (≤256×256, ≤256 KiB) | `Presentation/RadioStationIconCache.cs` | Stable | |
 | Vanilla-music hold — sticky through dead air, restored on STOP | `Patches/VanillaMusicPatches.cs`, `Runtime/VanillaMusicHold.cs`, `Runtime/RadioManager.cs` | Stable | Play / CrossFade / Queue patches plus a 0.5 s silence sweep |
 | Hunt soundtrack and previous station/position/pause restoration | `Runtime/RadioManager.cs`, `Runtime/HuntMusicGate.cs` | Unverified | Local Hunt station or installed tactical clip; manual transport wins, including snapshot recovery |
 | MP3 support | — | Absent | Unadvertised until a real target-runtime decode test passes |
-| Voice transmit, crypto nets, jamming | `Runtime/RadioLinkStub.cs` | Absent | Inert by design; the panel labels TX and SECURE as placeholders |
+| Voice transmit, crypto nets, jamming, voice receive ducking | `Runtime/RadioLinkStub.cs` | Absent | Inert by design; LINK block, TX and SEC say so; `DeckGain` duck is wired with no trigger |
 | Synchronized stations across peers | — | Absent | Designed (`RadioHello`/`RadioTuneIntent`/`RadioState`), gated, not enabled — see DESIGN_NOTES |
 
 **Needs attention**
@@ -193,54 +195,52 @@ Command (they consume `IPlayerPerks` / `IProgressionView` only).
 
 | Feature | Where | Status | Notes |
 |---|---|---|---|
-| Score → points (1 per `ScorePerPoint`, cap `MaximumPoints`) | `Runtime/PerkCatalog.cs` (`PerkPoints`), `Runtime/ProgressionManager.cs` | Stable | Reads `Player.PlayerScore`; rank shown as flavour only |
-| Flat 9-perk catalogue, per-perk cost, no prerequisites | `Runtime/PerkCatalog.cs` | Stable | 5 passives + 4 support authorisations; 12 points to buy the whole board |
-| Passive effects — fuel use, combat/service/objective reward, support cost | `Patches/ProgressionPatches.cs` | Stable | Hooks `Aircraft.UseFuel` + `FactionHQ.RewardPlayer`; reward mapped by enum member |
-| SQD presentation — pilot dossier, shared skill board, friendly/hostile wings and pursuit HUD | `Presentation/SqdMfdPanel*.cs`, `Presentation/SqdGlyphs.cs`, `Presentation/EmblemRenderer.cs`, `Presentation/AceHuntHud.cs` | Unverified | Uses `IProgressionView` and `ISquadView`; the friendly wing is a read-only roster and hostile wings carry a deterministic generated crest |
+| Score → picks (grade n costs n x `ScorePerPoint`, cap `MaximumPoints`) | `Runtime/PerkCatalog.cs` (`PerkPoints`), `Runtime/ProgressionManager.cs` | Stable | Reads `Player.PlayerScore`; rank shown as flavour only |
+| Qualification board — four lanes x five grades, one pick per grade | `Runtime/PerkCatalog.cs` | Stable | Grade 1 is the lane's OPS tool, grades 2-5 chain off it; a career holds two tools, so two lanes stay closed |
+| Passive effects — fuel use, combat/service/objective reward, support cost, re-tasking tempo, effect size | `Patches/ProgressionPatches.cs`, `modules/Support/Runtime/SupportManager.cs`, `Actions/EmpAction.cs` | In-flight | Fuel/reward hook `Aircraft.UseFuel` + `FactionHQ.RewardPlayer`; the two support kinds are read by Support through `IPlayerPerks` (cooldown check, host reply, client countdown, EMP radius); rod blast scaling is deferred until a rod's detonation can be correlated to its request |
+| SQD presentation — pilot dossier, shared skill board, friendly/hostile wings and pursuit HUD | `Presentation/SqdMfdPanel*.cs`, `Presentation/SqdGlyphs.cs`, `Presentation/EmblemRenderer.cs`, `Presentation/AceHuntHud.cs` | Unverified | Uses `IProgressionView` and `ISquadView`; SKILLS is a grade-row matrix (four qualification columns) with the pick budget and the selected-grade CONFIRM pinned above the scroll, and renders `PerkView.Block` as each cell's state word; the friendly wing is a read-only roster and hostile wings carry a deterministic generated crest |
 | Shared combat-skill presentation (AI/ace skills beside player skills) | `Runtime/AceSkillCatalog.cs`, `SqdMfdPanel.Skills.cs`, `SqdMfdPanel.Wings.cs` | Unverified | Display metadata over Wing Command's replicated four-bit `AbilityMask`; grants nothing |
 | Wing Command custom-pilot studio (edit/save/recruit) | `Presentation/SqdMfdPanel.Studio.cs`, `Infrastructure/GameInterop/WingLink.cs` | Unverified | Additive companion API resolved separately; page fails closed on older Wing Command builds |
 | Local squadron identity — procedural/PNG emblem, name, local pilot profile | `Runtime/EmblemDesign.cs`, `Presentation/EmblemRenderer.cs`, `Configuration/ProgressionSettings.cs` | Unverified | Client-local cosmetics; never networked |
-| Ace bonuses and one-life successor perk reset | `Runtime/ProgressionManager.cs` | Unverified | Score points plus server-owned bonuses, 20 total point ceiling |
+| Ace bonus picks and one-life successor reset | `Runtime/ProgressionManager.cs` | Unverified | Score pays five grades; server-owned ace bonuses go on top, 20 total pick ceiling |
 | Networking — protocol byte `3`, client polls while SQD open | `Networking/ProgressionNet.cs` | Unverified | Scene/request/pilot generation validation; host fast-path in-process; cosmetics are not on the wire |
 | `PerkStrength` scaling of passives | `Runtime/ProgressionManager.cs` | Stable | 0 = cosmetic, 2.0 = double |
 | Persistent cross-mission profiles | — | Absent | Gated on the persistence service (schema-versioned atomic writes); custom pilots persist in Wing Command's own folder |
 
-Config: `Progression.Enabled`, `ScorePerPoint` (500), `MaximumPoints` (6), `PerkStrength` (1.0).
+Config: `Progression.Enabled`, `ScorePerPoint` (250), `MaximumPoints` (6), `PerkStrength` (1.0).
 `Squadron.Name` / `Emblem` / `EmblemFile` / `PilotProfile` are client-local dossier cosmetics.
 Debug: `Debug.BypassRequirements` (grants everything free — testing aid).
 
 **Needs attention**
 - In-game acceptance is pending for the four-page SQD redesign, the studio against the
   companion Wing Command build, and emblem/PNG rendering at panel scale.
-- Balance dials to revisit once mission-length data exists: perk costs, `ScorePerPoint`.
+- Balance dials to revisit once mission-length data exists: the grade ramp
+  (`ScorePerPoint`), the pick ceiling, and whether the two-tool cap starves a solo career of
+  useful picks late in a long mission.
 
 ---
 
 ## Support operations — `support`
 
-OPS has five pages: SUPPORT (fire support tasking — five mission cards, active missions, activity log),
-SPACE (constellation command), CYBER (SIGINT/CRYPTO infrastructure and hacks),
-EW (DISRUPT/EW infrastructure and the countermeasure hacks) and STATUS. Orbital abilities
-require a matching-role satellite overhead; satellites are real orbiting objects the player
-launches, moves and recalls. Cyber infrastructure is bought with allocation and gates five
-bounded hacks. Host-authoritative, bounded snapshots, pure-model regressions and wire
-round-trips pass; live multiplayer acceptance is pending.
+OPS has five domain pages on the shared `AvScreen` chrome: SPACE (orbital station console:
+PLATFORM / MISSION PLANNER / ENEMY ACTIVITY, plus the full-screen station uplink), EW (mobile
+station, posture, flare barrage), INFO (cyber operations and infrastructure), SPEC OPS
+(base-of-operations doctrine, task-group programs, zone fortification) and INTEL (network
+programs). One modular station per faction flies real orbits and is visible in the sky; radar
+scan, ELINT, Rod from God and EMP need it overhead with the module fitted, powered and
+recharged; the EW station's posture decides which attack operations it backs; programs accrue
+token reserves, SOF tokens buy doctrine ranks that make ground forces fortify more and leave more rappel encampments, and the intel reserve waits on theater events.
+Host-authoritative, bounded snapshots, pure-model regressions and the protocol-11 wire
+round-trip pass; in-game visual and multiplayer acceptance are pending. Specs:
+`design/ux/ops-panel.md`, `design/ux/orbital-platform.md`.
 
-The OPS screen wears its own aerospace-console look rather than the shared green-glass shell:
-graphite housing, slate cards, warm-white proportional type, information blue and one
-interaction amber (`Presentation/OpsPalette.cs`, `OpsLook.cs`, `OpsShell.cs`). The palette is
-fixed and contrast-tested, so a mission-theme change or an `avionics.avss` reload cannot
-repaint OPS. In-game visual acceptance is pending.
-
-
-**Purpose:** OPS `SUPPORT` fire-control station — server-validated support requests, costs derived
-from vanilla unit value, one `CostMultiplier`, typed denials, and one pure state snapshot
-(`Presentation/SupportDeskModel.cs`) that the panel paints as tactical-card tiles.
+**Purpose:** server-validated support requests, costs derived from vanilla unit value, one
+`CostMultiplier`, typed denials, and host-owned orbital, EW, cyber and program state.
 
 | Action (catalogue) | Id | Capability / perk | Status | Notes |
 |---|---|---|---|---|
 | Satellite Scan | `Recon` | `Recon` / Satellite Scan | In-flight | Immediate coverage-gated native tracking snapshot, capped at 48 contacts; **absent from catalogue** if the seam can't be resolved |
-| Zone Fortification | `Fortify` | `Fortify` / Combat Engineering | Stable | Calls `IZoneFortificationService`; charged only after defenders verified. Absent if Urban Combat missing |
+| Zone Fortification | `Fortify` | `Fortify` / Combat Engineering | Stable | Calls `IZoneFortificationService` with the doctrine's shell count (1 + FTD rank, capped by zone/theater ceilings); charged only after defenders verified. Absent if Urban Combat missing |
 | Rod from God (kinetic strike) | `Artillery` | `Artillery` / Rod from God | In-flight | Native missile delivery with server-only 150 m core / 420 m blast; requires STRIKE coverage. In-game MP pending |
 | EMP Shock | `Emp` | `Emp` / EMP Shock | In-flight | 30 km airburst: light-speed E1 prompt footprint and cockpit upset, E2 branching arcs, E3 geomagnetic heave holds the host-only 30 s jamming; local cockpit feedback. In-game MP pending |
 | Flare Barrage | `FlareMissile` | **`Recon`** (shared) / Satellite Scan | In-flight | Airburst IR countermeasure. **DECIDED:** no dedicated perk — shares Satellite Scan / Recon authorisation |
@@ -255,23 +255,28 @@ from vanilla unit value, one `CostMultiplier`, typed denials, and one pure state
 
 | Supporting piece | Where | Status | Notes |
 |---|---|---|---|
-| Constellation model | `Runtime/OrbitalConstellation.cs` | Pure-tested | Three shells, real angles/footprints/fuel, coverage and next-pass queries, per-satellite windows, merged forward coverage forecast, manoeuvre easing |
+| Orbital model | `Domain/Orbital/OrbitMath.cs`, `TheaterTrack.cs`, `PlatformModules.cs`, `OrbitalPlatform.cs`, `PlatformTelemetry.cs`, `PlatformWords.cs` | Pure-tested | Real period/velocity/elevation/off-nadir/slant; LOW/MID/HIGH bands with 55° reach passes and compressed far side; 5×3 grid, placement/strand rules, mass, kW/kJ power and brownout, radiator/relay/shield utilities, holds (insertion, transfer, rephase, safe mode), recharge, rods, fuel, debris, snapshot export/mirror with jitter hold |
+| SAR image formation | `Domain/Orbital/SarImageFormer.cs`, `Visuals/SarCollector.cs` | Former pure-tested; collector in-game pending | Layover h·cot(inc), moving-target azimuth shift, shadow, sidelobes, two-look speckle, percentile dB stretch; ≤ 900 rays per frame over an 8 s collect |
+| Station presentation | `Visuals/PlatformSky.cs`, `Visuals/SatelliteImager.cs`, `Visuals/SarCollector.cs`, `Presentation/PlatformUplink.cs`, `PlatformProducts.cs`, `SupportPanel.Space/Platform/Planner/Enemy.cs`, `Patches/UplinkInputGuardPatch.cs` | Built; in-game visual/MP pass pending | 1/20-scale cube-cluster station in the sky; full-screen uplink (EO/IR feed, radar product, taskings, input ownership); PLATFORM / MISSION PLANNER / ENEMY ACTIVITY pages |
 | Infrastructure model | `Runtime/InfoNetwork.cs` | Pure-tested | Four facilities × 3 levels, prereqs, hack scaling, prices. CRYPTO `CostScale` discounts hack cost; copy must not claim a host cooldown discount |
 | EW presence | `Runtime/EwAssets.cs` | In-flight | Mobile radar truck only. Convert-to-encampment UI gone; wire `EwAssetState.Encampment = 2` reserved |
 | Track deception | `Runtime/CyberEffects.cs` | In-flight | Bounded: 4 effects, 64 aircraft, hostile tracking dictionaries only |
-| Map overlay | `Presentation/SupportMapOverlay.cs` | In-flight | Satellite tracks, footprints, role badges; coverage warning on the armed reticle |
+| Map overlay | `Presentation/SupportMapOverlay.cs` | In-flight | Station and foreign-station tracks, uplink aim, station readiness on the armed reticle |
 | Camera surface mark | `ICameraTargetService` (Support) + Command TGT CAMERA tab | In-flight | Capture/call/clear plus telemetry; OPS no longer hosts it |
 | Map-cursor target resolution | `Runtime/SupportTargeting.cs`, `Runtime/SupportMapGesture.cs` | Stable | Clearance-sphere / slope tolerance retained |
-| Fire-station presentation | `Presentation/SupportDeskModel.cs`, `SupportPanel.Support.cs` | Pure-tested state; in-game visual/MP pass pending | One `Capture(facts)` derives card state, tasking note, activity and gauge; the panel paints five mission cards in one column, then content-sized active missions and a bounded activity log. No cursor/coverage pre-checks; no empty reserved sections |
-| OPS console look | `Presentation/OpsPalette.cs`, `OpsLook.cs`, `OpsShell.cs` | Built; in-game visual acceptance pending | Fixed graphite/slate/warm-white/amber palette with contrast floors, proportional TMP default font, OPS-local chrome (heading, one resource band, five tabs with one amber mark, pinned footer) and OPS-local neutral/amber controls. No green-glass tokens, spine, scanlines or glow in any OPS refresh path |
+| OPS domain models | `Domain/OpsDomain.cs`, `TheaterGrid.cs`, `EwPostures.cs`, `InfoOperations.cs` | Pure-tested | Tab labels and doctrine, operator formatting (grid, countdown, GET), the posture → operation table the host enforces, INFO gate order and copy |
+| Programs (SPEC OPS / INTEL) | `Domain/OpsPrograms.cs` | Pure-tested; in-game pending | Six programs × 3 tiers, two reserves capped at 8 tokens, host-only accrual (5 s tick clamp), all-or-nothing `TryConsume` seam; the SOF reserve pays for doctrine ranks. Client mirror clamps hostile bytes |
+| Base of operations (SPEC OPS) | `Domain/OpsGarrison.cs`, `Framework/Contracts/IGroundForceReadiness.cs` | Pure-tested; in-game pending | Two doctrine tracks × 3 ranks (2/3/4 SOF tokens); ranks raise fortification shells and rappel camps, read by Urban Combat through the owner-scoped readiness contract (absent = 1); snapshot mirrors clamp hostile bytes |
+| OPS panel | `Presentation/SupportPanel.cs` + `.Space` / `.Ew` / `.Info` / `.Programs` | Built; in-game visual/MP pass pending | Shared `AvScreen` chrome, four metrics, five tabs, fixed-height rows with status words + rail, disabled reasons in hover help, ~6 Hz refresh of the visible page only |
 | Missile visual patch | `Patches/SupportMissileVisualPatch.cs` | Stable | |
 | Request pipeline, cooldown, rate limit, typed denials, 5s silent-host timeout | `Runtime/SupportManager.cs`, `Runtime/SupportModel.cs` | Stable | |
-| Networking — protocol byte `7`, host fast-path | `Networking/SupportNet.cs` | Stable | Request/result, ops query/command/state, cyber effect broadcast; host validates and charges every fleet/infrastructure command |
+| Networking — protocol byte `11`, host fast-path | `Networking/SupportNet.cs` | Stable | Request/result, ops query/command (module launch, jettison, rephase, orbit shift, resupply, invest, EW retune, garrison upgrade)/state (station layout, outages, band/seed/clock/hold, energy/fuel/rods/brownout, cargo, recharge, notice; foreign stations with layout masks; facilities, EW, programs, doctrine) roundtrip in the patch probe |
 
-Config: `Support.Enabled`, per-action toggles (`ReconSweep`, `Fortification`, `RodFromGod`,
-`EmpShock`, `FlareBarrage`, `CyberOperations`), `CostMultiplier`, per-action cost/range/radius keys,
-`MaximumSatellites` (4), per-role satellite costs, `SatelliteRecallRefund` (0.4),
-`MaximumRangeMeters` (30 km), `ReconRangeMeters` (120 km), `RequestCooldownSeconds` (30),
+Config: `Support.Enabled`, per-action toggles (`ReconSweep`, `ElintSweep`, `Fortification`,
+`RodFromGod`, `EmpShock`, `FlareBarrage`, `CyberOperations`), `CostMultiplier`, per-action
+cost/range/radius keys, `PlatformCostScale` (1.0), `PlatformJettisonRefund` (0.4),
+`PlatformInsertionSeconds` (45), `PlatformDockingSeconds` (20), `PlatformDebrisEvents`,
+`OrbitGapScale` (1.0), `MaximumRangeMeters` (30 km), `RequestCooldownSeconds` (30),
 `FireMissionDefinitionKey`. Debug: `Debug.DisableOpsCooldowns`.
 
 **Needs attention**
@@ -299,27 +304,30 @@ remote clients display unavailable. Build/pure checks cover storage and history;
 in-game visual and multiplayer acceptance remain pending.
 
 **Purpose:** owns the expanded tactical-map GUI, the `STR` strategic bezel screen and map
-overlays. The CMD tab and all tactical-command code (doctrine, per-cell Sector Focus,
-map right-click menu, AI target scoring) were removed and will be rebuilt in another
-form; the tab shows a WORK IN PROGRESS notice. Largest and most-churned module. Never
-tasks a recruited Wing Command wing.
+overlays. The old CMD tactical-command code (doctrine, per-cell Sector Focus, map
+right-click menu, AI target scoring) stays removed; the tab is now the operations board
+consuming TheaterOps' `ITheaterPriorityView` and issues no unit order of any kind. Largest
+and most-churned module. Never tasks a recruited Wing Command wing.
 
 | Feature | Where | Status | Notes |
 |---|---|---|---|
 | Expanded tactical map UI — left MFD dock + event log, central map, right bezel rail, spawn footer | `Presentation/MapUi/` (~30 files, `MapUiManager.cs`) | In-flight | Patches `MfdRailPatch`, `MfdScreenChromePatch`, `MfdSinglePanelPatch`; `VanillaMfdRebuild.*` partial classes are new; `Command.ExpandedMapUi` default on |
-| `STR` strategic screen — SA (air + frontline) / COC / CMD placeholder | `Presentation/StrMfdPanel.cs`, `Presentation/StrMfdPanel.Coc.cs`, `Domain/TacticalTheaterState.cs`, `Domain/TheaterReadout.cs`, `Domain/SortieClassifier.cs` | In-flight / Unverified | Own bezel; `ITheaterPage` gone. Empty-board air/territory ratios print "—", not 50%. CMD tab is a WORK IN PROGRESS notice; TASKING/LOG removed |
+| `STR` strategic screen — SA (air + frontline) / COC / CMD operations board | `Presentation/StrMfdPanel.cs`, `Presentation/StrMfdPanel.Coc.cs`, `Presentation/StrMfdPanel.Cmd.cs`, `Domain/TacticalTheaterState.cs`, `Domain/TheaterReadout.cs`, `Domain/SortieClassifier.cs` | In-flight / Unverified | Own bezel; `ITheaterPage` gone. Empty-board air/territory ratios print "—", not 50%. CMD names the main effort through `ITheaterPriorityView`; TASKING/LOG stay removed |
 | Dynamic frontline / sector-control overlay | `Runtime/TacticalSectorGrid.cs`, `Runtime/SectorClusterTree.cs`, `Runtime/SectorContour.cs`, `Runtime/TerritoryControlView.cs`, `Presentation/ComMapOverlay.cs` | Unverified | Cells sit on the map's own base grid (its grid offset, 1 km minor squares, coarsened in powers of two only if a theater exceeds the 16384-cell budget); the bake draws `SectorClusterTree` clusters, so the rear is a few blocks and the front stays fine. Marching-squares contour: real positions, local normals, lengths and per-stretch pressure; forward-band tint only, contested squares hatched red/blue with the stripe split following the cell's control value (no third colour), the front itself one plain vector line (`Presentation/MapUi/FrontlineGraphic`: map-pixel width and sampling, one colour, no teeth), front length in km. Enclosed ground with no opposing presence (troops or an airbase anchor) is claimed for the enclosing side. Both map overlays share `Infrastructure/GameInterop/TheaterFrame`. Objective ground presence independent of faction tracking. Advisory only — vanilla capture unchanged. In-game validation pending |
-| `MIS → SECONDARY` objectives view | `Presentation/MapUi/MfdSecondaryObjectives.cs` | Experimental | Reads `ISecondaryObjectivesView`; only live when `dynamic-operations` is enabled |
-| `MAP` layer/readability screen | `Presentation/MapUi/VanillaMfdRebuild.Map.cs` | In-flight / Unverified | Two-column switch grid over the six native layers plus Boscali's Control field and Front line overlays; All on / Hide all / Defaults presets; live overlay readout from `ComMapOverlay`; native hover-tooltip and symbol-size choices, scaled symbol preview and overlay legend. Cells size from the panel height, so both pages fit `PanelHeight` through `PanelHeightMax`. In-game visual acceptance pending |
-| `SET` MFD settings page - MAP / STYLE / IMAGE / COCKPIT | `Presentation/MapUi/SettingsMfdPanel.cs` | In-flight | Shared `AvScreen`; compact rows; panel resolves up to `PanelHeightMax`; COCKPIT reads QoL's `IThirdPersonHud`; bounded steppers explain disabled limits |
+| `MIS → SECONDARY` objectives view | `Presentation/MapUi/MfdSecondaryObjectives.cs` | Experimental | Reads `ISecondaryObjectivesView`, including the host's `ActiveLimit`; adaptive dossier grid (1–4 dossiers) with `AVAILABLE` / `ACTIVE` / `CLOSED` filters; only live when `dynamic-operations` is enabled |
+| `MAP` layer/readability screen | `Presentation/MapUi/VanillaMfdRebuild.Map.cs` | In-flight / Unverified | Two-column switch grid over the six native layers plus Boscali's Control field, Front line and Threat heat overlays; All on / Hide all / Defaults presets; live overlay readout from `ComMapOverlay` and `ThreatMapOverlay`; native hover-tooltip and symbol-size choices, scaled symbol preview and overlay legend. Cells size from the panel height, so both pages fit `PanelHeight` through `PanelHeightMax`. In-game visual acceptance pending |
+| `SET` MFD settings page — CLIENT sub-tabs MAP / STYLE / IMAGE / COCKPIT | `Presentation/MapUi/SettingsMfdPanel.cs` | In-flight | Shared `AvScreen`; two main tabs CLIENT / SERVER; compact rows; panel resolves up to `PanelHeightMax`; COCKPIT reads QoL's `IThirdPersonHud`; bounded steppers explain disabled limits |
+| `SET` SERVER page — host tasking board + host-authoritative settings | `Presentation/MapUi/SettingsMfdPanel.cs`, `Presentation/MapUi/SettingsServerPage.cs` | Unverified | The ADM bezel's tasking board relocated here (`ISecondaryObjectivesView`, late through `ModServices`); every installed feature's `IHostSettingsView` from the framework `HostSettingsBoard` renders as a host-only row. `GameAccess.IsServer()` re-read each refresh; remote clients see it read-only with the reason on the status strip. Only live-read gameplay knobs; startup `Enabled` gates stay in the config file |
 | TGT target presets / quick slots / native-radial page | `Presentation/MapUi/TargetPresetModel.cs`, `TargetPresetRuntime.cs`, `TargetPresetRadialPage.cs`, `Runtime/TargetPresetHotkeys.cs` | In-flight | Bounded config-persisted library; F6/F9/F10; Autopilot hosts the page through `IRadialMenuPage`. In-game acceptance pending |
-| Wing Command coexistence (NOAvionics, no assembly dep) | `Presentation/MapUi/`, `Infrastructure/GameInterop/MfdBezel.cs` | Stable | Named same-frame bezel claims plus exclusive armed map gestures. EVN/ADM are hosted as appended vanilla slots (`Infrastructure/GameInterop/MfdScreenHost.cs`), so Boscali claims five and Wing Command's list-scanning WMC installer keeps one free |
+| Wing Command coexistence (NOAvionics, no assembly dep) | `Presentation/MapUi/`, `Infrastructure/GameInterop/MfdBezel.cs` | Stable | Named same-frame bezel claims plus exclusive armed map gestures. EVN is hosted as an appended vanilla slot (`Infrastructure/GameInterop/MfdScreenHost.cs`), so Boscali claims five and Wing Command's list-scanning WMC installer keeps one free. The former ADM appended slot is gone with the bezel |
+| Hostile sensor-coverage heat map (one field over all tracked emitters) | `Presentation/ThreatMapOverlay.cs`, `Domain/ThreatEnvelope.cs` | Unverified | Client-local, no patches, no wire. Each spot is as hot as the best tracked emitter would find the local aircraft there: the game's own gates (`maxRange / minSignal × RCS^0.25`, radio horizon from both altitudes, twice-nominal scan limit) for radar and `min(detector sweep, visibility × magnification)` for optics, merged per cell by maximum with a cubed radial falloff (`ThreatEnvelope.Heat01`, squared again in the alpha so the far field stays silent). Optical coverage is weighted to half intensity, so an optical-only watcher reads as a soft amber patch. Tracked contacts only, at the faction-known position; jammed radars drop out. Tuned against the measured theater: 81920 m across, while a ground radar's radio horizon against a high target reaches past 200 km, so envelopes cover the map — hence the steep falloff and the panel's widest-reach readout. Cost: one stretch-anchored quad and one texture (≤256 px on the long side), no per-emitter objects, no per-frame work, a 1 Hz bake confined to each emitter's bounding box, flat pre-allocated buffers, rendering asleep while the map is closed. Terrain LOS, look-down clutter and scan cones are not cut out (they only shrink a real envelope). In-game validation pending |
 
 Config: `Command.Enabled`, `ExpandedMapUi`, `FrontlinesOverlay` (control field), `FrontlineTrace`
-(front line trace), `OverlayOpacity` (0.35), `GridCellSizeMetres` (1000, the map's base grid
+(front line trace), `ThreatHeat` (hostile sensor coverage), `OverlayOpacity` (0.35),
+`GridCellSizeMetres` (1000, the map's base grid
 square), `GridRefreshInterval` (0.5s), `TargetPresetWheel` (on), `TargetPresetKey1/2/3`
 (F6/F9/F10), `TargetPresets`/`TargetPresetSlots` (managed by TGT). The MAP bezel's layer
-switches write the two overlay entries, so the config file stays the single source of truth.
+switches write the three overlay entries, so the config file stays the single source of truth.
 
 **Needs attention**
 - COM copy is settled: `STR` is its own bezel, `ITheaterPage` is gone, DESIGN_NOTES matches.
@@ -338,18 +346,27 @@ Independent; publishes `ISecondaryObjectivesView` and morale outcomes; observes 
 
 | Feature | Where | Status | Notes |
 |---|---|---|---|
-| 1 Hz host director — 17 contract types including rescue/return, recon/BDA, logistics, repair cover, jammer hunts and surveys | `Runtime/OperationsManager.cs`, `Runtime/OperationMissionPool.cs`, `Domain/OperationBoard.cs` | Experimental | 8 boards / 3 cards / 2 active / 128 issued per faction per mission; randomized generation ≤ every 30s, 1 faction/tick |
+| 1 Hz host director — 17 contract types including rescue/return, recon/BDA, logistics, repair cover, jammer hunts and surveys | `Runtime/OperationsManager.cs`, `Runtime/OperationMissionPool.cs`, `Domain/OperationBoard.cs` | Experimental | 8 boards / 3 cards / 2 active / 128 issued per faction per mission; escalation-aware generation every 18–30 s, 1 faction/tick |
+| Escalation-aware tempo — generation interval + fresh-offer reward scale | `Domain/OperationTempo.cs` | Pure-tested | 30/24/18 s and 1.0/1.15/1.35 at conventional/tactical/strategic; reads only the mission's `tacticalThreshold`/`strategicThreshold` (unset is not a gate); stacked under the money/XP and `RewardMultiplier` clamps |
+| Follow-on chains — a paid completion may seed one related next contract | `Domain/OperationChains.cs`, `Runtime/OperationsManager.cs` | Pure-tested | Capture→Defend; Recon/SortieReport/DamageAssessment→Interdict; SupplyEscort→SupplyInterdict; Jam/ElectronicWarfare→Intercept (Rescue/BattlefieldSurvey exhausted); 2 links per operation, one pending follow-on per board, skipped when no candidate exists; never on cancel or expiry; no new wire fields |
+| Abort consequence — deliberately aborting an accepted contract costs 1 morale | `Domain/OperationFailure.cs`, `Runtime/OperationsManager.cs` | Pure-tested | Through the existing local host `MoraleAwarded` event; dismissing an offer or letting it lapse stays penalty-free; the dismissal message states what happened |
 | Native rescue, repair and supply observations; continuous surveys and same-aircraft intelligence return | `Runtime/OperationServicePatches.cs`, `Runtime/OperationMissionPool.cs` | In-game acceptance pending | Release/pure/patch checks pass; 2 unit passes/generation, 32 sightlines/tick and 32 recent jammer sources; no new spawns |
 | One-time faction money (normal tax) + mission-score XP awards | `Runtime/OperationRewards.cs` | Experimental | `RewardMultiplier` 0.25–4; team award, no individual attribution |
 | Special outcomes — 3 native DEF buildings on capture, 6-vehicle convoy on defend | `Runtime/OperationsManager.cs` | Experimental | 120s faction cooldown, 24-object ceiling; convoy needs a connected road |
 | Acceptance/dismissal and client snapshots (protocol 2) | `Networking/OperationsNet.cs` | Experimental | Own-faction validated IDs and bounded rate limits; no client completion/reward data |
-| Accepted-objective markers, adaptive MIS board, host morale +3 / hostile target faction -3 | `Runtime/OperationMarkers.cs`, `Runtime/OperationMarkerPatch.cs`, `Runtime/OperationZoneHud.cs`, Command MIS presenter | Experimental | Native map marker, cockpit pointer and area ring via the UI-only `MissionPosition` query; cockpit zone readout with enter/leave feedback; markers omit untracked enemies; morale remains host-only |
-| `ADM` solo/host tasking bezel | `Presentation/AdmMfdPanel.cs` | Unverified | Relocated from STR TASKING. `IsSoloAuthority()` re-checked every tick; hosted on an appended vanilla slot (`MfdScreenHost`) so it never evicts or races another bezel owner |
+| Accepted-objective markers, adaptive MIS board, host morale +3 / hostile target faction -3 | `Runtime/OperationZoneHud.cs`, Command MIS presenter | Experimental | The Command MIS presenter reads the host's `ActiveLimit` instead of hardcoding the ceiling; morale remains host-only |
+| Contract markers drawn by the mod — cockpit HUD, tactical map and the vicinity card | `Runtime/ContractHud.cs`, `Runtime/ContractMapHud.cs`, `Runtime/ContractPlate.cs`, `Runtime/OperationZoneHud.cs`, `Domain/ContractMarkerMath.cs`, `Domain/ContractSelection.cs`, `Domain/OperationMarkerCopy.cs` | Pure-tested layout and copy, in-game visuals pending | One vocabulary: `#5 SURVEY THE AFTERMATH` over `RECON · 20.4 KM TO AREA · T-2:41` / `HOLD 42%` / `LAND TO DELIVER`, tone by state (return green, clock ≤2 min amber, else cyan). Cockpit markers project through the game camera, clamp to the frame edge when the target is off screen or behind, and ring the area with 24 dots at the vanilla area-ring scale; map plates counter-scale against zoom and hide with `MapOptions.showObjectives`; the card lists inside-first, then nearest, then `CONTACT LOST`. **No vanilla marker, overlay, label field or `MissionPosition` query is patched, read or fed** — that earlier borrowing version was what came back buggy (pooled markers re-handed between objectives, vanilla's label nudger) |
+| Host task board rendering and reward scale | Command's SET SERVER (`Presentation/MapUi/SettingsServerPage.cs`); `Configuration/DynamicOperationsSettings.cs` | Unverified | The ADM bezel is deleted; the board reads `ISecondaryObjectivesView` and the reward multiplier is published as a host setting row (`HostSettingsTable`) |
 
 Config: `DynamicOperations.Enabled` (**false**), `DynamicOperations.RewardMultiplier` (1.0).
 Full MIS panel also needs `Progression.Enabled` + `Command.Enabled` + `Command.ExpandedMapUi`.
 
 **Needs attention**
+- The mod-drawn markers and the vicinity card are new and unverified in game: check the cockpit
+  marker on screen and clamped at each frame edge (including a target behind the aircraft), the
+  area ring against a vanilla capture ring at the same radius, the map plates at minimum and
+  maximum zoom, `MapOptions.showObjectives` off, the card with an inside contract / a lost
+  contact / three contracts at once, and the enter and leave banners.
 - Default-on gate (see [DYNAMIC_OPERATIONS.md](DYNAMIC_OPERATIONS.md)): single-player
   capture/defense/interdiction + tax/score awards; convoy path & supply behaviour;
   blocked/partial-spawn cleanup; listen-host / remote-client / late-join faction views;
@@ -362,18 +379,21 @@ Full MIS panel also needs `Progression.Enabled` + `Command.Enabled` + `Command.E
 
 ## Chain of command — `high-command`
 
-**Purpose:** generated faction staff, real command posts on the map, VIP convoys and
-economy-only rewards. **Default on.** New module. Publishes `IHighCommandView`; Command's
-STR console adds a COC page and a COMMAND metric. Effects are funds/score only — no vanilla
-AI, spawn or damage behaviour is touched.
+**Purpose:** generated faction staff as living battlefield assets - real command posts on the
+map, VIP convoys, per-commander bonuses and kill pay. **Default on.** New module. Publishes
+`IHighCommandView`; Command's STR console adds a COC page and a COMMAND metric. The board is
+read-only: no orders, marks or spends exist. Effects are funds/score and information only — no
+vanilla AI, spawn or damage behaviour is touched.
 
 | Feature | Where | Status | Notes |
 |---|---|---|---|
 | Deterministic roster — 6 posts, names, traits, bios, Wing Command portraits | `Domain/CommanderGenerator.cs`, `Domain/CommandTree.cs`, `Runtime/HighCommandManager.cs` | Pure suite passes | Seed-stable across host/client; portrait sprite borrowed from Wing Command's generated pilot pool (never destroyed here) |
-| Spawned command posts, last-damage kill credit, succession | `Runtime/HighCommandManager*.cs`, `Patches/HighCommandDamagePatch.cs` | Awaiting in-game validation | Death via `Unit.onDisableUnit`; bounty to the hostile faction that dealt the last damage; destroyed post rebuilt after `PostRespawnSeconds` |
-| VIP convoys, relocation orders, intel fog | `Runtime/HighCommandManager.Assets.cs` | Awaiting in-game validation | 1 transfer/faction, 8 convoys; lead vehicle carries the VIP; 45s intel memory, 2.6/4.2km reveal; unconfirmed enemy posts withhold position, transit and bounty |
-| Protocol-1 snapshot/intents, per-faction scoping, global post ids | `Networking/HighCommandNet.cs` | Awaiting in-game validation | Both staffs listed by identity; global id folds in the faction index; 32-node ceiling; 2s action throttle |
-| STR COC page and third COMMAND metric | `modules/Command/Presentation/StrMfdPanel.Coc.cs`, `Domain/CommandRosterOrder.cs` | Awaiting in-game visual check | Both-faction roster of portrait rows, re-ordered parents-first with trunk guides and a per-post staff-weight track; post count and command points in the roster note; dossier follows the last filled row, with state chip, generated portrait, site, traits and bio; COMMEND / RELOCATE / MARK BOUNTY |
+| Per-commander bonuses (income, kill value, patrol reach, cost of loss) | `Domain/CommandTraits.cs`, `Runtime/HighCommandManager*.cs` | Pure suite passes | Stated in words as a bounded bonus line; every effect is economic or informational; no spawn, retask, damage or AI effect |
+| Spawned command posts, last-damage kill credit, succession | `Runtime/HighCommandManager*.cs`, `Patches/HighCommandDamagePatch.cs` | Awaiting in-game validation | Death via `Unit.onDisableUnit`; kill pay to the hostile faction that dealt the last damage (no marking step); destroyed post rebuilt after `PostRespawnSeconds`, successor disrupted meanwhile |
+| VIP convoys and intel fog | `Runtime/HighCommandManager.Assets.cs` | Awaiting in-game validation | 1 transfer/faction, 8 convoys; lead vehicle carries the VIP; 45s intel memory, 2.6/4.2km reveal; unconfirmed enemy posts withhold position and transit |
+| Map markers for own and confirmed posts | `Presentation/CommandPostMarkers.cs`, `Domain/CommandMarkerPolicy.cs` | Awaiting in-game visual check | One pooled, tier-sized diamond per post the view lists as friendly or known, ringed while under fire, parented to `DynamicMap.iconLayer` and scaled by the map transform; no marker for a dead post, no map gesture, `MapMarkersEnabled` hides the layer only |
+| Protocol-4 read-only snapshot, per-faction scoping, global post ids, bounded staff log | `Networking/HighCommandNet.cs`, `Domain/CommandLog.cs` | Awaiting in-game validation | Both staffs listed by identity; global id folds in the faction index; 32-node ceiling; 6-row/64-char log arrays with an alert flag; the only client intent is a rate-limited refresh; hostile log entries filtered by the observer's sight record |
+| STR COC page and third COMMAND metric | `modules/Command/Presentation/StrMfdPanel.Coc.cs`, `Domain/CommandRosterOrder.cs` | Awaiting in-game visual check | Chain of command in the left column and the selected commander's **personnel file** in the right: form number, photo with reference, name and office, RANK/STATION fields with leader dots, a tilted disposition stamp in the state's ink, share of staff, the bonus as file entries and the service record - or redaction bars while an enemy post is unconfirmed; the card is laid out against the text it holds and grows to fit it. Four-row STAFF LOG under the tree; rows are re-ordered parents-first with trunk guides, a per-post share track and the first bonus entry; UNDER FIRE state and a row flash on change; nothing to press |
 
 Config: `HighCommand.Enabled` (true), `EconomyEnabled` (true), `StipendIntervalSeconds`
 (120), `MaximumStipends` (10), bounties 1500/3000/6000, `MarkedBountyPercent` (50),
@@ -390,6 +410,38 @@ Config: `HighCommand.Enabled` (true), `EconomyEnabled` (true), `StipendIntervalS
 
 ---
 
+## Theater operations — `theater-ops`
+
+**Purpose:** the theatre operations layer behind the CMD page: the faction's main effort,
+funded reinforcement calls, the readiness picture, the replicated read model and the map
+marker. **Default on.** New module. Publishes `ITheaterPriorityView` and
+`ITheaterLogisticsView`; Command's STR console adds the CMD operations board. It never
+selects, spawns, retasks or moves a unit; two postfixes on pure `MissionPosition` queries
+plus the vanilla convoy funding path are its whole world effect.
+
+| Feature | Where | Status | Notes |
+|---|---|---|---|
+| Host main effort — one active objective per faction, seeded from the faction's own objective list | `Runtime/TheaterPriorityService.cs`, `Domain/PriorityDirective.cs` | Pure suite passes | Keyed by `Faction.factionName`, 8-faction/12-option ceilings; hidden objectives never listed; non-finite positions rejected; scene reset clears |
+| Reinforcement delivery bias | `Patches/MissionPositionPriorityPatch.cs` (`TryGetClosestDistance(FactionHQ, Transform, out float)`) | Awaiting in-game validation | `FactionHQ.SortDepots/SortAirbases` pick the depot/airbase nearest the effort, so the next vanilla convoy or AI flight arrives there |
+| Advance bias | `Patches/MissionPositionPriorityPatch.cs` (`TryGetClosestPosition(Unit, out GlobalPosition)`) | Awaiting in-game validation | Ground vehicles, mobile artillery and idle aircraft with no contact head for the effort instead of the nearest objective; clearing restores vanilla on the next query |
+| Funded reinforcement — mission convoy group paid from the shared faction pool | `Runtime/TheaterLogisticsService.cs`, `Domain/ReinforcementGate.cs` | Pure suite passes | Vanilla gates enforced host-side: `preventDonation`, the group's own cooldown (`CmdGetDelaySpawnConvoy`) and `GetCost()` against `factionFunds`; delivery is the vanilla supply queue spawning at the delivery bias above. 8-row ceiling |
+| Readiness — units awaiting rearm, ready/tracked and depleted rearm assets | `Runtime/TheaterLogisticsService.cs` | Awaiting in-game validation | Local read of `RearmMissionController.Rearmers`/`UnitsNeedingRearm` on every peer, capped at 256 assets; unobserved reads as dashes, never zeroes |
+| Host priority replication (protocol 1) | `Networking/TheaterOpsNet.cs` | Roundtrip probed | One state per changed faction; a client query is answered with one state per set faction, throttled per player, bounded at 8 factions and 64 querying players; clients never set or clear it |
+| Effort map marker | `Runtime/TheaterEffortMarker.cs` | Awaiting in-game visual check | Client-local diamond on `DynamicMap.iconLayer`, transform maths mirrored from the game's objective markers; `TheaterOps.MapMarkerEnabled` |
+| STR CMD operations board | `modules/Command/Presentation/StrMfdPanel.Cmd.cs` | Awaiting in-game visual check | MAIN EFFORT card + CLEAR EFFORT, selectable objective rows (read-only on clients), REINFORCE rows with pool/cooldown/affordability, READINESS counters |
+
+Config: `TheaterOps.Enabled` (true), `MapMarkerEnabled` (true). Priority is mission-scoped
+and never persisted.
+
+**Needs attention**
+- In-game acceptance is pending for everything: reinforcement arrival near the effort, the
+  cooldown/affordability copy, the replicated client view (query on join, change broadcast,
+  late join), ground push direction, and the board's layout/input/live visuals.
+- The replicated read model is informational only. When clients get anything actionable,
+  their intents must be host-validated; do not grow a client-driven mutation path.
+
+---
+
 ## Trenches — `trenches`
 
 **Purpose:** natural front-line fieldworks — a Bezier trench curve fitted to Command's ordered
@@ -401,22 +453,26 @@ into a belt, defended by native emplacements and marked on the theater map.
 |---|---|---|---|
 | Domain math — Bezier resampling, owned-side offset planning, traversed densify, run splitting, stage gates | `Domain/TrenchTraceMath.cs` | Stable | Pure C#, verified by unit tests (no UnityEngine types) |
 | Trace intake — ordered contour polylines from Command's control field | `Framework/Contracts/ITerritoryIngress.cs`, `modules/Command/Runtime/TacticalSectorGrid.cs` | Stable | 4096 points / 64 traces, flat buffers, stitched on demand; a pocket ring repeats its first point |
-| Planner — trace to position: resample, owned-side probe, depth search, ground-refused runs | `Runtime/TrenchPlanner.cs` | Unity regression passed | 1200m / 320 stations per position, 5 candidate depths, ≥140m runs, wraparound tangents on closed rings |
+| Planner — trace to position: resample, signed-control side, depth search, ground-refused runs | `Runtime/TrenchPlanner.cs` | Pure regression passed; in-game acceptance pending | 2400m / 320 stations per position, 5 candidate depths (56–104m), ≥140m runs, wraparound tangents on closed rings. Each window is cut by arc length on the raw contour points and resampled at the fixed ~10m curve spacing; the earlier trace-wide resample widened the spacing to `length / 320` (about 150m on a real front) and produced eight-station slabs. Stations are indexed window-locally — the earlier `windowStart + station` mix fitted the second window to the wrong stretch and read stale stations past the buffer's end. The side comes from `TryGetHoldStrength` sign through `TrenchTraceMath.TryResolveInward` (40m→8km probe ladder), never from `SectorControl.Friendly`: a real front is a contested band and the Friendly-only gate placed nothing. Ground counts when the hold is on the faction's side **or inside its contested band** (`HoldOwnSideFloor`), because the field is one value per kilometre cell and a ragged front reads hostile-leaning on its own side. Each refusal is named (`TrenchRefusal`) |
 | Curve model — stations, inward vectors, chosen depths, anchors, belt traces | `Runtime/TrenchLine.cs` | Stable | 64 anchors ≈ 60m apart; support/redoubt/link/spur traces attached as the belt grows |
-| Scene manager — faction scan rotation, spacing, growth ticks, retirement, cleanup | `Runtime/TrenchManager.cs`, `Runtime/TrenchTerrain.cs` | Awaiting in-game validation | Reset order 60; one plan attempt per 2s; 360m/250m centre spacing; 16 positions; host only; terrain probe unchanged (dry, normal ≥ 0.985) |
-| Growth — Scrape → FireTrench → Support (110m trace + links) → Redoubt (220m trace) → Saps | `Runtime/TrenchPlanner.cs` (`TryGrowBelt`) | Unity regression passed | Atomic per stage with retry on refusal; default 45s per tick; the MANPADS waits for the support trace |
-| Combat — 4 native MG/ATGM/MANPADS emplacements, suppression, permanent losses | `Runtime/TrenchGarrison.cs` | Adapter regression passed; in-game acceptance pending | Sparse and spread over the curve anchors behind the parados (the MANPADS at the support centre, once it exists); damage pauses construction 60s; no healing or replacement |
-| Works — infantry-scale vanilla scenery on the ditch line (HESCO/sandbag/light gabion) | `Runtime/TrenchWorks.cs` | Awaiting in-game validation | 8 works/position on the anchor bays; runtime keyword+footprint filter (≤6m) rejects vehicle-scale pieces; selected keys logged once; no match stays ditch-only |
-| Ditch mesh generator — carved earthwork profile conformed to each side's ground | `Visuals/TrenchMeshBuilder.cs` | Unity render passed | Zero terrain edits; shared 10-point cross-section mitred at every traverse corner and capped at both ends; outer berm/skirt sample terrain per side; smooth spoil irregularity; no procedural strongpoints |
+| Scene manager — faction scan rotation, spacing, growth ticks, retirement, cleanup | `Runtime/TrenchManager.cs`, `Runtime/TrenchTerrain.cs` | Awaiting in-game validation | Reset order 60; one plan attempt per 2s; 360m/250m centre spacing; 16 positions; host only; terrain probe is dry ground past the slope floor (`MinimumNormalY`, a hillside digs, a cliff does not). The scan walks one window per attempt and keeps its cursor across the 5s trace refresh — resetting it (the earlier shape) restarted at the first window of the first faction every time, so a long front was never covered. Logs front-trace intake and, at most once a minute, an entirely refusing front with the refusal reason; ownership overrun is the hold floor past the line centre |
+| Growth — Scrape → FireTrench → Support (150m trace + links) → Redoubt (300m trace) → Saps | `Runtime/TrenchPlanner.cs` (`TryGrowBelt`) | Unity regression passed | Atomic per stage with retry on refusal; default 45s per tick; the MANPADS waits for the support trace. The belt sits at those depths on purpose: fire/support/reserve lines are what make a position read as doctrine-dig fieldworks instead of one ribbon |
+| Combat — 4 native MG/ATGM/MANPADS emplacements, suppression, permanent losses | `Runtime/TrenchGarrison.cs` | Adapter regression passed; in-game acceptance pending | Sparse and spread over the curve anchors behind the parados, 7.5m behind the ditch so the sandbag ring clears the earthwork's rear skirt (the MANPADS at the support centre, once it exists); a blocked bay tries the next station along the line before the site refuses; damage pauses construction 60s; no healing or replacement |
+| Works — infantry-scale vanilla scenery on the ditch line (HESCO/sandbag/light gabion) | `Runtime/TrenchWorks.cs` | Awaiting in-game validation | 8 works/position on the anchor bays; even slots on the parapet crest as fire positions, odd slots 7m behind the anchor as shelters clear of the rear skirt; runtime keyword+footprint filter (≤6m) rejects vehicle-scale pieces; selected keys logged once; no match stays ditch-only |
+| Ditch mesh generator — carved earthwork profile conformed to each side's ground | `Visuals/TrenchMeshBuilder.cs` | Unity render passed | Zero terrain edits; shared 10-point cross-section mitred at every traverse corner and capped at both ends; field scale — 1.4–1.9m floor inside a ~13m parapet/spoil/skirt footprint, packed crest ~3.4m and raised spoil aprons ~1.9m, 2m skirts; outer berm/skirt sample terrain per side; smooth spoil irregularity; no procedural strongpoints. `BuildWireBeltMesh` is the procedural wire belt (crossed pickets + two strands) draped 16m in front of the ditch line |
 | Material resolver — procedural ditch cross-section palette | `Visuals/TrenchMaterialResolver.cs` | Unity render passed | No external bundles; native URP lighting; one baked 256px texture per scene |
-| 3-tier flight LOD chunks — the curve densified and traversed into one continuous ditch | `Visuals/TrenchVisualChunk.cs` | Stable | `TrenchTraceMath.DensifyTraversed` cuts rings every 3.5m and lays the 5.5m traverse wave phased by world position, so neighbouring positions continue one pattern. Full 3D + ≤48 obstacle boxes < 250m, berms 250m–1.2km, ground scar 1.2km–3.5km, culled > 3.5km |
-| Tactical map overlay — NATO APP-6 crenellated fire line, strongpoints, stage ticks | `Presentation/TrenchMapOverlay.cs` | Stable | Reset order 61; hooks `DynamicMap.mapImage`; fire line solid, support/redoubt dim, crenellations face the threat and are spaced on the map (not per ditch station, which merged them into a bar); Command's front symbol already shows the contested trace |
+| 3-tier flight LOD chunks — the curve densified and traversed into one continuous ditch | `Visuals/TrenchVisualChunk.cs` | Awaiting in-game flight check | `TrenchTraceMath.DensifyTraversed` lays the 5.5m traverse wave phased by world position, so neighbouring positions continue one pattern. Every LOD is real earthwork at a coarser ring pitch — 3.5m with the wire belt, ≤48 obstacle boxes and colliders < 600m, 9m berms to ~2.6km, a bold 18m ridge silhouette (roughly 8m wide, 1.6m high) out to `LODFarDistance` (12km) — never a flat scar, so the front still reads from cruise altitude |
+| Tactical map overlay — NATO APP-6 crenellated fire line, strongpoints, stage ticks | `Presentation/TrenchMapOverlay.cs` (`TrenchMapGraphic`) | Awaiting in-game visual check | Reset order 61; one Canvas UI mesh layer under `DynamicMap.mapImage`, no baked texture. Curves are drawn in map-local units at a constant screen width (dark under-stroke then ink), so zoom magnifies the curves instead of pixelating blocks; fire line solid, support/redoubt/link/sap traces dimmer and thinner, one strongpoint mark per bay, stage ticks and a crossed-out centre. Rebuilds on a line change, a zoom step or a faction change only; Command's front symbol already shows the contested trace |
 
 Config: `Trenches.Enabled` (true), `GrowthIntervalSeconds` (45s), `MaxNetworks` (16, max 16),
-`LODNearDistance` (250m), `LODFarDistance` (3500m), `ShowOnTacticalMap` (true).
+`LODNearDistance` (600m, 100–2000), `LODFarDistance` (12000m, 3000–24000), `ShowOnTacticalMap` (true).
 
 **Needs attention**
 - In-game flight session verification (all LODs, works placement, map markers, origin shifts, belt trace seams, ground fit on slopes and coastal pockets).
+- Confirm a position actually commits on an active front: the log must show
+  `Front traces for <faction>: N trace(s)` followed by `'<name>' dug at global ...`. A
+  `No position accepted yet: the front was refused (...)` warning means the control field or
+  terrain probe still refuses — read its reason before changing the planner.
 - Native defenders and scenery works use vanilla replication; carved ditches/map marks remain host-local. Verify host/client/late-join targeting, destruction and cleanup in-game.
 - `TrenchWorks` selects infantry scenery at runtime from the game encyclopedia by keyword
   (`hesco`/`sandbag`/`gabion`/`dugout`) and footprint (≤6m); it logs the chosen keys once.
@@ -457,12 +513,81 @@ Config: `Events.Enabled` (true), `RotationGapMinSeconds`/`MaxSeconds` (90/240),
 
 ---
 
-## Weather — absent
+## Campaign mission — `campaign`
 
-Shelved at the user's request. Runtime, debug controls, settings, shader build integration
-and tests were removed from the active build. The planned `archive/` snapshot was never
-completed; Weather survives only as removed-feature notes in the CHANGELOG. No work
-scheduled.
+**Purpose:** ships the authored **Boscali Summer** campaign mission into the game's user
+mission list. **Default on.** New module. One bounded file write at startup; no Harmony
+patches, no scene service, no networking, no Framework contract and no dependency in either
+direction.
+
+| Feature | Where | Status | Notes |
+|---|---|---|---|
+| Mission install — one staged write to `Application.persistentDataPath/Missions/Boscali Summer/Boscali Summer.json` | `Runtime/CampaignMissionInstaller.cs` | Awaiting in-game validation | Idempotent; a marker at `MissionInstallPlan.Revision` skips; a same-named mission with no mod marker is never touched (warning log instead); every failure is a warning and the rest of the mod runs |
+| Overwrite policy — install / update / skip / foreign | `Domain/MissionInstallPlan.cs` | Pure-tested | A missing mission installs, the mod's own older marker updates, the shipped revision skips; `Revision` = 1 |
+| Authored mission — seven acts, both factions joinable, vanilla mission data | `missions/Boscali Summer/Boscali Summer.json` | Authored data | 44 objectives / 112 outcomes / 13 airbases; 16 timed beats, score gates at 200/400/625/850/1225 per faction, 25 spawn waves / 227 units (largest 17); thresholds 625/1225 like the game's own Escalation |
+| Builder + validator | `tools/build-boscali-summer-mission.ps1`, `tools/validate-boscali-summer-mission.ps1` | Tooling | Builder rebuilds the JSON from the built-in Escalation layout and the authored sections; validator is an independent static gate (dangling references, duplicate names, unknown types, bad waits, over-long messages, folder/name contract) |
+
+Config: `Campaign.Enabled` (true). One key; restart to apply.
+
+**Needs attention**
+- In-game acceptance is pending for **every** behaviour: the install path, timeline pacing,
+  spawn placement, balance and the multi-peer path. Only the Release build, the pure tests
+  and a deserialisation check against the real game assembly have run.
+
+---
+
+## Weather — `weather`
+
+**Purpose:** a deterministic front schedule the host drives the vanilla `LevelInfo` sky
+from, the spatial storm field it derives, the `WEA` environment MFD screen with its derived
+forecast and radar scope, cockpit rain and weather HUD, and an opt-in debug
+overlay. **Default on.** Restored module. No Harmony patches and no wire format: every
+value goes through a public `LevelInfo` setter into an existing Mirage sync var, so vanilla
+replicates it and a late joiner already receives it; the storm field is a pure function of
+(seed, mission time, map size, front wind), so it is derived on every peer, never
+transmitted. Reads Fire & Destruction's `IFireSuppressionService` optionally, read-only,
+for the fire-haze term; publishes no contract.
+
+| Feature | Where | Status | Notes |
+|---|---|---|---|
+| Deterministic front schedule — mission-identity seed, cross-fading fronts on the mission clock | `Domain/WeatherModel.cs`, `Domain/WeatherRegime.cs`, `Domain/WeatherState.cs` | Unverified | Six regimes CLEAR → STORM; 5-minute fronts in three-front phases with a 90 s cross-fade |
+| Bounded drive with foreign-write adoption | `Domain/WeatherDrive.cs`, `Runtime/WeatherManager.cs` | Unverified | Five driven channels, one write per channel per 0.25 s; a write it did not make is adopted and held 40 s, so authored `ModifyEnvironment` beats win; conditions and turbulence clamp 0..1, cloud base 450–3400 m; one front at a time |
+| Derived forecast — no wire format | `Domain/WeatherForecast.cs` | Unverified | ≤12 entries from the mission clock alone; identical on host and clients and correct across a late join; `NextChangeSeconds` / `NextRegime` |
+| Spatial storm field — up to 3 advecting cells derived from (seed, mission time, map size, front wind) | `Domain/StormField.cs`, `Domain/StormCell.cs`, `Runtime/WeatherManager.cs` (`CellBuffer`) | Unverified | ≤ `StormField.MaxCells` cells; no in-game run has confirmed the field in a live mission |
+| Supercell renderer — cloud towers and anvils from the shared cell buffer | `Runtime/SupercellRenderer.cs`, `Runtime/WeatherCloudAccess.cs` | Unverified | Reuses the vanilla cloud material read-only; no in-game run has confirmed the render |
+| Rain — falling rain and canopy streaks scaled by local cell influence | `Runtime/WeatherRain.cs`, `Runtime/RainSystem.cs`, `Runtime/CanopyRainOverlay.cs`, `Runtime/RainAudio.cs` | Unverified | `RainEffects`, `RainOnCanopy`, `RainEffectDensity`; `RainAudio` synthesises rain and storm wind in memory; no in-game run has confirmed the visuals or audio |
+| Cockpit weather HUD — warning tier, storm range and bearing, wind and cloud base | `Presentation/WeatherHud.cs` | Unverified | `Hud`; no in-game run has confirmed it |
+| `WEA` radar scope — storm cells painted by range | `Presentation/WeatherRadarPage.cs` | Unverified | `RadarRangeKm` sets the initial range, cycled on the scope itself; no in-game run has confirmed it |
+| `WEA` hosted MFD screen — environment panel and forecast | `Presentation/WeatherMfdPanel.cs` | Unverified | Reset order 65; hosted through `MfdScreenHost` like `EVN`, no bezel claim; render not yet confirmed |
+| Opt-in debug overlay (`DebugControls`, `F11` + Ctrl) | `Runtime/WeatherDebugOverlay.cs` | Unverified | Reset order 66; can aim the sky directly and release back to the schedule |
+| Fire-haze term — ground fires thicken the sky | `Runtime/WeatherManager.cs` | Unverified | Optional read-only `IFireSuppressionService.ActiveFireCount`, at most +0.15 conditions and never a storm from a clear day |
+
+Config: `Weather.Enabled` (true), `ForecastSteps` (8, 2–12), `ForecastStepMinutes` (3,
+0.5–30), `DebugControls` (false), `DebugKey` (F11), `DebugKeyRequiresCtrl` (true),
+`RainEffects` (true), `RainOnCanopy` (true), `RainAudio` (true), `RainEffectDensity`
+(1, 0–1), `Hud` (true), `Supercells` (true), `SupercellDetail` (0.6, 0–1), `RadarRangeKm`
+(40, 10–200), `ReplaceVanillaClouds` (false), `CloudSortFudge` (-100, -5000–5000).
+
+**How the cells relate to the vanilla sky**
+The cells always draw, but two settings decide who owns the local sky.
+`CloudSortFudge` is the sort bias between a cell and the vanilla deck; Unity draws lower
+values in front, so the default negative puts the storm in front. The first implementation
+used a large positive value and sorted every tower *behind* the deck, which is a defect
+worth remembering. `ReplaceVanillaClouds` takes the deck away entirely: it sets
+`Renderer.enabled = false` on the masked cloud plane and the near puff emitter only, so
+`CloudLayer` keeps running and vanilla still drives the sun and moon cloud cookies,
+`GetCloudOcclusion`, the fog and the distant horizon band. It is off by default and
+unverified in both states; hiding the deck with the cells disabled is prevented by gating on
+`Supercells` and `Enabled`.
+
+**Needs attention**
+- In-game acceptance is pending for **every behaviour**: the `WEA` panel install and
+  layout, the storm field and its supercell, rain, HUD and radar presentation, the ramp in
+  a live mission, the fire-haze read, and client display on a remote peer. No in-game run
+  has been recorded; nothing here is a flight test.
+- The cloud hijack and the sort bias have never been looked at. Until they have, treat both
+  settings as experiments: the right bias and the question of whether the cells alone can
+  carry a sky are look-at-it questions.
 
 ---
 
@@ -480,10 +605,11 @@ scheduled.
 ### Test coverage (pure suite)
 
 Present: Command (`CommandTests`, `FrontlineTests`, `MfdPanelTests`,
-`MfdSecondaryObjectivesTests`, `StrPanelTests`), DynamicOperations (`OperationTests`),
-FireAndDestruction (`ImpactScorchTests`), Progression (`ProgressionTests`), QoL
-(`CameraTests`, `ObservationTests`), Radio (`RadioTests`), Support
-(`SupportTests`), UrbanCombat (`TroopDeploymentTests`), Framework, Architecture boundary.
+`MfdSecondaryObjectivesTests`, `StrPanelTests`), DynamicOperations (`OperationTests`,
+`OperationDirectorTests`), FireAndDestruction (`ImpactScorchTests`), Progression
+(`ProgressionTests`), QoL (`CameraTests`, `ObservationTests`), Radio (`RadioTests`), Support
+(`SupportTests`), UrbanCombat (`TroopDeploymentTests`), Campaign
+(`MissionInstallPlanTests`), Weather (`WeatherTests`, `StormTests`), Framework, Architecture boundary.
 `BoscaliSummer.PatchProbe` validates Harmony targets / private fields / wire contracts
 against the installed `Assembly-CSharp.dll`.
 
@@ -496,7 +622,7 @@ map-overlay grid test beyond `FrontlineTests`, garrison lifecycle only via
 ## Consolidated doc/code drift (fix list)
 
 Resolved in the September reorg: perk count/cost (README + DESIGN_NOTES + ROADMAP now say
-nine perks / twelve points), STR-vs-THEATER-tab (DESIGN_NOTES rewritten), Rod from God
+the current board size and total), STR-vs-THEATER-tab (DESIGN_NOTES rewritten), Rod from God
 default (DESIGN_NOTES no longer says "default-off"), fire caps (ARCHITECTURE now 32 sites /
 ≤3 generations; the README budgets table was dropped in favour of ARCHITECTURE), Flare
 Barrage (now in the README action list, with a note that it shares the Satellite Scan
@@ -512,7 +638,8 @@ Resolved in the 2026-09-14 quality pass:
 3. **COM copy** — STR is the bezel; `ITheaterPage` gone; DESIGN_NOTES matches.
 4. **Fire caps** — MODULE_STATUS no longer claims 24 sites / ≤2 generations.
 5. **CRYPTO** — copy does not claim a host cooldown discount.
-6. **STR empty theater** — dash, not 50%. CMD is a placeholder; doctrine/Sector Focus removed.
+6. **STR empty theater** — dash, not 50%. CMD rebuilt as the TheaterOps intent board;
+   doctrine/Sector Focus stay removed.
 7. **EW encampment UI** — gone; wire enum value 2 kept.
 
 ## Refactor / cleanup debt
@@ -529,5 +656,5 @@ Resolved in the 2026-09-14 quality pass:
 2. **Command STR + frontline overlay** — recently made functional; needs a live theater.
 3. **Dynamic operations** — nothing proven in a mission; default-off until it is.
 4. **Air assault + Chimera paradrop** — visual/insertion sequences unconfirmed.
-5. **Multiplayer** — Support protocol 7 / Progression protocol 3, late-join for garrisons and
+5. **Multiplayer** — Support protocol 11 / Progression protocol 3, late-join for garrisons and
    dynamic ops, listen-host vs dedicated.

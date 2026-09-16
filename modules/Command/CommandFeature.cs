@@ -39,9 +39,12 @@ namespace BoscaliSummer.Features.Command
             // The MAP bezel resolves this late to switch the overlay's own layers; it never
             // reaches for the overlay by searching the scene.
             context.AddService<ComMapOverlay>(overlay);
+            ThreatMapOverlay threats = context.AddSceneService<ThreatMapOverlay>(54);
+            context.AddService<ThreatMapOverlay>(threats);
             StrMfdPanel strategic = context.AddSceneService<StrMfdPanel>(56);
             context.AddSceneService<MapUiManager>(57);
-            context.AddSceneService<SettingsMfdPanel>(58).Configure(context.Settings.Command, context.Logger, overlay);
+            context.AddSceneService<SettingsMfdPanel>(58)
+                .Configure(context.Settings.Command, context.Logger, overlay, context.HostSettings);
             context.AddSceneService<FactionResourceRecorder>(59);
 
             TerritoryControlView territory = context.AddSceneService<TerritoryControlView>(52);
@@ -49,6 +52,7 @@ namespace BoscaliSummer.Features.Command
             context.AddService<ITerritoryIngress>(territory);
             manager.Configure(context.Logger);
             overlay.Configure(context.Settings.Command, manager, compat, context.Logger, territory);
+            threats.Configure(context.Settings.Command, context.Logger);
             strategic.Configure(context.Settings.Command, manager, overlay, context.Logger);
         }
     }

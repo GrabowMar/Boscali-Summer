@@ -1,6 +1,8 @@
 using System;
 using System.Reflection;
 using System.Collections.Generic;
+using BoscaliSummer.Features.Support.Domain;
+using BoscaliSummer.Features.Support.Domain.Orbital;
 using BoscaliSummer.Features.Support.Runtime;
 using BoscaliSummer.Runtime;
 using Mirage;
@@ -40,10 +42,14 @@ namespace BoscaliSummer.Features.Support.Networking
     internal sealed class SupportNet : MonoBehaviour
     {
         /// <summary>
-        /// Protocol 6 replaces orbital ground tracks with station-keeping satellites and
-        /// their transfer state. Older peers must not interpret fleet or hack ids.
+        /// Protocol 8 added program investment and EW posture. Protocol 9 replaces
+        /// station-keeping satellites with orbital elements (payload, regime, seed, mission
+        /// clock, battery, magazine) plus undisclosed foreign satellites. Protocol 10 adds the
+        /// base-of-operations ranks (fortification doctrine and insertion rigging) to the
+        /// snapshot and the upgrade command. Older peers must not interpret fleet, hack,
+        /// program or garrison ids.
         /// </summary>
-        internal const byte ProtocolVersion = 7;
+        internal const byte ProtocolVersion = 11;
 
         private const float QueryInterval = 0.4f;
         private const int MaximumQueries = 64;
@@ -121,7 +127,7 @@ namespace BoscaliSummer.Features.Support.Networking
             if (GameAccess.IsServer() && GameManager.GetLocalPlayer<Player>(out Player local) && local != null)
             {
                 SupportResult result = manager.Evaluate(local, message);
-                manager.ReceiveResult(Reply(message, result, manager.ServerCooldown, local));
+                manager.ReceiveResult(Reply(message, result, manager.ServerCooldownFor(local), local));
                 return;
             }
 
@@ -167,7 +173,7 @@ namespace BoscaliSummer.Features.Support.Networking
                 !sender.TryGetPlayer<Player>(out Player player) || player == null)
                 return;
             SupportResult result = manager.Evaluate(player, request);
-            sender.Send(Reply(request, result, manager.ServerCooldown, player));
+            sender.Send(Reply(request, result, manager.ServerCooldownFor(player), player));
         }
 
         private void ReceiveResult(INetworkPlayer _, SupportResultMessage result)
@@ -175,7 +181,7 @@ namespace BoscaliSummer.Features.Support.Networking
             if (result.Protocol == ProtocolVersion) manager.ReceiveResult(result);
         }
 
-        // ---- Fleet and infrastructure ------------------------------------------------------
+        // ---- Station and infrastructure ----------------------------------------------------
 
         public void QueryOps()
         {
@@ -354,66 +360,109 @@ namespace BoscaliSummer.Features.Support.Networking
                 w.WriteByte(v.Protocol);
                 w.WritePackedInt32(v.RequestId);
                 w.WriteByte(v.Result);
-                int count = ClampCount(v.SatelliteCount, v.SatelliteIds);
-                w.WriteByte((byte)count);
-                for (int i = 0; i < count; i++)
+                bool active = v.PlatformActive && OpsStateMessageBuffers.ValidArrays(v);
+                w.WriteByte(active ? (byte)1 : (byte)0);
+                if (active)
                 {
-                    w.WriteByte(v.SatelliteIds[i]);
-                    w.WriteByte(v.SatelliteRoles[i]);
-                    w.WriteByte(v.SatelliteAltitudes[i]);
-                    w.WriteByte(v.SatelliteStates[i]);
-                    w.WriteByte(v.SatelliteFuel[i]);
-                    w.WriteSingle(v.StationXs[i]);
-                    w.WriteSingle(v.StationZs[i]);
-                    w.WriteSingle(v.OriginXs[i]);
-                    w.WriteSingle(v.OriginZs[i]);
-                    w.WriteSingle(v.TransitLeft[i]);
-                    w.WriteSingle(v.TransitTotal[i]);
+                    for (int i = 0; i < OrbitalPlatform.CellCount; i++) w.WriteByte(v.PlatformModules[i]);
+                    for (int i = 0; i < OrbitalPlatform.CellCount; i++) w.WriteByte(v.PlatformOffline[i]);
+                    w.WriteByte(v.PlatformRegime);
+                    w.WritePackedInt32(v.PlatformSeed);
+                    w.WriteSingle(v.PlatformClock);
+                    w.WriteByte(v.PlatformHold);
+                    w.WriteSingle(v.PlatformEnergy);
+                    w.WriteSingle(v.PlatformFuel);
+                    w.WriteByte(v.PlatformRods);
+                    w.WriteByte(v.PlatformBrownout ? (byte)1 : (byte)0);
+                    w.WriteByte(v.PlatformPending);
+                    w.WriteByte(v.PlatformPendingCell);
+                    w.WriteSingle(v.PlatformDockIn);
+                    for (int i = 0; i < PlatformAbilities.Count; i++) w.WriteSingle(v.PlatformRecharge[i]);
+                    w.WriteSingle(v.PlatformElapsed);
+                    w.WriteByte(v.PlatformNotice);
+                    w.WriteByte(v.PlatformNoticeCell);
+                    w.WriteByte(v.PlatformNoticeSerial);
+                }
+                int foreignCount = Math.Max(0, Math.Min((int)v.ForeignCount, Math.Min(SpaceOperations.MaximumForeign,
+                    Math.Min(v.ForeignRegimes?.Length ?? 0, Math.Min(v.ForeignSeeds?.Length ?? 0,
+                        Math.Min(v.ForeignClocks?.Length ?? 0, v.ForeignLayouts?.Length ?? 0))))));
+                w.WriteByte((byte)foreignCount);
+                for (int i = 0; i < foreignCount; i++)
+                {
+                    w.WriteByte(v.ForeignRegimes[i]);
+                    w.WritePackedInt32(v.ForeignSeeds[i]);
+                    w.WriteSingle(v.ForeignClocks[i]);
+                    w.WritePackedInt32(v.ForeignLayouts[i]);
                 }
                 w.WriteByte(v.Sigint); w.WriteByte(v.Crypto);
                 w.WriteByte(v.Disrupt); w.WriteByte(v.Ew);
                 w.WriteByte(v.EwAssetState);
+                w.WriteByte(v.EwPosture);
+                w.WriteSingle(v.EwX);
+                w.WriteSingle(v.EwZ);
+                for (int i = 0; i < OpsProgramLedger.ProgramCount; i++)
+                    w.WriteByte(v.ProgramTiers != null && i < v.ProgramTiers.Length ? v.ProgramTiers[i] : (byte)0);
+                w.WriteByte(v.SpecOpsTokens); w.WriteByte(v.IntelTokens);
+                w.WriteByte(v.SpecOpsProgress); w.WriteByte(v.IntelProgress);
+                for (int i = 0; i < OpsGarrison.UpgradeCount; i++)
+                    w.WriteByte(v.GarrisonLevels != null && i < v.GarrisonLevels.Length ? v.GarrisonLevels[i] : (byte)0);
             });
             SetReader<OpsStateMessage>(r =>
             {
                 byte protocol = r.ReadByte();
-                var message = new OpsStateMessage
-                {
-                    Protocol = protocol,
-                    SatelliteIds = new byte[SpaceOperations.MaximumSatellites],
-                    SatelliteRoles = new byte[SpaceOperations.MaximumSatellites],
-                    SatelliteAltitudes = new byte[SpaceOperations.MaximumSatellites],
-                    SatelliteStates = new byte[SpaceOperations.MaximumSatellites],
-                    SatelliteFuel = new byte[SpaceOperations.MaximumSatellites],
-                    StationXs = new float[SpaceOperations.MaximumSatellites],
-                    StationZs = new float[SpaceOperations.MaximumSatellites],
-                    OriginXs = new float[SpaceOperations.MaximumSatellites],
-                    OriginZs = new float[SpaceOperations.MaximumSatellites],
-                    TransitLeft = new float[SpaceOperations.MaximumSatellites],
-                    TransitTotal = new float[SpaceOperations.MaximumSatellites]
-                };
+                var message = OpsStateMessageBuffers.Create();
+                message.Protocol = protocol;
                 if (protocol != ProtocolVersion) return message;
                 message.RequestId = r.ReadPackedInt32();
                 message.Result = r.ReadByte();
-                int count = Math.Min((int)r.ReadByte(), SpaceOperations.MaximumSatellites);
-                message.SatelliteCount = (byte)count;
-                for (int i = 0; i < count; i++)
+                // A flag or count past its bound is a malformed or hostile message: stop reading
+                // rather than consume bytes that belong to later fields.
+                int active = r.ReadByte();
+                if (active > 1) return new OpsStateMessage { Protocol = 0 };
+                message.PlatformActive = active == 1;
+                if (message.PlatformActive)
                 {
-                    message.SatelliteIds[i] = r.ReadByte();
-                    message.SatelliteRoles[i] = r.ReadByte();
-                    message.SatelliteAltitudes[i] = r.ReadByte();
-                    message.SatelliteStates[i] = r.ReadByte();
-                    message.SatelliteFuel[i] = r.ReadByte();
-                    message.StationXs[i] = r.ReadSingle();
-                    message.StationZs[i] = r.ReadSingle();
-                    message.OriginXs[i] = r.ReadSingle();
-                    message.OriginZs[i] = r.ReadSingle();
-                    message.TransitLeft[i] = r.ReadSingle();
-                    message.TransitTotal[i] = r.ReadSingle();
+                    for (int i = 0; i < OrbitalPlatform.CellCount; i++) message.PlatformModules[i] = r.ReadByte();
+                    for (int i = 0; i < OrbitalPlatform.CellCount; i++) message.PlatformOffline[i] = r.ReadByte();
+                    message.PlatformRegime = r.ReadByte();
+                    message.PlatformSeed = r.ReadPackedInt32();
+                    message.PlatformClock = r.ReadSingle();
+                    message.PlatformHold = r.ReadByte();
+                    message.PlatformEnergy = r.ReadSingle();
+                    message.PlatformFuel = r.ReadSingle();
+                    message.PlatformRods = r.ReadByte();
+                    message.PlatformBrownout = r.ReadByte() != 0;
+                    message.PlatformPending = r.ReadByte();
+                    message.PlatformPendingCell = r.ReadByte();
+                    message.PlatformDockIn = r.ReadSingle();
+                    for (int i = 0; i < PlatformAbilities.Count; i++) message.PlatformRecharge[i] = r.ReadSingle();
+                    message.PlatformElapsed = r.ReadSingle();
+                    message.PlatformNotice = r.ReadByte();
+                    message.PlatformNoticeCell = r.ReadByte();
+                    message.PlatformNoticeSerial = r.ReadByte();
+                }
+                int foreignCount = r.ReadByte();
+                if (foreignCount > SpaceOperations.MaximumForeign) return new OpsStateMessage { Protocol = 0 };
+                message.ForeignCount = (byte)foreignCount;
+                for (int i = 0; i < foreignCount; i++)
+                {
+                    message.ForeignRegimes[i] = r.ReadByte();
+                    message.ForeignSeeds[i] = r.ReadPackedInt32();
+                    message.ForeignClocks[i] = r.ReadSingle();
+                    message.ForeignLayouts[i] = r.ReadPackedInt32();
                 }
                 message.Sigint = r.ReadByte(); message.Crypto = r.ReadByte();
                 message.Disrupt = r.ReadByte(); message.Ew = r.ReadByte();
                 message.EwAssetState = r.ReadByte();
+                message.EwPosture = r.ReadByte();
+                message.EwX = r.ReadSingle();
+                message.EwZ = r.ReadSingle();
+                for (int i = 0; i < OpsProgramLedger.ProgramCount; i++)
+                    message.ProgramTiers[i] = r.ReadByte();
+                message.SpecOpsTokens = r.ReadByte(); message.IntelTokens = r.ReadByte();
+                message.SpecOpsProgress = r.ReadByte(); message.IntelProgress = r.ReadByte();
+                for (int i = 0; i < OpsGarrison.UpgradeCount; i++)
+                    message.GarrisonLevels[i] = r.ReadByte();
                 return message;
             });
             SetWriter<CyberEffectMessage>((w, v) =>
@@ -443,12 +492,6 @@ namespace BoscaliSummer.Features.Support.Networking
             MessagePacker.RegisterMessage<CyberEffectMessage>();
             MessagePacker.RegisterMessage<SupportRequestMessage>();
             MessagePacker.RegisterMessage<SupportResultMessage>();
-        }
-
-        private static int ClampCount(byte count, byte[] ids)
-        {
-            if (ids == null || ids.Length == 0) return 0;
-            return Math.Min((int)count, Math.Min(SpaceOperations.MaximumSatellites, ids.Length));
         }
 
         private static void SetWriter<T>(Action<NetworkWriter, T> writer) =>

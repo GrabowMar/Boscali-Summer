@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using BoscaliSummer.Features.Support.Domain;
+using BoscaliSummer.Features.Support.Domain.Orbital;
 using NuclearOption.Networking;
 using UnityEngine;
 
@@ -7,37 +9,71 @@ namespace BoscaliSummer.Features.Support.Runtime
 {
     internal enum OpsCommand : byte
     {
+        /// <summary>Launch the core (Arg = <see cref="ModuleKind.Core"/>, Arg2 = orbit band) or a
+        /// module (Arg = <see cref="ModuleKind"/>, Arg2 = grid cell).</summary>
         Launch = 0,
-        Move = 1,
-        Recall = 2,
+
+        // 1 was the station-keeping transfer; retired with the constellation model.
+
+        /// <summary>Jettison the module in a grid cell; the core deorbits the station. Arg = cell.</summary>
+        Jettison = 2,
+
         Upgrade = 3,
         EwDeploy = 4,
-        EwReposition = 5
+        EwReposition = 5,
+
+        /// <summary>Fund the next tier of a SPEC OPS or INTEL program. Arg = <see cref="OpsProgramId"/>.</summary>
+        Invest = 6,
+
+        /// <summary>Retune the faction's EW station. Arg = <see cref="EwPosture"/>.</summary>
+        EwRetune = 7,
+
+        /// <summary>Raise the base of operations one rank. Arg = <see cref="GarrisonUpgradeId"/>.</summary>
+        GarrisonUpgrade = 8,
+
+        /// <summary>Phasing burn: the station's next pass begins in seconds.</summary>
+        Rephase = 9,
+
+        /// <summary>Raise or lower the station. Arg = target orbit band.</summary>
+        OrbitShift = 10,
+
+        /// <summary>Launch a cargo vehicle that refills fuel and rods.</summary>
+        Resupply = 11
     }
 
     /// <summary>
-    /// Per-faction orbital and cyber systems. The host owns every mutation and charge; a
-    /// client keeps the same model objects and rebuilds them from snapshots, so station
-    /// coverage is computed locally while authority stays with the server. At most eight
-    /// factions, four satellites and four facilities are tracked; scene teardown clears it.
+    /// Per-faction orbital, cyber and program systems. The host owns every mutation and
+    /// charge; a client keeps the same model objects and rebuilds them from snapshots, so pass
+    /// geometry is computed locally while authority stays with the server. At most eight
+    /// factions, one station each, four facilities and six programs are tracked, plus up to
+    /// four foreign stations a client has been told about; scene teardown clears it.
     /// </summary>
     internal sealed class SpaceOperations
     {
         public const int MaximumFactions = 8;
-        public const int MaximumSatellites = Constellation.MaximumSatellites;
+        public const int MaximumForeign = 4;
+        public const double DebrisOfflineSeconds = 45.0;
+        private const float DebrisMinimumSeconds = 360f;
+        private const float DebrisMaximumSeconds = 600f;
 
         private sealed class FactionSystems
         {
-            public Constellation Constellation;
+            public readonly OrbitalPlatform Platform = new OrbitalPlatform();
             public readonly InfoNetwork Info = new InfoNetwork();
+            public readonly OpsProgramLedger Programs = new OpsProgramLedger();
+            public readonly OpsGarrison Garrison = new OpsGarrison();
         }
 
         private readonly Dictionary<FactionHQ, FactionSystems> systems = new Dictionary<FactionHQ, FactionSystems>();
+        private readonly List<ForeignPlatform> foreign = new List<ForeignPlatform>(MaximumForeign);
 
-        public Constellation ConstellationFor(FactionHQ hq)
+        /// <summary>Other factions' stations as the last snapshot described them.</summary>
+        public IReadOnlyList<ForeignPlatform> Foreign => foreign;
+
+        public OrbitalPlatform PlatformFor(FactionHQ hq)
         {
             FactionSystems state = Get(hq);
-            return state == null ? null : state.Constellation;
+            return state == null ? null : state.Platform;
         }
 
         public InfoNetwork InfoFor(FactionHQ hq)
@@ -46,49 +82,90 @@ namespace BoscaliSummer.Features.Support.Runtime
             return state == null ? null : state.Info;
         }
 
-        public void Tick(float deltaTime, bool hostAuthoritative)
+        public OpsProgramLedger ProgramsFor(FactionHQ hq)
         {
-            foreach (FactionSystems state in systems.Values)
-                state.Constellation.Tick(deltaTime, hostAuthoritative);
+            FactionSystems state = Get(hq);
+            return state == null ? null : state.Programs;
+        }
+
+        /// <summary>The faction's base-of-operations ranks; the host owns them.</summary>
+        public OpsGarrison GarrisonFor(FactionHQ hq)
+        {
+            FactionSystems state = Get(hq);
+            return state == null ? null : state.Garrison;
+        }
+
+        /// <summary>
+        /// Host tick: station docking, power, drag and debris, and program accrual. Clients only
+        /// mirror all of it. Debris rolls use Unity's random source; the model decides the outcome.
+        /// </summary>
+        public void TickHost(double now, float deltaTime, bool theaterDaylight, in OrbitClock clock, bool debris,
+                             Action<FactionHQ, OrbitalPlatform> onDebris)
+        {
+            foreach (KeyValuePair<FactionHQ, FactionSystems> entry in systems)
+            {
+                OrbitalPlatform platform = entry.Value.Platform;
+                platform.Tick(now, deltaTime, theaterDaylight, clock);
+                entry.Value.Programs.Tick(deltaTime);
+                if (!platform.Exists || !debris) continue;
+                if (platform.NextDebris <= 0.0)
+                {
+                    platform.NextDebris = now + UnityEngine.Random.Range(DebrisMinimumSeconds, DebrisMaximumSeconds);
+                    continue;
+                }
+                if (now < platform.NextDebris) continue;
+                platform.NextDebris = now + UnityEngine.Random.Range(DebrisMinimumSeconds, DebrisMaximumSeconds);
+                if (platform.StrikeDebris(UnityEngine.Random.Range(0, 1 << 16), now, DebrisOfflineSeconds))
+                    onDebris?.Invoke(entry.Key, platform);
+            }
         }
 
         public void Clear()
         {
             systems.Clear();
+            foreign.Clear();
         }
 
         // ---- Host commands -----------------------------------------------------------------
-
-        public OrbitalFailure Deploy(FactionHQ hq, SatelliteRole role, byte altitude, float x, float z,
-                                     int capacity, float launchTransitSeconds, out Satellite satellite)
-        {
-            satellite = null;
-            FactionSystems state = Get(hq);
-            if (state == null) return OrbitalFailure.UnknownSatellite;
-            return state.Constellation.TryDeploy(role, altitude, x, z, capacity, launchTransitSeconds,
-                out satellite, out OrbitalFailure failure) ? OrbitalFailure.None : failure;
-        }
-
-        public OrbitalFailure Retask(FactionHQ hq, byte satelliteId, float x, float z, out float fuelCost)
-        {
-            fuelCost = 0f;
-            FactionSystems state = Get(hq);
-            if (state == null) return OrbitalFailure.UnknownSatellite;
-            return state.Constellation.TryRetask(satelliteId, x, z, out _, out fuelCost,
-                out OrbitalFailure failure) ? OrbitalFailure.None : failure;
-        }
-
-        public bool Recall(FactionHQ hq, byte satelliteId, out Satellite satellite)
-        {
-            satellite = null;
-            FactionSystems state = Get(hq);
-            return state != null && state.Constellation.TryRecall(satelliteId, out satellite);
-        }
 
         public bool Upgrade(FactionHQ hq, FacilityId facility)
         {
             FactionSystems state = Get(hq);
             return state != null && state.Info.TryUpgrade(facility);
+        }
+
+        public bool Invest(FactionHQ hq, OpsProgramId program)
+        {
+            FactionSystems state = Get(hq);
+            return state != null && state.Programs.TryInvest(program);
+        }
+
+        public bool UpgradeGarrison(FactionHQ hq, GarrisonUpgradeId upgrade)
+        {
+            FactionSystems state = Get(hq);
+            return state != null && state.Garrison.TryUpgrade(upgrade);
+        }
+
+        /// <summary>Host: up to <see cref="MaximumForeign"/> stations belonging to anyone but
+        /// <paramref name="hq"/>, for the sky, the map and ENEMY ACTIVITY. Modules are not
+        /// disclosed, only which cells are occupied.</summary>
+        public int CollectForeign(FactionHQ hq, double now, byte[] regimes, int[] seeds, float[] clocks, int[] layouts)
+        {
+            int count = 0;
+            foreach (KeyValuePair<FactionHQ, FactionSystems> entry in systems)
+            {
+                if (entry.Key == hq) continue;
+                OrbitalPlatform platform = entry.Value.Platform;
+                if (!platform.Exists) continue;
+                if (count >= MaximumForeign || count >= regimes.Length || count >= seeds.Length ||
+                    count >= clocks.Length || count >= layouts.Length) return count;
+                regimes[count] = platform.Regime;
+                seeds[count] = platform.Seed;
+                clocks[count] = (float)(now - platform.CycleStart);
+                layouts[count] = platform.LayoutMask();
+                count++;
+            }
+            return count;
         }
 
         // ---- Client mirror -----------------------------------------------------------------
@@ -99,40 +176,37 @@ namespace BoscaliSummer.Features.Support.Runtime
             if (state != null) state.Info.Mirror(sigint, crypto, disrupt, ew);
         }
 
-        public void Mirror(FactionHQ hq, byte id, SatelliteRole role, byte altitude,
-                           float stationX, float stationZ, float originX, float originZ,
-                           float transitLeft, float transitTotal, float fuel, SatelliteState satelliteState)
+        public void MirrorPrograms(FactionHQ hq, byte[] tiers, byte specOpsTokens, byte intelTokens,
+                                   byte specOpsProgress, byte intelProgress)
         {
             FactionSystems state = Get(hq);
-            if (state == null) return;
-            if (state.Constellation.Satellites.Count >= MaximumSatellites &&
-                state.Constellation.Find(id) == null) return;
-            state.Constellation.Mirror(id, role, altitude, stationX, stationZ, originX, originZ,
-                transitLeft, transitTotal, fuel, satelliteState);
+            if (state != null) state.Programs.Mirror(tiers, specOpsTokens, intelTokens, specOpsProgress, intelProgress);
         }
 
-        public void RemoveById(FactionHQ hq, byte id)
+        public void MirrorGarrison(FactionHQ hq, byte[] levels)
         {
             FactionSystems state = Get(hq);
-            if (state != null) state.Constellation.RemoveById(id);
+            if (state != null) state.Garrison.Mirror(levels);
         }
 
-        /// <summary>Mirror teardown: drop satellites the host no longer lists.</summary>
-        public void RemoveUnlisted(FactionHQ hq, byte[] ids, int count)
+        public void MirrorPlatform(FactionHQ hq, PlatformSnapshot snapshot, double now)
         {
-            Constellation constellation = ConstellationFor(hq);
-            if (constellation == null) return;
-            for (int i = constellation.Satellites.Count - 1; i >= 0; i--)
+            FactionSystems state = Get(hq);
+            if (state != null) state.Platform.Mirror(snapshot, now);
+        }
+
+        public void MirrorForeign(byte[] regimes, int[] seeds, float[] clocks, int[] layouts, int count, double now)
+        {
+            int bounded = Math.Min(Math.Min(count, MaximumForeign), Math.Min(regimes?.Length ?? 0,
+                Math.Min(seeds?.Length ?? 0, Math.Min(clocks?.Length ?? 0, layouts?.Length ?? 0))));
+            bounded = Math.Max(0, bounded);
+            while (foreign.Count > bounded) foreign.RemoveAt(foreign.Count - 1);
+            for (int i = 0; i < bounded; i++)
             {
-                byte id = constellation.Satellites[i].Id;
-                bool listed = false;
-                for (int j = 0; j < count && ids != null && j < ids.Length; j++)
-                {
-                    if (ids[j] != id) continue;
-                    listed = true;
-                    break;
-                }
-                if (!listed) constellation.RemoveById(id);
+                if (!OrbitRegimes.Valid(regimes[i]) || float.IsNaN(clocks[i]) || float.IsInfinity(clocks[i])) continue;
+                if (i >= foreign.Count) foreign.Add(new ForeignPlatform());
+                foreign[i].Mirror(regimes[i], seeds[i], now - clocks[i],
+                    (ushort)(layouts[i] & ((1 << OrbitalPlatform.CellCount) - 1)));
             }
         }
 
@@ -141,15 +215,14 @@ namespace BoscaliSummer.Features.Support.Runtime
             if (hq == null) return null;
             if (systems.TryGetValue(hq, out FactionSystems state)) return state;
             if (systems.Count >= MaximumFactions) return null;
-            float radius = OrbitalBounds.Radius();
-            if (radius <= 0f) return null;
-            state = new FactionSystems { Constellation = new Constellation(radius) };
+            if (OrbitalBounds.Radius() <= 0f) return null;
+            state = new FactionSystems();
             systems.Add(hq, state);
             return state;
         }
     }
 
-    /// <summary>Map extents used to size the schematic. Zero when no map is loaded.</summary>
+    /// <summary>Map extents. Zero when no map is loaded.</summary>
     internal static class OrbitalBounds
     {
         public static float Radius()

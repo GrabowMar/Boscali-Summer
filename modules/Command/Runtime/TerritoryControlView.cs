@@ -81,6 +81,15 @@ namespace BoscaliSummer.Features.Command.Runtime
                 grid.GetSectorControl(c, r) == SectorControl.Friendly;
         }
 
+        public bool TryGetHoldStrength(int factionId, float x, float z, out float hold)
+        {
+            hold = 0f;
+            TacticalSectorGrid grid = ReadFaction(factionId);
+            if (grid == null || !grid.WorldToCell(x, z, out int c, out int r)) return false;
+            hold = grid.GetSectorHoldStrength(c, r);
+            return !float.IsNaN(hold) && !float.IsInfinity(hold);
+        }
+
         public void ResetForScene() => fields.Clear();
         private void OnDestroy() => ResetForScene();
     }

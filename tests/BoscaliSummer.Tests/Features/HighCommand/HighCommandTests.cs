@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Features.HighCommand.Domain;
+using BoscaliSummer.Framework.Contracts;
 
 namespace BoscaliSummer.Tests.Features.HighCommand
 {
@@ -10,9 +11,11 @@ namespace BoscaliSummer.Tests.Features.HighCommand
         {
             GenerationIsDeterministicAndBounded();
             PromotionMovesTheNextInLine();
-            MarksAreBoundedAndToggled();
             CohesionTracksTheLivingRoster();
+            BonusesStateWhatACommanderIsWorth();
             EconomyPaysOnlyWhatItShould();
+            StaffLogKeepsItsMemoryBounded();
+            MapMarkersFollowTheFog();
             SnapshotRulesRejectMalformedRows();
         }
 
@@ -48,6 +51,7 @@ namespace BoscaliSummer.Tests.Features.HighCommand
                 TestAssert.That(bio.IndexOf('\n') < 0 && bio.IndexOf('\r') < 0, "bio is a flat string");
                 TestAssert.That((person.Traits & ~(CommandTrait)CommandTraits.All) == 0, "traits stay in the catalogue");
                 TestAssert.That(CommandTraits.Labels(person.Traits).Length <= 64, "trait labels fit the dossier");
+                TestAssert.That(CommandTraits.BonusLine(person.Traits).Length <= 128, "the bonus line fits the card");
             }
 
             var streamA = new SeedStream(7);
@@ -79,21 +83,43 @@ namespace BoscaliSummer.Tests.Features.HighCommand
             TestAssert.That(tree.KiaCount == 1 && tree.LiveCount == 5, "kills and lives stay consistent");
             TestAssert.That(tree.Cohesion(0f) < 1f, "losing a post costs cohesion");
             TestAssert.That(tree.Cohesion(0f) > 0f, "one loss is not a collapse");
-            TestAssert.That(tree.Find(theater.Id).MarkedByFaction == 0, "death clears any kill-list mark");
         }
 
-        private static void MarksAreBoundedAndToggled()
+        /// <summary>
+        /// The board's whole pitch is that a commander is worth something while alive, so the
+        /// bonus line is pinned: every trait states an effect, the line is bounded, and the
+        /// multipliers behind the words stay inside the range the page promises.
+        /// </summary>
+        private static void BonusesStateWhatACommanderIsWorth()
         {
-            CommandTree tree = CommandTree.Generate(5, Sites);
-            TestAssert.That(tree.Mark(0, 1, 2), "first mark accepted");
-            TestAssert.That(tree.Mark(1, 1, 2), "second mark accepted");
-            TestAssert.That(!tree.Mark(2, 1, 2), "a third mark is rejected");
-            TestAssert.That(tree.CountMarks(1) == 2, "mark count respects the ceiling");
-            TestAssert.That(tree.Mark(1, 1, 2), "re-marking clears the toggle");
-            TestAssert.That(tree.CountMarks(1) == 1, "clearing reduces the count");
-            TestAssert.That(tree.Mark(2, 2, 2), "another faction marks independently");
-            tree.ClearMarks(2);
-            TestAssert.That(tree.CountMarks(2) == 0 && tree.CountMarks(1) == 1, "clearing is per faction");
+            TestAssert.That(CommandTraits.BonusLine(CommandTrait.None) == "NO STAFF BONUS",
+                "a staff with nothing notable says so");
+
+            for (int bit = 0; bit < 5; bit++)
+            {
+                var trait = (CommandTrait)(1 << bit);
+                TestAssert.That(CommandTraits.Label(trait) != "UNKNOWN", "every trait has a name");
+                string effect = CommandTraits.Effect(trait);
+                TestAssert.That(effect.Length > 0 && effect.Length <= 32, "every trait states a bounded effect");
+                string line = CommandTraits.BonusLine(trait);
+                TestAssert.That(line.IndexOf(CommandTraits.Label(trait), StringComparison.Ordinal) >= 0 &&
+                                line.IndexOf(effect, StringComparison.Ordinal) >= 0,
+                    "the line carries both the name and the effect");
+            }
+
+            TestAssert.That(CommandTraits.StipendMultiplier(CommandTrait.Logistician) > 1f,
+                "a logistician earns more than a plain staff");
+            TestAssert.That(CommandTraits.StipendMultiplier(CommandTrait.Veteran) == 1f,
+                "a veteran earns nothing extra while alive");
+            TestAssert.That(CommandTraits.BountyMultiplier(CommandTrait.Veteran) > 1f,
+                "a veteran is worth more dead");
+            TestAssert.That(CommandTraits.IntelRadiusMultiplier(CommandTrait.Recluse) < 1f,
+                "a recluse's patrols see less");
+            TestAssert.That(CommandTraits.WeightMultiplier(CommandTrait.Beloved) >
+                            CommandTraits.WeightMultiplier(CommandTrait.Zealot),
+                "the beloved leader carries more of the staff than a zealot");
+            TestAssert.That(CommandTraits.DisruptionBonus(CommandTrait.Beloved) > 0f,
+                "losing a beloved leader hurts longer");
         }
 
         private static void CohesionTracksTheLivingRoster()
@@ -123,14 +149,14 @@ namespace BoscaliSummer.Tests.Features.HighCommand
 
         private static void EconomyPaysOnlyWhatItShould()
         {
-            TestAssert.That(CommandEconomy.BountyFunds(CommandTier.Base, false, 50, 1500, 3000, 6000, 1f) == 1500,
-                "base bounty");
-            TestAssert.That(CommandEconomy.BountyFunds(CommandTier.Theater, false, 50, 1500, 3000, 6000, 1f) == 6000,
-                "theater bounty");
-            TestAssert.That(CommandEconomy.BountyFunds(CommandTier.Component, true, 50, 1500, 3000, 6000, 1f) == 4500,
-                "marked bounty applies the percent");
-            TestAssert.That(CommandEconomy.BountyFunds(CommandTier.Base, true, 50, 1500, 3000, 6000, 1.2f) == 2700,
-                "veteran trait multiplies the bounty");
+            TestAssert.That(CommandEconomy.BountyFunds(CommandTier.Base, 1500, 3000, 6000, 1f) == 1500,
+                "base kill pay");
+            TestAssert.That(CommandEconomy.BountyFunds(CommandTier.Theater, 1500, 3000, 6000, 1f) == 6000,
+                "theater kill pay");
+            TestAssert.That(CommandEconomy.BountyFunds(CommandTier.Component, 1500, 3000, 6000, 1.2f) == 3600,
+                "a veteran is worth 20% more dead");
+            TestAssert.That(CommandEconomy.BountyFunds(CommandTier.Base, 0, 0, 0, 1f) == 0,
+                "a disabled economy pays nothing");
             TestAssert.That(CommandEconomy.BountyScore(CommandTier.Theater) == 20, "theater score");
 
             TestAssert.That(CommandEconomy.Stipend(0, 10f, 1f) == 0, "disabled stipend pays nothing");
@@ -139,28 +165,91 @@ namespace BoscaliSummer.Tests.Features.HighCommand
             int battered = CommandEconomy.Stipend(200, 6f, 0.2f);
             TestAssert.That(healthy > battered && battered > 0, "cohesion scales the stipend but never zeroes it");
             TestAssert.That(CommandEconomy.Stipend(200, float.NaN, 1f) == 0, "non-finite weight pays nothing");
+        }
 
-            TestAssert.That(CommandEconomy.IntervalCommandPoints(0.9f, 0) == 1, "high cohesion earns a point");
-            TestAssert.That(CommandEconomy.IntervalCommandPoints(0.4f, 0) == 0, "low cohesion earns none");
-            TestAssert.That(CommandEconomy.IntervalCommandPoints(0.4f, 2) == 2, "political officers earn their own");
+        private static void StaffLogKeepsItsMemoryBounded()
+        {
+            var log = new CommandLog();
+            TestAssert.That(log.Count == 0, "a fresh log is empty");
+            for (int i = 0; i < CommandLog.Capacity + 3; i++)
+                log.Append(i, CommanderLogTone.Order, "LINE " + i, i * 10f);
+
+            TestAssert.That(log.Count == CommandLog.Capacity, "the log caps at its capacity");
+            TestAssert.That(log[0].Text == "LINE 8", "the newest entry reads first");
+            TestAssert.That(log[CommandLog.Capacity - 1].Text == "LINE 3", "the oldest kept entry stays");
+            TestAssert.That(log[CommandLog.Capacity].Text == null, "out of range reads as empty");
+            TestAssert.That(log[0].Tone == CommanderLogTone.Order, "the tone survives the ring");
+
+            log.Append(-2, CommanderLogTone.Alert, new string('X', 200), 999f);
+            TestAssert.That(log[0].Text.Length == CommandLog.MaximumText, "log text is clamped before it is stored");
+            TestAssert.That(log[0].TargetId == -2 && log[0].Time == 999f, "faction-wide entries keep their id and time");
+
+            TestAssert.That(CommandLog.VisibleToObserver(50f, 40f),
+                "an event before the observer's last sighting is visible");
+            TestAssert.That(!CommandLog.VisibleToObserver(50f, 60f),
+                "an event after the last sighting is withheld");
+            TestAssert.That(!CommandLog.VisibleToObserver(0f, 10f), "no sight means no story");
+
+            log.Clear();
+            TestAssert.That(log.Count == 0, "clear empties the ring");
+        }
+
+        /// <summary>
+        /// The map layer obeys the same fog the roster does: a marker exists only for a post
+        /// the faction owns or has confirmed, never for a dead one, and the tier sizes stay
+        /// ordered so the chain of command reads on the map.
+        /// </summary>
+        private static void MapMarkersFollowTheFog()
+        {
+            TestAssert.That(CommandMarkerPolicy.Show(true, false, false), "your own post is marked");
+            TestAssert.That(CommandMarkerPolicy.Show(true, true, false), "a known post is marked");
+            TestAssert.That(!CommandMarkerPolicy.Show(false, false, false), "an unseen enemy post is not marked");
+            TestAssert.That(!CommandMarkerPolicy.Show(false, true, true), "a dead commander is never marked");
+            TestAssert.That(!CommandMarkerPolicy.Show(true, true, true), "your own dead commander is not marked either");
+
+            TestAssert.That(CommandMarkerPolicy.Size(CommandTier.Theater) > CommandMarkerPolicy.Size(CommandTier.Component) &&
+                            CommandMarkerPolicy.Size(CommandTier.Component) > CommandMarkerPolicy.Size(CommandTier.Base),
+                "the marker shrinks down the hierarchy");
+
+            for (float t = 0f; t < 4f; t += 0.13f)
+            {
+                float pulse = CommandMarkerPolicy.Pulse(t);
+                TestAssert.That(pulse >= 0f && pulse <= 1f, "the alert pulse stays inside its range");
+            }
+            TestAssert.That(CommandMarkerPolicy.Pulse(float.NaN) == 0f &&
+                            CommandMarkerPolicy.Pulse(float.PositiveInfinity) == 0f,
+                "a broken clock cannot pulse");
         }
 
         private static void SnapshotRulesRejectMalformedRows()
         {
-            TestAssert.That(CommandSnapshotRules.ValidHeader(0.5f, 3, 5, 1), "sane header accepted");
-            TestAssert.That(!CommandSnapshotRules.ValidHeader(float.NaN, 3, 5, 1), "NaN cohesion rejected");
-            TestAssert.That(!CommandSnapshotRules.ValidHeader(1.5f, 3, 5, 1), "cohesion above one rejected");
-            TestAssert.That(!CommandSnapshotRules.ValidHeader(0.5f, -1, 5, 1), "negative points rejected");
-            TestAssert.That(!CommandSnapshotRules.ValidHeader(0.5f, 3, 999, 1), "impossible staff count rejected");
+            TestAssert.That(CommandSnapshotRules.ValidHeader(0.5f, 5, 1), "sane header accepted");
+            TestAssert.That(!CommandSnapshotRules.ValidHeader(float.NaN, 5, 1), "NaN cohesion rejected");
+            TestAssert.That(!CommandSnapshotRules.ValidHeader(1.5f, 5, 1), "cohesion above one rejected");
+            TestAssert.That(!CommandSnapshotRules.ValidHeader(0.5f, 999, 1), "impossible staff count rejected");
+            TestAssert.That(!CommandSnapshotRules.ValidHeader(0.5f, -1, 1), "negative staff count rejected");
 
-            TestAssert.That(CommandSnapshotRules.ValidNode(3, 1, 2, 0x3F, 0x07, 12f, 0.25f, 100f, -200f),
-                "sane node accepted");
-            TestAssert.That(!CommandSnapshotRules.ValidNode(3, 1, 9, 0, 0, 12f, 0.25f, 0f, 0f), "bad tier rejected");
-            TestAssert.That(!CommandSnapshotRules.ValidNode(3, 1, 2, 0x80, 0, 12f, 0.25f, 0f, 0f), "unknown flag rejected");
-            TestAssert.That(!CommandSnapshotRules.ValidNode(3, 1, 2, 0, 0x08, 12f, 0.25f, 0f, 0f), "unknown action rejected");
-            TestAssert.That(!CommandSnapshotRules.ValidNode(3, 1, 2, 0, 0, 12f, 2f, 0f, 0f), "weight above one rejected");
-            TestAssert.That(!CommandSnapshotRules.ValidNode(3, 1, 2, 0, 0, 12f, 0.25f, float.PositiveInfinity, 0f),
+            TestAssert.That(CommandSnapshotRules.ValidNode(3, 1, 2, 0x3F, 12f, 0.25f, 100f, -200f),
+                "every defined node flag is accepted");
+            TestAssert.That(!CommandSnapshotRules.ValidNode(3, 1, 9, 0, 12f, 0.25f, 0f, 0f), "bad tier rejected");
+            TestAssert.That(!CommandSnapshotRules.ValidNode(3, 1, 2, 0x80, 12f, 0.25f, 0f, 0f), "unknown flag rejected");
+            TestAssert.That(!CommandSnapshotRules.ValidNode(3, 1, 2, 0, 12f, 2f, 0f, 0f), "weight above one rejected");
+            TestAssert.That(!CommandSnapshotRules.ValidNode(3, 1, 2, 0, 12f, 0.25f, float.PositiveInfinity, 0f),
                 "infinite coordinate rejected");
+
+            TestAssert.That(CommandSnapshotRules.ValidLogRow(-1, (byte)CommanderLogTone.Staff, "", 0f),
+                "a faction-wide log row is accepted");
+            TestAssert.That(CommandSnapshotRules.ValidLogRow(3, (byte)CommanderLogTone.Alert,
+                new string('X', CommandSnapshotRules.MaximumLogText), CommandSnapshotRules.MaximumLogAge),
+                "a bounded log row is accepted");
+            TestAssert.That(!CommandSnapshotRules.ValidLogRow(3, 6, "", 0f), "an unknown log tone is rejected");
+            TestAssert.That(!CommandSnapshotRules.ValidLogRow(3, 0, "", float.NaN), "a non-finite log age is rejected");
+            TestAssert.That(!CommandSnapshotRules.ValidLogRow(3, 0, "", CommandSnapshotRules.MaximumLogAge + 1f),
+                "a stale log age is rejected");
+            TestAssert.That(!CommandSnapshotRules.ValidLogRow(3, 0,
+                new string('X', CommandSnapshotRules.MaximumLogText + 1), 0f), "overlong log text is rejected");
+            TestAssert.That(!CommandSnapshotRules.ValidLogRow(CommandSnapshotRules.MaximumIdentifier, 0, "", 0f),
+                "a log row past the id ceiling is rejected");
         }
     }
 }

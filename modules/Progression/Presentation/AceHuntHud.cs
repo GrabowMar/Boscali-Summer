@@ -283,6 +283,10 @@ namespace BoscaliSummer.Features.Progression.Presentation
                         new Vector2(Mathf.Clamp(x + r.height, 0, r.width), r.height), r.min);
                 return;
             }
+
+            // Every other mark is drawn in normalised units on both axes, so it must be
+            // laid into the largest square the cell holds or a tall cell stretches it.
+            r = Square(r);
             if (Mark == HuntMark.Skill)
                 for (int i = 0; i < 3; i++)
                 {
@@ -358,6 +362,13 @@ namespace BoscaliSummer.Features.Progression.Presentation
             Vector2 d = b - a;
             Vector2 n = new Vector2(-d.y, d.x).normalized * 0.85f;
             Quad(mesh, a - n, b - n, b + n, a + n, r.min);
+        }
+
+        private static Rect Square(Rect rect)
+        {
+            float side = Mathf.Min(rect.width, rect.height);
+            return new Rect(rect.x + (rect.width - side) * 0.5f,
+                            rect.y + (rect.height - side) * 0.5f, side, side);
         }
 
         private void Quad(VertexHelper mesh, Vector2 a, Vector2 b, Vector2 c, Vector2 d, Vector2 origin)

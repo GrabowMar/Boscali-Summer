@@ -34,6 +34,35 @@ namespace BoscaliSummer.Features.DynamicOperations.Domain
         public static string Title(OperationKind kind) =>
             ByKind.TryGetValue(kind, out string title) ? title : "SECONDARY OBJECTIVE";
 
+        /// <summary>
+        /// The one word a marker or card prints for a contract's family. Kept at six
+        /// characters or fewer so it never crowds the detail line it prefixes.
+        /// </summary>
+        public static string Family(OperationKind kind) => kind switch
+        {
+            OperationKind.Capture => "SEIZE",
+            OperationKind.Defend => "HOLD",
+            OperationKind.Patrol => "HOLD",
+            OperationKind.RepairCover => "HOLD",
+            OperationKind.Interdict => "STRIKE",
+            OperationKind.SupplyInterdict => "STRIKE",
+            OperationKind.ElectronicWarfare => "STRIKE",
+            OperationKind.Intercept => "AIR",
+            OperationKind.Jam => "EW",
+            OperationKind.Recon => "RECON",
+            OperationKind.SortieReport => "RECON",
+            OperationKind.DamageAssessment => "RECON",
+            OperationKind.BattlefieldSurvey => "RECON",
+            OperationKind.Rappel => "INSERT",
+            OperationKind.Rooftop => "INSERT",
+            OperationKind.Rescue => "RESCUE",
+            OperationKind.SupplyEscort => "ESCORT",
+            _ => "CONTRACT"
+        };
+
+        public static string FamilyFor(string title) =>
+            TryKind(title, out OperationKind kind) ? Family(kind) : "CONTRACT";
+
         public static bool TryKind(string title, out OperationKind kind)
         {
             if (!string.IsNullOrEmpty(title)) return ByTitle.TryGetValue(title, out kind);

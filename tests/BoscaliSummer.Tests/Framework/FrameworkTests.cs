@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Features;
 
 namespace BoscaliSummer.Tests.Framework
@@ -47,6 +48,21 @@ namespace BoscaliSummer.Tests.Framework
                 "duplicate service registration was accepted");
             TestAssert.Throws<InvalidOperationException>(() => registry.GetRequired<MissingService>(),
                 "missing required service was accepted");
+
+            TestAssert.That(HostSettingMath.Step(0.5f, 1, 0.25f, 4f, 0.25f) == 0.75f,
+                "a host setting steps by its own increment");
+            TestAssert.That(HostSettingMath.Step(0.25f, -1, 0.25f, 4f, 0.25f) == 0.25f,
+                "a host setting never steps below its floor");
+            TestAssert.That(HostSettingMath.Step(4f, 1, 0.25f, 4f, 0.25f) == 4f,
+                "a host setting never steps past its ceiling");
+            TestAssert.That(HostSettingMath.Step(float.NaN, 1, 0.25f, 4f, 0.25f) == 4f &&
+                HostSettingMath.Step(float.PositiveInfinity, -1, 0.25f, 4f, 0.25f) == 0.25f,
+                "a non-finite value steps to a finite bound");
+            TestAssert.That(HostSettingMath.Step(1f, 0, 0f, 2f, 0.5f) == 1f &&
+                HostSettingMath.Step(1f, 1, 0f, 2f, 0f) == 1f,
+                "no direction or no increment changes nothing");
+            TestAssert.That(HostSettingMath.Clamp(float.NaN, 1f, 2f) == 1f,
+                "a non-finite value clamps to its floor");
         }
 
         private interface IExampleService { }

@@ -35,7 +35,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
         private readonly string[] wingPortraitKeys = new string[WingRowsPerPage];
 
         private Image wingPortrait;
-        private TMP_Text wingPortraitFallback;
+        private GameObject wingPortraitFallback;
         private TMP_Text wingCallsign;
         private TMP_Text wingName;
         private TMP_Text wingAirframe;
@@ -64,11 +64,15 @@ namespace BoscaliSummer.Features.Progression.Presentation
 
         private void BuildWingsPage(RectTransform parent, Rect body)
         {
-            parent = AvScreen.Scroll(parent, body, 608f, out body);
-            AvStyled.Spine(parent, new Rect(body.x, body.y, 3f, body.height));
+            clause = 0;
+            parent = AvScreen.Scroll(parent, body, 670f, out body);
+            DossierSpine(parent, new Rect(body.x, body.y, 3f, body.height));
             float x = body.x + SpineInset;
             float width = body.width - SpineInset;
             float y = body.y;
+
+            y = DrawFileHeader(parent, x, y, width, "FORM SQD-3 · SHEET 3 OF 4", "ORDER OF BATTLE",
+                "ACE ENCOUNTERS");
 
             // ---- Hunt status -------------------------------------------------------------
             AvStyled.Box(parent, new Rect(x, y, width, 78f), "section band");
@@ -145,10 +149,8 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 Rect portraitFrame = new Rect(74f, -10f, 42f, 54f);
                 AvKit.Panel(root, portraitFrame, AvTheme.SurfaceInert);
                 AvKit.Outline(root, portraitFrame, AvTheme.Frame.WithAlpha(0.6f));
-                row.PortraitFallback = PlainLabel(root,
-                    new Rect(portraitFrame.x + 2f, portraitFrame.y - 20f, portraitFrame.width - 4f, 20f),
-                    "NO\nVISUAL", "row-sub");
-                row.PortraitFallback.alignment = TextAlignmentOptions.Center;
+                row.PortraitFallback = Redaction(root,
+                    new Rect(portraitFrame.x + 9f, portraitFrame.y - 18f, portraitFrame.width - 18f, 22f), 2);
                 row.Portrait = AvKit.Panel(root,
                     new Rect(portraitFrame.x + 1f, portraitFrame.y - 1f, portraitFrame.width - 2f, portraitFrame.height - 2f),
                     Color.white);
@@ -206,10 +208,8 @@ namespace BoscaliSummer.Features.Progression.Presentation
             Rect portraitFrame = new Rect(x + 14f, y - 10f, 42f, 54f);
             AvKit.Panel(parent, portraitFrame, AvTheme.SurfaceInert);
             AvKit.Outline(parent, portraitFrame, AvTheme.Frame.WithAlpha(0.6f));
-            wingPortraitFallback = PlainLabel(parent,
-                new Rect(portraitFrame.x + 2f, portraitFrame.y - 20f, portraitFrame.width - 4f, 20f),
-                "NO\nVISUAL", "row-sub");
-            wingPortraitFallback.alignment = TextAlignmentOptions.Center;
+            wingPortraitFallback = Redaction(parent,
+                new Rect(portraitFrame.x + 9f, portraitFrame.y - 18f, portraitFrame.width - 18f, 22f), 2);
             wingPortrait = AvKit.Panel(parent,
                 new Rect(portraitFrame.x + 1f, portraitFrame.y - 1f, portraitFrame.width - 2f, portraitFrame.height - 2f),
                 Color.white);
@@ -330,7 +330,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
                     Sprite sprite = WingLink.PilotPortrait(name, handle);
                     row.Portrait.sprite = sprite;
                     row.Portrait.enabled = sprite != null;
-                    row.PortraitFallback.gameObject.SetActive(sprite == null);
+                    row.PortraitFallback.SetActive(sprite == null);
                 }
             }
         }

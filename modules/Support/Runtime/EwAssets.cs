@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using BoscaliSummer.Features.Support.Domain;
 using UnityEngine;
 
 namespace BoscaliSummer.Features.Support.Runtime
@@ -20,6 +21,9 @@ namespace BoscaliSummer.Features.Support.Runtime
         public EwAssetState State;
         public GroundVehicle Truck;
         public float Paid;
+
+        /// <summary>Host-owned operating posture; decides which attack operations it backs.</summary>
+        public EwPosture Posture = EwPostures.Default;
 
         public Vector3 Position => Truck != null ? Truck.transform.position : Vector3.zero;
 
@@ -43,10 +47,13 @@ namespace BoscaliSummer.Features.Support.Runtime
         public EwAsset ForFaction(FactionHQ hq) =>
             hq != null && assets.TryGetValue(hq, out EwAsset asset) ? asset : null;
 
-        public byte StateByteFor(FactionHQ hq)
+        /// <summary>Authority-free posture change; the host validates the request first.</summary>
+        public bool TryRetune(FactionHQ hq, EwPosture posture)
         {
             EwAsset asset = ForFaction(hq);
-            return asset == null ? (byte)0 : (byte)asset.State;
+            if (asset == null || !asset.Alive || posture > EwPosture.GhostSpoofing) return false;
+            asset.Posture = posture;
+            return true;
         }
 
         public bool TryDeployTruck(FactionHQ hq, GroundVehicle truck, float paid)

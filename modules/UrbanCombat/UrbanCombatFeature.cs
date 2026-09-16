@@ -35,6 +35,16 @@ namespace BoscaliSummer.Features.UrbanCombat
             context.AddService<IBuildingOccupancy>(garrisons);
             context.AddService<IZoneFortificationService>(garrisons);
             context.AddService<IBaseDefenseAlarmService>(alarm);
+
+            context.AddHostSettings(new HostSettingsTable("URBAN COMBAT")
+                .Toggle(1, context.Settings.UrbanCombat.GarrisonsEnabled, "ZONE GARRISONS",
+                    "Occupied buildings near owned airbases become defensive positions; the Zone Fortification support action needs this on.")
+                .Number(2, context.Settings.UrbanCombat.GarrisonsPerZone, "BUILDINGS PER ZONE",
+                    "Occupied civilian buildings per controlled zone. A successful Zone Fortification adds one above the zone's count.",
+                    1)
+                .Number(3, context.Settings.UrbanCombat.TroopsPerDeploy, "INFANTRY PER INSERTION",
+                    "Infantry deployed per transport paradrop, in one stick out the cargo access.",
+                    1));
         }
     }
 }

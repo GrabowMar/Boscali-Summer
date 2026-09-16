@@ -9,20 +9,24 @@ namespace BoscaliSummer.Features.Support.Configuration
         public ConfigEntry<bool> FortifyEnabled { get; }
         public ConfigEntry<bool> ArtilleryEnabled { get; }
         public ConfigEntry<bool> EmpEnabled { get; }
+        public ConfigEntry<bool> ElintEnabled { get; }
         public ConfigEntry<bool> FlareBarrageEnabled { get; }
         public ConfigEntry<bool> CyberEnabled { get; }
         public ConfigEntry<bool> EwEnabled { get; }
         public ConfigEntry<bool> ShowOnTacticalMap { get; }
 
-        public ConfigEntry<int> MaximumSatellites { get; }
-        public ConfigEntry<float> SatelliteReconCost { get; }
-        public ConfigEntry<float> SatelliteStrikeCost { get; }
-        public ConfigEntry<float> SatelliteEwCost { get; }
-        public ConfigEntry<float> SatelliteRecallRefund { get; }
+        public ConfigEntry<float> PlatformCostScale { get; }
+        public ConfigEntry<float> PlatformJettisonRefund { get; }
+        public ConfigEntry<float> PlatformInsertionSeconds { get; }
+        public ConfigEntry<float> PlatformDockingSeconds { get; }
+        public ConfigEntry<bool> PlatformDebrisEvents { get; }
+        public ConfigEntry<float> OrbitGapScale { get; }
+        public ConfigEntry<float> SarSceneRadius { get; }
+        public ConfigEntry<float> ElintCost { get; }
+        public ConfigEntry<float> ElintRadius { get; }
 
         public ConfigEntry<float> CostMultiplier { get; }
         public ConfigEntry<float> ReconCost { get; }
-        public ConfigEntry<float> ReconRange { get; }
         public ConfigEntry<float> FortifyCost { get; }
         public ConfigEntry<float> ArtilleryCost { get; }
         public ConfigEntry<float> EmpCost { get; }
@@ -34,11 +38,9 @@ namespace BoscaliSummer.Features.Support.Configuration
 
         public ConfigEntry<float> MaximumRange { get; }
         public ConfigEntry<float> RequestCooldown { get; }
-        public ConfigEntry<float> ReconRadius { get; }
 
         public ConfigEntry<float> EwTruckCost { get; }
         public ConfigEntry<float> EwProximityRadius { get; }
-        public ConfigEntry<float> SatelliteLaunchTransitSeconds { get; }
 
         public ConfigEntry<string> ArtilleryDefinitionKey { get; }
 
@@ -52,53 +54,76 @@ namespace BoscaliSummer.Features.Support.Configuration
                 "Host-authoritative: on a server, only the host's value applies.");
 
             ReconEnabled = config.Bind("Support", "ReconSweep", true,
-                "Satellite scan: reserve one faction scan for the next orbital coverage window. Requires an aircraft at request time. " +
-                "Spawns nothing.");
+                "Radar scan: an orbital station with a spy imager, overhead, images a scene and the host " +
+                "reveals stationary ground contacts in it. Spawns nothing.");
             FortifyEnabled = config.Bind("Support", "Fortification", true,
                 "Reinforce a friendly controlled zone. Requires the Garrisons feature; the " +
                 "request is refused, and nothing is charged, when it cannot place defenders.");
             ArtilleryEnabled = config.Bind("Support", "RodFromGod", true,
-                "Orbital kinetic strike: one high-velocity projectile onto the mark. Uses the " +
-                "FireMissionDefinitionKey missile.");
+                "Orbital kinetic strike from the station's rod magazine: one high-velocity projectile onto " +
+                "the mark, scattered by orbit band. Uses the FireMissionDefinitionKey missile.");
             EmpEnabled = config.Bind("Support", "EmpShock", true,
                 "EMP shock: a high-altitude airburst. The prompt pulse upsets electronics; the " +
                 "geomagnetic disturbance jams radars across a wide area, friendly and hostile " +
-                "alike. Uses the FireMissionDefinitionKey missile as a delivery visual.");
+                "alike. Needs the station's EMP emitter overhead. Uses the FireMissionDefinitionKey missile " +
+                "as a delivery visual.");
+            ElintEnabled = config.Bind("Support", "ElintSweep", true,
+                "ELINT sweep: an orbital station with a SIGINT array, overhead, locates enemy ground and ship " +
+                "radars that are emitting near the mark. Spawns nothing.");
             FlareBarrageEnabled = config.Bind("Support", "FlareBarrage", true,
                 "Flare barrage: launches an airburst countermeasure missile that disperses a cluster of " +
                 "intense pyrotechnic flares, seducing and misguiding all IR-seeking missiles in the area.");
             CyberEnabled = config.Bind("Support", "CyberOperations", true,
-                "Enable the CYBER page: infrastructure investment and the signals-intelligence " +
-                "operations it unlocks (ping sweep, track uplink). Host-authoritative.");
+                "Enable OPS INFO cyber operations: infrastructure investment and the operations " +
+                "it unlocks. Host-authoritative.");
             EwEnabled = config.Bind("Support", "ElectronicWarfare", true,
                 "Enable the EW page: build a radar truck and the electronic-warfare operations " +
                 "it unlocks (radar blackout, ghost shield, spoof contacts). Host-authoritative.");
             ShowOnTacticalMap = config.Bind("Support", "ShowOnTacticalMap", true,
-                "Show ability range circles, tactical vector icons, satellite tracks and active " +
-                "strike waypoints on the tactical theater map.");
+                "Show ability range circles, tactical vector icons, orbital station ground tracks and " +
+                "active strike waypoints on the tactical theater map.");
 
-            MaximumSatellites = config.Bind("Support", "MaximumSatellites", 4,
+            PlatformCostScale = config.Bind("Support", "PlatformCostScale", 1f,
                 new ConfigDescription(
-                    "How many satellites one faction may keep on orbit. Host-authoritative.",
-                    new AcceptableValueRange<int>(1, 4)));
-            SatelliteReconCost = config.Bind("Support", "SatelliteReconCost", 900f,
+                    "Scales every orbital station launch (core, modules, cargo; module price plus launch vehicle), " +
+                    "before CostMultiplier. Host-authoritative.",
+                    new AcceptableValueRange<float>(0f, 10f)));
+            PlatformJettisonRefund = config.Bind("Support", "PlatformJettisonRefund", 0.4f,
                 new ConfigDescription(
-                    "Allocation to launch a reconnaissance satellite, before CostMultiplier. " +
-                    "One-time purchase; moving it later costs fuel, not allocation.",
-                    new AcceptableValueRange<float>(0f, 20000f)));
-            SatelliteStrikeCost = config.Bind("Support", "SatelliteStrikeCost", 1100f,
-                new ConfigDescription(
-                    "Allocation to launch a strike satellite (Rod from God coverage), before CostMultiplier.",
-                    new AcceptableValueRange<float>(0f, 20000f)));
-            SatelliteEwCost = config.Bind("Support", "SatelliteEwCost", 1100f,
-                new ConfigDescription(
-                    "Allocation to launch an electronic-warfare satellite (EMP coverage), before CostMultiplier.",
-                    new AcceptableValueRange<float>(0f, 20000f)));
-            SatelliteRecallRefund = config.Bind("Support", "SatelliteRecallRefund", 0.4f,
-                new ConfigDescription(
-                    "Fraction of the launch cost refunded when a satellite is recalled to free a slot. " +
-                    "Host-authoritative; refunds use the amount actually charged.",
+                    "Fraction of what was paid refunded when a module is jettisoned; jettisoning the core deorbits " +
+                    "the station and refunds this share of everything. Host-authoritative.",
                     new AcceptableValueRange<float>(0f, 1f)));
+            PlatformInsertionSeconds = config.Bind("Support", "PlatformInsertionSeconds", 45f,
+                new ConfigDescription(
+                    "Seconds from core liftoff to orbit insertion; the pass cycle begins at insertion. " +
+                    "Host-authoritative.",
+                    new AcceptableValueRange<float>(10f, 600f)));
+            PlatformDockingSeconds = config.Bind("Support", "PlatformDockingSeconds", 20f,
+                new ConfigDescription(
+                    "Seconds from a module or cargo liftoff to docking. Host-authoritative.",
+                    new AcceptableValueRange<float>(5f, 300f)));
+            PlatformDebrisEvents = config.Bind("Support", "PlatformDebrisEvents", true,
+                "Every 6-10 minutes a micrometeoroid strike hits a random station module: shielded modules " +
+                "deflect it, others go offline for 45 s. Host-authoritative.");
+            OrbitGapScale = config.Bind("Support", "OrbitGapScale", 1f,
+                new ConfigDescription(
+                    "Scales the simulated out-of-theatre arc between station passes (45 s LOW, 60 s MID, 90 s HIGH " +
+                    "at 1.0). Passes themselves always fly at real orbital speed. Host-authoritative.",
+                    new AcceptableValueRange<float>(0.25f, 4f)));
+            SarSceneRadius = config.Bind("Support", "SarSceneRadiusMeters", 1000f,
+                new ConfigDescription(
+                    "Half-width of a radar scan scene at MID orbit (x0.8 LOW, x1.4 HIGH, x1.35 with a relay). " +
+                    "Stationary ground contacts inside it are revealed; movers faster than 4 m/s smear and are not.",
+                    new AcceptableValueRange<float>(400f, 4000f)));
+            ElintCost = config.Bind("Support", "ElintSweepCost", 400f,
+                new ConfigDescription(
+                    "Allocation charged for one ELINT sweep, before CostMultiplier and the Logistics Officer perk.",
+                    new AcceptableValueRange<float>(0f, 20000f)));
+            ElintRadius = config.Bind("Support", "ElintSweepRadiusMeters", 8000f,
+                new ConfigDescription(
+                    "Radius around the mark searched for emitting enemy radars at MID orbit (scaled like the " +
+                    "radar scan).",
+                    new AcceptableValueRange<float>(1000f, 40000f)));
 
             CostMultiplier = config.Bind("Support", "CostMultiplier", 1f,
                 new ConfigDescription(
@@ -109,7 +134,7 @@ namespace BoscaliSummer.Features.Support.Configuration
                     new AcceptableValueRange<float>(0f, 10f)));
             ReconCost = config.Bind("Support", "ReconCost", 600f,
                 new ConfigDescription(
-                    "Allocation reserved for one satellite scan (refunded on cancellation), before CostMultiplier and " +
+                    "Allocation charged for one radar scan, before CostMultiplier and " +
                     "the Logistics Officer perk. Recon spawns nothing, so it is priced flat.",
                     new AcceptableValueRange<float>(0f, 20000f)));
             FortifyCost = config.Bind("Support", "ZoneFortificationCost", 1200f,
@@ -156,23 +181,11 @@ namespace BoscaliSummer.Features.Support.Configuration
                     "Furthest a designated grid may be from your aircraft for an action that " +
                     "delivers something physical - strikes. You must be in an aircraft to request one.",
                     new AcceptableValueRange<float>(1000f, 200000f)));
-            ReconRange = config.Bind("Support", "ReconRangeMeters", 120000f,
-                new ConfigDescription(
-                    "Furthest a designated grid may be for a satellite scan. Recon asks HQ " +
-                    "to look somewhere rather than delivering anything, so it reaches across the " +
-                    "map rather than being held to the delivery range above.",
-                    new AcceptableValueRange<float>(1000f, 400000f)));
             RequestCooldown = config.Bind("Support", "RequestCooldownSeconds", 30f,
                 new ConfigDescription(
                     "Cooldown after an accepted request, per player and shared across all actions. " +
                     "The OPS page counts it down on the request button.",
                     new AcceptableValueRange<float>(5f, 600f)));
-            ReconRadius = config.Bind("Support", "ReconRadiusMeters", 6000f,
-                new ConfigDescription(
-                    "Radius around the mark searched for hostile units. At most 48 contacts are " +
-                    "revealed per sweep, so a very large radius reveals a sparser picture rather " +
-                    "than more of it.",
-                    new AcceptableValueRange<float>(500f, 20000f)));
 
             EwTruckCost = config.Bind("Support", "EwTruckCost", 1200f,
                 new ConfigDescription(
@@ -184,12 +197,6 @@ namespace BoscaliSummer.Features.Support.Configuration
                     "How close the faction's EW truck must be to a hack's target " +
                     "for Radar Blackout, Ghost Shield or Spoof Contacts to be authorised.",
                     new AcceptableValueRange<float>(1000f, 60000f)));
-            SatelliteLaunchTransitSeconds = config.Bind("Support", "SatelliteLaunchTransitSeconds", 20f,
-                new ConfigDescription(
-                    "How long a freshly-launched satellite spends in transit before it reaches " +
-                    "station and starts providing coverage. Reuses the same Transit state and " +
-                    "countdown a repositioning satellite already goes through.",
-                    new AcceptableValueRange<float>(5f, 120f)));
 
             ArtilleryDefinitionKey = config.Bind("Support", "FireMissionDefinitionKey", string.Empty,
                 "Exact jsonKey of the missile used by Rod from God and EMP shock. Empty auto-picks " +

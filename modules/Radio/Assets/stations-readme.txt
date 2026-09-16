@@ -7,8 +7,9 @@ Add a station in three steps:
 2. Put .ogg or .wav tracks directly inside it.
 3. Open RAD on the maximised map and press RESCAN.
 
-Files placed directly in Music appear under LOCAL. The MUS deck lists the same folders and
-plays them directly - folders are stations on RAD and albums on MUS.
+Files placed directly in Music appear under LOCAL. The DECK page of the same RAD screen lists
+these folders and plays them directly - folders are stations on the receiver page and albums
+on the deck page.
 
 Agrapol FM and Maris Network fall back to Nuclear Option's installed soundtrack at runtime.
 Adding tracks to either folder replaces that station's soundtrack fallback after RESCAN.

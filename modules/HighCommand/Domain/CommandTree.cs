@@ -109,21 +109,6 @@ namespace BoscaliSummer.Features.HighCommand.Domain
 
         public int KiaCount => slots.Count - LiveCount;
 
-        public int PoliticalCount
-        {
-            get
-            {
-                int count = 0;
-                for (int i = 0; i < slots.Count; i++)
-                {
-                    CommandSlot slot = slots[i];
-                    if (slot.Alive && slot.Person != null && CommandTraits.Has(slot.Person.Traits, CommandTrait.Political))
-                        count++;
-                }
-                return count;
-            }
-        }
-
         /// <summary>
         /// Kill the person in <paramref name="slotId"/> and move the next in line into the
         /// post. Returns the slot that received a freshly assigned person (-1 when the dead
@@ -135,7 +120,6 @@ namespace BoscaliSummer.Features.HighCommand.Domain
             if (dead == null || dead.Status == CommanderStatus.Kia) return -1;
 
             dead.Status = CommanderStatus.Kia;
-            dead.MarkedByFaction = 0;
 
             CommandSlot successor = null;
             float best = 0f;
@@ -155,33 +139,7 @@ namespace BoscaliSummer.Features.HighCommand.Domain
 
             dead.Person = successor.Person;
             successor.Person = CommanderGenerator.Create(unchecked(newSeed + 7919), successor.Tier);
-            successor.MarkedByFaction = 0;
             return successor.Id;
-        }
-
-        public int CountMarks(int factionToken)
-        {
-            if (factionToken <= 0) return 0;
-            int count = 0;
-            for (int i = 0; i < slots.Count; i++)
-                if (slots[i].MarkedByFaction == factionToken) count++;
-            return count;
-        }
-
-        public bool Mark(int slotId, int factionToken, int maximumMarks)
-        {
-            CommandSlot slot = Find(slotId);
-            if (slot == null || factionToken <= 0) return false;
-            if (slot.MarkedByFaction == factionToken) { slot.MarkedByFaction = 0; return true; }
-            if (slot.MarkedByFaction != 0 || CountMarks(factionToken) >= maximumMarks) return false;
-            slot.MarkedByFaction = (byte)factionToken;
-            return true;
-        }
-
-        public void ClearMarks(int factionToken)
-        {
-            for (int i = 0; i < slots.Count; i++)
-                if (slots[i].MarkedByFaction == factionToken) slots[i].MarkedByFaction = 0;
         }
     }
 }

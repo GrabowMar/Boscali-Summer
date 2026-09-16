@@ -117,10 +117,23 @@ namespace BoscaliSummer.Garrisons
 
         public static bool DeployRappelEncampment(Vector3 position, FactionHQ owner, Airbase airbase)
         {
-            if (!BoscaliSummer.Runtime.GameAccess.IsServer() || owner == null || ActiveSites.Count >= MaximumSites)
-                return false;
-            // Repeated insertions at the same LZ get distinct four-position camps.
-            // At most twelve candidate positions, matching the site ceiling.
+            if (!BoscaliSummer.Runtime.GameAccess.IsServer() || owner == null) return false;
+            // Base-of-operations doctrine decides how many camps one stick establishes.
+            BoscaliSummer.Framework.Features.ModServices.TryGet(
+                out BoscaliSummer.Framework.Contracts.IGroundForceReadiness readiness);
+            int wanted = Mathf.Clamp(readiness != null ? readiness.InsertionCamps(owner) : 1, 1, MaximumSites);
+            int placed = 0;
+            for (int camp = 0; camp < wanted && ActiveSites.Count < MaximumSites; camp++)
+                if (TryCreateRappelCamp(position, owner, airbase)) placed++;
+            return placed > 0;
+        }
+
+        /// <summary>
+        /// One camp near the LZ. Repeated insertions at the same place get distinct
+        /// four-position camps; at most twelve candidate positions, matching the site ceiling.
+        /// </summary>
+        private static bool TryCreateRappelCamp(Vector3 position, FactionHQ owner, Airbase airbase)
+        {
             for (int i = 0; i < MaximumSites; i++)
             {
                 float angle = i * (2f * Mathf.PI / (MaximumSites - 1));

@@ -55,10 +55,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 case "STR": return new MfdRailEntry(code, "THEATER", "theater");
                 case "SQD": return new MfdRailEntry(code, "SQUAD", "person");
                 case "RAD": return new MfdRailEntry(code, "RADIO", "radio");
-                case "MUS": return new MfdRailEntry(code, "MUSIC DECK", "deck");
                 case "SET": return new MfdRailEntry(code, "SETTINGS", "settings");
                 case "EVN": return new MfdRailEntry(code, "EVENTS", "pulse");
-                case "ADM": return new MfdRailEntry(code, "TASKING", "board");
+                case "WEA": return new MfdRailEntry(code, "WEATHER", "pulse");
                 default: return new MfdRailEntry(code, null, null);
             }
         }

@@ -38,6 +38,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private AvButton[] ledgerTabs;
             private AvButton[] infoTabs;
             private TMP_Text factionName;
+            private TMP_Text factionSubtitle;
+            private Image factionFlag;
             private Image factionLogo;
             private TMP_Text[] forceTotals;
             private AvStyled.Metric[] ledgerMetrics;
@@ -119,9 +121,24 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 Shell.DataBar.SetChip(2, "WHD " + hq.GetWarheadStockpile(), true);
 
                 factionName.text = name ?? "FACTION";
+                string extended = hq.faction == null ? null : hq.faction.factionExtendedName;
+                if (factionSubtitle != null)
+                {
+                    factionSubtitle.text = string.IsNullOrEmpty(extended)
+                        ? "LIVE THEATER ORDER OF BATTLE" : extended.ToUpperInvariant();
+                }
                 Sprite logo = hq.faction == null ? null : hq.faction.factionColorLogo;
                 factionLogo.sprite = logo;
                 factionLogo.enabled = logo != null;
+                // The game's own faction art is the identification a player actually
+                // recognises; the roundel above is the fallback for a mission whose faction
+                // carries no header sprite.
+                Sprite flag = hq.faction == null ? null : hq.faction.factionHeaderSprite;
+                if (factionFlag != null)
+                {
+                    factionFlag.sprite = flag;
+                    factionFlag.enabled = flag != null;
+                }
 
                 RefreshResources(hq);
                 if (selectedPage == 1)
@@ -228,20 +245,35 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 float y = Heading(page, -AvTokens.Space1, Shell.Body.width,
                                   "FORCE INVENTORY", "LIVE ASSETS");
 
-                AvKit.TacticalCard(page,
-                    new Rect(AvTokens.Space3, y, Shell.Body.width - AvTokens.Space3,
-                             68f), AvTheme.RailReady);
-                factionLogo = AvKit.Panel(page, new Rect(AvTokens.Space4, y - 8f, 52f, 52f),
-                                           Color.white, AvSprites.Control);
+                // The identity card: roundel, name and the faction's own flag art. The flag
+                // keeps the 2:1 aspect it was drawn at — a 456-wide banner would flatten the
+                // emblem into a smear, so it takes a fixed panel on the right instead.
+                const float heroHeight = 96f;
+                const float flagWidth = 176f;
+                Rect hero = new Rect(AvTokens.Space3, y, Shell.Body.width - AvTokens.Space3,
+                                     heroHeight);
+                AvKit.Panel(page, hero, AvTheme.Surface, AvSprites.Card);
+                Rect flagArea = new Rect(hero.x + hero.width - flagWidth - 4f, hero.y - 4f,
+                                         flagWidth, heroHeight - 8f);
+                factionFlag = AvKit.Panel(page, flagArea, Color.white);
+                factionFlag.preserveAspect = true;
+                factionFlag.raycastTarget = false;
+                AvKit.Rule(page, new Rect(hero.x, hero.y, 3f, heroHeight), AvTheme.RailReady);
+                AvKit.Outline(page, hero, AvTheme.Hairline);
+
+                factionLogo = AvKit.Panel(page, new Rect(hero.x + AvTokens.Space3, hero.y - 28f, 40f, 40f),
+                                           Color.white);
                 factionLogo.preserveAspect = true;
                 factionLogo.raycastTarget = false;
+                float textX = hero.x + AvTokens.Space3 + 48f;
+                float textWidth = Mathf.Max(0f, flagArea.x - textX - AvTokens.Space2);
                 factionName = AvStyled.Label(page,
-                    new Rect(AvTokens.Space4 + 64f, y - 8f, Shell.Body.width - 100f, 28f),
+                    new Rect(textX, hero.y - 24f, textWidth, 24f),
                     "SYNCING FACTION", "metric-value");
-                AvStyled.Label(page,
-                    new Rect(AvTokens.Space4 + 64f, y - 42f, Shell.Body.width - 100f, 12f),
+                factionSubtitle = AvStyled.Label(page,
+                    new Rect(textX, hero.y - 50f, textWidth, 12f),
                     "LIVE THEATER ORDER OF BATTLE", "metric-cap");
-                y -= 80f;
+                y -= heroHeight + AvTokens.Space3;
 
                 forceTotals = new TMP_Text[4];
                 string[] labels = { "BLD", "VEH", "SHP", "AIR" };

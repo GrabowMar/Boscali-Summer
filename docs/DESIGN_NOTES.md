@@ -107,40 +107,46 @@ Decisions that cost an argument. Kept so they are not made again the other way.
   installed map's tactical clip. The existing two sources and vanilla handoff preserve
   prior station/track/position/pause state; manual transport takes ownership for the rest
   of the hunt. Radio sends no music metadata or additional multiplayer messages.
-- **Two screens, one module.** `RAD` is the set an operator flies with; `MUS` is the local
-  deck. They share one audio engine (`RadioProgram`) and one hold on the vanilla soundtrack,
-  but nothing else: the deck has no dial, and the receiver has no track list of its own beyond
-  the tuned station's programme. `MUS` is hosted (`MfdScreenHost`) because the six vanilla
-  bezel slots are already allocated — the same reason EVN and ADM are hosted.
+- **One screen, two pages, two jobs.** `RAD` carries RECEIVER and DECK tabs from the shared
+  `AvScreen` tab bar. The receiver behaves like a set: tune a station, listen to whatever it
+  is airing, no track switching. The deck is the player's own library — folders, tracks,
+  transport, shuffle, repeat — and it replaced the old clickable programme log, which was a
+  music browser wearing a radio's clothes. Both pages drive one audio engine
+  (`RadioProgram`) and one hold on the vanilla soundtrack. The deck is the only part of the
+  module allowed any world awareness, and it is one rule: duck under a received transmission
+  (`RadioLinkStub.DeckGain`, no trigger yet).
 - **The hold is sticky, and that is deliberate.** The receiver takes the game's music away on
-  its first on-air play and keeps it away through dead air between stations; only STOP hands it
-  back. Tuning past a gap used to resume the vanilla track, which made every sweep of the dial
-  fight the score. A 0.5 s sweep stops any vanilla source that still starts under the hold, so
-  an unpatched play path cannot leak back in. Pure rule + assertions in `VanillaMusicHold`.
+  its first on-air play and keeps it away through dead air between stations; only STOP (or
+  the deck page's STOP ALL) hands it back. Tuning past a gap used to resume the vanilla track,
+  which made every sweep of the dial fight the score. A 0.5 s sweep stops any vanilla source
+  that still starts under the hold, so an unpatched play path cannot leak back in. Pure rule
+  + assertions in `VanillaMusicHold`.
 - **Reception is modelled locally, never faked.** `RadioPropagation` is a small link budget —
   free-space loss, the `4.12·(√h_tx+√h_rx)` km radio horizon, a terrain penalty (heavier for
   AM than FM) and a mode-mismatch penalty — applied to the player's aircraft against each
   built-in station's tower (own HQ, another faction's HQ, nearest owned airbase) resolved on a
-  10 s timer. One `Physics.Linecast` per evaluation on the game's ground mask, at 2 Hz. No
-  tower, no listener or a user folder means full-scale reception: the model is allowed to be
-  absent, never to invent a weak signal. This is a deliberately simplified reading of the NORS
-  propagation model, applied receive-side only.
-- **Transmit and crypto stay stubs.** `RadioLinkStub` is inert and labelled as such on the
-  panel. A real voice link needs mic capture, a second transport and an explicit handshake;
-  none of that exists, and the module still sends nothing.
+  10 s timer. One `Physics.Linecast` per evaluation on the game's ground mask, at 2 Hz. The
+  world feeds back in: if the map has resolved and a built-in's tower is gone — the airbase
+  fell, the HQ was destroyed — the station reads **off air** (folder), not weak; a user folder
+  is a local archive and reads full; no listener or no authored towers means full-scale rather
+  than an invented failure. This is a deliberately simplified reading of the NORS propagation
+  model, applied receive-side only.
+- **Transmit, crypto and the peer net stay stubs.** `RadioLinkStub` is inert and the LINK
+  block plus TX/SEC keys say so on the panel. A real voice link needs mic capture, a second
+  transport and an explicit handshake; none of that exists, and the module still sends nothing.
 - **The panel is a receiver, not a music browser.** Stations live on an FM / VHF-air / MW dial:
   the three built-ins keep canonical frequencies and user folders take a stable name-hashed FM
   slot (linear probe on collision), so the same folder lands on the same frequency after a
-  rescan. The hero frequency, spectrum waterfall, S-meter, programme log and morse ident carry
-  the fiction; carrier hiss, squelch and idents are generated in memory, never bundled — the
-  copyright boundary from the bullet above is unchanged.
+  rescan. The hero frequency, spectrum waterfall, S-meter, programme caption and morse ident
+  carry the fiction; carrier hiss, squelch and idents are generated in memory, never bundled —
+  the copyright boundary from the bullet above is unchanged.
 - **Tuning is a dial, not a list.** TUNE steps the band increment (100 kHz FM / 25 kHz VHF air
   / 10 kHz MW) or a five-times-finer step with FINE, and any non-station position is dead air
   with a carrier bed; SEEK jumps stations, the band knob cycles FM → VHF → MW with each band
   remembering its last frequency, and locking back on resumes the programme the player left.
   AM bands keep the AM curve regardless of the FM filter setting, the MODE override garbles a
   wrong-demodulator signal through the same penalty the propagation model uses, and the AF
-  knob scales music, carrier and idents together. Enemy ace chatter reaches the hero wire line
+  row scales music, carrier and idents together. Enemy ace chatter reaches the hero wire line
   as an INTERCEPT via the read-only `ISquadView.LastChatter` property: text only, client-local,
   no new messages and no music metadata.
 - **The spectrum is a fixture, not an FFT.** `RadioSpectrum` builds one 96-bin row per 0.12 s
@@ -166,11 +172,39 @@ Decisions that cost an argument. Kept so they are not made again the other way.
   live `Player.PlayerScore` in configured tiers, capped. Thresholds, aircraft requirements
   and weapon access are still not altered, and rank is displayed as flavour only. Support
   spends the player's normal allocation — no second currency.
-- **The perk list is flat.** The old nine-skill, two-tier prerequisite tree produced a UI
-  that could only ever show "everything locked" or, under the debug bypass, "everything
-  available" — there was no state a real player saw. Nine independent perks with per-perk
-  costs (twelve points to buy the whole board) removed the prerequisite bug class outright.
-  Group headings are presentation labels with no data-model meaning.
+- **The perk board is four qualification lanes of five grades, and a career holds two
+  tools.** The first tree failed because the *budget* was dead, not because trees are
+  unreadable: it was `PlayerRank - spent`, so a fresh pilot had nothing to spend and the UI
+  could only ever show "everything locked" or, under the debug bypass, "everything
+  available". With score-earned picks the board came back as shallow mini-trees; it is now
+  four lanes — STRIKE, RECON, SIGNALS, ENGINEER — of five grades each, grade 1 being the
+  lane's OPS tool and grades 2-5 the passives that end in a capstone. Every grade costs one
+  pick and grade n costs n x `ScorePerPoint`, so the tool lands early and depth is what the
+  budget buys. Vanilla `PlayerRank` stays display flavour: it is monotonic within a mission
+  and does not reset with a successor pilot, so keying currency to it would hand a fresh
+  pilot the dead one's picks — the exact shape of the original failure. The cap is a *rule*,
+  not a curve: `PerkState` refuses a third tool, which is the only way a career can be made
+  to choose; without it a long sortie simply buys everything, because four lanes of five
+  grades is twenty picks and no honest score curve reaches that. Two lanes open, two close,
+  mixing stays legal, and the closed lanes hand multiplayer squads a reason to cover each
+  other's tools. Support authorisations stayed roots in the previous model because a
+  capability gated behind another would starve a support-minded pilot; grade order replaces
+  that concern by making the tool the lane's cheapest node.
+- **The lane block is computed once.** `PerkState.BlockOf` answers grade order, the two-tool
+  cap and the price, `TryUnlock` enforces it on the host, and the SQD panel renders
+  `PerkView.Block` instead of re-deriving any of it — the panel used to infer "requires a
+  point" from a boolean and would have announced a pick the host now refuses.
+- **New effect kinds ride the support seam.** Re-tasking tempo (`SupportCooldown`) and
+  support effect size (`SupportEffectScale`) are read by Support, which already consumes
+  `IPlayerPerks` and installs after Progression: the host scales the cooldown it enforces and
+  replies with, the client scales the countdown it shows, and the EMP shock widens by the
+  requester's own scale. Rod-from-God blast scaling was dropped instead of faked — `RodBlast`
+  runs from the missile detonation patch and has no path back to the request, and inventing
+  one is a Support-owned correlation task; STRIKE grade 4 pays combat allocation until then. A
+  Squad-side kind (ace threat or stealth) would need Squad and Progression to consume each
+  other, so it was rejected until someone designs that dependency deliberately. Never let a
+  lane stack cost-down, effect-up and cooldown-down at full strength without a live pass: the
+  magnitudes here are deliberately small (10-20%).
 - **One rule couples the two features.** A perk grants zero or more capability strings; a
   support action requires exactly one. A pure test asserts both catalogues name the same
   set, which is what stops them drifting apart as either grows.
@@ -261,7 +295,7 @@ Decisions that cost an argument. Kept so they are not made again the other way.
   seams. A trench line in the real world is one continuous curve following the ground, so the
   module now fits a cubic Bezier chain directly to Command's ordered front trace. Beachhead
   pockets arrive as closed rings, diagonal fronts stay diagonal, and a kilometres-long
-  frontier is one curve split into 1200m positions. Removed on purpose: nodes, edges,
+  frontier is one curve split into multi-kilometre positions. Removed on purpose: nodes, edges,
   junction linking, the growth graph, per-row corridor validation and the 380m sector grid.
 - **Geography decides the line, not the sector axis.** Each station probes five candidate
   depths behind the trace and a dynamic program picks the level that combines low ground, a
@@ -271,11 +305,56 @@ Decisions that cost an argument. Kept so they are not made again the other way.
   resumes on the far side — a river or cliff interrupts a front rather than cancelling it.
 - **Trenches are dug where troops actually meet.** Command reports each trace's peak
   opposing ground-force pressure; a border where one force is absent is not fortifiable, no
-  matter how the stale control history reads. The owner is decided from the control field
-  itself (ownership 40m either side of the trace), so a position always sits on ground its
-  faction holds.
+  matter how the stale control history reads. The owner is decided from the sign of the
+  control field itself, not from cell ownership: a real engagement produces a kilometres-wide
+  contested band whose cells answer neither side as owned, so the first curve planner's
+  Friendly-only gate could never place a trench on an active front (77% of trace stations in
+  the regression scenario sit contested on both sides 40m out). The signed field still
+  separates the sides at the crossing, and the probe ladder deepens until it does, so a
+  position sits on ground its faction holds without demanding a rear-area cell.
+- **A position is a window of the trace, resampled — not the trace resampled and windowed.**
+  Command's contour points are cell-sized strides, so the first planner's "resample the whole
+  trace, then cut one position's window out of it" had to widen the station spacing to `length / 320` to fit
+  the 320-station buffer: about 150m on a fifty-kilometre front. Positions came out as eight
+  (once two) straight slabs, the depth search had almost no stations to choose between, and
+  the marker drew straight bars. Cutting the window first, by arc length on the raw points,
+  and resampling only that window keeps the ~10m stations the ditch, anchors, meshes and
+  traverse wave all assume — and it is what makes the finished line read as a curve.
+- **Field scale and a low, broad profile — trenches are earth moved, not a slot.** A real
+  position is defined by how much earth is between the occupant and the shell: overhead cover,
+  a parapet, a spoil apron and the wire belt in front. So the cross-section is a walkable
+  ditch (1.2–1.9m floor) inside a ~13m footprint — packed crest ~3.4m, raised spoil aprons
+  ~1.9m, 2m skirts — and the belt is two lines
+  deep (fire at 80m behind the trace, support at 150m, reserve redoubt at 300m) rather than a
+  single ribbon. The procedural wire belt exists for the same reason: an undefended ditch reads
+  as a ditch, while pickets and strands make the ground in front of it read as no man's land.
+  The footprint grew from ~10m once the harness could render a low pass and a cruise view: at
+  ten metres the position read as a thin brown thread from the altitude a player actually
+  flies at, which defeats the point of a field work.
+- **A front is a kilometre-cell field, and the front cell is not "friendly".** A live host
+  session placed nothing: the log showed a front intake every refresh and then nothing but
+  `refused (NoGround)` on every attempt, with zero trench objects in the scene. Three causes
+  had to be fixed together: First, the scan restarting: the manager rebuilt its faction list and reset
+  the cursor on every trace refresh, so only the first windows of the first faction were ever
+  planned — the rest of the front was never probed. Second, ownership gating at zero: the
+  signed control field is one value per kilometre cell, so the cell a position digs into — the
+  one Command anchors 60m behind the contour — can read slightly hostile on a ragged front,
+  and `hold >= 0` refused every candidate in the band the trenches actually live in. Ground now
+  counts on the faction's own side **or inside its contested band** (`HoldOwnSideFloor`), and
+  only deep enemy cells refuse. Third, the resampled station buffer was indexed as
+  `windowStart + station`, a raw trace index added to a station index: the first window was
+  fine, every later window was fitted to the wrong stretch and read stale stations past the
+  buffer's end. All three survived the pure tests because each one needs the game's own
+  geometry — a kilometre field, a real trace length, a second window — which is why the Unity
+  harness now plans a second window and a quantized cell field.
+- **A far LOD keeps a silhouette, never a ground scar.** The first LODs flattened the
+  earthwork to a 10cm ribbon beyond 1.2km and culled it entirely at 3.5km, which is exactly
+  the range band a player flies in — so a fully built front was invisible from the air. Every
+  LOD is now the same earthwork at a coarser ring pitch (3.5m / 9m / 18m), the mid one keeps
+  the parapet height and the far one keeps the ridge, and the cull distance is 12km. Vertex
+  cost is bounded by the ring pitch and the 16-position ceiling, not by shrinking the shape.
 - **Depth follows deliberate field positions, not decoration.** A real position layers a
-  support trace roughly 110m and a redoubt trace roughly 220m behind the fire trench,
+  support line roughly 150m and a reserve redoubt roughly 300m behind the fire trench,
   linked by communication trenches; a final stage pushes short saps into no man's land
   ending in listening posts. Saps stay inside owned ground, so they stop at the border
   instead of crossing into ground the position's validator rejects.
@@ -312,18 +391,30 @@ Decisions that cost an argument. Kept so they are not made again the other way.
 
 ## Chain of command (HighCommand)
 
-- **Economy-only effects were chosen deliberately.** Cohesion, bounties, stipends and
-  command points never mutate vanilla AI limits, spawn rates or damage. That scope makes the
+- **Economy-only effects were chosen deliberately.** Stipends, kill pay and patrol reach never
+  mutate vanilla AI limits, spawn rates or damage. That scope makes the
   feature safe beside any other module and leaves the AI-cap experiment (cohesion scaling
   `AIAircraftLimit`) available as a separate, gated slice.
+- **The staff is a living battlefield asset, not a management layer.** User decision after the
+  first two cuts drifted into grand-strategy: commanders are worth a **bonus** while alive, move
+  between their faction's bases in VIP convoys, can be killed at their post or on the road, and
+  a successor takes over - but the player issues no orders, marks no targets, and spends no
+  command points. There is nothing to order, because ordering would mean steering AI and the
+  war; what the feature offers instead is a reason to care about a person on the map and a
+  reward for finding them. The trim deleted command points, kill-list marks, commendations,
+  decorations and the dispatch-order system (protocol 3's whole surface) rather than growing
+  them: every one of those was a management verb the game's premise does not ask for.
+  Bonuses stay economic or informational - income, kill value, patrol reach, how hard a loss
+  lands - and are stated in words on the card, so the page answers "who is this and what is it
+  worth" without offering a button.
 - **Posts own slots; people move between them.** A fixed six-slot tree per faction means
   succession is a personnel transfer, not tree surgery: the next in line moves up, the
   vacated post gets a new generated name, and only the destroyed post building is rebuilt.
   Assets, intel and wire rows stay indexed by a stable slot id.
 - **A commander away in a convoy survives a strike on their post.** The post building and
   the lead vehicle are separate watched assets; only the asset carrying the person can kill
-  them. That turns strikes on empty posts into a legible LARP beat and makes relocation a
-  real risk decision.
+  them. That turns strikes on empty posts into a legible LARP beat and makes the road a real
+  risk - the convoy is the one moment the staff is exposed away from a defended post.
 - **Generated identities are seed functions.** Name, rank, traits and bio derive from a
   synced seed, and the portrait is the same generated paper doll Wing Command draws for
   aces and wingmen, keyed off the authoritative name; the host still sends name/rank/role
@@ -334,17 +425,75 @@ Decisions that cost an argument. Kept so they are not made again the other way.
   to an authored airbase building remains a possible later refinement.
 - **Enemy intel is a server-side sight record with a 45s memory.** One 1 Hz pass over
   `UnitRegistry.allUnits` (4096 cap) marks posts seen by faction units. The console hosts
-  both staffs, so every enemy post is listed by identity; an unconfirmed post's position,
-  movement and kill-list mark stay host-side, and its dossier reads unconfirmed. A global
-  wire id (faction index × slot) keeps a bounty order from resolving to a same-numbered
-  post in the local tree.
-- **Map markers were deliberately cut.** The dossier names the base and the existing sector
-  grid gives navigation; a native marker patch is deferred to avoid a second UI seam.
+  both staffs, so every enemy post is listed by identity; an unconfirmed post's position and
+  movement stay host-side, and its card reads unconfirmed. A global
+  wire id (faction index × slot) keeps a post in one staff from resolving to a same-numbered
+  post in another.
+- **The staff log is the page's memory.** The console used to state every event once, in the
+  status strip, and the next event overwrote it; the roster itself never showed that anything
+  had happened. Each faction now keeps a six-deep ring of the same broadcast lines (stipend,
+  transfer, kill, succession, contact), carried in the snapshot with the
+  subject post's global id, a tone and an age, so the console can show what changed and when.
+  The strings the strip already showed are the strings the log keeps — no second event
+  vocabulary and no per-frame simulation. Hostile entries keep the roster's intel policy: an
+  enemy event is visible only once the observer's sight record shows they had seen that post
+  at or after the event, so the log never leaks a position the roster was hiding.
+- **The COC page is a personnel file, not a card with a footnote.** Layout reworked twice: the
+  first cut read as a roster with a log and a dossier stacked under it (user: "still kinda
+  sucks, especially visually"), so the chain of command became the left column and the selected
+  commander's card the right; the second pass (user: "go a bit more into that dossier kind of
+  look") turned that card into the file the rest of the theme already implies. It uses the
+  sheet's own paper vocabulary - `.file-form` / `.file-meta` / `.file-title` / `.leader` /
+  `.form-key` / `.form-value` / `.stamp` / `.redact` - which until now only Wing Command's
+  dossier pages asked for: a form number, a photo with a reference, key/value fields with
+  leader dots the way a form draws them, a rubber-stamped disposition tilted a few degrees,
+  and redaction bars instead of a service record while local intel has not confirmed an enemy
+  post. The card is laid out against the text it actually holds and its frame follows the
+  record's height, because the fixed-height card was what clipped `THEATER COMMANDER` and the
+  bonus line in the first place: a form that cuts off its own entry has stopped being a form.
+  HOI4's chain-of-command window is still the reference for the hierarchy, not for its verb
+  set: hierarchy first, one selected leader, everything about them on one sheet, nothing to
+  press.
+- **A post under fire is a state, not an event.** `RecordDamage` already watches every
+  command asset; it now stamps a short alert window on the slot (and one log line at the
+  edge), which the row and card render as UNDER FIRE. The strike that follows is the same
+  asset destruction the module already handles, so the alert warns a pilot that the commander
+  they may be hunting is about to die to someone else.
+- **Wire protocol 4.** The snapshot carries the staff read (nodes, both logs, cohesion, active
+  and KIA counts) and nothing that could be acted on: query and snapshot have no action, mark
+  or dispatch fields, and a client's only request is "send me the board". Peers must run the
+  same build; an older peer's query or snapshot is ignored and its console reads "waiting for
+  the staff board".
+- **The map layer is the roster's fog, drawn where the flying happens.** Review work keeps the
+  hunt readable: one diamond per post the view already lists as friendly or known, tier-sized,
+  ringed while under fire, parented to the vanilla map's `iconLayer` and scaled by its
+  transform exactly as the theater effort marker is. It is deliberately presentation-only -
+  no click, no armed `MapPicker` gesture (that split is the shared protocol's, and a new armed
+  click would race the wing-order left click), no marker for a dead post, and no position the
+  roster is still hiding. The payoff is already in the economy: a sighting confirms a post, the
+  diamond appears on the map, and destroying it pays the killer's faction.
+- **Map markers were cut once, then earned their place.** The first design deferred them to
+  avoid a second UI seam; with the page read-only they became the only way the player could
+  find a commander without memorising the site name, so they shipped as their own small,
+  bounded layer instead of a change to the page.
 
 ## World events
 
 - **EVN cards are glyphs.** `EventIconCache` and PNG fallbacks were deleted; there are no
   event PNG assets. Category marks are `EventGlyph` only.
+
+## Weather
+
+- **The forecast is derived, not transmitted.** Every peer samples the same schedule from
+  the mission identity and the mission clock, so there is no second authority path, no
+  weather message and no late-join problem: a client that joins an hour in derives the
+  current front and the same forecast the host sees. Vanilla's `LevelInfo` sync vars carry
+  the authoritative sky; the schedule only supplies the shape around them.
+- **A foreign write is adopted, not fought.** `WeatherDrive` takes any change it did not
+  make as the new baseline and stands off for 40 seconds, which is what keeps the authored
+  `ModifyEnvironment` beats authoritative — the model supplies the weather between scripted
+  beats and never overrides one. A debug override and another mod's edit take the same
+  path; the adoption and `Acknowledge` pair must stay.
 
 ## Wing Command reuse boundary
 
@@ -362,8 +511,17 @@ Product split: Wing Command owns the recruited squadron; Boscali owns the battle
 screen (SA / COC / CMD) — it installs and fails on its own and does not
 borrow an OPS tab or a slot from Wing Command. `ITheaterPage` is gone; do not remount
 theater SA as an OPS tab. Empty-board air/territory ratios print "—",
-never a fake 50%. The CMD tab's tactical-command system (doctrine, per-cell Sector Focus,
-map right-click menu, AI target scoring) was removed whole and is a placeholder pending a
-rebuild; do not rebuild it on `CommandManager`'s old doctrine names.
+never a fake 50%.
+
+**CMD is an intent board, not a control room.** Amateurs' earlier tactical-command system
+(doctrine, per-cell Sector Focus, map right-click menu, AI target scoring) was removed whole
+and stays removed; do not rebuild it on `CommandManager`'s old doctrine names. Its
+replacement, built deliberately, chooses the opposite shape: the host names one of the
+faction's own active objectives as its main effort (TheaterOps), and the module biases only
+the two pure `MissionPosition` queries the vanilla AI already routes through — where a unit
+with no better order heads, and which depot or airbase delivers reinforcements. There is no
+unit selection, no waypoint, no stances, and no per-cell control; clearing the priority
+restores vanilla behavior on the next query. That is the RTS line this project does not
+cross: the player sets the effort, the AI runs the war.
 
 Maintenance rules (how to change bezels, the picker, the protocol): [`Avionics/README.md`](../Avionics/README.md).

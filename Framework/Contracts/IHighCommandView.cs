@@ -5,8 +5,8 @@ namespace BoscaliSummer.Framework.Contracts
 {
     /// <summary>
     /// Read-only view of the chain of command, published by the HighCommand module and
-    /// consumed by the STR console. Actions are intents: only the host validates and
-    /// applies them. Commands are addressed by commander id, never by position or asset.
+    /// consumed by the STR console. The staff lives, moves and dies on the host: there is
+    /// nothing to order here, only a board to read.
     /// </summary>
     internal interface IHighCommandView
     {
@@ -16,19 +16,21 @@ namespace BoscaliSummer.Framework.Contracts
         float FriendlyCohesion { get; }
         int FriendlyActive { get; }
         int FriendlyKia { get; }
-        int CommandPoints { get; }
         IReadOnlyList<CommanderView> Commanders { get; }
+
+        /// <summary>The local faction's own staff log, newest first, bounded by the source.</summary>
+        IReadOnlyList<CommanderLogLine> Log { get; }
+
+        /// <summary>Enemy staff events this faction has sight on, newest first, bounded.</summary>
+        IReadOnlyList<CommanderLogLine> HostileLog { get; }
 
         /// <summary>Ask the host for a fresh staff snapshot. Rate-limited by the transport.</summary>
         void Refresh();
-        void RequestCommend(int id);
-        void RequestRelocate(int id);
-        void RequestBounty(int id);
     }
 
     /// <summary>
     /// One staff post as the local faction may see it. Names and flags are authoritative;
-    /// bio text and the portrait are regenerated locally from <see cref="PortraitSeed"/>.
+    /// bio text, bonus line and the portrait are regenerated locally from <see cref="PortraitSeed"/>.
     /// </summary>
     internal sealed class CommanderView
     {
@@ -40,13 +42,15 @@ namespace BoscaliSummer.Framework.Contracts
         public bool IsKia { get; }
         public bool InTransit { get; }
         public bool Disrupted { get; }
-        public bool BountyMarked { get; }
+        public bool Alert { get; }
         public string Name { get; }
         public string Rank { get; }
         public string Role { get; }
         public string Location { get; }
-        public string Traits { get; }
-        public string Decoration { get; }
+
+        /// <summary>What this commander is worth to their faction, as the board states it.</summary>
+        public string Bonus { get; }
+
         public string Bio { get; }
         public int PortraitSeed { get; }
 
@@ -56,28 +60,23 @@ namespace BoscaliSummer.Framework.Contracts
         /// <summary>Seconds since last confirmed contact, or -1 for own living staff.</summary>
         public float IntelAge { get; }
 
-        /// <summary>Share of the roster this post represents, 0..1, for the row bar.</summary>
+        /// <summary>Share of the staff this post represents, 0..1, for the row bar.</summary>
         public float Weight { get; }
 
         public float X { get; }
         public float Z { get; }
-        public bool CanCommend { get; }
-        public bool CanRelocate { get; }
-        public bool CanBounty { get; }
 
         public CommanderView(int id, int parentId, int tier, bool isFriendly, bool isKnown,
-            bool isKia, bool inTransit, bool disrupted, bool bountyMarked, string name, string rank,
-            string role, string location, string traits, string decoration, string bio,
-            int portraitSeed, Sprite portrait, float intelAge, float weight, float x, float z,
-            bool canCommend, bool canRelocate, bool canBounty)
+            bool isKia, bool inTransit, bool disrupted, bool alert, string name,
+            string rank, string role, string location, string bonus, string bio,
+            int portraitSeed, Sprite portrait, float intelAge, float weight, float x, float z)
         {
             Id = id; ParentId = parentId; Tier = tier;
             IsFriendly = isFriendly; IsKnown = isKnown; IsKia = isKia;
-            InTransit = inTransit; Disrupted = disrupted; BountyMarked = bountyMarked;
+            InTransit = inTransit; Disrupted = disrupted; Alert = alert;
             Name = name; Rank = rank; Role = role; Location = location;
-            Traits = traits; Decoration = decoration; Bio = bio;
+            Bonus = bonus; Bio = bio;
             PortraitSeed = portraitSeed; Portrait = portrait; IntelAge = intelAge; Weight = weight; X = x; Z = z;
-            CanCommend = canCommend; CanRelocate = canRelocate; CanBounty = canBounty;
         }
     }
 }

@@ -108,5 +108,14 @@
     </EmbeddedResource>
   </ItemGroup>
 
+  <ItemGroup Label="Campaign mission">
+    <!-- The authored mission, embedded so the Campaign module can install it into the
+         game's user mission list. Source of truth is missions/Boscali Summer/; rebuild it
+         with tools/build-boscali-summer-mission.ps1 and bump MissionInstallPlan.Revision. -->
+    <EmbeddedResource Include="missions\Boscali Summer\Boscali Summer.json">
+      <LogicalName>BoscaliSummer.Campaign.BoscaliSummerMission.json</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
 
 </Project>

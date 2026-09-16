@@ -14,10 +14,11 @@ death. Respawning preserves the current pilot; confirmed death in one-life mode
 retires that identity and starts a successor's career. Native spawning, aircraft
 unlocks, rank thresholds and vanilla mission score remain the game's responsibility.
 
-Ace victories grant a separate, server-owned point bonus. The score-point ceiling
-must not swallow this bonus: `earned = min(20, scorePoints + aceBonus)`. Current
-perks cost twelve points in total. A leader defeat can award once per encounter;
-escort destruction does not award an additional ace point. The host validates player
+Ace victories grant a separate, server-owned pick bonus. The score-pick ceiling
+must not swallow this bonus: `earned = min(20, scorePicks + aceBonus)`. Score itself
+pays five qualification grades across four lanes, and a career may hold two of the four
+OPS tools. A leader defeat can award once per encounter;
+escort destruction does not award an additional ace pick. The host validates player
 participation and consumes the encounter's reward before publishing the result.
 Duplicate disable callbacks, reconnects and repeated snapshots cannot award again.
 

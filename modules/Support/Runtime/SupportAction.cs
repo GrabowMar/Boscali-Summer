@@ -2,6 +2,7 @@ using System.Collections;
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using BoscaliSummer.Features.Support.Configuration;
+using BoscaliSummer.Features.Support.Domain.Orbital;
 using NuclearOption.Networking;
 using UnityEngine;
 
@@ -23,6 +24,11 @@ namespace BoscaliSummer.Features.Support.Runtime
     {
         SupportSettings Settings { get; }
         SpaceOperations Space { get; }
+
+        /// <summary>The clock station passes are computed against on this peer.</summary>
+        double OrbitNow { get; }
+
+        OrbitClock OrbitClock { get; }
         ManualLogSource Logger { get; }
         VanillaSupportCatalog Vanilla { get; }
 
@@ -48,13 +54,21 @@ namespace BoscaliSummer.Features.Support.Runtime
         public readonly int RequestId;
         public readonly ISupportHost Host;
 
-        public SupportContext(Player player, GlobalPosition target, int requestId, ISupportHost host)
+        /// <summary>
+        /// The requester's `SupportEffectScale` multiplier, resolved once by the host so an
+        /// action never has to find its own way back to the perk state. 1 when nobody scales.
+        /// </summary>
+        public readonly float EffectScale;
+
+        public SupportContext(Player player, GlobalPosition target, int requestId, ISupportHost host,
+            float effectScale = 1f)
         {
             Player = player;
             Owner = player == null ? null : player.HQ;
             Target = target;
             RequestId = requestId;
             Host = host;
+            EffectScale = effectScale;
         }
 
         public SupportSettings Settings => Host.Settings;
@@ -63,11 +77,37 @@ namespace BoscaliSummer.Features.Support.Runtime
         /// <summary>Requester's faction infrastructure (null until the theater is loaded).</summary>
         public InfoNetwork Info => Host.Space.InfoFor(Owner);
 
-        /// <summary>True when a satellite of this role covers the requested point right now.</summary>
-        public bool HasCoverage(SatelliteRole role)
+        /// <summary>
+        /// The requester's station when it can run <paramref name="ability"/> right now (fitted,
+        /// online, powered, overhead, charged, recharged, armed); null with the reason otherwise.
+        /// Nothing is spent here — call <see cref="OrbitalPlatform.Consume"/> once the action is accepted.
+        /// </summary>
+        public OrbitalPlatform PlatformAccess(PlatformAbility ability, out PlatformDenial denial)
         {
-            Constellation constellation = Host.Space.ConstellationFor(Owner);
-            return constellation != null && constellation.Covers(role, Target.x, Target.z);
+            OrbitalPlatform platform = Host.Space.PlatformFor(Owner);
+            if (platform == null)
+            {
+                denial = PlatformDenial.NoPlatform;
+                return null;
+            }
+            denial = platform.Check(ability, Host.OrbitNow, Host.OrbitClock);
+            return denial == PlatformDenial.None ? platform : null;
+        }
+
+        public static SupportResult Refusal(PlatformDenial denial)
+        {
+            switch (denial)
+            {
+                case PlatformDenial.NoPlatform: return SupportResult.NoPlatform;
+                case PlatformDenial.NotFitted: return SupportResult.ModuleNotFitted;
+                case PlatformDenial.Offline: return SupportResult.ModuleOffline;
+                case PlatformDenial.Brownout: return SupportResult.PlatformBrownout;
+                case PlatformDenial.LowEnergy: return SupportResult.PlatformLowPower;
+                case PlatformDenial.Recharging: return SupportResult.PlatformRecharging;
+                case PlatformDenial.Expended: return SupportResult.PlatformExpended;
+                case PlatformDenial.NoFuel: return SupportResult.NoFuel;
+                default: return SupportResult.OutOfCoverage;
+            }
         }
 
         /// <summary>The requester's EW asset, or null if none is deployed / it has died.</summary>

@@ -27,6 +27,7 @@ namespace BoscaliSummer.Framework.Lifecycle { public interface ISceneService { v
 namespace BoscaliSummer.Runtime
 {
     public static class MfdSlots { public const string Set = "SET"; }
+    public static class GameAccess { public static bool IsServer() => false; }
     public static class MfdBezel
     {
         public static bool TryClaim(string id, bool preferLeft, VirtualMFD mfd, out List<Button> buttons,

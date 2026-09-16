@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using BoscaliSummer.Features.Support.Domain;
 using NuclearOption.Networking;
 using UnityEngine;
 
@@ -39,10 +40,9 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
             // Radar Blackout, Ghost Shield and Spoof Contacts are EW Division/C2 Disruptor
             // operations: they reach through a physical asset in the world, not pure signals
             // intelligence, so they additionally require a live EW truck within range of the
-            // target. Ping/Track (Sigint) never hit this — their facility is never Disrupt
-            // or Ew — so this stays a no-op for them.
-            FacilityId facility = CyberCatalog.Facility(kind);
-            if (facility == FacilityId.Disrupt || facility == FacilityId.Ew)
+            // target, tuned to the posture that backs them (EwPostures). Ping/Track (Sigint)
+            // are never station-backed, so this stays a no-op for them.
+            if (EwPostures.StationBacked(kind))
             {
                 EwAsset asset = context.EwAsset;
                 if (asset == null || !asset.Alive) return SupportResult.NoEwAsset;
@@ -51,6 +51,7 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
                 float dz = assetPos.z - ground.z;
                 float radius = context.Settings.EwProximityRadius.Value;
                 if (dx * dx + dz * dz > radius * radius) return SupportResult.NoEwAsset;
+                if (!EwPostures.Backs(asset.Posture, kind)) return SupportResult.WrongPosture;
             }
 
             switch (kind)

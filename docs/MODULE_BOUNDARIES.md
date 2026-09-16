@@ -9,14 +9,16 @@ maintainers and coding agents; runtime design is in [ARCHITECTURE.md](ARCHITECTU
 | Local ownship autopilot landing, Boscali Summer native-radial entry | `modules/Autopilot` | `Features/Autopilot` | Framework lifecycle, game interop; no feature dependency |
 | Fire, impact scorch, ruins, smoke, wreck persistence, fire replication | `modules/FireAndDestruction` | `Features/FireAndDestruction` | Framework, game interop |
 | Occupied shells, defensive proxies, capture cleanup | `modules/UrbanCombat` | `Features/UrbanCombat` | Framework, game interop |
-| Local music, stations, receiver (`RAD`) + deck (`MUS`) screens, hunt soundtrack override | `modules/Radio` | `Features/Radio` | Framework lifecycle, optional `ISquadView`, game interop |
+| Local music, stations, `RAD` screen (RECEIVER + DECK pages), hunt soundtrack override | `modules/Radio` | `Features/Radio` | Framework lifecycle, optional `ISquadView`, game interop |
 | Player pilot careers, enemy ace hunts, bonus awards and roster snapshots | `modules/Squad` | `Features/Squad` | Framework lifecycle/contracts, cached Wing Command public API adapter |
 | SQD MFD (dossier, shared skills, aces, pilot studio, local emblems), score/ace-earned perks, capabilities, reward/fuel effects | `modules/Progression` | `Features/Progression` | Squad through `ISquadView`, Framework lifecycle/contracts, game interop (Wing Command public API via `WingLink`) |
-| OPS MFD (support, observation, battle status), request validation, costs, cooldowns, spawn jobs | `modules/Support` | `Features/Support` | Progression + optional zone-fortification contracts, game interop |
+| OPS MFD (support, observation, battle status), request validation, costs, cooldowns, spawn jobs | `modules/Support` | `Features/Support` | Progression + optional zone-fortification contracts, game interop; publishes `IGroundForceReadiness`, optionally consumed by Urban Combat |
 | STR MFD, expanded map GUI, map overlays, territory/frontline field | `modules/Command` | `Features/Command` | Progression contracts, game interop |
 | Secondary objectives, faction awards, finite reinforcement batches | `modules/DynamicOperations` | `Features/DynamicOperations` | Framework lifecycle/contracts, native game interop |
 | Generated staff tree, command posts, VIP convoys, intel, stipends/bounties | `modules/HighCommand` | `Features/HighCommand` | Framework lifecycle/contracts, native game interop; consumed by Command through `IHighCommandView` |
 | Rotating world events, EVN MFD feed, support-cost modifier | `modules/Events` | `Features/Events` | Framework lifecycle/contracts, native game interop; publishes `IActiveEventsView`, optionally consumed by Support |
+| Installs the authored Boscali Summer campaign mission into the game's user mission list | `modules/Campaign` | `Features/Campaign` | Framework lifecycle, game interop; no feature dependency, publishes no contract |
+| Deterministic weather front schedule, `WEA` environment screen, opt-in debug overlay | `modules/Weather` | `Features/Weather` | Framework lifecycle/contracts, native game interop; optional read-only `IFireSuppressionService` for the fire-haze term; publishes no contract |
 | Feature graph, host, lifecycle, service contracts | `Framework` | `Framework` | no concrete feature |
 | Cached game/reflection/diagnostic adapters | `Infrastructure` | architecture / patch probe | no feature policy |
 | Registration and plugin startup | `Bootstrap` | Framework / architecture | may name every feature |
@@ -41,7 +43,9 @@ Sibling module A  ──✗──►  Sibling module B implementation
 
 Support and Command declare a dependency on Progression but consume only `IPlayerPerks` /
 `IProgressionView`; Support's optional Urban Combat integration uses
-`IZoneFortificationService` and `IBaseDefenseAlarmService`. Command's STR console also
+`IZoneFortificationService` and `IBaseDefenseAlarmService`, and Urban Combat reads Support's
+`IGroundForceReadiness` late through `ModServices` (absent means the untrained value).
+Command's STR console also
 reads the alarm ticker. Neither edge permits a concrete sibling import. When two
 features genuinely interact, define the smallest interface in `Framework/Contracts`,
 implement it in the owner, resolve it through `ServiceRegistry` — never expose a manager,
@@ -53,8 +57,18 @@ implementation, and neither module requires the other to install. The view carri
 generated `Sprite` portrait only because Command may not import the owner's renderer; the
 owner caches and clears it.
 
-DynamicOperations' solo-only ADM bezel consumes `ISecondaryObjectivesView` (published by
-the same module) for the faction tasking board that used to live on STR.
+Command's SET SERVER page consumes DynamicOperations' `ISecondaryObjectivesView` for the
+faction tasking board that used to live on the deleted ADM bezel, and reads every feature's
+`IHostSettingsView` from the framework `HostSettingsBoard` for the host-only settings rows.
+Each feature declares those rows itself with `HostSettingsTable`, so Command renders host
+settings without importing a sibling's settings object; a module's settings stay owned and
+written by that module.
+
+TheaterOps publishes `ITheaterPriorityView` (main effort) and `ITheaterLogisticsView`
+(reinforcement options and the readiness summary) to Command's STR CMD page. Neither side
+imports the other; TheaterOps owns the host-authoritative state and the only vaniila
+seams it touches are the two `MissionPosition` queries, the vanilla convoy funding path and
+its own read-only Mirage messages. The contracts expose no manager, table or mutable collection.
 
 Progression depends on Squad's read-only `ISquadView` for pilot generations and ace
 bonus points. Radio observes the same contract optionally for local music transitions.
@@ -64,6 +78,9 @@ pilot/ace-wing/chatter API and no feature imports Wing Command implementation ty
 Support optionally consumes Events' read-only `IActiveEventsView` for a live world-event
 factor on support pricing. It resolves the contract late through `ModServices`; Events
 imports no sibling, and neither module requires the other to install.
+
+Campaign depends on no module and publishes no contract. It writes the embedded mission JSON
+once at startup; no module consumes it and nothing blocks on it.
 
 ## Workflow for an ordinary feature request
 

@@ -72,8 +72,9 @@ namespace BoscaliSummer.Tests.Features.Support
 
         public static void Run()
         {
-            ConstellationTests.Run();
             InfoNetworkTests.Run();
+            OpsDomainTests.Run();
+            OrbitalTests.Run();
             TestAssert.That(SupportEffectPolicy.EmpDuration == 30f,
                 "EMP disruption must retain its 30-second operational duration");
             TestAssert.That(SupportEffectPolicy.EmpBurstAltitude >= 20000f &&

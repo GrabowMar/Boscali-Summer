@@ -2,25 +2,347 @@
 
 ## Unreleased
 
-- Radio split into two screens and rebuilt as an instrument. `RAD` is now a receiver: a
-  scrolled spectrum waterfall over the band, an S-meter in S-units and dBm, squelch with SQ
-  keys, wide/narrow bandwidth, an Auto/FM/AM mode switch that garbles a wrong-demodulator
-  signal, channel vs five-times-fine tuning, three bands (FM 100 kHz, VHF air 25 kHz AM,
-  MW 10 kHz), and TUNE/SEEK/SCAN/AF/PWR/STOP. Reception is modelled locally: a link budget
-  with free-space loss, the radio horizon `4.12·(√h_tx+√h_rx)` km and a terrain line-of-sight
-  probe against the game's ground mask, measured from the player's aircraft to each built-in
-  station's tower (HQ, other faction's HQ, nearest owned airbase), resolved on a 10 s timer;
-  a user folder or an unresolved tower reads full-scale instead of inventing a weak signal.
-  The new hosted `MUS` screen is the local deck: library folders on the left, their tracks
-  below, play/pause/skip/stop, shuffle, repeat, volume and rescan — no dial involved. Both
-  share one audio engine (`RadioProgram`) and one vanilla-soundtrack hold: the receiver keeps
-  the game's music silent from its first on-air play through dead air between stations and
-  only hands it back on STOP, with a 0.5 s sweep that stops any vanilla source that still
-  starts. Transmit and SECURE are inert placeholders (`RadioLinkStub`) and say so on the
-  panel; no network data is sent. Stations list shows modelled carrier strength; the rail
-  brands the new MUS button with its own glyph. FM step is now the real 100 kHz grid and the
-  band spans 87.5–108.0 MHz. Tests cover the propagation maths, spectrum rows, band cycle,
-  fine step and the hold rule.
+- **Weather is back, driven from the mission clock.** A new default-on `weather` module
+  restores dynamic weather with no Harmony patch and no message: the host drives cloud
+  coverage, cloud base, wind speed/heading and turbulence through the public `LevelInfo`
+  setters into vanilla's own Mirage sync vars, and every peer derives the same front
+  schedule and forecast from the mission identity and the mission clock, so a late joiner
+  is immediately correct and there is no second authority path. The schedule is six regimes
+  from CLEAR to STORM — 5-minute fronts in three-front phases with a 90-second cross-fade,
+  seeded from the mission name. The host ramps each driven value instead of snapping it and
+  writes at most once per channel per 0.25 s, with at most one front and one forecast of at
+  most 12 entries live, conditions and turbulence clamped to 0..1, and the cloud base
+  clamped to 450..3400 m. A foreign write it did not make — an authored `ModifyEnvironment`
+  beat, another mod, the debug controls — is adopted and held for 40 seconds instead of
+  fought, so the campaign's scripted weather stays authoritative between beats. A hosted
+  `WEA` environment screen (appended through `MfdScreenHost` like `EVN`, not a bezel
+  claim) shows the current sky and the derived forecast; an opt-in debug overlay
+  (`Weather.DebugControls`, `F11` + Ctrl) lets the host aim the sky directly; and ground fires
+  thicken the sky through the existing read-only `IFireSuppressionService` (at most +0.15
+  conditions). The same schedule now makes weather a place: a deterministic `StormField`
+  derives up to three advecting cells from the mission seed, mission time, map size and
+  front wind, so every peer and late joiner places the same storms in the same places with
+  no storm data on the wire, and everything spatial reads that one cell buffer — supercell
+  cloud towers and anvils rendered over the vanilla cloud material, falling rain with
+  canopy streaks and synthesised rain/storm-wind audio (the game ships none), a cockpit
+  weather HUD with the warning tier, storm range and bearing, and a `WEA` radar scope whose
+  range is cycled on the scope itself. Rain, the HUD, the supercells and the radar range
+  each have their own client-local setting (`RainEffects`, `RainOnCanopy`, `RainAudio`,
+  `RainEffectDensity`, `Hud`, `Supercells`, `SupercellDetail`, `RadarRangeKm`). Two further
+  settings decide how the cells sit against the vanilla deck: `CloudSortFudge` biases them
+  against it — Unity draws lower values in front, and the first cut sorted every tower
+  *behind* the deck it is meant to tower over — and `ReplaceVanillaClouds` (off by default)
+  takes the local deck away by disabling two renderers only, leaving `CloudLayer` free to
+  keep driving the sun and moon cloud cookies, the cloud occlusion, the fog and the distant
+  horizon band. In-game
+  acceptance is pending: the panel render, the storm field and its supercell, rain, HUD and
+  radar presentation, the ramp in a live mission, the fire-haze read, client display, the
+  sort bias and both hijack states are unverified.
+
+- **SET is split into CLIENT and SERVER, and the ADM bezel is gone.** The settings screen now
+  opens on two main tabs. CLIENT holds only client-local pages — MAP, STYLE, IMAGE and
+  COCKPIT behind their own sub-tab strip — and behaves exactly as before. SERVER is the host
+  page: the faction tasking board that used to live on the solo-only ADM bezel, plus a
+  host-only settings section for every installed feature (fire ignition and intensity,
+  garrisons, pilot career and ace hunts, progression score and perk strength, support costs
+  and call-ins, contract rewards, chain-of-command economy, trench growth, world-event
+  strength and calm windows). Rows are declared by the owning module through a new framework
+  seam (`IHostSettingsView` / `HostSettingsTable`) and write that module's own config entry,
+  so the config file stays the single owner of every value; only settings the module reads
+  live are exposed — startup enable gates stay in the config file. The host is re-checked
+  every refresh; a remote client sees the same page read-only with the reason on the status
+  strip. The ADM bezel, its appended vanilla slot and its rail mapping are removed, so
+  Boscali hosts only the EVN screen. In-game acceptance pending.
+
+- **Trenches generate again on a live front, and they are bigger.** A host session placed
+  nothing: the log showed the front intake arriving and then `refused (NoGround)` on every
+  attempt, with zero trench objects in the scene. Three causes. The scan reset its faction and
+  window cursor on every trace refresh, so only the first windows of the first faction were
+  ever planned; the cursor now walks the front window by window and rotates a faction only when
+  a trace is exhausted. Ownership gated on `hold >= 0`, but the signed control field is one
+  value per kilometre cell, so the cell a position digs into reads contested — on a ragged
+  front even slightly hostile — while the ground is still the faction's own side: ground now
+  counts on the own side **or inside its contested band**, and only deep enemy cells refuse.
+  The resampled station buffer was indexed as `windowStart + station`, so every window after
+  the first was fitted to the wrong stretch of trace and read stale stations; stations are now
+  indexed window-locally. The earthwork also grew to be readable from the air: a ~13m footprint
+  with a ~3.4m packed crest and ~1.9m raised spoil aprons, a bolder far-LOD ridge, fire works
+  on the parapet crest and shelters 7m behind the anchor, and a blocked emplacement bay now
+  tries the next station along the line instead of costing the whole position. The Unity
+  harness gained a second-window check, a quantized cell-field check, a blocked-bay/full-block
+  garrison check and flight renders with the real LOD distances. In-game flight acceptance
+  pending.
+
+- **Trenches are field-scale earthworks you can read from the air.** The ditch was a garden
+  slot that vanished past 3.5km — inside the band players actually fly — and a position was a
+  single thin ribbon. Now a position is up to 2.4km of front with a walkable 1.2–1.9m ditch
+  floor inside a parapet, spoil and skirt footprint, and skirts that tie
+  it into cross-slopes. The belt sits at deliberate doctrine depth: fire trench 80m behind the
+  trace, support line 150m, reserve redoubt 300m, plus deeper saps and communication trenches,
+  so a position reads as a two-line defence rather than one ribbon. A procedural wire belt —
+  crossed pickets and two taut strands, draped over the terrain 16m in front of the ditch —
+  puts no man's land in front of the parapet, and half the scenery works now sit behind the
+  parados as shelters and dugouts while the other half hold the parapet as fire positions.
+  All three LODs are the same earthwork at a coarser ring pitch (3.5m/9m/18m) instead of
+  simplified berms and a flat scar, so the front keeps its silhouette on a low pass and at
+  cruise altitude: full detail with the wire belt and colliders under 600m, berms to about
+  2.6km, ridge to 12km (`LODFarDistance`, configurable 3–24km). Obstacle boxes are strung
+  along the whole front instead of only its first stretch. In-game flight acceptance pending.
+
+- **Secondary contracts get their own HUD: markers on the cockpit, on the map, and a card that
+  actually appears.** The first attempt at this styling borrowed vanilla's marker objects - it
+  fed synthetic objectives into `MissionPosition` and patched `ObjectiveMarker.UpdateMarker`/
+  `Show` and `ObjectiveOverlay.UpdateOverlay` to restyle them - and it came back buggy: a map
+  marker is a pooled object re-handed to whichever objective lands on its index, its label is
+  a private legacy `Text` which the cockpit nudger moves every frame, and hiding one only
+  disables vanilla's own two graphics, so a label drawn by the mod needed three patches and
+  two reflected fields to survive. All of that is gone. `dynamic-operations` now draws its own
+  contract markers: the cockpit HUD projects each accepted contract through the game camera,
+  puts a turning pointer with a two-line plate on the target's own point and clamps it to the
+  frame edge - bearing mirrored, distance kept - when the target is off screen or behind the
+  aircraft, and rings an area with 24 dots sized by the same relation the vanilla area ring
+  uses; the tactical map gets the same plates parented to the map image, counter-scaled to
+  keep a constant size against zoom and scaled rings, hidden with the map's own objective
+  layer. The copy is one vocabulary on both: `#5 SURVEY THE AFTERMATH` over
+  `RECON - 20.4 KM TO AREA - T-2:41`, `HOLD 42%` inside the area, `LAND TO DELIVER` while
+  returning, with the family word and the clock carrying the meaning so colour never does
+  (return green, a clock inside two minutes amber, everything else cyan). The vicinity card no
+  longer demands an area and a few kilometres: it lists up to three contracts ordered inside-
+  your-area first, then the nearest, then anything whose contact the host lost - a `CONTACT
+  LOST` row is never dropped - appears from `radius + max(4x radius, 20 km)` out, keeps its
+  0.14 s / 0.24 s enter/leave banners, and its bar closes on the area edge before carrying the
+  hold. No vanilla marker, overlay, label field or `MissionPosition` query is patched, read or
+  fed, so the module's only Harmony patches are the gameplay observations it already had; no
+  wire fields, no new spawns, no new state, and the pure suite covers the card reading, the
+  panel ordering, the frame clamp and the projection scale.
+
+- **Trench positions are curves again, and the map marker is drawn from those curves.**
+  The planner resampled a whole front trace and only then cut a 1200m window out of the
+  result, which forced the station spacing up to `trace length / 320` — around 150m on a
+  real fifty-kilometre front. Positions were placed as a handful of straight slabs (the log
+  showed eight stations, and one two-station stub), the ground search had almost no stations
+  to follow the terrain with, and the tactical map drew the same bars. A window is now cut
+  out of the raw contour points by arc length first and resampled at the ditch's own ~10m
+  spacing, so a position follows both the front and the ground. The map marker is no longer
+  a baked 1536-pixel texture with Bresenham lines: it is one Canvas UI mesh layer over the
+  drawn curves — fire line solid with NATO crenellations facing the enemy, support, redoubt,
+  communication and sap traces dimmer and thinner, one mark per strongpoint bay, stage ticks
+  and a crossed-out neutralized centre — cut in map-local units at a constant screen width,
+  so zooming magnifies the curves instead of pixelating blocks. Rebuilt only when a line,
+  the zoom or the viewed faction changes. Pure tests pin the window maths; in-game visual
+  acceptance pending.
+
+- **Three landings: a remade contract board, a more dynamic director, and a shipped campaign
+  mission.** MIS → SECONDARY is now an adaptive dossier grid: one to four dossiers sized from
+  the panel body (198 px slot pitch, 190–220 px tall) instead of two fixed 242 px cards, so a
+  tall bezel has no dead space and a short one still pages cleanly. Offers and accepted work
+  sort soonest-deadline-first, closed work newest-first, and an unknown clock never jumps the
+  queue. The third filter reads **CLOSED** (was RESULTS); the empty states no longer claim a
+  30-second draw cycle or a 60-second retention; the urgency chip names the phase its clock
+  belongs to (`OFFER mm:ss`, `LEFT mm:ss`, `PAID`, `TIME UNKNOWN`, `OFFER ENDED`, `TIME ENDED`,
+  `CLOSED`); pay reads `PAID $n + m XP` only when the host reported completion, `UNPAID` for a
+  closed contract that never completed, and a bare figure for an open one; and the host's live
+  status text is written into the page heading instead of living only in the status strip. The
+  panel no longer invents a contract ceiling: `ISecondaryObjectivesView` gained
+  `int ActiveLimit` (0 = the host reports none), implemented by `OperationsManager` as
+  `OperationBoard.MaximumActive` (2), so a host without a limit prints a plain count rather
+  than a made-up one. The `dynamic-operations` director can chain work now: a paid completion
+  may seed one related follow-on (Capture→Defend; Recon/SortieReport/DamageAssessment→Interdict;
+  SupplyEscort→SupplyInterdict; Jam/ElectronicWarfare→Intercept; Rescue and BattlefieldSurvey
+  are exhausted), hard-capped at two links per operation and one pending follow-on per faction
+  board, delivered by the existing candidate pass and skipped, never faked, when no candidate
+  exists; cancel and expiry never chain, and there are no new wire fields. Generation pacing
+  and offer rewards follow the mission's own escalation ladder through the pure
+  `OperationTempo` — 30/24/18 s and 1.0/1.15/1.35 at conventional/tactical/strategic, stacked
+  under the existing money/XP and `RewardMultiplier` clamps, with an unset threshold never
+  inventing a stage. Deliberately aborting an accepted contract now costs the faction 1 morale
+  through the existing local `MoraleAwarded` event (`OperationFailure`), while dismissing an
+  offer or letting it expire stays penalty-free and the dismissal message states which
+  happened. A new `campaign` module ships the authored **Boscali Summer** mission (default on):
+  one staged startup write to `Application.persistentDataPath/Missions/Boscali Summer/`
+  installs an embedded ~840 KiB vanilla-data mission — seven acts, both factions joinable,
+  44 objectives, 112 outcomes and 25 waves / 227 units — through the pure `MissionInstallPlan`
+  policy (install when absent, update at an older mod marker, skip at the shipped revision, and
+  never overwrite a same-named mission Boscali did not write — it logs instead). Failure is a
+  warning, never a blocked module; the module has no Harmony patches, no scene service, no
+  networking and no framework contract. The patch probe now gates the embedded payload and the
+  feature inventory is 15. Pure tests cover the grid arithmetic and copy, sort order, chain
+  mapping and depth, tempo stage boundaries and clamps, abort policy and the install plan; the
+  test project also gained the missing `modules/Support/Domain/OpsGarrison.cs` link that was
+  breaking its build. In-game acceptance is pending for all three.
+
+- **Fixed: some map rail keys stayed vanilla green.** The adopted bezel label is pure
+  green in the game's prefab, and the game's `TextStyleApplier` repaints it with that
+  theme colour at first activation — after the rail had restyled it. The rail already
+  re-asserted the branded line after `SetupButtons`; it now re-asserts the label's
+  text-primary colour on the same reconcile tick, so every key reads the same.
+
+- **SPEC OPS is a base of operations you improve.** The tab now opens on the detachment —
+  a stamp-flagged readiness block over a doctrine board funded from the SOF tokens the task
+  groups accrue. Two tracks, three ranks each: FORTIFICATION DOCTRINE (2/3/4 SOF) has every
+  zone-fortification order occupy 2/3/4 defensive positions, INSERTION RIGGING has a fast-rope
+  stick establish 2/3/4 encampments. Rank, effect, cost and stock are written in words on each
+  row — three pips in the gutter repeat the rank — and the status line says what the *next*
+  rank buys instead of ellipsizing the held effect; the host's reply then names the raise
+  (`FORTIFICATION DOCTRINE RAISED TO RANK II/III · FORTIFY ORDERS OCCUPY 3 DEFENSIVE
+  POSITIONS.`). Ranks are faction assets: the host validates and charges them
+  in SOF tokens, the snapshot mirrors and clamps them, and Urban Combat reads the result through
+  the new `IGroundForceReadiness` contract when it reinforces shells or leaves a rappel camp
+  behind — absent, everything is one position and one camp. Support protocol is now 10; peers
+  must match. Pure tests cover the doctrine table, rank costs, effect mapping and hostile
+  mirrors.
+
+- **The SQD skill board is four qualifications now.** STRIKE (Rod from God), RECON
+  (Satellite Scan), SIGNALS (EMP shock) and ENGINEER (Zone Fortification) are five grades
+  each. Grade 1 is the lane's tool — the OPS authorisation — and grades 2-5 are its passives,
+  each needing the grade before it committed, ending in a capstone only a specialist reaches.
+  Every grade costs one pick: score pays grade n for n x `ScorePerPoint`, so the tool lands in
+  the first minutes and the capstone needs the long sortie, and credited ace defeats pay bonus
+  picks on top. A career may hold **two** tools — two lanes open, two stay closed — so a target
+  the panel once offered is now refused by the host, with the reason (`GRADE FIRST`,
+  `LANE CLOSED`, points) rendered from the same value the host checks instead of being guessed
+  by the panel. Two economy effect kinds ride the existing support seam: re-tasking tempo
+  (host check, host reply and the client's countdown all read the requester's own multiplier)
+  and effect size, which widens the EMP shock the requester calls. Rod-from-God blast scaling
+  is **not** in: the rod's blast runs from the detonation patch with no path back to the
+  request, so STRIKE grade 4 pays combat allocation instead until that correlation exists.
+  The debug bypass still opens everything. SKILLS now draws the board as a grade-row matrix —
+  four qualification columns side by side, so classes can be compared without scrolling — with
+  the pick budget and the selected-grade CONFIRM pinned above it, and one state word per cell
+  (`PICK`, `ACTIVE`, `GRADE FIRST`, `CLOSED`, `NO PICK`). The twenty per-row buttons and the
+  ace-skill rows that used to fill the first screen are gone; the shared ace codes moved to a
+  footer strip. The
+  score bar on SKILLS gave way to an unspent-pick pip row, and the PILOT committed-skill strip
+  grows a row per six grades instead of clipping.
+
+- Space is one modular orbital station now. The four payload satellites and the satellite wall
+  are gone. OPS › SPACE has three pages. MISSION PLANNER designs the station on a 5×3 truss:
+  launch a core to MID or HIGH, then launch modules one at a time (5 s GO/NO-GO count, docks
+  20 s later) from 13 designs — solar, battery, reactor, radiator, relay, gyros, shield,
+  propulsion, habitat, spy imager (EO/IR + radar), SIGINT array, rod magazine, EMP emitter —
+  against a 40 t structure and copy limits, so a station carries about eight. Neighbours share
+  utilities: radiators cool hot modules (EMP recharge ×2 and reactor output ×0.5 without one),
+  relays widen neighbouring sensors ×1.35, shields protect themselves and neighbours from
+  micrometeoroid strikes that otherwise take a module offline for 45 s. Launch price is module
+  plus vehicle (`PlatformCostScale`); jettison refunds `PlatformJettisonRefund`; cargo refills
+  fuel and rods. PLATFORM flies it: pass clock and bar, eight annunciators, energy/fuel/rods/
+  mass, a live schematic, ability cards with the reason in words and a voice loop. Orbit bands
+  trade pass length for precision (LOW ~2 min, sharp optics, 8 m rods, drag fuel; MID ~3 min;
+  HIGH ~5½ min, wide scans and EMP, 45 m rods), with real pass geometry and a compressed
+  far-side arc; propulsion rephases (25 fuel) or changes band (35 fuel, 30 s transfer). Power
+  is a kW/kJ budget with brownouts. The full-screen uplink replaces the wall: 16:10 EO/IR feed,
+  drag or WASD to slew with gimbal lag, wheel or Q/E zoom to the imager's GSD, radar product
+  panel, taskings 1–4 at the crosshair; the map ignores the mouse and the keyboard and pause
+  key are held while it is up. Radar scan (was SAR collect), the new ELINT sweep (emitting
+  ground radars, shares the scan perk), Rod from God (band scatter) and EMP shock (band radius)
+  need the station overhead with the module fitted, online, powered and recharged. The station
+  is a cube cluster in the sky; foreign stations are tracked in ENEMY ACTIVITY (counterspace
+  desk stubbed as coming soon) and drawn red. Support protocol is now 11. New keys:
+  `PlatformCostScale`, `PlatformJettisonRefund`, `PlatformInsertionSeconds`,
+  `PlatformDockingSeconds`, `PlatformDebrisEvents`, `ElintSweep`, `ElintSweepCost`,
+  `ElintSweepRadiusMeters`; the satellite keys are no longer read. In-game visual and
+  multiplayer acceptance is pending. Spec: `design/ux/orbital-platform.md`.
+
+- **The map can now show what the enemy can see you with, as heat.** A third Boscali overlay,
+  **THREAT HEAT** on the MAP bezel (`Command.ThreatHeat`, default on), shades the ground by how
+  strongly the best *tracked* hostile sensor would find your aircraft at that spot: a near
+  radar burns and a distant one fades, overlapping emitters blend into one hotter region instead
+  of stacking outlines, and an optical/IR envelope merges in more quietly because it never
+  touches your radar cross-section. The intensity is the game's own arithmetic — the
+  fourth-root cross-section term, the radio horizon from both altitudes, the twice-nominal scan
+  limit and the detector's sweep — so a stealthier airframe cools the whole field, and a radar
+  whose slant reach cannot close on your altitude contributes nothing. Untracked emitters
+  contribute no heat, blobs sit on the position your side believes the emitter to be at, and a
+  jammed radar goes cold because the game's own gate returns nothing when it is jammed.
+  It costs one texture on one quad: no per-emitter objects, no per-frame work at all (pan and
+  zoom transform the stretched raster for free) and a 1 Hz bake that sleeps while the map is
+  closed. Client-local presentation: no network traffic, no Harmony target, no world state
+  touched. Terrain line of sight is not cut out of the field yet.
+
+- **Commanders are living battlefield assets now, and the staff board is a reading board.**
+  The STR COC page was rebuilt around what the game is about: no orders, no kill-list marks, no
+  command points, no commendations. Each commander is worth a **bonus** to their faction while
+  alive - stated in words on the card (income, kill value, how far their patrols see, how hard
+  their loss lands) - travels between their bases in a real VIP convoy, survives a strike on an
+  empty post, and dies when their post or the convoy's lead vehicle is destroyed; a successor
+  takes over and the enemy loses the bonus meanwhile. Killing one pays the killer's faction
+  automatically. The page is the chain of command in the left column and the selected
+  commander's **personnel file** in the right: a form number, an ID photo with its reference,
+  key/value fields with leader dots, a tilted disposition stamp, share of staff, the bonus as
+  file entries, and the service record - or redaction bars while an enemy post is unconfirmed.
+  A hit post reads **UNDER FIRE** and a row that changes state flashes once. Enemy log entries
+  obey the roster's intel fog. The map
+  draws a tier-sized diamond for every post you own or have confirmed, ringed while it is under
+  fire, so a commander is a place you can fly to (layer toggle:
+  `HighCommand.MapMarkersEnabled`). `HighCommand` wire protocol is now 4 (read-only: the board
+  read and nothing else; peers must match).
+
+- **Trenches can finally dig on a real front.** The curve planner refused every position
+  once fighting started: it demanded a strictly `Friendly` control cell for the ditch, but
+  an engaged front is a kilometres-wide contested band, so the trace's own cells answer
+  neither side as owned and nothing was ever placed. The owning side now comes from the sign
+  of Command's signed control field (`ITerritoryIngress.TryGetHoldStrength`) through a probe
+  ladder that deepens until the field separates — the same field that draws the frontline —
+  and candidate ground counts when it is on the faction's side of that zero crossing,
+  contested or not. Geography is unchanged: the five-depth ground search still settles the
+  line into the flattest, lowest corridor and split runs still break at water, cliffs and
+  steep ground. A refusal is now named (`TrenchRefusal`: too short, no side, no ground, no
+  run, too close) and an entirely refusing front reports itself once a minute with the trace
+  intake line, so an empty theater can no longer be silent. Pure tests pin the regression: on
+  an engaged front most trace stations are contested on both sides while the control field
+  resolves the owning side at every one of them. In-game acceptance pending.
+
+- **STR CMD is a theater operations board.** The placeholder is gone. The host names one of
+  their faction's active objectives as its main effort (`TheaterOps`, default on): friendly
+  AI reinforcement delivery and movement with no better order favour that objective, applied
+  as two postfixes on the game's pure `MissionPosition` queries. The board also funds the
+  mission's own convoy groups from the shared faction pool — spending it on the vanilla
+  supply path, gated by the group's cooldown and affordability — and reports the rearm
+  network's readiness (units awaiting rearm, ready/tracked and depleted assets) as a local
+  observation on every peer. No unit is selected, spawned, retasked or waypointed, and
+  clearing the effort restores vanilla behaviour immediately. The host's effort replicates
+  read-only to clients (protocol 1) so they can name it too, and a client-local diamond
+  marks it on the map. Pure tests cover the bounded per-faction table and the funding gate;
+  live AI, wire and visual acceptance pending.
+
+- OPS rebuilt as a five-domain operations screen on the shared avionics chrome: **SPACE**,
+  **EW**, **INFO**, **SPEC OPS** and **INTEL**, with ALLOCATION / ORBIT / EW / RESERVE
+  metrics. SPACE hosts the orbital station (see the station entry above). EW deploys and moves the mobile EW
+  station and sets its posture: SIGINT PASSIVE backs nothing, NOISE JAMMING backs radar
+  blackout, GHOST SPOOFING backs ghost shield and spoof contacts — enforced by the host, so a
+  station deployed before a retune comes up jamming and a deception operation now needs
+  GHOST SPOOFING. INFO carries the five cyber operations and the four facilities. SPEC OPS
+  (pathfinders, sabotage cells, CSAR readiness; zone fortification) and INTEL (HUMINT
+  network, decryption array, asset recruitment) fund three-tier programs that accrue SOF
+  readiness and intel tokens into reserves capped at eight; the base of operations spends SOF
+  tokens on doctrine (see above) while the intel reserve waits on theater events.
+  Every row states its reason in words and in hover help. The invest and EW retune commands
+  and the station posture/position, program tiers and reserves ride the support snapshot.
+  Pure tests cover tabs, postures, INFO gates and program investment/accrual/mirror. In-game
+  visual and multiplayer acceptance is pending.
+
+- Radio rebuilt as one instrument with two pages. `RAD` now carries RECEIVER and DECK tabs.
+  RECEIVER is the set: a scrolled spectrum waterfall over the band, an S-meter in S-units and
+  dBm, squelch with SQL keys, wide/narrow bandwidth, an Auto/FM/AM mode switch that garbles a
+  wrong-demodulator signal, channel vs five-times-fine tuning, three bands (FM 100 kHz, VHF
+  air 25 kHz AM, MW 10 kHz), TUNE/SEEK/SCAN/PWR/STOP, a LINK block and an AF volume row of its
+  own. Reception is modelled locally: a link budget with free-space loss, the radio horizon
+  `4.12·(√h_tx+√h_rx)` km and a terrain line-of-sight probe against the game's ground mask,
+  measured from the player's aircraft to each built-in station's tower (HQ, other faction's HQ,
+  nearest owned airbase), resolved on a 10 s timer. The world feeds back in: a built-in whose
+  tower is lost reads off air (folder), a user folder is a local archive and reads full, and an
+  unresolved map or no listener reads full rather than inventing failure. The receiver does not
+  switch tracks — you listen to the station's programme. DECK is the player's own library,
+  which is what the old programme log should have been: folders, tracks, play/pause/skip/stop,
+  shuffle, repeat, folder and rescan. Both pages share one audio engine (`RadioProgram`) and
+  one vanilla-soundtrack hold: the receiver keeps the game's music silent from its first on-air
+  play through dead air between stations and only hands it back on STOP (or the deck's STOP
+  ALL), with a 0.5 s sweep that stops any vanilla source that still starts. Transmit, crypto,
+  jamming and voice receive are inert placeholders (`RadioLinkStub`) shown as such in the LINK
+  block; the deck's duck under a received transmission is wired through `RadioLinkStub.DeckGain`
+  and has no trigger yet. FM step is the real 100 kHz grid over 87.5–108.0 MHz, and the stations
+  list shows modelled carrier strength. Tests cover the propagation maths, spectrum rows, band
+  cycle, fine step, the hold rule, the off-air state and the link stubs.
 
 - Fire soot is measured in scar diameters again. The two lobe decals of a burn site were
   offset by fractions of the site's 260 m blast-map ash radius, so every burn left three

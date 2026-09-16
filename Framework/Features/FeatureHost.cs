@@ -23,6 +23,7 @@ namespace BoscaliSummer.Framework.Features
         private readonly GameObject runtimeRoot;
         private readonly SceneLifecycle sceneLifecycle;
         private readonly ServiceRegistry services = new ServiceRegistry();
+        private readonly HostSettingsBoard hostSettings = new HostSettingsBoard();
         private readonly List<LoadedFeature> loadedFeatures = new List<LoadedFeature>();
         private bool disposed;
         private bool loadAttempted;
@@ -71,7 +72,7 @@ namespace BoscaliSummer.Framework.Features
                 try
                 {
                     context = new FeatureContext(
-                        featureMetadata.Id, runtimeRoot, sceneLifecycle, logger, settings, services);
+                        featureMetadata.Id, runtimeRoot, sceneLifecycle, logger, settings, services, hostSettings);
                     feature.Install(context);
                     candidates.Add(new LoadedFeature
                     {

@@ -17,14 +17,12 @@ namespace BoscaliSummer.Features.HighCommand.Configuration
         public ConfigEntry<int> BountyBaseFunds { get; }
         public ConfigEntry<int> BountyComponentFunds { get; }
         public ConfigEntry<int> BountyTheaterFunds { get; }
-        public ConfigEntry<int> MarkedBountyPercent { get; }
-        public ConfigEntry<int> CommandPointsMaximum { get; }
-        public ConfigEntry<int> CommendBoostPercent { get; }
         public ConfigEntry<bool> TransfersEnabled { get; }
         public ConfigEntry<int> TransferMinSeconds { get; }
         public ConfigEntry<int> TransferMaxSeconds { get; }
         public ConfigEntry<int> DisruptionSeconds { get; }
         public ConfigEntry<int> PostRespawnSeconds { get; }
+        public ConfigEntry<bool> MapMarkersEnabled { get; }
 
         public HighCommandSettings(ConfigFile config)
         {
@@ -51,15 +49,6 @@ namespace BoscaliSummer.Features.HighCommand.Configuration
             BountyTheaterFunds = config.Bind(section, "BountyTheaterFunds", 6000,
                 new ConfigDescription("Funds for killing an enemy theater commander.",
                     new AcceptableValueRange<int>(0, 60000)));
-            MarkedBountyPercent = config.Bind(section, "MarkedBountyPercent", 50,
-                new ConfigDescription("Extra bounty percent while the commander is on your kill list.",
-                    new AcceptableValueRange<int>(0, 200)));
-            CommandPointsMaximum = config.Bind(section, "CommandPointsMaximum", 12,
-                new ConfigDescription("Maximum banked command points for commendations and relocation orders.",
-                    new AcceptableValueRange<int>(0, 32)));
-            CommendBoostPercent = config.Bind(section, "CommendBoostPercent", 4,
-                new ConfigDescription("Temporary cohesion granted to your faction by a commendation.",
-                    new AcceptableValueRange<int>(0, 10)));
             TransfersEnabled = config.Bind(section, "TransfersEnabled", true,
                 "Commanders occasionally travel between friendly bases in ground convoys. Intercepting the lead vehicle kills them.");
             TransferMinSeconds = config.Bind(section, "TransferMinSeconds", 180,
@@ -74,6 +63,8 @@ namespace BoscaliSummer.Features.HighCommand.Configuration
             PostRespawnSeconds = config.Bind(section, "PostRespawnSeconds", 60,
                 new ConfigDescription("Delay before a killed commander's post is re-established.",
                     new AcceptableValueRange<int>(10, 600)));
+            MapMarkersEnabled = config.Bind(section, "MapMarkersEnabled", true,
+                "Draw your posts and confirmed enemy posts as diamonds on the map. Off hides the layer only; the page still lists every post.");
         }
     }
 }

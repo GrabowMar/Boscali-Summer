@@ -23,6 +23,7 @@ namespace BoscaliSummer.Features.Progression.Runtime
         /// <summary>Snapshot poll cadence while a view is open. Nothing is sent while it is closed.</summary>
         private const float PollInterval = 2f;
         private const float ReplyTimeout = 5f;
+        private const string LadderComplete = "Grade ladder complete. Defeat enemy aces for bonus picks.";
 
         private readonly Dictionary<ulong, PerkState> states = new Dictionary<ulong, PerkState>();
         private readonly Dictionary<ulong, int> generations = new Dictionary<ulong, int>();
@@ -43,7 +44,7 @@ namespace BoscaliSummer.Features.Progression.Runtime
         private bool unlockPending;
         private float unlockPendingSince;
 
-        public string LastResult { get; private set; } = "Fly to earn perk points.";
+        public string LastResult { get; private set; } = "Fly to earn a qualification grade.";
 
         int IProgressionView.Rank => localRank;
         int IProgressionView.Score => localScore;
@@ -91,7 +92,7 @@ namespace BoscaliSummer.Features.Progression.Runtime
             nextPoll = 0f;
             unlockPending = false;
             unlockPendingSince = 0f;
-            LastResult = "Fly to earn perk points.";
+            LastResult = "Fly to earn a qualification grade.";
         }
 
         private void Update()
@@ -118,16 +119,21 @@ namespace BoscaliSummer.Features.Progression.Runtime
         PerkView[] IProgressionView.GetPerks()
         {
             bool bypass = BypassRequirements;
-            int available = localState.AvailablePoints(localEarnedPoints);
             var result = new PerkView[PerkCatalog.All.Length];
             for (int i = 0; i < PerkCatalog.All.Length; i++)
             {
                 PerkDefinition definition = PerkCatalog.All[i];
                 bool unlocked = localState.Has(definition.Id);
+                // The same rule the host applies, so the panel cannot offer a grade the
+                // server would refuse: grade order, the career's two-tool cap, or the price.
+                byte block = unlocked || bypass
+                    ? PerkView.BlockNone
+                    : localState.BlockOf(definition.Id, localEarnedPoints);
+                bool affordable = !unlocked && block == PerkView.BlockNone;
                 result[i] = new PerkView(
-                    definition.Id, definition.Group, definition.Name, definition.Description,
-                    definition.Cost, unlocked,
-                    !unlockPending && !unlocked && (bypass || available >= definition.Cost));
+                    definition.Id, PerkCatalog.Qualifications, definition.Lane, definition.Name,
+                    definition.Description, definition.Cost, PerkCatalog.PrerequisiteOf(definition.Id),
+                    block, unlocked, !unlockPending && affordable);
             }
             return result;
         }
@@ -209,19 +215,21 @@ namespace BoscaliSummer.Features.Progression.Runtime
             if (localPlayerId != PlayerIdentity.None)
             { states[localPlayerId] = localState; generations[localPlayerId] = snapshot.Generation; }
 
-            if (snapshot.Result == ProgressionSnapshot.Unlocked) LastResult = "Perk activated.";
-            else if (snapshot.Result == ProgressionSnapshot.Denied) LastResult = "Not enough perk points.";
+            if (snapshot.Result == ProgressionSnapshot.Unlocked) LastResult = "Qualification grade earned.";
+            else if (snapshot.Result == ProgressionSnapshot.Denied)
+                LastResult = "Pick refused. Check grade order and the two-tool career cap.";
             else LastResult = NextPointHint();
         }
 
         private string NextPointHint()
         {
-            if (localEarnedPoints >= 20) return "Pilot perk-point budget complete.";
-            if (localEarnedPoints >= localMaximumPoints)
-                return "Score budget complete. Defeat enemy aces for bonus perk points.";
-            int perPoint = Mathf.Max(1, localScorePerPoint);
+            if (localEarnedPoints >= 20) return "Pilot pick budget complete.";
+            if (localEarnedPoints >= localMaximumPoints) return LadderComplete;
             int origin = GameManager.GetLocalPlayer<Player>(out Player player) && player != null ? squad.GetScoreOrigin(PlayerIdentity.Of(player)) : 0;
-            return (perPoint - Mathf.Max(0, localScore - origin) % perPoint) + " more score for the next perk point.";
+            int remaining = PerkPoints.RemainingToNext(Math.Max(0, localScore - origin), localScorePerPoint);
+            return remaining < 0
+                ? LadderComplete
+                : remaining + " more score for the next qualification grade.";
         }
 
         // ---- Effects ---------------------------------------------------------------------
@@ -283,7 +291,7 @@ namespace BoscaliSummer.Features.Progression.Runtime
 
     /// <summary>
     /// Static locator for the two Harmony patches, which cannot resolve a service instance.
-    /// Nothing else may use it — cross-feature access goes through the service registry.
+    /// Nothing else may use it â€” cross-feature access goes through the service registry.
     /// </summary>
     internal static class ProgressionRuntime
     {

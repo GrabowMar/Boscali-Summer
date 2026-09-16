@@ -91,7 +91,6 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 case "FILTERS": case "PRESETS": case "LAYERS": return "filter";
                 case "MAP": return "map";
                 case "RAD": case "RADIO": return "radio";
-                case "MUS": case "MUSIC": return "deck";
                 case "SET": case "SETTINGS": case "CONFIG": return "settings";
                 case "OPS": case "SUPPORT": case "AIRDROP": return "support";
                 case "STR": return "theater";
@@ -203,15 +202,6 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     Circle(mesh,.5f,.5f,.32f,12); break;
                 case "flag": Path(mesh,.15f,.05f,.15f,.95f,.85f,.8f,.15f,.55f); break;
                 case "filter": Path(mesh,.05f,.9f,.95f,.9f,.6f,.5f,.6f,.15f,.4f,.05f,.4f,.5f,.05f,.9f); break;
-                case "board":
-                    Path(mesh,.18f,.05f, .82f,.05f, .82f,.90f, .18f,.90f, .18f,.05f);
-                    Path(mesh,.36f,.94f, .64f,.94f, .64f,.82f, .36f,.82f, .36f,.94f);
-                    Line(mesh,.30f,.66f,.70f,.66f); Line(mesh,.30f,.48f,.70f,.48f);
-                    Line(mesh,.30f,.30f,.58f,.30f); break;
-                // A deck: a transport triangle over its plinth.
-                case "deck":
-                    Path(mesh,.30f,.20f, .30f,.86f, .82f,.53f, .30f,.20f);
-                    Line(mesh,.14f,.16f,.86f,.16f); break;
                 default:
                     Line(mesh,.1f,.8f,.9f,.8f); Line(mesh,.1f,.5f,.75f,.5f); Line(mesh,.1f,.2f,.9f,.2f); break;
             }
