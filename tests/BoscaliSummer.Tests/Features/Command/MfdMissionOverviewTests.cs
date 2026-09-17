@@ -45,6 +45,9 @@ namespace BoscaliSummer.Tests.Features.Command
                 MfdMissionOverview.Caption(0f, 0f, 50f) ==
                 "CURRENT 0  ·  TACTICAL CLEARED  ·  50 TO STRATEGIC NUCLEAR",
                 "Unset thresholds say so instead of showing a confident zero");
+
+            TestAssert.That(MfdMissionOverview.Whole(1500f) == "1,500" && MfdMissionOverview.Whole(25f) == "25",
+                "Threshold figures group with the invariant comma, never the machine's separator");
         }
 
         private static bool Near(float value, float expected) => Math.Abs(value - expected) < 0.0005f;

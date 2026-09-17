@@ -9,7 +9,7 @@ Set-Content -LiteralPath "$PreviewDirectory/ProjectSettings/ProjectVersion.txt" 
 Set-Content -LiteralPath "$PreviewDirectory/Packages/manifest.json" -Value '{"dependencies":{"com.unity.modules.assetbundle":"1.0.0","com.unity.modules.physics":"1.0.0","com.unity.modules.imageconversion":"1.0.0"}}'
 Copy-Item -LiteralPath "$PSScriptRoot/TrenchUnityCheck.cs", "$PSScriptRoot/TrenchGameStubs.cs" -Destination "$PreviewDirectory/Assets/"
 Copy-Item -LiteralPath "$repo/modules/Trenches/Visuals/TrenchMeshBuilder.cs", "$repo/modules/Trenches/Visuals/TrenchMaterialResolver.cs", "$repo/modules/Trenches/Visuals/TrenchVisualChunk.cs" -Destination "$PreviewDirectory/Assets/"
-Copy-Item -LiteralPath "$repo/modules/Trenches/Runtime/TrenchLine.cs", "$repo/modules/Trenches/Runtime/TrenchPlanner.cs", "$repo/modules/Trenches/Runtime/TrenchGarrison.cs", "$repo/modules/Trenches/Domain/TrenchTraceMath.cs" -Destination "$PreviewDirectory/Assets/"
+Copy-Item -LiteralPath "$repo/modules/Trenches/Runtime/TrenchLine.cs", "$repo/modules/Trenches/Runtime/TrenchPlanner.cs", "$repo/modules/Trenches/Runtime/TrenchGarrison.cs", "$repo/modules/Trenches/Runtime/TrenchWorks.cs", "$repo/modules/Trenches/Domain/TrenchTraceMath.cs" -Destination "$PreviewDirectory/Assets/"
 Copy-Item -LiteralPath "$repo/Framework/Contracts/ITerritoryIngress.cs" -Destination "$PreviewDirectory/Assets/"
 $arguments = @("-batchmode", "-projectPath", $PreviewDirectory, "-executeMethod", "TrenchUnityCheck.Run", "-logFile", "$PreviewDirectory/check.log")
 $process = Start-Process -FilePath $Unity -ArgumentList $arguments -WorkingDirectory $PreviewDirectory -WindowStyle Hidden -Wait -PassThru

@@ -1,4 +1,6 @@
+using System;
 using BoscaliSummer.Features.Command.Presentation.MapUi;
+using BoscaliSummer.Features.DynamicOperations.Domain;
 
 namespace BoscaliSummer.Tests.Features.Command
 {
@@ -20,6 +22,15 @@ namespace BoscaliSummer.Tests.Features.Command
                     "every contract title maps to a family: " + title);
                 TestAssert.That(!string.IsNullOrEmpty(MfdMissionLabels.ContractGlyph(title)),
                     "every contract title maps to a glyph shape: " + title);
+            }
+
+            foreach (OperationKind kind in (OperationKind[])Enum.GetValues(typeof(OperationKind)))
+            {
+                string issued = OperationTitles.Title(kind);
+                TestAssert.That(MfdMissionLabels.KnownContract(issued),
+                    "every operation kind the director can issue is mapped, not the generic flag: " + kind + " -> " + issued);
+                TestAssert.That(MfdMissionLabels.ContractFamily(issued) != MfdMissionLabels.UnknownFamily,
+                    "the board knows the family a new operation kind issues: " + kind + " -> " + issued);
             }
 
             TestAssert.That(MfdMissionLabels.ContractGlyph("CONFIRM THE STRIKE") == "target" &&

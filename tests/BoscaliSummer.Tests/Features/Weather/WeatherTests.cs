@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Reflection;
 using BoscaliSummer.Features.Weather.Domain;
 
@@ -9,8 +10,9 @@ namespace BoscaliSummer.Tests.Features.Weather
     ///
     /// <para>These are the parts a screenshot cannot check: that every peer derives the same
     /// sky from the mission name and clock, that a blend crosses the short way round, that a
-    /// foreign write always wins, and that an unknown reading renders as a dash rather than a
-    /// confident zero.</para>
+    /// foreign write always wins, that the unit conversions are exact and culture-proof, that
+    /// the severity ramps only ever climb, and that an unknown reading renders as a dash rather
+    /// than a confident zero.</para>
     /// </summary>
     internal static class WeatherTests
     {
@@ -29,6 +31,11 @@ namespace BoscaliSummer.Tests.Features.Weather
             HeadingsTakeTheShortArc();
             ReadoutsNeverInventPrecision();
             SnapshotsReadTheLocalWind();
+            UnitConversionsAreExactAndCultureInvariant();
+            TrendsCarryTheirOwnSign();
+            FlightCategoriesMatchTheirThresholds();
+            NewFormattersSurviveUnreadableInput();
+            TheBannerNamesTheRightCell();
             StormTests.Run();
             DomainStaysFreeOfUnityTypes();
         }
@@ -392,6 +399,231 @@ namespace BoscaliSummer.Tests.Features.Weather
             TestAssert.That(WeatherSnapshot.Unavailable.LocalWindSpeed == 0f &&
                             !float.IsNaN(WeatherSnapshot.Unavailable.LocalWindHeading),
                 "an unavailable snapshot computes without throwing");
+        }
+
+        /// <summary>
+        /// The panel's new units. Feet, kilometres, metres above ground and tenths of a metre
+        /// per second all have to be exact and identical under every culture: a comma decimal
+        /// separator must not turn 3281 feet into something a pilot cannot read.
+        /// </summary>
+        private static void UnitConversionsAreExactAndCultureInvariant()
+        {
+            TestAssert.That(WeatherReadout.Feet(1000f) == "3281 FT",
+                "a thousand metres reads 3281 feet");
+            TestAssert.That(WeatherReadout.Feet(3400f) == "11155 FT",
+                "the model's ceiling clamp reads 11155 feet");
+            TestAssert.That(WeatherReadout.Feet(0f) == "0 FT", "zero metres is zero feet, not a dash");
+            TestAssert.That(WeatherReadout.MetersAgL(1040f) == "1040 M AGL",
+                "metres above ground say so");
+            TestAssert.That(WeatherReadout.Kilometres(8000f) == "8.0 KM",
+                "eight thousand metres is 8.0 km");
+            TestAssert.That(WeatherReadout.Kilometres(10400f) == "10 KM",
+                "four figures of kilometres drop the decimal");
+            TestAssert.That(WeatherReadout.Kilometres(800f) == "0.8 KM",
+                "poor visibility keeps its decimal");
+            TestAssert.That(WeatherReadout.Celsius(14f) == "14°C", "fourteen degrees reads fourteen");
+            TestAssert.That(WeatherReadout.Celsius(-3f) == "-3°C", "a negative temperature keeps its sign");
+            TestAssert.That(WeatherReadout.Speed(17.04f) == "17.0 M/S", "a gust reads to a tenth");
+
+            CultureInfo previous = CultureInfo.CurrentCulture;
+            try
+            {
+                // A comma-decimal culture. Every one of these must ignore it.
+                CultureInfo.CurrentCulture = new CultureInfo("de-DE");
+                TestAssert.That(WeatherReadout.Feet(1000f) == "3281 FT",
+                    "feet ignore the current culture");
+                TestAssert.That(WeatherReadout.Kilometres(8000f) == "8.0 KM",
+                    "kilometres ignore the current culture");
+                TestAssert.That(WeatherReadout.Speed(17.04f) == "17.0 M/S",
+                    "wind speeds ignore the current culture");
+                TestAssert.That(WeatherReadout.SignedDecimal(5.66f, 1) == "+5.7",
+                    "signed decimals ignore the current culture");
+            }
+            finally
+            {
+                CultureInfo.CurrentCulture = previous;
+            }
+        }
+
+        /// <summary>
+        /// A trend has to say which way it points. The arrow, the signed delta and the veer all
+        /// carry their own direction, and a level reading is a level mark rather than an arrow.
+        /// </summary>
+        private static void TrendsCarryTheirOwnSign()
+        {
+            TestAssert.That(WeatherReadout.SignedPercent(0.183f) == "+18%", "a rise reads with a plus");
+            TestAssert.That(WeatherReadout.SignedPercent(-0.24f) == "-24%", "a fall reads with a minus");
+            TestAssert.That(WeatherReadout.SignedPercent(0f) == "0%", "no change reads as zero, unsigned");
+            TestAssert.That(WeatherReadout.SignedPercent(0.004f) == "0%",
+                "a change under half a percent is level, never -0%");
+            TestAssert.That(WeatherReadout.SignedPercent(-0.004f) == "0%",
+                "a fall under half a percent is level, never -0%");
+
+            TestAssert.That(WeatherReadout.SignedDecimal(5.66f, 1) == "+5.7", "a wind rise carries its plus");
+            TestAssert.That(WeatherReadout.SignedDecimal(-2.34f, 1) == "-2.3", "a wind fall carries its minus");
+            TestAssert.That(WeatherReadout.SignedDecimal(0f, 1) == "0.0", "a level wind delta is unsigned");
+
+            TestAssert.That(WeatherReadout.TrendMark(0.5f, WeatherReadout.TrendDeadband) == "▲",
+                "a rise above the dead band is an up arrow");
+            TestAssert.That(WeatherReadout.TrendMark(-0.5f, WeatherReadout.TrendDeadband) == "▼",
+                "a fall below the dead band is a down arrow");
+            TestAssert.That(WeatherReadout.TrendMark(0.01f, WeatherReadout.TrendDeadband) == "=",
+                "a move inside the dead band is a level mark");
+            TestAssert.That(WeatherReadout.TrendMark(0f, 0f) == "=", "a zero change is never an arrow");
+
+            TestAssert.That(WeatherReadout.Veer(350f, 10f) == "+20°",
+                "a north-crossing heading change veers twenty degrees, not three hundred and forty");
+            TestAssert.That(WeatherReadout.Veer(10f, 350f) == "-20°", "the same change reversed backs");
+            TestAssert.That(WeatherReadout.Veer(90f, 90f) == "0°", "no veer reads as zero");
+
+            TestAssert.That(WeatherReadout.ShearLabel(0f) == "LIGHT", "still air is light shear");
+            TestAssert.That(WeatherReadout.ShearLabel(0.3f) == "MODERATE", "a third of the scale is moderate");
+            TestAssert.That(WeatherReadout.ShearLabel(0.9f) == "STRONG", "near the top is strong");
+            TestAssert.That(WeatherReadout.ShearLabel(-2f) == "LIGHT",
+                "negative shear clamps rather than throwing");
+        }
+
+        /// <summary>
+        /// The standard ceiling-and-visibility ladder, and the panel's ramp on top of it. Every
+        /// boundary is asserted on both sides, because a category one rung off is a different
+        /// decision in the cockpit.
+        /// </summary>
+        private static void FlightCategoriesMatchTheirThresholds()
+        {
+            TestAssert.That(Atmospheres.Rank((FlightCategory)(-4)) == 0 &&
+                            Atmospheres.Rank((FlightCategory)99) == 3,
+                "an out-of-range category clamps instead of throwing");
+
+            TestAssert.That(CategoryAt(900f, 99999f) == FlightCategory.Vfr,
+                "a 900 m ceiling is still visual");
+            TestAssert.That(CategoryAt(899f, 99999f) == FlightCategory.Mvfr,
+                "a ceiling just under 900 m is marginal visual");
+            TestAssert.That(CategoryAt(300f, 99999f) == FlightCategory.Mvfr,
+                "a 300 m ceiling is still marginal visual");
+            TestAssert.That(CategoryAt(299f, 99999f) == FlightCategory.Ifr,
+                "a ceiling under 300 m is instrument");
+            TestAssert.That(CategoryAt(150f, 99999f) == FlightCategory.Ifr,
+                "a 150 m ceiling is instrument, not low");
+            TestAssert.That(CategoryAt(149f, 99999f) == FlightCategory.Lifr,
+                "a ceiling under 150 m is low instrument");
+            TestAssert.That(CategoryAt(99999f, 8000f) == FlightCategory.Vfr,
+                "eight km visibility is visual");
+            TestAssert.That(CategoryAt(99999f, 7999f) == FlightCategory.Mvfr,
+                "visibility just under eight km is marginal");
+            TestAssert.That(CategoryAt(99999f, 5000f) == FlightCategory.Mvfr,
+                "five km visibility is still marginal");
+            TestAssert.That(CategoryAt(99999f, 4999f) == FlightCategory.Ifr,
+                "visibility just under five km is instrument");
+            TestAssert.That(CategoryAt(99999f, 1600f) == FlightCategory.Ifr,
+                "sixteen hundred metres of visibility is instrument");
+            TestAssert.That(CategoryAt(99999f, 1599f) == FlightCategory.Lifr,
+                "visibility under sixteen hundred metres is low instrument");
+
+            TestAssert.That(Atmospheres.Label(FlightCategory.Vfr) == "VFR" &&
+                            Atmospheres.Label(FlightCategory.Mvfr) == "MVFR" &&
+                            Atmospheres.Label(FlightCategory.Ifr) == "IFR" &&
+                            Atmospheres.Label(FlightCategory.Lifr) == "LIFR",
+                "every category has its standard label");
+
+            string[] expectedRail = { "rail ready", "rail info", "rail contested", "rail danger" };
+            string[] expectedChip = { "chip live", "chip info", "chip warn", "chip danger" };
+            int previousSeverity = -1;
+            for (int i = 0; i < 4; i++)
+            {
+                var category = (FlightCategory)i;
+                int severity = WeatherReadout.FlightSeverity(category);
+                TestAssert.That(severity == Atmospheres.Rank(category),
+                    "the panel's severity is exactly the atmosphere rank");
+                TestAssert.That(severity > previousSeverity,
+                    "the severity ramp is strictly monotonic in the rank");
+                previousSeverity = severity;
+                TestAssert.That(WeatherReadout.FlightRailClass(category) == expectedRail[i],
+                    "the rail ramp runs ready to danger in rank order");
+                TestAssert.That(WeatherReadout.FlightChipClass(category) == expectedChip[i],
+                    "the chip ramp runs live to danger in rank order");
+            }
+
+            string[] expectedRegimeChip = { "chip live", "chip live", "chip warn", "chip warn", "chip danger", "chip danger" };
+            for (int i = 0; i < WeatherRegimes.Count; i++)
+            {
+                TestAssert.That(WeatherReadout.ChipClass((WeatherRegime)i) == expectedRegimeChip[i],
+                    "every regime wears the chip class its severity names");
+            }
+        }
+
+        /// <summary>
+        /// Every new formatter, fed the readings a broken sample actually produces. A dash is an
+        /// answer; "NaN" is a bug report, and an exception here is a dead cockpit panel.
+        /// </summary>
+        private static void NewFormattersSurviveUnreadableInput()
+        {
+            float[] poison = { float.NaN, float.PositiveInfinity, float.NegativeInfinity, -1f, -1234.5f, float.MaxValue };
+            foreach (float value in poison)
+            {
+                AssertClean(WeatherReadout.Feet(value), "feet");
+                AssertClean(WeatherReadout.MetersAgL(value), "metres AGL");
+                AssertClean(WeatherReadout.Kilometres(value), "kilometres");
+                AssertClean(WeatherReadout.Celsius(value), "celsius");
+                AssertClean(WeatherReadout.Speed(value), "wind speed");
+                AssertClean(WeatherReadout.SignedDecimal(value, 1), "signed decimal");
+                AssertClean(WeatherReadout.SignedPercent(value), "signed percent");
+                AssertClean(WeatherReadout.TrendMark(value, WeatherReadout.TrendDeadband), "trend mark");
+                AssertClean(WeatherReadout.ShearLabel(value), "shear label");
+                AssertClean(WeatherReadout.Veer(value, 90f), "veer from");
+                AssertClean(WeatherReadout.Veer(90f, value), "veer to");
+            }
+        }
+
+        /// <summary>
+        /// The cockpit banner names one cell, and it has to be the right one: the cell already
+        /// raising a warning first, then the nearest supercell, and nothing at all otherwise.
+        /// </summary>
+        private static void TheBannerNamesTheRightCell()
+        {
+            var supercell = new StormCell(0, StormKind.Supercell, 30000f, 0f, 5000f, 0.9f, 10f, 600f, 800f, 9000f, 0f, 0f);
+            var warnedCumulus = new StormCell(1, StormKind.Cumulus, 3000f, 0f, 1000f, 0.5f, 10f, 600f, 800f, 2000f, 0f, 0f);
+            var quietCumulus = new StormCell(2, StormKind.Cumulus, 1000f, 0f, 1000f, 0.05f, 10f, 600f, 800f, 2000f, 0f, 0f);
+            var cells = new[] { supercell, warnedCumulus, quietCumulus };
+
+            TestAssert.That(StormReadout.Nearest(cells, 3, 0f, 0f, out StormCell nearest, out float distance) &&
+                            nearest.Slot == 1,
+                "a warned cell is named ahead of a farther supercell");
+            TestAssert.That(Near(distance, 3000f), "the named cell's distance is its own distance");
+
+            var distant = new[] { supercell, quietCumulus };
+            TestAssert.That(StormReadout.Nearest(distant, 2, 0f, 0f, out nearest, out distance) &&
+                            nearest.Slot == 0,
+                "with nothing warned, the nearest supercell is named");
+            TestAssert.That(Near(distance, 30000f), "the supercell's distance is the far one");
+
+            TestAssert.That(!StormReadout.Nearest(new[] { quietCumulus }, 1, 0f, 0f, out _, out _),
+                "a cell too weak to warn and too small to matter is not named");
+            TestAssert.That(!StormReadout.Nearest(null, 0, 0f, 0f, out _, out _), "no buffer names nothing");
+            TestAssert.That(!StormReadout.Nearest(cells, 0, 0f, 0f, out _, out _), "an empty buffer names nothing");
+            TestAssert.That(!StormReadout.Nearest(cells, 3, float.NaN, 0f, out _, out _),
+                "an unreadable reader position names nothing");
+
+            TestAssert.That(Near(StormReadout.BearingDegrees(0f, 0f, 0f, 1f), 0f), "due north is zero degrees");
+            TestAssert.That(Near(StormReadout.BearingDegrees(0f, 0f, 1f, 0f), 90f), "due east is ninety");
+            TestAssert.That(Near(StormReadout.BearingDegrees(0f, 0f, -1f, 0f), 270f), "due west is two seventy");
+            TestAssert.That(StormReadout.BearingDegrees(float.NaN, 0f, 1f, 0f) == 0f,
+                "an unreadable bearing falls back to north rather than throwing");
+        }
+
+        private static FlightCategory CategoryAt(float ceilingMetres, float visibilityMetres)
+        {
+            var atmosphere = new Atmosphere(true, AirMassKind.MaritimePolar, FrontKind.None,
+                12f, 8f, ceilingMetres, 0f, 0f, 0f, 0f, 0f, visibilityMetres, 0f, 0.5f, 0f);
+            return Atmospheres.Category(atmosphere);
+        }
+
+        private static void AssertClean(string rendered, string what)
+        {
+            TestAssert.That(!string.IsNullOrEmpty(rendered), what + " must render something");
+            TestAssert.That(rendered.IndexOf("NaN", StringComparison.Ordinal) < 0,
+                what + " must never print NaN, printed '" + rendered + "'");
+            TestAssert.That(rendered.IndexOf("Infinity", StringComparison.Ordinal) < 0,
+                what + " must never print Infinity, printed '" + rendered + "'");
         }
 
         private static void DomainStaysFreeOfUnityTypes()

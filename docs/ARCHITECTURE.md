@@ -106,7 +106,7 @@ generate per-frame network traffic.
 
 - **Radio** is client-local and sends nothing. It owns file discovery, three embedded PNG
   identities, references to the map's installed soundtrack clips, decoded local clips, the
-  music-bus hold, and its MFD screen (`RAD`: RECEIVER and DECK pages). Both pages drive one
+  music-bus hold, and its MFD screen (`RAD`: RECEIVER and MUSIC pages). Both pages drive one
   audio engine (`RadioProgram`) and one hold (`VanillaMusicHold`); the receiver's meter,
   squelch, off-air state and waterfall are fed by a local link budget (`RadioPropagation`,
   `RadioTransmitterAnchors`, `RadioSpectrum`). It reads `ISquadView` for local hunt
@@ -122,7 +122,7 @@ generate per-frame network traffic.
 - **Progression** never touches Nuclear Option's score thresholds, six ranks, or unlocks. It
   reads `Player.PlayerScore` above the current pilot's score origin and grants picks up to the
   configured ceiling, plus Squad ace bonuses up to twenty total. Pilot
-  generation changes reset selected grades. The board is four qualification lanes of five
+  generation changes reset selected grades. The board is four qualification lanes of six
   grades; grade 1 is a lane's OPS tool and each later grade needs the one before it, so a
   client can never buy down a lane out of order, and a career may hold only
   `PerkCatalog.AuthorisationLimit` tools — the rule that closes the lanes the pilot did not
@@ -451,13 +451,17 @@ trench, a support line behind it and a reserve line further back — not as one 
 frontier. An invalid belt leaves the position untouched and retries next tick.
 `TrenchGarrison` owns four native buildings per position (2 MG, 1 ATGM, 1 MANPADS), sparse
 by design and spread across the curve anchors, spawning through vanilla
-`Spawner.SpawnBuilding`. `TrenchWorks` places up to eight small infantry-scale scenery
-pieces per position on the anchor bays themselves — filtered at runtime from
-`Encyclopedia.Lookup` by keyword (`hesco`, `sandbag`, `gabion`, `dugout`) and footprint
+`Spawner.SpawnBuilding`, plus up to eight soldiers standing in the ditch itself on the curve
+anchors, facing the threat, spawned through vanilla `Spawner.SpawnPilot` — the game has no
+infantry unit, so the soldier is its dismounted-pilot figure, found by component in the
+encyclopedia's instance lists (never by a guessed jsonKey) and failing closed when absent.
+`TrenchWorks` places up to eight small infantry-scale scenery
+pieces per position on the anchor bays themselves — filtered at runtime from the
+encyclopedia instance's own lists by keyword (`hesco`, `sandbag`, `gabion`, `dugout`) and footprint
 (≤6m), so vehicle-scale hull-down ramps, shelters and concrete walls are never used — and
 spawns them networked through `Spawner.SpawnScenery`.
 Damage polls read up to 32 cached parts per defense at 2Hz. Damage pauses growth for
-60s; a committed defender slot never respawns or heals. Frontline proximity gates new
+60s; a committed defender or soldier slot never respawns or heals. Frontline proximity gates new
 positions; a position is neutralized once the enemy pushes the control zero crossing past
 its centre, while existing defenders that advance the border cannot erase their own
 position. Neutralized/abandoned positions retain their earthworks and works for 300s,
@@ -470,16 +474,17 @@ carved ditches and map marks remain host-local. Runtime combat/placement accepta
 pending.
 World mutation is non-destructive: it never carves Unity `TerrainData` heightmaps or
 cuts terrain holes at runtime, avoiding PhysX BVH rebuild stalls and resolution mismatches.
-Instead, a raised ditch profile with parapet, parados and downward skirts (2.2m at LOD0)
+Instead, a raised ditch profile with parapet, parados and downward skirts (1.1m at LOD0)
 provides physical cover and ground blending without terrain modification; outer berm toes
 and skirt tips sample the ground on each side so the earthwork follows cross-slopes instead
 of bridging them.
-The earthwork is built at field scale — a 1.4–1.9m ditch floor inside a parapet, spoil
-berm and skirt footprint of roughly thirteen metres, with the packed crest standing ~3.4m
-and the spoil aprons raised ~1.9m — because a position has to read from
-the air, and a real one is mostly earth moved, not a slot: overhead cover, spoil and the
-wire belt are what make the ground in front of it no man's land. The wire belt is
-procedural crossed pickets and two strands 16m forward of the ditch line, draped over the
+The earthwork is built at man scale — a 0.8–1.1m walkable fire-step floor inside a ~1.6m
+cut, a parapet 1.2–1.45m above ground with a lower parados and narrow spoil berms, a total
+footprint near 4.8m — because the position has to read correctly beside the 1.8m models that
+stand in it (soldiers, the vanilla emplacements and their HESCO). Only the far LOD is a
+deliberate exaggeration: a bold ridge silhouette that keeps the front visible from cruise
+altitude, where a man-scale line would fade into a ground scar. The wire belt is
+procedural crossed pickets and two strands 7m forward of the ditch line, draped over the
 terrain (`TrenchMeshBuilder.BuildWireBeltMesh`); half the scenery works sit behind the
 parados as shelters and dugouts (`TrenchWorks`), the other half on the parapet crest as fire
 positions.

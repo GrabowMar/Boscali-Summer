@@ -37,8 +37,8 @@ namespace BoscaliSummer.Features.Weather
             overlay.Configure(context.Settings.Weather, manager);
 
             // Every renderer below only draws. None of them writes weather state or networking.
-            SupercellRenderer supercells = context.AddSceneService<SupercellRenderer>(67);
-            supercells.Configure(context.Settings.Weather, manager, context.Logger);
+            VanillaClouds clouds = context.AddSceneService<VanillaClouds>(67);
+            clouds.Configure(manager, context.Logger);
 
             WeatherRain rain = context.AddSceneService<WeatherRain>(68);
             rain.Configure(context.Settings.Weather, manager, context.Logger);

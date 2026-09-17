@@ -19,7 +19,7 @@ namespace BoscaliSummer.Features.Weather.Domain
         /// <summary>What the world is actually doing right now.</summary>
         public readonly WeatherState Live;
 
-        /// <summary>Local wind at the player's position — the vanilla sample, not the mean field.</summary>
+        /// <summary>The synced mean wind at the reader — not a per-position sample.</summary>
         public readonly float LocalWindX;
         public readonly float LocalWindY;
         public readonly float LocalWindZ;
@@ -50,6 +50,18 @@ namespace BoscaliSummer.Features.Weather.Domain
         /// <summary>The cell that imposed <see cref="Warning"/>, or default when there is none.</summary>
         public readonly StormCell WarningSource;
 
+        /// <summary>
+        /// The physics behind <see cref="Model"/>: temperature, dewpoint, CAPE, shear, visibility.
+        /// What links the sky to what the panel, the clouds, the radar and the canopy rain show.
+        /// </summary>
+        public readonly Atmosphere Atmosphere;
+
+        /// <summary>The boundary nearest the reader, wherever it is across the map.</summary>
+        public readonly WeatherFront Front;
+
+        /// <summary>How this front arranges its cells. Drives the radar picture and the storm table.</summary>
+        public readonly StormMode StormMode;
+
         public WeatherSnapshot(
             bool available,
             float missionTime,
@@ -67,6 +79,34 @@ namespace BoscaliSummer.Features.Weather.Domain
             float cellInfluence,
             StormWarning warning,
             StormCell warningSource)
+            : this(
+                available, missionTime, model, live,
+                localWindX, localWindY, localWindZ, cloudOcclusion, daylightFactor,
+                overridden, hostAuthority, cells, cellCount, cellInfluence, warning, warningSource,
+                Atmosphere.Unavailable, WeatherFront.None, StormMode.None)
+        {
+        }
+
+        public WeatherSnapshot(
+            bool available,
+            float missionTime,
+            WeatherState model,
+            WeatherState live,
+            float localWindX,
+            float localWindY,
+            float localWindZ,
+            float cloudOcclusion,
+            float daylightFactor,
+            bool overridden,
+            bool hostAuthority,
+            StormCell[] cells,
+            int cellCount,
+            float cellInfluence,
+            StormWarning warning,
+            StormCell warningSource,
+            Atmosphere atmosphere,
+            WeatherFront front,
+            StormMode stormMode)
         {
             Available = available;
             MissionTime = missionTime;
@@ -85,13 +125,35 @@ namespace BoscaliSummer.Features.Weather.Domain
             CellInfluence = cellInfluence;
             Warning = warning;
             WarningSource = warningSource;
+            Atmosphere = atmosphere;
+            Front = front;
+            StormMode = stormMode;
         }
 
         /// <summary>
-        /// Precipitation the player is standing in: the strongest local cell influence. Zero
-        /// between storms, and the same number the radar, the haze and the warning ring read.
+        /// Precipitation the player is standing in: whichever is heavier, the cell they are
+        /// inside or the frontal rain crossing them. Zero between storms, and the same number the
+        /// radar, the haze and the warning ring read.
         /// </summary>
-        public float RainIntensity => WeatherRegimes.Clamp01(CellInfluence);
+        public float RainIntensity
+        {
+            get
+            {
+                float cell = WeatherRegimes.Clamp01(CellInfluence);
+                float frontal = Atmosphere.Available ? Atmosphere.RainRate : 0f;
+                return WeatherRegimes.Clamp01(cell > frontal ? cell : frontal);
+            }
+        }
+
+        /// <summary>What is falling at the reader, for the canopy effect and the panel.</summary>
+        public PrecipitationKind Precipitation
+        {
+            get
+            {
+                if (Atmosphere.Available) return Atmosphere.Precipitation;
+                return RainIntensity >= 0.25f ? PrecipitationKind.Showers : PrecipitationKind.Drizzle;
+            }
+        }
 
         public float LocalWindSpeed
         {

@@ -107,7 +107,7 @@ Decisions that cost an argument. Kept so they are not made again the other way.
   installed map's tactical clip. The existing two sources and vanilla handoff preserve
   prior station/track/position/pause state; manual transport takes ownership for the rest
   of the hunt. Radio sends no music metadata or additional multiplayer messages.
-- **One screen, two pages, two jobs.** `RAD` carries RECEIVER and DECK tabs from the shared
+- **One screen, two pages, two jobs.** `RAD` carries RECEIVER and MUSIC tabs from the shared
   `AvScreen` tab bar. The receiver behaves like a set: tune a station, listen to whatever it
   is airing, no track switching. The deck is the player's own library — folders, tracks,
   transport, shuffle, repeat — and it replaced the old clickable programme log, which was a
@@ -131,22 +131,22 @@ Decisions that cost an argument. Kept so they are not made again the other way.
   is a local archive and reads full; no listener or no authored towers means full-scale rather
   than an invented failure. This is a deliberately simplified reading of the NORS propagation
   model, applied receive-side only.
-- **Transmit, crypto and the peer net stay stubs.** `RadioLinkStub` is inert and the LINK
-  block plus TX/SEC keys say so on the panel. A real voice link needs mic capture, a second
+- **Transmit, crypto and the peer net stay stubs.** `RadioLinkStub` is inert and the panel's
+  RECEIVE ONLY copy says so. A real voice link needs mic capture, a second
   transport and an explicit handshake; none of that exists, and the module still sends nothing.
 - **The panel is a receiver, not a music browser.** Stations live on an FM / VHF-air / MW dial:
   the three built-ins keep canonical frequencies and user folders take a stable name-hashed FM
   slot (linear probe on collision), so the same folder lands on the same frequency after a
-  rescan. The hero frequency, spectrum waterfall, S-meter, programme caption and morse ident
-  carry the fiction; carrier hiss, squelch and idents are generated in memory, never bundled —
-  the copyright boundary from the bullet above is unchanged.
+  rescan. The frequency and signal metric strip, the spectrum waterfall, the programme caption
+  and the morse ident carry the fiction; carrier hiss, squelch and idents are generated in
+  memory, never bundled — the copyright boundary from the bullet above is unchanged.
 - **Tuning is a dial, not a list.** TUNE steps the band increment (100 kHz FM / 25 kHz VHF air
   / 10 kHz MW) or a five-times-finer step with FINE, and any non-station position is dead air
   with a carrier bed; SEEK jumps stations, the band knob cycles FM → VHF → MW with each band
   remembering its last frequency, and locking back on resumes the programme the player left.
   AM bands keep the AM curve regardless of the FM filter setting, the MODE override garbles a
   wrong-demodulator signal through the same penalty the propagation model uses, and the AF
-  row scales music, carrier and idents together. Enemy ace chatter reaches the hero wire line
+  stepper scales music, carrier and idents together. Enemy ace chatter reaches the hero wire line
   as an INTERCEPT via the read-only `ISquadView.LastChatter` property: text only, client-local,
   no new messages and no music metadata.
 - **The spectrum is a fixture, not an FFT.** `RadioSpectrum` builds one 96-bin row per 0.12 s
@@ -161,8 +161,8 @@ Decisions that cost an argument. Kept so they are not made again the other way.
   or the network.
 - **The wire is flavour, not a transcript.** Channel traffic (tuning, programme changes,
   station copy, intercepted chatter) rotates through a single hero line; the panel's spare
-  room goes to the tuned station's programme log of tracks, which is clickable and paged.
-  Nothing in the log is authoritative and nothing is transmitted.
+  room goes to the station list, which is clickable and paged. Nothing on it is authoritative
+  and nothing is transmitted.
 
 ## Progression and support
 
@@ -172,24 +172,27 @@ Decisions that cost an argument. Kept so they are not made again the other way.
   live `Player.PlayerScore` in configured tiers, capped. Thresholds, aircraft requirements
   and weapon access are still not altered, and rank is displayed as flavour only. Support
   spends the player's normal allocation — no second currency.
-- **The perk board is four qualification lanes of five grades, and a career holds two
+- **The perk board is four qualification lanes of six grades, and a career holds two
   tools.** The first tree failed because the *budget* was dead, not because trees are
   unreadable: it was `PlayerRank - spent`, so a fresh pilot had nothing to spend and the UI
   could only ever show "everything locked" or, under the debug bypass, "everything
   available". With score-earned picks the board came back as shallow mini-trees; it is now
-  four lanes — STRIKE, RECON, SIGNALS, ENGINEER — of five grades each, grade 1 being the
-  lane's OPS tool and grades 2-5 the passives that end in a capstone. Every grade costs one
+  four lanes — STRIKE, RECON, SIGNALS, ENGINEER — of six grades each, grade 1 being the
+  lane's OPS tool and grades 2-6 the passives that end in a capstone. Every grade costs one
   pick and grade n costs n x `ScorePerPoint`, so the tool lands early and depth is what the
   budget buys. Vanilla `PlayerRank` stays display flavour: it is monotonic within a mission
   and does not reset with a successor pilot, so keying currency to it would hand a fresh
   pilot the dead one's picks — the exact shape of the original failure. The cap is a *rule*,
   not a curve: `PerkState` refuses a third tool, which is the only way a career can be made
-  to choose; without it a long sortie simply buys everything, because four lanes of five
-  grades is twenty picks and no honest score curve reaches that. Two lanes open, two close,
+  to choose; without it a long sortie simply buys everything, because four lanes of six
+  grades is twenty-four picks and no honest score curve reaches that. Two lanes open, two close,
   mixing stays legal, and the closed lanes hand multiplayer squads a reason to cover each
   other's tools. Support authorisations stayed roots in the previous model because a
   capability gated behind another would starve a support-minded pilot; grade order replaces
-  that concern by making the tool the lane's cheapest node.
+  that concern by making the tool the lane's cheapest node. The sixth grade keeps each lane's
+  identity from collapsing into one axis: it is a *new* axis for the lane (STRIKE buys
+  re-tasking tempo, RECON a cheaper sweep, SIGNALS a wider EMP, ENGINEER service pay) rather
+  than a third helping of a multiplier the lane already stacks.
 - **The lane block is computed once.** `PerkState.BlockOf` answers grade order, the two-tool
   cap and the price, `TryUnlock` enforces it on the host, and the SQD panel renders
   `PerkView.Block` instead of re-deriving any of it — the panel used to infer "requires a
@@ -320,17 +323,35 @@ Decisions that cost an argument. Kept so they are not made again the other way.
   the marker drew straight bars. Cutting the window first, by arc length on the raw points,
   and resampling only that window keeps the ~10m stations the ditch, anchors, meshes and
   traverse wave all assume — and it is what makes the finished line read as a curve.
-- **Field scale and a low, broad profile — trenches are earth moved, not a slot.** A real
-  position is defined by how much earth is between the occupant and the shell: overhead cover,
-  a parapet, a spoil apron and the wire belt in front. So the cross-section is a walkable
-  ditch (1.2–1.9m floor) inside a ~13m footprint — packed crest ~3.4m, raised spoil aprons
-  ~1.9m, 2m skirts — and the belt is two lines
-  deep (fire at 80m behind the trace, support at 150m, reserve redoubt at 300m) rather than a
-  single ribbon. The procedural wire belt exists for the same reason: an undefended ditch reads
-  as a ditch, while pickets and strands make the ground in front of it read as no man's land.
-  The footprint grew from ~10m once the harness could render a low pass and a cruise view: at
-  ten metres the position read as a thin brown thread from the altitude a player actually
-  flies at, which defeats the point of a field work.
+- **Man scale wins over flight scale — the first flight-visible profile was a blockhouse.**
+  The cross-section was sized for the air first: a ~13m footprint, a packed crest at 3.4m, 2m
+  skirts, plus a 5.5m/1.6m traverse wave, so a low pass would see earthworks instead of a thin
+  brown thread. Live screenshots then showed what that looks like from the ground: square
+  blocky bays whose walls stood chest-high on a nearby HESCO and dwarfed the vanilla
+  emplacement beside them — the wrong read for a position a person stands in. The profile is
+  now sized against the models that occupy it (a man is ~1.8m): a ~1.6m cut with a 0.8–1.1m
+  walkable fire-step floor, a parapet 1.2–1.45m above ground, a lower parados, ~0.9m spoil
+  berms and ~0.7m skirts, a total footprint near 4.8m, and the traverse wave is a subtle
+  zigzag (9m period, 0.5m amplitude) instead of a sawtooth. The belt depth is unchanged —
+  two lines deep (fire at 80m behind the trace, support at 150m, reserve redoubt at 300m)
+  rather than a single ribbon. The procedural wire belt exists for the same reason as before:
+  an undefended ditch reads as a ditch, while pickets and strands make the ground in front of
+  it read as no man's land. The far LOD is the only deliberate exaggeration left: a bold ridge
+  silhouette for cruise altitude, because a man-scale line at 12km is invisible.
+- **The game has no infantry, so the soldiers are its dismounted pilots.** A foot-soldier was
+  the obvious way to man a trench, so the decompile was searched for one — there is no
+  infantry unit at all (the only human figure is `PilotDismounted`, and `MountedTroops` is a
+  vehicle weapon). The lazy correct answer is to spawn exactly that figure: vanilla exposes
+  `Spawner.SpawnPilot(prefab, globalPosition, rotation, hq, uniqueName)`, so a position fields
+  up to eight of them standing on the ditch centreline, facing the enemy, with the game owning
+  their physics, landing animation, hit points, death and Mirage replication. The prefab is
+  resolved by component from the encyclopedia's instance lists rather than by a jsonKey: the
+  key is not part of any documented contract and a mod should not hardcode one. They are
+  permanent casualties like the emplacements, never respawn or heal, and they deliberately do
+  not feed the defender count or the overrun state — the emplacements still decide when a
+  position is finished. Vanilla behaviour worth knowing: a landed pilot freezes standing after
+  35s, a killed one despawns after 60s, and one that ends up inside its own HQ's airbase
+  radius is returned to base — all fine at the front, where trenches are dug.
 - **A front is a kilometre-cell field, and the front cell is not "friendly".** A live host
   session placed nothing: the log showed a front intake every refresh and then nothing but
   `refused (NoGround)` on every attempt, with zero trench objects in the scene. Three causes
@@ -347,6 +368,27 @@ Decisions that cost an argument. Kept so they are not made again the other way.
   buffer's end. All three survived the pure tests because each one needs the game's own
   geometry — a kilometre field, a real trace length, a second window — which is why the Unity
   harness now plans a second window and a quantized cell field.
+- **An LOD distance is not a plain subtraction: the camera is local, the line is global.** The
+  first flight-LOD build culled every earthwork at every distance, and a live chunk proved it —
+  `currentLod = 3` with all three LOD roots off and "camera distance 14.6km" logged while the
+  player stood beside the ditch. The cause is the game's floating origin: `line.Center` is a
+  `GlobalPosition` (terrain probes return global) while `Camera.main.transform.position` is a
+  local transform, so the subtraction measured the origin offset, not the earthwork — the mid
+  LODs and the far silhouette never had a chance to be seen. The distance now converts one side
+  into the other's frame first. The same read hid a second defect: a failed ground probe fell
+  back to y=0, which buries a ring under the terrain and spikes the mesh into a wall, so the
+  fallback is now the curve's own planned height.
+- **A placement query that counts the ground as an obstacle refuses every real site.** Two out
+  of three positions in a live session were rejected with the same message ("native MG
+  definition, clear footprint or spawn unavailable"), and the culprit was `Physics.CheckBox` on
+  `DefaultRaycastLayers`: on any real slope the nest volume clips the terrain surface, and the
+  terrain sits on those layers. Ground is what the nest stands on; the overlap query now skips
+  colliders carrying `GameAssets.i.terrainMaterial` and keeps refusing anything solid. The same
+  session showed the other half of the problem: establishment demanded both opening MG teams and
+  threw away the whole dug position when one bay was blocked, and works resolved from the static
+  `Encyclopedia.Lookup` dictionary, which that host never populated — the catalog now comes from
+  the encyclopedia instance's own lists, and every refusal names its cause in the log so the next
+  session does not need a code read to know what happened.
 - **A far LOD keeps a silhouette, never a ground scar.** The first LODs flattened the
   earthwork to a 10cm ribbon beyond 1.2km and culled it entirely at 3.5km, which is exactly
   the range band a player flies in — so a fully built front was invisible from the air. Every
@@ -359,8 +401,8 @@ Decisions that cost an argument. Kept so they are not made again the other way.
   ending in listening posts. Saps stay inside owned ground, so they stop at the border
   instead of crossing into ground the position's validator rejects.
 - **Strongpoints are the game's own scenery, the ditch stays procedural.** Works are small
-  infantry-scale pieces (HESCO/sandbag/light gabion) filtered at runtime from
-  `Encyclopedia.Lookup` by keyword and footprint — vehicle-scale hull-down ramps, shelters
+  infantry-scale pieces (HESCO/sandbag/light gabion) filtered at runtime from the
+  encyclopedia instance's own lists by keyword and footprint — vehicle-scale hull-down ramps, shelters
   and concrete walls are rejected before they can become encampments in a field. Pieces
   spawn as networked `Scenery` on the curve anchors themselves, so they read as part of the
   position, and replicate to clients. The carved ditch between them is the only generated
@@ -448,12 +490,45 @@ Decisions that cost an argument. Kept so they are not made again the other way.
   dossier pages asked for: a form number, a photo with a reference, key/value fields with
   leader dots the way a form draws them, a rubber-stamped disposition tilted a few degrees,
   and redaction bars instead of a service record while local intel has not confirmed an enemy
-  post. The card is laid out against the text it actually holds and its frame follows the
-  record's height, because the fixed-height card was what clipped `THEATER COMMANDER` and the
-  bonus line in the first place: a form that cuts off its own entry has stopped being a form.
-  HOI4's chain-of-command window is still the reference for the hierarchy, not for its verb
-  set: hierarchy first, one selected leader, everything about them on one sheet, nothing to
-  press.
+  post. The card is laid out against the text it actually holds, and the frame then runs to the
+  column's bottom, because the fixed-height card was what clipped `THEATER COMMANDER` and the
+  bonus line in the first place and a content-sized one left a short card floating over blank
+  panel: a form that cuts off its own entry has stopped being a form, and a sheet that stops
+  mid-air has stopped being a sheet. HOI4's chain-of-command window is still the reference for
+  the hierarchy, not for its verb set: hierarchy first, one selected leader, everything about
+  them on one sheet, nothing to press.
+- **Two toolkit bugs the COC page walked into, and they were not the page's.** The visual audit
+  that followed ("UI still looks glitched and buggy") put the page in front of a camera rather
+  than in front of the user - `Run-CocUnityCheck.ps1` builds the real page with stub commanders
+  and renders it - and the render showed the faults as they are:
+  `AvStyled.Midline` mapped every alignment other than `Right` and `Center` to the left edge, so
+  every label that asked for `MidlineRight` (`FORM CC-2`, the SA page's key/value figures, the
+  staff log's age column) was silently left-aligned; on the card that printed the form number
+  over `PERSONNEL FILE`, and it is why the log read `1mSTIPEND PAID`. The mapping now keeps the
+  horizontal alignment and only drops the vertical one. `AvKit.ProgressBar` returns the *fill*
+  while the track and its outline are siblings placed from the build-time area, so a caller that
+  re-placed the returned image in `Bind` left the track's outline floating on the row's header
+  line as the dotted artefact in the screenshot; the row now builds its meter where it belongs
+  and the API says what it returns. Both fixes are in the shared toolkit for every panel's sake.
+  The page itself also stopped putting the side switch on the header line (it sat on the card's
+  form header), keeps `STAFF SHARE` from being ellipsised by its own key column, prettifies the
+  wire's base identifiers (`enemy_airbase_icaria` -> `ENEMY AIRBASE ICARIA`) and lets a long
+  name autosize instead of clipping. The row no longer tries to state the bonus as well as the
+  office: at 144 px the pair always ended in an ellipsis, so it stated neither; the bonus rides
+  the card and the row's tooltip.
+- **A portrait plate is a plate, not a picture frame that hopes.** The next visual report was
+  about the portraits ("uneven and look buggy"), and the camera said the same: the row's frame
+  was placed once at the column edge while the photo moved right with its tier, so a base
+  commander wore an empty frame beside a floating face; and the photo's fit was left to
+  `Image.preserveAspect`, which anchors the fitted sprite by *its own pivot*. Wing Command's
+  portrait sprites do not share a pivot, so every plate framed its subject differently and the
+  card's portrait left a transparent margin as a band down one side. The plate is now one group
+  (frame, well, photo, fallback glyph) indented as a whole, the photo is laid over a
+  `RectMask2D` well with the cover fit computed from the sprite's rect, and `preserveAspect` is
+  off so no sprite pivot can move it. The fit is a *crop*, the way a file crops a print: uniform
+  plates whatever shape the source is, at the cost of trimming a wide sprite's sides - which is
+  the trade a personnel file makes anyway. The render check now feeds it sprites of mixed aspect
+  *and* mixed pivots, because that is the case a null portrait never exercised.
 - **A post under fire is a state, not an event.** `RecordDamage` already watches every
   command asset; it now stamps a short alert window on the slot (and one log line at the
   edge), which the row and card render as UNDER FIRE. The strike that follows is the same

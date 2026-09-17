@@ -46,18 +46,18 @@ namespace BoscaliSummer.Features.Trenches.Visuals
 
             var mesh = new Mesh { name = "Trench_Edge_Mesh" };
 
-            // A field position reads from the air by its footprint, not its depth: a real
-            // parapet, a wide spoil apron both sides and the skirts that tie it into the
-            // ground. The ditch floor stays a walkable 1.2-1.9m while the earthwork spreads.
-        float halfW = width * 0.5f;
-        float scale = Mathf.Clamp(width / 3.4f, 0.55f, 1f);
-        float bermW = 2.8f * scale;
-        float skirtW = 2.0f * scale;
-        float bermH = parapetHeight * 0.55f * scale;
-            float floorW = Mathf.Clamp(width * 0.5f, 1.2f, 1.9f);
-            float stepW = Mathf.Clamp(2f * halfW - floorW, 0.4f, halfW * 0.9f);
-            float stepH = Mathf.Min(0.6f * scale, parapetHeight * 0.3f);
-            float paradosH = parapetHeight * 0.82f;
+            // A man-scale earthwork: about a 1.6m cut with a dry floor and firing step under
+            // a waist-high parapet over a narrow spoil berm, conformed to cross-slopes and
+            // still never touching TerrainData.
+            float halfW = width * 0.5f;
+            float scale = Mathf.Clamp(width / 1.6f, 0.6f, 1f);
+            float bermW = 0.9f * scale;
+            float skirtW = 0.7f * scale;
+            float bermH = parapetHeight * 0.5f * scale;
+            float floorW = Mathf.Clamp(width * 0.5f, 0.8f, 1.1f);
+            float stepW = Mathf.Clamp(2f * halfW - floorW, 0.3f, halfW * 0.9f);
+            float stepH = Mathf.Min(0.45f * scale, parapetHeight * 0.35f);
+            float paradosH = parapetHeight * 0.55f;
 
             int ringSize = ProfilePointCount;
             int ringCount = path.Length;
@@ -134,13 +134,13 @@ namespace BoscaliSummer.Features.Trenches.Visuals
                 vertices[baseIdx + 1] = new Vector3(
                     (pt + left * ((halfW + bermW) * miter + bermJitter * 0.4f)).x, leftGround + bermH + bermJitter * 0.3f,
                     (pt + left * ((halfW + bermW) * miter + bermJitter * 0.4f)).z);
-                vertices[baseIdx + 2] = pt + left * ((halfW + 1.2f) * miter + bermJitter * 0.2f) +
+                vertices[baseIdx + 2] = pt + left * ((halfW + 0.5f) * miter + bermJitter * 0.2f) +
                     Vector3.up * (Mathf.Max(pt.y, leftGround) - pt.y + paradosH + crestJitter * 0.5f);
                 vertices[baseIdx + 3] = pt + left * (halfW * miter) + Vector3.up * 0.14f;
                 vertices[baseIdx + 4] = pt + right * ((halfW - stepW) * miter) + Vector3.up * 0.14f;
                 vertices[baseIdx + 5] = pt + right * ((halfW - stepW) * miter) + Vector3.up * (0.14f + stepH);
-                vertices[baseIdx + 6] = pt + right * ((halfW + 0.9f) * miter) + Vector3.up * (parapetHeight + crestJitter);
-                vertices[baseIdx + 7] = pt + right * ((halfW + 1.6f) * miter + spoilJitter * 0.4f) +
+                vertices[baseIdx + 6] = pt + right * ((halfW + 0.42f) * miter) + Vector3.up * (parapetHeight + crestJitter);
+                vertices[baseIdx + 7] = pt + right * ((halfW + 0.7f) * miter + spoilJitter * 0.4f) +
                     Vector3.up * (parapetHeight - 0.3f + crestJitter * 0.6f);
                 vertices[baseIdx + 8] = new Vector3(
                     (pt + right * ((halfW + bermW) * miter)).x, rightGround + bermH + bermJitter * 0.3f,

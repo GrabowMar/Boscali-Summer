@@ -48,7 +48,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
         private static float Unit(float value) => Math.Max(0f, Math.Min(1f, value));
 
-        private static string Whole(float value) =>
+        internal static string Whole(float value) =>
             Math.Round(value, MidpointRounding.AwayFromZero).ToString("N0", CultureInfo.InvariantCulture);
     }
 }

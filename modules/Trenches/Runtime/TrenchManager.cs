@@ -298,7 +298,8 @@ namespace BoscaliSummer.Features.Trenches.Runtime
                     if (Time.unscaledTime >= nextGarrisonWarning)
                     {
                         nextGarrisonWarning = Time.unscaledTime + 30f;
-                        logger?.LogWarning("[TRENCHES] Position rejected: native MG definition, clear footprint or spawn unavailable. No empty cosmetic position was created.");
+                        logger?.LogWarning("[TRENCHES] Position rejected: " + garrison.LastFailure +
+                            ". No empty cosmetic position was created.");
                     }
                     return false;
                 }
@@ -336,7 +337,7 @@ namespace BoscaliSummer.Features.Trenches.Runtime
 
             try { chunk.Initialize(line); }
             catch { Destroy(go); throw; }
-            logger?.LogInfo($"[TRENCHES] World chunk {line.Id}: {chunk.MeshCount} meshes, center={chunk.WorldCenter}, camera distance={chunk.CameraDistance:0}m, material={chunk.EarthMaterial}.");
+            logger?.LogInfo($"[TRENCHES] World chunk {line.Id}: {chunk.MeshCount} meshes, center={chunk.WorldCenter}, camera distance={chunk.CameraDistance:0}m, lod={chunk.ActiveLod} (near {chunk.Lod0Distance:0}/{chunk.Lod1Distance:0}/{chunk.Lod2Distance:0}m), material={chunk.EarthMaterial}.");
             return chunk;
         }
 

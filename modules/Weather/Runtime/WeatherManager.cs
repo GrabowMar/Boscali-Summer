@@ -63,6 +63,10 @@ namespace BoscaliSummer.Features.Weather.Runtime
         private WeatherState live;
         private WeatherForecast forecast;
         private WeatherSnapshot snapshot;
+        private Atmosphere atmosphere;
+        private WeatherFront front;
+        private StormMode stormMode;
+        private float daylight;
 
         private readonly StormCell[] cells = new StormCell[StormField.MaxCells];
         private int cellCount;
@@ -190,10 +194,14 @@ namespace BoscaliSummer.Features.Weather.Runtime
                 channels[i].Observe(LiveValue(live, (Channel)i));
             }
 
-            WeatherState model = overrideActive ? overrideState : WeatherModel.Sample(seed, now);
+            float mapSize = MapSize();
+            daylight = Daylight();
+            front = WeatherModel.SampleFront(seed, now, mapSize);
+            atmosphere = WeatherModel.SampleAtmosphere(seed, now, mapSize, Haze(), daylight);
+            WeatherState model = overrideActive ? overrideState : WeatherModel.ToState(atmosphere, front, 0f, 0f);
             model = WeatherState.WithHaze(model, Haze());
             Announce(model);
-            RefreshCells(now, model);
+            RefreshCells(now, model, atmosphere, front);
             AnnounceStorms();
             // The ramp must advance by the real time since the last write, not by the write
             // interval, or every driven value crawls at a fraction of its stated rate.
@@ -212,25 +220,61 @@ namespace BoscaliSummer.Features.Weather.Runtime
                     seed,
                     now,
                     settings.ForecastSteps.Value,
-                    settings.ForecastStepMinutes.Value * 60f);
+                    settings.ForecastStepMinutes.Value * 60f,
+                    daylight);
             }
 
             snapshot = BuildSnapshot(model);
         }
 
         /// <summary>
-        /// Place the storm population for this instant. A cell only exists if the front has the
-        /// energy for one, so a clear sky raises nothing at all.
+        /// Place the storm population for this instant. A cell exists only where the air mass has
+        /// the energy for one, so a stable clear sky raises nothing at all.
         /// </summary>
-        private void RefreshCells(float now, WeatherState model)
+        private void RefreshCells(float now, WeatherState model, in Atmosphere sky, in WeatherFront boundary)
+        {
+            cellCount = StormField.Fill(
+                cells,
+                seed,
+                now,
+                MapSize(),
+                model.Conditions,
+                model.WindHeading,
+                model.WindSpeed,
+                boundary,
+                sky,
+                out stormMode);
+        }
+
+        /// <summary>
+        /// The map extent in metres. A map that reports a small number is reporting kilometres,
+        /// so scale it rather than silently raising no storms at all.
+        /// </summary>
+        private static float MapSize()
         {
             LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
             float mapSize = level != null ? level.mapSize : 0f;
-            // The field works in metres. A map that reports a small number is reporting
-            // kilometres, so scale it rather than silently raising no storms at all.
             if (mapSize > 0f && mapSize < 1000f) mapSize *= 1000f;
-            cellCount = StormField.Fill(
-                cells, seed, now, mapSize, model.Conditions, model.WindHeading, model.WindSpeed);
+            return mapSize;
+        }
+
+        /// <summary>
+        /// Daylight from the level's synced time of day, and deliberately **not**
+        /// <c>GetDaylightFactor(position)</c>. That multiplies in the reader's own cloud
+        /// occlusion, so a host under the deck and a client above it would derive different
+        /// temperatures, different CAPE and different storm fields — exactly the divergence this
+        /// module exists to prevent. <c>timeOfDay</c> is a sync var: identical on every peer.
+        /// </summary>
+        private static float Daylight()
+        {
+            LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
+            if (level == null) return Diurnal.UnknownDaylight;
+            float timeOfDay = level.timeOfDay;
+            if (float.IsNaN(timeOfDay) || float.IsInfinity(timeOfDay)) return Diurnal.UnknownDaylight;
+            float daylight = 1f;
+            if (timeOfDay > 18f) daylight -= (timeOfDay - 18f) * 2f;
+            else if (timeOfDay < 6f) daylight -= (6f - timeOfDay) * 2f;
+            return daylight < 0f ? 0f : daylight > 1f ? 1f : daylight;
         }
 
         /// <summary>Where the reader is looking from, for every local storm reading.</summary>
@@ -318,6 +362,9 @@ namespace BoscaliSummer.Features.Weather.Runtime
                 ? drive.StepAngle(current, target, elapsed, rate)
                 : drive.Step(current, target, elapsed, rate);
             if (Mathf.Approximately(next, current)) return;
+            // Mathf.Approximately(NaN, NaN) is false, so a NaN that ever reached a sync var
+            // would be written back forever. One clause keeps the world finite.
+            if (float.IsNaN(next) || float.IsInfinity(next)) return;
             Write(level, channel, next);
             drive.Acknowledge(next);
         }
@@ -425,7 +472,10 @@ namespace BoscaliSummer.Features.Weather.Runtime
                 cellCount,
                 influence,
                 warning,
-                warningSource);
+                warningSource,
+                atmosphere,
+                front,
+                stormMode);
         }
 
         private float Haze()

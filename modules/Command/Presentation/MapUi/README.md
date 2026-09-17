@@ -486,3 +486,34 @@ UX review followed the requested game-studio
 one reused button style rather than a second navigation widget, host settings reuse the
 existing row controls and the config entries behind them, the deleted bezel is not emulated,
 and the read-only client state is explained rather than hidden.
+
+## Contract board truth fixes (2026-09-17)
+
+The MIS SECONDARY board prints only what the host can be held to. An offer's ACCEPT
+CONTRACT is enabled only while the host clock is finite and running; a lapsed or unclocked
+offer reads OFFER ENDED and cannot be clicked, and a full roster reads ACTIVE LIMIT REACHED.
+Accepted work prints the cockpit marker's own countdown (`T-5:00`, `T-45s`) while offers keep
+the board's `OFFER mm:ss`; the urgency amber uses the HUD's 120 s gate, and the numbered
+title line is `#N TITLE`. Pay and escalation figures format with invariant grouping, so a
+pl-PL machine no longer prints `$1 400`. The grid never builds more than the host board's
+three cards, and a multi-row dossier is capped at its own 198 px pitch so no card background
+paints over the action row above it. A zero-count tab names the reason — director absent,
+host board not yet received, active limit reached, no eligible work, or a genuinely empty
+filter — instead of the contract-cycle copy. SET > SERVER re-requests the board at most once
+every 2 seconds and shows the offer clock on its rows, so the host's page no longer freezes
+when no HUD or map layer is pulling snapshots.
+
+Validation: pure layout, accept-state, clock, empty-reason and formatting checks in
+`MfdSecondaryObjectivesTests`, a cross-module test iterating every `OperationKind` through
+`OperationTitles` into `MfdMissionLabels` (plus HUD title/clock/urgency agreement) in
+`MfdMissionLabelsTests`, and the invariant escalation figure check in `MfdMissionOverviewTests`;
+Release build, module-boundary tests, patch probe and `nomod asm verify` pass. In-game visual
+acceptance at 720p/1080p/ultrawide, host/client and scene reload remains pending.
+
+UX review followed the requested game-studio
+[UX review skill](https://github.com/Donchitos/Claude-Code-Game-Studios/blob/main/.claude/skills/ux-review/SKILL.md),
+[Ponytail](https://github.com/DietrichGebert/ponytail) and
+[UI/UX Pro Max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill): every action state
+is mutually exclusive and truthful, a disabled action says why, the clock reads the same on
+the HUD and both boards, and empty/failure states are named instead of reusing the happy-path
+copy.

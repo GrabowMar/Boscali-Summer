@@ -13,38 +13,47 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Features.Weather.Presentation
 {
     /// <summary>
-    /// The always-on cockpit weather banner: the warning tier, the one line a pilot needs
-    /// about the storm that owns it, and rain or cloud occlusion only when either is real.
-    /// A screen-space overlay, so it claims no bezel and patches nothing, and it hides
-    /// itself the moment the module, the setting or the camera view says it should.
+    /// The always-on cockpit weather banner, three things and nothing else: the SIGMET tier,
+    /// the wind and its gust at the aircraft, and the nearest cell worth naming with its range
+    /// and bearing. The small rose on its right is the warning ring: where that cell is relative
+    /// to the aircraft's nose, so "which way" is a picture and not only a sentence.
+    ///
+    /// <para>A screen-space overlay, so it claims no bezel and patches nothing, and it hides
+    /// itself the moment the module, the setting or the camera view says it should. It ticks at
+    /// ten hertz and allocates nothing after the build.</para>
     /// </summary>
     internal sealed class WeatherHud : MonoBehaviour, ISceneService
     {
         /// <summary>Ten hertz: fast enough for a distance readout, cheap enough to ignore.</summary>
         private const float TickSeconds = 0.1f;
 
-        private const float PanelWidth = 320f;
+        private const float PanelWidth = 348f;
         private const float PanelHeight = 74f;
 
         /// <summary>Below the vanilla top bar, clear of the cockpit HUD's own rows.</summary>
         private const float TopInset = 104f;
 
         private const float EdgeInset = 10f;
-        private const float ChipWidth = 76f;
-        private const float ChipHeight = 16f;
+        private const float ChipWidth = 78f;
+        private const float ChipHeight = 18f;
         private const float ChipGap = 8f;
         private const float LineHeight = 14f;
         private const float Line1Y = 8f;
-        private const float Line2Y = 28f;
+        private const float Line2Y = 30f;
         private const float Line3Y = 48f;
+
+        private const float RoseSize = 44f;
+        private const float RoseBlip = 5f;
+        private const float RoseMinRadius = 3f;
+        private const float RoseMaxRadius = RoseSize * 0.5f - RoseBlip - 1f;
+
+        /// <summary>Beyond this the blip stays pinned to the rim: the ring is a bearing, not a chart.</summary>
+        private const float RoseFullRangeMetres = 40000f;
 
         private const float ReferenceWidth = 1920f;
         private const float ReferenceHeight = 1080f;
 
         private const int TierCount = 4;
-
-        private const float RainVisible = 0.02f;
-        private const float OcclusionVisible = 0.3f;
 
         /// <summary>A slow breathe, never a strobe: the frame alpha dips by this much.</summary>
         private const float PulseDepth = 0.25f;
@@ -65,11 +74,13 @@ namespace BoscaliSummer.Features.Weather.Presentation
         private GameObject root;
         private Image chipBox;
         private TMP_Text chipLabel;
-        private TMP_Text regimeLabel;
-        private TMP_Text hazardLabel;
-        private TMP_Text detailLabel;
-        private GameObject detailRoot;
+        private TMP_Text subjectLabel;
+        private TMP_Text windLabel;
+        private TMP_Text cellLabel;
         private Image[] frame;
+        private Image[] roseFrame;
+        private Image roseBlip;
+        private Image roseNose;
 
         private float nextTick;
 
@@ -88,11 +99,13 @@ namespace BoscaliSummer.Features.Weather.Presentation
             root = null;
             chipBox = null;
             chipLabel = null;
-            regimeLabel = null;
-            hazardLabel = null;
-            detailLabel = null;
-            detailRoot = null;
+            subjectLabel = null;
+            windLabel = null;
+            cellLabel = null;
             frame = null;
+            roseFrame = null;
+            roseBlip = null;
+            roseNose = null;
             nextTick = 0f;
         }
 
@@ -156,6 +169,32 @@ namespace BoscaliSummer.Features.Weather.Presentation
             return !float.IsNaN(x) && !float.IsNaN(z);
         }
 
+        /// <summary>
+        /// Where the nose points, so the rose can read relative. The ownship is the honest
+        /// source; the camera it is followed by is the fallback when no aircraft is being flown.
+        /// </summary>
+        private static bool TryOwnshipHeading(out float heading)
+        {
+            CombatHUD hud = SceneSingleton<CombatHUD>.i;
+            Aircraft aircraft = hud != null ? hud.aircraft : null;
+            if (aircraft != null && TryHeading(aircraft.transform.forward, out heading)) return true;
+
+            CameraStateManager cameras = SceneSingleton<CameraStateManager>.i;
+            if (cameras != null && TryHeading(cameras.transform.forward, out heading)) return true;
+
+            heading = 0f;
+            return false;
+        }
+
+        private static bool TryHeading(Vector3 forward, out float heading)
+        {
+            heading = 0f;
+            if (float.IsNaN(forward.x) || float.IsNaN(forward.z)) return false;
+            if (forward.x * forward.x + forward.z * forward.z < 1e-6f) return false;
+            heading = WeatherState.WrapHeading((float)(System.Math.Atan2(forward.x, forward.z) * 180.0 / System.Math.PI));
+            return true;
+        }
+
         // ---- Build -----------------------------------------------------------------------
 
         private void Build()
@@ -184,25 +223,23 @@ namespace BoscaliSummer.Features.Weather.Presentation
             chipBox = AvStyled.Box(panel, chipRect, "chip inert");
             chipLabel = AvStyled.Label(panel, chipRect, "", "chip inert", align: TextAlignmentOptions.Center);
 
-            float regimeX = EdgeInset + ChipWidth + ChipGap;
-            regimeLabel = AvStyled.Label(panel,
-                new Rect(regimeX, -Line1Y, PanelWidth - regimeX - EdgeInset, ChipHeight),
+            float textWidth = PanelWidth - EdgeInset * 2f - RoseSize - EdgeInset;
+            subjectLabel = AvStyled.Label(panel,
+                new Rect(EdgeInset + ChipWidth + ChipGap, -Line1Y, textWidth - ChipWidth - ChipGap, ChipHeight),
                 "", "row-name", align: TextAlignmentOptions.MidlineLeft);
 
-            hazardLabel = AvStyled.Label(panel,
-                new Rect(EdgeInset, -Line2Y, PanelWidth - EdgeInset * 2f, LineHeight),
+            windLabel = AvStyled.Label(panel, new Rect(EdgeInset, -Line2Y, textWidth, LineHeight),
                 "", "row-sub", align: TextAlignmentOptions.MidlineLeft);
-            hazardLabel.enableWordWrapping = false;
-            hazardLabel.overflowMode = TextOverflowModes.Overflow;
-            hazardLabel.color = AvTheme.TextPrimary;
+            windLabel.enableWordWrapping = false;
+            windLabel.overflowMode = TextOverflowModes.Overflow;
+            windLabel.color = AvTheme.TextPrimary;
 
-            detailLabel = AvStyled.Label(panel,
-                new Rect(EdgeInset, -Line3Y, PanelWidth - EdgeInset * 2f, LineHeight),
+            cellLabel = AvStyled.Label(panel, new Rect(EdgeInset, -Line3Y, textWidth, LineHeight),
                 "", "row-sub", align: TextAlignmentOptions.MidlineLeft);
-            detailLabel.enableWordWrapping = false;
-            detailLabel.overflowMode = TextOverflowModes.Overflow;
-            detailRoot = detailLabel.gameObject;
-            detailRoot.SetActive(false);
+            cellLabel.enableWordWrapping = false;
+            cellLabel.overflowMode = TextOverflowModes.Overflow;
+
+            BuildRose(panel);
 
             for (int tier = 0; tier < TierCount; tier++)
             {
@@ -219,6 +256,32 @@ namespace BoscaliSummer.Features.Weather.Presentation
             foreach (Graphic graphic in root.GetComponentsInChildren<Graphic>(true)) graphic.raycastTarget = false;
 
             log?.LogInfo("Weather HUD installed.");
+        }
+
+        /// <summary>
+        /// The warning ring. It is a bearing ring, not a picture of the map: the nose sits at
+        /// the top, the blip is the cell's relative bearing, and its radius is range until the
+        /// cell is beyond the ring, where it pins to the rim.
+        /// </summary>
+        private void BuildRose(RectTransform panel)
+        {
+            float x = PanelWidth - EdgeInset - RoseSize;
+            var roseObject = new GameObject("WarningRose", typeof(RectTransform));
+            var rose = roseObject.GetComponent<RectTransform>();
+            rose.SetParent(panel, false);
+            AvKit.Place(rose, new Rect(x, -Line1Y, RoseSize, RoseSize));
+
+            roseFrame = AvKit.Outline(rose, new Rect(0f, 0f, RoseSize, RoseSize), AvTheme.RailInert);
+
+            float centre = RoseSize * 0.5f;
+            roseNose = AvKit.Rule(rose, new Rect(centre - 1f, 0f, 2f, 5f), AvTheme.Dim);
+
+            roseBlip = AvKit.Panel(rose, new Rect(0f, 0f, RoseBlip, RoseBlip), AvTheme.RailInert);
+            RectTransform blip = roseBlip.rectTransform;
+            blip.anchorMin = blip.anchorMax = new Vector2(0.5f, 0.5f);
+            blip.pivot = new Vector2(0.5f, 0.5f);
+            blip.anchoredPosition = Vector2.zero;
+            roseBlip.gameObject.SetActive(false);
         }
 
         /// <summary>
@@ -262,44 +325,55 @@ namespace BoscaliSummer.Features.Weather.Presentation
             chipLabel.color = chipInk[tier];
             if (chipBox != null) chipBox.color = chipFill[tier];
 
-            regimeLabel.text = WeatherReadout.Regime(snapshot.Live.Regime);
+            // The one cell worth naming: the tier's own source when there is a warning, else the
+            // nearest supercell. Never invented, and never a zero when there is nothing.
+            StormCell source = snapshot.WarningSource;
+            bool hasCell = snapshot.Warning != StormWarning.None;
+            if (!hasCell)
+            {
+                hasCell = StormReadout.Nearest(snapshot.Cells, snapshot.CellCount, playerX, playerZ,
+                    out source, out _);
+            }
+
+            subjectLabel.text = hasCell
+                ? StormReadout.Kind(source.Kind)
+                : WeatherReadout.Regime(snapshot.Live.Regime);
 
             text.Length = 0;
-            if (snapshot.Warning == StormWarning.None)
+            text.Append("WIND ");
+            text.Append(WeatherReadout.Wind(snapshot.LocalWindSpeed, snapshot.LocalWindHeading));
+            if (snapshot.Atmosphere.Available)
             {
-                text.Append(WeatherReadout.Wind(snapshot.LocalWindSpeed, snapshot.LocalWindHeading));
+                text.Append("   GUST ");
+                text.Append(WeatherReadout.Speed(snapshot.Atmosphere.GustSpeed));
+            }
+            windLabel.SetText(text);
+
+            Color roseColor = rail[tier];
+            if (roseFrame != null)
+            {
+                for (int i = 0; i < roseFrame.Length; i++)
+                {
+                    if (roseFrame[i] != null) roseFrame[i].color = roseColor;
+                }
+            }
+
+            if (hasCell)
+            {
+                float distance = source.DistanceTo(playerX, playerZ);
+                float bearing = StormReadout.BearingDegrees(playerX, playerZ, source.X, source.Z);
+                text.Length = 0;
+                text.Append(StormReadout.NauticalMiles(distance));
                 text.Append("  ");
-                text.Append(WeatherReadout.Meters(snapshot.Live.CloudBase));
+                text.Append(StormReadout.BearingTo(playerX, playerZ, source.X, source.Z));
+                cellLabel.SetText(text);
+                PlaceBlip(bearing, distance, roseColor);
             }
             else
             {
-                StormCell source = snapshot.WarningSource;
-                text.Append(StormReadout.HazardLine(
-                    snapshot.Warning,
-                    StormReadout.Kind(source.Kind),
-                    source.DistanceTo(playerX, playerZ),
-                    StormReadout.BearingTo(playerX, playerZ, source.X, source.Z)));
-            }
-            hazardLabel.SetText(text);
-
-            bool rain = snapshot.RainIntensity > RainVisible;
-            bool occlusion = snapshot.CloudOcclusion > OcclusionVisible;
-            if (detailRoot.activeSelf != (rain || occlusion)) detailRoot.SetActive(rain || occlusion);
-            if (rain || occlusion)
-            {
-                text.Length = 0;
-                if (rain)
-                {
-                    text.Append("RAIN ");
-                    text.Append(WeatherReadout.Percent01(snapshot.RainIntensity));
-                }
-                if (occlusion)
-                {
-                    if (rain) text.Append("  ");
-                    text.Append("OCCLUSION ");
-                    text.Append(WeatherReadout.Percent01(snapshot.CloudOcclusion));
-                }
-                detailLabel.SetText(text);
+                cellLabel.text = "NO STORM IN RANGE";
+                if (roseNose != null) roseNose.color = AvTheme.Dim;
+                if (roseBlip != null) roseBlip.gameObject.SetActive(false);
             }
 
             Color frameColor = rail[tier];
@@ -309,11 +383,37 @@ namespace BoscaliSummer.Features.Weather.Presentation
                 float pulse = Mathf.Sin(Time.unscaledTime * (2f * Mathf.PI / PulsePeriod));
                 frameColor.a *= 1f - PulseDepth * (0.5f + 0.5f * pulse);
             }
-            if (frame == null) return;
-            for (int i = 0; i < frame.Length; i++)
+            if (frame != null)
             {
-                if (frame[i] != null) frame[i].color = frameColor;
+                for (int i = 0; i < frame.Length; i++)
+                {
+                    if (frame[i] != null) frame[i].color = frameColor;
+                }
             }
+        }
+
+        /// <summary>
+        /// Put the blip where the cell is relative to the nose: the ring is read like the
+        /// attitude of the traffic, not like north-up terrain.
+        /// </summary>
+        private void PlaceBlip(float bearing, float distance, Color tint)
+        {
+            if (roseBlip == null) return;
+
+            bool hasHeading = TryOwnshipHeading(out float heading);
+            if (roseNose != null) roseNose.color = hasHeading ? tint : AvTheme.Dim;
+            if (!hasHeading)
+            {
+                if (roseBlip.gameObject.activeSelf) roseBlip.gameObject.SetActive(false);
+                return;
+            }
+
+            float radians = (bearing - heading) * Mathf.Deg2Rad;
+            float radius = Mathf.Lerp(RoseMinRadius, RoseMaxRadius, Mathf.Clamp01(distance / RoseFullRangeMetres));
+            roseBlip.rectTransform.anchoredPosition =
+                new Vector2(Mathf.Sin(radians) * radius, Mathf.Cos(radians) * radius);
+            roseBlip.color = tint;
+            if (!roseBlip.gameObject.activeSelf) roseBlip.gameObject.SetActive(true);
         }
     }
 }

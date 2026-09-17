@@ -4,8 +4,13 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 public class SceneSingleton<T> { public static T i; }
-public class DynamicMap : MonoBehaviour { public static bool mapMaximized; public Canvas maximizedMapCanvas; }
+public class DynamicMap : MonoBehaviour { public static bool mapMaximized; public Canvas maximizedMapCanvas; public FactionHQ HQ; }
 public class VirtualMFD : MonoBehaviour { }
+public class FactionHQ { }
+public static class UnitConverter
+{
+    public static string ValueReading(float value) => value.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
+}
 public class MFDScreen : MonoBehaviour
 {
     public string shortName; public GameObject displayPanel; public bool aircraftOnly; public bool isActive;
@@ -26,8 +31,13 @@ namespace BoscaliSummer.Framework.Features { internal static class ModServices {
 namespace BoscaliSummer.Framework.Lifecycle { public interface ISceneService { void ResetForScene(); } }
 namespace BoscaliSummer.Runtime
 {
-    public static class MfdSlots { public const string Set = "SET"; }
-    public static class GameAccess { public static bool IsServer() => false; }
+    public static class MfdSlots { public const string Set = "SET"; public const string Str = "STR"; }
+    public static class GameAccess
+    {
+        public static bool IsServer() => false;
+        public static bool MfdAvailable => false;
+        public static bool HqSensorsAvailable => false;
+    }
     public static class MfdBezel
     {
         public static bool TryClaim(string id, bool preferLeft, VirtualMFD mfd, out List<Button> buttons,
@@ -41,7 +51,48 @@ namespace BoscaliSummer.Runtime
 }
 namespace BoscaliSummer.Features.Command.Presentation
 {
-    public class ComMapOverlay { public static ComMapOverlay Instance; public void SyncSettings() { } }
+    public class ComMapOverlay
+    {
+        public static ComMapOverlay Instance;
+        internal BoscaliSummer.Features.Command.Runtime.TacticalSectorGrid Grid => null;
+        public void SyncSettings() { }
+    }
+}
+namespace BoscaliSummer.Features.Command.Configuration
+{
+    internal sealed class CommandSettings
+    {
+        public readonly Setting<bool> Enabled = new Setting<bool>(true);
+        public readonly Setting<bool> FrontlinesOverlay = new Setting<bool>(false);
+        internal sealed class Setting<T> { public T Value; public Setting(T value) { Value = value; } }
+    }
+}
+namespace BoscaliSummer.Features.Command.Runtime
+{
+    internal enum SectorControl : byte { Neutral = 0, Friendly = 1, Hostile = 2, Contested = 3 }
+
+    internal sealed class TacticalSectorGrid
+    {
+        public const int MaximumNodes = 128;
+        public struct TacticalNode
+        {
+            public bool IsContested;
+            public float CaptureProgress;
+            public SectorControl Faction;
+            public string Name;
+            public bool IsAirbase;
+        }
+        private readonly System.Collections.Generic.List<TacticalNode> nodes =
+            new System.Collections.Generic.List<TacticalNode>();
+        public System.Collections.Generic.IReadOnlyList<TacticalNode> GetNodes() => nodes;
+    }
+
+    internal sealed class CommandManager
+    {
+        public BoscaliSummer.Features.Command.Domain.TacticalTheaterState TheaterState { get; } =
+            new BoscaliSummer.Features.Command.Domain.TacticalTheaterState();
+        public void UpdateTelemetry(FactionHQ hq) { }
+    }
 }
 namespace BoscaliSummer.Features.Command.Presentation.MapUi
 {

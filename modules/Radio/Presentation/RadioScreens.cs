@@ -13,7 +13,6 @@ namespace BoscaliSummer.Features.Radio.Presentation
         public GameObject Root;
         public MFDScreen Screen;
         public AvScreen Shell;
-        public Rect Body;
     }
 
     /// <summary>
@@ -81,8 +80,7 @@ namespace BoscaliSummer.Features.Radio.Presentation
             {
                 Root = root,
                 Screen = screen,
-                Shell = shell,
-                Body = shell.Body
+                Shell = shell
             };
             return true;
         }
@@ -105,37 +103,5 @@ namespace BoscaliSummer.Features.Radio.Presentation
                 if (images[i].gameObject != button.gameObject) return images[i];
             return button.GetComponent<Image>();
         }
-    }
-
-    /// <summary>A downward layout cursor over a page rectangle, in panel coordinates.</summary>
-    internal struct RadioCursor
-    {
-        private readonly Rect area;
-
-        public RadioCursor(Rect area)
-        {
-            this.area = area;
-            Y = area.y;
-        }
-
-        public float Y { get; private set; }
-        public float X => area.x;
-        public float Width => area.width;
-
-        public Rect Take(float height)
-        {
-            var rect = new Rect(area.x, Y, area.width, height);
-            Y -= height + AvTokens.Space2;
-            return rect;
-        }
-
-        public Rect Take(float height, float gap)
-        {
-            var rect = new Rect(area.x, Y, area.width, height);
-            Y -= height + gap;
-            return rect;
-        }
-
-        public void Skip(float height) => Y -= height;
     }
 }

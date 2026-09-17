@@ -688,6 +688,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             tasking = null;
             taskRequest = null;
             taskNote = null;
+            nextTaskingRefresh = 0f;
             Array.Clear(taskRows, 0, taskRows.Length);
             AvUiSound.Reset();
         }

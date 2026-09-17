@@ -21,11 +21,7 @@ namespace BoscaliSummer.Features.Weather.Configuration
         public readonly ConfigEntry<bool> RainAudio;
         public readonly ConfigEntry<float> RainEffectDensity;
         public readonly ConfigEntry<bool> Hud;
-        public readonly ConfigEntry<bool> Supercells;
-        public readonly ConfigEntry<float> SupercellDetail;
         public readonly ConfigEntry<int> RadarRangeKm;
-        public readonly ConfigEntry<bool> ReplaceVanillaClouds;
-        public readonly ConfigEntry<float> CloudSortFudge;
 
         public WeatherSettings(ConfigFile config)
         {
@@ -77,37 +73,11 @@ namespace BoscaliSummer.Features.Weather.Configuration
                 "Show the cockpit weather HUD: warning tier, storm range and bearing, wind and " +
                 "cloud base.");
 
-            Supercells = config.Bind("Weather", "Supercells", true,
-                "Render storm cell cloud towers and anvils. The host owns the sky; this only " +
-                "changes what you see.");
-
-            SupercellDetail = config.Bind("Weather", "SupercellDetail", 0.6f,
-                new ConfigDescription(
-                    "Scales how many cloud puffs each storm tower emits. Lower it if a " +
-                    "supercell costs you frames.",
-                    new AcceptableValueRange<float>(0f, 1f)));
-
             RadarRangeKm = config.Bind("Weather", "RadarRangeKm", 40,
                 new ConfigDescription(
                     "Initial range of the WEA radar scope in kilometres. Cycled on the scope " +
                     "itself.",
                     new AcceptableValueRange<int>(10, 200)));
-
-            ReplaceVanillaClouds = config.Bind("Weather", "ReplaceVanillaClouds", false,
-                "Take the vanilla local cloud deck away so the storm cells own the sky: the " +
-                "masked cloud plane and the near puff layer stop drawing, while vanilla keeps " +
-                "driving the sun and moon cloud cookies, the cloud occlusion, the fog and the " +
-                "distant horizon band. Off, you fly under the vanilla deck with the cells " +
-                "towering through it. Compare both before settling: this one is unverified.");
-
-            CloudSortFudge = config.Bind("Weather", "CloudSortFudge", -100f,
-                new ConfigDescription(
-                    "Sort bias between a storm cell and the vanilla cloud deck. Unity draws " +
-                    "LOWER values in front, so a negative number puts the cell in front of the " +
-                    "deck and a positive one buries it behind. Raise it towards 0 if the cells " +
-                    "look too flat against the deck; push it negative if a storm disappears " +
-                    "behind the base layer.",
-                    new AcceptableValueRange<float>(-5000f, 5000f)));
         }
     }
 }

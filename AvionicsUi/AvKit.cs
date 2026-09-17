@@ -356,6 +356,11 @@ namespace NOAvionics.Ui
             return y - AvTokens.Space4;
         }
 
+        /// <summary>
+        /// A track with a leading fill. Returns the <em>fill</em>: the track and its outline are
+        /// siblings placed from <paramref name="area"/>, so re-placing the returned image later
+        /// leaves the track behind. Lay the bar out where it belongs when it is built.
+        /// </summary>
         public static Image ProgressBar(RectTransform parent, Rect area, float percent, Color fillCol)
         {
             Panel(parent, area, AvTheme.SurfaceInert);

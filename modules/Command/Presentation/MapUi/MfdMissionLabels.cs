@@ -56,6 +56,13 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         public static string ContractFamily(string title) =>
             title != null && Contracts.TryGetValue(title, out ContractVisual visual) ? visual.Family : UnknownFamily;
 
+        /// <summary>
+        /// True when the title is in the table, not the generic fallback. The flag glyph is
+        /// also the fallback's shape, so membership is the only way to tell a mapped capture
+        /// contract from an unknown title.
+        /// </summary>
+        public static bool KnownContract(string title) => title != null && Contracts.ContainsKey(title);
+
         /// <summary>Maps a vanilla <c>ObjectiveType</c> name to its glyph shape.</summary>
         public static string ObjectiveGlyph(string typeName)
         {

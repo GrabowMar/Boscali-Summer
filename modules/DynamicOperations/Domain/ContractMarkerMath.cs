@@ -52,10 +52,13 @@ namespace BoscaliSummer.Features.DynamicOperations.Domain
 
         public string TitleLine => OperationMarkerCopy.Title(Id, Title);
 
+        /// <summary>The vanilla objective icon this contract's family borrows.</summary>
+        public MarkerIconKind Icon => ContractMarkerLook.KindFor(Family);
+
         /// <summary>Family, what the contract asks for, and the clock; distance from the viewer.</summary>
-        public string Detail(float distance) => OperationMarkerCopy.Detail(
+        public string Detail(float distance, bool metric) => OperationMarkerCopy.Detail(
             Family, distance, Radius, Seconds, Progress,
-            OperationMarkerCopy.Field(Inside(distance), Returning));
+            OperationMarkerCopy.Field(Inside(distance), Returning), metric);
 
         public override string ToString() => Id + " " + Title;
     }
@@ -65,24 +68,10 @@ namespace BoscaliSummer.Features.DynamicOperations.Domain
     /// </summary>
     internal static class ContractMarkerMath
     {
-        public const int RingDots = 24;
-
         public static float Distance(float ax, float az, float bx, float bz)
         {
             float dx = ax - bx, dz = az - bz;
             return (float)System.Math.Sqrt(dx * dx + dz * dz);
-        }
-
-        public static float DotX(float radius, int index)
-        {
-            double angle = 2.0 * System.Math.PI * index / RingDots;
-            return (float)(System.Math.Cos(angle) * radius);
-        }
-
-        public static float DotY(float radius, int index)
-        {
-            double angle = 2.0 * System.Math.PI * index / RingDots;
-            return (float)(System.Math.Sin(angle) * radius);
         }
 
         /// <summary>

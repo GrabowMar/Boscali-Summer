@@ -244,7 +244,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 y -= 22f;
 
                 // The grid takes the height the panel actually has: a shallow bezel shows
-                // one dossier at a time, a tall one shows four, and the pager never moves.
+                // one dossier at a time, a tall one shows three, and the pager never moves.
                 int rows = MfdSecondaryObjectives.RowsFor(height);
                 float cardHeight = MfdSecondaryObjectives.CardHeightFor(height, rows);
                 secondaryEmpty = AvStyled.Label(page,
@@ -275,13 +275,14 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             {
                 bool installed = ModServices.TryGet(out ISecondaryObjectivesView view);
                 IReadOnlyList<SecondaryObjectiveView> entries = null;
+                bool streamed = false;
                 if (installed)
                 {
                     view.Refresh();
                     entries = view.Objectives;
+                    streamed = !string.IsNullOrWhiteSpace(view.Status);
                     secondaryLimit = Math.Max(0, view.ActiveLimit);
-                    secondaryStatus = string.IsNullOrWhiteSpace(view.Status)
-                        ? "SECONDARY MISSIONS — WAITING FOR HOST" : view.Status;
+                    secondaryStatus = streamed ? view.Status : "SECONDARY MISSIONS — WAITING FOR HOST";
                 }
                 else
                 {
@@ -323,9 +324,14 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
                 boardSummary.text = MfdSecondaryObjectives.BoardSummary(available, secondaryActive, secondaryLimit, results);
                 boardStatus.text = secondaryStatus;
-                boardStatus.color = installed && entries != null ? AvTheme.Dim : AvTheme.Warning;
+                boardStatus.color = installed && streamed ? AvTheme.Dim : AvTheme.Warning;
+                BoardEmptyReason emptyReason = !installed ? BoardEmptyReason.Unavailable
+                    : !streamed ? BoardEmptyReason.LinkLost
+                    : !hasCapacity ? BoardEmptyReason.LimitReached
+                    : available + secondaryActive + results == 0 ? BoardEmptyReason.DirectorExhausted
+                    : BoardEmptyReason.Ready;
                 secondaryEmpty.gameObject.SetActive(secondaryCount == 0);
-                secondaryEmpty.text = MfdSecondaryObjectives.EmptyMessage(secondaryFilter);
+                secondaryEmpty.text = MfdSecondaryObjectives.EmptyMessage(secondaryFilter, emptyReason);
                 int pageCount = MfdSecondaryObjectives.PageCount(secondaryCount, secondaryCards.Length);
                 secondaryPageLabel.text = secondaryCount == 0 ? "NO SECONDARY MISSIONS" :
                     "PAGE " + (secondaryPage + 1) + " / " + pageCount + "  ·  " +
@@ -370,6 +376,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 private readonly AvButton accept;
                 private readonly AvButton dismiss;
                 private SecondaryObjectiveView current;
+                private bool acceptAllowed;
                 private int confirmCancel;
 
                 public SecondaryObjectiveCard(RectTransform parent, Rect area, System.Action refresh)
@@ -440,7 +447,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     accept = AvStyled.Button(Root, new Rect(AvTokens.Space3, actionTop, (inner - AvTokens.Gap) * .6f, ActionHeight),
                         "ACCEPT CONTRACT", "row-main", () =>
                         {
-                            if (current != null && ModServices.TryGet(out ISecondaryObjectivesView view)) view.RequestAccept(current.Id);
+                            if (acceptAllowed && ModServices.TryGet(out ISecondaryObjectivesView view)) view.RequestAccept(current.Id);
                             refresh();
                         }, AvButtonStyle.Primary);
                     dismiss = AvStyled.Button(Root, new Rect(AvTokens.Space3 + inner * .6f, actionTop, inner * .4f, ActionHeight),
@@ -472,8 +479,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 {
                     if (current?.Id != objective?.Id) confirmCancel = 0;
                     current = objective;
-                    accept.SetEnabled(objective != null && objective.IsOffered && hasCapacity);
-                    accept.SetText(objective?.IsOffered == true ? hasCapacity ? "ACCEPT CONTRACT" : "ACTIVE LIMIT REACHED" : objective?.IsActive == true ? objective.HasMarker ? "TRACKED ON MAP" : "CONTACT LOST" : "CONTRACT ENDED");
+                    acceptAllowed = MfdSecondaryObjectives.CanAccept(objective, hasCapacity);
+                    accept.SetEnabled(acceptAllowed);
+                    accept.SetText(MfdSecondaryObjectives.AcceptLabel(objective, hasCapacity));
                     dismiss.SetEnabled(objective != null && (objective.IsOffered || objective.IsActive));
                     dismiss.SetText(objective?.IsActive == true ? confirmCancel == objective.Id ? "CONFIRM ABORT" : "ABORT" : "DISMISS");
 
@@ -494,12 +502,12 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     float fraction = MfdChartScale.Fraction(objective.Progress, 1f);
                     bool complete = objective.IsComplete;
                     bool lapsed = !complete && objective.SecondsRemaining <= 0f;
-                    bool urgent = !complete && !lapsed && objective.SecondsRemaining <= 60f;
+                    bool urgent = !complete && !lapsed && objective.SecondsRemaining <= MfdSecondaryObjectives.UrgentSeconds;
                     Color color = complete ? AvTheme.RailReady :
                         lapsed ? AvTheme.Alert :
                         urgent ? AvTheme.Warning : objective.IsActive ? AvTheme.Accent : AvTheme.RailInfo;
 
-                    title.text = "#" + objective.Id + "  " + objective.Title;
+                    title.text = MfdSecondaryObjectives.TitleLine(objective.Id, objective.Title);
                     glyph.SetKind(MfdMissionLabels.ContractGlyph(objective.Title), color);
                     family.text = MfdMissionLabels.ContractFamily(objective.Title);
                     state.text = objective.IsOffered ? "AWAITING ACCEPTANCE" : objective.Status;
@@ -584,8 +592,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
                 escalationTacticalTick.enabled = hasTactical;
                 escalationStrategicTick.enabled = hasStrategic;
-                escalationTacticalValue.text = hasTactical ? tactical.ToString("N0") : "—";
-                escalationStrategicValue.text = hasStrategic ? strategic.ToString("N0") : "—";
+                escalationTacticalValue.text = hasTactical ? MfdMissionOverview.Whole(tactical) : "—";
+                escalationStrategicValue.text = hasStrategic ? MfdMissionOverview.Whole(strategic) : "—";
                 ladderCaption.text = MfdMissionOverview.Caption(current, tactical, strategic);
             }
 

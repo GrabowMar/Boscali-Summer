@@ -493,7 +493,8 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
                 if (target.Mission.State == OperationState.Offered)
                     target.Mission.Observe(now, 0f, valid, target.Base != null && target.Base.CurrentHQ == player.HQ,
                         target.Life.Neutralized || target.Unit != null && target.Unit.disabled);
-                if (cancel || !board.Rules.TryAccept(id, now)) return "Cannot accept: offer ended, target unavailable or two contracts already active.";
+                if (cancel) return "Contract already ended.";
+                if (!board.Rules.TryAccept(id, now)) return "Cannot accept: offer ended, target unavailable or two contracts already active.";
                 target.LastJam = -100f; target.Inserted = false; target.Serviced = false; target.Observer = null;
                 return "Contract accepted for your faction. Objective marked on map.";
             }
@@ -567,7 +568,8 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
             { snapshot.Status = "Join a faction to see its secondary objectives."; return snapshot; }
             if (!boards.TryGetValue(player.HQ, out FactionBoard board)) return snapshot;
             float now = NetworkSceneSingleton<MissionManager>.i.MissionTime;
-            snapshot.Status = "Accept up to 2 faction contracts. Holds reset when interrupted. Money is before tax; XP is mission score.";
+            snapshot.Status = "Accept up to " + OperationBoard.MaximumActive +
+                " faction contracts. Holds reset when interrupted. Money is before tax; XP is mission score.";
             snapshot.Cards = new SecondaryObjectiveView[board.Targets.Count];
             for (int i = 0; i < board.Targets.Count; i++)
             {

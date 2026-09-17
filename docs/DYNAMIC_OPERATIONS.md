@@ -16,18 +16,25 @@ Open the tactical map, select **MIS**, then **SECONDARY → AVAILABLE**. Accept 
 for your faction before doing it. **ACTIVE** shows execution progress; **RESULTS** keeps
 recent outcomes. Dismissing an offer has no penalty; confirming the abort of an accepted
 contract costs the faction 1 morale and pays nothing.
-Accepted objectives are drawn by this module, not by the native objective UI: a marker per
-contract on the tactical map (parented to the map image, so it pans and zooms, and hidden with
-the map's own objective-markers toggle) and in the cockpit, where the game camera projects it -
-a pointer turning toward the target, a two-line plate with the contract number and name over
-`FAMILY · DISTANCE · CLOCK`, an edge-clamped copy when the target is off screen or behind, and
-a dotted area ring at the contract's radius. The vicinity card lists up to three contracts
-(inside your area first, then nearest, then a lost contact, which is never dropped), with
-distance or hold progress, the clock, an approach-then-hold bar and a short banner when
-entering or leaving the area. Host-confirmed enemy tracking must remain recent (30 seconds) to
-keep a moving target's position; a lost contact keeps its row and says `CONTACT LOST` instead
-of drawing a stale marker. Nothing is fed into `MissionPosition` or the mission runner, so
-vanilla AI and authored objectives never see a contract.
+Accepted objectives are drawn by this module, in the game's own likeness: it reads vanilla's
+marker style once per scene, read-only, and imitates it - the cockpit pointer and dot sprites
+at vanilla's sizes with the pointer/dot switch ten degrees off the nose, the vanilla area-ring
+sprite with vanilla's own angular scale and fade, the HUD font at the player's overlay text
+size, vanilla map icons at 20/40 px, and vanilla's label glide with its
+50 px anti-overlap nudge. What marks a contract out is the `#N` number, a second
+line (`STRIKE 9.4km T-2:41`, distances formatted exactly like vanilla, metric or imperial) and
+the vanilla warning colour once a clock is inside two minutes. A target off screen is clamped
+to the frame edge and keeps its bearing; a lost contact keeps its card row and prints
+`CONTACT LOST` instead of drawing a stale marker. Host-confirmed enemy tracking must remain
+recent (30 seconds) to keep a moving target's position at all. The tactical map tags hide with
+the map's own objective-markers toggle; the vicinity card is plain HUD text at the right edge -
+a header, one line per contract and a thin vanilla-sized bar - and lists up to three contracts
+(inside your area first, then the nearest, then a lost contact, which is never dropped) from
+`radius + max(4x radius, 20 km)` out, with an approach-then-hold bar and a short banner when
+entering or leaving the area. Nothing is fed into `MissionPosition`, the
+mission runner or a vanilla marker object, so vanilla AI and authored objectives never see a
+contract; if the style read fails the marker layers stay hidden and log once instead of
+guessing a look.
 The original
 briefing and authored objectives remain on their tabs. A host without this module
 cannot supply secondary data; a missing or stale reply clears the panel.

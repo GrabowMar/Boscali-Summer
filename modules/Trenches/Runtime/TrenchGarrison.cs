@@ -10,26 +10,50 @@ namespace BoscaliSummer.Features.Trenches.Runtime
     {
         internal const string Prefix = "BoscaliSummer:Trench:";
         internal const int MaximumDefenders = 4;
+        internal const int MaximumSoldiers = 8;
         // Behind the parados and clear of the earthwork's rear skirt, which reaches about
         // five metres behind the ditch centreline, so the sandbag ring sits against the
         // reverse slope instead of spanning the cut.
         private const float NestRearOffset = 7.5f;
+        // One OverlapBox query per attempt is enough for a lone emplacement; a saturated
+        // buffer is treated as blocked so a crowded site is never accepted half-tested.
+        private const int ObstacleCeiling = 16;
         private static readonly string[] Keys = { "Emplacement1_MG", "Emplacement1_ATGM", "Emplacement1_MANPADS" };
         private static readonly int[] SlotKind = { 0, 0, 1, 2 }; // Two MG teams, one ATGM, one MANPADS
+        private static readonly bool[] missingReported = new bool[Keys.Length]; // Once per process
+        // The dismounted pilot is the game's only infantry figure, and its jsonKey is not
+        // stable across builds: resolve it from the encyclopedia's instance lists, cache it
+        // (including a miss) per encyclopedia, and report the key once per process.
+        private static UnitDefinition soldierDefinition;
+        private static Encyclopedia soldierSource;
+        private static bool soldierScanned;
+        private static bool soldierReported;
         // Preferred station along the line, and the spread of fallbacks tried when a bay's
         // native footprint is blocked: one bad emplacement must not cost a whole position.
         private static readonly float[] FireFractions = { 0.15f, 0.85f, 0.5f };
         private static readonly float[] FallbackSpread = { 0f, 0.2f, -0.2f };
+        private readonly Collider[] obstacles = new Collider[ObstacleCeiling];
         private readonly Building[] defenders = new Building[MaximumDefenders];
         private readonly UnitPart[][] parts = new UnitPart[MaximumDefenders][];
         private readonly float[] previousHealth = new float[MaximumDefenders];
         private readonly bool[] committed = new bool[MaximumDefenders];
         private readonly int[] attempts = new int[MaximumDefenders];
         private readonly BuildingDefinition[] definitions = new BuildingDefinition[3];
+        private readonly PilotDismounted[] soldiers = new PilotDismounted[MaximumSoldiers];
+        private readonly bool[] soldierCommitted = new bool[MaximumSoldiers];
+        private bool soldierFailureReported;
         private readonly TrenchLine line;
         internal int Alive { get; private set; }
         internal bool Overrun { get; private set; }
         internal float SuppressedUntil { get; private set; }
+        // Soldiers are permanent casualties, so unlike the emplacements they never feed the
+        // Alive count, the overrun state or construction suppression.
+        internal int SoldiersAlive { get; private set; }
+        internal int SoldierBudget { get; private set; }
+        // Why the last placement failed, from a fixed short list, so a rejected position can
+        // name the check that refused it instead of leaving the generic warning unexplained.
+        internal string LastFailure { get; private set; } = "not attempted";
+        internal string LastSoldierFailure { get; private set; } = "not attempted";
 
         internal TrenchGarrison(TrenchLine position)
         {
@@ -42,14 +66,27 @@ namespace BoscaliSummer.Features.Trenches.Runtime
                 for (int kind = 0; kind < Keys.Length; kind++)
                     if (string.Equals(def.jsonKey, Keys[kind], StringComparison.OrdinalIgnoreCase)) definitions[kind] = def;
             }
+            for (int kind = 0; kind < Keys.Length; kind++)
+                if (definitions[kind] == null && !missingReported[kind])
+                {
+                    missingReported[kind] = true;
+                    Debug.LogWarning("[TrenchGarrison] Native defense definition missing: " + Keys[kind] + ".");
+                }
         }
 
         internal bool Establish()
         {
             try
             {
-                if (!Spawn(0) || !Spawn(1)) { Remove(); return false; }
-                Alive = 2;
+                // One blocked nest must not cost the position: establish on the teams that
+                // actually spawned, and reject only when none did.
+                int spawned = 0;
+                for (int slot = 0; slot < 2; slot++)
+                    if (Spawn(slot)) spawned++;
+                if (spawned == 0) { Remove(); return false; }
+                Alive = spawned;
+                SoldierBudget = SoldierBudgetFor(line.Stage);
+                FillSoldiers();
                 return true;
             }
             catch { Remove(); throw; }
@@ -61,6 +98,8 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             int desired = TrenchTraceMath.DefenderBudget(line.Stage);
             for (int slot = 0; slot < desired; slot++)
                 if (!committed[slot] && attempts[slot] < 3) Spawn(slot);
+            SoldierBudget = SoldierBudgetFor(line.Stage);
+            FillSoldiers();
         }
 
         internal bool Poll(float now)
@@ -91,6 +130,15 @@ namespace BoscaliSummer.Features.Trenches.Runtime
                 previousHealth[slot] = health;
             }
             if (alive != Alive) { Alive = alive; changed = true; }
+            int soldiersAlive = 0;
+            for (int slot = 0; slot < soldiers.Length; slot++)
+            {
+                if (!soldierCommitted[slot]) continue;
+                PilotDismounted unit = soldiers[slot];
+                if (unit == null || unit.disabled || unit.NetworkHQ != line.OwnerHq) continue;
+                soldiersAlive++;
+            }
+            SoldiersAlive = soldiersAlive;
             if (Alive == 0 && !Overrun) { Overrun = true; changed = true; }
             return changed;
         }
@@ -98,14 +146,15 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         private bool Spawn(int slot)
         {
             var spawner = NetworkSceneSingleton<Spawner>.i;
-            if (spawner == null || !spawner.IsServer || line.OwnerHq == null) return false;
+            if (spawner == null || !spawner.IsServer) { LastFailure = "no server spawner"; return false; }
+            if (line.OwnerHq == null) { LastFailure = "no owner HQ"; return false; }
             attempts[slot]++;
             var def = definitions[SlotKind[slot]];
-            if (def == null) return false;
+            if (def == null) { LastFailure = "missing native definition " + Keys[SlotKind[slot]]; return false; }
             for (int attempt = 0; attempt < FallbackSpread.Length; attempt++)
             {
                 Vector3? anchor = FindAnchor(slot, attempt);
-                if (!anchor.HasValue) return false;
+                if (!anchor.HasValue) { LastFailure = "no anchor"; return false; }
                 if (TrySpawnAt(slot, def, anchor.Value)) return true;
             }
             return false;
@@ -118,12 +167,12 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         private bool TrySpawnAt(int slot, BuildingDefinition def, Vector3 anchor)
         {
             var spawner = NetworkSceneSingleton<Spawner>.i;
-            if (spawner == null || !spawner.IsServer) return false;
+            if (spawner == null || !spawner.IsServer) { LastFailure = "no server spawner"; return false; }
             Vector3 forward = line.ThreatAt(anchor);
             Quaternion rotation = Quaternion.LookRotation(forward);
             Vector3 offset = rotation * def.spawnOffset;
             Vector3 desired = anchor - forward * NestRearOffset + new Vector3(offset.x, 0, offset.z);
-            if (!TrenchTerrain.TryGround(desired, out Vector3 ground)) return false;
+            if (!TrenchTerrain.TryGround(desired, out Vector3 ground)) { LastFailure = "no ground"; return false; }
             // Validate the actual native emplacement footprint, not just a point.
             float halfWidth = Math.Max(2f, def.width * 0.5f + 1f);
             float halfLength = Math.Max(2f, def.length * 0.5f + 1f);
@@ -131,20 +180,138 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             {
                 Vector3 p = ground + rotation * new Vector3((corner & 1) == 0 ? -halfWidth : halfWidth, 0,
                     (corner & 2) == 0 ? -halfLength : halfLength);
-                if (!line.Contains(p)) return false;
-                if (!TrenchTerrain.TryGround(p, out Vector3 sample) || Math.Abs(sample.y - ground.y) > 1f) return false;
+                if (!line.Contains(p)) { LastFailure = "outside the position"; return false; }
+                if (!TrenchTerrain.TryGround(p, out Vector3 sample) || Math.Abs(sample.y - ground.y) > 1f)
+                { LastFailure = "uneven ground"; return false; }
             }
             Vector3 half = new Vector3(halfWidth, Math.Max(1f, def.height * 0.5f), halfLength);
             Vector3 volume = new GlobalPosition(ground).ToLocalPosition() + Vector3.up * (half.y + 0.2f);
-            if (Physics.CheckBox(volume, half, rotation, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)) return false;
+            if (Blocked(volume, half, rotation)) { LastFailure = "footprint blocked"; return false; }
             Building unit = spawner.SpawnBuilding(def.unitPrefab, new GlobalPosition(ground + Vector3.up * offset.y), rotation,
                 line.OwnerHq, null, Prefix + line.Id + ":" + slot, false, null);
-            if (unit == null) return false;
+            if (unit == null) { LastFailure = "spawn returned null"; return false; }
             defenders[slot] = unit;
             committed[slot] = true; // A destroyed slot never respawns or grants farmable repeat rewards.
             parts[slot] = unit.GetComponentsInChildren<UnitPart>();
             previousHealth[slot] = Health(parts[slot]);
             return true;
+        }
+
+        /// <summary>
+        /// Fills every uncommitted soldier slot up to the stage budget. Slots are committed
+        /// for the position's lifetime, so a casualty is never replaced and the field only
+        /// ever thins out.
+        /// </summary>
+        private void FillSoldiers()
+        {
+            if (Overrun || SoldierBudget <= 0) return;
+            bool attempted = false;
+            int placed = 0;
+            for (int slot = 0; slot < SoldierBudget && slot < soldiers.Length; slot++)
+            {
+                if (soldierCommitted[slot]) continue;
+                attempted = true;
+                if (SpawnSoldier(slot)) placed++;
+            }
+            if (!attempted || placed > 0 || soldierFailureReported || SoldiersAlive > 0) return;
+            soldierFailureReported = true; // One warning per position, never a per-growth spam.
+            Debug.LogWarning("[TrenchGarrison] No soldiers: " + LastSoldierFailure);
+        }
+
+        /// <summary>
+        /// One dismounted pilot on the ditch centreline, offset a couple of metres along the
+        /// line so no two slots share a point. Vanilla owns the body: its own physics drops it
+        /// onto the ground, its own logic freezes it standing, and its own damage and Mirage
+        /// replication make it a real casualty.
+        /// </summary>
+        private bool SpawnSoldier(int slot)
+        {
+            var spawner = NetworkSceneSingleton<Spawner>.i;
+            if (spawner == null || !spawner.IsServer) { LastSoldierFailure = "no server spawner"; return false; }
+            if (line.OwnerHq == null) { LastSoldierFailure = "no owner HQ"; return false; }
+            UnitDefinition definition = ResolveSoldierDefinition();
+            if (definition == null) { LastSoldierFailure = "no soldier prefab in the encyclopedia"; return false; }
+            Vector3? anchor = Pick(line.Anchors, (slot + 0.5f) / SoldierBudget);
+            if (!anchor.HasValue) { LastSoldierFailure = "no anchor"; return false; }
+            Vector3 threat = line.ThreatAt(anchor.Value);
+            Vector3 along = Vector3.Cross(Vector3.up, threat).normalized * ((slot & 1) == 0 ? 2f : -2f);
+            Vector3 ground = TrenchTerrain.TryGround(anchor.Value + along, out Vector3 sampled) ? sampled : anchor.Value;
+            PilotDismounted unit = spawner.SpawnPilot(definition.unitPrefab, new GlobalPosition(ground + Vector3.up * 0.3f),
+                Quaternion.LookRotation(threat), line.OwnerHq, Prefix + line.Id + ":soldier:" + slot);
+            if (unit == null) { LastSoldierFailure = "spawn returned null"; return false; }
+            soldiers[slot] = unit;
+            soldierCommitted[slot] = true; // A dead slot is permanent, like the emplacements.
+            return true;
+        }
+
+        private static int SoldierBudgetFor(TrenchStage stage)
+            => stage >= TrenchStage.Saps ? 8 : stage >= TrenchStage.Redoubt ? 7 : stage >= TrenchStage.Support ? 5 : stage >= TrenchStage.FireTrench ? 3 : 0;
+
+        /// <summary>
+        /// The dismounted pilot prefab, found by component in the encyclopedia's instance
+        /// lists (the static Lookup dictionary was empty on a live host). Cached including a
+        /// miss, rescanned per encyclopedia instance, logged once per process, never throwing.
+        /// </summary>
+        private static UnitDefinition ResolveSoldierDefinition()
+        {
+            Encyclopedia encyclopedia = Encyclopedia.i;
+            if (encyclopedia == null) return null;
+            if (soldierScanned && ReferenceEquals(soldierSource, encyclopedia)) return soldierDefinition;
+            soldierSource = encyclopedia;
+            soldierScanned = true;
+            soldierDefinition = FindSoldierPrefab(encyclopedia.otherUnits);
+            if (soldierDefinition == null) soldierDefinition = FindSoldierPrefab(encyclopedia.scenery);
+            if (soldierDefinition == null) soldierDefinition = FindSoldierPrefab(encyclopedia.aircraft);
+            if (soldierDefinition == null) soldierDefinition = FindSoldierPrefab(encyclopedia.vehicles);
+            if (soldierDefinition == null) soldierDefinition = FindSoldierPrefab(encyclopedia.buildings);
+            if (soldierDefinition == null) soldierDefinition = FindSoldierPrefab(encyclopedia.ships);
+            if (soldierDefinition == null) soldierDefinition = FindSoldierPrefab(encyclopedia.missiles);
+            if (!soldierReported)
+            {
+                soldierReported = true;
+                if (soldierDefinition == null)
+                    Debug.LogWarning("[TrenchGarrison] No dismounted-pilot prefab in the encyclopedia; positions stay unmanned.");
+                else
+                    Debug.Log("[TrenchGarrison] Soldiers: " + soldierDefinition.jsonKey + ".");
+            }
+            return soldierDefinition;
+        }
+
+        private static UnitDefinition FindSoldierPrefab(IReadOnlyList<UnitDefinition> list)
+        {
+            if (list == null) return null;
+            for (int i = 0; i < list.Count && i < 512; i++)
+            {
+                UnitDefinition definition = list[i];
+                if (definition == null || definition.unitPrefab == null) continue;
+                try
+                {
+                    if (definition.unitPrefab.GetComponent<PilotDismounted>() != null) return definition;
+                }
+                catch { } // A malformed prefab must not cost the whole position.
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Overlap probe for the actual emplacement volume. Terrain is the ground the nest
+        /// stands on, not an obstacle: on any real slope the box clips it, so terrain colliders
+        /// are identified exactly as <see cref="TrenchTerrain.TryGround"/> does and skipped.
+        /// The buffer is a hard ceiling, and a saturated query fails closed.
+        /// </summary>
+        private bool Blocked(Vector3 volume, Vector3 half, Quaternion rotation)
+        {
+            int count = Physics.OverlapBoxNonAlloc(volume, half, obstacles, rotation,
+                Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < count; i++)
+            {
+                Collider collider = obstacles[i];
+                if (collider == null) continue;
+                if (GameAssets.i?.terrainMaterial != null &&
+                    collider.sharedMaterial == GameAssets.i.terrainMaterial) continue;
+                return true;
+            }
+            return count >= obstacles.Length;
         }
 
         /// <summary>
@@ -183,6 +350,16 @@ namespace BoscaliSummer.Features.Trenches.Runtime
                     spawner.ServerObjectManager.Destroy(unit.gameObject);
                 defenders[i] = null;
             }
+            for (int i = 0; i < soldiers.Length; i++)
+            {
+                var soldier = soldiers[i];
+                if (soldier != null && soldier.NetworkHQ == line.OwnerHq && spawner != null && spawner.IsServer)
+                    spawner.ServerObjectManager.Destroy(soldier.gameObject);
+                soldiers[i] = null;
+                soldierCommitted[i] = false;
+            }
+            SoldiersAlive = 0;
+            SoldierBudget = 0;
         }
     }
 }

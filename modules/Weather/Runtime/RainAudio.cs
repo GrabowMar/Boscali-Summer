@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Features.Weather.Domain;
 using UnityEngine;
 
 namespace BoscaliSummer.Features.Weather.Runtime
@@ -8,7 +9,8 @@ namespace BoscaliSummer.Features.Weather.Runtime
     /// <c>rain</c> is band-limited noise with a slow wobble, <c>wind</c> is the same noise
     /// pushed down into an airframe rumble. Both loop by crossfading the generated tail over
     /// the head, so the seam is inaudible, and a source whose level falls to the floor is
-    /// stopped — not merely muted.
+    /// stopped — not merely muted. The level ladder follows what is falling: hail hammers,
+    /// showers roar, drizzle barely whispers.
     ///
     /// Two clips, two 2D sources, one owned GameObject. Nothing here routes through a mixer:
     /// this is world sound, not radio, so it stays on the game's default effects output.
@@ -27,6 +29,18 @@ namespace BoscaliSummer.Features.Weather.Runtime
         private const float MinAudible = 0.02f;
         private const float MaxRainVolume = 0.85f;
         private const float MaxWindVolume = 0.7f;
+
+        /// <summary>
+        /// Per-kind character: hail hammers the canopy and drizzle barely whispers, so the level
+        /// and the pitch both come from what is falling, not from the rate alone. Every gain is
+        /// under 1 and the sum is clamped before it reaches the source, so nothing clips.
+        /// </summary>
+        private const float HailGain = 1f;
+        private const float HailPitch = 1.18f;
+        private const float ShowerGain = 0.92f;
+        private const float RainGain = 0.8f;
+        private const float DrizzleGain = 0.42f;
+        private const float DrizzlePitch = 0.92f;
 
         /// <summary>Rain on a fast canopy is louder; 300 m/s is the reference that earns full gain.</summary>
         private const float AirspeedReference = 300f;
@@ -80,20 +94,47 @@ namespace BoscaliSummer.Features.Weather.Runtime
         }
 
         /// <summary>
-        /// One 10 Hz update: rain tracks precipitation and airspeed, wind tracks the mean wind
-        /// and its turbulence. Both levels are clamped and both sources stop at the floor.
+        /// One 10 Hz update: rain tracks what is falling and how fast the aircraft is going, wind
+        /// tracks the mean wind and its turbulence. Hail is the loudest and sharpest of the ladder
+        /// and drizzle the quietest, and both levels are clamped below full scale so a downpour on
+        /// top of a gale still has headroom.
         /// </summary>
-        public void Tick(float intensity, float airspeed, float windSpeed, float turbulence)
+        public void Tick(float intensity, PrecipitationKind kind, float airspeed, float windSpeed, float turbulence)
         {
             if (rainSource == null || windSource == null) return;
-            float rain = Mathf.Clamp01(intensity) *
+
+            float rain = Mathf.Clamp01(intensity) * KindGain(kind) *
                          (RainBaseGain + RainAirspeedGain * Mathf.Clamp01(airspeed / AirspeedReference)) *
                          MaxRainVolume;
-            SetLevel(rainSource, rain);
+            rainSource.pitch = KindPitch(kind);
+            SetLevel(rainSource, Mathf.Clamp01(rain));
+
             float wind = Mathf.Clamp01((windSpeed - WindThreshold) / WindReference) *
                          (WindBaseGain + WindTurbulenceGain * Mathf.Clamp01(turbulence)) *
                          MaxWindVolume;
-            SetLevel(windSource, wind);
+            SetLevel(windSource, Mathf.Clamp01(wind));
+        }
+
+        private static float KindGain(PrecipitationKind kind)
+        {
+            switch (kind)
+            {
+                case PrecipitationKind.Hail: return HailGain;
+                case PrecipitationKind.Showers: return ShowerGain;
+                case PrecipitationKind.Rain: return RainGain;
+                case PrecipitationKind.Drizzle: return DrizzleGain;
+                default: return 0f;
+            }
+        }
+
+        private static float KindPitch(PrecipitationKind kind)
+        {
+            switch (kind)
+            {
+                case PrecipitationKind.Hail: return HailPitch;
+                case PrecipitationKind.Drizzle: return DrizzlePitch;
+                default: return 1f;
+            }
         }
 
         public void Teardown()

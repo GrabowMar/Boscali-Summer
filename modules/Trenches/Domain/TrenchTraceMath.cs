@@ -36,8 +36,11 @@ namespace BoscaliSummer.Features.Trenches.Domain
         // into a curve before anything else touches it.
         public const float CurveSpacing = 10f;
         public const float MeshSpacing = 3.5f;
-        public const float TraverseSpacing = 5.5f;
-        public const float TraverseAmplitude = 1.6f;
+        // The traverse wave is a subtle traversed zigzag: a man-scale trench bends gently
+        // every nine metres or so, never a flight-visibility sawtooth that reads as blocky
+        // square bays beside 1.8m soldiers and vanilla emplacements.
+        public const float TraverseSpacing = 9f;
+        public const float TraverseAmplitude = 0.5f;
         public const float MinRunLength = 140f;
         public const int MaximumStations = 320;
 
