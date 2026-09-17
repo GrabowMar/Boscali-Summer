@@ -4,9 +4,14 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Features.Weather.Runtime
 {
     /// <summary>
-    /// Rain on the cockpit glass: one screen-space overlay canvas with exactly two animated
+    /// The fallback canopy rain: one screen-space overlay canvas with exactly two animated
     /// <see cref="RawImage"/> layers — fast streaks and a slow, independent droplet drift — so
     /// it sits above the 3D world and below the vanilla cockpit HUD.
+    ///
+    /// <para>This is what draws when there is no cockpit glass to lock to: an observer, a
+    /// parachute, a cockpit layout without a resolvable Canopy. <see cref="GlassRain"/> is the
+    /// real effect, and its owner tears this down the moment that layer takes over, so the two can
+    /// never compete for the gameplay canvas's sorting order.</para>
     ///
     /// Both sheets are generated once, in memory, into one reusable <see cref="Color32"/> buffer:
     /// no shader, no bundle, no file. The canvas, the two textures and the two images are the

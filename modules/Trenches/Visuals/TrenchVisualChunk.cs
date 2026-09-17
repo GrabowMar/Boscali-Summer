@@ -21,8 +21,8 @@ namespace BoscaliSummer.Features.Trenches.Visuals
         private const float TraceStep = 3.5f;
         private const float CoarseStep = 9f;
         private const float RidgeStep = 18f;
-        private const float WireForward = 16f;
-        private const float WireHeight = 1.15f;
+        private const float WireForward = 7f;
+        private const float WireHeight = 0.75f;
 
         private TrenchLine line;
         private GameObject lod0Root;
@@ -94,7 +94,7 @@ namespace BoscaliSummer.Features.Trenches.Visuals
             Vector3[] fire = BuildDitchPath(line.Curve, TraceStep);
             if (fire != null)
             {
-                AddMesh(lod0Root.transform, "Fire_LOD0", fire, width, parapet, 2.2f, earthMat, true);
+                AddMesh(lod0Root.transform, "Fire_LOD0", fire, width, parapet, 1.1f, earthMat, true);
                 AddFrontColliders(fire, width, parapet, "Fire");
                 AddWireBelt(lod0Root.transform, earthMat);
             }
@@ -102,23 +102,23 @@ namespace BoscaliSummer.Features.Trenches.Visuals
             // over the front must still read the parapet line and the belt behind it. The
             // far ridge is the silhouette — berms, no skirts — rather than a flat scar.
             AddPath(lod1Root.transform, "Fire_LOD1", line.Curve, CoarseStep,
-                width, parapet * 0.85f, 1.6f, earthMat, true);
+                width, parapet * 0.85f, 0.8f, earthMat, true);
             AddPath(lod2Root.transform, "Fire_LOD2", line.Curve, RidgeStep,
-                width + 4.5f, 1.6f, 0.8f, earthMat, true);
+                width + 3f, 1.8f, 0.5f, earthMat, true);
             if (line.Support != null)
             {
-                AddPath(lod0Root.transform, "Support", line.Support, TraceStep, 4.2f, 3.0f, 2.0f, earthMat, true);
-                AddPath(lod1Root.transform, "Support_LOD1", line.Support, CoarseStep, 4.2f, 2.4f, 1.6f, earthMat, true);
-                AddPath(lod2Root.transform, "Support_LOD2", line.Support, RidgeStep, 7.5f, 1.5f, 0.8f, earthMat, true);
+                AddPath(lod0Root.transform, "Support", line.Support, TraceStep, 2.2f, 1.2f, 1.0f, earthMat, true);
+                AddPath(lod1Root.transform, "Support_LOD1", line.Support, CoarseStep, 2.2f, 1.05f, 0.8f, earthMat, true);
+                AddPath(lod2Root.transform, "Support_LOD2", line.Support, RidgeStep, 3.4f, 1.5f, 0.5f, earthMat, true);
             }
             if (line.Redoubt != null)
             {
-                AddPath(lod0Root.transform, "Redoubt", line.Redoubt, TraceStep, 4.2f, 2.6f, 2.0f, earthMat, true);
-                AddPath(lod1Root.transform, "Redoubt_LOD1", line.Redoubt, CoarseStep, 4.2f, 2.2f, 1.6f, earthMat, true);
-                AddPath(lod2Root.transform, "Redoubt_LOD2", line.Redoubt, RidgeStep, 7.5f, 1.5f, 0.8f, earthMat, true);
+                AddPath(lod0Root.transform, "Redoubt", line.Redoubt, TraceStep, 2.2f, 1.15f, 1.0f, earthMat, true);
+                AddPath(lod1Root.transform, "Redoubt_LOD1", line.Redoubt, CoarseStep, 2.2f, 1.0f, 0.8f, earthMat, true);
+                AddPath(lod2Root.transform, "Redoubt_LOD2", line.Redoubt, RidgeStep, 3.4f, 1.5f, 0.5f, earthMat, true);
             }
-            AddTraces(lod0Root.transform, line.Links, "Link", 3.2f, 2.2f, earthMat);
-            AddTraces(lod0Root.transform, line.Spurs, "Sap", 2.0f, 1.4f, earthMat);
+            AddTraces(lod0Root.transform, line.Links, "Link", 1.8f, 1.1f, earthMat);
+            AddTraces(lod0Root.transform, line.Spurs, "Sap", 1.3f, 0.8f, earthMat);
 
             currentLod = -1;
             UpdateLod(true);
@@ -245,29 +245,29 @@ namespace BoscaliSummer.Features.Trenches.Visuals
                 Vector3 mid = (p0 + p1) * 0.5f;
                 Vector3 fwd = (p1 - p0).normalized;
                 var colObj = new GameObject($"DitchCollider_{tag}_{i}");
-                // Ignore Raycast layer: the earthwork still blocks vehicles, but placement
+                // Ignore Raycast layer: the obstacle boxes block vehicles only, and placement
                 // queries never mistake the mod's own ditch for an obstacle to spawn into.
                 colObj.layer = PhysicsLayers.IgnoreRaycast;
                 colObj.transform.SetParent(lod0Root.transform, false);
                 colObj.transform.localPosition = mid + Vector3.up * (parapetHeight * 0.5f);
                 colObj.transform.localRotation = Quaternion.LookRotation(fwd, Vector3.up);
                 var box = colObj.AddComponent<BoxCollider>();
-                box.size = new Vector3(width + 4f, Mathf.Max(1.2f, parapetHeight * 0.9f), len + 0.5f);
+                box.size = new Vector3(width + 1.2f, Mathf.Max(1.2f, parapetHeight * 0.9f), len + 0.5f);
                 colliders.Add(box);
             }
         }
 
         private static float WidthFor(TrenchStage stage)
-            => stage >= TrenchStage.Support ? 3.6f : stage >= TrenchStage.FireTrench ? 3.0f : 2.0f;
+            => stage >= TrenchStage.Support ? 1.7f : stage >= TrenchStage.FireTrench ? 1.6f : 1.4f;
 
         private static float ParapetFor(TrenchStage stage)
         {
             switch (stage)
             {
-                case TrenchStage.Scrape: return 0.8f;
-                case TrenchStage.FireTrench: return 2.0f;
-                case TrenchStage.Support: return 2.6f;
-                default: return 3.4f;
+                case TrenchStage.Scrape: return 0.5f;
+                case TrenchStage.FireTrench: return 1.2f;
+                case TrenchStage.Support: return 1.3f;
+                default: return 1.45f;
             }
         }
 

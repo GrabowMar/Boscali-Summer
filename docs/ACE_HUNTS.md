@@ -16,7 +16,7 @@ unlocks, rank thresholds and vanilla mission score remain the game's responsibil
 
 Ace victories grant a separate, server-owned pick bonus. The score-pick ceiling
 must not swallow this bonus: `earned = min(20, scorePicks + aceBonus)`. Score itself
-pays five qualification grades across four lanes, and a career may hold two of the four
+pays six qualification grades across four lanes, and a career may hold two of the four
 OPS tools. A leader defeat can award once per encounter;
 escort destruction does not award an additional ace pick. The host validates player
 participation and consumes the encounter's reward before publishing the result.

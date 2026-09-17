@@ -271,7 +271,8 @@ namespace BoscaliSummer.Tests.Features.Trenches
                 float step = Math.Abs(outX[i] - outX[i - 1]) + Math.Abs(outZ[i] - outZ[i - 1]);
                 TestAssert.That(step < TrenchTraceMath.MeshSpacing * 3f, "Mesh rings stay closely spaced");
             }
-            TestAssert.That(excursion > 1.0f && excursion <= TrenchTraceMath.TraverseAmplitude + 0.001f,
+            TestAssert.That(excursion > TrenchTraceMath.TraverseAmplitude * 0.5f &&
+                excursion <= TrenchTraceMath.TraverseAmplitude + 0.001f,
                 "The ditch weaves through traverses within a trench width");
         }
 
@@ -362,9 +363,11 @@ namespace BoscaliSummer.Tests.Features.Trenches
                 TrenchTraceMath.HasSaps(TrenchStage.Saps) && !TrenchTraceMath.HasSaps(TrenchStage.Redoubt),
                 "Belt predicates follow the stage order");
             TestAssert.That(TrenchTraceMath.SupportDepth - TrenchTraceMath.FireDepth >= 60f &&
-                TrenchTraceMath.RedoubtDepth - TrenchTraceMath.FireDepth >= 180f &&
-                TrenchTraceMath.TraverseAmplitude >= 1.5f,
+                TrenchTraceMath.RedoubtDepth - TrenchTraceMath.FireDepth >= 180f,
                 "A position digs a real two-line belt: support and reserve lines behind the fire trench");
+            TestAssert.That(TrenchTraceMath.TraverseAmplitude <= 0.7f &&
+                TrenchTraceMath.TraverseSpacing >= 8f,
+                "The traverse wave is a subtle zigzag; a sawtooth reads as blocky bays beside man-scale models");
         }
 
         private static bool Near(float a, float b) => Math.Abs(a - b) < 0.0001f;

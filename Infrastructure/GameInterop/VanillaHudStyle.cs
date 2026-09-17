@@ -50,6 +50,9 @@ namespace BoscaliSummer.Runtime
             public Vector2 PointerSize;
             public Vector2 DotSize;
             public Vector2 RingSize;
+
+            /// <summary>Vanilla's label is font size 32 scaled 0.5, i.e. 16 px on screen.</summary>
+            public float LabelScale;
         }
 
         internal struct MapStyle
@@ -63,6 +66,9 @@ namespace BoscaliSummer.Runtime
             public float LabelSize;
             public Color LabelColour;
             public Sprite Ring;
+
+            /// <summary>Vanilla's map label is 24 px scaled 0.5, i.e. 12 px on screen.</summary>
+            public float LabelScale;
         }
 
         internal struct Palette
@@ -77,6 +83,21 @@ namespace BoscaliSummer.Runtime
 
         /// <summary>The vanilla objective label size, live from the player's options.</summary>
         internal static float OverlayTextSize => PlayerSettings.overlayTextSize;
+
+        /// <summary>
+        /// The size vanilla's own objective label actually renders at: the player's overlay text
+        /// size carried through the label's 0.5 transform scale, i.e. 16 px at the default 32.
+        /// Imitating the font size alone is what makes a mod's marker text twice as loud.
+        /// </summary>
+        internal static float ObjectiveTextSize
+        {
+            get
+            {
+                float size = OverlayTextSize;
+                float scale = cockpitReady && cockpit.LabelScale > 0.01f ? cockpit.LabelScale : 0.5f;
+                return !float.IsNaN(size) && !float.IsInfinity(size) && size >= 1f ? size * scale : 16f;
+            }
+        }
 
         /// <summary>Vanilla HUD colours, live so a custom theme carries over.</summary>
         internal static Palette Colours
@@ -206,7 +227,8 @@ namespace BoscaliSummer.Runtime
                     RingSize = Size(ring.rectTransform, 20f),
                     Font = label.font,
                     FontMaterial = label.fontSharedMaterial,
-                    Colour = label.color
+                    Colour = label.color,
+                    LabelScale = Scale(label.rectTransform, 0.5f)
                 };
                 return style.Pointer != null && style.Dot != null && style.Ring != null && style.Font != null;
             }
@@ -239,6 +261,7 @@ namespace BoscaliSummer.Runtime
                     LabelMaterial = label != null ? label.material : null,
                     LabelSize = label != null ? label.fontSize : 24f,
                     LabelColour = label != null ? label.color : Color.white,
+                    LabelScale = label != null ? Scale(label.rectTransform, 0.5f) : 0.5f,
                     Ring = ExclusionRing()
                 };
                 return style.WaypointIcon != null && style.DestroyIcon != null &&
@@ -276,5 +299,12 @@ namespace BoscaliSummer.Runtime
 
         private static Vector2 Size(RectTransform rect, float fallback) =>
             rect != null && rect.sizeDelta.x > 0.5f && rect.sizeDelta.y > 0.5f ? rect.sizeDelta : new Vector2(fallback, fallback);
+
+        /// <summary>
+        /// The vanilla labels carry their real size in a 0.5 transform scale, so a mod that
+        /// copies the font size alone renders twice as large as the game beside it.
+        /// </summary>
+        private static float Scale(RectTransform rect, float fallback) =>
+            rect != null && rect.localScale.x > 0.01f && rect.localScale.x <= 4f ? rect.localScale.x : fallback;
     }
 }

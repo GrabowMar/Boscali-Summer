@@ -70,13 +70,19 @@ namespace BoscaliSummer.Features.Weather.Domain
             return (metres / MetresPerNauticalMile).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + " NM";
         }
 
+        /// <summary>Bearing from a point to a cell, degrees clockwise from north.</summary>
+        public static float BearingDegrees(float fromX, float fromZ, float toX, float toZ)
+        {
+            if (float.IsNaN(fromX) || float.IsNaN(fromZ) || float.IsNaN(toX) || float.IsNaN(toZ)) return 0f;
+            return WeatherState.WrapHeading((float)(Math.Atan2(toX - fromX, toZ - fromZ) * 180.0 / Math.PI));
+        }
+
         /// <summary>Bearing from a point to a cell, as a compass point and its degrees.</summary>
         public static string BearingTo(float fromX, float fromZ, float toX, float toZ)
         {
             if (float.IsNaN(fromX) || float.IsNaN(fromZ) || float.IsNaN(toX) || float.IsNaN(toZ))
                 return WeatherReadout.Unknown;
-            float degrees = (float)(Math.Atan2(toX - fromX, toZ - fromZ) * 180.0 / Math.PI);
-            float wrapped = WeatherState.WrapHeading(degrees);
+            float wrapped = BearingDegrees(fromX, fromZ, toX, toZ);
             return WeatherReadout.Compass16(wrapped) + " " +
                    Math.Round(wrapped).ToString("0", System.Globalization.CultureInfo.InvariantCulture) + "°";
         }
@@ -90,6 +96,63 @@ namespace BoscaliSummer.Features.Weather.Domain
             if (warning == StormWarning.None) return "NO STORM IN RANGE";
             if (string.IsNullOrEmpty(kind) || string.IsNullOrEmpty(bearing)) return WeatherReadout.Unknown;
             return Warning(warning) + " — " + kind + " " + NauticalMiles(distanceMetres) + " " + bearing;
+        }
+
+        /// <summary>
+        /// The cell the cockpit banner names: the nearest one already imposing a warning, or
+        /// failing that the nearest supercell. Reads the caller's bounded buffer in one pass and
+        /// allocates nothing, because the HUD runs it on every tick.
+        /// </summary>
+        /// <returns>False when nothing in the buffer is worth naming.</returns>
+        public static bool Nearest(
+            StormCell[] cells, int count, float fromX, float fromZ, out StormCell nearest, out float distance)
+        {
+            nearest = default(StormCell);
+            distance = 0f;
+            if (cells == null) return false;
+            if (count < 0) count = 0;
+            if (count > cells.Length) count = cells.Length;
+
+            bool foundWarned = false;
+            bool foundSupercell = false;
+            float warnedDistance = float.MaxValue;
+            float supercellDistance = float.MaxValue;
+            StormCell warned = default(StormCell);
+            StormCell supercell = default(StormCell);
+
+            for (int i = 0; i < count; i++)
+            {
+                StormCell cell = cells[i];
+                float metres = cell.DistanceTo(fromX, fromZ);
+                if (float.IsNaN(metres)) continue;
+
+                if (metres < warnedDistance && cell.WarningAt(fromX, fromZ) != StormWarning.None)
+                {
+                    warnedDistance = metres;
+                    warned = cell;
+                    foundWarned = true;
+                }
+                if (metres < supercellDistance && cell.IsSupercell)
+                {
+                    supercellDistance = metres;
+                    supercell = cell;
+                    foundSupercell = true;
+                }
+            }
+
+            if (foundWarned)
+            {
+                nearest = warned;
+                distance = warnedDistance;
+                return true;
+            }
+            if (foundSupercell)
+            {
+                nearest = supercell;
+                distance = supercellDistance;
+                return true;
+            }
+            return false;
         }
     }
 }

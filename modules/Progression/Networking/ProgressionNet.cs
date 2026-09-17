@@ -44,8 +44,12 @@ namespace BoscaliSummer.Features.Progression.Networking
 
     internal sealed class ProgressionNet : MonoBehaviour
     {
-        /// <summary>Version 3 includes pilot generation so a retired career cannot be restored by an old reply.</summary>
-        internal const byte ProtocolVersion = 3;
+        /// <summary>
+        /// Version 4 adds a sixth grade to every lane. Grade ids are wire identity, so the
+        /// insert renumbered every lane after STRIKE and a version 3 peer would apply the
+        /// wrong grade; the version gate keeps the two builds apart.
+        /// </summary>
+        internal const byte ProtocolVersion = 4;
 
         /// <summary>Perk id meaning "send me a snapshot, change nothing".</summary>
         internal const byte QueryOnly = byte.MaxValue;

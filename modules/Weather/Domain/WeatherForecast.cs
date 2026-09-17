@@ -9,10 +9,39 @@ namespace BoscaliSummer.Features.Weather.Domain
 
         public readonly WeatherState State;
 
+        /// <summary>
+        /// Conditions change from the previous entry — or from the sky right now, for the first
+        /// entry. Negative is easing, positive is thickening.
+        /// </summary>
+        public readonly float ConditionsDelta;
+
+        /// <summary>Wind speed change from the previous entry, metres per second.</summary>
+        public readonly float WindDelta;
+
         public WeatherForecastEntry(float atSeconds, WeatherState state)
+            : this(atSeconds, state, 0f, 0f)
+        {
+        }
+
+        public WeatherForecastEntry(float atSeconds, WeatherState state, float conditionsDelta, float windDelta)
         {
             AtSeconds = atSeconds;
             State = state;
+            ConditionsDelta = Clamp(conditionsDelta, -1f, 1f);
+            WindDelta = Clamp(windDelta, -WindDeltaLimit, WindDeltaLimit);
+        }
+
+        /// <summary>0..5, the regime's place on the severity ladder, for the panel's chip.</summary>
+        public int Severity => WeatherRegimes.Index(State.Regime);
+
+        /// <summary>Ceiling on the wind trend, so an unreadable sample cannot print an absurd number.</summary>
+        public const float WindDeltaLimit = 40f;
+
+        private static float Clamp(float value, float min, float max)
+        {
+            if (float.IsNaN(value)) return 0f;
+            if (value < min) return min;
+            return value > max ? max : value;
         }
     }
 
@@ -43,7 +72,8 @@ namespace BoscaliSummer.Features.Weather.Domain
             int seed,
             float missionTime,
             int steps = DefaultSteps,
-            float stepSeconds = DefaultStepSeconds)
+            float stepSeconds = DefaultStepSeconds,
+            float daylight = Diurnal.UnknownDaylight)
         {
             if (steps < 0) steps = 0;
             if (steps > MaxEntries) steps = MaxEntries;
@@ -51,10 +81,17 @@ namespace BoscaliSummer.Features.Weather.Domain
 
             var forecast = new WeatherForecast();
             forecast.Count = steps;
+            WeatherState previous = WeatherModel.Sample(seed, missionTime, daylight);
             for (int i = 0; i < steps; i++)
             {
                 float at = missionTime + stepSeconds * (i + 1);
-                forecast.entries[i] = new WeatherForecastEntry(at, WeatherModel.Sample(seed, at));
+                WeatherState state = WeatherModel.Sample(seed, at, daylight);
+                forecast.entries[i] = new WeatherForecastEntry(
+                    at,
+                    state,
+                    state.Conditions - previous.Conditions,
+                    state.WindSpeed - previous.WindSpeed);
+                previous = state;
             }
 
             float changeAt = WeatherModel.NextChangeAt(missionTime);

@@ -73,13 +73,6 @@ namespace BoscaliSummer.Features.Weather.Domain
 
         public bool IsSupercell => Kind == StormKind.Supercell;
 
-        /// <summary>0..1 through the cell's life, for a lifecycle curve or a radar fade.</summary>
-        public float LifeFraction => Lifetime <= 0f ? 0f : WeatherRegimes.Clamp01(Age / Lifetime);
-
-        /// <summary>Width of the anvil, in metres. Only a supercell really has one.</summary>
-        public float AnvilRadius =>
-            Kind == StormKind.Supercell ? Radius * 2.1f : Kind == StormKind.ToweringCumulus ? Radius * 1.2f : 0f;
-
         public float DistanceTo(float x, float z)
         {
             float dx = X - x;

@@ -33,11 +33,12 @@ public static class TrenchUnityCheck
             CheckMeshWindingAndConformance();
             CheckCurveAndPlanner();
             CheckGrowthAndCombat();
+            CheckSoldiers();
             CheckWorksCatalog();
             CheckEarthworkMaterial();
             CheckLodFloatingOrigin();
             Render();
-            File.WriteAllText("result.txt", "PASS: eight winding orientations; a sparse trace fitted to a smooth owned-side curve, terrain-refused runs split, a window fitted where its trace is (first and second window), contested band entrenched, stage growth through support/redoubt/saps, native-adapter defender budgets, damage suppression and no respawn after destruction; smooth terrain clipping a nest does not block it while solid obstacles still do; works deploy from the encyclopedia's instance lists with vehicle-scale pieces filtered; LOD is measured in local space so a chunk under a large floating origin stays visible at LOD0 with CameraStateManager present or absent. Native AI/networking require in-game acceptance. Stage renders saved.");
+            File.WriteAllText("result.txt", "PASS: eight winding orientations; a man-scale earthwork footprint beside vanilla emplacements and soldiers; a sparse trace fitted to a smooth owned-side curve, terrain-refused runs split, a window fitted where its trace is (first and second window), contested band entrenched, stage growth through support/redoubt/saps, native-adapter defender budgets, damage suppression and no respawn after destruction; dismounted soldiers spent from the stage budget on the centreline, facing the threat, with permanent casualties and a named fail-closed path when no pilot prefab loads; smooth terrain clipping a nest does not block it while solid obstacles still do; works deploy from the encyclopedia's instance lists with vehicle-scale pieces filtered; LOD is measured in local space so a chunk under a large floating origin stays visible at LOD0 with CameraStateManager present or absent. Native AI/networking require in-game acceptance. Stage renders saved.");
             EditorApplication.Exit(0);
         }
         catch (Exception ex)
@@ -71,13 +72,28 @@ public static class TrenchUnityCheck
             "Both ditch ends must be closed with a head-cover cap");
         Object.DestroyImmediate(capped);
 
-        // A field position must read from the air: a real parapet-and-spoil footprint, not a
-        // garden ditch. One firing trench spreads across a dozen metres of earthwork.
+        // A fire trench is an earthwork, but a man-scale one: it stands beside vanilla
+        // emplacements and the dismounted soldiers that hold it, so its parapet, berm and
+        // skirt must not spread into the dozen-metre field work the flight silhouette
+        // started as. The kit numbers are the LOD0 fire-trench call's.
         var section = TrenchMeshBuilder.BuildEdgeMesh(new[] { Vector3.zero, Vector3.forward * 40f },
-            3.4f, 3.0f, 2.2f, Vector3.right);
-        Check(section.bounds.size.x >= 12f,
-            "One position's earthwork spans a real parapet, spoil apron and skirt footprint");
-        Check(section.bounds.size.y >= 4f, "The parapet, spoil apron and skirt stand a real trench height");
+            1.6f, 1.2f, 1.1f, Vector3.right);
+        var sv = section.vertices;
+        float halfWidth = Mathf.Max(-section.bounds.min.x, section.bounds.max.x);
+        Check(halfWidth >= 2f, "A fire trench still spreads a real parapet, berm and skirt per side");
+        Check(halfWidth <= 2.6f,
+            "The earthwork stays man-scale beside vanilla emplacements and soldiers: half footprint " +
+            halfWidth + "m");
+        float crestHeight = 0f;
+        float floorWidth = 0f;
+        for (int r = 0; r + TrenchMeshBuilder.ProfilePointCount <= sv.Length - 2; r += TrenchMeshBuilder.ProfilePointCount)
+        {
+            crestHeight = Mathf.Max(crestHeight, sv[r + 6].y);
+            floorWidth = Mathf.Max(floorWidth, Mathf.Abs(sv[r + 4].x - sv[r + 3].x));
+        }
+        Check(crestHeight <= 1.4f, "A man-scale parapet crest stays under 1.4m, got " + crestHeight + "m");
+        Check(floorWidth <= 1.2f, "A man-scale ditch floor is walkable under 1.2m, got " + floorWidth + "m");
+        Debug.Log($"[TrenchUnityCheck] fire section: half={halfWidth:0.###}m crest={crestHeight:0.###}m floor={floorWidth:0.###}m");
         Object.DestroyImmediate(section);
 
         var wire = TrenchMeshBuilder.BuildWireBeltMesh(new[] { Vector3.zero, Vector3.forward * 60f }, 1.15f);
@@ -293,6 +309,98 @@ public static class TrenchUnityCheck
         Check(!failed.Establish(), "A fully blocked position must reject the site");
         Check(spawner.Spawned.Count == before, "A rejected position must not leak defenders");
         Object.DestroyImmediate(wall);
+        Object.DestroyImmediate(owner.gameObject);
+    }
+
+    /// <summary>
+    /// Dismounted soldiers hold the ditch: the stage budget (Scrape 0, fire trench 3) is spent
+    /// on the centreline at the anchors, each man faces the threat, and a casualty is permanent
+    /// — a committed slot never respawns. A missing pilot prefab fails closed: the position
+    /// stands on its native defenders and names the cause.
+    /// </summary>
+    private static void CheckSoldiers()
+    {
+        var front = new FlatFront();
+        var trace = new FrontlineTracePoint[3];
+        for (int i = 0; i < 3; i++) trace[i] = new FrontlineTracePoint(0f, -600f + i * 600f);
+        var owner = new GameObject("HQ").AddComponent<FactionHQ>();
+        Check(TrenchPlanner.TryPlanWindow(1, "Soldier_Front", owner, 0.8f, trace, 0, trace.Length, 0,
+            front, out TrenchLine line, out _, out _), "A front trace plans a position for the soldier check");
+        Check(TrenchPlanner.TryGrowBelt(line, front) && line.Stage == TrenchStage.FireTrench,
+            "The fire trench stage must be dug before soldiers hold it");
+
+        var encyclopedia = new Encyclopedia();
+        Encyclopedia.i = encyclopedia;
+        foreach (string key in new[] { "Emplacement1_MG", "Emplacement1_ATGM", "Emplacement1_MANPADS" })
+        {
+            var prefab = new GameObject(key);
+            prefab.AddComponent<Building>(); prefab.AddComponent<UnitPart>();
+            prefab.SetActive(false);
+            encyclopedia.buildings.Add(new BuildingDefinition { jsonKey = key, unitPrefab = prefab });
+        }
+        GameObject pilotPrefab = encyclopedia.AddSoldierPrefab();
+
+        var spawner = NetworkSceneSingleton<Spawner>.i = new Spawner();
+        var garrison = new TrenchGarrison(line);
+        Check(TrenchGarrison.MaximumSoldiers == 8, "The soldier roster is capped at eight");
+        Check(garrison.Establish(), "A fire-trench position establishes its defenders: " + garrison.LastFailure);
+        Check(garrison.SoldierBudget == 3,
+            "A fire-trench position unlocks the three-man stage budget, got " + garrison.SoldierBudget);
+        Check(spawner.PilotsSpawned.Count == 3, "Establish places every soldier of the stage budget");
+        // SoldiersAlive settles on the next roster poll, like the manager's own tick.
+        garrison.Poll(0f);
+        Check(garrison.SoldiersAlive == 3, "A fire-trench position holds three soldiers, got " +
+            garrison.SoldiersAlive + " (" + garrison.LastSoldierFailure + ")");
+        for (int i = 0; i < spawner.PilotsSpawned.Count; i++)
+        {
+            PilotDismounted pilot = spawner.PilotsSpawned[i];
+            Check(spawner.PilotPrefabs[i] == pilotPrefab,
+                "The soldier prefab comes from the encyclopedia's own definition lists");
+            Check(pilot.name.StartsWith(TrenchGarrison.Prefix + line.Id + ":soldier:"),
+                "A soldier is named for its position and slot: " + pilot.name);
+            Check(pilot.NetworkHQ == owner, "A soldier carries the position's owner HQ");
+            float nearest = float.MaxValue;
+            foreach (Vector3 anchor in line.Anchors)
+                nearest = Mathf.Min(nearest, new Vector2(pilot.transform.position.x - anchor.x,
+                    pilot.transform.position.z - anchor.z).magnitude);
+            Check(nearest <= 3f, "A soldier stands on the ditch centreline at an anchor, " + nearest + "m away");
+            Check(Mathf.Abs(pilot.transform.position.y - 0.3f) < 0.01f,
+                "A soldier spawns boot-height above the ground, y=" + pilot.transform.position.y);
+            Check(Vector3.Dot(pilot.transform.forward, line.ThreatAt(pilot.transform.position)) > 0.99f,
+                "A soldier faces the threat");
+        }
+
+        Object.DestroyImmediate(spawner.PilotsSpawned[0].gameObject);
+        garrison.Poll(1f);
+        Check(garrison.SoldiersAlive == 2, "A destroyed soldier is one casualty, " + garrison.SoldiersAlive + " alive");
+        garrison.Reinforce(); garrison.Poll(2f);
+        Check(garrison.SoldiersAlive == 2 && spawner.PilotsSpawned.Count == 3,
+            "A permanent casualty is never respawned into its committed slot");
+        garrison.Remove();
+        Check(garrison.SoldiersAlive == 0, "Remove() clears the soldier roster");
+        for (int i = 0; i < spawner.PilotsSpawned.Count; i++)
+            Check(spawner.PilotsSpawned[i] == null, "Remove() destroys every spawned soldier");
+
+        // Without a pilot prefab the position still stands on its native defenders and names
+        // the missing soldier source instead of throwing or silently fielding nobody.
+        Encyclopedia.i = new Encyclopedia();
+        foreach (string key in new[] { "Emplacement1_MG", "Emplacement1_ATGM", "Emplacement1_MANPADS" })
+        {
+            var prefab = new GameObject(key);
+            prefab.AddComponent<Building>(); prefab.AddComponent<UnitPart>();
+            prefab.SetActive(false);
+            Encyclopedia.i.buildings.Add(new BuildingDefinition { jsonKey = key, unitPrefab = prefab });
+        }
+        spawner = NetworkSceneSingleton<Spawner>.i = new Spawner();
+        var defendersOnly = new TrenchGarrison(line);
+        Check(defendersOnly.Establish(),
+            "A position without a pilot prefab still establishes defenders: " + defendersOnly.LastFailure);
+        Check(defendersOnly.SoldiersAlive == 0, "An unloaded pilot prefab fields no soldiers");
+        Check(!string.IsNullOrEmpty(defendersOnly.LastSoldierFailure),
+            "A missing soldier prefab is a named refusal: " + defendersOnly.LastSoldierFailure);
+        defendersOnly.Remove();
+
+        Object.DestroyImmediate(pilotPrefab);
         Object.DestroyImmediate(owner.gameObject);
     }
 

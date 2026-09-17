@@ -45,6 +45,7 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
         private bool detailMetric;
         private Color detailTone;
         private float textSize;
+        private float labelScale;
         private float labelX, labelY;
         private float targetX, targetY;
         private float nudgeX, nudgeY;
@@ -87,6 +88,8 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
             label.pivot = new Vector2(0f, 0.5f);
             label.sizeDelta = new Vector2(LabelWidth, textSize * (1f + DetailSizeFactor));
             label.anchoredPosition = new Vector2(LabelOffsetX, 0f);
+            labelScale = style.LabelScale > 0.01f ? style.LabelScale : 0.5f;
+            label.localScale = new Vector3(labelScale, labelScale, 1f);
             title = Text(label, name + " Title", style, textSize);
             detail = Text(label, name + " Detail", style, textSize * DetailSizeFactor);
             detail.rectTransform.anchorMin = detail.rectTransform.anchorMax = new Vector2(0f, 0f);
@@ -187,10 +190,11 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
             detail.color = tone;
 
             float width = Mathf.Max(title.preferredWidth, detail.preferredWidth);
+            float visual = width * labelScale;
             if (!Mathf.Approximately(width, label.sizeDelta.x))
                 label.sizeDelta = new Vector2(width, label.sizeDelta.y);
             bool rightEdge = clamped && x >= halfWidth - 0.5f;
-            bool wantFlip = rightEdge || x + LabelOffsetX + width > halfWidth;
+            bool wantFlip = rightEdge || x + LabelOffsetX + visual > halfWidth;
             if (wantFlip != flipped)
             {
                 flipped = wantFlip;

@@ -22,10 +22,6 @@ namespace BoscaliSummer.Features.Weather.Domain
 
         public bool Holding => holdRemaining > 0f;
 
-        public float HoldRemaining => holdRemaining;
-
-        public float LastWritten => lastWritten;
-
         public bool ShouldWrite => holdRemaining <= 0f;
 
         /// <summary>Run down the hold. Call once per tick, before <see cref="ShouldWrite"/>.</summary>

@@ -119,6 +119,8 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
             text.horizontalOverflow = HorizontalWrapMode.Overflow;
             text.verticalOverflow = VerticalWrapMode.Overflow;
             text.raycastTarget = false;
+            float scale = style.LabelScale > 0.01f ? style.LabelScale : 0.5f;
+            rect.localScale = new Vector3(scale, scale, 1f);
             return text;
         }
     }

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using BoscaliSummer.Features.Command.Presentation.MapUi;
+using BoscaliSummer.Features.DynamicOperations.Domain;
 using BoscaliSummer.Framework.Contracts;
 
 namespace BoscaliSummer.Tests.Features.Command
@@ -44,7 +45,9 @@ namespace BoscaliSummer.Tests.Features.Command
                 "The board fills a tall bezel and never builds more rows than it can show");
             TestAssert.That(MfdSecondaryObjectives.RowsFor(0f) == 1,
                 "A body measured at zero still yields one dossier instead of an empty page");
-            TestAssert.That(MfdSecondaryObjectives.CardHeightFor(764f, 3) == MfdSecondaryObjectives.MaxCardHeight &&
+            TestAssert.That(MfdSecondaryObjectives.MaxCards == OperationBoard.MaximumCards,
+                "The board never builds more dossiers than the host's own board can issue");
+            TestAssert.That(MfdSecondaryObjectives.CardHeightFor(764f, 3) == MfdSecondaryObjectives.RowPitch &&
                 MfdSecondaryObjectives.CardHeightFor(340f, 1) == 200f &&
                 MfdSecondaryObjectives.CardHeightFor(764f, 1) == MfdSecondaryObjectives.MaxCardHeight,
                 "A dossier grows into slack but never past its readable maximum");
@@ -57,6 +60,8 @@ namespace BoscaliSummer.Tests.Features.Command
                     height <= MfdSecondaryObjectives.MaxCardHeight &&
                     (rows - 1) * MfdSecondaryObjectives.RowPitch + height <= available,
                     "No dossier grid overflows its body at height " + body);
+                TestAssert.That(rows < 2 || height <= MfdSecondaryObjectives.RowPitch,
+                    "A multi-row dossier never paints over the card above it at height " + body);
             }
 
             var clockEntries = new List<SecondaryObjectiveView>
@@ -78,8 +83,9 @@ namespace BoscaliSummer.Tests.Features.Command
         private static void RunBoardCopy()
         {
             TestAssert.That(MfdSecondaryObjectives.ChipLabel(Card(1, 300f, offered: true)) == "OFFER 05:00" &&
-                MfdSecondaryObjectives.ChipLabel(Card(2, 1200f, active: true)) == "LEFT 20:00",
-                "The chip names the phase the clock belongs to");
+                MfdSecondaryObjectives.ChipLabel(Card(2, 1200f, active: true)) == "T-20:00" &&
+                MfdSecondaryObjectives.ChipLabel(Card(8, 45f, active: true)) == "T-45s",
+                "Offers keep the board's phase wording; accepted work uses the cockpit clock");
             TestAssert.That(MfdSecondaryObjectives.ChipLabel(Card(3, 0f, offered: true)) == "OFFER ENDED" &&
                 MfdSecondaryObjectives.ChipLabel(Card(4, 0f, active: true)) == "TIME ENDED" &&
                 MfdSecondaryObjectives.ChipLabel(Card(5, 0f)) == "CLOSED",
@@ -89,20 +95,58 @@ namespace BoscaliSummer.Tests.Features.Command
                 MfdSecondaryObjectives.ChipLabel(null) == "LINK LOST",
                 "Completed, unknown and lost contracts are all named");
 
+            TestAssert.That(MfdSecondaryObjectives.TitleLine(5, "SURVEY THE AFTERMATH") ==
+                OperationMarkerCopy.Title(5, "SURVEY THE AFTERMATH") &&
+                MfdSecondaryObjectives.TitleLine(5, null) == OperationMarkerCopy.Title(5, null),
+                "The numbered title line matches the cockpit marker's own rule");
+            foreach (float seconds in new[] { 45f, 59.5f, 60f, 299.4f, 1200f })
+                TestAssert.That(MfdSecondaryObjectives.Countdown(seconds) == OperationMarkerCopy.Clock(seconds),
+                    "The accepted clock matches the HUD at " + seconds + "s");
+            TestAssert.That(MfdSecondaryObjectives.UrgentSeconds == OperationMarkerCopy.UrgentSeconds,
+                "The board and the cockpit agree on when a contract reads urgent");
+
+            SecondaryObjectiveView live = Card(1, 300f, offered: true);
+            SecondaryObjectiveView lapsed = Card(2, 0f, offered: true);
+            SecondaryObjectiveView unknown = Card(3, float.NaN, offered: true);
+            TestAssert.That(MfdSecondaryObjectives.CanAccept(live, true) &&
+                MfdSecondaryObjectives.AcceptLabel(live, true) == "ACCEPT CONTRACT",
+                "A live offer with a free roster accepts");
+            TestAssert.That(!MfdSecondaryObjectives.CanAccept(live, false) &&
+                MfdSecondaryObjectives.AcceptLabel(live, false) == "ACTIVE LIMIT REACHED",
+                "A full roster disables accept with the ceiling named");
+            TestAssert.That(!MfdSecondaryObjectives.CanAccept(lapsed, true) &&
+                MfdSecondaryObjectives.AcceptLabel(lapsed, true) == "OFFER ENDED" &&
+                !MfdSecondaryObjectives.CanAccept(unknown, true) &&
+                MfdSecondaryObjectives.AcceptLabel(unknown, true) == "OFFER ENDED",
+                "A lapsed or unclocked offer can never be accepted");
+            TestAssert.That(MfdSecondaryObjectives.AcceptLabel(Card(4, 600f, active: true), true) == "TRACKED ON MAP" &&
+                MfdSecondaryObjectives.AcceptLabel(Card(5, 0f), true) == "CONTRACT ENDED" &&
+                MfdSecondaryObjectives.AcceptLabel(null, true) == "CONTRACT ENDED",
+                "Accepted, closed and lost cards name their non-action instead of offering one");
+
             string paid = MfdSecondaryObjectives.PayoutLabel(Card(1, 0f, complete: true));
             string closed = MfdSecondaryObjectives.PayoutLabel(Card(3, 0f));
             TestAssert.That(paid.StartsWith("PAID  $") && paid.EndsWith("+   125 XP") &&
                 MfdSecondaryObjectives.PayoutLabel(Card(2, 300f, offered: true)).StartsWith("$") &&
                 closed.StartsWith("UNPAID  $") && closed.EndsWith("+   125 XP"),
                 "Pay is only reported as collected when the host reported completion");
+            TestAssert.That(paid.Contains("$1,400"),
+                "Pay figures group with the invariant comma, never the machine's separator");
 
             TestAssert.That(MfdSecondaryObjectives.BoardSummary(3, 1, 2, 4) == "3 OFFERS  ·  1/2 ACTIVE  ·  4 CLOSED" &&
                 MfdSecondaryObjectives.ShortCount(1, 0) == "1",
                 "A host that reports no ceiling yields a plain count");
-            TestAssert.That(!string.IsNullOrEmpty(MfdSecondaryObjectives.EmptyMessage(0)) &&
-                !string.IsNullOrEmpty(MfdSecondaryObjectives.EmptyMessage(1)) &&
-                !string.IsNullOrEmpty(MfdSecondaryObjectives.EmptyMessage(2)),
+            TestAssert.That(!string.IsNullOrEmpty(MfdSecondaryObjectives.EmptyMessage(0, BoardEmptyReason.Ready)) &&
+                !string.IsNullOrEmpty(MfdSecondaryObjectives.EmptyMessage(1, BoardEmptyReason.Ready)) &&
+                !string.IsNullOrEmpty(MfdSecondaryObjectives.EmptyMessage(2, BoardEmptyReason.Ready)),
                 "Every filter has an empty state that explains the host cycle");
+            TestAssert.That(MfdSecondaryObjectives.EmptyMessage(0, BoardEmptyReason.Unavailable).StartsWith("CONTRACT BOARD UNAVAILABLE") &&
+                MfdSecondaryObjectives.EmptyMessage(0, BoardEmptyReason.LinkLost).StartsWith("WAITING FOR THE HOST BOARD") &&
+                MfdSecondaryObjectives.EmptyMessage(0, BoardEmptyReason.LimitReached).StartsWith("ACTIVE LIMIT REACHED") &&
+                MfdSecondaryObjectives.EmptyMessage(0, BoardEmptyReason.DirectorExhausted).StartsWith("NO CONTRACTS TO ISSUE") &&
+                MfdSecondaryObjectives.EmptyMessage(0, BoardEmptyReason.Unavailable) !=
+                MfdSecondaryObjectives.EmptyMessage(0, BoardEmptyReason.DirectorExhausted),
+                "An empty tab names the real reason, not the contract cycle");
         }
 
         private static SecondaryObjectiveView Card(int id, float seconds,

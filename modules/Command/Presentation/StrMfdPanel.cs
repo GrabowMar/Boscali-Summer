@@ -813,8 +813,13 @@ namespace BoscaliSummer.Features.Command.Presentation
                 float cohesion = staff ? Mathf.Clamp01(highCommand.FriendlyCohesion) : 0f;
                 shell.Metrics[2].Set(
                     staff ? TheaterReadout.Percent(cohesion) : "—",
+                    // The caption has room for the active count or for the pair; a staff with no
+                    // losses reads as "6 ACTIVE" rather than spending the cell on a zero.
                     staff
-                        ? highCommand.FriendlyActive + " ACTIVE · " + highCommand.FriendlyKia + " KIA"
+                        ? highCommand.FriendlyActive + " ACTIVE" +
+                          (highCommand.FriendlyKia > 0
+                              ? " · " + highCommand.FriendlyKia + " KIA"
+                              : "")
                         : "NO STAFF",
                     cohesion,
                     !staff ? AvTheme.RailInert

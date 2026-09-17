@@ -12,14 +12,14 @@ namespace BoscaliSummer.Features.Progression.Presentation
     /// </summary>
     internal static class SkillBoardLayout
     {
-        /// <summary>Grade gutter on the left of the matrix: "G1".."G5".</summary>
+        /// <summary>Grade gutter on the left of the matrix: "G1".."G6".</summary>
         public const float Gutter = 26f;
 
         /// <summary>Column and row gap; the same 6px the tables elsewhere use.</summary>
         public const float Gap = 6f;
 
-        /// <summary>Below this a cell cannot hold an icon, a two-line name and its state.</summary>
-        public const float MinCellHeight = 56f;
+        /// <summary>Below this a cell cannot hold an icon, a two-line name and its line.</summary>
+        public const float MinCellHeight = 68f;
 
         /// <summary>Above this the board reads as scattered tiles instead of a table.</summary>
         public const float MaxCellHeight = 76f;
@@ -27,7 +27,6 @@ namespace BoscaliSummer.Features.Progression.Presentation
         public const float FileHeaderHeight = 50f;
         public const float TitleHeight = 24f;
         public const float LaneHeaderHeight = 30f;
-        public const float FooterHeight = 54f;
         public const float LegendHeight = 22f;
         public const float DetailHeight = 44f;
 
@@ -53,9 +52,9 @@ namespace BoscaliSummer.Features.Progression.Presentation
         /// <summary>Everything the board spends on anything but the grade rows.</summary>
         public static float FixedHeight(int grades) => ContentHeight(0f, grades);
 
-        /// <summary>Everything the board draws, for the scroll viewport's content height.</summary>
+        /// <summary>Everything the board draws, in draw order, for the scroll viewport's height.</summary>
         public static float ContentHeight(float rowHeight, int grades) =>
-            FileHeaderHeight + TitleHeight + LaneHeaderHeight + Gap + grades * (rowHeight + Gap) +
-            FooterHeight + LegendHeight;
+            FileHeaderHeight + TitleHeight + LegendHeight + LaneHeaderHeight + Gap +
+            grades * (rowHeight + Gap);
     }
 }

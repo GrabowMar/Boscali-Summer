@@ -1,11 +1,22 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Text;
 using BoscaliSummer.Framework.Contracts;
 using NOAvionics;
 
 namespace BoscaliSummer.Features.Command.Presentation.MapUi
 {
+    /// <summary>Why a zero-count tab has nothing to show; the copy names the real reason.</summary>
+    internal enum BoardEmptyReason
+    {
+        Ready,
+        Unavailable,
+        LinkLost,
+        LimitReached,
+        DirectorExhausted,
+    }
+
     /// <summary>
     /// Pure layout and copy rules for the MIS contract board. The board is a paged grid:
     /// the panel decides how many dossiers fit from its own body height, and every label
@@ -22,7 +33,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         public const float RowPitch = 198f;
         public const float MinCardHeight = 190f;
         public const float MaxCardHeight = 220f;
-        public const int MaxCards = 4;
+        /// <summary>One page never grows past the host board's own three-card limit.</summary>
+        public const int MaxCards = 3;
+        /// <summary>The cockpit marker's urgency gate; both surfaces read the same clock as amber.</summary>
+        public const float UrgentSeconds = 120f;
 
         /// <summary>Header, filters, summary line and pager measured above and below the grid.</summary>
         private const float BoardChromeHeight = 140f;
@@ -64,12 +78,17 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             return Math.Max(1, Math.Min(MaxCards, (int)((available + AvTokens.Gap) / RowPitch)));
         }
 
-        /// <summary>Dossier height for that row count; taller panels grow the card, never the row count.</summary>
+        /// <summary>
+        /// Dossier height for that row count; taller panels grow the card, never the row count.
+        /// A multi-row card is capped at its own pitch, or its background paints over the
+        /// action row of the dossier above it.
+        /// </summary>
         public static float CardHeightFor(float bodyHeight, int rows)
         {
             if (rows < 1) rows = 1;
             float available = Math.Max(MinCardHeight, bodyHeight - BoardChromeHeight);
-            return Math.Max(MinCardHeight, Math.Min(MaxCardHeight, available - (rows - 1) * RowPitch));
+            float height = Math.Max(MinCardHeight, Math.Min(MaxCardHeight, available - (rows - 1) * RowPitch));
+            return rows >= 2 ? Math.Min(height, RowPitch) : height;
         }
 
         /// <summary>
@@ -105,6 +124,20 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             return float.IsNaN(seconds) || float.IsInfinity(seconds) ? float.MaxValue : seconds;
         }
 
+        /// <summary>The cockpit marker's title line, shared by the HUD, the map tag and this board.</summary>
+        public static string TitleLine(int id, string title) =>
+            "#" + id + " " + (string.IsNullOrEmpty(title) ? "SECONDARY OBJECTIVE" : title);
+
+        /// <summary>The cockpit marker's own countdown rule: T-45s under a minute, T-5:00 above it.</summary>
+        public static string Countdown(float seconds)
+        {
+            if (float.IsNaN(seconds) || float.IsInfinity(seconds) || seconds < 0f) return "";
+            int total = (int)Math.Ceiling(seconds);
+            if (total < 60) return "T-" + total.ToString(CultureInfo.InvariantCulture) + "s";
+            return "T-" + (total / 60).ToString(CultureInfo.InvariantCulture) + ":" +
+                (total % 60).ToString("00", CultureInfo.InvariantCulture);
+        }
+
         /// <summary>The urgency chip: the phase is named, then the clock the host reported.</summary>
         public static string ChipLabel(SecondaryObjectiveView objective)
         {
@@ -114,16 +147,39 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             if (objective.SecondsRemaining > 0f)
                 return objective.IsOffered
                     ? TimeLabel(false, objective.SecondsRemaining).Replace("LEFT", "OFFER")
-                    : TimeLabel(false, objective.SecondsRemaining);
+                    : Countdown(objective.SecondsRemaining);
             return objective.IsOffered ? "OFFER ENDED" : objective.IsActive ? "TIME ENDED" : "CLOSED";
+        }
+
+        /// <summary>An offer is acceptable only while the host's clock is finite and still running.</summary>
+        public static bool OfferLive(SecondaryObjectiveView objective) =>
+            objective != null && objective.IsOffered &&
+            !float.IsNaN(objective.SecondsRemaining) && !float.IsInfinity(objective.SecondsRemaining) &&
+            objective.SecondsRemaining > 0f;
+
+        /// <summary>The accept action is live only when the offer is and the faction has room.</summary>
+        public static bool CanAccept(SecondaryObjectiveView objective, bool hasCapacity) =>
+            hasCapacity && OfferLive(objective);
+
+        /// <summary>The action row reads exactly one state: accept, ceiling, lapsed, tracked or lost.</summary>
+        public static string AcceptLabel(SecondaryObjectiveView objective, bool hasCapacity)
+        {
+            if (objective != null && objective.IsOffered)
+            {
+                if (!OfferLive(objective)) return "OFFER ENDED";
+                return hasCapacity ? "ACCEPT CONTRACT" : "ACTIVE LIMIT REACHED";
+            }
+            if (objective != null && objective.IsActive)
+                return objective.HasMarker ? "TRACKED ON MAP" : "CONTACT LOST";
+            return "CONTRACT ENDED";
         }
 
         /// <summary>Pay is only reported as collected when the host reported completion.</summary>
         public static string PayoutLabel(SecondaryObjectiveView objective)
         {
             if (objective == null) return "—";
-            string money = "$" + Math.Max(0, objective.Money).ToString("N0");
-            string xp = Math.Max(0, objective.Xp).ToString("N0") + " XP";
+            string money = "$" + Math.Max(0, objective.Money).ToString("N0", CultureInfo.InvariantCulture);
+            string xp = Math.Max(0, objective.Xp).ToString("N0", CultureInfo.InvariantCulture) + " XP";
             string prefix = objective.IsComplete ? "PAID  " :
                 objective.IsOffered || objective.IsActive ? "" : "UNPAID  ";
             return prefix + money + "   +   " + xp;
@@ -139,16 +195,32 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         public static string ShortCount(int active, int activeLimit) =>
             activeLimit > 0 ? active + "/" + activeLimit : active.ToString();
 
-        public static string EmptyMessage(int filter)
+        /// <summary>
+        /// The zero-count line. A missing director, a silent host or a full active roster is
+        /// named for what it is; the contract-cycle copy only prints when the board is serving.
+        /// </summary>
+        public static string EmptyMessage(int filter, BoardEmptyReason reason)
         {
-            switch (filter)
+            switch (reason)
             {
-                case FilterAvailable:
-                    return "NO OFFERS ON THE BOARD\nContracts are drawn from the live battlefield as the front moves.";
-                case FilterActive:
-                    return "NO ACCEPTED CONTRACTS\nAccept an offer to place its marker on the map.";
+                case BoardEmptyReason.Unavailable:
+                    return "CONTRACT BOARD UNAVAILABLE\nDynamic operations are not running in this mission.";
+                case BoardEmptyReason.LinkLost:
+                    return "WAITING FOR THE HOST BOARD\nNo authoritative contract state has arrived yet.";
+                case BoardEmptyReason.LimitReached:
+                    return "ACTIVE LIMIT REACHED\nFinish or abort an active contract before accepting another.";
+                case BoardEmptyReason.DirectorExhausted:
+                    return "NO CONTRACTS TO ISSUE\nThe mission director has no eligible work for this faction.";
                 default:
-                    return "NO CLOSED CONTRACTS\nCompleted and lapsed contracts stay listed for a short while.";
+                    switch (filter)
+                    {
+                        case FilterAvailable:
+                            return "NO OFFERS ON THE BOARD\nContracts are drawn from the live battlefield as the front moves.";
+                        case FilterActive:
+                            return "NO ACCEPTED CONTRACTS\nAccept an offer to place its marker on the map.";
+                        default:
+                            return "NO CLOSED CONTRACTS\nCompleted and lapsed contracts stay listed for a short while.";
+                    }
             }
         }
     }

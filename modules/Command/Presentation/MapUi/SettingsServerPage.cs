@@ -22,11 +22,14 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
     internal sealed partial class SettingsMfdPanel
     {
         private const int TaskRowCount = 3;
+        /// <summary>The tasking board is host state, not a video: ask again at most this often.</summary>
+        private const float TaskingRefreshSeconds = 2f;
 
         private ISecondaryObjectivesView tasking;
         private AvButton taskRequest;
         private TMP_Text taskNote;
         private readonly ListRow[] taskRows = new ListRow[TaskRowCount];
+        private float nextTaskingRefresh;
 
         private void BuildServerPage(RectTransform parent, Rect body)
         {
@@ -61,7 +64,12 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             Heading(parent, ref area, "01", "FACTION TASKING", "SECONDARY OBJECTIVES");
 
             taskRequest = AvStyled.Button(parent, new Rect(x, area.y - 4f, 110f, 24f), "REQUEST BOARD", "btn",
-                () => { tasking?.Refresh(); nextTick = 0f; });
+                () =>
+                {
+                    tasking?.Refresh();
+                    nextTaskingRefresh = Time.unscaledTime + TaskingRefreshSeconds;
+                    nextTick = 0f;
+                });
             area.y -= 32f;
 
             taskNote = AvStyled.Label(parent, new Rect(x, area.y, width, 30f), "", "row-sub");
@@ -113,6 +121,13 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private void RefreshTasking()
         {
             if (tasking == null) ModServices.TryGet(out tasking);
+            // The board only paints from the last snapshot, so the SERVER page has to keep
+            // asking even when no HUD or map layer is pulling snapshots on its own.
+            if (tasking != null && Time.unscaledTime >= nextTaskingRefresh)
+            {
+                nextTaskingRefresh = Time.unscaledTime + TaskingRefreshSeconds;
+                tasking.Refresh();
+            }
             if (taskRequest != null)
             {
                 bool host = HostAuthority();
@@ -157,8 +172,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                            : active ? AvTheme.RailCaution
                            : AvTheme.Disabled;
 
+                string clock = card.IsOffered || active ? MfdSecondaryObjectives.ChipLabel(card) : "";
                 string detail = card.Target + " · " + card.Status +
-                                (active ? " · " + Countdown(card.SecondsRemaining) : "") +
+                                (string.IsNullOrEmpty(clock) ? "" : " · " + clock) +
                                 "\n" + card.Reward;
 
                 taskRows[i].Bind(
@@ -178,19 +194,6 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             float clamped = ratio < 0f ? 0f : ratio > 1f ? 1f : ratio;
             return ((int)Math.Round(clamped * 100f, MidpointRounding.AwayFromZero))
                    .ToString(CultureInfo.InvariantCulture) + "%";
-        }
-
-        private static string Countdown(float seconds)
-        {
-            if (float.IsNaN(seconds) || float.IsInfinity(seconds)) return "—";
-            if (seconds <= 0f) return "EXPIRED";
-
-            int total = (int)Math.Ceiling(seconds);
-            if (total < 60) return "T-" + total + "s";
-
-            int minutes = total / 60;
-            int rest = total % 60;
-            return "T-" + minutes + ":" + rest.ToString("00", CultureInfo.InvariantCulture);
         }
 
         /// <summary>One objective card: rail, title, detail, progress figure and track.</summary>

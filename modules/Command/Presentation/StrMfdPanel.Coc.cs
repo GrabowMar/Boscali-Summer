@@ -105,6 +105,7 @@ namespace BoscaliSummer.Features.Command.Presentation
         private readonly CocBonusEntry[] cocBonusEntries = new CocBonusEntry[CocBonusEntries];
         private readonly Image[] cocRedactions = new Image[CocRedactionBars];
         private RectTransform cocRoot, cocLogBlock, cocDossierBlock, cocStampRoot;
+        private RectTransform cocPortraitWell;
         private Image cocSpine;
         private Rect cocBody;
         private bool cocScrolled;
@@ -141,7 +142,8 @@ namespace BoscaliSummer.Features.Command.Presentation
             Array.Clear(cocLogRows, 0, cocLogRows.Length);
             Array.Clear(cocBonusEntries, 0, cocBonusEntries.Length);
             Array.Clear(cocRedactions, 0, cocRedactions.Length);
-            cocRoot = cocLogBlock = cocDossierBlock = cocStampRoot = null;
+            cocRoot = cocLogBlock =             cocDossierBlock = cocStampRoot = null;
+            cocPortraitWell = null;
             cocSpine = null;
             cocBody = default(Rect);
             cocScrolled = false;
@@ -302,10 +304,18 @@ namespace BoscaliSummer.Features.Command.Presentation
             cocPortraitFallback = AvStyled.Label(rect,
                 new Rect(frame.x + 2f, frame.y - 34f, frame.width - 4f, 32f), "NO\nVISUAL", "row-sub",
                 align: TextAlignmentOptions.Center);
-            cocPortrait = AvKit.Panel(rect,
-                new Rect(frame.x + 1f, frame.y - 1f, frame.width - 2f, frame.height - 2f), Color.white);
+
+            // The photo sits in a well of its own so the file can crop a portrait to a plate
+            // rather than showing whatever shape the sprite happens to be.
+            var wellObject = new GameObject("PortraitWell", typeof(RectTransform), typeof(RectMask2D));
+            cocPortraitWell = (RectTransform)wellObject.transform;
+            cocPortraitWell.SetParent(rect, false);
+            AvKit.Place(cocPortraitWell,
+                        new Rect(frame.x + 1f, frame.y - 1f, frame.width - 2f, frame.height - 2f));
+            cocPortrait = AvKit.Panel(cocPortraitWell,
+                new Rect(0f, 0f, frame.width - 2f, frame.height - 2f), Color.white);
             cocPortrait.type = Image.Type.Simple;
-            cocPortrait.preserveAspect = true;
+            cocPortrait.preserveAspect = false;
             cocPortrait.raycastTarget = false;
             cocPortrait.enabled = false;
 
@@ -320,6 +330,9 @@ namespace BoscaliSummer.Features.Command.Presentation
             cocName.fontSizeMin = 10f;
             cocName.fontSizeMax = 15f;
             cocRole = AvStyled.Label(rect, new Rect(CocDetailPad, -188f, inner, 13f), "", "section-title-note");
+            // The office is the second thing a reader looks for; the sheet's tracking would
+            // ellipsise "GROUND COMPONENT CMDR" away, so this one line sets its own tracking.
+            cocRole.characterSpacing = 0f;
             cocDossierPips = new CocPips(rect, 0f, 0f, AvTheme.Accent);
 
             // ---- the record below: laid out on every refresh ------------------------------
@@ -834,7 +847,31 @@ namespace BoscaliSummer.Features.Command.Presentation
             bool has = sprite != null;
             cocPortrait.enabled = has;
             cocPortrait.sprite = sprite;
+            Vector2 well = cocPortraitWell != null ? cocPortraitWell.sizeDelta : Vector2.zero;
+            FitPortrait(cocPortrait, well.x, well.y);
             if (cocPortraitFallback != null) cocPortraitFallback.gameObject.SetActive(!has);
+        }
+
+        /// <summary>
+        /// Lay a portrait over its well the way a file crops a print: the sprite covers the well,
+        /// centred, and the well's mask trims the overflow. The fit is computed here rather than
+        /// left to <c>Image.preserveAspect</c> because that anchors the sprite by its own pivot:
+        /// the portrait sprites do not share one, which is what made a column of plates uneven,
+        /// and a sprite with a transparent margin (the card's portrait, here) showed it as a
+        /// band down one side of the plate.
+        /// </summary>
+        private static void FitPortrait(Image image, float width, float height)
+        {
+            Rect area = new Rect(0f, 0f, width, height);
+            Sprite sprite = image != null ? image.sprite : null;
+            if (sprite != null && width > 0f && height > 0f && sprite.rect.height > 0.5f)
+            {
+                float aspect = sprite.rect.width / sprite.rect.height;
+                area = aspect > width / height
+                    ? new Rect((width - height * aspect) * 0.5f, 0f, height * aspect, height)
+                    : new Rect(0f, (height - width / aspect) * 0.5f, width, width / aspect);
+            }
+            AvKit.Place(image.rectTransform, area);
         }
 
         private static string StatusOf(CommanderView view)
@@ -1121,6 +1158,7 @@ namespace BoscaliSummer.Features.Command.Presentation
 
             private readonly GameObject root;
             private readonly Image background, rail, guide, tick, weight, portrait;
+            private readonly RectTransform portraitRoot, portraitWell;
             private readonly GameObject portraitGlyph;
             private readonly TMP_Text rank, name, role, status;
             private readonly CocPips pips;
@@ -1151,13 +1189,28 @@ namespace BoscaliSummer.Features.Command.Presentation
                 guide = AvKit.Rule(rect, new Rect(0f, 0f, 1f, 1f), AvTheme.Hairline);
                 tick = AvKit.Rule(rect, new Rect(0f, 0f, TierStep, 1f), AvTheme.Hairline);
 
-                Rect frame = new Rect(0f, -3f, PortraitWidth, portraitHeight);
-                AvKit.Panel(rect, frame, AvTheme.SurfaceInert);
-                AvKit.Outline(rect, frame, AvTheme.Frame.WithAlpha(0.6f));
-                portrait = AvKit.Panel(rect,
-                    new Rect(frame.x + 1f, frame.y - 1f, frame.width - 2f, frame.height - 2f), Color.white);
+                // The plate is one group, indented as a whole by the tier. Its parts used to be
+                // placed separately, so a post below the theater commander left its frame behind
+                // at the column edge while the photo moved under the indent.
+                var plateObject = new GameObject("Portrait", typeof(RectTransform));
+                portraitRoot = (RectTransform)plateObject.transform;
+                portraitRoot.SetParent(rect, false);
+                AvKit.Place(portraitRoot, new Rect(0f, 0f, PortraitWidth, portraitHeight));
+                AvKit.Panel(portraitRoot, new Rect(0f, 0f, PortraitWidth, portraitHeight),
+                            AvTheme.SurfaceInert);
+                AvKit.Outline(portraitRoot, new Rect(0f, 0f, PortraitWidth, portraitHeight),
+                              AvTheme.Frame.WithAlpha(0.6f));
+
+                var wellObject = new GameObject("Well", typeof(RectTransform), typeof(RectMask2D));
+                portraitWell = (RectTransform)wellObject.transform;
+                portraitWell.SetParent(portraitRoot, false);
+                AvKit.Place(portraitWell,
+                            new Rect(1f, -1f, PortraitWidth - 2f, portraitHeight - 2f));
+
+                portrait = AvKit.Panel(portraitWell,
+                    new Rect(0f, 0f, PortraitWidth - 2f, portraitHeight - 2f), Color.white);
                 portrait.type = Image.Type.Simple;
-                portrait.preserveAspect = true;
+                portrait.preserveAspect = false;
                 portrait.raycastTarget = false;
                 portrait.enabled = false;
 
@@ -1165,11 +1218,13 @@ namespace BoscaliSummer.Features.Command.Presentation
                 // holds the frame so the row keeps its shape.
                 var glyphObject = new GameObject("PortraitGlyph", typeof(RectTransform), typeof(MfdGlyph));
                 var glyphRect = (RectTransform)glyphObject.transform;
-                glyphRect.SetParent(rect, false);
+                glyphRect.SetParent(portraitWell, false);
                 portraitGlyph = glyphObject;
                 MfdGlyph glyph = glyphObject.GetComponent<MfdGlyph>();
                 glyph.raycastTarget = false;
                 glyph.SetKind("person", AvTheme.Dim);
+                AvKit.Place(glyphRect, new Rect((PortraitWidth - 2f - 12f) * 0.5f,
+                                                -(portraitHeight - 2f - 12f) * 0.5f, 12f, 12f));
                 glyphObject.SetActive(false);
 
                 const float trail = 72f;
@@ -1210,11 +1265,7 @@ namespace BoscaliSummer.Features.Command.Presentation
                 // Rows take the pitch the page could afford, so the row is centred in
                 // whatever height it was given rather than pinned to a design size.
                 float top = -(height - DesignHeight) * 0.5f;
-                AvKit.Place((RectTransform)portrait.transform,
-                    new Rect(indent + 3f, top - 1f, PortraitWidth - 2f, portraitHeight - 2f));
-                AvKit.Place((RectTransform)portraitGlyph.transform,
-                    new Rect(indent + (PortraitWidth - 12f) * 0.5f + 1f,
-                             top - (portraitHeight - 12f) * 0.5f, 12f, 12f));
+                AvKit.Place(portraitRoot, new Rect(indent + 3f, top - 1f, PortraitWidth, portraitHeight));
                 AvKit.Place(pips.Rect, new Rect(textX, top - 17f, 12f, 12f));
                 AvKit.Place(rank.rectTransform, new Rect(textX + 15f, top - 17f, 54f, 12f));
                 AvKit.Place(name.rectTransform, new Rect(textX, top - 1f, textWidth, 14f));
@@ -1228,6 +1279,7 @@ namespace BoscaliSummer.Features.Command.Presentation
                     bool has = view.Portrait != null;
                     portrait.enabled = has;
                     portrait.sprite = view.Portrait;
+                    FitPortrait(portrait, PortraitWidth - 2f, portraitHeight - 2f);
                     portraitGlyph.SetActive(!has);
                 }
 

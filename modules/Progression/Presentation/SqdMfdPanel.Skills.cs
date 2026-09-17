@@ -29,7 +29,6 @@ namespace BoscaliSummer.Features.Progression.Presentation
         private readonly List<SkillRow> skillRows = new List<SkillRow>(PerkCatalog.All.Length);
         private readonly List<SkillBranchRow> skillBranches = new List<SkillBranchRow>(8);
         private byte? skillAwaitingConfirmation;
-        private float skillConfirmationUntil;
 
         private void ResetSkillRows()
         {
@@ -37,19 +36,13 @@ namespace BoscaliSummer.Features.Progression.Presentation
             skillBranches.Clear();
             skillStripTitle = null;
             skillStripDetail = null;
-            skillBudgetNote = null;
             skillConfirmButton = null;
             skillIdleTitle = SkillIdleTitle;
             skillIdleDetail = SkillHint;
             skillAwaitingConfirmation = null;
-            skillConfirmationUntil = 0f;
         }
 
-        private void CancelSkillConfirmation()
-        {
-            skillAwaitingConfirmation = null;
-            skillConfirmationUntil = 0f;
-        }
+        private void CancelSkillConfirmation() => skillAwaitingConfirmation = null;
 
         // ---- SKILLS page -----------------------------------------------------------------
 
@@ -103,12 +96,11 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 BudgetNote(), band: false, out skillBudgetNote);
 
             float cellWidth = SkillBoardLayout.CellWidth(width, lanes.Count);
+            DrawBoardLegend(parent, x, y, width);
+            y -= SkillBoardLayout.LegendHeight;
             y = DrawLaneHeaders(parent, x, y, width, cellWidth, lanes);
             for (int g = 0; g < grades; g++) DrawGradeRow(parent, x, y, width, cellWidth, rowHeight, g, lanes);
-            y -= grades * (rowHeight + SkillBoardLayout.Gap);
 
-            y = DrawSharedFooter(parent, x, y, width);
-            DrawBoardLegend(parent, x, y, width);
             BuildSkillStrip(page, strip);
         }
 
@@ -123,7 +115,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             if (view.EarnedPoints >= view.MaximumPoints) return picks + "GRADE LADDER COMPLETE";
 
             int remaining = PerkPoints.RemainingToNext(MissionScore(), view.ScorePerPoint);
-            return remaining < 0 ? picks + "GRADE LADDER COMPLETE" : picks + remaining + " SCORE TO NEXT GRADE";
+            return remaining < 0 ? picks + "GRADE LADDER COMPLETE" : picks + remaining + " TO NEXT GRADE";
         }
 
         private int MissionScore()
@@ -156,6 +148,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
                     lanes[l].Name, "section-title");
                 header.Note = PlainLabel(parent, new Rect(laneX, y - 15f, cellWidth, 13f),
                     "", "row-sub");
+                header.Note.enableWordWrapping = false;
                 skillBranches.Add(header);
             }
 
@@ -181,7 +174,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             if (grade == PerkCatalog.MaximumDepth - 1)
             {
                 TMP_Text cap = PlainLabel(parent,
-                    new Rect(x, labelTop - 13f, SkillBoardLayout.Gutter - 8f, 12f), "CAP", "row-sub");
+                    new Rect(x, labelTop - 13f, SkillBoardLayout.Gutter - 4f, 12f), "CAP", "row-sub");
                 cap.alignment = TextAlignmentOptions.MidlineRight;
                 cap.color = AvTheme.Dim;
             }
@@ -243,50 +236,28 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 : view.Name.ToUpperInvariant();
 
         /// <summary>
-        /// The shared ace-skill marks, drawn as the WINGS cards draw them, so the same four
-        /// symbols read the same in both places. Hover carries the full description.
-        /// </summary>
-        private float DrawSharedFooter(RectTransform parent, float x, float y, float width)
-        {
-            float next = DrawSectionTitle(parent, x, y, width, "SHARED COMBAT SKILLS",
-                "AI & ACES · WING COMMAND", band: false);
-            float pitch = width / AceSkillCatalog.MaximumSkills;
-            for (int i = 0; i < AceSkillCatalog.MaximumSkills; i++)
-            {
-                AceSkillDefinition skill = AceSkillCatalog.All[i];
-                float markX = x + i * pitch + pitch * 0.5f - 18f;
-                Glyph(parent, new Rect(markX + 11f, next - 2f, 14f, 14f),
-                    HuntMark.Toughness + i, AvTheme.RailCaution);
-                TMP_Text code = PlainLabel(parent, new Rect(markX, next - 17f, 36f, 13f),
-                    skill.Code, "row-sub");
-                code.alignment = TextAlignmentOptions.Center;
-                AvKit.HitButton(parent, new Rect(markX, next - 20f, 36f, 34f), () => { })
-                    .WithTooltip(skill.Name + " — " + skill.Description);
-            }
-            return next - 22f;
-        }
-
-        /// <summary>
-        /// The rail's key. The board leans on the avionics rule that state lives on the rail,
-        /// so it also has to teach that language once rather than leave it to be guessed.
+        /// The rail's key, drawn as the table's first line: the board leans on the avionics
+        /// rule that state lives on the rail, so it teaches that language once, beside the
+        /// rails it explains, instead of leaving it to be guessed at the foot of the sheet.
         /// </summary>
         private static void DrawBoardLegend(RectTransform parent, float x, float y, float width)
         {
-            const float key = 78f;
+            const float key = 84f;
             PlainLabel(parent, new Rect(x, y - 13f, key - 6f, 12f), "RAIL STATE", "form-key");
 
-            string[] words = { "HELD", "PICKABLE", "SELECTED", "LOCKED" };
+            string[] words = { "HELD", "PICK", "SELECTED", "LOCKED" };
             Color[] colours =
             {
-                AvTheme.RailReady, AvTheme.RailInfo, AvTheme.RailCaution,
-                AvTheme.RailInert.WithAlpha(0.45f),
+                AvTheme.RailReady, AvTheme.RailInfo, AvTheme.RailCaution, AvTheme.RailInert,
             };
             float pitch = (width - key) / words.Length;
             for (int i = 0; i < words.Length; i++)
             {
                 float slotX = x + key + i * pitch;
                 AvKit.Rule(parent, new Rect(slotX, y - 12f, 3f, 12f), colours[i]);
-                PlainLabel(parent, new Rect(slotX + 9f, y - 13f, pitch - 12f, 12f), words[i], "row-sub");
+                TMP_Text word = PlainLabel(parent, new Rect(slotX + 9f, y - 13f, pitch - 12f, 12f),
+                    words[i], "row-sub");
+                word.enableWordWrapping = false;
             }
         }
 
@@ -300,10 +271,12 @@ namespace BoscaliSummer.Features.Progression.Presentation
             float textWidth = Mathf.Max(0f, area.width - 122f);
             skillStripTitle = PlainLabel(parent, new Rect(area.x + 6f, area.y + 2f, textWidth, 15f),
                 skillIdleTitle, "row-name");
-            skillStripDetail = PlainLabel(parent, new Rect(area.x + 6f, area.y - 17f, textWidth, 13f),
+            skillStripDetail = PlainLabel(parent, new Rect(area.x + 6f, area.y - 16f, textWidth, 26f),
                 skillIdleDetail, "row-sub");
-            skillStripDetail.enableWordWrapping = false;
-            skillStripDetail.overflowMode = TextOverflowModes.Ellipsis;
+            // Two wrapped lines: the confirm strip is the one place the whole sentence is
+            // readable, so it gets two lines instead of an ellipsis. Anything longer truncates
+            // at the rect rather than spilling into the padded row below.
+            skillStripDetail.overflowMode = TextOverflowModes.Truncate;
 
             skillConfirmButton = AvStyled.Button(parent,
                 new Rect(area.x + area.width - 110f, area.y - 9f, 104f, 26f),
@@ -327,22 +300,36 @@ namespace BoscaliSummer.Features.Progression.Presentation
             return default;
         }
 
-        /// <summary>The one word a grade's state is called, shared by the cell and the strip.</summary>
+        /// <summary>The one word a grade's state is called; the strip and the tooltip use it.</summary>
         private static string StateWord(PerkView perk)
         {
             bool tool = PerkDefinitionOf(perk).IsTool;
             if (perk.Unlocked) return tool ? "HELD" : "ACTIVE";
             if (perk.Affordable) return tool ? "TOOL" : "PICK";
-            if (perk.Block == PerkView.BlockCap) return "CLOSED · CAREER CAP";
-            if (perk.Block == PerkView.BlockGrade) return "GRADE FIRST";
-            return "NO PICK";
+            string word = BlockWord(perk);
+            return word == "CLOSED" ? "CLOSED · CAREER CAP" : word;
         }
 
-        /// <summary>Cell wording stays short; the strip has room for the long form.</summary>
-        private static string CellWord(PerkView perk)
+        /// <summary>
+        /// The cell's own line: why it is shut, else what it is. A passive grade sells its
+        /// effect here - "+15% COMBAT" - so the board reads as a comparison of what each pick
+        /// buys instead of a wall of identical "PICK" labels. A tool has no multiplier to sell,
+        /// so it keeps its state word.
+        /// </summary>
+        private static string CellLine(PerkView perk, byte id)
         {
-            string word = StateWord(perk);
-            return word == "CLOSED · CAREER CAP" ? "CLOSED" : word;
+            if (perk.Unlocked || perk.Affordable)
+                return PerkDefinitionOf(perk).IsTool
+                    ? (perk.Unlocked ? "HELD" : "TOOL")
+                    : PerkCatalog.EffectLabel(id);
+            return BlockWord(perk);
+        }
+
+        private static string BlockWord(PerkView perk)
+        {
+            if (perk.Block == PerkView.BlockCap) return "CLOSED";
+            if (perk.Block == PerkView.BlockGrade) return "GRADE FIRST";
+            return "NO PICK";
         }
 
         private void SelectSkill(byte id)
@@ -353,19 +340,17 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 view.Unlocked || !view.Affordable) return;
 
             skillAwaitingConfirmation = id;
-            skillConfirmationUntil = Time.unscaledTime + 6f;
             nextRefresh = 0f;
         }
 
         private void CommitSkill(byte id)
         {
             if (progression == null || Progress.UnlockPending ||
-                skillAwaitingConfirmation != id || Time.unscaledTime > skillConfirmationUntil ||
+                skillAwaitingConfirmation != id ||
                 !TryFind(Progress.GetPerks(), id, out PerkView view) ||
                 view.Unlocked || !view.Affordable) return;
 
             skillAwaitingConfirmation = null;
-            skillConfirmationUntil = 0f;
             skillIdleTitle = SkillIdleTitle;
             skillIdleDetail = SkillHint;
             Progress.RequestUnlock(id);
@@ -414,22 +399,12 @@ namespace BoscaliSummer.Features.Progression.Presentation
         private void RefreshSkillsPage()
         {
             if (skillStripTitle == null || progression == null) return;
-            if (skillAwaitingConfirmation.HasValue && Time.unscaledTime > skillConfirmationUntil)
-            {
-                skillAwaitingConfirmation = null;
-                skillConfirmationUntil = 0f;
-            }
 
             IProgressionView view = Progress;
             string budget = BudgetNote();
             if (skillBudgetNote != null && skillBudgetNote.text != budget) skillBudgetNote.text = budget;
-            bool bypass = progression.BypassRequirements;
             bool requestPending = view.UnlockPending;
-            if (requestPending)
-            {
-                skillAwaitingConfirmation = null;
-                skillConfirmationUntil = 0f;
-            }
+            if (requestPending) skillAwaitingConfirmation = null;
 
             PerkView[] perks = view.GetPerks();
             for (int i = 0; i < skillRows.Count; i++) PaintSkill(skillRows[i], perks);
@@ -463,10 +438,10 @@ namespace BoscaliSummer.Features.Progression.Presentation
             }
             else
             {
-                skillStripTitle.text = bypass ? "DEBUG BYPASS ACTIVE" : skillIdleTitle;
+                skillStripTitle.text = skillIdleTitle;
                 skillStripTitle.color = AvTheme.TextPrimary;
                 skillStripDetail.text = skillIdleDetail;
-                skillStripDetail.color = bypass ? AvTheme.Warning : AvTheme.Dim;
+                skillStripDetail.color = AvTheme.Dim;
             }
         }
 
@@ -476,12 +451,12 @@ namespace BoscaliSummer.Features.Progression.Presentation
             if (!TryFind(perks, row.Id, out PerkView perk)) return;
 
             bool armed = skillAwaitingConfirmation == row.Id && !perk.Unlocked && perk.Affordable;
-            string word = armed ? "SELECTED" : CellWord(perk);
+            string word = armed ? "SELECTED" : CellLine(perk, row.Id);
             Color rail;
             if (perk.Unlocked) rail = AvTheme.RailReady;
             else if (armed) rail = AvTheme.RailCaution;
             else if (perk.Affordable) rail = AvTheme.RailInfo;
-            else rail = AvTheme.RailInert.WithAlpha(0.45f);
+            else rail = AvTheme.RailInert;
 
             bool live = perk.Unlocked || perk.Affordable || armed;
             Color tone = perk.Unlocked ? AvTheme.RailReady
@@ -497,7 +472,10 @@ namespace BoscaliSummer.Features.Progression.Presentation
             row.Fill.color = perk.Unlocked ? AvTheme.SurfaceInert
                 : armed ? AvTheme.RailCaution.WithAlpha(0.12f) : Color.clear;
             for (int f = 0; f < row.Frame.Length; f++) row.Frame[f].color = frame;
-            row.Select.WithTooltip(perk.Name + " · " + word + " — " + perk.Description);
+            // A shut cell answers "why not" on hover instead of only after a click.
+            row.Select.WithTooltip(live
+                ? perk.Name + " — " + perk.Description
+                : perk.Name + " — " + BlockReason(perk));
         }
 
         private static void PaintLane(SkillBranchRow lane, PerkView[] perks)

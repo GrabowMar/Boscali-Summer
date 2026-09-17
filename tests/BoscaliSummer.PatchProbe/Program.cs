@@ -157,7 +157,12 @@ foreach ((string typeName, string methodName) in targets)
     ("GridLabels", "gridAircraft"),
     ("CloudLayer", "cloudSystem"),
     ("CloudLayer", "cloudMaterial"),
-    ("CloudLayer", "cloudRenderer")
+    ("CloudLayer", "cloudRenderer"),
+    ("CloudLayer", "distantCloudSystem"),
+    ("CloudLayer", "flyThroughSystem"),
+    ("CloudLayer", "layerMaterial"),
+    ("CloudLayer", "weatherSets"),
+    ("CloudLayer", "layerThickness")
 };
 
 foreach ((string typeName, string fieldName) in fields)
@@ -892,7 +897,7 @@ static void ProbeSquadSerialization(Assembly plugin, Assembly mirage)
         throw new InvalidOperationException("Squad protocol changed without updating its probe");
     net.GetMethod("InstallSerializers", flags)!.Invoke(null, null);
     Type progression = plugin.GetType("BoscaliSummer.Features.Progression.Networking.ProgressionNet", true)!;
-    if ((byte)progression.GetField("ProtocolVersion", flags)!.GetRawConstantValue()! != 3)
+    if ((byte)progression.GetField("ProtocolVersion", flags)!.GetRawConstantValue()! != 4)
         throw new InvalidOperationException("Progression protocol changed without updating its probe");
     progression.GetMethod("InstallSerializers", flags)!.Invoke(null, null);
     Type writerType = mirage.GetType("Mirage.Serialization.NetworkWriter", true)!;
@@ -977,7 +982,7 @@ static void ProbeSquadSerialization(Assembly plugin, Assembly mirage)
     Reject(excessiveCount);
     Type progressType = plugin.GetType("BoscaliSummer.Features.Progression.Networking.ProgressionSnapshot", true)!;
     object progress = Activator.CreateInstance(progressType)!;
-    Set(progress, "Protocol", (byte)3); Set(progress, "Generation", 10001); Set(progress, "PerkMask", 123u);
+    Set(progress, "Protocol", (byte)4); Set(progress, "Generation", 10001); Set(progress, "PerkMask", 123u);
     Set(progress, "Score", 70000); Set(progress, "Scene", 456u); Set(progress, "Token", 789u);
     Set(progress, "ScorePerPoint", 10000); Set(progress, "MaximumPoints", (byte)20);
     object progressResult = Decode(progressType, Encode(progressType, progress));
@@ -987,7 +992,7 @@ static void ProbeSquadSerialization(Assembly plugin, Assembly mirage)
         throw new InvalidOperationException("Progression generation roundtrip failed");
     Type submitType = plugin.GetType("BoscaliSummer.Features.Progression.Networking.ProgressionSubmit", true)!;
     object submit = Activator.CreateInstance(submitType)!;
-    Set(submit, "Protocol", (byte)3); Set(submit, "Perk", (byte)4); Set(submit, "Scene", 456u); Set(submit, "Token", 789u); Set(submit, "Generation", 10001);
+    Set(submit, "Protocol", (byte)4); Set(submit, "Perk", (byte)4); Set(submit, "Scene", 456u); Set(submit, "Token", 789u); Set(submit, "Generation", 10001);
     object submitResult = Decode(submitType, Encode(submitType, submit));
     foreach (FieldInfo field in submitType.GetFields(BindingFlags.Public | BindingFlags.Instance))
         if (!Equals(field.GetValue(submit), field.GetValue(submitResult))) throw new InvalidOperationException("Progression intent roundtrip changed " + field.Name);

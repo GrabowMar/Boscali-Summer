@@ -9,7 +9,7 @@ performance design pass its gate.
 Fire, forest spread, impact scorch, ruins, aftermath and wreck persistence; occupied
 civilian buildings; client-local radio; the expanded tactical map and STR theater screen;
 local QoL camera/HUD conveniences; a session-scoped perk/support slice (four OPS
-qualifications of five score-earned grades each, two tools per career; satellite scan, zone fortification, Rod from God, EMP shock and flare barrage
+qualifications of six score-earned grades each, two tools per career; satellite scan, zone fortification, Rod from God, EMP shock and flare barrage
 support actions) with constellation command and cyber infrastructure on OPS. Framework
 extraction is done and behaviour-preserving: it gave every
 module a common lifecycle and patch owner without yet splitting the large managers
@@ -85,7 +85,7 @@ codecs and snapshot providers; garrison catalogue/selection/spawning/lifecycle.
   VHF air 25 kHz AM, MW 10 kHz) with a spectrum waterfall, an S-meter fed by a local link
   budget (range, radio horizon, terrain line of sight), squelch, bandwidth, mode override,
   fine tuning, seek/scan, a LINK block and intercepted enemy chatter; a built-in station
-  whose tower is lost reads off air. DECK is the player's own library: folders, tracks,
+  whose tower is lost reads off air. MUSIC is the player's own library: folders, tracks,
   transport, shuffle, repeat. Base Broadcast still catalogs the installed score across
   registered maps (up to 30 deduplicated clips). Transmit, crypto, jamming and voice receive
   are inert placeholders (`RadioLinkStub`); the deck's duck under a received transmission is
@@ -98,7 +98,7 @@ codecs and snapshot providers; garrison catalogue/selection/spawning/lifecycle.
   are the two balance dials to revisit once mission-length data exists, along with the
   question of whether a third tool or a lane-swap rule is ever worth allowing. The SQD studio
   and emblem rendering need in-game acceptance against the companion Wing Command build.
-  More depth per lane, or a new qualification, graduates by adding one lane's five grades
+  More depth per lane, or a new qualification, graduates by adding one lane's six grades
   plus one support action; none are scheduled here.
 - **Support** — multiplayer and long-session gates remain; carrier requisition graduates only
   after a full spawn-to-destruction lifecycle around a live mission is clean.

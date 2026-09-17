@@ -26,19 +26,19 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
         private const float ToastSeconds = 4.5f;
         private const float FadeInSeconds = 0.14f;
         private const float FadeOutSeconds = 0.24f;
-        private const float RowWidth = 460f;
-        private const float RowPitch = 44f;
-        private const float RowHeight = 44f;
-        private const float RowTextHeight = 26f;
-        private const float RowTextInset = 2f;
-        private const float HeaderPitch = 30f;
-        private const float HeaderHeight = 24f;
-        private const float BarWidth = 244f;
-        private const float BarHeight = 8.6f;
-        private const float BarBackHeight = 12.8f;
-        private const float HeaderAlpha = 0.6f;
-        private const float TitleAlpha = 0.9f;
-        private const float DistanceAlpha = 0.7f;
+        private const float RowWidth = 380f;
+        private const float RowPitch = 30f;
+        private const float RowHeight = 30f;
+        private const float RowTextHeight = 18f;
+        private const float RowTextInset = 1f;
+        private const float HeaderPitch = 22f;
+        private const float HeaderHeight = 14f;
+        private const float BarWidth = 180f;
+        private const float BarHeight = 6f;
+        private const float BarBackHeight = 9f;
+        private const float HeaderAlpha = 0.45f;
+        private const float TitleAlpha = 0.8f;
+        private const float DistanceAlpha = 0.6f;
 
         private static readonly Color BarBackColour = new Color(0f, 0f, 0f, 0.3f);
 
@@ -332,11 +332,8 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
             return text;
         }
 
-        private static float OverlayTextSize()
-        {
-            float size = VanillaHudStyle.OverlayTextSize;
-            return OperationMarkerCopy.Finite(size) && size >= 1f ? size : 32f;
-        }
+        /// <summary>Vanilla's own label size (overlay text size through its 0.5 scale).</summary>
+        private static float OverlayTextSize() => VanillaHudStyle.ObjectiveTextSize;
 
         private static Color Alpha(Color colour, float alpha) => new Color(colour.r, colour.g, colour.b, alpha);
 

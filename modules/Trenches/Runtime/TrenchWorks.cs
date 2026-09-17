@@ -71,9 +71,9 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             Vector3 anchor = line[Mathf.Clamp((rank + 1) * line.Count / 5, 0, line.Count - 1)];
             Vector3 forward = position.ThreatAt(anchor);
             // Even slots are fire positions on the parapet crest (just forward of the centreline,
-            // overlooking no man's land); odd slots are the sandbag shelters and dugouts on the
-            // flat behind the parados, clear of the earthwork's rear skirt.
-            Vector3 desired = anchor + forward * (rank % 2 == 0 ? 2.6f : -7f);
+            // overlooking no man's land); odd slots are the sandbag shelters and dugouts just
+            // behind the parados, clear of the now ~1m rear skirt instead of the old ~5m one.
+            Vector3 desired = anchor + forward * (rank % 2 == 0 ? 1.1f : -2.6f);
             Vector3 ground = TrenchTerrain.TryGround(desired, out Vector3 sampled) ? sampled : anchor;
 
             UnitDefinition piece = pieces[index % pieces.Count];

@@ -2,6 +2,44 @@
 
 ## Unreleased
 
+- **Weather is now a real atmosphere, and the sky it drives is vanilla's own.** The custom
+  storm-cloud renderer and its ability to hide the vanilla deck are **deleted**; in their place
+  `Runtime/VanillaClouds.cs` retunes the live `CloudLayer` every frame — storm darkening under
+  and ahead of a cell and across a front, feathering between vanilla's five discrete weather
+  sets so a percentage is a percentage, puff noise driven by shear and gust, deck advection and
+  drift with the front, anvil expansion through the distant band, and the model's visibility
+  coupled into the fog. The schedule is rebuilt as synoptic meteorology: `SynopticCycle` moves a
+  pressure system every hour, five air masses (`MT`/`MP`/`CT`/`CP`/`CA`) meet at a boundary whose
+  contrast decides whether it is cold, warm, occluded or a dry line, `Diurnal` decides how much
+  of the energy is released, and `Thermo` derives cloud base from the LCL, CAPE from heat and
+  moisture, CIN as a hard lid, shear, gusts, rain rate and slant visibility. Cloud is moisture
+  times lift, so a ridge subsides and clears and a trough lifts and clouds. The storm field
+  grows to eight cells arranged as isolated, scattered, cluster or **squall line** — a line is
+  laid along the boundary and travels with it. Canopy rain is **locked to the cockpit glass**
+  (meshes taken from `Canopy.glassRenderers`) with real screen-space refraction through the
+  shipped `Universal Render Pipeline/Particles/Unlit` shader, driven by a runtime-generated
+  droplet normal map; the old screen-space overlay survives only for observer, parachute and
+  glass-less cases. The `WEA` radar is rebuilt as a whole-map synthetic reflectivity product
+  with the frontal boundaries, a legend, map and flight-plan context, a cell table, layers and
+  an exact `+30`/`+60` minute scrub, and the `WEA` environment page is rebuilt around flight
+  category, visibility, a wind rose, a frontal readout and a host timeline instead of the
+  duplicated readouts and six oversized regime buttons. Removed settings: `Supercells`,
+  `SupercellDetail`, `ReplaceVanillaClouds`, `CloudSortFudge`. **In-game visual acceptance is
+  pending for all of it**, and the mesh-wearing-a-particle-shader pairing is unproven in this
+  build.
+
+- **The `RAD` screen was rebuilt around what it shows and what each key does.** RECEIVER leads
+  with a 25px frequency and signal metric strip (station name in the frequency caption, dBm and
+  the tower / horizon / LOS read in the signal caption), one TUNING section holds the waterfall,
+  dial and tuning keys, and the old nine-key row became four keys that name the value they
+  cycle — `BAND · FM`, `MODE · AUTO`, `BW · WIDE`, `STEP · 100k` — beside `AF` and `SQL`
+  steppers. The dead LINK block and the inert TX/SEC keys are gone; the status strip carries the
+  hovered control's description and the RECEIVE ONLY copy, and the station rows interleave name,
+  frequency and signal instead of three stacked button rows. The MUSIC page replaced the two
+  paginated FOLDERS and TRACKS lists with one folder stepper, one 26px track list and one pager,
+  and its tab is now named **MUSIC** instead of DECK. Runtime, wire protocol, settings and the
+  copyright boundary are unchanged; in-game visual acceptance is pending.
+
 - **Weather is back, driven from the mission clock.** A new default-on `weather` module
   restores dynamic weather with no Harmony patch and no message: the host drives cloud
   coverage, cloud base, wind speed/heading and turbulence through the public `LevelInfo`
@@ -54,6 +92,22 @@
   strip. The ADM bezel, its appended vanilla slot and its rail mapping are removed, so
   Boscali hosts only the EVN screen. In-game acceptance pending.
 
+- **Trenches are man-scale now, and soldiers stand in them.** Screenshots from a live session
+  showed the earthwork as blocky bays whose walls stood chest-high on a nearby HESCO and
+  dwarfed the vanilla MG nest beside them: a ~13m footprint with a 3.4m packed crest and a
+  5.5m/1.6m sawtooth traverse. The profile is now sized against the 1.8m models that occupy it
+  — a ~1.6m cut with a walkable fire-step floor, a waist-high parapet (1.2-1.45m) over a lower
+  parados and narrow spoil berms, a total footprint near 4.8m — the zigzag is a subtle 9m/0.5m
+  traverse, the wire belt sits 7m in front, and the works sit on the crest and just behind the
+  parados instead of floating on the old broad profile. Only the far LOD stays deliberately
+  bold, because a man-scale line is invisible at 12km and the front must still read from cruise
+  altitude. Each position is also manned with soldiers: the game has no infantry unit of its
+  own, so the module fields its one human figure, the vanilla dismounted pilot, through
+  `Spawner.SpawnPilot` — up to 8 (3/5/7/8 across the growth stages) standing in the ditch on
+  the anchors and facing the enemy, with vanilla physics, damage and replication. They are
+  permanent casualties like the emplacements (no respawn, no healing) and never count as the
+  position's defenders, so the emplacements still decide when a position is finished.
+
 - **Trench earthworks are actually visible now, and positions stop getting thrown away.** Two
   live host sessions showed a full set of built positions whose carved ditch, berms and wire
   belt could not be seen anywhere in the world, and roughly two of every three planned positions
@@ -80,6 +134,22 @@
   ever planned; the cursor now walks the front window by window and rotates a faction only when
   a trace is exhausted. Ownership gated on `hold >= 0`, but the signed control field is one
   value per kilometre cell, so the cell a position digs into reads contested — on a ragged
+- **Contract text is vanilla-sized and the MIS contract tab tells the truth.** The marker text
+  was twice as loud as the objective next to it: the game carries `PlayerSettings.overlayTextSize`
+  (32) through a **0.5 transform scale** on the label object, so vanilla renders 16 px, and the
+  mod copied the font size without the scale; the cockpit label block and the map label now carry
+  that scale, and the vicinity card uses the same effective size, so a contract reads at the
+  footprint of the game's own labels rather than across the screen. Alongside it, the MIS
+  SECONDARY board was debugged: an offer whose clock had run out could still show an enabled
+  `ACCEPT CONTRACT` (it now flips to `OFFER ENDED` and stops being clickable, with `ACTIVE LIMIT
+  REACHED` covering a full roster), pay and escalation figures print `$1400` instead of `$1 400`
+  on a non-English machine, a two-row dossier grid can no longer paint a card over the buttons of
+  the card above it, the empty AVAILABLE tab names the real reason (board unavailable, host link
+  lost, roster full, director exhausted) instead of promising live offers, offers read `#N TITLE`
+  with the HUD's `T-mm:ss` clock and the same two-minute urgency threshold, and SET > SERVER's
+  tasking rows request a snapshot at most every 2 s, so they no longer freeze while the tactical
+  map is closed. Cancelling a contract that already ended now says so instead of answering with
+  the accept-failure sentence.
   front even slightly hostile — while the ground is still the faction's own side: ground now
   counts on the own side **or inside its contested band**, and only deep enemy cells refuse.
   The resampled station buffer was indexed as `windowStart + station`, so every window after
@@ -235,15 +305,28 @@
   request, so STRIKE grade 4 pays combat allocation instead until that correlation exists.
   The debug bypass still opens everything. SKILLS now draws the board as a grade-row matrix —
   four qualification columns side by side, so classes can be compared without scrolling — with
-  a rail key beneath it, one state word per cell (`PICK`, `TOOL`, `ACTIVE`, `HELD`, `GRADE
-  FIRST`, `CLOSED`, `NO PICK`) and the selected grade's description plus the single CONFIRM
-  pinned to the foot of the sheet. When the panel is too short for a legible board the grade
-  rows keep a readable minimum and the board scrolls, but the commit control never leaves the
-  screen. The twenty per-row buttons and the
-  ace-skill rows that used to fill the first screen are gone; the shared ace codes moved to a
-  footer strip. The
+  a rail key above the columns, one line per cell and the selected grade's description plus the
+  single CONFIRM pinned to the foot of the sheet. That line is the grade's own effect
+  ("+15% COMBAT", "-10% COOLDOWN") when it is takeable, so the board reads as a comparison of
+  what each pick buys instead of a wall of identical `PICK` labels; tools keep their support
+  code and say `TOOL`/`HELD`, shut grades say `GRADE FIRST`, `CLOSED` or `NO PICK` and explain
+  themselves on hover, and the clause note is refreshed in place so the unspent-pick count and
+  the score-to-next-grade figure stay live. When the panel is too short for a legible board the
+  grade rows keep a readable minimum and the board scrolls, but the commit control never leaves
+  the screen. The twenty per-row buttons are gone, along with the shared ace-skill strip: those
+  marks live on the WING cards, and this sheet is the player's own record. The
   score bar on SKILLS gave way to an unspent-pick pip row, and the PILOT committed-skill strip
   grows a row per six grades instead of clipping.
+- **Every qualification gained a sixth grade, and the board's protocol byte went 3 → 4.**
+  The new capstones are each lane's *second* axis rather than a third helping of its best one:
+  STRIKE's `Time on Target` (15% faster re-tasking), RECON's `Pathfinder` (15% cheaper
+  requests), SIGNALS' `Full Spectrum` (35% stronger EMP) and ENGINEER's `Depot Network` (25%
+  more service allocation). Grade ids are wire identity, so the in-lane insert renumbered every
+  lane after STRIKE and a version 3 peer would apply the wrong grade — the version gate keeps
+  the builds apart. `MaximumPoints` defaults to **7** now, which is what preserves the shape the
+  board was built around: score pays the six grades and one ace bonus pick buys the second
+  support tool. The board's own copy, the `MaximumPoints` text, README, the module guide and the
+  status tables all moved with it.
 
 - Space is one modular orbital station now. The four payload satellites and the satellite wall
   are gone. OPS › SPACE has three pages. MISSION PLANNER designs the station on a 5×3 truss:

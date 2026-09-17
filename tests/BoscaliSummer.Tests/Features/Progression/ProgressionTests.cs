@@ -154,7 +154,7 @@ namespace BoscaliSummer.Tests.Features.Progression
 
         private static void Points()
         {
-            // One pick per grade, and grade n costs n x the interval: 500, 1000, 1500, 2000, 2500.
+            // One pick per grade, and grade n costs n x the interval: 500, 1000, 1500, 2000, 2500, 3000.
             TestAssert.That(PerkPoints.Earned(0, 500, 6) == 0, "an unflown mission granted a pick");
             TestAssert.That(PerkPoints.Earned(499, 500, 6) == 0, "a partial grade granted a pick");
             TestAssert.That(PerkPoints.Earned(500, 500, 6) == 1, "the first grade granted no pick");
@@ -162,8 +162,10 @@ namespace BoscaliSummer.Tests.Features.Progression
             TestAssert.That(PerkPoints.Earned(1500, 500, 6) == 2, "the second grade granted no pick");
             TestAssert.That(PerkPoints.Earned(3000, 500, 6) == 3, "the third grade granted no pick");
             TestAssert.That(PerkPoints.Earned(5000, 500, 6) == 4, "the fourth grade granted no pick");
-            TestAssert.That(PerkPoints.Earned(7499, 500, 6) == 4, "the capstone grade came early");
-            TestAssert.That(PerkPoints.Earned(7500, 500, 6) == 5, "the capstone grade granted no pick");
+            TestAssert.That(PerkPoints.Earned(7499, 500, 6) == 4, "the fifth grade came early");
+            TestAssert.That(PerkPoints.Earned(7500, 500, 6) == 5, "the fifth grade granted no pick");
+            TestAssert.That(PerkPoints.Earned(10499, 500, 6) == 5, "the capstone grade came early");
+            TestAssert.That(PerkPoints.Earned(10500, 500, 6) == 6, "the capstone grade granted no pick");
             TestAssert.That(PerkPoints.Earned(100000, 500, 6) == PerkCatalog.MaximumDepth,
                 "score outgrew the grade ladder");
             TestAssert.That(PerkPoints.Earned(3000, 500, 2) == 2, "the configured pick ceiling was ignored");
@@ -177,7 +179,8 @@ namespace BoscaliSummer.Tests.Features.Progression
             TestAssert.That(PerkPoints.RemainingToNext(499, 500) == 1, "the first grade's remainder is wrong");
             TestAssert.That(PerkPoints.RemainingToNext(500, 500) == 1000, "the second grade's price is wrong");
             TestAssert.That(PerkPoints.RemainingToNext(1500, 500) == 1500, "the third grade's price is wrong");
-            TestAssert.That(PerkPoints.RemainingToNext(7500, 500) == -1, "an exhausted ladder still hints");
+            TestAssert.That(PerkPoints.RemainingToNext(7500, 500) == 3000, "the sixth grade's price is wrong");
+            TestAssert.That(PerkPoints.RemainingToNext(10500, 500) == -1, "an exhausted ladder still hints");
             TestAssert.That(PerkPoints.RemainingToNext(7500, 0) == -1, "an invalid interval still hints");
         }
 
@@ -189,13 +192,13 @@ namespace BoscaliSummer.Tests.Features.Progression
                 "a new pilot inherited the retired pilot's score");
             TestAssert.That(PerkPoints.EarnedForPilot(69999, 70000, 500, 6, 2) == 2,
                 "a score below the origin must retain bonus picks without earning score grades");
-            TestAssert.That(PerkPoints.EarnedForPilot(100000, 0, 500, 6, 3) == 8,
+            TestAssert.That(PerkPoints.EarnedForPilot(100000, 0, 500, 6, 3) == 9,
                 "ace bonus picks must extend past the grade ladder, not replace it");
             TestAssert.That(PerkPoints.EarnedForPilot(499, 0, 500, 6, 1) == 1,
                 "a partial score grade must not be rounded up when adding an ace bonus");
             TestAssert.That(PerkPoints.EarnedForPilot(int.MaxValue, 0, 1, int.MaxValue, int.MaxValue) == 20,
                 "large score and bonus inputs must not overflow or exceed the overall 20-pick ceiling");
-            TestAssert.That(PerkPoints.EarnedForPilot(int.MaxValue, int.MinValue, 1, 6, 0) == 5,
+            TestAssert.That(PerkPoints.EarnedForPilot(int.MaxValue, int.MinValue, 1, 6, 0) == 6,
                 "a negative origin must be normalized before score subtraction");
             TestAssert.That(PerkPoints.EarnedForPilot(int.MinValue, int.MaxValue, 500, 6, 3) == 3,
                 "extreme negative score must not wrap into score-derived picks");
@@ -256,8 +259,8 @@ namespace BoscaliSummer.Tests.Features.Progression
             TestAssert.That(!chain.TryUnlock(capstone, 20), "a capstone unlocked without its chain");
             for (byte id = tool; id < capstone; id++)
                 TestAssert.That(chain.TryUnlock(id, 20), "grade " + id + " failed in its own chain");
-            TestAssert.That(!chain.TryUnlock(capstone, 4), "a capstone was bought with too few picks");
-            TestAssert.That(chain.TryUnlock(capstone, 5), "a capstone failed with its chain and picks");
+            TestAssert.That(!chain.TryUnlock(capstone, 5), "a capstone was bought with too few picks");
+            TestAssert.That(chain.TryUnlock(capstone, 6), "a capstone failed with its chain and picks");
 
             var bypass = new PerkState();
             TestAssert.That(bypass.ForceUnlock(child), "bypass refused a grade with no predecessor");

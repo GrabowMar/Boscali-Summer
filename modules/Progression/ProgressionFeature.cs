@@ -37,7 +37,7 @@ namespace BoscaliSummer.Features.Progression
                     "Score for the first qualification grade; grade n costs n x this, so grades get longer as they get better.",
                     50)
                 .Number(2, context.Settings.Progression.MaximumPoints, "MAXIMUM PICKS",
-                    "Most picks one player can earn in a mission. Score pays the five grades; ace bonus picks go on top.",
+                    "Most picks one player can earn in a mission. Score pays the six grades; ace bonus picks go on top.",
                     1)
                 .Number(3, context.Settings.Progression.PerkStrength, "PERK STRENGTH",
                     "Scales every passive perk. Support authorisations are on or off and are unaffected.",

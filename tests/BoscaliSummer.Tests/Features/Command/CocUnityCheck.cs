@@ -75,7 +75,7 @@ public static class CocUnityCheck
 
             var report = new System.Text.StringBuilder();
             report.AppendLine("PASS: the real STR COC page (StrMfdPanel.BuildCocPage + RefreshCoc, production sources unmodified) rendered offline.");
-            report.AppendLine("Staff stub: 8 posts - theater cmdr (tier 0), air/ground component cmdrs (tier 1), three base cmdrs (tier 2; one InTransit, one KIA, one Disrupted), one known enemy (IntelAge 41s) and one unconfirmed enemy. Portraits null (NO VISUAL fallback).");
+            report.AppendLine("Staff stub: 8 posts - theater cmdr (tier 0), air/ground component cmdrs (tier 1), three base cmdrs (tier 2; one InTransit, one KIA, one Disrupted), one known enemy (IntelAge 41s) and one unconfirmed enemy. Portraits: synthetic sprites of mixed aspect (96x96, 80x120, 128x72, 64x64, 72x128, 100x100) and mixed pivots (centre, zero, one, top-left, bottom-right); the two unconfirmed/KIA posts keep the NO VISUAL fallback.");
             report.AppendLine("Renders (path | bytes | setup):");
             foreach (string note in Notes) report.AppendLine(note);
             report.AppendLine("Reflection used: fields shell/highCommand/settings/command, cocShowHostile, cocSelectedId; methods BuildCocPage(GameObject), Refresh(), RefreshCoc().");
@@ -200,6 +200,31 @@ public static class CocUnityCheck
 
     // ---------------------------------------------------------------------- staff
 
+    /// <summary>
+    /// A portrait the way Wing Command hands them over: shapes differ, and so do the sprite
+    /// pivots. The plate must not follow either, so the check draws a border and a diagonal
+    /// wash - a crop that drifts or scales is obvious at a glance.
+    /// </summary>
+    private static Sprite Portrait(int seed, int width, int height, Vector2 pivot)
+    {
+        var texture = new Texture2D(width, height, TextureFormat.RGBA32, false);
+        var pixels = new Color32[width * height];
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                bool border = x < 2 || y < 2 || x >= width - 2 || y >= height - 2;
+                int wash = 40 + (x + y) * 170 / (width + height);
+                pixels[y * width + x] = border
+                    ? new Color32(235, 255, 245, 255)
+                    : new Color32((byte)(wash + seed * 5), (byte)(wash + 50), (byte)(wash + 90), 255);
+            }
+        }
+        texture.SetPixels32(pixels);
+        texture.Apply();
+        return Sprite.Create(texture, new Rect(0f, 0f, width, height), pivot, 100f);
+    }
+
     private static IHighCommandView Staff()
     {
         const string LongBio =
@@ -215,28 +240,28 @@ public static class CocUnityCheck
             new CommanderView(0, -1, 0, true, true, false, false, false, false,
                 "GEN. D. HALVERSON", "GENERAL", "THEATER COMMANDER", "theater_hq_delta",
                 "LOGISTICS MIND +15% STIPEND · RECLUSE -30% PATROL SIGHT", LongBio,
-                0x1101, null, -1f, 0.40f, 0f, 0f),
+                0x1101, Portrait(1, 96, 96, new Vector2(0.5f, 0.5f)), -1f, 0.40f, 0f, 0f),
 
             // 1 - air component commander, tier 1.
             new CommanderView(1, 0, 1, true, true, false, false, false, false,
                 "COL. R. MARCHETTI", "COLONEL", "AIR COMPONENT CMDR", "airbase_west_complex",
                 "WING DOCTRINE +10% SORTIE READINESS",
                 "Flew the first sortie of the war and has not left the ops room since.",
-                0x1202, null, -1f, 0.20f, 0f, 0f),
+                0x1202, Portrait(2, 80, 120, Vector2.zero), -1f, 0.20f, 0f, 0f),
 
             // 2 - ground component commander, tier 1, under fire.
             new CommanderView(2, 0, 1, true, true, false, false, false, true,
                 "COL. A. OKONKWO", "COLONEL", "GROUND COMPONENT CMDR", "garrison_north",
                 "IRON GRIP -20% SUPPLY LOSS",
                 "Holds the northern shoulder with two battalions and a longer memory.",
-                0x1303, null, -1f, 0.20f, 0f, 0f),
+                0x1303, Portrait(3, 128, 72, Vector2.one), -1f, 0.20f, 0f, 0f),
 
             // 3 - base commander, tier 2, in transit, very long location, short bio.
             new CommanderView(3, 1, 2, true, true, false, true, false, false,
                 "MAJ. T. VOSSBERG", "MAJOR", "BASE COMMANDER", "airstrip_city2_northern_annex",
                 "SAPPER'S EYE +12% FORTIFICATION SPEED",
                 "Kept the annex running on borrowed parts and stubbornness.",
-                0x1404, null, -1f, 0.07f, 0f, 0f),
+                0x1404, Portrait(4, 64, 64, new Vector2(0.5f, 0.5f)), -1f, 0.07f, 0f, 0f),
 
             // 4 - base commander, tier 2, KIA.
             new CommanderView(4, 2, 2, true, true, true, false, false, false,
@@ -250,14 +275,14 @@ public static class CocUnityCheck
                 "CPT. M. SATO", "CAPTAIN", "BASE COMMANDER", "radar_site_9",
                 "QUIET WATCH -15% PATROL SIGHT",
                 "Keeps the eastern radar net lit through every raid.",
-                0x1606, null, -1f, 0.06f, 0f, 0f),
+                0x1606, Portrait(6, 72, 128, new Vector2(0f, 1f)), -1f, 0.06f, 0f, 0f),
 
             // 6 - enemy post, known, intel 41 seconds old.
             new CommanderView(6, -1, 1, false, true, false, false, false, false,
                 "COL. V. KRUPIN", "COLONEL", "AIR COMPONENT CMDR", "enemy_airbase_icaria",
                 "REAPER DOCTRINE +20% KILL VALUE",
                 "Commands the enemy air component from a hardened strip; his patrols arrive on schedule and leave on time.",
-                0x1707, null, 41f, 0.25f, 0f, 0f),
+                0x1707, Portrait(7, 100, 100, new Vector2(1f, 0f)), 41f, 0.25f, 0f, 0f),
 
             // 7 - enemy post, unconfirmed.
             new CommanderView(7, 6, 2, false, false, false, false, false, false,

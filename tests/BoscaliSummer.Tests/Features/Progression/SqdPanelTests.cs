@@ -12,6 +12,7 @@ namespace BoscaliSummer.Tests.Features.Progression
         {
             TestPerkClassification();
             TestBoardGeometry();
+            TestEffectLabels();
             TestWingmanPresenceTracking();
             TestSquadBezelCoexistence();
             TestDossierStylesheet();
@@ -48,23 +49,52 @@ namespace BoscaliSummer.Tests.Features.Progression
             }
 
             float roomy = SkillBoardLayout.RowHeight(604f, PerkCatalog.MaximumDepth);
-            TestAssert.That(roomy == SkillBoardLayout.MaxCellHeight,
-                "a tall sheet must not stretch the grade rows past the readable maximum");
+            TestAssert.That(roomy >= SkillBoardLayout.MinCellHeight &&
+                            roomy <= SkillBoardLayout.MaxCellHeight,
+                "a tall sheet must keep the grade rows inside the readable band");
             float tight = SkillBoardLayout.RowHeight(100f, PerkCatalog.MaximumDepth);
             TestAssert.That(tight == SkillBoardLayout.MinCellHeight,
                 "a short sheet must keep the grade rows at the readable minimum");
 
             // The scroll content must declare everything the board draws at the minimum row
-            // height - masthead, clause heading, lane header, rows, footer and legend - or the
-            // parts below the declared height can never be scrolled into view.
+            // height - masthead, clause heading, rail key, lane header and rows - or the parts
+            // below the declared height can never be scrolled into view.
             float declared = SkillBoardLayout.ContentHeight(
                 SkillBoardLayout.MinCellHeight, PerkCatalog.MaximumDepth);
             float drawn = SkillBoardLayout.FileHeaderHeight + SkillBoardLayout.TitleHeight +
-                SkillBoardLayout.LaneHeaderHeight + SkillBoardLayout.Gap +
-                PerkCatalog.MaximumDepth * SkillBoardLayout.MinCellHeight +
-                SkillBoardLayout.FooterHeight + SkillBoardLayout.LegendHeight;
+                SkillBoardLayout.LegendHeight + SkillBoardLayout.LaneHeaderHeight + SkillBoardLayout.Gap +
+                PerkCatalog.MaximumDepth * SkillBoardLayout.MinCellHeight;
             TestAssert.That(declared >= drawn - 0.01f,
                 "the scroll content height must cover every band the board draws");
+        }
+
+        /// <summary>
+        /// The board prints a passive grade's effect as its own line, so every grade needs copy
+        /// that fits one cell and agrees with the sentence in its description - the two used to
+        /// be written independently, which is exactly how a board starts lying about a number.
+        /// </summary>
+        private static void TestEffectLabels()
+        {
+            for (int i = 0; i < PerkCatalog.All.Length; i++)
+            {
+                PerkDefinition definition = PerkCatalog.All[i];
+                string label = PerkCatalog.EffectLabel(definition.Id);
+                if (definition.IsTool)
+                {
+                    TestAssert.That(label.Length == 0,
+                        "tool " + definition.Name + " has an effect label but grants no multiplier");
+                    continue;
+                }
+
+                TestAssert.That(label.Length > 0 && label.Contains("%"),
+                    "passive grade " + definition.Name + " has no effect label");
+                TestAssert.That(label.Length <= 13,
+                    "the effect label '" + label + "' is wider than one board cell");
+                string digits = new string(System.Array.FindAll(label.ToCharArray(), char.IsDigit));
+                TestAssert.That(definition.Description.Contains(digits),
+                    definition.Name + " advertises " + label + " but describes '" +
+                    definition.Description + "'");
+            }
         }
 
         private static void TestPerkClassification()

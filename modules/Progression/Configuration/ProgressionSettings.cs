@@ -24,21 +24,21 @@ namespace BoscaliSummer.Features.Progression.Configuration
                 new ConfigDescription(
                     "Score for the first qualification grade. Grade n costs n x this, so grades " +
                     "get longer as they get better: 250 gives the tool in the first minutes and " +
-                    "a complete five-grade qualification for 3750 score, 1000 makes even the " +
+                    "a complete six-grade qualification for 5250 score, 1000 makes even the " +
                     "first tool a long-mission reward. This reads the vanilla per-player score; " +
                     "Nuclear Option's rank thresholds, aircraft requirements and weapon access " +
                     "are never modified. Host-authoritative: on a server, only the host's value " +
                     "applies.",
                     new AcceptableValueRange<int>(50, 10000)));
-            MaximumPoints = config.Bind("Progression", "MaximumPoints", 6,
+            MaximumPoints = config.Bind("Progression", "MaximumPoints", 7,
                 new ConfigDescription(
                     "Most picks one player can earn in a mission. The board holds four " +
-                    "qualifications of five grades each, one pick per grade, and a career may " +
-                    "hold at most two support authorisations, so this is the balance dial: 6 " +
-                    "allows one complete qualification plus a second tool, once an ace pays the " +
-                    "sixth pick. Score pays the five grades; ace bonus picks go on top up to " +
-                    "this ceiling. Host-authoritative: on a server, only the host's value " +
-                    "applies.",
+                    "qualifications of six grades each, one pick per grade, and a career may " +
+                    "hold at most two support authorisations. Score pays the six grades, so " +
+                    "this is the balance dial: 7 buys one complete qualification plus a second " +
+                    "tool, once an ace pays the seventh pick; 6 forces a choice between depth " +
+                    "and a second tool. Ace bonus picks go on top up to this ceiling. " +
+                    "Host-authoritative: on a server, only the host's value applies.",
                     new AcceptableValueRange<int>(1, 20)));
             PerkStrength = config.Bind("Progression", "PerkStrength", 1f,
                 new ConfigDescription(

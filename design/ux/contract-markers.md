@@ -23,7 +23,7 @@ Cockpit (`ObjectiveOverlay`, 3 nearest objectives, global namespace):
 | pointer | `arrowOutline` sprite, 25×25, anchors/pivot (0.5, 1), local y −0.8, colour = HUD main colour (#00FF00 α 0.8) |
 | dot | `CircleVeryThick` sprite, 10×10, same colour; shown instead of the pointer when the target is within 10° of the nose |
 | area ring | `waypointSizeIndicator` sprite in a 20×20 rect, colour #00FF00 α 0.8, `localScale = canvasHeight / 20 / tan(fovY/2) · radius / distance`, alpha `clamp01(radius · 20 / distance − 0.5)`, rotation `Euler(0,0,−camera.eulerAngles.z)`, hidden while the marker is clamped to the frame edge |
-| label | TMP `Brass Mono Regular` (+ its shared material), size = `PlayerSettings.overlayTextSize` (default 32), colour #00FF00 α 0.8, text `DisplayName + " " + UnitConverter.DistanceReading(range)` |
+| label | TMP `Brass Mono Regular` (+ its shared material), size = `PlayerSettings.overlayTextSize` (default 32) **carried through the label rect's 0.5 transform scale**, so the label renders at 16 px — copying the font size without the scale is what made the first vanilla+ attempt read twice as loud as the objective beside it |
 | label motion | lerps 20 % per frame toward its anchor (`textLerp` 0.2); two labels closer than 50 px push apart at `(1000, 300)` px/s along the normalised delta (with `dy += 5` when `dy < 0.1`), and the nudge offset decays ×0.8 per frame |
 | pointer rotation | `atan2(dy, dx) · Rad2Deg − 90°` |
 
@@ -36,7 +36,7 @@ Map (`ObjectiveMarker : MapMarker`, parented under `DynamicMap.iconLayer`):
 | Element | Vanilla value |
 |---|---|
 | icon | `Image` with the family sprite (see below), `sizeDelta` 20×20 for waypoint/destroy, 40×40 for recon/capture, colour white |
-| label | legacy `Text` with font `regular`, 24 px, white, `MiddleCenter`, offset `(0, size)` in marker-root space (so 20 or 40 px above the icon), text `DisplayName` |
+| label | legacy `Text` with font `regular`, 24 px **at the prefab's 0.5 scale** (12 px on screen), white, `MiddleCenter`, offset `(0, size)` in marker-root space (so 20 or 40 px above the icon), text `DisplayName` |
 | transform | `localPosition = worldXZ · DynamicMap.mapDisplayFactor`, `localScale = 1 / mapImage.transform.localScale.x` (constant screen size) |
 | duplicate masking | only two markers of the *same* objective within 40 screen px are masked (icon ×0.5 RGB @ α0.5, label off); one contract is one tag, so contracts are never masked |
 | family sprites | `waypointObjective` (`waypointObjMarker`), `destroyObjective` (`steerpointMarker`), `reconObjective` (`targetLockOld`), `captureObjective` (`circleDot`) |
@@ -91,9 +91,10 @@ One widget pool per scene, ≤3 (the board's card ceiling), fixed hierarchy:
   when not clamped and the pixel diameter is 16..2600 px, roll-locked to the camera.
 - Label: two stacked TMP labels (title above detail; both the vanilla font and shared material,
   detail at `0.66 ×` size in the tone colour), one block, pivot (0, 0.5), anchored 18 px to the
-  right of the marker point and vertically centred; the block flips to the left of the point
-  when it would cross `halfWidth`, and the rect width follows the text. Text is cached and only
-  rewritten when it changes.
+  right of the marker point and vertically centred; the block carries vanilla's 0.5 scale, flips
+  to the left of the point when it would cross `halfWidth`, and its rect width follows the text
+  (the flip test multiplies by that scale, since the rect is measured pre-scale). Text is cached
+  and rewritten only when its inputs move.
 - Label motion: vanilla's glide + anti-overlap nudge (numbers above) applied to the label
   position only — the icons stay glued to their projected points. The separation test uses the
   labels' anchors, not their drifting points, and pushes *both* labels apart like vanilla's own
@@ -123,16 +124,17 @@ Vanilla HUD text, no panel chrome, right-centre of the screen (clear of the mess
 block, throttle scale and compass tape): anchored `(1, 0.5)`, pivot `(1, 0.5)`, offset
 (−28, 60). Own overlay canvas, `sortingOrder` 1 (above `HUDCanvas` 0, below the map's 2),
 `CanvasScaler` 1920×1080 with `ScreenMatchMode.MatchWidthOrHeight`, match 1 — vanilla's own
-scaler, so a 32 px label is 32 px in vanilla terms.
+scaler — and every size below is vanilla's *effective* one: `overlayTextSize × 0.5`, i.e. 16 px
+at the default.
 
-- header line `2 ACTIVE CONTRACTS` @ `0.7 ×` size, `AllClear` @ α 0.6 (the enter/leave banner
+- header line `2 ACTIVE CONTRACTS` @ `0.7 ×` size, `AllClear` @ α 0.45 (the enter/leave banner
   swaps into this line for 4.5 s, tone-coloured). The block hangs on a child of the canvas:
   a screen-space canvas drives its own root rect, so anchors on the root are not layout input.
   The font is the vanilla HUD font; if the style read fails the card falls back to the engine's
   default TMP font and warns once — the card carries information a pilot needs, unlike a marker.
 - one row per contract (≤3), right-aligned, a single TMP line built with rich-text colour
   segments — `#9 BREAK ENEMY PRESSURE   9.4km   T-2:41` with the title in `AllClear` @ α 0.9,
-  the distance @ α 0.7 and the clock in tone (`OperationMarkerCopy.Distance`, so metric and
+  the distance @ α 0.6 and the clock in tone (`OperationMarkerCopy.Distance`, so metric and
   imperial print like vanilla); a lost contact prints `CONTACT LOST` in `Alert`.
 - one bar per row: 244 × 8.6 px (vanilla capture-bar size) `AllClear`/tone, left-pivot grow
   = `OperationMarkerCopy.Bar(...)`, over a plain dark backing 12.8 px tall @ α 0.3 only while

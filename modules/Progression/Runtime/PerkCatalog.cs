@@ -6,7 +6,7 @@ namespace BoscaliSummer.Features.Progression.Runtime
     /// <summary>
     /// One grade of a qualification: a lane, the grade it occupies, and either a multiplier
     /// or a support capability, never both. Grade 1 of every lane is that lane's tool — the
-    /// support authorisation — and grades 2..5 hang off the grade before them.
+    /// support authorisation — and grades 2..6 hang off the grade before them.
     /// </summary>
     internal readonly struct PerkDefinition
     {
@@ -61,8 +61,8 @@ namespace BoscaliSummer.Features.Progression.Runtime
     }
 
     /// <summary>
-    /// The career board: four qualifications of five grades. Grade 1 is the lane's OPS
-    /// authorisation, grades 2..5 are its passives, and the grade-5 node is the capstone a
+    /// The career board: four qualifications of six grades. Grade 1 is the lane's OPS
+    /// authorisation, grades 2..6 are its passives, and the grade-6 node is the capstone a
     /// pilot can only reach by staying in one lane. A career may hold at most
     /// <see cref="AuthorisationLimit"/> tools, so two lanes open and two stay closed.
     /// </summary>
@@ -78,7 +78,7 @@ namespace BoscaliSummer.Features.Progression.Runtime
         public const string Engineer = "ENGINEER";
 
         /// <summary>Grades per lane; also the deepest the board ever gets.</summary>
-        public const int MaximumDepth = 5;
+        public const int MaximumDepth = 6;
 
         /// <summary>Tolls a career may hold. One per lane, so this is also the lane cap.</summary>
         public const int AuthorisationLimit = 2;
@@ -107,45 +107,54 @@ namespace BoscaliSummer.Features.Progression.Runtime
                 "12% more allocation from combat rewards.", PerkEffect.CombatReward, 1.12f, "combat"),
             new PerkDefinition(4, Strike, 5, "Strike Schedule",
                 "20% cheaper support requests.", PerkEffect.SupportCost, 0.80f, "logistics"),
+            new PerkDefinition(5, Strike, 6, "Time on Target",
+                "15% faster support re-tasking.", PerkEffect.SupportCooldown, 0.85f, "logistics"),
 
-            new PerkDefinition(5, Recon, 1, "Recon Qualification",
+            new PerkDefinition(6, Recon, 1, "Recon Qualification",
                 "Authorises satellite reconnaissance sweeps.", SupportCapabilities.Recon, "recon"),
-            new PerkDefinition(6, Recon, 2, "Lean Cruise",
+            new PerkDefinition(7, Recon, 2, "Lean Cruise",
                 "5% lower fuel consumption.", PerkEffect.FuelUse, 0.95f, "fuel"),
-            new PerkDefinition(7, Recon, 3, "Surveillance Loop",
+            new PerkDefinition(8, Recon, 3, "Surveillance Loop",
                 "15% more allocation from captures and pilot rescue.",
                 PerkEffect.ObjectiveReward, 1.15f, "objective"),
-            new PerkDefinition(8, Recon, 4, "Extended Patrol",
+            new PerkDefinition(9, Recon, 4, "Extended Patrol",
                 "8% lower fuel consumption.", PerkEffect.FuelUse, 0.92f, "fuel"),
-            new PerkDefinition(9, Recon, 5, "Eyes On",
+            new PerkDefinition(10, Recon, 5, "Eyes On",
                 "20% faster support re-tasking.", PerkEffect.SupportCooldown, 0.80f, "logistics"),
+            new PerkDefinition(11, Recon, 6, "Pathfinder",
+                "15% cheaper support requests.", PerkEffect.SupportCost, 0.85f, "logistics"),
 
-            new PerkDefinition(10, Signals, 1, "Signals Qualification",
+            new PerkDefinition(12, Signals, 1, "Signals Qualification",
                 "Authorises EMP and radar-disruption strikes from an EW satellite.",
                 SupportCapabilities.Emp, "ew"),
-            new PerkDefinition(11, Signals, 2, "Signal Discipline",
+            new PerkDefinition(13, Signals, 2, "Signal Discipline",
                 "10% cheaper support requests.", PerkEffect.SupportCost, 0.90f, "logistics"),
-            new PerkDefinition(12, Signals, 3, "Escort Duty",
+            new PerkDefinition(14, Signals, 3, "Escort Duty",
                 "15% more allocation from combat rewards.", PerkEffect.CombatReward, 1.15f, "combat"),
-            new PerkDefinition(13, Signals, 4, "Spectrum Overdrive",
+            new PerkDefinition(15, Signals, 4, "Spectrum Overdrive",
                 "25% stronger EMP shock.", PerkEffect.SupportEffectScale, 1.25f, "ew"),
-            new PerkDefinition(14, Signals, 5, "Blackout Tempo",
+            new PerkDefinition(16, Signals, 5, "Blackout Tempo",
                 "20% faster support re-tasking.", PerkEffect.SupportCooldown, 0.80f, "logistics"),
+            new PerkDefinition(17, Signals, 6, "Full Spectrum",
+                "35% stronger EMP shock.", PerkEffect.SupportEffectScale, 1.35f, "ew"),
 
-            new PerkDefinition(15, Engineer, 1, "Engineer Qualification",
+            new PerkDefinition(18, Engineer, 1, "Engineer Qualification",
                 "Authorises controlled-zone fortification.",
                 SupportCapabilities.Fortify, "fortify"),
-            new PerkDefinition(16, Engineer, 2, "Ground Crew",
+            new PerkDefinition(19, Engineer, 2, "Ground Crew",
                 "20% more allocation from supply, refuel and repair.",
                 PerkEffect.ServiceReward, 1.20f, "ground"),
-            new PerkDefinition(17, Engineer, 3, "Field Refit",
+            new PerkDefinition(20, Engineer, 3, "Field Refit",
                 "10% more allocation from supply, refuel and repair.",
                 PerkEffect.ServiceReward, 1.10f, "ground"),
-            new PerkDefinition(18, Engineer, 4, "Zone Control",
+            new PerkDefinition(21, Engineer, 4, "Zone Control",
                 "15% more allocation from captures and pilot rescue.",
                 PerkEffect.ObjectiveReward, 1.15f, "objective"),
-            new PerkDefinition(19, Engineer, 5, "Bastion Doctrine",
-                "20% cheaper support requests.", PerkEffect.SupportCost, 0.80f, "logistics")
+            new PerkDefinition(22, Engineer, 5, "Bastion Doctrine",
+                "20% cheaper support requests.", PerkEffect.SupportCost, 0.80f, "logistics"),
+            new PerkDefinition(23, Engineer, 6, "Depot Network",
+                "25% more allocation from supply, refuel and repair.",
+                PerkEffect.ServiceReward, 1.25f, "ground")
         };
 
         /// <summary>
@@ -168,6 +177,32 @@ namespace BoscaliSummer.Features.Progression.Runtime
             return "AUT";
         }
 
+        /// <summary>
+        /// Short label for what a passive grade buys, sized for one board cell: "+15% COMBAT",
+        /// "-10% COOLDOWN". A tool grants an authorisation instead of a multiplier, so it has no
+        /// label and the panel names the tool's state instead. Pure, so the board's copy is
+        /// testable without the game.
+        /// </summary>
+        public static string EffectLabel(byte id)
+        {
+            if (!IsDefined(id)) return string.Empty;
+            PerkDefinition definition = All[id];
+            if (definition.IsTool) return string.Empty;
+
+            int percent = (int)Math.Round(Math.Abs(definition.Multiplier - 1f) * 100f);
+            switch (definition.Effect)
+            {
+                case PerkEffect.CombatReward: return "+" + percent + "% COMBAT";
+                case PerkEffect.ServiceReward: return "+" + percent + "% SERVICE";
+                case PerkEffect.ObjectiveReward: return "+" + percent + "% CAPTURE";
+                case PerkEffect.FuelUse: return "-" + percent + "% FUEL";
+                case PerkEffect.SupportCost: return "-" + percent + "% PRICE";
+                case PerkEffect.SupportCooldown: return "-" + percent + "% COOLDOWN";
+                case PerkEffect.SupportEffectScale: return "+" + percent + "% EMP";
+                default: return string.Empty;
+            }
+        }
+
         public static bool IsDefined(byte id) => id < All.Length;
 
         public static PerkDefinition Get(byte id)
@@ -182,7 +217,7 @@ namespace BoscaliSummer.Features.Progression.Runtime
     {
         /// <summary>
         /// One pick per qualification grade. Grade <c>n</c> costs <c>n × scorePerPoint</c>,
-        /// so grades get longer as they get better: grade 1 lands early, the grade-5
+        /// so grades get longer as they get better: grade 1 lands early, the grade-6
         /// capstone needs the long sortie. Aces pay bonus picks on top of the ladder.
         /// </summary>
         public static int Earned(int score, int scorePerPoint, int maximumPoints)
