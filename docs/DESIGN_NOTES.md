@@ -347,6 +347,27 @@ Decisions that cost an argument. Kept so they are not made again the other way.
   buffer's end. All three survived the pure tests because each one needs the game's own
   geometry — a kilometre field, a real trace length, a second window — which is why the Unity
   harness now plans a second window and a quantized cell field.
+- **An LOD distance is not a plain subtraction: the camera is local, the line is global.** The
+  first flight-LOD build culled every earthwork at every distance, and a live chunk proved it —
+  `currentLod = 3` with all three LOD roots off and "camera distance 14.6km" logged while the
+  player stood beside the ditch. The cause is the game's floating origin: `line.Center` is a
+  `GlobalPosition` (terrain probes return global) while `Camera.main.transform.position` is a
+  local transform, so the subtraction measured the origin offset, not the earthwork — the mid
+  LODs and the far silhouette never had a chance to be seen. The distance now converts one side
+  into the other's frame first. The same read hid a second defect: a failed ground probe fell
+  back to y=0, which buries a ring under the terrain and spikes the mesh into a wall, so the
+  fallback is now the curve's own planned height.
+- **A placement query that counts the ground as an obstacle refuses every real site.** Two out
+  of three positions in a live session were rejected with the same message ("native MG
+  definition, clear footprint or spawn unavailable"), and the culprit was `Physics.CheckBox` on
+  `DefaultRaycastLayers`: on any real slope the nest volume clips the terrain surface, and the
+  terrain sits on those layers. Ground is what the nest stands on; the overlap query now skips
+  colliders carrying `GameAssets.i.terrainMaterial` and keeps refusing anything solid. The same
+  session showed the other half of the problem: establishment demanded both opening MG teams and
+  threw away the whole dug position when one bay was blocked, and works resolved from the static
+  `Encyclopedia.Lookup` dictionary, which that host never populated — the catalog now comes from
+  the encyclopedia instance's own lists, and every refusal names its cause in the log so the next
+  session does not need a code read to know what happened.
 - **A far LOD keeps a silhouette, never a ground scar.** The first LODs flattened the
   earthwork to a 10cm ribbon beyond 1.2km and culled it entirely at 3.5km, which is exactly
   the range band a player flies in — so a fully built front was invisible from the air. Every
@@ -448,12 +469,32 @@ Decisions that cost an argument. Kept so they are not made again the other way.
   dossier pages asked for: a form number, a photo with a reference, key/value fields with
   leader dots the way a form draws them, a rubber-stamped disposition tilted a few degrees,
   and redaction bars instead of a service record while local intel has not confirmed an enemy
-  post. The card is laid out against the text it actually holds and its frame follows the
-  record's height, because the fixed-height card was what clipped `THEATER COMMANDER` and the
-  bonus line in the first place: a form that cuts off its own entry has stopped being a form.
-  HOI4's chain-of-command window is still the reference for the hierarchy, not for its verb
-  set: hierarchy first, one selected leader, everything about them on one sheet, nothing to
-  press.
+  post. The card is laid out against the text it actually holds, and the frame then runs to the
+  column's bottom, because the fixed-height card was what clipped `THEATER COMMANDER` and the
+  bonus line in the first place and a content-sized one left a short card floating over blank
+  panel: a form that cuts off its own entry has stopped being a form, and a sheet that stops
+  mid-air has stopped being a sheet. HOI4's chain-of-command window is still the reference for
+  the hierarchy, not for its verb set: hierarchy first, one selected leader, everything about
+  them on one sheet, nothing to press.
+- **Two toolkit bugs the COC page walked into, and they were not the page's.** The visual audit
+  that followed ("UI still looks glitched and buggy") put the page in front of a camera rather
+  than in front of the user - `Run-CocUnityCheck.ps1` builds the real page with stub commanders
+  and renders it - and the render showed the faults as they are:
+  `AvStyled.Midline` mapped every alignment other than `Right` and `Center` to the left edge, so
+  every label that asked for `MidlineRight` (`FORM CC-2`, the SA page's key/value figures, the
+  staff log's age column) was silently left-aligned; on the card that printed the form number
+  over `PERSONNEL FILE`, and it is why the log read `1mSTIPEND PAID`. The mapping now keeps the
+  horizontal alignment and only drops the vertical one. `AvKit.ProgressBar` returns the *fill*
+  while the track and its outline are siblings placed from the build-time area, so a caller that
+  re-placed the returned image in `Bind` left the track's outline floating on the row's header
+  line as the dotted artefact in the screenshot; the row now builds its meter where it belongs
+  and the API says what it returns. Both fixes are in the shared toolkit for every panel's sake.
+  The page itself also stopped putting the side switch on the header line (it sat on the card's
+  form header), keeps `STAFF SHARE` from being ellipsised by its own key column, prettifies the
+  wire's base identifiers (`enemy_airbase_icaria` -> `ENEMY AIRBASE ICARIA`) and lets a long
+  name autosize instead of clipping. The row no longer tries to state the bonus as well as the
+  office: at 144 px the pair always ended in an ellipsis, so it stated neither; the bonus rides
+  the card and the row's tooltip.
 - **A post under fire is a state, not an event.** `RecordDamage` already watches every
   command asset; it now stamps a short alert window on the slot (and one log line at the
   edge), which the row and card render as UNDER FIRE. The strike that follows is the same

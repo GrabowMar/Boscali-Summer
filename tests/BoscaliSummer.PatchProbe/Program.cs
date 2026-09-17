@@ -272,11 +272,29 @@ if (levelInfo.GetProperty("LoadedMapSettings", AllMembers) == null)
     throw new MissingMemberException("LevelInfo.LoadedMapSettings");
 
 // Contract markers are drawn by the mod, so the game side of that is only read: the map's
-// objective layer toggle and the map's own world-to-map scale.
+// objective layer toggle and the map's own world-to-map scale, and the style source every
+// marker copies (prefab-fed sprites, the HUD label font, the theme palette, the unit system).
 if (gameAssembly.GetType("MapOptions", true)!.GetField("showObjectives", AllMembers) == null)
     throw new MissingFieldException("MapOptions.showObjectives");
 if (gameAssembly.GetType("DynamicMap", true)!.GetField("mapDisplayFactor", AllMembers) == null)
     throw new MissingFieldException("DynamicMap.mapDisplayFactor");
+if (gameAssembly.GetType("ObjectiveOverlayManager", true)!.GetField("overlayPrefab", AllMembers) == null)
+    throw new MissingFieldException("ObjectiveOverlayManager.overlayPrefab");
+if (gameAssembly.GetType("ObjectiveMarkerManager", true)!.GetField("markerPrefab", AllMembers) == null)
+    throw new MissingFieldException("ObjectiveMarkerManager.markerPrefab");
+Type objectiveMarker = gameAssembly.GetType("ObjectiveMarker", true)!;
+foreach (string sprite in new[] { "destroyObjective", "waypointObjective", "captureObjective", "reconObjective" })
+    if (objectiveMarker.GetField(sprite, AllMembers) == null)
+        throw new MissingFieldException("ObjectiveMarker." + sprite);
+if (gameAssembly.GetType("GameAssets", true)!.GetField("exclusionZoneDisplay", AllMembers) == null)
+    throw new MissingFieldException("GameAssets.exclusionZoneDisplay");
+Type themeManager = gameAssembly.GetType("NuclearOption.UIStyleSystem.ThemeManager", true)!;
+if (themeManager.GetProperty("Active", AllMembers) == null)
+    throw new MissingMemberException("ThemeManager.Active");
+if (gameAssembly.GetType("PlayerSettings", true)!.GetField("overlayTextSize", AllMembers) == null)
+    throw new MissingFieldException("PlayerSettings.overlayTextSize");
+if (gameAssembly.GetType("PlayerSettings", true)!.GetField("unitSystem", AllMembers) == null)
+    throw new MissingFieldException("PlayerSettings.unitSystem");
 
 string[] patchTypes =
 {
@@ -606,7 +624,9 @@ RequireMetadataSignature(Path.Combine(managedDir, "Mirage.dll"), "Mirage.ServerO
     ("GameAssets", "terrainMaterial", "UnityEngine.PhysicMaterial"),
     ("PhysicsLayers", "StaticsMask", "UnityEngine.LayerMask"),
     ("Encyclopedia", "vehicles", "System.Collections.Generic.List`1<VehicleDefinition>"),
-    ("Encyclopedia", "buildings", "System.Collections.Generic.List`1<BuildingDefinition>")
+    ("Encyclopedia", "buildings", "System.Collections.Generic.List`1<BuildingDefinition>"),
+    ("Encyclopedia", "scenery", "System.Collections.Generic.List`1<SceneryDefinition>"),
+    ("Encyclopedia", "otherUnits", "System.Collections.Generic.List`1<UnitDefinition>")
     ,("PersistentUnit", "player", "NuclearOption.Networking.Player")
     ,("Pilot", "dead", "System.Boolean")
     ,("Pilot", "ejected", "System.Boolean")
@@ -625,8 +645,9 @@ foreach (string type in new[] {
     "BoscaliSummer.Features.DynamicOperations.DynamicOperationsFeature",
     "BoscaliSummer.Features.DynamicOperations.Runtime.OperationsManager",
     "BoscaliSummer.Features.DynamicOperations.Runtime.OperationRewards",
-    "BoscaliSummer.Features.DynamicOperations.Runtime.ContractPlate",
+    "BoscaliSummer.Features.DynamicOperations.Runtime.ContractMarker",
     "BoscaliSummer.Features.DynamicOperations.Runtime.ContractHud",
+    "BoscaliSummer.Features.DynamicOperations.Runtime.ContractMapTag",
     "BoscaliSummer.Features.DynamicOperations.Runtime.ContractMapHud",
     "BoscaliSummer.Features.DynamicOperations.Runtime.OperationZoneHud",
     "BoscaliSummer.Features.DynamicOperations.Networking.OperationsNet" })

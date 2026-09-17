@@ -19,12 +19,13 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         internal const int MaximumWorks = 8;
         private const float MaximumFootprint = 6f;
         private const int CatalogCeiling = 4;
+        private const int NearMissCeiling = 10;
 
         private static readonly string[] Keywords = { "hesco", "sandbag", "gabion", "dugout" };
         private static readonly string[] Excluded = { "hulldown", "shelter", "concrete", "camonet", "wall" };
 
         private static List<UnitDefinition> catalog;
-        private static Dictionary<string, UnitDefinition> catalogSource;
+        private static Encyclopedia catalogSource;
         private static bool catalogReported;
 
         private readonly Scenery[] works = new Scenery[MaximumWorks];
@@ -94,21 +95,17 @@ namespace BoscaliSummer.Features.Trenches.Runtime
 
         private static List<UnitDefinition> ResolveCatalog()
         {
-            var lookup = Encyclopedia.Lookup;
-            if (lookup == null) return null;
-            if (catalog != null && ReferenceEquals(catalogSource, lookup)) return catalog;
+            // The static Lookup dictionary is not populated on every host; the instance lists
+            // are, once the encyclopedia has loaded. Null still means "not loaded yet: retry".
+            Encyclopedia encyclopedia = Encyclopedia.i;
+            if (encyclopedia == null) return null;
+            if (catalog != null && ReferenceEquals(catalogSource, encyclopedia)) return catalog;
 
-            catalogSource = lookup;
+            catalogSource = encyclopedia;
             catalog = new List<UnitDefinition>(CatalogCeiling);
-            int examined = 0;
-            foreach (var pair in lookup)
-            {
-                if (++examined > 4096) break;
-                UnitDefinition definition = pair.Value;
-                if (definition?.unitPrefab == null || definition.unitPrefab.GetComponent<Scenery>() == null) continue;
-                if (!IsInfantryPiece(pair.Key) || Footprint(definition) > MaximumFootprint) continue;
-                catalog.Add(definition);
-            }
+            var nearMiss = new List<string>(NearMissCeiling);
+            int examined = Scan(encyclopedia.scenery, nearMiss, 0);
+            Scan(encyclopedia.otherUnits, nearMiss, examined);
             catalog.Sort((a, b) => Footprint(a).CompareTo(Footprint(b)));
             if (catalog.Count > CatalogCeiling) catalog.RemoveRange(CatalogCeiling, catalog.Count - CatalogCeiling);
             if (!catalogReported)
@@ -119,22 +116,53 @@ namespace BoscaliSummer.Features.Trenches.Runtime
                 else
                     Debug.Log("[TrenchWorks] Infantry works: " + string.Join(", ",
                         catalog.ConvertAll(d => d.jsonKey + " (" + Footprint(d).ToString("0.0") + "m)").ToArray()));
+                // Bounded evidence for widening the keyword list when nothing matched.
+                if (nearMiss.Count > 0)
+                    Debug.LogWarning("[TrenchWorks] Scenery near-miss (keyword or exclusion rejected): " +
+                        string.Join(", ", nearMiss.ToArray()));
             }
             return catalog;
         }
 
-        private static bool IsInfantryPiece(string key)
+        /// <summary>
+        /// One pass over a definition list: root-scenery pieces within the footprint enter
+        /// the catalog; keyword or exclusion near-misses are remembered (bounded) as
+        /// evidence for widening the keyword list. <paramref name="examined"/> is carried
+        /// across lists so the total scan stays under the shared ceiling.
+        /// </summary>
+        private static int Scan(IReadOnlyList<UnitDefinition> source, List<string> nearMiss, int examined)
         {
-            if (string.IsNullOrEmpty(key)) return false;
-            string lower = key.ToLowerInvariant();
+            if (source == null) return examined;
+            for (int i = 0; i < source.Count && examined < 4096; i++, examined++)
+            {
+                UnitDefinition definition = source[i];
+                if (definition?.unitPrefab == null || definition.unitPrefab.GetComponent<Scenery>() == null) continue;
+                if (Footprint(definition) > MaximumFootprint) continue;
+                if (!IsInfantryPiece(definition))
+                {
+                    if (nearMiss.Count < NearMissCeiling)
+                        nearMiss.Add((definition.jsonKey ?? "?") + " \"" + (definition.unitName ?? "?") + "\"");
+                    continue;
+                }
+                catalog.Add(definition);
+            }
+            return examined;
+        }
+
+        private static bool IsInfantryPiece(UnitDefinition definition)
+        {
+            string key = definition.jsonKey?.ToLowerInvariant();
+            string name = definition.unitName?.ToLowerInvariant();
             bool matched = false;
             for (int i = 0; i < Keywords.Length; i++)
-                if (lower.Contains(Keywords[i])) { matched = true; break; }
+                if (Has(key, Keywords[i]) || Has(name, Keywords[i])) { matched = true; break; }
             if (!matched) return false;
             for (int i = 0; i < Excluded.Length; i++)
-                if (lower.Contains(Excluded[i])) return false;
+                if (Has(key, Excluded[i]) || Has(name, Excluded[i])) return false;
             return true;
         }
+
+        private static bool Has(string lowered, string token) => lowered != null && lowered.Contains(token);
 
         private static float Footprint(UnitDefinition definition)
             => Mathf.Max(Mathf.Abs(definition.width), Mathf.Max(Mathf.Abs(definition.length), Mathf.Abs(definition.height)));

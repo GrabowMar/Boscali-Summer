@@ -46,6 +46,7 @@ namespace BoscaliSummer.Features.Trenches.Visuals
         public Vector3 WorldCenter => line != null ? line.Center : transform.position;
         public string EarthMaterial { get; private set; }
         public int MeshCount => proceduralMeshes.Count;
+        public int ActiveLod => currentLod;
 
         public void Initialize(TrenchLine position)
         {
@@ -180,7 +181,13 @@ namespace BoscaliSummer.Features.Trenches.Visuals
             if (count < 2) return null;
             var path = new Vector3[count];
             for (int i = 0; i < count; i++)
-                path[i] = TrenchTerrain.SnapToGround(new Vector3(pathX[i], 0f, pathZ[i]));
+            {
+                // A missed or refused ground probe keeps the curve's own height (planned from
+                // successful probes): falling back to y=0 buries the ring under the terrain
+                // and spikes the mesh wherever the ray hits water, a tree or a building first.
+                int curveIndex = Mathf.RoundToInt((float)i / (count - 1) * (curve.Length - 1));
+                path[i] = TrenchTerrain.SnapToGround(new Vector3(pathX[i], curve[curveIndex].y, pathZ[i]));
+            }
             return path;
         }
 
@@ -275,16 +282,21 @@ namespace BoscaliSummer.Features.Trenches.Visuals
 
         private void UpdateLod(bool force)
         {
-            Camera cam = Camera.main;
+            // The distance test must run in one coordinate frame. A line's centre is global
+            // (terrain probes return GlobalPosition) while the camera is local, so comparing
+            // them raw measures the floating origin, not the chunk: every built earthwork
+            // reads as tens of kilometres away and sits at LOD3 — fully culled — forever.
+            CameraStateManager view = SceneSingleton<CameraStateManager>.i;
+            Camera cam = view != null && view.mainCamera != null ? view.mainCamera : Camera.main;
             if (cam == null && Camera.allCamerasCount > 0)
             {
                 cam = Camera.allCameras[0];
             }
             if (cam == null) return;
 
-            Vector3 camPos = cam.transform.position;
             Vector3 center = WorldCenter;
-            float dist = Vector3.Distance(camPos, center);
+            Vector3 centerLocal = new GlobalPosition(center.x, center.y, center.z).ToLocalPosition();
+            float dist = Vector3.Distance(cam.transform.position, centerLocal);
             CameraDistance = dist;
 
             int newLod;

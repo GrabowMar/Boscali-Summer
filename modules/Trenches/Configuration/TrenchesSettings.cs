@@ -37,6 +37,13 @@ namespace BoscaliSummer.Features.Trenches.Configuration
                     "earthwork silhouettes, so a front still reads from cruise altitude.",
                     new AcceptableValueRange<float>(3000f, 24000f)));
 
+            // The first flight-LOD release shipped 250/3500 before the far silhouette existed,
+            // and a config file written then keeps those values forever. Bump a value that is
+            // still exactly the old default (nobody hand-picked those) so an existing install
+            // reads the front from cruise altitude without editing the file.
+            if (UnityEngine.Mathf.Approximately(LODDistanceNear.Value, 250f)) LODDistanceNear.Value = 600f;
+            if (UnityEngine.Mathf.Approximately(LODDistanceFar.Value, 3500f)) LODDistanceFar.Value = 12000f;
+
             ShowOnTacticalMap = config.Bind("Trenches", "ShowOnTacticalMap", true,
                 "Display NATO APP-6 crenellated entrenchment marks and strongpoints on the theater map.");
         }

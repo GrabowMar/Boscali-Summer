@@ -1,88 +1,151 @@
-# Secondary contract markers — map, cockpit, vicinity
+# Secondary contract markers — map, cockpit, vicinity (vanilla+)
 
-Status: implemented; in-game visual acceptance pending.
-Date: 2026-09-16. Owner: DynamicOperations. Platform: Nuclear Option tactical map and cockpit.
-Design authority: the user's remake request ("vanilla GUI + WMC squadron GUI") and the
-follow-up that the first, vanilla-borrowing attempt was buggy and the vicinity card never
-appeared. Method: Game Studios quick-design structure, UI/UX Pro Max status-word rule,
-Ponytail reuse of the native marker objects and the shared avionics kit.
+Status: redesign in progress. Supersedes the "own plates/rings/rails" version.
+Date: 2026-09-17. Owner: DynamicOperations. Platform: Nuclear Option tactical map and cockpit.
+Design authority: the user's verdict that the plate/ring/card version was "very off and ugly",
+and the instruction to look like vanilla while staying slightly distinctive.
 
-## Why the first attempt was thrown away
+## Rule zero
 
-The first version fed synthetic objectives into `MissionPosition.GetAllPositionsResults` and
-then restyled what vanilla drew with it: a patch on `ObjectiveMarker.UpdateMarker`, another on
-`ObjectiveMarker.Show`, a third on `ObjectiveOverlay.UpdateOverlay`, plus reflected access to
-two private label fields and extra child objects hanging off vanilla's pooled markers.
+Every visual fact comes from the vanilla objects themselves, read **read-only** at runtime
+(`Infrastructure/GameInterop/VanillaHudStyle.cs`) and cached per scene. Never write to, patch,
+re-parent, disable or otherwise touch a vanilla marker, overlay, label or material. Never
+hardcode a font, sprite or colour that vanilla can supply — custom themes and user options
+exist. Geometry that vanilla computes (ring size, ring alpha, label glide and anti-overlap) is
+re-implemented with vanilla's own numbers and constants, spelled out below.
 
-Everything that was reported as buggy came from that seam:
+## Vanilla facts we imitate (measured, decompiled + prefab-read)
 
-- a marker is a *pooled* object handed to whichever objective lands on its index, so a
-  contract's plate could survive onto an authored objective, and the icon sizes (20 px vs
-  40 px) change under a plate built for the other size;
-- the label is vanilla's private legacy `Text`; the cockpit label is moved every frame by
-  vanilla's anti-overlap nudger, so a two-line replacement inherits its jitter;
-- hiding a marker only disables vanilla's own two graphics, so the plate had to be hidden by
-  a patch on `Show` as well — three patches and two reflected fields to draw a label;
-- the vicinity card only looked at contracts with an area *and* inside a band a few
-  kilometres wide, so a contract 3.8 km away — or a point contract at any range — never
-  appeared at all.
+Cockpit (`ObjectiveOverlay`, 3 nearest objectives, global namespace):
 
-The mod now draws its contract markers itself. No vanilla marker, overlay, label field or
-`MissionPosition` query is involved, patched or fed, and the whole presentation comes from the
-snapshot the board already publishes.
+| Element | Vanilla value |
+|---|---|
+| pointer | `arrowOutline` sprite, 25×25, anchors/pivot (0.5, 1), local y −0.8, colour = HUD main colour (#00FF00 α 0.8) |
+| dot | `CircleVeryThick` sprite, 10×10, same colour; shown instead of the pointer when the target is within 10° of the nose |
+| area ring | `waypointSizeIndicator` sprite in a 20×20 rect, colour #00FF00 α 0.8, `localScale = canvasHeight / 20 / tan(fovY/2) · radius / distance`, alpha `clamp01(radius · 20 / distance − 0.5)`, rotation `Euler(0,0,−camera.eulerAngles.z)`, hidden while the marker is clamped to the frame edge |
+| label | TMP `Brass Mono Regular` (+ its shared material), size = `PlayerSettings.overlayTextSize` (default 32), colour #00FF00 α 0.8, text `DisplayName + " " + UnitConverter.DistanceReading(range)` |
+| label motion | lerps 20 % per frame toward its anchor (`textLerp` 0.2); two labels closer than 50 px push apart at `(1000, 300)` px/s along the normalised delta (with `dy += 5` when `dy < 0.1`), and the nudge offset decays ×0.8 per frame |
+| pointer rotation | `atan2(dy, dx) · Rad2Deg − 90°` |
 
-## One vocabulary
+Distance reading (`UnitConverter.DistanceReading`): metric → `>10000` ⇒ `{km:F0}km`, `>1000` ⇒
+`{km:F1}km`, else `{m:F0}m`; imperial → `{yd:F0}yd` below 1000 (m × 1.09361), else
+`{nm:F1}nm` (m × 0.000539957). No space in front of the unit, no group separators.
 
-`FAMILY · DISTANCE · CLOCK`, plus state on colour and in words (UI/UX Pro Max rule: colour is
-never the only carrier). Fifteen seconds of copy: title line `#5 SURVEY THE AFTERMATH`, detail
-line `RECON · 20.4 KM TO AREA · T-2:41`, inside the area `RECON · HOLD 42% · T-2:41`, a return
-phase `RECON · LAND TO DELIVER · T-2:41`.
+Map (`ObjectiveMarker : MapMarker`, parented under `DynamicMap.iconLayer`):
 
-Tone: `RETURN` phases are green (`RailReady`), a clock at or under two minutes is amber
-(`RailCaution`), everything else is cyan (`RailInfo`). Vanilla's own rails, no new colours.
+| Element | Vanilla value |
+|---|---|
+| icon | `Image` with the family sprite (see below), `sizeDelta` 20×20 for waypoint/destroy, 40×40 for recon/capture, colour white |
+| label | legacy `Text` with font `regular`, 24 px, white, `MiddleCenter`, offset `(0, size)` in marker-root space (so 20 or 40 px above the icon), text `DisplayName` |
+| transform | `localPosition = worldXZ · DynamicMap.mapDisplayFactor`, `localScale = 1 / mapImage.transform.localScale.x` (constant screen size) |
+| duplicate masking | only two markers of the *same* objective within 40 screen px are masked (icon ×0.5 RGB @ α0.5, label off); one contract is one tag, so contracts are never masked |
+| family sprites | `waypointObjective` (`waypointObjMarker`), `destroyObjective` (`steerpointMarker`), `reconObjective` (`targetLockOld`), `captureObjective` (`circleDot`) |
+| toggle | all hidden while `MapOptions.showObjectives` is false |
 
-## Cockpit markers (`ContractHud`)
+Vanilla draws **no** area ring for objectives on the map. Vanilla *does* draw radius rings on
+the map for nuclear exclusion zones (`GameAssets.exclusionZoneDisplay` instantiated under
+`iconLayer` with `localScale = radius · mapDisplayFactor`), so an area circle sprite scaled by
+`radius · mapDisplayFactor` is a vanilla-consistent idiom.
 
-One marker per accepted, located contract, projected through the game camera each frame:
+There is **no vanilla proximity popup** for objectives: the closest analogue is the HUD cargo
+panel (`HUDCargoState.CapturePanel`, `Background` 9-slice frame, a 244×8.6 bar, TMP title,
+CanvasGroup fade at 2 alpha/s) and the MFD `MIS` objective list. The vicinity card therefore
+copies the HUD-text idiom (vanilla font, vanilla colour, thin bar, no chrome), not a box.
 
-- **On screen** — a pointer on the target's own point, turning toward it, with the two-line
-  plate above it (`FontSmall` bold title, `FontMicro` tone detail).
-- **Off screen** — the same marker clamped to the frame edge (170 px in from the sides, 130 px
-  from top and bottom, so it clears the compass tape and the instruments) with the bearing
-  taken from the camera-space direction, so a target behind the aircraft still points the
-  right way and keeps its distance on screen.
-- **Area** — a dotted ring (24 dots) at the contract's radius, sized with
-  `viewport height / (2 · distance · tan(fov/2))` — the same relation the vanilla area ring
-  uses, so a mod area matches a vanilla area drawn beside it. The ring is dropped when it is
-  smaller than 16 px or larger than 2600 px (degenerate projections).
-- Hidden while the tactical map is maximized, with no live aircraft, or when no contract has a
-  position.
+## One vocabulary (unchanged)
 
-## Map markers (`ContractMapHud`)
+`FAMILY · DISTANCE · CLOCK` on the detail line, title line `#9 BREAK ENEMY PRESSURE`,
+`16km` (past 10 km, no decimal), `9.4km` (a kilometre to ten), `842m`, `26.0nm` formatted exactly like vanilla (metric/imperial from
+`PlayerSettings.unitSystem`, never grouped digits). Colour is never the only carrier: the
+clock, the hold percentage and `CONTACT LOST` all print.
 
-The same plates, parented to `DynamicMap.mapImage` so they pan and zoom with the map: plates
-counter-scale by `1 / zoom` to keep a constant screen size, the dot ring scales with the map
-(`radius × mapDisplayFactor`), and the whole layer hides while the map's own objective layer
-(`MapOptions.showObjectives`) is switched off. The layer re-parents itself if the map is
-rebuilt.
+Tone (all vanilla theme colours, read live via `ThemeManager.Active.ColorTheme`):
+
+| Tone | When | Colour |
+|---|---|---|
+| normal | clock > 120 s or none | `AllClear` (#00FF00) — identical to a vanilla marker |
+| caution | clock ≤ 120 s | `Warning` (#FFFF00) |
+| lost | host lost the contact | `Alert` (#FF0000) |
+
+The icon/ring itself stays `AllClear` (vanilla-identical) for a located contract; tone shows on
+the detail line and the card bar. A lost contact has no position: it is listed in the card,
+never drawn.
+
+Distinctive, minimally: the `#N` number prefix on both surfaces and the second line
+(`STRIKE · 9.4km · T-2:41`) under the cockpit label. Nothing else deviates from vanilla.
+
+## Cockpit marker (`ContractMarker.cs`, managed by `ContractHud`)
+
+One widget pool per scene, ≤3 (the board's card ceiling), fixed hierarchy:
+`root → pointer(25×25) / dot(10×10) / ring(20×20) / label(TMP, 2 lines)`.
+
+- Projection and clamping: keep the existing `ContractMarkerMath` behaviour — in front of the
+  camera the target's own point; behind or off screen, the bearing-mirrored point on the frame
+  edge (`EdgeMarginX/Y` 170/130 px) and no ring. Never hide a located contract for being
+  off screen.
+- Pointer/dot switch at 10° from the camera forward axis (`Vector3.Angle(camera.forward, dir)`),
+  with `dir` measured from the *aircraft* as vanilla does — not the screen-centre offset. The
+  pointer's angle is taken before the edge clamp, so a marker pinned to the frame edge still
+  points at its target; ring and label distances read from the aircraft for the same reason.
+- Ring: vanilla formula above, using `canvasRect.rect.height` as `canvasHeight`, drawn only
+  when not clamped and the pixel diameter is 16..2600 px, roll-locked to the camera.
+- Label: two stacked TMP labels (title above detail; both the vanilla font and shared material,
+  detail at `0.66 ×` size in the tone colour), one block, pivot (0, 0.5), anchored 18 px to the
+  right of the marker point and vertically centred; the block flips to the left of the point
+  when it would cross `halfWidth`, and the rect width follows the text. Text is cached and only
+  rewritten when it changes.
+- Label motion: vanilla's glide + anti-overlap nudge (numbers above) applied to the label
+  position only — the icons stay glued to their projected points. The separation test uses the
+  labels' anchors, not their drifting points, and pushes *both* labels apart like vanilla's own
+  manager, so a pair cannot pump in and out of range. This is what stops the unreadable
+  stacking the user screenshotted.
+- Hidden entirely while `DynamicMap.mapMaximized`, with no local aircraft, ejected/disabled, or
+  when no contract has a position.
+
+## Map markers (`ContractMapTag.cs`, managed by `ContractMapHud`)
+
+Parented to `DynamicMap.mapImage` (re-parent if the map is rebuilt), hidden while
+`MapOptions.showObjectives` is false, empty, or the map is closed. Icon rect 20×20 (waypoint /
+destroy families) or 40×40 (recon / capture), counter-scaled `1 / zoom` at the tag root,
+positioned `worldXZ · mapDisplayFactor`. Label is a legacy `Text` in the vanilla map font
+(24 px, white, `MiddleCenter`) at offset `(0, iconSize)`; its text is `#N NAME`. Tone tints
+only the detail-less label of a caution contract and the area ring:
+
+- area ring: `waypointSizeIndicator`-style circle sprite, rect `2 · radius · mapDisplayFactor`
+  square, colour `AllClear` @ α 0.35 (tone when caution), skipped below 24 px.
+- no masking: vanilla's 40 px mask exists for two markers of the *same* objective, and one
+  contract is always one tag, so two nearby contracts stay fully drawn, exactly as vanilla
+  draws two distinct objectives side by side.
 
 ## Vicinity card (`OperationZoneHud`)
 
-A squadron-style card (3 px tone rail, `#5 SURVEY THE AFTERMATH`, family/distance/hold/clock,
-5 px bar) listing at most three contracts:
+Vanilla HUD text, no panel chrome, right-centre of the screen (clear of the message log, ammo
+block, throttle scale and compass tape): anchored `(1, 0.5)`, pivot `(1, 0.5)`, offset
+(−28, 60). Own overlay canvas, `sortingOrder` 1 (above `HUDCanvas` 0, below the map's 2),
+`CanvasScaler` 1920×1080 with `ScreenMatchMode.MatchWidthOrHeight`, match 1 — vanilla's own
+scaler, so a 32 px label is 32 px in vanilla terms.
 
-- inside your area first, then the nearest marked contract, then anything whose contact the
-  host lost — that last one is never dropped, because a lost contact is exactly what the pilot
-  needs to read;
-- a contract appears when it is inside `radius + max(4·radius, 20 km)`, so a contract 20 km out
-  is listed rather than only in the last few seconds of the approach;
-- the bar closes on the area edge and then carries the hold itself;
-- entering and leaving an area raises a banner that fades in 0.14 s and out 0.24 s.
+- header line `2 ACTIVE CONTRACTS` @ `0.7 ×` size, `AllClear` @ α 0.6 (the enter/leave banner
+  swaps into this line for 4.5 s, tone-coloured). The block hangs on a child of the canvas:
+  a screen-space canvas drives its own root rect, so anchors on the root are not layout input.
+  The font is the vanilla HUD font; if the style read fails the card falls back to the engine's
+  default TMP font and warns once — the card carries information a pilot needs, unlike a marker.
+- one row per contract (≤3), right-aligned, a single TMP line built with rich-text colour
+  segments — `#9 BREAK ENEMY PRESSURE   9.4km   T-2:41` with the title in `AllClear` @ α 0.9,
+  the distance @ α 0.7 and the clock in tone (`OperationMarkerCopy.Distance`, so metric and
+  imperial print like vanilla); a lost contact prints `CONTACT LOST` in `Alert`.
+- one bar per row: 244 × 8.6 px (vanilla capture-bar size) `AllClear`/tone, left-pivot grow
+  = `OperationMarkerCopy.Bar(...)`, over a plain dark backing 12.8 px tall @ α 0.3 only while
+  the bar is shown.
+- selection unchanged: ≤3 rows via `ContractSelection` (inside first, then nearest, then lost),
+  band `radius + max(4·radius, 20 km)`, fades 0.14 s in / 0.24 s out.
+- `raycastTarget` off everywhere, `CanvasGroup.blocksRaycasts = false`.
 
 ## Bounds
 
-≤3 markers on each surface (the board's own card ceiling), content refresh 0.5 s (card 0.25 s),
-positions glued per frame, one widget pool per surface built once per scene, strings cached and
-rewritten only when the rounded value moves, `raycastTarget` off everywhere. No new scene
-objects beyond the fixed pools, no new server state, no wire fields, and no Harmony patch on
-any UI class: the only patches left in the module are the gameplay observations it already had.
+≤3 markers per surface, one fixed pool per surface per scene, content refresh 0.5 s (card
+0.25 s), positions glued per frame, strings cached, no new wire fields, no server state, no
+Harmony patch on any UI class. Style reads: `ObjectiveOverlayManager.overlayPrefab`,
+`ObjectiveMarkerManager.markerPrefab`, `ObjectiveMarker`'s four sprites, `MapMarker.markerImg`,
+`GameAssets.exclusionZoneDisplay`, `ThemeManager.Active`, `PlayerSettings` — all read-only,
+cached per scene, invalidated on scene reset (`VanillaHudStyle.Invalidate()`).

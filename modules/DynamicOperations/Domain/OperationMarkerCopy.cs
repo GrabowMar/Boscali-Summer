@@ -51,19 +51,21 @@ namespace BoscaliSummer.Features.DynamicOperations.Domain
         /// Detail line: family, then what the contract asks for, then the clock when one is
         /// running. A part the host cannot report is dropped rather than guessed.
         /// </summary>
-        public static string Detail(string family, float distanceMetres, float radius, float secondsRemaining, float progress, MarkerField field)
+        public static string Detail(string family, float distanceMetres, float radius, float secondsRemaining, float progress, MarkerField field, bool metric)
         {
             string state = field switch
             {
                 MarkerField.Hold => "HOLD " + Percent(progress),
                 MarkerField.Deliver => "LAND TO DELIVER",
                 _ => Finite(distanceMetres)
-                    ? Distance(distanceMetres) + (Finite(radius) && radius > 0f ? " TO AREA" : "")
+                    ? Distance(distanceMetres, metric) + (Finite(radius) && radius > 0f ? " TO AREA" : "")
                     : ""
             };
-            string text = string.IsNullOrEmpty(state) ? family : family + " · " + state;
+            string text = string.IsNullOrEmpty(state)
+                ? family
+                : state.StartsWith(family, StringComparison.Ordinal) ? state : family + " · " + state;
             string clock = Clock(secondsRemaining);
-            return string.IsNullOrEmpty(clock) ? text : text + " · " + clock;
+            return string.IsNullOrEmpty(clock) ? text : (string.IsNullOrEmpty(text) ? clock : text + " · " + clock);
         }
 
         /// <summary>The vicinity card's cue bar: closing on the edge, then the hold itself.</summary>
@@ -73,13 +75,38 @@ namespace BoscaliSummer.Features.DynamicOperations.Domain
             return Approach(distanceMetres, radius);
         }
 
-        /// <summary>Metric only, matching the rest of the mod's contract readouts.</summary>
-        public static string Distance(float metres)
+        /// <summary>
+        /// Vanilla's own distance reading (<c>UnitConverter.DistanceReading</c>), so a contract
+        /// reads exactly like an objective: metric switches to kilometres past a kilometre and
+        /// drops the decimal past ten, imperial reads yards then nautical miles. The culture is
+        /// the caller's, so the runtime follows the machine and a test can pin it.
+        /// </summary>
+        public static string Distance(float metres, bool metric, IFormatProvider culture = null)
         {
             if (!Finite(metres) || metres < 0f) return "—";
-            return metres >= 1000f
-                ? (metres * 0.001f).ToString("0.0", CultureInfo.InvariantCulture) + " KM"
-                : Math.Round(metres, MidpointRounding.AwayFromZero).ToString("0", CultureInfo.InvariantCulture) + " M";
+            IFormatProvider provider = culture ?? CultureInfo.CurrentCulture;
+            if (metric)
+            {
+                if (metres > 10000f) return (metres * 0.001f).ToString("F0", provider) + "km";
+                if (metres > 1000f) return (metres * 0.001f).ToString("F1", provider) + "km";
+                return metres.ToString("F0", provider) + "m";
+            }
+
+            float yards = metres * 1.09361f;
+            return yards < 1000f
+                ? yards.ToString("F0", provider) + "yd"
+                : (metres * 0.000539957f).ToString("F1", provider) + "nm";
+        }
+
+        /// <summary>
+        /// Vanilla's area-ring fade: solid once a ring is inside a thirteenth of its radius in
+        /// range (radius/distance = 1/13.3), gone past forty times, linear in between.
+        /// </summary>
+        public static float RingAlpha(float radius, float distance)
+        {
+            if (!Finite(radius) || !Finite(distance) || radius <= 0f || distance <= 0.01f) return 0f;
+            float value = radius * 20f / distance - 0.5f;
+            return value < 0f ? 0f : value > 1f ? 1f : value;
         }
 
         /// <summary>Countdown text, or empty when no clock is running.</summary>

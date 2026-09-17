@@ -189,9 +189,9 @@
 
 /* ------------------------------------------------------------ 11. dossier */
 
-/* The SQD pages are a paper personnel file rendered on glass: form numbers,
-   clause rules with dotted leaders and rubber stamps. These are SQD-only
-   classes — Wing Command never asks for them. */
+/* A paper personnel file rendered on glass: form numbers, clause rules with
+   dotted leaders and rubber stamps. Wing Command never asks for these; the SQD
+   pages and the STR chain-of-command dossier both do. */
 
 .file-form     { font: micro; color: text-muted; tracking: 24; }
 .file-title    { font: lead bold; color: text-primary; tracking: 6; }
@@ -206,6 +206,7 @@
 .stamp.ok      { color: rail-ready; border: 1 #00FF9D 73; background: #00FF9D 0f; }
 .stamp.warn    { color: rail-caution; border: 1 #F59E0B 73; background: #F59E0B 10; }
 .stamp.bad     { color: rail-danger; border: 1 #EF4444 73; background: #EF4444 0f; }
+.stamp.info    { color: rail-info; border: 1 #00E5FF 73; background: #00E5FF 10; }
 
 /* A punched filing hole in the binding margin. */
 .punch         { background: #000000 e6; border: 1 frame 99; }

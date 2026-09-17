@@ -390,7 +390,13 @@ namespace BoscaliSummer.Features.Progression.Presentation
         /// </summary>
         private float DrawSectionTitle(
             RectTransform parent, float x, float y, float width, string title, string note, bool band)
+            => DrawSectionTitle(parent, x, y, width, title, note, band, out _);
+
+        private float DrawSectionTitle(
+            RectTransform parent, float x, float y, float width, string title, string note, bool band,
+            out TMP_Text noteLabel)
         {
+            noteLabel = null;
             if (band) AvStyled.Box(parent, new Rect(x - 6f, y + 4f, width + 6f, 22f), "section band");
             AvStyled.SpineTick(parent, x - SpineInset + 3f, y - 7f);
 
@@ -400,7 +406,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
 
             if (!string.IsNullOrEmpty(note))
             {
-                TMP_Text noteLabel = PlainLabel(parent, new Rect(x, y, width, 14f), note,
+                noteLabel = PlainLabel(parent, new Rect(x, y, width, 14f), note,
                                                 "section-title-note");
                 noteLabel.alignment = TextAlignmentOptions.MidlineRight;
                 float noteWidth = Mathf.Ceil(noteLabel.GetPreferredValues(note).x);
@@ -669,7 +675,9 @@ namespace BoscaliSummer.Features.Progression.Presentation
             public byte Id;
             public AvButton Select;
             public Image Fill;
+            public Image Hover;
             public Image[] Frame;
+            public Image Rail;
             public SqdGlyph Icon;
             public TMP_Text Name;
             public TMP_Text State;

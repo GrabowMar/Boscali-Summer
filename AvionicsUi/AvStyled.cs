@@ -69,13 +69,28 @@ namespace NOAvionics.Ui
             return label;
         }
 
+        /// <summary>
+        /// Keep the horizontal alignment a caller asked for and only drop the vertical one,
+        /// so a one-line label sits on the middle of its box. Mapping the midline variants by
+        /// exclusion sent <c>MidlineRight</c> and <c>TopRight</c> to the left edge, which is
+        /// how a form number ended up printed over the title it was supposed to sit opposite.
+        /// </summary>
         private static TextAlignmentOptions Midline(TextAlignmentOptions a)
         {
             switch (a)
             {
-                case TextAlignmentOptions.Right: return TextAlignmentOptions.MidlineRight;
-                case TextAlignmentOptions.Center: return TextAlignmentOptions.Center;
-                default: return TextAlignmentOptions.MidlineLeft;
+                case TextAlignmentOptions.Right:
+                case TextAlignmentOptions.MidlineRight:
+                case TextAlignmentOptions.TopRight:
+                case TextAlignmentOptions.BottomRight:
+                    return TextAlignmentOptions.MidlineRight;
+                case TextAlignmentOptions.Center:
+                case TextAlignmentOptions.Midline:
+                case TextAlignmentOptions.Top:
+                case TextAlignmentOptions.Bottom:
+                    return TextAlignmentOptions.Center;
+                default:
+                    return TextAlignmentOptions.MidlineLeft;
             }
         }
 

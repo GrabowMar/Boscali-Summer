@@ -2,8 +2,7 @@ using System.Collections.Generic;
 using BoscaliSummer.Features.DynamicOperations.Domain;
 using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Lifecycle;
-using NOAvionics;
-using NOAvionics.Ui;
+using BoscaliSummer.Runtime;
 using NuclearOption.Networking;
 using TMPro;
 using UnityEngine;
@@ -12,11 +11,11 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Features.DynamicOperations.Runtime
 {
     /// <summary>
-    /// The cockpit card the pilot reads while flying a contract: the contracts that are near
-    /// enough to matter, nearest first, with the one you are inside pinned to the top. Rows
-    /// carry the same family / distance / hold / clock copy as the markers, a bar that closes
-    /// on the area edge and then carries the hold, and a banner on entering or leaving an
-    /// area. A contract whose contact was lost stays listed, because that is the state the
+    /// The cockpit card the pilot reads while flying a contract: plain vanilla HUD text at the
+    /// right edge of the screen, no panel, no rails. Each row is one line — the contracted
+    /// title followed by the distance and clock (or CONTACT LOST) — with a thin vanilla-style
+    /// bar under it, and a header that swaps to the entering/leaving-area banner. Colours come
+    /// from the live vanilla theme; a lost contact stays listed because that is the state the
     /// pilot most needs to see.
     /// </summary>
     internal sealed class OperationZoneHud : MonoBehaviour, ISceneService
@@ -25,56 +24,63 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
         private const float ContentSeconds = 0.25f;
         private const float ServerRefreshSeconds = 2f;
         private const float ToastSeconds = 4.5f;
-        private const float PanelWidth = 660f;
-        private const float PanelHeight = 148f;
-        private const float RowPitch = 40f;
-        private const float FirstRowY = -30f;
-        private const float RowHeight = 34f;
-        private const float BarWidth = 150f;
-        private const float BarHeight = 5f;
         private const float FadeInSeconds = 0.14f;
         private const float FadeOutSeconds = 0.24f;
+        private const float RowWidth = 460f;
+        private const float RowPitch = 44f;
+        private const float RowHeight = 44f;
+        private const float RowTextHeight = 26f;
+        private const float RowTextInset = 2f;
+        private const float HeaderPitch = 30f;
+        private const float HeaderHeight = 24f;
+        private const float BarWidth = 244f;
+        private const float BarHeight = 8.6f;
+        private const float BarBackHeight = 12.8f;
+        private const float HeaderAlpha = 0.6f;
+        private const float TitleAlpha = 0.9f;
+        private const float DistanceAlpha = 0.7f;
 
-        private static readonly Color Ground = new Color32(10, 14, 17, 210);
+        private static readonly Color BarBackColour = new Color(0f, 0f, 0f, 0.3f);
 
         private OperationsManager manager;
         private GameObject root;
+        private RectTransform rootRect;
         private CanvasGroup group;
-        private TMP_Text banner;
-        private readonly RectTransform[] rowRoots = new RectTransform[MaxRows];
-        private readonly TMP_Text[] titles = new TMP_Text[MaxRows];
-        private readonly TMP_Text[] details = new TMP_Text[MaxRows];
-        private readonly Image[] rails = new Image[MaxRows];
+        private TMP_Text header;
+        private TMP_FontAsset font;
+        private Material fontMaterial;
+        private readonly TMP_Text[] rows = new TMP_Text[MaxRows];
+        private readonly Image[] barBacks = new Image[MaxRows];
         private readonly Image[] bars = new Image[MaxRows];
-        private readonly RectTransform[] barBoxes = new RectTransform[MaxRows];
         private readonly int[] shownIds = new int[MaxRows];
         private readonly bool[] inside = new bool[MaxRows];
-        private readonly string[] titleCache = new string[MaxRows];
-        private readonly string[] detailCache = new string[MaxRows];
+        private readonly string[] textCache = new string[MaxRows];
         private readonly ContractCard[] cards = new ContractCard[MaxRows];
-        private readonly ContractCard[] rows = new ContractCard[MaxRows];
-        private readonly float[] rowDistances = new float[MaxRows];
+        private readonly ContractCard[] selected = new ContractCard[MaxRows];
+        private readonly float[] distances = new float[MaxRows];
         private float nextContent, nextServer, toastUntil, alpha;
-        private bool wanted, bannerIsToast;
+        private bool wanted, headerIsToast;
 
         internal void Configure(OperationsManager owner)
         {
             manager = owner;
-            for (int i = 0; i < cards.Length; i++) { cards[i] = default; rows[i] = default; }
+            for (int i = 0; i < cards.Length; i++) { cards[i] = default; selected[i] = default; }
         }
 
         public void ResetForScene()
         {
             if (root != null) Destroy(root);
-            root = null; group = null; banner = null;
-            toastUntil = 0f; nextContent = 0f; nextServer = 0f; alpha = 0f; wanted = false; bannerIsToast = false;
+            root = null; rootRect = null; group = null; header = null;
+            font = null; fontMaterial = null;
+            toastUntil = 0f; nextContent = 0f; nextServer = 0f; alpha = 0f;
+            wanted = false; headerIsToast = false;
             for (int i = 0; i < MaxRows; i++)
             {
-                rowRoots[i] = null; titles[i] = null; details[i] = null; rails[i] = null; bars[i] = null;
-                barBoxes[i] = null;
-                shownIds[i] = 0; inside[i] = false; titleCache[i] = detailCache[i] = "";
-                cards[i] = default; rows[i] = default; rowDistances[i] = 0f;
+                rows[i] = null; barBacks[i] = null; bars[i] = null;
+                shownIds[i] = 0; inside[i] = false; textCache[i] = "";
+                cards[i] = default; selected[i] = default; distances[i] = 0f;
             }
+            VanillaHudStyle.Invalidate();
         }
 
         private void OnDestroy() => ResetForScene();
@@ -87,15 +93,23 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
                 nextContent = Time.unscaledTime + ContentSeconds;
                 Refresh();
             }
+            if (wanted && Time.unscaledTime >= nextServer)
+            {
+                nextServer = Time.unscaledTime + ServerRefreshSeconds;
+                manager.Refresh();
+            }
             Fade();
         }
 
         private void Refresh()
         {
-            if (bannerIsToast && Time.unscaledTime >= toastUntil) SetBanner(null, AvTheme.Dim);
+            if (headerIsToast && Time.unscaledTime >= toastUntil) headerIsToast = false;
             if (DynamicMap.mapMaximized || !GameManager.GetLocalAircraft(out Aircraft aircraft) || aircraft == null ||
                 aircraft.disabled || aircraft.HasEjected())
-            { wanted = false; return; }
+            {
+                wanted = false;
+                return;
+            }
 
             IReadOnlyList<SecondaryObjectiveView> views = manager.Objectives;
             int count = 0;
@@ -106,81 +120,104 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
             if (root == null) Build();
 
             Vector3 self = aircraft.transform.position.ToGlobalPosition().AsVector3();
-            int shown = ContractSelection.Select(cards, count, self.x, self.z, rows, rowDistances, MaxRows);
+            int shown = ContractSelection.Select(cards, count, self.x, self.z, selected, distances, MaxRows);
+
+            VanillaHudStyle.Palette colours = VanillaHudStyle.Colours;
+            bool metric = VanillaHudStyle.Metric;
+            float size = OverlayTextSize();
+
             for (int row = 0; row < shown; row++)
             {
-                ContractCard card = rows[row];
-                float distance = rowDistances[row];
-                bool isInside = card.HasMarker && card.Inside(distance);
-                Watch(row, card, isInside, distance);
-                string detail = card.HasMarker
-                    ? card.Detail(distance)
-                    : "CONTACT LOST · " + card.Family;
-                SetRow(row, card.TitleLine, detail, ContractPlate.ToneColor(card.Tone),
-                    OperationMarkerCopy.Bar(distance, card.Radius, isInside, card.Progress), !card.HasMarker);
+                ContractCard card = selected[row];
+                float distance = distances[row];
+                Watch(row, card, card.HasMarker && card.Inside(distance), distance);
+                SetRow(row, card, distance, colours, metric, size);
             }
-            for (int row = shown; row < MaxRows; row++) SetRow(row, null, null, AvTheme.RailInfo, 0f, false);
-            if (banner == null || !bannerIsToast)
-                SetBanner(count + (count == 1 ? " ACTIVE CONTRACT" : " ACTIVE CONTRACTS"), AvTheme.Dim);
+            for (int row = shown; row < MaxRows; row++) SetRowEmpty(row);
+
+            header.fontSize = size * 0.7f;
+            if (!headerIsToast)
+                SetHeader(count + (count == 1 ? " ACTIVE CONTRACT" : " ACTIVE CONTRACTS"),
+                    Alpha(colours.AllClear, HeaderAlpha));
             wanted = shown > 0 || Time.unscaledTime < toastUntil;
         }
 
-        private void Watch(int row, ContractCard card, bool isInside, float distance)
+        private void SetRow(int row, in ContractCard card, float distance,
+            in VanillaHudStyle.Palette colours, bool metric, float size)
+        {
+            TMP_Text label = rows[row];
+            if (label == null) return;
+            if (!label.gameObject.activeSelf) label.gameObject.SetActive(true);
+            label.fontSize = size;
+
+            Color tone = card.Tone == MarkerTone.Caution ? colours.Warning : colours.AllClear;
+            string text = Tag(card.TitleLine, Alpha(colours.AllClear, TitleAlpha));
+            if (!card.HasMarker)
+            {
+                text += "  " + Tag("CONTACT LOST", colours.Alert);
+            }
+            else
+            {
+                text += "  " + Tag(OperationMarkerCopy.Distance(distance, metric), Alpha(colours.AllClear, DistanceAlpha));
+                string clock = OperationMarkerCopy.Clock(card.Seconds);
+                if (!string.IsNullOrEmpty(clock)) text += "  " + Tag(clock, tone);
+            }
+            if (textCache[row] != text) { textCache[row] = text; label.text = text; }
+
+            float bar = card.HasMarker
+                ? OperationMarkerCopy.Bar(distance, card.Radius, card.Inside(distance), card.Progress)
+                : 0f;
+            bool showBar = card.HasMarker && bar > 0.001f;
+            Image back = barBacks[row];
+            if (back == null) return;
+            if (back.gameObject.activeSelf != showBar) back.gameObject.SetActive(showBar);
+            if (!showBar) return;
+            bars[row].rectTransform.sizeDelta = new Vector2(BarWidth * bar, BarHeight);
+            bars[row].color = tone;
+        }
+
+        private void SetRowEmpty(int row)
+        {
+            if (rows[row] != null && rows[row].gameObject.activeSelf) rows[row].gameObject.SetActive(false);
+            if (barBacks[row] != null && barBacks[row].gameObject.activeSelf) barBacks[row].gameObject.SetActive(false);
+            textCache[row] = "";
+        }
+
+        private void Watch(int row, in ContractCard card, bool isInside, float distance)
         {
             if (shownIds[row] != card.Id)
             {
                 shownIds[row] = card.Id;
                 inside[row] = isInside;
-                titleCache[row] = detailCache[row] = "";
+                textCache[row] = "";
                 return;
             }
             if (isInside && !inside[row])
             {
                 inside[row] = true;
-                Toast("ENTERING AREA  ·  " + card.TitleLine, ContractPlate.ToneColor(card.Tone));
+                Toast("ENTERING AREA  ·  " + card.TitleLine,
+                    card.Tone == MarkerTone.Caution ? VanillaHudStyle.Colours.Warning : VanillaHudStyle.Colours.AllClear);
             }
             else if (!isInside && inside[row] && card.Radius > 0f && distance > card.Radius * 1.1f)
             {
                 inside[row] = false;
-                Toast("LEAVING AREA  ·  " + card.TitleLine, AvTheme.Disabled);
+                Toast("LEAVING AREA  ·  " + card.TitleLine, Alpha(VanillaHudStyle.Colours.AllClear, HeaderAlpha));
             }
         }
 
-        private void SetRow(int row, string title, string detail, Color color, float bar, bool lost)
+        private void Toast(string text, Color colour)
         {
-            if (rowRoots[row] == null) return;
-            bool visible = title != null;
-            if (rowRoots[row].gameObject.activeSelf != visible) rowRoots[row].gameObject.SetActive(visible);
-            if (!visible) return;
-            if (titleCache[row] != title) { titleCache[row] = title; titles[row].text = title; }
-            if (detailCache[row] != detail) { detailCache[row] = detail; details[row].text = detail; }
-            titles[row].color = color;
-            details[row].color = lost ? AvTheme.RailCaution : AvTheme.Dim;
-            rails[row].color = lost ? AvTheme.RailCaution : color;
-            bars[row].color = color;
-            bars[row].fillAmount = bar;
-            if (barBoxes[row] != null)
-            {
-                bool showBar = !lost && bar > 0.001f;
-                if (barBoxes[row].gameObject.activeSelf != showBar)
-                    barBoxes[row].gameObject.SetActive(showBar);
-            }
-        }
-
-        private void Toast(string text, Color color)
-        {
-            if (root == null) return;
-            SetBanner(text, color);
-            bannerIsToast = true;
+            if (header == null) return;
+            SetHeader(text, colour);
+            headerIsToast = true;
             toastUntil = Time.unscaledTime + ToastSeconds;
         }
 
-        private void SetBanner(string text, Color color)
+        private void SetHeader(string text, Color colour)
         {
-            if (banner == null) return;
-            bannerIsToast = false;
-            banner.text = text ?? "SECONDARY CONTRACTS";
-            banner.color = color;
+            if (header == null) return;
+            if (header.text != text) header.text = text;
+            header.color = colour;
         }
 
         private void Fade()
@@ -199,57 +236,111 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
 
         private void Build()
         {
-            root = new GameObject("Boscali Contract Cards", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler));
+            if (VanillaHudStyle.TryCockpit(out VanillaHudStyle.CockpitStyle cockpit) && cockpit.Font != null)
+            {
+                font = cockpit.Font;
+                fontMaterial = cockpit.FontMaterial;
+            }
+            if (font == null)
+            {
+                font = TMP_Settings.defaultFontAsset;
+                fontMaterial = null;
+            }
+
+            root = new GameObject("Boscali Contract Text", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(CanvasGroup));
             root.transform.SetParent(transform, false);
             Canvas canvas = root.GetComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvas.sortingOrder = 4;
-            canvas.pixelPerfect = true;
+            canvas.sortingOrder = 1;
+            canvas.pixelPerfect = false;
             CanvasScaler scaler = root.GetComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1920f, 1080f);
-            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
+            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+            scaler.matchWidthOrHeight = 1f;
 
-            RectTransform panel = AvKit.Panel((RectTransform)root.transform, new Rect(0f, 132f, PanelWidth, PanelHeight), Ground).rectTransform;
-            panel.name = "Contract Cards";
-            panel.anchorMin = panel.anchorMax = new Vector2(0.5f, 0f);
-            panel.pivot = new Vector2(0.5f, 0f);
-            group = root.AddComponent<CanvasGroup>();
+            // A screen-space canvas drives its own root rect, so the block lives on a child:
+            // right-centre of the screen, clear of the log, ammo, throttle and compass.
+            var contentObject = new GameObject("Contract Text Block", typeof(RectTransform));
+            RectTransform content = (RectTransform)contentObject.transform;
+            content.SetParent(root.transform, false);
+            content.anchorMin = content.anchorMax = new Vector2(1f, 0.5f);
+            content.pivot = new Vector2(1f, 0.5f);
+            content.anchoredPosition = new Vector2(-28f, 60f);
+            content.sizeDelta = new Vector2(RowWidth, HeaderPitch + MaxRows * RowPitch);
+            rootRect = content;
+
+            group = root.GetComponent<CanvasGroup>();
             group.blocksRaycasts = false;
             group.interactable = false;
             group.alpha = 0f;
-            AvKit.Outline(panel, new Rect(0f, 0f, PanelWidth, PanelHeight), AvTheme.Hairline);
-            AvKit.CornerTicks(panel, new Rect(0f, 0f, PanelWidth, PanelHeight), AvTheme.Hairline);
 
-            banner = AvKit.Label(panel, "SECONDARY CONTRACTS", new Rect(14f, -6f, PanelWidth - 28f, 18f),
-                AvTheme.Dim, 13f, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
-            banner.richText = false;
-
+            header = Line(rootRect, "Contract Header", HeaderHeight, 0f);
+            header.alignment = TextAlignmentOptions.MidlineRight;
             for (int i = 0; i < MaxRows; i++)
             {
-                var rowObject = new GameObject("Contract Row", typeof(RectTransform));
-                RectTransform rowRect = (RectTransform)rowObject.transform;
-                rowRect.SetParent(panel, false);
-                AvKit.Place(rowRect, new Rect(0f, FirstRowY - i * RowPitch, PanelWidth, RowPitch));
-                rowRoots[i] = rowRect;
+                float top = HeaderPitch + i * RowPitch;
+                TMP_Text row = Line(rootRect, "Contract Row", RowTextHeight, -(top + RowTextInset));
+                row.alignment = TextAlignmentOptions.MidlineRight;
+                rows[i] = row;
 
-                rails[i] = AvKit.Rule(rowRect, new Rect(12f, 0f, 3f, RowHeight), AvTheme.RailInfo);
-                titles[i] = AvKit.Label(rowRect, "", new Rect(24f, 0f, 430f, 16f),
-                    AvTheme.TextPrimary, 13f, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
-                titles[i].richText = false;
-                details[i] = AvKit.Label(rowRect, "", new Rect(24f, -16f, 430f, 14f),
-                    AvTheme.Dim, 11f, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
-                details[i].richText = false;
-                var barObject = new GameObject("Contract Bar", typeof(RectTransform));
+                var backObject = new GameObject("Contract Bar Back", typeof(RectTransform), typeof(Image));
+                RectTransform back = (RectTransform)backObject.transform;
+                back.SetParent(rootRect, false);
+                back.anchorMin = back.anchorMax = new Vector2(1f, 1f);
+                back.pivot = new Vector2(1f, 0f);
+                back.sizeDelta = new Vector2(BarWidth, BarBackHeight);
+                back.anchoredPosition = new Vector2(0f, -(top + RowHeight));
+                barBacks[i] = backObject.GetComponent<Image>();
+                barBacks[i].color = BarBackColour;
+                barBacks[i].raycastTarget = false;
+
+                var barObject = new GameObject("Contract Bar", typeof(RectTransform), typeof(Image));
                 RectTransform barRect = (RectTransform)barObject.transform;
-                barRect.SetParent(rowRect, false);
-                AvKit.Place(barRect, new Rect(PanelWidth - 162f, -14f, BarWidth, BarHeight));
-                barBoxes[i] = barRect;
-                bars[i] = AvKit.ProgressBar(barRect, new Rect(0f, 0f, BarWidth, BarHeight), 0f, AvTheme.RailInfo);
-                rowObject.SetActive(false);
+                barRect.SetParent(back, false);
+                barRect.anchorMin = barRect.anchorMax = new Vector2(0f, 0.5f);
+                barRect.pivot = new Vector2(0f, 0.5f);
+                barRect.sizeDelta = new Vector2(BarWidth, BarHeight);
+                barRect.anchoredPosition = Vector2.zero;
+                Image bar = barObject.GetComponent<Image>();
+                bar.raycastTarget = false;
+                bars[i] = bar;
+
+                backObject.SetActive(false);
             }
-            foreach (Graphic graphic in root.GetComponentsInChildren<Graphic>(true)) graphic.raycastTarget = false;
             root.SetActive(false);
         }
+
+        private TMP_Text Line(RectTransform parent, string name, float height, float y)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(TextMeshProUGUI));
+            RectTransform rect = (RectTransform)go.transform;
+            rect.SetParent(parent, false);
+            rect.anchorMin = rect.anchorMax = new Vector2(1f, 1f);
+            rect.pivot = new Vector2(1f, 1f);
+            rect.sizeDelta = new Vector2(RowWidth, height);
+            rect.anchoredPosition = new Vector2(0f, y);
+
+            TextMeshProUGUI text = go.GetComponent<TextMeshProUGUI>();
+            text.font = font;
+            if (fontMaterial != null) text.fontSharedMaterial = fontMaterial;
+            text.color = Color.white;
+            text.alignment = TextAlignmentOptions.MidlineRight;
+            text.enableWordWrapping = false;
+            text.overflowMode = TextOverflowModes.Overflow;
+            text.raycastTarget = false;
+            return text;
+        }
+
+        private static float OverlayTextSize()
+        {
+            float size = VanillaHudStyle.OverlayTextSize;
+            return OperationMarkerCopy.Finite(size) && size >= 1f ? size : 32f;
+        }
+
+        private static Color Alpha(Color colour, float alpha) => new Color(colour.r, colour.g, colour.b, alpha);
+
+        private static string Tag(string text, Color colour) =>
+            "<color=#" + ColorUtility.ToHtmlStringRGBA(colour) + ">" + text + "</color>";
     }
 }

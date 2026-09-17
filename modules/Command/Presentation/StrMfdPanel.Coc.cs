@@ -45,7 +45,14 @@ namespace BoscaliSummer.Features.Command.Presentation
 
         private const float CocRowGap = 5f;
         private const float CocRowMinHeight = 44f;
-        private const float CocRowMaxHeight = 60f;
+
+        /// <summary>
+        /// The tallest a row may grow. Sized so eight rows plus the switch band, the header and
+        /// the log fit the full-height body (896) without the page having to scroll: a short
+        /// staff should never hand back a page whose last log line is below the fold. A shorter
+        /// canvas, or a roster longer than eight, still scrolls.
+        /// </summary>
+        private const float CocRowMaxHeight = 58f;
 
         /// <summary>
         /// The commander dossier: a personnel file laid out as a form - the form number, a
@@ -58,10 +65,19 @@ namespace BoscaliSummer.Features.Command.Presentation
         private const float CocPortraitHeight = 104f;
         private const int CocBonusEntries = 3;
         private const int CocRedactionBars = 3;
-        private const float CocDetailPad = 10f;
+        private const float CocDetailPad = 14f;
+
+        /// <summary>
+        /// The band the ALLIED/HOSTILE switch sits in. On the header line it overlapped the
+        /// card's form number and the card's frame ran through its middle.
+        /// </summary>
+        private const float CocToggleBand = 24f;
+
+        /// <summary>A stamp is a small tile of ink on the file, not a banner across it.</summary>
+        private const float CocStampWidth = 112f;
 
         /// <summary>Where the record's own fields begin, under the fixed identity block.</summary>
-        private const float CocFileFieldsTop = 198f;
+        private const float CocFileFieldsTop = 204f;
         private const float CocFormLine = 14f;
         private const float CocBonusEntryHeight = 27f;
         private const float CocStampHeight = 22f;
@@ -89,9 +105,11 @@ namespace BoscaliSummer.Features.Command.Presentation
         private readonly CocBonusEntry[] cocBonusEntries = new CocBonusEntry[CocBonusEntries];
         private readonly Image[] cocRedactions = new Image[CocRedactionBars];
         private RectTransform cocRoot, cocLogBlock, cocDossierBlock, cocStampRoot;
+        private Image cocSpine;
         private Rect cocBody;
         private bool cocScrolled;
         private float cocRosterTop, cocRowPitch, cocRowHeight, cocDossierWidth, cocDossierHeight;
+        private float cocColumnHeight;
         private int cocFilledRows;
         private TMP_Text cocTreeNote, cocLogNote;
         private TMP_Text cocFileNo, cocPhotoRef, cocName, cocRole, cocBio, cocEndNote;
@@ -124,10 +142,11 @@ namespace BoscaliSummer.Features.Command.Presentation
             Array.Clear(cocBonusEntries, 0, cocBonusEntries.Length);
             Array.Clear(cocRedactions, 0, cocRedactions.Length);
             cocRoot = cocLogBlock = cocDossierBlock = cocStampRoot = null;
+            cocSpine = null;
             cocBody = default(Rect);
             cocScrolled = false;
             cocRosterTop = cocRowPitch = cocRowHeight = 0f;
-            cocDossierWidth = cocDossierHeight = 0f;
+            cocDossierWidth = cocDossierHeight = cocColumnHeight = 0f;
             cocFilledRows = 0;
             cocTreeNote = cocLogNote = null;
             cocFileNo = cocPhotoRef = cocName = cocRole = cocBio = cocEndNote = null;
@@ -150,54 +169,62 @@ namespace BoscaliSummer.Features.Command.Presentation
         {
             Rect view = shell.Body;
             float usable = view.width - AvScreen.SpineInset;
-            float detailWidth = Mathf.Max(140f, usable - CocTreeWidth - CocColumnGap);
-            float detailX = view.x + AvScreen.SpineInset + CocTreeWidth + CocColumnGap;
 
             // Six posts are fielded. Sizing the rows to the page rather than the page to the
             // rows is what stops a six-post staff leaving a hole above the status strip; a
             // roster longer than the page scrolls instead.
-            float slack = view.height - (CocHeaderHeight + CocLogBlock + 8f);
+            float slack = view.height - (CocToggleBand + CocHeaderHeight + CocLogBlock + 8f);
             cocRowPitch = Mathf.Clamp(slack / CocFieldedPosts, CocRowMinHeight + CocRowGap,
                                       CocRowMaxHeight + CocRowGap);
             cocRowHeight = cocRowPitch - CocRowGap;
 
-            float rosterHeight = CocHeaderHeight + CocRosterRows * cocRowPitch + CocLogBlock + 8f;
+            float rosterHeight = CocToggleBand + CocHeaderHeight + CocRosterRows * cocRowPitch +
+                                 CocLogBlock + 8f;
             Rect body;
+            // The wrapper is taken whenever the card *could* outgrow the body, not only when
+            // the roster does: a long record is a card taller than the column, and without a
+            // viewport to scroll that card would be drawn over the pinned status strip.
             cocRoot = AvScreen.Scroll((RectTransform)page.transform, view,
-                                      Mathf.Max(rosterHeight, CocDetailHeight + 8f), out body);
+                                      Mathf.Max(rosterHeight, view.height + 1f), out body);
             cocScrolled = !ReferenceEquals(cocRoot, (RectTransform)page.transform);
             cocBody = body;
+            // The height the card is drawn to at least: the viewport, not the scroll content,
+            // so a page with a long roster still gives the file the height a reader sees.
+            cocColumnHeight = view.height - CocToggleBand - 4f;
 
+            // Both columns hang from the same line, under the switch band. The card's x used
+            // to be taken from the page rect while everything else used the scroll content's
+            // origin, so a scrolling page pushed the card under the viewport's right edge.
             float x = body.x + AvScreen.SpineInset;
-            float headerY = body.y;
-            AvStyled.Spine(cocRoot, new Rect(body.x, body.y, 3f, body.height));
+            float detailWidth = Mathf.Max(140f, usable - CocTreeWidth - CocColumnGap);
+            float detailX = x + CocTreeWidth + CocColumnGap;
+            float top = body.y - CocToggleBand;
+            cocSpine = AvStyled.Spine(cocRoot, new Rect(body.x, body.y, 3f, body.height));
 
-            // The side switch rides the header line rather than a row of its own: the two
-            // staffs are a property of the board, not a separate instrument.
             float toggleWidth = 74f;
+            float toggleY = body.y - 2f;
             cocHostileToggle = AvStyled.Button(
-                cocRoot, new Rect(x + usable - toggleWidth, headerY + 4f, toggleWidth, 18f),
+                cocRoot, new Rect(x + usable - toggleWidth, toggleY, toggleWidth, 18f),
                 "HOSTILE  —", "btn",
                 () => { cocShowHostile = true; nextRefresh = 0f; },
                 AvButtonStyle.Toggle)
                 .WithTooltip("Show the opposing chain of command. A post stays unconfirmed until local intel has seen it.");
             cocAlliedToggle = AvStyled.Button(
                 cocRoot,
-                new Rect(x + usable - toggleWidth * 2f - 4f, headerY + 4f, toggleWidth, 18f),
+                new Rect(x + usable - toggleWidth * 2f - 4f, toggleY, toggleWidth, 18f),
                 "ALLIED  —", "btn",
                 () => { cocShowHostile = false; nextRefresh = 0f; },
                 AvButtonStyle.Toggle)
                 .WithTooltip("Show the allied chain of command.");
             cocAlliedToggle.SetLatched(true);
 
-            SectionHeader(cocRoot, x, headerY, usable - toggleWidth * 2f - 12f, "CHAIN OF COMMAND", null,
-                          band: false);
+            SectionHeader(cocRoot, x, top, usable, "CHAIN OF COMMAND", null, band: false);
             // The reading gets its own line rather than the half-header beside the title: a
             // tally that gets ellipsised is a tally the panel did not give.
             cocTreeNote = AvStyled.Label(
-                cocRoot, new Rect(x, headerY - 20f, usable, 13f), "", "section-title-note");
+                cocRoot, new Rect(x, top - 20f, usable, 13f), "", "section-title-note");
 
-            float y = headerY - CocHeaderHeight;
+            float y = top - CocHeaderHeight;
             cocRosterTop = y;
             for (int i = 0; i < CocRosterRows; i++)
             {
@@ -206,7 +233,7 @@ namespace BoscaliSummer.Features.Command.Presentation
             }
 
             BuildCocLogBlock(x, y - CocRosterRows * cocRowPitch, CocTreeWidth);
-            BuildCocDossierBlock(detailX, headerY, detailWidth);
+            BuildCocDossierBlock(detailX, top, detailWidth);
         }
 
         /// <summary>The staff log: the sentences the status strip shows, kept and dated.</summary>
@@ -220,7 +247,7 @@ namespace BoscaliSummer.Features.Command.Presentation
 
             cocLogNote = CocSection(rect, 0f, 0f, width, "STAFF LOG", "NO TRAFFIC");
             for (int i = 0; i < cocLogRows.Length; i++)
-                cocLogRows[i] = new CocLogRow(rect, 0f, -CocLogHeader - i * CocLogPitch, width);
+                cocLogRows[i] = new CocLogRow(rect, 0f, -CocLogHeader - i * CocLogPitch, width, SelectCoc);
         }
 
         /// <summary>A staff section title with a live right-hand count, tied to the spine.</summary>
@@ -257,15 +284,17 @@ namespace BoscaliSummer.Features.Command.Presentation
             cocDossierRail = AvStyled.Rail(rect, new Rect(5f, -10f, 3f, CocDetailHeight - 20f), "locked");
 
             // ---- the form's own header ---------------------------------------------------
-            AvStyled.Label(rect, new Rect(CocDetailPad, -10f, inner * 0.6f, 12f), "PERSONNEL FILE",
+            // Two lines, not one: the sheet's tracking makes "PERSONNEL FILE" most of the
+            // column, and a right-aligned form number on the same line printed over it.
+            AvStyled.Label(rect, new Rect(CocDetailPad, -10f, inner, 12f), "PERSONNEL FILE",
                            "file-form");
-            cocFileNo = AvStyled.Label(rect, new Rect(CocDetailPad, -10f, inner, 12f), "", "file-meta",
+            cocFileNo = AvStyled.Label(rect, new Rect(CocDetailPad, -22f, inner, 12f), "", "file-meta",
                 align: TextAlignmentOptions.MidlineRight);
-            Divider(rect, CocDetailPad, -24f, inner);
+            Divider(rect, CocDetailPad, -38f, inner);
 
             // ---- photo and identity -------------------------------------------------------
             float portraitX = CocDetailPad + (inner - CocPortraitWidth) * 0.5f;
-            Rect frame = new Rect(portraitX, -30f, CocPortraitWidth, CocPortraitHeight);
+            Rect frame = new Rect(portraitX, -44f, CocPortraitWidth, CocPortraitHeight);
             AvKit.Panel(rect, frame, CocPortraitBack);
             AvKit.Outline(rect, frame, AvTheme.Frame);
             AvKit.CornerTicks(rect, frame, AvTheme.Hairline.WithAlpha(0.5f));
@@ -280,12 +309,17 @@ namespace BoscaliSummer.Features.Command.Presentation
             cocPortrait.raycastTarget = false;
             cocPortrait.enabled = false;
 
-            cocPhotoRef = AvStyled.Label(rect, new Rect(CocDetailPad, -136f, inner, 12f), "", "photo-cap",
+            cocPhotoRef = AvStyled.Label(rect, new Rect(CocDetailPad, -150f, inner, 12f), "", "photo-cap",
                 align: TextAlignmentOptions.Center);
-            cocName = AvStyled.Label(rect, new Rect(CocDetailPad, -152f, inner, 18f), "", "file-title",
+            cocName = AvStyled.Label(rect, new Rect(CocDetailPad, -166f, inner, 18f), "", "file-title",
                 align: TextAlignmentOptions.Center);
+            // A long name shrinks to fit the file rather than being cut off by it; fifteen
+            // points is the size the card is drawn for, ten the smallest it may fall back to.
             cocName.fontSize = 15f;
-            cocRole = AvStyled.Label(rect, new Rect(CocDetailPad, -172f, inner, 13f), "", "section-title-note");
+            cocName.enableAutoSizing = true;
+            cocName.fontSizeMin = 10f;
+            cocName.fontSizeMax = 15f;
+            cocRole = AvStyled.Label(rect, new Rect(CocDetailPad, -188f, inner, 13f), "", "section-title-note");
             cocDossierPips = new CocPips(rect, 0f, 0f, AvTheme.Accent);
 
             // ---- the record below: laid out on every refresh ------------------------------
@@ -299,15 +333,19 @@ namespace BoscaliSummer.Features.Command.Presentation
             cocBonusNote = CocSectionLabel(rect);
             cocRecordNote = CocSectionLabel(rect);
 
-            // A stamp is ink on the file, not a control: built once, re-inked per state.
+            // A stamp is ink on the file, not a control: a tile centred on the column, re-inked
+            // per state. The rounded control sprite is deliberately not used - with a tinted
+            // background it drew a second, curve-cornered frame inside the stamp's own border.
+            float stampTile = Mathf.Min(inner, CocStampWidth);
             var stamp = new GameObject("CocStamp", typeof(RectTransform));
             cocStampRoot = (RectTransform)stamp.transform;
             cocStampRoot.SetParent(rect, false);
             cocStampRoot.localRotation = Quaternion.Euler(0f, 0f, -3.5f);
-            cocStampFill = AvKit.Panel(cocStampRoot, new Rect(0f, 0f, inner, CocStampHeight), Color.clear,
-                                       AvSprites.Control);
-            cocStampBorder = AvKit.Outline(cocStampRoot, new Rect(0f, 0f, inner, CocStampHeight), AvTheme.Frame);
-            cocDossierStamp = AvStyled.Label(cocStampRoot, new Rect(0f, 0f, inner, CocStampHeight), "",
+            cocStampFill = AvKit.Panel(cocStampRoot, new Rect(0f, 0f, stampTile, CocStampHeight),
+                                       Color.clear);
+            cocStampBorder = AvKit.Outline(cocStampRoot, new Rect(0f, 0f, stampTile, CocStampHeight),
+                                           AvTheme.Frame);
+            cocDossierStamp = AvStyled.Label(cocStampRoot, new Rect(0f, 0f, stampTile, CocStampHeight), "",
                 "stamp", align: TextAlignmentOptions.Center);
 
             for (int i = 0; i < cocBonusEntries.Length; i++) cocBonusEntries[i] = new CocBonusEntry(rect);
@@ -336,7 +374,7 @@ namespace BoscaliSummer.Features.Command.Presentation
 
             float y = -CocFileFieldsTop;
             y = cocRankRow.Bind(x, y, inner, "RANK", view?.Rank, value);
-            y = cocStationRow.Bind(x, y, inner, "STATION", view?.Location, value);
+            y = cocStationRow.Bind(x, y, inner, "STATION", Pretty(view?.Location), value);
             y = CocClauseAt(cocRules[CocRuleFields], x, y - 8f, inner);
 
             y = CocSectionHeading(cocDispositionNote, "DISPOSITION", x, y - 4f, inner);
@@ -354,9 +392,14 @@ namespace BoscaliSummer.Features.Command.Presentation
             y = CocSectionHeading(cocRecordNote, "SERVICE RECORD", x, y - 4f, inner);
             y -= BindRecord(x, y, inner, view);
             y = CocClauseAt(cocRules[CocRuleRecord], x, y - 10f, inner);
-            AvKit.Place(cocEndNote.rectTransform, new Rect(x, y - 14f, inner, 12f));
+            // The closing line is the sheet's footer, not the record's last row: the card is
+            // resized after this and PlaceCocEnd pins it to whatever the card's bottom is.
             return -y + CocDetailPad + 16f;
         }
+
+        /// <summary>Base names arrive off the wire as identifiers; a file prints words.</summary>
+        private static string Pretty(string text) =>
+            string.IsNullOrEmpty(text) ? text : text.Replace('_', ' ').ToUpperInvariant();
 
         private void SelectCoc(int id)
         {
@@ -372,6 +415,9 @@ namespace BoscaliSummer.Features.Command.Presentation
             bool available = highCommand != null && highCommand.Available;
             if (!available)
             {
+                // No staff: the log block belongs at the top of the tree, and the count the
+                // nopost card hands back to PlaceCocLog is the empty one.
+                cocFilledRows = 0;
                 PlaceCocLog(0);
                 cocDossierBlock.gameObject.SetActive(false);
                 cocTreeNote.text = "";
@@ -450,20 +496,25 @@ namespace BoscaliSummer.Features.Command.Presentation
         {
             if (cocLogBlock == null) return;
 
-            float y = cocRosterTop - posts * cocRowPitch;
+            // A gap under the last post: the log is a new block, not the roster's next row.
+            float y = cocRosterTop - posts * cocRowPitch - CocLogGap;
             AvKit.Place(cocLogBlock,
                 new Rect(cocBody.x + AvScreen.SpineInset, y,
                          CocTreeWidth, CocLogBlock));
 
-            // The build sized the scroll area for a full roster so a longer one can be
-            // reached; a six-post staff then hands back the rows it did not use, and the
-            // dossier reports the height its own record needs, so the page cannot scroll
-            // into blank space under either column.
+            // The content is as deep as the deeper column, and the card hangs a switch band
+            // below the content's origin, so its own band has to be counted in. On a page that
+            // fits (no wrapper) there is nothing to size: the card was drawn to the column.
             if (!cocScrolled || cocRoot == null) return;
             float depth = cocBody.y - (y - CocLogBlock);
-            float height = Mathf.Max(cocDossierHeight + 8f, depth + 8f);
+            float height = Mathf.Max(cocDossierHeight + CocToggleBand + 8f, depth + 8f);
             if (Mathf.Abs(cocRoot.sizeDelta.y - height) > 0.5f)
+            {
                 cocRoot.sizeDelta = new Vector2(cocRoot.sizeDelta.x, height);
+                // The spine is the page's own column mark; it runs the content it was given.
+                if (cocSpine != null)
+                    AvKit.Place(cocSpine.rectTransform, new Rect(0f, 0f, 3f, height));
+            }
         }
 
         private void RefreshCocLog()
@@ -475,7 +526,7 @@ namespace BoscaliSummer.Features.Command.Presentation
             {
                 CommanderLogLine line = lines[i];
                 if (line == null) continue;
-                cocLogRows[shown].Bind(line, SelectCoc, LogTargetOnVisibleSide(line.TargetId));
+                cocLogRows[shown].Bind(line, LogTargetOnVisibleSide(line.TargetId));
                 shown++;
             }
             for (int i = shown; i < cocLogRows.Length; i++) cocLogRows[i].Hide();
@@ -540,7 +591,10 @@ namespace BoscaliSummer.Features.Command.Presentation
             }
 
             PlaceCocRole(view);
-            ResizeCocDossier(LayoutCocDossier(view));
+            // The file is a sheet, not a card that stops where its text does: the frame runs to
+            // the column's bottom and the record sits in it, so the page never shows a short
+            // card floating over blank panel.
+            ResizeCocDossier(Mathf.Max(LayoutCocDossier(view), cocColumnHeight));
             PlaceCocLog(cocFilledRows);
         }
 
@@ -552,8 +606,8 @@ namespace BoscaliSummer.Features.Command.Presentation
             cocRole.text = role;
             float roleWidth = Mathf.Min(inner - 20f, Mathf.Ceil(cocRole.GetPreferredValues(role).x) + 2f);
             float groupX = CocDetailPad + Mathf.Max(0f, (inner - roleWidth - 20f) * 0.5f);
-            AvKit.Place(cocDossierPips.Rect, new Rect(groupX, -178f, 12f, 8f));
-            AvKit.Place(cocRole.rectTransform, new Rect(groupX + 20f, -172f, roleWidth, 13f));
+            AvKit.Place(cocDossierPips.Rect, new Rect(groupX, -193f, 12f, 8f));
+            AvKit.Place(cocRole.rectTransform, new Rect(groupX + 20f, -188f, roleWidth, 13f));
         }
 
         private static string Percent(CommanderView view) =>
@@ -563,7 +617,8 @@ namespace BoscaliSummer.Features.Command.Presentation
         private float PlaceStamp(float x, float y, float width, CommanderView view)
         {
             float top = y - CocStampHeight;
-            AvKit.Place(cocStampRoot, new Rect(x, top, width, CocStampHeight));
+            float tile = Mathf.Min(width, CocStampWidth);
+            AvKit.Place(cocStampRoot, new Rect(x + (width - tile) * 0.5f, top, tile, CocStampHeight));
 
             string state = view == null ? null : StampStateOf(view);
             AvStyle style = AvStyleHost.Style(string.IsNullOrEmpty(state) ? "stamp" : "stamp " + state);
@@ -612,6 +667,10 @@ namespace BoscaliSummer.Features.Command.Presentation
                 string entry = end < 0 ? bonus.Substring(start) : bonus.Substring(start, end - start);
                 SplitBonus(entry, out string label, out string pay);
                 bool last = end < 0 || used + 1 >= cocBonusEntries.Length;
+                // A contract that carried more entries than the file has room for says so
+                // rather than dropping the rest: a file that hides a clause is a false file.
+                if (last && end >= 0)
+                    pay = string.IsNullOrEmpty(pay) ? "…" : pay + "  ·  …";
                 cursor -= cocBonusEntries[used].Bind(x, cursor, width, label, pay, last);
                 used++;
                 if (last) break;
@@ -656,6 +715,12 @@ namespace BoscaliSummer.Features.Command.Presentation
         {
             cocDossierHeight = Mathf.Max(340f, height);
             cocDossierBlock.sizeDelta = new Vector2(cocDossierWidth, cocDossierHeight);
+
+            // The closing line belongs to the sheet, so it sits just above the card's bottom
+            // edge however much record the file happens to carry.
+            float inner = cocDossierWidth - CocDetailPad * 2f;
+            AvKit.Place(cocEndNote.rectTransform,
+                        new Rect(CocDetailPad, -(cocDossierHeight - 24f), inner, 12f));
 
             AvKit.Place((RectTransform)cocDossierFill.transform,
                         new Rect(0f, 0f, cocDossierWidth, cocDossierHeight));
@@ -749,7 +814,7 @@ namespace BoscaliSummer.Features.Command.Presentation
             }
         }
 
-        /// <summary>The stamp's ink: the sheet carries ok, warn and bad, and nothing else.</summary>
+        /// <summary>The stamp's ink: the sheet carries ok, warn, bad and info, and nothing else.</summary>
         private static string StampStateOf(CommanderView view)
         {
             switch (ChipStateOf(view))
@@ -757,6 +822,7 @@ namespace BoscaliSummer.Features.Command.Presentation
                 case "live": return "ok";
                 case "warn": return "warn";
                 case "danger": return "bad";
+                case "info": return "info";
                 default: return null;
             }
         }
@@ -883,14 +949,18 @@ namespace BoscaliSummer.Features.Command.Presentation
                 leader = AvStyled.Label(parent, new Rect(0f, 0f, 10f, CocFormLine), "", "leader");
                 value = AvStyled.Label(parent, new Rect(0f, 0f, 10f, CocFormLine), "", "form-value");
                 value.enableWordWrapping = true;
-                value.overflowMode = TextOverflowModes.Truncate;
+                // A value longer than the field ends in an ellipsis rather than being cut mid
+                // word, so the file says it could not fit the whole answer.
+                value.overflowMode = TextOverflowModes.Ellipsis;
             }
 
             /// <summary>Lay the field at y; returns the y the next field should use.</summary>
             public float Bind(float x, float y, float width, string keyText, string valueText, Color color)
             {
                 key.text = keyText ?? "";
-                float keyWidth = Mathf.Min(Mathf.Ceil(key.GetPreferredValues(key.text).x) + 6f, width * 0.5f);
+                // The key may take a little over half the field: the cap exists to leave the
+                // value room, but at 50% "STAFF SHARE" itself was ellipsised.
+                float keyWidth = Mathf.Min(Mathf.Ceil(key.GetPreferredValues(key.text).x) + 6f, width * 0.62f);
                 AvKit.Place(key.rectTransform, new Rect(x, y, keyWidth, CocFormLine));
 
                 value.text = string.IsNullOrEmpty(valueText) ? "—" : valueText;
@@ -927,7 +997,7 @@ namespace BoscaliSummer.Features.Command.Presentation
                 name = AvStyled.Label(rect, new Rect(0f, 0f, 10f, 12f), "", "form-key");
                 pay = AvStyled.Label(rect, new Rect(0f, 0f, 10f, 13f), "", "form-value");
                 pay.enableWordWrapping = true;
-                pay.overflowMode = TextOverflowModes.Truncate;
+                pay.overflowMode = TextOverflowModes.Ellipsis;
                 rule = CocClause(rect);
                 rule.color = AvTheme.Unity(AvTokens.Hairline.WithAlpha(0.09f));
                 root.SetActive(false);
@@ -975,7 +1045,7 @@ namespace BoscaliSummer.Features.Command.Presentation
             private readonly AvButton hit;
             private int id = -1;
 
-            public CocLogRow(RectTransform parent, float x, float y, float width)
+            public CocLogRow(RectTransform parent, float x, float y, float width, Action<int> select)
             {
                 root = new GameObject("CocLogRow", typeof(RectTransform));
                 var rect = root.GetComponent<RectTransform>();
@@ -990,19 +1060,27 @@ namespace BoscaliSummer.Features.Command.Presentation
                 AvKit.Place(dotRect, new Rect(2f, -(CocLogPitch - 2f - 6f) * 0.5f, 6f, 6f));
                 dot.SetKind("dot", AvTheme.Dim);
 
-                age = AvStyled.Label(rect, new Rect(12f, 0f, AgeWidth, CocLogPitch - 2f), "", "metric-cap");
+                // The age column is a stamp of when, not a right-aligned figure: right-aligned
+                // it ended flush against the sentence and read as "1mSTIPEND PAID".
+                age = AvStyled.Label(rect, new Rect(12f, 0f, AgeWidth, CocLogPitch - 2f), "", "metric-cap",
+                                     align: TextAlignmentOptions.Left);
                 text = AvStyled.Label(rect,
-                    new Rect(12f + AgeWidth, 0f, width - AgeWidth - 16f, CocLogPitch - 2f), "", "row-sub");
+                    new Rect(12f + AgeWidth + 4f, 0f, width - AgeWidth - 20f, CocLogPitch - 2f), "", "row-sub");
                 text.fontSize = AvTokens.FontSmall;
                 text.enableWordWrapping = false;
                 text.overflowMode = TextOverflowModes.Ellipsis;
 
-                hit = AvKit.HitButton(rect, new Rect(0f, 0f, width, CocLogPitch - 2f), null);
+                // Built once and reading the row's own id, so a refresh does not hand the button
+                // a fresh closure four times a second.
+                hit = AvKit.HitButton(rect, new Rect(0f, 0f, width, CocLogPitch - 2f), () =>
+                {
+                    if (id >= 0) select(id);
+                });
                 hit.SetEnabled(false);
                 root.SetActive(false);
             }
 
-            public void Bind(CommanderLogLine line, Action<int> select, bool clickable)
+            public void Bind(CommanderLogLine line, bool clickable)
             {
                 id = line.TargetId;
                 Color tone = LogColor(line.Tone);
@@ -1011,7 +1089,7 @@ namespace BoscaliSummer.Features.Command.Presentation
                 text.text = line.Text;
                 text.color = tone;
 
-                hit.SetAction(clickable ? (Action)(() => select(id)) : null);
+                // The action is the constructor's; a refresh only says whether it may fire.
                 hit.SetEnabled(clickable);
                 hit.WithTooltip(clickable ? "Open this post's card." : null);
                 if (!root.activeSelf) root.SetActive(true);
@@ -1104,7 +1182,10 @@ namespace BoscaliSummer.Features.Command.Presentation
                 role.fontSize = AvTokens.FontMicro;
                 status = AvStyled.Label(rect, new Rect(width - trail, -3f, trail, 13f), "", "metric-cap");
                 status.fontSize = AvTokens.FontMicro;
-                weight = AvKit.ProgressBar(rect, new Rect(width - trail, 0f, trail, 3f), 0f,
+                // Built where it belongs: the fill this returns is the only part of a progress
+                // bar that can be moved afterwards, so re-placing it in Bind left the track's
+                // outline floating on the row's header line.
+                weight = AvKit.ProgressBar(rect, new Rect(width - trail, -18f, trail, 3f), 0f,
                                            AvTheme.RailInert);
 
                 Divider(rect, 0f, -(height - 2f), width);
@@ -1137,8 +1218,9 @@ namespace BoscaliSummer.Features.Command.Presentation
                 AvKit.Place(pips.Rect, new Rect(textX, top - 17f, 12f, 12f));
                 AvKit.Place(rank.rectTransform, new Rect(textX + 15f, top - 17f, 54f, 12f));
                 AvKit.Place(name.rectTransform, new Rect(textX, top - 1f, textWidth, 14f));
-                AvKit.Place(role.rectTransform, new Rect(textX, top - 30f, textWidth, 12f));
-                AvKit.Place(weight.rectTransform, new Rect(width - trail, -(height - 9f), trail, 3f));
+                // The office line runs the full width under the state: it is *below* the status
+                // and the share track, so nothing is beside it and nothing needs to be reserved.
+                AvKit.Place(role.rectTransform, new Rect(textX, top - 30f, width - textX - 8f, 12f));
 
                 if (view.PortraitSeed != portraitSeed)
                 {
@@ -1169,10 +1251,10 @@ namespace BoscaliSummer.Features.Command.Presentation
                     : view.IsFriendly ? AvTheme.TextPrimary
                     : AvTheme.Warning;
 
-                // The office, then what the post is worth: the row states the bonus's first
-                // entry, because that is the number a pilot hunting this commander wants.
-                string bonus = !view.IsFriendly && !view.IsKnown ? "" : FirstBonus(view.Bonus);
-                role.text = view.Role + (string.IsNullOrEmpty(bonus) ? "" : "  ·  " + bonus);
+                // The office. What the post is worth is the card's line, not the row's: at this
+                // width role and bonus together always ended in an ellipsis, so the row stated
+                // neither. The bonus still rides the row's tooltip.
+                role.text = view.Role;
 
                 status.text = StatusOf(view);
                 status.color = selected ? AvTheme.Accent
@@ -1215,6 +1297,9 @@ namespace BoscaliSummer.Features.Command.Presentation
                     AvKit.Place(tick.rectTransform, new Rect(gx, top - 23f, TierStep, 1f));
                 }
 
+                // The row's copy is the office; the bonus its post carries rides the tooltip,
+                // where there is room for the whole sentence.
+                string bonus = !view.IsFriendly && !view.IsKnown ? "" : FirstBonus(view.Bonus);
                 hit.WithTooltip((view.IsFriendly
                     ? "Open the card for " + view.Name + "  ·  " + view.Role
                     : view.IsKnown

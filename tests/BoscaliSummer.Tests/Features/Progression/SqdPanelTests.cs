@@ -1,3 +1,4 @@
+using BoscaliSummer.Features.Progression.Presentation;
 using BoscaliSummer.Features.Progression.Runtime;
 using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Runtime;
@@ -10,9 +11,60 @@ namespace BoscaliSummer.Tests.Features.Progression
         public static void Run()
         {
             TestPerkClassification();
+            TestBoardGeometry();
             TestWingmanPresenceTracking();
             TestSquadBezelCoexistence();
             TestDossierStylesheet();
+        }
+
+        /// <summary>
+        /// The board shipped once with every cell 56px wide and no row height at all, which
+        /// rendered as overlapping one-letter columns. Pin the arithmetic: four lanes of equal,
+        /// readable, non-overlapping columns that end exactly at the sheet's right edge.
+        /// </summary>
+        private static void TestBoardGeometry()
+        {
+            const float bodyWidth = 452f;
+            const float sheetWidth = bodyWidth - 14f;
+            int lanes = 0;
+            for (int i = 0; i < PerkCatalog.All.Length; i++)
+                if (PerkCatalog.All[i].Grade == 1) lanes++;
+
+            TestAssert.That(lanes >= 2, "the board needs at least two qualifications to compare");
+            float cell = SkillBoardLayout.CellWidth(sheetWidth, lanes);
+            TestAssert.That(cell >= 88f,
+                "a qualification cell narrower than 88px cannot hold a name and its state");
+
+            for (int l = 0; l < lanes; l++)
+            {
+                float x = SkillBoardLayout.CellX(0f, cell, l);
+                TestAssert.That(x >= 0f, "lane " + l + " starts left of the sheet");
+                TestAssert.That(x + cell <= sheetWidth + 0.01f,
+                    "lane " + l + " runs past the sheet's right edge");
+                if (l == 0) continue;
+                float previous = SkillBoardLayout.CellX(0f, cell, l - 1);
+                TestAssert.That(System.Math.Abs(x - (previous + cell) - SkillBoardLayout.Gap) < 0.01f,
+                    "lanes " + (l - 1) + " and " + l + " are not separated by exactly one gap");
+            }
+
+            float roomy = SkillBoardLayout.RowHeight(604f, PerkCatalog.MaximumDepth);
+            TestAssert.That(roomy == SkillBoardLayout.MaxCellHeight,
+                "a tall sheet must not stretch the grade rows past the readable maximum");
+            float tight = SkillBoardLayout.RowHeight(100f, PerkCatalog.MaximumDepth);
+            TestAssert.That(tight == SkillBoardLayout.MinCellHeight,
+                "a short sheet must keep the grade rows at the readable minimum");
+
+            // The scroll content must declare everything the board draws at the minimum row
+            // height - masthead, clause heading, lane header, rows, footer and legend - or the
+            // parts below the declared height can never be scrolled into view.
+            float declared = SkillBoardLayout.ContentHeight(
+                SkillBoardLayout.MinCellHeight, PerkCatalog.MaximumDepth);
+            float drawn = SkillBoardLayout.FileHeaderHeight + SkillBoardLayout.TitleHeight +
+                SkillBoardLayout.LaneHeaderHeight + SkillBoardLayout.Gap +
+                PerkCatalog.MaximumDepth * SkillBoardLayout.MinCellHeight +
+                SkillBoardLayout.FooterHeight + SkillBoardLayout.LegendHeight;
+            TestAssert.That(declared >= drawn - 0.01f,
+                "the scroll content height must cover every band the board draws");
         }
 
         private static void TestPerkClassification()

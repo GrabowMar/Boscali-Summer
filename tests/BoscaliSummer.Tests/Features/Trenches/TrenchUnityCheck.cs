@@ -33,9 +33,11 @@ public static class TrenchUnityCheck
             CheckMeshWindingAndConformance();
             CheckCurveAndPlanner();
             CheckGrowthAndCombat();
+            CheckWorksCatalog();
             CheckEarthworkMaterial();
+            CheckLodFloatingOrigin();
             Render();
-            File.WriteAllText("result.txt", "PASS: eight winding orientations; a sparse trace fitted to a smooth owned-side curve, terrain-refused runs split, a window fitted where its trace is (first and second window), contested band entrenched, stage growth through support/redoubt/saps, native-adapter defender budgets, damage suppression and no respawn after destruction. Native AI/networking require in-game acceptance. Stage renders saved.");
+            File.WriteAllText("result.txt", "PASS: eight winding orientations; a sparse trace fitted to a smooth owned-side curve, terrain-refused runs split, a window fitted where its trace is (first and second window), contested band entrenched, stage growth through support/redoubt/saps, native-adapter defender budgets, damage suppression and no respawn after destruction; smooth terrain clipping a nest does not block it while solid obstacles still do; works deploy from the encyclopedia's instance lists with vehicle-scale pieces filtered; LOD is measured in local space so a chunk under a large floating origin stays visible at LOD0 with CameraStateManager present or absent. Native AI/networking require in-game acceptance. Stage renders saved.");
             EditorApplication.Exit(0);
         }
         catch (Exception ex)
@@ -264,6 +266,22 @@ public static class TrenchUnityCheck
         displaced.Remove();
         Object.DestroyImmediate(obstacle);
 
+        // Terrain is the ground the nest stands on, not an obstacle: the same bay carrying
+        // the game's terrain material must not displace or block the teams. The negative
+        // case is the untextured obstacle above and the wall below.
+        GameAssets.i = new GameAssets { terrainMaterial = new PhysicMaterial("SmoothTerrain") };
+        var terrain = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        terrain.transform.position = blocked + Vector3.up * 2f;
+        terrain.transform.localScale = new Vector3(10f, 4f, 10f);
+        terrain.GetComponent<Collider>().sharedMaterial = GameAssets.i.terrainMaterial;
+        Physics.SyncTransforms();
+        var onTerrain = new TrenchGarrison(line);
+        before = spawner.Spawned.Count;
+        Check(onTerrain.Establish(), "Smooth terrain under the nest must not block it: " + onTerrain.LastFailure);
+        Check(spawner.Spawned.Count == before + 2, "Both teams must establish through a terrain collider");
+        onTerrain.Remove();
+        Object.DestroyImmediate(terrain);
+
         // Ground that blocks every station still refuses the site rather than leaving a
         // cosmetic position with a leaked defender outside the manager's capacity.
         var wall = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -278,12 +296,105 @@ public static class TrenchUnityCheck
         Object.DestroyImmediate(owner.gameObject);
     }
 
+    /// <summary>
+    /// Works come from the encyclopedia's instance lists once it has loaded. The static
+    /// Lookup dictionary is deliberately absent from the stubs: a catalog that reads it
+    /// would not compile against this harness.
+    /// </summary>
+    private static void CheckWorksCatalog()
+    {
+        var front = new FlatFront();
+        var trace = new FrontlineTracePoint[3];
+        for (int i = 0; i < 3; i++) trace[i] = new FrontlineTracePoint(0f, -600f + i * 600f);
+        var owner = new GameObject("HQ").AddComponent<FactionHQ>();
+        Check(TrenchPlanner.TryPlanWindow(1, "Works_Front", owner, 0.8f, trace, 0, trace.Length, 0,
+            front, out TrenchLine line, out _, out _), "A front trace plans a position for the works check");
+
+        var encyclopedia = new Encyclopedia();
+        Encyclopedia.i = encyclopedia;
+        var smallPrefab = new GameObject("Hesco_Small");
+        smallPrefab.AddComponent<Scenery>();
+        encyclopedia.scenery.Add(new SceneryDefinition
+        {
+            jsonKey = "Hesco_Small", unitName = "HESCO Bastion", unitPrefab = smallPrefab,
+            width = 2f, length = 2f, height = 1.2f
+        });
+        var hugePrefab = new GameObject("Hesco_Huge");
+        hugePrefab.AddComponent<Scenery>();
+        encyclopedia.scenery.Add(new SceneryDefinition
+        {
+            jsonKey = "Hesco_Huge", unitName = "HESCO Depot", unitPrefab = hugePrefab,
+            width = 12f, length = 12f, height = 4f
+        });
+
+        var spawner = NetworkSceneSingleton<Spawner>.i = new Spawner();
+        var works = new TrenchWorks(line);
+        works.Deploy(TrenchStage.FireTrench);
+        Check(works.Count == TrenchTraceMath.WorksBudget(TrenchStage.FireTrench),
+            "A committed position must deploy works from the encyclopedia instance lists");
+        Check(spawner.SceneryPrefabs.Count == works.Count && spawner.ScenerySpawned.Count == works.Count,
+            "Every work must be one vanilla scenery spawn");
+        foreach (GameObject prefab in spawner.SceneryPrefabs)
+            Check(prefab == smallPrefab, "Vehicle-scale scenery must never be used as a work");
+        works.Remove();
+
+        Object.DestroyImmediate(smallPrefab);
+        Object.DestroyImmediate(hugePrefab);
+        Object.DestroyImmediate(owner.gameObject);
+    }
+
     private static void CheckEarthworkMaterial()
     {
         var material = TrenchMaterialResolver.GetEarthBermMaterial();
         Check(material != null && material.mainTexture != null && material.mainTexture.width >= 64,
             "Earthwork material must carry the procedural cross-section palette texture");
         TrenchMaterialResolver.ResetForScene();
+    }
+
+    /// <summary>
+    /// A live session showed every chunk at LOD3 with all roots inactive because the LOD
+    /// comparison mixed global line centres with the local camera. The camera here stands on
+    /// the earthwork while the floating origin is parked nearly ten kilometres away — the raw
+    /// comparison would read the origin offset, not the chunk.
+    /// </summary>
+    private static void CheckLodFloatingOrigin()
+    {
+        var front = new FlatFront();
+        var trace = new FrontlineTracePoint[3];
+        for (int i = 0; i < 3; i++) trace[i] = new FrontlineTracePoint(0f, -600f + i * 600f);
+        var owner = new GameObject("HQ").AddComponent<FactionHQ>();
+        Check(TrenchPlanner.TryPlanWindow(1, "Lod_Front", owner, 0.8f, trace, 0, trace.Length, 0,
+            front, out TrenchLine line, out _, out _), "A front trace plans a position for the LOD check");
+
+        var cameraGo = new GameObject("LodCamera");
+        cameraGo.tag = "MainCamera";
+        var camera = cameraGo.AddComponent<Camera>();
+        var viewGo = new GameObject("CameraView");
+        var view = viewGo.AddComponent<CameraStateManager>();
+        view.mainCamera = camera;
+        SceneSingleton<CameraStateManager>.i = view;
+
+        var chunk = new GameObject("LodChunk").AddComponent<TrenchVisualChunk>();
+        chunk.Initialize(line);
+        Datum.originPosition = new Vector3(-6400f, 0f, -7300f);
+        camera.transform.position = new GlobalPosition(chunk.WorldCenter).ToLocalPosition();
+        chunk.Rebuild();
+        Check(chunk.CameraDistance < chunk.Lod0Distance,
+            "LOD distance must be measured in one frame; a camera on the earthwork read " +
+            chunk.CameraDistance + "m against Lod0Distance " + chunk.Lod0Distance);
+        Check(chunk.ActiveLod == 0, "A camera on the earthwork must select LOD0, got " + chunk.ActiveLod);
+
+        // A scene without a live CameraStateManager must still cull through Camera.main.
+        SceneSingleton<CameraStateManager>.i = null;
+        chunk.Rebuild();
+        Check(chunk.CameraDistance < chunk.Lod0Distance && chunk.ActiveLod == 0,
+            "LOD must fall back to Camera.main when CameraStateManager is absent");
+
+        Object.DestroyImmediate(chunk.gameObject);
+        Object.DestroyImmediate(viewGo);
+        Object.DestroyImmediate(cameraGo);
+        Object.DestroyImmediate(owner.gameObject);
+        Datum.originPosition = Vector3.zero;
     }
 
     private static void Render()
