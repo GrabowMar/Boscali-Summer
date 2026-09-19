@@ -66,6 +66,14 @@ namespace BoscaliSummer.Tests.Features.Progression
                 PerkCatalog.MaximumDepth * SkillBoardLayout.MinCellHeight;
             TestAssert.That(declared >= drawn - 0.01f,
                 "the scroll content height must cover every band the board draws");
+
+            foreach (float height in new[] { SkillBoardLayout.MinCellHeight, SkillBoardLayout.MaxCellHeight })
+            {
+                float stateTop = SkillBoardLayout.StateTop(height);
+                float stateBottom = stateTop - SkillBoardLayout.StateHeight;
+                TestAssert.That(stateTop <= 0f && stateBottom >= -height,
+                    "the skill state line must stay inside its cell at height " + height);
+            }
         }
 
         /// <summary>
@@ -141,8 +149,8 @@ namespace BoscaliSummer.Tests.Features.Progression
         }
 
         /// <summary>
-        /// The dossier look is data in the shipped sheet, and a typo there only logs a
-        /// warning at runtime. Parse it here so a broken class is a red test instead.
+        /// SQD now uses the common instrument hierarchy rather than paper-file decoration.
+        /// Parse the shipped sheet here and pin the type roles the dense personnel pages rely on.
         /// </summary>
         private static void TestDossierStylesheet()
         {
@@ -158,11 +166,28 @@ namespace BoscaliSummer.Tests.Features.Progression
             for (int i = 0; i < sheet.Errors.Count; i++)
                 TestAssert.That(false, "avionics.avss " + sheet.Errors[i]);
 
-            TestAssert.That(sheet.Resolve("stamp ok").Color.HasValue, "the dossier stamp must colour by state");
-            TestAssert.That(sheet.Resolve("stamp bad").Background.HasValue, "a red stamp must carry its own wash");
-            TestAssert.That(sheet.Resolve("form-key").HasFont, "dossier field keys must carry a type size");
-            TestAssert.That(sheet.Resolve("leader").Tracking > 0f, "the dotted leader needs tracking to read as a rule");
-            TestAssert.That(sheet.Resolve("punch").Background.HasValue, "a punched hole needs a fill");
+            AvStyle pageTitle = sheet.Resolve("page-title");
+            AvStyle sectionTitle = sheet.Resolve("section-title");
+            AvStyle rowMain = sheet.Resolve("row-main");
+            AvStyle rowSub = sheet.Resolve("row-sub");
+            AvStyle formKey = sheet.Resolve("form-key");
+            AvStyle formValue = sheet.Resolve("form-value");
+            AvStyle status = sheet.Resolve("status-text");
+
+            TestAssert.That(pageTitle.HasFont && pageTitle.FontSize >= 18f,
+                "SQD page identity must stay visually above its sections");
+            TestAssert.That(sectionTitle.HasFont && sectionTitle.FontSize >= 11f,
+                "SQD section labels must remain readable on a compact MFD");
+            TestAssert.That(rowMain.HasFont && rowMain.FontSize >= 12f,
+                "primary personnel data must use at least the 12px body role");
+            TestAssert.That(rowSub.HasFont && rowSub.FontSize >= 11f && rowSub.Wrap,
+                "secondary personnel copy must be readable and wrap instead of ellipsising");
+            TestAssert.That(formKey.HasFont && formKey.FontSize >= 11f,
+                "personnel field labels must carry a readable type size");
+            TestAssert.That(formValue.HasFont && formValue.FontSize >= 12f,
+                "personnel values must remain stronger than their labels");
+            TestAssert.That(status.HasFont && status.FontSize >= 12f && status.Wrap,
+                "the SQD status strip must carry readable wrapped guidance");
         }
 
         private static void TestSquadBezelCoexistence()

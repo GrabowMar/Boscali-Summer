@@ -20,6 +20,7 @@ Infrastructure/   Diagnostics/, GameInterop/ (cached reflection, capability repo
 modules/
   QoL/                local HUD/camera conveniences, observation marks and freshness readout
   Autopilot/          local ownship autopilot landing, Boscali Summer native-radial entry
+  Hud/                the one common cockpit HUD element every presentation feature draws through: a bounded, vanilla-styled stack of held lines and transient notices, plus its SET settings
   FireAndDestruction/  ignition, forest index, spread, impact scorch, ruins, wreck persistence, replication
   Squad/               player pilot careers, enemy ace hunts, rewards, read-only snapshots
   Progression/         SQD MFD/HUD (dossier, shared skills, aces, pilot studio), score/ace-earned perk choices, capabilities, reward/fuel effects
@@ -32,7 +33,6 @@ modules/
   Trenches/            natural Bezier trench curves fitted to Command's front traces, procedural berms, tactical map overlay
   Events/              rotating mission-wide world events, EVN MFD feed, support-cost modifier
   Campaign/            installs the authored Boscali Summer mission into the game's user mission list
-  Weather/             deterministic front schedule driving the vanilla sky, a derived spatial storm field (Domain/StormField.cs, Domain/StormCell.cs, Domain/StormReadout.cs) with the supercell renderer (Runtime/SupercellRenderer.cs, Runtime/WeatherCloudAccess.cs), rain (Runtime/WeatherRain.cs, Runtime/RainSystem.cs, Runtime/CanopyRainOverlay.cs, Runtime/RainAudio.cs), the cockpit HUD and WEA radar page (Presentation/WeatherHud.cs, Presentation/WeatherRadarPage.cs), WEA environment panel, opt-in debug overlay
 missions/         authored Boscali Summer mission JSON; rebuilt and validated by tools/
 ```
 
@@ -74,10 +74,6 @@ Host settings ──publishes──►  IHostSettingsView per feature (rendered 
 Events        ──publishes──►  IActiveEventsView (optionally consumed by Support's cost pricing)
 Support       ──publishes──►  IGroundForceReadiness (optionally consumed by Urban Combat)
 Campaign                      independent; one authored mission file written at startup, no patches or services
-Weather                       independent; host-authoritative sky schedule, a storm field derived
-                              from (seed, mission time, map size, front wind) and never
-                              transmitted, optional read-only `IFireSuppressionService` for the
-                              fire-haze term
 ```
 
 Features talk only through `Framework/Contracts` interfaces resolved via `ServiceRegistry` —
@@ -86,6 +82,17 @@ stays Autopilot-owned: it skips `actionsMain`/`SetupMain`, owns appearance and l
 draws at most one optional `IRadialMenuPage` per open. A contributor supplies labels, per-entry
 availability and actions only.
 
+The one presentational exception is `IHudBoard` (`Framework/Contracts/`, implemented by
+`Hud/`). A feature does not get to draw a cockpit overlay of its own: it holds a line for as
+long as its condition is true, or pushes a transient notice, and never learns where the element
+is, how big it is, or what palette it wears. `HudLayout` is the shared vocabulary — the anchor
+presets, the size, opacity and row bounds, the notice dwell — so the labels SET prints and the
+numbers the board applies cannot drift apart. The contract is deliberately feature-agnostic:
+feeds are declared by whoever has one, and the settings page lists them from `Channels`. The
+board's visibility rule (a live local aircraft, a mission camera, the map closed) is the only
+one, so no consumer re-implements it. Reset order is 80, after every feature that can hold a
+line, so a consumer never resets against a torn-down board.
+
 ## Scene lifecycle
 
 The host owns one hidden `DontDestroyOnLoad` object. Persistent managers implement
@@ -93,7 +100,7 @@ The host owns one hidden `DontDestroyOnLoad` object. Persistent managers impleme
 isolating reset exceptions per service. Reset order: fire (10) → impact scorch (15) → ruin
 aftermath (20) → zone garrison (30) → radio (40) → squad (44) → progression (45) → high command (46) → autopilot (48) → target preset hotkeys (49) → support (50) → theater priority (50) → operations (51) →
 command (52) → COM overlay (53) → SQD MFD/HUD (54) → OPS MFD (55) → STR MFD (56) → map UI (57) →
-SET MFD (58) → trench positions (60) → trench map overlay (61) → world-event director (62) → EVN MFD (63) → weather manager (64) → WEA MFD (65) → weather debug overlay (66) → fire-network per-scene state (100). Teardown unpatches in reverse, unregisters the
+SET MFD (58) → trench positions (60) → trench map overlay (61) → world-event director (62) → EVN MFD (63) → superevent alert (67) → common HUD element (80) → fire-network per-scene state (100). Teardown unpatches in reverse, unregisters the
 scene callback and Mirage handlers, clears the registry, and destroys the root.
 
 ## Authority and replication
@@ -258,9 +265,9 @@ Accepted contracts deliberately stay out of `MissionRunner.activeByFaction`: van
 dictionary as navigation and combat tasking. Instead a postfix on the UI-only
 `MissionPosition.GetAllPositionsResults` appends synthetic objective positions for the local
 faction, so the game draws its own map marker, cockpit pointer, distance and sized area ring,
-and `MapOptions.showObjectives` still governs them. `OperationZoneHud` adds a bottom-centre
-readout for distance to the area edge, hold progress and enter/leave transitions. Synthetic
-objectives are presentation-only, are not ticked by the runner, and disappear with the
+and `MapOptions.showObjectives` still governs them. The contract feed on the common HUD
+element carries the distance to the area edge, hold progress and the enter/leave notices.
+Synthetic objectives are presentation-only, are not ticked by the runner, and disappear with the
 module. Protocol 2 is unchanged.
 
 The director selects capturable forward bases, threatened friendly bases, and known
@@ -297,35 +304,62 @@ ceilings are fixed in `HighCommandNet` and pinned by the patch probe.
 
 ### World events
 
-`Events` owns an independent, default-on director of curated mission-wide events: twelve
-hand-authored entries across economic, political and hazard categories, rotated one at a
-time by the host on a randomized gap (90–240 s default), each with a duration window and an
-optional support-cost modifier. It publishes `IActiveEventsView`, Command's rail catalog
-labels its `EVN` bezel screen, and it consumes no sibling. Rotation runs at 1 Hz off
-`MissionManager.MissionTime`; the wire message carries only the catalog index and mission
-timestamps (title and flavor text are catalog-local on every peer), and a 15-second host
-heartbeat resends the active event so a late joiner converges without a backfill protocol.
-History is bounded by `Events.HistoryLength` and is deliberately not backfilled to a late
-joiner. The screen is hosted on an appended vanilla bezel slot rather than claiming one of
-the six shared buttons, so it cannot be crowded out by WMC or the claimed screens.
+`Events` owns an independent, default-on director of curated mission-wide events: nineteen
+hand-authored entries across economic, political and hazard categories, graded minor /
+medium / superevent, rotated one at a time by the host on a randomized gap (90–240 s
+default), each with a duration window and a support-cost modifier. It publishes
+`IActiveEventsView`, Command's rail catalog labels its `EVN` bezel screen, and it consumes
+no sibling. Rotation runs at 1 Hz off `MissionManager.MissionTime`; the wire message carries
+only the catalog index, the resolved target faction hash and mission timestamps (title and
+flavor text are catalog-local on every peer), and a 15-second host heartbeat resends the
+active event so a late joiner converges without a backfill protocol. History is bounded by
+`Events.HistoryLength` and is deliberately not backfilled to a late joiner. The screen is
+hosted on an appended vanilla bezel slot rather than claiming one of the six shared buttons,
+so it cannot be crowded out by WMC or the claimed screens.
 
-The one real modifier seam is support allocation cost. Support multiplies
+The director (`Domain/EventDirector.cs`, pure and unit-tested) grades its rolls. Minor and
+medium entries move one price; a superevent is scripted, rare, and aimed at a side. Windows
+are deliberately short (90–300 s) so the theater keeps moving, and the mission's first roll
+is always a medium: a session opens on an event that moves a price, never on weather. The
+manager counts ground airbase custody at 1 Hz from `FactionRegistry` — the same networked
+ownership the map shows, carriers excluded — and derives leader, trailer, deficit and the
+faction name hash. A deficit of two bases arms targeted supers, raises the escalation odds
+and is what `allied_intervention`, `emergency_appropriation` and `frontline_overstretch`
+require; global supers fit at any time. Eligibility also requires three minutes of mission
+and a five-minute gap, and the mission caps at three supers, each fired once. Every
+superevent's beats are an authored `EventStep` table applied host-side: `Funds` credits
+`FactionHQ.AddFunds`, `Allocation` credits each player on the side, and `Convoy` funds and
+queues the side's first ready, affordable vanilla convoy group. Nothing is spawned, and a
+beat that cannot resolve its side is skipped rather than guessed.
+
+The one pricing seam is support allocation cost, now per side. Support multiplies
 `IActiveEventsView.SupportCostMultiplierFor(playerId)` into both shared pricing points — the
-action `Cost(action, player)` path and the satellite/facility/EW-truck `Price` helper —
+action `Cost(action, player)` path and the station/facility/CYBER-site `Price` helper —
 resolved late through `ModServices`, so the two modules install in either order and a calm
-theater reads exactly 1. Vanilla purchase prices are deliberately untouched (no such seam
-exists in this mod yet). `Events.EffectStrength` scales every modifier (0 makes events
-flavor only) and is host-authoritative, like Support's own `CostMultiplier`.
+theater reads exactly 1. A targeted event reads 1 for everyone else: the manager resolves
+the player's side from the 1 Hz player map and compares it with the broadcast target hash.
+Vanilla purchase prices are deliberately untouched (no such seam exists in this mod yet).
+`Events.EffectStrength` scales every modifier and every credit (0 makes events flavor only)
+and is host-authoritative, like Support's own `CostMultiplier`.
 
-Each costed event is also a per-player decision. A `CONTAIN`/`LEVERAGE` intent asks the host
-to spend allocation once per event (price derived from the effective multiplier, 200–1200
-rounded to 50) to halve the deviation in the requester's favour for the rest of the run. The
-host validates index, one-response-per-player and affordability, deducts
-`player.SetAllocation`, and answers the requester with protocol-2 `EventReply`; the server
-prices support with the requester's response and the client predicts with its own, so the OPS
-number and the charge agree. The response map is bounded (64), cleared on rotation and scene
-reset, and a client re-queries on applying an active event so a reconnect converges. Only the
-catalog index and timestamps travel in state; the response message carries no text.
+Each costed event the player's own side is exposed to is also a per-player decision. A
+`CONTAIN`/`LEVERAGE` intent asks the host to spend allocation once per event (price derived
+from the requester's effective multiplier, 200–1200 rounded to 50) to halve the deviation in
+their favour for the rest of the run. The host validates index, one-response-per-player and
+affordability, deducts `player.SetAllocation`, and answers the requester with a protocol-3
+`EventReply`; the server prices support with the requester's response and the client
+predicts with its own, so the OPS number and the charge agree. The response map is bounded
+(64), cleared on rotation and scene reset, and a client re-queries on applying an active
+event so a reconnect converges. Only the catalog index, target hash and timestamps travel in
+state; the response message carries no text.
+
+Presentation is two layers. The `EVN` panel shows a theater-balance band, the active event's
+tier ribbon, poster (optional loose PNG from `BepInEx/plugins/BoscaliSummer/Events/`, with a
+vector glyph fallback), scripted-beat ticker and countdown, then bounded history. A separate
+client-local `SuperEventAlert` canvas — created only when a super fires, destroyed on reset,
+taking no input but its dismiss button — carries the full-screen poster moment, and the
+manager raises one transient `IHudBoard` notice so a pilot in the air hears about it too.
+Both are presentation only: nothing they draw feeds gameplay.
 
 Command's grid retains pressure history between fresh observation snapshots and
 uses elapsed-time control/recovery. Fixed base ownership anchors strategic influence;
@@ -394,10 +428,12 @@ BCL-only `NOAvionics` protocol coordinates named bezel claims and exclusive map 
 through `AppDomain` data, so independently compiled Boscali Summer and Wing Command copies
 cannot claim the same slot or consume the same armed click in one frame.
 
-OPS follows the same shell. Its five domain pages (SPACE, EW, INFO, SPEC OPS, INTEL) are
+OPS follows the same shell. Its four domain pages (SPACE, CYBER, SPEC OPS, INTEL) are
 partials of `SupportPanel` that share one fixed-height row shape; tab labels, launch payloads,
-EW postures, INFO gates, SPEC OPS / INTEL programs and the base-of-operations doctrine are pure
-models under `modules/Support/Domain`, which the host's validation reads too. Urban Combat
+the CYBER network and adversary campaign (`Domain/Cyber`), jammer modes, operation gates,
+SPEC OPS / INTEL programs and the base-of-operations doctrine are pure models under
+`modules/Support/Domain`, which the host's validation reads too. `Runtime/CyberDefense` is the
+only CYBER code that touches the game (site vehicles, reveals, the seeker umbrella). Urban Combat
 consults the resulting ground-force readiness through the `IGroundForceReadiness` contract
 (absent means one shell and one camp) and never imports Support types.
 
@@ -449,12 +485,20 @@ the air watch) and Saps (two forward listening posts). The belt sits at those de
 field depths because a position has to read as the two-line defence doctrine digs — a fire
 trench, a support line behind it and a reserve line further back — not as one ribbon on the
 frontier. An invalid belt leaves the position untouched and retries next tick.
-`TrenchGarrison` owns four native buildings per position (2 MG, 1 ATGM, 1 MANPADS), sparse
-by design and spread across the curve anchors, spawning through vanilla
-`Spawner.SpawnBuilding`, plus up to eight soldiers standing in the ditch itself on the curve
-anchors, facing the threat, spawned through vanilla `Spawner.SpawnPilot` — the game has no
+`TrenchGarrison` owns up to eight native buildings per position (four MG, two ATGM, two
+MANPADS; it opens with the two MG teams and grows with the stages) standing **in the ditch** on
+the curve's fire-bay nodes, spawning through vanilla
+`Spawner.SpawnBuilding`; the real weapon footprint is probed from the prefab's own root
+`BoxCollider`, never from the definition width that describes the hidden sandbag ring. The ring
+is a direct `dugout` child part (~10m mesh) and vanilla exposes no networked way to omit a
+part, so every peer hides it locally in `TrenchNestVisual.Strip` — postfixes on
+`Building.OnStartClient` and `Building.OnStartServer`, keyed on our `UniqueName` prefix — while
+keeping the part registered and the root hitbox untouched, so damage indices never desync. One
+dismounted soldier mans each nest: the game has no
 infantry unit, so the soldier is its dismounted-pilot figure, found by component in the
-encyclopedia's instance lists (never by a guessed jsonKey) and failing closed when absent.
+encyclopedia's instance lists (never by a guessed jsonKey) and failing closed when absent, and
+spawned through vanilla `Spawner.SpawnPilot` at its nest's own bay node once that nest has
+landed (a blocked bay walks to a neighbouring node and the crew follows it).
 `TrenchWorks` places up to eight small infantry-scale scenery
 pieces per position on the anchor bays themselves — filtered at runtime from the
 encyclopedia instance's own lists by keyword (`hesco`, `sandbag`, `gabion`, `dugout`) and footprint
@@ -481,14 +525,21 @@ of bridging them.
 The earthwork is built at man scale — a 0.8–1.1m walkable fire-step floor inside a ~1.6m
 cut, a parapet 1.2–1.45m above ground with a lower parados and narrow spoil berms, a total
 footprint near 4.8m — because the position has to read correctly beside the 1.8m models that
-stand in it (soldiers, the vanilla emplacements and their HESCO). Only the far LOD is a
+stand in it (soldiers, the vanilla emplacements and their HESCO). The ditch flares into a fire
+bay every ~20m (`TrenchTraceMath.NodeSpacing`/`BayExtra`: +1.4m across, full width through
+2.5m, eased to nothing by 6.5m; measured 2.41m plain half-width vs 3.11m in a bay), so the line
+reads as a chain of bays and traverses and every nest and crew has a place to stand inside the
+cut; only LOD0 carries the flare. The ditch colliders are a forward parapet wall band (bottom
+at ground, top above the crest) instead of a box through the cut, so the crew stands on the
+floor while ground units are still stopped by the berm. Only the far LOD is a
 deliberate exaggeration: a bold ridge silhouette that keeps the front visible from cruise
 altitude, where a man-scale line would fade into a ground scar. The wire belt is
 procedural crossed pickets and two strands 7m forward of the ditch line, draped over the
 terrain (`TrenchMeshBuilder.BuildWireBeltMesh`); half the scenery works sit behind the
 parados as shelters and dugouts (`TrenchWorks`), the other half on the parapet crest as fire
 positions.
-LOD0 is a continuous ditch extrusion along the curve using one shared cross-section profile
+LOD0 is a continuous ditch extrusion along the curve using one shared cross-section profile,
+re-derived per ring so fire bays flare as one earthwork
 (grass fringe, excavated spoil, timber revetment, firing step, packed earth crest) and a
 procedurally baked palette texture; the traverse wave is phased off the line's world
 position so neighbouring positions continue one pattern. There are no procedural

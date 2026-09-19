@@ -1,3 +1,4 @@
+using BoscaliSummer.Features.Support.Domain.Cyber;
 using BoscaliSummer.Features.Support.Runtime;
 
 namespace BoscaliSummer.Features.Support.Domain
@@ -8,11 +9,12 @@ namespace BoscaliSummer.Features.Support.Domain
         Ready = 0,
         FacilityMissing = 1,
         StationMissing = 2,
-        WrongPosture = 3
+        WrongPosture = 3,
+        CommandCompromised = 4
     }
 
     /// <summary>
-    /// Doctrine for the INFO tab: how each cyber operation is grouped and what gates it.
+    /// Doctrine for CYBER › OPERATIONS: how each cyber operation is grouped and what gates it.
     /// Names, prices and scaling stay in <see cref="CyberCatalog"/> and
     /// <see cref="InfoPowers"/>; this answers only "can it be tasked, and if not, why".
     /// Allocation and cooldown are checked by the caller, which owns the economy.
@@ -45,13 +47,21 @@ namespace BoscaliSummer.Features.Support.Domain
             }
         }
 
-        public static InfoGate Evaluate(InfoNetwork network, HackKind kind, bool stationDeployed, EwPosture posture)
+        /// <summary>
+        /// Target-independent gates, in order: doctrine level, a compromised Cyber Command, then
+        /// for station-backed operations a working jammer and one that is emitting (not EMCON).
+        /// Whether that jammer reaches the target stays a host check.
+        /// </summary>
+        public static InfoGate Evaluate(InfoNetwork network, HackKind kind, CyberNetwork cyber, double now = 0.0)
         {
             if (network == null || network.Level(CyberCatalog.Facility(kind)) < CyberCatalog.RequiredLevel(kind))
                 return InfoGate.FacilityMissing;
+            if (cyber != null && cyber.CommandCompromised) return InfoGate.CommandCompromised;
             if (!EwPostures.StationBacked(kind)) return InfoGate.Ready;
-            if (!stationDeployed) return InfoGate.StationMissing;
-            return EwPostures.Backs(posture, kind) ? InfoGate.Ready : InfoGate.WrongPosture;
+            // A trace foothold is a backdoor into that network: no jammer of your own needed.
+            if (cyber != null && cyber.AnyFoothold(now)) return InfoGate.Ready;
+            if (cyber == null || !cyber.AnyWorking(CyberSiteKind.Jammer)) return InfoGate.StationMissing;
+            return cyber.AnyEmittingJammer() ? InfoGate.Ready : InfoGate.WrongPosture;
         }
 
         /// <summary>Operator copy for a closed gate; null when the gate is open.</summary>
@@ -63,11 +73,11 @@ namespace BoscaliSummer.Features.Support.Domain
                     return "BUILD " + InfoNetwork.Facility(CyberCatalog.Facility(kind)).Name +
                            " LV" + CyberCatalog.RequiredLevel(kind);
                 case InfoGate.StationMissing:
-                    return "NEEDS EW STATION NEAR TARGET";
+                    return "NEEDS A WORKING JAM SITE NEAR TARGET";
                 case InfoGate.WrongPosture:
-                    EwPosture? required = EwPostures.Required(kind);
-                    return "SET EW POSTURE: " +
-                           (required.HasValue ? EwPostures.Info(required.Value).Name : "ACTIVE");
+                    return "EVERY JAMMER IS IN EMCON · SET ONE TO NOISE OR DECEPTION";
+                case InfoGate.CommandCompromised:
+                    return "CYBER COMMAND COMPROMISED · PATCH IT";
                 default:
                     return null;
             }

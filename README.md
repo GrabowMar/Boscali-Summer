@@ -28,15 +28,17 @@ Nuclear Option** — every expensive system pooled, event-driven, and globally b
   frontiers), offset onto the side each faction actually holds and settled into the
   flattest low ground the planner can find, so the work follows a hollow and bends around a
   rise instead of marching along a grid edge. Each ~2.4km position is a man-scale earthwork
-  — a walkable fire-step ditch behind a waist-high parapet, with a procedural wire belt in
+  — a walkable fire-step ditch behind a waist-high parapet, flared into fire bays every ~20m,
+  with a procedural wire belt in
   front of it — that matures from a scrape into a deliberate defensive belt (support
   line at 150m, reserve redoubt at 300m, communication trenches, forward saps with listening
   posts), and trenches appear only on contested stretches where opposing ground forces
   actually meet. Works are small infantry-scale game assets — HESCO, sandbag and light gabion
   pieces selected at runtime by keyword and footprint — on the parapet as fire positions and
-  behind the parados as shelters; four native MG/ATGM/MANPADS emplacements per position hold
-  the line, and dismounted soldiers stand in the ditch itself — the game has no infantry of
-  its own, so positions are manned by its dismounted pilots. Soldiers and emplacements are
+  behind the parados as shelters; up to eight native MG/ATGM/MANPADS nests per position hold
+  the line — standing in the ditch itself on the bay nodes, with their sandbag rings stripped —
+  and one dismounted soldier mans each nest, because the game has no infantry of its own and
+  its only human figure is the pilot. Soldiers and emplacements are
   permanent: hits pause construction for a minute, and a loss stays lost. The carved ditch follows the terrain on both sides of its
   cross-section; water, cliffs and broken ground interrupt a line rather than cancel it, and
   the earthwork keeps its real silhouette out to cruise altitude instead of fading into a
@@ -64,18 +66,22 @@ Nuclear Option** — every expensive system pooled, event-driven, and globally b
   station that survives hangar → spawn. Empty troop benches disappear and the ammunition
   display decreases.
 - **Radio** — one local map-MFD screen (`RAD`) with two pages, routed through the game's music
-  mixer. **RECEIVER** is the set: a frequency and signal metric strip, a spectrum waterfall, a
-  signal report fed by a real link budget (range, radio horizon and terrain line of sight to
-  each built-in station's tower), TUNE / SEEK / SCAN on FM (100 kHz), VHF air (25 kHz, AM) and
-  MW (10 kHz), and one setup row that names the value each key changes — BAND, MODE, BW,
-  STEP — beside AF and SQL steppers. It behaves like a radio — you tune a station and hear its
-  programme; you do not pick tracks. A built-in whose tower is lost (an airbase falls, an HQ
-  dies) reads **off air**. **MUSIC** is the local player: one transport, a folder stepper and
-  one track list — play, pause, skip, shuffle, repeat. While either page is live the game's
-  soundtrack stays held (including dead air between stations) and comes back on STOP. Carrier
-  static, squelch and the morse station ident are synthesized in memory; transmit, crypto and
-  the peer net are honest placeholders, and the deck ducks under a received transmission once
-  voice exists. Three starter stations; no bundled audio.
+  mixer. **RECEIVER** is the set: the tuned frequency big, the station and its programme, an
+  S-meter whose bar carries the scale and the squelch gate, and a **band scope** that is also
+  the tuning control — hover it to preview the nearest channel, click to tune there. `TUNE` /
+  `SEEK` / `SCAN` work FM (100 kHz), VHF air (25 kHz, AM) and MW (10 kHz), `FM` / `AIR` / `MW`
+  switch bands outright, and one setup row names the value each key changes — `MODE`, `BW`,
+  `STEP` — beside `AF` and `SQL` steppers. The preset list reads `STRONG / FAIR / WEAK` from
+  the modelled link budget (range, radio horizon, terrain line of sight to each built-in
+  station's tower). It behaves like a radio — you tune a station and hear its programme; you do
+  not pick tracks. A built-in whose tower is lost (an airbase falls, an HQ dies) reads **off
+  air**. **MUSIC** is the local player: a now-playing card with a real position bar, one
+  transport, one folder stepper and one track list — play, pause, skip, shuffle, repeat — with
+  an empty-state card pointing at the music folder when nothing is installed. While either page
+  is live the game's soundtrack stays held (including dead air between stations) and comes back
+  on STOP. Carrier static, squelch and the morse station ident are synthesized in memory;
+  transmit, crypto and the peer net are honest placeholders, and the deck ducks under a received
+  transmission once voice exists. Three starter stations; no bundled audio.
 - **Squad & aces** — `SQD` holds **PILOT**, **SKILLS**, **WINGS** and **STUDIO**. **PILOT**
   is the dossier: the pilot portrait generated by Wing Command, rank/score record, service
   background and the local squadron emblem. **SKILLS** is the shared skill board — the
@@ -111,13 +117,28 @@ Nuclear Option** — every expensive system pooled, event-driven, and globally b
   panel and taskings that fire at the crosshair. Radar scan, ELINT sweep, Rod from God and EMP
   only work while the station is overhead with the module fitted, powered and recharged; rods
   run out until a cargo resupply. ENEMY ACTIVITY tracks foreign stations and shows the
-  counterspace desk as coming soon. **EW** deploys one mobile EW station,
-  sets its posture — SIGINT passive, noise jamming or ghost spoofing — and calls in the flare
-  barrage. **INFO** runs ping sweep, track uplink, radar blackout, ghost shield and spoof
-  contacts, and invests allocation into the SIGINT, crypto, C2-disruptor and EW facilities
-  that unlock and strengthen them. Radar blackout needs the station jamming near the target;
-  ghost shield and spoof contacts need it spoofing. CRYPTO discounts operation cost; it does
-  not shorten the host support-request cooldown. **SPEC OPS** (base of operations, task groups,
+  counterspace desk as coming soon. **CYBER** is your faction's spectrum-defence network.
+  It builds itself on your airbases: Cyber Command sits on the base nearest the centre of your
+  holdings and gateways on up to five more, all linked by a backbone. Each lives in a real
+  building on its base — destroy the tower and that node is down until it is repaired; capture a
+  base and its node changes sides. ARCHITECT adds up to eight optional field trucks by
+  right-clicking the map — early-warning radars, jammers, SIGINT posts and relay masts — which
+  leave your nearest vehicle depot and link by range to any node on the net; the map and the
+  NETWORK page draw the mesh live. Radars feed hostile aircraft
+  into your picture, SIGINT posts find hostile emitters, and jammers in NOISE or DECEPTION throw
+  an ECM umbrella that breaks hostile radar-missile locks on friendlies (EMCON keeps them
+  silent). Once you field a truck, a host-simulated adversary campaign escalates against the network — recon probes that
+  expose your emitters, intrusions that walk your links toward Cyber Command, jamming raids that
+  halve links and radar cover — and enemy players' operations under your SIGINT ear show up too.
+  THREATS and the full-screen console (keys 1–5) answer them: ISOLATE, PATCH, HONEYPOT, TRACE
+  and BURN THROUGH, paid from a bandwidth pool, with INFOCON, a voice loop and a klaxon. A
+  finished trace opens a foothold (operations 25 % cheaper) and banks an INTEL token.
+  OPERATIONS runs ping sweep, track uplink, radar blackout, ghost shield, spoof contacts and
+  the flare barrage; DOCTRINE (in ARCHITECT) invests allocation into the SIGINT, crypto,
+  C2-disruptor and EW facilities that unlock and strengthen them. Radar blackout, ghost shield
+  and spoof contacts need a working jammer in NOISE or DECEPTION within reach of the target; a
+  compromised Cyber Command locks every operation. CRYPTO discounts operation cost;
+  it does not shorten the host support-request cooldown. **SPEC OPS** (base of operations, task groups,
   plus zone fortification) and **INTEL** (networks) fund programs that accrue readiness and
   intel tokens; SOF tokens buy doctrine ranks at the base of operations — fortification
   doctrine secures more positions per fortify order, insertion rigging leaves more encampments
@@ -126,10 +147,10 @@ Nuclear Option** — every expensive system pooled, event-driven, and globally b
   authorisation; there is no extra perk. Camera marks are on the TGT screen's CAMERA page;
   the third-person HUD toggle is in SET. Perk purchases remain in SQD. STR surfaces a
   base-defense ticker when hostiles approach a friendly airbase.
-  Orbital and EW stations, infrastructure, programs and doctrine ranks are faction assets,
-  host-authoritative; protocol 11 requires matching peers. The station console, uplink, sky
-  objects, EW posture, programs and the base of operations still need in-game and multiplayer
-  acceptance.
+  Orbital stations, CYBER networks, infrastructure, programs and doctrine ranks are faction
+  assets, host-authoritative; protocol 12 requires matching peers. The station console, uplink,
+  sky objects, the CYBER network and console, programs and the base of operations still need
+  in-game and multiplayer acceptance.
 - **Strategic layer** — an `STR` map-MFD with the theater picture: DEFCON, the air
   balance, the friendly-AI sortie board, the live sector field and contested nodes
   (**SA**), chain of command (**COC**, allied or hostile roster), and the theater
@@ -156,19 +177,30 @@ Nuclear Option** — every expensive system pooled, event-driven, and globally b
   row whose state changed; enemy log entries obey the same intel fog as the roster. Own posts
   and confirmed enemy posts are drawn on the map as tier-sized diamonds, pulsing while under
   fire, so a commander the board describes is a place you can fly to.
-- **World events** (`Events.Enabled`, new, in-game acceptance pending) — an `EVN` map-MFD
-  feed of rotating mission-wide events drawn from a curated catalog (a global supply chain
-  crisis, sanctions, a depot fire, a volunteer logistics corps, a black-market surplus,
-  monsoon season, and more). The host rolls one event at a time on a randomized gap and
-  broadcasts it; the panel pins the active event with its live countdown and a badge for
-  its real effect, and keeps a bounded history of what already happened this mission.
-  Modifiers are real: support requisition costs rise or fall by the event's multiplier
-  while it is active (the honored seam is the OPS support economy, not vanilla purchase
-  prices), with a global `EffectStrength` scalar and two flavor-only entries so not every
-  event is mechanical. Each costed event is also a decision: spend allocation to **contain**
-  a penalty or **leverage** a discount for the rest of its run (host-validated, one response
-  per player, priced by severity), and the active card shows a progress bar, the countdown
-  and the response's effect on your own price.
+- **World events** (`Events.Enabled`, in-game acceptance pending) — a graded, host-rotated
+  **event director** on the `EVN` map-MFD screen. Events come in three weights: **minor**
+  weather and flavor, **medium** moves on requisition prices, and rare scripted
+  **superevents** the director only fires when the theater leans — a coalition supply bridge
+  for the side losing ground, an emergency appropriation, an overstretched winner, a global
+  munitions crisis, a ceasefire ultimatum. The director counts ground airbase custody every
+  second (the same ownership the map shows) and names who leads and who is hard-pressed; a
+  two-base deficit arms the interventions. Superevents run timed beats that are real
+  host-side effects: faction pool credit, per-player allocation grants and one funded vanilla
+  convoy for the side that needs it, all scaled by the global `EffectStrength` scalar and
+  always inside seams the game already owns (the OPS support economy and the faction/convoy
+  economy — never vanilla purchase prices, never spawned aircraft). Each event aimed at your
+  side is also a decision: spend allocation to **contain** a penalty or **leverage** a
+  discount for the rest of its run (host-validated, one response per player, priced by
+  severity). The panel is an instrument board: a status bar, the live price factor and super
+  budget as metrics, a directorate strip naming who leads the ground war and whether the
+  director is armed, then an instrument card for the active event (tier band, title, the
+  effect in plain words with a consequence line, a scripted-beat ticker for superevents,
+  a millimetre countdown and the response control), with completed events below as a compact
+  feed. Poster art, if you generate it, is a 16:9 plate on the card and a thumbnail in every history row; without it a generated stripe plate over the category mark fills the same plate, so the page is never an empty frame. A
+  superevent takes over the screen once with a full-screen alert, and the HUD adds one
+  notice so a pilot in the air hears it too.
+  Optional poster art: PNGs dropped into `BepInEx/plugins/BoscaliSummer/Events/` (see
+  `docs/EVENT_ART_BRIEF.md`); without them the vector glyph carries the panel and alert.
 - **Expanded tactical map** — `Command.ExpandedMapUi` (default on): left-side MFD pages and
   event log, central map, right-side bezel rail, native spawn footer, with shared Wing
   Command bezel and map-input ownership.
@@ -221,30 +253,6 @@ Nuclear Option** — every expensive system pooled, event-driven, and globally b
   112 outcomes), so the game replicates its own timeline. A same-named mission Boscali did not
   write is never overwritten. In-game acceptance of the install path, timeline pacing, spawn
   placement, balance and the multi-peer path is pending.
-- **Weather** (`Weather.Enabled`, default on) — the host drives the mission's sky from a
-  deterministic synoptic model: a pressure system per hour moves air masses across the map,
-  the contrast between them forms a cold, warm, occluded or dry-line front, and the
-  day's heating decides how much of the energy is released. Temperature, dewpoint, cloud
-  base, CAPE, shear, gusts, rain rate and visibility are all derived from that, and every
-  peer derives the same forecast from the mission clock alone, so a late joiner is
-  immediately correct and no new weather message is added — vanilla's own sync vars carry
-  the five driven channels. The same model makes weather a place: up to eight storm cells in
-  isolated, scattered, cluster or squall-line arrangement, derived identically on every peer
-  from the seed, clock, map size and wind — none of it is transmitted. The sky itself is the
-  game's own cloud deck, retuned rather than replaced: it darkens under and ahead of a storm,
-  feathers between vanilla's five weather sets, tears with shear and drifts with the front.
-  Rain falls on the canopy properly — droplets live on the cockpit glass and refract what is
-  behind them — and the whole-map `WEA` radar paints synthetic reflectivity with the frontal
-  boundaries, motion, layers and a time scrub, each with its own client-local setting
-  (`RainEffects`, `RainOnCanopy`, `RainAudio`, `RainEffectDensity`, `Hud`, `RadarRangeKm`).
-  The `WEA` environment panel shows flight category, cloud base, visibility, a wind rose and
-  the forecast; an opt-in debug overlay (`Weather.DebugControls`, `F11` + Ctrl) aims it
-  directly on the host. Authored `ModifyEnvironment` mission beats always win — a change the
-  model did not make is adopted and held for 40 seconds before the schedule resumes — and
-  ground fires thicken the sky through the existing fire read. In-game acceptance is pending:
-  the panel render, the retuned deck, the glass rain, the HUD, the radar and the map click
-  path are all unverified.
-
 Active fires, ruins and garrisons sync for multiplayer and late joiners; only authoritative
 transitions go on the wire. Hard global budgets keep large city battles practical — see
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
@@ -283,10 +291,11 @@ in-game with [ConfigurationManager](https://github.com/BepInEx/BepInEx.Configura
    a town or tree line for a secondary ignition chance.
 3. Capture an airbase and inspect nearby civilian buildings — selected shells keep their
    look but behave as defensive positions.
-4. Maximise the tactical map. Press **`RAD`** for the receiver page — TUNE/SEEK/SCAN work the
-   band, the setup row shows and changes BAND / MODE / BW / STEP, and the AF and SQL steppers
-   set volume and squelch — and its **MUSIC** tab for your own folders and transport
-   (**FOLDER** opens the library; add OGG/WAV files and press **RESCAN**). Press **`SQD`** for
+4. Maximise the tactical map. Press **`RAD`** for the receiver page — click the band scope or
+   use TUNE/SEEK/SCAN to tune, `FM` / `AIR` / `MW` switch bands, the setup row changes MODE /
+   BW / STEP, and the AF and SQL steppers set volume and squelch — and its **MUSIC** tab for
+   your own folders and transport (**OPEN FOLDER** opens the library; add OGG/WAV files and
+   press **RESCAN**). Press **`SQD`** for
    your pilot dossier, shared skill board, enemy aces and the
    pilot/emblem studio; press **`OPS`**
    to call support over a valid map target. Press **`STR`** for the theater picture and
@@ -329,19 +338,24 @@ anything) or **client-local**. This table is a curated subset; F1 shows the rest
 | Squadron | `PilotProfile` | *(empty)* | Optional Wing Command custom-pilot callsign shown as your local SQD profile (name, callsign, background, portrait) |
 | Support | `Enabled` / `CostMultiplier` | `true` / `1.0` | OPS support pipeline; scale every cost at once |
 | Support | `ReconSweep` `ElintSweep` `Fortification` `RodFromGod` `EmpShock` `FlareBarrage` | `true` | Per-action toggles; `ReconSweep` is the radar scan (ELINT sweep and flare barrage share its Satellite Scan authorisation) |
-| Support | `CyberOperations` | `true` | INFO cyber operations: infrastructure and the five operations it unlocks |
+| Support | `CyberOperations` | `true` | CYBER offensive operations and the doctrine that unlocks them |
+| Support | `ElectronicWarfare` / `CyberCampaignIntensity` | `true` / `1.0` | CYBER spectrum-defence network; how hard the simulated adversary works against it (0 = off) |
+| Support | `CyberSiteCostScale` / `CyberScrapRefund` / `CyberSiteLimit` | `1.0` / `0.5` / `8` | Scale on every CYBER field-site price; share refunded on scrap; most field trucks per faction (airbase nodes are free and never count) |
+| Support | `EwProximityRadiusMeters` | `15000` | How close a working jammer must be to a radar blackout / ghost / spoof target |
 | Support | `PlatformCostScale` / `PlatformJettisonRefund` | `1.0` / `0.4` | Scale on every station launch (module price + vehicle); share refunded on jettison or deorbit |
 | Support | `PlatformInsertionSeconds` / `PlatformDockingSeconds` / `PlatformDebrisEvents` | `45` / `20` / `true` | Core liftoff to first pass cycle; module liftoff to docking; micrometeoroid strikes |
 | Support | `OrbitGapScale` / `SarSceneRadiusMeters` | `1.0` / `1000` | Far-side arc scale; radar scan half-width at MID (×0.8 LOW, ×1.4 HIGH, ×1.35 with a relay) |
 | Support | `ElintSweepCost` / `ElintSweepRadiusMeters` | `400` / `8000` | ELINT sweep price and search radius at MID |
 | Support | `MaximumRangeMeters` / `RequestCooldownSeconds` | `30000` / `30` | Strike delivery reach; cooldown per player |
 | Support | `FireMissionDefinitionKey` | *(empty)* | Missile for Rod from God / EMP; empty auto-picks a yield ≤ 200 vanilla missile |
-| Support | Map effect areas | — | Abilities and hacks show icons and radii; rod has a 150 m core inside a 420 m blast boundary. Active markers use host-approved values (support protocol 11; matching peers required). |
+| Support | Map effect areas | — | Abilities and hacks show icons and radii; rod has a 150 m core inside a 420 m blast boundary. Active markers use host-approved values (support protocol 12; matching peers required). |
 | Command | `Enabled` / `ExpandedMapUi` | `true` / `true` | STR screen + map overlays; full tactical map GUI |
 | HighCommand | `Enabled` / `EconomyEnabled` | `true` / `true` | Chain-of-command page, command posts, VIP convoys and funds/score payouts |
-| Events | `Enabled` / `EffectStrength` | `true` / `1.0` | `EVN` rotating world-event feed; scale every event modifier (0 = flavor only) |
-| Events | `RotationGapMinSeconds` / `MaxSeconds` | `90` / `240` | Calm window between events; one event at a time, 5–15 min each |
+| Events | `Enabled` / `EffectStrength` | `true` / `1.0` | `EVN` graded world-event director; scale every modifier and credit (0 = flavor only) |
+| Events | `RotationGapMinSeconds` / `MaxSeconds` | `90` / `240` | Calm window between events; one event at a time, 1.5–5 min each |
 | Events | `HistoryLength` | `16` | Finished events kept on the EVN screen this mission (max 16) |
+| Events | `SuperEventsEnabled` | `true` | Host: allow scripted superevents when the theater leans |
+| Events | `AlertsEnabled` / `AlertSeconds` | `true` / `24` | Client: full-screen superevent alert and how long it stays |
 | Campaign | `Enabled` | `true` | Install the authored Boscali Summer campaign mission into the game's mission list (restart to apply) |
 | Command | `FrontlinesOverlay` / `FrontlineTrace` / `ThreatHeat` / `OverlayOpacity` | `true` / `true` / `true` / `0.35` | Sector-control tint, front line trace and hostile sensor-coverage heat on the map |
 | DynamicOperations | `Enabled` / `RewardMultiplier` | `false` / `1.0` | Experimental secondary missions; scale money & XP |

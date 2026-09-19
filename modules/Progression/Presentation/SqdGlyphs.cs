@@ -44,7 +44,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
 
         public static SqdGlyph Create(RectTransform parent, Rect area, SqdMark mark)
         {
-            var go = new GameObject(mark.ToString(), typeof(RectTransform), typeof(SqdGlyph));
+            var go = new GameObject(mark.ToString(), typeof(RectTransform), typeof(CanvasRenderer), typeof(SqdGlyph));
             go.transform.SetParent(parent, false);
             var glyph = go.GetComponent<SqdGlyph>();
             glyph.Mark = mark;

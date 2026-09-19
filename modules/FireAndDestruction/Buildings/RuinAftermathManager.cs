@@ -78,6 +78,9 @@ namespace BoscaliSummer.Fire
         {
             float now = Time.timeSinceLevelLoad;
             collapsePool.Update(now);
+            if (now < nextSelection && now < nextVisualTick) return;
+            if (ruins.Count == 0) return;
+
             Camera camera = SceneSingleton<CameraStateManager>.i?.mainCamera ?? Camera.main;
             if (camera == null) return;
             Vector3 camPos = camera.transform.position;

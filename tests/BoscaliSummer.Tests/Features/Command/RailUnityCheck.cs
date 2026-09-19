@@ -34,7 +34,7 @@ public static class RailUnityCheck
     private static readonly string[] Labels =
     {
         "BDF", "MAP", "MFD", "SUD", "DPS", "PALA", "TGT", "MIS", "RAD", "SET", "WMC", "STR",
-        "EVN", "WEA",
+        "EVN",
     };
 
     public static void Run()
@@ -149,7 +149,7 @@ public static class RailUnityCheck
 
         var skins = new List<MfdRail.ButtonSkin>();
         Check(MfdRail.PrepareCapacity(columns.Rail.height, Labels.Length),
-            "fourteen keys (six vanilla screens, WMC, the claimed screens and the hosted EVN/WEA) must fit the rail");
+            "thirteen keys (six vanilla screens, WMC, the claimed screens and hosted EVN) must fit the rail");
         int adopted = MfdRail.Adopt(buttons, screens, null, null, skins);
         Check(adopted == Labels.Length, "every slot with a screen must be adopted, adopted=" + adopted);
 
@@ -161,8 +161,6 @@ public static class RailUnityCheck
             "SET must be branded with its descriptor");
         Check(skins[12].Label.text.Contains("EVN") && skins[12].Label.text.Contains("EVENTS"),
             "the hosted EVN button must be branded in the rail");
-        Check(skins[13].Label.text.Contains("WEA") && skins[13].Label.text.Contains("WEATHER"),
-            "the hosted WEA button must be branded in the rail");
         Check(skins[4].Label.text == "SUD", "an unknown code keeps its sanitised code and no invented name");
         Check(skins[4].Icon != null, "an unknown code still gets the neutral glyph");
         Check(skins[2].Icon != null && skins[2].Icon.gameObject.activeSelf,

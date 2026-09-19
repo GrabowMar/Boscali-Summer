@@ -55,6 +55,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private int selectedPage;
             private int resourceSeries;
             private int renderedResourceSeries = -1;
+            private int renderedResourceCount = -1;
             private float renderedResourceTime = float.NaN;
             private static readonly string[] ResourceLabels = { "FUNDS", "WARHEADS", "MANPOWER", "MORALE" };
             private static readonly string[] ResourceGlyphs = { "funds", "missile", "person", "gauge" };
@@ -62,7 +63,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private MfdResourceHistory resourceHistory;
             private AvStyled.Metric[] resourceMetrics;
             private AvButton[] resourceTabs;
-            private MfdResourceChart resourceChart;
+            private ResourceHistoryChart resourceChart;
 
             public FactionPresenter(MFDScreen screen, InfoPanel_Faction source, VanillaMfdPanelId id)
                 : base(screen, id)
@@ -87,6 +88,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 BuildForcesPage(pages[1]);
                 BuildLedgerPage(pages[2]);
                 BuildStatusPage(pages[3]);
+                // The state line carries the faction's full name; it shrinks before it cuts.
+                Shell.DataBar.State.enableAutoSizing = true;
+                Shell.DataBar.State.fontSizeMin = AvTokens.FontMicro;
                 SelectDefinitions(0);
                 SelectPage(0);
             }
@@ -99,6 +103,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     observedHq = hq;
                     resourceHistory = FactionResourceHistoryStore.For(hq);
                     renderedResourceSeries = -1;
+                    renderedResourceCount = -1;
                     renderedResourceTime = float.NaN;
                     definitionGrid.ResetPage();
                     infoGrid.ResetPage();
@@ -115,7 +120,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 pages[selectedPage].gameObject.SetActive(true);
 
                 string name = hq.faction == null ? "FACTION" : hq.faction.factionName;
-                Shell.DataBar.State.text = AvTheme.Truncate((name ?? "FACTION").ToUpperInvariant(), 18);
+                Shell.DataBar.State.text = (name ?? "FACTION").ToUpperInvariant();
                 Shell.DataBar.SetChip(0, "SCORE " + hq.factionScore.ToString("0.0"), true);
                 Shell.DataBar.SetChip(1, UnitConverter.ValueReading(hq.factionFunds), true);
                 Shell.DataBar.SetChip(2, "WHD " + hq.GetWarheadStockpile(), true);
@@ -166,30 +171,52 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private void BuildResourcesPage(RectTransform page)
             {
                 DrawSpine(page);
-                float y = Heading(page, -AvTokens.Space1, Shell.Body.width, "FACTION RESOURCES", "LIVE STOCKPILES");
+                float width = PageWidth;
+                float body = PageHeight;
+                const float cardHeight = 80f;
+                float cardWidth = (width - AvTokens.Space3 - AvTokens.Gap) / 2f;
+
+                float y = Heading(page, -AvTokens.Space1, width, "FACTION RESOURCES", "LIVE STOCKPILES");
                 string[] labels = ResourceLabels;
                 string[] units = { "", "WHD", "PAX", "/ 100" };
-                float width = (Shell.Body.width - AvTokens.Space3 - AvTokens.Gap) / 2f;
                 resourceMetrics = new AvStyled.Metric[4];
                 for (int i = 0; i < 4; i++)
                 {
-                    Rect area = new Rect(AvTokens.Space3 + i % 2 * (width + AvTokens.Gap),
-                        y - i / 2 * 90f, width, 82f);
+                    Rect area = new Rect(AvTokens.Space3 + i % 2 * (cardWidth + AvTokens.Gap),
+                        y - i / 2 * (cardHeight + AvTokens.Gap), cardWidth, cardHeight);
                     AvKit.TacticalCard(page, area, i == 3 ? AvTheme.RailReady : AvTheme.RailInfo);
                     resourceMetrics[i] = AvStyled.MetricCell(page, area, labels[i], units[i]);
                     CardGlyph(page, area, ResourceGlyphs[i]);
+                    // A stock figure shrinks to the micro floor before it is ever cut, so a
+                    // large balance or a morale readout never prints as an ellipsis.
+                    resourceMetrics[i].Value.enableAutoSizing = true;
+                    resourceMetrics[i].Value.fontSizeMin = AvTokens.FontMicro;
+                    resourceMetrics[i].Value.fontSizeMax = 22f;
+                    resourceMetrics[i].Caption.enableAutoSizing = true;
+                    resourceMetrics[i].Caption.fontSizeMin = AvTokens.FontMicro;
+                    resourceMetrics[i].Caption.fontSizeMax = 11f;
+                    // The unit stops short of the card's corner glyph instead of being
+                    // printed under it, which is what hid the morale readout.
+                    resourceMetrics[i].Unit.rectTransform.sizeDelta = new Vector2(
+                        cardWidth - 50f, resourceMetrics[i].Unit.rectTransform.sizeDelta.y);
                     // Only morale has a meaningful maximum. Other resources are absolute stocks.
                     if (i != 3) resourceMetrics[i].Fill.enabled = false;
                 }
-                y -= 184f;
-                y = Heading(page, y, Shell.Body.width, "RESOURCE HISTORY", "LOCAL OBSERVATIONS");
+                y -= 2f * cardHeight + AvTokens.Gap + AvTokens.Space3;
+
+                y = Heading(page, y, width, "RESOURCE HISTORY", "LOCAL OBSERVATIONS");
                 resourceTabs = CreateButtonRow(page, y, labels, selected =>
                 {
                     resourceSeries = selected;
                     RequestRefresh();
                 });
-                y -= AvTokens.RowHeight + AvTokens.Space3;
-                resourceChart = new MfdResourceChart(page, y, Shell.Body.width, Shell.Body.height + y - AvTokens.Space2);
+                for (int i = 0; i < resourceTabs.Length; i++)
+                {
+                    resourceTabs[i].WithTooltip(
+                        "Plot " + labels[i].ToLowerInvariant() + " over the observed window.");
+                }
+                y -= AvTokens.RowHeight + AvTokens.Space2;
+                resourceChart = new ResourceHistoryChart(page, y, width, body + y - AvTokens.Space1);
             }
 
             private void RefreshResources(FactionHQ hq)
@@ -207,13 +234,16 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     MfdResourceHistory.Finite(morale) ? "STORED • INACTIVE" : "HOST DATA UNAVAILABLE",
                     MfdResourceHistory.Finite(morale) ? morale / 100f : 0f, AvTheme.Accent);
                 if (resourceHistory == null) resourceHistory = FactionResourceHistoryStore.For(hq);
-                float latest = resourceHistory != null && resourceHistory.Count > 0
-                    ? resourceHistory.Time(resourceHistory.Count - 1) : float.NaN;
-                if (resourceHistory != null &&
-                    (latest != renderedResourceTime || renderedResourceSeries != resourceSeries))
+                int latestCount = resourceHistory != null ? resourceHistory.Count : 0;
+                float latest = latestCount > 0 ? resourceHistory.Time(latestCount - 1) : float.NaN;
+                bool chartChanged = latestCount != renderedResourceCount ||
+                                    (latestCount > 0 && latest != renderedResourceTime) ||
+                                    renderedResourceSeries != resourceSeries;
+                if (resourceHistory != null && chartChanged)
                 {
                     resourceChart.Set(resourceHistory, resourceSeries, ResourceLabels[resourceSeries], FormatResource);
                     renderedResourceTime = latest;
+                    renderedResourceCount = latestCount;
                     renderedResourceSeries = resourceSeries;
                 }
                 SetRow(resourceTabs, resourceSeries);
@@ -221,6 +251,178 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             private string FormatResource(float value) => resourceSeries == 0
                 ? UnitConverter.ValueReading(value) : value.ToString("0.#");
+
+            /// <summary>
+            /// The observed resource window: quarter gridlines, the window's own minimum
+            /// and maximum at the axis, and an honest empty state until two samples can
+            /// draw a line. It pools one segment per history slot and only moves them; the
+            /// observed window is padded so a flat series sits inside the plot instead of
+            /// hugging its top edge.
+            /// </summary>
+            private sealed class ResourceHistoryChart
+            {
+                private const float AxisWidth = 68f;
+                private readonly Image[] segments = new Image[MfdResourceHistory.Capacity - 1];
+                private readonly TMP_Text summary, upper, lower, window, empty;
+                private readonly Image marker, zero;
+                private readonly float left, top, width, height;
+
+                public ResourceHistoryChart(RectTransform parent, float y, float panelWidth,
+                                            float availableHeight)
+                {
+                    summary = AvStyled.Label(parent,
+                        new Rect(AvTokens.Space3, y, panelWidth - AvTokens.Space3, 18f), "", "row-main");
+                    // The series name and its change are data: the line shrinks to the
+                    // micro floor and then overflows rather than being clipped.
+                    summary.enableWordWrapping = false;
+                    summary.overflowMode = TextOverflowModes.Overflow;
+                    summary.enableAutoSizing = true;
+                    summary.fontSizeMin = AvTokens.FontMicro;
+                    summary.fontSizeMax = summary.fontSize;
+
+                    top = y - 28f;
+                    height = Mathf.Max(56f, availableHeight - 74f);
+                    left = AvTokens.Space3 + AxisWidth;
+                    width = panelWidth - left - AvTokens.Space2;
+
+                    AvKit.Panel(parent, new Rect(left, top, width, height), AvTheme.SurfaceRaised);
+                    AvKit.Outline(parent, new Rect(left, top, width, height), AvTheme.Hairline);
+                    for (int i = 1; i < 4; i++)
+                    {
+                        AvKit.Rule(parent, new Rect(left, top - height * i / 4f, width, 1f),
+                                   AvTheme.Unity(AvTokens.Hairline.WithAlpha(0.35f)));
+                    }
+
+                    upper = AxisLabel(parent, top, "—");
+                    lower = AxisLabel(parent, top - height + 14f, "—");
+                    zero = AvKit.Rule(parent, new Rect(left, top, width, 1f), AvTheme.RailInfo);
+                    for (int i = 0; i < segments.Length; i++)
+                    {
+                        segments[i] = AvKit.Rule(parent, new Rect(left, top, 0f, 2f), AvTheme.Accent);
+                        segments[i].rectTransform.pivot = new Vector2(0f, .5f);
+                    }
+                    marker = AvKit.Rule(parent, new Rect(left, top, 6f, 6f), AvTheme.TextPrimary);
+                    marker.rectTransform.pivot = new Vector2(.5f, .5f);
+
+                    empty = AvStyled.Label(parent,
+                        new Rect(left + 10f, top - height * 0.5f - 20f, width - 20f, 40f),
+                        "", "row-sub", align: TextAlignmentOptions.Center);
+                    empty.enableWordWrapping = true;
+                    empty.overflowMode = TextOverflowModes.Truncate;
+                    window = AvStyled.Label(parent,
+                        new Rect(AvTokens.Space3, top - height - 18f, panelWidth - AvTokens.Space3, 16f),
+                        "", "row-sub");
+                }
+
+                private static TMP_Text AxisLabel(RectTransform parent, float y, string text)
+                {
+                    TMP_Text label = AvStyled.Label(parent,
+                        new Rect(AvTokens.Space3, y, AxisWidth - 6f, 16f), text, "kv-value");
+                    label.enableAutoSizing = true;
+                    label.fontSizeMin = AvTokens.FontMicro;
+                    label.fontSizeMax = AvTokens.FontSmall;
+                    return label;
+                }
+
+                public void Set(MfdResourceHistory history, int series, string name,
+                                Func<float, string> format)
+                {
+                    int count = history == null ? 0 : history.Count;
+                    float lo = float.MaxValue, hi = float.MinValue;
+                    for (int i = 0; i < count; i++)
+                    {
+                        float value = history.Value(series, i);
+                        if (!MfdResourceHistory.Finite(value)) continue;
+                        lo = Mathf.Min(lo, value);
+                        hi = Mathf.Max(hi, value);
+                    }
+
+                    bool lastKnown = count > 0 && MfdResourceHistory.Finite(history.Value(series, count - 1));
+                    if (count < 2 || hi < lo || !lastKnown)
+                    {
+                        for (int i = 0; i < segments.Length; i++) segments[i].enabled = false;
+                        marker.enabled = false;
+                        zero.enabled = false;
+                        upper.text = lower.text = "—";
+                        empty.gameObject.SetActive(true);
+                        empty.text = count == 0
+                            ? "NO SAMPLES YET\nA sample is taken every 5 seconds while this page is open."
+                            : "NOT ENOUGH SAMPLES\nA line needs at least two 5-second samples.";
+                        summary.text = name + "  •  WAITING FOR SAMPLES";
+                        window.text = "HISTORY KEEPS THE LAST " +
+                            (MfdResourceHistory.Capacity * MfdResourceHistory.Interval).ToString("0") + " s";
+                        return;
+                    }
+
+                    // The plot shows the observed window, padded, so a flat series sits
+                    // inside the frame rather than along its top edge; the axis labels
+                    // state exactly what the window is.
+                    float span = hi - lo;
+                    if (span < Mathf.Max(1f, Mathf.Abs(hi) * 0.02f))
+                    {
+                        float centre = (hi + lo) * 0.5f;
+                        float pad = Mathf.Max(1f, Mathf.Abs(centre) * 0.05f);
+                        lo = centre - pad;
+                        hi = centre + pad;
+                    }
+                    else
+                    {
+                        float pad = Mathf.Max(1f, span * 0.15f);
+                        lo -= pad;
+                        hi += pad;
+                    }
+                    span = hi - lo;
+
+                    float duration = history.Time(count - 1) - history.Time(0);
+                    if (duration <= 0f) duration = 1f;
+                    int drawn = 0;
+                    for (int i = 0; i < segments.Length; i++)
+                    {
+                        bool valid = i + 1 < count &&
+                            MfdResourceHistory.Finite(history.Value(series, i)) &&
+                            MfdResourceHistory.Finite(history.Value(series, i + 1));
+                        segments[i].enabled = valid;
+                        if (!valid) continue;
+                        SetSegment(segments[i], history, series, i, lo, span, duration);
+                        drawn++;
+                    }
+
+                    marker.enabled = true;
+                    marker.rectTransform.anchoredPosition =
+                        Point(history, series, count - 1, lo, span, duration);
+                    zero.enabled = lo <= 0f && hi >= 0f;
+                    if (zero.enabled)
+                        zero.rectTransform.anchoredPosition =
+                            new Vector2(left, top - height * (0f - lo) / span);
+                    upper.text = format(hi);
+                    lower.text = format(lo);
+                    // Samples that are all gaps still draw no line, so the plot says so.
+                    empty.gameObject.SetActive(drawn == 0);
+                    if (drawn == 0)
+                        empty.text = "NOT ENOUGH SAMPLES\nA line needs two consecutive 5-second samples.";
+                    float change = history.Value(series, count - 1) - history.Value(series, 0);
+                    summary.text = name + "  •  CHANGE " + (MfdResourceHistory.Finite(change)
+                        ? (change > 0f ? "+" : "") + format(change) : "—");
+                    window.text = "LAST " + duration.ToString("0") + "s   →   NOW  |  5s SAMPLES";
+                }
+
+                private void SetSegment(Image image, MfdResourceHistory history, int series,
+                                        int index, float lo, float span, float duration)
+                {
+                    Vector2 a = Point(history, series, index, lo, span, duration);
+                    Vector2 b = Point(history, series, index + 1, lo, span, duration);
+                    RectTransform rect = image.rectTransform;
+                    rect.anchoredPosition = a;
+                    rect.sizeDelta = new Vector2((b - a).magnitude, 2f);
+                    rect.localRotation = Quaternion.Euler(0f, 0f,
+                        Mathf.Atan2(b.y - a.y, b.x - a.x) * Mathf.Rad2Deg);
+                }
+
+                private Vector2 Point(MfdResourceHistory history, int series, int index,
+                                      float lo, float span, float duration) =>
+                    new Vector2(left + width * (history.Time(index) - history.Time(0)) / duration,
+                                top - height + height * (history.Value(series, index) - lo) / span);
+            }
 
             /// <summary>
             /// A resource glyph in the card's top-right corner. The metric key names the
@@ -242,15 +444,15 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private void BuildForcesPage(RectTransform page)
             {
                 DrawSpine(page);
-                float y = Heading(page, -AvTokens.Space1, Shell.Body.width,
+                float y = Heading(page, -AvTokens.Space1, PageWidth,
                                   "FORCE INVENTORY", "LIVE ASSETS");
 
                 // The identity card: roundel, name and the faction's own flag art. The flag
                 // keeps the 2:1 aspect it was drawn at — a 456-wide banner would flatten the
                 // emblem into a smear, so it takes a fixed panel on the right instead.
                 const float heroHeight = 96f;
-                const float flagWidth = 176f;
-                Rect hero = new Rect(AvTokens.Space3, y, Shell.Body.width - AvTokens.Space3,
+                const float flagWidth = 112f;
+                Rect hero = new Rect(AvTokens.Space3, y, PageWidth - AvTokens.Space3,
                                      heroHeight);
                 AvKit.Panel(page, hero, AvTheme.Surface, AvSprites.Card);
                 Rect flagArea = new Rect(hero.x + hero.width - flagWidth - 4f, hero.y - 4f,
@@ -268,16 +470,24 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 float textX = hero.x + AvTokens.Space3 + 48f;
                 float textWidth = Mathf.Max(0f, flagArea.x - textX - AvTokens.Space2);
                 factionName = AvStyled.Label(page,
-                    new Rect(textX, hero.y - 24f, textWidth, 24f),
+                    new Rect(textX, hero.y - 22f, textWidth, 38f),
                     "SYNCING FACTION", "metric-value");
+                // A long faction name wraps or shrinks; it is the screen's identity and
+                // must never be cut.
+                factionName.enableWordWrapping = true;
+                factionName.overflowMode = TextOverflowModes.Overflow;
+                factionName.enableAutoSizing = true;
+                factionName.fontSizeMin = AvTokens.FontBody;
+                factionName.fontSizeMax = 22f;
                 factionSubtitle = AvStyled.Label(page,
-                    new Rect(textX, hero.y - 50f, textWidth, 12f),
+                    new Rect(textX, hero.y - 64f, textWidth, 24f),
                     "LIVE THEATER ORDER OF BATTLE", "metric-cap");
+                factionSubtitle.enableWordWrapping = true;
                 y -= heroHeight + AvTokens.Space3;
 
                 forceTotals = new TMP_Text[4];
-                string[] labels = { "BLD", "VEH", "SHP", "AIR" };
-                float totalWidth = (Shell.Body.width - AvTokens.Space3 - AvTokens.Gap * 3f) / 4f;
+                string[] labels = { "BUILDINGS", "VEHICLES", "SHIPS", "AIRCRAFT" };
+                float totalWidth = (PageWidth - AvTokens.Space3 - AvTokens.Gap * 3f) / 4f;
                 for (int i = 0; i < forceTotals.Length; i++)
                 {
                     float x = AvTokens.Space3 + i * (totalWidth + AvTokens.Gap);
@@ -296,29 +506,37 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 forceBarWidth = totalWidth;
                 y -= 48f;
 
-                y = Heading(page, y, Shell.Body.width, "ASSET CLASS", "TAP TO FILTER");
+                y = Heading(page, y, PageWidth, "ASSET CLASS", "CHOOSE A CLASS");
                 definitionTabs = CreateButtonRow(page, y,
                     new[] { "BUILDINGS", "VEHICLES", "SHIPS", "AIRCRAFT" }, SelectDefinitions);
                 y -= AvTokens.RowHeight + AvTokens.Space3;
-                y = Heading(page, y, Shell.Body.width, "UNIT READOUT", "CURRENT / LOST");
-                int rows = Mathf.Clamp(Mathf.FloorToInt((Shell.Body.height + y - 44f) / 38f), 3, 12);
-                definitionGrid = new MfdPagingGrid(page, y, Shell.Body.width, 2, rows, readOnly: true);
+                y = Heading(page, y, PageWidth, "UNIT READOUT", "CURRENT / LOST");
+                // The row math folds the pager in: Space1 and RowHeight are the pager, and
+                // Space2 is the margin above the status strip. The pitch then takes the
+                // whole remainder, so the list ends within a line of the body bottom
+                // instead of stopping 28-52px short of it.
+                const float chrome = 42f;
+                float readable = PageHeight + y - chrome;
+                int rows = Mathf.Clamp(Mathf.FloorToInt(readable / 46f), 2, 8);
+                float cell = Mathf.Clamp(readable / rows, 46f, 88f);
+                definitionGrid = new MfdPagingGrid(page, y, PageWidth, 2, rows,
+                                                   readOnly: true, rowHeight: cell);
             }
 
             private void BuildLedgerPage(RectTransform page)
             {
                 DrawSpine(page);
-                float y = Heading(page, -AvTokens.Space1, Shell.Body.width,
+                float y = Heading(page, -AvTokens.Space1, PageWidth,
                                   "THEATER LEDGER", "MISSION ACCOUNTING");
                 ledgerTabs = CreateButtonRow(page, y,
                     new[] { "RESERVES", "LOSSES", "VALUE", "MANPOWER" }, SelectLedger);
                 y -= AvTokens.RowHeight + AvTokens.Space3;
 
-                y = Heading(page, y, Shell.Body.width, "ASSET BREAKDOWN", "LIVE TOTALS");
+                y = Heading(page, y, PageWidth, "ASSET BREAKDOWN", "LIVE TOTALS");
                 ledgerMetrics = new AvStyled.Metric[4];
                 string[] labels = { "BUILDINGS", "VEHICLES", "SHIPS", "AIRCRAFT" };
                 float gap = AvTokens.Gap;
-                float cellWidth = (Shell.Body.width - AvTokens.Space3 - gap) * 0.5f;
+                float cellWidth = (PageWidth - AvTokens.Space3 - gap) * 0.5f;
                 for (int i = 0; i < ledgerMetrics.Length; i++)
                 {
                     int row = i / 2;
@@ -329,20 +547,20 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                         new Rect(AvTokens.Space3 + column * (cellWidth + gap),
                                  y - row * 92f, cellWidth, 82f), labels[i], "UNIT");
                 }
-                ledgerChart = new MfdLedgerChart(page, y-184f, Shell.Body.width,
-                    Shell.Body.height + y - 184f - AvTokens.Space2);
+                ledgerChart = new MfdLedgerChart(page, y-184f, PageWidth,
+                    PageHeight + y - 184f - AvTokens.Space2);
             }
 
             private void BuildStatusPage(RectTransform page)
             {
                 DrawSpine(page);
-                float y = Heading(page, -AvTokens.Space1, Shell.Body.width,
+                float y = Heading(page, -AvTokens.Space1, PageWidth,
                                   "FACTION STATUS", "LIVE THEATER LINK");
                 infoTabs = CreateButtonRow(page, y, new[] { "AIRBASES", "PLAYERS" }, SelectInfo);
                 y -= AvTokens.RowHeight + AvTokens.Space3;
-                y = Heading(page, y, Shell.Body.width, "ACTIVE ENTRIES", "DIRECTORY");
-                int rows = Mathf.Clamp(Mathf.FloorToInt((Shell.Body.height + y - 44f) / 38f), 4, 16);
-                infoGrid = new MfdPagingGrid(page, y, Shell.Body.width, 1, rows, readOnly: true);
+                y = Heading(page, y, PageWidth, "ACTIVE ENTRIES", "DIRECTORY");
+                int rows = Mathf.Clamp(Mathf.FloorToInt((PageHeight + y - 44f) / 30f), 4, 16);
+                infoGrid = new MfdPagingGrid(page, y, PageWidth, 1, rows, readOnly: true);
             }
 
             private AvButton[] CreateButtonRow(RectTransform parent, float y, string[] labels,
@@ -350,14 +568,14 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             {
                 var row = new AvButton[labels.Length];
                 float gap = AvTokens.Gap;
-                float width = (Shell.Body.width - AvTokens.Space3 - gap * (labels.Length - 1)) /
+                float width = (PageWidth - AvTokens.Space3 - gap * (labels.Length - 1)) /
                               labels.Length;
                 for (int i = 0; i < labels.Length; i++)
                 {
                     int index = i;
                     row[i] = PanelButton(parent,
                         new Rect(AvTokens.Space3 + i * (width + gap), y, width, AvTokens.RowHeight),
-                        labels[i], "toggle", () => selected(index), AvButtonStyle.Toggle);
+                        labels[i], "tab", () => selected(index), AvButtonStyle.Tab);
                 }
                 return row;
             }
@@ -452,20 +670,32 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             {
                 if (!definitionsLoaded) PopulateDefinitions();
                 definitionGrid.SetData(definitions.Count,
-                    i => DefinitionLabel(definitions[i], hq),
+                    i => DefinitionLabel(definitions[i]),
                     i => false,
-                    null, icons: i => definitions[i] == null ? null : definitions[i].mapIcon);
+                    null,
+                    icons: i => definitions[i] == null ? null : definitions[i].mapIcon,
+                    details: i => DefinitionDetail(definitions[i], hq),
+                    subs: i => DefinitionDetail(definitions[i], hq));
             }
 
-            private string DefinitionLabel(UnitDefinition definition, FactionHQ hq)
+            /// <summary>
+            /// The unit's own code, never cut: the readout's figures live on the second
+            /// line so a long designation cannot push a count off the edge.
+            /// </summary>
+            private static string DefinitionLabel(UnitDefinition definition)
             {
                 if (definition == null) return "UNKNOWN";
-                if (hq.missionStatsTracker == null) return (definition.code ?? "UNIT") + " — / —";
+                string code = string.IsNullOrEmpty(definition.code) ? definition.unitName : definition.code;
+                return string.IsNullOrEmpty(code) ? "UNIT" : code.ToUpperInvariant();
+            }
+
+            private static string DefinitionDetail(UnitDefinition definition, FactionHQ hq)
+            {
+                if (definition == null || hq == null || hq.missionStatsTracker == null)
+                    return "NO UNIT ACCOUNTING YET";
                 int current = hq.missionStatsTracker.GetCurrentUnits(definition);
                 int lost = hq.missionStatsTracker.GetLostUnits(definition);
-                string code = string.IsNullOrEmpty(definition.code) ? definition.unitName : definition.code;
-                return AvTheme.Truncate((code ?? "UNIT").ToUpperInvariant(), 11) + " " +
-                       current + " / " + lost;
+                return current + " CURRENT  /  " + lost + " LOST";
             }
 
             private void RefreshLedger(FactionHQ hq)

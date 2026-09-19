@@ -2,6 +2,7 @@ using System.Collections;
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using BoscaliSummer.Features.Support.Configuration;
+using BoscaliSummer.Features.Support.Domain.Cyber;
 using BoscaliSummer.Features.Support.Domain.Orbital;
 using NuclearOption.Networking;
 using UnityEngine;
@@ -42,8 +43,8 @@ namespace BoscaliSummer.Features.Support.Runtime
         /// <summary>Host-side entry for the two track-deception operations.</summary>
         bool BeginDeception(Player caster, HackKind kind, GlobalPosition target, float duration);
 
-        /// <summary>The faction's electronic-warfare presence, or null if none is deployed.</summary>
-        EwAsset EwAssetFor(FactionHQ owner);
+        /// <summary>An operation landed: the attacker's adversaries grow warier and enemy SIGINT may hear it.</summary>
+        void ReportOperation(Player caster, GlobalPosition target);
     }
 
     internal readonly struct SupportContext
@@ -110,8 +111,8 @@ namespace BoscaliSummer.Features.Support.Runtime
             }
         }
 
-        /// <summary>The requester's EW asset, or null if none is deployed / it has died.</summary>
-        public EwAsset EwAsset => Host.EwAssetFor(Owner);
+        /// <summary>The requester's CYBER network (null until the theater is loaded).</summary>
+        public CyberNetwork Cyber => Host.Space.CyberFor(Owner);
     }
 
     /// <summary>

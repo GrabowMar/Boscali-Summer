@@ -33,6 +33,7 @@ namespace BoscaliSummer.Features.Trenches.Visuals
         private readonly List<BoxCollider> colliders = new List<BoxCollider>(MaximumColliders);
         private readonly float[] pathX = new float[MaximumRings];
         private readonly float[] pathZ = new float[MaximumRings];
+        private readonly float[] bayExtra = new float[MaximumRings];
         private readonly float[] curveX = new float[TrenchLine.MaximumCurvePoints];
         private readonly float[] curveZ = new float[TrenchLine.MaximumCurvePoints];
 
@@ -94,7 +95,10 @@ namespace BoscaliSummer.Features.Trenches.Visuals
             Vector3[] fire = BuildDitchPath(line.Curve, TraceStep);
             if (fire != null)
             {
-                AddMesh(lod0Root.transform, "Fire_LOD0", fire, width, parapet, 1.1f, earthMat, true);
+                // Bays flare the LOD0 fire ditch only: a 1.4m widening is sub-pixel at the mid
+                // and far LOD ranges, and the constant silhouettes already read from there.
+                AddMesh(lod0Root.transform, "Fire_LOD0", fire, width, parapet, 1.1f, earthMat, true,
+                    BuildBaySchedule(fire));
                 AddFrontColliders(fire, width, parapet, "Fire");
                 AddWireBelt(lod0Root.transform, earthMat);
             }
@@ -214,12 +218,39 @@ namespace BoscaliSummer.Features.Trenches.Visuals
             return curveZ;
         }
 
+        /// <summary>
+        /// Per-ring widening for the fire ditch: the extra half-width at each ring from the
+        /// nearest bay node, full through a bay and easing back into the plain ditch between.
+        /// Returns the cached buffer (no per-rebuild allocation); a line without nodes yet
+        /// returns null and digs the plain ditch.
+        /// </summary>
+        private float[] BuildBaySchedule(Vector3[] path)
+        {
+            Vector3[] nodes = line.Nodes;
+            if (nodes == null || nodes.Length == 0 || path == null) return null;
+
+            int count = Mathf.Min(path.Length, bayExtra.Length);
+            for (int i = 0; i < count; i++)
+            {
+                float nearestSq = float.MaxValue;
+                for (int n = 0; n < nodes.Length; n++)
+                {
+                    float dx = path[i].x - nodes[n].x;
+                    float dz = path[i].z - nodes[n].z;
+                    float sq = dx * dx + dz * dz;
+                    if (sq < nearestSq) nearestSq = sq;
+                }
+                bayExtra[i] = TrenchTraceMath.BayExtra(Mathf.Sqrt(nearestSq));
+            }
+            return bayExtra;
+        }
+
         private void AddMesh(Transform parent, string name, Vector3[] path, float width, float height, float skirt,
-            Material material, bool conformToGround)
+            Material material, bool conformToGround, float[] ringExtra = null)
         {
             if (parent == null || material == null) return;
             Mesh mesh = TrenchMeshBuilder.BuildEdgeMesh(path, width, height, skirt, line.Threat[0],
-                conformToGround ? TrenchTerrain.SnapToGround : (Func<Vector3, Vector3>)null);
+                conformToGround ? TrenchTerrain.SnapToGround : (Func<Vector3, Vector3>)null, ringExtra);
             if (mesh == null) return;
             proceduralMeshes.Add(mesh);
             var go = new GameObject(name);
@@ -234,6 +265,10 @@ namespace BoscaliSummer.Features.Trenches.Visuals
         /// </summary>
         private void AddFrontColliders(Vector3[] path, float width, float parapetHeight, string tag)
         {
+            // The band is the forward parapet wall, not the whole cut: the interior stays
+            // clear so the crew stands on the ditch floor, and the berm wall in front of
+            // them is what stops ground units crossing the line.
+            float wallHeight = parapetHeight + 0.6f;
             int stride = Mathf.Max(3, path.Length / MaximumColliders);
             for (int i = 0; i < path.Length - 1 && colliders.Count < MaximumColliders; i += stride)
             {
@@ -244,15 +279,21 @@ namespace BoscaliSummer.Features.Trenches.Visuals
 
                 Vector3 mid = (p0 + p1) * 0.5f;
                 Vector3 fwd = (p1 - p0).normalized;
+                Vector3 threat = line.ThreatAt(mid);
+                Vector3 side = new Vector3(threat.x, 0f, threat.z);
+                if (side.sqrMagnitude < 0.0001f) side = Vector3.Cross(Vector3.up, fwd);
+                else side.Normalize();
+
                 var colObj = new GameObject($"DitchCollider_{tag}_{i}");
                 // Ignore Raycast layer: the obstacle boxes block vehicles only, and placement
                 // queries never mistake the mod's own ditch for an obstacle to spawn into.
                 colObj.layer = PhysicsLayers.IgnoreRaycast;
                 colObj.transform.SetParent(lod0Root.transform, false);
-                colObj.transform.localPosition = mid + Vector3.up * (parapetHeight * 0.5f);
+                colObj.transform.localPosition = mid + side * (width * 0.5f + 0.55f) +
+                    Vector3.up * (wallHeight * 0.5f);
                 colObj.transform.localRotation = Quaternion.LookRotation(fwd, Vector3.up);
                 var box = colObj.AddComponent<BoxCollider>();
-                box.size = new Vector3(width + 1.2f, Mathf.Max(1.2f, parapetHeight * 0.9f), len + 0.5f);
+                box.size = new Vector3(width + 1.2f, wallHeight, len + 0.5f);
                 colliders.Add(box);
             }
         }
@@ -288,10 +329,6 @@ namespace BoscaliSummer.Features.Trenches.Visuals
             // reads as tens of kilometres away and sits at LOD3 — fully culled — forever.
             CameraStateManager view = SceneSingleton<CameraStateManager>.i;
             Camera cam = view != null && view.mainCamera != null ? view.mainCamera : Camera.main;
-            if (cam == null && Camera.allCamerasCount > 0)
-            {
-                cam = Camera.allCameras[0];
-            }
             if (cam == null) return;
 
             Vector3 center = WorldCenter;

@@ -61,14 +61,13 @@ entries inside the list**, not indices past its end.
 | `BezelRegistry.Str` | left | Boscali strategic layer: theater SA, chain of command, and the CMD operations board |
 | `BezelRegistry.Rad` | right | Boscali radio: RECEIVER and DECK pages |
 | `BezelRegistry.Set` | right | Boscali saved map settings |
-| Boscali `MfdSlots.Weather` | hosted (appended) | Boscali weather: environment panel and derived forecast; appended like `EVN`, not a claim |
 
 Five Boscali screens plus WMC fill the six unused slots (three per column) in the
 supported vanilla layout. `TryClaim` spills from a full preferred column and never
 evicts another owner. Boscali's `SqdPanelTests` verifies all six claims coexist and
-an additional claim fails without replacement. `EVN` and `WEA` do not claim: they are
-**hosted** (`Infrastructure/GameInterop/MfdScreenHost.cs`), and hosting appends a button and
-screen per hosted panel to the vanilla column lists so vanilla drives each like any other
+an additional claim fails without replacement. `EVN` does not claim: it is **hosted**
+(`Infrastructure/GameInterop/MfdScreenHost.cs`), and hosting appends a button and screen
+to the vanilla column lists so vanilla drives it like any other
 slot and Wing Command's installer still sees six free slots. The radio's second page (the local
 deck) is a tab inside `RAD`, not a screen of its own. The former solo-only `ADM` bezel is
 gone: faction tasking is a **SERVER** page tab inside `SET`.
@@ -76,7 +75,7 @@ gone: faction tasking is a **SERVER** page tab inside `SET`.
 The installed Wing Command `0.9.2.6` installs WMC by scanning the live lists for the
 first free button rather than through `BezelRegistry`, so a registry entry alone cannot
 protect its slot. Hosting is what keeps WMC safe: Boscali claims exactly five slots, the
-scanner takes the sixth, and the appended EVN and WEA slots are already occupied as far as
+scanner takes the sixth, and the appended EVN slot is already occupied as far as
 it is concerned. Do not add a claim for a screen that can be hosted, and do not append a host
 button without also appending its screen — vanilla indexes screens by button index, so the
 two lists must stay the same length.

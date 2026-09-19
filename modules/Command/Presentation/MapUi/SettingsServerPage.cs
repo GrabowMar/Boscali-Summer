@@ -34,7 +34,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private void BuildServerPage(RectTransform parent, Rect body)
         {
             int settingRows = 0;
-            int sections = 1;
+            int sections = 1; // the tasking heading; every view below adds one
             if (hostSettings != null)
             {
                 for (int i = 0; i < hostSettings.Views.Count; i++)
@@ -44,8 +44,13 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 }
             }
 
-            parent = Page(ServerDisplay, parent, body,
-                TaskRowCount + settingRows + 3, sections, out Rect area);
+            // The tasking board is fixed-height furniture: the request button, the status
+            // line and the three card rows do not stretch, so Page() spreads the bay's
+            // slack over the host setting rows instead. The tasking heading is one of the
+            // page's sections, so its height is not part of this block.
+            const float taskingBlock = 32f + 36f + TaskRowCount * ListRow.Pitch + 10f;
+            parent = Page(ServerDisplay, parent, body, settingRows, sections,
+                taskingBlock, out Rect area);
 
             // Providers re-read their config before the row widgets paint: values, bounds and
             // availability all come from the owning module, never from a copy kept here.
@@ -58,12 +63,12 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             }
             refreshers.Add(RefreshTasking);
 
-            float x = area.x + AvScreen.SpineInset;
-            float width = area.width - AvScreen.SpineInset;
+            float x = area.x;
+            float width = area.width;
 
             Heading(parent, ref area, "01", "FACTION TASKING", "SECONDARY OBJECTIVES");
 
-            taskRequest = AvStyled.Button(parent, new Rect(x, area.y - 4f, 110f, 24f), "REQUEST BOARD", "btn",
+            taskRequest = AvStyled.Button(parent, new Rect(x, area.y - 2f, 144f, 28f), "REFRESH BOARD", "btn",
                 () =>
                 {
                     tasking?.Refresh();
@@ -199,7 +204,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         /// <summary>One objective card: rail, title, detail, progress figure and track.</summary>
         private sealed class ListRow
         {
-            public const float Pitch = 50f;
+            public const float Pitch = 64f;
 
             private readonly GameObject root;
             private readonly Image rail;
@@ -215,12 +220,12 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 rect.SetParent(parent, false);
                 AvKit.Place(rect, new Rect(x, y, width, Pitch - 4f));
 
-                const float trail = 96f;
+                const float trail = 56f;
                 float textWidth = width - trail - 20f;
 
                 rail = AvStyled.Rail(rect, new Rect(0f, 0f, 3f, Pitch - 8f), "locked");
                 name = AvStyled.Label(rect, new Rect(12f, 0f, textWidth, 15f), "", "row-name");
-                detail = AvStyled.Label(rect, new Rect(12f, -16f, textWidth, 28f), "", "row-sub");
+                detail = AvStyled.Label(rect, new Rect(12f, -20f, textWidth, 34f), "", "row-sub");
                 value = AvStyled.Label(rect, new Rect(width - trail, 0f, trail, 15f), "",
                                        "row-value", align: TextAlignmentOptions.MidlineRight);
                 bar = AvKit.ProgressBar(rect, new Rect(width - trail, -22f, trail, 6f), 0f,

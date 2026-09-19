@@ -380,6 +380,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             protected readonly MFDScreen Screen;
             public readonly VanillaMfdPanelId Id;
             protected AvScreen Shell;
+            // A shallow bay scrolls a readable page instead of squeezing every control.
+            // All owned stock presenters use this same content measure.
+            protected float PageHeight => Mathf.Max(540f, Shell.Body.height);
+            protected float PageWidth { get; private set; }
 
             public void Build(RectTransform root)
             {
@@ -432,7 +436,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 RectTransform pageRect = page.GetComponent<RectTransform>();
                 AvKit.Place(pageRect, Shell.Body);
                 if (TabCount <= 0) page.SetActive(true);
-                return pageRect;
+                RectTransform content = AvScreen.Scroll(pageRect,
+                    new Rect(0f, 0f, Shell.Body.width, Shell.Body.height), PageHeight, out Rect area);
+                PageWidth = area.width;
+                return content;
             }
 
             protected void ConfigureTabs(string[] labels, Action<int> onTab)
@@ -445,6 +452,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     AvButton tab = Shell.Tabs[i];
                     if (tab == null) continue;
                     tab.SetText(labels[i]);
+                    tab.WithTooltip("Open the " + labels[i].ToLowerInvariant() + " page.");
                     DecorateTab(tab, labels[i]);
                 }
                 PaintTabGlyphs();
@@ -522,21 +530,81 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             protected static void DrawSpine(RectTransform page) =>
                 AvStyled.Spine(page, new Rect(0f, 0f, 3f, page.rect.height));
 
+            /// <summary>Distance from a section title's top edge to the content under its rule.</summary>
+            protected const float HeadingPitch = 24f;
+
+            /// <summary>
+            /// One section head, kept as references so a page whose blocks move as the copy
+            /// changes can re-place it. The head is the same everywhere: the spine tick, the
+            /// title, an optional right-hand note, and a hairline rule. The old version drew
+            /// a lit accent bar under the title, which made every heading look like a latched
+            /// tab and was the loudest mark on the page; the sheet's title and note carry the
+            /// hierarchy, and the rule only ties them together.
+            /// </summary>
+            protected sealed class SectionHead
+            {
+                public Image Tick;
+                public TMP_Text Title;
+                public TMP_Text Note;
+                public Image Rule;
+
+                public void Place(RectTransform parent, float y, float width)
+                {
+                    AvKit.Place(Tick.rectTransform, new Rect(3f, y - 7f, Tick.rectTransform.sizeDelta.x,
+                                                             Tick.rectTransform.sizeDelta.y));
+                    AvKit.Place(Title.rectTransform,
+                        new Rect(AvTokens.Space3, y, width * 0.55f - AvTokens.Space3, 16f));
+                    if (Note != null)
+                        AvKit.Place(Note.rectTransform, new Rect(width * 0.57f, y, width * 0.43f, 16f));
+                    AvKit.Place(Rule.rectTransform,
+                        new Rect(AvTokens.Space3, y - 16f, width - AvTokens.Space3, 1f));
+                }
+            }
+
+            protected static SectionHead Head(RectTransform parent, float y, float width,
+                                              string title, string note = null)
+            {
+                var head = new SectionHead();
+                AvStyle tick = AvStyleHost.Style("spine-tick");
+                head.Tick = AvKit.Rule(parent, new Rect(3f, y - 7f,
+                        tick.HasWidth ? tick.Width : 8f, tick.HasHeight ? tick.Height : 1.5f),
+                    AvStyleHost.Resolve(tick.Background, AvTheme.Accent));
+                head.Title = AvStyled.Label(parent,
+                    new Rect(AvTokens.Space3, y, width * 0.55f - AvTokens.Space3, 16f), title, "section-title");
+                if (!string.IsNullOrEmpty(note))
+                {
+                    head.Note = AvStyled.Label(parent, new Rect(width * 0.57f, y, width * 0.43f, 16f),
+                        note, "section-title-note", align: TextAlignmentOptions.MidlineRight);
+                }
+                head.Rule = AvKit.Rule(parent, new Rect(AvTokens.Space3, y - 16f,
+                                                        width - AvTokens.Space3, 1f),
+                                       AvTheme.Unity(AvTokens.Hairline));
+                return head;
+            }
+
             protected static float Heading(RectTransform parent, float y, float width,
                                            string title, string note = null)
             {
-                AvStyled.SpineTick(parent, 3f, y - 7f);
-                AvStyled.Label(parent, new Rect(AvTokens.Space3, y, width * 0.5f - AvTokens.Space3, 14f),
-                               title, "section-title");
-                if (!string.IsNullOrEmpty(note))
-                {
-                    AvStyled.Label(parent,
-                        new Rect(width * 0.52f, y, width * 0.48f, 14f), note,
-                        "section-title-note", align: TextAlignmentOptions.MidlineRight);
-                }
-                AvKit.Rule(parent, new Rect(AvTokens.Space3, y - 16f,
-                                            width - AvTokens.Space3, 1f), AvTheme.Hairline);
-                return y - AvTokens.Space5;
+                Head(parent, y, width, title, note);
+                return y - HeadingPitch;
+            }
+
+            /// <summary>
+            /// How much room a page has beyond a layout's floor, up to its ceiling. Pages
+            /// size their stretchable blocks from the body the bay actually gave them; a
+            /// hard-coded layout is always wrong at one end of the 596..896 panel range.
+            /// </summary>
+            protected static float Stretch(float bodyHeight, float minimum, float maximum) =>
+                Mathf.Clamp(bodyHeight - minimum, 0f, Mathf.Max(0f, maximum - minimum));
+
+            /// <summary>Explanatory copy under a heading: dim, wrapped, and never ellipsised.</summary>
+            protected static TMP_Text Hint(RectTransform parent, Rect area, string text)
+            {
+                TMP_Text label = AvStyled.Label(parent, area, text, "hint");
+                label.enableWordWrapping = true;
+                label.overflowMode = TextOverflowModes.Overflow;
+                label.fontSizeMin = AvTokens.FontMicro;
+                return label;
             }
         }
 

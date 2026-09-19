@@ -33,13 +33,13 @@ namespace BoscaliSummer.Tests.Features.Support
         private const double Insertion = 45.0;
         private const double Dock = 20.0;
 
-        /// <summary>A core on MID, past insertion, sitting at the start of its first pass.</summary>
+        /// <summary>A core on Standard orbit, past insertion, sitting at the start of its first pass.</summary>
         private static OrbitalPlatform Station(out double now)
         {
             var platform = new OrbitalPlatform();
-            PlacementFailure failure = platform.TryLaunch(ModuleKind.Core, OrbitalPlatform.CoreCell, OrbitRegimes.Mid,
+            PlacementFailure failure = platform.TryLaunch(ModuleKind.Core, OrbitalPlatform.CoreCell, OrbitRegimes.Standard,
                 42, 100.0, 1300f, Insertion, Dock);
-            TestAssert.That(failure == PlacementFailure.None, "a core must launch onto MID");
+            TestAssert.That(failure == PlacementFailure.None, "a core must launch onto Standard orbit");
             now = FirstPassTime(platform, 100.0 + Insertion);
             return platform;
         }
@@ -80,23 +80,29 @@ namespace BoscaliSummer.Tests.Features.Support
 
         private static void TestBands()
         {
-            OrbitRegime low = OrbitRegimes.Get(OrbitRegimes.Low);
-            OrbitRegime mid = OrbitRegimes.Get(OrbitRegimes.Mid);
-            OrbitRegime high = OrbitRegimes.Get(OrbitRegimes.High);
-            double lowPass = TheaterTrack.WindowSeconds(low);
-            double midPass = TheaterTrack.WindowSeconds(mid);
-            double highPass = TheaterTrack.WindowSeconds(high);
-            TestAssert.That(Near(lowPass, 130.0, 20.0), "a LOW pass must last about two minutes, was " + lowPass);
-            TestAssert.That(Near(midPass, 195.0, 25.0), "a MID pass must last about three minutes, was " + midPass);
-            TestAssert.That(Near(highPass, 340.0, 40.0), "a HIGH pass must last about five and a half minutes, was " + highPass);
-            TestAssert.That(low.NadirGsd < mid.NadirGsd && mid.NadirGsd < high.NadirGsd, "higher bands must image coarser");
-            TestAssert.That(low.RodScatter < mid.RodScatter && mid.RodScatter < high.RodScatter,
-                "higher bands must scatter rods wider");
-            TestAssert.That(low.ScanScale < high.ScanScale && low.EmpScale < high.EmpScale,
-                "higher bands must see and burst wider");
-            TestAssert.That(low.DragFuelPerSecond > 0f && mid.DragFuelPerSecond == 0f, "only LOW must burn drag fuel");
-            TestAssert.That(TheaterTrack.CycleSeconds(low, OrbitClock.Default) <
-                            TheaterTrack.CycleSeconds(high, OrbitClock.Default), "LOW must come round sooner");
+            TestAssert.That(OrbitRegimes.All.Length == 1, "only a single orbit regime must exist");
+            OrbitRegime leo = OrbitRegimes.Get(OrbitRegimes.Standard);
+            TestAssert.That(leo.Index == OrbitRegimes.Standard, "regime index must be Standard");
+            TestAssert.That(leo.Code == "LEO" && leo.Name == "LOW EARTH ORBIT", "regime must be LEO");
+            TestAssert.That(Near(leo.Altitude, 500000.0, 1e-6), "altitude must be 500 km");
+            TestAssert.That(Near(leo.InclinationDeg, 51.6, 1e-6), "inclination must be 51.6°");
+            TestAssert.That(Near(leo.GapSeconds, 60.0, 1e-6), "gap must be 60 s");
+            TestAssert.That(Near(leo.NadirGsd, 0.4, 1e-6), "nadir GSD must be 0.4 m");
+            TestAssert.That(Near(leo.ScanScale, 1.0f, 1e-6), "scan scale must be 1.0");
+            TestAssert.That(Near(leo.RodScatter, 15f, 1e-6), "rod scatter must be 15 m");
+            TestAssert.That(Near(leo.EmpScale, 1.0f, 1e-6), "EMP scale must be 1.0");
+            TestAssert.That(leo.DragFuelPerSecond == 0f, "space orbit must have zero drag fuel");
+
+            // Backward compatibility constants
+            TestAssert.That(OrbitRegimes.Low == 0 && OrbitRegimes.Mid == 0 && OrbitRegimes.High == 0,
+                "compat constants Low, Mid, High must all map to 0");
+            TestAssert.That(OrbitRegimes.Valid(OrbitRegimes.Standard), "Standard orbit must be valid");
+            TestAssert.That(!OrbitRegimes.Valid(1) && !OrbitRegimes.Valid(-1), "other orbit indices must be invalid");
+            TestAssert.That(OrbitRegimes.Get(99).Index == OrbitRegimes.Standard, "Get must return the single orbit");
+
+            double pass = TheaterTrack.WindowSeconds(leo);
+            TestAssert.That(Near(pass, 215.0, 30.0), "a LEO pass must last about three and a half minutes, was " + pass);
+            TestAssert.That(TheaterTrack.CycleSeconds(leo, OrbitClock.Default) > pass, "cycle must exceed window");
             TestAssert.That(new OrbitClock(99.0).GapScale == 4.0, "gap scale must clamp");
         }
 
@@ -203,14 +209,14 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(!empty.Exists, "a new platform must not exist");
             TestAssert.That(empty.CheckPlacement(ModuleKind.Solar, 6, 0, 0.0) == PlacementFailure.NoPlatform,
                 "a module needs a core");
-            TestAssert.That(empty.CheckPlacement(ModuleKind.Core, 0, OrbitRegimes.Low, 0.0) == PlacementFailure.NeedsPropulsion,
-                "a bare core cannot hold LOW");
+            TestAssert.That(empty.CheckPlacement(ModuleKind.Core, 0, OrbitRegimes.Standard, 0.0) == PlacementFailure.None,
+                "a bare core can launch without propulsion");
             TestAssert.That(empty.CheckPlacement(ModuleKind.Core, 0, 9, 0.0) == PlacementFailure.UnknownOrbit,
                 "an unknown band must be refused");
 
             OrbitalPlatform platform = Station(out double now);
             TestAssert.That(platform.Exists && platform.Energy == 600f, "the core must launch charged");
-            TestAssert.That(platform.CheckPlacement(ModuleKind.Core, 0, OrbitRegimes.Mid, now) == PlacementFailure.PlatformExists,
+            TestAssert.That(platform.CheckPlacement(ModuleKind.Core, 0, OrbitRegimes.Standard, now) == PlacementFailure.PlatformExists,
                 "one station per faction");
             TestAssert.That(platform.CanAttach(6) && platform.CanAttach(2) && !platform.CanAttach(0),
                 "only cells next to the station can take a module");
@@ -357,7 +363,7 @@ namespace BoscaliSummer.Tests.Features.Support
                 "no station must be the first reason");
 
             var inserting = new OrbitalPlatform();
-            inserting.TryLaunch(ModuleKind.Core, 0, OrbitRegimes.Mid, 5, 0.0, 0f, Insertion, Dock);
+            inserting.TryLaunch(ModuleKind.Core, 0, OrbitRegimes.Standard, 5, 0.0, 0f, Insertion, Dock);
             TestAssert.That(inserting.Check(PlatformAbility.RadarScan, 1.0, clock) == PlatformDenial.NotFitted,
                 "an unfitted ability must say so");
             TestAssert.That(inserting.HoldAt(1.0) == PlatformHold.Insertion && inserting.HoldAt(Insertion + 1.0) == PlatformHold.None,
@@ -406,12 +412,12 @@ namespace BoscaliSummer.Tests.Features.Support
             Add(crewed, ModuleKind.Habitat, 8, ref t);
             TestAssert.That(Near(crewed.RechargeSeconds(PlatformAbility.RadarScan, t), 45.0 * 0.75, 1e-3),
                 "a crew must speed recharge");
-            TestAssert.That(Near(crewed.ScanScale(t), 1f, 1e-6), "an unboosted MID scan must be nominal");
+            TestAssert.That(Near(crewed.ScanScale(t), 1f, 1e-6), "an unboosted LEO scan must be nominal");
             Add(crewed, ModuleKind.Relay, 1, ref t);
             TestAssert.That(Near(crewed.ScanScale(t), OrbitalPlatform.RelayBoost, 1e-6), "a relay next to the imager must boost it");
-            TestAssert.That(Near(crewed.RodScatter(t), 20f, 1e-6), "MID rods must scatter 20 m");
+            TestAssert.That(Near(crewed.RodScatter(t), 15f, 1e-6), "LEO rods must scatter 15 m");
             Add(crewed, ModuleKind.Gyro, 2, ref t);
-            TestAssert.That(Near(crewed.RodScatter(t), 10f, 1e-6), "gyros must halve rod scatter");
+            TestAssert.That(Near(crewed.RodScatter(t), 7.5f, 1e-6), "gyros must halve rod scatter");
         }
 
         private static void TestManoeuvres()
@@ -432,16 +438,13 @@ namespace BoscaliSummer.Tests.Features.Support
                 "holds must not hide a missing module");
 
             double later = away + 200.0;
-            TestAssert.That(platform.CheckShift(OrbitRegimes.Mid, later, clock) == PlatformDenial.SameOrbit,
-                "a shift must change band");
-            TestAssert.That(Near(platform.ShiftFuel(OrbitRegimes.High), 35.0, 1e-6) &&
-                            Near(platform.ShiftFuel(OrbitRegimes.Low), 35.0, 1e-6), "one band costs 35 fuel");
-            TestAssert.That(platform.TryShift(OrbitRegimes.High, later, clock, 88), "a fuelled station must raise its orbit");
-            TestAssert.That(platform.Regime == OrbitRegimes.High && platform.Fuel == 40f &&
-                            platform.HoldAt(later + 1.0) == PlatformHold.Transfer, "a raise must burn and transfer");
-            TestAssert.That(platform.CheckShift(OrbitRegimes.Low, later + OrbitalPlatform.TransferSeconds + 1.0, clock) ==
-                            PlatformDenial.NoFuel, "two bands need 70 fuel");
-            TestAssert.That(!platform.TryShift(OrbitRegimes.Mid, later + 1.0, clock, 9), "no burn during a transfer");
+            TestAssert.That(platform.CheckShift(OrbitRegimes.Standard, later, clock) == PlatformDenial.SameOrbit,
+                "shift to same orbit must be refused");
+            TestAssert.That(platform.CheckShift(1, later, clock) == PlatformDenial.SameOrbit,
+                "shift to invalid orbit must be refused as SameOrbit");
+            TestAssert.That(!platform.TryShift(OrbitRegimes.Standard, later, clock, 88), "a station cannot shift in single orbit");
+            TestAssert.That(!platform.TryShift(1, later, clock, 88), "a station cannot shift to invalid orbit");
+            TestAssert.That(platform.Regime == OrbitRegimes.Standard, "regime must remain Standard");
         }
 
         private static void TestSafeMode()
@@ -449,17 +452,11 @@ namespace BoscaliSummer.Tests.Features.Support
             OrbitalPlatform platform = Station(out double now);
             OrbitClock clock = OrbitClock.Default;
             Add(platform, ModuleKind.Propulsion, 6, ref now);
-            TestAssert.That(platform.TryShift(OrbitRegimes.Low, now, clock, 3), "a fuelled station must lower its orbit");
-            now += OrbitalPlatform.TransferSeconds + 1.0;
-            platform.Tick(now, 0.1f, true, clock);
+            TestAssert.That(platform.Orbit.DragFuelPerSecond == 0f, "space orbit must have no drag fuel");
             float fuel = platform.Fuel;
-            platform.Tick(now, 5f, true, clock);
-            TestAssert.That(Near(fuel - platform.Fuel, 0.1, 1e-4), "LOW drag must burn fuel");
-
-            byte serial = platform.NoticeSerial;
-            for (int i = 0; i < 2000 && platform.Regime == OrbitRegimes.Low; i++) platform.Tick(now + i * 5.0, 5f, true, clock);
-            TestAssert.That(platform.Regime == OrbitRegimes.Mid && platform.Notice == PlatformNotice.SafeMode &&
-                            platform.NoticeSerial != serial, "running dry at LOW must climb to MID in safe mode");
+            platform.Tick(now, 100f, true, clock);
+            TestAssert.That(platform.Fuel == fuel, "no fuel burned from atmospheric drag");
+            TestAssert.That(platform.Regime == OrbitRegimes.Standard, "platform remains in Standard orbit");
         }
 
         private static void TestDebris()
@@ -544,12 +541,12 @@ namespace BoscaliSummer.Tests.Features.Support
         private static void TestForeign()
         {
             var foreign = new ForeignPlatform();
-            foreign.Mirror(OrbitRegimes.High, 9, 100.0, (ushort)((1 << 7) | (1 << 6) | (1 << 8)));
+            foreign.Mirror(OrbitRegimes.Standard, 9, 100.0, (ushort)((1 << 7) | (1 << 6) | (1 << 8)));
             TestAssert.That(foreign.ModuleCount == 3 && foreign.Occupied(6) && !foreign.Occupied(0),
                 "a foreign silhouette must count its cells");
-            foreign.Mirror(OrbitRegimes.High, 9, 100.4, foreign.Layout);
+            foreign.Mirror(OrbitRegimes.Standard, 9, 100.4, foreign.Layout);
             TestAssert.That(foreign.CycleStart == 100.0, "foreign jitter must be held");
-            foreign.Mirror(OrbitRegimes.High, 10, 100.4, foreign.Layout);
+            foreign.Mirror(OrbitRegimes.Standard, 10, 100.4, foreign.Layout);
             TestAssert.That(foreign.CycleStart == 100.4, "a new orbit must rebase");
             TestAssert.That(foreign.State(50.0, OrbitClock.Default).Phase == OrbitPhase.Hold,
                 "a foreign station before its epoch must hold");
@@ -577,7 +574,7 @@ namespace BoscaliSummer.Tests.Features.Support
             OrbitClock clock = OrbitClock.Default;
             TestAssert.That(PlatformWords.Phase(null, 0.0, clock) == "NO STATION ON ORBIT", "no station must say so");
             var inserting = new OrbitalPlatform();
-            inserting.TryLaunch(ModuleKind.Core, 0, OrbitRegimes.Mid, 5, 0.0, 0f, Insertion, Dock);
+            inserting.TryLaunch(ModuleKind.Core, 0, OrbitRegimes.Standard, 5, 0.0, 0f, Insertion, Dock);
             TestAssert.That(PlatformWords.Phase(inserting, 14.5, clock) == "INSERTION · T-00:31",
                 "a hold must count down, rounded up: " + PlatformWords.Phase(inserting, 14.5, clock));
             OrbitalPlatform platform = Station(out double now);

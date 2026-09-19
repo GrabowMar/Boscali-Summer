@@ -3,6 +3,7 @@ using BoscaliSummer.Core;
 using BoscaliSummer.Tests.Architecture;
 using BoscaliSummer.Tests.Features.Command;
 using BoscaliSummer.Tests.Features.FireAndDestruction;
+using BoscaliSummer.Tests.Features.Hud;
 using BoscaliSummer.Tests.Features.Radio;
 using BoscaliSummer.Tests.Features.Progression;
 using BoscaliSummer.Tests.Features.Support;
@@ -20,6 +21,7 @@ namespace BoscaliSummer.Tests
             ImpactScorchTests.Run();
             FireScorchTests.Run();
             GroundSnapTests.Run();
+            ForestIndexTests.Run();
             TroopDeploymentTests.Run();
             GarrisonMarkerInfoTests.Run();
             RadioTests.Run();
@@ -47,11 +49,9 @@ namespace BoscaliSummer.Tests
             Features.TheaterOps.PriorityTests.Run();
             Features.TheaterOps.LogisticsTests.Run();
             Features.Events.EventSelectorTests.Run();
+            Features.Events.EventDirectorTests.Run();
             Features.Campaign.MissionInstallPlanTests.Run();
-            Features.Weather.WeatherTests.Run();
-            Features.Weather.ThermoTests.Run();
-            Features.Weather.RainDropsTests.Run();
-            Features.Weather.RadarTests.Run();
+            HudTests.Run();
             TrenchTests.Run();
             ModuleBoundaryTests.Run();
 

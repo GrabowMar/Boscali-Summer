@@ -70,8 +70,13 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
         private void OnSettingChanged(object sender, SettingChangedEventArgs args)
         {
-            if (args.ChangedSetting.Definition.Section != "Command") return;
+            // Hud is the one section this panel does not own: the common HUD element reads its
+            // own entries live, and this only repaints the rows so the panel is not left showing
+            // a value the config file no longer holds.
+            string section = args.ChangedSetting.Definition.Section;
+            if (section != "Command" && section != "Hud") return;
             dirty = true;
+            if (section == "Hud") return;
             switch (args.ChangedSetting.Definition.Key)
             {
                 case "ExpandedMapUi": layoutPending = true; break;
@@ -204,6 +209,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     nextTick = 0f;
                     RefreshPanel();
                 });
+            shell.Tabs[TabClient].WithTooltip(
+                "Client-local display settings: the map, console surface, background imagery and cockpit view.");
+            shell.Tabs[TabServer].WithTooltip(
+                "Host settings: faction tasking and every installed feature's host-authoritative options.");
             shell.DataBar.SetChip(0, "SAVED", true);
             shell.Status.richText = false;
 
@@ -258,6 +267,13 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             const float barHeight = 26f;
             const float gap = 6f;
             string[] names = { "MAP", "STYLE", "IMAGE", "COCKPIT" };
+            string[] hints =
+            {
+                "Map layout, overlays and terrain.",
+                "Console surface, backdrop decoration and dispatches.",
+                "Local background imagery and its rescans.",
+                "Third-person HUD, camera and the shared cockpit HUD element.",
+            };
 
             AvNode bar = AvBox.Row("subtabs").Height(barHeight);
             for (int i = 0; i < names.Length; i++) bar.Add(AvBox.Cell("c" + i).Grow());
@@ -268,7 +284,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             {
                 int index = i;
                 clientTabs[i] = AvStyled.Button(page, bar.At("c" + i), names[i], "tab",
-                    () => SetClientPage(index), AvButtonStyle.Tab);
+                    () => SetClientPage(index), AvButtonStyle.Tab)
+                    .WithTooltip(hints[i]);
             }
 
             var area = new Rect(body.x, body.y - barHeight - gap, body.width, body.height - barHeight - gap);
@@ -311,58 +328,117 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             RefreshPanel();
         }
 
-        // Compact row geometry: the toggle and step buttons match the inline control size
-        // the other panels use, so a settings page reads as an instrument instead of a
-        // wall of boxes.
-        private const float RowHeight = 46f;
-        private const float RowPitch = 52f;
-        private const float ToggleValueWidth = 78f;
-        private const float StepButtonWidth = 38f;
-        private const float StepValueWidth = 96f;
+        // One row geometry for every page: a 10px state pip in the left gutter, the name
+        // in a shared label column, and a control group of one width. A toggle puts its
+        // state plate in the same slot a stepper's figure occupies, so ON/OFF and every
+        // number line up on one value column across pages. The value column is wide
+        // enough for a wallpaper filename and still shrinks to the micro floor when a
+        // host string runs longer. RowHeight is the 30px token; the pitch is per page,
+        // because Page() spreads a short page over the bay instead of pooling the empty
+        // height under its last row.
+        private const float PipSize = 6f;
+        private const float CellGap = 4f;
+        private const float StateWidth = 96f;
+        private const float StepWidth = 26f;
+        private const float RowRightPad = 8f;
+        private const float RowInset = 2f; // keeps the 26px controls on the 30px row midline
+
+        // Section headings: the number column is fixed, so every title on every page
+        // starts on the same x, and the rule hangs a fixed distance below the labels.
+        private const float HeadingHeight = 26f;
+        private const float HeadingGap = 6f;
+        private const float PageTail = 12f;
+
+        /// <summary>Flow of the page currently being built, set by <see cref="Page"/>.</summary>
+        private float rowPitch = AvTokens.RowPitch;
+        private float sectionGap = HeadingGap;
+        private int sectionsOnPage;
 
         // Pages are built once. Dependencies disable controls without rebuilding the tree.
-        private RectTransform Page(int display, RectTransform parent, Rect body, int rows, int sections, out Rect area)
+        private RectTransform Page(int display, RectTransform parent, Rect body, int rows, int sections, out Rect area) =>
+            Page(display, parent, body, rows, sections, 0f, out area);
+
+        /// <summary>
+        /// A page: the spine, then the scroll viewport when the copy is taller than the
+        /// bay, and the content column every heading and row builds into.
+        ///
+        /// The page's natural height is measured from its rows and sections. When it is
+        /// shorter than the bay, the slack is spread evenly across the row advances and
+        /// the gaps between sections, so the copy reaches the bottom of Shell.Body rather
+        /// than leaving a dead band under the last row; a page taller than its bay scrolls
+        /// at the natural pitch instead of compressing. <paramref name="fixedHeight"/> is
+        /// the part of a page whose height does not come from rows — the SERVER tasking
+        /// board — and never stretches.
+        /// </summary>
+        private RectTransform Page(int display, RectTransform parent, Rect body, int rows, int sections,
+            float fixedHeight, out Rect area)
         {
             AvStyled.Spine(parent, new Rect(body.x, body.y, 3f, body.height));
-            float contentHeight = rows * RowPitch + sections * 30f + 42f;
-            if (display >= 0 && display < pageScrolls.Length) pageScrolls[display] = contentHeight > body.height;
-            return AvScreen.Scroll(parent, body, contentHeight, out area);
+
+            int gaps = Mathf.Max(0, sections - 1);
+            // The last row's own advance is never spent — the page ends at the last row's
+            // bottom — so it is removed from the measured height and only rows and section
+            // gaps that actually move the bottom take a share of the slack.
+            float natural = fixedHeight + sections * HeadingHeight + gaps * HeadingGap
+                          + rows * AvTokens.RowPitch - (AvTokens.RowPitch - AvTokens.RowHeight)
+                          + PageTail;
+            bool scrolls = natural > body.height;
+            int units = rows + gaps - 1;
+            // Settings are a form, not a fill-height dashboard: keep adjacent labels
+            // close enough to scan and leave calm space below short pages.
+            float extra = 4f;
+            natural += Mathf.Max(0, units) * extra;
+            scrolls = natural > body.height;
+            rowPitch = AvTokens.RowPitch + extra;
+            sectionGap = HeadingGap + extra;
+            sectionsOnPage = 0;
+            if (display >= 0 && display < pageScrolls.Length) pageScrolls[display] = scrolls;
+
+            RectTransform content = AvScreen.Scroll(parent, body, Mathf.Max(natural, body.height), out area);
+            area = new Rect(area.x + AvScreen.SpineInset, area.y,
+                Mathf.Max(0f, area.width - AvScreen.SpineInset), area.height);
+            return content;
         }
 
         /// <summary>
         /// A numbered section heading hanging off the spine, like the theater panels:
-        /// index in accent, name in primary, status on the right, hairline under.
+        /// index in accent, name in the shared section-title step, status on the right,
+        /// hairline under. Number and title share the page's left column, so the numbering
+        /// lines up across pages.
         /// </summary>
-        private static void Heading(RectTransform parent, ref Rect area, string index, string title, string note)
+        private void Heading(RectTransform parent, ref Rect area, string index, string title, string note)
         {
-            const float height = 24f;
-            var rect = new Rect(area.x, area.y, area.width, height);
+            if (sectionsOnPage > 0) area.y -= sectionGap;
+            sectionsOnPage++;
 
-            AvStyled.SpineTick(parent, rect.x, rect.y - 13f);
+            var rect = new Rect(area.x, area.y, area.width, HeadingHeight);
+            AvStyled.SpineTick(parent, rect.x - AvScreen.SpineInset + 2f, rect.y - 13f);
 
-            TMP_Text number = AvStyled.Label(parent, new Rect(rect.x + 12f, rect.y, 30f, 16f), index, "section-title");
+            const float numberWidth = 24f;
+            TMP_Text number = AvStyled.Label(parent, new Rect(rect.x, rect.y, numberWidth, 16f), index, "section-title");
             number.color = AvTheme.Accent;
-            AvStyled.Label(parent, new Rect(rect.x + 42f, rect.y, Mathf.Max(0f, rect.width - 42f - 140f), 16f),
-                title, "row-name");
+            AvStyled.Label(parent,
+                new Rect(rect.x + numberWidth + CellGap, rect.y,
+                    Mathf.Max(0f, rect.width * 0.5f - numberWidth - CellGap), 16f), title, "section-title");
             if (!string.IsNullOrEmpty(note))
-                AvStyled.Label(parent, new Rect(rect.x + rect.width - 140f, rect.y, 140f, 16f), note,
-                    "section-title-note", align: TextAlignmentOptions.MidlineRight);
+                AvStyled.Label(parent, new Rect(rect.x + rect.width * 0.5f, rect.y, rect.width * 0.5f, 16f),
+                    note, "section-title-note", align: TextAlignmentOptions.MidlineRight);
             AvKit.Rule(parent, new Rect(rect.x, rect.y - 20f, rect.width, 1f),
                 AvTheme.Unity(AvTokens.Hairline.WithAlpha(0.5f)));
 
-            area.y -= height + 6f;
+            area.y -= HeadingHeight;
         }
 
-        private static Rect TakeRow(ref Rect area)
+        private Rect TakeRow(ref Rect area)
         {
-            var row = new Rect(area.x, area.y, area.width, RowHeight);
-            area.y -= RowPitch;
+            var row = new Rect(area.x, area.y, area.width, AvTokens.RowHeight);
+            area.y -= rowPitch;
             return row;
         }
 
         private void BuildMapPage(RectTransform parent, Rect body)
         {
-            parent = Page(0, parent, body, 6, 3, out var area);
+            parent = Page(0, parent, body, 7, 3, out var area);
 
             Heading(parent, ref area, "01", "DISPLAY", "CONSOLE");
             Toggle(parent, TakeRow(ref area), "EXPANDED LAYOUT",
@@ -445,7 +521,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
         private void BuildImagePage(RectTransform parent, Rect body)
         {
-            parent = Page(2, parent, body, 5, 1, out var area);
+            parent = Page(2, parent, body, 4, 1, out var area);
 
             Heading(parent, ref area, "01", "LOCAL IMAGERY", "PNG / JPEG");
             Percent(parent, TakeRow(ref area), "IMAGE STRENGTH", settings.BackgroundImageOpacity, .05f, 1f, .05f,
@@ -480,13 +556,18 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
         /// <summary>
         /// Cockpit-side presentation: the third-person HUD and cameras published by QoL
-        /// through <see cref="IThirdPersonHud"/>, plus Command's own radial preset page.
+        /// through <see cref="IThirdPersonHud"/>, the common HUD element published by the Hud
+        /// module through <see cref="IHudBoard"/>, plus Command's own radial preset page.
         /// Every row here writes live state; the camera rows wait for the HUD they belong to.
         /// </summary>
         private void BuildViewPage(RectTransform parent, Rect body)
         {
-            parent = Page(3, parent, body, 5, 3, out var area);
             ModServices.TryGet(out IThirdPersonHud hud);
+            ModServices.TryGet(out IHudBoard board);
+            int feeds = board != null ? Mathf.Min(board.Channels.Count, HudLayout.MaxChannels) : 0;
+            // The unavailable case still paints one FEEDS row saying so, so the page's
+            // measured height matches what it builds either way.
+            parent = Page(3, parent, body, 5 + HudSettingRows + (board == null ? 1 : feeds), 4, out var area);
 
             Heading(parent, ref area, "01", "HUD", "THIRD PERSON");
             Toggle(parent, TakeRow(ref area), "THIRD-PERSON HUD",
@@ -512,6 +593,89 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             Toggle(parent, TakeRow(ref area), "RADIAL PRESETS",
                 "Offer the TGT quick slots as a page in the native cockpit radial menu.",
                 () => settings.TargetPresetWheel.Value, v => settings.TargetPresetWheel.Value = v);
+
+            Heading(parent, ref area, "04", "COMMON HUD", "OVERLAY");
+            BuildHudRows(parent, ref area, board);
+        }
+
+        /// <summary>The seven element-wide rows, before one row per declared feed.</summary>
+        private const int HudSettingRows = 7;
+
+        /// <summary>
+        /// The common HUD element's own rows. Everything here is client-local presentation and
+        /// applies on the board's next tick, so the pilot sees the change while flying. The
+        /// feeds below are listed from whatever modules declared one, not from a list kept here.
+        /// </summary>
+        private void BuildHudRows(RectTransform parent, ref Rect area, IHudBoard board)
+        {
+            Func<bool> on = () => board != null && board.Enabled;
+            Func<string> off = () => "Turn the common HUD element on first.";
+
+            Toggle(parent, TakeRow(ref area), "HUD ELEMENT",
+                "Draw the one cockpit HUD element every feature shares for status lines and notices.",
+                () => on(), v => { if (board != null) board.Enabled = v; });
+
+            Stepper(parent, TakeRow(ref area), "POSITION",
+                () => board != null ? HudLayout.AnchorName((int)board.Anchor) : "--",
+                d => { if (board != null) board.Anchor = (HudAnchor)HudLayout.Cycle((int)board.Anchor, HudLayout.AnchorCount, d); },
+                () => board != null, () => board != null,
+                "Where the element hangs and which way it stacks. Keep it clear of the pitch ladder.",
+                on, off);
+
+            Stepper(parent, TakeRow(ref area), "SIZE",
+                () => board != null ? HudLayout.ScaleName(board.ScaleStep) : "--",
+                d => { if (board != null) board.ScaleStep = HudLayout.Cycle(board.ScaleStep, HudLayout.ScaleCount, d); },
+                () => board != null, () => board != null,
+                "Text size as a multiple of the game's own overlay text size option.",
+                on, off);
+
+            Stepper(parent, TakeRow(ref area), "OPACITY",
+                () => board != null ? HudLayout.OpacityName(board.OpacityStep) : "--",
+                d => { if (board != null) board.OpacityStep = HudLayout.Cycle(board.OpacityStep, HudLayout.OpacityCount, d); },
+                () => board != null, () => board != null,
+                "How solid the element reads over a bright sky. OFF hides it without unloading it.",
+                on, off);
+
+            Stepper(parent, TakeRow(ref area), "MAX LINES",
+                () => board != null ? board.MaxRows.ToString() : "--",
+                d => { if (board != null) board.MaxRows = Mathf.Clamp(board.MaxRows + d, HudLayout.MinRows, HudLayout.MaxRows); },
+                () => board != null && board.MaxRows > HudLayout.MinRows,
+                () => board != null && board.MaxRows < HudLayout.MaxRows,
+                "How many lines the element may show at once. Two are kept for live notices.",
+                on, off);
+
+            Toggle(parent, TakeRow(ref area), "NOTICES",
+                "Show transient notices: an ace hunt starting, entering or leaving a contract area.",
+                () => board != null && board.NoticesEnabled,
+                v => { if (board != null) board.NoticesEnabled = v; },
+                on, off);
+
+            Stepper(parent, TakeRow(ref area), "NOTICE TIME",
+                () => board != null ? board.NoticeSeconds.ToString("0") + " s" : "--",
+                d => { if (board != null) board.NoticeSeconds = Mathf.Clamp(board.NoticeSeconds + d, HudLayout.MinNoticeSeconds, HudLayout.MaxNoticeSeconds); },
+                () => board != null && board.NoticeSeconds > HudLayout.MinNoticeSeconds,
+                () => board != null && board.NoticeSeconds < HudLayout.MaxNoticeSeconds,
+                "How long a transient notice stays up.",
+                () => on() && board.NoticesEnabled, () => "Turn notices on first.");
+
+            if (board == null)
+            {
+                Toggle(parent, TakeRow(ref area), "FEEDS",
+                    "The common HUD element is not installed in this session.",
+                    () => false, v => { }, () => false, () => "HUD element unavailable.");
+                return;
+            }
+
+            int feeds = Mathf.Min(board.Channels.Count, HudLayout.MaxChannels);
+            for (int i = 0; i < feeds; i++)
+            {
+                IHudChannel feed = board.Channels[i];
+                Toggle(parent, TakeRow(ref area), feed.Label,
+                    "Show this feed on the common HUD element. Switching it off hides its lines " +
+                    "and changes nothing about how the feature itself runs.",
+                    () => feed.Enabled, v => { if (feed.Enabled != v) feed.Toggle(); },
+                    on, off);
+            }
         }
 
         private void Percent(RectTransform parent, Rect area, string title, ConfigEntry<float> entry,
@@ -523,14 +687,18 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 "Adjust " + title.ToLowerInvariant() + ".", enabled, reason);
         }
 
-        private static AvNode ToggleRow(string name) =>
-            AvBox.Row(name).Height(RowHeight).Pad(14f, 5f, 8f, 5f).Gaps(8f)
-                .Add(AvBox.Cell("label").Grow()).Add(AvBox.Cell("value").Width(ToggleValueWidth));
-
-        private static AvNode StepperRow(string name) =>
-            AvBox.Row(name).Height(RowHeight).Pad(14f, 5f, 8f, 5f).Gaps(6f)
-                .Add(AvBox.Cell("label").Grow()).Add(AvBox.Cell("minus").Width(StepButtonWidth))
-                .Add(AvBox.Cell("value").Width(StepValueWidth)).Add(AvBox.Cell("plus").Width(StepButtonWidth));
+        /// <summary>
+        /// The five shared row columns: state pip, name, minus, value, plus. A toggle
+        /// draws only the pip and the value plate, a stepper the minus/value/plus, so the
+        /// label column and the value column never move between the two kinds of row.
+        /// </summary>
+        private static AvNode SettingRow(string name) =>
+            AvBox.Row(name).Height(AvTokens.RowHeight).Pad(0f, RowInset, RowRightPad, RowInset).Gaps(CellGap)
+                .Add(AvBox.Cell("pip").Width(PipSize))
+                .Add(AvBox.Cell("label").Grow())
+                .Add(AvBox.Cell("minus").Width(StepWidth))
+                .Add(AvBox.Cell("value").Width(StateWidth))
+                .Add(AvBox.Cell("plus").Width(StepWidth));
 
         private static Image FindHighlight(Button button)
         {
@@ -552,10 +720,15 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         }
 
         // The row's own state, before hover: an active control carries an accent marker
-        // and wash, so ON reads at a glance without relying on the value text alone.
-        private static Color LatchedRow => AvTheme.Unity(AvTokens.Wash(AvTheme.Accent.ToRgba(), 0.16f, 0.30f));
-        private static Color LatchedRowHover => AvTheme.Unity(AvTokens.Wash(AvTheme.Accent.ToRgba(), 0.24f, 0.42f));
+        // and subtle wash, so ON reads at a glance without overpowering the panel.
+        private static Color LatchedRow => AvTheme.Unity(AvTokens.Wash(AvTheme.Accent.ToRgba(), 0.12f, 0.16f));
+        private static Color LatchedRowHover => AvTheme.Unity(AvTokens.Wash(AvTheme.Accent.ToRgba(), 0.18f, 0.24f));
         private static Color HoverRow => AvTheme.Unity(AvTokens.SurfaceRaised.WithAlpha(0.5f));
+
+        // The ON plate is a wash of the accent, not a solid block. The wash keeps the dark
+        // ink label at roughly 5:1 on the panel ground, and the state is never colour alone:
+        // the pip is lit and the plate says ON.
+        private static Color LatchedState => AvTheme.Unity(AvTokens.Wash(AvTheme.Accent.ToRgba(), 0.16f, 0.75f));
 
         /// <summary>
         /// Confirm the action on the status strip for a moment. Text, not colour alone:
@@ -599,11 +772,14 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private void Toggle(RectTransform parent, Rect area, string title, string tooltip,
             Func<bool> get, Action<bool> set, Func<bool> enabled = null, Func<string> reason = null)
         {
-            var row = ToggleRow("row").Arrange(area);
+            var row = SettingRow("row").Arrange(area);
             var hover = RowHover(parent, row.Rect, tooltip);
-            Image marker = AvKit.Rule(parent,
-                new Rect(row.Rect.X + 6f, row.Rect.Y - 8f, 3f, row.Rect.Height - 16f), Color.clear);
-            AvStyled.Label(parent, row.At("label"), title, "row-value", align: TextAlignmentOptions.MidlineLeft);
+            Rect pip = row.At("pip");
+            Image led = AvKit.Panel(parent,
+                new Rect(pip.x, pip.y - (pip.height - PipSize) * 0.5f, PipSize, PipSize),
+                AvTheme.RailInert);
+            TMP_Text label = AvStyled.Label(parent, row.At("label"), title, "row-name",
+                align: TextAlignmentOptions.MidlineLeft);
             var button = AvStyled.Button(parent, row.At("value"), "", "btn", () =>
             {
                 if (enabled != null && !enabled()) return;
@@ -619,10 +795,20 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 button.SetEnabled(available);
                 button.SetText(on ? "ON" : "OFF");
                 button.SetLatched(on);
+                if (on)
+                {
+                    button.SetCustomColors(LatchedState, AvTheme.Frame, AvTheme.Accent);
+                }
+                else
+                {
+                    button.ClearCustomColors();
+                }
                 button.WithTooltip(why);
                 hover.SetText(why);
-                marker.color = on ? AvTheme.Accent : Color.clear;
-                hover.SetColors(on ? LatchedRow : Color.clear, on ? LatchedRowHover : HoverRow);
+                led.color = !available ? AvTheme.Disabled : on ? AvTheme.RailReady : AvTheme.RailInert;
+                label.color = available ? AvTheme.TextPrimary : AvTheme.Disabled;
+                hover.SetColors(on && available ? LatchedRow : Color.clear,
+                                on && available ? LatchedRowHover : HoverRow);
             });
         }
 
@@ -630,9 +816,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             Action<int> change, Func<bool> decrease, Func<bool> increase, string tooltip,
             Func<bool> enabled = null, Func<string> reason = null, bool readOnlyValue = false)
         {
-            var row = StepperRow("row").Arrange(area);
+            var row = SettingRow("row").Arrange(area);
             var hover = RowHover(parent, row.Rect, tooltip);
-            AvStyled.Label(parent, row.At("label"), title, "row-value", align: TextAlignmentOptions.MidlineLeft);
+            TMP_Text label = AvStyled.Label(parent, row.At("label"), title, "row-name",
+                align: TextAlignmentOptions.MidlineLeft);
             Action<int> click = d =>
             {
                 if (enabled != null && !enabled() || !(d < 0 ? decrease() : increase())) return;
@@ -642,12 +829,17 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             };
             var minus = AvStyled.Button(parent, row.At("minus"), "-", "btn", () => click(-1));
             var value = AvStyled.Label(parent, row.At("value"), "", "row-value", align: TextAlignmentOptions.Center);
+            // A value is never traded for an ellipsis: it shrinks to the micro floor and
+            // then overflows its cell, the module's FitSingleLine rule.
             value.enableWordWrapping = false;
-            value.overflowMode = TextOverflowModes.Ellipsis;
+            value.overflowMode = TextOverflowModes.Overflow;
+            value.enableAutoSizing = true;
+            value.fontSizeMin = AvTokens.FontMicro;
+            value.fontSizeMax = value.fontSize;
             value.richText = false;
             var plus = AvStyled.Button(parent, row.At("plus"), "+", "btn", () => click(1));
-            minus.GetComponentInChildren<TMP_Text>().fontSize = 15f;
-            plus.GetComponentInChildren<TMP_Text>().fontSize = 15f;
+            minus.GetComponentInChildren<TMP_Text>().fontSize = AvTokens.FontLead;
+            plus.GetComponentInChildren<TMP_Text>().fontSize = AvTokens.FontLead;
             refreshers.Add(() =>
             {
                 bool available = enabled == null || enabled();
@@ -659,6 +851,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 minus.WithTooltip(available ? tooltip + " Previous / decrease. " + text : why);
                 plus.WithTooltip(available ? tooltip + " Next / increase. " + text : why);
                 hover.SetText(why);
+                label.color = available ? AvTheme.TextPrimary : AvTheme.Disabled;
+                // A remote client sees the host's value read-only; the figure stays legible,
+                // the controls around it say why they are inert.
+                value.color = available || readOnlyValue ? AvTheme.TextPrimary : AvTheme.Disabled;
             });
         }
 

@@ -69,6 +69,14 @@ namespace NOAvionics.Tests
             assert(s.Resolve("z").Rail.Kind == AvColorRef.Fixed,
                    "a rail declared as a literal stays literal, so status survives a theme change");
             Near(assert, s.Resolve("z").RailWidth, 3f, "a rail without an explicit width defaults to 3px");
+
+            AvStyleSheet themed = AvStyleSheet.Parse(
+                ":root { state-wash: accent 14; state-edge: warning 80; }" +
+                ".a { background: state-wash; border: 1 state-edge; }");
+            assert(!themed.HasErrors, "theme colours with alpha may be shared through variables");
+            assert(themed.Resolve("a").Background.Kind == AvColorRef.Accent,
+                "a theme colour alias stays live");
+            Near(assert, themed.Resolve("a").Background.Alpha, 20f / 255f, "theme alias retains its alpha");
         }
 
         private static void TestCompoundSelectors(Action<bool, string> assert)
@@ -190,7 +198,8 @@ namespace NOAvionics.Tests
                    "an unknown class declares nothing, so the widget keeps its own colours");
             assert(!s.Resolve(null).Color.HasValue, "a null class set is harmless");
             Near(assert, s.Number("missing", 470f), 470f, "a missing variable falls back");
-            Near(assert, s.Paint("missing", AvTokens.RailReady).Value.G, 1f, "a missing colour variable falls back");
+            Near(assert, s.Paint("missing", AvTokens.RailReady).Value.G, AvTokens.RailReady.G,
+                "a missing colour variable preserves the supplied fallback");
         }
 
         private static void Near(Action<bool, string> assert, float actual, float expected, string what)

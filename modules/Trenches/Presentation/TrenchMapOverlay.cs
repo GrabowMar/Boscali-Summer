@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using BepInEx.Logging;
 using BoscaliSummer.Features.Trenches.Configuration;
+using BoscaliSummer.Features.Trenches.Domain;
 using BoscaliSummer.Features.Trenches.Runtime;
 using BoscaliSummer.Framework.Lifecycle;
 using BoscaliSummer.Runtime;
@@ -274,12 +275,22 @@ namespace BoscaliSummer.Features.Trenches.Presentation
             return line.OwnerHq != null && line.OwnerHq == map.HQ ? FriendlyInk : HostileInk;
         }
 
-        /// <summary>Strongpoints: the bays the native emplacements actually hold.</summary>
+        /// <summary>Strongpoints: one per nest bay of the current budget, plus the support centre.</summary>
         private static void Marks(VertexHelper vh, TrenchLine line, float factor, float pixel, Color32 ink)
         {
-            Mark(vh, line.Anchors, 0.15f, factor, pixel, ink);
-            Mark(vh, line.Anchors, 0.5f, factor, pixel, ink);
-            Mark(vh, line.Anchors, 0.85f, factor, pixel, ink);
+            int budget = TrenchTraceMath.DefenderBudget(line.Stage);
+            Vector3[] nodes = line.Nodes;
+            if (nodes != null && nodes.Length > 0)
+            {
+                for (int slot = 0; slot < budget; slot++)
+                    Mark(vh, nodes, TrenchTraceMath.NodeFraction(slot, budget), factor, pixel, ink);
+            }
+            else
+            {
+                Mark(vh, line.Anchors, 0.15f, factor, pixel, ink);
+                Mark(vh, line.Anchors, 0.5f, factor, pixel, ink);
+                Mark(vh, line.Anchors, 0.85f, factor, pixel, ink);
+            }
             Mark(vh, line.SupportAnchors, 0.5f, factor, pixel, ink);
         }
 

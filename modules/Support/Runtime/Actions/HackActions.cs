@@ -2,19 +2,23 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using BoscaliSummer.Features.Support.Domain;
+using BoscaliSummer.Features.Support.Domain.Cyber;
 using NuclearOption.Networking;
 using UnityEngine;
 
 namespace BoscaliSummer.Features.Support.Runtime.Actions
 {
     /// <summary>
-    /// One cyber operation, driven by the faction's <see cref="InfoNetwork"/> rather than a
-    /// career perk. The effect families share a file because they differ only in what they
-    /// touch: native tracking reveals, native jamming, or the track-deception layer.
+    /// One cyber operation, driven by the faction's <see cref="InfoNetwork"/> doctrine and its
+    /// CYBER network rather than a career perk. The effect families share a file because they
+    /// differ only in what they touch: native tracking reveals, native jamming, or the
+    /// track-deception layer. A foothold from a completed trace makes every operation cheaper;
+    /// every accepted operation is reported so enemy SIGINT can hear it.
     /// </summary>
     internal sealed class HackAction : ISupportAction
     {
         private const float TrackInterval = 1f;
+        public const float FootholdDiscount = 0.75f;
 
         private readonly HackKind kind;
 
@@ -24,34 +28,43 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
         {
             InfoNetwork info = context.Info;
             float scale = info == null ? 1f : info.Powers.CostScale;
+            CyberNetwork cyber = context.Cyber;
+            if (cyber != null && cyber.AnyFoothold(context.Host.OrbitNow)) scale *= FootholdDiscount;
             return CyberCatalog.BaseCost(kind) * context.Settings.CostMultiplier.Value * scale;
         }
 
         public SupportResult Execute(in SupportContext context)
         {
+            SupportResult result = Run(context, out GlobalPosition target);
+            if (result == SupportResult.Accepted) context.Host.ReportOperation(context.Player, target);
+            return result;
+        }
+
+        private SupportResult Run(in SupportContext context, out GlobalPosition target)
+        {
+            target = context.Target;
             InfoNetwork info = context.Info;
             if (info == null) return SupportResult.CapabilityUnavailable;
             InfoPowers powers = info.Powers;
             if (!powers.Has(kind)) return SupportResult.NotBuilt;
             if (!SupportTargeting.TryMapPoint(context.Target, out Vector3 ground))
                 return SupportResult.InvalidTarget;
-            GlobalPosition target = ground.ToGlobalPosition();
+            target = ground.ToGlobalPosition();
 
-            // Radar Blackout, Ghost Shield and Spoof Contacts are EW Division/C2 Disruptor
-            // operations: they reach through a physical asset in the world, not pure signals
-            // intelligence, so they additionally require a live EW truck within range of the
-            // target, tuned to the posture that backs them (EwPostures). Ping/Track (Sigint)
-            // are never station-backed, so this stays a no-op for them.
-            if (EwPostures.StationBacked(kind))
+            CyberNetwork cyber = context.Cyber;
+            if (cyber != null && cyber.CommandCompromised) return SupportResult.CommandCompromised;
+
+            // Radar Blackout, Ghost Shield and Spoof Contacts reach through a physical jammer, not
+            // pure signals intelligence: a working CYBER jammer that is emitting (NOISE or
+            // DECEPTION, see EwPostures) must reach the target. Ping and Track never need one.
+            // A foothold from a completed trace is a backdoor: it carries the operation without a
+            // jammer of your own in reach of the target.
+            if (EwPostures.StationBacked(kind) && (cyber == null || !cyber.AnyFoothold(context.Host.OrbitNow)))
             {
-                EwAsset asset = context.EwAsset;
-                if (asset == null || !asset.Alive) return SupportResult.NoEwAsset;
-                Vector3 assetPos = asset.Position;
-                float dx = assetPos.x - ground.x;
-                float dz = assetPos.z - ground.z;
-                float radius = context.Settings.EwProximityRadius.Value;
-                if (dx * dx + dz * dz > radius * radius) return SupportResult.NoEwAsset;
-                if (!EwPostures.Backs(asset.Posture, kind)) return SupportResult.WrongPosture;
+                if (cyber == null || !cyber.AnyWorking(CyberSiteKind.Jammer)) return SupportResult.NoEwAsset;
+                if (!cyber.AnyEmittingJammer()) return SupportResult.WrongPosture;
+                if (!cyber.EmittingJammerCovers(target.x, target.z, context.Settings.EwProximityRadius.Value))
+                    return SupportResult.NoEwAsset;
             }
 
             switch (kind)

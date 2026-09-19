@@ -9,6 +9,7 @@ namespace BoscaliSummer.Tests.Features.Events
         public static void Run()
         {
             CatalogIsWellFormed();
+            CatalogIsGraded();
             SelectionIsStableAndAvoidsRepeats();
             DurationStaysInsideItsWindow();
             EffectStrengthScalesTheModifier();
@@ -37,6 +38,64 @@ namespace BoscaliSummer.Tests.Features.Events
 
             TestAssert.That(EventCatalog.At(-1) == null && EventCatalog.At(EventCatalog.Count) == null,
                 "out-of-range lookups return null");
+        }
+
+        private static void CatalogIsGraded()
+        {
+            int minors = 0, mediums = 0, supers = 0;
+            for (int i = 0; i < EventCatalog.Count; i++)
+            {
+                EventDefinition entry = EventCatalog.At(i);
+                switch (entry.Tier)
+                {
+                    case EventTier.Minor: minors++; break;
+                    case EventTier.Medium: mediums++; break;
+                    default: supers++; break;
+                }
+
+                if (entry.Tier == EventTier.Super)
+                {
+                    TestAssert.That(entry.Script.Length > 0,
+                        "a superevent is scripted, not a bigger medium");
+                    TestAssert.That(entry.DurationMinSeconds >= 180,
+                        "a superevent runs long enough to feel like news");
+                    TestAssert.That(EventCatalog.TierLabel(entry.Tier) == "SUPEREVENT",
+                        "the tier word is the one the panel shows");
+                    for (int s = 0; s < entry.Script.Length; s++)
+                    {
+                        EventStep step = entry.Script[s];
+                        TestAssert.That(step.Effect != EventEffect.None,
+                            "a scripted beat does something");
+                        TestAssert.That(!string.IsNullOrWhiteSpace(step.Label),
+                            "a scripted beat names itself for the ticker");
+                        TestAssert.That(step.AtSeconds < entry.DurationMinSeconds,
+                            "every beat lands inside the shortest possible run");
+                        TestAssert.That(step.Amount >= 0f, "a beat never takes a value away");
+                        if (s > 0)
+                            TestAssert.That(step.AtSeconds > entry.Script[s - 1].AtSeconds,
+                                "scripted beats are ordered");
+                    }
+                    TestAssert.That(entry.Target != EventTarget.All ||
+                                    entry.SupportCostMultiplier != 1f,
+                        "a global superevent still changes a price");
+                }
+                else
+                {
+                    TestAssert.That(entry.Script.Length == 0,
+                        "minor and medium events carry no script");
+                    TestAssert.That(entry.Target == EventTarget.All,
+                        "only a superevent is aimed at one side");
+                    float deviation = Math.Abs(entry.SupportCostMultiplier - 1f);
+                    TestAssert.That(entry.Tier == EventTier.Minor
+                            ? deviation <= 0.15f
+                            : deviation > 0.15f && deviation <= 0.5f,
+                        "the tier matches how far the event moves the price");
+                }
+            }
+
+            TestAssert.That(minors >= 3, "the director has quiet rolls to spend");
+            TestAssert.That(mediums >= 6, "the director has ordinary drama to spend");
+            TestAssert.That(supers >= 4, "the director has superevents to escalate to");
         }
 
         private static void SelectionIsStableAndAvoidsRepeats()

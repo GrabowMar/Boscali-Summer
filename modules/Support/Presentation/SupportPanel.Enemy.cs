@@ -16,15 +16,7 @@ namespace BoscaliSummer.Features.Support.Presentation
     /// </summary>
     internal sealed partial class SupportPanel
     {
-        private const float StubHeight = 50f;
-
-        private static readonly string[][] Stubs =
-        {
-            new[] { "ASA", "ASAT WARNING", "Direct-ascent launches against our station, with a time to intercept." },
-            new[] { "SIG", "SIGNALS INTERCEPT", "What the enemy station is tasking, heard through our SIGINT array." },
-            new[] { "DBR", "DEBRIS WATCH", "Conjunction alerts and debris fields after a kill." },
-            new[] { "DEF", "ORBITAL DEFENCE", "Decoys, manoeuvres and shielding postures against counterspace fire." }
-        };
+        private const float CounterspaceNoticeHeight = 104f;
 
         private readonly OpsRow[] foreignRows = new OpsRow[SpaceOperations.MaximumForeign];
         private TMP_Text foreignNote;
@@ -38,34 +30,26 @@ namespace BoscaliSummer.Features.Support.Presentation
         private void BuildEnemyPage(RectTransform root, Rect body)
         {
             float height = HeaderHeight + foreignRows.Length * CompactRowHeight + SectionGap +
-                           HeaderHeight + Stubs.Length * (StubHeight + 6f) + SectionGap;
+                           HeaderHeight + CounterspaceNoticeHeight + SectionGap;
+            float rowHeight = CompactRowHeight;
             RectTransform parent = BeginSub(root, body, height, out float x, out float y, out float width);
 
             foreignNote = Header(parent, x, ref y, width, "TRACKED PLATFORMS", "");
             for (int i = 0; i < foreignRows.Length; i++)
             {
-                foreignRows[i] = Row(parent, x, y, width, true, "UNK", "TRACK " + (i + 1), null, null, null);
-                y -= CompactRowHeight;
+                foreignRows[i] = Row(parent, x, y, width, true, "UNK", "TRACK " + (i + 1), null, null, null,
+                                     height: rowHeight);
+                y -= rowHeight;
             }
             y -= SectionGap;
 
-            Header(parent, x, ref y, width, "COUNTERSPACE DESK", "COMING SOON");
-            for (int i = 0; i < Stubs.Length; i++)
-            {
-                var area = new Rect(x, y, width, StubHeight);
-                AvStyled.Box(parent, area, "card inert");
-                AvStyled.Rail(parent, area, "locked");
-                AvKit.Label(parent, Stubs[i][0], new Rect(x + 10f, y - 6f, 34f, 16f), AvTheme.Dim, AvTokens.FontLead,
-                    FontStyles.Bold);
-                SingleLine(AvStyled.Label(parent, new Rect(x + 50f, y - 6f, width - 170f, 16f), Stubs[i][1], "row-name"))
-                    .color = AvTheme.Dim;
-                AvStyled.Label(parent, new Rect(x + 50f, y - 25f, width - 60f, 20f), Stubs[i][2], "row-sub").color =
-                    AvTheme.Disabled;
-                var stamp = new Rect(x + width - 112f, y - 6f, 102f, 16f);
-                AvStyled.Box(parent, stamp, "stamp warn");
-                AvStyled.Label(parent, stamp, "COMING SOON", "stamp warn", align: TextAlignmentOptions.Center);
-                y -= StubHeight + 6f;
-            }
+            Header(parent, x, ref y, width, "COUNTERSPACE", "COMING SOON · NO ACTIONS AVAILABLE");
+            AvStyled.Label(parent, new Rect(x, y, width, 18f), "TRACKING ONLY", "row-name");
+            TMP_Text notice = Wrapped(AvStyled.Label(parent, new Rect(x, y - 28f, width, 68f),
+                "Enemy orbit and silhouette are host-reported; fitted modules are not disclosed. " +
+                "ASAT warnings, signal interception, debris alerts and orbital defence are not implemented yet.", "row-sub"));
+            notice.maxVisibleLines = 4;
+            notice.color = AvTheme.Dim;
         }
 
         private void RefreshEnemyPage(double now, in OrbitClock clock)
@@ -79,8 +63,8 @@ namespace BoscaliSummer.Features.Support.Presentation
                 if (i >= tracks.Count)
                 {
                     row.Code.text = "—";
-                    row.Name.text = "TRACK " + (i + 1);
-                    Paint(row, Tone.Locked, "NO TRACK · SKY CLEAR ON THIS SLOT");
+                    row.Name.text = "EMPTY TRACK " + (i + 1);
+                    Paint(row, Tone.Locked, "NO HOST-REPORTED PLATFORM");
                     continue;
                 }
 
@@ -112,8 +96,10 @@ namespace BoscaliSummer.Features.Support.Presentation
                 }
                 Paint(row, tone, status);
             }
-            foreignNote.text = tracks.Count == 0 ? "NO TRACKS"
-                : tracks.Count + " TRACK" + (tracks.Count == 1 ? "" : "S") + (overhead > 0 ? " · " + overhead + " OVERHEAD" : "");
+            foreignNote.text = tracks.Count + "/" + foreignRows.Length +
+                               (tracks.Count == 1 ? " TRACK" : " TRACKS") +
+                               (overhead > 0 ? " · " + overhead + " OVERHEAD"
+                                             : tracks.Count == 0 ? " · SKY CLEAR" : "");
         }
     }
 }

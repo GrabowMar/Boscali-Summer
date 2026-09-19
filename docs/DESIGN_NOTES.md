@@ -137,13 +137,17 @@ Decisions that cost an argument. Kept so they are not made again the other way.
 - **The panel is a receiver, not a music browser.** Stations live on an FM / VHF-air / MW dial:
   the three built-ins keep canonical frequencies and user folders take a stable name-hashed FM
   slot (linear probe on collision), so the same folder lands on the same frequency after a
-  rescan. The frequency and signal metric strip, the spectrum waterfall, the programme caption
-  and the morse ident carry the fiction; carrier hiss, squelch and idents are generated in
-  memory, never bundled — the copyright boundary from the bullet above is unchanged.
+  rescan. The big frequency readout, the S-meter's scale and squelch gate, the spectrum
+  waterfall, the programme caption and the morse ident carry the fiction; carrier hiss, squelch
+  and idents are generated in memory, never bundled — the copyright boundary from the bullet
+  above is unchanged.
 - **Tuning is a dial, not a list.** TUNE steps the band increment (100 kHz FM / 25 kHz VHF air
   / 10 kHz MW) or a five-times-finer step with FINE, and any non-station position is dead air
   with a carrier bed; SEEK jumps stations, the band knob cycles FM → VHF → MW with each band
   remembering its last frequency, and locking back on resumes the programme the player left.
+  The band scope is the same dial made direct: hovering it previews the nearest channel and
+  clicking tunes there, through the same `SetDial` path so the hold, the resume and dead air
+  behave exactly as they do from the keys.
   AM bands keep the AM curve regardless of the FM filter setting, the MODE override garbles a
   wrong-demodulator signal through the same penalty the propagation model uses, and the AF
   stepper scales music, carrier and idents together. Enemy ace chatter reaches the hero wire line
@@ -223,8 +227,11 @@ Decisions that cost an argument. Kept so they are not made again the other way.
   fifth perk. Do not add a perk row for it.
 - **CRYPTO discounts hack cost, not cooldown.** Host `RequestCooldown` is unchanged; CYBER
   copy must not claim a cooldown the host ignores.
-- **EW encampment convert/UI is gone.** `EwAssetState.Encampment = 2` stays on the wire as
-  a reserved value; do not reuse the byte.
+- **The single EW truck is gone; CYBER replaced EW and INFO.** Spectrum defence is a network
+  of real site vehicles with a host adversary campaign, not a free posture switch. Commands 4,
+  5 and 7 (truck deploy, move, retune) are retired and must not be reused; jammer modes kept the
+  `EwPosture` bytes. Defence comes first: jammers protect friendlies and back the attack
+  operations, SIGINT is the only way to trace, and a trace is the only way to a foothold.
 - **One skill language for the player, AI and aces.** The player's board presents the same
   combat skills Wing Command gives enemy aces (Toughness, Countermeasures, Notch Expert,
   Ghost) with the same codes and vector badges, beside the player's passives and support
@@ -338,12 +345,28 @@ Decisions that cost an argument. Kept so they are not made again the other way.
   an undefended ditch reads as a ditch, while pickets and strands make the ground in front of
   it read as no man's land. The far LOD is the only deliberate exaggeration left: a bold ridge
   silhouette for cruise altitude, because a man-scale line at 12km is invisible.
+- **A fire trench is a chain of bays, and the nest that stands in one is a bare weapon.** Two
+  follow-ups from the same live session. First, the ditch was a uniform ribbon, and a real fire
+  trench is bays and traverses: the curve now schedules a node every ~20m
+  (`TrenchTraceMath.NodeSpacing`) and the LOD0 profile flares 1.4m wider through each node
+  (`BayExtra`, full width through 2.5m and eased to nothing by 6.5m) — that flare is also what
+  makes room for a nest and a man inside the cut instead of beside it. Second, the vanilla
+  emplacements arrive with a ~10m sandbag ring: a direct child part named `dugout`, and the
+  game has no networked way to omit a part (parts are plain MonoBehaviours, and damage RPCs
+  address them by registration index). The definition's width/length describe that ring, so
+  placement no longer uses them — the real weapon footprint comes from the prefab's own root
+  `BoxCollider`. Every peer then hides the ring locally in `TrenchNestVisual.Strip`, called
+  from `Building.OnStartClient` and `OnStartServer` postfixes keyed on our `UniqueName` prefix,
+  leaving the part registered and the root hitbox untouched: a local `Destroy` would desync
+  every later hit, and hiding it only on clients would show the host a different trench than
+  its own players.
 - **The game has no infantry, so the soldiers are its dismounted pilots.** A foot-soldier was
   the obvious way to man a trench, so the decompile was searched for one — there is no
   infantry unit at all (the only human figure is `PilotDismounted`, and `MountedTroops` is a
   vehicle weapon). The lazy correct answer is to spawn exactly that figure: vanilla exposes
   `Spawner.SpawnPilot(prefab, globalPosition, rotation, hq, uniqueName)`, so a position fields
-  up to eight of them standing on the ditch centreline, facing the enemy, with the game owning
+  one crewman per nest (up to eight), standing in the ditch at its own nest's bay node,
+  facing the enemy, spawned only once that nest has landed, with the game owning
   their physics, landing animation, hit points, death and Mirage replication. The prefab is
   resolved by component from the encyclopedia's instance lists rather than by a jsonKey: the
   key is not part of any documented contract and a mod should not hardcode one. They are
@@ -550,25 +573,43 @@ Decisions that cost an argument. Kept so they are not made again the other way.
 - **Map markers were cut once, then earned their place.** The first design deferred them to
   avoid a second UI seam; with the page read-only they became the only way the player could
   find a commander without memorising the site name, so they shipped as their own small,
-  bounded layer instead of a change to the page.
+  bounded layer instead of a change to the page. The follow-up request ("choosing general
+  should select him on the map") closed the loop the other way: the console sets one
+  client-local id on the contract and the layer draws a bracket reticle around that post's
+  diamond in lifted ink, which is how the vanilla map says "this icon" without an order, a
+  mark or a target. It is a *selection*, not a command: no armed map gesture is involved (so
+  nothing can race the wing-order left click), nothing crosses the wire, and the same page
+  state that closes the file clears it - an empty card brackets nothing, and a page that is
+  not COC has no file open at all.
 
 ## World events
 
-- **EVN cards are glyphs.** `EventIconCache` and PNG fallbacks were deleted; there are no
-  event PNG assets. Category marks are `EventGlyph` only.
+- **EVN cards fall back to glyphs, never to placeholders.** `EventIconCache` and bundled PNG
+  assets were deleted once; poster art returns as *loose, optional* files the player drops
+  into `BepInEx/plugins/BoscaliSummer/Events/`, because superevents are the mod's one
+  full-screen moment and the user wanted to generate that art rather than have it bundled.
+  `EventGlyph` stays the guaranteed mark: a missing, oversized or malformed PNG fails closed
+  to the vector category shape, and `docs/EVENT_ART_BRIEF.md` is the generation brief.
+- **The director is a rubber band with a ceiling.** Grading events is not decoration: the
+  point is that the theater gets a story when it is lopsided. The two-base deficit gate and
+  the five-minute spacing were chosen so an intervention feels like news rather than a
+  rotating buff, and the three-per-mission cap is what keeps the fourth from being a
+  formula. When supers are spent or the theater is balanced, the director quietly falls back
+  to minor and medium texture.
+- **Effects stay inside seams the game already owns.** Superevent beats use the vanilla
+  faction pool, `Player.AddAllocation`, and the mission's own convoy groups — the same paths
+  TheaterOps and HighCommand already spend through — rather than spawning units. There is no
+  aircraft spawner available to this mod that is allowed to touch friendly air, so
+  "intervention" is credit, allocation and logistics, and the catalog copy never claims
+  otherwise.
 
 ## Weather
 
-- **The forecast is derived, not transmitted.** Every peer samples the same schedule from
-  the mission identity and the mission clock, so there is no second authority path, no
-  weather message and no late-join problem: a client that joins an hour in derives the
-  current front and the same forecast the host sees. Vanilla's `LevelInfo` sync vars carry
-  the authoritative sky; the schedule only supplies the shape around them.
-- **A foreign write is adopted, not fought.** `WeatherDrive` takes any change it did not
-  make as the new baseline and stands off for 40 seconds, which is what keeps the authored
-  `ModifyEnvironment` beats authoritative — the model supplies the weather between scripted
-  beats and never overrides one. A debug override and another mod's edit take the same
-  path; the adoption and `Acknowledge` pair must stay.
+- **The previous implementation is removed.** Its synoptic/storm model, cloud retuning,
+  precipitation and wetness presentation, `WEA` screen, HUD and debug controls cost too
+  much for their visual result. No successor architecture is specified here; plan the
+  lightweight version separately. The campaign's authored `ModifyEnvironment` outcomes
+  are vanilla mission content and remain.
 
 ## Wing Command reuse boundary
 

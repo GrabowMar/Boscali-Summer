@@ -28,22 +28,22 @@ namespace BoscaliSummer.Tests.Features.Command
                 "A saturated or unset ladder stays inside the track");
 
             TestAssert.That(MfdMissionOverview.Caption(0f, 25f, 50f) ==
-                "CURRENT 0  ·  25 TO TACTICAL NUCLEAR",
+                "CUR 0 · TAC IN 25",
                 "Before the tactical gate the caption states the remaining score");
 
             TestAssert.That(MfdMissionOverview.Caption(30f, 25f, 50f) ==
-                "CURRENT 30  ·  TACTICAL CLEARED  ·  20 TO STRATEGIC NUCLEAR",
-                "Between gates the caption reports the cleared stage and the next one");
+                "CUR 30 · TAC ACTIVE · STR IN 20",
+                "Between gates the caption reports the active stage and the next one");
 
             TestAssert.That(MfdMissionOverview.Caption(55f, 25f, 50f) ==
-                "CURRENT 55  ·  STRATEGIC NUCLEAR CLEARED" &&
+                "CUR 55 · STR ACTIVE" &&
                 MfdMissionOverview.Caption(10f, 25f, 0f) ==
-                "CURRENT 10  ·  15 TO TACTICAL NUCLEAR",
+                "CUR 10 · TAC IN 15",
                 "A cleared or unset strategic gate is reported without inventing a threshold");
 
-            TestAssert.That(MfdMissionOverview.Caption(0f, 0f, 0f) == "NO ESCALATION THRESHOLDS SET" &&
+            TestAssert.That(MfdMissionOverview.Caption(0f, 0f, 0f) == "NO ESCALATION GATES" &&
                 MfdMissionOverview.Caption(0f, 0f, 50f) ==
-                "CURRENT 0  ·  TACTICAL CLEARED  ·  50 TO STRATEGIC NUCLEAR",
+                "CUR 0 · TAC ACTIVE · STR IN 50",
                 "Unset thresholds say so instead of showing a confident zero");
 
             TestAssert.That(MfdMissionOverview.Whole(1500f) == "1,500" && MfdMissionOverview.Whole(25f) == "25",

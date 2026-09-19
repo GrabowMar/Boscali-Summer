@@ -498,7 +498,6 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             // intentionally seated on the deck, without competing with MapFrame's bezel.
             var inset = new Rect(8f, -8f, Mathf.Max(0f, width - 16f), Mathf.Max(0f, height - 16f));
             AvKit.Outline(grid, inset, AvTheme.Frame.WithAlpha(0.30f));
-            AvKit.CornerTicks(grid, inset, AvTheme.Hairline.WithAlpha(0.70f), 12f);
         }
 
         private static Image CreateGradient(RectTransform parent, string name, Color color)

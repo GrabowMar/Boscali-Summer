@@ -35,7 +35,7 @@ Boscali-owned layout do not change Wing Command's standalone presentation.
   bars have distinct thicknesses and an explicit legend. These are current snapshots,
   not historical trends. The game's supply API does not expose building/ship reserves.
 - MAP includes an illustrative symbol-size preview; HUD has a profile readout and
-  type-derived category names. MIS gives its main tab a full-height briefing sheet —
+  type-derived category names. MIS gives its main tab a content-sized briefing sheet —
   name, scrolling brief, mission time and player mode — then a three-stage escalation
   ladder carrying the mission's own threshold values, a live position marker and the
   remaining score to the next nuclear gate; an unset threshold reads as unset, never as
@@ -43,6 +43,36 @@ Boscali-owned layout do not change Wing Command's standalone presentation.
 - Empty grid slots and unnecessary pagers disappear. Inventory, directory and
   selected-unit rows use quieter readout styling. Symbols and bars reuse bounded
   UI objects and refresh with the existing visible-panel throttle.
+
+### Unified reading layout (2026-09-20)
+
+The stock presenters share a 540-unit minimum content measure inside the live body.
+Smaller bays scroll that content; the title, primary tabs and status strip remain fixed.
+MAP choices keep a 56-unit rhythm, while HUD and TGT use 48-unit two-column choices
+with full class names and explicit ON/OFF text. Compact actions prioritize their labels
+instead of spending scarce width on decorative glyphs. Faction pages share this reading
+layout for both BDF and PALA. The mission ladder has bounded row heights and its contract
+action immediately follows the three stages instead of hanging below a large empty gap.
+The camera mark keeps its actions beside a compact telemetry readout. Contract subtabs
+use the shared secondary-navigation height; titles stay clear of deadline chips and
+full contract copy is available on the accept action's hover hint.
+
+STR names its pages SITUATION, COMMAND and OPERATIONS. The command page is a full-width
+roster followed by the selected personnel file and staff log. Selecting a post brings
+its file into view; BACK TO POSTS returns to the roster. It no longer compresses names
+and service records into competing narrow columns. Situation and operations rows use
+the same larger data rhythm, with quiet section rules instead of alternating bands.
+
+SET is a consistently spaced form: a short page leaves space below the last setting;
+long pages scroll. Native accent is reserved for selection, state and semantic cues.
+The rail uses an explicit selected edge; footer, news ticker and backdrop avoid redundant
+corner ornaments. Gameplay adapters, host authority and existing action IDs are unchanged.
+
+`Run-StockMfdUnityCheck.ps1` renders the production stock presenters from a Release DLL
+and installed game metadata using synthetic display data. `Run-CocUnityCheck.ps1` covers
+roster, file navigation, hostile/unknown and unavailable states plus SITUATION and
+OPERATIONS at compact and tall heights; SET's fixture covers all
+client pages and the host board. These are offline layout checks, not live-game evidence.
 
 ## Additional inexpensive improvements considered
 
@@ -335,9 +365,9 @@ gives each stage an equal third — matching the game's own pointer, which maps
 conventional, tactical and strategic to equal segments — with tick marks at the tactical
 and strategic boundaries and each mission's threshold value printed beneath its tick. A
 2px marker rides the current position; the fill and active stage use accent, caution or
-alert by stage. The caption states `CURRENT n — m TO TACTICAL NUCLEAR` (or the distance
-to strategic, or that a gate is cleared); when both thresholds are zero it says
-`NO ESCALATION THRESHOLDS SET` instead of lighting STRATEGIC off an unset zero. The math
+alert by stage. The compact caption states `CUR n · TAC IN m` (or `TAC ACTIVE · STR IN m`);
+when both thresholds are zero it says `NO ESCALATION GATES` instead of lighting STRATEGIC
+off an unset zero. The math
 lives in `MfdMissionOverview.cs` (Unity-free) and is covered by
 `MfdMissionOverviewTests`.
 

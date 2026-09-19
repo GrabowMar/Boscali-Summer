@@ -39,7 +39,10 @@ namespace BoscaliSummer.Features.Support.Configuration
         public ConfigEntry<float> MaximumRange { get; }
         public ConfigEntry<float> RequestCooldown { get; }
 
-        public ConfigEntry<float> EwTruckCost { get; }
+        public ConfigEntry<float> CyberSiteCostScale { get; }
+        public ConfigEntry<float> CyberScrapRefund { get; }
+        public ConfigEntry<int> CyberSiteLimit { get; }
+        public ConfigEntry<float> CyberCampaignIntensity { get; }
         public ConfigEntry<float> EwProximityRadius { get; }
 
         public ConfigEntry<string> ArtilleryDefinitionKey { get; }
@@ -74,11 +77,13 @@ namespace BoscaliSummer.Features.Support.Configuration
                 "Flare barrage: launches an airburst countermeasure missile that disperses a cluster of " +
                 "intense pyrotechnic flares, seducing and misguiding all IR-seeking missiles in the area.");
             CyberEnabled = config.Bind("Support", "CyberOperations", true,
-                "Enable OPS INFO cyber operations: infrastructure investment and the operations " +
+                "Enable OPS CYBER operations: doctrine investment and the offensive operations " +
                 "it unlocks. Host-authoritative.");
             EwEnabled = config.Bind("Support", "ElectronicWarfare", true,
-                "Enable the EW page: build a radar truck and the electronic-warfare operations " +
-                "it unlocks (radar blackout, ghost shield, spoof contacts). Host-authoritative.");
+                "Enable the OPS CYBER spectrum-defence network: airbase infrastructure that comes up by itself " +
+                "(Cyber Command and gateways on owned airbases), field sites (early-warning radar, jammer, SIGINT, " +
+                "relay), the adversary campaign against it and the console. Emitting jammers back radar blackout, " +
+                "ghost shield and spoof contacts. Host-authoritative.");
             ShowOnTacticalMap = config.Bind("Support", "ShowOnTacticalMap", true,
                 "Show ability range circles, tactical vector icons, orbital station ground tracks and " +
                 "active strike waypoints on the tactical theater map.");
@@ -187,15 +192,31 @@ namespace BoscaliSummer.Features.Support.Configuration
                     "The OPS page counts it down on the request button.",
                     new AcceptableValueRange<float>(5f, 600f)));
 
-            EwTruckCost = config.Bind("Support", "EwTruckCost", 1200f,
+            CyberSiteCostScale = config.Bind("Support", "CyberSiteCostScale", 1f,
                 new ConfigDescription(
-                    "Allocation charged to deploy a mobile EW radar truck, before CostMultiplier. " +
-                    "One per faction.",
-                    new AcceptableValueRange<float>(0f, 20000f)));
+                    "Scales the price of every CYBER field site (radar 700, jammer 800, SIGINT 600, relay 350), " +
+                    "before CostMultiplier. Airbase infrastructure is free. Host-authoritative.",
+                    new AcceptableValueRange<float>(0f, 10f)));
+            CyberScrapRefund = config.Bind("Support", "CyberScrapRefund", 0.5f,
+                new ConfigDescription(
+                    "Fraction of what was paid refunded when a CYBER site is scrapped. A destroyed site refunds " +
+                    "nothing. Host-authoritative.",
+                    new AcceptableValueRange<float>(0f, 1f)));
+            CyberSiteLimit = config.Bind("Support", "CyberSiteLimit", 8,
+                new ConfigDescription(
+                    "Most CYBER field sites one faction may deploy at once (each is a real vehicle from a depot). " +
+                    "Airbase infrastructure never counts. Host-authoritative.",
+                    new AcceptableValueRange<int>(1, 10)));
+            CyberCampaignIntensity = config.Bind("Support", "CyberCampaignIntensity", 1f,
+                new ConfigDescription(
+                    "How hard the simulated adversary works against each faction's CYBER network: scales heat " +
+                    "build-up and how often probes, intrusions and jamming raids arrive. 0 switches the campaign " +
+                    "off; enemy players' operations are still heard. Host-authoritative.",
+                    new AcceptableValueRange<float>(0f, 4f)));
             EwProximityRadius = config.Bind("Support", "EwProximityRadiusMeters", 15000f,
                 new ConfigDescription(
-                    "How close the faction's EW truck must be to a hack's target " +
-                    "for Radar Blackout, Ghost Shield or Spoof Contacts to be authorised.",
+                    "How close one of the faction's working, emitting CYBER jammers (NOISE or DECEPTION) must be to " +
+                    "an operation's target for Radar Blackout, Ghost Shield or Spoof Contacts to be authorised.",
                     new AcceptableValueRange<float>(1000f, 60000f)));
 
             ArtilleryDefinitionKey = config.Bind("Support", "FireMissionDefinitionKey", string.Empty,

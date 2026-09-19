@@ -34,6 +34,13 @@ namespace BoscaliSummer.Features.Command.Presentation
         private bool isMapMaximized;
         private bool initialized;
 
+        private uint lastBakeGridVersion;
+        private bool lastBakeShowSectors;
+        private float lastBakeOverlayAlpha = -1f;
+        private int lastBakeTexW;
+        private int lastBakeTexH;
+        private bool hasBakedTexture;
+
         /// <summary>
         /// The faction control field shared with host ingress queries.
         /// </summary>
@@ -115,6 +122,7 @@ namespace BoscaliSummer.Features.Command.Presentation
             isMapMaximized = false;
             nextGridUpdate = 0f;
             gridHq = null;
+            hasBakedTexture = false;
             TheaterFrame.Invalidate();
         }
 
@@ -341,15 +349,32 @@ namespace BoscaliSummer.Features.Command.Presentation
                     overlayImage.enabled = localHq != null && showSectors;
                 }
 
-                // 4. Fast Procedural Texture Bake
-                Color32[] pixels = sectorGrid.BakeTexture(
-                    texW,
-                    texH,
-                    showSectors,
-                    overlayAlpha);
+                // 4. Fast Procedural Texture Bake (dirty-checked)
+                bool bakeDirty = !hasBakedTexture
+                    || lastBakeGridVersion != sectorGrid.GridVersion
+                    || lastBakeShowSectors != showSectors
+                    || !Mathf.Approximately(lastBakeOverlayAlpha, overlayAlpha)
+                    || lastBakeTexW != texW
+                    || lastBakeTexH != texH;
 
-                overlayTexture.SetPixels32(pixels);
-                overlayTexture.Apply(false);
+                if (bakeDirty)
+                {
+                    Color32[] pixels = sectorGrid.BakeTexture(
+                        texW,
+                        texH,
+                        showSectors,
+                        overlayAlpha);
+
+                    overlayTexture.SetPixels32(pixels);
+                    overlayTexture.Apply(false);
+
+                    lastBakeGridVersion = sectorGrid.GridVersion;
+                    lastBakeShowSectors = showSectors;
+                    lastBakeOverlayAlpha = overlayAlpha;
+                    lastBakeTexW = texW;
+                    lastBakeTexH = texH;
+                    hasBakedTexture = true;
+                }
 
                 if (frontlineGraphic != null)
                 {

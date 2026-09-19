@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using BepInEx.Logging;
 using BoscaliSummer.Features.Support.Domain;
+using BoscaliSummer.Features.Support.Domain.Cyber;
 using BoscaliSummer.Features.Support.Domain.Orbital;
 using BoscaliSummer.Features.Support.Runtime;
 using BoscaliSummer.Framework.Contracts;
@@ -17,7 +18,7 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Features.Support.Presentation
 {
     /// <summary>
-    /// "OPS" — the multi-domain operations MFD: SPACE, EW, INFO, SPEC OPS and INTEL.
+    /// "OPS" — the multi-domain operations MFD: SPACE, CYBER, SPEC OPS and INTEL.
     ///
     /// <para>The panel owns no policy. Every figure it shows comes from
     /// <see cref="SupportManager"/> (host snapshot or the same pricing the host charges) and
@@ -34,12 +35,11 @@ namespace BoscaliSummer.Features.Support.Presentation
         private const float RefreshInterval = 0.15f;
 
         private const int ChipCount = 3;
-        private const float SectionGap = 10f;
-        private const float HeaderHeight = 26f;
+        private const float SectionGap = 16f;
+        private const float HeaderHeight = 38f;
 
         private const int TabSpace = (int)OpsDomain.Space;
-        private const int TabEw = (int)OpsDomain.ElectronicWarfare;
-        private const int TabInfo = (int)OpsDomain.Information;
+        private const int TabCyber = (int)OpsDomain.Cyber;
         private const int TabSpecOps = (int)OpsDomain.SpecialOperations;
         private const int TabIntel = (int)OpsDomain.Intelligence;
 
@@ -88,8 +88,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             allocationMetric = orbitMetric = stationMetric = reserveMetric = null;
             actionRows.Clear();
             ResetSpacePage();
-            ResetEwPage();
-            ResetInfoPage();
+            ResetCyberPage();
             ResetProgramPages();
 
             nextAttempt = 0f;
@@ -120,6 +119,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             SetViewOpen(visible);
             // The launch count, the voice loop and SAR hand-off keep running with the screen closed.
             TickSpaceBackground();
+            TickCyberBackground();
             if (!visible || Time.unscaledTime < nextRefresh) return;
 
             nextRefresh = Time.unscaledTime + RefreshInterval;
@@ -238,7 +238,7 @@ namespace BoscaliSummer.Features.Support.Presentation
                 {
                     new[] { "ALLOCATION", "" },
                     new[] { "ORBIT", "MOD" },
-                    new[] { "EW", "STN" },
+                    new[] { "CYBER", "NET" },
                     new[] { "RESERVE", "INT" }
                 },
                 ChipCount, Width, height, _ => nextRefresh = 0f);
@@ -249,8 +249,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             reserveMetric = FitMetric(shell.Metrics[3]);
 
             BuildSpacePage();
-            BuildEwPage();
-            BuildInfoPage();
+            BuildCyberPage();
             BuildProgramPage(TabSpecOps, OpsReserve.SpecOps);
             BuildProgramPage(TabIntel, OpsReserve.Intel);
 
@@ -273,15 +272,29 @@ namespace BoscaliSummer.Features.Support.Presentation
         }
 
         /// <summary>
-        /// Four metrics share the bezel, so a wide allocation figure would otherwise ellipsize.
-        /// Shrink-to-fit keeps the sheet's size as the ceiling and never drops below body type.
+        /// Four metrics share the bezel, so a wide allocation figure or caption would otherwise
+        /// ellipsize. Shrink-to-fit keeps the sheet's size as the ceiling and never drops below
+        /// the 10px floor; values align right so "0/15" fractions share one edge.
         /// </summary>
         private static AvStyled.Metric FitMetric(AvStyled.Metric metric)
         {
             if (metric?.Value == null) return metric;
             metric.Value.enableAutoSizing = true;
             metric.Value.fontSizeMax = metric.Value.fontSize;
-            metric.Value.fontSizeMin = AvTokens.FontLead;
+            metric.Value.fontSizeMin = AvTokens.FontMicro;
+            metric.Value.alignment = TextAlignmentOptions.MidlineRight;
+            if (metric.Caption != null)
+            {
+                metric.Caption.enableAutoSizing = true;
+                metric.Caption.fontSizeMax = metric.Caption.fontSize;
+                metric.Caption.fontSizeMin = AvTokens.FontMicro;
+            }
+            if (metric.Unit != null)
+            {
+                metric.Unit.enableAutoSizing = true;
+                metric.Unit.fontSizeMax = metric.Unit.fontSize;
+                metric.Unit.fontSizeMin = AvTokens.FontMicro;
+            }
             return metric;
         }
 
@@ -307,10 +320,9 @@ namespace BoscaliSummer.Features.Support.Presentation
         {
             var page = (RectTransform)shell.CreatePage(tab, name).transform;
             RectTransform parent = AvScreen.Scroll(page, shell.Body, contentHeight, out Rect area);
-            AvStyled.Spine(parent, new Rect(area.x, area.y, 3f, area.height));
-            x = area.x + AvScreen.SpineInset;
+            x = area.x + 4f;
             y = area.y;
-            width = area.width - AvScreen.SpineInset;
+            width = area.width - 8f;
             return parent;
         }
 
@@ -318,12 +330,10 @@ namespace BoscaliSummer.Features.Support.Presentation
         private static TMP_Text Header(RectTransform parent, float x, ref float y, float width,
                                        string title, string note)
         {
-            AvStyled.SpineTick(parent, x - AvScreen.SpineInset + 3f, y - 7f);
-            float half = width * 0.5f;
-            AvStyled.Label(parent, new Rect(x, y, half, 14f), title, "section-title");
-            TMP_Text noteLabel = AvStyled.Label(parent, new Rect(x + half, y, width - half, 14f), note ?? "",
-                                                "section-title-note", align: TextAlignmentOptions.MidlineRight);
-            AvKit.Rule(parent, new Rect(x, y - 18f, width, 1f), AvTheme.Hairline);
+            AvStyled.Label(parent, new Rect(x, y, width, 16f), title, "section-title");
+            TMP_Text noteLabel = AvStyled.Label(parent, new Rect(x, y - 17f, width, 14f), note ?? "",
+                                                "section-title-note");
+            AvKit.Rule(parent, new Rect(x, y - 33f, width, 1f), AvTheme.Hairline);
             y -= HeaderHeight;
             return noteLabel;
         }
@@ -340,9 +350,9 @@ namespace BoscaliSummer.Features.Support.Presentation
         }
 
         /// <summary>
-        /// The one row shape every page uses: status rail, code, name, a live status line, a
-        /// wrapped detail line, and a trailing value with one or two buttons. Fixed height, so
-        /// no refresh can make a row taller than the space it was laid out in.
+        /// The one row shape every page uses: name and value, a full-width readiness line,
+        /// then explanation and labelled controls. Fixed heights keep refreshes stable;
+        /// compact rows omit the explanation but retain a two-line readiness lane.
         /// </summary>
         private sealed class OpsRow
         {
@@ -361,64 +371,91 @@ namespace BoscaliSummer.Features.Support.Presentation
             public Tone LastTone = (Tone)255;
         }
 
-        private const float RowHeight = 66f;
-        private const float CompactRowHeight = 48f;
-        private const float TrailWidth = 104f;
+        private const float RowHeight = 100f;
+        private const float CompactRowHeight = 68f;
+        /// <summary>Value and action columns: a cost figure is never crowded by its button.</summary>
+        private const float RowValueWidth = 100f;
+        private const float RowActionWidth = 96f;
+        private const float RowColumnGap = 8f;
 
         private static OpsRow Row(
             RectTransform parent, float x, float y, float width, bool compact,
             string code, string name, string detail,
             string primaryText, Action onPrimary,
             string secondaryText = null, Action onSecondary = null,
-            AvButtonStyle primaryStyle = AvButtonStyle.Primary, Action onSelect = null)
+            AvButtonStyle primaryStyle = AvButtonStyle.Default, Action onSelect = null,
+            float height = 0f, string selectTooltip = null)
         {
-            float height = compact ? CompactRowHeight : RowHeight;
+            float baseHeight = compact ? CompactRowHeight : RowHeight;
+            float slot = height > baseHeight ? height : baseHeight;
+            float inset = (slot - baseHeight) * 0.5f;
+            float top = y - inset;
             var row = new OpsRow();
 
-            row.Background = AvKit.Panel(parent, new Rect(x - 4f, y, width + 4f, height), Color.clear);
-            if (onSelect != null)
-                AvKit.HitButton(parent, new Rect(x, y, width - TrailWidth - 4f, height), onSelect);
-
-            AvKit.Rule(parent, new Rect(x, y - height + 1f, width, 1f), AvTheme.Hairline.WithAlpha(0.3f));
-            row.Rail = AvKit.Rule(parent, new Rect(x, y - 8f, 3f, height - 16f), AvTheme.RailInert);
-            row.Code = AvStyled.Label(parent, new Rect(x + 10f, y - 6f, 38f, 16f), code, "row-sub");
-            SingleLine(row.Code);
+            row.Background = AvKit.Panel(parent, new Rect(x - 4f, y, width + 4f, slot),
+                                         AvTheme.Unity(AvTokens.Surface), AvSprites.Control);
 
             bool trail = primaryText != null;
-            float textX = x + 52f;
-            float textWidth = width - 52f - (trail ? TrailWidth + 8f : 0f);
+            float actionWidth = secondaryText != null ? 152f : RowActionWidth;
+            float actionX = x + width - actionWidth - 8f;
+            float textRight = x + width - 8f;
 
-            row.Name = AvStyled.Label(parent, new Rect(textX, y - 6f, textWidth, 16f), name, "row-name");
-            row.Status = SingleLine(AvStyled.Label(parent, new Rect(textX, y - 23f, textWidth, 14f), "", "row-sub"));
+            AvButton select = null;
+            if (onSelect != null)
+                select = AvKit.HitButton(parent, new Rect(x, y, trail ? actionX - x - RowColumnGap : width, slot), onSelect);
+            if (select != null && selectTooltip != null) select.WithTooltip(selectTooltip);
+
+            AvKit.Rule(parent, new Rect(x, y - slot + 1f, width, 1f), AvTheme.Unity(AvTokens.Hairline.WithAlpha(0.3f)));
+            row.Rail = AvKit.Rule(parent, new Rect(x, y - 10f, 2f, 18f), AvTheme.RailInert);
+            row.Code = AvKit.Label(parent, code, new Rect(x + 10f, top - 8f, 36f, 18f),
+                AvTheme.Dim, AvTokens.FontSmall, FontStyles.Bold);
+
+            float textX = x + 52f;
+            float textWidth = textRight - textX - (trail ? RowValueWidth + RowColumnGap : 0f);
+
+            row.Name = AvStyled.Label(parent, new Rect(textX, top - 8f, textWidth, 18f), name, "row-name");
+            row.Status = Wrapped(AvStyled.Label(parent,
+                new Rect(x + 10f, top - 30f, compact && trail ? actionX - x - 18f : width - 20f, 30f), "", "row-sub"));
             if (!compact)
             {
-                row.Detail = AvStyled.Label(parent, new Rect(textX, y - 39f, textWidth, 24f), detail ?? "", "row-sub");
-                row.Detail.maxVisibleLines = 2;
-                row.Detail.color = AvTheme.Disabled;
+                row.Detail = Wrapped(AvStyled.Label(parent,
+                    new Rect(x + 10f, top - 64f, trail ? actionX - x - 18f : width - 20f, 30f), detail ?? "", "row-sub"));
+                row.Detail.color = AvTheme.Dim;
             }
 
             if (trail)
             {
-                float trailX = x + width - TrailWidth;
-                row.Value = AvStyled.Label(parent, new Rect(trailX, y - 6f, TrailWidth, 16f), "",
-                                           "row-value", align: TextAlignmentOptions.MidlineRight);
-                float buttonY = y - 25f;
+                row.Value = AvStyled.Label(parent, new Rect(textRight - RowValueWidth, top - 8f, RowValueWidth, 18f),
+                                           "", "row-value", align: TextAlignmentOptions.MidlineRight);
+                float buttonY = top - baseHeight + 34f;
                 if (secondaryText != null)
                 {
-                    float half = (TrailWidth - 12f) * 0.5f;
-                    row.Secondary = AvStyled.Button(parent, new Rect(trailX + 8f, buttonY, half, 24f),
+                    float half = (actionWidth - 8f) * 0.5f;
+                    row.Secondary = AvStyled.Button(parent, new Rect(actionX, buttonY, half, 28f),
                                                     secondaryText, "btn", onSecondary, AvButtonStyle.Danger);
-                    row.Primary = AvStyled.Button(parent, new Rect(trailX + 12f + half, buttonY, half, 24f),
+                    row.Primary = AvStyled.Button(parent, new Rect(actionX + half + 8f, buttonY, half, 28f),
                                                   primaryText, "btn", onPrimary, primaryStyle);
                 }
                 else
                 {
-                    row.Primary = AvStyled.Button(parent, new Rect(trailX + 8f, buttonY, TrailWidth - 8f, 24f),
+                    row.Primary = AvStyled.Button(parent, new Rect(actionX, buttonY, RowActionWidth, 28f),
                                                   primaryText, "btn", onPrimary, primaryStyle);
                 }
+                if (selectTooltip != null) row.Primary.WithTooltip(selectTooltip);
             }
 
             return row;
+        }
+
+        private static TMP_Text Wrapped(TMP_Text label)
+        {
+            label.enableWordWrapping = true;
+            label.maxVisibleLines = 2;
+            label.fontSize = 11f;
+            label.characterSpacing = 0f;
+            label.overflowMode = TextOverflowModes.Ellipsis;
+            label.alignment = TextAlignmentOptions.TopLeft;
+            return label;
         }
 
         private static TMP_Text SingleLine(TMP_Text label)
@@ -438,6 +475,24 @@ namespace BoscaliSummer.Features.Support.Presentation
             row.Rail.color = RailColor(tone);
             row.Status.text = status;
             row.Status.color = StatusColor(tone);
+            if (row.Background != null)
+            {
+                switch (tone)
+                {
+                    case Tone.Armed:
+                        row.Background.color = AvTheme.RailCaution.WithAlpha(0.07f);
+                        break;
+                    case Tone.Ready:
+                        row.Background.color = AvTheme.Unity(AvTokens.Surface);
+                        break;
+                    case Tone.Danger:
+                        row.Background.color = AvTheme.RailDanger.WithAlpha(0.08f);
+                        break;
+                    default:
+                        row.Background.color = AvTheme.Unity(AvTokens.Surface.WithAlpha(0.85f));
+                        break;
+                }
+            }
             return true;
         }
 
@@ -468,7 +523,7 @@ namespace BoscaliSummer.Features.Support.Presentation
         private static void SetSelected(OpsRow row, bool selected) =>
             row.Background.color = selected ? AvTheme.Accent.WithAlpha(0.08f) : Color.clear;
 
-        // ---- Support-action rows (shared by SPACE, EW, INFO and SPEC OPS) -----------------
+        // ---- Support-action rows (shared by SPACE, CYBER and SPEC OPS) --------------------
 
         private sealed class ActionRow
         {
@@ -481,9 +536,9 @@ namespace BoscaliSummer.Features.Support.Presentation
         /// <summary>Which domain page hosts an action. Nothing is left without a page.</summary>
         private static int HomeTab(SupportActionDefinition action)
         {
-            if (action.IsHack) return TabInfo;
+            if (action.IsHack) return TabCyber;
             if (SupportManager.OrbitalAbility(action.Id).HasValue) return TabSpace;
-            if (action.Id == SupportActionId.FlareMissile) return TabEw;
+            if (action.Id == SupportActionId.FlareMissile) return TabCyber;
             return TabSpecOps;
         }
 
@@ -496,8 +551,10 @@ namespace BoscaliSummer.Features.Support.Presentation
         }
 
         /// <summary>Build every action row this tab hosts; returns the new y.</summary>
-        private float BuildActionRows(RectTransform parent, int tab, float x, float y, float width, string verb)
+        private float BuildActionRows(RectTransform parent, int tab, float x, float y, float width, string verb,
+                                      float rowHeight = 0f)
         {
+            float step = rowHeight > RowHeight ? rowHeight : RowHeight;
             foreach (SupportActionDefinition action in support.Actions)
             {
                 if (HomeTab(action) != tab) continue;
@@ -510,10 +567,10 @@ namespace BoscaliSummer.Features.Support.Presentation
                     Tab = tab,
                     Verb = verb,
                     View = Row(parent, x, y, width, false, code, action.Name, detail, verb,
-                               () => { support.Arm(id); nextRefresh = 0f; })
+                               () => { support.Arm(id); nextRefresh = 0f; }, height: rowHeight)
                 };
                 actionRows.Add(row);
-                y -= RowHeight;
+                y -= step;
             }
             return y;
         }
@@ -615,6 +672,8 @@ namespace BoscaliSummer.Features.Support.Presentation
                 row.View.Primary.SetEnabled(enabled);
                 row.View.Primary.SetLatched(armed);
                 row.View.Primary.SetText(armed ? "ABORT" : row.Verb);
+                // Armed/ready read from the shared accent wash; no solid plate at rest.
+                row.View.Primary.ClearCustomColors();
                 if (Paint(row.View, tone, status))
                 {
                     row.View.Primary.WithTooltip(action.Name + " — " + (cost > 0f ? Figure(cost) + " ALLOC. " : "") +
@@ -623,16 +682,16 @@ namespace BoscaliSummer.Features.Support.Presentation
             }
         }
 
-        /// <summary>Domain gates the host would refuse (station posture, a satellite of the payload
-        /// with a round and power). An open orbital gate still reports its access planning note.</summary>
+        /// <summary>Domain gates the host would refuse (a jammer in the backing mode, a breached
+        /// Cyber Command, the station's pass and power). An open orbital gate still reports its
+        /// access planning note.</summary>
         private bool Gate(SupportActionDefinition action, out string reason)
         {
             reason = null;
             if (action.IsHack)
             {
-                bool station = support.LocalEwAssetState != EwAssetState.None;
-                InfoGate gate = InfoOperations.Evaluate(support.LocalInfo, action.Hack.Value, station,
-                                                        support.LocalEwPosture);
+                InfoGate gate = InfoOperations.Evaluate(support.LocalInfo, action.Hack.Value, support.LocalCyber,
+                                                       support.OrbitNow);
                 // HackAction re-checks facility powers and the station even under debug bypass.
                 reason = InfoOperations.Explain(gate, action.Hack.Value);
                 return gate == InfoGate.Ready;
@@ -655,8 +714,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             switch (shell.Page)
             {
                 case TabSpace: RefreshSpace(bypass); break;
-                case TabEw: RefreshEw(bypass); break;
-                case TabInfo: RefreshInfo(bypass); break;
+                case TabCyber: RefreshCyber(bypass); break;
                 case TabSpecOps: RefreshProgramPage(TabSpecOps, bypass); break;
                 case TabIntel: RefreshProgramPage(TabIntel, bypass); break;
             }
@@ -746,11 +804,20 @@ namespace BoscaliSummer.Features.Support.Presentation
                                 : state.InPass ? AvTheme.RailReady : AvTheme.RailCaution);
             }
 
-            bool station = support.LocalEwAssetState != EwAssetState.None;
-            EwPostureInfo posture = EwPostures.Info(support.LocalEwPosture);
-            stationMetric.Set(station ? "1/1" : "0/1",
-                              station ? posture.Code + " · " + posture.Discipline : "NONE",
-                              station ? 1f : 0f, station ? AvTheme.RailReady : AvTheme.RailInert);
+            CyberNetwork cyber = support.LocalCyber;
+            if (cyber == null || !cyber.HasCommand)
+            {
+                stationMetric.Set("0/0", "NO AIRBASE", 0f, AvTheme.RailInert);
+            }
+            else
+            {
+                int infocon = cyber.Infocon;
+                CyberStats stats = cyber.Stats();
+                // Nodes on the net over nodes held: airbase infrastructure plus field trucks.
+                stationMetric.Set(stats.OnNet + "/" + stats.Sites, CyberWords.Infocon(infocon),
+                                  stats.Capacity > 0f ? cyber.Bandwidth / stats.Capacity : 0f,
+                                  infocon >= 5 ? AvTheme.RailReady : infocon >= 3 ? AvTheme.RailCaution : AvTheme.RailDanger);
+            }
 
             OpsProgramLedger programs = support.LocalPrograms;
             int intel = programs != null ? programs.Tokens(OpsReserve.Intel) : 0;

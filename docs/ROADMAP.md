@@ -66,13 +66,9 @@ codecs and snapshot providers; garrison catalogue/selection/spawning/lifecycle.
   acceptance of the install path, timeline pacing, spawn placement, balance and the
   multi-peer path. The builder, the static validator and the pure install-policy tests are
   not flight tests.
-- **Weather restored** — a deterministic front schedule drives the vanilla `LevelInfo`
-  sky, the `WEA` environment screen is hosted (no bezel claim), and the debug overlay is
-  opt-in. Genuinely open work: per-position/advecting storm cells instead of one
-  theater-wide reading, volumetric or precipitation rendering, weather-gated objectives
-  and support windows, and a read-only contract another module could consume for the
-  schedule — which needs a named consumer first.
-
+- **Lightweight weather replacement — design pending.** The previous weather module has
+  been removed. Its successor gets a separate planning pass; no model, rendering, UI,
+  networking or configuration is committed here yet.
 - **Urban combat first release** — deterministic shell selection around controlled ground
   airbases, an authoritative occupancy record separate from its visual, `Occupied →
   Neutralized/Ruined` transitions, bounded air-assault presentation, no duplicate proxies

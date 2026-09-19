@@ -27,8 +27,14 @@ namespace BoscaliSummer.Features.Progression.Presentation
         public const float FileHeaderHeight = 50f;
         public const float TitleHeight = 24f;
         public const float LaneHeaderHeight = 30f;
-        public const float LegendHeight = 22f;
+        public const float LegendHeight = 34f;
         public const float DetailHeight = 44f;
+        public const float StateHeight = 14f;
+        public const float StateBottomInset = 3f;
+
+        /// <summary>Top offset of the state line, measured down from a cell's top edge.</summary>
+        public static float StateTop(float rowHeight) =>
+            -rowHeight + StateHeight + StateBottomInset;
 
         /// <summary>Equal share of the width after the gutter and one gap per lane.</summary>
         public static float CellWidth(float width, int lanes) =>

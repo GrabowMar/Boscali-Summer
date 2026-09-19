@@ -1,6 +1,7 @@
 using System;
 using BoscaliSummer.Features.Trenches.Presentation;
 using BoscaliSummer.Features.Trenches.Runtime;
+using BoscaliSummer.Features.Trenches.Visuals;
 using BoscaliSummer.Framework.Features;
 using BoscaliSummer.Framework.Contracts;
 
@@ -8,8 +9,14 @@ namespace BoscaliSummer.Features.Trenches
 {
     internal sealed class TrenchesFeature : IModFeature
     {
+        private static readonly Type[] Patches =
+        {
+            typeof(TrenchNestClientPatch),
+            typeof(TrenchNestServerPatch)
+        };
+
         public FeatureMetadata Metadata { get; } = new FeatureMetadata("trenches", "Natural front-line trench curves", "command");
-        public Type[] PatchTypes => Array.Empty<Type>();
+        public Type[] PatchTypes => Patches;
 
         public void Install(FeatureContext context)
         {

@@ -477,6 +477,7 @@ namespace BoscaliSummer.Fire
 
         private void UpdateFires()
         {
+            if (fires.Count == 0) return;
             float now = Time.timeSinceLevelLoad;
             Vector3 wind = NetworkSceneSingleton<LevelInfo>.i != null
                 ? NetworkSceneSingleton<LevelInfo>.i.GetWind()

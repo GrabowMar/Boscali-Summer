@@ -16,9 +16,8 @@ maintainers and coding agents; runtime design is in [ARCHITECTURE.md](ARCHITECTU
 | STR MFD, expanded map GUI, map overlays, territory/frontline field | `modules/Command` | `Features/Command` | Progression contracts, game interop |
 | Secondary objectives, faction awards, finite reinforcement batches | `modules/DynamicOperations` | `Features/DynamicOperations` | Framework lifecycle/contracts, native game interop |
 | Generated staff tree, command posts, VIP convoys, intel, stipends/bounties | `modules/HighCommand` | `Features/HighCommand` | Framework lifecycle/contracts, native game interop; consumed by Command through `IHighCommandView` |
-| Rotating world events, EVN MFD feed, support-cost modifier | `modules/Events` | `Features/Events` | Framework lifecycle/contracts, native game interop; publishes `IActiveEventsView`, optionally consumed by Support |
+| Graded world-event director (minor/medium/superevents), EVN MFD feed, superevent alert, per-side support-cost modifier, scripted fund/allocation/convoy beats | `modules/Events` | `Features/Events` | Framework lifecycle/contracts, native game interop (airbase custody, faction pool, convoy queue); publishes `IActiveEventsView`, optionally consumed by Support |
 | Installs the authored Boscali Summer campaign mission into the game's user mission list | `modules/Campaign` | `Features/Campaign` | Framework lifecycle, game interop; no feature dependency, publishes no contract |
-| Deterministic weather front schedule, `WEA` environment screen, opt-in debug overlay | `modules/Weather` | `Features/Weather` | Framework lifecycle/contracts, native game interop; optional read-only `IFireSuppressionService` for the fire-haze term; publishes no contract |
 | Feature graph, host, lifecycle, service contracts | `Framework` | `Framework` | no concrete feature |
 | Cached game/reflection/diagnostic adapters | `Infrastructure` | architecture / patch probe | no feature policy |
 | Registration and plugin startup | `Bootstrap` | Framework / architecture | may name every feature |
@@ -76,8 +75,11 @@ The plugin requires Wing Command `0.9.2.6`+ at runtime; `WingLink` caches its pu
 pilot/ace-wing/chatter API and no feature imports Wing Command implementation types.
 
 Support optionally consumes Events' read-only `IActiveEventsView` for a live world-event
-factor on support pricing. It resolves the contract late through `ModServices`; Events
-imports no sibling, and neither module requires the other to install.
+factor on support pricing, per player and per side. It resolves the contract late through
+`ModServices`; Events imports no sibling, and neither module requires the other to install.
+A superevent's other beats spend through the vanilla faction pool, `Player.AddAllocation`
+and the mission's own convoy groups directly, the same seams TheaterOps and HighCommand
+already use; Events never spawns, retasks or reaches into another module's state.
 
 Campaign depends on no module and publishes no contract. It writes the embedded mission JSON
 once at startup; no module consumes it and nothing blocks on it.

@@ -51,6 +51,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private static readonly List<Entry> history = new List<Entry>();
         private static readonly List<string> previousMessages = new List<string>();
         private static readonly List<string> previousKills = new List<string>();
+        private static string lastMessageRaw;
+        private static string lastKillRaw;
         internal static event Action<string> OnLineAdded;
 
         public static void Ensure(Canvas canvas, MfdLayout.Columns layout, VirtualMFD virtualMfd)
@@ -86,9 +88,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             if (panel == null || mfd == null) return;
 
             ResolveSources();
-            bool added = CaptureChanges(messageSource == null ? null : messageSource.text, previousMessages);
-            added |= CaptureChanges(killSource == null ? null : killSource.text, previousKills);
-            PruneHistory();
+            bool added = CaptureChanges(messageSource == null ? null : messageSource.text, ref lastMessageRaw, previousMessages);
+            added |= CaptureChanges(killSource == null ? null : killSource.text, ref lastKillRaw, previousKills);
+            bool pruned = PruneHistory();
 
             if (!DynamicMap.mapMaximized)
             {
@@ -128,8 +130,11 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 Rebuild(panel.sizeDelta);
 
             HideOriginals();
-            body.text = HistoryText();
-            ResizeScrollContent(added);
+            if (added || pruned || string.IsNullOrEmpty(body.text))
+            {
+                body.text = HistoryText();
+                ResizeScrollContent(added);
+            }
         }
 
         public static void Restore()
@@ -143,6 +148,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             mfd = null;
             messageSource = null;
             killSource = null;
+            lastMessageRaw = null;
+            lastKillRaw = null;
             builtSize = Vector2.zero;
             bodyWidth = 0f;
             viewportHeight = 0f;
@@ -267,6 +274,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 new Rect(0f, 0f, bodyWidth, viewportHeight),
                 "", "row-sub", align: TextAlignmentOptions.TopLeft);
             body.richText = true;
+            body.fontSize = 13f;
+            body.characterSpacing = 0f;
             body.enableWordWrapping = true;
             body.overflowMode = TextOverflowModes.Overflow;
 
@@ -309,8 +318,12 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             if (panel != null) panel.gameObject.SetActive(false);
         }
 
-        private static bool CaptureChanges(string text, List<string> previous)
+        private static bool CaptureChanges(string text, ref string lastRaw, List<string> previous)
         {
+            if (ReferenceEquals(text, lastRaw) || (text != null && string.Equals(text, lastRaw, StringComparison.Ordinal)))
+                return false;
+            lastRaw = text;
+
             List<string> current = SplitLines(text);
             var matched = new bool[current.Count];
             int[,] lcs = new int[previous.Count + 1, current.Count + 1];
@@ -392,11 +405,19 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             OnLineAdded?.Invoke(text);
         }
 
-        private static void PruneHistory()
+        private static bool PruneHistory()
         {
             float now = Time.unscaledTime;
+            bool pruned = false;
             for (int i = history.Count - 1; i >= 0; i--)
-                if (history[i].ExpiresAt <= now) history.RemoveAt(i);
+            {
+                if (history[i].ExpiresAt <= now)
+                {
+                    history.RemoveAt(i);
+                    pruned = true;
+                }
+            }
+            return pruned;
         }
 
         private static string HistoryText()

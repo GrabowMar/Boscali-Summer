@@ -36,6 +36,7 @@ public static class SettingsUnityCheck
             AvStyleHost.Configure(Directory.GetCurrentDirectory(), Debug.Log, Debug.LogWarning);
             AvFont.Font = TMP_FontAsset.CreateFontAsset(new Font("C:/Windows/Fonts/consola.ttf"));
             new GameObject("Events", typeof(EventSystem));
+            AvionicsUnityCheck.Check();
             CheckMfdLookup();
             CheckLayoutCanvas();
             CheckScreenSpaceSizing();
@@ -132,7 +133,8 @@ public static class SettingsUnityCheck
         ((RectTransform)canvas.transform).sizeDelta = new Vector2(480, height);
         var panel = canvas.gameObject.AddComponent<SettingsMfdPanel>();
         panel.Configure(config, null);
-        var shell = AvScreen.Build((RectTransform)canvas.transform, "SET", new[] { "CLIENT", "SERVER" }, null, 0, 480, height, null);
+        var shell = AvScreen.Build((RectTransform)canvas.transform, "SET", new[] { "CLIENT", "SERVER" }, null, 2, 480, height, null);
+        shell.DataBar.SetChip(0, "SAVED", true);
         shell.DataBar.State.text = "TACTICAL DISPLAY";
         typeof(SettingsMfdPanel).GetField("shell", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(panel, shell);
         Invoke(panel, "BuildClientArea", (RectTransform)shell.CreatePage(0, "ClientPage").transform, shell.Body);
@@ -147,6 +149,7 @@ public static class SettingsUnityCheck
             Render(camera, canvas, height, page);
         }
         shell.SetPage(1);
+        shell.DataBar.State.text = "SERVER SETTINGS";
         Refresh(panel);
         shell.WriteStatus(null, null, "Host only. These settings are read-only on a remote client.");
         Render(camera, canvas, height, 4);

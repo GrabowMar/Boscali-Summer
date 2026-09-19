@@ -129,10 +129,46 @@ namespace NOAvionics.Ui
             Disabled = AvTokens.TextMuted,
         };
 
+        private bool hasCustomColors;
+        private Color customFill;
+        private Color customFrame;
+        private Color customText;
+
+        public void SetCustomColors(Color fill, Color frame, Color text)
+        {
+            hasCustomColors = true;
+            customFill = fill;
+            customFrame = frame;
+            customText = text;
+            Apply();
+        }
+
+        public void ClearCustomColors()
+        {
+            if (!hasCustomColors) return;
+            hasCustomColors = false;
+            Apply();
+        }
+
         public void Apply()
         {
             if (rowFill != null) rowFill.color = hovered && interactable ? rowHover : rowRest;
             if (!decorated) return;
+
+            if (hasCustomColors && interactable)
+            {
+                // A semantic tint must not turn off the shared pointer feedback.
+                float lift = pressed ? 0.18f : hovered ? 0.08f : 0f;
+                if (fill != null) fill.color = Color.Lerp(customFill, Color.white, lift);
+                if (label != null) label.color = hovered || pressed ? Color.white : customText;
+                if (frame != null)
+                {
+                    for (int i = 0; i < frame.Length; i++)
+                        if (frame[i] != null) frame[i].color = hovered || pressed ? Color.white : customFrame;
+                }
+                if (underline != null) underline.color = latched ? customFrame : Color.clear;
+                return;
+            }
 
             AvButtonPaint paint = AvTokens.Paint(style, PaletteInputs, interactable, latched, hovered, pressed);
 

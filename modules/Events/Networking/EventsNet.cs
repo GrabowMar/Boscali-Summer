@@ -22,6 +22,9 @@ namespace BoscaliSummer.Features.Events.Networking
     {
         public byte Protocol;
         public sbyte CatalogIndex;
+
+        /// <summary>Faction the event is aimed at as a name hash; 0 = all theater.</summary>
+        public int TargetFactionHash;
         public float StartedAtMissionTime;
         public float EndsAtMissionTime;
     }
@@ -50,8 +53,8 @@ namespace BoscaliSummer.Features.Events.Networking
 
     internal sealed class EventsNet : MonoBehaviour
     {
-        /// <summary>Version 2 adds the response intent and reply.</summary>
-        internal const byte ProtocolVersion = 2;
+        /// <summary>Version 3 adds the resolved target faction hash for superevents.</summary>
+        internal const byte ProtocolVersion = 3;
 
         internal const byte ActionRespond = 0;
         internal const byte ActionQuery = 1;
@@ -122,7 +125,7 @@ namespace BoscaliSummer.Features.Events.Networking
             }
         }
 
-        public void Broadcast(sbyte catalogIndex, float start, float end)
+        public void Broadcast(sbyte catalogIndex, int targetFactionHash, float start, float end)
         {
             if (!GameAccess.IsServer()) return;
             NetworkServer server = NetworkManagerNuclearOption.i?.Server;
@@ -131,6 +134,7 @@ namespace BoscaliSummer.Features.Events.Networking
             {
                 Protocol = ProtocolVersion,
                 CatalogIndex = catalogIndex,
+                TargetFactionHash = targetFactionHash,
                 StartedAtMissionTime = start,
                 EndsAtMissionTime = end,
             }, authenticatedOnly: true, excludeLocalPlayer: true);
@@ -208,7 +212,8 @@ namespace BoscaliSummer.Features.Events.Networking
         private void ReceiveChanged(INetworkPlayer _, ActiveEventChanged message)
         {
             if (GameAccess.IsServer() || message.Protocol != ProtocolVersion) return;
-            manager.ApplyRemote(message.CatalogIndex, message.StartedAtMissionTime, message.EndsAtMissionTime);
+            manager.ApplyRemote(message.CatalogIndex, message.TargetFactionHash,
+                message.StartedAtMissionTime, message.EndsAtMissionTime);
         }
 
         private void OnDestroy()
@@ -244,6 +249,7 @@ namespace BoscaliSummer.Features.Events.Networking
             {
                 w.WriteByte(v.Protocol);
                 w.WriteByte((byte)v.CatalogIndex);
+                w.WritePackedInt32(v.TargetFactionHash);
                 w.WriteSingle(v.StartedAtMissionTime);
                 w.WriteSingle(v.EndsAtMissionTime);
             }));
@@ -253,6 +259,7 @@ namespace BoscaliSummer.Features.Events.Networking
                 var message = new ActiveEventChanged { Protocol = protocol };
                 if (protocol != ProtocolVersion) return message;
                 message.CatalogIndex = unchecked((sbyte)r.ReadByte());
+                message.TargetFactionHash = r.ReadPackedInt32();
                 message.StartedAtMissionTime = r.ReadSingle();
                 message.EndsAtMissionTime = r.ReadSingle();
                 return message;

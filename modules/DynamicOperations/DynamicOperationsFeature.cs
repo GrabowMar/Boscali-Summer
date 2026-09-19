@@ -27,7 +27,7 @@ namespace BoscaliSummer.Features.DynamicOperations
                 .Number(1, context.Settings.DynamicOperations.RewardMultiplier, "REWARD SCALE",
                     "Scale mission money and XP for accepted contracts. Money uses the normal faction tax; XP is vanilla mission score.",
                     0.25f, v => v.ToString("0.00") + "x"));
-            context.Logger.LogInfo("[Operations] 17 contract families; mod-drawn contract markers on the cockpit HUD and the tactical map plus the vicinity card; native rescue/repair/supply observations; acceptance required, 3 cards/2 active per faction, 24 reward units; experimental.");
+            context.Logger.LogInfo("[Operations] 17 contract families; mod-drawn contract markers on the cockpit HUD and the tactical map plus the contract feed on the common HUD element; native rescue/repair/supply observations; acceptance required, 3 cards/2 active per faction, 24 reward units; experimental.");
         }
     }
 }

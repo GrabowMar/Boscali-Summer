@@ -183,7 +183,6 @@ namespace NOAvionics.Ui
         {
             Image bg = Panel(parent, area, AvTheme.Surface, AvSprites.Card);
             Outline(parent, area, AvTheme.Hairline);
-            CornerTicks(parent, area, AvTheme.Hairline);
 
             Image rail = null;
             if (hasRail)
@@ -198,10 +197,11 @@ namespace NOAvionics.Ui
             RectTransform parent, string text, Rect area, Color railColor, Color textColor,
             float fontSize = AvTokens.FontMicro)
         {
-            Image bg = Panel(parent, area, new Color(railColor.r * 0.15f, railColor.g * 0.15f, railColor.b * 0.15f, 0.85f), AvSprites.Control);
-            Outline(parent, area, new Color(railColor.r, railColor.g, railColor.b, 0.45f));
-
-            TMP_Text lbl = Label(parent, text, area, textColor, fontSize, FontStyles.Bold, TextAlignmentOptions.Center);
+            Image bg = Panel(parent, area, AvTheme.SurfaceInert);
+            Rule(parent, new Rect(area.x + 5f, area.y - area.height * 0.5f + 3f, 3f, 6f), railColor);
+            TMP_Text lbl = Label(parent, text,
+                new Rect(area.x + 12f, area.y, Mathf.Max(0f, area.width - 16f), area.height),
+                textColor, fontSize, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
             return (bg, lbl);
         }
 
@@ -239,15 +239,31 @@ namespace NOAvionics.Ui
             fill.sprite = AvSprites.Control;
             fill.type = Image.Type.Sliced;
             fill.raycastTarget = true;
-
-            Image[] frame = Outline(rt, new Rect(0f, 0f, area.width, area.height), AvTheme.Frame);
+            Image border = Panel(rt, new Rect(0f, 0f, area.width, area.height), AvTheme.Frame, AvSprites.ControlFrame);
+            border.raycastTarget = false;
+            Stretch(border.rectTransform);
+            Image[] frame = new[] { border };
 
             Image underline = style == AvButtonStyle.Tab
                 ? Rule(rt, new Rect(0f, -(area.height - 2f), area.width, 2f), Color.clear)
                 : null;
+            if (underline != null)
+            {
+                RectTransform underlineRect = underline.rectTransform;
+                underlineRect.anchorMin = new Vector2(0f, 0f);
+                underlineRect.anchorMax = new Vector2(1f, 0f);
+                underlineRect.pivot = new Vector2(0.5f, 0f);
+                underlineRect.anchoredPosition = Vector2.zero;
+                underlineRect.sizeDelta = new Vector2(0f, 2f);
+            }
 
             TMP_Text label = Label(rt, text, new Rect(0f, 0f, area.width, area.height),
                                    AvTheme.Accent, fontSize, FontStyles.Bold, TextAlignmentOptions.Center);
+            Stretch(label.rectTransform);
+            label.margin = new Vector4(6f, 0f, 6f, 0f);
+            label.enableAutoSizing = true;
+            label.fontSizeMax = fontSize;
+            label.fontSizeMin = Mathf.Min(fontSize, AvTokens.FontMicro);
 
             AvButton btn = go.AddComponent<AvButton>();
             btn.Initialise(style, fill, frame, underline, label, onClick);
@@ -372,6 +388,7 @@ namespace NOAvionics.Ui
             Place(fillRect, new Rect(area.x + 1f, area.y - 1f, area.width - 2f, area.height - 2f));
             Image fill = fillObject.GetComponent<Image>();
             fill.color = fillCol;
+            fill.sprite = AvSprites.White;
             fill.type = Image.Type.Filled;
             fill.fillMethod = Image.FillMethod.Horizontal;
             fill.fillOrigin = 0;
@@ -404,14 +421,9 @@ namespace NOAvionics.Ui
 
         public static TMP_Text StatusStrip(RectTransform parent, Rect area, Color? railColor = null)
         {
-            Color rail = railColor ?? AvTheme.RailReady;
-            TacticalCard(parent, area, rail);
-
-            TMP_Text label = Label(parent, "> READY",
-                                   new Rect(area.x + AvTokens.Space3, area.y - 2f,
-                                            area.width - AvTokens.Space4 - AvTokens.Space2, area.height - 4f),
-                                   AvTheme.Dim, AvTokens.FontMicro, FontStyles.Normal,
-                                   TextAlignmentOptions.MidlineLeft, wrap: true);
+            TMP_Text label = AvStyled.StatusStrip(parent, area, out Image rail);
+            rail.color = railColor ?? AvTheme.RailInert;
+            label.text = "READY";
             return label;
         }
 
@@ -685,7 +697,7 @@ namespace NOAvionics.Ui
                 detail.text = entry.Detail ?? "";
 
                 Color rest = entry.Selected ? AvTheme.Unity(AvTokens.Wash(AvTheme.Accent.ToRgba(), AvTokens.SelectedScale, AvTokens.SelectedAlpha)) : AvTheme.Ground;
-                Color hover = AvTheme.Unity(AvTokens.Wash(AvTheme.Accent.ToRgba(), AvTokens.RowHoverScale, AvTokens.RowHoverAlpha));
+                Color hover = AvTheme.Unity(AvTokens.RowFill(AvTheme.Accent.ToRgba(), false, true));
                 hit.SetRowHighlight(fill, rest, hover);
                 hit.SetAction(entry.Enabled ? onPick : null);
                 hit.SetEnabled(entry.Enabled);

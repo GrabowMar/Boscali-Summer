@@ -117,16 +117,19 @@ otherwise it goes offline for 45 s. `PlatformDebrisEvents` turns it off.
 - **OPS › SPACE › PLATFORM** — station banner (callsign, band, OVERHEAD / AWAY / INSERTION /
   TRANSFER, large AOS/LOS clock, pass bar with NOW marker, GET), annunciator tiles (POWER,
   THERMAL, FUEL, LINK, CREW, DEBRIS, ORBIT, MODULES), energy/fuel/rods/mass gauges, a compact
-  live schematic, ability cards in two columns (status word, cost, recharge bar, one button),
-  voice loop.
+  live schematic, full-width ability rows (two-line readiness, complete cost in its own lane,
+  labelled action and recharge bar), voice loop. Without a station, one setup guide replaces
+  empty telemetry and abilities, with OPEN PLANNER as the next step.
 - **OPS › SPACE › MISSION PLANNER** — the 5 × 3 grid (category colour, code, HOT / +REL / SHD
   / OFF / DOCKING tags, connectors), cell inspector with JETTISON (click twice), launch card
   (next module, cell, mass, vehicle, price, projected mass / net power / storage, 5 s count with
   HOLD, docking progress), core launch with band choice when there is no station, the module
-  catalogue as tiles (fits / why not), CARGO resupply, the utility rules.
+  catalogue as two-column tiles with separate name, fit state and specification lanes,
+  CARGO resupply, the wrapped utility rules. Inspector and launch projection have enough
+  vertical space for their full explanatory text.
 - **OPS › SPACE › ENEMY ACTIVITY** — tracked foreign stations (band, size, overhead / away /
-  manoeuvring) and COMING SOON stubs: ASAT warning, signals intercept, debris watch, orbital
-  defence.
+  manoeuvring) and a single COMING SOON notice explaining that ASAT warning, signals
+  interception, debris watch and orbital defence are unavailable; no fake action cards.
 - **Uplink** — full-screen overlay: 16:10 feed with corner brackets, crosshair, compass tape,
   north arrow, scale bar, frame counter and LIVE light; left rail telemetry; right rail radar
   product and ability buttons 1–4 that fire at the crosshair; pass bar; key legend. Drag or

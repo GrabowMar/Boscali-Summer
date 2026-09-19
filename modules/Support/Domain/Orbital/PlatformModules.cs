@@ -130,7 +130,7 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
                 "Debris bumper. Protects itself and its neighbours from strikes.",
                 2f, 180f, 0f, 0f, 0f, 0f, 0f, 0, false, 3),
             new ModuleInfo(ModuleKind.Propulsion, "PRP", "PROPULSION", ModuleCategory.Mobility,
-                "Tanks and thrusters. +100 fuel for rephase burns and orbit changes; LOW needs it.",
+                "Tanks and thrusters. +100 fuel for rephase burns and stationkeeping.",
                 4f, 400f, 0f, 0f, 0f, 0f, 100f, 0, false, 2),
             new ModuleInfo(ModuleKind.Habitat, "HAB", "HABITAT", ModuleCategory.Utility,
                 "Crew of three on console. Every ability recharges 25 % faster.",
@@ -261,7 +261,7 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
                 "Phasing burn: the next pass begins in 10 s.",
                 ModuleKind.Propulsion, 0f, 30f, 25f, AbilityWindow.Away),
             new AbilityInfo(PlatformAbility.OrbitShift, "ORB", "ORBIT CHANGE",
-                "Raise or lower one band. 30 s transfer, abilities offline.",
+                "Orbit changes disabled. Single space orbit.",
                 ModuleKind.Propulsion, 0f, 0f, ShiftFuelPerBand, AbilityWindow.Any)
         };
 

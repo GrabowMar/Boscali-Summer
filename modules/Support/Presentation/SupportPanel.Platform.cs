@@ -18,12 +18,13 @@ namespace BoscaliSummer.Features.Support.Presentation
     /// </summary>
     internal sealed partial class SupportPanel
     {
-        private const float BannerHeight = 104f;
-        private const float TileHeight = 34f;
-        private const float ResourceHeight = 58f;
-        private const float MiniCellHeight = 24f;
-        private const float CardHeight = 72f;
-        private const float CardGap = 6f;
+        private const float BannerHeight = 128f;
+        private const float TileHeight = 46f;
+        private const float ResourceHeight = 88f;
+        private const float MiniCellHeight = 30f;
+        private const float CardHeight = 104f;
+        private const float CardGap = 8f;
+        private const float EmptyStateHeight = 144f;
 
         private static readonly string[] TileKeys =
             { "POWER", "THERMAL", "FUEL", "LINK", "CREW", "DEBRIS", "ORBIT", "MODULES" };
@@ -32,9 +33,7 @@ namespace BoscaliSummer.Features.Support.Presentation
         {
             Uplink,
             Action,
-            Rephase,
-            Raise,
-            Lower
+            Rephase
         }
 
         private sealed class AbilityCard
@@ -55,6 +54,9 @@ namespace BoscaliSummer.Features.Support.Presentation
         private TMP_Text bannerBand, bannerWord, bannerClockKey, bannerClock, bannerNote;
         private Image bannerPass;
         private AvButton bannerPlanner;
+        private RectTransform platformScrollContent;
+        private GameObject platformDetails, platformEmpty;
+        private float platformExpandedHeight, platformEmptyHeight;
         private readonly Tile[] tiles = new Tile[8];
         private TMP_Text resourceNote, rodsLabel, massLabel;
         private Gauge energyGauge, fuelGauge;
@@ -69,6 +71,9 @@ namespace BoscaliSummer.Features.Support.Presentation
             bannerRail = bannerPass = null;
             bannerBand = bannerWord = bannerClockKey = bannerClock = bannerNote = null;
             bannerPlanner = null;
+            platformScrollContent = null;
+            platformDetails = platformEmpty = null;
+            platformExpandedHeight = platformEmptyHeight = 0f;
             for (int i = 0; i < tiles.Length; i++) tiles[i] = null;
             for (int i = 0; i < rodPips.Length; i++) rodPips[i] = null;
             resourceNote = rodsLabel = massLabel = null;
@@ -84,59 +89,89 @@ namespace BoscaliSummer.Features.Support.Presentation
             var orbital = new List<SupportActionDefinition>(4);
             foreach (SupportActionDefinition action in support.Actions)
                 if (SupportManager.OrbitalAbility(action.Id).HasValue) orbital.Add(action);
-            int cardCount = 1 + orbital.Count + 3;
-            int cardRows = (cardCount + 1) / 2;
+            int cardCount = 1 + orbital.Count + 1;
+            int cardRows = cardCount;
 
             float gridHeight = OrbitalPlatform.Rows * MiniCellHeight + (OrbitalPlatform.Rows - 1) * 6f;
-            float height = BannerHeight + SectionGap +
-                           HeaderHeight + TileHeight * 2f + 4f + SectionGap +
-                           HeaderHeight + ResourceHeight + SectionGap +
-                           HeaderHeight + gridHeight + SectionGap +
-                           HeaderHeight + cardRows * (CardHeight + CardGap) + SectionGap +
-                           HeaderHeight + LoopLines * LoopPitch + SectionGap;
-            RectTransform parent = BeginSub(root, body, height, out float x, out float y, out float width);
+            platformExpandedHeight = BannerHeight + SectionGap +
+                                     HeaderHeight + TileHeight * 2f + 4f + SectionGap +
+                                     HeaderHeight + ResourceHeight + SectionGap +
+                                     HeaderHeight + gridHeight + SectionGap +
+                                     HeaderHeight + cardRows * (CardHeight + CardGap) + SectionGap +
+                                     HeaderHeight + LoopLines * LoopPitch + SectionGap;
+            platformEmptyHeight = BannerHeight + SectionGap + EmptyStateHeight + SectionGap;
+            RectTransform parent = BeginSub(root, body, platformExpandedHeight, out float x, out float y, out float width);
+            platformScrollContent = parent != root ? parent : null;
 
             BuildBanner(parent, x, y, width);
             y -= BannerHeight + SectionGap;
 
-            Header(parent, x, ref y, width, "ANNUNCIATORS", "WORDS FIRST · COLOUR REPEATS");
+            platformDetails = new GameObject("PlatformDetails", typeof(RectTransform));
+            var details = (RectTransform)platformDetails.transform;
+            details.SetParent(parent, false);
+            AvKit.Stretch(details);
+
+            platformEmpty = new GameObject("PlatformEmpty", typeof(RectTransform));
+            var empty = (RectTransform)platformEmpty.transform;
+            empty.SetParent(parent, false);
+            AvKit.Stretch(empty);
+            BuildPlatformEmptyState(empty, x, y, width);
+            platformEmpty.SetActive(false);
+
+            Header(details, x, ref y, width, "STATION HEALTH", "POWER · ENVIRONMENT · CONNECTION");
             float tileWidth = (width - 12f) / 4f;
             for (int i = 0; i < tiles.Length; i++)
             {
                 float tx = x + (i % 4) * (tileWidth + 4f);
                 float ty = y - (i / 4) * (TileHeight + 4f);
-                tiles[i] = BuildTile(parent, new Rect(tx, ty, tileWidth, TileHeight), TileKeys[i]);
+                tiles[i] = BuildTile(details, new Rect(tx, ty, tileWidth, TileHeight), TileKeys[i]);
             }
             y -= TileHeight * 2f + 4f + SectionGap;
 
-            resourceNote = Header(parent, x, ref y, width, "RESOURCES", "");
+            resourceNote = Header(details, x, ref y, width, "RESOURCES", "");
             float half = (width - 12f) * 0.5f;
-            energyGauge = BuildGauge(parent, x, y, half, "ENERGY", AvTheme.RailReady);
-            fuelGauge = BuildGauge(parent, x + half + 12f, y, half, "FUEL", MobilityColour);
-            float rodsY = y - 42f;
-            rodsLabel = SingleLine(AvStyled.Label(parent, new Rect(x, rodsY, 80f, 14f), "RODS", "kv-key"));
+            energyGauge = BuildGauge(details, x, y, half, "ENERGY", AvTheme.RailReady);
+            fuelGauge = BuildGauge(details, x + half + 12f, y, half, "FUEL", MobilityColour);
+            float rodsY = y - 70f;
+            rodsLabel = SingleLine(AvStyled.Label(details, new Rect(x, rodsY, 80f, 14f), "RODS", "kv-key"));
             for (int i = 0; i < rodPips.Length; i++)
-                rodPips[i] = AvKit.Panel(parent, new Rect(x + 84f + i * 14f, rodsY - 3f, 10f, 10f), Color.clear);
-            massLabel = AvStyled.Label(parent, new Rect(x + half + 12f, rodsY, half, 14f), "", "kv-value",
+                rodPips[i] = AvKit.Panel(details, new Rect(x + 84f + i * 14f, rodsY - 3f, 10f, 10f), Color.clear, AvSprites.Led);
+            massLabel = AvStyled.Label(details, new Rect(x + half + 12f, rodsY, half, 14f), "", "kv-value",
                 align: TextAlignmentOptions.MidlineRight);
             y -= ResourceHeight + SectionGap;
 
-            Header(parent, x, ref y, width, "STATION", "LIVE SCHEMATIC · 5×3 TRUSS");
-            miniGrid = BuildGrid(parent, x, y, width, MiniCellHeight, false, null);
+            Header(details, x, ref y, width, "STATION", "LIVE SCHEMATIC · 5×3 TRUSS");
+            miniGrid = BuildGrid(details, x, y, width, MiniCellHeight, false, null);
             y -= gridHeight + SectionGap;
 
-            cardsNote = Header(parent, x, ref y, width, "ABILITIES", "");
-            float cardWidth = (width - CardGap) * 0.5f;
+            cardsNote = Header(details, x, ref y, width, "ABILITIES", "");
+            float cardWidth = width;
             int index = 0;
-            AddCard(parent, x, y, cardWidth, index++, CardKind.Uplink, PlatformAbility.Uplink, null);
+            AddCard(details, x, y, cardWidth, index++, CardKind.Uplink, PlatformAbility.Uplink, null);
             foreach (SupportActionDefinition action in orbital)
-                AddCard(parent, x, y, cardWidth, index++, CardKind.Action, SupportManager.OrbitalAbility(action.Id).Value, action);
-            AddCard(parent, x, y, cardWidth, index++, CardKind.Rephase, PlatformAbility.Rephase, null);
-            AddCard(parent, x, y, cardWidth, index++, CardKind.Raise, PlatformAbility.OrbitShift, null);
-            AddCard(parent, x, y, cardWidth, index, CardKind.Lower, PlatformAbility.OrbitShift, null);
+                AddCard(details, x, y, cardWidth, index++, CardKind.Action, SupportManager.OrbitalAbility(action.Id).Value, action);
+            AddCard(details, x, y, cardWidth, index++, CardKind.Rephase, PlatformAbility.Rephase, null);
             y -= cardRows * (CardHeight + CardGap) + SectionGap;
 
-            platformLoop = BuildLoop(parent, x, ref y, width);
+            platformLoop = BuildLoop(details, x, ref y, width);
+        }
+
+        private static void BuildPlatformEmptyState(RectTransform parent, float x, float y, float width)
+        {
+            AvKit.TacticalCard(parent, new Rect(x, y, width, EmptyStateHeight), AvTheme.RailInfo);
+            AvKit.Chip(parent, "SETUP", new Rect(x + 12f, y - 12f, 54f, 18f), AvTheme.RailInfo, AvTheme.RailInfo);
+            AvKit.Label(parent, "BUILD YOUR ORBITAL PLATFORM", new Rect(x + 76f, y - 10f, width - 88f, 20f),
+                AvTheme.TextPrimary, AvTokens.FontBody, FontStyles.Bold);
+
+            TMP_Text guide = AvKit.Label(parent,
+                "Open MISSION PLANNER, choose an orbit and launch the core. Dock modules after insertion; telemetry and abilities then appear here.",
+                new Rect(x + 12f, y - 40f, width - 24f, 68f), AvTheme.Dim, AvTokens.FontBody);
+            guide.enableWordWrapping = true;
+            guide.overflowMode = TextOverflowModes.Ellipsis;
+
+            AvKit.Label(parent, "1  PLAN    2  LAUNCH CORE    3  DOCK MODULES",
+                new Rect(x + 12f, y - 120f, width - 24f, 14f), AvTheme.RailInfo,
+                AvTokens.FontMicro, FontStyles.Bold);
         }
 
         private void BuildBanner(RectTransform parent, float x, float y, float width)
@@ -144,7 +179,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             var area = new Rect(x, y, width, BannerHeight);
             bannerRail = AvKit.TacticalCard(parent, area, AvTheme.RailInert).Rail;
             AvKit.Label(parent, OrbitalPlatform.Callsign, new Rect(x + 12f, y - 8f, 180f, 20f), AvTheme.TextPrimary,
-                AvTokens.FontTitle, FontStyles.Bold).characterSpacing = 12f;
+                AvTokens.FontTitle, FontStyles.Bold).characterSpacing = 2f;
             bannerBand = AvKit.Label(parent, "", new Rect(x + width - 232f, y - 10f, 220f, 16f), AvTheme.Dim,
                 AvTokens.FontSmall, FontStyles.Bold, TextAlignmentOptions.Right);
             bannerWord = AvKit.Label(parent, "", new Rect(x + 12f, y - 32f, width * 0.56f, 30f), AvTheme.Dim, 22f,
@@ -160,14 +195,14 @@ namespace BoscaliSummer.Features.Support.Presentation
                 () => SelectSpaceSub(SubPlanner), AvButtonStyle.Primary)
                 .WithTooltip("Design the station and launch its core in MISSION PLANNER.");
             bannerPass = AvKit.ProgressBar(parent, new Rect(x + 12f, y - 78f, width - 24f, 6f), 0f, AvTheme.RailReady);
-            bannerNote = SingleLine(AvStyled.Label(parent, new Rect(x + 12f, y - 88f, width - 24f, 14f), "", "row-sub"));
+            bannerNote = Wrapped(AvStyled.Label(parent, new Rect(x + 12f, y - 90f, width - 24f, 30f), "", "row-sub"));
         }
 
         private void AddCard(RectTransform parent, float x, float y, float cardWidth, int index, CardKind kind,
                              PlatformAbility ability, SupportActionDefinition action)
         {
-            float cx = x + (index % 2) * (cardWidth + CardGap);
-            float cy = y - (index / 2) * (CardHeight + CardGap);
+            float cx = x;
+            float cy = y - index * (CardHeight + CardGap);
             var area = new Rect(cx, cy, cardWidth, CardHeight);
             Image rail = AvKit.TacticalCard(parent, area, AvTheme.RailInert).Rail;
             AbilityInfo info = PlatformAbilities.Info(ability);
@@ -175,42 +210,50 @@ namespace BoscaliSummer.Features.Support.Presentation
                 ? CategoryColour(ModuleCategory.Weapon)
                 : kind == CardKind.Uplink || kind == CardKind.Action ? CategoryColour(ModuleCategory.Sensor)
                 : MobilityColour;
-            string code = kind == CardKind.Raise ? "UP" : kind == CardKind.Lower ? "DN" : info.Code;
-            string name = kind == CardKind.Raise ? "RAISE ORBIT" : kind == CardKind.Lower ? "LOWER ORBIT"
-                : action != null ? action.Name : info.Name;
-            AvKit.Chip(parent, code, new Rect(cx + 10f, cy - 8f, 32f, 16f), colour, colour);
+            string code = info.Code;
+            string name = action != null ? action.Name : info.Name;
+            if (ability == PlatformAbility.EmpBurst) name += " · FRIENDLY FIRE";
+            AvKit.Label(parent, code, new Rect(cx + 10f, cy - 8f, 34f, 18f), colour,
+                AvTokens.FontSmall, FontStyles.Bold);
             SingleLine(AvStyled.Label(parent, new Rect(cx + 48f, cy - 7f, cardWidth - 56f, 18f), name, "row-name"));
 
+            const float buttonWidth = 88f;
+            // Cost, readiness and action each have their own line. No cost is hidden behind
+            // a button or reduced to a tooltip on the compact MFD.
+            TMP_Text cost = AvKit.Label(parent, "", new Rect(cx + 10f, cy - 70f, cardWidth - 116f, 18f),
+                AvTheme.TextPrimary, AvTokens.FontSmall);
+            cost.enableWordWrapping = false;
+            cost.enableAutoSizing = true;
+            cost.fontSizeMax = cost.fontSize;
+            cost.fontSizeMin = AvTokens.FontMicro;
+            cost.overflowMode = TextOverflowModes.Ellipsis;
             var card = new AbilityCard
             {
                 Kind = kind,
                 Ability = ability,
                 Action = action,
                 Rail = rail,
-                Status = SingleLine(AvStyled.Label(parent, new Rect(cx + 10f, cy - 29f, cardWidth - 20f, 14f), "", "row-sub")),
-                Cost = SingleLine(AvKit.Label(parent, "", new Rect(cx + 10f, cy - 47f, cardWidth - 92f, 14f), AvTheme.Dim,
-                    AvTokens.FontMicro)),
-                Recharge = AvKit.ProgressBar(parent, new Rect(cx + 10f, cy - 63f, cardWidth - 20f, 4f), 0f, AvTheme.RailCaution)
+                Status = Wrapped(AvStyled.Label(parent, new Rect(cx + 10f, cy - 32f, cardWidth - 20f, 30f), "", "row-sub")),
+                Cost = cost,
+                Recharge = AvKit.ProgressBar(parent, new Rect(cx + 10f, cy - 96f, cardWidth - 20f, 3f), 0f, AvTheme.RailCaution)
             };
-            float buttonWidth = kind == CardKind.Uplink ? 38f : 72f;
-            card.Button = AvStyled.Button(parent, new Rect(cx + cardWidth - buttonWidth - 10f, cy - 42f, buttonWidth, 20f),
+            card.Button = AvStyled.Button(parent, new Rect(cx + cardWidth - buttonWidth - 10f, cy - 64f, buttonWidth, 28f),
                 kind == CardKind.Uplink ? "OPEN" : kind == CardKind.Action ? "ARM" : "BURN", "btn",
-                () => OnCard(card), AvButtonStyle.Primary);
+                () => OnCard(card), AvButtonStyle.Default);
             if (kind == CardKind.Uplink)
             {
-                AvStyled.Button(parent, new Rect(cx + cardWidth - 92f, cy - 42f, 40f, 20f), "MAP", "btn", () =>
+                cost.rectTransform.sizeDelta = new Vector2(cardWidth - 216f, 18f);
+                AvStyled.Button(parent, new Rect(cx + cardWidth - 194f, cy - 64f, 88f, 28f), "AIM ON MAP", "btn", () =>
                 {
                     support.ArmLocalPick("UPLINK AIM", point => OpenUplink(point));
                     nextRefresh = 0f;
                 }, AvButtonStyle.Quiet).WithTooltip("Right-click the map where the sensor should look, then the feed opens there.");
-                card.Cost.rectTransform.sizeDelta = new Vector2(cardWidth - 112f, 14f);
             }
             cards.Add(card);
         }
 
         private void OnCard(AbilityCard card)
         {
-            OrbitalPlatform platform = support.LocalPlatform;
             switch (card.Kind)
             {
                 case CardKind.Uplink:
@@ -224,12 +267,6 @@ namespace BoscaliSummer.Features.Support.Presentation
                     support.RequestRephase();
                     break;
                 default:
-                    if (platform == null) return;
-                    int target = platform.Regime + (card.Kind == CardKind.Raise ? 1 : -1);
-                    if (!OrbitRegimes.Valid(target)) return;
-                    Log("FLIGHT · " + (card.Kind == CardKind.Raise ? "RAISE" : "LOWER") + " TO " +
-                        OrbitRegimes.Get(target).Code + " REQUESTED");
-                    support.RequestOrbitShift((byte)target);
                     break;
             }
             nextRefresh = 0f;
@@ -244,11 +281,33 @@ namespace BoscaliSummer.Features.Support.Presentation
             PlatformStats stats = station ? platform.Stats(now) : default;
             OrbitState state = station ? platform.State(now, clock) : default;
             RefreshBanner(platform, station, state, now, clock);
+            SetPlatformDetailVisibility(station);
+            if (!station) return;
+
             RefreshTiles(platform, station, stats, state, now);
             RefreshResources(platform, station, stats, now, clock);
             PaintGrid(miniGrid, platform, now, -1, false);
             RefreshCards(bypass, platform, station, state, now, clock);
             WriteLoop(platformLoop, loop);
+        }
+
+        private void SetPlatformDetailVisibility(bool station)
+        {
+            if (platformDetails == null || platformEmpty == null) return;
+            bool changed = platformDetails.activeSelf != station;
+            platformDetails.SetActive(station);
+            platformEmpty.SetActive(!station);
+
+            if (platformScrollContent == null) return;
+            Vector2 size = platformScrollContent.sizeDelta;
+            size.y = station ? platformExpandedHeight : platformEmptyHeight;
+            platformScrollContent.sizeDelta = size;
+            if (changed)
+            {
+                Vector2 position = platformScrollContent.anchoredPosition;
+                position.y = 0f;
+                platformScrollContent.anchoredPosition = position;
+            }
         }
 
         private void RefreshBanner(OrbitalPlatform platform, bool station, in OrbitState state, double now, in OrbitClock clock)
@@ -397,9 +456,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             {
                 fuelGauge.Reading.text = PlatformWords.Whole(platform.Fuel) + " / " + PlatformWords.Whole(stats.FuelCapacity);
                 fuelGauge.Fill.fillAmount = platform.Fuel / stats.FuelCapacity;
-                fuelGauge.Note.text = "REPHASE 25 · BAND 35" +
-                                      (platform.Orbit.DragFuelPerSecond > 0f ? " · DRAG " +
-                                       (platform.Orbit.DragFuelPerSecond * 60f).ToString("0.0", Invariant) + "/MIN" : "");
+                fuelGauge.Note.text = "REPHASE 25 · STATIONKEEPING";
             }
             else
             {
@@ -446,7 +503,7 @@ namespace BoscaliSummer.Features.Support.Presentation
                         tone = denial == PlatformDenial.None ? Tone.Ready : fitted ? Tone.Pending : Tone.Locked;
                         status = denial == PlatformDenial.None ? "READY · FEED LIVE"
                             : PlatformWords.Denial(denial, platform, card.Ability, now, clock);
-                        card.Cost.text = "IMAGER LOAD 2.0 KW · VIEW ONLY";
+                        card.Cost.text = "LOAD 2.0KW · VIEW";
                         break;
                     }
                     case CardKind.Action:
@@ -475,9 +532,10 @@ namespace BoscaliSummer.Features.Support.Presentation
 
                         card.Button.SetLatched(armed);
                         card.Button.SetText(armed ? "ABORT" : "ARM");
-                        card.Cost.text = (cost > 0f ? Figure(cost) + " ALLOC · " : "") + PlatformWords.Whole(info.EnergyKj) +
-                                         " KJ · " + Mathf.RoundToInt(station ? platform.RechargeSeconds(card.Ability, now)
-                                             : info.RechargeSeconds) + " S";
+                        card.Cost.text = (cost > 0f ? "ALLOC " + Figure(cost) + " · " : "") +
+                                         PlatformWords.Whole(info.EnergyKj) + "KJ · " +
+                                         Mathf.RoundToInt(station ? platform.RechargeSeconds(card.Ability, now)
+                                             : info.RechargeSeconds) + "S";
                         if (station)
                         {
                             float total = platform.RechargeSeconds(card.Ability, now);
@@ -494,7 +552,7 @@ namespace BoscaliSummer.Features.Support.Presentation
                         status = support.CommandPending ? "COMMAND PENDING"
                             : denial == PlatformDenial.None ? "READY · NEXT PASS IN 10 S"
                             : PlatformWords.Denial(denial, platform, card.Ability, now, clock);
-                        card.Cost.text = "25 FUEL · SKIPS THE FAR-SIDE WAIT";
+                        card.Cost.text = "25 FUEL · PASS +10S";
                         if (station)
                         {
                             float total = platform.RechargeSeconds(PlatformAbility.Rephase, now);
@@ -504,26 +562,16 @@ namespace BoscaliSummer.Features.Support.Presentation
                     }
                     default:
                     {
-                        int target = (station ? platform.Regime : OrbitRegimes.Mid) + (card.Kind == CardKind.Raise ? 1 : -1);
-                        bool valid = OrbitRegimes.Valid(target);
-                        PlatformDenial denial = !station ? PlatformDenial.NoPlatform
-                            : !valid ? PlatformDenial.SameOrbit
-                            : platform.CheckShift((byte)target, now, clock);
-                        enabled = denial == PlatformDenial.None && !support.CommandPending;
-                        tone = enabled ? Tone.Ready : denial == PlatformDenial.Holding ? Tone.Pending
-                            : denial == PlatformDenial.NoFuel || denial == PlatformDenial.Brownout ? Tone.Danger : Tone.Locked;
-                        status = support.CommandPending ? "COMMAND PENDING"
-                            : !valid && station ? (card.Kind == CardKind.Raise ? "HIGHEST BAND" : "LOWEST BAND")
-                            : denial == PlatformDenial.None ? "READY · TO " + OrbitRegimes.Get(target).Name
-                            : PlatformWords.Denial(denial, platform, card.Ability, now, clock);
-                        card.Cost.text = valid
-                            ? "35 FUEL · 30 S TRANSFER · " + OrbitRegimes.Get(target).Summary
-                            : "35 FUEL PER BAND · 30 S TRANSFER";
+                        tone = Tone.Locked;
+                        status = "INACTIVE";
+                        enabled = false;
                         break;
                     }
                 }
 
                 card.Button.SetEnabled(enabled);
+                // Armed/ready read from the shared accent wash and latch, never a solid plate.
+                card.Button.ClearCustomColors();
                 card.Recharge.fillAmount = Mathf.Clamp01(recharge);
                 if (card.LastTone == tone && card.LastStatus == status) continue;
                 card.LastTone = tone;
@@ -544,12 +592,8 @@ namespace BoscaliSummer.Features.Support.Presentation
                 case CardKind.Action:
                     return card.Action.Name + " — " + card.Action.Description +
                            " Arm, then right-click the map or fire from the uplink crosshair.";
-                case CardKind.Rephase:
-                    return "Phasing burn while the station is away: the next pass begins about 10 s later.";
-                case CardKind.Raise:
-                    return "Raise one band: longer passes and wider scans, blurrier optics and looser rods.";
                 default:
-                    return "Lower one band: sharper optics and tighter rods, shorter passes. LOW burns drag fuel.";
+                    return "Phasing burn while the station is away: the next pass begins about 10 s later.";
             }
         }
     }

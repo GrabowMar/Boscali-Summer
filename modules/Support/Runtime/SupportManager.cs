@@ -5,6 +5,7 @@ using BepInEx.Configuration;
 using BepInEx.Logging;
 using BoscaliSummer.Features.Support.Configuration;
 using BoscaliSummer.Features.Support.Domain;
+using BoscaliSummer.Features.Support.Domain.Cyber;
 using BoscaliSummer.Features.Support.Domain.Orbital;
 using BoscaliSummer.Features.Support.Networking;
 using BoscaliSummer.Framework.Contracts;
@@ -20,9 +21,9 @@ namespace BoscaliSummer.Features.Support.Runtime
     /// <summary>
     /// Validates and dispatches support requests. Everything an action does lives in the
     /// action; this class owns only authority, economy, bounded concurrency and the client's
-    /// view of its own request. It also owns the host-authoritative orbital stations, cyber and
-    /// program systems: launch, jettison, burn, resupply, upgrade and invest commands are
-    /// validated and charged here, never in a panel.
+    /// view of its own request. It also owns the host-authoritative orbital stations, CYBER
+    /// networks and program systems: launch, jettison, burn, resupply, site, console verb,
+    /// upgrade and invest commands are validated and charged here, never in a panel.
     /// </summary>
         internal sealed class SupportManager : MonoBehaviour, ISceneService, ISupportHost, ICameraTargetService,
             IGroundForceReadiness
@@ -39,7 +40,7 @@ namespace BoscaliSummer.Features.Support.Runtime
 
         internal readonly SpaceOperations Space = new SpaceOperations();
         internal readonly CyberEffects Cyber = new CyberEffects();
-        internal readonly EwAssets Ew = new EwAssets();
+        internal readonly CyberDefense Spectrum = new CyberDefense();
         SpaceOperations ISupportHost.Space => Space;
 
         public OpsStateMessage OpsState { get; private set; }
@@ -64,7 +65,7 @@ namespace BoscaliSummer.Features.Support.Runtime
             if (!OpsStateMessageBuffers.ValidArrays(state)) return;
             if (state.ProgramTiers == null || state.ProgramTiers.Length < OpsProgramLedger.ProgramCount) return;
             if (state.GarrisonLevels == null || state.GarrisonLevels.Length < OpsGarrison.UpgradeCount) return;
-            if (!Finite(state.EwX) || !Finite(state.EwZ)) return;
+            if (!OpsStateMessageBuffers.ValidCyber(state)) return;
 
             GameManager.GetLocalPlayer<Player>(out Player player);
             if (player != null && player.HQ != null)
@@ -77,7 +78,10 @@ namespace BoscaliSummer.Features.Support.Runtime
                 {
                     OpsStateMessageBuffers.Read(state, mirrorSnapshot);
                     Space.MirrorPlatform(hq, mirrorSnapshot, now);
+                    Space.MirrorCyber(hq, state.Cyber, now);
                 }
+                for (int i = 0; i < cyberOrigins.Length; i++)
+                    cyberOrigins[i] = i < state.CyberOriginCount ? state.CyberOrigins[i] : null;
                 Space.MirrorForeign(state.ForeignRegimes, state.ForeignSeeds, state.ForeignClocks, state.ForeignLayouts,
                     state.ForeignCount, now);
                 Space.Mirror(hq, state.Sigint, state.Crypto, state.Disrupt, state.Ew);
@@ -128,6 +132,7 @@ namespace BoscaliSummer.Features.Support.Runtime
 
         private readonly PlatformSnapshot mirrorSnapshot = new PlatformSnapshot();
         private readonly PlatformSnapshot exportSnapshot = new PlatformSnapshot();
+        private readonly string[] cyberOrigins = new string[OpsStateMessageBuffers.MaximumOriginNames];
 
         private readonly SupportRequestLedger ledger = new SupportRequestLedger();
         private readonly SupportRequestLedger commandLedger = new SupportRequestLedger();
@@ -214,14 +219,28 @@ namespace BoscaliSummer.Features.Support.Runtime
             }
         }
 
-        /// <summary>The local faction's EW asset state, mirrored from the last snapshot —
-        /// same pattern as <see cref="LocalFleet"/>/<see cref="LocalInfo"/>, except an
-        /// asset's state is a single byte, so it rides <see cref="OpsState"/> directly rather
-        /// than needing its own per-faction model object.</summary>
-        public EwAssetState LocalEwAssetState => (EwAssetState)Math.Min(OpsState.EwAssetState, (byte)EwAssetState.Encampment);
+        /// <summary>The local faction's CYBER network: the host's own model or a client mirror.</summary>
+        public CyberNetwork LocalCyber
+        {
+            get
+            {
+                GameManager.GetLocalPlayer<Player>(out Player player);
+                return player == null ? null : Space.CyberFor(player.HQ);
+            }
+        }
 
-        /// <summary>The local station posture as the host last reported it.</summary>
-        public EwPosture LocalEwPosture => EwPostures.Clamp(OpsState.EwPosture);
+        /// <summary>The enemy faction an incident origin byte names, as the host last reported it.</summary>
+        public string CyberOriginName(int origin)
+        {
+            if (GameAccess.IsServer())
+            {
+                GameManager.GetLocalPlayer<Player>(out Player player);
+                FactionHQ hq = player != null ? Spectrum.Origin(player.HQ, origin) : null;
+                if (hq != null) return CyberDefense.Name(hq);
+            }
+            string name = origin >= 0 && origin < cyberOrigins.Length ? cyberOrigins[origin] : null;
+            return string.IsNullOrEmpty(name) ? "HOSTILE ACTOR " + (origin + 1) : name;
+        }
 
         /// <summary>The local faction SPEC OPS and INTEL programs; mirrored on clients.</summary>
         public OpsProgramLedger LocalPrograms
@@ -391,7 +410,10 @@ namespace BoscaliSummer.Features.Support.Runtime
         SupportSettings ISupportHost.Settings => settings;
         ManualLogSource ISupportHost.Logger => logger;
         VanillaSupportCatalog ISupportHost.Vanilla => vanilla;
-        EwAsset ISupportHost.EwAssetFor(FactionHQ owner) => Ew.ForFaction(owner);
+        void ISupportHost.ReportOperation(Player caster, GlobalPosition target)
+        {
+            if (caster != null) Spectrum.ReportOperation(Space, caster.HQ, target, OrbitNow);
+        }
 
         public IReadOnlyList<SupportActionDefinition> Actions => catalog.Actions;
         public bool BypassRequirements => bypassRequirements != null && bypassRequirements.Value;
@@ -442,7 +464,8 @@ namespace BoscaliSummer.Features.Support.Runtime
             UplinkAim = default;
             UplinkAimSet = false;
             Cyber.Clear();
-            Ew.Clear();
+            Spectrum.Clear();
+            Array.Clear(cyberOrigins, 0, cyberOrigins.Length);
             OpsState = default;
             opsReceived = -100f;
             nextOpsQuery = 0f;
@@ -478,9 +501,13 @@ namespace BoscaliSummer.Features.Support.Runtime
             if (host)
             {
                 LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
-                Space.TickHost(OrbitNow, Time.deltaTime, level != null && level.isDayLight, OrbitClock,
-                    settings != null && settings.PlatformDebrisEvents.Value, LogDebris);
-                Ew.Tick(Time.unscaledTime);
+                double orbitNow = OrbitNow;
+                bool spectrum = settings != null && settings.EwEnabled.Value;
+                Spectrum.Sync(Space, orbitNow, Time.unscaledTime, spectrum);
+                Space.TickHost(orbitNow, Time.deltaTime, level != null && level.isDayLight, OrbitClock,
+                    settings != null && settings.PlatformDebrisEvents.Value,
+                    spectrum ? settings.CyberCampaignIntensity.Value : 0f, LogDebris);
+                if (spectrum) Spectrum.Apply(Space, orbitNow, Time.unscaledTime, logger);
             }
             else
             {
@@ -636,11 +663,26 @@ namespace BoscaliSummer.Features.Support.Runtime
                 : programs.NextCost(program) * Price(player, settings.CostMultiplier.Value);
         }
 
-        public float EwTruckCost()
+        /// <summary>Price of a CYBER site for the local player, with the multipliers the host charges.</summary>
+        public float CyberSiteCost(CyberSiteKind kind)
         {
             GameManager.GetLocalPlayer<Player>(out Player player);
-            if (player == null || settings == null) return 0f;
-            return settings.EwTruckCost.Value * Price(player, settings.CostMultiplier.Value);
+            return CyberSiteCost(player, kind);
+        }
+
+        public float CyberScrapRefund => settings != null ? Mathf.Clamp01(settings.CyberScrapRefund.Value) : 0f;
+
+        /// <summary>Field sites the host allows; airbase infrastructure never counts.</summary>
+        public int CyberSiteLimit => Mathf.Clamp(settings != null ? settings.CyberSiteLimit.Value : CyberNetwork.FieldSlots,
+            1, CyberNetwork.FieldSlots);
+
+        public bool CyberEnabled => settings == null || settings.EwEnabled.Value;
+
+        private float CyberSiteCost(Player player, CyberSiteKind kind)
+        {
+            if (player == null || settings == null || !CyberSites.Fieldable((byte)kind)) return 0f;
+            return CyberSites.Info(kind).Price * settings.CyberSiteCostScale.Value *
+                   Price(player, settings.CostMultiplier.Value);
         }
 
         private float LaunchCost(Player player, ModuleKind kind)
@@ -758,7 +800,7 @@ namespace BoscaliSummer.Features.Support.Runtime
         public bool LocalPickArmed => localPick != null;
 
         /// <summary>Launch the core onto <paramref name="band"/>.</summary>
-        public void RequestCoreLaunch(byte band) => SendCommand(OpsCommand.Launch, (byte)ModuleKind.Core, band, default);
+        public void RequestCoreLaunch(byte band = OrbitRegimes.Standard) => SendCommand(OpsCommand.Launch, (byte)ModuleKind.Core, band, default);
 
         /// <summary>Launch a module to dock at <paramref name="cell"/>.</summary>
         public void RequestModuleLaunch(ModuleKind kind, int cell) =>
@@ -782,10 +824,14 @@ namespace BoscaliSummer.Features.Support.Runtime
             SendCommand(OpsCommand.Invest, (byte)program, 0, default);
         }
 
-        public void RequestEwRetune(EwPosture posture)
-        {
-            SendCommand(OpsCommand.EwRetune, (byte)posture, 0, default);
-        }
+        public void RequestCyberMode(int slot, EwPosture mode) =>
+            SendCommand(OpsCommand.CyberMode, (byte)slot, (byte)mode, default);
+
+        public void RequestCyberScrap(int slot) => SendCommand(OpsCommand.CyberScrap, (byte)slot, 0, default);
+
+        /// <summary>A console verb on a site slot or, for TRACE and BURN THROUGH, an incident index.</summary>
+        public void RequestCyberVerb(CyberVerb verb, int target) =>
+            SendCommand(OpsCommand.CyberVerb, (byte)Mathf.Clamp(target, 0, 255), (byte)verb, default);
 
         public void RequestGarrisonUpgrade(GarrisonUpgradeId upgrade)
         {
@@ -829,16 +875,25 @@ namespace BoscaliSummer.Features.Support.Runtime
                 }
                 case OpsCommand.Resupply:
                     return "CARGO RESUPPLY";
-                case OpsCommand.EwDeploy:
-                    return "DEPLOY EW TRUCK";
-                case OpsCommand.EwReposition:
-                    return "EW TRUCK REPOSITION";
+                case OpsCommand.CyberBuild:
+                    return "DEPLOY " + CyberSites.Code((CyberSiteKind)arg);
+                case OpsCommand.CyberMove:
+                    return "RELOCATE " + CyberWords.Callsign(LocalCyber, arg);
+                case OpsCommand.CyberScrap:
+                    return "SCRAP " + CyberWords.Callsign(LocalCyber, arg);
+                case OpsCommand.CyberMode:
+                    return CyberWords.Callsign(LocalCyber, arg) + " TO " + CyberWords.Mode(EwPostures.Clamp(arg2));
+                case OpsCommand.CyberVerb:
+                {
+                    var verb = (CyberVerb)Math.Min(arg2, (byte)(CyberNetwork.VerbCount - 1));
+                    return CyberWords.Verb(verb) + (CyberNetwork.TargetsIncident(verb)
+                        ? " " + CyberWords.Incident(LocalCyber?.Incident(arg).Kind ?? IncidentKind.None)
+                        : " " + CyberWords.Callsign(LocalCyber, arg));
+                }
                 case OpsCommand.Invest:
                     return arg < OpsProgramLedger.ProgramCount
                         ? "FUND " + OpsProgramLedger.Info((OpsProgramId)arg).Name
                         : "PROGRAM FUNDING";
-                case OpsCommand.EwRetune:
-                    return "EW POSTURE " + EwPostures.Info(EwPostures.Clamp(arg)).Name;
                 case OpsCommand.GarrisonUpgrade:
                     return arg < OpsGarrison.UpgradeCount
                         ? "IMPROVE " + OpsGarrison.Info((GarrisonUpgradeId)arg).Name
@@ -916,7 +971,7 @@ namespace BoscaliSummer.Features.Support.Runtime
 
             if (!IsAuthorised(def))
             {
-                Status = def.IsHack ? "Infrastructure not built (see INFO)." : "Action not authorised.";
+                Status = def.IsHack ? "Doctrine not built (see CYBER)." : "Action not authorised.";
                 return;
             }
 
@@ -1009,9 +1064,12 @@ namespace BoscaliSummer.Features.Support.Runtime
                 case SupportResult.WouldStrand: return "it would strand other modules";
                 case SupportResult.PlatformExists: return "the faction already has a station";
                 case SupportResult.NeedsPropulsion: return "LOW orbit needs propulsion — launch to MID or HIGH";
-                case SupportResult.NotBuilt: return "infrastructure not built in INFO";
-                case SupportResult.NoEwAsset: return "needs an EW station near the target";
-                case SupportResult.WrongPosture: return "EW station in the wrong posture";
+                case SupportResult.NotBuilt: return "doctrine not built in CYBER";
+                case SupportResult.NoEwAsset: return "needs a working CYBER jammer in reach of the target";
+                case SupportResult.WrongPosture: return "no jammer in the mode this operation needs";
+                case SupportResult.NeedsCyberCommand: return "build Cyber Command first";
+                case SupportResult.NetworkFull: return "the network is full";
+                case SupportResult.CommandCompromised: return "Cyber Command is compromised - patch it";
                 case SupportResult.Disabled: return "action disabled";
                 case SupportResult.NotUnlocked: return "not authorised";
                 case SupportResult.InvalidTarget: return "unusable target";
@@ -1025,7 +1083,11 @@ namespace BoscaliSummer.Features.Support.Runtime
                 case SupportResult.CapabilityUnavailable: return "unavailable on this map";
                 case SupportResult.SpawnFailed: return "could not be delivered";
                 case SupportResult.RateLimited: return "too many requests";
-                default: return result.ToString();
+                default:
+                    if ((byte)result > (byte)SupportResult.CyberRefused &&
+                        (byte)result <= (byte)SupportResult.CyberRefused + (byte)CyberDenial.Recharging)
+                        return CyberWords.Denial((CyberDenial)((byte)result - (byte)SupportResult.CyberRefused)).ToLowerInvariant();
+                    return result.ToString();
             }
         }
 
@@ -1196,34 +1258,91 @@ namespace BoscaliSummer.Features.Support.Runtime
                         info.Level(facility) + " for " + Mathf.RoundToInt(cost) + " alloc.");
                     break;
                 }
-                case OpsCommand.EwDeploy:
+                case OpsCommand.CyberBuild:
                 {
                     if (!settings.EwEnabled.Value) return SupportResult.Disabled;
-                    if (Ew.ForFaction(player.HQ) != null) return SupportResult.Busy;
+                    var kind = (CyberSiteKind)message.Arg;
+                    CyberNetwork cyber = Space.CyberFor(player.HQ);
+                    if (cyber == null) return SupportResult.CapabilityUnavailable;
+                    SupportResult placement = CyberPlacement(cyber.CheckPlacement(kind, CyberSiteLimit));
+                    if (placement != SupportResult.Accepted) return placement;
                     if (!SupportTargeting.TryGround(new GlobalPosition(message.X, 0f, message.Z), out Vector3 ground))
                         return SupportResult.InvalidTarget;
                     VehicleDefinition definition = vanilla.EwTruck();
                     if (definition == null || definition.unitPrefab == null || NetworkSceneSingleton<Spawner>.i == null)
                         return SupportResult.CapabilityUnavailable;
-                    Airbase depot = SupportTargeting.NearestOwnedAirbase(player, ground, out _);
-                    if (depot == null) return SupportResult.InvalidTarget;
-                    Vector3 spawnPoint = depot.center != null ? depot.center.position : depot.transform.position;
-                    float cost = settings.EwTruckCost.Value * Price(player, settings.CostMultiplier.Value);
+                    float cost = CyberSiteCost(player, kind);
                     if (!bypass && player.Allocation + 0.001f < cost) return SupportResult.InsufficientAllocation;
-                    Vector3 facing = ground - spawnPoint;
-                    facing.y = 0f;
-                    Quaternion rotation = facing.sqrMagnitude > 1f
-                        ? Quaternion.LookRotation(facing.normalized) : Quaternion.identity;
-                    GroundVehicle truck = NetworkSceneSingleton<Spawner>.i.SpawnVehicle(
+                    // The truck leaves the nearest owned vehicle depot's bay (an airbase only when there is none).
+                    if (!Spectrum.TryStart(player, ground, definition, out Vector3 spawnPoint, out Quaternion rotation,
+                            out string depot))
+                        return SupportResult.InvalidTarget;
+
+                    GlobalPosition mark = ground.ToGlobalPosition();
+                    int slot = cyber.TryBuild(kind, mark.x, mark.z, bypass ? 0f : cost, CyberSiteLimit);
+                    if (slot < 0) return SupportResult.Busy;
+                    GroundVehicle vehicle = NetworkSceneSingleton<Spawner>.i.SpawnVehicle(
                         definition.unitPrefab, spawnPoint.ToGlobalPosition(), rotation, Vector3.zero,
-                        player.HQ, "BoscaliSummer:Support:EwTruck:" + PlayerIdentity.Of(player) + ":" + message.RequestId,
+                        player.HQ, "BoscaliSummer:Support:Cyber:" + CyberSites.Code(kind) + ":" +
+                        PlayerIdentity.Of(player) + ":" + message.RequestId,
                         1f, true, player);
-                    if (truck == null || truck.UnitCommand == null) return SupportResult.SpawnFailed;
-                    if (!Ew.TryDeployTruck(player.HQ, truck, bypass ? 0f : cost)) return SupportResult.Busy;
-                    truck.UnitCommand.SetDestination(ground.ToGlobalPosition(), false);
+                    if (vehicle == null || vehicle.UnitCommand == null)
+                    {
+                        cyber.TryScrap(slot, out _, out _);
+                        if (vehicle != null && Spectrum.Attach(player.HQ, slot, vehicle, mark, Time.unscaledTime))
+                            Spectrum.Remove(player.HQ, slot, true);
+                        return SupportResult.SpawnFailed;
+                    }
+                    Spectrum.Attach(player.HQ, slot, vehicle, mark, Time.unscaledTime);
+                    vehicle.UnitCommand.SetDestination(mark, false);
                     if (!bypass) player.SetAllocation(Mathf.Max(0f, player.Allocation - cost));
-                    logger.LogInfo("[Support] EW truck deployed from depot, en route, for " +
-                        Mathf.RoundToInt(cost) + " alloc.");
+                    logger.LogInfo("[Support] CYBER " + CyberWords.Callsign(cyber, slot) + " rolling from " +
+                        depot + " for " + Mathf.RoundToInt(cost) + " alloc.");
+                    break;
+                }
+                case OpsCommand.CyberMove:
+                {
+                    if (!settings.EwEnabled.Value) return SupportResult.Disabled;
+                    CyberNetwork cyber = Space.CyberFor(player.HQ);
+                    if (cyber == null || !cyber.Online(message.Arg) || cyber.Static(message.Arg))
+                        return SupportResult.InvalidTarget;
+                    if (!SupportTargeting.TryGround(new GlobalPosition(message.X, 0f, message.Z), out Vector3 ground))
+                        return SupportResult.InvalidTarget;
+                    if (!Spectrum.Redirect(player.HQ, message.Arg, ground.ToGlobalPosition(), Time.unscaledTime))
+                        return SupportResult.InvalidTarget;
+                    cyber.TryRelocate(message.Arg);
+                    break;
+                }
+                case OpsCommand.CyberScrap:
+                {
+                    CyberNetwork cyber = Space.CyberFor(player.HQ);
+                    if (cyber == null) return SupportResult.CapabilityUnavailable;
+                    string name = CyberWords.Callsign(cyber, message.Arg);
+                    if (!cyber.TryScrap(message.Arg, out _, out float paid)) return SupportResult.InvalidTarget;
+                    Spectrum.Remove(player.HQ, message.Arg, true);
+                    float refund = CyberScrapRefund * paid;
+                    if (refund > 0f && !bypass) player.SetAllocation(player.Allocation + refund);
+                    logger.LogInfo("[Support] CYBER " + name + " scrapped; refunded " + Mathf.RoundToInt(refund) + " alloc.");
+                    break;
+                }
+                case OpsCommand.CyberMode:
+                {
+                    if (!settings.EwEnabled.Value) return SupportResult.Disabled;
+                    if (message.Arg2 > (byte)EwPosture.GhostSpoofing) return SupportResult.InvalidTarget;
+                    CyberNetwork cyber = Space.CyberFor(player.HQ);
+                    if (cyber == null || !cyber.TrySetMode(message.Arg, (EwPosture)message.Arg2))
+                        return SupportResult.InvalidTarget;
+                    break;
+                }
+                case OpsCommand.CyberVerb:
+                {
+                    if (!settings.EwEnabled.Value) return SupportResult.Disabled;
+                    if (message.Arg2 >= CyberNetwork.VerbCount) return SupportResult.InvalidTarget;
+                    CyberNetwork cyber = Space.CyberFor(player.HQ);
+                    if (cyber == null) return SupportResult.CapabilityUnavailable;
+                    CyberDenial denial = cyber.TryVerb((CyberVerb)message.Arg2, message.Arg, OrbitNow);
+                    if (denial != CyberDenial.None)
+                        return (SupportResult)((byte)SupportResult.CyberRefused + (byte)denial);
                     break;
                 }
                 case OpsCommand.Invest:
@@ -1241,13 +1360,6 @@ namespace BoscaliSummer.Features.Support.Runtime
                         programs.Tier(program) + " for " + Mathf.RoundToInt(cost) + " alloc.");
                     break;
                 }
-                case OpsCommand.EwRetune:
-                {
-                    if (!settings.EwEnabled.Value) return SupportResult.Disabled;
-                    if (message.Arg > (byte)EwPosture.GhostSpoofing) return SupportResult.InvalidTarget;
-                    if (!Ew.TryRetune(player.HQ, (EwPosture)message.Arg)) return SupportResult.NoEwAsset;
-                    break;
-                }
                 case OpsCommand.GarrisonUpgrade:
                 {
                     if (message.Arg >= OpsGarrison.UpgradeCount) return SupportResult.InvalidTarget;
@@ -1262,18 +1374,6 @@ namespace BoscaliSummer.Features.Support.Runtime
                     if (!bypass) programs.TryConsume(OpsReserve.SpecOps, tokens);
                     logger.LogInfo("[Support] Base of operations: " + OpsGarrison.Info(upgrade).Name +
                         " raised to rank " + garrison.Rank(upgrade) + " for " + tokens + " SOF token(s).");
-                    break;
-                }
-                case OpsCommand.EwReposition:
-                {
-                    if (!settings.EwEnabled.Value) return SupportResult.Disabled;
-                    EwAsset asset = Ew.ForFaction(player.HQ);
-                    if (asset == null || asset.State != EwAssetState.Truck || asset.Truck == null ||
-                        asset.Truck.UnitCommand == null)
-                        return SupportResult.InvalidTarget;
-                    if (!SupportTargeting.TryGround(new GlobalPosition(message.X, 0f, message.Z), out Vector3 ground))
-                        return SupportResult.InvalidTarget;
-                    asset.Truck.UnitCommand.SetDestination(ground.ToGlobalPosition(), false);
                     break;
                 }
                 default:
@@ -1305,6 +1405,18 @@ namespace BoscaliSummer.Features.Support.Runtime
                     return SupportResult.CellBlocked;
                 default:
                     return SupportResult.InvalidTarget;
+            }
+        }
+
+        private static SupportResult CyberPlacement(SitePlacement placement)
+        {
+            switch (placement)
+            {
+                case SitePlacement.None: return SupportResult.Accepted;
+                case SitePlacement.NeedsCommand: return SupportResult.NeedsCyberCommand;
+                case SitePlacement.CopyLimit: return SupportResult.CopyLimit;
+                case SitePlacement.NetworkFull: return SupportResult.NetworkFull;
+                default: return SupportResult.InvalidTarget;
             }
         }
 
@@ -1481,17 +1593,11 @@ namespace BoscaliSummer.Features.Support.Runtime
                 message.Disrupt = (byte)info.Level(FacilityId.Disrupt);
                 message.Ew = (byte)info.Level(FacilityId.Ew);
             }
-            EwAsset station = player != null ? Ew.ForFaction(player.HQ) : null;
-            message.EwAssetState = station != null ? (byte)station.State : (byte)0;
-            if (station != null)
+            CyberNetwork cyber = player != null ? Space.CyberFor(player.HQ) : null;
+            if (cyber != null)
             {
-                message.EwPosture = (byte)station.Posture;
-                if (station.Alive)
-                {
-                    GlobalPosition position = station.Position.ToGlobalPosition();
-                    message.EwX = position.x;
-                    message.EwZ = position.z;
-                }
+                cyber.Export(now, message.Cyber);
+                message.CyberOriginCount = (byte)Spectrum.OriginNames(player.HQ, message.CyberOrigins);
             }
             OpsProgramLedger programs = player != null ? Space.ProgramsFor(player.HQ) : null;
             if (programs != null)

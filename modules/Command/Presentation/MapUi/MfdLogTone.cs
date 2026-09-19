@@ -20,10 +20,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             Danger,
         }
 
-        public const string NeutralHex = "9EB7AB";
-        public const string ReadyHex = "00FF9D";
-        public const string CautionHex = "F59E0B";
-        public const string DangerHex = "EF4444";
+        public const string NeutralHex = "8FA8B8";
+        public const string ReadyHex = "00FFA3";
+        public const string CautionHex = "FFB300";
+        public const string DangerHex = "FF2A55";
 
         private static readonly string[] DangerWords =
         {

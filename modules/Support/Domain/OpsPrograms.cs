@@ -193,6 +193,17 @@ namespace BoscaliSummer.Features.Support.Domain
             return true;
         }
 
+        /// <summary>Host: bank tokens earned outside accrual (a completed CYBER trace). Capped;
+        /// returns how many were actually banked.</summary>
+        public int Grant(OpsReserve reserve, int amount)
+        {
+            if (amount <= 0 || (int)reserve >= tokens.Length) return 0;
+            int banked = Math.Min(amount, ReserveCap - tokens[(int)reserve]);
+            if (banked <= 0) return 0;
+            tokens[(int)reserve] += banked;
+            return banked;
+        }
+
         /// <summary>Snapshot mirror. Out-of-range bytes clamp; a client never exceeds the caps.</summary>
         public void Mirror(byte[] tierBytes, byte specOpsTokens, byte intelTokens,
                            byte specOpsProgress, byte intelProgress)

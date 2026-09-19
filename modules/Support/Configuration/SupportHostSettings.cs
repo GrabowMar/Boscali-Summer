@@ -32,10 +32,10 @@ namespace BoscaliSummer.Features.Support.Configuration
                     "A station with a SIGINT array, overhead, locates emitting enemy ground and ship radars near the mark.")
                 .Toggle(9, settings.FlareBarrageEnabled, "FLARE BARRAGE",
                     "An airburst countermeasure rocket that disperses intense flares, seducing and misguiding IR missiles in the area.")
-                .Toggle(10, settings.EwEnabled, "ELECTRONIC WARFARE",
-                    "Build a radar truck and unlock radar blackout, ghost shield and spoof contacts.")
+                .Toggle(10, settings.EwEnabled, "SPECTRUM DEFENCE",
+                    "The CYBER network: airbase nodes that come up by themselves, field sites, the adversary campaign and the console.")
                 .Toggle(11, settings.CyberEnabled, "CYBER OPERATIONS",
-                    "Infrastructure investment and the information operations it unlocks.")
+                    "Doctrine investment and the offensive operations it unlocks.")
                 .Number(12, settings.PlatformCostScale, "PLATFORM COST SCALE",
                     "Scales every orbital station launch: core, modules and cargo.",
                     0.05f, v => v.ToString("0.00") + "x")
@@ -63,6 +63,17 @@ namespace BoscaliSummer.Features.Support.Configuration
                     "Number of pyrotechnic flares dispersed in the initial airburst wave.", 2)
                 .Number(21, settings.OrbitGapScale, "ORBIT GAP SCALE",
                     "Scales the simulated out-of-theatre arc between station passes. Passes themselves always fly at real orbital speed.",
-                    0.25f, v => v.ToString("0.00") + "x");
+                    0.25f, v => v.ToString("0.00") + "x")
+                .Number(22, settings.CyberSiteCostScale, "CYBER SITE COST",
+                    "Scales the price of every CYBER field site. Airbase nodes are free.",
+                    0.05f, v => v.ToString("0.00") + "x")
+                .Number(23, settings.CyberCampaignIntensity, "ADVERSARY INTENSITY",
+                    "How hard the simulated adversary works against each CYBER network. 0 switches it off.",
+                    0.25f, v => v <= 0f ? "OFF" : v.ToString("0.00") + "x")
+                .Number(24, settings.CyberSiteLimit, "CYBER SITE LIMIT",
+                    "Most CYBER field sites (real vehicles from a depot) one faction may deploy. Airbase nodes never count.", 1)
+                .Number(25, settings.CyberScrapRefund, "SCRAP REFUND",
+                    "Fraction of what was paid refunded when a CYBER site is scrapped.",
+                    0.05f, v => v.ToString("P0"));
     }
 }

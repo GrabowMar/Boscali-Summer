@@ -325,7 +325,6 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             chromeSize = size;
             var area = new Rect(0f, 0f, size.x, size.y);
             AvKit.Outline(chrome, area, AvTheme.Hairline);
-            AvKit.CornerTicks(chrome, area, AvTheme.Hairline, 8f);
 
             float innerHeight = Mathf.Max(0f, size.y - FooterInset * 2f);
             float contextHeight = Mathf.Min(48f, innerHeight * 0.52f);

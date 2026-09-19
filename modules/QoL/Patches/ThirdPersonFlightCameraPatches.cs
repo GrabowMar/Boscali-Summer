@@ -20,13 +20,14 @@ namespace BoscaliSummer.Features.QoL.Patches
     [HarmonyPatch(typeof(CameraChaseState), nameof(CameraChaseState.UpdateState))]
     internal static class ThirdPersonChasePatch
     {
-        private static readonly FieldInfo PositionField = AccessTools.Field(typeof(CameraChaseState), "currentPos");
+        private static readonly AccessTools.FieldRef<CameraChaseState, int> PositionRef =
+            AccessTools.FieldRefAccess<CameraChaseState, int>("currentPos");
         private static void Postfix(CameraChaseState __instance, CameraStateManager cam, float ___viewDistAdjust)
         {
-            if (cam.currentState != __instance || PositionField == null) return;
+            if (cam.currentState != __instance || PositionRef == null) return;
             // Back is the verified native enum value 0. Leave wing, belly and camera-tool presets alone.
             ThirdPersonHudController.Instance?.FlightCamera.Chase(cam, ___viewDistAdjust,
-                Convert.ToInt32(PositionField.GetValue(__instance)) == 0);
+                PositionRef(__instance) == 0);
         }
     }
 }

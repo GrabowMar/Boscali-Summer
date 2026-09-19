@@ -2,6 +2,214 @@
 
 ## Unreleased
 
+- **The dynamic weather module has been removed.** The `weather` feature, its synoptic and
+  storm models, cloud retuning, rain/wet-surface/audio effects, `WEA` panel and radar, cockpit
+  HUD, debug overlay, and weather-only tests are gone. Bootstrap no longer constructs it,
+  obsolete `[Weather]` settings are purged on config load, and the compatibility probe no
+  longer requires its private `CloudLayer` seams. Vanilla mission weather and authored
+  `ModifyEnvironment` beats are untouched. This is removal only; a lightweight replacement
+  will be designed separately.
+
+- **CYBER builds itself on your airbases; trucks are optional and leave from a depot.** Every
+  airbase your faction holds is now a CYBER node with no action from you: Cyber Command comes up
+  on the base nearest the centre of your holdings, and gateways on up to five more, all wired
+  together by a backbone that ignores distance. Each node lives in a real building on its base
+  (the map tower): destroy it and the node goes DOWN, taking whatever hangs off it with it, until
+  the game repairs the building; capture a base and its node changes hands. Field sites (radar,
+  jammer, SIGINT, relay) are now optional reach extenders counted against their own limit
+  (`CyberSiteLimit`, 8), link to any node on the net, and leave the bay of your nearest vehicle
+  depot instead of appearing at an airbase centre. Any jammer that is emitting (NOISE or
+  DECEPTION) now backs every jammer-backed operation; EMCON just goes dark. Airbase nodes alone
+  never draw the simulated adversary, so the defence game starts only when you field a truck.
+  Support protocol 13 (sixteen network slots, static/down flags); older peers are refused.
+  Verified by the pure suite (new infrastructure test), a clean Release build, the patch probe
+  (protocol-13 roundtrip, 724-byte worst-case snapshot, `VehicleDepot.spawnTransform`) and
+  `nomod asm verify` (105/105 reflection lookups); **not yet seen in game.**
+
+- **The `WEA` page renders again, and its radar sits where the map is.** The one-page rework
+  left `RefreshFront` writing to a front row that no longer exists, so every refresh threw a
+  `NullReferenceException` after the observation and the page froze half-built: empty forecast
+  rows, a black radar, an unlatched schedule toggle and a blank status strip. The dead row is
+  gone, the radar's map rect is placed with the same top-edge convention as every other block
+  (it was drawn one map-height low, over its own legend and cell table), and the echo layer no
+  longer flashes white before its first texture. The page is also denser where it was loose:
+  the radar and the rose are measured before the forecast, the last table column takes the
+  room the row had spare, the range rings and the marker key no longer ellipsise, a held or
+  missing schedule says so in words instead of leaving a hole, and a bay too short for one
+  forecast row drops that section rather than printing a header over nothing. Every reading
+  was verified offline by the new `tests/BoscaliSummer.Tests/Features/Weather/Run-WeatherUnityCheck.ps1`
+  render check (host/client, 896/596, storm/calm/held/no readout) built from the production
+  panel and the real weather model; clean Release build, full suite, patch probe and
+  `nomod asm verify` pass; **in-game hosting on the MFD is still unverified.**
+
+- **The `WEA` page speaks the cockpit font, and the observation icons sit in their own
+  cells.** The vanilla MFD font has no triangles, so the forecast trend arrows and the front
+  symbols were rendering as tofu boxes: a row now reads `+8%` / `-10%` / `0%` in the trend
+  colour, the wind section names the front in words, and the boundary's symbols on the radar
+  are drawn arrow tokens pointing the way it travels. The temperature/dewpoint readout was
+  ellipsised to `3…` under the sheet's tracked capitals, so observation values are untracked
+  and shrink to fit instead of truncating; the flight-category pips and precipitation bars
+  were drawn a row high and now sit on their value's line; the forecast chip frames no longer
+  bake a green "live" border under a red storm chip; and the hazard banner says `NO STORM IN
+  RANGE` when no cell warns rather than arguing with an `EXPECT LIGHTNING` sky.
+
+- **The canopy droplets are bead-sized now.** The first flight that could see them showed them
+  four times too large: `RainDrops` authors an optic radius up to 4.5 % of the pane's longer
+  side, which is about 4 cm on a one-metre pane. The simulation keeps its own scale - its tests
+  and its fall speeds live there - and the render applies `LensScale` 0.2 and a 512 px sheet, so
+  the largest hailstone is under a centimetre across and the common bead is 2-4 mm, with trails
+  drawn as continuous lines rather than dotted rows of lenses.
+
+- **Canopy rain is visible now, and the rain is audible.** Three separate defects, found with
+  the live bridge and the shipped shader source, not guessed. (1) Canopy glass is reached
+  through `Aircraft.canopies`: **unit parts are root GameObjects, not children of the aircraft
+  transform**, so the old `GetComponentInChildren<Canopy>` found nothing on a live aircraft and
+  the module fell back to a screen-space overlay every time; that overlay is deleted and the
+  glass path now logs which of glass/windshield it took. (2) The droplets were invisible even
+  once the panes built: URP's `Distortion()` returns `lerp(scene, tint, saturate(alpha -
+  blend))` and gates the refraction by the same alpha, so one all-opaque normal sheet refracted
+  a flat overcast sky into flat overcast sky. `_BumpMap` and `_BaseMap` are now two sheets - a
+  normal sheet and a tint sheet whose graded alpha is both the tint and the refraction gate
+  (dry glass 0, rim opaque, glint white, film faint), with `_DistortionBlend` 0 and
+  `_DistortionStrengthScaled` 0.04 (was 0.1, a tenth of the screen per lens edge). Droplets
+  also survive the jet cruise band now (`SpeedFadeStart`/`BlowOffSpeed` 130..206 m/s became
+  220..340 m/s; the old window had them gone at 740 km/h). (3) The rain was inaudible:
+  peak-normalising an impact stack left the sparse layer at -32 dBFS RMS at 21 % intensity,
+  15 dB below a vanilla one-shot, with 43 % of impact energy above the 8 kHz low-pass the
+  cockpit mixer applies (`AudioMixerVolume.SetEffectsAudioFilterStrength(8000f, 0.7f)`,
+  verified in the shipped build). `Domain/RainSynth.cs` (new, pure and unit-tested) bakes four
+  RMS-normalised layers - a speed-driven roar, Poisson drops with damped modal rings under
+  6 kHz, a warm wash and wind - and `Runtime/RainAudio.cs` levels them from measured RMS at the
+  mixer's own sample rate, and the four layer targets carry a further 4 dB over the researched
+  values (the first in-flight pass measured 15 dB below a vanilla one-shot). `Weather.RainVolume`
+  (0-2, default 1) is the client-local gain on that mix. Falling rain keeps its own streak
+  material and denser box. Clean Release build, full suite including the new `RainSynthTests`,
+  patch probe and `nomod asm verify` pass; **the in-game look and mix still need a flight - the
+  lens tints, `RainSystem` sizes/rates and the rain layer levels are the tuning knobs.**
+
+- **The world rain is a weather system now, not one particle box.** `Runtime/RainSystem.cs` is
+  three bounded stretched-billboard layers — near and mid alpha streaks plus a wide, dim
+  additive veil — whose emission rates are derived from a target particle density per cubic
+  metre and the layer's box volume rather than hand-tuned counts, so resizing a box cannot
+  change how thick the rain looks. The near box grows with relative airspeed (23 m +
+  0.10 × relative speed), every box is pushed 30 % of its radius upwind, and the emitters
+  follow the eye every frame while only their parameters tick at 10 Hz: a 46 m box crossed at
+  250 m/s is crossed in 0.18 s, and the old 10 Hz transform update teleported the volume. The
+  streak texture is an asymmetric head-and-tail line about 6 % of the quad wide, the near
+  layer's opacity is in the researched 0.07–0.16 band instead of 0.55, and the rain is tinted
+  from the live fog colour so a night storm and a grey dawn do not get the same fixed white.
+  `Domain/Wetness.cs` (new, pure, unit-tested by `WetnessTests`) integrates surface wetness
+  with 4 s rise / 100 s dry constants, and the world answers the water that has landed: a new
+  `Runtime/GroundResponse.cs` casts at most 16 downward rays at 5 Hz and emits expanding
+  ripple rings and splash bursts from near-horizontal hits within 30 m (sea-level fallback
+  only when no collider is hit), `Runtime/WetGround.cs` puts two cloned vanilla
+  `scorchMarkDecal` DBuffer projectors under the camera with the wetness in their
+  `fadeFactor`, and `Runtime/SeaResponse.cs` roughs and darkens the shared vanilla `WaterMat`
+  in place from the baseline it read on binding, restoring it exactly on release or scene
+  change. Client-local throughout: no patches, no wire, no new sync vars. Clean Release build,
+  full suite (including the new `WetnessTests`), patch probe and `nomod asm verify` pass;
+  **the look is unverified in flight — the streak head direction, the near-layer opacity band
+  and the wet-ground decal fade are the tuning knobs.**
+
+- **World events are now a graded director, and superevents own the screen for a minute.**
+  The `EVN` feed's catalog is ranked minor / medium / superevent: minors are weather and
+  flavor, mediums move one price, and supers are rare, scripted and aimed at a side. A new
+  pure director (`Domain/EventDirector.cs`) reads ground airbase custody once a second — the
+  same ownership the map shows, carriers excluded — and only escalates when the theater has a
+  story: three minutes of mission behind it, five minutes since the last super, at most three
+  per mission, each fired once, and a two-base deficit before any intervention aimed at the
+  losing or winning side can roll. Event windows are short (90–300 s) so the theater keeps
+  moving, and the mission's first roll is always a medium — a session opens on an event that
+  actually moves a price, never on weather. The `EVN` screen is an instrument board: one fact per place (status word, price metric, super budget, directorate strip, instrument card, feed), tier colour only where it means something, and no empty art frame - a poster PNG is a 16:9 plate on the card (and a thumbnail in every history row), and a generated stripe plate over the category mark fills the same plate when it is missing. Five supers ship: Allied Intervention and Emergency
+  Appropriation for the side losing ground, Frontline Overstretch on the side that overran
+  its logistics, and the global Munitions Crisis and Ceasefire Ultimatum. Their beats are
+  real host-side effects on the seams the game already owns — `FactionHQ.AddFunds`,
+  `Player.AddAllocation`, and one funded vanilla convoy group for the target side — scaled by
+  `EffectStrength`, never a spawned aircraft, never a vanilla price. Support pricing is now
+  per side: a targeted event reads exactly 1 for everyone else, and only the side it is aimed
+  at gets the `CONTAIN`/`LEVERAGE` response offer. Protocol 3 carries the resolved target
+  faction hash beside the catalog index and timestamps; the response intent/reply is
+  otherwise unchanged. The `EVN` panel is rebuilt around a director band (leader, trailer,
+  deficit, supers fired), a tier ribbon, an optional poster (loose PNGs in
+  `BepInEx/plugins/BoscaliSummer/Events/`, vector glyph fallback, `docs/EVENT_ART_BRIEF.md`
+  is the brief) and a scripted-beat ticker; a client-local full-screen `SuperEventAlert`
+  canvas shows each super once per peer — late joiners included — with a synthesized tone and
+  a self-dismissing frame, and the common HUD element gets one notice so a pilot in the air
+  hears it too. New config: `SuperEventsEnabled` (host), `AlertsEnabled` / `AlertSeconds`
+  (client); `SET > SERVER > WORLD EVENTS` gained the super toggle. Clean-copy Release build,
+  full suite including the architecture boundary test and the new director tests, and the
+  patch probe pass (17 features, 50 patch classes, protocol-3 roundtrip with target hash);
+  **in-game acceptance is pending for every new behaviour.**
+
+- **One common cockpit HUD element, hanging under the weapon column, and the ace hunt dossier
+  stays.** `Hud/` owns a single screen-space, vanilla-styled stack: a feature holds a *line* for
+  as long as its condition is true, or pushes a *notice* that expires on its own. By default the
+  block sits directly under the vanilla weapon and capacitor column, right-aligned to it at its
+  own 460 px width, and measures that column's live rectangle from `CombatHUD.topRightPanel` once
+  a second - read only, never written to, re-parented or disabled - so the two read as one column
+  instead of two overlays; it falls back to fixed offsets in a scene where the column cannot be
+  resolved. Seven other anchors remain (TOP CENTRE / TOP RIGHT / TOP LEFT / RIGHT / LEFT /
+  BOTTOM RIGHT / BOTTOM LEFT). The weather banner and the accepted-contract card now render there
+  - the contract card keeps its progress gauge, its `CONTACT LOST` state and its entering/leaving
+  notices. **The hostile ace dossier is untouched:** `AceHuntHud` keeps its own overlay, its
+  ten-second collapse and its minimised bar, and the full reading still lives on SQD. The whole
+  element is pilot-configurable from SET > COCKPIT > COMMON HUD: position (now eight anchors),
+  size (four steps off the game's own overlay text size), opacity (FULL/HIGH/LOW/OFF), line cap,
+  notice switch and dwell, and one switch per declared feed - the page lists whatever modules
+  declared one rather than a list kept by hand. Look: no panel and no rail, because the vanilla
+  HUD writes its own objective text straight onto the sky; font, material, the objective label's
+  own ink, palette and text size are read live so a custom theme carries over; a routine line
+  wears the game's ink and only Caution and Warning are coloured; a notice is tinted throughout,
+  so a still frame tells a transient event from standing status. **Readability:** when vanilla's
+  label material carries neither an outline nor an underlay the element clones it once and adds a
+  thin black outline, because saturated green and red over a sunlit cloud measure 1.3:1 and 2.4:1
+  without one - the vanilla material asset itself is never written to and the clone is destroyed
+  on scene reset. The element sits one sorting order above the cockpit HUD canvas and applies
+  safe-area insets inward from whichever edge it hangs from. Bounded and cheap: ten held lines,
+  three notices, eight feeds, ten hertz, nothing allocated after the build, and a vanilla style
+  that never resolves degrades to the engine font instead of failing. New module `hud` (no
+  Harmony patches, presentation only) plus `Framework/Contracts/IHudBoard.cs`, `HudLayout.cs` and
+  `HudPrimitives.cs`. Clean-copy Release build, full suite including the architecture boundary
+  test, and the patch probe pass (17 features, 48 patch classes); **in-game visual acceptance is
+  pending.**
+- **OPS EW and INFO are now one CYBER tab — a spectrum-defence network you build, hold and
+  fight from.** ARCHITECT deploys up to twelve real vehicles by right-clicking the map (Cyber
+  Command, early-warning radars, jammers, SIGINT posts, relay masts); they link by range back to
+  Cyber Command and the mesh is drawn live on the map, the NETWORK page and a new full-screen
+  console. Radars feed hostile aircraft into the faction picture, SIGINT posts find hostile
+  emitters, and jammers raise an ECM umbrella that pushes hostile active and semi-active radar
+  seekers homing on friendlies past their jam tolerance (NOISE full, DECEPTION half, EMCON
+  silent). A host-simulated adversary campaign escalates (probing → active → offensive, faster
+  when you run offensive operations): recon probes expose your emitters unless a SIGINT ear
+  covers them, intrusions land on an edge site and walk your links toward Cyber Command, jamming
+  raids halve links and radar cover, and enemy players' operations under your SIGINT ear become
+  traceable incidents. THREATS and the console answer with ISOLATE, PATCH, HONEYPOT (holds what it
+  catches), TRACE and BURN THROUGH, paid from a bandwidth pool, with INFOCON, a voice loop and a
+  synthesized klaxon; a finished trace opens a 4-minute foothold (operations −25 %) and banks an
+  INTEL token. A breached Cyber Command locks OPERATIONS until patched. Radar blackout, ghost
+  shield and spoof contacts now need a working jammer in the backing mode within reach; the old
+  EW truck, its free postures and `EwTruckCost` are gone. The board is tuned so a pilot can fly:
+  an intrusion takes 20 s to land and 26 s a hop (16 s when the adversary is offensive), a
+  compromised field site the intruder has left is reimaged after two minutes (Cyber Command never
+  is), Cyber Command arrives with bandwidth banked, and **every incident you win cools the
+  adversary** — 4 heat, 8 for a trace — so the campaign's pace is something you steer, with a
+  DEFENDED / BREACHED score to show it. A completed trace is also a backdoor: while the foothold
+  is open, operations need no jammer of your own in reach. The console carries an advisor bar
+  that names the next move and fires it with **[SPACE]**, the klaxon is reserved for break-ins,
+  C2 breaches and raids so it keeps meaning something, and a jammer breaking a radar missile now
+  says so on the voice loop. New host settings: `CyberSiteCostScale`,
+  `CyberScrapRefund`, `CyberSiteLimit`, `CyberCampaignIntensity`. **Support protocol 12** —
+  matching peers required. Pure model, clean-copy Release build, full suite, patch probe and
+  Harmony verification pass; **in-game visual, balance and multiplayer acceptance are pending.**
+  Spec: `design/ux/cyber-defense.md`.
+
+- **The COC page shows the general it has open on the map.** Choosing a post in the STR
+  chain of command - or clicking a staff-log line - brackets that post's map diamond and draws
+  it in lifted faction ink above the others, so the commander being read about is the commander
+  the reader can see; closing the file, leaving the page or losing the staff clears it. It is a
+  selection, not an order: client-local presentation, nothing sent, nothing marked. With no
+  staff running the page now reads **NO STAFF BOARD** instead of leaving the column empty.
+
 - **Weather is now a real atmosphere, and the sky it drives is vanilla's own.** The custom
   storm-cloud renderer and its ability to hide the vanilla deck are **deleted**; in their place
   `Runtime/VanillaClouds.cs` retunes the live `CloudLayer` every frame — storm darkening under
@@ -29,16 +237,21 @@
   build.
 
 - **The `RAD` screen was rebuilt around what it shows and what each key does.** RECEIVER leads
-  with a 25px frequency and signal metric strip (station name in the frequency caption, dBm and
-  the tower / horizon / LOS read in the signal caption), one TUNING section holds the waterfall,
-  dial and tuning keys, and the old nine-key row became four keys that name the value they
-  cycle — `BAND · FM`, `MODE · AUTO`, `BW · WIDE`, `STEP · 100k` — beside `AF` and `SQL`
-  steppers. The dead LINK block and the inert TX/SEC keys are gone; the status strip carries the
-  hovered control's description and the RECEIVE ONLY copy, and the station rows interleave name,
-  frequency and signal instead of three stacked button rows. The MUSIC page replaced the two
-  paginated FOLDERS and TRACKS lists with one folder stepper, one 26px track list and one pager,
-  and its tab is now named **MUSIC** instead of DECK. Runtime, wire protocol, settings and the
-  copyright boundary are unchanged; in-game visual acceptance is pending.
+  with the set's own face — the tuned frequency at 34px, the station and its programme, and an
+  S-meter with its scale grid and a squelch gate drawn on the bar, so raising the squelch moves
+  something you can see. The middle of the page is one **band scope**: a 72px waterfall, one
+  ruler and one needle that is also the tuning control — hovering previews the nearest channel
+  and names the station on it, clicking tunes to it through a new step-snapped
+  `RadioManager.TuneTo`, and a new `RadioManager.SetBand` backs three `FM` / `AIR` / `MW` keys
+  instead of one cycling knob. The old nine-key row became `MODE · AUTO`, `BW · WIDE` and
+  `STEP · 100k` beside `AF` and `SQL` steppers, the dead LINK block and the inert TX/SEC keys
+  are gone, and presets now read `STRONG / FAIR / WEAK / OFF AIR` rather than a bare percentage.
+  The MUSIC page is a player: a now-playing card with a real position bar, a 44px transport, one
+  folder stepper, twelve track rows that mark the playing track with its own position line, and
+  an empty-state card that says where files go instead of twelve dead rows. Its tab is named
+  **MUSIC** instead of DECK. Runtime tuning gained `TuneTo` / `SetBand` and the pure
+  `RadioDialTuning.Nearest`; the wire protocol, settings, authority and the copyright boundary
+  are unchanged. In-game visual acceptance is pending.
 
 - **Weather is back, driven from the mission clock.** A new default-on `weather` module
   restores dynamic weather with no Harmony patch and no message: the host drives cloud
@@ -91,6 +304,20 @@
   every refresh; a remote client sees the same page read-only with the reason on the status
   strip. The ADM bezel, its appended vanilla slot and its rail mapping are removed, so
   Boscali hosts only the EVN screen. In-game acceptance pending.
+
+- **Nests and crews now live in the trench, and there are more of them.** The emplacements
+  stood 7.5m behind the ditch as a sandbag ring with a weapon in it, because the ring (a direct
+  `dugout` child of the vanilla prefab, about ten metres across) is far too big for the cut. The
+  ring is hidden on every peer while the weapon stays fully functional and shootable — the game
+  offers no networked way to omit a part, so `TrenchNestVisual` disables just its renderers,
+  colliders and cosmetic pieces from the building spawn callbacks, keyed on the position's own
+  name, leaving the part registered so hit indices never desync. What is left is a bare weapon
+  standing in the ditch itself, on a fire-bay node: the profile now flares 1.4m wider every
+  ~20m, so the line reads as bays and traverses and each bay holds a nest and its crew. A
+  position builds 8 nests instead of 4 (four MG, two ATGM, two MANPADS, in that order as it
+  matures), and each nest gets one dismounted soldier standing beside it in the ditch — the
+  crew follows its weapon to a fallback bay if the primary one is blocked, and never spawns
+  without a nest to man.
 
 - **Trenches are man-scale now, and soldiers stand in them.** Screenshots from a live session
   showed the earthwork as blocky bays whose walls stood chest-high on a nearby HESCO and

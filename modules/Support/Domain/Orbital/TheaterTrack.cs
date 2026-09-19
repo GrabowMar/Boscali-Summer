@@ -53,23 +53,20 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
 
     internal static class OrbitRegimes
     {
+        public const byte Standard = 0;
         public const byte Low = 0;
-        public const byte Mid = 1;
-        public const byte High = 2;
+        public const byte Mid = 0;
+        public const byte High = 0;
 
         public static readonly OrbitRegime[] All =
         {
-            new OrbitRegime(Low, "LOW", "LOW ORBIT", 300000.0, 51.6, 45.0, 0.3, 0.8f, 8f, 0.8f, 0.02f,
-                "Sharp optics, tight rods, short passes. Drag burns fuel."),
-            new OrbitRegime(Mid, "MID", "MID ORBIT", 450000.0, 51.6, 60.0, 0.5, 1f, 20f, 1f, 0f,
-                "Balanced passes, optics and scatter."),
-            new OrbitRegime(High, "HIGH", "HIGH ORBIT", 700000.0, 51.6, 90.0, 0.9, 1.4f, 45f, 1.25f, 0f,
-                "Long passes, wide scans and EMP. Blurry optics, loose rods.")
+            new OrbitRegime(Standard, "LEO", "LOW EARTH ORBIT", 500000.0, 51.6, 60.0, 0.4, 1f, 15f, 1f, 0f,
+                "Stable space orbit. All-weather SAR radar reconnaissance.")
         };
 
-        public static bool Valid(int index) => index >= 0 && index < All.Length;
+        public static bool Valid(int index) => index == 0;
 
-        public static OrbitRegime Get(int index) => All[Math.Max(0, Math.Min(All.Length - 1, index))];
+        public static OrbitRegime Get(int index) => All[0];
     }
 
     /// <summary>Timing knob the host decides; clients use the host's value from settings.</summary>

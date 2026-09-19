@@ -24,8 +24,8 @@ namespace BoscaliSummer.Features.Progression.Presentation
         private TMP_Text pilotEmblemFallback;
         private TMP_Text pilotSquadron;
         private Image pilotProgressFill;
-        private Image pilotStampFill;
-        private TMP_Text pilotStamp;
+        private Image pilotStateFill;
+        private TMP_Text pilotStateBadge;
         private TMP_Text pilotPhotoCaption;
 
         private TMP_Text tileSortie;
@@ -64,8 +64,8 @@ namespace BoscaliSummer.Features.Progression.Presentation
             pilotEmblemImage = null;
             pilotEmblemFallback = pilotSquadron = null;
             pilotProgressFill = null;
-            pilotStampFill = null;
-            pilotStamp = pilotPhotoCaption = null;
+            pilotStateFill = null;
+            pilotStateBadge = pilotPhotoCaption = null;
             tileSortie = tileTime = tileFuel = tileDeaths = null;
             pilotMode = pilotStatus = pilotDeaths = pilotGeneration = null;
             runAirframeValue = runTimeValue = runFlightStatusValue = runFuelValue = runSortieScoreValue = null;
@@ -78,42 +78,177 @@ namespace BoscaliSummer.Features.Progression.Presentation
             Array.Clear(committedLabels, 0, committedLabels.Length);
         }
 
-        private void BuildPilotPage(RectTransform parent, Rect body)
+        private const float PilotCardHeight = 150f;
+        private const float PilotTileHeight = 46f;
+        private const float PilotParaHeight = 42f;
+        private const float PilotChipPitch = 36f;
+        private const float PilotPipsHeight = 42f;
+
+        /// <summary>
+        /// The record body is two columns: the pilot's own service on the left, the career
+        /// ledger on the right. They are cut to one shared height, and each column spreads
+        /// its rows over it, so the lower half of the page can never draw a short column
+        /// beside a tall one or pool blank glass under the last field.
+        /// </summary>
+        private const float PilotRecordRegion = 200f;
+
+        private const float PilotServiceBlock = SheetHeadingHeight + PilotParaHeight;
+        /// <summary>Chips per row in the committed-skills block.</summary>
+        private const int PilotChipColumns = 6;
+        /// <summary>
+        /// Heading, the whole chip pool (icon over its label) and the 8px lead-in. The debug
+        /// bypass can light every grade, so the block reserves all four rows; a normal career
+        /// only ever fills two.
+        /// </summary>
+        private static readonly int PilotChipRows =
+            (PerkCatalog.All.Length + PilotChipColumns - 1) / PilotChipColumns;
+        private static readonly float PilotCommittedBlock =
+            SheetHeadingHeight + PilotChipRows * PilotChipPitch + 6f;
+
+        private void BuildPilotPage(RectTransform page, Rect body)
         {
-            clause = 0;
-            parent = AvScreen.Scroll(parent, body, PilotContentHeight(), out body);
-            DossierSpine(parent, new Rect(body.x, body.y, 3f, body.height));
+            float content = PilotMinContentHeight();
+            RectTransform parent = AvScreen.Scroll(page, body, content, out body);
+            PageRail(parent, new Rect(body.x, body.y, 3f, body.height));
             float x = body.x + SpineInset;
             float width = body.width - SpineInset;
             float y = body.y;
 
-            y = DrawFileHeader(parent, x, y, width, "FORM SQD-1 · SHEET 1 OF 4", "PERSONNEL FILE",
-                "HOST COPY");
+            y = DrawPageHeader(parent, x, y, width, "PILOT  /  01 OF 04", "PILOT STATUS",
+                "LOCAL + HOST DATA");
 
-            // ---- Dossier card ------------------------------------------------------------
-            const float cardHeight = 150f;
-            AvStyled.Box(parent, new Rect(x, y, width, cardHeight), "section band");
-            AvStyled.SpineTick(parent, x - SpineInset + 3f, y - 12f);
+            // The spare glass is shared on the page's one rhythm first, then into the
+            // identity card — the block that can grow without opening a dead band.
+            float slack = Mathf.Max(0f, body.height - content);
+            float gap = SheetGap(body.height, content, 4);
+            float cardHeight = PilotCardHeight + Mathf.Max(0f, Mathf.Min(slack - (gap - SheetBaseGap) * 4f, 24f));
 
-            TMP_Text watermark = PlainLabel(parent, new Rect(x, y - 112f, width, 34f), "ARCHIVE COPY",
-                "watermark");
-            watermark.alignment = TextAlignmentOptions.Center;
-            watermark.rectTransform.localRotation = Quaternion.Euler(0f, 0f, -4f);
+            y = BuildPilotIdentity(parent, x, y, width, cardHeight);
+            y -= gap;
 
-            Rect portraitFrame = new Rect(x + 10f, y - 8f, 92f, 138f);
+            float tileWidth = (width - AvTokens.Space2 * 3f) / 4f;
+            tileSortie = StatTile(parent, x, y, tileWidth, "SORTIE", "—");
+            tileTime = StatTile(parent, x + (tileWidth + AvTokens.Space2), y, tileWidth, "MISSION", "00:00");
+            tileFuel = StatTile(parent, x + (tileWidth + AvTokens.Space2) * 2f, y, tileWidth, "FUEL", "—");
+            tileDeaths = StatTile(parent, x + (tileWidth + AvTokens.Space2) * 3f, y, tileWidth, "DEATHS", "0");
+            y -= PilotTileHeight + gap;
+
+            y = DrawSectionTitle(parent, x, y, width, "SERVICE NOTE", "LOCAL PROFILE", band: false);
+            pilotBackground = AvStyled.Label(parent, new Rect(x, y, width, PilotParaHeight),
+                "No service background on file.", "row-sub");
+            // DrawSectionTitle already consumed the heading height.
+            y -= PilotParaHeight + gap;
+
+            // ---- Record body: service on the left, career ledger on the right -----------
+            float gutter = AvTokens.Space3;
+            float leftWidth = Mathf.Floor((width - gutter) * 0.52f);
+            float rightX = x + leftWidth + gutter;
+            float rightWidth = width - leftWidth - gutter;
+            float leftPitch = (PilotRecordRegion - 2f * SheetHeadingHeight - AvTokens.Space2) / 9f;
+            float rightPitch = (PilotRecordRegion - SheetHeadingHeight - PilotPipsHeight) / 8f;
+
+            float leftY = y;
+            leftY = DrawSectionTitle(parent, x, leftY, leftWidth, "CURRENT LIFE", null, band: false);
+            pilotMode = Field(parent, leftPitch, x, ref leftY, leftWidth, "LIFE MODE");
+            pilotStatus = Field(parent, leftPitch, x, ref leftY, leftWidth, "STATUS");
+            pilotDeaths = Field(parent, leftPitch, x, ref leftY, leftWidth, "DEATHS");
+            pilotGeneration = Field(parent, leftPitch, x, ref leftY, leftWidth, "GENERATION");
+            leftY -= AvTokens.Space2;
+            // Column-width headings: "SORTIE PERFORMANCE" and "CAREER STANDING" at the
+            // this width would ellipsise in a half-width column, so the short names
+            // carry the same meaning and the fields underneath say the rest.
+            leftY = DrawSectionTitle(parent, x, leftY, leftWidth, "SORTIE", null, band: false);
+            runAirframeValue = Field(parent, leftPitch, x, ref leftY, leftWidth, "AIRFRAME");
+            runTimeValue = Field(parent, leftPitch, x, ref leftY, leftWidth, "ELAPSED");
+            runFlightStatusValue = Field(parent, leftPitch, x, ref leftY, leftWidth, "CONDITION");
+            runFuelValue = Field(parent, leftPitch, x, ref leftY, leftWidth, "FUEL");
+            runSortieScoreValue = Field(parent, leftPitch, x, ref leftY, leftWidth, "SORTIE SCORE");
+
+            float rightY = DrawSectionTitle(parent, rightX, y, rightWidth, "CAREER TOTALS", null, band: true);
+            runRankValue = Field(parent, rightPitch, rightX, ref rightY, rightWidth, "RANK");
+            runMissionScoreValue = Field(parent, rightPitch, rightX, ref rightY, rightWidth, "MISSION");
+            pilotScoreValue = Field(parent, rightPitch, rightX, ref rightY, rightWidth, "THIS PILOT");
+            aceBonusValue = Field(parent, rightPitch, rightX, ref rightY, rightWidth, "ACE BONUS");
+            runNextPerkValue = Field(parent, rightPitch, rightX, ref rightY, rightWidth, "NEXT PICK");
+            earnedValue = Field(parent, rightPitch, rightX, ref rightY, rightWidth, "EARNED");
+            spentValue = Field(parent, rightPitch, rightX, ref rightY, rightWidth, "SPENT");
+            availableValue = Field(parent, rightPitch, rightX, ref rightY, rightWidth, "UNSPENT");
+
+            budgetPips = new Image[MaximumBudgetPips];
+            budgetPipSlots = new GameObject[MaximumBudgetPips];
+            for (int i = 0; i < MaximumBudgetPips; i++)
+            {
+                var slot = new GameObject("BudgetPoint_" + i, typeof(RectTransform));
+                var rect = (RectTransform)slot.transform;
+                rect.SetParent(parent, false);
+                AvKit.Place(rect, new Rect(rightX + (i % 10) * 18f, rightY - 2f - (i / 10) * 14f, 11f, 11f));
+                AvKit.Outline(rect, new Rect(0f, 0f, 11f, 11f), AvTheme.Hairline);
+                budgetPips[i] = AvKit.Panel(rect, new Rect(2f, -2f, 7f, 7f), Color.clear, AvSprites.Led);
+                budgetPipSlots[i] = slot;
+            }
+            // Three pip states, three captions: two greens a shade apart are not a key.
+            BudgetKey(parent, rightX, rightY - 30f, AvTheme.Dim, "SPENT");
+            BudgetKey(parent, rightX + 64f, rightY - 30f, AvTheme.Accent, "UNSPENT");
+            BudgetKey(parent, rightX + 132f, rightY - 30f, AvTheme.Hairline, "OPEN");
+            y -= PilotRecordRegion + gap;
+
+            y = DrawSectionTitle(parent, x, y, width, "COMMITTED SKILLS", null, band: false);
+            committedSkillsEmpty = AvStyled.Label(parent, new Rect(x, y, width, 28f),
+                "No skills committed yet. Open SKILLS to choose one.", "row-sub");
+            float chipWidth = (width - AvTokens.Space2 * (PilotChipColumns - 1)) / PilotChipColumns;
+            for (int i = 0; i < committedIcons.Length; i++)
+            {
+                float chipX = x + (chipWidth + AvTokens.Space2) * (i % PilotChipColumns);
+                float chipY = y - 8f - (i / PilotChipColumns) * PilotChipPitch;
+                committedIcons[i] = SqdGlyph.Create(parent, new Rect(chipX, chipY, 18f, 18f), SqdMarks.FromKey("combat"));
+                committedLabels[i] = Fitted(PlainLabel(parent,
+                    new Rect(chipX - 2f, chipY - 18f, chipWidth + 4f, 16f), "", "row-sub"));
+                // This width would ellipsise a word like SURVEILLANCE in a chip
+                // this narrow; the tile is the mark, so the caption only has to name it.
+                committedLabels[i].characterSpacing = 0f;
+                committedLabels[i].alignment = TextAlignmentOptions.Center;
+                committedIcons[i].gameObject.SetActive(false);
+                committedLabels[i].gameObject.SetActive(false);
+            }
+        }
+
+        /// <summary>One budget-pip key: a swatch and its state word, so the pips are a key and not a shade.</summary>
+        private static void BudgetKey(RectTransform parent, float x, float y, Color colour, string word)
+        {
+            AvKit.Panel(parent, new Rect(x, y + 1f, 9f, 9f), colour, AvSprites.Led);
+            TMP_Text label = PlainLabel(parent, new Rect(x + 12f, y, 64f, 12f), word, "section-title-note");
+            label.enableWordWrapping = false;
+        }
+
+        /// <summary>
+        /// The content floor the pilot page declares: identity, tiles, service block, the
+        /// record body and the full committed-skill pool. The pool is reserved whole because
+        /// the debug bypass lights every grade, so no committed chip is ever drawn outside
+        /// the height the page scrolled to.
+        /// </summary>
+        private static float PilotMinContentHeight() =>
+            SheetHeaderHeight + PilotCardHeight + PilotTileHeight + PilotServiceBlock +
+            PilotRecordRegion + PilotCommittedBlock + SheetBaseGap * 4f;
+
+        /// <summary>The pilot identity card: portrait, identity, readiness and squadron mark.</summary>
+        private float BuildPilotIdentity(RectTransform parent, float x, float y, float width, float cardHeight)
+        {
+            AvKit.Panel(parent, new Rect(x, y, width, cardHeight), AvTheme.SurfaceInert);
+            AvKit.Outline(parent, new Rect(x, y, width, cardHeight), AvTheme.Frame.WithAlpha(0.7f));
+            AvKit.Rule(parent, new Rect(x, y, 3f, cardHeight), AvTheme.RailInfo);
+
+            Rect portraitFrame = new Rect(x + 10f, y - 8f, 92f, cardHeight - 16f);
             AvKit.Panel(parent, portraitFrame, AvTheme.SurfaceInert);
             AvKit.Outline(parent, portraitFrame, AvTheme.Frame);
-            AvKit.CornerTicks(parent, portraitFrame, AvTheme.TextPrimary.WithAlpha(0.22f), 9f);
-            pilotPortraitFallback = Redaction(parent,
-                new Rect(portraitFrame.x + 12f, portraitFrame.y - 30f, portraitFrame.width - 24f, 46f), 3);
+            pilotPortraitFallback = VisualPlaceholder(parent,
+                new Rect(portraitFrame.x + 12f, portraitFrame.y - 30f, portraitFrame.width - 24f, 46f));
             pilotPortraitImage = AvKit.Panel(parent,
                 new Rect(portraitFrame.x + 3f, portraitFrame.y - 3f, portraitFrame.width - 6f, portraitFrame.height - 6f),
                 Color.white);
             pilotPortraitImage.type = Image.Type.Simple;
             pilotPortraitImage.preserveAspect = true;
             pilotPortraitImage.raycastTarget = false;
-            CornerFold(parent, x + width, y - cardHeight, 18f, 135f, AvTheme.Frame);
-
+            pilotPortraitImage.enabled = false;
             AvKit.Panel(parent, new Rect(portraitFrame.x + 3f, portraitFrame.y - portraitFrame.height + 19f,
                 portraitFrame.width - 6f, 16f), AvTheme.Ground.WithAlpha(0.88f));
             pilotPhotoCaption = PlainLabel(parent,
@@ -123,18 +258,16 @@ namespace BoscaliSummer.Features.Progression.Presentation
             pilotPhotoCaption.alignment = TextAlignmentOptions.Center;
 
             float textX = portraitFrame.x + portraitFrame.width + 12f;
-            float emblemWidth = 74f;
+            const float emblemWidth = 74f;
             float textWidth = width - (textX - x) - emblemWidth - 12f;
             pilotProfileTag = PlainLabel(parent, new Rect(textX, y - 8f, textWidth, 16f), "", "section-title-note");
             pilotProfileTag.alignment = TextAlignmentOptions.MidlineRight;
             pilotCallsign = PlainLabel(parent, new Rect(textX, y - 10f, textWidth, 26f), "PILOT RECORD PENDING", "section-title");
-            pilotName = PlainLabel(parent, new Rect(textX, y - 38f, textWidth, 16f), "", "kv-value");
-            pilotRankLine = PlainLabel(parent, new Rect(textX, y - 57f, textWidth, 15f), "", "row-sub");
+            pilotName = PlainLabel(parent, new Rect(textX, y - 40f, textWidth, 16f), "", "kv-value");
+            pilotRankLine = PlainLabel(parent, new Rect(textX, y - 58f, textWidth, 15f), "", "row-sub");
             pilotStatusLine = PlainLabel(parent, new Rect(textX, y - 76f, textWidth, 15f), "", "row-sub");
             pilotProgressFill = AvKit.ProgressBar(parent,
-                new Rect(textX, y - 100f, textWidth, 5f), 0f, AvTheme.RailReady);
-            (_, pilotStampFill, pilotStamp) = Stamp(
-                parent, new Rect(x + width - 84f, y - 96f, 80f, 22f), "ACTIVE", "ok");
+                new Rect(textX, y - cardHeight + 36f, textWidth, 5f), 0f, AvTheme.RailReady);
 
             float emblemX = x + width - emblemWidth + 6f;
             pilotEmblemFallback = PlainLabel(parent, new Rect(emblemX, y - 42f, 62f, 30f), "NO\nART", "row-sub");
@@ -143,109 +276,31 @@ namespace BoscaliSummer.Features.Progression.Presentation
             pilotEmblemImage.type = Image.Type.Simple;
             pilotEmblemImage.preserveAspect = true;
             pilotEmblemImage.raycastTarget = false;
-            pilotSquadron = PlainLabel(parent, new Rect(emblemX - 8f, y - 74f, 78f, 14f), "", "row-sub");
+            pilotEmblemImage.enabled = false;
+            // Two lines: a 24-character squadron name does not fit one 78px line, and the
+            // name is the reader's own, so it shrinks and wraps rather than being cut.
+            pilotSquadron = PlainLabel(parent, new Rect(emblemX - 8f, y - 74f, 78f, 26f), "", "row-sub");
             pilotSquadron.alignment = TextAlignmentOptions.Center;
-            y -= cardHeight + 10f;
+            pilotSquadron.enableAutoSizing = true;
+            pilotSquadron.fontSizeMin = AvTokens.FontMicro;
+            pilotSquadron.fontSizeMax = pilotSquadron.fontSize;
 
-            // ---- Service tiles -----------------------------------------------------------
-            float tileWidth = (width - AvTokens.Space2 * 3f) / 4f;
-            tileSortie = StatTile(parent, x, y, tileWidth, "SORTIE", "—");
-            tileTime = StatTile(parent, x + (tileWidth + AvTokens.Space2), y, tileWidth, "MISSION", "00:00");
-            tileFuel = StatTile(parent, x + (tileWidth + AvTokens.Space2) * 2f, y, tileWidth, "FUEL", "—");
-            tileDeaths = StatTile(parent, x + (tileWidth + AvTokens.Space2) * 3f, y, tileWidth, "DEATHS", "0");
-            y -= 56f;
-
-            y = DrawSectionTitle(parent, x, y, width, "SERVICE BACKGROUND", "PILOT LORE", band: false);
-            pilotBackground = AvStyled.Label(parent, new Rect(x, y, width, 42f),
-                "No service background on file.", "row-sub");
-            y -= 52f;
-
-            y = DrawSectionTitle(parent, x, y, width, "PILOT LIFE", "HOST-AUTHORITATIVE", band: false);
-            pilotMode = KeyValue(parent, x, y, width, "PILOT LIFE MODE (F1)");
-            y -= 19f;
-            pilotStatus = KeyValue(parent, x, y, width, "PILOT STATUS");
-            y -= 19f;
-            pilotDeaths = KeyValue(parent, x, y, width, "PILOT DEATHS");
-            y -= 19f;
-            pilotGeneration = KeyValue(parent, x, y, width, "PILOT GENERATION");
-            y -= 27f;
-
-            y = DrawSectionTitle(parent, x, y, width, "SORTIE PERFORMANCE", "CURRENT AIRCRAFT", band: false);
-            runAirframeValue = KeyValue(parent, x, y, width, "ACTIVE AIRFRAME");
-            y -= 19f;
-            runTimeValue = KeyValue(parent, x, y, width, "MISSION ELAPSED");
-            y -= 19f;
-            runFlightStatusValue = KeyValue(parent, x, y, width, "FLIGHT CONDITION");
-            y -= 19f;
-            runFuelValue = KeyValue(parent, x, y, width, "FUEL QUANTITY");
-            y -= 19f;
-            runSortieScoreValue = KeyValue(parent, x, y, width, "SORTIE SCORE");
-            y -= 27f;
-
-            y = DrawSectionTitle(parent, x, y, width, "CAREER STANDING", "MISSION TOTALS", band: true);
-            runRankValue = KeyValue(parent, x, y, width, "PILOT RANK");
-            y -= 19f;
-            runMissionScoreValue = KeyValue(parent, x, y, width, "MISSION SCORE");
-            y -= 19f;
-            pilotScoreValue = KeyValue(parent, x, y, width, "CURRENT PILOT SCORE");
-            y -= 19f;
-            aceBonusValue = KeyValue(parent, x, y, width, "ACE BONUS POINTS");
-            y -= 19f;
-            runNextPerkValue = KeyValue(parent, x, y, width, "SCORE TO NEXT SKILL POINT");
-            y -= 19f;
-            earnedValue = KeyValue(parent, x, y, width, "POINTS EARNED");
-            y -= 19f;
-            spentValue = KeyValue(parent, x, y, width, "POINTS COMMITTED");
-            y -= 19f;
-            availableValue = KeyValue(parent, x, y, width, "PICKS UNSPENT");
-            y -= 24f;
-
-            budgetPips = new Image[MaximumBudgetPips];
-            budgetPipSlots = new GameObject[MaximumBudgetPips];
-            for (int i = 0; i < MaximumBudgetPips; i++)
-            {
-                var slot = new GameObject("BudgetPoint_" + i, typeof(RectTransform));
-                var rect = (RectTransform)slot.transform;
-                rect.SetParent(parent, false);
-                AvKit.Place(rect, new Rect(x + i * 15f, y, 12f, 12f));
-                AvKit.Outline(rect, new Rect(0f, 0f, 12f, 12f), AvTheme.Hairline);
-                budgetPips[i] = AvKit.Panel(rect, new Rect(2f, -2f, 8f, 8f), Color.clear);
-                budgetPipSlots[i] = slot;
-            }
-            y -= 26f;
-
-            y = DrawSectionTitle(parent, x, y, width, "COMMITTED SKILLS", null, band: false);
-            committedSkillsEmpty = AvStyled.Label(parent, new Rect(x, y, width, 18f),
-                "No skills committed yet. Open SKILLS to choose one.", "row-sub");
-            float chipWidth = (width - AvTokens.Space2 * 5f) / 6f;
-            for (int i = 0; i < committedIcons.Length; i++)
-            {
-                float chipX = x + (chipWidth + AvTokens.Space2) * (i % 6);
-                float chipY = y - 20f - (i / 6) * 44f;
-                committedIcons[i] = SqdGlyph.Create(parent, new Rect(chipX, chipY, 18f, 18f), SqdMarks.FromKey("combat"));
-                committedLabels[i] = PlainLabel(parent,
-                    new Rect(chipX - 2f, chipY - 16f, chipWidth + 4f, 16f), "", "row-sub");
-                committedLabels[i].alignment = TextAlignmentOptions.Center;
-                committedIcons[i].gameObject.SetActive(false);
-                committedLabels[i].gameObject.SetActive(false);
-            }
+            (_, pilotStateFill, pilotStateBadge) = StatusBadge(
+                parent, new Rect(x + width - 88f, y - cardHeight + 8f, 84f, 18f), "ACTIVE", "ok");
+            return y - cardHeight;
         }
-
-        /// <summary>
-        /// The hand-laid sheet is 950px tall with two rows of committed-skill chips. Every
-        /// six perks beyond that adds a chip row, so the scroll content has to grow with it
-        /// or the last skills sit below the fold.
-        /// </summary>
-        private static float PilotContentHeight() =>
-            950f + Mathf.Max(0, (PerkCatalog.All.Length + 5) / 6 - 2) * 44f;
 
         private static TMP_Text StatTile(
             RectTransform parent, float x, float y, float width, string caption, string value)
         {
-            AvKit.Panel(parent, new Rect(x, y, width, 44f), AvTheme.SurfaceInert);
+            AvKit.Panel(parent, new Rect(x, y, width, PilotTileHeight), AvTheme.SurfaceInert);
             AvKit.Rule(parent, new Rect(x, y, width, 2f), AvTheme.RailInfo.WithAlpha(0.6f));
             PlainLabel(parent, new Rect(x + 6f, y - 3f, width - 12f, 12f), caption, "section-title-note");
-            TMP_Text label = PlainLabel(parent, new Rect(x + 6f, y - 18f, width - 12f, 22f), value, "row-main");
+            TMP_Text label = PlainLabel(parent, new Rect(x + 6f, y - 19f, width - 12f, 24f), value, "row-main");
+            label.enableAutoSizing = true;
+            label.fontSizeMin = AvTokens.FontMicro;
+            label.fontSizeMax = label.fontSize;
+            label.overflowMode = TextOverflowModes.Overflow;
             return label;
         }
 
@@ -276,9 +331,9 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 pilotPhotoCaption.text = string.IsNullOrEmpty(callsign)
                     ? "NO PHOTO" : callsign.ToUpperInvariant();
             }
-            if (pilotStamp != null)
+            if (pilotStateBadge != null)
             {
-                PaintStamp(pilotStampFill, pilotStamp,
+                PaintStatusBadge(pilotStateFill, pilotStateBadge,
                     bypass ? "warn" : kia ? "bad" : "ok",
                     bypass ? "DEBUG" : kia ? "KIA" : "ACTIVE");
             }
@@ -363,8 +418,9 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 for (int i = 0; i < budgetPips.Length; i++)
                 {
                     budgetPipSlots[i].SetActive(i < ceiling);
-                    budgetPips[i].color = bypass || i < spent ? AvTheme.Accent
-                                        : i < earned ? AvTheme.RailReady
+                    budgetPips[i].color = bypass ? AvTheme.Accent
+                                        : i < spent ? AvTheme.Dim
+                                        : i < earned ? AvTheme.Accent
                                         : Color.clear;
                 }
             }

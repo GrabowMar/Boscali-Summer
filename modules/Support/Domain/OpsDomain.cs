@@ -1,16 +1,15 @@
 namespace BoscaliSummer.Features.Support.Domain
 {
     /// <summary>
-    /// The five OPS warfare domains, in tab order. Panel-local identity: nothing here
+    /// The four OPS warfare domains, in tab order. Panel-local identity: nothing here
     /// crosses the wire, so the order may change without a protocol bump.
     /// </summary>
     internal enum OpsDomain : byte
     {
         Space = 0,
-        ElectronicWarfare = 1,
-        Information = 2,
-        SpecialOperations = 3,
-        Intelligence = 4
+        Cyber = 1,
+        SpecialOperations = 2,
+        Intelligence = 3
     }
 
     /// <summary>Tab labels, headings and one-line mission statements for each domain.</summary>
@@ -19,20 +18,18 @@ namespace BoscaliSummer.Features.Support.Domain
         public static readonly OpsDomain[] All =
         {
             OpsDomain.Space,
-            OpsDomain.ElectronicWarfare,
-            OpsDomain.Information,
+            OpsDomain.Cyber,
             OpsDomain.SpecialOperations,
             OpsDomain.Intelligence
         };
 
-        /// <summary>Short tab label. Eight characters at most so five tabs fit a 480px bezel.</summary>
+        /// <summary>Short tab label. Eight characters at most so every tab fits the 480px bezel.</summary>
         public static string Tab(OpsDomain domain)
         {
             switch (domain)
             {
                 case OpsDomain.Space: return "SPACE";
-                case OpsDomain.ElectronicWarfare: return "EW";
-                case OpsDomain.Information: return "INFO";
+                case OpsDomain.Cyber: return "CYBER";
                 case OpsDomain.SpecialOperations: return "SPEC OPS";
                 default: return "INTEL";
             }
@@ -43,8 +40,7 @@ namespace BoscaliSummer.Features.Support.Domain
             switch (domain)
             {
                 case OpsDomain.Space: return "SPACE WARFARE";
-                case OpsDomain.ElectronicWarfare: return "ELECTRONIC WARFARE";
-                case OpsDomain.Information: return "INFORMATION WARFARE";
+                case OpsDomain.Cyber: return "SPECTRUM & CYBER WARFARE";
                 case OpsDomain.SpecialOperations: return "SPECIAL OPERATIONS";
                 default: return "ESPIONAGE";
             }
@@ -56,10 +52,8 @@ namespace BoscaliSummer.Features.Support.Domain
             {
                 case OpsDomain.Space:
                     return "Responsive launch and constellation command.";
-                case OpsDomain.ElectronicWarfare:
-                    return "Mobile EW station: attack, protect, listen.";
-                case OpsDomain.Information:
-                    return "Cyber operations against hostile C2 and tracks.";
+                case OpsDomain.Cyber:
+                    return "Build the spectrum-defence net, hold it, trace the attackers, strike back.";
                 case OpsDomain.SpecialOperations:
                     return "Base of operations, doctrine and task groups for ground action.";
                 default:
