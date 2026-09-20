@@ -1,6 +1,6 @@
 # Stylized moving-front weather overhaul
 
-Status: written specification awaiting user review. This document describes proposed work, not implemented or performance-validated behaviour.
+Status: approved by the user on 2026-09-20 ("proceed with plan, implement weather system"). Implementation plan also approved for subagent-driven execution. This document describes intended work, not implemented or performance-validated behaviour.
 
 ## Intent and scope
 
@@ -108,4 +108,4 @@ The first implementation milestone is the cloud silhouette and contact transitio
 
 ## Workflow checkpoint
 
-The prior discussion approved the visual direction. The requested Superpowers architectural workflow requires review of this written spec next, followed by a written implementation plan and execution-method selection. No product implementation is authorized by this document's existence. Game Studios' technical-art guidance sets explicit visual/performance checks; Ponytail keeps simulation, UI and dependencies outside this first version unless required above.
+The user approved the visual direction, this written spec, and the implementation plan, selecting subagent-driven execution. Game Studios' technical-art guidance sets explicit visual/performance checks; Ponytail keeps simulation, UI and dependencies outside this first version unless required above.

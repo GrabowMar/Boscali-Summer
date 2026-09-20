@@ -38,7 +38,7 @@ blocked red, inert grey). A disabled button still publishes hover help that says
   `design/ux/cyber-defense.md`. OPERATIONS carries the five operations and the flare barrage
   with gate order doctrine → C2 breach → jammer → mode; its button says ARM because targeting
   is a separate map step. ARCHITECT's four-slot roster pages reach all sixteen slots;
-  selecting a site also selects its roster page. ARCHITECT › DOCTRINE carries SIGINT,
+  selecting a site also selects its roster page. ARCHITECT ▸ DOCTRINE carries SIGINT,
   CRYPTO, C2D, EWD with level, prerequisite and next-level note.
 - **SPEC OPS / INTEL** — reserve readout (tokens / 8, next-token clock, yield per minute,
   progress bar; SPEC OPS explains the allocation-to-token-to-doctrine flow, INTEL says "No theater

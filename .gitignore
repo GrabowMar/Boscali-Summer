@@ -43,6 +43,12 @@ AGENTS.md
 CLAUDE.md
 GEMINI.md
 .github/copilot-instructions.md
+.nomodkit/
+
+# Local design/spec/archive material (kept on disk, out of the repo)
+/design/
+/docs/superpowers/
+/archive/
 
 # CI workflows are maintained outside the repo
 .github/workflows/
