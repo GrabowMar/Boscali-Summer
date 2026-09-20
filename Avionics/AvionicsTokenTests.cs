@@ -62,6 +62,29 @@ namespace NOAvionics.Tests
             TestRosterRows(assert);
             TestGroundDrift(assert);
             TestHudToast(assert);
+            TestActionHierarchy(assert);
+            TestSecondaryTextOnSurfaces(assert);
+        }
+
+        private static void TestActionHierarchy(Action<bool, string> assert)
+        {
+            AvButtonPaint action = AvTokens.Paint(AvButtonStyle.Default, Inputs, true, false, false, false);
+            AvButtonPaint selected = AvTokens.Paint(AvButtonStyle.Toggle, Inputs, true, true, false, false);
+            assert(Math.Abs(action.Frame.G - Frame.G) < 0.001f,
+                "ordinary actions use a neutral frame; accent is reserved for selection and primary actions");
+            assert(Math.Abs(action.Text.G - AvTokens.TextPrimary.G) < 0.001f,
+                "ordinary actions have readable neutral labels");
+            assert(Math.Abs(selected.Frame.G - Accent.G) < 0.001f,
+                "selected controls retain the live theme accent");
+        }
+
+        private static void TestSecondaryTextOnSurfaces(Action<bool, string> assert)
+        {
+            foreach (Rgba surface in new[] { AvTokens.Ground, AvTokens.Surface, AvTokens.SurfaceRaised })
+            {
+                float ratio = Rgba.Contrast(AvTokens.TextMuted, surface.Over(GroundOverBrightMap));
+                assert(ratio >= 4.5f, $"secondary text is {ratio:F2}:1 on a shared surface; must be at least 4.5:1");
+            }
         }
 
         private static void TestBodyText(Action<bool, string> assert)
@@ -90,7 +113,8 @@ namespace NOAvionics.Tests
             float disabled = Rgba.Contrast(flattened, ground);
             float live = Rgba.Contrast(Dim, ground);
 
-            assert(disabled >= 2.5f, $"disabled text at {disabled:F2}:1 is too faint to read");
+            assert(disabled >= 4.5f,
+                $"disabled text at {disabled:F2}:1 misses the 4.5:1 readability floor");
             assert(disabled < live * 0.7f,
                 $"disabled text at {disabled:F2}:1 is not clearly weaker than live text at {live:F2}:1");
         }
@@ -185,9 +209,9 @@ namespace NOAvionics.Tests
         {
             Rgba ground = GroundOverDarkMap;
 
-            Rgba rest = Rgba.Shade(AvTokens.RowRestShade).Over(ground);
-            Rgba hover = AvTokens.Wash(Accent, AvTokens.RowHoverScale, AvTokens.RowHoverAlpha).Over(ground);
-            Rgba selected = AvTokens.Wash(Accent, AvTokens.RowSelectedScale, AvTokens.RowSelectedAlpha).Over(ground);
+            Rgba rest = AvTokens.RowFill(Accent, false).Over(ground);
+            Rgba hover = AvTokens.RowFill(Accent, false, true).Over(ground);
+            Rgba selected = AvTokens.RowFill(Accent, true).Over(ground);
 
             float hoverVsRest = Rgba.Contrast(hover, rest);
             float selectedVsHover = Rgba.Contrast(selected, hover);
@@ -195,6 +219,8 @@ namespace NOAvionics.Tests
             assert(hoverVsRest >= 1.30f, $"row hover lift is only {hoverVsRest:F2}:1");
             assert(selectedVsHover >= 1.30f, $"selected and hovered rows are only {selectedVsHover:F2}:1 apart");
             assert(selected.RelativeLuminance > hover.RelativeLuminance, "selected row must be brighter than hovered");
+            assert(AvTokens.RowFill(Accent, true, true).RelativeLuminance > selected.RelativeLuminance,
+                "a selected row must still respond to pointer hover");
         }
 
         private static void TestGroundDrift(Action<bool, string> assert)

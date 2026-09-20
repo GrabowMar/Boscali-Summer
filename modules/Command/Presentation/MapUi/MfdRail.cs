@@ -48,7 +48,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private const float ButtonHeight = 58f;
 
         /// <summary>Vertical gap between buttons.</summary>
-        private const float ButtonGap = 12f;
+        private const float ButtonGap = 8f;
 
         private const float CompactGap = 4f;
 
@@ -243,6 +243,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             /// <summary>Fill a branded button returns to when it is not the open screen.</summary>
             internal Color RestFill;
+            internal Image SelectionRail;
             private bool latched;
 
             /// <summary>
@@ -261,6 +262,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                         : RestFill;
                 }
                 if (Icon != null) Icon.color = on ? AvTheme.Accent : AvTheme.TextPrimary;
+                if (SelectionRail != null) SelectionRail.color = on ? AvTheme.Accent : Color.clear;
             }
 
             public void Restore()
@@ -364,7 +366,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 // enough to make the label pop.
                 bg.sprite = AvSprites.Control;
                 bg.type = Image.Type.Sliced;
-                bg.color = AvTheme.Unity(Rgba.Shade(0.55f));
+                bg.color = AvTheme.Surface;
                 skin.RestFill = bg.color;
             }
 
@@ -402,8 +404,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 label.fontSizeMax = effectiveLabelSize;
                 label.color = AvTheme.TextPrimary;
                 label.fontSize = effectiveLabelSize;
-                label.fontStyle = FontStyles.Bold;
-                label.characterSpacing = 1f;
+                label.fontStyle = FontStyles.Normal;
+                label.characterSpacing = 0f;
                 label.alignment = TextAlignmentOptions.Center;
                 label.enableWordWrapping = false;
                 label.overflowMode = TextOverflowModes.Overflow;
@@ -478,8 +480,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             rt.SetAsLastSibling();
 
             var area = new Rect(0f, 0f, slot.width, slot.height);
-            AvKit.Outline(rt, area, AvTheme.Frame);
-            AvKit.CornerTicks(rt, area, AvTheme.Hairline, 5f);
+            AvKit.Outline(rt, area, AvTheme.Hairline);
+            skin.SelectionRail = AvKit.Rule(rt, new Rect(0f, -4f, 3f, slot.height - 8f), Color.clear);
 
             var brand = button.gameObject.AddComponent<MfdRailBrand>();
             brand.Label = skin.Label;

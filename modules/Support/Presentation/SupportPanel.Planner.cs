@@ -18,9 +18,9 @@ namespace BoscaliSummer.Features.Support.Presentation
     internal sealed partial class SupportPanel
     {
         private const float PlannerCellHeight = 50f;
-        private const float InspectorHeight = 72f;
-        private const float LaunchCardHeight = 112f;
-        private const float CatalogueTileHeight = 44f;
+        private const float InspectorHeight = 120f;
+        private const float LaunchCardHeight = 168f;
+        private const float CatalogueTileHeight = 84f;
         private const int RuleLines = 4;
 
         private static readonly string[] Rules =
@@ -28,7 +28,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             "DOCK NEXT TO THE STATION · ONE LAUNCH AT A TIME · 40 T STRUCTURE",
             "RAD COOLS NEIGHBOURS · EMP AND RTG RUN DEGRADED WITHOUT ONE",
             "REL BOOSTS NEIGHBOURING IMG / SIG · SHD SHIELDS ITSELF AND NEIGHBOURS",
-            "A CORE LAUNCHES TO MID OR HIGH · LOW NEEDS PRP AND BURNS DRAG FUEL"
+            "A CORE LAUNCHES DIRECTLY TO STABLE LOW EARTH ORBIT (500 KM LEO)"
         };
 
         private sealed class CatalogueTile
@@ -52,7 +52,7 @@ namespace BoscaliSummer.Features.Support.Presentation
         private OpsRow cargoRow;
         private int plannerCell = -1;
         private ModuleKind plannerModule = ModuleKind.None;
-        private byte coreBand = OrbitRegimes.Mid;
+        private byte coreBand = OrbitRegimes.Standard;
         private int jettisonArmedCell = -1;
         private float jettisonArmedUntil;
         private readonly StringBuilder effects = new StringBuilder(96);
@@ -70,7 +70,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             cargoRow = null;
             plannerCell = -1;
             plannerModule = ModuleKind.None;
-            coreBand = OrbitRegimes.Mid;
+            coreBand = OrbitRegimes.Standard;
             jettisonArmedCell = -1;
         }
 
@@ -83,7 +83,7 @@ namespace BoscaliSummer.Features.Support.Presentation
                            LaunchCardHeight + SectionGap +
                            HeaderHeight + tileRows * (CatalogueTileHeight + 4f) + SectionGap +
                            HeaderHeight + CompactRowHeight + SectionGap +
-                           HeaderHeight + RuleLines * 14f + SectionGap;
+                           HeaderHeight + RuleLines * 30f + SectionGap;
             RectTransform parent = BeginSub(root, body, height, out float x, out float y, out float width);
 
             plannerNote = Header(parent, x, ref y, width, "STATION LAYOUT", "");
@@ -96,7 +96,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             BuildLaunchCard(parent, x, y, width);
             y -= LaunchCardHeight + SectionGap;
 
-            Header(parent, x, ref y, width, "MODULE CATALOGUE", "13 DESIGNS · A STATION CARRIES ABOUT 8");
+            Header(parent, x, ref y, width, "MODULE CATALOGUE", "SELECT A MODULE · REVIEW PROJECTED MASS AND POWER");
             float tileWidth = (width - 6f) * 0.5f;
             int index = 0;
             for (int i = 0; i < PlatformModules.Designs.Length; i++)
@@ -116,7 +116,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             Header(parent, x, ref y, width, "DESIGN RULES", "GRID UTILITIES · MASS");
             for (int i = 0; i < Rules.Length; i++)
             {
-                TMP_Text rule = SingleLine(AvStyled.Label(parent, new Rect(x, y - i * 14f, width, 13f), Rules[i], "row-sub"));
+                TMP_Text rule = Wrapped(AvStyled.Label(parent, new Rect(x, y - i * 30f, width, 28f), Rules[i], "row-sub"));
                 rule.color = AvTheme.Dim;
             }
         }
@@ -125,11 +125,10 @@ namespace BoscaliSummer.Features.Support.Presentation
         {
             AvKit.TacticalCard(parent, new Rect(x, y, width, InspectorHeight), AvTheme.RailInfo);
             inspectorTitle = SingleLine(AvStyled.Label(parent, new Rect(x + 12f, y - 8f, width - 124f, 16f), "", "row-name"));
-            inspectorSummary = AvStyled.Label(parent, new Rect(x + 12f, y - 27f, width - 124f, 26f), "", "row-sub");
-            inspectorSummary.maxVisibleLines = 2;
-            inspectorEffects = SingleLine(AvKit.Label(parent, "", new Rect(x + 12f, y - 54f, width - 24f, 13f),
-                AvTheme.RailInfo, AvTokens.FontMicro, FontStyles.Bold));
-            jettisonButton = AvStyled.Button(parent, new Rect(x + width - 104f, y - 10f, 92f, 24f), "JETTISON", "btn",
+            inspectorSummary = Wrapped(AvStyled.Label(parent, new Rect(x + 12f, y - 38f, width - 24f, 32f), "", "row-sub"));
+            inspectorEffects = Wrapped(AvKit.Label(parent, "", new Rect(x + 12f, y - 80f, width - 24f, 32f),
+                AvTheme.RailInfo, AvTokens.FontSmall, FontStyles.Normal));
+            jettisonButton = AvStyled.Button(parent, new Rect(x + width - 104f, y - 6f, 92f, 28f), "JETTISON", "btn",
                 OnJettison, AvButtonStyle.Danger);
         }
 
@@ -148,12 +147,13 @@ namespace BoscaliSummer.Features.Support.Presentation
                     OrbitRegimes.All[i].Code, "btn", () => { coreBand = band; nextRefresh = 0f; }, AvButtonStyle.Quiet)
                     .WithTooltip(OrbitRegimes.All[i].Name + " — " + OrbitRegimes.All[i].Summary);
             }
-            launchProjection = SingleLine(AvKit.Label(parent, "", new Rect(x + 12f, y - 50f, width - 24f, 13f),
-                AvTheme.RailInfo, AvTokens.FontMicro, FontStyles.Bold));
-            launchStatus = SingleLine(AvStyled.Label(parent, new Rect(x + 12f, y - 70f, width - 130f, 14f), "", "row-sub"));
-            launchButton = AvStyled.Button(parent, new Rect(x + width - 112f, y - 66f, 100f, 26f), "LAUNCH", "btn",
+            launchProjection = Wrapped(AvKit.Label(parent, "", new Rect(x + 12f, y - 56f, width - 24f, 32f),
+                AvTheme.RailInfo, AvTokens.FontSmall, FontStyles.Normal));
+            launchStatus = Wrapped(AvStyled.Label(parent, new Rect(x + 12f, y - 100f, width - 136f, 44f), "", "row-sub"));
+            launchStatus.maxVisibleLines = 3;
+            launchButton = AvStyled.Button(parent, new Rect(x + width - 112f, y - 112f, 100f, 30f), "LAUNCH", "btn",
                 OnLaunch, AvButtonStyle.Primary);
-            launchProgress = AvKit.ProgressBar(parent, new Rect(x + 12f, y - 98f, width - 24f, 5f), 0f, AvTheme.RailInfo);
+            launchProgress = AvKit.ProgressBar(parent, new Rect(x + 12f, y - 156f, width - 24f, 4f), 0f, AvTheme.RailInfo);
         }
 
         private CatalogueTile BuildCatalogueTile(RectTransform parent, Rect area, in ModuleInfo info)
@@ -161,14 +161,13 @@ namespace BoscaliSummer.Features.Support.Presentation
             var tile = new CatalogueTile { Kind = info.Kind, Fill = AvKit.Panel(parent, area, AvTheme.Surface, AvSprites.Card) };
             AvKit.Outline(parent, area, AvTheme.Hairline);
             Color colour = CategoryColour(info.Category);
-            AvKit.Rule(parent, new Rect(area.x, area.y, 3f, area.height), colour);
-            AvKit.Label(parent, info.Code, new Rect(area.x + 9f, area.y - 5f, 36f, 16f), colour, AvTokens.FontLead, FontStyles.Bold);
-            SingleLine(AvStyled.Label(parent, new Rect(area.x + 46f, area.y - 5f, area.width - 118f, 16f), info.Name, "row-sub"))
+            AvKit.Label(parent, info.Code, new Rect(area.x + 9f, area.y - 8f, 36f, 18f), colour, AvTokens.FontSmall, FontStyles.Bold);
+            SingleLine(AvStyled.Label(parent, new Rect(area.x + 50f, area.y - 8f, area.width - 58f, 18f), info.Name, "row-sub"))
                 .color = AvTheme.TextPrimary;
-            tile.State = AvKit.Label(parent, "", new Rect(area.x + area.width - 76f, area.y - 5f, 70f, 14f), AvTheme.Dim,
-                AvTokens.FontMicro, FontStyles.Bold, TextAlignmentOptions.Right);
-            SingleLine(AvKit.Label(parent, Spec(info), new Rect(area.x + 9f, area.y - 25f, area.width - 16f, 13f), AvTheme.Dim,
-                AvTokens.FontMicro));
+            tile.State = AvKit.Label(parent, "", new Rect(area.x + 9f, area.y - 32f, area.width - 18f, 14f), AvTheme.Dim,
+                AvTokens.FontSmall, FontStyles.Bold);
+            Wrapped(AvKit.Label(parent, Spec(info), new Rect(area.x + 9f, area.y - 52f, area.width - 18f, 28f), AvTheme.Dim,
+                AvTokens.FontSmall));
             ModuleKind kind = info.Kind;
             AvKit.HitButton(parent, area, () =>
             {
@@ -300,6 +299,7 @@ namespace BoscaliSummer.Features.Support.Presentation
                 jettisonButton.SetEnabled(!support.CommandPending && !strands);
                 jettisonButton.SetText(confirming ? "CONFIRM" : core ? "DEORBIT" : "JETTISON");
                 jettisonButton.SetLatched(confirming);
+                jettisonButton.ClearCustomColors();
                 float refund = (core ? EstimatedStationValue(platform) : support.LaunchCost(kind)) * support.JettisonRefund;
                 jettisonButton.WithTooltip(strands
                     ? "Other modules dock through this one; jettison them first."
@@ -384,10 +384,10 @@ namespace BoscaliSummer.Features.Support.Presentation
             {
                 bandButtons[i].gameObject.SetActive(!station);
                 bandButtons[i].SetLatched(i == coreBand);
-                bandButtons[i].SetEnabled(i != OrbitRegimes.Low);
+                bandButtons[i].SetEnabled(true);
             }
             launchLine.gameObject.SetActive(station);
-            if (!station && coreBand == OrbitRegimes.Low) coreBand = OrbitRegimes.Mid;
+            if (!station && !OrbitRegimes.Valid(coreBand)) coreBand = OrbitRegimes.Standard;
 
             bool counting = countdownEnd > 0f && countdownKind != LaunchKind.Cargo;
             Tone tone;
@@ -511,6 +511,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             launchButton.SetEnabled(enabled);
             launchButton.SetLatched(counting);
             launchButton.SetText(counting ? "HOLD" : station ? "LAUNCH" : "LAUNCH CORE");
+            launchButton.ClearCustomColors();
             launchButton.WithTooltip(counting
                 ? "Hold the count. Nothing has been sent or charged yet."
                 : "Start a " + Mathf.RoundToInt(CountdownSeconds) + " s GO/NO-GO count; the host charges at liftoff. " + status + ".");
@@ -547,7 +548,7 @@ namespace BoscaliSummer.Features.Support.Presentation
                 }
 
                 bool selected = tile.Kind == plannerModule;
-                tile.Fill.color = selected ? AvTheme.Accent.WithAlpha(0.2f) : AvTheme.Surface;
+                tile.Fill.color = selected ? AvTheme.Accent.WithAlpha(0.08f) : AvTheme.Surface;
                 if (tile.LastState == state && tile.LastTone == tone) continue;
                 tile.LastState = state;
                 tile.LastTone = tone;
@@ -588,6 +589,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             cargoRow.Primary.SetEnabled(enabled);
             cargoRow.Primary.SetLatched(counting);
             cargoRow.Primary.SetText(counting ? "HOLD" : "LAUNCH");
+            cargoRow.Primary.ClearCustomColors();
             if (Paint(cargoRow, tone, status))
                 cargoRow.Primary.WithTooltip("Uncrewed freighter: refills every fuel tank and rod magazine when it docks. " + status + ".");
         }

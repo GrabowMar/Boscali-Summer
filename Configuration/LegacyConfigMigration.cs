@@ -60,6 +60,28 @@ namespace BoscaliSummer
             BindAndRemove(config, "Support", "VehicleAirdrops", true);
             BindAndRemove(config, "Support", "VehicleAirdropCost", 12f);
             BindAndRemove(config, "Support", "ArtilleryDefinitionKey", string.Empty);
+
+            // The original dynamic weather module was removed wholesale. Purge both its
+            // final settings and the presentation keys retired during its earlier rework so
+            // a future lightweight implementation starts with no inherited configuration.
+            // Remove or revise this block before a replacement reuses any [Weather] key.
+            BindAndRemove(config, "Weather", "Enabled", true);
+            BindAndRemove(config, "Weather", "ForecastSteps", 8);
+            BindAndRemove(config, "Weather", "ForecastStepMinutes", 3f);
+            BindAndRemove(config, "Weather", "DebugControls", false);
+            BindAndRemove(config, "Weather", "DebugKey", UnityEngine.KeyCode.F11);
+            BindAndRemove(config, "Weather", "DebugKeyRequiresCtrl", true);
+            BindAndRemove(config, "Weather", "RainEffects", true);
+            BindAndRemove(config, "Weather", "RainOnCanopy", true);
+            BindAndRemove(config, "Weather", "RainAudio", true);
+            BindAndRemove(config, "Weather", "RainEffectDensity", 1f);
+            BindAndRemove(config, "Weather", "RainVolume", 1f);
+            BindAndRemove(config, "Weather", "Hud", true);
+            BindAndRemove(config, "Weather", "Supercells", true);
+            BindAndRemove(config, "Weather", "SupercellDetail", 0.6f);
+            BindAndRemove(config, "Weather", "RadarRangeKm", 40);
+            BindAndRemove(config, "Weather", "ReplaceVanillaClouds", false);
+            BindAndRemove(config, "Weather", "CloudSortFudge", -100f);
         }
 
         private static void BindAndRemove<T>(ConfigFile config, string section, string key, T defaultValue)

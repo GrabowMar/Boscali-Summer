@@ -168,7 +168,7 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
         private float pendingPaid;
         private byte noticeSerial;
 
-        public byte Regime { get; private set; } = OrbitRegimes.Mid;
+        public byte Regime { get; private set; } = OrbitRegimes.Standard;
         public int Seed { get; private set; }
 
         /// <summary>Scene time at which pass zero's slot begins; earlier times are a hold.</summary>
@@ -353,8 +353,7 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
             {
                 if (Exists) return PlacementFailure.PlatformExists;
                 if (!OrbitRegimes.Valid(regime)) return PlacementFailure.UnknownOrbit;
-                // A bare core has no tanks, and LOW orbit drag needs propellant.
-                return regime == OrbitRegimes.Low ? PlacementFailure.NeedsPropulsion : PlacementFailure.None;
+                return PlacementFailure.None;
             }
             if (!PlatformModules.Placeable((int)kind)) return PlacementFailure.UnknownModule;
             if (!Exists) return PlacementFailure.NoPlatform;
@@ -539,7 +538,7 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
 
         private void EnterSafeMode(double now)
         {
-            Regime = OrbitRegimes.Mid;
+            Regime = OrbitRegimes.Standard;
             Seed = (int)Deterministic.Hash(Seed, 0x5afe, 3, 0);
             CycleStart = now + TransferSeconds;
             Hold = PlatformHold.SafeMode;
@@ -609,9 +608,9 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
 
         public PlatformDenial CheckShift(byte target, double now, in OrbitClock clock)
         {
+            if (!OrbitRegimes.Valid(target) || target == Regime) return PlatformDenial.SameOrbit;
             PlatformDenial denial = Check(PlatformAbility.OrbitShift, now, clock);
             if (denial != PlatformDenial.None) return denial;
-            if (!OrbitRegimes.Valid(target) || target == Regime) return PlatformDenial.SameOrbit;
             return Fuel + 0.001f < ShiftFuel(target) ? PlatformDenial.NoFuel : PlatformDenial.None;
         }
 
@@ -777,7 +776,7 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
             Array.Clear(offlineUntil, 0, offlineUntil.Length);
             Array.Clear(paid, 0, paid.Length);
             Array.Clear(readyAt, 0, readyAt.Length);
-            Regime = OrbitRegimes.Mid;
+            Regime = OrbitRegimes.Standard;
             Seed = 0;
             CycleStart = 0.0;
             Hold = PlatformHold.None;
@@ -793,6 +792,8 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
             NoticeCell = 0;
             NextDebris = 0.0;
         }
+
+        public void Reset() => Clear();
     }
 
     /// <summary>Another faction's station: orbit and silhouette only, modules undisclosed.</summary>

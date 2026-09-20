@@ -11,10 +11,10 @@ namespace BoscaliSummer.Features.QoL.Presentation
     /// <summary>One passive view of the native camera texture. Never owns or renders the feed.</summary>
     internal sealed class ThirdPersonCameraPanel
     {
-        private const float PanelWidth = 408f;
+        private const float PanelWidth = 440f;
         private const float PanelPad = AvTokens.Space3;
-        private const float HeaderHeight = AvTokens.TitleBarHeight;
-        private const float FooterHeight = 64f;
+        private const float HeaderHeight = 44f;
+        private const float FooterHeight = 78f;
         private const float SafeMargin = AvTokens.Space6;
 
         public static bool Available => NativeCamera.Available;
@@ -23,6 +23,7 @@ namespace BoscaliSummer.Features.QoL.Presentation
         private Canvas canvas;
         private RectTransform panel;
         private Image feedGround;
+        private Image footerGround;
         private Image[] feedFrame;
         private Image signalRail;
         private RawImage image;
@@ -73,27 +74,38 @@ namespace BoscaliSummer.Features.QoL.Presentation
             RenderTexture texture = source.isActiveAndEnabled && targetMode && camera != null && camera.isActiveAndEnabled
                 ? sourceTexture : null;
             bool live = texture != null && texture.IsCreated();
-            image.texture = live ? texture : null;
-            image.enabled = live;
-            string caption = live ? "LIVE" : "NO SIGNAL";
-            dataBar.SetChip(0, caption, live ? "live" : "warn");
-            signalRail.color = live ? AvTheme.RailReady : AvTheme.RailCaution;
-            Color frameColor = live ? AvTheme.Hairline : AvTheme.RailCaution.WithAlpha(0.55f);
-            for (int i = 0; i < feedFrame.Length; i++) feedFrame[i].color = frameColor;
-            string selected = selectedCount + (selectedCount == 1 ? " TARGET SELECTED" : " TARGETS SELECTED");
+            PresentFeed(live ? texture : null, targetMode);
+            string selected = "TRACKING  ·  " + selectedCount +
+                (selectedCount == 1 ? " VALID TARGET" : " VALID TARGETS");
             if (selection.text != selected) selection.text = selected;
             if (Time.unscaledTime >= nextReadout)
             {
                 nextReadout = Time.unscaledTime + 0.25f;
-                contactAge.text = NativeCamera.ContactFreshness(aircraft);
+                contactAge.text = "CONTACT  ·  " + NativeCamera.ContactFreshness(aircraft);
                 ObservationManager observations = ObservationManager.Instance;
                 if (observations != null && observations.TryGet(out ObservationPoint point))
-                    markStatus.text = $"MARK X {point.X:0} / Z {point.Z:0} · {Time.unscaledTime - point.RecordedAt:0}s OLD";
+                    markStatus.text = $"MARK  ·  X {point.X:0} / Z {point.Z:0}  ·  {Time.unscaledTime - point.RecordedAt:0}s OLD";
                 else
-                    markStatus.text = observations != null ? observations.ShortcutHint + " · " + observations.Status : "";
+                    markStatus.text = observations != null
+                        ? "MARK  ·  " + observations.ShortcutHint + "  ·  " + observations.Status
+                        : "MARK  ·  OBSERVATION SERVICE UNAVAILABLE";
             }
+        }
+
+        /// <summary>Paint the real live/no-feed state; kept separate so offline UI checks use it too.</summary>
+        private void PresentFeed(Texture texture, bool targetMode)
+        {
+            bool live = texture != null;
+            image.texture = texture;
+            image.enabled = live;
+            dataBar.SetChip(0, live ? "LIVE FEED" : "SIGNAL LOST", live ? "live" : "warn");
+            signalRail.color = live ? AvTheme.RailReady : AvTheme.RailCaution;
+            Color frameColor = live ? AvTheme.Hairline : AvTheme.RailCaution.WithAlpha(0.55f);
+            for (int i = 0; i < feedFrame.Length; i++) feedFrame[i].color = frameColor;
             unavailable.enabled = !live;
-            unavailable.text = targetMode ? "TARGET CAMERA UNAVAILABLE" : "LANDING CAMERA ACTIVE";
+            unavailable.text = targetMode
+                ? "NO TARGET CAMERA SIGNAL\nCYCLE TO A VALID TRACKED TARGET"
+                : "LANDING CAMERA ACTIVE\nRETURN TO TARGET VIEW FOR TRACKING";
         }
 
         private void Create(Transform owner)
@@ -124,20 +136,23 @@ namespace BoscaliSummer.Features.QoL.Presentation
             float contentWidth = PanelWidth - PanelPad * 2f;
             dataBar = AvStyled.TopBar(
                 panel, new Rect(PanelPad, -PanelPad, contentWidth, HeaderHeight), "CAM", 1);
-            dataBar.State.text = "TARGET VIEW";
-            dataBar.SetChip(0, "NO SIGNAL", "warn");
+            dataBar.State.text = "TARGET CAMERA";
+            dataBar.SetChip(0, "SIGNAL LOST", "warn");
 
             feedGround = AvKit.Panel(panel, new Rect(0f, 0f, 1f, 1f), AvTheme.SurfaceInert);
 
             var imageObject = new GameObject("Camera Feed", typeof(RectTransform), typeof(RawImage));
             image = imageObject.GetComponent<RawImage>();
             image.raycastTarget = false;
+            image.enabled = false;
             RectTransform rect = image.rectTransform;
             rect.SetParent(panel, false);
             feedFrame = AvKit.Outline(panel, new Rect(0f, 0f, 1f, 1f), AvTheme.Hairline);
 
             unavailable = AvStyled.Label(
                 panel, new Rect(0f, 0f, 1f, 1f), "", "row-main warn", align: TextAlignmentOptions.Center);
+            unavailable.enableWordWrapping = true;
+            footerGround = AvKit.Panel(panel, new Rect(0f, 0f, 1f, 1f), AvTheme.SurfaceInert);
             selection = AvStyled.Label(panel, new Rect(0f, 0f, 1f, 1f), "", "row-name");
             contactAge = AvStyled.Label(panel, new Rect(0f, 0f, 1f, 1f), "", "row-sub");
             markStatus = AvStyled.Label(panel, new Rect(0f, 0f, 1f, 1f), "", "row-sub");
@@ -197,12 +212,13 @@ namespace BoscaliSummer.Features.QoL.Presentation
             AvKit.Place((RectTransform)unavailable.transform, feedRect);
 
             float footerY = feedY - feedHeight - AvTokens.Space2;
+            AvKit.Place(footerGround.rectTransform, new Rect(PanelPad, footerY, contentWidth, FooterHeight));
             AvKit.Place(signalRail.rectTransform, new Rect(PanelPad, footerY, 3f, FooterHeight));
             float copyX = PanelPad + AvTokens.Space3;
             float copyWidth = contentWidth - AvTokens.Space3;
-            AvKit.Place((RectTransform)selection.transform, new Rect(copyX, footerY, copyWidth, 22f));
-            AvKit.Place((RectTransform)contactAge.transform, new Rect(copyX, footerY - 21f, copyWidth, 19f));
-            AvKit.Place((RectTransform)markStatus.transform, new Rect(copyX, footerY - 40f, copyWidth, 24f));
+            AvKit.Place((RectTransform)selection.transform, new Rect(copyX, footerY - 7f, copyWidth, 22f));
+            AvKit.Place((RectTransform)contactAge.transform, new Rect(copyX, footerY - 31f, copyWidth, 19f));
+            AvKit.Place((RectTransform)markStatus.transform, new Rect(copyX, footerY - 52f, copyWidth, 20f));
         }
 
         private static void PlaceOutline(Image[] outline, Rect area)
@@ -237,6 +253,7 @@ namespace BoscaliSummer.Features.QoL.Presentation
             canvas = null;
             panel = null;
             feedGround = null;
+            footerGround = null;
             feedFrame = null;
             signalRail = null;
             image = null;

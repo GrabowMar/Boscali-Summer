@@ -10,7 +10,7 @@ using UnityEngine.UI;
 
 namespace BoscaliSummer.Features.Progression.Presentation
 {
-    /// <summary>Passive local threat dossier; all encounter state comes from the squad host.</summary>
+    /// <summary>Passive local threat display; all encounter state comes from the squad host.</summary>
     internal sealed class AceHuntHud : MonoBehaviour, ISceneService
     {
         private static readonly Color Caution = new Color32(246, 194, 66, 255);
@@ -62,13 +62,13 @@ namespace BoscaliSummer.Features.Progression.Presentation
             string name = separator < 0 ? ace : ace.Substring(0, separator);
             string handle = separator < 0 ? "UNIDENTIFIED ACE" : ace.Substring(separator + 3);
             callsign.text = handle.ToUpperInvariant();
-            compactStatus.text = "ACE HUNT // " + handle.ToUpperInvariant() + "  ·  " +
-                wing.MembersAlive + "/" + wing.MemberCount + " WING";
-            identity.text = name + "  //  " + wing.Symbol + " " + wing.WingName;
+            compactStatus.text = "ACE THREAT  ·  " + handle.ToUpperInvariant() + "  ·  " +
+                wing.MembersAlive + "/" + wing.MemberCount + " ACTIVE";
+            identity.text = name + "  ·  " + wing.Symbol + " " + wing.WingName;
             proficiency.text = (wing.Skill ?? "UNKNOWN").ToUpperInvariant();
             formation.text = wing.MembersAlive + " / " + wing.MemberCount + " ACTIVE";
-            returning.text = wing.Returns > 0 ? "RETURNING ACE // ENCOUNTER " + (wing.Returns + 1) : "ENEMY ACE // TIER " + wing.Tier;
-            status.text = (wing.Status ?? "HUNTING") + "   //   TARGET: YOU";
+            returning.text = wing.Returns > 0 ? "RETURNING ACE  ·  ENCOUNTER " + (wing.Returns + 1) : "ENEMY ACE  ·  TIER " + wing.Tier;
+            status.text = "STATUS  " + (wing.Status ?? "HUNTING") + "   ·   TARGET YOU";
             for (int i = 0; i < abilitySlots.Length; i++)
                 abilitySlots[i].SetActive((wing.AbilityMask & (1 << i)) != 0);
             noAbilities.gameObject.SetActive(wing.AbilityMask == 0);
@@ -108,19 +108,18 @@ namespace BoscaliSummer.Features.Progression.Presentation
 
             RectTransform panel = AvKit.Panel((RectTransform)root.transform,
                 new Rect(0, -48, 704, 184), Ink).rectTransform;
-            panel.name = "Ace Threat Dossier";
+            panel.name = "Ace Threat Panel";
             panel.anchorMin = panel.anchorMax = new Vector2(0.5f, 1f);
             panel.pivot = new Vector2(0.5f, 1f);
             expandedPanel = panel;
             expandedGroup = panel.gameObject.AddComponent<CanvasGroup>();
             expandedGroup.blocksRaycasts = false;
-            AvKit.Outline(panel, new Rect(0, 0, 704, 184), Caution.WithAlpha(0.75f));
-            AvKit.CornerTicks(panel, new Rect(0, 0, 704, 184), Caution);
-
-            Glyph(panel, new Rect(2, -2, 700, 7), HuntMark.Stripes);
-            AvKit.Panel(panel, new Rect(2, -9, 700, 26), Caution);
-            Label(panel, new Rect(14, -10, 360, 24), "///  WARNING  :  HOSTILE ACE DETECTED", 14, Ink, true);
-            Label(panel, new Rect(420, -10, 206, 24), "AIR DEFENSE INTERCEPT", 11, Ink, true);
+            AvKit.Outline(panel, new Rect(0, 0, 704, 184), Caution.WithAlpha(0.55f));
+            AvKit.Panel(panel, new Rect(0, 0, 704, 4), Caution);
+            AvKit.Panel(panel, new Rect(2, -8, 700, 28), new Color32(20, 24, 28, 255));
+            Label(panel, new Rect(14, -10, 360, 24), "HOSTILE ACE DETECTED", 14, Caution, true);
+            Label(panel, new Rect(420, -10, 266, 24), "AIR DEFENSE ALERT", 11, Secondary, true)
+                .alignment = TextAlignmentOptions.MidlineRight;
 
             // Pilot Portrait Box
             AvKit.Panel(panel, new Rect(16, -44, 98, 114), AvTheme.SurfaceInert);
@@ -130,9 +129,8 @@ namespace BoscaliSummer.Features.Progression.Presentation
             portrait.preserveAspect = true;
             portrait.rectTransform.pivot = new Vector2(0.5f, 0.5f);
             portrait.rectTransform.anchoredPosition = new Vector2(65f, -101f);
-            AvKit.CornerTicks(panel, new Rect(16, -44, 98, 114), Caution);
             AvKit.Panel(panel, new Rect(16, -162, 98, 16), new Color32(24, 28, 32, 255));
-            TMP_Text leaderLabel = Label(panel, new Rect(16, -162, 98, 16), "ACE / LEADER", 10, Caution, true);
+            TMP_Text leaderLabel = Label(panel, new Rect(16, -162, 98, 16), "ACE LEADER", 10, Caution, true);
             leaderLabel.alignment = TextAlignmentOptions.Center;
 
             // Callsign, Rank Badge & Wing Identity
@@ -164,7 +162,6 @@ namespace BoscaliSummer.Features.Progression.Presentation
             crest.preserveAspect = true;
             crest.enabled = false;
             AvKit.Outline(panel, crestFrame, Caution.WithAlpha(0.35f));
-            AvKit.CornerTicks(panel, crestFrame, Caution.WithAlpha(0.6f));
             crestCaption = Label(panel, new Rect(634, -105, 60, 14), "", 10, Secondary);
             crestCaption.alignment = TextAlignmentOptions.Center;
 
@@ -186,8 +183,8 @@ namespace BoscaliSummer.Features.Progression.Presentation
             compactPanel.pivot = new Vector2(0.5f, 1f);
             compactGroup = compactPanel.gameObject.AddComponent<CanvasGroup>();
             compactGroup.blocksRaycasts = false;
-            AvKit.Outline(compactPanel, new Rect(0, 0, 420, 36), Caution.WithAlpha(0.75f));
-            Glyph(compactPanel, new Rect(1, -1, 418, 4), HuntMark.Stripes);
+            AvKit.Outline(compactPanel, new Rect(0, 0, 420, 36), Caution.WithAlpha(0.55f));
+            AvKit.Panel(compactPanel, new Rect(0, 0, 420, 3), Caution);
             Glyph(compactPanel, new Rect(12, -10, 16, 16), HuntMark.Target);
             compactCrest = AvKit.Panel(compactPanel, new Rect(34, -9, 18, 18), Color.white);
             compactCrest.type = Image.Type.Simple;
@@ -230,7 +227,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
 
         private static void Glyph(RectTransform parent, Rect area, HuntMark mark)
         {
-            var go = new GameObject(mark.ToString(), typeof(RectTransform), typeof(HuntGlyph));
+            var go = new GameObject(mark.ToString(), typeof(RectTransform), typeof(CanvasRenderer), typeof(HuntGlyph));
             go.transform.SetParent(parent, false);
             AvKit.Place((RectTransform)go.transform, area);
             HuntGlyph glyph = go.GetComponent<HuntGlyph>();

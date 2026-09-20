@@ -57,6 +57,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         {
             if (Selection != null) Selection.enabled = selected;
             color = selected ? AvTheme.Accent : restColor;
+            if (NativeIcon != null) NativeIcon.color = AvTheme.TextPrimary;
         }
 
         private static string Kind(string text)
@@ -302,6 +303,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             string classes, System.Action action, AvButtonStyle style = AvButtonStyle.Default)
         {
             AvButton button = AvStyled.Button(parent, area, text, classes, action, style);
+            // Compact actions read as words; a decorative symbol must not take the
+            // width required by RESET, RENAME or a filter's explicit ON/OFF state.
+            if (area.width < 140f) return button.WithTooltip(text);
             var root = (RectTransform)button.transform;
             TMP_Text label = button.GetComponentInChildren<TMP_Text>();
             AvKit.Place(label.rectTransform, new Rect(28f, 0f, area.width - 38f, area.height));
@@ -317,16 +321,22 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             glyph.raycastTarget = false;
             glyph.NativeIcon = AvKit.Panel(root, new Rect(7f, -(area.height-18f)/2f, 18f, 18f), AvTheme.TextPrimary);
             glyph.NativeIcon.preserveAspect = true;
-            glyph.Selection = AvKit.Rule(root, new Rect(area.width-6f, -6f, 2f, area.height-12f), AvTheme.Accent);
+            glyph.Selection = AvKit.Panel(root, new Rect(area.width - 13f, -(area.height - 10f) / 2f, 9f, 9f), AvTheme.RailReady, AvSprites.Led);
             glyph.Set(text);
             button.WithTooltip(text);
             return button;
         }
 
+        /// <summary>
+        /// Paint a filter chip from its live state. The state is the word in the label, the
+        /// chip's LED and the toggle paint; a solid accent plate under a latched chip made
+        /// a row of filters look like a row of armed actions and hid the label contrast.
+        /// </summary>
         private static void PaintButton(AvButton button, string text, bool selected, Sprite sprite = null)
         {
             button.SetText(text);
             button.SetLatched(selected);
+            button.ClearCustomColors();
             button.GetComponentInChildren<MfdGlyph>(true)?.Set(text, sprite, selected);
         }
     }

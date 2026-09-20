@@ -51,47 +51,10 @@ namespace BoscaliSummer.Runtime
 }
 namespace BoscaliSummer.Features.Command.Presentation
 {
-    public class ComMapOverlay
+    public partial class ComMapOverlay
     {
         public static ComMapOverlay Instance;
-        internal BoscaliSummer.Features.Command.Runtime.TacticalSectorGrid Grid => null;
         public void SyncSettings() { }
-    }
-}
-namespace BoscaliSummer.Features.Command.Configuration
-{
-    internal sealed class CommandSettings
-    {
-        public readonly Setting<bool> Enabled = new Setting<bool>(true);
-        public readonly Setting<bool> FrontlinesOverlay = new Setting<bool>(false);
-        internal sealed class Setting<T> { public T Value; public Setting(T value) { Value = value; } }
-    }
-}
-namespace BoscaliSummer.Features.Command.Runtime
-{
-    internal enum SectorControl : byte { Neutral = 0, Friendly = 1, Hostile = 2, Contested = 3 }
-
-    internal sealed class TacticalSectorGrid
-    {
-        public const int MaximumNodes = 128;
-        public struct TacticalNode
-        {
-            public bool IsContested;
-            public float CaptureProgress;
-            public SectorControl Faction;
-            public string Name;
-            public bool IsAirbase;
-        }
-        private readonly System.Collections.Generic.List<TacticalNode> nodes =
-            new System.Collections.Generic.List<TacticalNode>();
-        public System.Collections.Generic.IReadOnlyList<TacticalNode> GetNodes() => nodes;
-    }
-
-    internal sealed class CommandManager
-    {
-        public BoscaliSummer.Features.Command.Domain.TacticalTheaterState TheaterState { get; } =
-            new BoscaliSummer.Features.Command.Domain.TacticalTheaterState();
-        public void UpdateTelemetry(FactionHQ hq) { }
     }
 }
 namespace BoscaliSummer.Features.Command.Presentation.MapUi
@@ -118,7 +81,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 namespace NuclearOption.UIStyleSystem
 {
     public static class ThemeManager { public static Theme Active => throw new System.InvalidOperationException(); }
-    public class Theme { public Palette ColorTheme; }
+    public class Theme { public Palette ColorTheme; public TacticalScreenTheme TacScreenTheme; }
+    public class TacticalScreenTheme { public List<TacticalTextStyle> TextStyles; }
+    public class TacticalTextStyle { public TacticalStyle Style; }
+    public class TacticalStyle { public TMP_FontAsset Font; }
     public class Palette { public Color AllClear, MapIconFriendly, HudUnitFriendly, Warning, Alert; }
 }
 namespace Rewired

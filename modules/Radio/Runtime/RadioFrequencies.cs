@@ -161,9 +161,24 @@ namespace BoscaliSummer.Features.Radio.Runtime
             return RadioDial.At(dial.Band, khz);
         }
 
-        public static int IndexAt(IReadOnlyList<RadioDial> dials, RadioDial dial)
+        /// <summary>
+        /// The nearest position on the band's channel grid, clamped to the band.
+        ///
+        /// A click on the band scope can land anywhere on the ruler; the grid is where the
+        /// stations are, so a click tunes to the closest channel instead of between two.
+        /// </summary>
+        public static RadioDial Nearest(RadioBand band, int kilohertz)
         {
-            if (dials == null) return -1;
+            int step = Math.Max(1, RadioBands.Step(band));
+            int min = RadioBands.Min(band);
+            int max = RadioBands.Max(band);
+            int snapped = min +
+                (int)Math.Round((kilohertz - min) / (double)step, MidpointRounding.AwayFromZero) * step;
+            return RadioDial.At(band, Math.Min(max, Math.Max(min, snapped)));
+        }
+
+        public static int IndexAt(IReadOnlyList<RadioDial> dials, RadioDial dial)
+        {            if (dials == null) return -1;
             for (int i = 0; i < dials.Count; i++)
                 if (dials[i].Equals(dial)) return i;
             return -1;

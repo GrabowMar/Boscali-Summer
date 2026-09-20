@@ -38,6 +38,11 @@ namespace BoscaliSummer.Features.Command.Presentation
     /// sortie board, the contested-node list, the frontline's length. Where a figure cannot
     /// be established, it reads as a dash. A zero is a claim, and this panel does not make
     /// claims it has not verified.</para>
+    ///
+    /// <para>Every page fills the bay it is given. The fixed blocks are laid out from the
+    /// top, and the page's primary list — contested ground on SA, the objective and
+    /// reinforcement boards on CMD — takes whatever height is left, so a short canvas
+    /// scrolls and a tall one never ends in a dead strip above the status line.</para>
     /// </summary>
     internal sealed partial class StrMfdPanel : MonoBehaviour, ISceneService
     {
@@ -50,14 +55,41 @@ namespace BoscaliSummer.Features.Command.Presentation
 
         private const int ChipCount = 3;
 
-        /// <summary>Contested nodes shown before the list defers to a "and n more" line.</summary>
+        /// <summary>Contested nodes the SA window can rank; the visible slice is sized to the bay.</summary>
         private const int NodeRowCount = 8;
 
+        /// <summary>The fewest contested rows a page shows before it would rather scroll.</summary>
+        private const int NodeRowMinimum = 3;
+
+        /// <summary>A taller bay spreads rows to this pitch at most, never into a dead band.</summary>
+        private const float NodePitchMax = 52f;
+        private const float ListPitch = 44f;
+
+        // ---- Shared page geometry --------------------------------------------------------
+
+        /// <summary>What one <see cref="SectionHeader"/> consumes, title, note and rule.</summary>
+        private const float HeaderStep = 24f;
+
+        /// <summary>The pitch of one SORTIE BOARD row; the board is a fixed five-role table.</summary>
+        private const float SortiePitch = 26f;
+
+        /// <summary>The pitch of one SECTOR CONTROL legend row.</summary>
+        private const float LegendPitch = 22f;
+
+        /// <summary>The pitch of a label/figure pair on one line.</summary>
+        private const float KvPitch = 22f;
+
         /// <summary>
-        /// Combined air picture plus frontline. Taller than the MFD body at lower canvas
-        /// heights, so the merged SA page scrolls rather than running under the status strip.
+        /// Everything the SA page holds above the contested list, in the order the build
+        /// lays it out. Written as the sum of the same steps the layout uses, so the list
+        /// can be sized against the bay without measuring text at build time.
         /// </summary>
-        private const float MergedSaContentHeight = 920f;
+        private const float SaFixedHeight =
+            HeaderStep + 18f + 20f + 16f + 14f +                            // AIR PICTURE
+            HeaderStep + 16f + 5f * SortiePitch + 6f +                       // SORTIE BOARD
+            HeaderStep + 3f * KvPitch + 4f +                                 // SURFACE & INFRASTRUCTURE
+            HeaderStep + 12f + 4f * LegendPitch + 6f + 2f * KvPitch + 4f +   // SECTOR CONTROL
+            HeaderStep + 16f + 2f;                                           // CONTESTED GROUND
 
         private static readonly SortieRole[] Roles =
         {
@@ -90,10 +122,10 @@ namespace BoscaliSummer.Features.Command.Presentation
         private TMP_Text defconLabel;
         private TMP_Text threatLabel;
         private TMP_Text airCountLabel;
-        private Image airBar;
+        private GameObject airBarRoot;
+        private Image airFill;
         private TMP_Text sortieNote;
-        private readonly TMP_Text[] sortieCount = new TMP_Text[5];
-        private readonly Image[] sortieBar = new Image[5];
+        private readonly SortieRow[] sortieRows = new SortieRow[5];
         private TMP_Text groundValue;
         private TMP_Text airbaseValue;
         private TMP_Text radarValue;
@@ -103,13 +135,12 @@ namespace BoscaliSummer.Features.Command.Presentation
         private RectTransform frontRoot;
         private Rect controlBarRect;
         private readonly Image[] controlBarFill = new Image[3];
-        private TMP_Text alliedSectors;
-        private TMP_Text contestedSectors;
-        private TMP_Text hostileSectors;
-        private TMP_Text neutralSectors;
+        private readonly SectorLegend[] sectorLegend = new SectorLegend[4];
         private TMP_Text frontlineValue;
         private TMP_Text nodeValue;
         private readonly ListRow[] nodeRows = new ListRow[NodeRowCount];
+        private int nodeRowsBuilt;
+        private float nodeRowPitch = AvTokens.RowPitch;
 
         /// <summary>The worst contested nodes, ranked into a reused window each refresh.</summary>
         private readonly TacticalSectorGrid.TacticalNode[] ranked =
@@ -142,15 +173,17 @@ namespace BoscaliSummer.Features.Command.Presentation
             theaterLogistics = null;
 
             defconLabel = threatLabel = airCountLabel = sortieNote = null;
-            airBar = null;
-            Array.Clear(sortieCount, 0, sortieCount.Length);
-            Array.Clear(sortieBar, 0, sortieBar.Length);
+            airBarRoot = null;
+            airFill = null;
+            Array.Clear(sortieRows, 0, sortieRows.Length);
             groundValue = airbaseValue = radarValue = null;
 
             frontRoot = null;
             Array.Clear(controlBarFill, 0, controlBarFill.Length);
-            alliedSectors = contestedSectors = hostileSectors = neutralSectors = null;
+            Array.Clear(sectorLegend, 0, sectorLegend.Length);
             frontlineValue = nodeValue = nodeNote = null;
+            nodeRowsBuilt = 0;
+            nodeRowPitch = AvTokens.RowPitch;
             Array.Clear(nodeRows, 0, nodeRows.Length);
 
             ResetCoc();
@@ -283,7 +316,7 @@ namespace BoscaliSummer.Features.Command.Presentation
 
             shell = AvScreen.Build(
                 content, "STR",
-                new[] { "SA", "COC", "CMD" },
+                new[] { "SITUATION", "COMMAND", "OPERATIONS" },
                 new[]
                 {
                     new[] { "THEATER CONTROL", "HELD" },
@@ -292,10 +325,22 @@ namespace BoscaliSummer.Features.Command.Presentation
                 },
                 ChipCount, Width, height, _ => nextRefresh = 0f);
 
-            // The command metric's caption carries the staff's active/KIA split; the sheet's
-            // tracking ellipsised it in the cell. Tighter tracking keeps the full reading.
-            if (shell.Metrics.Length > 2 && shell.Metrics[2].Caption != null)
-                shell.Metrics[2].Caption.characterSpacing = 0f;
+            // The panel's primary navigation is also a control, and every control explains
+            // itself on the status strip.
+            if (shell.Tabs.Length > 0)
+                shell.Tabs[0].WithTooltip("Air picture, sortie board and sector control.");
+            if (shell.Tabs.Length > 1)
+                shell.Tabs[1].WithTooltip("Chain of command: posts, personnel files and the staff log.");
+            if (shell.Tabs.Length > 2)
+                shell.Tabs[2].WithTooltip("Theater operations: main effort, objectives and reinforcement calls.");
+
+            // A caption that gets ellipsised is a reading the panel did not give. The sheet
+            // tracks captions for the display type, and the counts they carry ("3264/3188",
+            // "6 ACTIVE · 2 KIA") are long enough that the tracking closes the last glyph
+            // off. The row drops tracking on the captions only, so the three cells keep one
+            // key, value, unit and caption baseline.
+            for (int i = 0; i < shell.Metrics.Length; i++)
+                if (shell.Metrics[i].Caption != null) shell.Metrics[i].Caption.characterSpacing = 0f;
 
             BuildSaPage(shell.CreatePage(TabSa, "SaPage"));
             BuildCocPage(shell.CreatePage(TabCoc, "CocPage"));
@@ -332,27 +377,33 @@ namespace BoscaliSummer.Features.Command.Presentation
         // ---- Page scaffolding ------------------------------------------------------------
 
         /// <summary>
-        /// A section header on the page spine: a band, a tick, a title, and a right-hand
-        /// note. The title and the note get their own halves of the line — drawing both
-        /// across the full width is what made the old header overprint itself.
+        /// The one section header every page wears: a spine tick, the title, the live note
+        /// on the right of the same line, and a hairline rule under both. The title and the
+        /// note get their own halves of the line — drawing both across the full width is
+        /// what made the old header overprint itself — and every section on every page is
+        /// aligned to the same left column.
         /// </summary>
         private static float SectionHeader(
-            RectTransform parent, float x, float y, float width, string title, string note, bool band)
+            RectTransform parent, float x, float y, float width, string title, string note,
+            bool band, out TMP_Text noteLabel)
         {
-            if (band) AvStyled.Box(parent, new Rect(x - 6f, y + 4f, width + 12f, 22f), "section band");
+            // Every section uses one quiet rule; bands looked like another navigation row.
             AvStyled.SpineTick(parent, x - AvScreen.SpineInset + 3f, y - 7f);
 
-            float titleWidth = width * 0.5f;
+            float titleWidth = width * 0.56f;
             AvStyled.Label(parent, new Rect(x, y, titleWidth, 14f), title, "section-title");
-
-            if (!string.IsNullOrEmpty(note))
-            {
-                AvStyled.Label(parent, new Rect(x + titleWidth, y, width - titleWidth, 14f),
-                               note, "section-title-note", align: TextAlignmentOptions.MidlineRight);
-            }
-
-            return y - 22f;
+            // The slot exists on every header, even one with nothing to say yet: a live
+            // count then has somewhere to land without a second layout pass.
+            noteLabel = AvStyled.Label(parent, new Rect(x + titleWidth, y, width - titleWidth, 14f),
+                                       note ?? "", "section-title-note",
+                                       align: TextAlignmentOptions.MidlineRight);
+            Divider(parent, x, y - 17f, width);
+            return y - HeaderStep;
         }
+
+        private static float SectionHeader(
+            RectTransform parent, float x, float y, float width, string title, string note, bool band) =>
+            SectionHeader(parent, x, y, width, title, note, band, out _);
 
         /// <summary>A label/figure pair on one line, the figure right-aligned against the gutter.</summary>
         private static TMP_Text KeyValue(
@@ -365,20 +416,119 @@ namespace BoscaliSummer.Features.Command.Presentation
 
         private static void Divider(RectTransform parent, float x, float y, float width) =>
             AvKit.Rule(parent, new Rect(x, y, width, 1f),
-                       AvTheme.Unity(AvTokens.Hairline.WithAlpha(0.13f)));
+                       AvTheme.Unity(AvTokens.Hairline.WithAlpha(0.35f)));
 
         /// <summary>
-        /// One pooled list row: a state rail, a name, a wrapping detail line, and a trailing
-        /// figure over a bar.
+        /// One row of the sortie board: the role on the left, its count right-aligned, and a
+        /// short track under the figure for the role's share of the AI aircraft that were
+        /// actually observed. There is no rule drawn from the name to the number: that long
+        /// fill read as a data bar while carrying no figure of its own.
+        /// </summary>
+        private sealed class SortieRow
+        {
+            private const float ValueWidth = 64f;
+
+            private readonly TMP_Text name;
+            private readonly TMP_Text value;
+            private readonly Image track;
+            private readonly Image fill;
+
+            public SortieRow(RectTransform parent, float x, float y, float width)
+            {
+                var root = new GameObject("SortieRow", typeof(RectTransform));
+                var rect = (RectTransform)root.transform;
+                rect.SetParent(parent, false);
+                AvKit.Place(rect, new Rect(x, y, width, SortiePitch));
+
+                name = AvStyled.Label(rect, new Rect(0f, 0f, width - ValueWidth - AvTokens.Space2, 14f),
+                                      "", "row-name");
+                value = AvStyled.Label(rect, new Rect(width - ValueWidth, 0f, ValueWidth, 14f),
+                                       "—", "row-value", align: TextAlignmentOptions.MidlineRight);
+                track = AvKit.Panel(rect, new Rect(width - ValueWidth, -15f, ValueWidth, 3f),
+                                    AvTheme.SurfaceInert);
+                fill = AvKit.Panel(rect, new Rect(width - ValueWidth + 1f, -16f, ValueWidth - 2f, 1f),
+                                   AvTheme.RailInfo);
+                fill.sprite = AvSprites.White;
+                fill.type = Image.Type.Filled;
+                fill.fillMethod = Image.FillMethod.Horizontal;
+                fill.fillOrigin = 0;
+
+                Divider(rect, 0f, -(SortiePitch - 1f), width);
+            }
+
+            /// <summary>
+            /// Bind the row. <paramref name="known"/> false hides the track entirely: a bar
+            /// beside a dash is the panel making a claim it could not verify.
+            /// </summary>
+            public void Bind(string role, string figure, bool known, float share, Color colour)
+            {
+                name.text = role;
+                value.text = figure;
+                value.color = known ? AvTheme.TextPrimary : AvTheme.Disabled;
+
+                if (track.gameObject.activeSelf != known) track.gameObject.SetActive(known);
+                if (fill.gameObject.activeSelf != known) fill.gameObject.SetActive(known);
+                if (!known) return;
+
+                fill.color = colour;
+                fill.fillAmount = Mathf.Clamp01(share);
+            }
+        }
+
+        /// <summary>
+        /// One row of the sector-control legend: a colour mark, the side it belongs to, the
+        /// sector count and the share, on one column grid so every figure starts and ends on
+        /// the same edge as the figure above it.
+        /// </summary>
+        private sealed class SectorLegend
+        {
+            private const float CountWidth = 56f;
+            private const float ShareWidth = 52f;
+
+            private readonly Image mark;
+            private readonly TMP_Text key;
+            private readonly TMP_Text count;
+            private readonly TMP_Text share;
+
+            public SectorLegend(RectTransform parent, float x, float y, float width)
+            {
+                var root = new GameObject("SectorLegend", typeof(RectTransform));
+                var rect = (RectTransform)root.transform;
+                rect.SetParent(parent, false);
+                AvKit.Place(rect, new Rect(x, y, width, LegendPitch));
+
+                // A mark, not a rail: the rail language means state everywhere else, and
+                // this one's only job is to key the share bar's colours.
+                mark = AvKit.Rule(rect, new Rect(0f, -6f, 10f, 6f), AvTheme.RailInert);
+                float keyWidth = width - CountWidth - ShareWidth - 16f;
+                key = AvStyled.Label(rect, new Rect(14f, 0f, keyWidth, 14f), "", "kv-key");
+                count = AvStyled.Label(rect, new Rect(width - CountWidth - ShareWidth, 0f, CountWidth, 14f),
+                                       "—", "row-value", align: TextAlignmentOptions.MidlineRight);
+                share = AvStyled.Label(rect, new Rect(width - ShareWidth, 0f, ShareWidth, 14f),
+                                       "—", "row-value-unit", align: TextAlignmentOptions.MidlineRight);
+            }
+
+            public void Bind(string label, string countText, string shareText, Color colour, Color countColour)
+            {
+                key.text = label;
+                count.text = countText;
+                count.color = countColour;
+                share.text = shareText;
+                mark.color = colour;
+            }
+        }
+
+        /// <summary>
+        /// One pooled list row: a state rail, a name, a state line, a trailing figure, and an
+        /// optional track under it.
         ///
-        /// <para>Pooled rows are a fixed pitch on purpose. The auto-sizing rows elsewhere are
-        /// measured against text known at build time; a row whose copy changes every refresh
-        /// has nothing to measure, so it is given room for two wrapped detail lines instead
-        /// of being re-laid out four times a second.</para>
+        /// <para>The track is shown only where the caller has a fraction that means
+        /// something; a row with no figure reads as a dash and its state line, never as a
+        /// bare bar. Rows keep a fixed pitch so a refresh reuses them instead of rebuilding
+        /// the list four times a second.</para>
         /// </summary>
         private sealed class ListRow
         {
-            public const float Pitch = 50f;
             private static readonly Color RowHover = new Color(1f, 1f, 1f, 0.06f);
 
             private readonly GameObject root;
@@ -387,36 +537,45 @@ namespace BoscaliSummer.Features.Command.Presentation
             private readonly TMP_Text name;
             private readonly TMP_Text detail;
             private readonly TMP_Text value;
-            private readonly Image bar;
+            private readonly Image track;
+            private readonly Image fill;
             private readonly AvButton hit;
+            private readonly float height;
 
-            public ListRow(RectTransform parent, float x, float y, float width)
+            public ListRow(RectTransform parent, float x, float y, float width, float pitch)
             {
+                height = pitch - 2f;
+
                 root = new GameObject("ListRow", typeof(RectTransform));
                 var rect = root.GetComponent<RectTransform>();
                 rect.SetParent(parent, false);
-                AvKit.Place(rect, new Rect(x, y, width, Pitch - 4f));
+                AvKit.Place(rect, new Rect(x, y, width, height));
 
-                const float trail = 96f;
-                float textWidth = width - trail - 20f;
+                const float trail = 64f;
+                float textWidth = width - trail - AvTokens.Space3;
 
-                background = AvKit.Panel(rect, new Rect(0f, 0f, width, Pitch - 4f), Color.clear);
-                rail = AvStyled.Rail(rect, new Rect(0f, 0f, 3f, Pitch - 8f), "locked");
-                name = AvStyled.Label(rect, new Rect(12f, 0f, textWidth, 15f), "", "row-name");
-                detail = AvStyled.Label(rect, new Rect(12f, -16f, textWidth, 28f), "", "row-sub");
-                value = AvStyled.Label(rect, new Rect(width - trail, 0f, trail, 15f), "",
+                background = AvKit.Panel(rect, new Rect(0f, 0f, width, height), Color.clear);
+                rail = AvStyled.Rail(rect, new Rect(0f, -2f, 3f, Mathf.Max(8f, height - 6f)), "locked");
+                name = AvStyled.Label(rect, new Rect(12f, -3f, textWidth, 16f), "", "row-name");
+                detail = AvStyled.Label(rect, new Rect(12f, -21f, textWidth, 16f), "", "row-sub");
+                value = AvStyled.Label(rect, new Rect(width - trail, 0f, trail, 14f), "",
                                        "row-value", align: TextAlignmentOptions.MidlineRight);
-                bar = AvKit.ProgressBar(rect, new Rect(width - trail, -22f, trail, 6f), 0f,
-                                        AvTheme.RailReady);
+                track = AvKit.Panel(rect, new Rect(width - trail, -17f, trail, 3f), AvTheme.SurfaceInert);
+                fill = AvKit.Panel(rect, new Rect(width - trail + 1f, -18f, trail - 2f, 1f),
+                                   AvTheme.RailInert);
+                fill.sprite = AvSprites.White;
+                fill.type = Image.Type.Filled;
+                fill.fillMethod = Image.FillMethod.Horizontal;
+                fill.fillOrigin = 0;
 
-                Divider(rect, 0f, -(Pitch - 8f), width);
-                hit = AvKit.HitButton(rect, new Rect(0f, 0f, width, Pitch - 4f), null);
+                Divider(rect, 0f, -(height - 2f), width);
+                hit = AvKit.HitButton(rect, new Rect(0f, 0f, width, height), null);
                 hit.SetEnabled(false);
                 root.SetActive(false);
             }
 
             public void Bind(string railState, string title, string sub, string figure,
-                             float fraction, Color figureColor, Color barColor,
+                             bool showTrack, float fraction, Color figureColor, Color trackColor,
                              Action onClick = null, string tooltip = null)
             {
                 rail.color = AvStyleHost.Resolve(
@@ -427,13 +586,20 @@ namespace BoscaliSummer.Features.Command.Presentation
                 value.text = figure ?? "";
                 value.color = figureColor;
 
-                bar.color = barColor;
-                bar.fillAmount = Mathf.Clamp01(fraction);
+                if (track.gameObject.activeSelf != showTrack) track.gameObject.SetActive(showTrack);
+                if (fill.gameObject.activeSelf != showTrack) fill.gameObject.SetActive(showTrack);
+                if (showTrack)
+                {
+                    fill.color = trackColor;
+                    fill.fillAmount = Mathf.Clamp01(fraction);
+                }
 
                 bool clickable = onClick != null;
                 hit.SetAction(onClick);
                 hit.SetEnabled(clickable);
-                hit.WithTooltip(clickable ? tooltip : null);
+                // A row that cannot be clicked still explains itself on hover: the reason
+                // belongs on the status strip, not in a missing cursor.
+                hit.WithTooltip(string.IsNullOrEmpty(tooltip) ? null : tooltip);
                 hit.SetRowHighlight(background, Color.clear, clickable ? RowHover : Color.clear);
 
                 if (!root.activeSelf) root.SetActive(true);
@@ -451,16 +617,29 @@ namespace BoscaliSummer.Features.Command.Presentation
 
         private void BuildSaPage(GameObject page)
         {
-            Rect body = shell.Body;
-            // Combined air picture + frontline still exceeds the reduced MFD body at lower
-            // canvas heights. Clip and scroll only when needed so the last rows never run
-            // under the status strip.
-            frontRoot = AvScreen.Scroll((RectTransform)page.transform, body, MergedSaContentHeight, out body);
-            float y = body.y;
+            Rect view = shell.Body;
+
+            // The page fills the bay. When the fixed blocks leave room for the contested
+            // list, the list takes what fits and its pitch spreads to meet the status line
+            // rather than ending in a dead strip; when the bay is short the full window is
+            // built and the page scrolls instead of silently showing fewer nodes than the
+            // list is allowed to name.
+            float space = view.height - SaFixedHeight;
+            bool fits = space >= NodeRowMinimum * ListPitch;
+            nodeRowsBuilt = fits
+                ? Mathf.Clamp(Mathf.FloorToInt(space / ListPitch), NodeRowMinimum, NodeRowCount)
+                : NodeRowCount;
+            nodeRowPitch = fits
+                ? Mathf.Clamp(space / nodeRowsBuilt, ListPitch, NodePitchMax)
+                : ListPitch;
+
+            float contentHeight = Mathf.Max(view.height, SaFixedHeight + nodeRowsBuilt * nodeRowPitch);
+            Rect body;
+            frontRoot = AvScreen.Scroll((RectTransform)page.transform, view, contentHeight, out body);
 
             AvStyled.Spine(frontRoot, new Rect(body.x, body.y, 3f, body.height));
 
-            y = BuildSaBody(frontRoot, body, y);
+            float y = BuildSaBody(frontRoot, body, body.y);
             BuildFrontBody(frontRoot, body, y);
         }
 
@@ -474,47 +653,57 @@ namespace BoscaliSummer.Features.Command.Presentation
             defconLabel = AvStyled.Label(parent, new Rect(x, y, width, 16f),
                                          "DEFCON —", "row-name");
             y -= 18f;
-            threatLabel = AvStyled.Label(parent, new Rect(x, y, width, 26f), "", "row-sub");
-            y -= 30f;
+            threatLabel = AvStyled.Label(parent, new Rect(x, y, width, 18f), "", "row-main");
+            y -= 20f;
 
-            airCountLabel = AvStyled.Label(parent, new Rect(x, y, width, 16f), "", "kv-key");
-            y -= 18f;
-            airBar = AvKit.ProgressBar(parent, new Rect(x, y, width, 6f), 0.5f, AvTheme.RailReady);
-            y -= 18f;
+            airCountLabel = AvStyled.Label(parent, new Rect(x, y, width, 14f), "", "kv-key");
+            y -= 16f;
+            airBarRoot = BuildAirTrack(parent, x, y, width);
+            y -= 14f;
 
             y = SectionHeader(parent, x, y, width, "SORTIE BOARD", "FRIENDLY AI", band: true);
 
-            sortieNote = AvStyled.Label(parent, new Rect(x, y, width, 16f), "", "row-sub");
-            y -= 18f;
+            sortieNote = AvStyled.Label(parent, new Rect(x, y, width, 14f), "", "row-sub");
+            y -= 16f;
 
             for (int i = 0; i < Roles.Length; i++)
             {
-                SortieRole role = Roles[i];
-                AvStyled.Label(parent, new Rect(x, y, 34f, 16f),
-                               SortieClassifier.Code(role), "row-sub");
-                AvStyled.Label(parent, new Rect(x + 38f, y, 150f, 16f),
-                               SortieClassifier.Name(role), "kv-key");
-
-                sortieBar[i] = AvKit.ProgressBar(
-                    parent, new Rect(x + 194f, y - 5f, width - 194f - 44f, 6f), 0f, AvTheme.RailInfo);
-                sortieCount[i] = AvStyled.Label(
-                    parent, new Rect(x + width - 40f, y, 40f, 16f), "—", "kv-value",
-                    align: TextAlignmentOptions.MidlineRight);
-
-                y -= 20f;
+                sortieRows[i] = new SortieRow(parent, x, y - i * SortiePitch, width);
             }
+            y -= Roles.Length * SortiePitch + 6f;
 
-            y -= 6f;
-            y = SectionHeader(parent, x, y, width, "SURFACE & INFRASTRUCTURE", null, band: false);
+            y = SectionHeader(parent, x, y, width, "SURFACE & INFRASTRUCTURE", "ALLIED / HOSTILE",
+                              band: false);
 
-            groundValue = KeyValue(parent, x, y, width, "GROUND FORCES  ALLIED / HOSTILE");
-            y -= 18f;
+            groundValue = KeyValue(parent, x, y, width, "GROUND FORCES");
+            y -= KvPitch;
             airbaseValue = KeyValue(parent, x, y, width, "AIRBASES  ALLIED / HOSTILE / NEUTRAL");
-            y -= 18f;
+            y -= KvPitch;
 
             // "SAMS" was this number's old label. It is the friendly radar list, so it says so.
             radarValue = KeyValue(parent, x, y, width, "FRIENDLY RADARS ON NET");
-            return y - 22f;
+            return y - KvPitch - 4f;
+        }
+
+        /// <summary>
+        /// The air-dominance track. It is its own object so the whole track can be hidden
+        /// when the ratio is unknown: an empty track under a dash would read as a measured
+        /// zero, which is exactly what the dash is there to refuse.
+        /// </summary>
+        private GameObject BuildAirTrack(RectTransform parent, float x, float y, float width)
+        {
+            var root = new GameObject("AirTrack", typeof(RectTransform));
+            var rect = (RectTransform)root.transform;
+            rect.SetParent(parent, false);
+            AvKit.Place(rect, new Rect(x, y, width, 4f));
+
+            AvKit.Panel(rect, new Rect(0f, 0f, width, 4f), AvTheme.SurfaceInert);
+            airFill = AvKit.Panel(rect, new Rect(1f, -1f, width - 2f, 2f), AvTheme.RailCaution);
+            airFill.sprite = AvSprites.White;
+            airFill.type = Image.Type.Filled;
+            airFill.fillMethod = Image.FillMethod.Horizontal;
+            airFill.fillOrigin = 0;
+            return root;
         }
 
         private void RefreshSa(TacticalTheaterState state)
@@ -532,15 +721,23 @@ namespace BoscaliSummer.Features.Command.Presentation
                 AvStyleHost.Style("rail " + TheaterReadout.DefconRail(state.DefconLevel)).Background,
                 AvTheme.TextPrimary);
 
+            // The alert line carries the state in words and the ink follows the same scale,
+            // so the warning is never a colour with nothing said.
             threatLabel.text = state.ActiveThreatWarning;
+            threatLabel.color = state.DefconLevel <= 2 ? AvTheme.Alert
+                              : state.DefconLevel == 3 ? AvTheme.Warning
+                              : AvTheme.Dim;
 
-            airCountLabel.text = "ALLIED " + state.FriendlyAircraftCount +
-                                 "  ·  HOSTILE " + state.HostileAircraftCount +
-                                 "  ·  " + TheaterReadout.Percent(state.AirSuperiorityRatio) + " DOMINANCE";
             bool airKnown = !float.IsNaN(state.AirSuperiorityRatio);
-            airBar.fillAmount = airKnown ? Mathf.Clamp01(state.AirSuperiorityRatio) : 0f;
-            airBar.color = !airKnown ? AvTheme.RailInert
-                : state.AirSuperiorityRatio >= 0.5f ? AvTheme.RailReady : AvTheme.RailCaution;
+            airCountLabel.text = "ALLIED " + state.FriendlyAircraftCount +
+                                 "   ·   HOSTILE " + state.HostileAircraftCount +
+                                 "   ·   " + TheaterReadout.Percent(state.AirSuperiorityRatio) + " DOMINANCE";
+            if (airBarRoot != null && airBarRoot.activeSelf != airKnown) airBarRoot.SetActive(airKnown);
+            if (airKnown)
+            {
+                airFill.fillAmount = Mathf.Clamp01(state.AirSuperiorityRatio);
+                airFill.color = state.AirSuperiorityRatio >= 0.5f ? AvTheme.RailReady : AvTheme.RailCaution;
+            }
 
             SortieTally tally = state.Sorties;
             bool known = tally.Observed > 0;
@@ -550,16 +747,19 @@ namespace BoscaliSummer.Features.Command.Presentation
                 : "NO AI PILOT STATE AVAILABLE — SORTIE ROLES UNKNOWN";
             sortieNote.color = known ? AvTheme.Dim : AvTheme.RailCaution;
 
-            int peak = 1;
-            for (int i = 0; i < Roles.Length; i++) peak = Mathf.Max(peak, tally.Of(Roles[i]));
-
+            // The track under each count is the role's share of the aircraft the scan
+            // actually saw, so every bar has a figure above it and a denominator the note
+            // states.
+            int observed = Mathf.Max(1, tally.Observed);
             for (int i = 0; i < Roles.Length; i++)
             {
                 int count = tally.Of(Roles[i]);
-                sortieCount[i].text = known ? count.ToString() : "—";
-                sortieCount[i].color = known && count > 0 ? AvTheme.TextPrimary : AvTheme.Disabled;
-                sortieBar[i].fillAmount = known ? count / (float)peak : 0f;
-                sortieBar[i].color = Roles[i] == SortieRole.Transit ? AvTheme.RailInert : AvTheme.RailInfo;
+                sortieRows[i].Bind(
+                    SortieClassifier.Code(Roles[i]) + " · " + SortieClassifier.Name(Roles[i]),
+                    known ? count.ToString() : "—",
+                    known,
+                    count / (float)observed,
+                    Roles[i] == SortieRole.Transit ? AvTheme.RailInert : AvTheme.RailInfo);
             }
 
             groundValue.text = state.FriendlyGroundUnitsCount + " / " + state.HostileGroundUnitsCount;
@@ -585,41 +785,39 @@ namespace BoscaliSummer.Features.Command.Presentation
 
             y = SectionHeader(parent, x, y, width, "SECTOR CONTROL", "LIVE FIELD", band: false);
 
-            controlBarRect = new Rect(x, y, width, 10f);
+            controlBarRect = new Rect(x, y, width, 8f);
             AvStyled.Box(parent, controlBarRect, "bar");
             for (int i = 0; i < controlBarFill.Length; i++)
             {
-                controlBarFill[i] = AvKit.Panel(parent, new Rect(x, y, 0f, 10f), Color.clear);
+                controlBarFill[i] = AvKit.Panel(parent, new Rect(x, y, 0f, 8f), Color.clear);
             }
-            y -= 18f;
+            y -= 12f;
 
-            alliedSectors = KeyValue(parent, x, y, width, "ALLIED SECTORS");
-            y -= 17f;
-            contestedSectors = KeyValue(parent, x, y, width, "CONTESTED SECTORS");
-            y -= 17f;
-            hostileSectors = KeyValue(parent, x, y, width, "HOSTILE SECTORS");
-            y -= 17f;
-            neutralSectors = KeyValue(parent, x, y, width, "UNCLAIMED SECTORS");
-            y -= 17f;
+            for (int i = 0; i < sectorLegend.Length; i++)
+            {
+                sectorLegend[i] = new SectorLegend(parent, x, y - i * LegendPitch, width);
+            }
+            y -= sectorLegend.Length * LegendPitch + 6f;
+
             frontlineValue = KeyValue(parent, x, y, width, "FRONTLINE LENGTH");
-            y -= 17f;
+            y -= KvPitch;
             nodeValue = KeyValue(parent, x, y, width, "TRACKED NODES");
-            y -= 22f;
+            y -= KvPitch + 4f;
 
             y = SectionHeader(parent, x, y, width, "CONTESTED GROUND", "BY PRESSURE", band: true);
 
-            nodeNote = AvStyled.Label(parent, new Rect(x, y, width, 16f), "", "row-sub");
-            y -= 20f;
+            nodeNote = AvStyled.Label(parent, new Rect(x, y, width, 14f), "", "row-sub");
+            y -= 16f + 2f;
 
-            for (int i = 0; i < nodeRows.Length; i++)
+            for (int i = 0; i < nodeRowsBuilt; i++)
             {
-                nodeRows[i] = new ListRow(parent, x, y - i * ListRow.Pitch, width);
+                nodeRows[i] = new ListRow(parent, x, y - i * nodeRowPitch, width, nodeRowPitch);
             }
         }
 
         private void RefreshFrontBody(TacticalTheaterState state)
         {
-            if (alliedSectors == null) return;
+            if (frontlineValue == null) return;
 
             TheaterReadout.Shares(
                 state.FriendlySectorCount, state.ContestedSectorCount,
@@ -627,7 +825,11 @@ namespace BoscaliSummer.Features.Command.Presentation
                 out float friendly, out float contested, out float hostile);
 
             float[] shares = { friendly, contested, hostile };
-            Color[] colours = { AvTheme.Accent, AvTheme.RailCaution, AvTheme.RailDanger };
+            Color[] colours = {
+                AvStyleHost.Resolve(AvStyleHost.Style("bar-friendly").Background, AvTheme.Accent),
+                AvStyleHost.Resolve(AvStyleHost.Style("bar-contested").Background, AvTheme.RailCaution),
+                AvStyleHost.Resolve(AvStyleHost.Style("bar-hostile").Background, AvTheme.RailDanger)
+            };
 
             float cursor = controlBarRect.x;
             for (int i = 0; i < controlBarFill.Length; i++)
@@ -639,16 +841,19 @@ namespace BoscaliSummer.Features.Command.Presentation
                 cursor += w;
             }
 
-            alliedSectors.text = state.FriendlySectorCount + "   " +
-                                 TheaterReadout.Percent(friendly);
-            contestedSectors.text = state.ContestedSectorCount + "   " +
-                                    TheaterReadout.Percent(contested);
-            contestedSectors.color = state.ContestedSectorCount > 0
-                ? AvTheme.RailCaution
-                : AvTheme.TextPrimary;
-            hostileSectors.text = state.HostileSectorCount + "   " +
-                                  TheaterReadout.Percent(hostile);
-            neutralSectors.text = state.NeutralSectorCount.ToString();
+            // The bar shows the split; the legend rows put the same split into figures on
+            // one column grid, so the counts and shares line up instead of riding the end
+            // of a sentence.
+            float unclaimed = Mathf.Clamp01(1f - friendly - contested - hostile);
+            sectorLegend[0].Bind("ALLIED", state.FriendlySectorCount.ToString(),
+                                 TheaterReadout.Percent(friendly), colours[0], AvTheme.TextPrimary);
+            sectorLegend[1].Bind("CONTESTED", state.ContestedSectorCount.ToString(),
+                                 TheaterReadout.Percent(contested), colours[1],
+                                 state.ContestedSectorCount > 0 ? AvTheme.RailCaution : AvTheme.TextPrimary);
+            sectorLegend[2].Bind("HOSTILE", state.HostileSectorCount.ToString(),
+                                 TheaterReadout.Percent(hostile), colours[2], AvTheme.TextPrimary);
+            sectorLegend[3].Bind("UNCLAIMED", state.NeutralSectorCount.ToString(),
+                                 TheaterReadout.Percent(unclaimed), AvTheme.RailInert, AvTheme.Dim);
 
             frontlineValue.text = state.FrontlineSegmentCount > 0
                 ? TheaterReadout.Kilometres(state.FrontlineLengthMetres)
@@ -665,7 +870,7 @@ namespace BoscaliSummer.Features.Command.Presentation
             {
                 nodeNote.text = "SECTOR FIELD NOT RUNNING.";
                 nodeNote.color = AvTheme.Dim;
-                for (int i = 0; i < nodeRows.Length; i++) nodeRows[i].Hide();
+                for (int i = 0; i < nodeRowsBuilt; i++) nodeRows[i].Hide();
                 return;
             }
 
@@ -688,15 +893,15 @@ namespace BoscaliSummer.Features.Command.Presentation
 
                 int slot = shown;
                 while (slot > 0 && ranked[slot - 1].CaptureProgress < pressure) slot--;
-                if (slot >= nodeRows.Length) continue;
+                if (slot >= nodeRowsBuilt) continue;
 
-                for (int j = Mathf.Min(shown, nodeRows.Length - 1); j > slot; j--)
+                for (int j = Mathf.Min(shown, nodeRowsBuilt - 1); j > slot; j--)
                 {
                     ranked[j] = ranked[j - 1];
                 }
 
                 ranked[slot] = nodes[i];
-                if (shown < nodeRows.Length) shown++;
+                if (shown < nodeRowsBuilt) shown++;
             }
 
             for (int i = 0; i < shown; i++)
@@ -710,18 +915,26 @@ namespace BoscaliSummer.Features.Command.Presentation
                 Color tint = friendly ? AvTheme.RailCaution : AvTheme.RailReady;
 
                 bool pressing = node.CaptureProgress >= 0.05f;
+                string name = string.IsNullOrEmpty(node.Name) ? "UNNAMED NODE" : node.Name.ToUpperInvariant();
+                string state = TheaterReadout.PressureState(node.CaptureProgress);
+                string figure = pressing ? TheaterReadout.Percent(node.CaptureProgress) : "—";
+
+                // A row that carries no percentage says why in words beside the dash, and
+                // the track stays off: no bare bar is drawn for a reading that is not there.
                 nodeRows[i].Bind(
                     TheaterReadout.NodeRail(friendly, node.IsContested),
-                    string.IsNullOrEmpty(node.Name) ? "UNNAMED NODE" : node.Name.ToUpperInvariant(),
+                    name,
                     (node.IsAirbase ? "AIRBASE" : "STRONGPOINT") + " · " +
-                    (friendly ? "ALLIED HELD" : "HOSTILE HELD") + " · " +
-                    TheaterReadout.PressureState(node.CaptureProgress),
-                    pressing ? TheaterReadout.Percent(node.CaptureProgress) : "—",
+                    (friendly ? "ALLIED HELD" : "HOSTILE HELD") + " · " + state,
+                    figure,
+                    pressing,
                     pressing ? node.CaptureProgress : 0f,
-                    tint, tint);
+                    tint, tint,
+                    null,
+                    name + " — " + (friendly ? "allied held" : "hostile held") + ", " + state.ToLowerInvariant() + ".");
             }
 
-            for (int i = shown; i < nodeRows.Length; i++) nodeRows[i].Hide();
+            for (int i = shown; i < nodeRowsBuilt; i++) nodeRows[i].Hide();
 
             if (contestedTotal == 0)
             {
@@ -756,6 +969,10 @@ namespace BoscaliSummer.Features.Command.Presentation
 
             RefreshChrome(state);
 
+            // The map ring follows the open file, which lives on the COC page: any other page
+            // showing means no file is open, so nothing is ringed.
+            if (shell.Page != TabCoc && highCommand != null) highCommand.Highlight(-1);
+
             switch (shell.Page)
             {
                 case TabSa: RefreshSa(state); break;
@@ -771,7 +988,8 @@ namespace BoscaliSummer.Features.Command.Presentation
 
         private void RefreshChrome(TacticalTheaterState state)
         {
-            shell.DataBar.State.text = state.PrimaryThreatDescription;
+            shell.DataBar.State.text = state.PrimaryThreatDescription == "ACTIVE GROUND BATTLE"
+                ? "GROUND BATTLE" : state.PrimaryThreatDescription;
             shell.DataBar.State.color = state.DefconLevel <= 2 ? AvTheme.Alert
                                       : state.DefconLevel == 3 ? AvTheme.Warning
                                       : AvTheme.Dim;

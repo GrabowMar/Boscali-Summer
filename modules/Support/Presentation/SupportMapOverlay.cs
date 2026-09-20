@@ -86,6 +86,7 @@ namespace BoscaliSummer.Features.Support.Presentation
 
         private readonly List<OrbitMarker> orbitPool = new List<OrbitMarker>(OrbitMarkers);
         private GameObject aimMarker;
+        private CyberMapLayer cyberLayer;
 
         public void Configure(SupportSettings config, SupportManager manager, ManualLogSource log)
         {
@@ -106,6 +107,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             markerPool.Clear();
             orbitPool.Clear();
             aimMarker = null;
+            cyberLayer = null;
             dynamicMap = null;
             initialized = false;
         }
@@ -151,6 +153,9 @@ namespace BoscaliSummer.Features.Support.Presentation
 
             // 3. Station ground tracks, sub-station points and the uplink aim
             UpdateOrbits(mapFactor, invZoom);
+
+            // 4. The CYBER network: sites, links, covers, incidents and the placement preview
+            cyberLayer?.Update(supportManager, dynamicMap, mapFactor, invZoom);
         }
 
         private void TryInitialize()
@@ -179,6 +184,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             BuildArmedReticle();
             BuildMarkerPool();
             BuildOrbitOverlay();
+            cyberLayer = new CyberMapLayer(overlayRoot.transform, uiFont);
 
             initialized = true;
             logger?.LogInfo("[Support] Tactical theater map overlay initialized.");

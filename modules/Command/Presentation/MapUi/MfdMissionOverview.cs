@@ -7,9 +7,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
     /// Pure escalation readout math for the MIS main tab.
     ///
     /// The game raises escalation to the highest faction score reached and clears
-    /// tactical / strategic employment at the mission's own thresholds, so the ladder
-    /// gives each stage an equal third of the track and states the distance to the next
-    /// threshold. A zero threshold means the mission never gated that stage.
+    /// tactical / strategic employment at the mission's own thresholds. The ladder names
+    /// each rung, its threshold and its state; <see cref="Fraction"/> keeps the equal-thirds
+    /// position for any caller that still draws the old single track. A zero threshold
+    /// means the mission never gated that stage.
     /// </summary>
     internal static class MfdMissionOverview
     {
@@ -34,16 +35,37 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             return 1f;
         }
 
+        /// <summary>The rungs in order, as the ladder names them.</summary>
+        public static string StageName(int stage) =>
+            stage <= 0 ? "CONVENTIONAL" : stage == 1 ? "TACTICAL NUCLEAR" : "STRATEGIC NUCLEAR";
+
+        /// <summary>One rung's threshold; an unset gate never reads as a confident zero.</summary>
+        public static string Threshold(int stage, float tactical, float strategic)
+        {
+            if (stage <= 0) return "BASELINE — ALWAYS ACTIVE";
+            float value = stage == 1 ? tactical : strategic;
+            return value > 0f ? "THRESHOLD " + Whole(value) : "NO THRESHOLD SET";
+        }
+
+        /// <summary>
+        /// One rung's state against the current stage. The word and the rung's rail both
+        /// carry it, so a colour-blind player still reads which gate is holding.
+        /// </summary>
+        public static string StageState(int stage, int currentStage, bool thresholdSet) =>
+            stage == currentStage ? "CURRENT"
+            : stage < currentStage ? "CLEARED"
+            : thresholdSet ? "PENDING" : "NOT SET";
+
         public static string Caption(float current, float tactical, float strategic)
         {
             current = Math.Max(0f, current);
-            if (tactical <= 0f && strategic <= 0f) return "NO ESCALATION THRESHOLDS SET";
+            if (tactical <= 0f && strategic <= 0f) return "NO ESCALATION GATES";
             if (tactical > 0f && current < tactical)
-                return "CURRENT " + Whole(current) + "  ·  " + Whole(tactical - current) + " TO TACTICAL NUCLEAR";
-            if (strategic <= 0f) return "CURRENT " + Whole(current) + "  ·  TACTICAL NUCLEAR CLEARED";
+                return "CUR " + Whole(current) + " · TAC IN " + Whole(tactical - current);
+            if (strategic <= 0f) return "CUR " + Whole(current) + " · TAC ACTIVE";
             if (current < strategic)
-                return "CURRENT " + Whole(current) + "  ·  TACTICAL CLEARED  ·  " + Whole(strategic - current) + " TO STRATEGIC NUCLEAR";
-            return "CURRENT " + Whole(current) + "  ·  STRATEGIC NUCLEAR CLEARED";
+                return "CUR " + Whole(current) + " · TAC ACTIVE · STR IN " + Whole(strategic - current);
+            return "CUR " + Whole(current) + " · STR ACTIVE";
         }
 
         private static float Unit(float value) => Math.Max(0f, Math.Min(1f, value));

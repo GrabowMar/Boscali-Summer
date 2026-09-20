@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Features.Support.Domain;
+using BoscaliSummer.Features.Support.Domain.Cyber;
 using BoscaliSummer.Features.Support.Domain.Orbital;
 using NuclearOption.Networking;
 using UnityEngine;
@@ -19,14 +20,12 @@ namespace BoscaliSummer.Features.Support.Runtime
         Jettison = 2,
 
         Upgrade = 3,
-        EwDeploy = 4,
-        EwReposition = 5,
+        // 4 and 5 were the single EW truck's deploy and move; retired with the CYBER network.
 
         /// <summary>Fund the next tier of a SPEC OPS or INTEL program. Arg = <see cref="OpsProgramId"/>.</summary>
         Invest = 6,
 
-        /// <summary>Retune the faction's EW station. Arg = <see cref="EwPosture"/>.</summary>
-        EwRetune = 7,
+        // 7 was the EW truck's posture retune; jammers now carry their own mode (CyberMode).
 
         /// <summary>Raise the base of operations one rank. Arg = <see cref="GarrisonUpgradeId"/>.</summary>
         GarrisonUpgrade = 8,
@@ -38,11 +37,26 @@ namespace BoscaliSummer.Features.Support.Runtime
         OrbitShift = 10,
 
         /// <summary>Launch a cargo vehicle that refills fuel and rods.</summary>
-        Resupply = 11
+        Resupply = 11,
+
+        /// <summary>Order a CYBER site. Arg = <see cref="CyberSiteKind"/>, X/Z = mark.</summary>
+        CyberBuild = 12,
+
+        /// <summary>Scrap a CYBER site for a partial refund. Arg = slot.</summary>
+        CyberScrap = 13,
+
+        /// <summary>Console verb. Arg = slot or incident, Arg2 = <see cref="CyberVerb"/>.</summary>
+        CyberVerb = 14,
+
+        /// <summary>Set a jammer's mode. Arg = slot, Arg2 = <see cref="EwPosture"/>.</summary>
+        CyberMode = 15,
+
+        /// <summary>Drive a CYBER site to a new mark. Arg = slot, X/Z = mark.</summary>
+        CyberMove = 16
     }
 
     /// <summary>
-    /// Per-faction orbital, cyber and program systems. The host owns every mutation and
+    /// Per-faction orbital, CYBER network, doctrine and program systems. The host owns every mutation and
     /// charge; a client keeps the same model objects and rebuilds them from snapshots, so pass
     /// geometry is computed locally while authority stays with the server. At most eight
     /// factions, one station each, four facilities and six programs are tracked, plus up to
@@ -62,9 +76,23 @@ namespace BoscaliSummer.Features.Support.Runtime
             public readonly InfoNetwork Info = new InfoNetwork();
             public readonly OpsProgramLedger Programs = new OpsProgramLedger();
             public readonly OpsGarrison Garrison = new OpsGarrison();
+            public readonly CyberNetwork Cyber = new CyberNetwork();
         }
 
         private readonly Dictionary<FactionHQ, FactionSystems> systems = new Dictionary<FactionHQ, FactionSystems>();
+        private readonly List<FactionHQ> order = new List<FactionHQ>(MaximumFactions);
+
+        /// <summary>Factions with systems, in the order they were first seen.</summary>
+        public int FactionCount => order.Count;
+
+        public FactionHQ FactionAt(int index) => index >= 0 && index < order.Count ? order[index] : null;
+
+        /// <summary>The faction's spectrum-defence network; the host owns it, clients mirror it.</summary>
+        public CyberNetwork CyberFor(FactionHQ hq)
+        {
+            FactionSystems state = Get(hq);
+            return state == null ? null : state.Cyber;
+        }
         private readonly List<ForeignPlatform> foreign = new List<ForeignPlatform>(MaximumForeign);
 
         /// <summary>Other factions' stations as the last snapshot described them.</summary>
@@ -100,13 +128,14 @@ namespace BoscaliSummer.Features.Support.Runtime
         /// mirror all of it. Debris rolls use Unity's random source; the model decides the outcome.
         /// </summary>
         public void TickHost(double now, float deltaTime, bool theaterDaylight, in OrbitClock clock, bool debris,
-                             Action<FactionHQ, OrbitalPlatform> onDebris)
+                             float cyberIntensity, Action<FactionHQ, OrbitalPlatform> onDebris)
         {
             foreach (KeyValuePair<FactionHQ, FactionSystems> entry in systems)
             {
                 OrbitalPlatform platform = entry.Value.Platform;
                 platform.Tick(now, deltaTime, theaterDaylight, clock);
                 entry.Value.Programs.Tick(deltaTime);
+                entry.Value.Cyber.Tick(now, deltaTime, cyberIntensity);
                 if (!platform.Exists || !debris) continue;
                 if (platform.NextDebris <= 0.0)
                 {
@@ -123,6 +152,7 @@ namespace BoscaliSummer.Features.Support.Runtime
         public void Clear()
         {
             systems.Clear();
+            order.Clear();
             foreign.Clear();
         }
 
@@ -189,6 +219,12 @@ namespace BoscaliSummer.Features.Support.Runtime
             if (state != null) state.Garrison.Mirror(levels);
         }
 
+        public void MirrorCyber(FactionHQ hq, CyberSnapshot snapshot, double now)
+        {
+            FactionSystems state = Get(hq);
+            if (state != null) state.Cyber.Mirror(snapshot, now);
+        }
+
         public void MirrorPlatform(FactionHQ hq, PlatformSnapshot snapshot, double now)
         {
             FactionSystems state = Get(hq);
@@ -217,7 +253,9 @@ namespace BoscaliSummer.Features.Support.Runtime
             if (systems.Count >= MaximumFactions) return null;
             if (OrbitalBounds.Radius() <= 0f) return null;
             state = new FactionSystems();
+            state.Cyber.Seed(hq.GetInstanceID() ^ Environment.TickCount);
             systems.Add(hq, state);
+            order.Add(hq);
             return state;
         }
     }

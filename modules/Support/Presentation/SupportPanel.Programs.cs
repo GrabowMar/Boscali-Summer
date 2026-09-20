@@ -16,8 +16,9 @@ namespace BoscaliSummer.Features.Support.Presentation
     /// </summary>
     internal sealed partial class SupportPanel
     {
-        private const float ReserveHeight = 72f;
-        private const float StampWidth = 128f;
+        private const float ReserveHeight = 112f;
+        private const float ReserveValueWidth = 120f;
+        private const float ReserveBarKeyWidth = 86f;
 
         private sealed class ProgramPage
         {
@@ -54,6 +55,7 @@ namespace BoscaliSummer.Features.Support.Presentation
                            (doctrineCount > 0 ? HeaderHeight + doctrineCount * RowHeight + SectionGap : 0f) +
                            HeaderHeight + programCount * RowHeight + SectionGap +
                            (actions > 0 ? HeaderHeight + actions * RowHeight : 0f) + SectionGap;
+            float programHeight = RowHeight;
 
             RectTransform parent = BeginPage(tab, specOps ? "SpecOpsPage" : "IntelPage",
                                              height, out float x, out float y, out float width);
@@ -69,37 +71,34 @@ namespace BoscaliSummer.Features.Support.Presentation
 
             // 01 — the detachment and its readiness
             page.ReserveNote = Header(parent, x, ref y, width,
-                                      specOps ? "01 / BASE OF OPERATIONS" : "01 / " + OpsProgramLedger.ReserveName(reserve),
+                                      specOps ? "BASE OF OPERATIONS" : OpsProgramLedger.ReserveName(reserve),
                                       specOps ? "SOF DETACHMENT · READINESS" : "HELD FOR THEATER EVENTS");
             AvStyled.Label(parent, new Rect(x, y, width * 0.4f, 11f), "RESERVE", "metric-key");
             page.Count = AvStyled.Label(parent, new Rect(x, y - 13f, width * 0.4f, 28f), "—", "metric-value");
             float column = x + width * 0.45f;
             float columnWidth = width * 0.55f;
-            AvStyled.Label(parent, new Rect(column, y - 2f, columnWidth * 0.5f, 14f), "NEXT TOKEN", "kv-key");
-            page.Eta = AvStyled.Label(parent, new Rect(column + columnWidth * 0.5f, y - 2f, columnWidth * 0.5f, 14f),
-                                      "—", "kv-value", align: TextAlignmentOptions.MidlineRight);
-            AvStyled.Label(parent, new Rect(column, y - 20f, columnWidth * 0.5f, 14f), "YIELD", "kv-key");
-            page.Yield = AvStyled.Label(parent, new Rect(column + columnWidth * 0.5f, y - 20f, columnWidth * 0.5f, 14f),
+            AvStyled.Label(parent, new Rect(column, y - 2f, columnWidth * 0.5f, 14f), "YIELD", "kv-key");
+            page.Yield = AvStyled.Label(parent, new Rect(column + columnWidth * 0.5f, y - 2f, columnWidth * 0.5f, 14f),
                                         "—", "kv-value", align: TextAlignmentOptions.MidlineRight);
-            page.Fill = AvKit.ProgressBar(parent, new Rect(x, y - 48f, width, 6f), 0f, AvTheme.RailInfo);
-            AvStyled.Label(parent, new Rect(x, y - 58f, specOps ? width - StampWidth - 8f : width, 13f),
+            // The token track gets its reading in text on the same line: the fill alone is
+            // decoration, the figure and the bar together are the accrual state.
+            AvStyled.Label(parent, new Rect(x, y - 46f, ReserveBarKeyWidth, 12f), "NEXT TOKEN", "kv-key");
+            page.Eta = AvStyled.Label(parent, new Rect(x + width - ReserveValueWidth, y - 46f, ReserveValueWidth, 12f),
+                                      "—", "kv-value", align: TextAlignmentOptions.MidlineRight);
+            page.Fill = AvKit.ProgressBar(parent,
+                new Rect(x + ReserveBarKeyWidth + 4f, y - 44f, width - ReserveBarKeyWidth - ReserveValueWidth - 8f, 8f),
+                0f, AvTheme.RailInfo);
+            Wrapped(AvStyled.Label(parent, new Rect(x, y - 72f, width, 32f),
                            specOps
-                               ? "The base of operations is bought with these tokens."
-                               : "No theater event draws on this reserve yet.",
-                           "row-sub").color = AvTheme.Disabled;
-            if (specOps)
-            {
-                var stamp = new Rect(x + width - StampWidth, y - 60f, StampWidth, 16f);
-                AvStyled.Box(parent, stamp, "stamp");
-                AvStyled.Label(parent, stamp, "AIRBORNE // SOF", "stamp",
-                               align: TextAlignmentOptions.Center);
-            }
+                               ? "Fund task groups with allocation. Spend their SOF tokens on doctrine upgrades below."
+                               : "Fund intelligence networks to fill the reserve. No theater event spends these tokens yet.",
+                           "hint")).color = AvTheme.Dim;
             y -= ReserveHeight + SectionGap;
 
             // 02 — base-of-operations doctrine (SPEC OPS only)
             if (doctrineCount > 0)
             {
-                Header(parent, x, ref y, width, "02 / DOCTRINE", "SPENDS SOF TOKENS");
+                Header(parent, x, ref y, width, "DETACHMENT DOCTRINE", "SPENDS SOF TOKENS");
                 for (int i = 0; i < OpsGarrison.UpgradeCount; i++)
                 {
                     GarrisonUpgradeInfo info = OpsGarrison.Upgrades[i];
@@ -114,7 +113,7 @@ namespace BoscaliSummer.Features.Support.Presentation
 
             // 03 — task groups (SPEC OPS) or networks (INTEL)
             page.ProgramsNote = Header(parent, x, ref y, width,
-                                       specOps ? "03 / TASK GROUPS" : "02 / NETWORKS",
+                                       specOps ? "TASK GROUPS" : "INTELLIGENCE NETWORKS",
                                        specOps ? "ASSIGNED ELEMENTS" : "");
             int row = 0;
             for (int i = 0; i < OpsProgramLedger.Programs.Length; i++)
@@ -124,16 +123,17 @@ namespace BoscaliSummer.Features.Support.Presentation
                 OpsProgramId id = info.Id;
                 page.Ids[row] = id;
                 page.Rows[row] = Row(parent, x, y, width, false, info.Code, info.Name, info.Summary,
-                                     "FUND", () => { support.RequestInvest(id); nextRefresh = 0f; });
+                                     "FUND", () => { support.RequestInvest(id); nextRefresh = 0f; },
+                                     height: programHeight);
                 row++;
-                y -= RowHeight;
+                y -= programHeight;
             }
             y -= SectionGap;
 
             // 04 — direct action (SPEC OPS only)
             if (actions > 0)
             {
-                Header(parent, x, ref y, width, specOps ? "04 / DIRECT ACTION" : "03 / DIRECT ACTION",
+                Header(parent, x, ref y, width, "DIRECT ACTION",
                        "GROUND FORCES");
                 BuildActionRows(parent, tab, x, y, width, "TASK");
             }
@@ -155,6 +155,7 @@ namespace BoscaliSummer.Features.Support.Presentation
                 page.Eta.text = "—";
                 page.Yield.text = "—";
                 page.Fill.fillAmount = 0f;
+                page.Fill.color = AvTheme.RailInert;
                 page.ProgramsNote.text = "AWAITING THEATER DATA";
             }
             else
@@ -167,7 +168,8 @@ namespace BoscaliSummer.Features.Support.Presentation
                 page.Eta.color = ledger.Full(reserve) ? AvTheme.RailReady : eta < 0f ? AvTheme.Dim : AvTheme.TextPrimary;
                 page.Yield.text = yield.ToString("0.00", CultureInfo.InvariantCulture) + " " + tag + "/MIN";
                 page.Fill.fillAmount = ledger.Full(reserve) ? 1f : ledger.Progress(reserve);
-                page.Fill.color = ledger.Full(reserve) ? AvTheme.RailReady : AvTheme.RailInfo;
+                page.Fill.color = ledger.Full(reserve) ? AvTheme.RailReady
+                    : eta < 0f ? AvTheme.RailInert : AvTheme.RailInfo;
                 page.ProgramsNote.text = "FUNDED " + ledger.FundedTiers(reserve) + "/" +
                                          OpsProgramLedger.MaxTier * page.Rows.Length;
             }
@@ -235,7 +237,7 @@ namespace BoscaliSummer.Features.Support.Presentation
         {
             var pips = new Image[OpsGarrison.MaxRank];
             for (int i = 0; i < pips.Length; i++)
-                pips[i] = AvKit.Rule(parent, new Rect(x + 10f + i * 12f, y - 20f, 10f, 3f), AvTheme.RailInert);
+                pips[i] = AvKit.Rule(parent, new Rect(x + 10f + i * 12f, y - 26f, 10f, 2f), AvTheme.RailInert);
             return pips;
         }
 

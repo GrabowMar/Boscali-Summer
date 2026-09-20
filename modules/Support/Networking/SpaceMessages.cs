@@ -1,5 +1,6 @@
 using System;
 using BoscaliSummer.Features.Support.Domain;
+using BoscaliSummer.Features.Support.Domain.Cyber;
 using BoscaliSummer.Features.Support.Domain.Orbital;
 using BoscaliSummer.Features.Support.Runtime;
 using Mirage;
@@ -13,7 +14,8 @@ namespace BoscaliSummer.Features.Support.Networking
         public byte Protocol;
     }
 
-    /// <summary>One client intent: launch, jettison, burn, resupply, upgrade, invest or EW retune. The host validates everything.</summary>
+    /// <summary>One client intent: launch, jettison, burn, resupply, upgrade, invest, doctrine or a CYBER
+    /// site order or console verb. The host validates everything.</summary>
     [NetworkMessage]
     internal struct OpsCommandMessage
     {
@@ -27,9 +29,10 @@ namespace BoscaliSummer.Features.Support.Networking
 
     /// <summary>
     /// Bounded faction snapshot: the faction's station (15 cells, 7 recharge timers), up to four
-    /// foreign stations, four facility levels, one EW station, six program tiers and the
-    /// base-of-operations ranks. Station clocks are relative to the moment the host took the
-    /// snapshot, so a client rebuilds the same passes locally.
+    /// foreign stations, four facility levels, the CYBER network (12 sites, 6 incidents, 6
+    /// notices, up to 8 origin names), six program tiers and the base-of-operations ranks.
+    /// Clocks are relative to the moment the host took the snapshot, so a client rebuilds the
+    /// same passes and timers locally.
     /// </summary>
     [NetworkMessage]
     internal struct OpsStateMessage
@@ -80,17 +83,12 @@ namespace BoscaliSummer.Features.Support.Networking
 
         public byte Sigint, Crypto, Disrupt, Ew;
 
-        /// <summary>The faction's EW asset state (see <c>EwAssetState</c>): none, truck, or
-        /// encampment. Only the state crosses the wire — never the live Unit/Building
-        /// reference, which a client cannot reconstruct anyway.</summary>
-        public byte EwAssetState;
+        /// <summary>The faction's spectrum-defence network; never the live vehicles behind it.</summary>
+        public CyberSnapshot Cyber;
 
-        /// <summary>The station's operating posture (see <c>EwPosture</c>). Meaningless while
-        /// <see cref="EwAssetState"/> is none.</summary>
-        public byte EwPosture;
-
-        /// <summary>Station ground position in global metres, for the panel's grid readout.</summary>
-        public float EwX, EwZ;
+        /// <summary>Enemy faction names in the network's origin order.</summary>
+        public byte CyberOriginCount;
+        public string[] CyberOrigins;
 
         /// <summary>Funded tier per <c>OpsProgramId</c>, always six entries.</summary>
         public byte[] ProgramTiers;
@@ -107,6 +105,12 @@ namespace BoscaliSummer.Features.Support.Networking
     /// mapping between the wire fields and the station model's snapshot.</summary>
     internal static class OpsStateMessageBuffers
     {
+        /// <summary>Enemy faction names carried per snapshot. Beyond this an incident origin reads
+        /// as a numbered hostile actor rather than growing the poll.</summary>
+        public const int MaximumOriginNames = 4;
+
+        public const int MaximumOriginLength = 20;
+
         public static OpsStateMessage Create() => new OpsStateMessage
         {
             PlatformModules = new byte[OrbitalPlatform.CellCount],
@@ -117,8 +121,14 @@ namespace BoscaliSummer.Features.Support.Networking
             ForeignClocks = new float[SpaceOperations.MaximumForeign],
             ForeignLayouts = new int[SpaceOperations.MaximumForeign],
             ProgramTiers = new byte[OpsProgramLedger.ProgramCount],
-            GarrisonLevels = new byte[OpsGarrison.UpgradeCount]
+            GarrisonLevels = new byte[OpsGarrison.UpgradeCount],
+            Cyber = new CyberSnapshot(),
+            CyberOrigins = new string[MaximumOriginNames]
         };
+
+        public static bool ValidCyber(in OpsStateMessage state) =>
+            state.Cyber != null && state.CyberOrigins != null && state.CyberOriginCount <= MaximumOriginNames &&
+            state.CyberOrigins.Length >= state.CyberOriginCount;
 
         public static bool ValidArrays(in OpsStateMessage state) =>
             state.PlatformModules != null && state.PlatformModules.Length >= OrbitalPlatform.CellCount &&

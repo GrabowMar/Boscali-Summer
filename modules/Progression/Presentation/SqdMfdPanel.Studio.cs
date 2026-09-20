@@ -26,6 +26,15 @@ namespace BoscaliSummer.Features.Progression.Presentation
 
         private const int StudioRowsPerPage = 4;
 
+        /// <summary>How a studio message reads: a success, a caution, or a refusal.</summary>
+        private enum StudioTone : byte
+        {
+            Info,
+            Ok,
+            Warn,
+            Bad
+        }
+
         private readonly List<WingPilotRecord> studioPilots = new List<WingPilotRecord>(64);
         private readonly StudioRow[] studioRows = new StudioRow[StudioRowsPerPage];
         private PilotDraft studioDraft = PilotDraft.New();
@@ -35,6 +44,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
         private bool studioDirty = true;
         private bool studioArtDirty = true;
         private string studioMessage = string.Empty;
+        private StudioTone studioMessageTone = StudioTone.Info;
         private float studioMessageUntil;
         private string studioPortraitKey;
         private Sprite studioPortraitSprite;
@@ -79,6 +89,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             studioDirty = true;
             studioArtDirty = true;
             studioMessage = string.Empty;
+            studioMessageTone = StudioTone.Info;
             studioMessageUntil = 0f;
             studioPortraitKey = null;
             studioPortraitSprite = null;
@@ -110,43 +121,48 @@ namespace BoscaliSummer.Features.Progression.Presentation
 
         private void BuildStudioPage(RectTransform parent, Rect body)
         {
-            clause = 0;
             if (!WingLink.PilotStudioAvailable)
             {
-                DossierSpine(parent, new Rect(body.x, body.y, 3f, body.height));
+                PageRail(parent, new Rect(body.x, body.y, 3f, body.height));
                 float px = body.x + SpineInset;
-                AvStyled.Label(parent, new Rect(px, body.y, body.width - SpineInset, 20f),
+                float pw = body.width - SpineInset;
+                AvKit.TacticalCard(parent, new Rect(px, body.y, pw, 106f), AvTheme.RailCaution);
+                AvStyled.Label(parent, new Rect(px + 12f, body.y - 12f, pw - 24f, 20f),
                     "PILOT STUDIO UNAVAILABLE", "section-title");
-                AvStyled.Label(parent, new Rect(px, body.y - 26f, body.width - SpineInset, 60f),
+                AvStyled.Label(parent, new Rect(px + 12f, body.y - 40f, pw - 24f, 54f),
                     WingLink.PilotStudioUnavailableReason, "row-sub");
                 return;
             }
 
-            parent = AvScreen.Scroll(parent, body, 960f, out body);
-            DossierSpine(parent, new Rect(body.x, body.y, 3f, body.height));
+            RectTransform scrolled = AvScreen.Scroll(parent, body, StudioContentHeight(), out body);
+            bool scrolls = !ReferenceEquals(scrolled, parent);
+            parent = scrolled;
+            PageRail(parent, new Rect(body.x, body.y, 3f, body.height));
             float x = body.x + SpineInset;
             float width = body.width - SpineInset;
             float y = body.y;
 
-            y = DrawFileHeader(parent, x, y, width, "FORM SQD-4 · SHEET 4 OF 4", "STUDIO RECORD",
-                "LOCAL FILES · HOST ROSTER");
-            y = DrawSectionTitle(parent, x, y, width, "PILOT STUDIO", "WING COMMAND COMPANION API", band: false);
-            studioStatus = PlainLabel(parent, new Rect(x, y + 2f, width, 16f), "", "row-sub");
+            y = DrawPageHeader(parent, x, y, width, "STUDIO  /  04 OF 04", "PILOT STUDIO",
+                "LOCAL FILES + HOST ROSTER");
+            y = DrawSectionTitle(parent, x, y, width, "CUSTOM PILOTS", "WING COMMAND CONNECTED", band: false);
+            // Two lines: the ready line and Wing Command's own unavailable reason are both
+            // sentences, and a wrapped sentence clipped to one line reads as a bug.
+            studioStatus = PlainLabel(parent, new Rect(x, y + 2f, width, 26f), "", "row-sub");
 
             // ---- List actions and catalogue ---------------------------------------------
             float quarter = (width - AvTokens.Space2 * 3f) / 4f;
-            AvStyled.Button(parent, new Rect(x, y - 24f, quarter, 26f), "+ NEW", "btn",
+            AvStyled.Button(parent, new Rect(x, y - 32f, quarter, 26f), "+ NEW", "btn",
                 NewStudioDraft, AvButtonStyle.Quiet).WithTooltip("Start a new custom pilot draft.");
-            AvStyled.Button(parent, new Rect(x + quarter + AvTokens.Space2, y - 24f, quarter, 26f), "CLONE", "btn",
+            AvStyled.Button(parent, new Rect(x + quarter + AvTokens.Space2, y - 32f, quarter, 26f), "CLONE", "btn",
                 CloneStudioDraft, AvButtonStyle.Quiet).WithTooltip("Copy the selected pilot into a new draft.");
             studioDeleteButton = AvStyled.Button(parent,
-                new Rect(x + (quarter + AvTokens.Space2) * 2f, y - 24f, quarter, 26f), "DELETE", "btn",
+                new Rect(x + (quarter + AvTokens.Space2) * 2f, y - 32f, quarter, 26f), "DELETE", "btn",
                 DeleteStudioDraft, AvButtonStyle.Danger);
             studioDeleteButton.WithTooltip("Delete the selected custom pilot file. Press twice to confirm.");
-            AvStyled.Button(parent, new Rect(x + (quarter + AvTokens.Space2) * 3f, y - 24f, quarter, 26f),
+            AvStyled.Button(parent, new Rect(x + (quarter + AvTokens.Space2) * 3f, y - 32f, quarter, 26f),
                 "IMPORT ALL", "btn", ImportAllCustomPilots, AvButtonStyle.Quiet)
                 .WithTooltip("Recruit every custom pilot not already in the Wing Command squadron.");
-            y -= 58f;
+            y -= 66f;
 
             float columnCallsign = x + 4f;
             float columnName = x + width * 0.18f;
@@ -162,30 +178,31 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 var rowObject = new GameObject("StudioRow_" + i, typeof(RectTransform));
                 var root = (RectTransform)rowObject.transform;
                 root.SetParent(parent, false);
-                AvKit.Place(root, new Rect(x, y, width, 28f));
+                AvKit.Place(root, new Rect(x, y, width, AvTokens.RowPitch - 2f));
                 var row = new StudioRow
                 {
                     Root = root,
                     Background = AvKit.Panel(root, new Rect(0f, 0f, width, 26f), Color.clear),
-                    Callsign = PlainLabel(root, new Rect(4f, -2f, width * 0.16f, 22f), "", "row-name"),
-                    Name = PlainLabel(root, new Rect(width * 0.18f, -2f, width * 0.36f, 22f), "", "kv-value"),
-                    Rank = PlainLabel(root, new Rect(width * 0.56f, -2f, width * 0.18f, 22f), "", "kv-value"),
-                    Status = PlainLabel(root, new Rect(width * 0.76f, -2f, width * 0.22f, 22f), "", "kv-value"),
+                    Callsign = Fitted(PlainLabel(root, new Rect(4f, -2f, width * 0.16f, 22f), "", "row-name")),
+                    Name = Fitted(PlainLabel(root, new Rect(width * 0.18f, -2f, width * 0.36f, 22f), "", "kv-value")),
+                    Rank = Fitted(PlainLabel(root, new Rect(width * 0.56f, -2f, width * 0.18f, 22f), "", "kv-value")),
+                    Status = Fitted(PlainLabel(root, new Rect(width * 0.76f, -2f, width * 0.22f, 22f), "", "kv-value")),
                 };
                 int index = i;
                 row.Select = AvKit.HitButton(root, new Rect(0f, 0f, width, 26f), () => SelectStudio(index));
                 row.Select.SetRowHighlight(row.Background, Color.clear, HoverFill());
+                row.Select.WithTooltip("Open this custom pilot in the editor. Saving is local-only.");
 
-                // Every slot keeps its rule, so an unfilled register still reads as a form.
-                AvKit.Rule(root, new Rect(0f, -27f, width, 1f), AvTheme.Hairline.WithAlpha(0.10f));
+                // Every slot keeps its rule, so an unfilled roster still has clear row rhythm.
+                AvKit.Rule(root, new Rect(0f, -(AvTokens.RowPitch - 3f), width, 1f), AvTheme.Hairline.WithAlpha(0.10f));
                 studioRows[i] = row;
-                y -= 30f;
+                y -= AvTokens.RowPitch;
             }
-            const float pagerArrow = 34f;
-            studioPagerPrev = AvStyled.Button(parent, new Rect(x, y - 3f, pagerArrow, 22f), "<", "btn",
+            const float pagerArrow = 70f;
+            studioPagerPrev = AvStyled.Button(parent, new Rect(x, y - 3f, pagerArrow, 22f), "PREVIOUS", "btn",
                 () => ChangeStudioPage(-1), AvButtonStyle.Quiet).WithTooltip("Previous page of custom pilots.");
             studioPagerNext = AvStyled.Button(parent, new Rect(x + width - pagerArrow, y - 3f, pagerArrow, 22f),
-                ">", "btn", () => ChangeStudioPage(1), AvButtonStyle.Quiet)
+                "NEXT", "btn", () => ChangeStudioPage(1), AvButtonStyle.Quiet)
                 .WithTooltip("Next page of custom pilots.");
             studioPager = PlainLabel(parent, new Rect(x + pagerArrow + AvTokens.Space2, y - 2f,
                 width - (pagerArrow + AvTokens.Space2) * 2f, 16f), "", "section-title-note");
@@ -193,68 +210,73 @@ namespace BoscaliSummer.Features.Progression.Presentation
             y -= 30f;
 
             // ---- Editor -------------------------------------------------------------------
-            y = DrawSectionTitle(parent, x, y, width, "PILOT EDITOR", "LOCAL FILES · HOST ROSTER", band: true);
+            y = DrawSectionTitle(parent, x, y, width, "PILOT EDITOR", "LOCAL FILE", band: true);
 
             // Sized off the editor's stepper block so the portrait is the height of the
-            // record it illustrates, in the same 3:4 mount the pilot dossier uses.
+            // record it illustrates, in the same 3:4 mount the pilot status page uses.
             Rect portraitFrame = new Rect(x, y - 2f, 92f, 138f);
             AvKit.Panel(parent, portraitFrame, AvTheme.SurfaceInert);
             AvKit.Outline(parent, portraitFrame, AvTheme.Frame);
-            AvKit.CornerTicks(parent, portraitFrame, AvTheme.TextPrimary.WithAlpha(0.22f), 9f);
-            studioPortraitFallback = Redaction(parent,
-                new Rect(portraitFrame.x + 14f, portraitFrame.y - 35f, portraitFrame.width - 28f, 68f), 3);
+            studioPortraitFallback = VisualPlaceholder(parent,
+                new Rect(portraitFrame.x + 14f, portraitFrame.y - 35f, portraitFrame.width - 28f, 68f));
             studioPortrait = AvKit.Panel(parent,
                 new Rect(portraitFrame.x + 3f, portraitFrame.y - 3f, portraitFrame.width - 6f, portraitFrame.height - 6f),
                 Color.white);
             studioPortrait.type = Image.Type.Simple;
             studioPortrait.preserveAspect = true;
             studioPortrait.raycastTarget = false;
+            studioPortrait.enabled = false;
 
             float stepperX = x + 100f;
             float stepperWidth = width - 100f;
+            // The editor rows sit on the shared RowPitch grid the other three pages use,
+            // so a stepper and a text field never stagger by four pixels.
             Stepper(parent, stepperX, y, stepperWidth, out studioBodyValue, "BODY",
                 () => CycleDraft(d => d.CycleBody(-1, BodyCount())),
                 () => CycleDraft(d => d.CycleBody(1, BodyCount())));
-            Stepper(parent, stepperX, y - 28f, stepperWidth, out studioFaceValue, "FACE",
+            Stepper(parent, stepperX, y - AvTokens.RowPitch, stepperWidth, out studioFaceValue, "FACE",
                 () => CycleDraft(d => d.CycleFace(-1, FaceCount())),
                 () => CycleDraft(d => d.CycleFace(1, FaceCount())));
-            Stepper(parent, stepperX, y - 56f, stepperWidth, out studioHairValue, "HAIR",
+            Stepper(parent, stepperX, y - AvTokens.RowPitch * 2f, stepperWidth, out studioHairValue, "HAIR",
                 () => CycleDraft(d => d.CycleHair(-1, HairCount())),
                 () => CycleDraft(d => d.CycleHair(1, HairCount())));
-            Stepper(parent, stepperX, y - 84f, stepperWidth, out studioSuitValue, "SUIT",
+            Stepper(parent, stepperX, y - AvTokens.RowPitch * 3f, stepperWidth, out studioSuitValue, "SUIT",
                 () => CycleDraft(d => d.CycleUniform(-1, UniformCount())),
                 () => CycleDraft(d => d.CycleUniform(1, UniformCount())));
-            Stepper(parent, stepperX, y - 112f, stepperWidth, out studioBackValue, "BACK",
+            Stepper(parent, stepperX, y - AvTokens.RowPitch * 4f, stepperWidth, out studioBackValue, "BACK",
                 () => CycleDraft(d => d.CycleBackdrop(-1, BackdropCount())),
                 () => CycleDraft(d => d.CycleBackdrop(1, BackdropCount())));
-            y -= 146f;
+            y -= AvTokens.RowPitch * 5f + AvTokens.Space1;
 
             float fieldWidth = width - 52f - 66f;
-            PlainLabel(parent, new Rect(x, y, 46f, 28f), "CALL", "kv-key");
+            PlainLabel(parent, new Rect(x, y, 46f, AvTokens.RowHeight), "CALL", "form-key");
             studioCallsignField = AvKit.InputField(parent, new Rect(x + 48f, y, fieldWidth, 28f),
                 PilotDraft.MaxCallsign, value => { studioDraft.Callsign = value; studioDraft.Normalize(); },
                 placeholderText: "CALLSIGN", tooltip: "Pilot callsign, up to 14 characters.");
-            AvStyled.Button(parent, new Rect(x + width - 64f, y, 64f, 28f), "RND", "btn",
+            AttachTooltip(studioCallsignField, "Pilot callsign, up to 14 characters.");
+            AvStyled.Button(parent, new Rect(x + width - 64f, y, 64f, 28f), "RANDOM", "btn",
                 RandomizeCallsign, AvButtonStyle.Quiet).WithTooltip("Generate a new random callsign.");
-            y -= 32f;
-            PlainLabel(parent, new Rect(x, y, 46f, 28f), "NAME", "kv-key");
+            y -= AvTokens.RowPitch;
+            PlainLabel(parent, new Rect(x, y, 46f, AvTokens.RowHeight), "NAME", "form-key");
             studioNameField = AvKit.InputField(parent, new Rect(x + 48f, y, fieldWidth, 28f),
                 PilotDraft.MaxName, value => { studioDraft.Name = value; studioDraft.Normalize(); },
                 placeholderText: "NAME", tooltip: "Pilot name, up to 24 characters.");
-            AvStyled.Button(parent, new Rect(x + width - 64f, y, 64f, 28f), "RND", "btn",
+            AttachTooltip(studioNameField, "Pilot name, up to 24 characters.");
+            AvStyled.Button(parent, new Rect(x + width - 64f, y, 64f, 28f), "RANDOM", "btn",
                 RandomizeName, AvButtonStyle.Quiet).WithTooltip("Generate a new random name.");
-            y -= 32f;
+            y -= AvTokens.RowPitch;
             Stepper(parent, x, y, width, out studioStyleValue, "STYLE",
                 () => CycleDraft(d => d.CyclePersona(-1)),
                 () => CycleDraft(d => d.CyclePersona(1)));
-            y -= 34f;
+            y -= AvTokens.RowPitch + AvTokens.Space1;
 
             PlainLabel(parent, new Rect(x, y, width - 100f, 14f), "BACKGROUND / LORE", "section-title-note");
             studioBioField = AvKit.InputField(parent, new Rect(x, y - 16f, width - 100f, 58f),
                 PilotDraft.MaxBackground,
                 value => { studioDraft.Background = value; studioDraft.Normalize(); },
                 placeholderText: "Service background\u2026", multiline: true,
-                tooltip: "Free-form service record shown in the pilot dossier.");
+                tooltip: "Free-form service record shown on the pilot status page.");
+            AttachTooltip(studioBioField, "Free-form service record shown on the pilot status page.");
             AvStyled.Button(parent, new Rect(x + width - 94f, y - 16f, 94f, 28f), "GENERATE", "btn",
                 GenerateBio, AvButtonStyle.Quiet).WithTooltip("Generate a service background from the radio style.");
             y -= 84f;
@@ -276,12 +298,13 @@ namespace BoscaliSummer.Features.Progression.Presentation
             y = DrawSectionTitle(parent, x, y, width, "SQUADRON IDENTITY", "LOCAL COSMETIC", band: true);
             Rect emblemFrame = new Rect(x, y - 2f, 64f, 64f);
             studioEmblemFallback = PlainLabel(parent, new Rect(emblemFrame.x + 2f, emblemFrame.y - 22f, 60f, 20f),
-                "NO\nART", "row-sub");
+                "NO ART", "row-sub");
             studioEmblemFallback.alignment = TextAlignmentOptions.Center;
             studioEmblem = AvKit.Panel(parent, emblemFrame, Color.white);
             studioEmblem.type = Image.Type.Simple;
             studioEmblem.preserveAspect = true;
             studioEmblem.raycastTarget = false;
+            studioEmblem.enabled = false;
 
             float emblemStepperX = x + 76f;
             float emblemStepperWidth = width - 76f;
@@ -295,12 +318,13 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 RandomizeEmblem, AvButtonStyle.Quiet).WithTooltip("Roll a new local emblem.");
             y -= 130f;
 
-            PlainLabel(parent, new Rect(x, y, 96f, 28f), "SQUADRON", "kv-key");
+            PlainLabel(parent, new Rect(x, y, 96f, AvTokens.RowHeight), "SQUADRON", "form-key");
             studioSquadronField = AvKit.InputField(parent, new Rect(x + 98f, y, width - 98f, 28f), 24,
                 value => { settings.SquadronName.Value = value ?? string.Empty; },
-                placeholderText: "SQUADRON NAME", tooltip: "Local squadron name shown on the pilot dossier.");
+                placeholderText: "SQUADRON NAME", tooltip: "Local squadron name shown on the pilot status page.");
+            AttachTooltip(studioSquadronField, "Local squadron name shown on the pilot status page.");
             y -= 34f;
-            Stepper(parent, x, y, width - 96f, out studioArtValue, "CUSTOM ART",
+            Stepper(parent, x, y, width - 96f, out studioArtValue, "ART",
                 () => CycleArtFile(-1), () => CycleArtFile(1));
             AvStyled.Button(parent, new Rect(x + width - 92f, y, 92f, 30f), "NO ART", "btn",
                 ClearArtFile, AvButtonStyle.Quiet).WithTooltip("Use the procedural emblem instead of a PNG.");
@@ -308,14 +332,41 @@ namespace BoscaliSummer.Features.Progression.Presentation
             y -= 40f;
             studioMessageText = PlainLabel(parent, new Rect(x, y, width, 30f),
                 "Custom pilots are local files read by Wing Command; nothing is uploaded.", "row-sub");
+
+            // The declared content height is an upper bound; trim the scroll's own content
+            // to the depth that was actually drawn so a short editor never scrolls into
+            // blank glass below the last control.
+            if (scrolls)
+            {
+                float used = body.y - (y - 30f) + AvTokens.Space2;
+                scrolled.sizeDelta = new Vector2(scrolled.sizeDelta.x, used);
+            }
         }
+
+        /// <summary>
+        /// An upper bound for the editor's scroll content. The build trims the content to
+        /// what it actually drew afterwards, so this only has to be generous enough that
+        /// the viewport is created; it is never the depth a reader scrolls to.
+        /// </summary>
+        private static float StudioContentHeight() => 1040f;
 
         private void Stepper(RectTransform parent, float x, float y, float width,
             out TMP_Text value, string caption, Action previous, Action next)
         {
-            PlainLabel(parent, new Rect(x, y, 48f, AvTokens.RowHeight), caption, "kv-key");
+            PlainLabel(parent, new Rect(x, y, 48f, AvTokens.RowHeight), caption, "form-key");
             AvKit.Stepper(parent, x + 50f, y, width - 50f, out value, previous, next,
                 caption + " — left/right steps the selection.");
+        }
+
+        /// <summary>
+        /// The shared hover target, so an input field's help reaches the status strip like
+        /// every button's does. The field's own widget takes the tooltip text but does not
+        /// yet publish it, and this keeps the fix on this side of the avionics seam.
+        /// </summary>
+        private static void AttachTooltip(Component control, string text)
+        {
+            if (control == null) return;
+            control.gameObject.AddComponent<AvTooltipTarget>().Initialise(text);
         }
 
         // ---- STUDIO refresh --------------------------------------------------------------
@@ -344,9 +395,13 @@ namespace BoscaliSummer.Features.Progression.Presentation
             int pageCount = Math.Max(1, (studioPilots.Count + StudioRowsPerPage - 1) / StudioRowsPerPage);
             studioPage = Mathf.Clamp(studioPage, 0, pageCount - 1);
             studioPagerPrev.SetEnabled(studioPage > 0);
+            studioPagerPrev.WithTooltip(studioPage > 0
+                ? "Previous page of custom pilots." : "Already on the first page.");
             studioPagerNext.SetEnabled(studioPage < pageCount - 1);
+            studioPagerNext.WithTooltip(studioPage < pageCount - 1
+                ? "Next page of custom pilots." : "Already on the last page.");
             int first = studioPage * StudioRowsPerPage;
-            studioPager.text = studioPilots.Count == 0 ? "NO CUSTOM PILOTS FOUND — PRESS NEW OR IMPORT ALL"
+            studioPager.text = studioPilots.Count == 0 ? "NO PILOTS — PRESS NEW OR IMPORT ALL"
                 : (first + 1) + "–" + Math.Min(first + StudioRowsPerPage, studioPilots.Count) +
                   " OF " + studioPilots.Count + "   ·   PAGE " + (studioPage + 1) + "/" + pageCount;
 
@@ -372,10 +427,15 @@ namespace BoscaliSummer.Features.Progression.Presentation
             RefreshStudioEditor();
             if (studioMessageText != null)
             {
-                studioMessageText.text = string.IsNullOrEmpty(studioMessage)
+                bool quiet = string.IsNullOrEmpty(studioMessage);
+                studioMessageText.text = quiet
                     ? "Custom pilots are local files read by Wing Command; nothing is uploaded."
                     : studioMessage;
-                studioMessageText.color = string.IsNullOrEmpty(studioMessage) ? AvTheme.Dim : AvTheme.RailReady;
+                studioMessageText.color = quiet ? AvTheme.Dim
+                    : studioMessageTone == StudioTone.Ok ? AvTheme.RailReady
+                    : studioMessageTone == StudioTone.Warn ? AvTheme.Warning
+                    : studioMessageTone == StudioTone.Bad ? AvTheme.Alert
+                    : AvTheme.Dim;
             }
         }
 
@@ -437,16 +497,25 @@ namespace BoscaliSummer.Features.Progression.Presentation
 
             bool valid = studioDraft.IsValid;
             bool recruited = valid && WingLink.IsPilotRecruited(studioDraft.Callsign);
+            // State is carried by the word on the button and the latched paint, never by a
+            // solid accent plate; the stylesheet's latched wash is the strongest fill these
+            // controls wear.
             studioRecruitButton.SetText(recruited ? "DISCHARGE" : "RECRUIT");
             studioRecruitButton.SetEnabled(valid);
-            studioProfileButton.SetLatched(valid &&
-                string.Equals(settings.PilotProfile.Value, studioDraft.Callsign, StringComparison.OrdinalIgnoreCase));
+            studioRecruitButton.SetLatched(recruited);
+            studioRecruitButton.ClearCustomColors();
+
+            bool profileActive = valid &&
+                string.Equals(settings.PilotProfile.Value, studioDraft.Callsign, StringComparison.OrdinalIgnoreCase);
+            studioProfileButton.SetLatched(profileActive);
             studioProfileButton.SetEnabled(valid);
+            studioProfileButton.ClearCustomColors();
 
             bool deleteArmed = valid && studioSelected >= 0 && Time.unscaledTime < studioDeleteArmedUntil &&
                 string.Equals(studioDeleteArmedCallsign, studioDraft.Callsign, StringComparison.OrdinalIgnoreCase);
             studioDeleteButton.SetEnabled(valid && studioSelected >= 0);
             studioDeleteButton.SetLatched(deleteArmed);
+            studioDeleteButton.ClearCustomColors();
         }
 
         private void ReloadStudioPilots()
@@ -503,7 +572,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             studioPortraitKey = null;
             studioEditorKey = null;
             RandomizeLooks();
-            NextMessage("New pilot draft — set a callsign and save.");
+            NextMessage("New pilot draft — set a callsign and save.", StudioTone.Info);
             nextRefresh = 0f;
         }
 
@@ -511,7 +580,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
         {
             if (studioSelected < 0 || studioSelected >= studioPilots.Count)
             {
-                NextMessage("Select a custom pilot to clone first.");
+                NextMessage("Select a custom pilot to clone first.", StudioTone.Warn);
                 return;
             }
             studioDraft = DraftFrom(studioPilots[studioSelected]);
@@ -524,7 +593,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             studioSelectedCallsign = null;
             studioPortraitKey = null;
             studioEditorKey = null;
-            NextMessage("Cloned " + baseCallsign + " — adjust the callsign and save.");
+            NextMessage("Cloned " + baseCallsign + " — adjust the callsign and save.", StudioTone.Ok);
             nextRefresh = 0f;
         }
 
@@ -532,7 +601,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
         {
             if (studioSelected < 0 || studioSelected >= studioPilots.Count)
             {
-                NextMessage("Select a custom pilot file to delete first.");
+                NextMessage("Select a custom pilot file to delete first.", StudioTone.Warn);
                 return;
             }
             string callsign = studioPilots[studioSelected].Callsign;
@@ -541,7 +610,8 @@ namespace BoscaliSummer.Features.Progression.Presentation
             {
                 studioDeleteArmedCallsign = callsign;
                 studioDeleteArmedUntil = Time.unscaledTime + 4f;
-                NextMessage("Delete " + callsign + "? Press DELETE again within a moment to confirm.");
+                NextMessage("Delete " + callsign + "? Press DELETE again within a moment to confirm.",
+                    StudioTone.Warn);
                 nextRefresh = 0f;
                 return;
             }
@@ -553,9 +623,9 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 if (string.Equals(studioSelectedCallsign, callsign, StringComparison.OrdinalIgnoreCase))
                     studioSelectedCallsign = null;
                 studioDirty = true;
-                NextMessage("Deleted custom pilot " + callsign + ".");
+                NextMessage("Deleted custom pilot " + callsign + ".", StudioTone.Ok);
             }
-            else NextMessage("Wing Command could not delete " + callsign + ".");
+            else NextMessage("Wing Command could not delete " + callsign + ".", StudioTone.Bad);
             nextRefresh = 0f;
         }
 
@@ -565,7 +635,8 @@ namespace BoscaliSummer.Features.Progression.Presentation
             studioDirty = true;
             NextMessage(imported > 0
                 ? "Recruited " + imported + " custom pilot(s) to the squadron."
-                : "No new custom pilots to recruit.");
+                : "No new custom pilots to recruit.",
+                imported > 0 ? StudioTone.Ok : StudioTone.Info);
             nextRefresh = 0f;
         }
 
@@ -574,17 +645,17 @@ namespace BoscaliSummer.Features.Progression.Presentation
             studioDraft.Normalize();
             if (!studioDraft.IsValid)
             {
-                NextMessage("Enter a callsign before saving.");
+                NextMessage("Enter a callsign before saving.", StudioTone.Warn);
                 return;
             }
             if (WingLink.SaveCustomPilot(RecordFrom(studioDraft)))
             {
                 studioSelectedCallsign = studioDraft.Callsign;
                 studioDirty = true;
-                localProfileKey = null; // reload the local dossier from the saved file
-                NextMessage("Saved " + studioDraft.Callsign + " to the custom pilots folder.");
+                localProfileKey = null; // reload the local profile from the saved file
+                NextMessage("Saved " + studioDraft.Callsign + " to the custom pilots folder.", StudioTone.Ok);
             }
-            else NextMessage("Wing Command rejected the save — check the BepInEx log.");
+            else NextMessage("Wing Command rejected the save — check the BepInEx log.", StudioTone.Bad);
             nextRefresh = 0f;
         }
 
@@ -593,11 +664,11 @@ namespace BoscaliSummer.Features.Progression.Presentation
             studioDraft.Normalize();
             if (!studioDraft.IsValid)
             {
-                NextMessage("Enter a callsign before setting a profile.");
+                NextMessage("Enter a callsign before setting a profile.", StudioTone.Warn);
                 return;
             }
             settings.PilotProfile.Value = studioDraft.Callsign;
-            NextMessage(studioDraft.Callsign + " is now your local SQD profile.");
+            NextMessage(studioDraft.Callsign + " is now your local SQD profile.", StudioTone.Ok);
             nextRefresh = 0f;
         }
 
@@ -606,7 +677,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             studioDraft.Normalize();
             if (!studioDraft.IsValid)
             {
-                NextMessage("Select a pilot with a callsign first.");
+                NextMessage("Select a pilot with a callsign first.", StudioTone.Warn);
                 return;
             }
             bool recruited = WingLink.IsPilotRecruited(studioDraft.Callsign);
@@ -616,7 +687,8 @@ namespace BoscaliSummer.Features.Progression.Presentation
             NextMessage(changed
                 ? (recruited ? "Discharged " + studioDraft.Callsign + " from the squadron."
                              : "Recruited " + studioDraft.Callsign + " to the squadron.")
-                : "Wing Command did not change the squadron roster.");
+                : "Wing Command did not change the squadron roster.",
+                changed ? StudioTone.Ok : StudioTone.Warn);
             nextRefresh = 0f;
         }
 
@@ -625,7 +697,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             if (!WingLink.TryCreatePilot(NextSeed(), out _, out string callsign, out _, out _)) return;
             studioDraft.Callsign = callsign;
             studioDraft.Normalize();
-            NextMessage("Callsign rolled: " + studioDraft.Callsign + ".");
+            NextMessage("Callsign rolled: " + studioDraft.Callsign + ".", StudioTone.Ok);
             nextRefresh = 0f;
         }
 
@@ -634,7 +706,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             if (!WingLink.TryCreatePilot(NextSeed(), out string name, out _, out _, out _)) return;
             studioDraft.Name = name;
             studioDraft.Normalize();
-            NextMessage("Name rolled: " + studioDraft.Name + ".");
+            NextMessage("Name rolled: " + studioDraft.Name + ".", StudioTone.Ok);
             nextRefresh = 0f;
         }
 
@@ -644,7 +716,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             studioDraft.Background = background;
             studioDraft.Persona = persona;
             studioDraft.Normalize();
-            NextMessage("Generated a service background.");
+            NextMessage("Generated a service background.", StudioTone.Ok);
             nextRefresh = 0f;
         }
 
@@ -674,7 +746,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             emblem = emblem.Cycle(shape, charge, palette);
             settings.Emblem.Value = emblem.Encode();
             NextMessage("Emblem updated: " + EmblemDesign.ShapeNames[emblem.Shape] + " / " +
-                EmblemDesign.ChargeNames[emblem.Charge] + ".");
+                EmblemDesign.ChargeNames[emblem.Charge] + ".", StudioTone.Ok);
             nextRefresh = 0f;
         }
 
@@ -683,7 +755,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             emblem = EmblemDesign.Random(NextSeed());
             settings.Emblem.Value = emblem.Encode();
             settings.EmblemFile.Value = string.Empty;
-            NextMessage("Rolled a new emblem.");
+            NextMessage("Rolled a new emblem.", StudioTone.Ok);
             nextRefresh = 0f;
         }
 
@@ -691,21 +763,21 @@ namespace BoscaliSummer.Features.Progression.Presentation
         {
             if (emblemFiles.Length == 0)
             {
-                NextMessage("No PNG files in the BoscaliSummer\\Emblems config folder.");
+                NextMessage("No PNG files in the BoscaliSummer\\Emblems config folder.", StudioTone.Warn);
                 return;
             }
             int index = emblemFileIndex;
             if (index < 0) index = direction > 0 ? 0 : emblemFiles.Length - 1;
             else index = ((index + direction) % emblemFiles.Length + emblemFiles.Length) % emblemFiles.Length;
             settings.EmblemFile.Value = emblemFiles[index];
-            NextMessage("Custom emblem art: " + System.IO.Path.GetFileName(emblemFiles[index]));
+            NextMessage("Custom emblem art: " + System.IO.Path.GetFileName(emblemFiles[index]), StudioTone.Ok);
             nextRefresh = 0f;
         }
 
         private void ClearArtFile()
         {
             settings.EmblemFile.Value = string.Empty;
-            NextMessage("Using the procedural emblem.");
+            NextMessage("Using the procedural emblem.", StudioTone.Ok);
             nextRefresh = 0f;
         }
 
@@ -715,9 +787,10 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 settings.PilotProfile.Value = string.Empty;
         }
 
-        private void NextMessage(string message)
+        private void NextMessage(string message, StudioTone tone)
         {
             studioMessage = message ?? string.Empty;
+            studioMessageTone = tone;
             studioMessageUntil = Time.unscaledTime + 8f;
         }
 

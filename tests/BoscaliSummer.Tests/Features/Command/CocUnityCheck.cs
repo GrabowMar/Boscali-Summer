@@ -20,7 +20,7 @@ using Object = UnityEngine.Object;
 /// Standalone render check for the STR "COC" page.
 ///
 /// The chain-of-command board is Unity UI whose whole point is what a player sees: a tree,
-/// a dossier that grows to its own record, leader dots, stamps and a staff log. None of that
+/// a full-width personnel file that grows to its record, status cues and a staff log. None of that
 /// can be exercised by the pure net8 tests. This check builds the real shell and the real
 /// page from the production sources, feeds it a deterministic stubbed IHighCommandView staff
 /// and writes one PNG per scenario so the page can be reviewed without launching the game.
@@ -33,6 +33,7 @@ public static class CocUnityCheck
     private const float Width = AvTokens.PanelWidth;
 
     private static readonly List<string> Notes = new List<string>();
+    private static int captures;
 
     public static void Run()
     {
@@ -59,6 +60,8 @@ public static class CocUnityCheck
 
             IHighCommandView staff = Staff();
 
+            RenderScenario(staff, 420f, 0, false, "coc-420-long.png",
+                "height 420 (compact bay), ALLIED side, long-file selection, back-to-posts and collapse bounds");
             RenderScenario(staff, 596f, 0, false, "coc-596.png",
                 "height 596 (AvTokens.PanelHeight), ALLIED side, dossier: GEN. D. HALVERSON (tier 0 theater commander, long bio, two-entry bonus)");
             RenderScenario(staff, 896f, 3, false, "coc-896.png",
@@ -66,15 +69,35 @@ public static class CocUnityCheck
             RenderScenario(staff, 896f, 6, true, "coc-hostile.png",
                 "height 896, HOSTILE side latched (cocShowHostile=true), dossier: COL. V. KRUPIN (known enemy, IntelAge 41s)");
             RenderScenario(staff, 596f, -1, false, "coc-nopost.png",
-                "height 596, ALLIED side, no post open (cocSelectedId=-1), dossier reads NO POST SELECTED");
-            // The card can be taller than the column: the longest record at the full-height
+                "height 596, ALLIED side, no post open (cocSelectedId=-1), one compact selection prompt");
+            // The card can be taller than the viewport: the longest record at full height
             // panel is the case where the viewport has to clip it and the page to scroll,
             // instead of the sheet being painted over the pinned status strip.
             RenderScenario(staff, 896f, 0, false, "coc-896-long.png",
-                "height 896, ALLIED side, dossier: GEN. D. HALVERSON (longest bio and two bonus entries - the card overflows the column on purpose)");
+                "height 896, ALLIED side, dossier: GEN. D. HALVERSON (longest bio and two bonus entries - the card scrolls within the viewport)");
+            // No staff at all: the page must read as unavailable and must not leave a stale
+            // selection bracketed on the map.
+            RenderScenario(Staff(available: false), 596f, -1, false, "coc-nostaff.png",
+                "height 596, no staff running (stub Available=false), dossier hidden and the map highlight cleared");
+            foreach (float height in new[] { 420f, 596f, 896f })
+                foreach (int page in new[] { 0, 2 })
+                {
+                    GameObject canvas = Build(height, staff, -1, false, page);
+                    string prefix = (page == 0 ? "situation-" : "operations-") + height;
+                    Capture(canvas, height, prefix + ".png");
+                    ScrollRect scroll = canvas.GetComponentInChildren<ScrollRect>();
+                    if (scroll != null && scroll.content.rect.height > scroll.viewport.rect.height + 1f)
+                    {
+                        scroll.verticalNormalizedPosition = 0f;
+                        Capture(canvas, height, prefix + "-bottom.png");
+                    }
+                    Object.DestroyImmediate(canvas);
+                }
 
             var report = new System.Text.StringBuilder();
             report.AppendLine("PASS: the real STR COC page (StrMfdPanel.BuildCocPage + RefreshCoc, production sources unmodified) rendered offline.");
+            report.AppendLine(captures + " captures: COC roster/file scenarios plus SITUATION and OPERATIONS at 420/596/896; compact bottom reachability, file focus/back/collapse and filled-gauge sprites checked.");
+            report.AppendLine("The stub IHighCommandView records Highlight(id); every scenario asserts the map highlight matches the open file (or -1 when none is open).");
             report.AppendLine("Staff stub: 8 posts - theater cmdr (tier 0), air/ground component cmdrs (tier 1), three base cmdrs (tier 2; one InTransit, one KIA, one Disrupted), one known enemy (IntelAge 41s) and one unconfirmed enemy. Portraits: synthetic sprites of mixed aspect (96x96, 80x120, 128x72, 64x64, 72x128, 100x100) and mixed pivots (centre, zero, one, top-left, bottom-right); the two unconfirmed/KIA posts keep the NO VISUAL fallback.");
             report.AppendLine("Renders (path | bytes | setup):");
             foreach (string note in Notes) report.AppendLine(note);
@@ -98,16 +121,47 @@ public static class CocUnityCheck
     {
         GameObject canvas = Build(height, staff, selectedId, hostile);
         string path = Capture(canvas, height, file);
+        if (selectedId >= 0)
+        {
+            StrMfdPanel panel = canvas.GetComponentInChildren<StrMfdPanel>();
+            Call(panel, "SelectCoc", selectedId);
+            Call(panel, "RefreshCoc");
+            Capture(canvas, height, Path.GetFileNameWithoutExtension(file) + "-file.png");
+            ScrollRect scroll = canvas.GetComponentInChildren<ScrollRect>();
+            Check(scroll != null && scroll.verticalNormalizedPosition < .99f,
+                "Selecting a commander must bring the full-width personnel file into view.");
+            foreach (AvButton button in canvas.GetComponentsInChildren<AvButton>())
+                if (button.GetComponentInChildren<TMP_Text>()?.text == "BACK TO POSTS")
+                {
+                    button.OnPointerClick(new PointerEventData(EventSystem.current) { button = PointerEventData.InputButton.Left });
+                    Check(scroll.verticalNormalizedPosition > .99f, "Back to posts must return to the roster.");
+                }
+            scroll.verticalNormalizedPosition = 0f;
+            SetField(panel, "cocSelectedId", -1);
+            Call(panel, "RefreshCoc");
+            float limit = Mathf.Max(0f, scroll.content.rect.height - scroll.viewport.rect.height);
+            Check(scroll.content.anchoredPosition.y >= -.5f && scroll.content.anchoredPosition.y <= limit + .5f,
+                "Closing a long file must clamp scrolling to the shorter roster and log.");
+            Call(panel, "SelectCoc", selectedId);
+            Call(panel, "RefreshCoc");
+        }
         Object.DestroyImmediate(canvas);
 
+        // The page selects a post on the map: whatever file is open is the post the map
+        // brackets, and a closed file clears it. This is the wiring check the render cannot show.
+        var stub = (CocStaffStub)staff;
+        Check(stub.HighlightedId == selectedId,
+            file + ": the map highlight should be " + selectedId + " but the page asked for " +
+            stub.HighlightedId);
+
         long bytes = new FileInfo(path).Length;
-        Notes.Add(path + " | " + bytes + " bytes | " + description);
+        Notes.Add(path + " | " + bytes + " bytes | highlight " + stub.HighlightedId + " | " + description);
         Debug.Log("[CocUnityCheck] " + path + " (" + bytes + " bytes)");
     }
 
-    private static GameObject Build(float height, IHighCommandView staff, int selectedId, bool hostile)
+    private static GameObject Build(float height, IHighCommandView staff, int selectedId, bool hostile, int pageIndex = 1)
     {
-        var canvasObject = new GameObject("CocCanvas", typeof(Canvas), typeof(RectTransform));
+        var canvasObject = new GameObject("CocCanvas", typeof(RectTransform), typeof(Canvas));
         Canvas canvas = canvasObject.GetComponent<Canvas>();
         canvas.renderMode = RenderMode.WorldSpace;
         ((RectTransform)canvasObject.transform).sizeDelta = new Vector2(Width, height);
@@ -129,7 +183,7 @@ public static class CocUnityCheck
 
         AvScreen shell = AvScreen.Build(
             content, "STR",
-            new[] { "SA", "COC", "CMD" },
+            new[] { "SITUATION", "COMMAND", "OPERATIONS" },
             new[]
             {
                 new[] { "THEATER CONTROL", "HELD" },
@@ -138,8 +192,8 @@ public static class CocUnityCheck
             },
             3, Width, height, _ => { });
 
-        GameObject page = shell.CreatePage(1, "CocPage");
-        shell.SetPage(1);
+        GameObject page = shell.CreatePage(pageIndex, "PreviewPage");
+        shell.SetPage(pageIndex);
 
         var panelObject = new GameObject("StrMfdPanel");
         panelObject.transform.SetParent(canvasObject.transform, false);
@@ -148,20 +202,25 @@ public static class CocUnityCheck
         SetField(panel, "highCommand", staff);
         SetField(panel, "settings", new CommandSettings());
         SetField(panel, "command", new CommandManager());
-        Call(panel, "BuildCocPage", page);
+        Call(panel, pageIndex == 0 ? "BuildSaPage" : pageIndex == 1 ? "BuildCocPage" : "BuildCmdPage", page);
         if (hostile) SetField(panel, "cocShowHostile", true);
         if (selectedId >= 0) SetField(panel, "cocSelectedId", selectedId);
         // Refresh() fills the shared chrome (data bar, metrics, status strip) and routes
         // through RefreshCoc(); the second call exercises the private page entry point
         // directly, exactly as the panel does on its own refresh tick.
         Call(panel, "Refresh");
-        Call(panel, "RefreshCoc");
+        if (pageIndex == 1) Call(panel, "RefreshCoc");
         return canvasObject;
     }
 
     private static string Capture(GameObject canvasObject, float height, string file)
     {
         Canvas.ForceUpdateCanvases();
+        foreach (ScrollRect scroll in canvasObject.GetComponentsInChildren<ScrollRect>())
+            scroll.Rebuild(CanvasUpdate.PostLayout);
+        foreach (Image gauge in canvasObject.GetComponentsInChildren<Image>(true))
+            if (gauge.type == Image.Type.Filled)
+                Check(gauge.sprite != null, "Filled gauge needs a sprite or Unity renders it permanently full.");
         foreach (TMP_Text text in canvasObject.GetComponentsInChildren<TMP_Text>(true)) text.ForceMeshUpdate();
         LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)canvasObject.transform);
 
@@ -195,6 +254,7 @@ public static class CocUnityCheck
 
         var info = new FileInfo(path);
         Check(info.Exists && info.Length > 0, "render produced no bytes: " + file);
+        captures++;
         return path;
     }
 
@@ -225,7 +285,7 @@ public static class CocUnityCheck
         return Sprite.Create(texture, new Rect(0f, 0f, width, height), pivot, 100f);
     }
 
-    private static IHighCommandView Staff()
+    private static IHighCommandView Staff(bool available = true)
     {
         const string LongBio =
             "Born in the northern shipyards and raised on maintenance decks, Halverson flew three combat tours " +
@@ -304,7 +364,7 @@ public static class CocUnityCheck
             new CommanderLogLine(6, CommanderLogTone.Contact, "ENEMY AIR COMPONENT CMDR SPOTTED.", 41f),
             new CommanderLogLine(4, CommanderLogTone.Economy, "ENEMY STIPEND PAYOUT OBSERVED.", 190f),
         };
-        return new CocStaffStub(commanders, log, hostileLog);
+        return new CocStaffStub(commanders, log, hostileLog, available);
     }
 
     private sealed class CocStaffStub : IHighCommandView
@@ -312,19 +372,22 @@ public static class CocUnityCheck
         private readonly IReadOnlyList<CommanderView> commanders;
         private readonly IReadOnlyList<CommanderLogLine> log;
         private readonly IReadOnlyList<CommanderLogLine> hostileLog;
+        private readonly bool available;
 
         public CocStaffStub(
             IReadOnlyList<CommanderView> commanders,
             IReadOnlyList<CommanderLogLine> log,
-            IReadOnlyList<CommanderLogLine> hostileLog)
+            IReadOnlyList<CommanderLogLine> hostileLog,
+            bool available)
         {
             this.commanders = commanders;
             this.log = log;
             this.hostileLog = hostileLog;
+            this.available = available;
         }
 
-        public bool Available => true;
-        public string Status => "chain of command is running";
+        public bool Available => available;
+        public string Status => available ? "chain of command is running" : "No staff has formed for your faction.";
         public string Signal => "STIPEND PAID: 15% COMMAND SHARE";
         public float FriendlyCohesion => 0.72f;
         public int FriendlyActive => 5;
@@ -332,6 +395,10 @@ public static class CocUnityCheck
         public IReadOnlyList<CommanderView> Commanders => commanders;
         public IReadOnlyList<CommanderLogLine> Log => log;
         public IReadOnlyList<CommanderLogLine> HostileLog => hostileLog;
+        public int HighlightedId { get; private set; } = int.MinValue;
+
+        public void Highlight(int id) => HighlightedId = id;
+
         public void Refresh() { }
     }
 
@@ -356,6 +423,52 @@ public static class CocUnityCheck
     private static void Check(bool condition, string message)
     {
         if (!condition) throw new Exception(message);
+    }
+}
+
+namespace BoscaliSummer.Features.Command.Configuration
+{
+    internal sealed class CommandSettings
+    {
+        public readonly Setting<bool> Enabled = new Setting<bool>(true);
+        public readonly Setting<bool> FrontlinesOverlay = new Setting<bool>(false);
+        internal sealed class Setting<T> { public T Value; public Setting(T value) { Value = value; } }
+    }
+}
+
+namespace BoscaliSummer.Features.Command.Runtime
+{
+    internal enum SectorControl : byte { Neutral = 0, Friendly = 1, Hostile = 2, Contested = 3 }
+
+    internal sealed class TacticalSectorGrid
+    {
+        public const int MaximumNodes = 128;
+        public struct TacticalNode
+        {
+            public bool IsContested;
+            public float CaptureProgress;
+            public SectorControl Faction;
+            public string Name;
+            public bool IsAirbase;
+        }
+        private readonly System.Collections.Generic.List<TacticalNode> nodes =
+            new System.Collections.Generic.List<TacticalNode>();
+        public System.Collections.Generic.IReadOnlyList<TacticalNode> GetNodes() => nodes;
+    }
+
+    internal sealed class CommandManager
+    {
+        public BoscaliSummer.Features.Command.Domain.TacticalTheaterState TheaterState { get; } =
+            new BoscaliSummer.Features.Command.Domain.TacticalTheaterState();
+        public void UpdateTelemetry(FactionHQ hq) { }
+    }
+}
+
+namespace BoscaliSummer.Features.Command.Presentation
+{
+    public partial class ComMapOverlay
+    {
+        internal BoscaliSummer.Features.Command.Runtime.TacticalSectorGrid Grid => null;
     }
 }
 #endif

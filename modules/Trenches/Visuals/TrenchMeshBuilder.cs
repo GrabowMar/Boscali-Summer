@@ -37,27 +37,16 @@ namespace BoscaliSummer.Features.Trenches.Visuals
         /// floor with a firing step, and a forward parapet over a narrow spoil berm.
         /// When <paramref name="ground"/> is supplied, the outer berm toes and skirt tips
         /// are lowered onto the terrain on each side, so the earthwork hugs cross-slopes
-        /// instead of bridging them.
+        /// instead of bridging them. <paramref name="ringExtra"/> adds per-ring width (one
+        /// entry per path point, the last entry repeating), so fire bays can flare; null or
+        /// all zeros keeps one uniform ditch.
         /// </summary>
         public static Mesh BuildEdgeMesh(Vector3[] path, float width, float parapetHeight, float skirtDepth, Vector3 threatDir,
-            Func<Vector3, Vector3> ground = null)
+            Func<Vector3, Vector3> ground = null, float[] ringExtra = null)
         {
             if (path == null || path.Length < 2) return null;
 
             var mesh = new Mesh { name = "Trench_Edge_Mesh" };
-
-            // A man-scale earthwork: about a 1.6m cut with a dry floor and firing step under
-            // a waist-high parapet over a narrow spoil berm, conformed to cross-slopes and
-            // still never touching TerrainData.
-            float halfW = width * 0.5f;
-            float scale = Mathf.Clamp(width / 1.6f, 0.6f, 1f);
-            float bermW = 0.9f * scale;
-            float skirtW = 0.7f * scale;
-            float bermH = parapetHeight * 0.5f * scale;
-            float floorW = Mathf.Clamp(width * 0.5f, 0.8f, 1.1f);
-            float stepW = Mathf.Clamp(2f * halfW - floorW, 0.3f, halfW * 0.9f);
-            float stepH = Mathf.Min(0.45f * scale, parapetHeight * 0.35f);
-            float paradosH = parapetHeight * 0.55f;
 
             int ringSize = ProfilePointCount;
             int ringCount = path.Length;
@@ -74,6 +63,22 @@ namespace BoscaliSummer.Features.Trenches.Visuals
             {
                 Vector3 pt = path[r];
                 if (r > 0) accumulatedLength += Vector3.Distance(pt, path[r - 1]);
+
+                // A man-scale earthwork: about a 1.6m cut with a dry floor and firing step under
+                // a waist-high parapet over a narrow spoil berm, conformed to cross-slopes and
+                // still never touching TerrainData. The whole profile is derived per ring, so a
+                // bay flares into all ten points instead of widening one strip of the wall.
+                float w = width + (ringExtra != null && ringExtra.Length > 0
+                    ? ringExtra[Mathf.Min(r, ringExtra.Length - 1)] : 0f);
+                float halfW = w * 0.5f;
+                float scale = Mathf.Clamp(w / 1.6f, 0.6f, 1f);
+                float bermW = 0.9f * scale;
+                float skirtW = 0.7f * scale;
+                float bermH = parapetHeight * 0.5f * scale;
+                float floorW = Mathf.Clamp(w * 0.5f, 0.8f, 1.1f);
+                float stepW = Mathf.Clamp(2f * halfW - floorW, 0.3f, halfW * 0.9f);
+                float stepH = Mathf.Min(0.45f * scale, parapetHeight * 0.35f);
+                float paradosH = parapetHeight * 0.55f;
 
                 // Cross-section frame. At a traverse corner the two wall planes of one side
                 // meet on their bisector; extending the profile to that intersection keeps

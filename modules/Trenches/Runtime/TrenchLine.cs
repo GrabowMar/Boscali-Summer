@@ -42,6 +42,8 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         public Vector3[] Threat { get; set; }
         /// <summary>Anchors for works and defenders, roughly every 60m of ditch.</summary>
         public Vector3[] Anchors { get; set; }
+        /// <summary>Fire-bay schedule: nests, crews and map marks anchor here, ~20m apart.</summary>
+        public Vector3[] Nodes { get; private set; }
 
         public Vector3[] Support { get; set; }
         public Vector3[] SupportAnchors { get; set; }
@@ -70,9 +72,11 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             Validate();
         }
 
-        /// <summary>Centre and bounding radius of the fire curve, for LOD and spacing tests.</summary>
+        /// <summary>Centre, bounding radius and bay nodes of the fire curve, for LOD,
+        /// spacing and placement tests. A too-short or empty curve leaves Nodes null.</summary>
         public void Validate()
         {
+            Nodes = null;
             if (Curve == null || Curve.Length == 0) return;
             Vector3 sum = Vector3.zero;
             for (int i = 0; i < Curve.Length; i++) sum += Curve[i];
@@ -85,6 +89,19 @@ namespace BoscaliSummer.Features.Trenches.Runtime
                 if (dSq > maxSq) maxSq = dSq;
             }
             Radius = Mathf.Sqrt(maxSq) + 20f;
+
+            Nodes = TrenchPlanner.SampleAnchors(Curve, TrenchTraceMath.NodeSpacingFor(CurveLengthXz(Curve)));
+        }
+
+        private static float CurveLengthXz(Vector3[] curve)
+        {
+            float total = 0f;
+            for (int i = 1; i < curve.Length; i++)
+            {
+                float dx = curve[i].x - curve[i - 1].x, dz = curve[i].z - curve[i - 1].z;
+                total += Mathf.Sqrt(dx * dx + dz * dz);
+            }
+            return total;
         }
 
         public bool Contains(Vector3 position)

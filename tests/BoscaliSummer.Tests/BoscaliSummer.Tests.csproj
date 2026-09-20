@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
@@ -12,6 +12,10 @@
     <Compile Include="..\..\modules\Support\Domain\TheaterGrid.cs" Link="Features\Support\TheaterGrid.cs" />
     <Compile Include="..\..\modules\Support\Domain\EwPostures.cs" Link="Features\Support\EwPostures.cs" />
     <Compile Include="..\..\modules\Support\Domain\InfoOperations.cs" Link="Features\Support\InfoOperations.cs" />
+    <Compile Include="..\..\modules\Support\Domain\Cyber\CyberSites.cs" Link="Features\Support\CyberSites.cs" />
+    <Compile Include="..\..\modules\Support\Domain\Cyber\CyberNetwork.cs" Link="Features\Support\CyberNetwork.cs" />
+    <Compile Include="..\..\modules\Support\Domain\Cyber\CyberNetwork.Campaign.cs" Link="Features\Support\CyberNetwork.Campaign.cs" />
+    <Compile Include="..\..\modules\Support\Domain\Cyber\CyberWords.cs" Link="Features\Support\CyberWords.cs" />
     <Compile Include="..\..\modules\Support\Domain\OpsPrograms.cs" Link="Features\Support\OpsPrograms.cs" />
     <Compile Include="..\..\modules\Support\Domain\Orbital\OrbitMath.cs" Link="Features\Support\OrbitMath.cs" />
     <Compile Include="..\..\modules\Support\Domain\Orbital\TheaterTrack.cs" Link="Features\Support\TheaterTrack.cs" />
@@ -59,6 +63,7 @@
     <Compile Include="..\..\modules\FireAndDestruction\Buildings\ImpactScorchPolicy.cs" Link="Features\FireAndDestruction\ImpactScorchPolicy.cs" />
     <Compile Include="..\..\modules\FireAndDestruction\Runtime\FireScorchPolicy.cs" Link="Features\FireAndDestruction\FireScorchPolicy.cs" />
     <Compile Include="..\..\modules\FireAndDestruction\Runtime\FireGroundSnapPolicy.cs" Link="Features\FireAndDestruction\FireGroundSnapPolicy.cs" />
+    <Compile Include="..\..\modules\FireAndDestruction\Runtime\ForestIndex.cs" Link="Features\FireAndDestruction\ForestIndex.cs" />
     <Compile Include="..\..\modules\Radio\Runtime\RadioLibrary.cs" Link="Features\Radio\RadioLibrary.cs" />
     <Compile Include="..\..\modules\Radio\Runtime\HuntMusicGate.cs" Link="Features\Radio\HuntMusicGate.cs" />
     <Compile Include="..\..\modules\Radio\Runtime\RadioFrequencies.cs" Link="Features\Radio\RadioFrequencies.cs" />
@@ -106,7 +111,10 @@
     <Compile Include="..\..\modules\Events\Domain\EventDefinition.cs" Link="Features\Events\EventDefinition.cs" />
     <Compile Include="..\..\modules\Events\Domain\EventCatalog.cs" Link="Features\Events\EventCatalog.cs" />
     <Compile Include="..\..\modules\Events\Domain\EventSelector.cs" Link="Features\Events\EventSelector.cs" />
-    <Compile Include="..\..\modules\Weather\Domain\*.cs" Link="Features\Weather\%(Filename)%(Extension)" />
+    <Compile Include="..\..\modules\Events\Domain\EventDirector.cs" Link="Features\Events\EventDirector.cs" />
+    <Compile Include="..\..\Framework\Contracts\HudLayout.cs" Link="Framework\HudLayout.cs" />
+    <Compile Include="..\..\Framework\Contracts\HudPrimitives.cs" Link="Framework\HudPrimitives.cs" />
+    <Compile Include="..\..\modules\Hud\Domain\HudNoticeQueue.cs" Link="Features\Hud\HudNoticeQueue.cs" />
     <Compile Include="..\..\Infrastructure\GameInterop\MfdSlots.cs" Link="Infrastructure\MfdSlots.cs" />
     <Compile Include="..\..\Avionics\*.cs" LinkBase="Avionics" />
   </ItemGroup>

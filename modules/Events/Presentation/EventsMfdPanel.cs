@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using BepInEx.Logging;
+using BoscaliSummer.Core;
 using BoscaliSummer.Features.Events.Configuration;
 using BoscaliSummer.Features.Events.Domain;
 using BoscaliSummer.Features.Events.Runtime;
@@ -17,14 +19,15 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Features.Events.Presentation
 {
     /// <summary>
-    /// "EVN" — the world-event feed. The active event is pinned at the top with its live
-    /// countdown, remaining-time bar and the one decision this module offers: spend
-    /// allocation to contain a penalty or deepen a discount for the rest of its run. The
-    /// mission history follows in reverse order. A calm theater says so instead of
-    /// rendering an empty list, and the modifier badge only names a support cost change
-    /// when one is actually in force.
+    /// "EVN" — the world-event directorate board. One fact, one place: the top bar carries
+    /// status, tier and the log count; the two metric cells carry the live price factor and
+    /// the ground war; one director line says whether the director is armed; the card carries
+    /// the event in reading order — plate, title, category and scope, countdown, effect,
+    /// plain-words consequence, copy, scripted beats, decision; history follows as a compact
+    /// media feed that fills the body. Nothing is printed twice, no state is signalled by
+    /// colour alone, and no state is ever a blank rectangle.
     /// </summary>
-    internal sealed class EventsMfdPanel : MonoBehaviour, ISceneService
+    internal sealed partial class EventsMfdPanel : MonoBehaviour, ISceneService
     {
         private const float Width = AvTokens.PanelWidth;
         private const float RefreshInterval = 0.25f;
@@ -32,9 +35,28 @@ namespace BoscaliSummer.Features.Events.Presentation
         private const int ChipCount = 3;
         private const int TabEvents = 0;
 
-        private const float ActiveCardHeight = 162f;
-        private const float HistoryCardHeight = 108f;
+        private const float DirectorLineHeight = 18f;
         private const float CardGap = 6f;
+        private const float HistoryCardHeight = 64f;
+        private const float HistoryHeaderHeight = 22f;
+        private const float HistoryPad = 12f;
+
+        /// <summary>
+        /// The scripted-beat rows the active card and the full-screen broadcast both reserve.
+        /// One cap for both, so a four-beat entry cannot silently drop its last beat.
+        /// </summary>
+        internal const int MaximumEventSteps = 4;
+
+        /// <summary>
+        /// The empty feed must clear its own help block: the copy sits 48px down and runs 30px.
+        /// </summary>
+        private const float EmptyHistoryCardHeight = 90f;
+
+        /// <summary>The clock starts saying ENDING this many seconds out, and pulsing.</summary>
+        private const float EndingSeconds = 60f;
+
+        /// <summary>Below this the clock and its rail go danger, not caution.</summary>
+        private const float CriticalSeconds = 20f;
 
         private EventsSettings settings;
         private EventsManager events;
@@ -44,10 +66,28 @@ namespace BoscaliSummer.Features.Events.Presentation
         private GameObject screenRoot;
         private AvScreen shell;
 
-        private EventCard activeCard;
-        private TMP_Text historyNote;
-        private readonly List<EventCard> historyCards = new List<EventCard>(16);
+        private ActiveEventCard activeCard;
+        private readonly List<HistoryCard> historyCards = new List<HistoryCard>(16);
+        private RectTransform scrollContent;
+        private bool hasViewport;
+        private float contentTop;
+        private float contentX;
+        private float contentWidth;
+        private float viewportHeight;
+        private float historyBaseY;
+        private float lastCardHeight;
+        private int lastRows = -1;
 
+        private Image spine;
+        private Image directorRail;
+        private TMP_Text directorLine;
+        private Image historyBand;
+        private TMP_Text historyTitle;
+        private Image historyTick;
+        private TMP_Text historyNote;
+
+        private string boundId;
+        private float boundStart;
         private float nextAttempt;
         private float nextRefresh;
         private bool failed;
@@ -68,8 +108,21 @@ namespace BoscaliSummer.Features.Events.Presentation
             screen = null;
             shell = null;
             activeCard = null;
-            historyNote = null;
             historyCards.Clear();
+            scrollContent = null;
+            hasViewport = false;
+            contentTop = contentX = contentWidth = viewportHeight = historyBaseY = 0f;
+            lastCardHeight = 0f;
+            lastRows = -1;
+            spine = null;
+            directorRail = null;
+            directorLine = null;
+            historyBand = null;
+            historyTitle = null;
+            historyTick = null;
+            historyNote = null;
+            boundId = null;
+            boundStart = 0f;
             nextAttempt = 0f;
             nextRefresh = 0f;
             failed = false;
@@ -79,7 +132,14 @@ namespace BoscaliSummer.Features.Events.Presentation
 
         private void Update()
         {
-            if (failed || events == null || settings == null || !settings.Enabled.Value) return;
+            if (failed || events == null || settings == null) return;
+            if (!settings.Enabled.Value)
+            {
+                // Disabling the director mid-scene releases the hosted slot instead of
+                // leaving a frozen screen on the bezel.
+                if (screen != null) ResetForScene();
+                return;
+            }
             if (Application.isBatchMode) { failed = true; return; }
             if (!GameAccess.MfdAvailable) { failed = true; return; }
 
@@ -93,7 +153,11 @@ namespace BoscaliSummer.Features.Events.Presentation
 
             bool visible = screen.isActive &&
                 SceneSingleton<DynamicMap>.i?.maximizedMapCanvas?.isActiveAndEnabled == true;
-            if (visible && Time.unscaledTime >= nextRefresh)
+            if (!visible) return;
+
+            // The countdown breathes between the four-hertz refreshes; nothing else runs.
+            if (activeCard != null && events.Current != null) activeCard.TickPulse();
+            if (Time.unscaledTime >= nextRefresh)
             {
                 nextRefresh = Time.unscaledTime + RefreshInterval;
                 Refresh();
@@ -191,8 +255,8 @@ namespace BoscaliSummer.Features.Events.Presentation
                 Array.Empty<string>(),
                 new[]
                 {
-                    new[] { "SUPPORT COST", "ALLOCATION" },
-                    new[] { "EVENTS RUN", "THIS MISSION" },
+                    new[] { "SUPPORT COST", "SIDE" },
+                    new[] { "GROUND CUSTODY", "BASES" },
                 },
                 ChipCount, Width, height, _ => nextRefresh = 0f);
 
@@ -231,51 +295,58 @@ namespace BoscaliSummer.Features.Events.Presentation
         private void BuildEventsPage(GameObject page)
         {
             int capacity = Mathf.Max(1, settings.HistoryLength.Value);
-            float contentHeight = 24f + ActiveCardHeight + CardGap + 22f + 20f +
-                                  capacity * (HistoryCardHeight + CardGap) + 12f;
+            // Sized for the scripted card so the viewport exists whenever a superevent can
+            // grow the page past the body; a short one still fits without paying for a mask.
+            float buildHeight = DirectorLineHeight + CardGap +
+                                ActiveEventCard.ScriptedHeight + CardGap +
+                                HistoryHeaderHeight + capacity * (HistoryCardHeight + CardGap) + HistoryPad;
 
             Rect body = shell.Body;
-            RectTransform parent = AvScreen.Scroll((RectTransform)page.transform, body, contentHeight, out body);
-            float x = body.x + AvScreen.SpineInset;
-            float width = body.width - AvScreen.SpineInset;
+            viewportHeight = body.height;
+
+            var pageRect = (RectTransform)page.transform;
+            RectTransform parent = AvScreen.Scroll(pageRect, body, buildHeight, out body);
+            hasViewport = parent != pageRect;
+            scrollContent = parent;
+            contentTop = body.y;
+            contentX = body.x + AvScreen.SpineInset;
+            contentWidth = body.width - AvScreen.SpineInset;
+
+            float x = contentX;
+            float width = contentWidth;
             float y = body.y;
 
-            AvStyled.Spine(parent, new Rect(body.x, body.y, 3f, body.height));
+            spine = AvStyled.Spine(parent, new Rect(body.x, body.y, 3f, viewportHeight));
 
-            y = SectionHeader(parent, x, y, width, "ACTIVE EVENT", "LIVE MODIFIER", band: false);
-            activeCard = new EventCard(parent, x, y, width, ActiveCardHeight, withResponse: true);
-            y -= ActiveCardHeight + CardGap;
+            // The director's posture gets a rail as well as words: armed is a state, not a
+            // colour the player has to decode.
+            directorRail = AvKit.Panel(parent, new Rect(x, y + 3f, 3f, 12f), AvTheme.RailInert);
+            directorRail.raycastTarget = false;
+            directorLine = AvStyled.Label(parent, new Rect(x + 10f, y, width - 10f, DirectorLineHeight),
+                "", "row-sub");
+            y -= DirectorLineHeight + CardGap;
 
-            y = SectionHeader(parent, x, y, width, "MISSION HISTORY",
-                              "MOST RECENT FIRST", band: true);
-            historyNote = AvStyled.Label(parent, new Rect(x, y, width, 16f),
-                "NO COMPLETED EVENTS YET — THE FEED ROLLS ONE EVENT AT A TIME.",
-                "row-sub");
-            y -= 20f;
+            activeCard = new ActiveEventCard(parent, x, y, width);
+            y -= activeCard.Height + CardGap;
+
+            historyBand = AvKit.Panel(parent, new Rect(x, y + 4f, width, HistoryHeaderHeight), Color.clear);
+            historyBand.raycastTarget = false;
+            historyTick = AvKit.Panel(parent, new Rect(x, y - 1f, 3f, 14f), AvTheme.Accent);
+            historyTick.raycastTarget = false;
+            historyTitle = AvStyled.Label(parent, new Rect(x + 10f, y, width * 0.5f - 10f, 14f),
+                "EVENT LOG", "section-title");
+            historyNote = AvStyled.Label(parent, new Rect(x + width * 0.5f, y, width * 0.5f, 14f),
+                "MOST RECENT FIRST", "section-title-note", align: TextAlignmentOptions.MidlineRight);
+            historyBaseY = y - HistoryHeaderHeight;
 
             historyCards.Clear();
             for (int i = 0; i < capacity; i++)
             {
-                historyCards.Add(new EventCard(parent, x, y - i * (HistoryCardHeight + CardGap),
-                    width, HistoryCardHeight, withResponse: false));
+                var card = new HistoryCard(parent);
+                card.Hide();
+                historyCards.Add(card);
             }
-        }
-
-        private static float SectionHeader(
-            RectTransform parent, float x, float y, float width, string title, string note, bool band)
-        {
-            if (band) AvStyled.Box(parent, new Rect(x - 6f, y + 4f, width + 12f, 22f), "section band");
-            AvStyled.SpineTick(parent, x - AvScreen.SpineInset + 3f, y - 7f);
-
-            float titleWidth = width * 0.5f;
-            AvStyled.Label(parent, new Rect(x, y, titleWidth, 14f), title, "section-title");
-
-            if (!string.IsNullOrEmpty(note))
-            {
-                AvStyled.Label(parent, new Rect(x + titleWidth, y, width - titleWidth, 14f),
-                               note, "section-title-note", align: TextAlignmentOptions.MidlineRight);
-            }
-            return y - 22f;
+            LayoutHistory(0);
         }
 
         // ---- Refresh ---------------------------------------------------------------------
@@ -291,72 +362,176 @@ namespace BoscaliSummer.Features.Events.Presentation
 
             float multiplier = current != null ? events.SupportCostMultiplier : 1f;
             string summary = current != null ? EventSelector.EffectSummary(multiplier) : null;
+            bool aimedAtLocal = current != null && (events.LocalTargeted || current.Target == "ALL THEATER");
+            bool penalty = current != null && EffectColor(summary, aimedAtLocal) == AvTheme.RailDanger;
 
-            shell.DataBar.State.text = current != null ? current.Title
-                : events.Available ? "NO ACTIVE WORLD EVENT" : "WAITING FOR A RUNNING MISSION.";
-            shell.DataBar.State.color = current != null ? AvTheme.RailCaution : AvTheme.Dim;
-            shell.DataBar.SetChip(0, current != null ? ShortCategory(current.Category) : "CALM",
-                                  current != null ? "warn" : "inert");
-            shell.DataBar.SetChip(1, DirectionLabel(multiplier, current != null),
-                                  DirectionState(multiplier, current != null));
-            shell.DataBar.SetChip(2, history.Count + "/" + capacity + " LOGGED",
-                                  history.Count > 0 ? "live" : "inert");
+            RefreshDirector();
 
+            shell.DataBar.State.text = current != null
+                ? "EVENT ACTIVE"
+                : events.Available ? "THEATER CALM" : "NO RUNNING MISSION";
+            shell.DataBar.State.color = current != null ? TierInk(current.Tier) : AvTheme.Dim;
+            shell.DataBar.SetChip(0, current != null ? TierShort(current.Tier) : "STANDBY",
+                                  TierChipState(current));
+            shell.DataBar.SetChip(1, current != null ? DirectionLabel(multiplier, aimedAtLocal) : "NO EVENT",
+                                  DirectionState(multiplier, aimedAtLocal, current != null));
+            bool historyOff = settings.HistoryLength.Value <= 0;
+            shell.DataBar.SetChip(2,
+                                  historyOff ? "HISTORY OFF" : history.Count + "/" + capacity + " LOGGED",
+                                  !historyOff && history.Count > 0 ? "live" : "inert");
+
+            // The caption is the effect in the player's own terms; it is kept inside the
+            // cell's measured width so it can never be ellipsised into ambiguity.
+            shell.Metrics[0].Unit.text = current == null ? "" : aimedAtLocal ? "YOUR SIDE" : "OTHER SIDE";
             shell.Metrics[0].Set(
                 current != null ? MultiplierLabel(multiplier) : "—",
-                current != null ? summary : "NO ACTIVE MODIFIER",
-                current != null ? Mathf.Clamp01(Mathf.Abs(multiplier - 1f)) : 0f,
-                EffectColor(summary));
+                current == null ? "NO ACTIVE EVENT"
+                    : aimedAtLocal ? summary : "NO EFFECT ON YOU",
+                current != null && aimedAtLocal ? Mathf.Clamp01(Mathf.Abs(multiplier - 1f)) : 0f,
+                EffectColor(summary, aimedAtLocal));
 
-            int logged = history.Count + (current != null ? 1 : 0);
+            TheaterBalance balance = events.Balance;
+            shell.Metrics[1].Unit.text = balance.Known ? "BASES" : "";
             shell.Metrics[1].Set(
-                events.Available ? logged.ToString() : "—",
-                current != null ? "1 ACTIVE · " + history.Count + " ENDED" : history.Count + " ENDED",
-                capacity <= 0 ? 0f : Mathf.Clamp01(history.Count / (float)capacity),
-                logged > 0 ? AvTheme.RailInfo : AvTheme.RailInert);
+                balance.Known ? balance.LeaderBases + " : " + balance.LoserBases : "—",
+                CustodyLine(balance),
+                BalanceFraction(balance),
+                balance.Known ? AvTheme.RailInfo : AvTheme.RailInert);
+
+            string id = current != null ? current.Id : "";
+            float started = current != null ? current.StartedAtMissionTime : 0f;
+            if (id != boundId || started != boundStart)
+            {
+                boundId = id;
+                boundStart = started;
+                if (current != null)
+                    activeCard.Bind(current, EffectText(summary, aimedAtLocal),
+                        EffectColor(summary, aimedAtLocal), Consequence(current, aimedAtLocal));
+                else
+                    activeCard.BindPlaceholder(events.Available
+                        ? "The theater is quiet. The director is watching for a story worth telling."
+                        : "No mission is running on this host.");
+
+                if (activeCard.Height != lastCardHeight)
+                {
+                    lastCardHeight = activeCard.Height;
+                    LayoutHistory(history.Count);
+                }
+            }
 
             if (current != null)
             {
-                activeCard.Bind(current, "ENDS IN " + Duration(current.EndsAtMissionTime - now),
-                                EffectColor(summary), GlyphKind(current.Category));
                 float span = Mathf.Max(1f, current.EndsAtMissionTime - current.StartedAtMissionTime);
-                activeCard.SetProgress(
-                    Mathf.Clamp01((current.EndsAtMissionTime - now) / span), EffectColor(summary));
-                RefreshResponse(multiplier, summary);
-            }
-            else
-            {
-                activeCard.BindPlaceholder(events.Available
-                    ? "The theater is quiet. A new event will surface without warning."
-                    : "No mission is running on this host.");
-                activeCard.SetProgress(0f, AvTheme.RailInert);
-                activeCard.HideResponse();
+                float remaining = Mathf.Clamp01((current.EndsAtMissionTime - now) / span);
+                float secondsLeft = current.EndsAtMissionTime - now;
+                activeCard.SetProgress(remaining, EffectColor(summary, aimedAtLocal));
+                bool ending = secondsLeft <= EndingSeconds;
+                activeCard.SetClock("ENDS " + Clock(secondsLeft), ending, secondsLeft <= CriticalSeconds);
+                activeCard.SetScript(current, current.StartedAtMissionTime, now, TierRail(current.Tier));
+                // Only a penalty aimed at this player's side raises the alarm; a discount
+                // expiring is not a threat.
+                activeCard.SetUrgency(penalty ? Mathf.Clamp01((90f - secondsLeft) / 90f) : 0f);
+                activeCard.TickPulse();
+                RefreshResponse(multiplier, summary, aimedAtLocal);
             }
 
+            if (history.Count != lastRows) LayoutHistory(history.Count);
             for (int i = 0; i < capacity; i++)
             {
-                int source = history.Count - 1 - i;
-                if (source < 0)
+                if (i < history.Count)
+                {
+                    ActiveEventView view = history[history.Count - 1 - i];
+                    historyCards[i].Bind(view, TierInk(view.Tier), TierRail(view.Tier),
+                        EffectColor(view.EffectSummary, true));
+                    historyCards[i].SetClock(Duration(now - view.EndsAtMissionTime) + " AGO");
+                }
+                else if (i == 0)
+                {
+                    historyCards[i].BindEmpty();
+                }
+                else
                 {
                     historyCards[i].Hide();
-                    continue;
                 }
-
-                ActiveEventView view = history[source];
-                historyCards[i].Bind(view, "ENDED " + Duration(now - view.EndsAtMissionTime) + " AGO",
-                                     EffectColor(view.EffectSummary), GlyphKind(view.Category));
             }
 
-            historyNote.gameObject.SetActive(history.Count == 0);
-
             string ambient = current != null
-                ? "WORLD EVENT: " + current.Title + " · " + current.EffectSummary
+                ? "WORLD EVENT: " + current.Title
                 : events.Available ? "No active world event." : "No running mission.";
             shell.WriteStatus(events.Signal, MapPicker.Prompt, ambient);
         }
 
+        /// <summary>
+        /// Places the feed rows and sizes the scroll content. With no rows the empty card is
+        /// stretched to the bottom of the body so the section fills its space; with rows the
+        /// content is only as tall as the events it holds.
+        /// </summary>
+        private void LayoutHistory(int rows)
+        {
+            if (historyCards.Count == 0) return;
+            lastRows = rows;
+
+            float shift = activeCard != null ? activeCard.Height - ActiveEventCard.PlainHeight : 0f;
+            float top = historyBaseY - shift;
+
+            if (historyBand != null) AvKit.Place(historyBand.rectTransform, new Rect(contentX, top + 26f, contentWidth, HistoryHeaderHeight));
+            if (historyTick != null) AvKit.Place(historyTick.rectTransform, new Rect(contentX, top + 21f, 3f, 14f));
+            if (historyTitle != null) AvKit.Place(historyTitle.rectTransform, new Rect(contentX + 10f, top + 22f, contentWidth * 0.5f - 10f, 14f));
+            if (historyNote != null) AvKit.Place(historyNote.rectTransform, new Rect(contentX + contentWidth * 0.5f, top + 22f, contentWidth * 0.5f, 14f));
+
+            float emptyHeight = Mathf.Max(EmptyHistoryCardHeight,
+                viewportHeight - (contentTop - top) - HistoryPad);
+            for (int i = 0; i < historyCards.Count; i++)
+            {
+                bool empty = rows == 0 && i == 0;
+                historyCards[i].Place(contentX, top - i * (HistoryCardHeight + CardGap), contentWidth,
+                    empty ? emptyHeight : HistoryCardHeight);
+            }
+            SetContentHeight(rows, top, emptyHeight);
+        }
+
+        /// <summary>
+        /// Sizes the scroll content to what the page actually holds. The empty card is a real
+        /// card: when a scripted superevent pushes the feed down, the content reaches its bottom
+        /// so the help copy is never clipped by the viewport.
+        /// </summary>
+        private void SetContentHeight(int rows, float top, float emptyHeight)
+        {
+            if (!hasViewport || scrollContent == null) return;
+            float needed = (contentTop - top) + HistoryPad +
+                           (rows == 0 ? emptyHeight : rows * (HistoryCardHeight + CardGap));
+            float height = Mathf.Max(viewportHeight, needed);
+            if (Mathf.Abs(scrollContent.sizeDelta.y - height) > 0.5f)
+                scrollContent.sizeDelta = new Vector2(scrollContent.sizeDelta.x, height);
+            if (spine != null)
+                AvKit.Place(spine.rectTransform, new Rect(spine.rectTransform.anchoredPosition.x,
+                    spine.rectTransform.anchoredPosition.y, 3f, height));
+        }
+
+        /// <summary>The director's posture, once: custody is on the metric, this is the voice.</summary>
+        private void RefreshDirector()
+        {
+            TheaterBalance balance = events.Balance;
+            string supers = "SUPERS " + events.SupersFired + "/" + EventDirector.MaximumSupers;
+
+            if (!balance.Known)
+            {
+                directorLine.text = "DIRECTOR  ·  WAITING FOR GROUND CUSTODY DATA";
+                directorLine.color = AvTheme.Dim;
+                directorRail.color = AvTheme.RailInert;
+                return;
+            }
+
+            bool armed = balance.Contested && balance.Deficit >= EventDirector.AidDeficitThreshold;
+            directorLine.text = armed
+                ? "DIRECTOR ARMED  ·  TRAILING SIDE ELIGIBLE  ·  " + supers
+                : "DIRECTOR MONITORING  ·  " + supers;
+            directorLine.color = armed ? AvTheme.RailCaution : AvTheme.Dim;
+            directorRail.color = armed ? AvTheme.RailCaution : AvTheme.RailInert;
+        }
+
         /// <summary>The one decision: mitigate a penalty, or deepen a discount. Pay to own it.</summary>
-        private void RefreshResponse(float multiplier, string summary)
+        private void RefreshResponse(float multiplier, string summary, bool aimedAtLocal)
         {
             EventResponseKind response = events.LocalResponse;
             if (response != EventResponseKind.None)
@@ -364,26 +539,54 @@ namespace BoscaliSummer.Features.Events.Presentation
                 activeCard.SetResponse(
                     response == EventResponseKind.Contain ? "PENALTY CONTAINED" : "DISCOUNT DEEPENED",
                     "RESPONSE ACTIVE · " + summary,
-                    enabled: false, tooltip: null, onClick: null);
+                    ready: true, enabled: false,
+                    tooltip: "Your side's answer to this event is paid for and stays in force for the rest of its run.",
+                    onClick: null);
                 return;
             }
-            if (!events.CanRespond)
+            if (!events.CanRespond || !aimedAtLocal)
             {
                 activeCard.HideResponse();
                 return;
             }
 
             int cost = events.ResponseCost;
-            bool affordable = LocalAllocation() + 0.001f >= cost;
+            float available = LocalAllocation();
+            bool affordable = available + 0.001f >= cost;
             EventResponseKind kind = multiplier > 1f ? EventResponseKind.Contain : EventResponseKind.Leverage;
             string label = (kind == EventResponseKind.Contain ? "CONTAIN" : "LEVERAGE") + " · " + cost + " ALLOC";
-            string tooltip = kind == EventResponseKind.Contain
-                ? "Spend " + cost + " allocation to halve this event's support-cost penalty for the rest of its run."
-                : "Spend " + cost + " allocation to deepen this event's support-cost discount for the rest of its run.";
             string note = affordable
                 ? kind == EventResponseKind.Contain ? "HALVES THE PENALTY" : "DEEPENS THE DISCOUNT"
                 : "INSUFFICIENT ALLOCATION";
-            activeCard.SetResponse(label, note, affordable, tooltip, events.RequestResponse);
+            string tooltip = affordable
+                ? kind == EventResponseKind.Contain
+                    ? "Spend " + cost + " allocation to halve this event's support-cost penalty for the rest of its run."
+                    : "Spend " + cost + " allocation to deepen this event's support-cost discount for the rest of its run."
+                : "This response costs " + cost + " allocation and you have " +
+                  Mathf.FloorToInt(available) + ". Allocation arrives from events aimed at your side.";
+            activeCard.SetResponse(label, note, ready: affordable, enabled: affordable,
+                tooltip: tooltip, onClick: events.RequestResponse);
+        }
+
+        /// <summary>The card's effect line, from this player's point of view.</summary>
+        private static string EffectText(string summary, bool aimedAtLocal)
+        {
+            if (!aimedAtLocal) return "NO EFFECT ON YOUR SIDE";
+            return IsNeutral(summary) ? "NO PRICE EFFECT" : summary;
+        }
+
+        /// <summary>Plain words for what the live effect means to the player reading it.</summary>
+        private static string Consequence(ActiveEventView view, bool aimedAtLocal)
+        {
+            if (view == null) return "";
+            if (IsNeutral(view.EffectSummary))
+                return "Texture only — requisition prices are unchanged while it runs.";
+            if (!aimedAtLocal)
+                return "Aimed at the " + view.Target.ToLowerInvariant() +
+                       " — your requisition prices are unchanged.";
+            return view.EffectSummary[0] == '+'
+                ? "Support requisitions cost more until it ends."
+                : "Support requisitions cost less until it ends.";
         }
 
         private static float MissionTime() =>
@@ -392,200 +595,122 @@ namespace BoscaliSummer.Features.Events.Presentation
         private static float LocalAllocation() =>
             GameManager.GetLocalPlayer<Player>(out Player player) && player != null ? player.Allocation : 0f;
 
-        private static string MultiplierLabel(float multiplier) => "x" + multiplier.ToString("0.00");
+        private static string MultiplierLabel(float multiplier) =>
+            "x" + multiplier.ToString("0.00", CultureInfo.InvariantCulture);
 
         private static string DirectionLabel(float multiplier, bool active)
         {
-            if (!active) return "NO EVENT";
+            if (!active) return "NOT YOUR SIDE";
             if (multiplier > 1f) return "COST UP";
             if (multiplier < 1f) return "COST DOWN";
             return "FLAT";
         }
 
-        private static string DirectionState(float multiplier, bool active)
+        private static string DirectionState(float multiplier, bool active, bool hasEvent)
         {
-            if (!active) return "inert";
+            if (!hasEvent || !active) return "inert";
             if (multiplier > 1f) return "warn";
             if (multiplier < 1f) return "live";
             return "inert";
         }
 
+        private static string TierShort(string tier)
+        {
+            if (tier == "SUPEREVENT") return "SUPER";
+            if (tier == "MEDIUM") return "MEDIUM";
+            return "MINOR";
+        }
+
+        private static int CategoryOf(string category)
+        {
+            if (category == "POLITICAL") return 1;
+            if (category == "HAZARD") return 2;
+            return 0;
+        }
+
+        /// <summary>The narrow column form of the target label, for the history rows.</summary>
+        private static string ShortTarget(string target)
+        {
+            if (target == "HARD-PRESSED SIDE") return "LOSING SIDE";
+            if (target == "ALL THEATER") return "ALL THEATER";
+            return target;
+        }
+
+        private static string TierChipState(ActiveEventView view) =>
+            view == null ? "inert"
+            : view.Tier == "SUPEREVENT" ? "danger"
+            : view.Tier == "MEDIUM" ? "warn"
+            : "inert";
+
+        /// <summary>Colour a tier's ink: weather recedes, a medium warns, a super is an alert.</summary>
+        private static Color TierInk(string tier) =>
+            tier == "SUPEREVENT" ? AvTheme.RailDanger
+            : tier == "MEDIUM" ? AvTheme.RailCaution
+            : AvTheme.Dim;
+
+        /// <summary>The rail is a state light; a minor event never claims one.</summary>
+        private static Color TierRail(string tier) =>
+            tier == "SUPEREVENT" ? AvTheme.RailDanger
+            : tier == "MEDIUM" ? AvTheme.RailCaution
+            : AvTheme.RailInert;
+
+        /// <summary>One line naming the ground war; the numbers live in the metric cell.</summary>
+        private static string CustodyLine(TheaterBalance balance) =>
+            !balance.Known ? "UNOBSERVED"
+            : !balance.Contested ? "NO FRONT-RUNNER"
+            : NameOf(balance.LeaderHash) + " AHEAD";
+
+        private static float BalanceFraction(TheaterBalance balance)
+        {
+            if (!balance.Known) return 0f;
+            int total = Mathf.Max(1, balance.LeaderBases + balance.LoserBases + balance.NeutralBases);
+            return Mathf.Clamp01(balance.LeaderBases / (float)total);
+        }
+
+        /// <summary>Short faction tag from the name hash: the name itself, upper-cased.</summary>
+        private static string NameOf(int factionHash)
+        {
+            if (factionHash == 0) return "—";
+            foreach (FactionHQ hq in FactionRegistry.GetAllHQs())
+            {
+                string name = hq != null && hq.faction != null ? hq.faction.factionName : null;
+                if (string.IsNullOrEmpty(name)) continue;
+                if (unchecked((int)Deterministic.HashString(name)) == factionHash)
+                    return name.ToUpperInvariant();
+            }
+            return "—";
+        }
+
+        private static string GlyphKind(int category) =>
+            category == 1 ? EventGlyph.Political
+            : category == 2 ? EventGlyph.Hazard
+            : EventGlyph.Economic;
+
         private static bool IsNeutral(string summary) =>
             string.IsNullOrEmpty(summary) || summary == "NO EFFECT";
 
-        /// <summary>The badge colour, and never the only signal: the badge text says the same.</summary>
-        private static Color EffectColor(string summary)
+        /// <summary>The badge colour, and never the only signal: the words say the same.</summary>
+        private static Color EffectColor(string summary, bool aimedAtLocal)
         {
-            if (IsNeutral(summary)) return AvTheme.Dim;
+            if (!aimedAtLocal || IsNeutral(summary)) return AvTheme.Dim;
             return summary[0] == '+' ? AvTheme.RailDanger : AvTheme.RailReady;
         }
 
-        private static string ShortCategory(string category)
+        /// <summary>Millimetre-instrument clock: minutes and seconds, zero padded.</summary>
+        private static string Clock(float seconds)
         {
-            switch (category)
-            {
-                case "POLITICAL": return "POL";
-                case "HAZARD": return "HAZ";
-                default: return "ECO";
-            }
+            int total = Mathf.Max(0, Mathf.CeilToInt(seconds));
+            return (total / 60) + ":" + (total % 60).ToString("00");
         }
 
-        private static string GlyphKind(string category)
-        {
-            switch (category)
-            {
-                case "POLITICAL": return EventGlyph.Political;
-                case "HAZARD": return EventGlyph.Hazard;
-                default: return EventGlyph.Economic;
-            }
-        }
-
-        /// <summary>Compact countdown; event windows are minutes, not hours, at this scale.</summary>
+        /// <summary>Compact age/duration; event windows are minutes, not hours, at this scale.</summary>
         private static string Duration(float seconds)
         {
             int total = Mathf.Max(0, Mathf.CeilToInt(seconds));
             int minutes = total / 60;
             if (minutes >= 60) return (minutes / 60) + "h " + (minutes % 60) + "m";
-            if (minutes > 0) return minutes + "m";
+            if (minutes > 0) return minutes + "m " + (total % 60) + "s";
             return total + "s";
-        }
-
-        // ---- Card ------------------------------------------------------------------------
-
-        private sealed class EventCard
-        {
-            private const float TextX = 76f;
-
-            private readonly GameObject root;
-            private readonly Image rail;
-            private readonly EventGlyph glyph;
-            private readonly TMP_Text title;
-            private readonly TMP_Text category;
-            private readonly TMP_Text flavor;
-            private readonly Image badgeFill;
-            private readonly Image[] badgeFrame;
-            private readonly TMP_Text badge;
-            private readonly TMP_Text stamp;
-            private readonly AvButton action;
-            private readonly TMP_Text actionNote;
-            private readonly Image progressFill;
-
-            public EventCard(RectTransform parent, float x, float y, float width, float height, bool withResponse)
-            {
-                root = new GameObject("EventCard", typeof(RectTransform));
-                var rect = (RectTransform)root.transform;
-                rect.SetParent(parent, false);
-                AvKit.Place(rect, new Rect(x, y, width, height));
-                AvStyled.Box(rect, new Rect(0f, 0f, width, height), "card");
-                AvKit.CornerTicks(rect, new Rect(0f, 0f, width, height), AvTheme.Frame.WithAlpha(0.5f));
-
-                rail = AvStyled.Rail(rect, new Rect(4f, -8f, 3f, height - 16f), "locked");
-
-                Rect frame = new Rect(14f, -10f, 48f, 48f);
-                AvKit.Panel(rect, frame, AvTheme.SurfaceInert);
-                AvKit.Outline(rect, frame, AvTheme.Frame.WithAlpha(0.6f));
-
-                var glyphObject = new GameObject("Glyph", typeof(RectTransform), typeof(EventGlyph));
-                glyphObject.transform.SetParent(rect, false);
-                glyph = glyphObject.GetComponent<EventGlyph>();
-                AvKit.Place(glyph.rectTransform, new Rect(frame.x + 12f, frame.y - 12f, 24f, 24f));
-                glyph.raycastTarget = false;
-
-                const float categoryWidth = 90f;
-                const float gap = 8f;
-                float textWidth = width - TextX - 14f;
-                float titleWidth = Mathf.Max(0f, textWidth - categoryWidth - gap);
-                title = AvStyled.Label(rect, new Rect(TextX, -9f, titleWidth, 18f), "", "row-name");
-                category = AvStyled.Label(rect, new Rect(width - 14f - categoryWidth, -9f, categoryWidth, 14f), "",
-                                          "section-title-note", align: TextAlignmentOptions.MidlineRight);
-                flavor = AvStyled.Label(rect, new Rect(TextX, -28f, textWidth, 46f), "", "row-sub");
-
-                Rect badgeArea = new Rect(TextX, -78f, 168f, 18f);
-                badgeFill = AvKit.Panel(rect, badgeArea, new Color(0f, 0f, 0f, 0.35f));
-                badgeFrame = AvKit.Outline(rect, badgeArea, AvTheme.Hairline);
-                badge = AvStyled.Label(rect, badgeArea, "", "chip", align: TextAlignmentOptions.Center);
-                stamp = AvStyled.Label(rect, new Rect(width - 184f, -78f, 170f, 16f), "",
-                                       "kv-value", align: TextAlignmentOptions.MidlineRight);
-
-                if (!withResponse) return;
-
-                float actionY = -104f;
-                action = AvStyled.Button(rect, new Rect(TextX, actionY, 190f, 24f), "", "btn", null);
-                actionNote = AvStyled.Label(
-                    rect, new Rect(TextX + 200f, actionY, textWidth - 200f, 24f), "", "row-sub");
-                progressFill = AvKit.ProgressBar(
-                    rect, new Rect(14f, -(height - 14f), width - 28f, 4f), 0f, AvTheme.RailInert);
-            }
-
-            public void Bind(ActiveEventView view, string stampText, Color tint, string glyphKind)
-            {
-                if (!root.activeSelf) root.SetActive(true);
-                glyph.gameObject.SetActive(true);
-                glyph.SetKind(glyphKind);
-                glyph.color = tint;
-
-                title.text = view.Title.ToUpperInvariant();
-                category.text = view.Category;
-                flavor.text = view.FlavorText;
-                badge.text = view.EffectSummary;
-                badge.color = tint;
-                badgeFill.color = tint.WithAlpha(0.12f);
-                for (int i = 0; i < badgeFrame.Length; i++) badgeFrame[i].color = tint.WithAlpha(0.45f);
-                rail.color = RailColor(tint);
-                stamp.text = stampText;
-                stamp.color = AvTheme.Dim;
-            }
-
-            public void BindPlaceholder(string note)
-            {
-                if (!root.activeSelf) root.SetActive(true);
-                glyph.gameObject.SetActive(true);
-                glyph.SetKind(EventGlyph.Economic);
-                glyph.color = AvTheme.Dim;
-
-                title.text = "NO ACTIVE EVENT";
-                category.text = "WORLD";
-                flavor.text = note;
-                badge.text = "NO EFFECT";
-                badge.color = AvTheme.Dim;
-                badgeFill.color = AvTheme.Dim.WithAlpha(0.12f);
-                for (int i = 0; i < badgeFrame.Length; i++) badgeFrame[i].color = AvTheme.Hairline;
-                rail.color = AvTheme.RailInert;
-                stamp.text = "";
-            }
-
-            public void SetProgress(float fraction, Color color)
-            {
-                if (progressFill == null) return;
-                progressFill.fillAmount = Mathf.Clamp01(fraction);
-                progressFill.color = color;
-            }
-
-            public void SetResponse(string label, string note, bool enabled, string tooltip, Action onClick)
-            {
-                if (action == null) return;
-                if (!action.gameObject.activeSelf) action.gameObject.SetActive(true);
-                action.SetText(label);
-                action.SetEnabled(enabled);
-                action.SetAction(enabled ? onClick : null);
-                action.WithTooltip(tooltip);
-                actionNote.text = note ?? "";
-                actionNote.color = enabled ? AvTheme.Dim : AvTheme.RailCaution;
-            }
-
-            public void HideResponse()
-            {
-                if (action == null) return;
-                if (action.gameObject.activeSelf) action.gameObject.SetActive(false);
-                actionNote.text = "";
-            }
-
-            public void Hide() => root.SetActive(false);
-
-            private static Color RailColor(Color tint) =>
-                tint == AvTheme.Dim ? AvTheme.RailInert
-                : tint == AvTheme.RailDanger ? AvTheme.RailDanger
-                : AvTheme.RailReady;
         }
     }
 }

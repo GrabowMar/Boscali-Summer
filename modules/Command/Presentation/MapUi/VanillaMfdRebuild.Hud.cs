@@ -40,15 +40,28 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 };
 
                 BuildModePage(pages[0]);
+
+                // Two-line cells: a vehicle or building name gets the room to print whole.
+                // The row count is the floor the body can hold; the pitch then takes the
+                // rest, so the list reaches its pager at 596 and at 896 instead of leaving
+                // a band of nothing under the last row. The 70px chrome is the heading,
+                // the pager and the Space1/Space2 outside them.
+                float body = PageHeight;
+                const float chrome = 70f;
+                int rows = Mathf.Clamp(Mathf.FloorToInt((body - chrome) / 46f), 3, 8);
+                float cell = 52f;
+
                 DrawSpine(pages[1]);
-                float vehicleTop = Heading(pages[1], -AvTokens.Space1, Shell.Body.width,
+                float vehicleTop = Heading(pages[1], -AvTokens.Space1, PageWidth,
                                             "VEHICLE PRIORITY", "ONE TYPE AT A TIME");
-                vehicles = new MfdPagingGrid(pages[1], vehicleTop, Shell.Body.width, 3, 5);
+                vehicles = new MfdPagingGrid(pages[1], vehicleTop, PageWidth, 2, rows,
+                                             rowHeight: cell);
 
                 DrawSpine(pages[2]);
-                float buildingTop = Heading(pages[2], -AvTokens.Space1, Shell.Body.width,
+                float buildingTop = Heading(pages[2], -AvTokens.Space1, PageWidth,
                                              "BUILDING PRIORITY", "ONE TYPE AT A TIME");
-                buildings = new MfdPagingGrid(pages[2], buildingTop, Shell.Body.width, 3, 5);
+                buildings = new MfdPagingGrid(pages[2], buildingTop, PageWidth, 2, rows,
+                                              rowHeight: cell);
                 SelectPage(0);
             }
 
@@ -86,7 +99,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 }
                 modeBrief.text = brief + "\n" + CountEnabled(options.listVehicleTypes) + " vehicle types / " +
                     CountEnabled(options.listBuildingTypes) + " building types prioritised.\n" +
-                    "Lit edge marks an active choice. Category gates control HUD emphasis.";
+                    "ON marks an active choice. Priority gates control which contacts the HUD emphasises.";
 
                 modes.SetData(options.listModes.Count,
                     i => i < 6 ? ((HUDOptions.HUDMode)i).ToString() : LabelFor(options.listModes[i], "MODE"),
@@ -112,17 +125,24 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private void BuildModePage(RectTransform root)
             {
                 DrawSpine(root);
-                float y = Heading(root, -AvTokens.Space1, Shell.Body.width,
+                // Fixed two-column choices keep the full class names readable.
+                const float cell = 48f;
+                const float brief = 112f;
+
+                float y = Heading(root, -AvTokens.Space1, PageWidth,
                                   "ENGAGEMENT MODE", "AUTO HUD PROFILE");
-                modes = new MfdPagingGrid(root, y, Shell.Body.width, 3, 2, pager: false);
-                y -= AvTokens.RowHeight * 2f + AvTokens.Gap * 2f + AvTokens.Space3;
-                y = Heading(root, y, Shell.Body.width, "PRIORITY GATES", "MAXIMISE TRACKS");
-                categories = new MfdPagingGrid(root, y, Shell.Body.width, 3, 2, pager: false);
-                y -= 2f*(AvTokens.RowHeight+AvTokens.Gap)+AvTokens.Space3;
-                y = Heading(root, y, Shell.Body.width, "PROFILE READOUT", "LIVE HUD SETTINGS");
-                AvKit.TacticalCard(root, new Rect(AvTokens.Space3, y, Shell.Body.width-AvTokens.Space3, 106f), AvTheme.RailInfo);
+                modes = new MfdPagingGrid(root, y, PageWidth, 2, 3, pager: false, rowHeight: cell, exclusive: true);
+                y -= cell * 3f + AvTokens.Space3;
+                y = Heading(root, y, PageWidth, "PRIORITY GATES", "MAXIMISE TRACKS");
+                categories = new MfdPagingGrid(root, y, PageWidth, 2, 3, pager: false, rowHeight: cell);
+                y -= cell * 3f + AvTokens.Space3;
+                y = Heading(root, y, PageWidth, "PROFILE READOUT", "LIVE HUD SETTINGS");
+                AvKit.TacticalCard(root, new Rect(AvTokens.Space3, y, PageWidth-AvTokens.Space3, brief), AvTheme.RailInfo);
+                // The copy sits on the card's midline, so a tall body reads as a panel
+                // with the brief on it rather than a block of text stranded at the top.
                 modeBrief = AvStyled.Label(root,
-                    new Rect(AvTokens.Space5, y-12f, Shell.Body.width-AvTokens.Space5*2f, 82f), "", "row-main");
+                    new Rect(AvTokens.Space5, y - Mathf.Max(10f, (brief - 82f) * 0.5f),
+                             PageWidth-AvTokens.Space5*2f, 82f), "", "row-main");
                 modeBrief.enableWordWrapping = true;
             }
 

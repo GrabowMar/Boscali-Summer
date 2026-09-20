@@ -24,6 +24,18 @@ namespace BoscaliSummer.Framework.Contracts
         /// <summary>Enemy staff events this faction has sight on, newest first, bounded.</summary>
         IReadOnlyList<CommanderLogLine> HostileLog { get; }
 
+        /// <summary>
+        /// The post the map draws as selected, or -1 for none. Client-local presentation: the
+        /// console opens a file, the map says where that post is standing.
+        /// </summary>
+        int HighlightedId { get; }
+
+        /// <summary>
+        /// Select one post on the map, or clear with -1. Client-local and nothing more: it
+        /// sends nothing to the host, orders nothing, arms no gesture and marks no target.
+        /// </summary>
+        void Highlight(int id);
+
         /// <summary>Ask the host for a fresh staff snapshot. Rate-limited by the transport.</summary>
         void Refresh();
     }

@@ -18,6 +18,13 @@ namespace BoscaliSummer.Features.Events.Presentation
 
         private string kind = Economic;
 
+        /// <summary>A category mark is decoration: it must never intercept a click.</summary>
+        protected override void Awake()
+        {
+            base.Awake();
+            raycastTarget = false;
+        }
+
         public void SetKind(string value)
         {
             string next = value == Political ? Political

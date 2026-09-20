@@ -18,6 +18,7 @@ namespace BoscaliSummer.Tests.Features.Trenches
             TestRoutePlanning();
             TestRunSplitting();
             TestStageRules();
+            TestBaySchedule();
             TestSideResolution();
             TestContestedFrontSide();
         }
@@ -342,12 +343,14 @@ namespace BoscaliSummer.Tests.Features.Trenches
 
         private static void TestStageRules()
         {
-            TestAssert.That(TrenchTraceMath.DefenderBudget(TrenchStage.Scrape) == 1 &&
-                TrenchTraceMath.DefenderBudget(TrenchStage.FireTrench) == 2 &&
-                TrenchTraceMath.DefenderBudget(TrenchStage.Support) == 3 &&
-                TrenchTraceMath.DefenderBudget(TrenchStage.Redoubt) == 4 &&
-                TrenchTraceMath.DefenderBudget(TrenchStage.Saps) == 4,
-                "Defenses grow 1/2/3/4 and stay sparse");
+            TestAssert.That(TrenchTraceMath.DefenderBudget(TrenchStage.Scrape) == 2 &&
+                TrenchTraceMath.DefenderBudget(TrenchStage.FireTrench) == 3 &&
+                TrenchTraceMath.DefenderBudget(TrenchStage.Support) == 5 &&
+                TrenchTraceMath.DefenderBudget(TrenchStage.Redoubt) == 7 &&
+                TrenchTraceMath.DefenderBudget(TrenchStage.Saps) == 8,
+                "Defenses grow 2/3/5/7/8 and stay sparse");
+            TestAssert.That(TrenchTraceMath.DefenderBudget((TrenchStage)(-1)) == 0,
+                "Before the first scrape, a position fields nothing");
             TestAssert.That(TrenchTraceMath.WorksBudget(TrenchStage.Scrape) == 0 &&
                 TrenchTraceMath.WorksBudget(TrenchStage.FireTrench) > 0 &&
                 TrenchTraceMath.WorksBudget(TrenchStage.Redoubt) == 8,
@@ -368,6 +371,64 @@ namespace BoscaliSummer.Tests.Features.Trenches
             TestAssert.That(TrenchTraceMath.TraverseAmplitude <= 0.7f &&
                 TrenchTraceMath.TraverseSpacing >= 8f,
                 "The traverse wave is a subtle zigzag; a sawtooth reads as blocky bays beside man-scale models");
+        }
+
+        /// <summary>
+        /// The fire ditch is a chain of bays, not one uniform ribbon: a pitch that widens on a
+        /// long line so the bay count stays inside the budget, a slot fraction centred in its
+        /// slot so the end bays are not half-cut, and a widening that eases out of the plain
+        /// ditch instead of stepping. The schedule is sampled per curve in TrenchLine.Validate
+        /// (Unity-checked); these are the pure numbers behind it.
+        /// </summary>
+        private static void TestBaySchedule()
+        {
+            TestAssert.That(Near(TrenchTraceMath.NodeSpacingFor(600f), TrenchTraceMath.NodeSpacing) &&
+                Near(TrenchTraceMath.NodeSpacingFor(0f), TrenchTraceMath.NodeSpacing) &&
+                Near(TrenchTraceMath.NodeSpacingFor(-500f), TrenchTraceMath.NodeSpacing),
+                "A short or unknown line digs a bay every twenty metres");
+            float longPitch = TrenchTraceMath.NodeSpacingFor(2400f);
+            TestAssert.That(Near(longPitch, 2400f / (TrenchTraceMath.MaximumNodes - 1)) &&
+                longPitch > 77f && longPitch < 78f,
+                "A long line widens the pitch to about 77.4m, got " + longPitch);
+            TestAssert.That(longPitch * (TrenchTraceMath.MaximumNodes - 1) >= 2400f,
+                "The widest pitch still fits one position's 2400m inside the node budget");
+
+            TestAssert.That(Near(TrenchTraceMath.NodeFraction(0, 3), 1f / 6f) &&
+                Near(TrenchTraceMath.NodeFraction(1, 3), 0.5f) &&
+                Near(TrenchTraceMath.NodeFraction(2, 3), 5f / 6f),
+                "Three bays sit at 0.17/0.5/0.83 of the line, centred in their slots");
+            TestAssert.That(Near(TrenchTraceMath.NodeFraction(0, 0), 0f) &&
+                Near(TrenchTraceMath.NodeFraction(4, 0), 0f),
+                "A spent slot budget puts the bay on the line's start");
+            TestAssert.That(Near(TrenchTraceMath.NodeFraction(-2, 3), 0f) &&
+                Near(TrenchTraceMath.NodeFraction(9, 3), 1f),
+                "A slot outside the budget is clamped onto the line, never past its caps");
+
+            TestAssert.That(Near(TrenchTraceMath.BayExtra(0f), TrenchTraceMath.BayExtraWidth) &&
+                Near(TrenchTraceMath.BayExtra(2.5f), TrenchTraceMath.BayExtraWidth),
+                "A bay keeps its full width through its core");
+            TestAssert.That(TrenchTraceMath.BayExtra(6.5f) == 0f &&
+                TrenchTraceMath.BayExtra(20f) == 0f,
+                "A bay has faded back into the plain ditch by the fade radius");
+            float middle = TrenchTraceMath.BayExtra(4.5f);
+            TestAssert.That(middle > 0f && middle < TrenchTraceMath.BayExtraWidth,
+                "A bay eases out between its flat core and the fade radius, got " + middle);
+            float previous = float.MaxValue;
+            for (float distance = 0f; distance <= 8f; distance += 0.05f)
+            {
+                float extra = TrenchTraceMath.BayExtra(distance);
+                TestAssert.That(extra <= previous + 1e-5f,
+                    "Bay widening never rises with distance, broke at " + distance + "m");
+                previous = extra;
+            }
+
+            // The bay schedule that TrenchLine.Validate samples from a curve: the node count a
+            // straight 400m/2400m curve produces through the real sampler is asserted in the
+            // Unity harness, where TrenchLine and TrenchPlanner are compiled.
+            TestAssert.That(400f / TrenchTraceMath.NodeSpacingFor(400f) >= 19f,
+                "A 400m fire curve carries about twenty bays at the base pitch");
+            TestAssert.That(2400f / longPitch <= TrenchTraceMath.MaximumNodes - 1,
+                "A 2400m fire curve needs at most the node budget at the widened pitch");
         }
 
         private static bool Near(float a, float b) => Math.Abs(a - b) < 0.0001f;

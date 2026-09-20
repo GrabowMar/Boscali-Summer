@@ -38,6 +38,8 @@ namespace BoscaliSummer.Features.Support.Runtime
         /// <summary>The station is not overhead (or is holding in a transfer).</summary>
         OutOfCoverage = 15,
         NotBuilt = 16,
+
+        /// <summary>No working CYBER jammer reaches the target.</summary>
         NoEwAsset = 17,
         WrongPosture = 18,
         PlatformExpended = 19,
@@ -54,7 +56,15 @@ namespace BoscaliSummer.Features.Support.Runtime
         CopyLimit = 30,
         WouldStrand = 31,
         PlatformExists = 32,
-        NeedsPropulsion = 33
+        NeedsPropulsion = 33,
+        NeedsCyberCommand = 34,
+        NetworkFull = 35,
+
+        /// <summary>The faction's Cyber Command is compromised; offensive operations are locked.</summary>
+        CommandCompromised = 36,
+
+        /// <summary>A console verb refused by the network model: <c>CyberRefused + (byte)CyberDenial</c>.</summary>
+        CyberRefused = 64
     }
 
     /// <summary>

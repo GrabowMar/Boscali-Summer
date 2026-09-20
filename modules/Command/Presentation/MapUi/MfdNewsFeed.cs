@@ -40,7 +40,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             public HeadlineItem(string tag, string colorHex, string text, Priority priority, bool isLarp = false)
             {
                 Tag = tag ?? "WIRE";
-                ColorHex = colorHex ?? "#44EE88";
+                ColorHex = colorHex ?? "#00FFA3";
                 Text = text ?? "";
                 Priority = priority;
                 IsLarp = isLarp;
@@ -51,7 +51,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 : $"<color={ColorHex}>[{Tag}]</color> {Text}";
         }
 
-        public const string Separator = "  <color=#2B5D3A>+++</color>  ";
+        public const string Separator = "  <color=#00F0FF>+++</color>  ";
 
         private const int MaxActiveQueue = 16;
         private const int MaxHistory = 96;

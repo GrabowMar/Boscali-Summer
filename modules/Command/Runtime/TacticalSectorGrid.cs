@@ -58,6 +58,7 @@ namespace BoscaliSummer.Features.Command.Runtime
         public static readonly Color32 HostileTint = new Color32(230, 45, 45, 255);
 
         public float CellSize { get; private set; }
+        public uint GridVersion { get; private set; }
 
         public int ResolutionX { get; private set; }
         public int ResolutionY { get; private set; }
@@ -537,6 +538,7 @@ namespace BoscaliSummer.Features.Command.Runtime
             float frontLength = 0f;
             for (int i = 0; i < segmentCount; i++) frontLength += frontSegments[i].HalfLength * 2f;
             FrontlineLengthMetres = frontLength;
+            GridVersion++;
         }
 
         /// <summary>

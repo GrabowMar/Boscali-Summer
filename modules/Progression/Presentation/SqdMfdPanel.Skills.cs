@@ -55,14 +55,17 @@ namespace BoscaliSummer.Features.Progression.Presentation
 
         private void BuildSkillsPage(RectTransform page, Rect body)
         {
-            clause = 0;
             PerkView[] perks = Progress != null ? Progress.GetPerks() : Array.Empty<PerkView>();
             if (perks.Length == 0)
             {
-                DossierSpine(page, new Rect(body.x, body.y, 3f, body.height));
-                PlainLabel(page,
-                    new Rect(body.x + SpineInset, body.y, body.width - SpineInset, 40f),
-                    "No pilot qualifications are configured on this host.", "row-sub");
+                PageRail(page, new Rect(body.x, body.y, 3f, body.height));
+                float emptyX = body.x + SpineInset;
+                float emptyWidth = body.width - SpineInset;
+                AvKit.TacticalCard(page, new Rect(emptyX, body.y, emptyWidth, 92f), AvTheme.RailInert);
+                PlainLabel(page, new Rect(emptyX + 12f, body.y - 12f, emptyWidth - 24f, 20f),
+                    "NO QUALIFICATIONS AVAILABLE", "row-name");
+                PlainLabel(page, new Rect(emptyX + 12f, body.y - 40f, emptyWidth - 24f, 34f),
+                    "This host has not configured a qualification catalog.", "row-sub");
                 return;
             }
 
@@ -73,7 +76,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             for (int l = 0; l < lanes.Count; l++)
                 if (lanes[l].Nodes.Count > grades) grades = lanes[l].Nodes.Count;
 
-            // The selected-grade strip is pinned to the foot of the sheet, so the commit
+            // The selected-grade strip is pinned to the foot of the page, so the commit
             // control can never scroll away from the cell it commits. Only the board scrolls,
             // and only when the panel is too short to hold it.
             Rect strip = new Rect(body.x, body.y - body.height + SkillBoardLayout.DetailHeight,
@@ -83,16 +86,24 @@ namespace BoscaliSummer.Features.Progression.Presentation
 
             float rowHeight = SkillBoardLayout.RowHeight(listArea.height, grades);
             float contentHeight = SkillBoardLayout.ContentHeight(rowHeight, grades);
+            // A body taller than the board's readable maximum would leave the lower third
+            // of the page under the last grade row; spread what is left over the rows, so
+            // the board ends on the pinned strip instead of on blank glass.
+            if (contentHeight < listArea.height)
+            {
+                rowHeight += (listArea.height - contentHeight) / Mathf.Max(1, grades);
+                contentHeight = SkillBoardLayout.ContentHeight(rowHeight, grades);
+            }
 
             RectTransform parent = AvScreen.Scroll(page, listArea, contentHeight, out Rect area);
-            DossierSpine(parent, new Rect(area.x, area.y, 3f, area.height));
+            PageRail(parent, new Rect(area.x, area.y, 3f, area.height));
             float x = area.x + SpineInset;
             float width = area.width - SpineInset;
             float y = area.y;
 
-            y = DrawFileHeader(parent, x, y, width, "FORM SQD-2 · SHEET 2 OF 4",
-                "QUALIFICATION RECORD", "HOST COPY");
-            y = DrawSectionTitle(parent, x, y, width, PerkCatalog.Qualifications,
+            y = DrawPageHeader(parent, x, y, width, "SKILLS  /  02 OF 04",
+                "QUALIFICATION BOARD", "HOST PROGRESSION");
+            y = DrawSectionTitle(parent, x, y, width, "AVAILABLE QUALIFICATIONS",
                 BudgetNote(), band: false, out skillBudgetNote);
 
             float cellWidth = SkillBoardLayout.CellWidth(width, lanes.Count);
@@ -166,16 +177,17 @@ namespace BoscaliSummer.Features.Progression.Presentation
             float rowHeight, int grade, List<SkillLane> lanes)
         {
             float rowTop = y - grade * (rowHeight + SkillBoardLayout.Gap);
-            float labelTop = rowTop - (rowHeight - 14f) * 0.5f;
+            bool maximum = grade == PerkCatalog.MaximumDepth - 1;
+            float labelTop = rowTop - (rowHeight - 18f) * 0.5f + (maximum ? 7f : 0f);
             TMP_Text label = PlainLabel(parent,
-                new Rect(x, labelTop, SkillBoardLayout.Gutter - 8f, 14f), "G" + (grade + 1),
-                "section-title-note");
-            label.alignment = TextAlignmentOptions.MidlineRight;
-            if (grade == PerkCatalog.MaximumDepth - 1)
+                new Rect(x, labelTop, SkillBoardLayout.Gutter, 18f), (grade + 1).ToString(),
+                "kv-value");
+            label.alignment = TextAlignmentOptions.Center;
+            if (maximum)
             {
                 TMP_Text cap = PlainLabel(parent,
-                    new Rect(x, labelTop - 13f, SkillBoardLayout.Gutter - 4f, 12f), "CAP", "row-sub");
-                cap.alignment = TextAlignmentOptions.MidlineRight;
+                    new Rect(x, labelTop - 19f, SkillBoardLayout.Gutter, 11f), "MAX", "row-sub");
+                cap.alignment = TextAlignmentOptions.Center;
                 cap.color = AvTheme.Dim;
             }
 
@@ -206,18 +218,29 @@ namespace BoscaliSummer.Features.Progression.Presentation
             PerkDefinition definition = PerkDefinitionOf(view);
             cell.Icon = SqdGlyph.Create(parent, new Rect(area.x + 9f, area.y - 9f, 15f, 15f),
                 SqdMarks.FromKey(definition.Icon));
+            // Two lines: a composed name like ENGINEER QUALIFICATION is wider than the cell
+            // at one line, and the board never drops half a pick's own name.
             cell.Name = PlainLabel(parent,
-                new Rect(area.x + 8f, area.y - 26f, area.width - 16f,
-                    Mathf.Clamp(area.height - 44f, 14f, 28f)),
+                new Rect(area.x + 8f, area.y - 25f, area.width - 16f,
+                    Mathf.Clamp(area.height - 44f, 24f, 30f)),
                 CellName(view, definition), "row-main");
             // A cell this narrow would otherwise break a long word like SURVEILLANCE mid-word;
             // the paging grid shrinks its labels the same way.
             cell.Name.enableAutoSizing = true;
             cell.Name.fontSizeMax = cell.Name.fontSize;
             cell.Name.fontSizeMin = AvTokens.FontMicro;
+            // The state line is one auto-sized line at the foot of the cell: an effect label
+            // like "+15% COOLDOWN" shrinks to the micro floor and overflows its box rather
+            // than silently dropping the tail of its word.
             cell.State = PlainLabel(parent,
-                new Rect(area.x + 8f, area.y - area.height + 16f, area.width - 16f, 13f),
+                new Rect(area.x + 8f, area.y + SkillBoardLayout.StateTop(area.height),
+                    area.width - 16f, SkillBoardLayout.StateHeight),
                 "", "row-sub");
+            cell.State.enableWordWrapping = false;
+            cell.State.enableAutoSizing = true;
+            cell.State.fontSizeMax = cell.State.fontSize;
+            cell.State.fontSizeMin = AvTokens.FontMicro;
+            cell.State.overflowMode = TextOverflowModes.Overflow;
 
             byte id = view.Id;
             cell.Select = AvKit.HitButton(parent, area, () => ClickSkill(id));
@@ -238,7 +261,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
         /// <summary>
         /// The rail's key, drawn as the table's first line: the board leans on the avionics
         /// rule that state lives on the rail, so it teaches that language once, beside the
-        /// rails it explains, instead of leaving it to be guessed at the foot of the sheet.
+        /// rails it explains, instead of leaving it to be guessed at the foot of the page.
         /// </summary>
         private static void DrawBoardLegend(RectTransform parent, float x, float y, float width)
         {
@@ -264,23 +287,28 @@ namespace BoscaliSummer.Features.Progression.Presentation
         /// <summary>The pinned strip: what a click means, what is armed, and the one commit.</summary>
         private void BuildSkillStrip(RectTransform parent, Rect area)
         {
-            AvStyled.Box(parent, new Rect(area.x - 6f, area.y + 4f, area.width + 6f, area.height - 4f),
-                "section band");
-            AvStyled.SpineTick(parent, area.x - SpineInset + 3f, area.y - 7f);
+            AvKit.Panel(parent, new Rect(area.x, area.y, area.width, area.height - 4f),
+                AvTheme.SurfaceRaised);
+            AvKit.Outline(parent, new Rect(area.x, area.y, area.width, area.height - 4f),
+                AvTheme.Frame.WithAlpha(0.75f));
+            AvKit.Rule(parent, new Rect(area.x, area.y, 3f, area.height - 4f), AvTheme.RailInfo);
 
-            float textWidth = Mathf.Max(0f, area.width - 122f);
-            skillStripTitle = PlainLabel(parent, new Rect(area.x + 6f, area.y + 2f, textWidth, 15f),
-                skillIdleTitle, "row-name");
-            skillStripDetail = PlainLabel(parent, new Rect(area.x + 6f, area.y - 16f, textWidth, 26f),
+            float textWidth = Mathf.Max(0f, area.width - 150f);
+            skillStripTitle = Fitted(PlainLabel(parent, new Rect(area.x + 12f, area.y + 2f, textWidth, 15f),
+                skillIdleTitle, "row-name"));
+            skillStripDetail = PlainLabel(parent, new Rect(area.x + 12f, area.y - 16f, textWidth, 26f),
                 skillIdleDetail, "row-sub");
             // Two wrapped lines: the confirm strip is the one place the whole sentence is
-            // readable, so it gets two lines instead of an ellipsis. Anything longer truncates
-            // at the rect rather than spilling into the padded row below.
-            skillStripDetail.overflowMode = TextOverflowModes.Truncate;
+            // readable, so it shrinks to the micro floor and overflows rather than truncating
+            // the reason a pick cannot be committed.
+            skillStripDetail.enableAutoSizing = true;
+            skillStripDetail.fontSizeMin = AvTokens.FontMicro;
+            skillStripDetail.fontSizeMax = skillStripDetail.fontSize;
+            skillStripDetail.overflowMode = TextOverflowModes.Overflow;
 
             skillConfirmButton = AvStyled.Button(parent,
-                new Rect(area.x + area.width - 110f, area.y - 9f, 104f, 26f),
-                "CONFIRM", "btn", CommitSelected, AvButtonStyle.Primary);
+                new Rect(area.x + area.width - 138f, area.y - 9f, 128f, 26f),
+                "UNLOCK SELECTED", "btn", CommitSelected, AvButtonStyle.Primary);
             skillConfirmButton.SetEnabled(false);
             skillConfirmButton.WithTooltip("Commit the selected grade. One pick, no undo.");
         }
@@ -300,14 +328,15 @@ namespace BoscaliSummer.Features.Progression.Presentation
             return default;
         }
 
-        /// <summary>The one word a grade's state is called; the strip and the tooltip use it.</summary>
+        /// <summary>
+        /// The one word a grade's state is called; the strip and the tooltip use it. Kept
+        /// to a word per state so no cell or lane caption has to ellipsise it.
+        /// </summary>
         private static string StateWord(PerkView perk)
         {
-            bool tool = PerkDefinitionOf(perk).IsTool;
-            if (perk.Unlocked) return tool ? "HELD" : "ACTIVE";
-            if (perk.Affordable) return tool ? "TOOL" : "PICK";
-            string word = BlockWord(perk);
-            return word == "CLOSED" ? "CLOSED · CAREER CAP" : word;
+            if (perk.Unlocked) return PerkDefinitionOf(perk).IsTool ? "HELD" : "ACTIVE";
+            if (perk.Affordable) return PerkDefinitionOf(perk).IsTool ? "TOOL" : "PICK";
+            return BlockWord(perk);
         }
 
         /// <summary>
@@ -417,8 +446,10 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 !selected.Unlocked && selected.Affordable;
             if (skillConfirmButton != null)
             {
+                // Armed reads as the latched wash and the word CONFIRM; no solid plate.
                 skillConfirmButton.SetEnabled(canConfirm);
                 skillConfirmButton.SetLatched(canConfirm);
+                skillConfirmButton.ClearCustomColors();
             }
 
             if (requestPending)
@@ -489,7 +520,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             bool closed = !toolHeld && lane.Ids.Count > 0 &&
                 TryFind(perks, lane.Ids[0], out PerkView tool) && tool.Block == PerkView.BlockCap;
 
-            lane.Note.text = taken + "/" + lane.Ids.Count + " · " + (toolHeld ? "TOOL HELD"
+            lane.Note.text = taken + "/" + lane.Ids.Count + " " + (toolHeld ? "HELD"
                 : closed ? "CLOSED" : "OPEN");
             lane.Note.color = toolHeld ? AvTheme.RailReady : closed ? AvTheme.Dim : AvTheme.TextPrimary;
             lane.Caption.color = closed ? AvTheme.Dim : AvTheme.TextPrimary;

@@ -80,7 +80,6 @@ namespace BoscaliSummer.Features.QoL.Runtime
             if (settings == null) return;
             if (!InputFieldChecker.InsideInputField && !GameplayUI.GameIsPaused &&
                 Input.GetKeyDown(settings.ThirdPersonHudKey.Value)) Toggle();
-            ApplyVisibility();
         }
 
         private void LateUpdate()

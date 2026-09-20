@@ -33,12 +33,21 @@ namespace BoscaliSummer.Features.Radio.Presentation
             BuildPalette();
 
             ground = AvKit.Panel(parent, area, AvTheme.Unity(AvTokens.Ground));
-            AvKit.Outline(parent, area, AvTheme.Frame);
+            AvKit.Outline(parent, area, AvTheme.Unity(AvTokens.Hairline));
 
             var viewObject = new GameObject("Waterfall", typeof(RectTransform), typeof(RawImage));
             var viewRect = (RectTransform)viewObject.transform;
             viewRect.SetParent(ground.rectTransform, false);
             AvKit.Place(viewRect, new Rect(1f, -1f, area.width - 2f, area.height - 2f));
+
+            // Reticle dB reference markers for 6th/7th-gen SIGINT scope
+            for (int r = 1; r <= 3; r++)
+            {
+                float yFrac = r * 0.25f;
+                AvKit.Rule(ground.rectTransform,
+                    new Rect(1f, -(area.height * yFrac), area.width - 2f, 1f),
+                    AvTheme.Unity(AvTokens.Hairline.WithAlpha(0.28f)));
+            }
 
             texture = new Texture2D(this.bins, this.rows, TextureFormat.RGBA32, false)
             {
@@ -53,9 +62,31 @@ namespace BoscaliSummer.Features.Radio.Presentation
             image.raycastTarget = false;
             image.color = Color.white;
             Clear();
+
+            BuildLegend(parent, area);
         }
 
-        public bool Valid => texture != null && ground != null;
+        /// <summary>
+        /// A three-swatch key for the ramp, labelled in words: the display's meaning is never
+        /// carried by its colours alone. It sits inside the waterfall's lower-left corner,
+        /// over the oldest rows, and is built once.
+        /// </summary>
+        private void BuildLegend(RectTransform parent, Rect area)
+        {
+            const float swatch = 7f;
+            const float step = 10f;
+            float x = area.x + AvTokens.Space2;
+            float y = area.y - area.height + 5f;
+
+            AvStyled.Label(parent, new Rect(x, y, 50f, 12f), "NOISE", "row-sub");
+            x += 50f;
+            for (int i = 0; i < 3; i++)
+            {
+                AvKit.Panel(parent, new Rect(x, y + 1f, swatch, swatch), Ramp(0.10f + i * 0.40f));
+                x += step;
+            }
+            AvStyled.Label(parent, new Rect(x + 2f, y, 64f, 12f), "CARRIER", "row-sub");
+        }
 
         /// <summary>Push the newest row at the top and scroll the history down by one.</summary>
         public void Push(float[] magnitudes)
@@ -93,24 +124,27 @@ namespace BoscaliSummer.Features.Radio.Presentation
         }
 
         /// <summary>
-        /// A green-glass thermal ramp: noise floor reads as the panel ground, a carrier climbs
-        /// through the accent and a saturated peak goes white-hot.
+        /// The one place the ramp is written down, so the legend swatches and the pixels they
+        /// explain can never drift apart. 6th/7th-generation quantum SIGINT spectrum:
+        /// deep-space obsidian ground -> datalink cyan -> quantum hyper-emerald -> white-hot.
         /// </summary>
-        private void BuildPalette()
+        internal static Color Ramp(float t)
         {
             Color floor = AvTheme.Ground;
-            Color low = Color.Lerp(floor, AvTheme.Accent, 0.35f);
-            Color mid = AvTheme.Accent;
-            Color hot = Color.Lerp(AvTheme.Accent, Color.white, 0.85f);
+            Color low = new Color(0.00f, 0.55f, 0.70f, 1f);
+            Color mid = AvTheme.RailReady;
+            Color hot = Color.white;
+            t = Mathf.Clamp01(t);
+            return t < 0.35f
+                ? Color.Lerp(floor, low, t / 0.35f)
+                : t < 0.75f ? Color.Lerp(low, mid, (t - 0.35f) / 0.40f)
+                : Color.Lerp(mid, hot, (t - 0.75f) / 0.25f);
+        }
+
+        private void BuildPalette()
+        {
             for (int i = 0; i < PaletteSteps; i++)
-            {
-                float t = i / (float)(PaletteSteps - 1);
-                Color colour = t < 0.5f
-                    ? Color.Lerp(floor, low, t * 2f)
-                    : t < 0.8f ? Color.Lerp(low, mid, (t - 0.5f) / 0.3f)
-                    : Color.Lerp(mid, hot, (t - 0.8f) / 0.2f);
-                palette[i] = colour;
-            }
+                palette[i] = Ramp(i / (float)(PaletteSteps - 1));
         }
     }
 }

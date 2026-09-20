@@ -1,4 +1,5 @@
 using BoscaliSummer.Features.Support.Domain;
+using BoscaliSummer.Features.Support.Domain.Cyber;
 using BoscaliSummer.Features.Support.Runtime;
 
 namespace BoscaliSummer.Tests.Features.Support
@@ -20,12 +21,12 @@ namespace BoscaliSummer.Tests.Features.Support
         private static void TestTabs()
         {
             string[] labels = OpsDomains.TabLabels();
-            TestAssert.That(labels.Length == 5, "OPS must expose exactly five domain tabs");
-            string[] expected = { "SPACE", "EW", "INFO", "SPEC OPS", "INTEL" };
+            TestAssert.That(labels.Length == 4, "OPS must expose exactly four domain tabs");
+            string[] expected = { "SPACE", "CYBER", "SPEC OPS", "INTEL" };
             for (int i = 0; i < expected.Length; i++)
             {
                 TestAssert.That(labels[i] == expected[i], "OPS tab " + i + " must read " + expected[i]);
-                TestAssert.That(labels[i].Length <= 8, "an OPS tab label must fit a fifth of the bezel");
+                TestAssert.That(labels[i].Length <= 8, "an OPS tab label must fit its share of the bezel");
                 TestAssert.That(!string.IsNullOrEmpty(OpsDomains.Mission(OpsDomains.All[i])),
                     "every OPS domain needs a mission line");
             }
@@ -43,7 +44,10 @@ namespace BoscaliSummer.Tests.Features.Support
 
         private static void TestPostures()
         {
-            TestAssert.That(EwPostures.Default == EwPosture.NoiseJamming, "a fresh EW station comes up jamming");
+            TestAssert.That(EwPostures.Default == EwPosture.NoiseJamming, "a fresh jammer comes up in NOISE");
+            TestAssert.That(EwPostures.Umbrella(EwPosture.NoiseJamming) == 1f &&
+                EwPostures.Umbrella(EwPosture.GhostSpoofing) == 0.5f && EwPostures.Umbrella(EwPosture.SigintPassive) == 0f,
+                "NOISE raises the full umbrella, DECEPTION half, EMCON none");
             TestAssert.That(EwPostures.Clamp(200) == EwPostures.Default, "a hostile posture byte must clamp");
             TestAssert.That(EwPostures.Clamp(2) == EwPosture.GhostSpoofing, "a valid posture byte must survive");
 
@@ -52,10 +56,12 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(EwPostures.StationBacked(HackKind.Blackout) && EwPostures.StationBacked(HackKind.Ghost) &&
                 EwPostures.StationBacked(HackKind.Spoof), "attack operations must reach through a station");
 
-            TestAssert.That(EwPostures.Backs(EwPosture.NoiseJamming, HackKind.Blackout), "jamming backs blackout");
-            TestAssert.That(!EwPostures.Backs(EwPosture.GhostSpoofing, HackKind.Blackout), "spoofing must not back blackout");
-            TestAssert.That(EwPostures.Backs(EwPosture.GhostSpoofing, HackKind.Ghost) &&
-                EwPostures.Backs(EwPosture.GhostSpoofing, HackKind.Spoof), "spoofing backs both deception operations");
+            TestAssert.That(EwPostures.Backs(EwPosture.NoiseJamming, HackKind.Blackout) &&
+                EwPostures.Backs(EwPosture.NoiseJamming, HackKind.Spoof), "NOISE backs every station operation");
+            TestAssert.That(EwPostures.Backs(EwPosture.GhostSpoofing, HackKind.Blackout) &&
+                EwPostures.Backs(EwPosture.GhostSpoofing, HackKind.Ghost), "DECEPTION backs every station operation too");
+            TestAssert.That(EwPostures.Emitting(EwPosture.NoiseJamming) && !EwPostures.Emitting(EwPosture.SigintPassive),
+                "only EMCON is silent");
             TestAssert.That(!EwPostures.Backs(EwPosture.SigintPassive, HackKind.Blackout) &&
                 !EwPostures.Backs(EwPosture.SigintPassive, HackKind.Spoof), "a passive station backs no attack");
             TestAssert.That(EwPostures.Backs(EwPosture.SigintPassive, HackKind.Ping),
@@ -68,29 +74,70 @@ namespace BoscaliSummer.Tests.Features.Support
         private static void TestInfoGates()
         {
             var network = new InfoNetwork();
-            TestAssert.That(InfoOperations.Evaluate(network, HackKind.Ping, false, EwPosture.SigintPassive) ==
+            var cyber = new CyberNetwork();
+            TestAssert.That(InfoOperations.Evaluate(network, HackKind.Ping, cyber) ==
                 InfoGate.FacilityMissing, "an unbuilt facility must gate first");
-            TestAssert.That(InfoOperations.Evaluate(null, HackKind.Ping, true, EwPosture.NoiseJamming) ==
+            TestAssert.That(InfoOperations.Evaluate(null, HackKind.Ping, cyber) ==
                 InfoGate.FacilityMissing, "a missing network must read as unbuilt, not ready");
 
             network.TryUpgrade(FacilityId.Sigint);
-            TestAssert.That(InfoOperations.Evaluate(network, HackKind.Ping, false, EwPosture.SigintPassive) ==
-                InfoGate.Ready, "PING needs no station");
+            TestAssert.That(InfoOperations.Evaluate(network, HackKind.Ping, cyber) ==
+                InfoGate.Ready, "PING needs no jammer");
 
             network.TryUpgrade(FacilityId.Crypto);
             network.TryUpgrade(FacilityId.Disrupt);
-            TestAssert.That(InfoOperations.Evaluate(network, HackKind.Blackout, false, EwPosture.NoiseJamming) ==
-                InfoGate.StationMissing, "BLACKOUT needs a deployed station");
-            TestAssert.That(InfoOperations.Evaluate(network, HackKind.Blackout, true, EwPosture.GhostSpoofing) ==
-                InfoGate.WrongPosture, "BLACKOUT needs a jamming posture");
-            TestAssert.That(InfoOperations.Evaluate(network, HackKind.Blackout, true, EwPosture.NoiseJamming) ==
-                InfoGate.Ready, "a jamming station backs BLACKOUT");
+            TestAssert.That(InfoOperations.Evaluate(network, HackKind.Blackout, cyber) ==
+                InfoGate.StationMissing, "BLACKOUT needs a working jammer");
+
+            cyber.PlaceStatic(1, CyberSiteKind.Command, 0f, 0f);
+            int jammer = cyber.TryBuild(CyberSiteKind.Jammer, 5000f, 0f, 0f, 8);
+            cyber.SetPosition(jammer, 5000f, 0f, true);
+            cyber.Tick(1.0, 0.1f, 0f);
+            cyber.TrySetMode(jammer, EwPosture.SigintPassive);
+            TestAssert.That(InfoOperations.Evaluate(network, HackKind.Blackout, cyber) ==
+                InfoGate.WrongPosture, "a jammer in EMCON backs nothing");
+            cyber.TrySetMode(jammer, EwPosture.GhostSpoofing);
+            TestAssert.That(InfoOperations.Evaluate(network, HackKind.Blackout, cyber) ==
+                InfoGate.Ready, "any emitting jammer backs BLACKOUT");
+            TestAssert.That(cyber.EmittingJammerCovers(9000f, 0f, 5000f) && !cyber.EmittingJammerCovers(30000f, 0f, 5000f),
+                "reach is still measured from the jammer");
+
+            int entry = cyber.Force(IncidentKind.Intrusion, 2.0);
+            TestAssert.That(entry >= 0, "an intrusion must open on a live network");
+            cyber.Tick(2.0 + CyberNetwork.IntrusionLanding + 0.1, 0.1f, 0f);
+            // The only non-command site is the jammer: compromised, it stops backing anything.
+            TestAssert.That(InfoOperations.Evaluate(network, HackKind.Blackout, cyber) ==
+                InfoGate.StationMissing, "a compromised jammer backs nothing");
+
+            // A trace foothold is a backdoor: the operation no longer needs a jammer of your own.
+            var raider = new CyberNetwork { OriginCount = 1 };
+            raider.PlaceStatic(1, CyberSiteKind.Command, 0f, 0f);
+            int ear = raider.TryBuild(CyberSiteKind.Sigint, 6000f, 0f, 0f, 8);
+            // Two ears: the intrusion takes the one it lands on, the other keeps the trace running.
+            int spare = raider.TryBuild(CyberSiteKind.Sigint, 0f, 6000f, 0f, 8);
+            raider.SetPosition(ear, 6000f, 0f, true);
+            raider.SetPosition(spare, 0f, 6000f, true);
+            raider.Tick(1.0, 0.1f, 0f);
+            int incident = raider.Force(IncidentKind.Intrusion, 1.0);
+            TestAssert.That(raider.TryVerb(CyberVerb.Trace, incident, 1.0) == CyberDenial.None, "setup: trace started");
+            double traced = 1.0;
+            while (traced < 1.0 + CyberNetwork.TraceSeconds + 2.0)
+            {
+                traced += 0.5;
+                raider.Tick(traced, 0.5f, 0f);
+            }
+            TestAssert.That(raider.AnyFoothold(traced), "setup: the trace opened a foothold");
+            TestAssert.That(!raider.AnyWorking(CyberSiteKind.Jammer) &&
+                InfoOperations.Evaluate(network, HackKind.Blackout, raider, traced) == InfoGate.Ready,
+                "a foothold carries a station-backed operation with no jammer of your own");
 
             TestAssert.That(InfoOperations.Explain(InfoGate.Ready, HackKind.Ping) == null, "an open gate has no copy");
-            TestAssert.That(InfoOperations.Explain(InfoGate.WrongPosture, HackKind.Spoof).Contains("GHOST SPOOFING"),
-                "a posture gate must name the posture to set");
+            TestAssert.That(InfoOperations.Explain(InfoGate.WrongPosture, HackKind.Spoof).Contains("NOISE OR DECEPTION"),
+                "a mode gate must name the modes that work");
             TestAssert.That(InfoOperations.Explain(InfoGate.FacilityMissing, HackKind.Track).Contains("LV2"),
                 "a facility gate must name the level to build");
+            TestAssert.That(InfoOperations.Explain(InfoGate.CommandCompromised, HackKind.Ping).Contains("COMPROMISED"),
+                "a compromised command must say so");
         }
 
         private static void TestProgramInvestment()

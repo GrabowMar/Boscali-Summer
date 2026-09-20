@@ -16,6 +16,13 @@ namespace BoscaliSummer.Features.Progression.Presentation
     {
         private const int WingmanRows = 4;
 
+        private const float WingHuntHeight = 78f;
+        private const float WingFriendlyHeight = 112f;
+        private const float WingRowHeight = 124f;
+        private const float WingPagerHeight = 28f;
+        private const float WingFooterHeight = 36f;
+        private const float WingRowGrowthCap = 28f;
+
         private sealed class FriendlySlot
         {
             public RectTransform Root;
@@ -62,78 +69,97 @@ namespace BoscaliSummer.Features.Progression.Presentation
 
         // ---- WINGS page ------------------------------------------------------------------
 
-        private void BuildWingsPage(RectTransform parent, Rect body)
+        /// <summary>
+        /// The page's blocks at their natural heights: header, hunt band, the two wing
+        /// sections, the pager, two hostile rows and the footer. A taller bezel grows the
+        /// hostile cards first and then the gaps, so the last note always sits on the
+        /// status strip instead of leaving the lower third of the glass blank.
+        /// </summary>
+        private static float WingMinContentHeight() =>
+            SheetHeaderHeight + WingHuntHeight + SheetHeadingHeight + WingFriendlyHeight +
+            SheetHeadingHeight + WingPagerHeight + 2f * (WingRowHeight + AvTokens.Space2) +
+            WingFooterHeight + SheetBaseGap * 3f;
+
+        private void BuildWingsPage(RectTransform page, Rect body)
         {
-            clause = 0;
-            parent = AvScreen.Scroll(parent, body, 670f, out body);
-            DossierSpine(parent, new Rect(body.x, body.y, 3f, body.height));
+            float content = WingMinContentHeight();
+            RectTransform parent = AvScreen.Scroll(page, body, content, out body);
+            PageRail(parent, new Rect(body.x, body.y, 3f, body.height));
             float x = body.x + SpineInset;
             float width = body.width - SpineInset;
             float y = body.y;
 
-            y = DrawFileHeader(parent, x, y, width, "FORM SQD-3 · SHEET 3 OF 4", "ORDER OF BATTLE",
-                "ACE ENCOUNTERS");
+            float slack = Mathf.Max(0f, body.height - content);
+            float gap = SheetGap(body.height, content, 3);
+            float rowHeight = WingRowHeight + Mathf.Max(0f,
+                Mathf.Min((slack - (gap - SheetBaseGap) * 3f) / 2f, WingRowGrowthCap));
+
+            y = DrawPageHeader(parent, x, y, width, "WINGS  /  03 OF 04", "WING STATUS",
+                "LIVE + ENCOUNTER DATA");
 
             // ---- Hunt status -------------------------------------------------------------
-            AvStyled.Box(parent, new Rect(x, y, width, 78f), "section band");
-            huntRail = AvStyled.Rail(parent, new Rect(x + 6f, y - 8f, 3f, 60f), "ready");
-            huntTitle = PlainLabel(parent, new Rect(x + 18f, y - 8f, width - 28f, 18f),
-                "ACE HUNT STANDBY", "section-title");
-            huntDetails = PlainLabel(parent, new Rect(x + 18f, y - 30f, width - 28f, 40f),
+            AvKit.Panel(parent, new Rect(x, y, width, WingHuntHeight), AvTheme.SurfaceInert);
+            AvKit.Outline(parent, new Rect(x, y, width, WingHuntHeight), AvTheme.Frame.WithAlpha(0.7f));
+            huntRail = AvStyled.Rail(parent, new Rect(x + 6f, y - 8f, 3f, WingHuntHeight - 18f), "ready");
+            huntTitle = Fitted(PlainLabel(parent, new Rect(x + 18f, y - 8f, width - 28f, 18f),
+                "ACE HUNT STANDBY", "section-title"));
+            huntTitle.characterSpacing = 2f;
+            huntDetails = PlainLabel(parent, new Rect(x + 18f, y - 30f, width - 28f, WingHuntHeight - 38f),
                 "Awaiting enemy wing reports.", "row-sub");
-            y -= 90f;
+            y -= WingHuntHeight + gap;
 
             // ---- Your wing ---------------------------------------------------------------
-            y = DrawSectionTitle(parent, x, y, width, "YOUR WING", "RECRUITED SQUADRON · WMC", band: false);
+            y = DrawSectionTitle(parent, x, y, width, "FRIENDLY FLIGHT", "MANAGED IN WMC", band: false);
             BuildFriendlyWing(parent, x, y, width);
-            y -= 120f;
+            y -= WingFriendlyHeight + gap;
 
             // ---- Hostile wings -----------------------------------------------------------
-            y = DrawSectionTitle(parent, x, y, width, "HOSTILE WINGS", "ACE ENCOUNTERS", band: false);
+            y = DrawSectionTitle(parent, x, y, width, "HOSTILE ACE INTELLIGENCE", "MOST RECENT CONTACTS", band: false);
 
-            previousWings = AvStyled.Button(parent, new Rect(x, y, 78f, 28f), "< PREV", "btn", () =>
+            previousWings = AvStyled.Button(parent, new Rect(x, y, 88f, WingPagerHeight), "PREVIOUS", "btn", () =>
             {
                 wingPage = Math.Max(0, wingPage - 1);
                 nextRefresh = 0f;
             }, AvButtonStyle.Quiet);
             previousWings.WithTooltip("Show the previous two hostile wings.");
-            rosterPage = PlainLabel(parent, new Rect(x + 84f, y, width - 168f, 28f), "NO WINGS", "kv-value");
+            rosterPage = PlainLabel(parent, new Rect(x + 94f, y, width - 188f, WingPagerHeight), "NO CONTACTS", "kv-value");
             rosterPage.alignment = TextAlignmentOptions.Center;
-            nextWings = AvStyled.Button(parent, new Rect(x + width - 78f, y, 78f, 28f), "NEXT >", "btn", () =>
+            nextWings = AvStyled.Button(parent, new Rect(x + width - 88f, y, 88f, WingPagerHeight), "NEXT", "btn", () =>
             {
                 int count = squad != null ? squad.EnemyWingCount : 0;
                 if ((wingPage + 1) * WingRowsPerPage < count) wingPage++;
                 nextRefresh = 0f;
             }, AvButtonStyle.Quiet);
             nextWings.WithTooltip("Show the next two hostile wings, including previous encounters.");
-            y -= 36f;
+            y -= WingPagerHeight + AvTokens.Space2;
 
             for (int i = 0; i < WingRowsPerPage; i++)
             {
                 var rowObject = new GameObject("EnemyWing_" + i, typeof(RectTransform));
                 var root = (RectTransform)rowObject.transform;
                 root.SetParent(parent, false);
-                AvKit.Place(root, new Rect(x, y, width, 124f));
-                AvStyled.Box(root, new Rect(0f, 0f, width, 124f), "card");
-                AvKit.CornerTicks(root, new Rect(0f, 0f, width, 124f), AvTheme.Frame.WithAlpha(0.5f));
+                AvKit.Place(root, new Rect(x, y, width, rowHeight));
+                AvStyled.Box(root, new Rect(0f, 0f, width, rowHeight), "card");
 
                 var row = new WingRow
                 {
                     Root = root,
-                    Rail = AvStyled.Rail(root, new Rect(4f, -8f, 3f, 108f), "locked"),
+                    Rail = AvStyled.Rail(root, new Rect(4f, -8f, 3f, rowHeight - 16f), "locked"),
                 };
 
                 var emptyObject = new GameObject("NoFurtherContacts_" + i, typeof(RectTransform));
                 var empty = (RectTransform)emptyObject.transform;
                 empty.SetParent(parent, false);
-                AvKit.Place(empty, new Rect(x, y, width, 124f));
-                AvStyled.Box(empty, new Rect(0f, 0f, width, 124f), "card inert");
-                AvStyled.Rail(empty, new Rect(4f, -8f, 3f, 108f), "locked");
-                TMP_Text emptyLabel = PlainLabel(empty, new Rect(14f, -52f, width - 28f, 20f),
+                AvKit.Place(empty, new Rect(x, y, width, rowHeight));
+                AvStyled.Box(empty, new Rect(0f, 0f, width, rowHeight), "card inert");
+                AvStyled.Rail(empty, new Rect(4f, -8f, 3f, rowHeight - 16f), "locked");
+                TMP_Text emptyLabel = PlainLabel(empty,
+                    new Rect(14f, -(rowHeight - 20f) * 0.5f, width - 28f, 20f),
                     "NO FURTHER HOSTILE CONTACTS ON RECORD", "row-sub");
                 emptyLabel.alignment = TextAlignmentOptions.Center;
                 emptyObject.SetActive(false);
                 row.Empty = emptyObject;
+                row.EmptyLabel = emptyLabel;
 
                 Rect crestFrame = new Rect(14f, -10f, 54f, 54f);
                 AvKit.Panel(root, crestFrame, AvTheme.SurfaceInert);
@@ -149,28 +175,38 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 Rect portraitFrame = new Rect(74f, -10f, 42f, 54f);
                 AvKit.Panel(root, portraitFrame, AvTheme.SurfaceInert);
                 AvKit.Outline(root, portraitFrame, AvTheme.Frame.WithAlpha(0.6f));
-                row.PortraitFallback = Redaction(root,
-                    new Rect(portraitFrame.x + 9f, portraitFrame.y - 18f, portraitFrame.width - 18f, 22f), 2);
+                row.PortraitFallback = VisualPlaceholder(root,
+                    new Rect(portraitFrame.x + 2f, portraitFrame.y - 2f,
+                        portraitFrame.width - 4f, portraitFrame.height - 4f));
                 row.Portrait = AvKit.Panel(root,
                     new Rect(portraitFrame.x + 1f, portraitFrame.y - 1f, portraitFrame.width - 2f, portraitFrame.height - 2f),
                     Color.white);
                 row.Portrait.type = Image.Type.Simple;
                 row.Portrait.preserveAspect = true;
                 row.Portrait.raycastTarget = false;
+                row.Portrait.enabled = false;
 
                 row.Symbol = PlainLabel(root, new Rect(124f, -12f, 28f, 18f), "", "section-title");
-                row.Wing = PlainLabel(root, new Rect(156f, -10f, 138f, 20f), "", "row-name");
-                row.Ace = PlainLabel(root, new Rect(124f, -34f, 172f, 15f), "", "kv-value");
-                row.Skill = PlainLabel(root, new Rect(124f, -52f, width - 136f, 14f), "", "row-sub");
+                row.Wing = Fitted(PlainLabel(root, new Rect(156f, -10f, 138f, 20f), "", "row-name"));
+                row.Ace = Fitted(PlainLabel(root, new Rect(124f, -34f, 172f, 15f), "", "kv-value"));
+                // One line, shrunk to fit: the flight line runs to "· FIRST ENCOUNTER" and
+                // the target name is a base name, neither of which has a wrap budget.
+                row.Skill = Fitted(PlainLabel(root, new Rect(124f, -52f, width - 136f, 14f), "", "row-sub"));
+                row.Skill.enableWordWrapping = false;
+                row.Skill.characterSpacing = 0f;
 
                 row.Status = PlainLabel(root, new Rect(width - 152f, -12f, 142f, 16f), "", "kv-value");
                 row.Status.alignment = TextAlignmentOptions.MidlineRight;
                 row.Members = PlainLabel(root, new Rect(width - 152f, -30f, 142f, 14f), "", "kv-value");
                 row.Members.alignment = TextAlignmentOptions.MidlineRight;
 
+                // The badge row keeps its offset under the identity block; the target line
+                // hangs off the card's bottom edge, so a card grown by a taller bezel opens
+                // its spare space between the two instead of leaving a band above neither.
+                const float badgeTop = -70f;
                 for (int badge = 0; badge < row.Badges.Length; badge++)
                 {
-                    RectTransform slot = AvKit.Panel(root, new Rect(124f + badge * 40f, -70f, 36f, 38f),
+                    RectTransform slot = AvKit.Panel(root, new Rect(124f + badge * 40f, badgeTop, 36f, 38f),
                         new Color32(22, 26, 30, 255)).rectTransform;
                     row.Badges[badge] = slot.gameObject;
                     AvKit.Outline(slot, new Rect(0f, 0f, 36f, 38f), AvTheme.RailCaution.WithAlpha(0.35f));
@@ -185,14 +221,18 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 row.NoSkills = PlainLabel(root, new Rect(124f, -68f, 158f, 14f),
                     "NO ACTIVE THREAT SKILLS", "row-sub");
 
-                row.Target = PlainLabel(root, new Rect(288f, -84f, width - 298f, 15f), "", "row-sub");
+                row.Target = Fitted(PlainLabel(root, new Rect(288f, -(rowHeight - 24f), width - 298f, 15f), "", "row-sub"));
+                row.Target.enableWordWrapping = false;
+                row.Target.characterSpacing = 0f;
                 row.Target.alignment = TextAlignmentOptions.MidlineRight;
 
                 wingRows.Add(row);
-                y -= 132f;
+                y -= rowHeight;
+                if (i < WingRowsPerPage - 1) y -= AvTokens.Space2;
             }
 
-            AvStyled.Label(parent, new Rect(x, y - 4f, width, 44f),
+            y -= gap;
+            AvStyled.Label(parent, new Rect(x, y, width, WingFooterHeight),
                 "ACE KILL: +1 SKILL POINT. Downed aces may return stronger.\nFRIENDLY WING RECRUITING AND ORDERS REMAIN IN WMC.", "row-sub");
         }
 
@@ -202,14 +242,14 @@ namespace BoscaliSummer.Features.Progression.Presentation
         private void BuildFriendlyWing(RectTransform parent, float x, float y, float width)
         {
             AvStyled.Box(parent, new Rect(x, y, width, 112f), "card");
-            AvKit.CornerTicks(parent, new Rect(x, y, width, 112f), AvTheme.Frame.WithAlpha(0.5f));
             AvStyled.Rail(parent, new Rect(x + 4f, y - 8f, 3f, 96f), "ready");
 
             Rect portraitFrame = new Rect(x + 14f, y - 10f, 42f, 54f);
             AvKit.Panel(parent, portraitFrame, AvTheme.SurfaceInert);
             AvKit.Outline(parent, portraitFrame, AvTheme.Frame.WithAlpha(0.6f));
-            wingPortraitFallback = Redaction(parent,
-                new Rect(portraitFrame.x + 9f, portraitFrame.y - 18f, portraitFrame.width - 18f, 22f), 2);
+            wingPortraitFallback = VisualPlaceholder(parent,
+                new Rect(portraitFrame.x + 2f, portraitFrame.y - 2f,
+                    portraitFrame.width - 4f, portraitFrame.height - 4f));
             wingPortrait = AvKit.Panel(parent,
                 new Rect(portraitFrame.x + 1f, portraitFrame.y - 1f, portraitFrame.width - 2f, portraitFrame.height - 2f),
                 Color.white);
@@ -221,16 +261,20 @@ namespace BoscaliSummer.Features.Progression.Presentation
             float textX = portraitFrame.x + portraitFrame.width + 10f;
             float rightX = x + width - 156f;
             float textWidth = rightX - textX - 8f;
-            wingCallsign = PlainLabel(parent, new Rect(textX, y - 8f, textWidth, 20f), "PILOT RECORD PENDING", "row-name");
-            wingName = PlainLabel(parent, new Rect(textX, y - 30f, textWidth, 15f), "", "kv-value");
-            wingAirframe = PlainLabel(parent, new Rect(textX, y - 48f, rightX - textX - 8f, 14f), "", "row-sub");
+            wingCallsign = Fitted(PlainLabel(parent, new Rect(textX, y - 8f, textWidth, 20f), "PILOT RECORD PENDING", "row-name"));
+            wingName = Fitted(PlainLabel(parent, new Rect(textX, y - 30f, textWidth, 15f), "", "kv-value"));
+            wingAirframe = Fitted(PlainLabel(parent, new Rect(textX, y - 48f, rightX - textX - 8f, 14f), "", "row-sub"));
+            wingAirframe.enableWordWrapping = false;
+            wingAirframe.characterSpacing = 0f;
 
-            wingCount = PlainLabel(parent, new Rect(rightX, y - 8f, 146f, 18f), "", "kv-value");
+            wingCount = Fitted(PlainLabel(parent, new Rect(rightX, y - 8f, 146f, 18f), "", "kv-value"));
             wingCount.alignment = TextAlignmentOptions.MidlineRight;
             wingCountNote = PlainLabel(parent, new Rect(rightX, y - 28f, 146f, 14f), "", "section-title-note");
             wingCountNote.alignment = TextAlignmentOptions.MidlineRight;
 
-            wingTeamNote = PlainLabel(parent, new Rect(textX, y - 68f, width - (textX - x) - 14f, 16f),
+            // The note only shows on an empty wing, when the wingman slots below it are
+            // hidden, so the two lines it may need can use the slot band.
+            wingTeamNote = PlainLabel(parent, new Rect(textX, y - 66f, width - (textX - x) - 14f, 30f),
                 "NO RECRUITED WINGMEN — RECRUIT AND TASK THEM IN WMC.", "row-sub");
 
             float slotWidth = (width - 36f) / 2f;
@@ -271,7 +315,12 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 : count == 1 ? "1 OF 1 WING"
                 : (first + 1) + "–" + last + " OF " + count + " WINGS";
             previousWings.SetEnabled(wingPage > 0);
+            previousWings.WithTooltip(wingPage > 0
+                ? "Show the previous two hostile wings." : "Already on the first page.");
             nextWings.SetEnabled(first + WingRowsPerPage < count);
+            nextWings.WithTooltip(first + WingRowsPerPage < count
+                ? "Show the next two hostile wings, including previous encounters."
+                : "Already on the last page.");
             bool tailPage = (wingPage + 1) * WingRowsPerPage >= count;
 
             for (int i = 0; i < wingRows.Count; i++)
@@ -281,7 +330,14 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 row.Root.gameObject.SetActive(visible);
                 if (!visible)
                 {
-                    row.Empty.SetActive(count > 0 && tailPage && i == count - first);
+                    // A zero-contact page still fills the reserved band with inert plates:
+                    // blank glass reads as a broken page. The first slot carries the reason.
+                    bool placeholder = count == 0 || (tailPage && i == count - first);
+                    row.Empty.SetActive(placeholder);
+                    if (placeholder)
+                        row.EmptyLabel.text = count == 0
+                            ? (i == 0 ? "NO HOSTILE CONTACTS ON RECORD" : "")
+                            : "NO FURTHER HOSTILE CONTACTS ON RECORD";
                     continue;
                 }
                 row.Empty.SetActive(false);

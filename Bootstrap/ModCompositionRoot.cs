@@ -7,6 +7,7 @@ using BoscaliSummer.Features.DynamicOperations;
 using BoscaliSummer.Features.Events;
 using BoscaliSummer.Features.FireAndDestruction;
 using BoscaliSummer.Features.HighCommand;
+using BoscaliSummer.Features.Hud;
 using BoscaliSummer.Features.Progression;
 using BoscaliSummer.Features.QoL;
 using BoscaliSummer.Features.Radio;
@@ -15,7 +16,6 @@ using BoscaliSummer.Features.Squad;
 using BoscaliSummer.Features.TheaterOps;
 using BoscaliSummer.Features.Trenches;
 using BoscaliSummer.Features.UrbanCombat;
-using BoscaliSummer.Features.Weather;
 using BoscaliSummer.Framework.Features;
 using BoscaliSummer.Runtime;
 
@@ -34,6 +34,9 @@ namespace BoscaliSummer.Bootstrap
                 {
                     new FireAndDestructionFeature(),
                     new UrbanCombatFeature(),
+                    // The common HUD element installs first so every presentation feature below
+                    // can find it; each of them resolves it late and works without it.
+                    new HudFeature(),
                     new RadioFeature()
                 };
                 if (settings.QoL.Enabled.Value && !UnityEngine.Application.isBatchMode)
@@ -53,7 +56,6 @@ namespace BoscaliSummer.Bootstrap
                 if (settings.Trenches.Enabled.Value) features.Add(new TrenchesFeature());
                 if (settings.Events.Enabled.Value) features.Add(new EventsFeature());
                 if (settings.Campaign.Enabled.Value) features.Add(new CampaignFeature());
-                if (settings.Weather.Enabled.Value) features.Add(new WeatherFeature());
                 host.Load(features.ToArray());
                 CapabilityReport.Log();
                 return host;

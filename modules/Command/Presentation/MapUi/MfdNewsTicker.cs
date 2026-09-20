@@ -226,7 +226,6 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             var area = new Rect(0f, 0f, size.x, size.y);
             AvKit.Outline(chrome, area, AvTheme.Frame.WithAlpha(0.55f));
-            AvKit.CornerTicks(chrome, area, AvTheme.Hairline.WithAlpha(0.70f), 4f);
             alertRail = AvKit.Rule(chrome, new Rect(0f, -size.y + 2f, size.x, 2f), AvTheme.Accent.WithAlpha(0.30f));
 
             // Vertical divider separating badge from news viewport
@@ -253,6 +252,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 "row-sub",
                 align: TextAlignmentOptions.MidlineLeft);
             badgeLabel.fontSize = 12f;
+            badgeLabel.characterSpacing = 0f;
             badgeLabel.richText = true;
 
             // 3. Masked Viewport

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using BoscaliSummer.Features.Support.Domain;
 using BoscaliSummer.Features.Support.Domain.Orbital;
@@ -10,6 +11,7 @@ using NuclearOption.Networking;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using static BoscaliSummer.Features.Support.Presentation.SupportOverlayUi;
 
 namespace BoscaliSummer.Features.Support.Presentation
 {
@@ -34,12 +36,17 @@ namespace BoscaliSummer.Features.Support.Presentation
         private const float FrameWidth = 1920f;
         private const float FrameHeight = 1080f;
         private const float VideoX = 320f;
-        private const float VideoTop = -84f;
+        private const float VideoTop = -88f;
         private const float VideoWidth = 1280f;
         private const float VideoHeight = 800f;
         private const float LeftX = 24f;
         private const float RightX = 1616f;
         private const float RailWidth = 280f;
+        // One grid for every readout: key column, then the value column. 30 px rows, and the
+        // list's pitch stretches so the rail fills the video's height instead of leaving a
+        // dead band under the last row.
+        private const float KeyWidth = RailWidth * 0.34f;
+        private const float TaskBlock = 82f;
         private const int FeedWidth = 768;
         private const int FeedHeight = 480;
         private const float FramesPerSecond = 8f;
@@ -54,7 +61,7 @@ namespace BoscaliSummer.Features.Support.Presentation
         private static readonly double FieldOfRegard = 62.0 * OrbitMath.Deg;
         private static readonly CultureInfo Invariant = CultureInfo.InvariantCulture;
 
-        private static readonly float[] Footprints = { 24000f, 12000f, 6000f, 3000f, 1500f, 750f, 400f };
+        private static readonly float[] Footprints = { 32000f, 16000f, 8000f, 4000f, 2000f, 1000f, 500f, 250f, 120f, 60f };
         private static readonly string[] Keys =
         {
             "STATION", "ORBIT", "PHASE", "EL / AZ", "OFF-NADIR", "SLANT", "GSD", "FOV", "AIM",
@@ -70,6 +77,19 @@ namespace BoscaliSummer.Features.Support.Presentation
         /// <summary>True while the uplink is on screen and for one frame after it closes, so the key
         /// or click that closed it does not also reach the map or the pause menu.</summary>
         public static bool IsOpen => visible || Time.frameCount <= closedFrame + 1;
+
+        private sealed class ContactMarker
+        {
+            public GameObject Root;
+            public RectTransform Transform;
+            public Image[] Brackets;
+            public Image Leader;
+            public TMP_Text Label;
+            public bool Active;
+        }
+
+        private const int MaxContactMarkers = 16;
+        private readonly ContactMarker[] contactMarkers = new ContactMarker[MaxContactMarkers];
 
         private SupportManager support;
         private PlatformProducts products;
@@ -97,15 +117,20 @@ namespace BoscaliSummer.Features.Support.Presentation
         private TMP_Text productCaption, productDetail;
         private readonly AvButton[] taskButtons = new AvButton[Tasks.Length];
         private readonly TMP_Text[] taskStatus = new TMP_Text[Tasks.Length];
+        // The same readiness the buttons paint with, kept for the key handler: a hotkey
+        // must not fire what the button would have refused.
+        private readonly bool[] taskReady = new bool[Tasks.Length];
+        private bool deliverReady;
         private AvButton deliverButton;
         private TMP_Text status;
+        private Image statusRail;
 
         private SatelliteImager imager;
         private double aimX, aimZ, commandX, commandZ;
         private float aimHeight;
         private float nextHeight;
         private float nextText;
-        private int footprintIndex = 2;
+        private int footprintIndex = 4;
         private bool gsdLimited;
         private bool live;
         private bool dragging;
@@ -114,10 +139,7 @@ namespace BoscaliSummer.Features.Support.Presentation
         private Vector3 lastClickPosition;
         private float lastClickTime = -10f;
 
-        private bool inputHeld;
-        private bool keyboardTouched;
-        private bool keyboardWas;
-        private bool pauseWas;
+        private readonly FullscreenInput input = new FullscreenInput();
 
         public bool Visible => visible && content != null && content.activeSelf;
 
@@ -152,6 +174,9 @@ namespace BoscaliSummer.Features.Support.Presentation
             nextHeight = 0f;
             nextText = 0f;
             dragging = false;
+            // Keys are gated on the button readiness; the first frame repaints it.
+            Array.Clear(taskReady, 0, taskReady.Length);
+            deliverReady = false;
             visible = true;
             canvas.enabled = true;
             content.SetActive(true);
@@ -165,6 +190,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             visible = false;
             closedFrame = Time.frameCount;
             dragging = false;
+            HideContacts();
             support?.SetUplinkAim(AimPoint());
             if (content != null) content.SetActive(false);
             if (canvas != null) canvas.enabled = false;
@@ -185,31 +211,9 @@ namespace BoscaliSummer.Features.Support.Presentation
 
         // ---- Input ownership -------------------------------------------------------------------
 
-        private void HoldInput()
-        {
-            if (inputHeld) return;
-            inputHeld = true;
-            pauseWas = GameplayUI.AllowPauseKeybind;
-            GameplayUI.AllowPauseKeybind = false;
-            keyboardTouched = false;
-            if (Rewired.ReInput.isReady && Rewired.ReInput.controllers != null && Rewired.ReInput.controllers.Keyboard != null)
-            {
-                keyboardWas = Rewired.ReInput.controllers.Keyboard.enabled;
-                Rewired.ReInput.controllers.Keyboard.enabled = false;
-                keyboardTouched = true;
-            }
-        }
+        private void HoldInput() => input.Hold();
 
-        private void ReleaseInput()
-        {
-            if (!inputHeld) return;
-            inputHeld = false;
-            GameplayUI.AllowPauseKeybind = pauseWas;
-            if (keyboardTouched && Rewired.ReInput.isReady && Rewired.ReInput.controllers != null &&
-                Rewired.ReInput.controllers.Keyboard != null)
-                Rewired.ReInput.controllers.Keyboard.enabled = keyboardWas;
-            keyboardTouched = false;
-        }
+        private void ReleaseInput() => input.Release();
 
         // ---- Build -------------------------------------------------------------------------------
 
@@ -222,7 +226,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             contentRect.SetParent(root, false);
             AvKit.Stretch(contentRect);
 
-            Image blocker = AvKit.Panel(contentRect, new Rect(0f, 0f, 10f, 10f), new Color(0.006f, 0.012f, 0.01f, 0.97f));
+            Image blocker = AvKit.Panel(contentRect, new Rect(0f, 0f, 10f, 10f), AvTheme.Surface.WithAlpha(0.98f));
             AvKit.Stretch(blocker.rectTransform);
             blocker.raycastTarget = true;
 
@@ -233,30 +237,42 @@ namespace BoscaliSummer.Features.Support.Presentation
             frame.pivot = new Vector2(0.5f, 0.5f);
             frame.sizeDelta = new Vector2(FrameWidth, FrameHeight);
 
-            bar = AvStyled.TopBar(frame, new Rect(LeftX, -16f, FrameWidth - LeftX * 2f, 40f), "UPLINK", 4);
+            bar = AvStyled.TopBar(frame, new Rect(LeftX, -16f, FrameWidth - LeftX * 2f, AvTokens.ScreenHeaderHeight), "UPLINK", 4);
             BuildVideo();
-            BuildLeftRail();
-            BuildRightRail();
 
-            var passArea = new Rect(VideoX, VideoTop - VideoHeight - 14f, VideoWidth, 10f);
-            passFill = AvKit.ProgressBar(frame, passArea, 0f, AvTheme.RailReady);
-            passLeft = AvKit.Label(frame, "", new Rect(VideoX, passArea.y - 14f, 400f, 16f), AvTheme.Dim, AvTokens.FontSmall,
+            // The feed keeps its 16:10 rect; the pass bar, legend and status strip are stacked
+            // under it and pinned to the frame, so the bottom of the overlay is never a dead
+            // band. The rails flank the feed at exactly its height.
+            float frameHeight = frame.rect.height;
+            float videoBottom = VideoTop - VideoHeight;
+            float statusTop = -frameHeight + AvTokens.Space4 + AvTokens.StatusStripHeight;
+            float margin = ((videoBottom - statusTop) - (10f + 16f + 18f)) / 4f;
+            float passTop = videoBottom - margin;
+            float passLabelTop = passTop - 10f - margin;
+            float legendTop = passLabelTop - 16f - margin;
+
+            BuildLeftRail(VideoTop, videoBottom);
+            BuildRightRail(VideoTop, videoBottom);
+
+            passFill = AvKit.ProgressBar(frame, new Rect(VideoX, passTop, VideoWidth, 10f), 0f, AvTheme.RailReady);
+            passLeft = AvKit.Label(frame, "", new Rect(VideoX, passLabelTop, 400f, 16f), AvTheme.Dim, AvTokens.FontSmall,
                 FontStyles.Bold);
-            passRight = AvKit.Label(frame, "", new Rect(VideoX + VideoWidth - 400f, passArea.y - 14f, 400f, 16f),
+            passRight = AvKit.Label(frame, "", new Rect(VideoX + VideoWidth - 400f, passLabelTop, 400f, 16f),
                 AvTheme.Dim, AvTokens.FontSmall, FontStyles.Bold, TextAlignmentOptions.Right);
 
             AvKit.Label(frame,
                 "DRAG / WASD  SLEW   ·   WHEEL / Q E  ZOOM   ·   DOUBLE-CLICK  CENTRE   ·   C  NADIR   ·   " +
                 "1-4  TASK AT CROSSHAIR   ·   F  DELIVER ARMED   ·   ESC / RIGHT-CLICK  CLOSE",
-                new Rect(VideoX, VideoTop - VideoHeight - 52f, VideoWidth, 18f), AvTheme.Dim, AvTokens.FontSmall,
+                new Rect(VideoX, legendTop, VideoWidth, 18f), AvTheme.Dim, AvTokens.FontSmall,
                 FontStyles.Normal, TextAlignmentOptions.Center);
-            status = AvStyled.StatusStrip(frame, new Rect(VideoX, VideoTop - VideoHeight - 80f, VideoWidth, 44f));
+            status = AvStyled.StatusStrip(
+                frame, new Rect(VideoX, statusTop, VideoWidth, AvTokens.StatusStripHeight), out statusRail);
         }
 
         private void BuildVideo()
         {
             var area = new Rect(VideoX, VideoTop, VideoWidth, VideoHeight);
-            AvKit.Panel(frame, area, new Color(0.01f, 0.018f, 0.015f, 1f));
+            AvKit.Panel(frame, area, AvTheme.SurfaceInert);
 
             var videoObject = new GameObject("Feed", typeof(RectTransform), typeof(RawImage));
             video = videoObject.GetComponent<RawImage>();
@@ -341,21 +357,68 @@ namespace BoscaliSummer.Features.Support.Presentation
 
             slate = AvKit.Label(frame, "", new Rect(VideoX + 80f, VideoTop - VideoHeight * 0.5f + 40f, VideoWidth - 160f, 80f),
                 AvTheme.RailCaution, 26f, FontStyles.Bold, TextAlignmentOptions.Center, wrap: true);
+
+            var contactsObject = new GameObject("Contacts", typeof(RectTransform));
+            var contactsRect = (RectTransform)contactsObject.transform;
+            contactsRect.SetParent(frame, false);
+            AvKit.Place(contactsRect, area);
+
+            for (int i = 0; i < MaxContactMarkers; i++)
+            {
+                var markerObj = new GameObject("Marker_" + i, typeof(RectTransform));
+                var rt = (RectTransform)markerObj.transform;
+                rt.SetParent(contactsRect, false);
+                rt.anchorMin = rt.anchorMax = new Vector2(0f, 1f);
+                rt.pivot = new Vector2(0.5f, 0.5f);
+                rt.sizeDelta = new Vector2(32f, 32f);
+
+                Image[] brackets = AvKit.Outline(rt, new Rect(-16f, 16f, 32f, 32f), hud);
+
+                var leaderObj = new GameObject("Leader", typeof(RectTransform), typeof(Image));
+                var leaderRt = (RectTransform)leaderObj.transform;
+                leaderRt.SetParent(rt, false);
+                leaderRt.anchorMin = leaderRt.anchorMax = new Vector2(0.5f, 0.5f);
+                leaderRt.pivot = new Vector2(0f, 0.5f);
+                leaderRt.anchoredPosition = Vector2.zero;
+                leaderRt.sizeDelta = new Vector2(16f, 1.5f);
+                Image leaderImg = leaderObj.GetComponent<Image>();
+                leaderImg.color = hud;
+                leaderImg.raycastTarget = false;
+
+                TMP_Text lbl = AvKit.Label(rt, "", new Rect(-60f, -22f, 120f, 14f), hud, AvTokens.FontMicro,
+                    FontStyles.Bold, TextAlignmentOptions.Center);
+
+                contactMarkers[i] = new ContactMarker
+                {
+                    Root = markerObj,
+                    Transform = rt,
+                    Brackets = brackets,
+                    Leader = leaderImg,
+                    Label = lbl,
+                    Active = false
+                };
+                markerObj.SetActive(false);
+            }
         }
 
-        private void BuildLeftRail()
+        private void BuildLeftRail(float railTop, float railBottom)
         {
-            float y = VideoTop;
-            Section(LeftX, ref y, "TRACK · TELEMETRY");
+            float y = railTop;
+            Section(frame, LeftX, ref y, RailWidth, "TRACK · TELEMETRY");
+            float rowsTop = y;
+            // The readout list is the rail's primary list: it takes the slack between the
+            // section head and the power block, so the rail is flush top and bottom.
+            float block = AvTokens.Space3 + 30f + 42f + 42f + 16f;
+            float pitch = FillPitch(rowsTop - railBottom - block, Keys.Length, AvTokens.RowHeight);
             for (int i = 0; i < Keys.Length; i++)
             {
-                AvStyled.Label(frame, new Rect(LeftX, y, RailWidth * 0.4f, 18f), Keys[i], "kv-key");
-                values[i] = AvKit.Label(frame, "—", new Rect(LeftX + RailWidth * 0.34f, y, RailWidth * 0.66f, 18f),
-                    AvTheme.TextPrimary, AvTokens.FontBody, FontStyles.Bold, TextAlignmentOptions.Right);
-                y -= 26f;
+                float rowY = rowsTop - i * pitch;
+                AvKit.Label(frame, Keys[i], new Rect(LeftX, rowY, KeyWidth, AvTokens.RowHeight), AvTheme.Dim, 12f);
+                values[i] = Value(frame, new Rect(LeftX + KeyWidth + AvTokens.Gap, rowY,
+                    RailWidth - KeyWidth - AvTokens.Gap, AvTokens.RowHeight));
             }
-            y -= 12f;
-            Section(LeftX, ref y, "POWER · PROPELLANT");
+            y = rowsTop - (Keys.Length - 1) * pitch - AvTokens.RowHeight - AvTokens.Space3;
+            Section(frame, LeftX, ref y, RailWidth, "POWER · PROPELLANT");
             energyText = AvKit.Label(frame, "", new Rect(LeftX, y, RailWidth, 16f), AvTheme.TextPrimary, AvTokens.FontSmall,
                 FontStyles.Bold);
             energyFill = AvKit.ProgressBar(frame, new Rect(LeftX, y - 20f, RailWidth, 10f), 0f, AvTheme.RailReady);
@@ -368,49 +431,48 @@ namespace BoscaliSummer.Features.Support.Presentation
                 FontStyles.Bold);
         }
 
-        private void BuildRightRail()
+        private void BuildRightRail(float railTop, float railBottom)
         {
-            float y = VideoTop;
-            Section(RightX, ref y, "RADAR PRODUCT");
-            var box = new Rect(RightX, y, RailWidth, RailWidth);
-            AvKit.Panel(frame, box, new Color(0.01f, 0.018f, 0.015f, 1f));
+            float y = railTop;
+            Section(frame, RightX, ref y, RailWidth, "RADAR PRODUCT");
+            const float productSize = 220f;
+            var box = new Rect(RightX, y, RailWidth, productSize);
+            AvKit.Panel(frame, box, AvTheme.SurfaceInert);
             AvKit.Outline(frame, box, AvTheme.Hairline);
             var productObject = new GameObject("Product", typeof(RectTransform), typeof(RawImage));
             product = productObject.GetComponent<RawImage>();
             product.rectTransform.SetParent(frame, false);
-            AvKit.Place(product.rectTransform, new Rect(RightX + 8f, y - 8f, RailWidth - 16f, RailWidth - 16f));
+            AvKit.Place(product.rectTransform, new Rect(RightX + (RailWidth - productSize) * 0.5f + 8f, y - 8f, productSize - 16f, productSize - 16f));
             // Formed images keep range on the horizontal axis; flip so the product is a rotation, not a mirror.
             product.uvRect = new Rect(1f, 0f, -1f, 1f);
             product.raycastTarget = false;
             product.enabled = false;
-            productCaption = AvKit.Label(frame, "", new Rect(RightX, y - RailWidth - 8f, RailWidth, 16f), AvTheme.RailReady,
+            productCaption = AvKit.Label(frame, "", new Rect(RightX, y - productSize - 8f, RailWidth, 16f), AvTheme.RailReady,
                 AvTokens.FontSmall, FontStyles.Bold);
-            productDetail = AvKit.Label(frame, "", new Rect(RightX, y - RailWidth - 26f, RailWidth, 34f), AvTheme.Dim,
+            productDetail = AvKit.Label(frame, "", new Rect(RightX, y - productSize - 26f, RailWidth, 34f), AvTheme.Dim,
                 AvTokens.FontSmall, FontStyles.Normal, TextAlignmentOptions.TopLeft, wrap: true);
-            y -= RailWidth + 70f;
+            y -= productSize + 70f;
 
-            Section(RightX, ref y, "TASKING · AT CROSSHAIR");
+            Section(frame, RightX, ref y, RailWidth, "TASKING · AT CROSSHAIR");
+            // Deliver and close are anchored to the rail's bottom; the tasking rows are the
+            // primary list and absorb the rest, so nothing hangs in a dead band.
+            float closeTop = railBottom + 34f;
+            float deliverTop = closeTop + AvTokens.Gap + AvTokens.RowHeight;
+            float tasksBottom = deliverTop + AvTokens.Space3;
+            float pitch = FillPitch(y - tasksBottom, Tasks.Length, TaskBlock);
             for (int i = 0; i < Tasks.Length; i++)
             {
                 int index = i;
-                taskButtons[i] = AvStyled.Button(frame, new Rect(RightX, y, RailWidth, 30f), "", "btn",
-                    () => Task(index), AvButtonStyle.Primary);
-                taskStatus[i] = AvKit.Label(frame, "", new Rect(RightX, y - 33f, RailWidth, 16f), AvTheme.Dim,
-                    AvTokens.FontSmall, FontStyles.Normal);
-                y -= 58f;
+                float rowY = y - i * pitch;
+                taskButtons[i] = AvStyled.Button(frame, new Rect(RightX, rowY, RailWidth, AvTokens.RowHeight), "", "btn",
+                    () => Task(index), AvButtonStyle.Default);
+                taskStatus[i] = Detail(frame, new Rect(RightX, rowY - 34f, RailWidth, 46f));
+                taskStatus[i].maxVisibleLines = 3;
             }
-            deliverButton = AvStyled.Button(frame, new Rect(RightX, y, RailWidth, 30f), "[F] DELIVER ARMED", "btn",
-                DeliverArmed, AvButtonStyle.Quiet);
-            y -= 48f;
-            AvStyled.Button(frame, new Rect(RightX, y, RailWidth, 34f), "CLOSE UPLINK  [ESC]", "btn", Close,
-                AvButtonStyle.Danger).WithTooltip("Close the feed. The station keeps flying; the aim is remembered.");
-        }
-
-        private void Section(float x, ref float y, string title)
-        {
-            AvStyled.Label(frame, new Rect(x, y, RailWidth, 16f), title, "section-title");
-            AvKit.Rule(frame, new Rect(x, y - 20f, RailWidth, 1f), AvTheme.Hairline);
-            y -= 30f;
+            deliverButton = AvStyled.Button(frame, new Rect(RightX, deliverTop, RailWidth, AvTokens.RowHeight),
+                "[F] DELIVER ARMED", "btn", DeliverArmed, AvButtonStyle.Quiet);
+            AvStyled.Button(frame, new Rect(RightX, closeTop, RailWidth, 34f), "CLOSE UPLINK  [ESC]", "btn", Close,
+                AvButtonStyle.Quiet).WithTooltip("Close the feed. The station keeps flying; the aim is remembered.");
         }
 
         // ---- Frame -------------------------------------------------------------------------------
@@ -419,7 +481,7 @@ namespace BoscaliSummer.Features.Support.Presentation
         {
             if (!visible)
             {
-                if (inputHeld && Time.frameCount > closedFrame + 1) ReleaseInput();
+                if (input.Held && Time.frameCount > closedFrame + 1) ReleaseInput();
                 return;
             }
             if (support == null || !DynamicMap.mapMaximized || GameplayUI.GameIsPaused)
@@ -454,8 +516,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             LookAngles look = station ? TheaterTrack.Look(state, aimX, aimZ) : LookAngles.Hidden;
             RenderFeed(platform, state, look, now);
 
-            bool blink = Time.unscaledTime % 1f < 0.6f;
-            liveLight.enabled = live && blink;
+            liveLight.enabled = live;
             liveLabel.text = live ? "LIVE" : "NO FEED";
             liveLabel.color = live ? AvTheme.RailDanger : AvTheme.Dim;
             product.texture = products.Scan.Image;
@@ -483,6 +544,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             if (message != null)
             {
                 live = false;
+                HideContacts();
                 slate.text = message;
                 slate.color = AvTheme.RailCaution;
                 veil.enabled = true;
@@ -508,33 +570,24 @@ namespace BoscaliSummer.Features.Support.Presentation
             live = imager.FramesRendered > 0;
             video.texture = imager.Output;
             video.enabled = live;
-            scanlines.color = new Color(1f, 1f, 1f, night ? 0.2f : 0.12f);
+            scanlines.color = new Color(1f, 1f, 1f, 0.15f);
             SetCrosshair(true);
 
-            LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
-            float cloud = level != null ? level.GetCloudOcclusion(aimLocal) : 0f;
-            if (cloud > 0.55f)
-            {
-                video.color = new Color(0.55f, 0.58f, 0.6f, 1f);
-                veil.enabled = true;
-                slate.text = "CLOUD DECK · NO GROUND CONTACT\nRADAR SCAN [1] SEES THROUGH";
-                slate.color = AvTheme.RailCaution;
-            }
-            else
-            {
-                video.color = Color.white;
-                veil.enabled = !live;
-                slate.text = live ? "" : "ACQUIRING…";
-                slate.color = AvTheme.RailReady;
-            }
+            // Microwave Synthetic Aperture Radar penetrates clouds seamlessly 24/7
+            video.color = Color.white;
+            veil.enabled = !live;
+            slate.text = live ? "" : "ACQUIRING SAR FEED…";
+            slate.color = AvTheme.RailReady;
+
+            UpdateContacts(aimLocal, footprint, state);
         }
 
         private float Footprint(in OrbitRegime orbit, in LookAngles look, bool night)
         {
             float footprint = Footprints[footprintIndex];
-            float minimum = (float)(TheaterTrack.GroundSample(orbit, look, night) * FeedWidth * 0.75);
+            float minimum = (float)(TheaterTrack.GroundSample(orbit, look, false) * FeedWidth * 0.75);
             gsdLimited = footprint < minimum;
-            return gsdLimited ? minimum : footprint;
+            return footprint;
         }
 
         private void SetCrosshair(bool on)
@@ -553,11 +606,11 @@ namespace BoscaliSummer.Features.Support.Presentation
             double gsd = station ? TheaterTrack.GroundSample(orbit, look, night) : 0.0;
             bool contact = station && state.InPass && look.Visible;
 
-            bar.State.text = OrbitalPlatform.Callsign + " · SPY IMAGER · " + (station ? orbit.Name : "NO STATION");
-            bar.SetChip(0, night ? "MWIR" : "VNIR", night ? "warn" : "info");
+            bar.State.text = OrbitalPlatform.Callsign + " · SAR RADAR · " + (station ? orbit.Name : "NO STATION");
+            bar.SetChip(0, "SAR-X", "info");
             bar.SetChip(1, contact ? "AOS" : "LOS", contact ? "live" : "warn");
             bar.SetChip(2, live ? "LIVE" : "NO FEED", live ? "live" : "inert");
-            bar.SetChip(3, gsdLimited ? "GSD LIMIT" : "ZOOM " + (footprintIndex + 1) + "/" + Footprints.Length,
+            bar.SetChip(3, gsdLimited ? "DIGITAL MAG" : "ZOOM " + (footprintIndex + 1) + "/" + Footprints.Length,
                 gsdLimited ? "warn" : "info");
 
             values[0].text = OrbitalPlatform.Callsign;
@@ -572,7 +625,9 @@ namespace BoscaliSummer.Features.Support.Presentation
             values[9].text = contact ? TheaterGrid.Kilometres(state.SubX, state.SubZ) : "—";
             values[10].text = station ? Bearing(state.Pass.Heading / OrbitMath.Deg) + (state.Pass.Ascending ? " ASC" : " DSC") : "—";
             values[11].text = station ? PlatformWords.Whole(platform.Energy) + " KJ" + (platform.Brownout ? " BRN" : "") : "—";
-            values[12].text = night ? "MWIR · WHITE HOT" : "VNIR · TRUE COLOUR";
+            LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
+            float clouds = level != null ? Mathf.Clamp01(level.conditions) : 0f;
+            values[12].text = "SAR-X · " + Mathf.RoundToInt(clouds * 100f) + "% CLOUD PEN";
             if (station)
             {
                 LookAngles centre = TheaterTrack.Look(state, 0.0, 0.0);
@@ -586,10 +641,9 @@ namespace BoscaliSummer.Features.Support.Presentation
                 values[13].text = "NO LINK";
             }
 
-            LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
             string gmt = level != null ? TheaterGrid.Clock(((level.timeOfDay % 24f) + 24f) % 24f * 3600.0) : "--:--";
             hudTopLeft.text = "GMT " + gmt + "   FRM " + (imager != null ? imager.FramesRendered : 0).ToString("00000", Invariant);
-            hudTopRight.text = OrbitalPlatform.Callsign + (night ? " MWIR" : " VNIR") + "   GET " +
+            hudTopRight.text = OrbitalPlatform.Callsign + " SAR-X   GET " +
                                TheaterGrid.Elapsed(station ? platform.Elapsed(now) : -1.0);
             hudBottomLeft.text = look.Visible
                 ? "EL " + Deg(look.Elevation) + "   OFF-NDR " + Deg(look.OffNadir) + "   SLANT " + TheaterGrid.Km(look.SlantRange) + " KM"
@@ -635,8 +689,10 @@ namespace BoscaliSummer.Features.Support.Presentation
             WriteTasks(platform, now, clock);
 
             string hovered = AvButton.HoveredTooltip;
-            status.text = "> " + (!string.IsNullOrEmpty(hovered) ? hovered : support.Status);
-            status.color = !string.IsNullOrEmpty(hovered) ? AvTheme.Friendly : AvTheme.Dim;
+            bool help = !string.IsNullOrEmpty(hovered);
+            status.text = (help ? "HELP" : "STATUS") + "  ·  " + (help ? hovered : support.Status);
+            status.color = help ? AvTheme.TextPrimary : AvTheme.Dim;
+            if (statusRail != null) statusRail.color = help ? AvTheme.RailInfo : AvTheme.RailInert;
         }
 
         private void WriteProduct()
@@ -698,24 +754,29 @@ namespace BoscaliSummer.Features.Support.Presentation
                     else if (!bypass && allocation + 0.001f < cost) line = "INSUFFICIENT ALLOCATION";
                     else
                     {
-                        line = "READY · " + PlatformWords.Whole(cost) + " ALLOC · " +
-                               PlatformWords.Whole(PlatformAbilities.Info(ability).EnergyKj) + " KJ";
+                        line = "READY · FIRE AT CROSSHAIR";
                         enabled = true;
                     }
                 }
-                taskButtons[i].SetText("[" + (i + 1) + "]  " + name);
+                taskButtons[i].SetText("[" + (i + 1) + "]  " + name +
+                    (ability == PlatformAbility.EmpBurst ? " · FRIENDLY FIRE" : ""));
                 taskButtons[i].SetEnabled(enabled);
+                taskReady[i] = enabled;
                 taskButtons[i].WithTooltip(name + " at the crosshair — " + PlatformAbilities.Info(ability).Summary + " " + line + ".");
-                taskStatus[i].text = line;
+                taskStatus[i].text = (cost > 0f ? PlatformWords.Whole(cost) + " ALLOC · " +
+                    PlatformWords.Whole(PlatformAbilities.Info(ability).EnergyKj) + " KJ\n" : "") + line;
                 taskStatus[i].color = enabled ? AvTheme.RailReady : AvTheme.Dim;
             }
 
             SupportActionDefinition armed = support.ArmedAction.HasValue ? Find(support.ArmedAction.Value) : null;
             deliverButton.SetText(armed != null ? "[F] DELIVER " + armed.Name : "[F] DELIVER ARMED");
-            deliverButton.SetEnabled(armed != null && !support.RequestPending);
-            deliverButton.WithTooltip(armed != null
-                ? "Deliver the armed " + armed.Name + " at the crosshair instead of a map click."
-                : "Arm any support action in OPS, then deliver it here at the crosshair.");
+            deliverReady = armed != null && !support.RequestPending;
+            deliverButton.SetEnabled(deliverReady);
+            deliverButton.WithTooltip(armed == null
+                ? "Arm any support action in OPS, then deliver it here at the crosshair."
+                : support.RequestPending
+                    ? "REQUEST PENDING · the host has not answered the last one yet."
+                    : "Deliver the armed " + armed.Name + " at the crosshair instead of a map click.");
         }
 
         // ---- Controls ----------------------------------------------------------------------------
@@ -851,6 +912,9 @@ namespace BoscaliSummer.Features.Support.Presentation
         private void Task(int index)
         {
             if (index < 0 || index >= Tasks.Length || taskButtons[index] == null) return;
+            // The key handler and the button share one gate: keys must not fire a task the
+            // button would have refused. The host still re-validates the request.
+            if (!taskReady[index]) return;
             SupportActionDefinition definition = Find(Tasks[index]);
             if (definition == null) return;
             support.RequestAt(definition.Id, AimPoint());
@@ -859,7 +923,7 @@ namespace BoscaliSummer.Features.Support.Presentation
 
         private void DeliverArmed()
         {
-            if (!support.ArmedAction.HasValue) return;
+            if (!deliverReady || !support.ArmedAction.HasValue) return;
             support.CallArmedAt(AimPoint());
             nextText = 0f;
         }
@@ -870,6 +934,123 @@ namespace BoscaliSummer.Features.Support.Presentation
             for (int i = 0; i < actions.Count; i++)
                 if (actions[i].Id == id) return actions[i];
             return null;
+        }
+
+        private void HideContacts()
+        {
+            for (int i = 0; i < MaxContactMarkers; i++)
+            {
+                ContactMarker marker = contactMarkers[i];
+                if (marker != null && marker.Active)
+                {
+                    marker.Active = false;
+                    marker.Root.SetActive(false);
+                }
+            }
+        }
+
+        private void UpdateContacts(Vector3 aimLocal, float footprint, in OrbitState state)
+        {
+            if (imager == null || imager.Camera == null || !live)
+            {
+                HideContacts();
+                return;
+            }
+
+            List<Unit> units = UnitRegistry.allUnits;
+            if (units == null || units.Count == 0)
+            {
+                HideContacts();
+                return;
+            }
+
+            FactionHQ localHq = null;
+            if (GameManager.GetLocalPlayer<Player>(out Player localPlayer) && localPlayer != null)
+            {
+                localHq = localPlayer.HQ;
+            }
+
+            Camera cam = imager.Camera;
+            float maxDistSq = (footprint * 0.75f) * (footprint * 0.75f);
+            int markerIndex = 0;
+
+            for (int i = 0; i < units.Count && markerIndex < MaxContactMarkers; i++)
+            {
+                Unit unit = units[i];
+                if (unit == null || unit.disabled) continue;
+
+                Vector3 unitPos = unit.transform.position;
+                float dx = unitPos.x - aimLocal.x;
+                float dz = unitPos.z - aimLocal.z;
+                if (dx * dx + dz * dz > maxDistSq) continue;
+
+                Vector3 vp = cam.WorldToViewportPoint(unitPos);
+                if (vp.z <= 0f || vp.x < 0.03f || vp.x > 0.97f || vp.y < 0.03f || vp.y > 0.97f) continue;
+
+                ContactMarker marker = contactMarkers[markerIndex];
+                if (marker == null) continue;
+
+                float px = vp.x * VideoWidth;
+                float py = -(1f - vp.y) * VideoHeight;
+                marker.Transform.anchoredPosition = new Vector2(px, py);
+
+                bool hostile = localHq != null && unit.NetworkHQ != null && unit.NetworkHQ != localHq;
+                bool friendly = localHq != null && unit.NetworkHQ == localHq;
+                Color col = hostile ? AvTheme.RailDanger : (friendly ? AvTheme.RailReady : AvTheme.RailCaution);
+
+                if (marker.Brackets != null)
+                {
+                    for (int b = 0; b < marker.Brackets.Length; b++)
+                    {
+                        if (marker.Brackets[b] != null) marker.Brackets[b].color = col;
+                    }
+                }
+                if (marker.Leader != null) marker.Leader.color = col;
+                if (marker.Label != null) marker.Label.color = col;
+
+                string rawName = !string.IsNullOrEmpty(unit.unitName) ? unit.unitName : (unit is Aircraft ? "AIR" : "VEH");
+                string tag = hostile ? "TGT: " : (friendly ? "FRD: " : "");
+                marker.Label.text = tag + rawName.ToUpperInvariant();
+
+                Vector3 vel = (unit.rb != null) ? unit.rb.velocity : unit.transform.forward * unit.speed;
+                float speed = vel.magnitude;
+                if (speed > 2f)
+                {
+                    Vector3 leadWorld = unitPos + vel.normalized * 50f;
+                    Vector3 leadVp = cam.WorldToViewportPoint(leadWorld);
+                    Vector2 screenDir = new Vector2((leadVp.x - vp.x) * VideoWidth, (leadVp.y - vp.y) * VideoHeight);
+                    if (screenDir.sqrMagnitude > 0.001f)
+                    {
+                        marker.Leader.enabled = true;
+                        float angle = Mathf.Atan2(screenDir.y, screenDir.x) * Mathf.Rad2Deg;
+                        marker.Leader.rectTransform.localEulerAngles = new Vector3(0f, 0f, angle);
+                        float len = Mathf.Clamp(speed * 0.35f, 10f, 36f);
+                        marker.Leader.rectTransform.sizeDelta = new Vector2(len, 1.5f);
+                    }
+                    else
+                    {
+                        marker.Leader.enabled = false;
+                    }
+                }
+                else
+                {
+                    marker.Leader.enabled = false;
+                }
+
+                marker.Active = true;
+                marker.Root.SetActive(true);
+                markerIndex++;
+            }
+
+            for (int i = markerIndex; i < MaxContactMarkers; i++)
+            {
+                ContactMarker marker = contactMarkers[i];
+                if (marker != null && marker.Active)
+                {
+                    marker.Active = false;
+                    marker.Root.SetActive(false);
+                }
+            }
         }
 
         // ---- Formatting --------------------------------------------------------------------------

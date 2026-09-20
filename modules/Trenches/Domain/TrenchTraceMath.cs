@@ -44,6 +44,43 @@ namespace BoscaliSummer.Features.Trenches.Domain
         public const float MinRunLength = 140f;
         public const int MaximumStations = 320;
 
+        // A fire trench is a chain of bays, not one uniform ribbon: weapon nests and their
+        // crews stand in the ditch at a regular pitch, and the ditch flares around each bay
+        // so a nest and a man fit side by side. The count is capped, so the extra width
+        // stays a bounded widening of one position's earthwork.
+        public const float NodeSpacing = 20f;      // fire-bay pitch along the fire trench
+        public const int MaximumNodes = 32;
+        public const float BayExtraWidth = 1.4f;   // how much wider a bay is than the ditch
+        public const float BayFlatRadius = 2.5f;   // full width this close to a node
+        public const float BayFadeRadius = 6.5f;   // back to the plain ditch by here
+
+        /// <summary>
+        /// Bay pitch along a line: the fixed spacing, widened so a long line still fits within
+        /// <see cref="MaximumNodes"/> bays instead of packing them past the budget.
+        /// </summary>
+        public static float NodeSpacingFor(float lineLength)
+            => Math.Max(NodeSpacing, Math.Max(0f, lineLength) / (MaximumNodes - 1));
+
+        /// <summary>
+        /// Fraction of the line a bay slot sits at, centred in the slot so the end bays are
+        /// not half-cut by the line's caps. A spent budget yields the line's start.
+        /// </summary>
+        public static float NodeFraction(int slot, int budget)
+            => budget <= 0 ? 0f : Math.Clamp((slot + 0.5f) / budget, 0f, 1f);
+
+        /// <summary>
+        /// Extra half-width a bay adds at a distance from its node: full width through the
+        /// bay's core, easing monotonically to none by the fade radius, so a bay swells out
+        /// of the plain ditch and neighbouring bays still meet through the traverses.
+        /// </summary>
+        public static float BayExtra(float distanceFromNode)
+        {
+            if (distanceFromNode <= BayFlatRadius) return BayExtraWidth;
+            if (distanceFromNode >= BayFadeRadius) return 0f;
+            float t = (distanceFromNode - BayFlatRadius) / (BayFadeRadius - BayFlatRadius);
+            return BayExtraWidth * (1f - t * t * (3f - 2f * t));
+        }
+
         // Belt: the fire trench sits behind the line on the owned side; the support and
         // redoubt traces sit at deliberate field depths behind it, so the position reads as
         // the two-line defence real doctrine digs instead of a single ribbon.
@@ -397,8 +434,15 @@ namespace BoscaliSummer.Features.Trenches.Domain
         public static bool CanAdvance(bool overrun, float now, float suppressedUntil, float nextGrowth)
             => !overrun && now >= suppressedUntil && now >= nextGrowth;
 
+        // Nests and crews share one budget: the two opening MG teams of a Scrape grow into a
+        // full chain of bay strongpoints, not a second free garrison on top of the works.
         public static int DefenderBudget(TrenchStage stage)
-            => stage >= TrenchStage.Redoubt ? 4 : stage >= TrenchStage.Support ? 3 : stage >= TrenchStage.FireTrench ? 2 : 1;
+            => stage >= TrenchStage.Saps ? 8
+                : stage >= TrenchStage.Redoubt ? 7
+                : stage >= TrenchStage.Support ? 5
+                : stage >= TrenchStage.FireTrench ? 3
+                : stage >= TrenchStage.Scrape ? 2
+                : 0;
 
         public static int WorksBudget(TrenchStage stage)
             => stage >= TrenchStage.Redoubt ? 8 : stage >= TrenchStage.Support ? 6 : stage >= TrenchStage.FireTrench ? 3 : 0;

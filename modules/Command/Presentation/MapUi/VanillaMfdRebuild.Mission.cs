@@ -16,26 +16,29 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
         private sealed class MissionPresenter : Presenter
         {
+            /// <summary>Fixed card furniture above and below the brief text.</summary>
+            private const float BriefCardChrome = 118f;
+            /// <summary>Name and footer measured from the card's edges; the rest is viewport.</summary>
+            private const float BriefViewportInset = 100f;
+
             private readonly List<Objective> objectives = new List<Objective>();
             private RectTransform[] pages;
+            private RectTransform missionPage;
+            private RectTransform briefCard;
             private TMP_Text missionName;
             private TMP_Text missionDescription;
             private UnityEngine.UI.ScrollRect briefingScroll;
             private TMP_Text missionClock;
             private TMP_Text missionMode;
             private TMP_Text briefNote;
-            private TMP_Text ladderCaption;
-            private UnityEngine.UI.Image escalationFill;
-            private UnityEngine.UI.Image escalationMarker;
-            private UnityEngine.UI.Image escalationTacticalTick;
-            private UnityEngine.UI.Image escalationStrategicTick;
-            private TMP_Text escalationTacticalValue;
-            private TMP_Text escalationStrategicValue;
-            private readonly TMP_Text[] escalationStages = new TMP_Text[3];
-            private readonly UnityEngine.UI.Image[] escalationStageMarks = new UnityEngine.UI.Image[3];
-            private float escalationTrackX;
-            private float escalationTrackWidth;
-            private float escalationMarkerY;
+            private SectionHead ladderHead;
+            private readonly UnityEngine.UI.Image[] ladderRails = new UnityEngine.UI.Image[3];
+            private readonly UnityEngine.UI.Image[] ladderMarkers = new UnityEngine.UI.Image[3];
+            private readonly TMP_Text[] ladderNames = new TMP_Text[3];
+            private readonly TMP_Text[] ladderThresholds = new TMP_Text[3];
+            private readonly TMP_Text[] ladderStates = new TMP_Text[3];
+            private AvButton browseContracts;
+            private float briefCardHeight = 170f;
             private ObjectiveBoard objectiveBoard;
             private TMP_Text objectiveSummary;
             private readonly List<string> objectiveTypes = new List<string>();
@@ -91,44 +94,52 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             private void BuildMissionPage(RectTransform page)
             {
+                missionPage = page;
                 DrawSpine(page);
-                float width = Shell.Body.width;
-                float y = Heading(page, -AvTokens.Space1, width, "MISSION BRIEF");
+                float width = PageWidth;
+
+                Heading(page, -AvTokens.Space1, width, "MISSION BRIEF");
                 briefNote = AvStyled.Label(page,
                     new Rect(width * 0.52f, -AvTokens.Space1, width * 0.48f, 14f),
-                    "SCROLL TO READ BRIEF", "section-title-note", align: TextAlignmentOptions.MidlineRight);
+                    "", "section-title-note", align: TextAlignmentOptions.MidlineRight);
 
-                // The brief takes every pixel the fixed blocks below it do not. The ladder
-                // and the contract action are measured up from the page bottom, so the
-                // card grows with the dock instead of leaving the lower half empty.
-                float bottom = -Shell.Body.height;
-                float buttonTop = bottom + AvTokens.Space1 + 44f;
-                float captionTop = buttonTop + AvTokens.Space3 + 14f;
-                float valueTop = captionTop + AvTokens.Space1 + 12f;
-                float trackTop = valueTop + AvTokens.Space1 + 10f;
-                float stageTop = trackTop + AvTokens.Space2 + 14f;
-                float ladderTop = stageTop + AvTokens.Space5;
-                float briefHeight = Mathf.Max(160f, y - ladderTop - AvTokens.Space6);
+                // The brief card is a container: its fill and rail stretch with it, the
+                // name and rule are pinned to its top, and the clock/mode footer is pinned
+                // to its bottom. The layout pass then sizes the card to its copy, so a
+                // two-line brief does not sit in a card with an empty middle.
+                var cardGo = new GameObject("BriefCard", typeof(RectTransform));
+                briefCard = cardGo.GetComponent<RectTransform>();
+                briefCard.SetParent(page, false);
+                UnityEngine.UI.Image cardFill = AvKit.Panel(briefCard, new Rect(0f, 0f, 0f, 0f),
+                    AvTheme.Unity(AvTokens.Surface), AvSprites.Card);
+                AvKit.Stretch(cardFill.rectTransform);
+                UnityEngine.UI.Image cardRail = AvKit.Rule(briefCard, new Rect(0f, 0f, 0f, 0f),
+                    AvTheme.RailInfo);
+                StretchVertical(cardRail.rectTransform, 0f, 3f);
 
-                AvKit.TacticalCard(page,
-                    new Rect(AvTokens.Space3, y, width - AvTokens.Space3, briefHeight), AvTheme.RailInfo);
-                missionName = AvStyled.Label(page,
-                    new Rect(AvTokens.Space4, y - 14f, width - AvTokens.Space5, 56f),
+                missionName = AvStyled.Label(briefCard,
+                    new Rect(AvTokens.Space4, -12f, width - AvTokens.Space5, 40f),
                     "LOADING MISSION", "metric-value");
                 missionName.enableWordWrapping = true;
+                // The identity line shrinks to the micro floor before it is ever cut; the
+                // two-line box catches anything the smaller face still cannot fit.
+                missionName.overflowMode = TextOverflowModes.Overflow;
                 missionName.enableAutoSizing = true;
-                missionName.fontSizeMin = 15f;
-                missionName.fontSizeMax = 22f;
-                AvKit.Rule(page, new Rect(AvTokens.Space4, y - 74f, width - AvTokens.Space5, 1f), AvTheme.Hairline);
+                missionName.fontSizeMin = AvTokens.FontMicro;
+                missionName.fontSizeMax = AvTokens.FontTitle + 4f;
+                UnityEngine.UI.Image divider = AvKit.Rule(briefCard,
+                    new Rect(AvTokens.Space4, -58f, width - AvTokens.Space5, 1f), AvTheme.Hairline);
+                PinTop(divider.rectTransform, AvTokens.Space4, -58f, width - AvTokens.Space5);
 
                 var viewport = new GameObject("BriefingScroll", typeof(RectTransform), typeof(UnityEngine.UI.Image),
                     typeof(UnityEngine.UI.RectMask2D), typeof(UnityEngine.UI.ScrollRect)).GetComponent<RectTransform>();
-                viewport.SetParent(page, false);
-                // The viewport stops above the mission-time footer so a scrolled line is
-                // never sliced in half by the footer band underneath it.
-                AvKit.Place(viewport, new Rect(AvTokens.Space4, y - 82f, width - AvTokens.Space5,
-                    Mathf.Max(40f, briefHeight - 132f)));
+                viewport.SetParent(briefCard, false);
                 viewport.GetComponent<UnityEngine.UI.Image>().color = Color.clear;
+                viewport.anchorMin = Vector2.zero;
+                viewport.anchorMax = Vector2.one;
+                viewport.pivot = new Vector2(0.5f, 0.5f);
+                viewport.offsetMin = new Vector2(AvTokens.Space4, 34f);
+                viewport.offsetMax = new Vector2(-AvTokens.Space5, -66f);
                 briefingScroll = viewport.GetComponent<UnityEngine.UI.ScrollRect>();
                 briefingScroll.viewport = viewport;
                 briefingScroll.horizontal = false;
@@ -136,73 +147,139 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 briefingScroll.inertia = false;
                 briefingScroll.scrollSensitivity = 24f;
                 briefingScroll.movementType = UnityEngine.UI.ScrollRect.MovementType.Clamped;
-                missionDescription = AvStyled.Label(viewport, new Rect(0f, 0f, viewport.rect.width, viewport.rect.height), "", "row-sub");
+                // The brief is body copy: a normal measure (~70 characters at 13px), the
+                // sheet's normal leading, and no letter tracking borrowed from a label.
+                float textWidth = width - AvTokens.Space4 - AvTokens.Space5;
+                missionDescription = AvStyled.Label(viewport, new Rect(0f, 0f, textWidth, 100f), "", "row-sub");
                 briefingScroll.content = missionDescription.rectTransform;
                 missionDescription.enableWordWrapping = true;
-                missionDescription.fontSize = 13f;
+                missionDescription.fontSize = AvTokens.FontLead;
+                missionDescription.characterSpacing = 0f;
+                missionDescription.lineSpacing = 0f;
                 missionDescription.overflowMode = TextOverflowModes.Overflow;
                 missionDescription.color = AvTheme.TextPrimary;
 
-                float footerTop = y - briefHeight + 26f;
-                AvKit.Rule(page, new Rect(AvTokens.Space4, footerTop + 20f, width - AvTokens.Space5, 1f), AvTheme.Hairline);
-                missionClock = AvStyled.Label(page,
-                    new Rect(AvTokens.Space4, footerTop, width * 0.5f - AvTokens.Space2, 16f),
+                missionClock = AvStyled.Label(briefCard, new Rect(0f, 0f, 0f, 16f),
                     "MISSION TIME  —", "row-sub");
-                missionMode = AvStyled.Label(page,
-                    new Rect(width * 0.5f, footerTop, width * 0.5f - AvTokens.Space5, 16f),
+                PinBottom(missionClock.rectTransform, AvTokens.Space4, 14f, width * 0.5f - AvTokens.Space2, false);
+                missionMode = AvStyled.Label(briefCard, new Rect(0f, 0f, 0f, 16f),
                     "MODE  —", "row-sub", align: TextAlignmentOptions.MidlineRight);
+                PinBottom(missionMode.rectTransform, AvTokens.Space5, 14f, width * 0.5f - AvTokens.Space5, true);
 
-                Heading(page, ladderTop, width, "ESCALATION LADDER", "CURRENT THRESHOLD");
-                string[] stages = { "CONVENTIONAL", "TACTICAL", "STRATEGIC" };
-                float third = (width - AvTokens.Space3) / 3f;
-                for (int i = 0; i < stages.Length; i++)
+                browseContracts = AvStyled.Button(page, new Rect(0f, 0f, 0f, 44f),
+                    "BROWSE CONTRACTS  >", "btn", () => SelectPage(2), AvButtonStyle.Default)
+                    .WithTooltip("Open the contract board and browse optional missions.");
+
+                // Three rungs on one rail. Each states its own threshold and its own state
+                // in words, so the current gate reads without relying on colour.
+                ladderHead = Head(page, 0f, width, "ESCALATION LADDER", "CURRENT THRESHOLD");
+                for (int i = 0; i < ladderRails.Length; i++)
                 {
-                    float x = AvTokens.Space3 + i * third;
-                    escalationStages[i] = AvStyled.Label(page, new Rect(x, stageTop, third, 14f),
-                        stages[i], "section-title-note", align: TextAlignmentOptions.Center);
-                    escalationStageMarks[i] = AvKit.Rule(page,
-                        new Rect(x + third * 0.5f - 14f, stageTop - 17f, 28f, 2f), Color.clear);
+                    ladderRails[i] = AvKit.Rule(page, new Rect(0f, 0f, 3f, 10f),
+                        AvTheme.Unity(AvTokens.RailInert));
+                    ladderMarkers[i] = AvKit.Panel(page, new Rect(0f, 0f, 10f, 10f),
+                        AvTheme.Unity(AvTokens.RailInert), AvSprites.Led);
+                    ladderNames[i] = AvStyled.Label(page, new Rect(0f, 0f, 10f, 16f),
+                        MfdMissionOverview.StageName(i), "row-name");
+                    ladderThresholds[i] = AvStyled.Label(page, new Rect(0f, 0f, 10f, 14f), "—", "row-sub");
+                    ladderStates[i] = AvStyled.Label(page, new Rect(0f, 0f, 110f, 16f), "—", "row-value",
+                        align: TextAlignmentOptions.MidlineRight);
                 }
 
-                var track = new Rect(AvTokens.Space3, trackTop, width - AvTokens.Space3, 10f);
-                AvKit.Panel(page, track, AvTheme.SurfaceInert);
-                AvKit.Outline(page, track, AvTheme.Frame);
-                escalationTrackX = track.x + 1f;
-                escalationTrackWidth = track.width - 2f;
-                escalationMarkerY = track.y + 1f;
-                escalationFill = AvKit.Panel(page,
-                    new Rect(escalationTrackX, escalationMarkerY, 0f, 8f), AvTheme.Accent);
-                escalationTacticalTick = AvKit.Rule(page,
-                    new Rect(track.x + track.width / 3f, track.y, 1f, track.height), AvTheme.Frame);
-                escalationStrategicTick = AvKit.Rule(page,
-                    new Rect(track.x + track.width * 2f / 3f, track.y, 1f, track.height), AvTheme.Frame);
-                escalationMarker = AvKit.Rule(page,
-                    new Rect(escalationTrackX, escalationMarkerY, 2f, 12f), AvTheme.TextPrimary);
+                LayoutMissionPage();
+            }
 
-                escalationTacticalValue = AvStyled.Label(page,
-                    new Rect(track.x + track.width / 3f - 40f, valueTop, 80f, 12f), "",
-                    "section-title-note", align: TextAlignmentOptions.Center);
-                escalationStrategicValue = AvStyled.Label(page,
-                    new Rect(track.x + track.width * 2f / 3f - 40f, valueTop, 80f, 12f), "",
-                    "section-title-note", align: TextAlignmentOptions.Center);
-                ladderCaption = AvStyled.Label(page,
-                    new Rect(AvTokens.Space3, captionTop, width - AvTokens.Space3, 14f), "", "section-title-note");
+            /// <summary>
+            /// Places the brief card, the ladder and the contract action for the current
+            /// card height. Called at build and again when the measured brief changes size;
+            /// it only moves pooled widgets, never rebuilds them.
+            /// </summary>
+            private void LayoutMissionPage()
+            {
+                float width = PageWidth;
+                float body = PageHeight;
+                float cardTop = -HeadingPitch - AvTokens.Space1;
+                float cardHeight = Mathf.Clamp(briefCardHeight, 150f, MaxBriefCard());
 
-                AvStyled.Button(page,
-                    new Rect(AvTokens.Space3, buttonTop, width - AvTokens.Space3, 44f),
-                    "BROWSE OPTIONAL CONTRACTS", "row-main", () => SelectPage(2), AvButtonStyle.Primary);
+                AvKit.Place(briefCard, new Rect(AvTokens.Space3, cardTop, width - AvTokens.Space3, cardHeight));
+
+                // The action sits wholly inside the page: its own height is reserved above the
+                // body bottom so it cannot paint over the pinned status strip.
+                float buttonTop = -body + 44f + AvTokens.Space2;
+                AvKit.Place((RectTransform)browseContracts.transform,
+                    new Rect(AvTokens.Space3, buttonTop, width - AvTokens.Space3, 44f));
+
+                float ladderHeadingTop = cardTop - cardHeight - AvTokens.Space2;
+                float ladderBottom = buttonTop + AvTokens.Space3;
+                ladderHead.Place(missionPage, ladderHeadingTop, width);
+                float ladderTop = ladderHeadingTop - HeadingPitch;
+                float rowHeight = Mathf.Clamp((ladderTop - ladderBottom) / 3f, 44f, 64f);
+                AvKit.Place((RectTransform)browseContracts.transform,
+                    new Rect(AvTokens.Space3, ladderTop - rowHeight * 3f - AvTokens.Space3,
+                             width - AvTokens.Space3, 36f));
+
+                for (int i = 0; i < ladderRails.Length; i++)
+                {
+                    float rowTop = ladderTop - i * rowHeight;
+                    float centre = rowTop - rowHeight * 0.5f;
+                    AvKit.Place(ladderRails[i].rectTransform,
+                        new Rect(AvTokens.Space3 + 4f, rowTop - 2f, 3f, Mathf.Max(10f, rowHeight - 4f)));
+                    AvKit.Place(ladderMarkers[i].rectTransform,
+                        new Rect(AvTokens.Space3 + 0.5f, centre - 5f, 10f, 10f));
+                    AvKit.Place(ladderNames[i].rectTransform,
+                        new Rect(AvTokens.Space3 + 18f, centre + 16f, width - 148f, 16f));
+                    AvKit.Place(ladderThresholds[i].rectTransform,
+                        new Rect(AvTokens.Space3 + 18f, centre - 2f, width - 148f, 14f));
+                    AvKit.Place(ladderStates[i].rectTransform,
+                        new Rect(width - 118f, centre - 8f, 110f, 16f));
+                }
+            }
+
+            /// <summary>
+            /// The tallest the brief card may grow: the body's share, but never so tall
+            /// that the three ladder rungs and the contract action below it are squeezed.
+            /// </summary>
+            private float MaxBriefCard() => Mathf.Min(Mathf.Max(200f, PageHeight * 0.44f),
+                                                      Mathf.Max(150f, PageHeight - 252f));
+
+            /// <summary>A rule that keeps its width but follows its container's height.</summary>
+            private static void StretchVertical(RectTransform rect, float x, float width)
+            {
+                rect.anchorMin = new Vector2(0f, 0f);
+                rect.anchorMax = new Vector2(0f, 1f);
+                rect.pivot = new Vector2(0f, 0.5f);
+                rect.anchoredPosition = new Vector2(x, 0f);
+                rect.sizeDelta = new Vector2(width, 0f);
+            }
+
+            private static void PinTop(RectTransform rect, float x, float y, float width)
+            {
+                rect.anchorMin = rect.anchorMax = new Vector2(0f, 1f);
+                rect.pivot = new Vector2(0f, 1f);
+                rect.anchoredPosition = new Vector2(x, y);
+                rect.sizeDelta = new Vector2(width, rect.sizeDelta.y);
+            }
+
+            private static void PinBottom(RectTransform rect, float x, float y, float width, bool right)
+            {
+                rect.anchorMin = rect.anchorMax = new Vector2(right ? 1f : 0f, 0f);
+                rect.pivot = new Vector2(right ? 1f : 0f, 0f);
+                rect.anchoredPosition = new Vector2(right ? -x : x, y);
+                rect.sizeDelta = new Vector2(width, rect.sizeDelta.y);
             }
 
             private void BuildObjectivesPage(RectTransform page)
             {
                 DrawSpine(page);
-                float width = Shell.Body.width;
+                float width = PageWidth;
                 float y = Heading(page, -AvTokens.Space1, width, "ACTIVE OBJECTIVES");
                 objectiveSummary = AvStyled.Label(page,
                     new Rect(width * 0.4f, -AvTokens.Space1, width * 0.6f, 14f),
                     "", "section-title-note", align: TextAlignmentOptions.MidlineRight);
-                int rows = Mathf.Clamp(Mathf.FloorToInt((Shell.Body.height - 80f) / ObjectiveBoard.Pitch), 4, 11);
-                objectiveBoard = new ObjectiveBoard(page, y, width, rows);
+                float usable = PageHeight - 80f;
+                int rows = Mathf.Clamp(Mathf.FloorToInt(usable / ObjectiveBoard.Pitch), 4, 12);
+                float pitch = Mathf.Clamp(usable / rows, ObjectiveBoard.Pitch, 84f);
+                objectiveBoard = new ObjectiveBoard(page, y, width, rows, pitch);
             }
 
             private void SelectPage(int selected)
@@ -216,8 +293,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private void BuildSecondaryPage(RectTransform page)
             {
                 DrawSpine(page);
-                float width = Shell.Body.width;
-                float height = Shell.Body.height;
+                float width = PageWidth;
+                float height = PageHeight;
                 float y = Heading(page, -AvTokens.Space1, width, "CONTRACT BOARD");
                 // The heading's own note slot is static; the board writes the host's live
                 // status there instead, so a director that is off or unanswered says so on
@@ -226,18 +303,29 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     new Rect(width * 0.34f, -AvTokens.Space1, width * 0.66f - AvTokens.Space3, 14f),
                     "", "section-title-note", align: TextAlignmentOptions.MidlineRight);
                 boardStatus.enableWordWrapping = false;
+                // Keep long host status copy inside the heading's measured note slot.
                 boardStatus.overflowMode = TextOverflowModes.Ellipsis;
+                boardStatus.enableAutoSizing = true;
+                boardStatus.fontSizeMin = AvTokens.FontSmall;
+                boardStatus.fontSizeMax = boardStatus.fontSize;
 
                 string[] filters = { "AVAILABLE", "ACTIVE", "CLOSED" };
+                string[] filterHelp =
+                {
+                    "offers the host has not answered yet",
+                    "contracts this faction has accepted",
+                    "completed, lapsed and aborted contracts",
+                };
                 float filterWidth = (width - AvTokens.Space3 - AvTokens.Gap * 2f) / 3f;
                 for (int i = 0; i < filters.Length; i++)
                 {
                     int index = i;
                     secondaryFilters[i] = AvStyled.Button(page,
-                        new Rect(AvTokens.Space3 + i * (filterWidth + AvTokens.Gap), y, filterWidth, 40f),
-                        filters[i], "row-main", () => { secondaryFilter = index; secondaryPage = 0; RequestRefresh(); }, AvButtonStyle.Tab);
+                        new Rect(AvTokens.Space3 + i * (filterWidth + AvTokens.Gap), y, filterWidth, 30f),
+                        filters[i], "row-main", () => { secondaryFilter = index; secondaryPage = 0; RequestRefresh(); }, AvButtonStyle.Tab)
+                        .WithTooltip("Show " + filters[i].ToLowerInvariant() + " contracts — " + filterHelp[i] + ".");
                 }
-                y -= 48f;
+                y -= 38f;
 
                 boardSummary = AvStyled.Label(page,
                     new Rect(AvTokens.Space3, y, width - AvTokens.Space3, 14f), "", "section-title-note");
@@ -246,7 +334,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 // The grid takes the height the panel actually has: a shallow bezel shows
                 // one dossier at a time, a tall one shows three, and the pager never moves.
                 int rows = MfdSecondaryObjectives.RowsFor(height);
-                float cardHeight = MfdSecondaryObjectives.CardHeightFor(height, rows);
+                float cardHeight = Mathf.Min(MfdSecondaryObjectives.CardHeightFor(height, rows),
+                    MfdSecondaryObjectives.RowPitch - AvTokens.Gap);
                 secondaryEmpty = AvStyled.Label(page,
                     new Rect(AvTokens.Space3, y, width - AvTokens.Space3, 100f),
                     "Waiting for the mission director.", "row-main");
@@ -375,9 +464,12 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 private readonly float valueWidth;
                 private readonly AvButton accept;
                 private readonly AvButton dismiss;
+                private readonly float briefWidth;
+                private readonly float briefHeight;
                 private SecondaryObjectiveView current;
                 private bool acceptAllowed;
                 private int confirmCancel;
+                private string briefSource;
 
                 public SecondaryObjectiveCard(RectTransform parent, Rect area, System.Action refresh)
                 {
@@ -387,7 +479,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     float effectTop = -(height - 70f);
                     float payTop = effectTop + LinePitch;
                     float targetTop = payTop + LinePitch;
-                    float briefHeight = height >= 200f ? 30f : 15f;
+                    briefHeight = height >= 200f ? 30f : 15f;
+                    briefWidth = area.width - AvTokens.Space3 * 2f;
 
                     Root = new GameObject("SecondaryObjective", typeof(RectTransform)).GetComponent<RectTransform>();
                     Root.SetParent(parent, false);
@@ -395,36 +488,42 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     rail = AvKit.TacticalCard(Root, new Rect(0f, 0f, area.width, height), AvTheme.RailInfo).Rail;
                     float inner = area.width - AvTokens.Space3 * 2f;
 
-                    var well = new Rect(AvTokens.Space3, -10f, 30f, 30f);
-                    AvKit.Panel(Root, well, AvTheme.SurfaceInert, AvSprites.Control);
-                    AvKit.Outline(Root, well, AvTheme.Frame);
                     var glyphGo = new GameObject("Glyph", typeof(RectTransform), typeof(MfdGlyph));
                     glyphGo.transform.SetParent(Root, false);
                     glyph = glyphGo.GetComponent<MfdGlyph>();
                     glyph.raycastTarget = false;
                     AvKit.Place(glyph.rectTransform, new Rect(AvTokens.Space3 + 6.5f, -16.5f, 17f, 17f));
 
-                    title = AvStyled.Label(Root, new Rect(48f, -8f, area.width - 152f, 20f), "", "row-main");
+                    title = AvStyled.Label(Root, new Rect(48f, -8f, area.width - 168f, 20f), "", "row-main");
                     title.fontSize = 15f;
                     title.fontStyle = FontStyles.Bold;
                     title.richText = false;
+                    // Long names remain readable and never paint over the deadline chip.
+                    title.enableWordWrapping = false;
                     title.overflowMode = TextOverflowModes.Ellipsis;
+                    title.enableAutoSizing = true;
+                    title.fontSizeMin = 12f;
+                    title.fontSizeMax = 15f;
 
                     var chip = new Rect(area.width - AvTokens.Space3 - 96f, -12f, 96f, 17f);
                     deadlineFill = AvKit.Panel(Root, chip, AvTheme.SurfaceInert, AvSprites.Control);
                     deadlineFrame = AvKit.Outline(Root, chip, AvTheme.Frame);
                     deadline = AvStyled.Label(Root, chip, "", "section-title-note", align: TextAlignmentOptions.Center);
-                    deadline.characterSpacing = 2f;
+                    deadline.characterSpacing = 0f;
 
-                    family = AvStyled.Label(Root, new Rect(48f, -32f, area.width - 192f, 12f), "", "section-title-note");
+                    family = AvStyled.Label(Root, new Rect(48f, -32f, area.width - 216f, 16f), "", "section-title-note");
                     family.richText = false;
-                    state = AvStyled.Label(Root, new Rect(area.width - AvTokens.Space3 - 128f, -32f, 128f, 12f),
+                    state = AvStyled.Label(Root, new Rect(area.width - AvTokens.Space3 - 152f, -32f, 152f, 16f),
                         "", "section-title-note", align: TextAlignmentOptions.MidlineRight);
 
                     description = AvStyled.Label(Root, new Rect(AvTokens.Space3, -52f, inner, briefHeight), "", "row-sub");
                     description.fontSize = 11.5f;
                     description.richText = false;
-                    description.overflowMode = TextOverflowModes.Ellipsis;
+                    // The brief wraps to the two lines the card reserved; when the sentence
+                    // is longer it is clamped with an explicit "+N MORE" (see ClampedCopy),
+                    // never an ellipsis.
+                    description.enableWordWrapping = true;
+                    description.overflowMode = TextOverflowModes.Overflow;
 
                     AvKit.Rule(Root, new Rect(AvTokens.Space3, -48f, inner, 1f), AvTheme.Hairline);
 
@@ -434,14 +533,14 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     valueWidth = area.width - 78f;
                     target = Value(targetTop, 14f, 11.5f, AvTheme.TextPrimary);
                     pay = Value(payTop, 15f, 13f, AvTheme.Accent);
-                    effect = Value(effectTop, 15f, 10.5f, AvTheme.Dim);
+                    effect = Value(effectTop, 15f, 11.5f, AvTheme.Dim);
 
                     var track = new Rect(AvTokens.Space3, barTop, inner - 64f, 6f);
                     AvKit.Panel(Root, track, AvTheme.SurfaceInert);
                     AvKit.Outline(Root, track, AvTheme.Frame);
                     progressWidth = track.width - 2f;
                     progressFill = AvKit.Rule(Root, new Rect(track.x + 1f, track.y - 1f, 0f, 4f), AvTheme.RailInfo);
-                    percent = AvStyled.Label(Root, new Rect(area.width - AvTokens.Space3 - 56f, barTop - 1f, 56f, 15f),
+                    percent = AvStyled.Label(Root, new Rect(area.width - AvTokens.Space3 - 56f, barTop + 5f, 56f, 14f),
                         "", "row-value");
 
                     accept = AvStyled.Button(Root, new Rect(AvTokens.Space3, actionTop, (inner - AvTokens.Gap) * .6f, ActionHeight),
@@ -449,7 +548,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                         {
                             if (acceptAllowed && ModServices.TryGet(out ISecondaryObjectivesView view)) view.RequestAccept(current.Id);
                             refresh();
-                        }, AvButtonStyle.Primary);
+                        }, AvButtonStyle.Primary)
+                        .WithTooltip("Accept this contract for the faction.");
                     dismiss = AvStyled.Button(Root, new Rect(AvTokens.Space3 + inner * .6f, actionTop, inner * .4f, ActionHeight),
                         "DISMISS", "row-main", () =>
                         {
@@ -458,7 +558,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                             { confirmCancel = current.Id; dismiss.SetText("CONFIRM ABORT"); return; }
                             if (ModServices.TryGet(out ISecondaryObjectivesView view)) view.RequestCancel(current.Id);
                             confirmCancel = 0; refresh();
-                        }, AvButtonStyle.Danger);
+                        }, AvButtonStyle.Danger)
+                        .WithTooltip("Dismiss this offer; aborting an active contract asks for confirmation first.");
                 }
 
                 private void Key(float y, string text) =>
@@ -466,13 +567,38 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
                 private TMP_Text Value(float y, float height, float size, Color color)
                 {
+                    // Keep each reading in its column; full contract copy is on hover.
                     TMP_Text label = AvStyled.Label(Root, new Rect(66f, y, valueWidth, height), "", "row-main");
                     label.fontSize = size;
                     label.color = color;
                     label.richText = false;
-                    label.overflowMode = TextOverflowModes.Ellipsis;
                     label.enableWordWrapping = false;
+                    label.overflowMode = TextOverflowModes.Ellipsis;
+                    label.enableAutoSizing = true;
+                    label.fontSizeMin = AvTokens.FontSmall;
+                    label.fontSizeMax = size;
                     return label;
+                }
+
+                /// <summary>
+                /// Body copy for the dossier's fixed brief slot. It wraps to the two lines
+                /// the card reserved and, when the sentence is longer, states how many
+                /// words were left out instead of ending in a silent cut. Only re-measured
+                /// when the brief's source text changes.
+                /// </summary>
+                private static string ClampedCopy(TMP_Text label, string text, float width, float height)
+                {
+                    if (string.IsNullOrEmpty(text)) return "";
+                    if (label.GetPreferredValues(text, width, 0f).y <= height + 1f) return text;
+                    string[] words = text.Split(' ');
+                    for (int count = words.Length - 1; count >= 1; count--)
+                    {
+                        string omitted = "  +" + (words.Length - count) + " MORE";
+                        string head = string.Join(" ", words, 0, count);
+                        if (label.GetPreferredValues(head + omitted, width, 0f).y <= height + 1f)
+                            return head + omitted;
+                    }
+                    return "+" + words.Length + " MORE";
                 }
 
                 public void Refresh(SecondaryObjectiveView objective, bool hasCapacity)
@@ -492,6 +618,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                         state.text = "WAITING FOR HOST";
                         state.color = AvTheme.Warning;
                         deadline.text = description.text = target.text = pay.text = effect.text = percent.text = "";
+                        briefSource = null;
                         glyph.SetKind("flag", AvTheme.Warning);
                         SetTimer(AvTheme.Warning);
                         SetProgress(0f, AvTheme.Warning);
@@ -508,13 +635,19 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                         urgent ? AvTheme.Warning : objective.IsActive ? AvTheme.Accent : AvTheme.RailInfo;
 
                     title.text = MfdSecondaryObjectives.TitleLine(objective.Id, objective.Title);
+                    accept.WithTooltip(title.text + " · " + objective.Description + " · " +
+                        objective.Target + " · " + objective.Reward);
                     glyph.SetKind(MfdMissionLabels.ContractGlyph(objective.Title), color);
                     family.text = MfdMissionLabels.ContractFamily(objective.Title);
                     state.text = objective.IsOffered ? "AWAITING ACCEPTANCE" : objective.Status;
                     state.color = color;
                     deadline.text = MfdSecondaryObjectives.ChipLabel(objective);
                     SetTimer(color);
-                    description.text = objective.Description;
+                    if (briefSource != objective.Description)
+                    {
+                        briefSource = objective.Description;
+                        description.text = ClampedCopy(description, briefSource, briefWidth, briefHeight);
+                    }
                     target.text = objective.Target;
                     pay.text = MfdSecondaryObjectives.PayoutLabel(objective);
                     pay.color = color;
@@ -561,11 +694,24 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
                 missionClock.text = "MISSION TIME  " + MissionClock(manager);
                 missionMode.text = ModeLabel(mission);
+
+                // Size the card to its copy: a short brief leaves the ladder the room, and
+                // the brief never sits in a card with an empty middle. Only the pooled
+                // widgets move; the measurement runs on the refresh pass it already had.
+                float textWidth = PageWidth - AvTokens.Space4 - AvTokens.Space5;
                 float preferred = missionDescription.GetPreferredValues(
-                    missionDescription.text, briefingScroll.viewport.rect.width, 0f).y;
-                missionDescription.rectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical,
-                    Mathf.Max(briefingScroll.viewport.rect.height, preferred));
-                briefNote.text = preferred > briefingScroll.viewport.rect.height + 1f ? "SCROLL TO READ BRIEF" : "";
+                    missionDescription.text, textWidth, 0f).y;
+                float wanted = Mathf.Clamp(Mathf.Round((preferred + BriefCardChrome) * 0.5f) * 2f,
+                                           150f, MaxBriefCard());
+                if (Mathf.Abs(wanted - briefCardHeight) > 1f)
+                {
+                    briefCardHeight = wanted;
+                    LayoutMissionPage();
+                }
+                float viewportHeight = Mathf.Max(40f, briefCardHeight - BriefViewportInset);
+                missionDescription.rectTransform.sizeDelta =
+                    new Vector2(textWidth, Mathf.Max(viewportHeight, preferred));
+                briefNote.text = preferred > viewportHeight + 1f ? "SCROLL TO READ BRIEF" : "";
                 RefreshEscalation(manager);
             }
 
@@ -573,44 +719,41 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             {
                 if (manager == null)
                 {
-                    ladderCaption.text = "ESCALATION DATA UNAVAILABLE";
-                    escalationTacticalValue.text = escalationStrategicValue.text = "—";
-                    escalationTacticalTick.enabled = escalationStrategicTick.enabled = false;
-                    SetEscalationVisual(0f, AvTheme.RailInert, -1);
+                    ladderHead.Note.text = "ESCALATION DATA UNAVAILABLE";
+                    for (int i = 0; i < ladderRails.Length; i++)
+                        SetLadderRow(i, "—", "—", AvTheme.Disabled,
+                                     AvTheme.Unity(AvTokens.RailInert), false);
                     return;
                 }
 
                 float current = Mathf.Max(0f, manager.currentEscalation);
                 float tactical = manager.tacticalThreshold;
                 float strategic = manager.strategicThreshold;
-                bool hasTactical = tactical > 0f;
-                bool hasStrategic = strategic > 0f;
-
                 int stage = MfdMissionOverview.Stage(current, tactical, strategic);
-                Color color = stage == 2 ? AvTheme.Alert : stage == 1 ? AvTheme.Warning : AvTheme.Accent;
-                SetEscalationVisual(MfdMissionOverview.Fraction(current, tactical, strategic), color, stage);
+                ladderHead.Note.text = MfdMissionOverview.Caption(current, tactical, strategic);
 
-                escalationTacticalTick.enabled = hasTactical;
-                escalationStrategicTick.enabled = hasStrategic;
-                escalationTacticalValue.text = hasTactical ? MfdMissionOverview.Whole(tactical) : "—";
-                escalationStrategicValue.text = hasStrategic ? MfdMissionOverview.Whole(strategic) : "—";
-                ladderCaption.text = MfdMissionOverview.Caption(current, tactical, strategic);
+                Color holding = stage == 2 ? AvTheme.Alert : stage == 1 ? AvTheme.Warning : AvTheme.Accent;
+                for (int i = 0; i < ladderRails.Length; i++)
+                {
+                    bool set = i == 0 || (i == 1 ? tactical > 0f : strategic > 0f);
+                    bool currentRung = i == stage;
+                    Color ink = currentRung ? holding : i < stage ? AvTheme.RailReady : AvTheme.Dim;
+                    SetLadderRow(i, MfdMissionOverview.Threshold(i, tactical, strategic),
+                        MfdMissionOverview.StageState(i, stage, set), ink,
+                        currentRung ? holding : AvTheme.Unity(AvTokens.RailInert), currentRung);
+                }
             }
 
-            private void SetEscalationVisual(float fraction, Color color, int stage)
+            private void SetLadderRow(int index, string threshold, string state, Color ink,
+                                      Color rail, bool currentRung)
             {
-                fraction = Mathf.Clamp01(fraction);
-                escalationFill.color = color;
-                escalationFill.rectTransform.sizeDelta = new Vector2(fraction * escalationTrackWidth, 8f);
-                escalationMarker.color = color;
-                escalationMarker.rectTransform.anchoredPosition =
-                    new Vector2(escalationTrackX + fraction * escalationTrackWidth - 1f, escalationMarkerY);
-                for (int i = 0; i < escalationStages.Length; i++)
-                {
-                    bool active = i == stage;
-                    escalationStages[i].color = active ? color : AvTheme.Dim;
-                    escalationStageMarks[i].color = active ? color : Color.clear;
-                }
+                ladderNames[index].color = currentRung ? AvTheme.TextPrimary : AvTheme.Dim;
+                ladderThresholds[index].text = threshold;
+                ladderThresholds[index].color = ink;
+                ladderStates[index].text = state;
+                ladderStates[index].color = ink;
+                ladderRails[index].color = rail;
+                ladderMarkers[index].color = rail;
             }
 
             private static string ModeLabel(Mission mission)
@@ -672,7 +815,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 private int page;
                 private List<Objective> data;
 
-                public ObjectiveBoard(RectTransform parent, float y, float width, int rowCount)
+                public ObjectiveBoard(RectTransform parent, float y, float width, int rowCount, float pitch)
                 {
                     float usable = width - AvTokens.Space3;
                     perPage = Mathf.Max(1, rowCount);
@@ -680,14 +823,15 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     empty = AvStyled.Label(parent, new Rect(AvTokens.Space3, y, usable, 30f),
                         "NO ACTIVE OBJECTIVES — THE FRONT IS QUIET", "row-sub");
                     for (int i = 0; i < perPage; i++)
-                        rows[i] = new Row(parent, y - i * Pitch, usable);
+                        rows[i] = new Row(parent, y - i * pitch, usable, pitch);
 
-                    float pagerY = y - perPage * Pitch - AvTokens.Space1;
+                    float pagerY = y - perPage * pitch - AvTokens.Space1;
                     var go = new GameObject("ObjectivePager", typeof(RectTransform));
                     pagerRoot = go.GetComponent<RectTransform>();
                     pagerRoot.SetParent(parent, false);
                     AvKit.Place(pagerRoot, new Rect(AvTokens.Space3, pagerY, usable, AvTokens.RowHeight));
-                    AvButton[] pager = AvKit.Stepper(pagerRoot, 0f, 0f, usable, out pageLabel, Previous, Next);
+                    AvButton[] pager = AvKit.Stepper(pagerRoot, 0f, 0f, usable, out pageLabel,
+                        Previous, Next, "Page the objective list");
                     previous = pager[0];
                     next = pager[1];
                 }
@@ -724,7 +868,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
                     empty.gameObject.SetActive(count == 0);
                     int pages = PageCount(count);
-                    pagerRoot.gameObject.SetActive(pages > 1);
+                    // The pager stays on the page whether or not there is a second one: it
+                    // states the position and holds the space the pitch was measured into.
+                    pagerRoot.gameObject.SetActive(count > 0);
                     pageLabel.text = count == 0 ? "" : (page + 1) + " / " + pages;
                     previous.SetEnabled(page > 0);
                     next.SetEnabled(page + 1 < pages);
@@ -748,14 +894,15 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     private readonly AvButton hover;
                     private readonly float trackWidth;
 
-                    public Row(RectTransform parent, float y, float width)
+                    public Row(RectTransform parent, float y, float width, float pitch)
                     {
+                        float height = pitch - AvTokens.Gap;
                         root = new GameObject("ObjectiveRow", typeof(RectTransform));
                         var rect = root.GetComponent<RectTransform>();
                         rect.SetParent(parent, false);
-                        AvKit.Place(rect, new Rect(AvTokens.Space3, y, width, Pitch - AvTokens.Gap));
+                        AvKit.Place(rect, new Rect(AvTokens.Space3, y, width, height));
 
-                        rail = AvKit.Rule(rect, new Rect(0f, 3f, 3f, Pitch - AvTokens.Gap - 9f), AvTheme.RailInert);
+                        rail = AvKit.Rule(rect, new Rect(0f, 3f, 3f, height - 9f), AvTheme.RailInert);
 
                         var glyphGo = new GameObject("Glyph", typeof(RectTransform), typeof(MfdGlyph));
                         glyphGo.transform.SetParent(rect, false);
@@ -766,14 +913,19 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                         name = AvStyled.Label(rect, new Rect(36f, -6f, width - 120f, 16f), "", "row-name");
                         value = AvStyled.Label(rect, new Rect(width - 78f, -6f, 62f, 16f), "", "row-value");
                         detail = AvStyled.Label(rect, new Rect(36f, -25f, width - 46f, 13f), "", "row-sub");
+                        // The type/source line is data: it shrinks to the floor and then
+                        // overflows rather than being cut to a one-line ellipsis.
                         detail.enableWordWrapping = false;
                         detail.overflowMode = TextOverflowModes.Ellipsis;
+                        detail.enableAutoSizing = true;
+                        detail.fontSizeMin = AvTokens.FontMicro;
+                        detail.fontSizeMax = detail.fontSize;
 
                         trackWidth = width - 36f;
-                        AvKit.Panel(rect, new Rect(36f, -(Pitch - 17f), trackWidth, 3f), AvTheme.SurfaceInert);
-                        fill = AvKit.Rule(rect, new Rect(36f, -(Pitch - 17f), 0f, 3f), AvTheme.RailInert);
-                        AvKit.Rule(rect, new Rect(0f, -(Pitch - AvTokens.Gap), width, 1f), AvTheme.Hairline);
-                        hover = AvKit.HitButton(rect, new Rect(0f, 0f, width, Pitch - AvTokens.Gap), null);
+                        AvKit.Panel(rect, new Rect(36f, -(height - 9f), trackWidth, 3f), AvTheme.SurfaceInert);
+                        fill = AvKit.Rule(rect, new Rect(36f, -(height - 9f), 0f, 3f), AvTheme.RailInert);
+                        AvKit.Rule(rect, new Rect(0f, -height, width, 1f), AvTheme.Hairline);
+                        hover = AvKit.HitButton(rect, new Rect(0f, 0f, width, height), null);
                         root.SetActive(false);
                     }
 
@@ -813,10 +965,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 DrawSpine(page);
                 AvStyled.SpineTick(page, 3f, -AvTokens.Space3);
                 AvStyled.Label(page, new Rect(AvTokens.Space3, -AvTokens.Space3,
-                                               Shell.Body.width - AvTokens.Space3, 18f),
+                                               PageWidth - AvTokens.Space3, 18f),
                                "NATIVE ADAPTER UNAVAILABLE", "section-title");
                 AvStyled.Label(page, new Rect(AvTokens.Space3, -AvTokens.Space6,
-                                               Shell.Body.width - AvTokens.Space3, 56f),
+                                               PageWidth - AvTokens.Space3, 56f),
                                "This game build changed the controller attached to this MFD. " +
                                "The source panel remains intact and will be restored when the map closes.",
                                "row-sub");

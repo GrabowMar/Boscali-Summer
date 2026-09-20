@@ -55,6 +55,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private EditMode editorMode = EditMode.None;
             private TMPro.TMP_Text selectedNote;
             private TMPro.TMP_Text presetNote;
+            private int selectedVisible = 9;
+            private int presetVisible = 6;
 
             // Camera surface mark: state lives in Support through a narrow contract.
             private ICameraTargetService cameraService;
@@ -89,6 +91,14 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             protected override void BuildContent()
             {
                 ConfigureTabs(new[] { "FILTERS", "PRESETS", "SELECTED", "CAMERA" }, SelectPage);
+                // The active-profile chip carries the whole saved name: tracking off and
+                // the micro floor keep it inside the fixed chip instead of cutting it.
+                TMPro.TMP_Text profileChip = Shell.DataBar.Chips[1];
+                profileChip.characterSpacing = 0f;
+                profileChip.enableAutoSizing = true;
+                profileChip.fontSizeMin = AvTokens.FontMicro;
+                profileChip.fontSizeMax = profileChip.fontSize;
+                profileChip.overflowMode = TMPro.TextOverflowModes.Overflow;
                 pages = new[]
                 {
                     CreatePage("Filters"), CreatePage("Presets"),
@@ -108,7 +118,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 if (!Ready)
                 {
                     SetFilterInput(false);
-                    Shell.DataBar.State.text = "WAITING FOR TARGET FILTERS";
+                    Shell.DataBar.State.text = "FILTER LINK WAIT";
                     Shell.DataBar.SetChip(0, "LINK", false);
                     Shell.DataBar.SetChip(1, "DATA", false);
                     Shell.DataBar.SetChip(2, "—", false);
@@ -129,18 +139,23 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 int filters = CountEnabled(selector.toggleFactionItems) +
                               CountEnabled(selector.toggleUnitTypesItems) +
                               CountEnabled(selector.toggleVehicleTypesItems);
-                Shell.DataBar.State.text = "TARGET ACQUISITION";
+                Shell.DataBar.State.text = "TARGET FILTERS";
                 Shell.DataBar.SetChip(0, filters + " FILTERS", filters > 0);
-                Shell.DataBar.SetChip(1, AvTheme.Truncate(activePreset, 12),
+                Shell.DataBar.SetChip(1, activePreset,
                                       activePreset != TargetPresetLibrary.CustomProfile);
                 Shell.DataBar.SetChip(2, selector.toggleFollowHUD.status ? "HUD LINK" :
                                       selector.toggleLaser.status ? "LASER" : "MANUAL",
                                       selector.toggleFollowHUD.status || selector.toggleLaser.status);
 
-                PaintButton(resetFilters, "RESET", activePreset == MfdTargetPresets.Names[0]);
-                clearTargets.SetEnabled(SelectedCount() > 0);
-                PaintButton(followHud, "HUD LINK", selector.toggleFollowHUD.status);
-                PaintButton(laser, "LASER", selector.toggleLaser.status);
+                int tracked = SelectedCount();
+                clearTargets.SetEnabled(tracked > 0);
+                clearTargets.WithTooltip(tracked > 0
+                    ? "Drop every tracked contact from the target list."
+                    : "No tracked contacts to clear.");
+                PaintButton(followHud, selector.toggleFollowHUD.status ? "HUD ON" : "HUD OFF",
+                            selector.toggleFollowHUD.status);
+                PaintButton(laser, selector.toggleLaser.status ? "LASER ON" : "LASER OFF",
+                            selector.toggleLaser.status);
 
                 SetGrid(factionGrid, selector.toggleFactionItems, ToggleFaction);
                 SetGrid(unitGrid, selector.toggleUnitTypesItems, ToggleUnitType);
@@ -177,12 +192,17 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private void BuildFiltersPage(RectTransform page)
             {
                 DrawSpine(page);
-                float y = Heading(page, -AvTokens.Space1, Shell.Body.width,
-                                  "TARGET FILTER", "LIVE MAP ACQUISITION");
+                float width = PageWidth;
                 float gap = AvTokens.Gap;
-                float width = (Shell.Body.width - AvTokens.Space3 - gap * 3f) / 4f;
-                resetFilters = PanelButton(page, new Rect(AvTokens.Space3, y, width, AvTokens.RowHeight),
-                    "RESET", "toggle", () =>
+
+                // Two columns make room for a full label, icon and explicit state.
+                const float cell = 48f;
+
+                float y = Heading(page, -AvTokens.Space1, width,
+                                  "TARGET FILTER", "LIVE MAP ACQUISITION");
+                float chipWidth = (width - AvTokens.Space3 - gap * 3f) / 4f;
+                resetFilters = PanelButton(page, new Rect(AvTokens.Space3, y, chipWidth, AvTokens.RowHeight),
+                    "RESET", "btn", () =>
                     {
                         if (!Ready) return;
                         CancelDeleteConfirm();
@@ -190,17 +210,17 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                         selector.NeedUpdateIcons();
                         Echo("FILTERS RESET");
                         RequestRefresh();
-                    }, AvButtonStyle.Toggle);
+                    }, AvButtonStyle.Default);
                 clearTargets = PanelButton(page,
-                    new Rect(AvTokens.Space3 + (width + gap), y, width, AvTokens.RowHeight),
-                    "CLEAR", "toggle", () =>
+                    new Rect(AvTokens.Space3 + (chipWidth + gap), y, chipWidth, AvTokens.RowHeight),
+                    "CLEAR", "btn", () =>
                     {
                         if (!Ready) return;
                         selector.DeselectAll();
                         RequestRefresh();
-                    }, AvButtonStyle.Toggle);
+                    }, AvButtonStyle.Default);
                 followHud = PanelButton(page,
-                    new Rect(AvTokens.Space3 + 2f * (width + gap), y, width, AvTokens.RowHeight),
+                    new Rect(AvTokens.Space3 + 2f * (chipWidth + gap), y, chipWidth, AvTokens.RowHeight),
                     "HUD LINK", "toggle", () =>
                     {
                         if (!Ready) return;
@@ -211,7 +231,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     },
                     AvButtonStyle.Toggle);
                 laser = PanelButton(page,
-                    new Rect(AvTokens.Space3 + 3f * (width + gap), y, width, AvTokens.RowHeight),
+                    new Rect(AvTokens.Space3 + 3f * (chipWidth + gap), y, chipWidth, AvTokens.RowHeight),
                     "LASER", "toggle", () =>
                     {
                         if (!Ready) return;
@@ -220,20 +240,24 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                         selector.NeedUpdateIcons();
                         RequestRefresh();
                     }, AvButtonStyle.Toggle);
+                resetFilters.WithTooltip("Restore the ALL profile: every faction and unit class, laser off.");
+                clearTargets.WithTooltip("Drop every tracked contact from the target list.");
+                followHud.WithTooltip("Follow the HUD: the target list tracks whatever the HUD is following.");
+                laser.WithTooltip("Laser only: the target list keeps lased targets.");
                 y -= AvTokens.RowHeight + AvTokens.Space2;
 
-                y = Heading(page, y, Shell.Body.width, "FACTION", "FRIEND / HOSTILE");
-                factionGrid = new MfdPagingGrid(page, y, Shell.Body.width, 2, 1, pager: false);
+                y = Heading(page, y, width, "FACTION", "FRIEND / HOSTILE");
+                factionGrid = new MfdPagingGrid(page, y, width, 2, 1, pager: false, rowHeight: cell);
                 AddRightClickActions(factionGrid, OnlyFaction);
-                y -= AvTokens.RowHeight + AvTokens.Space2;
+                y -= cell + AvTokens.Space2;
 
-                y = Heading(page, y, Shell.Body.width, "UNIT CLASS", "AIR / GROUND / SEA");
-                unitGrid = new MfdPagingGrid(page, y, Shell.Body.width, 3, 2, pager: false);
+                y = Heading(page, y, width, "UNIT CLASS", "AIR / GROUND / SEA");
+                unitGrid = new MfdPagingGrid(page, y, width, 2, 3, pager: false, rowHeight: cell);
                 AddRightClickActions(unitGrid, OnlyUnitType);
-                y -= AvTokens.RowHeight * 2f + AvTokens.Gap + AvTokens.Space2;
+                y -= cell * 3f + AvTokens.Space2;
 
-                y = Heading(page, y, Shell.Body.width, "PLATFORM TYPE", "DETAILED FILTER");
-                vehicleGrid = new MfdPagingGrid(page, y, Shell.Body.width, 3, 4);
+                y = Heading(page, y, width, "PLATFORM TYPE", "DETAILED FILTER");
+                vehicleGrid = new MfdPagingGrid(page, y, width, 2, 3, rowHeight: cell);
                 AddRightClickActions(vehicleGrid, OnlyVehicleType);
             }
 
@@ -242,7 +266,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private void BuildPresetsPage(RectTransform page)
             {
                 DrawSpine(page);
-                float width = Shell.Body.width;
+                float width = PageWidth;
                 string[] keys =
                 {
                     KeyLabel(TargetPresetRuntime.Key(0)),
@@ -252,19 +276,30 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 float y = Heading(page, -AvTokens.Space1, width, "QUICK SWITCH",
                                   "RADIAL · " + string.Join(" ", keys));
 
-                quickGrid = new MfdPagingGrid(page, y, width, TargetPresetLibrary.SlotCount, 1, pager: false);
+                // Two columns: a slot shows its whole preset name on one line, with the
+                // slot number and key on the detail line instead of crowding the name.
+                quickGrid = new MfdPagingGrid(page, y, width, 2, 2, pager: false, rowHeight: 46f, exclusive: true);
                 AddSlotActions();
-                y -= AvTokens.RowHeight + AvTokens.Space3;
+                y -= 2f * 46f + AvTokens.Space3;
 
                 float libraryY = y;
                 y = Heading(page, y, width, "PRESET LIBRARY", null);
                 presetNote = AvStyled.Label(page,
                     new Rect(width * 0.52f, libraryY, width * 0.48f, 14f), SavedNote(),
                     "section-title-note", align: TMPro.TextAlignmentOptions.MidlineRight);
-                presetGrid = new MfdPagingGrid(page, y, width, 2, 3);
+                // Everything under the library grid is fixed (its pager, the status and
+                // summary lines, the four actions and the editor's 52px), and so is the
+                // block above it; the library rows then take what is left. That is what
+                // keeps the editor's bottom inside Shell.Body.bottom at the 596 floor
+                // instead of drawing the name field over the status strip.
+                const float libraryChrome = 344f;
+                float librarySpace = Mathf.Max(68f, PageHeight - libraryChrome);
+                int libraryRows = Mathf.Clamp(Mathf.FloorToInt(librarySpace / 34f), 2, 6);
+                float libraryCell = Mathf.Clamp(librarySpace / libraryRows, 28f, 64f);
+                presetVisible = 2 * libraryRows;
+                presetGrid = new MfdPagingGrid(page, y, width, 2, libraryRows, rowHeight: libraryCell, exclusive: true);
                 AddPresetActions();
-                y -= 3f * (AvTokens.RowHeight + AvTokens.Gap) + AvTokens.Space1 +
-                     AvTokens.RowHeight + AvTokens.Space2;
+                y -= libraryRows * libraryCell + AvTokens.Space1 + AvTokens.RowHeight;
 
                 presetStatus = AvStyled.Label(page, new Rect(AvTokens.Space3, y, width - AvTokens.Space3, 16f),
                     "ACTIVE PROFILE", "row-main");
@@ -290,7 +325,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     "DELETE", "toggle", PressDelete, AvButtonStyle.Danger);
                 y -= AvTokens.RowHeight + AvTokens.Space2;
 
-                BuildNameEditor(page, y, width);
+                // Belt and braces: the measured layout already lands here; the clamp keeps
+                // the editor's top from ever crossing the body bottom if a token changes.
+                BuildNameEditor(page, Mathf.Max(y, -PageHeight + AvTokens.Space2 + 52f), width);
             }
 
             private string SavedNote() =>
@@ -338,7 +375,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             private void AddPresetActions()
             {
-                for (int slot = 0; slot < 6; slot++)
+                for (int slot = 0; slot < presetVisible; slot++)
                 {
                     int index = slot;
                     AvButton button = presetGrid.ButtonAt(slot);
@@ -399,10 +436,11 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private void RefreshQuickSlots()
             {
                 quickGrid.SetData(TargetPresetLibrary.SlotCount,
-                    slot => (slot + 1) + "  " + SlotLabel(slot),
+                    slot => SlotLabel(slot),
                     slot => TargetPresetRuntime.QuickSlotName(slot).Length > 0 &&
                             TargetPresetRuntime.QuickSlotName(slot) == activePreset,
-                    null);
+                    null,
+                    subs: slot => "SLOT " + (slot + 1) + "  ·  KEY " + KeyLabel(TargetPresetRuntime.Key(slot)));
                 for (int slot = 0; slot < TargetPresetLibrary.SlotCount; slot++)
                 {
                     AvButton button = quickGrid.ButtonAt(slot);
@@ -419,7 +457,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private static string SlotLabel(int slot)
             {
                 string name = TargetPresetRuntime.QuickSlotName(slot);
-                return name.Length == 0 ? "—" : AvTheme.Truncate(name, 11);
+                return name.Length == 0 ? "EMPTY" : name;
             }
 
             private void RefreshLibrary()
@@ -431,7 +469,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     index => catalog[index] != null && catalog[index].Name == activePreset,
                     ApplyCatalog,
                     icons: index => null);
-                for (int slot = 0; slot < 6; slot++)
+                for (int slot = 0; slot < presetVisible; slot++)
                 {
                     AvButton button = presetGrid.ButtonAt(slot);
                     if (button == null) continue;
@@ -708,13 +746,22 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private void BuildSelectedPage(RectTransform page)
             {
                 DrawSpine(page);
-                float width = Shell.Body.width;
+                float width = PageWidth;
                 float y = Heading(page, -AvTokens.Space1, width, "SELECTED TARGETS", null);
                 selectedNote = AvStyled.Label(page,
                     new Rect(width * 0.52f, -AvTokens.Space1, width * 0.48f, 14f),
                     "0 TRACKED", "section-title-note", align: TMPro.TextAlignmentOptions.MidlineRight);
-                selectedGrid = new MfdPagingGrid(page, y, width, 1, 9, readOnly: true);
-                for (int slot = 0; slot < 9; slot++)
+                // The same 70px chrome as the HUD list pages: heading, pager and the two
+                // small gaps outside them. The pitch takes the body's slack so the pager
+                // sits on the footer instead of a dead band.
+                const float chrome = 70f;
+                selectedVisible = Mathf.Clamp(
+                    Mathf.FloorToInt((PageHeight - chrome) / AvTokens.RowHeight), 3, 9);
+                float cell = Mathf.Clamp((PageHeight - chrome) / selectedVisible,
+                                         AvTokens.RowHeight, 72f);
+                selectedGrid = new MfdPagingGrid(page, y, width, 1, selectedVisible,
+                                                 readOnly: true, rowHeight: cell);
+                for (int slot = 0; slot < selectedVisible; slot++)
                 {
                     int index = slot;
                     AvButton button = selectedGrid.ButtonAt(slot);
@@ -740,46 +787,55 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private void BuildCameraPage(RectTransform page)
             {
                 DrawSpine(page);
-                float width = Shell.Body.width;
+                float width = PageWidth;
                 float y = Heading(page, -AvTokens.Space1, width, "CAMERA MARK", "SURFACE SENSOR TARGET");
 
-                AvStyled.Box(page, new Rect(AvTokens.Space3, y, width - AvTokens.Space3 * 2f, 64f), "section band");
-                cameraRail = AvStyled.Rail(page, new Rect(AvTokens.Space3 + 6f, y - 6f, 3f, 52f), "locked");
+                // Keep the mark, actions and readout together at every bezel height.
+                const float plate = 112f;
+                const float keyPitch = 28f;
+                const float noteHeight = 42f;
+
+                AvStyled.Box(page, new Rect(AvTokens.Space3, y, width - AvTokens.Space3 * 2f, plate),
+                    "section band");
+                cameraRail = AvStyled.Rail(page,
+                    new Rect(AvTokens.Space3 + 6f, y - 6f, 3f, Mathf.Max(10f, plate - 12f)), "locked");
+                float groupTop = y - Mathf.Max(6f, (plate - 54f) * 0.5f);
                 cameraState = AvStyled.Label(page,
-                    new Rect(AvTokens.Space3 + 16f, y - 6f, width - AvTokens.Space3 * 2f - 24f, 16f),
+                    new Rect(AvTokens.Space3 + 16f, groupTop, width - AvTokens.Space3 * 2f - 24f, 16f),
                     "NO ACTIVE MARK", "section-title");
                 cameraDetails = AvStyled.Label(page,
-                    new Rect(AvTokens.Space3 + 16f, y - 24f, width - AvTokens.Space3 * 2f - 24f, 36f),
+                    new Rect(AvTokens.Space3 + 16f, groupTop - 18f, width - AvTokens.Space3 * 2f - 24f, 36f),
                     "Aim the cockpit camera at a surface point and press MARK CAMERA.", "row-sub");
-                y -= 76f;
+                y -= plate + AvTokens.Space2;
 
                 float gap = AvTokens.Gap;
                 float buttonWidth = (width - AvTokens.Space3 * 2f - gap * 2f) / 3f;
                 cameraCapture = PanelButton(page,
                     new Rect(AvTokens.Space3, y, buttonWidth, AvTokens.RowHeight),
-                    "MARK CAMERA", "toggle",
-                    () => { Camera?.Capture(); RequestRefresh(); }, AvButtonStyle.Toggle);
+                    "MARK CAMERA", "btn",
+                    () => { Camera?.Capture(); RequestRefresh(); }, AvButtonStyle.Default);
                 cameraCall = PanelButton(page,
                     new Rect(AvTokens.Space3 + buttonWidth + gap, y, buttonWidth, AvTokens.RowHeight),
-                    "CALL AT MARK", "toggle",
-                    () => { Camera?.CallAtMark(); RequestRefresh(); }, AvButtonStyle.Toggle);
+                    "CALL AT MARK", "btn",
+                    () => { Camera?.CallAtMark(); RequestRefresh(); }, AvButtonStyle.Default);
                 cameraClear = PanelButton(page,
                     new Rect(AvTokens.Space3 + (buttonWidth + gap) * 2f, y, buttonWidth, AvTokens.RowHeight),
-                    "CLEAR MARK", "toggle",
-                    () => { Camera?.Clear(); RequestRefresh(); }, AvButtonStyle.Toggle);
+                    "CLEAR MARK", "btn",
+                    () => { Camera?.Clear(); RequestRefresh(); }, AvButtonStyle.Default);
                 y -= AvTokens.RowHeight + AvTokens.Space2;
 
                 y = Heading(page, y, width, "TARGET TELEMETRY", "COORDINATES & RANGE");
                 cameraPos = CameraKey(page, y, width, "COORDINATES (X/Z)");
-                y -= 18f;
+                y -= keyPitch;
                 cameraRange = CameraKey(page, y, width, "SLANT RANGE");
-                y -= 18f;
+                y -= keyPitch;
                 cameraAge = CameraKey(page, y, width, "MARK AGE");
-                y -= 18f;
+                y -= keyPitch;
                 cameraArmed = CameraKey(page, y, width, "ARMED CALL-IN");
-                y -= 24f;
 
-                AvStyled.Label(page, new Rect(AvTokens.Space3, y, width - AvTokens.Space3 * 2f, 30f),
+                AvStyled.Label(page,
+                    new Rect(AvTokens.Space3, y - keyPitch - AvTokens.Space2,
+                             width - AvTokens.Space3 * 2f, noteHeight),
                     "The mark is a surface reference, not a tracked contact. Arm an operation on OPS / SUPPORT, then CALL AT MARK.",
                     "row-sub");
             }
@@ -805,6 +861,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     cameraCapture?.SetEnabled(false);
                     cameraCall?.SetEnabled(false);
                     cameraClear?.SetEnabled(false);
+                    cameraCapture?.WithTooltip("Camera marking is unavailable: the support module or its observation source is not installed.");
+                    cameraCall?.WithTooltip("Camera marking is unavailable: the support module or its observation source is not installed.");
+                    cameraClear?.WithTooltip("Camera marking is unavailable: the support module or its observation source is not installed.");
                     SetCameraTelemetry("—", "—", "—", "—");
                     return;
                 }
@@ -968,12 +1027,28 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     editorMode = EditMode.None;
                     if (editor != null) editor.gameObject.SetActive(false);
                     confirmDelete = null;
+                    clearTargets?.WithTooltip("Waiting for target filters.");
+                    updatePreset?.WithTooltip("Waiting for target filters.");
+                    renamePreset?.WithTooltip("Waiting for target filters.");
+                    deletePreset?.WithTooltip("Waiting for target filters.");
                 }
                 else
                 {
-                    updatePreset?.SetEnabled(SelectedCustom() != null);
-                    renamePreset?.SetEnabled(SelectedCustom() != null);
-                    deletePreset?.SetEnabled(SelectedCustom() != null);
+                    // A disabled preset action states the one thing it is waiting for,
+                    // the way the camera and map preset buttons do.
+                    bool custom = SelectedCustom() != null;
+                    updatePreset?.SetEnabled(custom);
+                    updatePreset?.WithTooltip(custom
+                        ? "Overwrite the selected saved preset with the current filters."
+                        : "Select a saved preset first.");
+                    renamePreset?.SetEnabled(custom);
+                    renamePreset?.WithTooltip(custom
+                        ? "Rename the selected saved preset."
+                        : "Select a saved preset first.");
+                    deletePreset?.SetEnabled(custom);
+                    deletePreset?.WithTooltip(custom
+                        ? "Delete the selected saved preset. Deletion asks for a second press."
+                        : "Select a saved preset first.");
                 }
             }
 
@@ -986,19 +1061,36 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 return count;
             }
 
+            /// <summary>
+            /// The native filter's full name. It is not cut here: the cell wraps it over
+            /// two lines at the micro floor, so "GROUND VEHICLES" never prints as "GND".
+            /// </summary>
             private static string NativeTargetLabel(TargetListSelector_ToggleButton entry)
             {
                 if (entry != null && entry.label != null && !string.IsNullOrEmpty(entry.label.text))
-                    return AvTheme.Truncate(entry.label.text.Replace("\n", " ").ToUpperInvariant(), 22);
+                {
+                    string label = entry.label.text.Replace("\n", " ").ToUpperInvariant();
+                    switch (label)
+                    {
+                        case "AIR": return "AIRCRAFT";
+                        case "MSL": return "MISSILES";
+                        case "GND": return "GROUND";
+                        case "BLD": return "BUILDINGS";
+                        case "SHP": return "SHIPS";
+                        default: return label;
+                    }
+                }
                 return NativeLabel(entry, "FILTER");
             }
 
             private static string TargetUnitLabel(Unit unit)
             {
+                // The selected grid wraps or shrinks the whole call sign; a unit's own
+                // name is never cut to a fixed column.
                 if (unit == null) return "UNKNOWN TARGET";
                 string code = unit.definition == null ? "UNIT" : unit.definition.code;
                 string name = string.IsNullOrEmpty(unit.unitName) ? code : unit.unitName;
-                return AvTheme.Truncate((name ?? "UNIT").ToUpperInvariant(), 34);
+                return (string.IsNullOrEmpty(name) ? "UNIT" : name).ToUpperInvariant();
             }
         }
     }

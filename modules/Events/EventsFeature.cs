@@ -31,6 +31,9 @@ namespace BoscaliSummer.Features.Events
             EventsMfdPanel panel = context.AddSceneService<EventsMfdPanel>(63);
             panel.Configure(context.Settings.Events, manager, context.Logger);
 
+            SuperEventAlert alert = context.AddSceneService<SuperEventAlert>(67);
+            alert.Configure(context.Settings.Events, manager, context.Logger);
+
             context.AddHostSettings(new HostSettingsTable("WORLD EVENTS")
                 .Number(1, context.Settings.Events.EffectStrength, "EFFECT STRENGTH",
                     "Scales every event modifier without editing the catalog. 0 makes events flavour only.",
@@ -38,7 +41,9 @@ namespace BoscaliSummer.Features.Events
                 .Number(2, context.Settings.Events.RotationGapMinSeconds, "MIN CALM",
                     "Shortest calm period between events.", 10, v => v.ToString("0") + " s")
                 .Number(3, context.Settings.Events.RotationGapMaxSeconds, "MAX CALM",
-                    "Longest calm period between events.", 10, v => v.ToString("0") + " s"));
+                    "Longest calm period between events.", 10, v => v.ToString("0") + " s")
+                .Toggle(4, context.Settings.Events.SuperEventsEnabled, "SUPEREVENTS",
+                    "Allow scripted, faction-targeted superevents when the theater leans."));
         }
     }
 }

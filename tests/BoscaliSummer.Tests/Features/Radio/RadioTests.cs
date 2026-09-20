@@ -130,6 +130,16 @@ namespace BoscaliSummer.Tests.Features.Radio
             TestAssert.That(RadioDialTuning.FirstInBand(dials, RadioBand.Mw) == 2 &&
                 RadioDialTuning.FirstInBand(dials, RadioBand.Fm) == 0,
                 "first-in-band did not find the lowest station of the band");
+
+            TestAssert.That(RadioDialTuning.Nearest(RadioBand.Fm, 88460).Equals(RadioDial.Fm(88500)) &&
+                RadioDialTuning.Nearest(RadioBand.Fm, 88540).Equals(RadioDial.Fm(88500)),
+                "a band-scope click did not snap to the nearest 100 kHz channel");
+            TestAssert.That(RadioDialTuning.Nearest(RadioBand.Air, 121518).Equals(RadioDial.Air(121525)) &&
+                RadioDialTuning.Nearest(RadioBand.Mw, 785).Equals(RadioDial.Mw(790)),
+                "a click did not snap to the band's own channel grid");
+            TestAssert.That(RadioDialTuning.Nearest(RadioBand.Fm, 100).Kilohertz == RadioBands.Min(RadioBand.Fm) &&
+                RadioDialTuning.Nearest(RadioBand.Fm, 999999).Kilohertz == RadioBands.Max(RadioBand.Fm),
+                "a click off the band did not clamp to the band edge");
         }
 
         private static void PropagationMath()

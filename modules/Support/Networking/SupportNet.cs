@@ -2,6 +2,7 @@ using System;
 using System.Reflection;
 using System.Collections.Generic;
 using BoscaliSummer.Features.Support.Domain;
+using BoscaliSummer.Features.Support.Domain.Cyber;
 using BoscaliSummer.Features.Support.Domain.Orbital;
 using BoscaliSummer.Features.Support.Runtime;
 using BoscaliSummer.Runtime;
@@ -46,10 +47,14 @@ namespace BoscaliSummer.Features.Support.Networking
         /// station-keeping satellites with orbital elements (payload, regime, seed, mission
         /// clock, battery, magazine) plus undisclosed foreign satellites. Protocol 10 adds the
         /// base-of-operations ranks (fortification doctrine and insertion rigging) to the
-        /// snapshot and the upgrade command. Older peers must not interpret fleet, hack,
-        /// program or garrison ids.
+        /// snapshot and the upgrade command. Protocol 11 replaces the satellites with the
+        /// modular orbital station. Protocol 12 replaces the single EW truck with the CYBER
+        /// network (sites, incidents, notices, origin names) and its site and console
+        /// commands. Protocol 13 raises the network to sixteen slots and adds the static and
+        /// down site flags for the airbase infrastructure. Older peers must not interpret fleet,
+        /// hack, program, garrison or site ids.
         /// </summary>
-        internal const byte ProtocolVersion = 11;
+        internal const byte ProtocolVersion = 13;
 
         private const float QueryInterval = 0.4f;
         private const int MaximumQueries = 64;
@@ -396,10 +401,7 @@ namespace BoscaliSummer.Features.Support.Networking
                 }
                 w.WriteByte(v.Sigint); w.WriteByte(v.Crypto);
                 w.WriteByte(v.Disrupt); w.WriteByte(v.Ew);
-                w.WriteByte(v.EwAssetState);
-                w.WriteByte(v.EwPosture);
-                w.WriteSingle(v.EwX);
-                w.WriteSingle(v.EwZ);
+                WriteCyber(w, v.Cyber, v.CyberOriginCount, v.CyberOrigins);
                 for (int i = 0; i < OpsProgramLedger.ProgramCount; i++)
                     w.WriteByte(v.ProgramTiers != null && i < v.ProgramTiers.Length ? v.ProgramTiers[i] : (byte)0);
                 w.WriteByte(v.SpecOpsTokens); w.WriteByte(v.IntelTokens);
@@ -453,10 +455,7 @@ namespace BoscaliSummer.Features.Support.Networking
                 }
                 message.Sigint = r.ReadByte(); message.Crypto = r.ReadByte();
                 message.Disrupt = r.ReadByte(); message.Ew = r.ReadByte();
-                message.EwAssetState = r.ReadByte();
-                message.EwPosture = r.ReadByte();
-                message.EwX = r.ReadSingle();
-                message.EwZ = r.ReadSingle();
+                if (!ReadCyber(r, ref message)) return new OpsStateMessage { Protocol = 0 };
                 for (int i = 0; i < OpsProgramLedger.ProgramCount; i++)
                     message.ProgramTiers[i] = r.ReadByte();
                 message.SpecOpsTokens = r.ReadByte(); message.IntelTokens = r.ReadByte();
@@ -492,6 +491,140 @@ namespace BoscaliSummer.Features.Support.Networking
             MessagePacker.RegisterMessage<CyberEffectMessage>();
             MessagePacker.RegisterMessage<SupportRequestMessage>();
             MessagePacker.RegisterMessage<SupportResultMessage>();
+        }
+
+        private static readonly CyberSnapshot EmptyCyber = new CyberSnapshot();
+
+        /// <summary>The CYBER block of a snapshot. Counts are clamped to their bounds on write.</summary>
+        private static void WriteCyber(NetworkWriter w, CyberSnapshot c, byte originCount, string[] origins)
+        {
+            c = c ?? EmptyCyber;
+            int sites = Math.Min((int)c.SiteCount, CyberNetwork.SlotCount);
+            w.WriteByte((byte)sites);
+            for (int i = 0; i < sites; i++)
+            {
+                w.WriteByte(c.Slot[i]);
+                w.WriteByte(c.Kind[i]);
+                w.WriteSingle(c.X[i]);
+                w.WriteSingle(c.Z[i]);
+                w.WriteByte(c.Flags[i]);
+                w.WriteByte(c.Mode[i]);
+                w.WriteSingle(c.PatchIn[i]);
+                w.WriteSingle(c.BaitIn[i]);
+            }
+            w.WriteSingle(c.Bandwidth);
+            w.WritePackedInt32(c.Defeated);
+            w.WritePackedInt32(c.Defended);
+            w.WritePackedInt32(c.Breached);
+            for (int v = 0; v < CyberNetwork.VerbCount; v++) w.WriteSingle(c.Recharge[v]);
+            w.WriteByte(c.Heat);
+            w.WriteSingle(c.NextIncidentIn);
+            w.WriteSingle(c.ExposedIn);
+
+            int incidents = Math.Min((int)c.IncidentCount, CyberNetwork.IncidentSlots);
+            w.WriteByte((byte)incidents);
+            for (int i = 0; i < incidents; i++)
+            {
+                w.WriteByte(c.IncidentKind[i]);
+                w.WriteByte(c.IncidentState[i]);
+                w.WriteByte(c.IncidentSite[i]);
+                w.WriteByte(c.IncidentOrigin[i]);
+                w.WriteSingle(c.IncidentX[i]);
+                w.WriteSingle(c.IncidentZ[i]);
+                w.WriteSingle(c.IncidentAge[i]);
+                w.WriteSingle(c.IncidentLeft[i]);
+                w.WriteByte(c.IncidentTrace[i]);
+            }
+            for (int f = 0; f < CyberNetwork.MaximumOrigins; f++) w.WriteByte(c.Foothold[f]);
+
+            w.WritePackedInt32(c.NoticeSerial);
+            int notices = Math.Min((int)c.NoticeCount, CyberNetwork.NoticeSlots);
+            w.WriteByte((byte)notices);
+            for (int i = 0; i < notices; i++)
+            {
+                w.WriteByte(c.NoticeKind[i]);
+                w.WriteByte(c.NoticeSite[i]);
+                w.WriteByte(c.NoticeOrigin[i]);
+            }
+
+            int names = origins == null ? 0
+                : Math.Min((int)originCount, Math.Min(origins.Length, OpsStateMessageBuffers.MaximumOriginNames));
+            w.WriteByte((byte)names);
+            for (int i = 0; i < names; i++)
+            {
+                string name = origins[i] ?? string.Empty;
+                w.WriteString(name.Length > OpsStateMessageBuffers.MaximumOriginLength
+                    ? name.Substring(0, OpsStateMessageBuffers.MaximumOriginLength)
+                    : name);
+            }
+        }
+
+        /// <summary>False for a count past its bound: the rest of the message cannot be trusted.</summary>
+        private static bool ReadCyber(NetworkReader r, ref OpsStateMessage m)
+        {
+            CyberSnapshot c = m.Cyber;
+            int sites = r.ReadByte();
+            if (sites > CyberNetwork.SlotCount) return false;
+            c.SiteCount = (byte)sites;
+            for (int i = 0; i < sites; i++)
+            {
+                c.Slot[i] = r.ReadByte();
+                c.Kind[i] = r.ReadByte();
+                c.X[i] = r.ReadSingle();
+                c.Z[i] = r.ReadSingle();
+                c.Flags[i] = r.ReadByte();
+                c.Mode[i] = r.ReadByte();
+                c.PatchIn[i] = r.ReadSingle();
+                c.BaitIn[i] = r.ReadSingle();
+            }
+            c.Bandwidth = r.ReadSingle();
+            c.Defeated = r.ReadPackedInt32();
+            c.Defended = r.ReadPackedInt32();
+            c.Breached = r.ReadPackedInt32();
+            for (int v = 0; v < CyberNetwork.VerbCount; v++) c.Recharge[v] = r.ReadSingle();
+            c.Heat = r.ReadByte();
+            c.NextIncidentIn = r.ReadSingle();
+            c.ExposedIn = r.ReadSingle();
+
+            int incidents = r.ReadByte();
+            if (incidents > CyberNetwork.IncidentSlots) return false;
+            c.IncidentCount = (byte)incidents;
+            for (int i = 0; i < incidents; i++)
+            {
+                c.IncidentKind[i] = r.ReadByte();
+                c.IncidentState[i] = r.ReadByte();
+                c.IncidentSite[i] = r.ReadByte();
+                c.IncidentOrigin[i] = r.ReadByte();
+                c.IncidentX[i] = r.ReadSingle();
+                c.IncidentZ[i] = r.ReadSingle();
+                c.IncidentAge[i] = r.ReadSingle();
+                c.IncidentLeft[i] = r.ReadSingle();
+                c.IncidentTrace[i] = r.ReadByte();
+            }
+            for (int f = 0; f < CyberNetwork.MaximumOrigins; f++) c.Foothold[f] = r.ReadByte();
+
+            c.NoticeSerial = r.ReadPackedInt32();
+            int notices = r.ReadByte();
+            if (notices > CyberNetwork.NoticeSlots) return false;
+            c.NoticeCount = (byte)notices;
+            for (int i = 0; i < notices; i++)
+            {
+                c.NoticeKind[i] = r.ReadByte();
+                c.NoticeSite[i] = r.ReadByte();
+                c.NoticeOrigin[i] = r.ReadByte();
+            }
+
+            int names = r.ReadByte();
+            if (names > OpsStateMessageBuffers.MaximumOriginNames) return false;
+            m.CyberOriginCount = (byte)names;
+            for (int i = 0; i < names; i++)
+            {
+                string name = r.ReadString() ?? string.Empty;
+                m.CyberOrigins[i] = name.Length > OpsStateMessageBuffers.MaximumOriginLength
+                    ? name.Substring(0, OpsStateMessageBuffers.MaximumOriginLength)
+                    : name;
+            }
+            return true;
         }
 
         private static void SetWriter<T>(Action<NetworkWriter, T> writer) =>

@@ -51,6 +51,30 @@ public class Encyclopedia
     public List<UnitDefinition> missiles = new List<UnitDefinition>();
 
     /// <summary>
+    /// Adds a native-defense definition for one of the emplacement keys, optionally with a
+    /// real root <see cref="BoxCollider"/> footprint so the garrison's measurement path is
+    /// exercised instead of its 1.6m fallback. The prefab is parked inactive like a real
+    /// encyclopedia asset; the spawner activates its instances.
+    /// </summary>
+    public GameObject AddDefensePrefab(string key, float footprint = 0f)
+    {
+        var prefab = new GameObject(key);
+        prefab.AddComponent<Building>();
+        prefab.AddComponent<UnitPart>();
+        if (footprint > 0f)
+        {
+            var box = prefab.AddComponent<BoxCollider>();
+            box.size = new Vector3(footprint, 1.2f, footprint);
+        }
+        prefab.SetActive(false);
+        buildings.Add(new BuildingDefinition
+        {
+            jsonKey = key, unitPrefab = prefab, buildingType = BuildingType.DEF, height = 1.2f
+        });
+        return prefab;
+    }
+
+    /// <summary>
     /// Adds a dismounted-pilot prefab plus a decoy scenery piece whose prefab is not a
     /// <see cref="PilotDismounted"/>, so the resolver's discrimination is exercised. Nothing
     /// is added by default: an untouched encyclopedia stays soldier-free and the fail-closed
@@ -102,6 +126,7 @@ public class Spawner
         object airbase, string name, bool capturable, object factory)
     {
         var go = Object.Instantiate(prefab, position.ToLocalPosition(), rotation);
+        go.SetActive(true); // harness prefabs are parked inactive so they neither render nor collide
         go.name = name;
         var building = go.GetComponent<Building>();
         building.NetworkHQ = owner;
@@ -121,6 +146,7 @@ public class Spawner
         string uniqueName)
     {
         var go = Object.Instantiate(prefab, globalPosition.ToLocalPosition(), rotation);
+        go.SetActive(true);
         go.name = uniqueName;
         var pilot = go.GetComponent<PilotDismounted>();
         pilot.UniqueName = uniqueName;

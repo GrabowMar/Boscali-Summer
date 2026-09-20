@@ -521,6 +521,21 @@ namespace BoscaliSummer.Features.Radio.Runtime
             SetDial(RadioDial.At(next, bandPositions[(int)next]));
         }
 
+        /// <summary>Band key: switch straight to a band, which keeps its last frequency.</summary>
+        public void SetBand(RadioBand band)
+        {
+            if (band == tunedDial.Band) return;
+            RememberBandPosition(tunedDial);
+            SetDial(RadioDial.At(band, bandPositions[(int)band]));
+        }
+
+        /// <summary>
+        /// Tune straight to a frequency, snapped to the band's channel grid. A click on the
+        /// band scope can land anywhere; this is the seam the display drives.
+        /// </summary>
+        public void TuneTo(int kilohertz) =>
+            SetDial(RadioDialTuning.Nearest(tunedDial.Band, kilohertz));
+
         public void CycleMode()
         {
             if (settings == null) return;

@@ -24,14 +24,21 @@ namespace BoscaliSummer.Features.Support.Presentation
         private const int SubPlatform = 0;
         private const int SubPlanner = 1;
         private const int SubEnemy = 2;
-        private const float SubNavHeight = 24f;
+        private const float SubNavHeight = 30f;
         private const int LoopLines = 6;
-        private const float LoopPitch = 15f;
+        private const float LoopPitch = 30f;
         private const float CountdownSeconds = 5f;
         private const float ConfirmSeconds = 3f;
 
         private static readonly string[] SubLabels = { "PLATFORM", "MISSION PLANNER", "ENEMY ACTIVITY" };
-        private static readonly Color MobilityColour = new Color(1f, 0.6f, 0.24f, 1f);
+        private static readonly string[] SubTips =
+        {
+            "Station status, resources, truss and abilities.",
+            "Design the station, launch modules and cargo.",
+            "Hostile stations the mirror tracks, and the counterspace desk."
+        };
+        /// <summary>Mobility's tint, taken from the live theme so a wash and its rail can never disagree.</summary>
+        private static Color MobilityColour => AvTheme.Warning;
 
         private readonly GameObject[] spaceSubPages = new GameObject[3];
         private readonly AvButton[] spaceSubTabs = new AvButton[3];
@@ -103,7 +110,8 @@ namespace BoscaliSummer.Features.Support.Presentation
             {
                 int sub = i;
                 spaceSubTabs[i] = AvStyled.Button(page, new Rect(body.x + i * (segment + 4f), body.y, segment, SubNavHeight),
-                    SubLabels[i], "tab", () => SelectSpaceSub(sub), AvButtonStyle.Tab);
+                    SubLabels[i], "tab", () => SelectSpaceSub(sub), AvButtonStyle.Tab)
+                    .WithTooltip(SubTips[i]);
             }
 
             var subBody = new Rect(body.x, body.y - SubNavHeight - 8f, body.width, body.height - SubNavHeight - 8f);
@@ -127,10 +135,9 @@ namespace BoscaliSummer.Features.Support.Presentation
                                               out float x, out float y, out float width)
         {
             RectTransform parent = AvScreen.Scroll(root, body, contentHeight, out Rect area);
-            AvStyled.Spine(parent, new Rect(area.x, area.y, 3f, area.height));
-            x = area.x + AvScreen.SpineInset;
+            x = area.x + 4f;
             y = area.y;
-            width = area.width - AvScreen.SpineInset;
+            width = area.width - 8f;
             return parent;
         }
 
@@ -369,7 +376,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             var labels = new TMP_Text[LoopLines];
             for (int i = 0; i < LoopLines; i++)
             {
-                labels[i] = SingleLine(AvStyled.Label(parent, new Rect(x, y - i * LoopPitch, width, 14f), "", "row-sub"));
+                labels[i] = Wrapped(AvStyled.Label(parent, new Rect(x, y - i * LoopPitch, width, 28f), "", "row-sub"));
                 labels[i].color = i == 0 ? AvTheme.TextPrimary : AvTheme.Dim;
             }
             y -= LoopLines * LoopPitch;
@@ -424,9 +431,9 @@ namespace BoscaliSummer.Features.Support.Presentation
                 Fill = AvKit.Panel(parent, area, Color.clear),
                 Frame = AvKit.Outline(parent, area, AvTheme.Hairline)
             };
-            AvKit.Label(parent, key, new Rect(area.x + 6f, area.y - 3f, area.width - 12f, 11f), AvTheme.Dim,
-                AvTokens.FontMicro, FontStyles.Bold);
-            tile.Value = AvKit.Label(parent, "", new Rect(area.x + 6f, area.y - 15f, area.width - 12f, 16f),
+            AvKit.Label(parent, key, new Rect(area.x + 8f, area.y - 6f, area.width - 16f, 14f), AvTheme.Dim,
+                AvTokens.FontSmall, FontStyles.Normal);
+            tile.Value = AvKit.Label(parent, "", new Rect(area.x + 8f, area.y - 24f, area.width - 16f, 16f),
                 AvTheme.TextPrimary, AvTokens.FontSmall, FontStyles.Bold);
             return tile;
         }
@@ -439,8 +446,8 @@ namespace BoscaliSummer.Features.Support.Presentation
             Color colour = tone == Tone.Locked ? AvTheme.Disabled : StatusColor(tone);
             tile.Value.text = value;
             tile.Value.color = tone == Tone.Locked ? AvTheme.Dim : colour;
-            tile.Fill.color = colour.WithAlpha(tone == Tone.Locked ? 0.04f : tone == Tone.Danger ? 0.22f : 0.12f);
-            for (int i = 0; i < tile.Frame.Length; i++) tile.Frame[i].color = colour.WithAlpha(0.55f);
+            tile.Fill.color = tone == Tone.Danger ? colour.WithAlpha(0.08f) : AvTheme.Surface;
+            for (int i = 0; i < tile.Frame.Length; i++) tile.Frame[i].color = AvTheme.Hairline;
         }
 
         /// <summary>A labelled bar: key left, reading right, a bar under both.</summary>
@@ -453,14 +460,13 @@ namespace BoscaliSummer.Features.Support.Presentation
 
         private static Gauge BuildGauge(RectTransform parent, float x, float y, float width, string key, Color fill)
         {
-            AvStyled.Label(parent, new Rect(x, y, width * 0.4f, 14f), key, "kv-key");
+            AvStyled.Label(parent, new Rect(x, y, width, 14f), key, "kv-key");
             var gauge = new Gauge
             {
-                Reading = AvStyled.Label(parent, new Rect(x + width * 0.3f, y, width * 0.7f, 14f), "—", "kv-value",
-                    align: TextAlignmentOptions.MidlineRight),
-                Fill = AvKit.ProgressBar(parent, new Rect(x, y - 17f, width, 6f), 0f, fill)
+                Reading = AvStyled.Label(parent, new Rect(x, y - 18f, width, 18f), "—", "kv-value"),
+                Fill = AvKit.ProgressBar(parent, new Rect(x, y - 39f, width, 4f), 0f, fill)
             };
-            gauge.Note = SingleLine(AvStyled.Label(parent, new Rect(x, y - 26f, width, 14f), "", "row-sub"));
+            gauge.Note = SingleLine(AvStyled.Label(parent, new Rect(x, y - 47f, width, 14f), "", "row-sub"));
             gauge.Note.color = AvTheme.Dim;
             return gauge;
         }
@@ -501,7 +507,8 @@ namespace BoscaliSummer.Features.Support.Presentation
                 if (onCell != null)
                 {
                     int index = cell;
-                    AvKit.HitButton(parent, area, () => onCell(index));
+                    AvKit.HitButton(parent, area, () => onCell(index))
+                        .WithTooltip(OrbitalPlatform.CellName(cell) + " · select this cell for the inspector.");
                 }
             }
 

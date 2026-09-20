@@ -45,6 +45,9 @@ namespace NOAvionics.Ui
 
         public TMP_Text Status { get; private set; }
 
+        /// <summary>Semantic cue for the status strip; text carries the same meaning.</summary>
+        public Image StatusRail { get; private set; }
+
         /// <summary>Which tab is latched. -1 until the first <see cref="SetPage"/>.</summary>
         public int Page { get; private set; } = -1;
 
@@ -71,20 +74,19 @@ namespace NOAvionics.Ui
             int metricCount = metrics == null ? 0 : metrics.Length;
 
             var screen = new AvScreen(Math.Max(1, labels.Length), onTab);
-
             AvNode shell = AvBox.Column("screen").Pad(AvTokens.Pad).Gaps(AvTokens.Space2)
-                .Add(AvBox.Row("databar").Height(AvTokens.TitleBarHeight + 2f));
+                .Add(AvBox.Row("databar").Height(chipCount > 0 ? AvTokens.ScreenHeaderHeight : AvTokens.TitleBarHeight));
 
             if (metricCount > 0)
             {
                 AvNode row = AvBox.Grid("metrics", metricCount).Height(MetricRowHeight).Gaps(0f);
-                for (int i = 0; i < metricCount; i++) row.Add(AvBox.Cell("m" + i));
+                for (int i = 0; i < metricCount; i++) row.Add(AvBox.Cell("m" + i).Height(MetricRowHeight));
                 shell.Add(row);
             }
 
             if (labels.Length > 0)
             {
-                AvNode tabs = AvBox.Row("tabs").Height(AvTokens.TabBarHeight).Gaps(1f);
+                AvNode tabs = AvBox.Row("tabs").Height(AvTokens.TabBarHeight).Gaps(AvTokens.Space1);
                 for (int i = 0; i < labels.Length; i++) tabs.Add(AvBox.Cell("t" + i).Grow());
                 shell.Add(tabs);
             }
@@ -128,7 +130,8 @@ namespace NOAvionics.Ui
             }
 
             screen.Body = shell.At("body");
-            screen.Status = AvStyled.StatusStrip(content, shell.At("status"));
+            screen.Status = AvStyled.StatusStrip(content, shell.At("status"), out Image statusRail);
+            screen.StatusRail = statusRail;
             return screen;
         }
 
@@ -201,7 +204,9 @@ namespace NOAvionics.Ui
             contentArea = body;
             if (parent == null || contentHeight <= body.height) return parent;
 
-            Image viewportImage = AvKit.Panel(parent, body, Color.clear);
+            const float scrollbarGutter = 8f;
+            var viewportArea = new Rect(body.x, body.y, Mathf.Max(0f, body.width - scrollbarGutter), body.height);
+            Image viewportImage = AvKit.Panel(parent, viewportArea, Color.clear);
             var viewport = (RectTransform)viewportImage.transform;
             viewportImage.raycastTarget = true;
             viewport.gameObject.AddComponent<RectMask2D>();
@@ -210,7 +215,7 @@ namespace NOAvionics.Ui
             var scrolled = (RectTransform)content.transform;
             scrolled.SetParent(viewport, false);
 
-            contentArea = new Rect(0f, 0f, body.width, contentHeight);
+            contentArea = new Rect(0f, 0f, viewportArea.width, contentHeight);
             AvKit.Place(scrolled, contentArea);
 
             ScrollRect scroll = viewport.gameObject.AddComponent<ScrollRect>();
@@ -220,6 +225,28 @@ namespace NOAvionics.Ui
             scroll.movementType = ScrollRect.MovementType.Clamped;
             scroll.scrollSensitivity = 24f;
             scroll.inertia = false;
+
+            // A visible thumb makes overflow discoverable without stretching the rows or
+            // spending another status line on "scroll for more". Reserve a gutter so the
+            // thumb never covers a trailing value, status word or action button.
+            Image track = AvKit.Panel(parent,
+                new Rect(body.x + body.width - 4f, body.y, 4f, body.height), AvTheme.Hairline);
+            track.gameObject.name = "ScrollTrack";
+            track.raycastTarget = true;
+            Image thumb = AvKit.Panel(track.rectTransform,
+                new Rect(0f, 0f, 4f, body.height), AvTheme.Dim);
+            thumb.gameObject.name = "ScrollThumb";
+            thumb.raycastTarget = true;
+            AvKit.Stretch(thumb.rectTransform);
+            Scrollbar scrollbar = track.gameObject.AddComponent<Scrollbar>();
+            scrollbar.handleRect = thumb.rectTransform;
+            scrollbar.targetGraphic = thumb;
+            scrollbar.direction = Scrollbar.Direction.BottomToTop;
+            scrollbar.value = 1f;
+            AvInput.StripNavigation(scrollbar);
+            scroll.verticalScrollbar = scrollbar;
+            scroll.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHide;
+            scroll.verticalNormalizedPosition = 1f;
             return scrolled;
         }
 
@@ -235,27 +262,30 @@ namespace NOAvionics.Ui
             string hovered = AvButton.HoveredTooltip;
             if (!string.IsNullOrEmpty(hovered))
             {
-                Status.text = "> " + hovered;
-                Status.color = AvTheme.Friendly;
+                SetStatus("HELP", hovered, AvTheme.TextPrimary, AvTheme.RailInfo);
                 return;
             }
 
             if (!string.IsNullOrEmpty(prompt))
             {
-                Status.text = "> " + prompt;
-                Status.color = AvTheme.Friendly;
+                SetStatus("ACTION", prompt, AvTheme.TextPrimary, AvTheme.Warning);
                 return;
             }
 
             if (!string.IsNullOrEmpty(alert))
             {
-                Status.text = "> " + alert;
-                Status.color = AvTheme.Alert;
+                SetStatus("ALERT", alert, AvTheme.Alert, AvTheme.Alert);
                 return;
             }
 
-            Status.text = "> " + (ambient ?? "");
-            Status.color = AvTheme.Dim;
+            SetStatus("STATUS", ambient ?? "", AvTheme.Dim, AvTheme.RailInert);
+        }
+
+        private void SetStatus(string kind, string text, Color textColor, Color railColor)
+        {
+            Status.text = kind + "  ·  " + text;
+            Status.color = textColor;
+            if (StatusRail != null) StatusRail.color = railColor;
         }
 
         /// <summary>
