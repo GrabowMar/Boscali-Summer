@@ -15,7 +15,19 @@ namespace BoscaliSummer.Features.Support.Runtime
         HackBlackout = 12,
         HackGhost = 13,
         HackSpoof = 14,
-        ElintSweep = 15
+        ElintSweep = 15,
+        CapReveal = 16,
+        CapJammer = 17,
+        CapSabotage = 18,
+        SpecSpot = 19,
+        SpecSuppress = 20,
+        HackScan = 21,
+        HackHijack = 22,
+        HackOverload = 23,
+        MtiSweep = 24,
+        SpecSkywatch = 25,
+        SpecEavesdrop = 26,
+        SpecHunt = 27
     }
 
     internal enum SupportResult : byte
@@ -63,8 +75,17 @@ namespace BoscaliSummer.Features.Support.Runtime
         /// <summary>The faction's Cyber Command is compromised; offensive operations are locked.</summary>
         CommandCompromised = 36,
 
+        /// <summary>The faction's intel pool is too low for the ability.</summary>
+        LowIntel = 37,
+
+        /// <summary>No held SPEC OPS post of the ability's kind covers the target.</summary>
+        NoFieldPost = 38,
+
         /// <summary>A console verb refused by the network model: <c>CyberRefused + (byte)CyberDenial</c>.</summary>
-        CyberRefused = 64
+        CyberRefused = 64,
+
+        /// <summary>Field-operation refusal: <c>SpecOpsRefused + SpecOpsDenial</c>.</summary>
+        SpecOpsRefused = 128
     }
 
     /// <summary>

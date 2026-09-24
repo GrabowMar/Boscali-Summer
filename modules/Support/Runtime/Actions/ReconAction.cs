@@ -59,7 +59,7 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
 
         internal static int Reveal(FactionHQ faction, GlobalPosition target, float radius,
             BepInEx.Logging.ManualLogSource logger, RevealFilter filter, bool quiet = false,
-            float maximumSpeed = float.PositiveInfinity)
+            float maximumSpeed = float.PositiveInfinity, float minimumSpeed = 0f)
         {
             Vector3 centre = target.ToLocalPosition();
             List<Unit> units = UnitRegistry.allUnits;
@@ -76,6 +76,7 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
                 if (filter == RevealFilter.Ground && unit is Aircraft) continue;
                 if (filter == RevealFilter.Emitters && !Emitting(unit)) continue;
                 if (unit.speed > maximumSpeed) continue;
+                if (unit.speed < minimumSpeed) continue;
                 Vector3 position = unit.transform.position;
                 if ((position - centre).sqrMagnitude > radiusSquared) continue;
                 attempted++;

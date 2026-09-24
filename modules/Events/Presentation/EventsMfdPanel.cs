@@ -19,13 +19,7 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Features.Events.Presentation
 {
     /// <summary>
-    /// "EVN" — the world-event directorate board. One fact, one place: the top bar carries
-    /// status, tier and the log count; the two metric cells carry the live price factor and
-    /// the ground war; one director line says whether the director is armed; the card carries
-    /// the event in reading order — plate, title, category and scope, countdown, effect,
-    /// plain-words consequence, copy, scripted beats, decision; history follows as a compact
-    /// media feed that fills the body. Nothing is printed twice, no state is signalled by
-    /// colour alone, and no state is ever a blank rectangle.
+    /// "EVN" — active dispatch, response desk, archive and field documentation.
     /// </summary>
     internal sealed partial class EventsMfdPanel : MonoBehaviour, ISceneService
     {
@@ -34,6 +28,7 @@ namespace BoscaliSummer.Features.Events.Presentation
 
         private const int ChipCount = 3;
         private const int TabEvents = 0;
+        private const int TabDesk = 1;
 
         private const float DirectorLineHeight = 18f;
         private const float CardGap = 6f;
@@ -67,6 +62,10 @@ namespace BoscaliSummer.Features.Events.Presentation
         private AvScreen shell;
 
         private ActiveEventCard activeCard;
+        private DecisionBoard decisionBoard;
+        private EventDeskArchive archive;
+        private PlateUi deskPlate;
+        private TMP_Text deskCaseTitle, deskCaseMeta, deskCaseBody, deskCount;
         private readonly List<HistoryCard> historyCards = new List<HistoryCard>(16);
         private RectTransform scrollContent;
         private bool hasViewport;
@@ -75,6 +74,8 @@ namespace BoscaliSummer.Features.Events.Presentation
         private float contentWidth;
         private float viewportHeight;
         private float historyBaseY;
+        private float decisionBaseY;
+        private float baseCardHeight;
         private float lastCardHeight;
         private int lastRows = -1;
 
@@ -108,10 +109,15 @@ namespace BoscaliSummer.Features.Events.Presentation
             screen = null;
             shell = null;
             activeCard = null;
+            decisionBoard = null;
+            archive?.Close();
+            archive = null;
+            deskPlate = null;
+            deskCaseTitle = deskCaseMeta = deskCaseBody = deskCount = null;
             historyCards.Clear();
             scrollContent = null;
             hasViewport = false;
-            contentTop = contentX = contentWidth = viewportHeight = historyBaseY = 0f;
+            contentTop = contentX = contentWidth = viewportHeight = historyBaseY = decisionBaseY = baseCardHeight = 0f;
             lastCardHeight = 0f;
             lastRows = -1;
             spine = null;
@@ -153,6 +159,11 @@ namespace BoscaliSummer.Features.Events.Presentation
 
             bool visible = screen.isActive &&
                 SceneSingleton<DynamicMap>.i?.maximizedMapCanvas?.isActiveAndEnabled == true;
+            if (archive != null && (!archive.IsOpen || !visible || shell.Page != TabDesk))
+            {
+                archive.Close();
+                archive = null;
+            }
             if (!visible) return;
 
             // The countdown breathes between the four-hertz refreshes; nothing else runs.
@@ -252,15 +263,16 @@ namespace BoscaliSummer.Features.Events.Presentation
 
             shell = AvScreen.Build(
                 content, MfdSlots.Events,
-                Array.Empty<string>(),
+                new[] { "DISPATCH", "DESK" },
                 new[]
                 {
                     new[] { "SUPPORT COST", "SIDE" },
-                    new[] { "GROUND CUSTODY", "BASES" },
+                    new[] { "SUPPORT RESET", "TEMPO" },
                 },
                 ChipCount, Width, height, _ => nextRefresh = 0f);
 
             BuildEventsPage(shell.CreatePage(TabEvents, "EventsPage"));
+            BuildDocsPage(shell.CreatePage(TabDesk, "DeskPage"));
 
             MFDScreen result = root.AddComponent<MFDScreen>();
             result.shortName = MfdSlots.Events;
@@ -299,6 +311,7 @@ namespace BoscaliSummer.Features.Events.Presentation
             // grow the page past the body; a short one still fits without paying for a mask.
             float buildHeight = DirectorLineHeight + CardGap +
                                 ActiveEventCard.ScriptedHeight + CardGap +
+                                DecisionBoard.Height + CardGap +
                                 HistoryHeaderHeight + capacity * (HistoryCardHeight + CardGap) + HistoryPad;
 
             Rect body = shell.Body;
@@ -327,7 +340,14 @@ namespace BoscaliSummer.Features.Events.Presentation
             y -= DirectorLineHeight + CardGap;
 
             activeCard = new ActiveEventCard(parent, x, y, width);
+            activeCard.UseExternalDecisionBoard();
+            baseCardHeight = activeCard.Height;
+            lastCardHeight = baseCardHeight;
             y -= activeCard.Height + CardGap;
+
+            decisionBaseY = y;
+            decisionBoard = new DecisionBoard(parent, x, y, width);
+            y -= DecisionBoard.Height + CardGap;
 
             historyBand = AvKit.Panel(parent, new Rect(x, y + 4f, width, HistoryHeaderHeight), Color.clear);
             historyBand.raycastTarget = false;
@@ -349,6 +369,76 @@ namespace BoscaliSummer.Features.Events.Presentation
             LayoutHistory(0);
         }
 
+        private void BuildDocsPage(GameObject page)
+        {
+            Rect body = shell.Body;
+            const float fullHeight = 594f;
+            RectTransform pageRect = (RectTransform)page.transform;
+            RectTransform parent = AvScreen.Scroll(pageRect, body, fullHeight, out body);
+            float x = body.x + AvScreen.SpineInset;
+            float width = body.width - AvScreen.SpineInset;
+            float y = body.y;
+            AvStyled.Spine(parent, new Rect(body.x, body.y, 3f, fullHeight));
+
+            AvStyled.Box(parent, new Rect(x, y, width, 142f), "card");
+            AvKit.Panel(parent, new Rect(x, y, 3f, 142f), AvTheme.RailInfo).raycastTarget = false;
+            AvStyled.Label(parent, new Rect(x + 14f, y - 12f, width - 28f, 13f),
+                "EVENT DIRECTORATE / LOCAL DESK", "section-title-note");
+            AvStyled.Label(parent, new Rect(x + 14f, y - 33f, width - 28f, 26f),
+                "THE FIELD DESK", "page-title");
+            AvStyled.Label(parent, new Rect(x + 14f, y - 65f, width - 28f, 28f),
+                "Case files, aircraft and the life behind the wire.", "row-sub");
+            AvStyled.Button(parent, new Rect(x + 14f, y - 102f, width - 28f, 29f),
+                "OPEN DOCUMENTS  /  FIELD ARCHIVE  ›", "btn", () => OpenArchive(0),
+                AvButtonStyle.Primary).WithTooltip("Open the client-local field archive.");
+            y -= 150f;
+
+            AvStyled.Box(parent, new Rect(x, y, width, 154f), "card");
+            AvKit.Panel(parent, new Rect(x, y, 3f, 154f), AvTheme.RailInfo).raycastTarget = false;
+            AvStyled.Label(parent, new Rect(x + 13f, y - 10f, width - 26f, 14f),
+                "CASE FILE / THEATER WIRE", "section-title");
+            deskPlate = PlateUi.Build(parent, x + 13f, y - 35f, 110f, 62f, 20f);
+            deskPlate.Bind(null, 0, AvTheme.Dim);
+            deskCaseTitle = AvStyled.Label(parent, new Rect(x + 134f, y - 36f, width - 148f, 25f),
+                "AWAITING REPORT", "row-main");
+            deskCaseTitle.enableAutoSizing = true;
+            deskCaseTitle.fontSizeMin = AvTokens.FontSmall;
+            deskCaseMeta = AvStyled.Label(parent, new Rect(x + 134f, y - 65f, width - 148f, 21f),
+                "DIRECTOR MONITORING", "section-title-note");
+            deskCaseBody = AvStyled.Label(parent, new Rect(x + 13f, y - 108f, width - 26f, 38f),
+                "The next report will appear here.", "row-sub");
+            y -= 162f;
+
+            deskCount = AvStyled.Label(parent, new Rect(x + 11f, y, width - 22f, 16f),
+                "FIELD ARCHIVE / LOCAL INDEX", "section-title-note");
+            y -= 26f;
+            string[] labels = { "AIRFRAME REGISTRY", "EVENT DOSSIERS", "WORLD FILES", "FIELD MANUAL" };
+            string[] notes = { "NATIVE AIRCRAFT / MODEL VIEWER", "AUTHORED THEATER SCENARIOS",
+                "LIFE BEHIND THE FRONT", "READ THE SIGNAL / ISSUE ORDERS" };
+            for (int i = 0; i < labels.Length; i++)
+            {
+                int section = i;
+                float rowY = y - i * 63f;
+                AvStyled.Box(parent, new Rect(x, rowY, width, 56f), "card");
+                AvKit.Panel(parent, new Rect(x, rowY, 3f, 56f),
+                    i == 0 ? AvTheme.RailReady : AvTheme.RailInfo).raycastTarget = false;
+                AvStyled.Label(parent, new Rect(x + 14f, rowY - 8f, width - 42f, 18f),
+                    labels[i], "row-main");
+                AvStyled.Label(parent, new Rect(x + 14f, rowY - 31f, width - 42f, 13f),
+                    notes[i], "section-title-note");
+                AvStyled.Label(parent, new Rect(x + width - 28f, rowY - 14f, 18f, 24f),
+                    "›", "row-value");
+                AvKit.HitButton(parent, new Rect(x, rowY, width, 56f), () => OpenArchive(section))
+                    .WithTooltip("Open " + labels[i].ToLowerInvariant() + " in the field archive.");
+            }
+        }
+
+        private void OpenArchive(int section)
+        {
+            if (archive == null) archive = EventDeskArchive.Create();
+            archive.Show(section);
+        }
+
         // ---- Refresh ---------------------------------------------------------------------
 
         private void Refresh()
@@ -361,6 +451,7 @@ namespace BoscaliSummer.Features.Events.Presentation
             float now = MissionTime();
 
             float multiplier = current != null ? events.SupportCostMultiplier : 1f;
+            float cooldown = current != null ? events.LocalSupportCooldownMultiplier : 1f;
             string summary = current != null ? EventSelector.EffectSummary(multiplier) : null;
             bool aimedAtLocal = current != null && (events.LocalTargeted || current.Target == "ALL THEATER");
             bool penalty = current != null && EffectColor(summary, aimedAtLocal) == AvTheme.RailDanger;
@@ -373,8 +464,13 @@ namespace BoscaliSummer.Features.Events.Presentation
             shell.DataBar.State.color = current != null ? TierInk(current.Tier) : AvTheme.Dim;
             shell.DataBar.SetChip(0, current != null ? TierShort(current.Tier) : "STANDBY",
                                   TierChipState(current));
-            shell.DataBar.SetChip(1, current != null ? DirectionLabel(multiplier, aimedAtLocal) : "NO EVENT",
-                                  DirectionState(multiplier, aimedAtLocal, current != null));
+            bool tempoOnly = current != null && aimedAtLocal &&
+                Mathf.Abs(multiplier - 1f) < 0.001f && Mathf.Abs(cooldown - 1f) >= 0.001f;
+            shell.DataBar.SetChip(1,
+                tempoOnly ? cooldown > 1f ? "RESET SLOW" : "RESET FAST" :
+                    current != null ? DirectionLabel(multiplier, aimedAtLocal) : "NO EVENT",
+                tempoOnly ? cooldown > 1f ? "warn" : "live" :
+                    DirectionState(multiplier, aimedAtLocal, current != null));
             bool historyOff = settings.HistoryLength.Value <= 0;
             shell.DataBar.SetChip(2,
                                   historyOff ? "HISTORY OFF" : history.Count + "/" + capacity + " LOGGED",
@@ -390,13 +486,17 @@ namespace BoscaliSummer.Features.Events.Presentation
                 current != null && aimedAtLocal ? Mathf.Clamp01(Mathf.Abs(multiplier - 1f)) : 0f,
                 EffectColor(summary, aimedAtLocal));
 
-            TheaterBalance balance = events.Balance;
-            shell.Metrics[1].Unit.text = balance.Known ? "BASES" : "";
+            shell.Metrics[1].Unit.text = current != null ? "REQUEST CLOCK" : "";
             shell.Metrics[1].Set(
-                balance.Known ? balance.LeaderBases + " : " + balance.LoserBases : "—",
-                CustodyLine(balance),
-                BalanceFraction(balance),
-                balance.Known ? AvTheme.RailInfo : AvTheme.RailInert);
+                current != null ? MultiplierLabel(cooldown) : "—",
+                current == null ? "NO ACTIVE EVENT" :
+                    !aimedAtLocal ? "NO EFFECT ON YOU" :
+                    cooldown > 1.001f ? "LONGER COOLDOWN" :
+                    cooldown < 0.999f ? "SHORTER COOLDOWN" : "NORMAL RESET",
+                current != null && aimedAtLocal ? Mathf.Clamp01(Mathf.Abs(cooldown - 1f)) : 0f,
+                !aimedAtLocal ? AvTheme.RailInert :
+                    cooldown > 1.001f ? AvTheme.RailCaution :
+                    cooldown < 0.999f ? AvTheme.RailReady : AvTheme.RailInert);
 
             string id = current != null ? current.Id : "";
             float started = current != null ? current.StartedAtMissionTime : 0f;
@@ -405,8 +505,8 @@ namespace BoscaliSummer.Features.Events.Presentation
                 boundId = id;
                 boundStart = started;
                 if (current != null)
-                    activeCard.Bind(current, EffectText(summary, aimedAtLocal),
-                        EffectColor(summary, aimedAtLocal), Consequence(current, aimedAtLocal));
+                    activeCard.Bind(current, EffectText(current, summary, aimedAtLocal),
+                        LiveEffectColor(current, summary, aimedAtLocal), Consequence(current, aimedAtLocal));
                 else
                     activeCard.BindPlaceholder(events.Available
                         ? "The theater is quiet. The director is watching for a story worth telling."
@@ -424,7 +524,7 @@ namespace BoscaliSummer.Features.Events.Presentation
                 float span = Mathf.Max(1f, current.EndsAtMissionTime - current.StartedAtMissionTime);
                 float remaining = Mathf.Clamp01((current.EndsAtMissionTime - now) / span);
                 float secondsLeft = current.EndsAtMissionTime - now;
-                activeCard.SetProgress(remaining, EffectColor(summary, aimedAtLocal));
+                activeCard.SetProgress(remaining, LiveEffectColor(current, summary, aimedAtLocal));
                 bool ending = secondsLeft <= EndingSeconds;
                 activeCard.SetClock("ENDS " + Clock(secondsLeft), ending, secondsLeft <= CriticalSeconds);
                 activeCard.SetScript(current, current.StartedAtMissionTime, now, TierRail(current.Tier));
@@ -432,7 +532,15 @@ namespace BoscaliSummer.Features.Events.Presentation
                 // expiring is not a threat.
                 activeCard.SetUrgency(penalty ? Mathf.Clamp01((90f - secondsLeft) / 90f) : 0f);
                 activeCard.TickPulse();
-                RefreshResponse(multiplier, summary, aimedAtLocal);
+                bool wasVisible = decisionBoard != null && decisionBoard.Visible;
+                RefreshResponse(aimedAtLocal);
+                if (!wasVisible) LayoutHistory(history.Count);
+            }
+            else if (decisionBoard != null)
+            {
+                bool wasVisible = decisionBoard.Visible;
+                decisionBoard.SetStandby();
+                if (wasVisible) LayoutHistory(history.Count);
             }
 
             if (history.Count != lastRows) LayoutHistory(history.Count);
@@ -442,7 +550,7 @@ namespace BoscaliSummer.Features.Events.Presentation
                 {
                     ActiveEventView view = history[history.Count - 1 - i];
                     historyCards[i].Bind(view, TierInk(view.Tier), TierRail(view.Tier),
-                        EffectColor(view.EffectSummary, true));
+                        LiveEffectColor(view, view.EffectSummary, true));
                     historyCards[i].SetClock(Duration(now - view.EndsAtMissionTime) + " AGO");
                 }
                 else if (i == 0)
@@ -458,7 +566,36 @@ namespace BoscaliSummer.Features.Events.Presentation
             string ambient = current != null
                 ? "WORLD EVENT: " + current.Title
                 : events.Available ? "No active world event." : "No running mission.";
+            RefreshDesk(current, history, now);
             shell.WriteStatus(events.Signal, MapPicker.Prompt, ambient);
+        }
+
+        private void RefreshDesk(ActiveEventView current, IReadOnlyList<ActiveEventView> history,
+            float now)
+        {
+            if (deskCaseTitle == null) return;
+            ActiveEventView file = current ?? (history.Count > 0 ? history[history.Count - 1] : null);
+            int aircraft = Encyclopedia.i?.aircraft?.Count ?? 0;
+            deskCount.text = "LOCAL INDEX  /  " + aircraft + " AIRFRAMES  ·  " +
+                EventCatalog.All.Length + " EVENTS  ·  " + EventDocs.World.Length + " WORLD FILES";
+            if (file == null)
+            {
+                deskCaseTitle.text = "AWAITING FIRST REPORT";
+                deskCaseMeta.text = "NO CASE FILED THIS MISSION";
+                deskCaseBody.text = "The archive is available while the theater is quiet.";
+                deskPlate.Bind(null, 0, AvTheme.Dim);
+                return;
+            }
+            deskCaseTitle.text = file.Title.ToUpperInvariant();
+            deskCaseMeta.text = current != null ? file.Tier + " / LIVE · " + file.Target
+                : file.Tier + " / LAST FILED · " + file.Target;
+            deskCaseBody.text = current != null
+                ? file.EffectSummary +
+                    (string.IsNullOrEmpty(file.TempoSummary) ? "" : " · " + file.TempoSummary) +
+                    " · ENDS " + Clock(file.EndsAtMissionTime - now)
+                : "This dispatch has closed. Its full dossier remains in the archive.";
+            deskPlate.Bind(EventArtCache.Get(file.IconKey, file.IsSuper ? "tier_super" : "tier_medium"),
+                CategoryOf(file.Category), TierInk(file.Tier));
         }
 
         /// <summary>
@@ -471,8 +608,11 @@ namespace BoscaliSummer.Features.Events.Presentation
             if (historyCards.Count == 0) return;
             lastRows = rows;
 
-            float shift = activeCard != null ? activeCard.Height - ActiveEventCard.PlainHeight : 0f;
-            float top = historyBaseY - shift;
+            float shift = activeCard != null ? activeCard.Height - baseCardHeight : 0f;
+            float top = historyBaseY - shift +
+                (decisionBoard != null && !decisionBoard.Visible ? DecisionBoard.Height + CardGap : 0f);
+
+            decisionBoard?.Place(contentX, decisionBaseY - shift, contentWidth);
 
             if (historyBand != null) AvKit.Place(historyBand.rectTransform, new Rect(contentX, top + 26f, contentWidth, HistoryHeaderHeight));
             if (historyTick != null) AvKit.Place(historyTick.rectTransform, new Rect(contentX, top + 21f, 3f, 14f));
@@ -524,69 +664,54 @@ namespace BoscaliSummer.Features.Events.Presentation
 
             bool armed = balance.Contested && balance.Deficit >= EventDirector.AidDeficitThreshold;
             directorLine.text = armed
-                ? "DIRECTOR ARMED  ·  TRAILING SIDE ELIGIBLE  ·  " + supers
-                : "DIRECTOR MONITORING  ·  " + supers;
+                ? "DIRECTOR ARMED  ·  BASES " + balance.LeaderBases + ":" + balance.LoserBases + "  ·  " + supers
+                : "DIRECTOR MONITORING  ·  BASES " + balance.LeaderBases + ":" + balance.LoserBases + "  ·  " + supers;
             directorLine.color = armed ? AvTheme.RailCaution : AvTheme.Dim;
             directorRail.color = armed ? AvTheme.RailCaution : AvTheme.RailInert;
         }
 
-        /// <summary>The one decision: mitigate a penalty, or deepen a discount. Pay to own it.</summary>
-        private void RefreshResponse(float multiplier, string summary, bool aimedAtLocal)
+        private void RefreshResponse(bool aimedAtLocal)
         {
-            EventResponseKind response = events.LocalResponse;
-            if (response != EventResponseKind.None)
-            {
-                activeCard.SetResponse(
-                    response == EventResponseKind.Contain ? "PENALTY CONTAINED" : "DISCOUNT DEEPENED",
-                    "RESPONSE ACTIVE · " + summary,
-                    ready: true, enabled: false,
-                    tooltip: "Your side's answer to this event is paid for and stays in force for the rest of its run.",
-                    onClick: null);
-                return;
-            }
-            if (!events.CanRespond || !aimedAtLocal)
-            {
-                activeCard.HideResponse();
-                return;
-            }
-
-            int cost = events.ResponseCost;
-            float available = LocalAllocation();
-            bool affordable = available + 0.001f >= cost;
-            EventResponseKind kind = multiplier > 1f ? EventResponseKind.Contain : EventResponseKind.Leverage;
-            string label = (kind == EventResponseKind.Contain ? "CONTAIN" : "LEVERAGE") + " · " + cost + " ALLOC";
-            string note = affordable
-                ? kind == EventResponseKind.Contain ? "HALVES THE PENALTY" : "DEEPENS THE DISCOUNT"
-                : "INSUFFICIENT ALLOCATION";
-            string tooltip = affordable
-                ? kind == EventResponseKind.Contain
-                    ? "Spend " + cost + " allocation to halve this event's support-cost penalty for the rest of its run."
-                    : "Spend " + cost + " allocation to deepen this event's support-cost discount for the rest of its run."
-                : "This response costs " + cost + " allocation and you have " +
-                  Mathf.FloorToInt(available) + ". Allocation arrives from events aimed at your side.";
-            activeCard.SetResponse(label, note, ready: affordable, enabled: affordable,
-                tooltip: tooltip, onClick: events.RequestResponse);
+            activeCard.HideResponse();
+            decisionBoard?.Refresh(events, aimedAtLocal);
         }
 
         /// <summary>The card's effect line, from this player's point of view.</summary>
-        private static string EffectText(string summary, bool aimedAtLocal)
+        private static string EffectText(ActiveEventView view, string summary, bool aimedAtLocal)
         {
             if (!aimedAtLocal) return "NO EFFECT ON YOUR SIDE";
-            return IsNeutral(summary) ? "NO PRICE EFFECT" : summary;
+            return IsNeutral(summary)
+                ? string.IsNullOrEmpty(view?.TempoSummary) ? "NO PRICE EFFECT" : view.TempoSummary
+                : summary;
+        }
+
+        private static Color LiveEffectColor(ActiveEventView view, string summary, bool aimedAtLocal)
+        {
+            if (!aimedAtLocal || view == null || string.IsNullOrEmpty(view.TempoSummary) ||
+                !IsNeutral(summary)) return EffectColor(summary, aimedAtLocal);
+            return view.TempoSummary.Contains("+") ? AvTheme.RailCaution : AvTheme.RailReady;
         }
 
         /// <summary>Plain words for what the live effect means to the player reading it.</summary>
         private static string Consequence(ActiveEventView view, bool aimedAtLocal)
         {
             if (view == null) return "";
-            if (IsNeutral(view.EffectSummary))
-                return "Texture only — requisition prices are unchanged while it runs.";
+            if (!view.TargetResolved)
+                return "Target faction unavailable — scripted orders cancelled.";
             if (!aimedAtLocal)
                 return "Aimed at the " + view.Target.ToLowerInvariant() +
-                       " — your requisition prices are unchanged.";
+                       " — your support network is unchanged.";
+            if (IsNeutral(view.EffectSummary))
+                return string.IsNullOrEmpty(view.TempoSummary)
+                    ? "Prices and readiness are unchanged."
+                    : view.TempoSummary.Contains("+")
+                        ? "Support requests take longer to reset; requisition prices are unchanged."
+                        : "Support requests reset sooner; requisition prices are unchanged.";
             return view.EffectSummary[0] == '+'
-                ? "Support requisitions cost more until it ends."
-                : "Support requisitions cost less until it ends.";
+                ? "Requisitions cost more until it ends." +
+                    (string.IsNullOrEmpty(view.TempoSummary) ? "" : " " + view.TempoSummary + ".")
+                : "Requisitions cost less until it ends." +
+                    (string.IsNullOrEmpty(view.TempoSummary) ? "" : " " + view.TempoSummary + ".");
         }
 
         private static float MissionTime() =>

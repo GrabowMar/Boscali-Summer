@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using BoscaliSummer.Features.Progression.Configuration;
+using BoscaliSummer.Features.Progression.Domain;
 using BoscaliSummer.Features.Progression.Networking;
 using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Lifecycle;
@@ -79,6 +80,22 @@ namespace BoscaliSummer.Features.Progression.Runtime
             LastResult = "No host connection.";
         }
 
+        internal void RequestTune(Aircraft aircraft, int index) =>
+            network?.RequestPlaneTune(aircraft, index);
+
+        internal byte TuneFor(Aircraft aircraft) => network?.TuneFor(aircraft) ?? PlaneEngineMap.Stock;
+
+        internal string TuneFeedback { get; private set; }
+        internal uint TuneFeedbackAircraft { get; private set; }
+        internal float TuneFeedbackUntil { get; private set; }
+        internal void ReportTune(bool accepted, uint aircraftId)
+        {
+            TuneFeedback = accepted ? "ENGINE MAP SET FOR THIS AIRCRAFT" :
+                "HOST REFUSED · LAND TO CHANGE ENGINE MAP";
+            TuneFeedbackAircraft = aircraftId;
+            TuneFeedbackUntil = Time.unscaledTime + 4f;
+        }
+
         public void ResetForScene()
         {
             states.Clear();
@@ -93,6 +110,9 @@ namespace BoscaliSummer.Features.Progression.Runtime
             unlockPending = false;
             unlockPendingSince = 0f;
             LastResult = "Fly to earn a qualification grade.";
+            TuneFeedback = null;
+            TuneFeedbackAircraft = 0;
+            TuneFeedbackUntil = 0f;
         }
 
         private void Update()
@@ -185,7 +205,9 @@ namespace BoscaliSummer.Features.Progression.Runtime
                 Result = result,
                 Generation = GetGeneration(id),
                 MaximumPoints = (byte)Mathf.Min(20, settings.MaximumPoints.Value + squad.GetBonusPoints(id)),
-                ScorePerPoint = settings.ScorePerPoint.Value
+                ScorePerPoint = settings.ScorePerPoint.Value,
+                PlaneId = player?.Aircraft != null ? player.Aircraft.persistentID.Id : 0,
+                EngineMap = network.TuneFor(player?.Aircraft)
             };
         }
 
@@ -208,6 +230,7 @@ namespace BoscaliSummer.Features.Progression.Runtime
             localScore = snapshot.Score;
             localEarnedPoints = snapshot.EarnedPoints;
             localMaximumPoints = snapshot.MaximumPoints; localScorePerPoint = snapshot.ScorePerPoint;
+            network.AcceptSnapshotTune(snapshot.PlaneId, snapshot.EngineMap);
             // Effect lookups read the shared map, so the local entry has to track every
             // snapshot. Keeping only the first one left a client applying a stale perk mask
             // to its own fuel, rewards and support authorisations for the rest of the mission.

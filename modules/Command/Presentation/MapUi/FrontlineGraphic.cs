@@ -19,13 +19,14 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private const int MaximumTraces = FrontlineTraceLimits.MaximumTraces;
         private const int MaximumSamples = 1200;
         private const int MaximumVertices = 16000;
-        private const float StationStep = 10f;
+        private const float StationStep = 7f;
         private const float HalfWidth = 1.6f;
 
-        private static readonly Color32 Under = new Color32(8, 10, 14, 140);
+        private static readonly Color32 OuterUnder = new Color32(6, 8, 12, 175);
+        private static readonly Color32 InnerGlow = new Color32(185, 215, 240, 75);
 
         /// <summary>The front's own ink; the map legend swatch reads it from here.</summary>
-        internal static readonly Color32 Ink = new Color32(236, 241, 246, 230);
+        internal static readonly Color32 Ink = new Color32(240, 245, 252, 235);
 
         private readonly FrontlineTracePoint[] points = new FrontlineTracePoint[FrontlineTraceLimits.MaximumPoints];
         private readonly int[] lengths = new int[MaximumTraces];
@@ -136,11 +137,11 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
         /// <summary>
         /// The contour is a chain of cell-edge crossings, so its raw shape is a staircase with
-        /// cell-sized treads. Two weighted passes turn it into the front line a reader expects.
+        /// cell-sized treads. Four weighted passes turn it into a fluid tactical vector curve.
         /// </summary>
         private void Smooth(int start, int end)
         {
-            for (int pass = 0; pass < 2 && end - start > 2; pass++)
+            for (int pass = 0; pass < 4 && end - start > 2; pass++)
             {
                 Vector2 previous = stations[start];
                 for (int i = start + 1; i < end - 1; i++)
@@ -190,8 +191,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         }
 
         /// <summary>
-        /// Dark under-stroke, then the plain core: the front stays legible over terrain, over
-        /// the forward-band tint and over the trench trace beneath it.
+        /// Outer dark halo, soft tactical glow, then the crisp core: the front stays legible
+        /// over terrain, over the forward-band tint and over the trench trace beneath it.
         /// </summary>
         private static void AddStroke(VertexHelper vh, Vector2 a, Vector2 b, float toLocal)
         {
@@ -200,7 +201,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             if (length < 0.05f) return;
 
             Vector2 side = new Vector2(-delta.y, delta.x) / length * HalfWidth;
-            AddQuad(vh, a, b, side * 1.9f, toLocal, Under);
+            AddQuad(vh, a, b, side * 2.5f, toLocal, OuterUnder);
+            AddQuad(vh, a, b, side * 1.5f, toLocal, InnerGlow);
             AddQuad(vh, a, b, side, toLocal, Ink);
         }
 

@@ -72,7 +72,6 @@ namespace BoscaliSummer.Tests.Features.Support
 
         public static void Run()
         {
-            InfoNetworkTests.Run();
             OpsDomainTests.Run();
             CyberNetworkTests.Run();
             OrbitalTests.Run();
@@ -90,6 +89,8 @@ namespace BoscaliSummer.Tests.Features.Support
                 "rod blast must not damage outside the displayed radius");
             string emp = SupportEffectPolicy.EmpName("BoscaliSummer:Support:Emp:42", 37500.5f);
             TestAssert.That(SupportEffectPolicy.EmpRadius(emp) == 37500.5f, "EMP radius must survive native name replication");
+            TestAssert.That(SupportEffectPolicy.EmpRadius(SupportEffectPolicy.EmpName("Emp", 90000f)) == 90000f,
+                "the fully upgraded EMP radius must survive native name replication");
             TestAssert.That(SupportEffectPolicy.EmpRadius("bad:r=NaN") == 12000f &&
                 SupportEffectPolicy.EmpRadius("bad:r=Infinity") == 12000f &&
                 SupportEffectPolicy.EmpRadius("bad:r=999999") == 12000f, "invalid EMP metadata must use bounded fallback");

@@ -1,51 +1,36 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace BoscaliSummer.Garrisons
 {
     /// <summary>
-    /// Lightweight server-side marker for procedural MapBuilding shells, which do not
-    /// expose NetworkHQ like authored Building units do.
+    /// Server-side occupancy for procedural MapBuilding shells, which do not expose
+    /// NetworkHQ like authored Building units do.
     /// </summary>
-    internal sealed class GarrisonOccupancy : MonoBehaviour
+    internal static class GarrisonOccupancy
     {
-        public FactionHQ Owner;
-
-        private static readonly System.Collections.Generic.HashSet<GameObject> occupiedShells =
-            new System.Collections.Generic.HashSet<GameObject>();
+        // A plain map, not a marker component: Destroy() is deferred to the end of the frame,
+        // so a zone cleared and re-garrisoned in one frame lost its new occupant when the old
+        // marker finally died.
+        private static readonly Dictionary<GameObject, FactionHQ> owners = new Dictionary<GameObject, FactionHQ>();
 
         public static void Set(GameObject shell, FactionHQ owner)
         {
             if (shell == null) return;
-            GarrisonOccupancy marker = shell.GetComponent<GarrisonOccupancy>();
-            if (marker == null) marker = shell.AddComponent<GarrisonOccupancy>();
-            marker.Owner = owner;
-            if (owner != null)
-                occupiedShells.Add(shell);
-            else
-                occupiedShells.Remove(shell);
+            if (owner != null) owners[shell] = owner;
+            else owners.Remove(shell);
         }
 
-        public static bool IsOccupied(GameObject shell)
-        {
-            return shell != null && occupiedShells.Contains(shell);
-        }
+        public static bool IsOccupied(GameObject shell) => shell != null && owners.ContainsKey(shell);
 
         public static void Clear(GameObject shell, FactionHQ owner)
         {
-            if (shell == null) return;
-            GarrisonOccupancy marker = shell.GetComponent<GarrisonOccupancy>();
-            if (marker != null && (owner == null || marker.Owner == owner))
-            {
-                occupiedShells.Remove(shell);
-                Object.Destroy(marker);
-            }
+            // Reference check, not Unity's ==: a shell destroyed with its building must still leave the map.
+            if (ReferenceEquals(shell, null)) return;
+            if (owners.TryGetValue(shell, out FactionHQ current) && (owner == null || current == owner))
+                owners.Remove(shell);
         }
 
-        private void OnDestroy() => occupiedShells.Remove(gameObject);
-
-        public static void Reset()
-        {
-            occupiedShells.Clear();
-        }
+        public static void Reset() => owners.Clear();
     }
 }

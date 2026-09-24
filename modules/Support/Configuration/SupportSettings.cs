@@ -9,11 +9,14 @@ namespace BoscaliSummer.Features.Support.Configuration
         public ConfigEntry<bool> FortifyEnabled { get; }
         public ConfigEntry<bool> ArtilleryEnabled { get; }
         public ConfigEntry<bool> EmpEnabled { get; }
+        public ConfigEntry<bool> MtiEnabled { get; }
         public ConfigEntry<bool> ElintEnabled { get; }
         public ConfigEntry<bool> FlareBarrageEnabled { get; }
         public ConfigEntry<bool> CyberEnabled { get; }
         public ConfigEntry<bool> EwEnabled { get; }
+        public ConfigEntry<bool> SpecOpsEnabled { get; }
         public ConfigEntry<bool> ShowOnTacticalMap { get; }
+        public ConfigEntry<bool> ReduceMotion { get; }
 
         public ConfigEntry<float> PlatformCostScale { get; }
         public ConfigEntry<float> PlatformJettisonRefund { get; }
@@ -23,6 +26,7 @@ namespace BoscaliSummer.Features.Support.Configuration
         public ConfigEntry<float> OrbitGapScale { get; }
         public ConfigEntry<float> SarSceneRadius { get; }
         public ConfigEntry<float> ElintCost { get; }
+        public ConfigEntry<float> MtiCost { get; }
         public ConfigEntry<float> ElintRadius { get; }
 
         public ConfigEntry<float> CostMultiplier { get; }
@@ -39,11 +43,10 @@ namespace BoscaliSummer.Features.Support.Configuration
         public ConfigEntry<float> MaximumRange { get; }
         public ConfigEntry<float> RequestCooldown { get; }
 
-        public ConfigEntry<float> CyberSiteCostScale { get; }
-        public ConfigEntry<float> CyberScrapRefund { get; }
-        public ConfigEntry<int> CyberSiteLimit { get; }
+        public ConfigEntry<float> CyberUpgradeCostScale { get; }
         public ConfigEntry<float> CyberCampaignIntensity { get; }
-        public ConfigEntry<float> EwProximityRadius { get; }
+        public ConfigEntry<float> CyberReach { get; }
+        public ConfigEntry<float> SpecOpsCostScale { get; }
 
         public ConfigEntry<string> ArtilleryDefinitionKey { get; }
 
@@ -73,6 +76,9 @@ namespace BoscaliSummer.Features.Support.Configuration
             ElintEnabled = config.Bind("Support", "ElintSweep", true,
                 "ELINT sweep: an orbital station with a SIGINT array, overhead, locates enemy ground and ship " +
                 "radars that are emitting near the mark. Spawns nothing.");
+            MtiEnabled = config.Bind("Support", "MtiSweep", true,
+                "MTI sweep: an orbital station with a spy imager, overhead, tracks moving enemy ground " +
+                "contacts near the mark. Shares the radar scan tasking. Spawns nothing.");
             FlareBarrageEnabled = config.Bind("Support", "FlareBarrage", true,
                 "Flare barrage: launches an airburst countermeasure missile that disperses a cluster of " +
                 "intense pyrotechnic flares, seducing and misguiding all IR-seeking missiles in the area.");
@@ -84,9 +90,16 @@ namespace BoscaliSummer.Features.Support.Configuration
                 "(Cyber Command and gateways on owned airbases), field sites (early-warning radar, jammer, SIGINT, " +
                 "relay), the adversary campaign against it and the console. Emitting jammers back radar blackout, " +
                 "ghost shield and spoof contacts. Host-authoritative.");
+            SpecOpsEnabled = config.Bind("Support", "SpecialOperations", true,
+                "Enable OPS SPEC OPS: the detachment's four teams, missions to real map objectives (recon, " +
+                "air-defence sabotage, seizing buildings) and the SPOT and SUPPRESS abilities their posts grant. " +
+                "Host-authoritative.");
             ShowOnTacticalMap = config.Bind("Support", "ShowOnTacticalMap", true,
                 "Show ability range circles, tactical vector icons, orbital station ground tracks and " +
                 "active strike waypoints on the tactical theater map.");
+            ReduceMotion = config.Bind("Support", "ReduceMotion", false,
+                "Client-local. OPS windows and rooms open on their final frame, with no motion. " +
+                "Does not change host rules, prices or what a peer sees.");
 
             PlatformCostScale = config.Bind("Support", "PlatformCostScale", 1f,
                 new ConfigDescription(
@@ -100,7 +113,7 @@ namespace BoscaliSummer.Features.Support.Configuration
                     new AcceptableValueRange<float>(0f, 1f)));
             PlatformInsertionSeconds = config.Bind("Support", "PlatformInsertionSeconds", 45f,
                 new ConfigDescription(
-                    "Seconds from core liftoff to orbit insertion; the pass cycle begins at insertion. " +
+                    "Seconds from core liftoff until the platform holds its fixed theatre position. " +
                     "Host-authoritative.",
                     new AcceptableValueRange<float>(10f, 600f)));
             PlatformDockingSeconds = config.Bind("Support", "PlatformDockingSeconds", 20f,
@@ -112,8 +125,7 @@ namespace BoscaliSummer.Features.Support.Configuration
                 "deflect it, others go offline for 45 s. Host-authoritative.");
             OrbitGapScale = config.Bind("Support", "OrbitGapScale", 1f,
                 new ConfigDescription(
-                    "Scales the simulated out-of-theatre arc between station passes (45 s LOW, 60 s MID, 90 s HIGH " +
-                    "at 1.0). Passes themselves always fly at real orbital speed. Host-authoritative.",
+                    "Legacy compatibility setting. Fixed-position stations no longer use pass gaps; this value has no gameplay effect.",
                     new AcceptableValueRange<float>(0.25f, 4f)));
             SarSceneRadius = config.Bind("Support", "SarSceneRadiusMeters", 1000f,
                 new ConfigDescription(
@@ -129,6 +141,10 @@ namespace BoscaliSummer.Features.Support.Configuration
                     "Radius around the mark searched for emitting enemy radars at MID orbit (scaled like the " +
                     "radar scan).",
                     new AcceptableValueRange<float>(1000f, 40000f)));
+            MtiCost = config.Bind("Support", "MtiSweepCost", 500f,
+                new ConfigDescription(
+                    "Allocation charged for one MTI sweep, before CostMultiplier and the Logistics Officer perk.",
+                    new AcceptableValueRange<float>(0f, 20000f)));
 
             CostMultiplier = config.Bind("Support", "CostMultiplier", 1f,
                 new ConfigDescription(
@@ -192,32 +208,28 @@ namespace BoscaliSummer.Features.Support.Configuration
                     "The OPS page counts it down on the request button.",
                     new AcceptableValueRange<float>(5f, 600f)));
 
-            CyberSiteCostScale = config.Bind("Support", "CyberSiteCostScale", 1f,
+            CyberUpgradeCostScale = config.Bind("Support", "CyberUpgradeCostScale", 1f,
                 new ConfigDescription(
-                    "Scales the price of every CYBER field site (radar 700, jammer 800, SIGINT 600, relay 350), " +
-                    "before CostMultiplier. Airbase infrastructure is free. Host-authoritative.",
+                    "Scales the price of every CYBER network upgrade (radius 800/1300/1900, reach 700/1200/1800, " +
+                    "yield 900/1400/2000, trace 1000/1500/2200), before CostMultiplier. Host-authoritative.",
                     new AcceptableValueRange<float>(0f, 10f)));
-            CyberScrapRefund = config.Bind("Support", "CyberScrapRefund", 0.5f,
-                new ConfigDescription(
-                    "Fraction of what was paid refunded when a CYBER site is scrapped. A destroyed site refunds " +
-                    "nothing. Host-authoritative.",
-                    new AcceptableValueRange<float>(0f, 1f)));
-            CyberSiteLimit = config.Bind("Support", "CyberSiteLimit", 8,
-                new ConfigDescription(
-                    "Most CYBER field sites one faction may deploy at once (each is a real vehicle from a depot). " +
-                    "Airbase infrastructure never counts. Host-authoritative.",
-                    new AcceptableValueRange<int>(1, 10)));
-            CyberCampaignIntensity = config.Bind("Support", "CyberCampaignIntensity", 1f,
+            CyberCampaignIntensity = config.Bind("Support", "CyberCampaignIntensity", 0.75f,
                 new ConfigDescription(
                     "How hard the simulated adversary works against each faction's CYBER network: scales heat " +
                     "build-up and how often probes, intrusions and jamming raids arrive. 0 switches the campaign " +
                     "off; enemy players' operations are still heard. Host-authoritative.",
                     new AcceptableValueRange<float>(0f, 4f)));
-            EwProximityRadius = config.Bind("Support", "EwProximityRadiusMeters", 15000f,
+            CyberReach = config.Bind("Support", "CyberReachMeters", 30000f,
                 new ConfigDescription(
-                    "How close one of the faction's working, emitting CYBER jammers (NOISE or DECEPTION) must be to " +
-                    "an operation's target for Radar Blackout, Ghost Shield or Spoof Contacts to be authorised.",
-                    new AcceptableValueRange<float>(1000f, 60000f)));
+                    "Base network reach: how far from one of the faction's online nodes a location may be for a " +
+                    "breach to be authorised. Upgrades raise it by 25% a level. Host-authoritative.",
+                    new AcceptableValueRange<float>(2000f, 120000f)));
+
+            SpecOpsCostScale = config.Bind("Support", "SpecOpsCostScale", 1f,
+                new ConfigDescription(
+                    "Scales every SPEC OPS price (raise a team 1000; recon 400, sabotage 700, seize 900; SPOT 250, " +
+                    "SUPPRESS 500), before CostMultiplier. Host-authoritative.",
+                    new AcceptableValueRange<float>(0f, 10f)));
 
             ArtilleryDefinitionKey = config.Bind("Support", "FireMissionDefinitionKey", string.Empty,
                 "Exact jsonKey of the missile used by Rod from God and EMP shock. Empty auto-picks " +

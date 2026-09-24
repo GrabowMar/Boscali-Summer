@@ -43,6 +43,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             string code = Sanitise(label, MaxCodeLength);
             switch (code)
             {
+                case "FAC": return new MfdRailEntry(code, "FACTIONS", "faction");
                 case "BDF": return new MfdRailEntry(code, "BOSCALI HQ", "faction");
                 case "PALA": return new MfdRailEntry(code, "PALA HQ", "faction");
                 case "MAP": return new MfdRailEntry(code, "TACTICAL", "map");
@@ -53,22 +54,23 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 case "WMC": return new MfdRailEntry(code, "WING CMD", "air");
                 case "OPS": return new MfdRailEntry(code, "SUPPORT", "support");
                 case "STR": return new MfdRailEntry(code, "THEATER", "theater");
-                case "SQD": return new MfdRailEntry(code, "SQUAD", "person");
+                case "SQD": return new MfdRailEntry(code, "PILOT", "person");
+                case "PILOT": return new MfdRailEntry(code, "PERSONNEL", "person");
                 case "RAD": return new MfdRailEntry(code, "RADIO", "radio");
                 case "SET": return new MfdRailEntry(code, "SETTINGS", "settings");
                 case "EVN": return new MfdRailEntry(code, "EVENTS", "pulse");
                 case "COM": return new MfdRailEntry(code, "COMMS", "comms");
+                case "ENV": return new MfdRailEntry(code, "WEATHER", "weather");
                 default: return new MfdRailEntry(code, null, null);
             }
         }
 
         /// <summary>
         /// Codes that lead the rail, in the order they lead it. Every other button keeps
-        /// the game's own order behind them. BDF and PALA are the two faction readouts a
-        /// player compares, so they sit together instead of at opposite ends of a rail
-        /// adopted column by column.
+        /// the game's own order behind them. FAC is the merged faction readout; the
+        /// native codes remain recognised while the game is setting up its screens.
         /// </summary>
-        private static readonly string[] LeadCodes = { "BDF", "PALA" };
+        private static readonly string[] LeadCodes = { "FAC", "BDF", "PALA" };
 
         /// <summary>
         /// Rank in the rail's display order: the lead codes first, everything else after.

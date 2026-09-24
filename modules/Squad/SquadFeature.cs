@@ -20,18 +20,15 @@ namespace BoscaliSummer.Features.Squad
             context.AddService<ISquadView>(manager);
             context.Logger.LogInfo("[Squad] Wing Command API: " + (WingLink.SquadAvailable ? "ready" : WingLink.SquadUnavailableReason));
 
+            // Whether a dead pilot stays dead, and whether aces come looking. What it takes
+            // to provoke a hunt and how long the quiet after one lasts are balance, and stay
+            // in the config file.
             context.AddHostSettings(new HostSettingsTable("SQUAD AND ACES")
                 .Choice(1, context.Settings.Squad.PilotLives, "PILOT CAREER",
                     "Respawning keeps the generated pilot and perks; One Life retires a confirmed dead pilot. Ejection alone is not death.")
                 .Toggle(2, context.Settings.Squad.EnemyAceHunts, "ACE HUNTS",
                     "Enemy aces lead escalating wings that hunt a player after hostile damage.",
-                    () => WingLink.SquadAvailable ? null : WingLink.SquadUnavailableReason)
-                .Number(3, context.Settings.Squad.DamageThreshold, "HUNT THRESHOLD",
-                    "Initial hostile part damage needed for an ace hunt, after native armor. Threshold rises 35% per defeated ace.",
-                    5f, v => v.ToString("0"))
-                .Number(4, context.Settings.Squad.HuntCooldown, "HUNT COOLDOWN",
-                    "Quiet period after a hunt ends. Fresh hostile damage is required afterward.",
-                    10f, v => v.ToString("0") + " s"));
+                    () => WingLink.SquadAvailable ? null : WingLink.SquadUnavailableReason));
         }
     }
 }

@@ -31,5 +31,28 @@ namespace BoscaliSummer.Garrisons
             return 1;
         }
 
+        /// <summary>Slowest canopy sink rate; the first jumper out hangs longest.</summary>
+        public const float ParachuteDescentRate = 5.2f;
+        /// <summary>Combined winch-out and slide rate of a fast-rope insertion.</summary>
+        public const float FastRopeDescentRate = 5f;
+        /// <summary>Hard ceiling for any drop: about 3 km of canopy at the slowest sink rate.</summary>
+        public const float MaxParadropSeconds = 600f;
+
+        /// <summary>Seconds to come down <paramref name="height"/> metres; bounded and never NaN.</summary>
+        public static float DescentSeconds(float height, float descentRate)
+        {
+            if (!(height > 0f)) return 0f;
+            if (!(descentRate > 0f)) return MaxParadropSeconds;
+            return Math.Min(MaxParadropSeconds, height / descentRate);
+        }
+
+        /// <summary>
+        /// Lifetime of a paradrop visual: the slowest descent plus the stick's exit stagger and
+        /// landing hold, never shorter than a low-level drop and never past the ceiling.
+        /// </summary>
+        public static float ParadropOperationSeconds(float dropHeight, float descentRate)
+        {
+            return Math.Min(MaxParadropSeconds, Math.Max(40f, DescentSeconds(dropHeight, descentRate) + 25f));
+        }
     }
 }

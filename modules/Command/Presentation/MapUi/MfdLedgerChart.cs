@@ -20,11 +20,11 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         public MfdLedgerChart(RectTransform parent, float y, float panelWidth, float availableHeight)
         {
             float x = AvTokens.Space3;
-            width = panelWidth - x - 8f;
+            width = panelWidth - 2f * x;
             rowPitch = Mathf.Clamp((availableHeight - 34f) / 4f, 28f, 64f);
             primaryHeight = rowPitch > 40f ? 12f : 5f;
             secondaryHeight = rowPitch > 40f ? 8f : 3f;
-            legend = AvStyled.Label(parent, new Rect(x, y, panelWidth-x, 14f), "", "row-sub");
+            legend = AvStyled.Label(parent, new Rect(x, y, width, 14f), "", "row-sub");
             y -= 20f;
             string[] names = { "BUILDINGS", "VEHICLES", "SHIPS", "AIRCRAFT" };
             for (int i = 0; i < 4; i++)
@@ -32,12 +32,18 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 float top = y-i*rowPitch;
                 AvStyled.Label(parent, new Rect(x, top, width * .4f, 16f), names[i], "row-main");
                 AvKit.Rule(parent, new Rect(x, top-16f, width, primaryHeight+secondaryHeight+2f), AvTheme.SurfaceRaised);
+                for (int tick = 1; tick < 4; tick++)
+                    AvKit.Rule(parent, new Rect(x + width * tick / 4f, top - 16f,
+                        1f, primaryHeight + secondaryHeight + 2f),
+                        AvTheme.Hairline.WithAlpha(0.55f));
                 primary[i] = AvKit.Rule(parent, new Rect(x, top-16f, 0f, primaryHeight), AvTheme.Accent);
                 secondary[i] = AvKit.Rule(parent, new Rect(x, top-18f-primaryHeight, 0f, secondaryHeight), AvTheme.Warning);
+                AvKit.Rule(parent, new Rect(x, top - 16f, 2f,
+                    primaryHeight + secondaryHeight + 2f), AvTheme.RailInfo);
                 values[i] = AvStyled.Label(parent, new Rect(x+width*.4f, top, width*.6f, 16f), "", "row-main",
                     align: TextAlignmentOptions.MidlineRight);
             }
-            scale = AvStyled.Label(parent, new Rect(x, y-4f*rowPitch, panelWidth-x, 14f), "", "row-sub");
+            scale = AvStyled.Label(parent, new Rect(x, y-4f*rowPitch, width, 14f), "", "row-sub");
         }
 
         public void Set(float[] first, float[] second, string firstName, string secondName, string unit,

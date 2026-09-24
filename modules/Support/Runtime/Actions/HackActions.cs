@@ -1,37 +1,34 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using BoscaliSummer.Features.Support.Domain;
 using BoscaliSummer.Features.Support.Domain.Cyber;
+using BoscaliSummer.Runtime;
 using NuclearOption.Networking;
 using UnityEngine;
 
 namespace BoscaliSummer.Features.Support.Runtime.Actions
 {
     /// <summary>
-    /// One cyber operation, driven by the faction's <see cref="InfoNetwork"/> doctrine and its
-    /// CYBER network rather than a career perk. The effect families share a file because they
-    /// differ only in what they touch: native tracking reveals, native jamming, or the
-    /// track-deception layer. A foothold from a completed trace makes every operation cheaper;
-    /// every accepted operation is reported so enemy SIGINT can hear it.
+    /// One map ability, carried by a hacked location of the right stage whose radius covers the
+    /// target (or by a foothold, which is a backdoor). Intel is checked and spent by the manager;
+    /// this class only re-checks coverage and touches the game. The effect families share a file
+    /// because they differ only in what they touch: native reveals, native jamming, the
+    /// track-deception layer, or seized ground vehicles.
     /// </summary>
     internal sealed class HackAction : ISupportAction
     {
         private const float TrackInterval = 1f;
+        private const float HijackInterval = 0.5f;
+        private const float HijackStrength = 800f;
+        private const int HijackMaximum = 8;
+        private const int OverloadMaximum = 4;
         public const float FootholdDiscount = 0.75f;
 
         private readonly HackKind kind;
 
         public HackAction(HackKind kind) => this.kind = kind;
 
-        public float BaseCost(in SupportContext context)
-        {
-            InfoNetwork info = context.Info;
-            float scale = info == null ? 1f : info.Powers.CostScale;
-            CyberNetwork cyber = context.Cyber;
-            if (cyber != null && cyber.AnyFoothold(context.Host.OrbitNow)) scale *= FootholdDiscount;
-            return CyberCatalog.BaseCost(kind) * context.Settings.CostMultiplier.Value * scale;
-        }
+        public float BaseCost(in SupportContext context) => 0f;
 
         public SupportResult Execute(in SupportContext context)
         {
@@ -43,36 +40,25 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
         private SupportResult Run(in SupportContext context, out GlobalPosition target)
         {
             target = context.Target;
-            InfoNetwork info = context.Info;
-            if (info == null) return SupportResult.CapabilityUnavailable;
-            InfoPowers powers = info.Powers;
-            if (!powers.Has(kind)) return SupportResult.NotBuilt;
+            CyberNetwork cyber = context.Cyber;
+            if (cyber == null) return SupportResult.CapabilityUnavailable;
             if (!SupportTargeting.TryMapPoint(context.Target, out Vector3 ground))
                 return SupportResult.InvalidTarget;
             target = ground.ToGlobalPosition();
+            if (cyber.CommandCompromised) return SupportResult.CommandCompromised;
 
-            CyberNetwork cyber = context.Cyber;
-            if (cyber != null && cyber.CommandCompromised) return SupportResult.CommandCompromised;
-
-            // Radar Blackout, Ghost Shield and Spoof Contacts reach through a physical jammer, not
-            // pure signals intelligence: a working CYBER jammer that is emitting (NOISE or
-            // DECEPTION, see EwPostures) must reach the target. Ping and Track never need one.
-            // A foothold from a completed trace is a backdoor: it carries the operation without a
-            // jammer of your own in reach of the target.
-            if (EwPostures.StationBacked(kind) && (cyber == null || !cyber.AnyFoothold(context.Host.OrbitNow)))
-            {
-                if (cyber == null || !cyber.AnyWorking(CyberSiteKind.Jammer)) return SupportResult.NoEwAsset;
-                if (!cyber.AnyEmittingJammer()) return SupportResult.WrongPosture;
-                if (!cyber.EmittingJammerCovers(target.x, target.z, context.Settings.EwProximityRadius.Value))
-                    return SupportResult.NoEwAsset;
-            }
+            // The ability reaches through a location of the right stage whose radius covers the
+            // target; a foothold from a completed trace is a backdoor that carries it anywhere.
+            double now = context.Host.OrbitNow;
+            bool covered = cyber.TryCovering(CyberCatalog.RequiredStage(kind) - 1, target.x, target.z, now, out _);
+            if (!covered && !cyber.AnyFoothold(now)) return SupportResult.NoEwAsset;
 
             switch (kind)
             {
                 case HackKind.Ping:
                     try
                     {
-                        int contacts = ReconAction.Reveal(context.Owner, target, powers.RevealRadius,
+                        int contacts = ReconAction.Reveal(context.Owner, target, CyberCatalog.Radius(kind),
                             context.Logger, RevealFilter.Ground);
                         context.Host.ReportContacts(context.RequestId, contacts);
                         return SupportResult.Accepted;
@@ -86,21 +72,47 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
                 case HackKind.Track:
                     if (!context.Host.TryReserve(SupportPool.Cyber)) return SupportResult.Busy;
                     context.Host.Run(TrackRoutine(context.Host, context.Owner, target,
-                        powers.TrackRadius, powers.TrackDuration));
+                        CyberCatalog.Radius(kind), CyberCatalog.Duration(kind)));
                     return SupportResult.Accepted;
 
                 case HackKind.Blackout:
                     if (!context.Host.TryReserve(SupportPool.Cyber)) return SupportResult.Busy;
                     context.Host.Run(BlackoutRoutine(context.Host, context.Player, context.Owner, target,
-                        powers.JamRadius, powers.JamStrength));
+                        CyberCatalog.Radius(kind), CyberCatalog.BlackoutStrength));
                     return SupportResult.Accepted;
 
                 case HackKind.Ghost:
                 case HackKind.Spoof:
-                    return context.Host.BeginDeception(context.Player, kind, target,
-                        powers.DeceptionDuration)
+                    return context.Host.BeginDeception(context.Player, kind, target, CyberCatalog.Duration(kind))
                         ? SupportResult.Accepted
                         : SupportResult.Busy;
+
+                case HackKind.Scan:
+                    try
+                    {
+                        int found = ReconAction.Reveal(context.Owner, target, CyberCatalog.Radius(kind),
+                            context.Logger, RevealFilter.Ground);
+                        context.Host.ReportContacts(context.RequestId, found);
+                        return SupportResult.Accepted;
+                    }
+                    catch (Exception e)
+                    {
+                        context.Logger.LogWarning("[Support] Node scan failed: " + e.Message);
+                        return SupportResult.SpawnFailed;
+                    }
+
+                case HackKind.Hijack:
+                    if (!context.Host.TryReserve(SupportPool.Cyber)) return SupportResult.Busy;
+                    context.Host.Run(HijackRoutine(context.Host, context.Player, context.Owner, target,
+                        CyberCatalog.Radius(kind), CyberCatalog.Duration(kind)));
+                    return SupportResult.Accepted;
+
+                case HackKind.Overload:
+                    if (!GameAccess.IsServer()) return SupportResult.CapabilityUnavailable;
+                    int overloaded = CapstoneAction.Sabotage(context.Owner, ground, context.Logger,
+                        CyberCatalog.Radius(kind), OverloadMaximum);
+                    context.Host.ReportContacts(context.RequestId, overloaded);
+                    return SupportResult.Accepted;
 
                 default:
                     return SupportResult.CapabilityUnavailable;
@@ -171,6 +183,90 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
             }
             finally
             {
+                host.Release(SupportPool.Cyber);
+            }
+        }
+
+        /// <summary>
+        /// Host: seize up to eight hostile ground vehicles in the radius. Seized vehicles halt,
+        /// hold position with locked wheels, are revealed to the owner, and stay jammed until the
+        /// window ends, when every survivor is released. Destroyed vehicles need no release.
+        /// </summary>
+        private static IEnumerator HijackRoutine(
+            ISupportHost host, Player player, FactionHQ owner, GlobalPosition target,
+            float radius, float duration)
+        {
+            var seized = new List<GroundVehicle>(HijackMaximum);
+            try
+            {
+                float radiusSquared = radius * radius;
+                float elapsed = 0f;
+                Aircraft jammer = player != null ? player.Aircraft : null;
+                while (elapsed < duration)
+                {
+                    Vector3 centre = target.ToLocalPosition();
+                    List<Unit> units = UnitRegistry.allUnits;
+                    if (units != null)
+                    {
+                        for (int i = 0; i < units.Count && seized.Count < HijackMaximum; i++)
+                        {
+                            Unit unit = units[i];
+                            if (!(unit is GroundVehicle vehicle) || vehicle == null || unit.disabled) continue;
+                            FactionHQ ownerHq = unit.NetworkHQ;
+                            if (ownerHq == null || ownerHq == owner) continue;
+                            float dx = unit.transform.position.x - centre.x;
+                            float dz = unit.transform.position.z - centre.z;
+                            if (dx * dx + dz * dz > radiusSquared) continue;
+                            if (!seized.Contains(vehicle))
+                            {
+                                seized.Add(vehicle);
+                                try
+                                {
+                                    vehicle.StopImmediately();
+                                    vehicle.SetHoldPosition(true);
+                                    vehicle.SetWheelsLocked(true);
+                                    if (owner != null) owner.RpcUpdateTrackingInfo(unit.persistentID);
+                                }
+                                catch (Exception e)
+                                {
+                                    host.Logger.LogWarning("[Support] Hijack seize failed: " + e.Message);
+                                }
+                            }
+                            try
+                            {
+                                unit.Jam(new Unit.JamEventArgs
+                                {
+                                    jammingUnit = jammer,
+                                    jamAmount = HijackStrength
+                                });
+                            }
+                            catch (Exception e)
+                            {
+                                host.Logger.LogWarning("[Support] Hijack jam error: " + e.Message);
+                            }
+                        }
+                    }
+                    yield return new WaitForSeconds(HijackInterval);
+                    elapsed += HijackInterval;
+                }
+            }
+            finally
+            {
+                for (int i = 0; i < seized.Count; i++)
+                {
+                    GroundVehicle vehicle = seized[i];
+                    if (vehicle == null) continue;
+                    try
+                    {
+                        vehicle.SetHoldPosition(false);
+                        vehicle.SetWheelsLocked(false);
+                    }
+                    catch (Exception e)
+                    {
+                        host.Logger.LogWarning("[Support] Hijack release failed: " + e.Message);
+                    }
+                }
+                seized.Clear();
                 host.Release(SupportPool.Cyber);
             }
         }

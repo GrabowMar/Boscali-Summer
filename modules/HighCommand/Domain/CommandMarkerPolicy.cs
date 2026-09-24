@@ -10,6 +10,22 @@ namespace BoscaliSummer.Features.HighCommand.Domain
     {
         public static bool Show(bool friendly, bool known, bool isKia) => !isKia && (friendly || known);
 
+        /// <summary>
+        /// A post's position inside the map's icon layer. Vanilla places every icon at global
+        /// metres times the map's own display factor; skipping that factor, or feeding a local
+        /// position instead of a global one, put every post in the wrong place. A non-finite
+        /// or non-positive factor has no map position and is refused.
+        /// </summary>
+        public static bool MapPoint(float globalX, float globalZ, float displayFactor, out float x, out float z)
+        {
+            x = 0f;
+            z = 0f;
+            if (!(displayFactor > 0f) || float.IsInfinity(displayFactor)) return false;
+            x = globalX * displayFactor;
+            z = globalZ * displayFactor;
+            return !float.IsNaN(x) && !float.IsInfinity(x) && !float.IsNaN(z) && !float.IsInfinity(z);
+        }
+
         /// <summary>Theater posts read bigger than base posts, so the map shows the hierarchy.</summary>
         public static float Size(int tier) => tier <= 0 ? 15f : tier == 1 ? 12f : 10f;
 

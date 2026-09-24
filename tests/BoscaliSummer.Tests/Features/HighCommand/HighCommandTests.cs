@@ -208,6 +208,17 @@ namespace BoscaliSummer.Tests.Features.HighCommand
             TestAssert.That(!CommandMarkerPolicy.Show(false, true, true), "a dead commander is never marked");
             TestAssert.That(!CommandMarkerPolicy.Show(true, true, true), "your own dead commander is not marked either");
 
+            // The map places icons at global metres times its own display factor. Feeding raw
+            // metres (skipping the factor) or a non-finite factor is what put every post at
+            // the wrong place; both are refused here.
+            TestAssert.That(CommandMarkerPolicy.MapPoint(1000f, -2000f, 0.011f, out float mx, out float mz) &&
+                            Math.Abs(mx - 11f) < 0.0001f && Math.Abs(mz + 22f) < 0.0001f,
+                "a post maps to global metres scaled by the map factor");
+            TestAssert.That(!CommandMarkerPolicy.MapPoint(1000f, 0f, 0f, out _, out _) &&
+                            !CommandMarkerPolicy.MapPoint(1000f, 0f, float.NaN, out _, out _) &&
+                            !CommandMarkerPolicy.MapPoint(1000f, 0f, float.PositiveInfinity, out _, out _),
+                "a map with no usable factor draws no post");
+
             TestAssert.That(CommandMarkerPolicy.Size(CommandTier.Theater) > CommandMarkerPolicy.Size(CommandTier.Component) &&
                             CommandMarkerPolicy.Size(CommandTier.Component) > CommandMarkerPolicy.Size(CommandTier.Base),
                 "the marker shrinks down the hierarchy");

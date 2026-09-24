@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Features.Progression.Domain;
 using BoscaliSummer.Features.Progression.Runtime;
 using BoscaliSummer.Framework.Contracts;
 using NOAvionics;
@@ -114,8 +115,8 @@ namespace BoscaliSummer.Features.Progression.Presentation
             float width = body.width - SpineInset;
             float y = body.y;
 
-            y = DrawPageHeader(parent, x, y, width, "PILOT  /  01 OF 04", "PILOT STATUS",
-                "LOCAL + HOST DATA");
+            y = DrawPageHeader(parent, x, y, width, "PILOT RECORD",
+                "LOCAL + HOST DATA", SqdMark.Recon);
 
             // The spare glass is shared on the page's one rhythm first, then into the
             // identity card — the block that can grow without opening a dead band.
@@ -200,7 +201,8 @@ namespace BoscaliSummer.Features.Progression.Presentation
             {
                 float chipX = x + (chipWidth + AvTokens.Space2) * (i % PilotChipColumns);
                 float chipY = y - 8f - (i / PilotChipColumns) * PilotChipPitch;
-                committedIcons[i] = SqdGlyph.Create(parent, new Rect(chipX, chipY, 18f, 18f), SqdMarks.FromKey("combat"));
+                float iconX = chipX + (chipWidth - 18f) * 0.5f;
+                committedIcons[i] = SqdGlyph.Create(parent, new Rect(iconX, chipY, 18f, 18f), SqdMarks.FromKey("combat"));
                 committedLabels[i] = Fitted(PlainLabel(parent,
                     new Rect(chipX - 2f, chipY - 18f, chipWidth + 4f, 16f), "", "row-sub"));
                 // This width would ellipsise a word like SURVEILLANCE in a chip
@@ -237,7 +239,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             AvKit.Outline(parent, new Rect(x, y, width, cardHeight), AvTheme.Frame.WithAlpha(0.7f));
             AvKit.Rule(parent, new Rect(x, y, 3f, cardHeight), AvTheme.RailInfo);
 
-            Rect portraitFrame = new Rect(x + 10f, y - 8f, 92f, cardHeight - 16f);
+            Rect portraitFrame = new Rect(x + 10f, y - 8f, 82f, cardHeight - 16f);
             AvKit.Panel(parent, portraitFrame, AvTheme.SurfaceInert);
             AvKit.Outline(parent, portraitFrame, AvTheme.Frame);
             pilotPortraitFallback = VisualPlaceholder(parent,
@@ -254,32 +256,37 @@ namespace BoscaliSummer.Features.Progression.Presentation
             pilotPhotoCaption = PlainLabel(parent,
                 new Rect(portraitFrame.x + 4f, portraitFrame.y - portraitFrame.height + 17f,
                          portraitFrame.width - 8f, 14f),
-                "NO PHOTO", "photo-cap");
+                "PILOT FILE", "photo-cap");
             pilotPhotoCaption.alignment = TextAlignmentOptions.Center;
 
             float textX = portraitFrame.x + portraitFrame.width + 12f;
-            const float emblemWidth = 74f;
+            const float emblemWidth = 58f;
             float textWidth = width - (textX - x) - emblemWidth - 12f;
             pilotProfileTag = PlainLabel(parent, new Rect(textX, y - 8f, textWidth, 16f), "", "section-title-note");
-            pilotProfileTag.alignment = TextAlignmentOptions.MidlineRight;
-            pilotCallsign = PlainLabel(parent, new Rect(textX, y - 10f, textWidth, 26f), "PILOT RECORD PENDING", "section-title");
-            pilotName = PlainLabel(parent, new Rect(textX, y - 40f, textWidth, 16f), "", "kv-value");
-            pilotRankLine = PlainLabel(parent, new Rect(textX, y - 58f, textWidth, 15f), "", "row-sub");
-            pilotStatusLine = PlainLabel(parent, new Rect(textX, y - 76f, textWidth, 15f), "", "row-sub");
+            pilotCallsign = PlainLabel(parent, new Rect(textX, y - 28f, textWidth, 24f), "PILOT RECORD PENDING", "section-title");
+            pilotName = PlainLabel(parent, new Rect(textX, y - 54f, textWidth, 16f), "", "kv-value");
+            pilotName.alignment = TextAlignmentOptions.MidlineLeft;
+            pilotRankLine = PlainLabel(parent, new Rect(textX, y - 73f, textWidth, 15f), "", "row-sub");
+            // The title suffix grows and shrinks with the pilot's career score, so this line
+            // shrinks to fit instead of overflowing the card.
+            pilotRankLine.enableAutoSizing = true;
+            pilotRankLine.fontSizeMin = AvTokens.FontMicro;
+            pilotRankLine.fontSizeMax = pilotRankLine.fontSize;
+            pilotStatusLine = PlainLabel(parent, new Rect(textX, y - 92f, textWidth, 15f), "", "row-sub");
             pilotProgressFill = AvKit.ProgressBar(parent,
                 new Rect(textX, y - cardHeight + 36f, textWidth, 5f), 0f, AvTheme.RailReady);
 
-            float emblemX = x + width - emblemWidth + 6f;
-            pilotEmblemFallback = PlainLabel(parent, new Rect(emblemX, y - 42f, 62f, 30f), "NO\nART", "row-sub");
+            float emblemX = x + width - emblemWidth + 2f;
+            pilotEmblemFallback = PlainLabel(parent, new Rect(emblemX, y - 30f, 48f, 20f), "NO ART", "row-sub");
             pilotEmblemFallback.alignment = TextAlignmentOptions.Center;
-            pilotEmblemImage = AvKit.Panel(parent, new Rect(emblemX, y - 8f, 62f, 62f), Color.white);
+            pilotEmblemImage = AvKit.Panel(parent, new Rect(emblemX, y - 8f, 48f, 48f), Color.white);
             pilotEmblemImage.type = Image.Type.Simple;
             pilotEmblemImage.preserveAspect = true;
             pilotEmblemImage.raycastTarget = false;
             pilotEmblemImage.enabled = false;
             // Two lines: a 24-character squadron name does not fit one 78px line, and the
             // name is the reader's own, so it shrinks and wraps rather than being cut.
-            pilotSquadron = PlainLabel(parent, new Rect(emblemX - 8f, y - 74f, 78f, 26f), "", "row-sub");
+            pilotSquadron = PlainLabel(parent, new Rect(emblemX - 8f, y - 62f, 62f, 36f), "", "row-sub");
             pilotSquadron.alignment = TextAlignmentOptions.Center;
             pilotSquadron.enableAutoSizing = true;
             pilotSquadron.fontSizeMin = AvTokens.FontMicro;
@@ -317,10 +324,12 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 ? localProfile.Background : pilot.Background;
 
             pilotCallsign.text = string.IsNullOrEmpty(callsign) ? "PILOT RECORD PENDING" : callsign;
-            pilotProfileTag.text = profile ? "LOCAL PROFILE" : "SQUADRON RECORD";
+            pilotProfileTag.text = profile ? "LOCAL PROFILE" : "PILOT DOSSIER";
             pilotProfileTag.color = profile ? AvTheme.Accent : AvTheme.Dim;
             pilotName.text = string.IsNullOrEmpty(name) ? "—" : name;
-            pilotRankLine.text = "RANK " + Progress.Rank + "   ·   GENERATION " + pilot.Generation;
+            string pilotTitle = PilotTitleCatalog.TitleFor(pilotScore, Progress.ScorePerPoint, Progress.MaximumPoints);
+            pilotRankLine.text = "RANK " + Progress.Rank + "   ·   GENERATION " + pilot.Generation +
+                                  "   ·   " + pilotTitle;
             pilotStatusLine.text = pilot.Status;
             bool kia = pilot.Status != null && pilot.Status.IndexOf("KIA", StringComparison.OrdinalIgnoreCase) >= 0;
             pilotStatusLine.color = kia ? AvTheme.Alert : AvTheme.RailReady;
@@ -329,7 +338,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             if (pilotPhotoCaption != null)
             {
                 pilotPhotoCaption.text = string.IsNullOrEmpty(callsign)
-                    ? "NO PHOTO" : callsign.ToUpperInvariant();
+                    ? "PILOT FILE" : callsign.ToUpperInvariant();
             }
             if (pilotStateBadge != null)
             {
@@ -430,8 +439,8 @@ namespace BoscaliSummer.Features.Progression.Presentation
 
         private void RefreshCommittedSkills(PerkView[] perks)
         {
-            int shown = 0;
-            for (int i = 0; i < PerkCatalog.All.Length && i < committedIcons.Length; i++)
+            int slot = 0;
+            for (int i = 0; i < PerkCatalog.All.Length; i++)
             {
                 PerkDefinition definition = PerkCatalog.All[i];
                 bool unlocked = false;
@@ -441,19 +450,27 @@ namespace BoscaliSummer.Features.Progression.Presentation
                     unlocked = perks[j].Unlocked;
                     break;
                 }
-                committedIcons[i].gameObject.SetActive(unlocked);
-                committedLabels[i].gameObject.SetActive(unlocked);
-                if (!unlocked) continue;
-                committedIcons[i].Mark = SqdMarks.FromKey(definition.Icon);
-                committedIcons[i].SetVerticesDirty();
-                committedIcons[i].color = definition.Capability == null ? AvTheme.RailReady : AvTheme.RailInfo;
-                committedLabels[i].text = definition.Capability == null
+                if (!unlocked || slot >= committedIcons.Length) continue;
+
+                committedIcons[slot].gameObject.SetActive(true);
+                committedLabels[slot].gameObject.SetActive(true);
+                committedIcons[slot].Mark = SqdMarks.FromKey(definition.Icon);
+                committedIcons[slot].SetVerticesDirty();
+                committedIcons[slot].color = definition.Capability == null ? AvTheme.RailReady : AvTheme.RailInfo;
+                committedLabels[slot].text = definition.Capability == null
                     ? definition.Name.Split(' ')[0].ToUpperInvariant()
                     : PerkCatalog.CodeOf(definition);
-                shown++;
+                slot++;
             }
+
+            for (int i = slot; i < committedIcons.Length; i++)
+            {
+                committedIcons[i].gameObject.SetActive(false);
+                committedLabels[i].gameObject.SetActive(false);
+            }
+
             if (committedSkillsEmpty != null)
-                committedSkillsEmpty.gameObject.SetActive(shown == 0);
+                committedSkillsEmpty.gameObject.SetActive(slot == 0);
         }
     }
 }

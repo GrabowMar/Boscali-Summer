@@ -23,6 +23,7 @@ namespace BoscaliSummer.Garrisons
 
         private static readonly Dictionary<string, Texture2D> cache =
             new Dictionary<string, Texture2D>(StringComparer.Ordinal);
+        private static readonly Queue<string> insertionOrder = new Queue<string>(MaximumCached);
 
         /// <summary>Stable key for a banner: the faction's own name when the game provides
         /// one, otherwise its colour, so unlisted/modded factions still get a consistent
@@ -40,7 +41,17 @@ namespace BoscaliSummer.Garrisons
             if (string.IsNullOrEmpty(identity)) identity = "#" + ColorUtility.ToHtmlStringRGB(field);
             if (cache.TryGetValue(identity, out Texture2D cached) && cached != null) return cached;
             Texture2D texture = Build(identity, field);
-            if (cache.Count < MaximumCached) cache[identity] = texture;
+            if (cache.Count >= MaximumCached && insertionOrder.Count > 0)
+            {
+                string oldest = insertionOrder.Dequeue();
+                if (cache.TryGetValue(oldest, out Texture2D evicted))
+                {
+                    if (evicted != null) UnityEngine.Object.Destroy(evicted);
+                    cache.Remove(oldest);
+                }
+            }
+            cache[identity] = texture;
+            insertionOrder.Enqueue(identity);
             return texture;
         }
 

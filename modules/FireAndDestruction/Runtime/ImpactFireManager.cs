@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using BoscaliSummer.Core;
 using BoscaliSummer.Features.FireAndDestruction.Configuration;
+using BoscaliSummer.Features.FireAndDestruction.Domain;
 using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Features;
 using BoscaliSummer.Framework.Lifecycle;
@@ -15,7 +16,7 @@ using UnityEngine.Rendering;
 
 namespace BoscaliSummer.Fire
 {
-    internal sealed class ImpactFireManager : MonoBehaviour, ISceneService, IFireSuppressionService
+    internal sealed class ImpactFireManager : MonoBehaviour, ISceneService, IFireSuppressionService, IFoliageCover
     {
         private struct ImpactEvent
         {
@@ -36,6 +37,15 @@ namespace BoscaliSummer.Fire
         {
             public GlobalPosition Position;
             public int InstanceId;
+            public int Generation;
+        }
+
+        private struct ScheduledCookoff
+        {
+            public GlobalPosition Position;
+            public int InstanceId;
+            public int Generation;
+            public float DueAt;
         }
 
         private sealed class FireSite
@@ -58,9 +68,17 @@ namespace BoscaliSummer.Fire
         public static ImpactFireManager Instance { get; private set; }
 
         private const int MaximumScorchQueue = 128;
+        private const int MaximumImpacts = 256;
+        // Bound on candidate probes per 4 Hz simulation tick: with 32 sites due at once the
+        // unbudgeted scan ran six forest-index lookups and snaps each in a single frame.
+        private const int MaximumSpreadProbesPerTick = 24;
 
-        private readonly Queue<ImpactEvent> impacts = new Queue<ImpactEvent>(256);
+        private readonly Queue<ImpactEvent> impacts = new Queue<ImpactEvent>(MaximumImpacts);
         private readonly Queue<VehicleExplosionEvent> vehicleExplosions = new Queue<VehicleExplosionEvent>(32);
+        private readonly List<ScheduledCookoff> scheduledCookoffs = new List<ScheduledCookoff>(CookoffPolicy.MaxScheduled);
+        private readonly WreckNotice[] wrecks = new WreckNotice[CookoffPolicy.MaxWreckNotices];
+        private int wreckCount;
+        private int wreckHead;
         private readonly Queue<ScorchMark> scorches = new Queue<ScorchMark>(MaximumScorchQueue);
         private readonly List<FireSite> fires = new List<FireSite>(32);
         private readonly Dictionary<long, float> cellCooldowns = new Dictionary<long, float>();
@@ -78,6 +96,8 @@ namespace BoscaliSummer.Fire
         private ServiceRegistry services;
         private float nextTick;
         private int impactSequence;
+        private int scorchSequence;
+        private int spreadBudget;
 
         private static FireAndDestructionSettings Fire => Plugin.Settings.FireAndDestruction;
         private static DiagnosticSettings Diagnostics => Plugin.Settings.Diagnostics;
@@ -103,6 +123,9 @@ namespace BoscaliSummer.Fire
         {
             impacts.Clear();
             vehicleExplosions.Clear();
+            scheduledCookoffs.Clear();
+            wreckCount = 0;
+            wreckHead = 0;
             scorches.Clear();
             cellCooldowns.Clear();
             vehicleCooldowns.Clear();
@@ -116,16 +139,47 @@ namespace BoscaliSummer.Fire
             visualPool.Clear();
             fuelDepotSmokePool.Clear();
             burnScars.Clear();
+            TerrainProbeCache.Clear();
             impactSequence = 0;
+            scorchSequence = 0;
             if (indexRoutine != null) StopCoroutine(indexRoutine);
             indexRoutine = StartCoroutine(RebuildIndexDelayed());
         }
 
         public int ActiveFireCount => fires.Count;
 
+        bool IFoliageCover.Ready => forestIndex.Ready;
+        bool IFoliageCover.Contains(float x, float z) => forestIndex.Contains(x, z);
+
+        public int CopyWrecks(WreckNotice[] dest)
+        {
+            if (dest == null || dest.Length == 0) return 0;
+            int n = dest.Length < wreckCount ? dest.Length : wreckCount;
+            for (int i = 0; i < n; i++)
+                dest[i] = wrecks[(wreckHead + i) % CookoffPolicy.MaxWreckNotices];
+            return n;
+        }
+
+        internal void RecordWreck(GlobalPosition position, int instanceId)
+        {
+            Vector3 local = position.ToLocalPosition();
+            float now = Time.timeSinceLevelLoad;
+            var notice = new WreckNotice(local.x, local.y, local.z, instanceId, now);
+            if (wreckCount < CookoffPolicy.MaxWreckNotices)
+            {
+                wrecks[(wreckHead + wreckCount) % CookoffPolicy.MaxWreckNotices] = notice;
+                wreckCount++;
+            }
+            else
+            {
+                wrecks[wreckHead] = notice;
+                wreckHead = (wreckHead + 1) % CookoffPolicy.MaxWreckNotices;
+            }
+        }
+
         public void SubmitImpact(GlobalPosition position, bool explosive, int salt)
         {
-            if (!Fire.FiresEnabled.Value || !GameAccess.IsServer() || impacts.Count >= 256) return;
+            if (!Fire.FiresEnabled.Value || !GameAccess.IsServer() || impacts.Count >= MaximumImpacts) return;
             impacts.Enqueue(new ImpactEvent
             {
                 Position = position,
@@ -141,7 +195,27 @@ namespace BoscaliSummer.Fire
             if (vehicleCooldowns.TryGetValue(instanceId, out float retryAt) && now < retryAt) return;
             if (vehicleCooldowns.Count >= 128) vehicleCooldowns.Clear();
             vehicleCooldowns[instanceId] = now + 8f;
-            vehicleExplosions.Enqueue(new VehicleExplosionEvent { Position = position, InstanceId = instanceId });
+            vehicleExplosions.Enqueue(new VehicleExplosionEvent { Position = position, InstanceId = instanceId, Generation = 0 });
+            ScheduleFollowUps(position, instanceId, now);
+        }
+
+        private void ScheduleFollowUps(GlobalPosition position, int instanceId, float born)
+        {
+            uint hash = CookoffPolicy.Hash(
+                instanceId,
+                Mathf.RoundToInt(position.x * 0.25f),
+                Mathf.RoundToInt(position.z * 0.25f));
+            int n = CookoffPolicy.FollowUps(hash);
+            for (int g = 1; g <= n && scheduledCookoffs.Count < CookoffPolicy.MaxScheduled; g++)
+            {
+                scheduledCookoffs.Add(new ScheduledCookoff
+                {
+                    Position = position,
+                    InstanceId = instanceId,
+                    Generation = g,
+                    DueAt = CookoffPolicy.DueAt(born, hash, g)
+                });
+            }
         }
 
         private IEnumerator RebuildIndexDelayed()
@@ -155,10 +229,18 @@ namespace BoscaliSummer.Fire
         {
             // Burn sites are the expensive path: each one paints the vanilla blast map,
             // queues at most one small tree-clearing blast and stamps a pooled soot decal.
-            // One or two per frame bounds spikes from a spreading front.
+            // One or two per frame bounds spikes from a spreading front. Every burn mark
+            // drawn this frame shares one command buffer execution.
             int scorchBudget = scorches.Count > 8 ? 2 : 1;
+            bool burnMarks = false;
             while (scorchBudget-- > 0 && scorches.Count > 0)
-                StampBurnSite(scorches.Dequeue());
+            {
+                ScorchMark scorch = scorches.Dequeue();
+                burnMarks |= QueueBurnMark(scorch);
+                if (scorch.ScarDiameter > 0f)
+                    burnScars.Stamp(scorch.Position, scorch.ScarDiameter);
+            }
+            if (burnMarks) FlushBurnMarks();
 
             int budget = 8;
             while (budget-- > 0 && impacts.Count > 0) ProcessImpact(impacts.Dequeue());
@@ -167,33 +249,37 @@ namespace BoscaliSummer.Fire
             // salvos. Drain at most one spatial query per frame to avoid a destruction
             // cascade turning into a physics spike.
             if (vehicleExplosions.Count > 0) ProcessVehicleExplosion(vehicleExplosions.Dequeue());
+            else DrainScheduledCookoff();
 
             if (Time.unscaledTime < nextTick) return;
             nextTick = Time.unscaledTime + 0.25f;
+            spreadBudget = MaximumSpreadProbesPerTick;
             UpdateFires();
         }
 
-        private void StampBurnSite(ScorchMark scorch)
+        /// <summary>Records the burn mark into the shared buffer. Returns true when something was drawn.</summary>
+        private bool QueueBurnMark(ScorchMark scorch)
         {
             // The gray ash bed is drawn straight into the vanilla blast map. DrawBlast paints
             // the persistent texture only; it never touches procedural trees. Tree removal
             // is a separate, deliberately small AddBlast, so a campfire no longer flattens a
             // 90 m stand around every stamp.
             BlastManager blast = SceneSingleton<BlastManager>.i;
-            if (!GameManager.IsHeadless && blast != null && blast.Texture != null)
-            {
-                float radius = Mathf.Max(scorch.MarkRadius, blast.worldSizeToResolution * 0.5f);
-                if (burnMarkCommands == null)
-                    burnMarkCommands = new CommandBuffer { name = "BoscaliSummer.BurnMark" };
-                burnMarkCommands.Clear();
-                blast.DrawBlast(burnMarkCommands,
-                    new BlastManager.DetailBlast(scorch.Position, radius));
-                Graphics.ExecuteCommandBuffer(burnMarkCommands);
-                if (scorch.TreeClearBlastRadius > 0f)
-                    blast.AddBlast(scorch.Position, scorch.TreeClearBlastRadius);
-            }
-            if (scorch.ScarDiameter > 0f)
-                burnScars.Stamp(scorch.Position, scorch.ScarDiameter);
+            if (GameManager.IsHeadless || blast == null || blast.Texture == null) return false;
+            float radius = Mathf.Max(scorch.MarkRadius, blast.worldSizeToResolution * 0.5f);
+            if (burnMarkCommands == null)
+                burnMarkCommands = new CommandBuffer { name = "BoscaliSummer.BurnMark" };
+            blast.DrawBlast(burnMarkCommands, new BlastManager.DetailBlast(scorch.Position, radius));
+            if (scorch.TreeClearBlastRadius > 0f)
+                blast.AddBlast(scorch.Position, scorch.TreeClearBlastRadius);
+            return true;
+        }
+
+        private void FlushBurnMarks()
+        {
+            if (burnMarkCommands == null) return;
+            Graphics.ExecuteCommandBuffer(burnMarkCommands);
+            burnMarkCommands.Clear();
         }
 
         private void ProcessImpact(ImpactEvent impact)
@@ -234,6 +320,27 @@ namespace BoscaliSummer.Fire
             cellCooldowns[cell] = now + Fire.FireCellCooldown;
             Ignite(anchor, now, forest,
                 0, true, networkBuilding, mapBuilding);
+        }
+
+        private void DrainScheduledCookoff()
+        {
+            float now = Time.timeSinceLevelLoad;
+            int pick = -1;
+            for (int i = 0; i < scheduledCookoffs.Count; i++)
+            {
+                if (scheduledCookoffs[i].DueAt > now) continue;
+                pick = i;
+                break;
+            }
+            if (pick < 0) return;
+            ScheduledCookoff due = scheduledCookoffs[pick];
+            scheduledCookoffs.RemoveAt(pick);
+            ProcessVehicleExplosion(new VehicleExplosionEvent
+            {
+                Position = due.Position,
+                InstanceId = due.InstanceId,
+                Generation = due.Generation
+            });
         }
 
         private void ProcessVehicleExplosion(VehicleExplosionEvent explosion)
@@ -300,12 +407,13 @@ namespace BoscaliSummer.Fire
 
             long cell = Deterministic.CellKey(explosion.Position.x, explosion.Position.z, 24f);
             float now = Time.timeSinceLevelLoad;
-            if (cellCooldowns.TryGetValue(cell, out float retryAt) && now < retryAt) return;
+            bool followUp = explosion.Generation > 0;
+            if (!followUp && cellCooldowns.TryGetValue(cell, out float retryAt) && now < retryAt) return;
             uint hash = Deterministic.Hash(
                 Mathf.RoundToInt(explosion.Position.x * 0.25f),
                 Mathf.RoundToInt(explosion.Position.z * 0.25f),
                 explosion.InstanceId, 0x6f2e9a31);
-            if (Deterministic.UnitFloat(hash) >= Fire.VehicleExplosionIgnitionChance) return;
+            if (!followUp && Deterministic.UnitFloat(hash) >= Fire.VehicleExplosionIgnitionChance) return;
 
             GlobalPosition anchor;
             if (forest)
@@ -411,9 +519,11 @@ namespace BoscaliSummer.Fire
             // their plume uses the same narrow building profile as the host. Do not replace
             // a server-side target already supplied by ProcessImpact: overlap queries can
             // miss a shell when its colliders are still settling after a scene load.
-            Vector3 local = position.ToLocalPosition();
-            if (site.BurningBuilding == null || site.BurningMapBuilding == null)
+            // Forest sites are not buildings, so they skip the query entirely — spread
+            // creates most sites and every one of them used to run a wasted overlap.
+            if (!forest && (site.BurningBuilding == null || site.BurningMapBuilding == null))
             {
+                Vector3 local = position.ToLocalPosition();
                 FindBuildings(local, out Building nearbyBuilding, out MapBuilding nearbyMapBuilding);
                 if (site.BurningBuilding == null) site.BurningBuilding = nearbyBuilding;
                 if (site.BurningMapBuilding == null) site.BurningMapBuilding = nearbyMapBuilding;
@@ -488,6 +598,9 @@ namespace BoscaliSummer.Fire
             float distA = float.MaxValue, distB = float.MaxValue, distC = float.MaxValue;
             int smokeAcquireBudget = 1;
 
+            const float FireCullDistanceSq = 15000f * 15000f;
+            const float FireWakeDistanceSq = 14000f * 14000f;
+
             for (int i = fires.Count - 1; i >= 0; i--)
             {
                 FireSite site = fires[i];
@@ -501,23 +614,35 @@ namespace BoscaliSummer.Fire
                     fires.RemoveAt(i);
                     continue;
                 }
-                site.Visual?.SetPosition(site.Position);
-                site.Visual?.SetClusterScale(site.ClusterScale);
-                site.Visual?.SetPhase(
-                    Mathf.Max(0f, now - site.Born),
-                    Mathf.Clamp01((site.Expires - now) / Fire.FireLifetime),
-                    wind);
-                TrySpread(site, now, wind);
-                if (site.BuildingSmoke != null)
+
+                float distToCamSq = camera != null
+                    ? (camPos - site.Position.ToLocalPosition()).sqrMagnitude
+                    : 0f;
+                bool isSleeping = site.Visual?.Sleeping == true;
+                bool shouldSleep = camera != null && distToCamSq > (isSleeping ? FireWakeDistanceSq : FireCullDistanceSq);
+
+                site.Visual?.SetSleeping(shouldSleep);
+                site.BuildingSmoke?.SetSleeping(shouldSleep);
+
+                if (!shouldSleep)
                 {
-                    site.BuildingSmoke.SetPosition(site.Position);
-                    site.BuildingSmoke.SetForestClusterScale(site.ClusterScale);
-                    site.BuildingSmoke.SetPhase(
+                    site.Visual?.SetPosition(site.Position);
+                    site.Visual?.SetClusterScale(site.ClusterScale);
+                    site.Visual?.SetPhase(
                         Mathf.Max(0f, now - site.Born),
                         Mathf.Clamp01((site.Expires - now) / Fire.FireLifetime),
                         wind);
+                    if (site.BuildingSmoke != null)
+                    {
+                        site.BuildingSmoke.SetPosition(site.Position);
+                        site.BuildingSmoke.SetForestClusterScale(site.ClusterScale);
+                        site.BuildingSmoke.SetPhase(
+                            Mathf.Max(0f, now - site.Born),
+                            Mathf.Clamp01((site.Expires - now) / Fire.FireLifetime),
+                            wind);
+                    }
                 }
-
+                TrySpread(site, now, wind);
                 if (now >= site.NextSmoke)
                 {
                     // A network client can receive an ignition before the building's
@@ -531,7 +656,7 @@ namespace BoscaliSummer.Fire
                     bool buildingFire = site.BurningBuilding != null || site.BurningMapBuilding != null;
                     site.Forest = !buildingFire;
                     site.Visual?.Configure(site.Forest, site.Position);
-                    if (site.BuildingSmoke == null && !GameManager.IsHeadless && smokeAcquireBudget > 0)
+                    if (site.BuildingSmoke == null && !GameManager.IsHeadless && smokeAcquireBudget > 0 && !shouldSleep)
                     {
                         // Both urban and forest sites now use smoke-only copies of the actual
                         // Fuel Depot destruction prefab. Forest fires get a wider, windier
@@ -549,8 +674,8 @@ namespace BoscaliSummer.Fire
                     }
                     site.NextSmoke = site.BuildingSmoke == null ? now + 2.4f : float.MaxValue;
                 }
-                if (camera == null || site.Visual == null) continue;
-                float d = (camPos - site.Position.ToLocalPosition()).sqrMagnitude;
+                if (camera == null || site.Visual == null || shouldSleep) continue;
+                float d = distToCamSq;
                 if (d < distA)
                 {
                     distC = distB; nearestC = nearestB;
@@ -574,6 +699,9 @@ namespace BoscaliSummer.Fire
             if (!source.Forest || !Fire.FireSpreadEnabled || !GameAccess.IsServer()) return;
             if (source.Generation >= Fire.FireSpreadGenerations ||
                 source.SpreadAttempts >= 3 || now < source.NextSpread) return;
+            // Leave the attempt unspent when this tick's probe budget is gone; the site is
+            // still due and will be considered again on the next simulation tick.
+            if (spreadBudget <= 0) return;
 
             source.SpreadAttempts++;
             uint seed = Deterministic.Hash(
@@ -594,6 +722,8 @@ namespace BoscaliSummer.Fire
             float baseDistance = Fire.FireSpreadDistance;
             for (int option = 0; option < 6; option++)
             {
+                if (spreadBudget <= 0) return;
+                spreadBudget--;
                 uint optionSeed = Deterministic.Hash((int)seed, option, source.Generation, 0x165667b1);
                 float lateral = Deterministic.UnitFloat(optionSeed) * 2f - 1f;
                 Vector3 direction = (windDirection + crosswind * lateral * 0.9f).normalized;
@@ -685,7 +815,7 @@ namespace BoscaliSummer.Fire
             QueueScorch(position, scale);
 
             uint seed = Deterministic.Hash(
-                Mathf.RoundToInt(position.x), Mathf.RoundToInt(position.z), 0x61a7, impactSequence++);
+                Mathf.RoundToInt(position.x), Mathf.RoundToInt(position.z), 0x61a7, scorchSequence++);
 
             // Two lighter lobes stretch the ash bed along and across the wind front. They
             // carry no tree removal, so the consumed stand stays a compact hole while the
@@ -731,24 +861,21 @@ namespace BoscaliSummer.Fire
         // ground fire. Forest spread reuses the same probe with one spread step of slack, so
         // the front can still walk down a steep valley side.
         private const float ImpactGroundSnapDrop = 30f;
-        private const float GroundProbeHeight = 120f;
-        private const float GroundProbeRange = 400f;
 
         private static bool TrySnapForestFireToGround(
             GlobalPosition position, float maxDrop, out GlobalPosition grounded)
         {
             grounded = position;
             Vector3 local = position.ToLocalPosition();
-            RaycastHit hit;
             // Probe from well above the reported point: the fixed 260 m ray used to miss the
             // ground under high air bursts and returned the air position unchanged, which is
             // how a flame column ended up hanging in the sky. Failing closed is the fix.
-            if (!Physics.Raycast(local + Vector3.up * GroundProbeHeight, Vector3.down, out hit,
-                    GroundProbeRange, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore))
+            // The shared cache means repeated candidates and decal stamps reuse one cast.
+            if (!TerrainProbeCache.TryProbe(position, out GlobalPosition point, out _))
                 return false;
             if (!FireGroundSnapPolicy.CanAnchor(
-                    hit.point.y, local.y, Datum.LocalSeaY, maxDrop)) return false;
-            grounded = (hit.point + Vector3.up * 0.2f).ToGlobalPosition();
+                    point.ToLocalPosition().y, local.y, Datum.LocalSeaY, maxDrop)) return false;
+            grounded = point + Vector3.up * 0.2f;
             return true;
         }
 

@@ -174,6 +174,11 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
         public static void Reconcile()
         {
+            if (!DynamicMap.mapMaximized)
+            {
+                MfdScreenFinish.Restore();
+                return;
+            }
             if (DynamicMap.mapMaximized && applied != MfdPresentation.Expanded)
                 MaximizePostfix(SceneSingleton<DynamicMap>.i);
             else if (DynamicMap.mapMaximized && applied)
@@ -184,6 +189,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 ReLayoutForActiveScreen(MfdSinglePanelPatch.ActiveScreen);
                 RefreshLatched();
             }
+            DynamicMap display = SceneSingleton<DynamicMap>.i;
+            MfdScreenFinish.Ensure(display == null ? null : display.maximizedMapCanvas);
         }
 
         public static void Refresh(DynamicMap dynamicMap)
@@ -236,10 +243,14 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 // Restoring here happens with the map still maximised, so the map rect does
                 // have to be put back — unlike on Minimize, where vanilla has already done it.
                 Restore(onMinimize: false);
+                // The one faction key still needs its two-HQ selector in stock layout.
+                VanillaMfdRebuild.TryApply(FactionMfdMergePatch.Screen);
+                MfdScreenFinish.Ensure(__instance.maximizedMapCanvas);
                 return;
             }
 
             Canvas canvas = __instance.maximizedMapCanvas;
+            MfdScreenFinish.Ensure(canvas);
             float initialWidth = MfdSinglePanelPatch.ActiveScreen != null && MfdSinglePanelPatch.ActiveScreen.isActive
                 ? MfdPanelDock.VisibleWidth(MfdSinglePanelPatch.ActiveScreen)
                 : AvTokens.PanelWidth;
@@ -267,8 +278,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             DockPanels(canvas, columns);
             MfdMapDeck.Ensure(canvas, columns);
             EnsureFooter(canvas, columns);
-            EnsureLogPanel(canvas, columns);
             EnsureNewsTicker(canvas, columns);
+            EnsureLogPanel(canvas, columns);
+            MfdScreenFinish.Ensure(canvas);
 
             applied = true;
             appliedCanvasSize = columns.Canvas;
@@ -635,8 +647,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             MfdPanelDock.Ensure(canvas, columns);
             MfdMapDeck.Ensure(canvas, columns);
             EnsureFooter(canvas, columns);
-            EnsureLogPanel(canvas, columns);
             EnsureNewsTicker(canvas, columns);
+            EnsureLogPanel(canvas, columns);
+            MfdScreenFinish.Ensure(canvas);
 
             appliedCanvasSize = columns.Canvas;
         }
@@ -668,6 +681,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 // independently owned, so clean it even if no complete map transaction was
                 // captured yet rather than leaving a root overlay canvas behind.
                 MfdMapDeck.Restore();
+                MfdScreenFinish.Restore();
                 return;
             }
 
@@ -694,6 +708,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             MfdLogPanel.Restore();
             MfdMapFooter.Restore();
             MfdMapDeck.Restore();
+            MfdScreenFinish.Restore();
 
             MfdPanelDock.Restore();
 
@@ -733,6 +748,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             MfdRail.Reset();
             MfdPanelDock.Reset();
             MfdSinglePanelPatch.Reset();
+            FactionMfdMergePatch.Reset();
         }
     }
 }

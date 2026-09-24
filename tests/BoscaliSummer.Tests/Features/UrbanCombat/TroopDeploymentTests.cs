@@ -47,6 +47,29 @@ namespace BoscaliSummer.Tests.Features.UrbanCombat
             TestAssert.That(TroopDeploymentMath.ComputeTier(committed) == 3, "third drop reaches 24 troops and tier 3");
             committed += TroopDeploymentMath.ComputeDropSize(8, 8);
             TestAssert.That(TroopDeploymentMath.ComputeTier(committed) == 4, "fourth drop reaches 32 troops and tier 4");
+
+            // Descent time: height over rate, never negative, NaN or unbounded.
+            float rate = TroopDeploymentMath.ParachuteDescentRate;
+            TestAssert.That(Math.Abs(TroopDeploymentMath.DescentSeconds(520f, 5.2f) - 100f) < 0.01f,
+                "descent time is height over descent rate");
+            TestAssert.That(TroopDeploymentMath.DescentSeconds(-10f, rate) == 0f &&
+                TroopDeploymentMath.DescentSeconds(float.NaN, rate) == 0f, "no height lands at once");
+            TestAssert.That(TroopDeploymentMath.DescentSeconds(1e7f, rate) == TroopDeploymentMath.MaxParadropSeconds &&
+                TroopDeploymentMath.DescentSeconds(500f, 0f) == TroopDeploymentMath.MaxParadropSeconds,
+                "descent time stops at the hard ceiling");
+
+            // Paradrop lifetime: the slowest jumper of a full stick lands before the drop is culled.
+            float high = TroopDeploymentMath.ParadropOperationSeconds(570f, rate);
+            TestAssert.That(high > 570f / rate + 16 * 1.15f,
+                "a 570 m drop outlives the slowest jumper's descent and the stick's exit stagger");
+            TestAssert.That(TroopDeploymentMath.ParadropOperationSeconds(1500f, rate) > high,
+                "higher drops stay alive longer");
+            TestAssert.That(TroopDeploymentMath.ParadropOperationSeconds(0f, rate) >= 40f &&
+                TroopDeploymentMath.ParadropOperationSeconds(float.NaN, rate) >= 40f,
+                "a low drop still holds its landing");
+            TestAssert.That(TroopDeploymentMath.ParadropOperationSeconds(1e7f, rate) == TroopDeploymentMath.MaxParadropSeconds &&
+                TroopDeploymentMath.ParadropOperationSeconds(500f, -1f) == TroopDeploymentMath.MaxParadropSeconds,
+                "paradrop lifetime stops at the hard ceiling");
         }
     }
 }

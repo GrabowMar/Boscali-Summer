@@ -61,7 +61,7 @@ public static class StockMfdUnityCheck
         if (name == "Faction")
         {
             Type id = assembly.GetType("BoscaliSummer.Features.Command.Presentation.MapUi.VanillaMfdPanelId", true);
-            args = new object[] { null, null, Enum.Parse(id, "Bdf", true) };
+            args = new object[] { null, null, null, Enum.Parse(id, "Bdf", true) };
         }
         object presenter = Activator.CreateInstance(type, All, null, args, null);
         var canvasObject = new GameObject(name, typeof(RectTransform), typeof(Canvas));
@@ -81,6 +81,15 @@ public static class StockMfdUnityCheck
         for (int page = 0; page < shell.Tabs.Length; page++)
         {
             shell.SetPage(page);
+            if (name == "Target")
+                shell.DataBar.State.text = new[]
+                {
+                    "FILTERS / ACQUISITION", "ACQUIRE / CONTACTS", "PRESETS / LIBRARY",
+                    "TARGETS / TRACKED", "CAMERA / SENSOR MARK"
+                }[page];
+            if (name == "Faction")
+                shell.DataBar.State.text = "BOSCALI GENERAL AVIATION  /  " +
+                    new[] { "ECONOMY", "FORCES", "LEDGER", "POLITICS" }[page];
             shell.WriteStatus(null, null, "OFFLINE LAYOUT PREVIEW · SYNTHETIC DATA");
             Canvas.ForceUpdateCanvases();
             if (shell.Body.height < 540f)
@@ -108,6 +117,9 @@ public static class StockMfdUnityCheck
     {
         if (name == "Map")
         {
+            var readouts = (TMP_Text[])presenter.GetType().GetField("readoutValues", All).GetValue(presenter);
+            string[] readings = { "1000 m", "LIVE", "12 EMITTERS · 185 km", "SATELLITE ON" };
+            for (int i = 0; i < readouts.Length; i++) readouts[i].text = readings[i];
             Grid(presenter, "layers", new[] { "OBJECTIVES", "TARGET DETAILS", "JAMMING", "GRID LABELS", "PILOTS", "AIRBASES" });
             Grid(presenter, "overlays", new[] { "CONTROL FIELD", "FRONT LINE", "THREAT HEAT" });
             Grid(presenter, "hover", new[] { "OFF", "UNIT INFO", "AMMUNITION", "ORDERS" });
@@ -125,6 +137,9 @@ public static class StockMfdUnityCheck
         }
         if (name == "Target")
         {
+            Label(presenter, "filterCountReadout", "17");
+            Label(presenter, "filterProfileReadout", "PROFILE / ALL");
+            ((Image)presenter.GetType().GetField("filterGauge", All).GetValue(presenter)).fillAmount = .8f;
             Grid(presenter, "factionGrid", new[] { "FRIENDLY", "ENEMY" });
             Grid(presenter, "unitGrid", new[] { "AIRCRAFT", "MISSILES", "GROUND", "BUILDINGS", "SHIPS" });
             Grid(presenter, "vehicleGrid", new[] { "TRUCK", "UGV", "LCV", "AFV", "MBT", "ART", "AAA", "IR SAM", "R SAM", "RADAR" });
@@ -147,7 +162,7 @@ public static class StockMfdUnityCheck
                     i + 12, i == 0 ? "Interdict the northern supply route" : "Protect allied infrastructure",
                     "Engage hostile transports before they reach the northern logistics depot.",
                     "NORTHERN HIGHWAY CHECKPOINT", "OFFERED", "+10% LOGISTICS READINESS",
-                    .25f, 450f, 35000, 120, false, true, false, true, 0f, 0f, 0f
+                    .25f, 450f, 35000, 120, false, true, false, true, 0f, 0f, 0f, ""
                 });
                 object card = cards.GetValue(i);
                 card.GetType().GetMethod("Refresh", All).Invoke(card, new[] { sample, (object)true });
@@ -162,6 +177,30 @@ public static class StockMfdUnityCheck
             Grid(presenter, "infoGrid", new[] { "AIRBASE NORTH RIDGE", "AIRBASE SECTOR TWO", "HIGHWAY STRIP" });
             Label(presenter, "factionName", "Boscali Defence Force");
             Label(presenter, "factionSubtitle", "FACTION ORDER OF BATTLE");
+            Label(presenter, "economyHeadline", "FRONTLINE OVERSTRETCH");
+            Label(presenter, "economyEffect", "LOCAL EVENT / +35% SUPPORT COST • 03:42 LEFT");
+            Label(presenter, "economyContract", "FIELD CONTRACT / $1,800   +   150 XP");
+            Label(presenter, "mandateHeadline", "WAR WEARY");
+            ((TMP_Text)presenter.GetType().GetField("mandateHeadline", All).GetValue(presenter)).color = AvTheme.Warning;
+            ((Image)presenter.GetType().GetField("mandateRail", All).GetValue(presenter)).color = AvTheme.Warning;
+            Label(presenter, "mandateEffect", "MORALE 42/100  •  NEW CONTRACTS -3% MONEY / XP\nACTIVE DIRECTIVE / HOLD NORTHERN AIRBASE");
+            Label(presenter, "politicalEvent", "FRONTLINE OVERSTRETCH");
+            Label(presenter, "politicalEffect", "LOCAL EVENT • +35% SUPPORT COST • 03:42 LEFT");
+            Label(presenter, "politicalBrief", "LEADING SIDE • NEXT ORDER 00:45 / REAR DEPOTS DRAINED");
+            Label(presenter, "politicalMission", "ACTIVE / HOLD NORTHERN AIRBASE");
+            Label(presenter, "politicalMissionDetail", "$1,800   +   150 XP  •  SUCCESS +3 MORALE");
+            Array metrics = (Array)presenter.GetType().GetField("resourceMetrics", All).GetValue(presenter);
+            string[] figures = { "24,600", "4", "138", "42" };
+            string[] captions = { "AVAILABLE FUNDS", "STOCKPILE", "IN ACTIVE ASSETS", "NEW CONTRACTS 0.97x" };
+            for (int i = 0; i < metrics.Length; i++)
+            {
+                object metric = metrics.GetValue(i);
+                metric.GetType().GetMethod("Set").Invoke(metric,
+                    new object[] { figures[i], captions[i], i == 3 ? 0.42f : 0f,
+                        i == 3 ? AvTheme.Warning : AvTheme.Accent });
+            }
+            ((TMP_Text)metrics.GetValue(3).GetType().GetField("Value").GetValue(metrics.GetValue(3))).color = AvTheme.Warning;
+            ((Image)presenter.GetType().GetField("moraleRail", All).GetValue(presenter)).color = AvTheme.Warning;
         }
     }
 

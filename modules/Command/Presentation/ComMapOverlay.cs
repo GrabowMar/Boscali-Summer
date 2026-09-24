@@ -63,6 +63,8 @@ namespace BoscaliSummer.Features.Command.Presentation
 
         public bool FrontLineVisible => ControlFieldVisible && settings != null && settings.FrontlineTrace.Value;
 
+        public bool TerrainImageVisible => settings == null || settings.MapTerrainImage.Value;
+
         public void SetControlFieldVisible(bool visible)
         {
             if (settings == null || settings.FrontlinesOverlay.Value == visible) return;
@@ -75,6 +77,13 @@ namespace BoscaliSummer.Features.Command.Presentation
             if (settings == null || settings.FrontlineTrace.Value == visible) return;
             settings.FrontlineTrace.Value = visible;
             SyncSettings();
+        }
+
+        public void SetTerrainImageVisible(bool visible)
+        {
+            if (settings == null || settings.MapTerrainImage.Value == visible) return;
+            settings.MapTerrainImage.Value = visible;
+            MfdMapDeck.ApplyAppearance(settings);
         }
 
         public void Configure(CommandSettings config, CommandManager manager, MissionMapCompatibilityEngine compat, ManualLogSource log, TerritoryControlView control)
@@ -374,6 +383,7 @@ namespace BoscaliSummer.Features.Command.Presentation
                     lastBakeTexW = texW;
                     lastBakeTexH = texH;
                     hasBakedTexture = true;
+                    sectorGrid.ClearChunkDirty();
                 }
 
                 if (frontlineGraphic != null)

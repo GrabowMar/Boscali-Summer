@@ -4,9 +4,17 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 public class SceneSingleton<T> { public static T i; }
-public class DynamicMap : MonoBehaviour { public static bool mapMaximized; public Canvas maximizedMapCanvas; public FactionHQ HQ; }
+public class DynamicMap : MonoBehaviour { public static bool mapMaximized; public Canvas maximizedMapCanvas; public FactionHQ HQ; public Image mapImage; public GameObject iconLayer; }
+public struct GlobalPosition
+{
+    public static Vector3 OriginOffset;
+    private readonly float x, y, z;
+    public GlobalPosition(float x, float y, float z) { this.x=x; this.y=y; this.z=z; }
+    public Vector3 AsVector3() => new Vector3(x, y, z) - OriginOffset;
+}
 public class VirtualMFD : MonoBehaviour { }
 public class FactionHQ { }
+public static class GameplayUI { public static bool AllowPauseKeybind = true; }
 public static class UnitConverter
 {
     public static string ValueReading(float value) => value.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
@@ -16,18 +24,7 @@ public class MFDScreen : MonoBehaviour
     public string shortName; public GameObject displayPanel; public bool aircraftOnly; public bool isActive;
     public TextMeshProUGUI label; public Image highlight;
 }
-namespace BoscaliSummer.Framework.Contracts
-{
-    internal interface IThirdPersonHud
-    {
-        bool IsEnabled { get; }
-        void Toggle();
-        bool HidePitchLadder { get; set; }
-        bool CameraFeedEnabled { get; set; }
-        bool FlightCameraEnabled { get; set; }
-    }
-}
-namespace BoscaliSummer.Framework.Features { internal static class ModServices { public static bool TryGet<T>(out T service) { service=default; return false; } } }
+namespace BoscaliSummer.Framework.Features { internal static class ModServices { public static readonly Dictionary<System.Type, object> Services = new Dictionary<System.Type, object>(); public static bool TryGet<T>(out T service) { if (Services.TryGetValue(typeof(T), out object value)) { service=(T)value; return true; } service=default; return false; } } }
 namespace BoscaliSummer.Framework.Lifecycle { public interface ISceneService { void ResetForScene(); } }
 namespace BoscaliSummer.Runtime
 {

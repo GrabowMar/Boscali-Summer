@@ -77,6 +77,20 @@ namespace BoscaliSummer.Tests.Features.Command
             TestContourGeometry();
             TestClusterTree();
             TestEncirclement();
+            TestDefensiveWeight();
+        }
+
+        /// <summary>
+        /// A dug-in emplacement anchors its ground harder than a passing vehicle: a full
+        /// eight-nest position outweighs one six-vehicle group in its cell and yields to three.
+        /// </summary>
+        private static void TestDefensiveWeight()
+        {
+            float vehicle = TacticalSectorGrid.GroundObservationWeight(false);
+            float nest = TacticalSectorGrid.GroundObservationWeight(true);
+            TestAssert.That(vehicle > 0f && nest > vehicle, "A defensive building weighs more than a vehicle");
+            TestAssert.That(8f * nest > 6f * vehicle && 8f * nest < 18f * vehicle,
+                "A mature position holds against a platoon, not a battalion");
         }
 
         private static void TestContourGeometry()

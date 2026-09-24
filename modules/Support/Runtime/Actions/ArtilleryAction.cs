@@ -6,11 +6,8 @@ using UnityEngine;
 namespace BoscaliSummer.Features.Support.Runtime.Actions
 {
     /// <summary>
-    /// "Rod from God": one high-velocity kinetic projectile dropped from high altitude onto
-    /// the designated grid. Reuses the verified low-yield vanilla missile seam - the rod is
-    /// a single very fast shot, not a salvo. The faction's station releases it only while it is
-    /// overhead with a loaded rod magazine; the impact scatters by orbit band (halved by gyros),
-    /// and the strike spends a rod and station energy.
+    /// "Rod from God": one high-velocity projectile per online magazine, up to loaded rods.
+    /// Each shot uses the verified low-yield vanilla missile seam and its own orbit scatter.
     /// </summary>
     internal sealed class ArtilleryAction : ISupportAction
     {
@@ -43,21 +40,27 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
             if (!context.Host.TryReserve(SupportPool.Strike)) return SupportResult.Busy;
 
             double now = context.Host.OrbitNow;
-            Vector2 miss = Random.insideUnitCircle * platform.RodScatter(now);
-            Vector3 aim = ground + new Vector3(miss.x, 0f, miss.y);
-            if (SupportTargeting.TryMapPoint(aim.ToGlobalPosition(), out Vector3 scattered)) ground = scattered;
-            platform.Consume(PlatformAbility.RodStrike, now);
-            context.Logger.LogInfo("[Support] Rod from God released by " + OrbitalPlatform.Callsign + " (" +
-                                   platform.Orbit.Code + ", " + Mathf.RoundToInt(miss.magnitude) + " m off the mark) using " +
-                                   definition.jsonKey + "; " + platform.Rods + " rod(s) left.");
-            context.Host.Run(Strike(context.Host, context.Player, context.Owner, definition, ground,
+            int shots = platform.RodSalvoCount(now);
+            var targets = new Vector3[shots];
+            for (int i = 0; i < shots; i++)
+            {
+                Vector2 miss = Random.insideUnitCircle * platform.RodScatter(now);
+                Vector3 aim = ground + new Vector3(miss.x, 0f, miss.y);
+                targets[i] = SupportTargeting.TryMapPoint(aim.ToGlobalPosition(), out Vector3 scattered)
+                    ? scattered : ground;
+            }
+            platform.Consume(PlatformAbility.RodStrike, now, shots);
+            context.Logger.LogInfo("[Support] Rod from God: " + shots + " rod(s) released by " +
+                                   OrbitalPlatform.Callsign + " using " + definition.jsonKey +
+                                   "; " + platform.Rods + " rod(s) left.");
+            context.Host.Run(Strike(context.Host, context.Player, context.Owner, definition, targets,
                 SupportNaming.Unique("Rod", context)));
             return SupportResult.Accepted;
         }
 
         private static IEnumerator Strike(
             ISupportHost host, Player player, FactionHQ owner, MissileDefinition definition,
-            Vector3 target, string unique)
+            Vector3[] targets, string unique)
         {
             try
             {
@@ -66,23 +69,36 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
                 string guide = player != null && player.Aircraft != null
                     ? player.Aircraft.UniqueName
                     : string.Empty;
-                Missile missile = spawner.SpawnSavedMissile(
-                    definition.unitPrefab,
-                    (target + Vector3.up * ReleaseAltitude).ToGlobalPosition(),
-                    Quaternion.LookRotation(Vector3.down), owner, string.Empty, guide,
-                    Vector3.down * ReleaseSpeed, unique);
-                if (missile != null)
+                var missiles = new Missile[targets.Length];
+                for (int i = 0; i < targets.Length; i++)
                 {
-                    missile.SetAimpoint(target.ToGlobalPosition(), Vector3.zero);
-                    missile.Arm();
-                    Visuals.KineticRodStrikeVisuals.Track(missile, target);
-                    float deadline = Time.time + 30f;
-                    while (missile != null && !missile.disabled && Time.time < deadline)
-                        yield return null;
-                    if (missile != null && !missile.disabled)
-                        Object.Destroy(missile.gameObject); // Expiry is not an impact; native network object teardown.
-
+                    Vector3 target = targets[i];
+                    Missile missile = spawner.SpawnSavedMissile(
+                        definition.unitPrefab,
+                        (target + Vector3.up * ReleaseAltitude).ToGlobalPosition(),
+                        Quaternion.LookRotation(Vector3.down), owner, string.Empty, guide,
+                        Vector3.down * ReleaseSpeed, unique + ":" + i);
+                    missiles[i] = missile;
+                    if (missile != null)
+                    {
+                        missile.SetAimpoint(target.ToGlobalPosition(), Vector3.zero);
+                        missile.Arm();
+                        Visuals.KineticRodStrikeVisuals.Track(missile, target);
+                    }
+                    if (i + 1 < targets.Length) yield return new WaitForSeconds(0.35f);
                 }
+                float deadline = Time.time + 30f;
+                while (Time.time < deadline)
+                {
+                    bool flying = false;
+                    for (int i = 0; i < missiles.Length; i++)
+                        flying |= missiles[i] != null && !missiles[i].disabled;
+                    if (!flying) break;
+                    yield return null;
+                }
+                for (int i = 0; i < missiles.Length; i++)
+                    if (missiles[i] != null && !missiles[i].disabled)
+                        Object.Destroy(missiles[i].gameObject); // Expiry is not an impact.
             }
             finally
             {

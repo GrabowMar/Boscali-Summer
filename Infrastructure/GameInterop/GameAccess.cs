@@ -12,6 +12,7 @@ namespace BoscaliSummer.Runtime
     {
         private static FieldInfo mapBuildingHitPoints;
         private static AccessTools.FieldRef<MapBuilding, float> mapBuildingHitPointsRef;
+        private static FieldInfo mapBuildingSetBuildings;
         private static AccessTools.FieldRef<VirtualMFD, List<Button>> leftMfdButtonsRef;
         private static AccessTools.FieldRef<VirtualMFD, List<Button>> rightMfdButtonsRef;
         private static AccessTools.FieldRef<VirtualMFD, List<MFDScreen>> leftMfdScreensRef;
@@ -24,6 +25,7 @@ namespace BoscaliSummer.Runtime
         private static FieldInfo aiAttackModeField;
 
         public static bool MapBuildingHitPointsAvailable { get; private set; }
+        public static bool MapBuildingSetBuildingsAvailable { get; private set; }
         public static bool MfdAvailable { get; private set; }
         public static bool MusicSourcesAvailable { get; private set; }
         public static bool HqSensorsAvailable { get; private set; }
@@ -43,6 +45,18 @@ namespace BoscaliSummer.Runtime
             {
                 MapBuildingHitPointsAvailable = false;
                 Plugin.Logger?.LogWarning("Map building HP access unavailable: " + e.Message);
+            }
+
+            try
+            {
+                mapBuildingSetBuildings = AccessTools.Field(typeof(MapBuildingSet), "mapBuildings");
+                MapBuildingSetBuildingsAvailable = mapBuildingSetBuildings != null &&
+                    mapBuildingSetBuildings.FieldType == typeof(MapBuilding[]);
+            }
+            catch (Exception e)
+            {
+                MapBuildingSetBuildingsAvailable = false;
+                Plugin.Logger?.LogWarning("Map building set index access unavailable: " + e.Message);
             }
 
             try
@@ -101,6 +115,24 @@ namespace BoscaliSummer.Runtime
             if (building != null && mapBuildingHitPointsRef != null)
                 return mapBuildingHitPointsRef(building);
             return 100f;
+        }
+
+        public static void SetMapBuildingHitPoints(MapBuilding building, float hitPoints)
+        {
+            if (building != null && mapBuildingHitPointsRef != null)
+                mapBuildingHitPointsRef(building) = hitPoints;
+        }
+
+        public static bool TryGetMapBuilding(MapBuildingSet set, int index, out MapBuilding building)
+        {
+            building = null;
+            if (set == null || !MapBuildingSetBuildingsAvailable) return false;
+            MapBuilding[] buildings;
+            try { buildings = mapBuildingSetBuildings.GetValue(set) as MapBuilding[]; }
+            catch { return false; }
+            if (buildings == null || index < 0 || index >= buildings.Length) return false;
+            building = buildings[index];
+            return building != null;
         }
 
         public static List<Button> GetLeftMfdButtons(VirtualMFD mfd) => leftMfdButtonsRef(mfd);

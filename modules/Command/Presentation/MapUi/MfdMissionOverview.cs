@@ -68,6 +68,35 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             return "CUR " + Whole(current) + " · STR ACTIVE";
         }
 
+        // The segmented tape is a score gate, not a timer. An unset or malformed gate has no
+        // trustworthy fraction to draw.
+        public static float NextGateProgress(float current, float tactical, float strategic)
+        {
+            if (float.IsNaN(current) || float.IsInfinity(current) ||
+                float.IsNaN(tactical) || float.IsInfinity(tactical) ||
+                float.IsNaN(strategic) || float.IsInfinity(strategic)) return 0f;
+            current = Math.Max(0f, current);
+            if (tactical <= 0f && strategic <= 0f) return 0f;
+            if (tactical > 0f && current < tactical) return Unit(current / tactical);
+            if (strategic > tactical && current < strategic)
+                return Unit((current - Math.Max(0f, tactical)) / (strategic - Math.Max(0f, tactical)));
+            return 1f;
+        }
+
+        public static string NextGateLabel(float current, float tactical, float strategic)
+        {
+            if (float.IsNaN(current) || float.IsInfinity(current) ||
+                float.IsNaN(tactical) || float.IsInfinity(tactical) ||
+                float.IsNaN(strategic) || float.IsInfinity(strategic)) return "SCORE LINK UNAVAILABLE";
+            current = Math.Max(0f, current);
+            if (tactical <= 0f && strategic <= 0f) return "NO ESCALATION GATES";
+            if (tactical > 0f && current < tactical)
+                return "SCORE " + Whole(current) + "  /  +" + Whole(tactical - current) + " TO TACTICAL";
+            if (strategic > tactical && current < strategic)
+                return "SCORE " + Whole(current) + "  /  +" + Whole(strategic - current) + " TO STRATEGIC";
+            return "SCORE " + Whole(current) + "  /  ALL GATES CLEARED";
+        }
+
         private static float Unit(float value) => Math.Max(0f, Math.Min(1f, value));
 
         internal static string Whole(float value) =>

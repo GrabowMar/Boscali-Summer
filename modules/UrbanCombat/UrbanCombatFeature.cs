@@ -2,6 +2,7 @@ using System;
 using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Features;
 using BoscaliSummer.Garrisons;
+using BoscaliSummer.Features.UrbanCombat.Audio;
 using BoscaliSummer.Features.UrbanCombat.Runtime;
 
 namespace BoscaliSummer.Features.UrbanCombat
@@ -15,10 +16,15 @@ namespace BoscaliSummer.Features.UrbanCombat
             typeof(AirbaseCapturePatch),
             typeof(GarrisonClientVisualPatch),
             typeof(MountedTroopsFirePatch),
-            typeof(ChimeraLoadoutAssignAircraftPatch),
-            typeof(ChimeraWeaponManagerInitPatch),
-            typeof(ChimeraWeaponSelectorPopulatePatch),
-            typeof(ChimeraWeaponCheckerAvailablePatch)
+            typeof(ChimeraMountRegistrationPatch),
+            typeof(UrbanDefensePatch),
+            typeof(SiegeFloorPatch),
+            typeof(UrbanArmorPatch),
+            typeof(ShellDamagePatch),
+            typeof(StrongpointDamagePatch),
+            typeof(StrongpointClientGuardPatch),
+            typeof(DestroyCommandGuardPatch),
+            typeof(ShellDestructPatch)
         };
 
         public FeatureMetadata Metadata => Feature;
@@ -32,19 +38,21 @@ namespace BoscaliSummer.Features.UrbanCombat
             AirAssaultController assault = context.AddSceneService<AirAssaultController>(31);
             context.AddService<IAirAssaultObservation>(assault);
             BaseDefenseAlarmService alarm = context.AddSceneService<BaseDefenseAlarmService>(32);
+            context.AddSceneService<UrbanAmbienceService>(33);
+            context.AddSceneService<WarzoneDressingService>(34);
             context.AddService<IBuildingOccupancy>(garrisons);
             context.AddService<IZoneFortificationService>(garrisons);
             context.AddService<IBaseDefenseAlarmService>(alarm);
 
+            // Whether occupied buildings defend a zone at all. How many buildings and how
+            // large a stick are balance, and stay in the config file.
             context.AddHostSettings(new HostSettingsTable("URBAN COMBAT")
                 .Toggle(1, context.Settings.UrbanCombat.GarrisonsEnabled, "ZONE GARRISONS",
                     "Occupied buildings near owned airbases become defensive positions; the Zone Fortification support action needs this on.")
-                .Number(2, context.Settings.UrbanCombat.GarrisonsPerZone, "BUILDINGS PER ZONE",
-                    "Occupied civilian buildings per controlled zone. A successful Zone Fortification adds one above the zone's count.",
-                    1)
-                .Number(3, context.Settings.UrbanCombat.TroopsPerDeploy, "INFANTRY PER INSERTION",
-                    "Infantry deployed per transport paradrop, in one stick out the cargo access.",
-                    1));
+                .Toggle(2, context.Settings.UrbanCombat.SiegeEnabled, "URBAN SIEGE",
+                    "Cities resist capture with their size and rooftop nests; control holds at the strongpoint floor until the nests fall.")
+                .Number(3, context.Settings.UrbanCombat.SiegeDefenseScale, "SIEGE STRENGTH",
+                    "Overall urban siege strength; 0 is vanilla capture pacing everywhere.", 0.25f));
         }
     }
 }

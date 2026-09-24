@@ -37,7 +37,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
         private const float SheetBaseGap = 10f;
         private const float SheetGapMax = 22f;
 
-        private const float SheetHeaderHeight = 50f;
+        private const float SheetHeaderHeight = 28f;
         private const float SheetHeadingHeight = 24f;
 
         private const int ChipCount = 3;
@@ -46,6 +46,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
         private const int TabSkills = 1;
         private const int TabWings = 2;
         private const int TabStudio = 3;
+        private const int TabPlane = 4;
 
         private const int MaximumBudgetPips = 20;
         private const int WingRowsPerPage = 2;
@@ -53,8 +54,9 @@ namespace BoscaliSummer.Features.Progression.Presentation
         /// <summary>What each operational page is called, in tab order.</summary>
         private static readonly string[] SheetNames =
         {
-            "PILOT STATUS", "QUALIFICATIONS", "WING STATUS", "PILOT STUDIO",
+            "PILOT STATUS", "QUALIFICATIONS", "ACE INTELLIGENCE", "PILOT STUDIO", "PLANE STATUS",
         };
+        private static readonly string[] TabLabels = { "PILOT", "SKILLS", "ACES", "STUDIO", "PLANE" };
 
         private ProgressionManager progression;
         private ProgressionSettings settings;
@@ -121,6 +123,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             ResetPilotPage();
             ResetWingsPage();
             ResetStudioPage();
+            ResetPlanePage();
 
             emblemSprite = null;
             emblemSpriteKey = null;
@@ -256,8 +259,8 @@ namespace BoscaliSummer.Features.Progression.Presentation
             AvKit.Stretch(content);
 
             shell = AvScreen.Build(
-                content, "SQD",
-                new[] { "01 PILOT", "02 SKILLS", "03 WINGS", "04 STUDIO" },
+                content, "PILOT",
+                TabLabels,
                 new[]
                 {
                     new[] { "PILOT SCORE", "THIS PILOT" },
@@ -276,9 +279,11 @@ namespace BoscaliSummer.Features.Progression.Presentation
             BuildSkillsPage((RectTransform)shell.CreatePage(TabSkills, "SkillsPage").transform, body);
             BuildWingsPage((RectTransform)shell.CreatePage(TabWings, "WingsPage").transform, body);
             BuildStudioPage((RectTransform)shell.CreatePage(TabStudio, "StudioPage").transform, body);
+            BuildPlanePage((RectTransform)shell.CreatePage(TabPlane, "PlanePage").transform, body);
 
             MFDScreen result = root.AddComponent<MFDScreen>();
-            result.shortName = MfdSlots.Sqd;
+            // The registry still owns SQD; the cockpit-facing screen name is PILOT.
+            result.shortName = "PILOT";
             result.displayPanel = contentObject;
             result.aircraftOnly = false;
             result.label = bezel != null ? bezel.GetComponentInChildren<TextMeshProUGUI>(true) : null;
@@ -320,12 +325,33 @@ namespace BoscaliSummer.Features.Progression.Presentation
             {
                 "Pilot status, current sortie, service background and career totals.",
                 "Compare qualification grades and spend an available pick.",
-                "Review your recruited wing and known hostile ace wings.",
+                "Review known hostile aces; friendly-wing management stays in Wing Command.",
                 "Manage local pilot profiles and squadron identity.",
+                "Inspect the aircraft you are piloting: flight, systems, stores and damage.",
             };
             if (shell?.Tabs == null) return;
+            SqdMark[] marks = { SqdMark.Recon, SqdMark.Combat, SqdMark.Strike,
+                SqdMark.Recon, SqdMark.Aircraft };
             for (int i = 0; i < shell.Tabs.Length && i < hints.Length; i++)
-                shell.Tabs[i].WithTooltip(hints[i]);
+            {
+                AvButton tab = shell.Tabs[i];
+                tab.WithTooltip(hints[i]);
+                RectTransform root = (RectTransform)tab.transform;
+                float width = root.sizeDelta.x > 1f ? root.sizeDelta.x : root.rect.width;
+                float height = root.sizeDelta.y > 1f ? root.sizeDelta.y : root.rect.height;
+                if (width <= 1f) width = Width / TabLabels.Length;
+                if (height <= 1f) height = AvTokens.TabBarHeight;
+                SqdGlyph glyph = SqdGlyph.Create(root,
+                    new Rect(7f, -(height - 14f) * 0.5f, 14f, 14f), marks[i]);
+                glyph.color = AvTheme.RailInfo;
+                TMP_Text label = tab.GetComponentInChildren<TMP_Text>();
+                if (label == null) continue;
+                AvKit.Place(label.rectTransform, new Rect(24f, 0f, width - 28f, height));
+                label.alignment = TextAlignmentOptions.MidlineLeft;
+                label.fontSizeMax = label.fontSize;
+                label.fontSizeMin = AvTokens.FontMicro;
+                label.enableAutoSizing = true;
+            }
         }
 
         private static void PrepareMetric(AvStyled.Metric metric)
@@ -386,6 +412,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 case TabSkills: RefreshSkillsPage(); break;
                 case TabWings: RefreshWingsPage(); break;
                 case TabStudio: RefreshStudioPage(); break;
+                case TabPlane: RefreshPlanePage(); break;
             }
 
             UpdateStatusStrip();
@@ -394,8 +421,11 @@ namespace BoscaliSummer.Features.Progression.Presentation
         private void RefreshDataBar(bool bypass)
         {
             bool hunted = squad != null && squad.HuntActive;
-            dataBar.State.text = hunted ? "ACE HUNT ACTIVE" : bypass
-                ? "DEBUG BYPASS" : "PERSONNEL FILE";
+            string page = shell.Page >= 0 && shell.Page < TabLabels.Length
+                ? TabLabels[shell.Page]
+                : "PILOT";
+            dataBar.State.text = (hunted ? "ACE HUNT ACTIVE" : bypass
+                ? "DEBUG BYPASS" : "PERSONNEL FILE") + "  /  " + page;
             dataBar.State.color = hunted ? AvTheme.Alert : bypass ? AvTheme.Warning : AvTheme.RailReady;
             dataBar.SetChip(0, hunted ? "HUNT ACTIVE" : "NO HUNT", hunted);
             dataBar.SetChip(1, "RANK " + Progress.Rank, true);
@@ -438,6 +468,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             string baseLine = shell.Page == TabWings
                 ? (squad != null ? squad.Status : "Enemy wing reports are unavailable.")
                 : shell.Page == TabStudio ? StudioStatusLine()
+                : shell.Page == TabPlane ? planeStatus
                 : progression.BypassRequirements ? "DEBUG BYPASS — EVERY GRADE OPEN"
                 : progression.LastResult;
 
@@ -475,22 +506,24 @@ namespace BoscaliSummer.Features.Progression.Presentation
             return y - 24f;
         }
 
-        /// <summary>Page identity with a readable title and one restrained divider.</summary>
+        /// <summary>One compact page identity; the tab and data bar already carry location.</summary>
         private static float DrawPageHeader(
-            RectTransform parent, float x, float y, float width, string eyebrowText, string title, string meta)
+            RectTransform parent, float x, float y, float width, string title, string meta, SqdMark mark)
         {
-            TMP_Text eyebrow = PlainLabel(parent, new Rect(x, y, width, 12f), eyebrowText, "section-title-note");
-            eyebrow.color = AvTheme.RailInfo;
-            PlainLabel(parent, new Rect(x, y - 15f, width, 22f), title, "page-title");
+            AvKit.Rule(parent, new Rect(x, y - 8f, 8f, 2f), AvTheme.RailInfo);
+            SqdGlyph glyph = SqdGlyph.Create(parent, new Rect(x + 14f, y - 2f, 15f, 15f), mark);
+            glyph.color = AvTheme.RailInfo;
+            PlainLabel(parent, new Rect(x + 36f, y - 1f, width * 0.52f - 36f, 19f),
+                title, "row-name");
             if (!string.IsNullOrEmpty(meta))
             {
-                TMP_Text note = PlainLabel(parent, new Rect(x + width * 0.52f, y - 16f,
-                    width * 0.48f, 20f), meta, "section-title-note");
+                TMP_Text note = PlainLabel(parent, new Rect(x + width * 0.52f, y - 1f,
+                    width * 0.48f, 19f), meta, "section-title-note");
                 note.alignment = TextAlignmentOptions.MidlineRight;
             }
 
-            AvKit.Rule(parent, new Rect(x, y - 40f, width, 2f), AvTheme.RailInfo.WithAlpha(0.65f));
-            return y - 50f;
+            AvKit.Rule(parent, new Rect(x, y - 23f, width, 1f), AvTheme.Hairline);
+            return y - SheetHeaderHeight;
         }
 
         /// <summary>A flat, word-labelled status badge.</summary>
@@ -551,10 +584,6 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 AvTheme.RailInfo.WithAlpha(0.45f));
             rail.raycastTarget = false;
         }
-
-        private static void RowSeparator(RectTransform parent, Rect area) =>
-            AvKit.Rule(parent, new Rect(area.x, area.y - area.height, area.width, 1f),
-                       AvTheme.Unity(AvTokens.Hairline.WithAlpha(0.13f)));
 
         /// <summary>
         /// One aligned status field: key at left and value at right. The value shrinks to
@@ -618,9 +647,6 @@ namespace BoscaliSummer.Features.Progression.Presentation
             y = row.Bind(x, y, width, pitch, key, "—");
             return row.Value;
         }
-
-        private static Color RailColour(string state) =>
-            AvStyleHost.Resolve(AvStyleHost.Style("rail " + state).Background, AvTheme.RailInert);
 
         private static Color HoverFill() =>
             AvStyleHost.Resolve(AvStyleHost.Style("row", "hover").Background, AvTheme.SurfaceRaised);

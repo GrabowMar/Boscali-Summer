@@ -5,23 +5,19 @@ using UnityEngine;
 
 namespace BoscaliSummer.Garrisons
 {
+    // Vanilla replays Fire on the owner, the server and observers (MountedTroops.Fire ->
+    // Cmd/RpcLaunchMissile -> WeaponStation.LaunchMount); the controller sorts out who does what.
     [HarmonyPatch(typeof(MountedTroops), nameof(MountedTroops.Fire))]
     internal static class MountedTroopsFirePatch
     {
-        private static void Postfix(
-            MountedTroops __instance,
-            Unit owner,
-            Unit target,
-            Vector3 inheritedVelocity,
-            WeaponStation weaponStation,
-            GlobalPosition aimpoint)
+        private static void Postfix(MountedTroops __instance, Unit owner, WeaponStation weaponStation)
         {
-            if (__instance == null) return;
-            Aircraft aircraft = owner as Aircraft ?? __instance.GetComponentInParent<Aircraft>();
+            AirAssaultController controller = AirAssaultController.Instance;
+            if (__instance == null || controller == null) return;
+            Aircraft aircraft = owner as Aircraft;
+            if (aircraft == null) aircraft = __instance.GetComponentInParent<Aircraft>();
             if (aircraft != null)
-            {
-                AirAssaultController.Instance?.DeployFromWeaponStation(aircraft, __instance, inheritedVelocity, weaponStation);
-            }
+                controller.DeployFromWeaponStation(aircraft, __instance, weaponStation);
         }
     }
 }

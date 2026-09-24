@@ -8,19 +8,23 @@ namespace BoscaliSummer.Tests.Features.Command
         internal static void Run()
         {
             var morale = new FactionMoraleState();
-            TestAssert.That(morale.TryGet(1, out float value) && value == 100f, "New faction morale starts at 100");
+            TestAssert.That(morale.TryGet(1, out float value) && value == 50f, "New faction morale starts neutral");
             TestAssert.That(morale.TrySet(1, 42.5f) && morale.TryGet(1, out value) && value == 42.5f,
                 "Morale survives reads without rounding");
             foreach (float invalid in new[] { float.NaN, float.PositiveInfinity, float.NegativeInfinity, -1f, 101f })
                 TestAssert.That(!morale.TrySet(1, invalid) && morale.TryGet(1, out value) && value == 42.5f,
                     "Invalid writes preserve stored morale");
             for (int i = 2; i <= FactionMoraleState.MaximumFactions; i++)
-                TestAssert.That(morale.TryGet(i, out value) && value == 100f, "Faction state is independent");
+                TestAssert.That(morale.TryGet(i, out value) && value == 50f, "Faction state is independent");
             TestAssert.That(!morale.TrySet(9, 50f), "Faction storage is bounded");
             TestAssert.That(morale.TrySet(1, 0f) && morale.TrySet(1, 100f), "Both morale endpoints are valid");
+            TestAssert.That(System.Math.Abs(FactionMoraleState.ContractMultiplier(0f) - 0.8f) < 0.0001f &&
+                System.Math.Abs(FactionMoraleState.ContractMultiplier(50f) - 1f) < 0.0001f &&
+                System.Math.Abs(FactionMoraleState.ContractMultiplier(100f) - 1.1f) < 0.0001f,
+                "Morale gives bounded contract penalties and bonuses");
             morale.Reset();
             morale.Reset();
-            TestAssert.That(morale.TryGet(9, out value) && value == 100f, "Scene reset releases capacity and restores defaults");
+            TestAssert.That(morale.TryGet(9, out value) && value == 50f, "Scene reset releases capacity and restores defaults");
 
             var history = new MfdResourceHistory();
             TestAssert.That(history.Sample(0f, -10f, 0f, float.NaN, 100f), "First observation recorded");

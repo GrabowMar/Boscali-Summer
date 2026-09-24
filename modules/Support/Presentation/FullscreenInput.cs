@@ -1,9 +1,10 @@
 namespace BoscaliSummer.Features.Support.Presentation
 {
     /// <summary>
-    /// Input ownership for a full-screen OPS overlay (the station uplink, the CYBER console):
-    /// Rewired keyboard and the pause keybind are held while it is up and restored exactly as
-    /// found. The map guard patch asks <see cref="AnyOpen"/>.
+    /// Input ownership for the OPS window (the station wall, the sensor feed, the network-ops
+    /// terminal, the briefing table all live in it): Rewired keyboard and the pause keybind are
+    /// held while it is up and restored exactly as found. The map guard patch asks
+    /// <see cref="AnyOpen"/>.
     /// </summary>
     internal sealed class FullscreenInput
     {
@@ -13,8 +14,8 @@ namespace BoscaliSummer.Features.Support.Presentation
 
         public bool Held { get; private set; }
 
-        /// <summary>True while any full-screen OPS overlay owns the mouse, and one frame after.</summary>
-        public static bool AnyOpen => PlatformUplink.IsOpen || CyberConsole.IsOpen;
+        /// <summary>True while the OPS window owns the mouse, and one frame after.</summary>
+        public static bool AnyOpen => Window.OpsWindow.IsOpen;
 
         public void Hold()
         {

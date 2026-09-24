@@ -175,6 +175,13 @@ namespace BoscaliSummer.Tests.Features.Command
             TestAssert.That(text.Contains("+++"), "Marquee must include separator");
             TestAssert.That(text.Contains("<color="), "Marquee must include rich text color tags");
 
+            feed.Enqueue(new MfdNewsFeed.HeadlineItem("SITREP", "#66CCFF", "FRONT STATUS UNCHANGED"));
+            feed.Enqueue(new MfdNewsFeed.HeadlineItem("SITREP", "#66CCFF", "FRONT STATUS UNCHANGED"));
+            text = feed.BuildMarqueeText(6);
+            TestAssert.That(text.IndexOf("FRONT STATUS UNCHANGED", StringComparison.Ordinal) ==
+                text.LastIndexOf("FRONT STATUS UNCHANGED", StringComparison.Ordinal),
+                "Repeated status dispatches must not stack in the wire");
+
             feed.OnMarqueeCycleComplete();
             string nextText = feed.BuildMarqueeText(6);
             TestAssert.That(!string.IsNullOrEmpty(nextText), "Next cycle marquee text must not be empty");
@@ -192,7 +199,8 @@ namespace BoscaliSummer.Tests.Features.Command
                 contestedAirbases: 0);
 
             string text = feed.BuildMarqueeText();
-            TestAssert.That(text.Contains("DEFCON 1") || text.Contains("DEFCON ALERT"), "Must report Defcon 1 alert");
+            TestAssert.That(text.Contains("DEFCON ALERT"), "Must report a defcon alert");
+            TestAssert.That(!text.Contains("DEFCON 1"), "Defcon numbers must stay off the wire");
 
             feed.UpdateTheaterStatus(
                 now: 200f,
@@ -203,7 +211,11 @@ namespace BoscaliSummer.Tests.Features.Command
                 contestedAirbases: 0);
 
             text = feed.BuildMarqueeText();
-            TestAssert.That(text.Contains("75%") || text.Contains("ALLIED GROUND UNITS"), "Must report territorial advantage");
+            TestAssert.That(text.Contains("PRESSING THE ADVANTAGE") || text.Contains("FRONT ADVANCE"),
+                "Must report territorial advantage");
+            TestAssert.That(!text.Contains("% THEATER CONTROL") && !text.Contains("EFFECTIVENESS"),
+                "Percentages and unit tallies must stay off the wire");
+            TestAssert.That(!text.Contains("SPREAD ACROSS"), "Sector counts must stay off the wire");
         }
 
         private static void TestCleanTagsAndDedup()

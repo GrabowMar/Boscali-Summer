@@ -16,6 +16,8 @@ using BoscaliSummer.Features.Squad.Configuration;
 using BoscaliSummer.Features.TheaterOps.Configuration;
 using BoscaliSummer.Features.Trenches.Configuration;
 using BoscaliSummer.Features.UrbanCombat.Configuration;
+using BoscaliSummer.Features.Visuals.Configuration;
+using BoscaliSummer.Features.Weather.Configuration;
 using BoscaliSummer.Infrastructure.Diagnostics;
 
 namespace BoscaliSummer
@@ -44,6 +46,8 @@ namespace BoscaliSummer
         public AutopilotSettings Autopilot { get; }
         public HudSettings Hud { get; }
         public DiagnosticSettings Diagnostics { get; }
+        public WeatherSettings Weather { get; }
+        public VisualsSettings Visuals { get; }
 
         public ModConfiguration(ConfigFile config)
         {
@@ -69,7 +73,12 @@ namespace BoscaliSummer
                 Autopilot = new AutopilotSettings(config);
                 Hud = new HudSettings(config);
                 Diagnostics = new DiagnosticSettings(config);
+                Weather = new WeatherSettings(config);
+                Visuals = new VisualsSettings(config);
                 LegacyConfigMigration.RemoveEntries(config);
+                // Last, so every module's entries are present to be sorted into the
+                // F1 window's plain and advanced halves.
+                ConfigMenu.Apply(config, this);
             }
             finally
             {

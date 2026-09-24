@@ -48,6 +48,13 @@ namespace BoscaliSummer.Tests.Features.Command
 
             TestAssert.That(MfdMissionOverview.Whole(1500f) == "1,500" && MfdMissionOverview.Whole(25f) == "25",
                 "Threshold figures group with the invariant comma, never the machine's separator");
+
+            TestAssert.That(Near(MfdMissionOverview.NextGateProgress(10f, 25f, 50f), .4f) &&
+                Near(MfdMissionOverview.NextGateProgress(30f, 25f, 50f), .2f) &&
+                Near(MfdMissionOverview.NextGateProgress(50f, 25f, 50f), 1f) &&
+                MfdMissionOverview.NextGateLabel(30f, 25f, 50f).Contains("+20 TO STRATEGIC") &&
+                MfdMissionOverview.NextGateLabel(float.NaN, 25f, 50f) == "SCORE LINK UNAVAILABLE",
+                "Score tape advances toward the next host gate without implying a time countdown");
         }
 
         private static bool Near(float value, float expected) => Math.Abs(value - expected) < 0.0005f;

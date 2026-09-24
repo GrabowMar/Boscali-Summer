@@ -27,6 +27,9 @@ namespace BoscaliSummer.Features.Events.Networking
         public int TargetFactionHash;
         public float StartedAtMissionTime;
         public float EndsAtMissionTime;
+        public float EffectStrength;
+        public int[] FactionResponseHashes;
+        public byte[] FactionResponseKinds;
     }
 
     /// <summary>Client intent: respond to the active event, or ask what this player already bought.</summary>
@@ -53,11 +56,14 @@ namespace BoscaliSummer.Features.Events.Networking
 
     internal sealed class EventsNet : MonoBehaviour
     {
-        /// <summary>Version 3 adds the resolved target faction hash for superevents.</summary>
-        internal const byte ProtocolVersion = 3;
+        /// <summary>Version 5 mirrors faction-wide event decisions for support quotes and late joiners.</summary>
+        internal const byte ProtocolVersion = 5;
 
         internal const byte ActionRespond = 0;
         internal const byte ActionQuery = 1;
+        internal const byte ActionTreasury = 2;
+        internal const byte ActionContract = 3;
+        internal const byte ActionPerk = 4;
 
         private const float ReplyTimeout = 5f;
         private const float SendInterval = 0.5f;
@@ -125,11 +131,23 @@ namespace BoscaliSummer.Features.Events.Networking
             }
         }
 
-        public void Broadcast(sbyte catalogIndex, int targetFactionHash, float start, float end)
+        public void Broadcast(sbyte catalogIndex, int targetFactionHash, float start, float end,
+            float effectStrength, IReadOnlyDictionary<int, byte> factionResponses)
         {
             if (!GameAccess.IsServer()) return;
             NetworkServer server = NetworkManagerNuclearOption.i?.Server;
             if (server == null || !server.Active) return;
+            int count = Math.Min(8, factionResponses?.Count ?? 0);
+            var hashes = new int[count];
+            var kinds = new byte[count];
+            int at = 0;
+            if (factionResponses != null)
+                foreach (var pair in factionResponses)
+                {
+                    if (at >= count) break;
+                    hashes[at] = pair.Key;
+                    kinds[at++] = pair.Value;
+                }
             server.SendToAll(new ActiveEventChanged
             {
                 Protocol = ProtocolVersion,
@@ -137,10 +155,16 @@ namespace BoscaliSummer.Features.Events.Networking
                 TargetFactionHash = targetFactionHash,
                 StartedAtMissionTime = start,
                 EndsAtMissionTime = end,
+                EffectStrength = effectStrength,
+                FactionResponseHashes = hashes,
+                FactionResponseKinds = kinds,
             }, authenticatedOnly: true, excludeLocalPlayer: true);
         }
 
-        internal void RequestResponse(sbyte catalogIndex) => Send(ActionRespond, catalogIndex);
+        internal void RequestResponse(sbyte catalogIndex, EventResponseKind kind) =>
+            Send(kind == EventResponseKind.Treasury ? ActionTreasury :
+                 kind == EventResponseKind.Contract ? ActionContract :
+                 kind == EventResponseKind.Perk ? ActionPerk : ActionRespond, catalogIndex);
 
         internal void QueryState(sbyte catalogIndex) => Send(ActionQuery, catalogIndex);
 
@@ -149,7 +173,7 @@ namespace BoscaliSummer.Features.Events.Networking
             if (GameAccess.IsServer())
             {
                 // The host owns the state; resolve its own request in-process.
-                if (action != ActionRespond) return;
+                if (action == ActionQuery) return;
                 if (!GameManager.GetLocalPlayer<Player>(out Player local) || local == null) return;
                 EventResponseKind kind;
                 int cost;
@@ -181,7 +205,7 @@ namespace BoscaliSummer.Features.Events.Networking
         private void ReceiveIntent(INetworkPlayer sender, EventIntent intent)
         {
             if (!GameAccess.IsServer() || intent.Protocol != ProtocolVersion || sender == null ||
-                !sender.IsAuthenticated || intent.Action > ActionQuery ||
+                !sender.IsAuthenticated || intent.Action > ActionPerk ||
                 !sender.TryGetPlayer<Player>(out Player player) || player == null ||
                 !RateLimit(player))
                 return;
@@ -213,7 +237,8 @@ namespace BoscaliSummer.Features.Events.Networking
         {
             if (GameAccess.IsServer() || message.Protocol != ProtocolVersion) return;
             manager.ApplyRemote(message.CatalogIndex, message.TargetFactionHash,
-                message.StartedAtMissionTime, message.EndsAtMissionTime);
+                message.StartedAtMissionTime, message.EndsAtMissionTime, message.EffectStrength,
+                message.FactionResponseHashes, message.FactionResponseKinds);
         }
 
         private void OnDestroy()
@@ -252,6 +277,15 @@ namespace BoscaliSummer.Features.Events.Networking
                 w.WritePackedInt32(v.TargetFactionHash);
                 w.WriteSingle(v.StartedAtMissionTime);
                 w.WriteSingle(v.EndsAtMissionTime);
+                w.WriteSingle(v.EffectStrength);
+                int count = Math.Min(8, Math.Min(v.FactionResponseHashes?.Length ?? 0,
+                    v.FactionResponseKinds?.Length ?? 0));
+                w.WriteByte((byte)count);
+                for (int i = 0; i < count; i++)
+                {
+                    w.WritePackedInt32(v.FactionResponseHashes[i]);
+                    w.WriteByte(v.FactionResponseKinds[i]);
+                }
             }));
             Bind(typeof(Reader<ActiveEventChanged>), "Read", (Func<NetworkReader, ActiveEventChanged>)(r =>
             {
@@ -262,6 +296,16 @@ namespace BoscaliSummer.Features.Events.Networking
                 message.TargetFactionHash = r.ReadPackedInt32();
                 message.StartedAtMissionTime = r.ReadSingle();
                 message.EndsAtMissionTime = r.ReadSingle();
+                message.EffectStrength = r.ReadSingle();
+                int count = r.ReadByte();
+                if (count > 8) return message;
+                message.FactionResponseHashes = new int[count];
+                message.FactionResponseKinds = new byte[count];
+                for (int i = 0; i < count; i++)
+                {
+                    message.FactionResponseHashes[i] = r.ReadPackedInt32();
+                    message.FactionResponseKinds[i] = r.ReadByte();
+                }
                 return message;
             }));
 

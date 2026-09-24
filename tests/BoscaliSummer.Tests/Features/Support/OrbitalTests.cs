@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Features.Support.Runtime;
 using BoscaliSummer.Features.Support.Domain.Orbital;
 
 namespace BoscaliSummer.Tests.Features.Support
@@ -7,14 +8,18 @@ namespace BoscaliSummer.Tests.Features.Support
     {
         public static void Run()
         {
+            TestStationKeeping();
             TestOrbitMath();
             TestBands();
             TestPassGeometry();
             TestCatalogue();
             TestPlacement();
+            TestMissionFitting();
             TestJettison();
             TestPower();
             TestDockingAndCargo();
+            TestWeaponUpgrades();
+            TestMtiSharesImagerTasking();
             TestAbilities();
             TestManoeuvres();
             TestSafeMode();
@@ -27,8 +32,128 @@ namespace BoscaliSummer.Tests.Features.Support
             TestSarFormation();
         }
 
+        /// <summary>
+        /// MTI rides the radar tasking SAR already spends: one window, one spend, one recharge.
+        /// The mapping lives in the manager (Unity-bound); the pure suite pins the wire id and the
+        /// single-window platform semantics both modes share.
+        /// </summary>
+        private static void TestMtiSharesImagerTasking()
+        {
+            TestAssert.That((byte)SupportActionId.MtiSweep == 24, "MTI keeps wire id 24");
+            var seen = new System.Collections.Generic.HashSet<byte>();
+            foreach (SupportActionId id in (SupportActionId[])Enum.GetValues(typeof(SupportActionId)))
+                TestAssert.That(seen.Add((byte)id), "wire id " + (byte)id + " must be unique");
+
+            OrbitalPlatform platform = Station(out double now);
+            OrbitClock clock = OrbitClock.Default;
+            Add(platform, ModuleKind.Imager, 6, ref now);
+            Add(platform, ModuleKind.Solar, 5, ref now);
+            now = FirstPassTime(platform, now);
+            for (int i = 0; i < 60; i++) platform.Tick(now, 5f, true, clock);
+            TestAssert.That(platform.Check(PlatformAbility.RadarScan, now, clock) == PlatformDenial.None,
+                "a charged imager offers its radar window");
+            float energy = platform.Energy;
+            platform.Consume(PlatformAbility.RadarScan, now);
+            TestAssert.That(platform.Check(PlatformAbility.RadarScan, now, clock) == PlatformDenial.Recharging,
+                "one radar task — SAR or MTI — closes the window for both");
+            TestAssert.That(Near(platform.Energy, energy - PlatformAbilities.Info(PlatformAbility.RadarScan).EnergyKj, 0.01),
+                "the shared tasking spends its energy once");
+        }
+
+        private static void TestStationKeeping()
+        {
+            OrbitalPlatform station = Station(out double now);
+            OrbitClock clock = OrbitClock.Default;
+            OrbitState before = station.State(now, clock);
+            OrbitState hoursLater = station.State(now + 86400, new OrbitClock(4));
+            TestAssert.That(before.InPass && hoursLater.InPass && before.SubX == hoursLater.SubX && before.SubZ == hoursLater.SubZ,
+                "a station holds its position indefinitely, regardless of old orbit-gap settings");
+            TestAssert.That(station.PositionIndex == StationKeeping.Centre, "initial station is at theatre centre");
+            TestAssert.That(!station.TryRelocate(0, now, clock), "movement requires a propulsion module");
+            Add(station, ModuleKind.Propulsion, 6, ref now);
+            float fuel = station.Fuel;
+            TestAssert.That(!station.TryRelocate(9, now, clock) && !station.TryRelocate(-1, now, clock) &&
+                !station.TryRelocate(StationKeeping.Centre, now, clock) && station.Fuel == fuel,
+                "invalid and current destinations never spend fuel");
+            TestAssert.That(station.TryRelocate(0, now, clock) && station.Fuel == fuel - 25,
+                "a valid destination spends fuel once");
+            TestAssert.That(!station.TryRelocate(8, now, clock), "an active relocation cannot be replaced");
+            var snapshot = new PlatformSnapshot();
+            station.Export(now + 5, snapshot);
+            var remote = new OrbitalPlatform();
+            remote.Mirror(snapshot, 900);
+            OrbitState moving = station.State(now + 5, clock), mirrored = remote.State(900, clock);
+            TestAssert.That(Near(moving.SubX, mirrored.SubX, 0.01) && Near(moving.SubZ, mirrored.SubZ, 0.01),
+                "a late join mirrors the relocation trajectory with rebased time");
+            OrbitState arrived = station.State(now + 10, clock);
+            TestAssert.That(arrived.InPass && arrived.SubX == StationKeeping.X(0) && arrived.SubZ == StationKeeping.Z(0),
+                "arrival holds the chosen sector");
+            TestAssert.That(station.CheckRelocate(8, now + 10, clock) == PlatformDenial.Recharging,
+                "propulsion recharge survives arrival");
+            TestAssert.That(station.TryRelocate(8, now + 31, clock), "a later move can be selected explicitly");
+            int known = remote.Seed;
+            snapshot.Seed = 81;
+            remote.Mirror(snapshot, 901);
+            TestAssert.That(remote.Seed == known, "a malformed sector route cannot move the client station");
+        }
+
         private static bool Near(double value, double expected, double tolerance) =>
             Math.Abs(value - expected) <= tolerance;
+
+        private static void TestMissionFitting()
+        {
+            for (int missionIndex = 0; missionIndex < PlatformMissions.Count; missionIndex++)
+            {
+                PlatformMission mission = (PlatformMission)missionIndex;
+                var station = new OrbitalPlatform();
+                double now = 0.0;
+                PlatformFitStep step = PlatformMissions.Next(station, mission, now);
+                TestAssert.That(step.Module == ModuleKind.Core && step.Cell == OrbitalPlatform.CoreCell,
+                    "a mission fit starts with the existing core launch");
+                int launches = 0;
+                while (!step.Complete && launches < OrbitalPlatform.CellCount)
+                {
+                    TestAssert.That(step.Failure == PlacementFailure.None,
+                        mission + " fit must recommend a legal launch: " + step.Failure);
+                    TestAssert.That(station.TryLaunch(step.Module, step.Cell, OrbitRegimes.Standard, 42, now,
+                        PlatformModules.LaunchPrice(step.Module), Insertion, Dock) == PlacementFailure.None,
+                        mission + " recommendation must pass the authoritative placement rules");
+                    if (step.Module != ModuleKind.Core)
+                    {
+                        PlatformFitStep waiting = PlatformMissions.Next(station, mission, now);
+                        TestAssert.That(waiting.Failure == PlacementFailure.LaunchInFlight && !waiting.Complete,
+                            "the planner must wait for docking, without counting an in-flight module as fitted");
+                    }
+                    now += Dock;
+                    station.Tick(now, 0.01f, true, OrbitClock.Default);
+                    launches++;
+                    step = PlatformMissions.Next(station, mission, now);
+                }
+                TestAssert.That(step.Complete && step.Fitted == step.Total && launches == step.Total,
+                    mission + " fit must finish without duplicate launches");
+                PlatformStats stats = station.Stats(now);
+                TestAssert.That(stats.Mass <= OrbitalPlatform.MassLimit && stats.NetSunKw >= 0f &&
+                    stats.StorageKj >= PlatformAbilities.Info(PlatformMissions.Ability(mission)).EnergyKj,
+                    mission + " fit must support its payload mass, solar draw and burst storage");
+                if (mission == PlatformMission.Emp)
+                    TestAssert.That(!station.RunsHot(ModuleKind.Emp, now), "guided EMP radiator must cool the emitter");
+                if (mission == PlatformMission.PrecisionStrike)
+                    TestAssert.That(stats.Stabilised && station.Rods > 0, "strike fit must carry rods and the scatter-reducing gyro");
+                TestAssert.That(PlatformMissions.Next(station, mission, now).Complete,
+                    "a completed fit never schedules another module");
+            }
+
+            OrbitalPlatform heavy = Station(out double heavyNow);
+            Add(heavy, ModuleKind.Reactor, 2, ref heavyNow);
+            Add(heavy, ModuleKind.Rods, 6, ref heavyNow);
+            Add(heavy, ModuleKind.Rods, 8, ref heavyNow);
+            Add(heavy, ModuleKind.Habitat, 3, ref heavyNow);
+            Add(heavy, ModuleKind.Battery, 1, ref heavyNow);
+            PlatformFitStep blocked = PlatformMissions.Next(heavy, PlatformMission.Emp, heavyNow);
+            TestAssert.That(!blocked.Complete && blocked.Module == ModuleKind.Emp && blocked.Failure == PlacementFailure.OverMass,
+                "a custom station over the mission mass allowance must explain the blockage, never suggest an illegal cell");
+            TestAssert.That(heavy.Stats(heavyNow).Mass == 37.5f, "planning must leave a player's custom station untouched");
+        }
 
         private const double Insertion = 45.0;
         private const double Dock = 20.0;
@@ -310,9 +435,8 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(platform.Check(PlatformAbility.Uplink, now, clock) == PlatformDenial.Brownout,
                 "a browned-out station must refuse every ability");
 
-            // Out of the pass the arrays recharge it; the brownout lifts at a quarter charge.
-            now = now + FirstAwayDelay(platform, now, clock);
-            for (int i = 0; i < 100 && platform.Brownout; i++) platform.Tick(now, 1f, false, clock);
+            // Daylight recharges a fixed station; waiting never creates free sunlight.
+            for (int i = 0; i < 100 && platform.Brownout; i++) platform.Tick(now, 1f, true, clock);
             TestAssert.That(!platform.Brownout && platform.Energy >= 600f * OrbitalPlatform.BrownoutRecovery,
                 "sunlight must end the brownout at a quarter charge");
 
@@ -353,6 +477,29 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(platform.Cell(OrbitalPlatform.CoreCell) == ModuleKind.Core, "cargo must not replace the core");
             TestAssert.That(new OrbitalPlatform().TryResupply(0.0, Dock) == PlacementFailure.NoPlatform,
                 "cargo needs a station");
+        }
+
+        private static void TestWeaponUpgrades()
+        {
+            OrbitalPlatform platform = Station(out double now);
+            Add(platform, ModuleKind.Rods, 8, ref now);
+            TestAssert.That(platform.RodSalvoCount(now) == 1, "one magazine releases one rod");
+            Add(platform, ModuleKind.Rods, 9, ref now);
+            TestAssert.That(platform.RodSalvoCount(now) == 2 && platform.Rods == 6,
+                "a second magazine adds one shot and three stored rods");
+            platform.Consume(PlatformAbility.RodStrike, now, platform.RodSalvoCount(now));
+            TestAssert.That(platform.Rods == 4, "the salvo spends one rod per projectile");
+
+            float baseScale = platform.Orbit.EmpScale;
+            Add(platform, ModuleKind.Battery, 6, ref now);
+            TestAssert.That(Near(platform.EmpScaleAt(now), baseScale, 1e-6),
+                "the first battery establishes the base EMP radius");
+            Add(platform, ModuleKind.Battery, 5, ref now);
+            TestAssert.That(Near(platform.EmpScaleAt(now), baseScale * 1.25, 1e-6),
+                "a second battery widens the actual EMP pulse");
+            Add(platform, ModuleKind.Battery, 10, ref now);
+            TestAssert.That(Near(platform.EmpScaleAt(now), baseScale * 1.5, 1e-6),
+                "the third battery widens the actual EMP pulse again");
         }
 
         private static void TestAbilities()
@@ -400,8 +547,8 @@ namespace BoscaliSummer.Tests.Features.Support
 
             OrbitState state = platform.State(later, clock);
             double away = later + state.TimeToPassEnd + 1.0;
-            TestAssert.That(platform.Check(PlatformAbility.RadarScan, away, clock) == PlatformDenial.NotOverhead,
-                "overhead abilities must wait for the pass");
+            TestAssert.That(platform.Check(PlatformAbility.RadarScan, away, clock) == PlatformDenial.None,
+                "station abilities remain available without a pass window");
 
             // Candidates run in cell order, so pick 0 is the solar array in cell 5.
             platform.StrikeDebris(0, later, 45.0);
@@ -427,8 +574,8 @@ namespace BoscaliSummer.Tests.Features.Support
             Add(platform, ModuleKind.Propulsion, 6, ref now);
 
             double pass = FirstPassTime(platform, now);
-            TestAssert.That(platform.Check(PlatformAbility.Rephase, pass, clock) == PlatformDenial.Overhead,
-                "rephase must wait until the station is away");
+            TestAssert.That(platform.Check(PlatformAbility.Rephase, pass, clock) == PlatformDenial.None,
+                "propulsion permits relocation while on station");
             double away = pass + platform.State(pass, clock).TimeToPassEnd + 1.0;
             TestAssert.That(platform.TryRephase(away, clock, 77), "an away station with fuel must rephase");
             TestAssert.That(platform.Fuel == 75f && platform.HoldAt(away) == PlatformHold.Rephase, "rephase must burn and hold");
@@ -578,8 +725,8 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(PlatformWords.Phase(inserting, 14.5, clock) == "INSERTION · T-00:31",
                 "a hold must count down, rounded up: " + PlatformWords.Phase(inserting, 14.5, clock));
             OrbitalPlatform platform = Station(out double now);
-            TestAssert.That(PlatformWords.Phase(platform, now, clock).StartsWith("OVERHEAD · LOS ", StringComparison.Ordinal),
-                "an overhead station must show its LOS clock");
+            TestAssert.That(PlatformWords.Phase(platform, now, clock).StartsWith("ON STATION · ", StringComparison.Ordinal),
+                "a fixed station names its sector");
             TestAssert.That(PlatformWords.Denial(PlatformDenial.NotFitted, platform, PlatformAbility.Elint, now, clock) ==
                             "NOT FITTED · BUILD SIG", "a missing module must name what to build");
             TestAssert.That(PlatformWords.Denial(PlatformDenial.LowEnergy, platform, PlatformAbility.EmpBurst, now, clock) ==

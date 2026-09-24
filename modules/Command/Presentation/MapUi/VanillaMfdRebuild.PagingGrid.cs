@@ -22,7 +22,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private sealed class MfdPagingGrid
         {
             private const float LedInset = 9f;
-            private const float LedSize = 6f;
+            private const float LedSize = 3f;
             private const float IconSize = 16f;
             private const float ValueWidth = 36f;
             /// <summary>At or above this a cell may wrap its name to a second line.</summary>
@@ -70,13 +70,13 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 cellWidth = Mathf.Max(40f, width - AvTokens.Space3) / this.columns;
                 perPage = this.columns * rows;
 
-                // One card for the whole matrix, with a hairline seam between cells and a
-                // single frame around all of it: a wall of individually bordered boxes is
-                // what made filter grids read as unrelated buttons.
+                // The matrix is a single dark instrument well. Sparse cyan dividers mark
+                // addressable softkeys; the green vertical cue is reserved for live state.
                 Rect grid = new Rect(AvTokens.Space3, y, cellWidth * this.columns, rows * rowHeight);
-                AvKit.Panel(parent, grid, AvTheme.Unity(AvTokens.Surface), AvSprites.Card);
-                AvKit.Outline(parent, grid, AvTheme.Hairline);
-                Color seam = AvTheme.Unity(AvTokens.Hairline.WithAlpha(0.45f));
+                AvKit.Panel(parent, grid, AvTheme.SurfaceInert);
+                AvKit.Outline(parent, grid, AvTheme.Hairline.WithAlpha(0.7f));
+                AvKit.Rule(parent, new Rect(grid.x, grid.y, 28f, 2f), AvTheme.RailInfo);
+                Color seam = AvTheme.Hairline.WithAlpha(0.35f);
                 for (int c = 1; c < this.columns; c++)
                     AvKit.Rule(parent, new Rect(grid.x + c * cellWidth, grid.y, 1f, grid.height), seam);
                 rowRules = new Image[Mathf.Max(0, rows - 1)];
@@ -84,8 +84,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     rowRules[r - 1] = AvKit.Rule(parent, new Rect(grid.x, grid.y - r * rowHeight, grid.width, 1f), seam);
 
                 empty = AvStyled.Label(parent,
-                    new Rect(grid.x + 10f, y - 8f, grid.width - 20f, AvTokens.RowHeight),
-                    "NO ENTRIES", "row-sub");
+                    new Rect(grid.x + 10f, y - Mathf.Max(6f, (grid.height - 30f) * 0.5f), grid.width - 20f, 30f),
+                    "NO ENTRIES", "row-sub", align: TextAlignmentOptions.Center);
+                empty.enableWordWrapping = true;
 
                 bool tall = rowHeight >= TallCell;
                 cells = new Cell[perPage];
@@ -142,6 +143,11 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             {
                 page = 0;
                 Refresh();
+            }
+
+            public void SetEmptyMessage(string message)
+            {
+                if (empty != null) empty.text = message;
             }
 
             /// <summary>Temporarily fence controls while a native model is still initializing.</summary>
@@ -212,6 +218,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     }
                 }
 
+                int shownRows = Mathf.CeilToInt(Mathf.Min(perPage, Mathf.Max(0, count - page * perPage)) / (float)columns);
+                int activeSlots = shownRows * columns;
+
                 for (int i = 0; i < cells.Length; i++)
                 {
                     int index = CurrentIndex(i);
@@ -220,8 +229,26 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     bool on = exists && !readOnly && selected != null && selected(index);
                     Cell cell = cells[i];
 
-                    cell.Root.gameObject.SetActive(exists);
-                    if (!exists) continue;
+                    if (!exists)
+                    {
+                        bool inActiveRow = count > 0 && i < activeSlots;
+                        cell.Root.gameObject.SetActive(inActiveRow);
+                        if (inActiveRow)
+                        {
+                            cell.Hit.SetEnabled(false);
+                            cell.Hit.WithTooltip(null);
+                            cell.Icon.enabled = false;
+                            cell.Led.gameObject.SetActive(false);
+                            cell.Name.text = "";
+                            cell.Name.color = AvTheme.Disabled;
+                            if (cell.Sub != null && cell.Sub.enabled) cell.Sub.text = "";
+                            cell.State.text = "";
+                            cell.Hit.SetRowHighlight(cell.Ground, Color.clear, Color.clear);
+                        }
+                        continue;
+                    }
+
+                    cell.Root.gameObject.SetActive(true);
 
                     // The hit target stays live so a fenced cell still publishes its "why"
                     // to the status strip; Click() is where the action is actually gated.
@@ -262,18 +289,18 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                         cell.State.color = AvTheme.Dim;
                     }
 
-                    cell.Led.color = canUse && on ? AvTheme.Accent : AvTheme.Unity(AvTokens.RailInert);
+                    cell.Led.color = canUse && on ? AvTheme.Accent : AvTheme.RailInert;
 
                     // Keep a latched cell readable even when the pointer is elsewhere. The
                     // ON/OFF word and LED remain the primary redundant state cues; this wash
                     // only makes the selected row easier to find in a dense matrix.
-                    Color rest = AvTheme.Unity(AvTokens.RowFill(AvTheme.Accent.ToRgba(), canUse && on));
-                    Color hover = AvTheme.Unity(AvTokens.RowFill(AvTheme.Accent.ToRgba(), canUse && on, true));
+                    Color rest = canUse && on ? AvTheme.Accent.WithAlpha(0.11f) : Color.clear;
+                    Color hover = canUse && on ? AvTheme.Accent.WithAlpha(0.17f)
+                        : AvTheme.RailInfo.WithAlpha(0.10f);
                     cell.Hit.SetRowHighlight(cell.Ground, rest, hover);
                 }
 
                 empty.gameObject.SetActive(count == 0);
-                int shownRows = Mathf.CeilToInt(Mathf.Min(perPage, Mathf.Max(0, count - page * perPage)) / (float)columns);
                 for (int i = 0; i < rowRules.Length; i++) rowRules[i].enabled = i + 1 < shownRows;
                 if (pageLabel != null)
                     pageLabel.text = count == 0 ? "NO ENTRIES"
@@ -311,8 +338,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     Ground.color = Color.clear;
                     Ground.raycastTarget = true;
 
-                    Led = AvKit.Panel(Root, new Rect(0f, 0f, LedSize, LedSize),
-                                      AvTheme.Unity(AvTokens.RailInert));
+                    Led = AvKit.Panel(Root, new Rect(0f, 0f, LedSize, 20f), AvTheme.RailInert);
                     Icon = AvKit.Panel(Root, new Rect(0f, 0f, IconSize, IconSize), Color.white);
                     Icon.preserveAspect = true;
                     Icon.enabled = false;
@@ -337,7 +363,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 {
                     AvKit.Place(Root, new Rect(x, y, width, height));
                     AvKit.Place(Led.rectTransform,
-                        new Rect(LedInset, -(height - LedSize) * 0.5f, LedSize, LedSize));
+                        new Rect(LedInset, -(height - 20f) * 0.5f, LedSize, 20f));
                     AvKit.Place(Icon.rectTransform,
                         new Rect(LedInset + 15f, -(height - IconSize) * 0.5f, IconSize, IconSize));
 
@@ -349,11 +375,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     AvKit.Place(Name.rectTransform, new Rect(nameX, -(height - nameHeight - (subs ? 16f : 0f)) * .5f, nameWidth, nameHeight));
                     AvKit.Place(Sub.rectTransform, new Rect(nameX, -(height - 15f), nameWidth, 13f));
                     Sub.enabled = tall && subs;
-                    // A data name is never traded for an ellipsis: a two-line cell wraps
-                    // its name, and a one-line cell shrinks to the micro floor and then
-                    // overflows, the module's FitSingleLine rule.
+                    // The full native name remains in the cell's tooltip. A long name
+                    // signals overflow instead of silently losing its last words.
                     Name.enableWordWrapping = tall;
-                    Name.overflowMode = tall ? TextOverflowModes.Truncate : TextOverflowModes.Overflow;
+                    Name.overflowMode = tall ? TextOverflowModes.Ellipsis : TextOverflowModes.Overflow;
 
                     AvKit.Place(State.rectTransform,
                         new Rect(width - ValueWidth - 6f, -(height - 16f) * 0.5f, ValueWidth, 16f));

@@ -5,6 +5,7 @@ using BoscaliSummer.Features.Trenches.Configuration;
 using BoscaliSummer.Features.Trenches.Domain;
 using BoscaliSummer.Features.Trenches.Visuals;
 using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Framework.Features;
 using BoscaliSummer.Framework.Lifecycle;
 using BoscaliSummer.Runtime;
 using NuclearOption.Networking;
@@ -19,12 +20,12 @@ namespace BoscaliSummer.Features.Trenches.Runtime
     /// that accepts it and matured into a belt. Placement and ditch geometry are host-local;
     /// native defenders and scenery replicate through vanilla Mirage spawning.
     /// </summary>
-    internal sealed class TrenchManager : MonoBehaviour, ISceneService
+    internal sealed class TrenchManager : MonoBehaviour, ISceneService, IFieldworksReadiness
     {
         public const int MaximumActiveLines = 16;
         private const float TraceRefreshSeconds = 5f;
         private const float BuildAttemptSeconds = 2f;
-        private const float SimulationSeconds = 0.5f;
+        private const float SimulationSeconds = 0.75f;
         private const float RetireSeconds = 300f;
         private const float SameOwnerSpacing = 360f;
         private const float OtherOwnerSpacing = 250f;
@@ -44,12 +45,15 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         private readonly FrontlineTracePoint[] tracePoints = new FrontlineTracePoint[FrontlineTraceLimits.MaximumPoints];
         private readonly int[] traceLengths = new int[FrontlineTraceLimits.MaximumTraces];
         private readonly float[] tracePressure = new float[FrontlineTraceLimits.MaximumTraces];
+        private readonly int[] traceOrder = new int[FrontlineTraceLimits.MaximumTraces];
+        private readonly int[] traceOffset = new int[FrontlineTraceLimits.MaximumTraces];
         private readonly FactionHQ[] factions = new FactionHQ[MaximumFactions];
         private int factionCount;
         private int factionIndex;
         private int traceCount;
         private int traceIndex;
         private int windowStart;
+        private int lastOrderedTrace;
 
         private int nextLineId = 1;
         private float nextTraceRefresh;
@@ -65,6 +69,41 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         public event Action OnLinesChanged;
 
         public IReadOnlyList<TrenchLine> Lines => lines;
+
+        public void CountNear(FactionHQ observer, float x, float z, float radius,
+            out int friendlyDefenders, out int observedHostileDefenders, out int suppressedFriendly)
+        {
+            friendlyDefenders = observedHostileDefenders = suppressedFriendly = 0;
+            if (observer == null || settings == null || !settings.Enabled.Value ||
+                !GameAccess.IsServer() || radius <= 0f) return;
+            float radiusSq = radius * radius;
+            for (int i = 0; i < lines.Count; i++)
+            {
+                TrenchLine line = lines[i];
+                if (line == null || line.Overrun || line.DefenderCount <= 0 || line.Curve == null) continue;
+                float dx = line.Center.x - x, dz = line.Center.z - z;
+                float reach = radius + line.Radius;
+                if (dx * dx + dz * dz > reach * reach) continue;
+                bool near = false;
+                for (int station = 0; station < line.Curve.Length; station++)
+                {
+                    dx = line.Curve[station].x - x;
+                    dz = line.Curve[station].z - z;
+                    if (dx * dx + dz * dz > radiusSq) continue;
+                    near = true;
+                    break;
+                }
+                if (!near) continue;
+                if (ReferenceEquals(line.OwnerHq, observer))
+                {
+                    friendlyDefenders += line.DefenderCount;
+                    if (line.Suppressed) suppressedFriendly += line.DefenderCount;
+                }
+                else if (garrisons.TryGetValue(line.Id, out TrenchGarrison garrison) &&
+                         garrison.ObservedBy(observer))
+                    observedHostileDefenders += line.DefenderCount;
+            }
+        }
 
         public void Configure(TrenchesSettings config, ManualLogSource log, ITerritoryIngress control)
         {
@@ -87,11 +126,13 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             lines.Clear();
 
             TrenchMaterialResolver.ResetForScene();
+            TrenchRoadIndex.ResetForScene();
 
             nextLineId = 1;
             factionCount = 0;
             factionIndex = 0;
             traceCount = traceIndex = windowStart = 0;
+            lastOrderedTrace = -1;
             nextTraceRefresh = 0f;
             nextBuildAttempt = 0f;
             nextSimulationTick = 0f;
@@ -184,7 +225,12 @@ namespace BoscaliSummer.Features.Trenches.Runtime
                 return;
             }
             traceIndex = Math.Min(previousTrace, traceCount - 1);
-            windowStart = Math.Max(0, previousWindow);
+            // The scan walks the traces hottest first, so the cursor can land on a different
+            // stretch of front after a refresh: the saved window only survives when it is
+            // still on the same trace, or a position would be fitted to the wrong ground.
+            int ordered = traceOrder[traceIndex];
+            windowStart = ordered == lastOrderedTrace ? Math.Max(0, previousWindow) : 0;
+            lastOrderedTrace = ordered;
         }
 
         private void CopyTraces()
@@ -193,6 +239,13 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             windowStart = 0;
             traceCount = territory.CopyFrontlineTraces(factions[factionIndex].GetInstanceID(),
                 tracePoints, traceLengths, tracePressure);
+            TrenchTraceMath.OrderByPressure(tracePressure, traceCount, traceOrder);
+            int offset = 0;
+            for (int t = 0; t < traceCount; t++)
+            {
+                traceOffset[t] = offset;
+                offset += traceLengths[t];
+            }
             // A front that is reported but never planned is the one failure that used to be
             // silent; the intake line makes that state visible in the log.
             int slot = factionIndex;
@@ -204,7 +257,8 @@ namespace BoscaliSummer.Features.Trenches.Runtime
                 $"{traceCount} trace(s), {stations} stations.");
         }
 
-        /// <summary>One planning attempt per call; the scan advances so nothing stalls.</summary>
+        /// <summary>One planning attempt per call; the scan walks the hottest traces first so
+        /// positions dig where the fighting is before the quiet stretches.</summary>
         private void TryBuildOne(int maximum)
         {
             if (traceCount <= 0 || traceIndex >= traceCount)
@@ -213,18 +267,27 @@ namespace BoscaliSummer.Features.Trenches.Runtime
                 return;
             }
             FactionHQ owner = factions[factionIndex];
-            int offset = 0;
-            for (int t = 0; t < traceIndex; t++) offset += traceLengths[t];
-            int length = traceLengths[traceIndex];
+            int trace = traceOrder[traceIndex];
+            int offset = traceOffset[trace];
+            int length = traceLengths[trace];
             if (length < 2 || owner == null || lines.Count >= maximum)
             {
                 NextTrace();
                 return;
             }
 
-            bool planned = TrenchPlanner.TryPlanWindow(nextLineId, owner.name + "_Front", owner,
-                tracePressure[traceIndex], tracePoints, offset, length, windowStart, territory,
-                out TrenchLine line, out int next, out TrenchRefusal refusal);
+            // Strategic siting probes, both optional: a missing forest index or road
+            // network plans the same relief-only position as before.
+            Func<float, float, bool> foliageAt = null;
+            if (ModServices.TryGet<IFoliageCover>(out IFoliageCover foliage) && foliage.Ready)
+                foliageAt = foliage.Contains;
+            Func<float, float, float> roadAt = null;
+            if (TrenchRoadIndex.EnsureBuilt())
+                roadAt = (x, z) => TrenchRoadIndex.TryDistance(x, z, TrenchTraceMath.RoadClearDistance,
+                    out float ditch) ? ditch : float.NaN;
+            bool planned = TrenchPlanner.TryPlanWindow(nextLineId, owner.name + "_Front_" + nextLineId, owner,
+                tracePressure[trace], tracePoints, offset, length, windowStart, territory,
+                out TrenchLine line, out int next, out TrenchRefusal refusal, foliageAt, roadAt);
             if (!planned)
             {
                 NotePlanRefusal(refusal);
@@ -293,6 +356,9 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             try
             {
                 garrison = new TrenchGarrison(line);
+                if (TrenchRoadIndex.EnsureBuilt())
+                    garrison.RoadDistanceAt = (x, z) => TrenchRoadIndex.TryDistance(x, z,
+                        TrenchTraceMath.RoadWatchDistance, out float watch) ? watch : float.NaN;
                 if (!garrison.Establish())
                 {
                     if (Time.unscaledTime >= nextGarrisonWarning)
@@ -321,6 +387,8 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             works.Add(line.Id, lineWorks);
             visualChunks.Add(line.Id, chunk);
             line.DefenderCount = garrison.Alive;
+            line.DugAt = Time.time;
+            line.HostileSince = -1f;
             line.NextGrowthAt = Time.time + Math.Max(15f, settings.GrowthIntervalSeconds.Value);
             logger?.LogInfo($"[TRENCHES] '{line.Name}' dug at global {line.Center}: {line.Curve.Length} curve stations, {line.Anchors.Length} anchors, pressure {line.Pressure:0.00}.");
             OnLinesChanged?.Invoke();
@@ -351,22 +419,37 @@ namespace BoscaliSummer.Features.Trenches.Runtime
                 TrenchGarrison garrison = garrisons[line.Id];
                 bool changed = garrison.Poll(now);
                 if (works.TryGetValue(line.Id, out TrenchWorks lineWorks)) lineWorks.Deploy(line.Stage);
+                int previousDefenders = line.DefenderCount;
                 line.DefenderCount = garrison.Alive;
 
                 bool suppressed = now < garrison.SuppressedUntil;
                 changed |= line.Suppressed != suppressed;
                 line.Suppressed = suppressed;
 
-                if (!line.Overrun && (garrison.Overrun || !StillOwned(line)))
+                // The field's verdict is hysteretic: one hostile sample never ends a line.
+                if (StillOwned(line)) line.HostileSince = -1f;
+                else if (line.HostileSince < 0f) line.HostileSince = now;
+
+                if (!line.Overrun && garrison.Overrun)
                 {
                     line.Overrun = true;
                     line.RetireAt = now + RetireSeconds;
-                    if (!garrison.Overrun) garrison.Remove();
                     line.DefenderCount = 0;
                     changed = true;
-                    logger?.LogInfo($"[TRENCHES] '{line.Name}' neutralized or abandoned; growth stopped, no defender respawns.");
+                    logger?.LogInfo($"[TRENCHES] '{line.Name}' neutralized: no defenders remain; growth stopped, no respawns.");
                 }
-                if (line.Overrun && now >= line.RetireAt)
+                else if (!line.Overrun && TrenchTraceMath.FieldAbandons(now, line.DugAt, line.HostileSince))
+                {
+                    // Cut off, not destroyed: living nests keep fighting until they are killed,
+                    // and the earthwork retires only after the last of them.
+                    line.Overrun = true;
+                    line.RetireAt = now + RetireSeconds;
+                    changed = true;
+                    logger?.LogInfo($"[TRENCHES] '{line.Name}' cut off: the front moved past it; growth stopped, {line.DefenderCount} defenders fight on without relief.");
+                }
+                if (line.Overrun && previousDefenders > 0 && line.DefenderCount == 0)
+                    line.RetireAt = now + RetireSeconds;
+                if (line.Overrun && now >= line.RetireAt && garrison.Alive == 0)
                 {
                     if (visualChunks.TryGetValue(line.Id, out TrenchVisualChunk obsolete) && obsolete != null)
                         Destroy(obsolete.gameObject);
@@ -385,9 +468,13 @@ namespace BoscaliSummer.Features.Trenches.Runtime
                 {
                     advancedOne = true;
                     line.NextGrowthAt = now + Math.Max(15f, settings.GrowthIntervalSeconds.Value);
+                    TrenchStage before = line.Stage;
                     if (TrenchPlanner.TryGrowBelt(line, territory))
                     {
                         changed = true;
+                        string missing = MissingBeltTrace(line, before);
+                        if (missing != null)
+                            logger?.LogInfo($"[TRENCHES] '{line.Name}' advanced to {line.Stage} without its {missing}: the ground refused it {TrenchTraceMath.BeltRefusalLimit} times.");
                         if (visualChunks.TryGetValue(line.Id, out TrenchVisualChunk chunk) && chunk != null) chunk.Rebuild();
                         garrison.Reinforce();
                         garrison.Poll(now);
@@ -408,6 +495,16 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             }
 
             if (anyChanged) OnLinesChanged?.Invoke();
+        }
+
+        /// <summary>Name of the belt trace the stage just entered was meant to add but could not.</summary>
+        private static string MissingBeltTrace(TrenchLine line, TrenchStage before)
+        {
+            if (line.Stage == before) return null;
+            if (line.Stage == TrenchStage.Support && line.Support == null) return "support trace";
+            if (line.Stage == TrenchStage.Redoubt && line.Redoubt == null) return "redoubt trace";
+            if (line.Stage == TrenchStage.Saps && line.Spurs == null) return "saps";
+            return null;
         }
 
         private bool StillOwned(TrenchLine line)

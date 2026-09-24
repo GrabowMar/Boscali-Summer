@@ -1,5 +1,10 @@
 namespace BoscaliSummer.Framework.Contracts
 {
+    internal struct HudBounds
+    {
+        public float X, Y, Width, Height;
+        public bool Visible => Width > 0 && Height > 0;
+    }
     /// <summary>
     /// How loud one HUD line is. Decides its colour and where it sits in the stack.
     /// Kept free of Unity types so the layout and queue rules compile into the test runner.

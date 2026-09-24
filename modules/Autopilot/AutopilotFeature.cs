@@ -26,6 +26,8 @@ namespace BoscaliSummer.Features.Autopilot
             AutopilotSettings settings = context.Settings.Autopilot;
             AutopilotLandController controller = context.AddSceneService<AutopilotLandController>(48);
             controller.Configure(settings);
+            context.AddSceneService<Presentation.AutopilotHudLine>(49).Configure(controller);
+            context.AddSceneService<Presentation.IlsHudLine>(49).Configure(settings);
             RadialMenuAccess.Initialise();
             context.Logger.LogInfo("Autopilot land=local ownship native-autopilot takeover; radial=" +
                 (RadialMenuAccess.Available ? "native wheel entry" : "unavailable"));

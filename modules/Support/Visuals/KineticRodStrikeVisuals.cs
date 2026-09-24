@@ -77,11 +77,11 @@ namespace BoscaliSummer.Features.Support.Visuals
         public static void EnsureResolved()
         {
             if (resolved) return;
-            resolved = true;
 
             try
             {
                 if (Encyclopedia.i == null || Encyclopedia.i.missiles == null) return;
+                resolved = true;
 
                 MissileDefinition tacticalNukeDef = null;
                 float lowestYield = float.MaxValue;

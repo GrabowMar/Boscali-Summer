@@ -17,7 +17,7 @@ namespace BoscaliSummer.Features.Radio.Runtime
     /// </summary>
     internal static class RadioProgramming
     {
-        public const int MaximumBulletins = 8;
+        public const int MaximumBulletins = 12;
 
         private sealed class StationVoice
         {
@@ -34,51 +34,60 @@ namespace BoscaliSummer.Features.Radio.Runtime
                 "You are listening to a local transmission.",
                 "Signal strength nominal. Enjoy the rotation.",
                 "This frequency is operated by the station owner.",
-                "Requests are handled at the source."
+                "Requests are handled at the source.",
+                "Thanks for tuning in. Stay on this frequency for the next set.",
+                "Programming continues after this short break in transmission."
             }
         };
 
         private static readonly StationVoice Agrapol = new StationVoice
         {
-            Shows = new[] { "Sunrise Drive", "Midday Rotation", "Evening Request Line", "Nightwatch Slow Set" },
+            Shows = new[] { "Republic Dawn", "Open Assembly", "Harbor Voices", "The Night Commons" },
             Bulletins = new[]
             {
-                "Coastal weather holds clear through the night.",
-                "Request lines open after the top of the hour.",
-                "Two more nights of the Agrapol airshow. Tickets at the gate.",
-                "Traffic on the ring road is moving again after the convoy.",
-                "Tonight's slow set is dedicated to the night shift.",
-                "The midnight countdown returns this weekend."
+                "Boscali Republic Radio. The coast belongs to everyone who calls it home.",
+                "The assembly meets at noon; the public gallery remains open.",
+                "Harbor crews have cleared the relief convoy for departure.",
+                "Volunteers are collecting blankets at the western ferry hall.",
+                "Civilian traffic may use the south bridge after the morning inspection.",
+                "This next song goes to the mechanics keeping the lights on.",
+                "The election office reminds residents to check their registration.",
+                "Keep the emergency lane clear for ambulances and fire crews.",
+                "From the hills to the harbor, this is your republic on the air."
             }
         };
 
         private static readonly StationVoice Maris = new StationVoice
         {
-            Shows = new[] { "Morning Brief", "World Service", "The Six O'Clock Report", "Overnight Wire" },
+            Shows = new[] { "First Order", "The State Hour", "Evening Directive", "Night Vigil" },
             Bulletins = new[]
             {
-                "Shipping lanes report normal traffic through the strait.",
-                "Currency markets closed steady after a quiet session.",
-                "Rail service to the northern depots resumes on schedule.",
-                "Forecast: scattered cloud, visibility good for flight ops.",
-                "Next bulletin on the hour; world service continues.",
-                "Local councils meet tomorrow over the harbor expansion.",
-                "Rescue services stood down after the night's search."
+                "PALA State Radio. Order is the duty of every citizen.",
+                "Travel permits are required at all eastern checkpoints.",
+                "The Directorate confirms the curfew remains in effect.",
+                "Factory shifts will report one hour before dawn.",
+                "Unauthorized transmissions should be reported to the district office.",
+                "The military council thanks the workers of the northern rail line.",
+                "Civil defense drills begin at the second siren.",
+                "Do not approach restricted airfields without written authorization.",
+                "The state endures through discipline and vigilance."
             }
         };
 
         private static readonly StationVoice Base = new StationVoice
         {
-            Shows = new[] { "Reveille and Duty Roster", "Wing Ops Bulletin", "Stand-down Report", "Night Watch" },
+            Shows = new[] { "First Watch", "Flight Line", "Shift Change", "Night Operations" },
             Bulletins = new[]
             {
-                "Range control: live fire to the east until 0400.",
-                "Duty roster for the next watch is posted at the ready room.",
-                "All flights check in on the tower channel before taxi.",
-                "Weather advisory: crosswinds on the main runway.",
-                "Commissary restock arrives with the morning transport.",
-                "Reminder: blackout restrictions remain in effect.",
-                "Ground crews report the flight line clear for the night."
+                "Base Broadcast. Flight line checks are due before first launch.",
+                "Tower, confirm the runway is clear for recovery traffic.",
+                "Fuel teams report to the hardstands after the next landing.",
+                "Maintain radio discipline on the operational channels.",
+                "The ready room has posted the revised duty roster.",
+                "Ground control reports a vehicle crossing on taxiway two.",
+                "Medics and rescue crews remain on immediate standby.",
+                "Night crews, inspect the approach lights before handover.",
+                "All personnel, acknowledge the shelter drill when directed."
             }
         };
 

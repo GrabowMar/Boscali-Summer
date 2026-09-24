@@ -1,12 +1,49 @@
-using BoscaliSummer.Features.Hud.Domain;
+﻿using BoscaliSummer.Features.Hud.Domain;
 using BoscaliSummer.Framework.Contracts;
 
 namespace BoscaliSummer.Tests.Features.Hud
 {
     internal static class HudTests
     {
+        private static void FeedStore()
+        {
+            float now = 0;
+            var store = new HudFeedStore(() => now);
+            IHudLine line = store.Acquire("a", "flight", "status");
+            TestAssert.That(ReferenceEquals(line, store.Acquire("a", "flight", "status")), "Acquiring a stable key is idempotent");
+            line.Set(HudTone.Warning, "PULL UP", "TERRAIN", float.NaN);
+            store.Notice("info", HudTone.Info, "Saved", null, 8);
+            var output = new HudMessage[4];
+            TestAssert.That(store.Snapshot(output, 1, _ => true, true) == 1 && output[0].Text == "PULL UP" && output[0].Bar == 0,
+                "Routine notices cannot displace warnings, including in a one-row layout");
+            TestAssert.That(store.Snapshot(output, 4, _ => false, false) == 0, "Muted feeds must disappear");
+            now = 2;
+            TestAssert.That(store.Snapshot(output, 4, _ => true, false) == 0, "Stale lines expire without Unity objects");
+            for (int i = 0; i < HudFeedStore.Capacity; i++) store.Acquire("pool", "info", i.ToString())?.Set(HudTone.Info, "Live", null, 0);
+            TestAssert.That(store.Acquire("over", "info", "ceiling") == null, "Pool capacity is hard bounded");
+            store.Reset(); line.Set(HudTone.Warning, "Ghost", null, 1);
+            TestAssert.That(store.Snapshot(output, 4, _ => true, true) == 0, "Pre-reset handles cannot resurrect old messages");
+            store.Notice("info", HudTone.Info, "Mute me", null, 8); store.Mute("info");
+            TestAssert.That(store.Snapshot(output, 4, _ => true, true) == 0, "Muting purges active notices");
+        }
+
         public static void Run()
         {
+            var screen = new HudBounds { Width = 1920, Height = 1080 };
+            var instruments = new HudBounds { X = 1500, Y = 24, Width = 396, Height = 700 };
+            var status = new HudBounds { X = 1430, Y = 450, Width = 460, Height = 480 };
+            HudBounds moved = HudLayout.Avoid(status, instruments, screen);
+            TestAssert.That(moved.Visible && moved.X + moved.Width < instruments.X,
+                "A tall instrument board must move overlapping status rows beside it");
+            TestAssert.That(HudLayout.Avoid(status, default, screen).X == status.X,
+                "An absent board must not move the user's status anchor");
+            var queue = new HudNoticeQueue();
+            queue.Push("muted", HudTone.Warning, "Old warning", null, 0, 10);
+            queue.Push("kept", HudTone.Info, "Visible notice", null, 0, 10);
+            queue.RemoveChannel("muted");
+            TestAssert.That(queue.Count == 1 && queue.TryGet(0, out _, out string text, out _) && text == "Visible notice",
+                "Muting a feed must remove already queued notices without touching other feeds");
+            FeedStore();
             Layout();
             Notices();
         }

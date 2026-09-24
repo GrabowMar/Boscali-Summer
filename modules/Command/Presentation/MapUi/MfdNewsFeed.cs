@@ -47,8 +47,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             }
 
             public string FormattedText => IsUrgent
-                ? $"<b><color={ColorHex}>[{Tag}]</color> {Text}</b>"
-                : $"<color={ColorHex}>[{Tag}]</color> {Text}";
+                ? $"<b><mark=#243B48AA><color={ColorHex}> [{Tag}] </color></mark> {Text}</b>"
+                : $"<mark=#243B48AA><color={ColorHex}> [{Tag}] </color></mark> {Text}";
         }
 
         public const string Separator = "  <color=#00F0FF>+++</color>  ";
@@ -57,7 +57,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private const int MaxHistory = 96;
         private const int LarpKeepAfterCycle = 7;
         private const float LogisticsThrottleSeconds = 30f;
-        private const float TheaterHeadlineSeconds = 45f;
+        // The wire is atmosphere first: staff SITREPs are rare punctuation, not a feed.
+        private const float TheaterHeadlineSeconds = 90f;
         private const float ReactionSeconds = 25f;
 
         private static readonly Dictionary<string, string> Reactions = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -68,6 +69,20 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             { "CRITICAL KILL", "ESCORT SCREENS TIGHTENED AND SALVAGE TUGS TASKED ACROSS THE APPROACH CORRIDORS" },
             { "BASE DEFENSE", "CIVIL DEFENSE CREDITS AIR DEFENSE CREWS FOR A TEXTBOOK SHIELD" },
             { "POW", "RED CROSS RELAY REQUESTED FOR AIRCREW HELD IN THE SECTOR" },
+        };
+
+        /// <summary>
+        /// Allocation-free pre-filter for the log feed. The kill feed and routine chatter
+        /// dominate the line rate and can never become a headline, so they are rejected
+        /// before CleanTags builds a string or ParseEvent scans the line. Permissive on
+        /// purpose: a false positive only costs the old parse path.
+        /// </summary>
+        private static readonly string[] HeadlineTriggers =
+        {
+            "has been captured by", "nuclear weapon launched", "exclusion zone", "ace",
+            " was rescued by ", " was captured by ", "warhead", "destroyed at ",
+            " sank ", " demolished ", " intercepted ", " destroyed ",
+            " donated ", " provisioned ",
         };
 
         private readonly List<HeadlineItem> activeQueue = new List<HeadlineItem>(MaxActiveQueue);
@@ -135,6 +150,23 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             "DOCTRINE: INTERCEPTORS REMINDED TO PRESERVE ENERGY WHEN BUGGING OUT BEHIND FRIENDLY SAM COVER",
             "SUPPLY BULLETIN: FORWARD DEPOTS URGED TO BURY MUNITIONS UNDER SANDBAGS BEFORE THE NEXT BARRAGE",
             "HOME FRONT: MOTHERS' LEAGUE PETITIONS FOR LETTER CENSORS TO ALLOW PHOTOS OF NEWBORN CHILDREN",
+            "TACTICAL DOCTRINE ADVISORY: WINGMEN REMINDED TO CALL 'BLIND' RATHER THAN GUESS A MERGE",
+            "METEOROLOGICAL OFFICE: LOW CEILING EXPECTED OVER THE COAST THROUGH THE MORNING WATCH",
+            "GROUND CONTROL BULLETIN: TAXIWAY LIGHTING REPAIRS COMPLETE AT THE FORWARD STRIP",
+            "MINISTRY OF SUPPLY: RATIONED COPPER WIRE RELEASED FOR FIELD RADIO REPAIR KITS",
+            "SQUADRON SCUTTLEBUTT: GROUND CREW WAGERS RUNNING ON WHICH FLIGHT LANDS LAST TONIGHT",
+            "INTERCEPT: ENEMY GROUND CONTROLLER HEARD COUNTING AIRCRAFT ON AN OPEN CHANNEL",
+            "ECONOMY: SHIPYARD REPORTS AHEAD OF SCHEDULE ON THE PATROL BOAT REFIT PROGRAM",
+            "RUMOR: A DOWNED PILOT WAS RETURNED THROUGH NEUTRAL LINES UNDER A WHITE FLAG",
+            "HOME FRONT: SCHOOLCHILDREN'S LETTERS TO THE FRONT DELAYED BY THE MAIL BACKLOG",
+            "TACTICAL REMINDER: DECLARE BINGO FUEL EARLY — THE RECOVERY PATTERN GETS CROWDED",
+            "STRATEGIC COMMAND NOTES QUIET NIGHT ALONG THE NORTHERN SECTOR FOR THE THIRD DAY RUNNING",
+            "WEATHER: MORNING FOG EXPECTED TO BURN OFF BEFORE THE FIRST LAUNCH WINDOW",
+            "DEFENSE MINISTRY CONFIRMS ROUTINE ROTATION OF FORWARD AIR CONTROLLERS THIS WEEK",
+            "RADIO INTERCEPT: 'TELL MAINTENANCE THE LEFT GEAR DOOR IS STILL RATTLING'",
+            "PROVOST OFFICE REPORTS A QUIET WEEK IN THE REAR AREAS, FOR ONCE",
+            "SUPPLY BULLETIN: FIELD KITCHENS ISSUED EXTRA COAL RATIONS FOR THE COLD SNAP",
+            "WAR CORRESPONDENT REPORT: GROUND CREWS PATCH A FLAK-DAMAGED WING BEFORE DAWN LAUNCH",
         };
 
         public MfdNewsFeed(int seed = 42)
@@ -216,6 +248,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         public bool IngestGameEvent(string rawLine, float now)
         {
             if (string.IsNullOrWhiteSpace(rawLine)) return false;
+            // Most log lines cannot become a headline; reject them without allocating.
+            if (!MightCarryHeadline(rawLine)) return false;
 
             string clean = CleanTags(rawLine).Trim();
             if (clean.Length == 0) return false;
@@ -253,6 +287,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         public void Enqueue(HeadlineItem item)
         {
             if (item == null) return;
+            activeQueue.RemoveAll(existing => existing.Tag == item.Tag && existing.Text == item.Text);
             activeQueue.Insert(0, item);
             while (activeQueue.Count > MaxActiveQueue)
             {
@@ -401,7 +436,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         }
 
         /// <summary>
-        /// Periodically injects tactical theater status based on strategic theater telemetry.
+        /// Periodic theater color from CommandManager. The numbers only choose which
+        /// qualitative dispatch runs — the wire never prints tallies, percentages or
+        /// unit counts, because the desk is writing for morale, not for the staff.
         /// </summary>
         public void UpdateTheaterStatus(
             float now,
@@ -419,7 +456,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 PushUrgent(new HeadlineItem(
                     "SITREP",
                     "#FF5533",
-                    $"FORWARD CONTEST: HEAVY RESISTANCE REPORTED AROUND {contestedAirbases} CONTESTED BASE PERIMETERS",
+                    "FORWARD CONTEST: RESISTANCE REPORTED AT CONTESTED BASE PERIMETERS — CIVIL AFFAIRS TEAMS STANDING BY",
                     Priority.Major), now);
                 return;
             }
@@ -429,7 +466,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 PushUrgent(new HeadlineItem(
                     "DEFCON ALERT",
                     "#FF2222",
-                    $"THEATER DEFCON {defcon} DECLARED — STRATEGIC ALERT IN EFFECT ACROSS ALL SECTORS",
+                    "THEATER DEFCON RAISED — STRATEGIC ALERT IN EFFECT ACROSS ALL SECTORS",
                     Priority.Major), now);
                 return;
             }
@@ -437,21 +474,21 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             if (activeClashes > 3)
             {
                 Enqueue(new HeadlineItem("HOT ZONE", "#FFAA22",
-                    $"FRONT ENGAGEMENTS: INTENSE SQUAD CLASHES SPREAD ACROSS {activeClashes} SECTORS"));
+                    "FRONT ENGAGEMENTS REPORTED ACROSS THE THEATER — FIELD DESKS FILING AROUND THE CLOCK"));
                 return;
             }
 
             if (!float.IsNaN(territoryRatio) && territoryRatio > 0.65f)
             {
                 Enqueue(new HeadlineItem("FRONT ADVANCE", "#44EE88",
-                    $"STRATEGIC ASSESSMENT: ALLIED GROUND UNITS HOLDING {(int)(territoryRatio * 100f)}% THEATER CONTROL"));
+                    "STRATEGIC ASSESSMENT: ALLIED GROUND FORCES PRESSING THE ADVANTAGE ALONG THE FRONT"));
                 return;
             }
 
             if (!float.IsNaN(territoryRatio) && territoryRatio < 0.35f)
             {
                 Enqueue(new HeadlineItem("DEFENSE ALERT", "#FF6644",
-                    "FRONT ASSESSMENT: HEAVY THEATER PRESSURE — ALLIED FORCES RETRENCHING DEFENSE CORRIDORS"));
+                    "FRONT ASSESSMENT: ALLIED FORCES YIELDING GROUND — DEFENSE CORRIDORS UNDER STRAIN"));
                 return;
             }
 
@@ -466,7 +503,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     else
                     {
                         Enqueue(new HeadlineItem("SITREP", "#66CCFF",
-                            $"AIR CORRIDOR DOMINANCE EVALUATED AT {(int)(airSuperiorityRatio * 100f)}% EFFECTIVENESS"));
+                            "AIR CORRIDORS CONTESTED BUT HELD — INTERCEPTOR SCREENS REPORTING ON STATION"));
                     }
                     break;
                 case 1:
@@ -587,9 +624,20 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private static bool Contains(string haystack, string needle) =>
             haystack.IndexOf(needle, StringComparison.OrdinalIgnoreCase) >= 0;
 
+        private static bool MightCarryHeadline(string line)
+        {
+            for (int i = 0; i < HeadlineTriggers.Length; i++)
+            {
+                if (line.IndexOf(HeadlineTriggers[i], StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            }
+            return false;
+        }
+
         private static string CleanTags(string input)
         {
             if (string.IsNullOrEmpty(input)) return "";
+            // Untagged lines are the common case and are already clean.
+            if (input.IndexOf('<') < 0) return input;
             var sb = new StringBuilder(input.Length);
             bool insideTag = false;
             for (int i = 0; i < input.Length; i++)
