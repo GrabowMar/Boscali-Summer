@@ -24,7 +24,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             public AvButton Select;
         }
 
-        private const int StudioRowsPerPage = 4;
+        private const int StudioRowsPerPage = 2;
 
         /// <summary>How a studio message reads: a success, a caution, or a refusal.</summary>
         private enum StudioTone : byte
@@ -142,8 +142,8 @@ namespace BoscaliSummer.Features.Progression.Presentation
             float width = body.width - SpineInset;
             float y = body.y;
 
-            y = DrawPageHeader(parent, x, y, width, "STUDIO  /  04 OF 04", "PILOT STUDIO",
-                "LOCAL FILES + HOST ROSTER");
+            y = DrawPageHeader(parent, x, y, width, "PILOT STUDIO",
+                "LOCAL FILES + HOST ROSTER", SqdMark.Recon);
             y = DrawSectionTitle(parent, x, y, width, "CUSTOM PILOTS", "WING COMMAND CONNECTED", band: false);
             // Two lines: the ready line and Wing Command's own unavailable reason are both
             // sentences, and a wrapped sentence clipped to one line reads as a bug.
@@ -287,7 +287,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             studioProfileButton = AvStyled.Button(parent,
                 new Rect(x + actionWidth + AvTokens.Space2, y, actionWidth, 28f), "SET AS MY PROFILE", "btn",
                 SetAsLocalProfile, AvButtonStyle.Default);
-            studioProfileButton.WithTooltip("Use this pilot's name, callsign, background and portrait as your local SQD profile.");
+            studioProfileButton.WithTooltip("Use this pilot's name, callsign, background and portrait as your local pilot profile.");
             studioRecruitButton = AvStyled.Button(parent,
                 new Rect(x + (actionWidth + AvTokens.Space2) * 2f, y, actionWidth, 28f), "RECRUIT", "btn",
                 ToggleRecruit, AvButtonStyle.Default);
@@ -668,7 +668,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 return;
             }
             settings.PilotProfile.Value = studioDraft.Callsign;
-            NextMessage(studioDraft.Callsign + " is now your local SQD profile.", StudioTone.Ok);
+            NextMessage(studioDraft.Callsign + " is now your local pilot profile.", StudioTone.Ok);
             nextRefresh = 0f;
         }
 

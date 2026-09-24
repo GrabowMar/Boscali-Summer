@@ -4,6 +4,7 @@ using BepInEx.Logging;
 using BoscaliSummer.Features.Support.Configuration;
 using BoscaliSummer.Features.Support.Domain.Cyber;
 using BoscaliSummer.Features.Support.Domain.Orbital;
+using BoscaliSummer.Features.Support.Domain.SpecOps;
 using NuclearOption.Networking;
 using UnityEngine;
 
@@ -45,6 +46,9 @@ namespace BoscaliSummer.Features.Support.Runtime
 
         /// <summary>An operation landed: the attacker's adversaries grow warier and enemy SIGINT may hear it.</summary>
         void ReportOperation(Player caster, GlobalPosition target);
+
+        /// <summary>SPEC OPS host runtime: the timed jam zones SUPPRESS adds to.</summary>
+        SpecOpsTheater SpecOps { get; }
     }
 
     internal readonly struct SupportContext
@@ -55,28 +59,20 @@ namespace BoscaliSummer.Features.Support.Runtime
         public readonly int RequestId;
         public readonly ISupportHost Host;
 
-        /// <summary>
-        /// The requester's `SupportEffectScale` multiplier, resolved once by the host so an
-        /// action never has to find its own way back to the perk state. 1 when nobody scales.
-        /// </summary>
-        public readonly float EffectScale;
-
-        public SupportContext(Player player, GlobalPosition target, int requestId, ISupportHost host,
-            float effectScale = 1f)
+        public SupportContext(Player player, GlobalPosition target, int requestId, ISupportHost host)
         {
             Player = player;
             Owner = player == null ? null : player.HQ;
             Target = target;
             RequestId = requestId;
             Host = host;
-            EffectScale = effectScale;
         }
 
         public SupportSettings Settings => Host.Settings;
         public ManualLogSource Logger => Host.Logger;
 
-        /// <summary>Requester's faction infrastructure (null until the theater is loaded).</summary>
-        public InfoNetwork Info => Host.Space.InfoFor(Owner);
+        /// <summary>The requester's CYBER network (null until the theater is loaded).</summary>
+        public CyberNetwork Cyber => Host.Space.CyberFor(Owner);
 
         /// <summary>
         /// The requester's station when it can run <paramref name="ability"/> right now (fitted,
@@ -110,9 +106,6 @@ namespace BoscaliSummer.Features.Support.Runtime
                 default: return SupportResult.OutOfCoverage;
             }
         }
-
-        /// <summary>The requester's CYBER network (null until the theater is loaded).</summary>
-        public CyberNetwork Cyber => Host.Space.CyberFor(Owner);
     }
 
     /// <summary>
@@ -155,8 +148,14 @@ namespace BoscaliSummer.Features.Support.Runtime
         public readonly string Capability;
         public readonly ISupportAction Action;
 
-        /// <summary>Facility gate for cyber operations; null for perk-authorised actions.</summary>
+        /// <summary>CYBER ability gate for the eight map operations; null for other actions.</summary>
         public readonly HackKind? Hack;
+
+        /// <summary>CYBER capstone gate; null for other actions.</summary>
+        public readonly Capstone? Cap;
+
+        /// <summary>SPEC OPS post gate for SPOT and SUPPRESS; null for other actions.</summary>
+        public readonly FieldAbility? Field;
 
         private readonly ConfigEntry<bool> enabled;
 
@@ -171,6 +170,7 @@ namespace BoscaliSummer.Features.Support.Runtime
             this.enabled = enabled;
             Action = action;
             Hack = null;
+            Cap = null;
         }
 
         public SupportActionDefinition(
@@ -184,9 +184,42 @@ namespace BoscaliSummer.Features.Support.Runtime
             this.enabled = enabled;
             Action = action;
             Hack = hack;
+            Cap = null;
+        }
+
+        public SupportActionDefinition(
+            SupportActionId id, Capstone capstone,
+            ConfigEntry<bool> enabled, ISupportAction action)
+        {
+            Id = id;
+            Name = Capstones.Name(capstone);
+            Description = Capstones.Summary(capstone);
+            Capability = null;
+            this.enabled = enabled;
+            Action = action;
+            Hack = null;
+            Cap = capstone;
+        }
+
+        public SupportActionDefinition(
+            SupportActionId id, FieldAbility ability,
+            ConfigEntry<bool> enabled, ISupportAction action)
+        {
+            Id = id;
+            Name = FieldWords.Ability(ability);
+            Description = FieldWords.AbilityDescription(ability);
+            Capability = null;
+            this.enabled = enabled;
+            Action = action;
+            Hack = null;
+            Cap = null;
+            Field = ability;
         }
 
         public bool IsHack => Hack.HasValue;
+        public bool IsCapstone => Cap.HasValue;
+        public bool IsCyber => Hack.HasValue || Cap.HasValue;
+        public bool IsField => Field.HasValue;
         public bool Enabled => enabled == null || enabled.Value;
     }
 }

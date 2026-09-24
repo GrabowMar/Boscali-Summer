@@ -1,4 +1,5 @@
 using BoscaliSummer.Features.Command.Domain;
+using BoscaliSummer.Framework.Contracts;
 
 namespace BoscaliSummer.Tests.Features.Command
 {
@@ -24,6 +25,7 @@ namespace BoscaliSummer.Tests.Features.Command
             PressureStateDoesNotOverstateNoise();
             RosterDrawsTheChainOfCommand();
             RosterSurvivesAMissingParent();
+            OutcomeWordsMatchTheStaffLog();
         }
 
         private static void RosterDrawsTheChainOfCommand()
@@ -217,6 +219,18 @@ namespace BoscaliSummer.Tests.Features.Command
             TestAssert.That(TheaterReadout.DefconRail(1) == "danger", "DEFCON 1 is the alarm");
             TestAssert.That(TheaterReadout.DefconRail(4) == "ready", "DEFCON 4 is nominal");
             TestAssert.That(TheaterReadout.DefconRail(0) == "danger", "below the scale is still the alarm");
+        }
+
+        private static void OutcomeWordsMatchTheStaffLog()
+        {
+            // Mirrors the director's own words (TheaterOps' DirectorWords): the board and the
+            // staff log must read the same outcome. Change both or neither.
+            TestAssert.That(TheaterReadout.OffensiveOutcomeWord(TheaterOperationOutcome.ObjectiveSecured) == "SECURED", "a secured objective reads secured");
+            TestAssert.That(TheaterReadout.OffensiveOutcomeWord(TheaterOperationOutcome.ObjectiveLost) == "OBJECTIVE CLOSED", "a lost objective reads closed");
+            TestAssert.That(TheaterReadout.OffensiveOutcomeWord(TheaterOperationOutcome.Stalled) == "STALLED", "a stall reads stalled");
+            TestAssert.That(TheaterReadout.OffensiveOutcomeWord(TheaterOperationOutcome.CommitmentSpent) == "COMMITMENT SPENT", "spent waves read spent");
+            TestAssert.That(TheaterReadout.OffensiveOutcomeWord(TheaterOperationOutcome.Cancelled) == "CANCELLED", "a stand-down reads cancelled");
+            TestAssert.That(TheaterReadout.OffensiveOutcomeWord(TheaterOperationOutcome.None) == "CONCLUDED", "an unmarked end reads concluded");
         }
 
         private static bool Near(float a, float b) => a - b < 0.0005f && b - a < 0.0005f;

@@ -25,7 +25,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private sealed class MapPresenter : Presenter
         {
             private const int NativeLayerCount = 6;
-            private const int OverlayLayerCount = 3;
+            private const int OverlayLayerCount = 4;
 
             private static readonly string[] LayerNames =
                 { "OBJECTIVES", "TARGET DETAILS", "JAMMING", "GRID LABELS", "PILOTS", "AIRBASES" };
@@ -34,13 +34,17 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 "Mission objective markers", "Target information markers", "Jamming indicators",
                 "Map grid coordinates", "Dismounted pilot icons", "Airbase icons",
             };
+            private static readonly string[] LayerSubtitles =
+                { "Mission markers", "Target markers", "Jam indicators", "Grid coordinates", "Pilot icons", "Base icons" };
             private static readonly string[] OverlayNames =
-                { "CONTROL FIELD", "FRONT LINE", "THREAT HEAT" };
+                { "CONTROL FIELD", "FRONT LINE", "THREAT HEAT", "SATELLITE MAP" };
             private static readonly string[] OverlayNotes =
             {
                 "Faction sector control tint", "Front line trace over the control field",
-                "Hostile sensor heat over tracked emitters",
+                "Hostile sensor heat over tracked emitters", "Satellite imagery under map symbols",
             };
+            private static readonly string[] OverlaySubtitles =
+                { "Sector control", "Control boundary", "Sensor coverage", "Terrain imagery" };
             private static readonly string[] HoverNames = { "OFF", "UNIT INFO", "AMMUNITION", "ORDERS" };
             private static readonly string[] HoverNotes =
                 { "No hover tooltip", "Unit information", "Weapon and ammunition", "Current unit orders" };
@@ -50,8 +54,11 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 MapOptions.TooltipType.Ammo, MapOptions.TooltipType.Order,
             };
             private static readonly string[] SizeNames = { "SMALL", "MEDIUM", "LARGE" };
+            private static readonly string[] SizeSubtitles = { "COMPACT", "BALANCED", "FULL SIZE" };
             private static readonly string[] ReadoutKeys =
-                { "SECTOR CELL", "CONTROL DATA", "THREAT TRACKS" };
+                { "SECTOR CELL", "CONTROL DATA", "THREAT TRACKS", "TERRAIN DECK" };
+            private static readonly string[] ReadoutGlyphs =
+                { "grid", "control", "radar", "map" };
             private static readonly string[] LegendLabels =
                 { "FRIENDLY GROUND", "HOSTILE GROUND", "CONTESTED", "FRONT LINE", "RADAR HEAT", "OPTICAL / IR" };
 
@@ -72,6 +79,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 : base(screen, VanillaMfdPanelId.Map) { this.options = options; }
 
             protected override int TabCount => 2;
+            protected override bool PageHasTitle => false;
 
             private bool Available => options != null && SceneSingleton<DynamicMap>.i != null;
             private bool OverlaysReady => Available && Overlay != null && Overlay.LayersAvailable;
@@ -112,17 +120,42 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 float width = PageWidth;
                 float gap = AvTokens.Gap;
 
-                // Fixed reading rhythm; compact bays scroll the same controls.
-                const float cell = 56f;
-                const float readout = 112f;
+                float cell = Mathf.Clamp((PageHeight - 298f) / 5f, 48f, 64f);
+                float readoutHeight = Mathf.Clamp(96f + (PageHeight - 540f) * 0.12f, 96f, 120f);
+                float y = MapHeading(page, -AvTokens.Space1, width,
+                    "TACTICAL PICTURE", "LIVE MAP TELEMETRY", "map");
+                Rect picture = new Rect(AvTokens.Space3, y, width - AvTokens.Space3, readoutHeight);
+                float cardGap = AvTokens.Space1;
+                float cardWidth = (picture.width - cardGap) * 0.5f;
+                float cardHeight = (picture.height - cardGap) * 0.5f;
+                for (int i = 0; i < ReadoutKeys.Length; i++)
+                {
+                    var card = new Rect(picture.x + (i % 2) * (cardWidth + cardGap),
+                        y - (i / 2) * (cardHeight + cardGap), cardWidth, cardHeight);
+                    AvKit.Panel(page, card, AvTheme.SurfaceInert);
+                    AvKit.Rule(page, new Rect(card.x, card.y, card.width, 1f), AvTheme.Hairline);
+                    AvKit.Rule(page, new Rect(card.x, card.y, 3f, card.height), AvTheme.RailInfo);
+                    AvStyled.Label(page, new Rect(card.x + 10f, card.y - 5f,
+                        card.width - 36f, 14f), ReadoutKeys[i], "metric-key");
+                    readoutValues[i] = AvStyled.Label(page,
+                        new Rect(card.x + 10f, card.y - 21f, card.width - 20f, 23f),
+                        "—", "metric-value", align: TextAlignmentOptions.MidlineRight);
+                    readoutValues[i].enableAutoSizing = true;
+                    readoutValues[i].fontSizeMin = AvTokens.FontMicro;
+                    readoutValues[i].fontSizeMax = 18f;
+                    MapGlyph(page, new Rect(card.x + card.width - 24f, card.y - 5f, 15f, 15f),
+                        ReadoutGlyphs[i]);
+                }
+                y -= readoutHeight + AvTokens.Space2;
 
-                float y = Heading(page, 0f, width, "MAP LAYERS", NativeLayerCount + " GAME LAYERS");
+                y = MapHeading(page, y, width, "GAME SYMBOLOGY",
+                    NativeLayerCount + " NATIVE LAYERS", "filter");
                 layers = new MfdPagingGrid(page, y, width, 2, 3, pager: false, rowHeight: cell);
                 y -= 3f * cell + AvTokens.Space2;
 
-                y = Heading(page, y, width, "BOSCALI OVERLAYS", "THEATER CONTROL");
+                y = MapHeading(page, y, width, "THEATER OVERLAYS", "TACTICAL RASTER", "control");
                 overlays = new MfdPagingGrid(page, y, width, 2, 2, pager: false, rowHeight: cell);
-                y -= 2f * cell + AvTokens.Space2;
+                y -= 2f * cell + AvTokens.Space1;
 
                 overlayNote = Hint(page, new Rect(AvTokens.Space3, y, width - AvTokens.Space3, 26f), "");
                 y -= 30f;
@@ -138,27 +171,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     new Rect(AvTokens.Space3 + (buttonWidth + gap) * 2f, y, buttonWidth, AvTokens.RowHeight),
                     "DEFAULTS", "btn", ApplyDefaults)
                     .WithTooltip("Restore the game's defaults: every layer on, unit tooltips and full-size symbols.");
-                y -= AvTokens.RowHeight + AvTokens.Space1;
-
-                AvKit.TacticalCard(page, new Rect(AvTokens.Space3, y, width - AvTokens.Space3, readout),
-                    AvTheme.RailInfo);
-                AvStyled.Label(page, new Rect(AvTokens.Space5, y - 10f, width - AvTokens.Space5 * 2f, 14f),
-                    "OVERLAY READOUT", "section-title");
-                // The rows spread over the card's whole height: the pitch takes the slack
-                // between them instead of leaving it stacked under the last row.
-                float pitch = (readout - 54f) / (ReadoutKeys.Length - 1);
-                for (int i = 0; i < ReadoutKeys.Length; i++)
-                {
-                    float rowY = y - 30f - i * pitch;
-                    AvStyled.Label(page, new Rect(AvTokens.Space5, rowY, 150f, 16f), ReadoutKeys[i], "kv-key");
-                    readoutValues[i] = AvStyled.Label(page,
-                        new Rect(AvTokens.Space5 + 150f, rowY, width - AvTokens.Space5 * 2f - 150f, 16f),
-                        "—", "kv-value", align: TextAlignmentOptions.MidlineRight);
-                    if (i > 0 && pitch >= 20f)
-                        AvKit.Rule(page, new Rect(AvTokens.Space5, rowY + (pitch - 16f) * 0.5f,
-                                                  width - AvTokens.Space5 * 2f, 1f),
-                                   AvTheme.Unity(AvTokens.Hairline.WithAlpha(0.35f)));
-                }
+                MapGlyph((RectTransform)presetAll.transform, new Rect(10f, -8f, 14f, 14f), "grid");
+                MapGlyph((RectTransform)presetNone.transform, new Rect(10f, -8f, 14f, 14f), "clear");
+                MapGlyph((RectTransform)presetDefaults.transform, new Rect(10f, -8f, 14f, 14f), "reset");
             }
 
             private bool NativeLayer(int index)
@@ -189,23 +204,26 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             private bool OverlayLayer(int index)
             {
-                if (index == 0) return Overlay.ControlFieldVisible;
-                if (index == 1) return Overlay.FrontLineVisible;
-                return Threats != null && Threats.Visible;
+                if (index == 0) return Overlay != null && Overlay.ControlFieldVisible;
+                if (index == 1) return Overlay != null && Overlay.FrontLineVisible;
+                if (index == 2) return Threats != null && Threats.Visible;
+                return Overlay != null && Overlay.TerrainImageVisible;
             }
 
             private void SetOverlayLayer(int index, bool visible)
             {
-                if (index == 0) Overlay.SetControlFieldVisible(visible);
-                else if (index == 1) Overlay.SetFrontLineVisible(visible);
-                else Threats?.SetVisible(visible);
+                if (index == 0) Overlay?.SetControlFieldVisible(visible);
+                else if (index == 1) Overlay?.SetFrontLineVisible(visible);
+                else if (index == 2) Threats?.SetVisible(visible);
+                else Overlay?.SetTerrainImageVisible(visible);
             }
 
             /// <summary>Whether one overlay has the map and the state it needs to draw at all.</summary>
             private bool OverlayReady(int index)
             {
                 if (index < 2) return Overlay != null && Overlay.LayersAvailable;
-                return Threats != null && Threats.Available;
+                if (index == 2) return Threats != null && Threats.Available;
+                return Overlay != null && Overlay.LayersAvailable;
             }
 
             /// <summary>Both presets state the whole set; already-satisfied layers are skipped.</summary>
@@ -252,26 +270,27 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             {
                 DrawSpine(page);
                 float width = PageWidth;
-                const float cell = 48f;
-                const float legendPitch = 28f;
-                const float preview = 120f;
+                float cell = Mathf.Clamp((PageHeight - 330f) / 3f, 46f, 54f);
+                float legendPitch = Mathf.Clamp(PageHeight / 22f, 24f, 32f);
+                float preview = Mathf.Clamp(PageHeight * 0.26f, 136f, 176f);
 
-                float y = Heading(page, 0f, width, "HOVER TOOLTIP", "CHOOSE ONE");
+                float y = MapHeading(page, -AvTokens.Space1, width,
+                    "SYMBOL DECK", "ILLUSTRATIVE SCALE", "hud");
+                BuildPreview(page, y, width, preview);
+                y -= preview + AvTokens.Space2;
+
+                y = MapHeading(page, y, width, "CONTACT HOVER", "CHOOSE ONE", "eye");
                 hover = new MfdPagingGrid(page, y, width, 2, 2, pager: false, rowHeight: cell, exclusive: true);
                 y -= 2f * cell + AvTokens.Space2;
 
                 detailSummary = Hint(page, new Rect(AvTokens.Space3, y, width - AvTokens.Space3, 26f), "");
                 y -= 30f;
 
-                y = Heading(page, y, width, "SYMBOL SIZE", "CHOOSE ONE");
+                y = MapHeading(page, y, width, "SYMBOL SIZE", "CHOOSE ONE", "hud");
                 sizes = new MfdPagingGrid(page, y, width, 3, 1, pager: false, rowHeight: cell, exclusive: true);
                 y -= cell + AvTokens.Space2;
 
-                y = Heading(page, y, width, "SYMBOL PREVIEW", "ILLUSTRATIVE");
-                BuildPreview(page, y, width, preview);
-                y -= preview + AvTokens.Space2;
-
-                y = Heading(page, y, width, "MAP LEGEND", "BOSCALI OVERLAYS");
+                y = MapHeading(page, y, width, "MAP LEGEND", "BOSCALI OVERLAYS", "map");
                 BuildLegend(page, y, width, legendPitch);
             }
 
@@ -279,22 +298,38 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             {
                 AvKit.TacticalCard(page, new Rect(AvTokens.Space3, y, width - AvTokens.Space3, height),
                     AvTheme.RailInfo);
+                AvStyled.Label(page, new Rect(AvTokens.Space3 + 12f, y - 7f,
+                    width - AvTokens.Space3 - 24f, 14f),
+                    "UNIT SIGNATURE  /  SCALE SAMPLE", "metric-key");
+                AvKit.Rule(page, new Rect(AvTokens.Space3 + 12f, y - 25f,
+                    width - AvTokens.Space3 - 24f, 1f), AvTheme.Hairline.WithAlpha(0.55f));
 
                 string[] symbols = { "AIR", "GND", "SHP" };
-                string[] labels = { "AIRCRAFT", "GROUND", "SHIP" };
+                string[] labels = { "AIRCRAFT", "GROUND", "SURFACE" };
                 float column = (width - AvTokens.Space3) / 3f;
                 float glyphSize = Mathf.Clamp(height * 0.34f, 26f, 52f);
-                float centreY = y - height * 0.40f;
+                float centreY = y - height * 0.38f;
+
+                Color reticleCol = AvTheme.Unity(AvTokens.Hairline.WithAlpha(0.35f));
                 for (int i = 0; i < symbols.Length; i++)
                 {
                     float x = AvTokens.Space3 + column * i;
+                    float glyphCenterX = x + column * 0.5f;
+                    if (i > 0)
+                        AvKit.Rule(page, new Rect(x, y - 33f, 1f, height - 62f),
+                            AvTheme.Hairline.WithAlpha(0.35f));
+
+                    // Subtle scale reference brackets
+                    AvKit.Rule(page, new Rect(glyphCenterX - 18f, centreY - glyphSize * 0.5f - 4f, 36f, 1f), reticleCol);
+                    AvKit.Rule(page, new Rect(glyphCenterX - 18f, centreY + glyphSize * 0.5f + 4f, 36f, 1f), reticleCol);
+
                     var go = new GameObject("PreviewSymbol", typeof(RectTransform), typeof(MfdGlyph));
                     go.transform.SetParent(page, false);
                     previewSymbols[i] = go.GetComponent<MfdGlyph>();
                     RectTransform symbol = previewSymbols[i].rectTransform;
-                    // Centre pivot so the size choice scales the glyph about its own middle.
+                    AvKit.Place(symbol, new Rect(glyphCenterX, centreY, glyphSize, glyphSize));
+                    // Place resets pivot; set it afterwards so scale stays centred.
                     symbol.pivot = new Vector2(.5f, .5f);
-                    AvKit.Place(symbol, new Rect(x + column / 2f, centreY, glyphSize, glyphSize));
                     previewSymbols[i].raycastTarget = false;
                     previewSymbols[i].Set(symbols[i]);
                     AvStyled.Label(page,
@@ -303,7 +338,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 }
 
                 previewCaption = Hint(page,
-                    new Rect(AvTokens.Space5, y - height + 26f, width - AvTokens.Space5 * 2f, 26f), "");
+                    new Rect(AvTokens.Space5, y - height + 24f, width - AvTokens.Space5 * 2f, 22f), "");
             }
 
             private static void BuildLegend(RectTransform page, float y, float width, float pitch)
@@ -314,22 +349,34 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 Color32 contestedRight = new Color32(hostile.r, hostile.g, hostile.b, 150);
                 Color32 front = FrontlineGraphic.Ink;
 
-                float half = (width - AvTokens.Space3) / 2f;
-                float blockHeight = Mathf.Clamp(pitch - 14f, 8f, 20f);
-                float blockWidth = Mathf.Max(5f, blockHeight * 0.75f);
+                float cardWidth = width - AvTokens.Space3;
+                float cardHeight = pitch * 3f + 16f;
+                Rect cardRect = new Rect(AvTokens.Space3, y, cardWidth, cardHeight);
+                AvKit.Panel(page, cardRect, AvTheme.Unity(AvTokens.SurfaceInert), AvSprites.Card);
+                AvKit.Outline(page, cardRect, AvTheme.Hairline);
+
+                float half = cardWidth / 2f;
+                AvKit.Rule(page, new Rect(AvTokens.Space3 + half, y - 8f, 1f, cardHeight - 16f),
+                           AvTheme.Unity(AvTokens.Hairline.WithAlpha(0.35f)));
+
+                float blockHeight = 12f;
+                float blockWidth = 10f;
                 for (int i = 0; i < LegendLabels.Length; i++)
                 {
-                    float x = AvTokens.Space3 + i % 2 * half;
-                    float rowY = y - i / 2 * pitch;
+                    float colX = AvTokens.Space3 + 12f + (i % 2) * half;
+                    float rowY = y - 12f - (i / 2) * pitch;
                     Color32 left = i == 1 ? hostile : i == 2 ? contestedLeft : i == 3 ? front
                         : i == 4 ? (Color32)AvTheme.RailDanger : i == 5 ? (Color32)AvTheme.RailCaution : friendly;
                     Color32 right = i == 2 ? contestedRight : left;
 
-                    AvKit.Rule(page, new Rect(x, rowY - 6f, blockWidth, blockHeight), left);
-                    AvKit.Rule(page, new Rect(x + blockWidth, rowY - 6f, blockWidth, blockHeight), right);
+                    AvKit.Rule(page, new Rect(colX, rowY - 4f, blockWidth, blockHeight), left);
+                    AvKit.Rule(page, new Rect(colX + blockWidth, rowY - 4f, blockWidth, blockHeight), right);
+                    AvKit.Outline(page, new Rect(colX, rowY - 4f, blockWidth * 2f, blockHeight),
+                                  AvTheme.Unity(AvTokens.Hairline.WithAlpha(0.5f)));
+
                     AvStyled.Label(page,
-                        new Rect(x + blockWidth * 2f + 8f, rowY - 6f - (blockHeight - 16f) * 0.5f,
-                                 half - blockWidth * 2f - 14f, 16f),
+                        new Rect(colX + blockWidth * 2f + 10f, rowY - 6f,
+                                 half - blockWidth * 2f - 24f, 16f),
                         LegendLabels[i], "kv-key");
                 }
             }
@@ -362,13 +409,14 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     i => { if (ToggleReady()) ToggleNativeLayer(i); RequestRefresh(); }, i => available,
                     details: i => !available ? "Map is not available yet."
                         : LayerNotes[i] + (NativeLayer(i) ? ". Click to hide." : ". Click to show."),
-                    subs: i => available ? LayerNotes[i] : null);
+                    subs: i => available ? LayerSubtitles[i] : null);
                 overlays.SetData(OverlayLayerCount, i => OverlayNames[i], i => OverlayReady(i) && OverlayLayer(i),
                     i => { if (ToggleReady() && OverlayReady(i)) SetOverlayLayer(i, !OverlayLayer(i)); RequestRefresh(); },
                     i => OverlayReady(i),
                     details: i => !OverlayReady(i) ? OverlayUnavailable(i)
                         : OverlayNotes[i] + (OverlayLayer(i) ? ". Click to hide." : ". Click to show.") +
-                          OverlayDetail(i, threatSource));
+                          OverlayDetail(i, threatSource),
+                    subs: i => OverlayReady(i) ? OverlaySubtitles[i] : null);
 
                 bool tooltipOn = available && options.tooltipType != MapOptions.TooltipType.None;
                 hover.SetData(HoverNames.Length, i => HoverNames[i],
@@ -381,9 +429,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 sizes.SetData(SizeNames.Length, i => SizeNames[i] + " " + (60 + 20 * i) + "%",
                     i => available && Mathf.Approximately(options.iconSize, .6f + .2f * i),
                     i => { if (ToggleReady()) options.SetIconSize(i); RequestRefresh(); }, i => available,
-                    details: i => available ? "Draw map symbols at " + (60 + 20 * i) + " percent." :
+                    details: i => available ? "Draw map symbols at " + (60 + 20 * i) + " percent (" + SizeSubtitles[i] + ")." :
                         "Map options are not available yet.",
-                    subs: i => available ? "OF STANDARD SIZE" : null);
+                    subs: i => available ? SizeSubtitles[i] : null);
 
                 bool anyLayer = available && visibleLayers > 0;
                 bool everyLayer = available && visibleLayers == ShownLayerTarget();
@@ -410,8 +458,11 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                       Mathf.RoundToInt(threatSource.WidestEnvelopeKm) + " km"
                     : "NONE",
                     threatsReady);
+                SetReadout(3, overlaysReady ? (source.TerrainImageVisible ? "SATELLITE ON" : "VECTOR (OFF)") : "—", overlaysReady);
 
-                Shell.DataBar.State.text = available ? "MAP DISPLAY" : "WAITING FOR MAP";
+                Shell.DataBar.State.text = available
+                    ? "MAP DISPLAY  /  " + (selectedPage == 0 ? "LAYERS" : "READABILITY")
+                    : "MAP DISPLAY  /  WAITING FOR MAP";
                 Shell.DataBar.SetChip(0, available ? "LAYERS " + visibleLayers + "/" + ShownLayerTarget() : "LAYERS —",
                     !available ? "inert" : visibleLayers == ShownLayerTarget() ? "live" : "info");
                 Shell.DataBar.SetChip(1, available ? "TOOLTIP " + TooltipName() : "TOOLTIP —",
@@ -441,6 +492,26 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 readoutValues[index].color = color ?? (live ? AvTheme.TextPrimary : AvTheme.Disabled);
             }
 
+            private static float MapHeading(RectTransform page, float y, float width,
+                string title, string note, string glyph)
+            {
+                float next = Heading(page, y, width, title, note);
+                MapGlyph(page, new Rect(AvTokens.Space3 + title.Length * 7f + 8f,
+                    y - 1f, 14f, 14f), glyph);
+                return next;
+            }
+
+            private static void MapGlyph(RectTransform page, Rect area, string kind)
+            {
+                var go = new GameObject("MapGlyph", typeof(RectTransform), typeof(MfdGlyph));
+                var rt = go.GetComponent<RectTransform>();
+                rt.SetParent(page, false);
+                AvKit.Place(rt, area);
+                MfdGlyph glyph = go.GetComponent<MfdGlyph>();
+                glyph.raycastTarget = false;
+                glyph.SetKind(kind, AvTheme.RailInfo);
+            }
+
             /// <summary>The whole set is only as large as the overlays that can actually draw.</summary>
             private int ShownLayerTarget()
             {
@@ -460,9 +531,12 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     : " Nothing tracked.";
             }
 
-            private string OverlayUnavailable(int index) => index < 2
-                ? "Command's theater overlay is not running on this map."
-                : "Threat heat waits for the map, a faction and your own aircraft.";
+            private string OverlayUnavailable(int index)
+            {
+                if (index < 2) return "Command's theater overlay is not running on this map.";
+                if (index == 2) return "Threat heat waits for the map, a faction and your own aircraft.";
+                return "Satellite map background requires an active tactical map.";
+            }
 
             private static bool IsUsableSize(float value) =>
                 !float.IsNaN(value) && !float.IsInfinity(value);

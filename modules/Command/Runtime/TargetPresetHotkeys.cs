@@ -20,7 +20,9 @@ namespace BoscaliSummer.Features.Command.Runtime
 
         private void Update()
         {
-            if (settings == null) return;
+            if (settings == null || SceneSingleton<RadialMenuMain>.i == null ||
+                SceneSingleton<TargetListSelector>.i == null ||
+                !GameManager.GetLocalAircraft(out Aircraft aircraft) || aircraft == null || aircraft.disabled) return;
             if (InputFieldChecker.InsideInputField || GameplayUI.GameIsPaused ||
                 RadialMenuMain.IsInUse() || LeaderboardMenu.IsOpen()) return;
 

@@ -91,11 +91,10 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             if (Time.unscaledTime < nextOptions) return;
             nextOptions = Time.unscaledTime + OptionInterval;
 
-            // Readiness is a local read of the networked rearm lists, so it is refreshed on
-            // every peer. Convoy options need the server-only cooldown and the pool, so they
-            // stay host-only.
+            // Mission convoy definitions are local on every peer. Only the host may inspect
+            // cooldowns, prices and the faction pool or claim a group is ready.
             RebuildReadiness();
-            if (authoritative) RebuildReinforcements();
+            RebuildReinforcements();
         }
 
         public bool RequestReinforcement(string key)
@@ -126,9 +125,9 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             funds = float.NaN;
 
             if (!TryGetLocalFaction(out FactionHQ hq)) return;
-            funds = hq.factionFunds;
+            if (authoritative) funds = hq.factionFunds;
 
-            if (hq.preventDonation) return;
+            if (authoritative && hq.preventDonation) return;
 
             List<Faction.ConvoyGroup> groups = hq.faction.GetConvoyGroups();
             if (groups == null) return;
@@ -139,6 +138,14 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
                 Faction.ConvoyGroup group = groups[i];
                 if (group == null || string.IsNullOrEmpty(group.Name)) continue;
 
+                if (!authoritative)
+                {
+                    options.Add(new ReinforcementOption(
+                        group.Name, group.Name, DetailOf(group), float.NaN,
+                        false, false, 0f));
+                    continue;
+                }
+
                 float cost = group.GetCost();
                 float cooldown = hq.CmdGetDelaySpawnConvoy((byte)i);
                 ReinforcementGate gate = ReinforcementGatePolicy.Evaluate(
@@ -148,7 +155,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
                     group.Name, group.Name, DetailOf(group), cost,
                     gate == ReinforcementGate.Ready,
                     gate != ReinforcementGate.Unaffordable && gate != ReinforcementGate.Disabled,
-                    gate == ReinforcementGate.Cooling ? cooldown : 0f));
+                    Mathf.Max(0f, cooldown)));
             }
         }
 

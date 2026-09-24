@@ -16,7 +16,7 @@ namespace BoscaliSummer.Features.Support.Visuals
     /// Every rendered frame is processed via an asynchronous SAR microwave imaging pipeline:
     /// dynamic contrast stretching, specular corner reflector blooming for metallic structures,
     /// vehicles and antennas, radar shadow / water attenuation, coherent Rayleigh speckle noise,
-    /// and tactical phosphor radar monochrome formatting. Microwaves penetrate cloud decks and
+    /// and neutral grayscale radar formatting. Microwaves penetrate cloud decks and
     /// operate 24/7 day and night.
     /// </summary>
     internal sealed class SatelliteImager : MonoBehaviour
@@ -35,12 +35,13 @@ namespace BoscaliSummer.Features.Support.Visuals
         private Texture2D sarTexture;
         private Color32[] sarPixels;
         private bool readbackPending;
+        private bool hasProcessedFrame;
         private float nextFrame;
         private int enabledFrame = -1;
         private bool fogWas = true;
         private uint noise = 0x9E3779B9u;
 
-        public Texture Output => sarTexture != null && FramesRendered > 0 ? (Texture)sarTexture : colour;
+        public Texture Output => sarTexture != null && hasProcessedFrame ? (Texture)sarTexture : colour;
         public Camera Camera => cam;
         public bool InfraredMode => false;
         public int FramesRendered { get; private set; }
@@ -210,15 +211,14 @@ namespace BoscaliSummer.Features.Support.Visuals
                     float speckle = ((noise & 0xff) / 255f - 0.5f) * 0.16f;
                     float finalVal = Mathf.Clamp01(Mathf.Pow(l, 0.82f) + speckle);
 
-                    // Tactical radar phosphor green palette
-                    byte g = (byte)Mathf.Clamp(finalVal * 242f + 12f, 0f, 255f);
-                    byte r = (byte)(g * 0.32f);
-                    byte b = (byte)(g * 0.42f);
-                    sarPixels[y * sarWidth + x] = new Color32(r, g, b, 255);
+                    // Neutral SAR intensity: preserve luminance detail without a night-vision tint.
+                    byte value = (byte)Mathf.Clamp(finalVal * 222f + 18f, 0f, 255f);
+                    sarPixels[y * sarWidth + x] = new Color32(value, value, value, 255);
                 }
             }
             sarTexture.SetPixels32(sarPixels);
             sarTexture.Apply(false);
+            hasProcessedFrame = true;
         }
 
         private static float Luminance(Color32 c) => (0.299f * c.r + 0.587f * c.g + 0.114f * c.b) / 255f;

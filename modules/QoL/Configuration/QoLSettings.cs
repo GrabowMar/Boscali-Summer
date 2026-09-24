@@ -8,12 +8,6 @@ namespace BoscaliSummer.Features.QoL.Configuration
         public ConfigEntry<bool> Enabled { get; }
         public ConfigEntry<bool> ObservationEnabled { get; }
         public ConfigEntry<KeyCode> MarkCameraKey { get; }
-        public ConfigEntry<bool> ThirdPersonHudEnabled { get; }
-        public ConfigEntry<KeyCode> ThirdPersonHudKey { get; }
-        public ConfigEntry<bool> ThirdPersonHidePitchLadder { get; }
-        public ConfigEntry<bool> ThirdPersonCameraEnabled { get; }
-        public ConfigEntry<bool> ThirdPersonFlightCameraEnabled { get; }
-
         public QoLSettings(ConfigFile config)
         {
             Enabled = config.Bind("QoL", "Enabled", true,
@@ -23,17 +17,7 @@ namespace BoscaliSummer.Features.QoL.Configuration
             MarkCameraKey = config.Bind("QoL", "MarkCameraKey", KeyCode.F8,
                 "Capture a camera observation; ignores text entry and pause. None disables the shortcut. Also available on TGT CAMERA.");
 
-            // Retain the existing keys so moving ownership does not reset user preferences.
-            ThirdPersonHudEnabled = config.Bind("Avionics", "ThirdPersonHudEnabled", true,
-                "Keep tactical flight HUD visible in external orbit and chase camera views.");
-            ThirdPersonCameraEnabled = config.Bind("Avionics", "ThirdPersonCameraEnabled", true,
-                "Show the native target camera feed only while targets are selected in third person; no additional world rendering.");
-            ThirdPersonFlightCameraEnabled = config.Bind("Avionics", "ThirdPersonFlightCameraEnabled", true,
-                "Smooth aircraft-relative orbit/rear chase framing with a steady horizon and room above the aircraft for aiming. Native zoom, look-at and other chase presets remain available.");
-            ThirdPersonHudKey = config.Bind("Avionics", "ThirdPersonHudKey", KeyCode.F7,
-                "Hotkey to toggle third-person HUD visibility on the fly.");
-            ThirdPersonHidePitchLadder = config.Bind("Avionics", "ThirdPersonHidePitchLadder", true,
-                "Declutter: hide the floating pitch ladder in third person while keeping reticle, ammo, and radar.");
+
         }
     }
 }

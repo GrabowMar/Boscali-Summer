@@ -147,6 +147,7 @@ namespace BoscaliSummer.Features.Radio.Presentation
         {
             public int Index = -1;
             public GameObject Root;
+            public Image Ground;
             public Image Rule;
             public TMP_Text Number;
             public TMP_Text Title;
@@ -440,7 +441,7 @@ namespace BoscaliSummer.Features.Radio.Presentation
         {
             rx = new ReceiverUi();
             float x = area.x + AvScreen.SpineInset;
-            float w = area.width - AvScreen.SpineInset;
+            float w = area.width - AvScreen.SpineInset - 12f;
             float y = area.y;
 
             AvStyled.Spine(page, new Rect(area.x, area.y, 3f, area.height));
@@ -456,7 +457,7 @@ namespace BoscaliSummer.Features.Radio.Presentation
 
             TMP_Text note = null;
             float headerTop = y;
-            y = SectionHeader(page, x, y, w, "STATION PRESETS", "0 FOUND", 78f, out note);
+            y = SectionHeader(page, x, y, w, "STATION PRESETS", "0 FOUND", 88f, out note);
             rx.StationsNote = note;
             AvKit.Button(page, "RESCAN", new Rect(x + w - 72f, headerTop - 2f, 72f, 20f),
                 () => manager?.Rescan(), AvTokens.FontMicro, AvButtonStyle.Quiet)
@@ -751,15 +752,15 @@ namespace BoscaliSummer.Features.Radio.Presentation
             AvKit.Panel(page, area, AvTheme.SurfaceInert, AvSprites.Control);
             AvKit.Outline(page, area, AvTheme.Frame);
             const float arrow = 24f;
-            AvKit.Button(page, "−", new Rect(area.x + 1f, area.y - 1f, arrow, area.height - 2f),
+            AvKit.Button(page, "-", new Rect(area.x + 1f, area.y - 1f, arrow, area.height - 2f),
                 down, AvTokens.FontMicro, AvButtonStyle.Quiet).WithTooltip(downTip);
             AvKit.Button(page, "+", new Rect(area.x + area.width - arrow - 1f, area.y - 1f, arrow, area.height - 2f),
                 up, AvTokens.FontMicro, AvButtonStyle.Quiet).WithTooltip(upTip);
 
-            // The label spans the slot behind the arrows: it is pointer-transparent, and a
-            // centred name cannot collide with an edge arrow at these widths.
+            // Keep the readout in the gap between arrow keys at every bezel size.
             TMP_Text label = AvStyled.Label(page,
-                new Rect(area.x + 2f, area.y, Mathf.Max(0f, area.width - 4f), area.height),
+                new Rect(area.x + arrow + 2f, area.y,
+                    Mathf.Max(0f, area.width - 2f * arrow - 4f), area.height),
                 text, "row-main", align: TextAlignmentOptions.Center);
             label.fontSize = fontSize;
             label.fontStyle = FontStyles.Bold;
@@ -784,7 +785,7 @@ namespace BoscaliSummer.Features.Radio.Presentation
         {
             deck = new DeckUi();
             float x = area.x + AvScreen.SpineInset;
-            float w = area.width - AvScreen.SpineInset;
+            float w = area.width - AvScreen.SpineInset - 12f;
             float y = area.y;
 
             // Slack rides the track pitch and the empty card, never a dead band: the list's
@@ -802,7 +803,7 @@ namespace BoscaliSummer.Features.Radio.Presentation
 
             TMP_Text note = null;
             float headerTop = y;
-            y = SectionHeader(page, x, y, w, "MUSIC LIBRARY", "0 TRACKS", 78f, out note);
+            y = SectionHeader(page, x, y, w, "MUSIC LIBRARY", "0 TRACKS", 88f, out note);
             deck.LibraryNote = note;
             AvKit.Button(page, "RESCAN", new Rect(x + w - 72f, headerTop - 2f, 72f, 20f),
                 () => manager?.Rescan(), AvTokens.FontMicro, AvButtonStyle.Quiet)
@@ -886,7 +887,7 @@ namespace BoscaliSummer.Features.Radio.Presentation
         {
             RectTransform group = Group(page);
             deck.EmptyRoot = group.gameObject;
-            AvKit.TacticalCard(group, area, AvTheme.Warning);
+            AvKit.TacticalCard(group, area, AvTheme.Warning, hasRail: false);
             // The message block keeps its 356px composition and centres in whatever the card
             // grew to, so the space slack added reads as a taller card, not a top-heavy one.
             float shift = -(area.height - EmptyCard) * 0.5f;
@@ -894,7 +895,7 @@ namespace BoscaliSummer.Features.Radio.Presentation
                 "NO MUSIC FOUND", "row-name", align: TextAlignmentOptions.Center);
             AvStyled.Label(group, new Rect(area.x + AvTokens.Space4, area.y - 156f + shift,
                     area.width - AvTokens.Space4 * 2f, 40f),
-                "ADD .OGG OR .WAV FILES TO BEPLUGINS/BOSCALISUMMER/MUSIC, THEN PRESS RESCAN",
+                "ADD .OGG OR .WAV FILES TO BEPINEX/PLUGINS/BOSCALISUMMER/MUSIC, THEN PRESS RESCAN",
                 "row-sub", align: TextAlignmentOptions.Center);
 
             const float buttonWidth = 200f;
@@ -1093,7 +1094,7 @@ namespace BoscaliSummer.Features.Radio.Presentation
                 waterfall.Push(manager.Spectrum);
             }
 
-            if (Time.unscaledTime < nextMeterAt) return;
+            if (shell == null || shell.Page != TabReceiver || Time.unscaledTime < nextMeterAt) return;
             nextMeterAt = Time.unscaledTime + 0.1f;
             UpdateMeter();
         }
@@ -1232,7 +1233,8 @@ namespace BoscaliSummer.Features.Radio.Presentation
             NoWrap(row.Frequency);
             row.Unit = AvStyled.Label(rect, new Rect(unitX, 0f, unitWidth, PresetPitch), string.Empty, "row-value-unit");
             NoWrap(row.Unit);
-            row.Status = AvStyled.Label(rect, new Rect(strengthX, 0f, strengthWidth, PresetPitch), string.Empty, "row-value");
+            row.Status = AvStyled.Label(rect, new Rect(strengthX, 0f, strengthWidth - 8f, PresetPitch),
+                string.Empty, "row-value", align: TextAlignmentOptions.MidlineRight);
             NoWrap(row.Status);
 
             StationRow captured = row;
@@ -1259,6 +1261,7 @@ namespace BoscaliSummer.Features.Radio.Presentation
             var row = new TrackRow
             {
                 Root = ground.gameObject,
+                Ground = ground,
                 Rule = rule
             };
 
@@ -1330,10 +1333,13 @@ namespace BoscaliSummer.Features.Radio.Presentation
                 RadioStationIconCache.Clear();
                 iconRevision = manager.StationRevision;
             }
-            if (markerRevision != manager.StationRevision) RefreshDialMarkers();
-
-            RefreshReceiver();
-            RefreshDeck();
+            // Switching tabs forces a refresh, so hidden controls need no 6 Hz text pass.
+            if (shell.Page == TabReceiver)
+            {
+                if (markerRevision != manager.StationRevision) RefreshDialMarkers();
+                RefreshReceiver();
+            }
+            else RefreshDeck();
             RefreshDataBar();
         }
 
@@ -1435,8 +1441,8 @@ namespace BoscaliSummer.Features.Radio.Presentation
 
                 if (!filled)
                 {
-                    row.Preset.text = "–";
-                    row.Name.text = "—";
+                    row.Preset.text = (index + 1).ToString();
+                    row.Name.text = "EMPTY PRESET";
                     row.Frequency.text = string.Empty;
                     row.Unit.text = string.Empty;
                     row.Status.text = string.Empty;
@@ -1444,10 +1450,10 @@ namespace BoscaliSummer.Features.Radio.Presentation
                     row.Frequency.color = AvTheme.Disabled;
                     row.Status.color = AvTheme.Disabled;
                     row.Preset.color = AvTheme.Disabled;
-                    row.Badge.text = "–";
-                    if (!row.Badge.gameObject.activeSelf) row.Badge.gameObject.SetActive(true);
+                    row.Badge.text = string.Empty;
+                    if (row.Badge.gameObject.activeSelf) row.Badge.gameObject.SetActive(false);
                     row.Icon.enabled = false;
-                    row.BadgeGround.color = AvTheme.Unity(AvTokens.SurfaceInert);
+                    row.BadgeGround.color = Color.clear;
                     row.SelectionRail.color = Color.clear;
                     row.Button.SetEnabled(false);
                     row.Button.WithTooltip(null);
@@ -1586,7 +1592,7 @@ namespace BoscaliSummer.Features.Radio.Presentation
                 if (row.Index < 0) continue;
 
                 bool active = index == current && playing;
-                row.Number.text = (index + 1).ToString();
+                row.Number.text = active ? ">" : (index + 1).ToString("00");
                 string title = manager.DeckTrackTitle(index);
                 if (row.Title.text != title)
                 {
@@ -1595,6 +1601,9 @@ namespace BoscaliSummer.Features.Radio.Presentation
                 }
                 row.Number.color = active ? AvTheme.RailInfo : AvTheme.Disabled;
                 row.Title.color = active ? AvTheme.RailInfo : AvTheme.Unity(AvTokens.TextDim);
+                row.Button?.SetRowHighlight(row.Ground,
+                    active ? AvTheme.RailInfo.WithAlpha(0.1f) : Color.clear,
+                    AvTheme.Unity(AvTokens.RowFill(AvTheme.RailInfo.ToRgba(), active, hover: true)));
                 row.Rule.color = active ? AvTheme.RailInfo : Color.clear;
                 if (row.Position.Fill.enabled != active) row.Position.Fill.enabled = active;
                 if (active) row.Position.Set(manager.DeckProgress);
@@ -1610,12 +1619,13 @@ namespace BoscaliSummer.Features.Radio.Presentation
             if (receiverTab)
             {
                 RadioDial dial = manager.TunedDial;
-                dataBar.State.text = manager.IsOffAir ? "OFF AIR"
+                string receiverState = manager.IsOffAir ? "OFF AIR"
                     : manager.IsScanning ? "SCANNING"
                     : manager.IsOffStation ? "DEAD AIR"
                     : playing ? "ON AIR"
                     : manager.IsPaused ? "PAUSED"
                     : manager.HasChannels ? "STANDBY" : "NO LIBRARY";
+                dataBar.State.text = "RECEIVER / " + receiverState;
                 dataBar.State.color = manager.IsOffAir ? AvTheme.Alert
                     : manager.IsScanning || manager.IsOffStation ? AvTheme.Warning
                     : playing ? AvTheme.RailReady
@@ -1643,9 +1653,10 @@ namespace BoscaliSummer.Features.Radio.Presentation
                 return;
             }
 
-            dataBar.State.text = manager.DeckPlaying ? "PLAYING"
+            string deckState = manager.DeckPlaying ? "PLAYING"
                 : manager.DeckPaused ? "PAUSED"
                 : manager.DeckFolderCount > 0 ? "READY" : "EMPTY";
+            dataBar.State.text = "MUSIC / " + deckState;
             dataBar.State.color = manager.DeckPlaying ? AvTheme.RailInfo
                 : manager.DeckFolderCount > 0 ? AvTheme.Dim : AvTheme.Warning;
             dataBar.SetChip(0, "LOCAL", "info");

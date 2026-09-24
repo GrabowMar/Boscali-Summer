@@ -1,4 +1,4 @@
-using BoscaliSummer.Framework.Contracts;
+﻿using BoscaliSummer.Framework.Contracts;
 
 namespace BoscaliSummer.Features.Hud.Domain
 {
@@ -112,6 +112,15 @@ namespace BoscaliSummer.Features.Hud.Domain
         {
             for (int i = 0; i < Capacity; i++) entries[i].Active = false;
             Count = 0;
+        }
+
+        public void RemoveChannel(string channel)
+        {
+            int write = 0;
+            for (int read = 0; read < Count; read++)
+                if (!Same(entries[read].Channel, channel)) entries[write++] = entries[read];
+            for (int i = write; i < Count; i++) entries[i] = default;
+            Count = write;
         }
 
         private static bool Same(string a, string b) => string.Equals(a, b, System.StringComparison.Ordinal);

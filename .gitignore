@@ -15,9 +15,14 @@ TestResults/
 # Logs
 *.log
 
+# Local session trace exports
+/trajectory-*.json
+
 # Stray local tooling droppings
 .appdata/
 .codex-remote-attachments/
+decompiled_src/
+/custom gui.png
 
 # Editors / IDEs
 .vs/

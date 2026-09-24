@@ -24,6 +24,7 @@ namespace BoscaliSummer.Features.Support.Visuals
         private readonly Vector3[] arcPoints = new Vector3[25];
         private readonly Vector3[] ringPoints = new Vector3[RingPoints];
         private float born, radius, lifetime, nextArc, nextCockpit;
+        private float groundOffset;
         private Light flash;
 
         public static void Trigger(Vector3 point, float radiusMeters)
@@ -40,9 +41,14 @@ namespace BoscaliSummer.Features.Support.Visuals
 
         private void Initialize(float range)
         {
-            radius = Mathf.Clamp(range, 1000f, 60000f);
+            radius = Mathf.Clamp(range, 1000f, SupportEffectPolicy.MaxEmpRadius);
             lifetime = SupportEffectPolicy.EmpDuration + 4f;
             born = Time.time;
+            // Show the affected footprint at ground level while the source pulse stays in the sky.
+            float groundY = Datum.LocalSeaY + 120f;
+            if (Physics.Raycast(transform.position, Vector3.down, out RaycastHit hit, 50000f, PhysicsLayers.StaticsMask))
+                groundY = hit.point.y + 120f;
+            groundOffset = groundY - transform.position.y;
             var prompt = SupportParticles.Layer(transform, "Prompt ionization", true, 48, 1.6f, 150f,
                 new Color(3f, 4.4f, 6f));
             prompt.Emit(24);
@@ -51,6 +57,7 @@ namespace BoscaliSummer.Features.Support.Visuals
             SupportParticles.Ring(intermediate, 160, 80f, 150f, 6f);
             var footprint = SupportParticles.Layer(transform, "Ionized footprint", true, 320, 5.5f, 120f,
                 new Color(0.45f, 1.4f, 2.4f, 0.6f));
+            footprint.transform.localPosition = Vector3.up * groundOffset;
             SupportParticles.Ring(footprint, 320, radius * 0.97f, 90f, 0f);
             var aurora = SupportParticles.Layer(transform, "Geomagnetic heave", true, 240,
                 SupportEffectPolicy.EmpDuration, 200f, new Color(0.4f, 1.3f, 1.5f, 0.35f), 0f, AuroraFade());
@@ -75,6 +82,7 @@ namespace BoscaliSummer.Features.Support.Visuals
                 line.loop = true; line.startWidth = 22f; line.endWidth = 22f;
                 heave[i] = line;
             }
+            heave[0].transform.localPosition = Vector3.up * groundOffset;
             flash = gameObject.AddComponent<Light>();
             flash.color = new Color(0.72f, 0.86f, 1f);
             flash.range = 45000f; flash.intensity = 90f; flash.shadows = LightShadows.None;

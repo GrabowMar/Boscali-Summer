@@ -38,15 +38,19 @@ namespace BoscaliSummer.Framework.Contracts
         public float X { get; }
         public float Z { get; }
         public float Radius { get; }
+        /// <summary>The pilot who accepted this faction-wide contract, for display only.</summary>
+        public string AcceptedBy { get; }
 
         public SecondaryObjectiveView(int id, string title, string description, string target,
             string status, string reward, float progress, float secondsRemaining, int money, int xp, bool isComplete,
-            bool isOffered = false, bool isActive = false, bool hasMarker = false, float x = 0f, float z = 0f, float radius = 0f)
+            bool isOffered = false, bool isActive = false, bool hasMarker = false, float x = 0f, float z = 0f, float radius = 0f,
+            string acceptedBy = null)
         {
             Id = id; Title = title; Description = description; Target = target;
             Status = status; Reward = reward; Progress = progress; SecondsRemaining = secondsRemaining;
             Money = money; Xp = xp; IsComplete = isComplete;
             IsOffered = isOffered; IsActive = isActive; HasMarker = hasMarker; X = x; Z = z; Radius = radius;
+            AcceptedBy = acceptedBy ?? string.Empty;
         }
     }
 }

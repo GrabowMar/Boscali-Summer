@@ -12,7 +12,19 @@ namespace BoscaliSummer.Features.Command.Runtime
         {
             internal TacticalSectorGrid Grid;
             internal float Updated = -1;
+            internal ulong Snapshot;
+            internal bool Evaluated;
+            internal readonly List<Observation> Observations = new List<Observation>(4096);
         }
+
+        private struct Observation
+        {
+            public float X;
+            public float Z;
+            public float Weight;
+            public bool Hostile;
+        }
+
         private readonly Dictionary<FactionHQ, Field> fields = new Dictionary<FactionHQ, Field>();
         private MissionMapCompatibilityEngine compatibility;
         private float cellSize;
@@ -32,19 +44,51 @@ namespace BoscaliSummer.Features.Command.Runtime
             }
             float now = Time.timeSinceLevelLoad;
             if (field.Updated >= 0 && now - field.Updated < 0.5f) return field.Grid;
+
+            // Snapshot pass first: nodes plus cell-quantized ground observations. When
+            // neither moved, the previous field still describes the front, so the whole
+            // evaluation — 16k-cell smoothing, pocket sweeps, contour, cluster tree and
+            // the texture bake — is skipped. Quantizing to the grid cell is deliberate:
+            // a vehicle shifting inside its kilometre square cannot change the front.
+            compatibility.ReconcileMissionNodes(field.Grid, hq);
+            ulong snapshot = field.Grid.ComputeNodeHash();
+            field.Observations.Clear();
+            var units = UnitRegistry.allUnits;
+            int count = units != null ? Math.Min(units.Count, 4096) : 0;
+            for (int i = 0; i < count; i++)
+            {
+                if (!MissionMapCompatibilityEngine.TryGetGroundObservation(units[i], hq,
+                    out Vector3 p, out float weight, out bool hostile)) continue;
+                field.Observations.Add(new Observation { X = p.x, Z = p.z, Weight = weight, Hostile = hostile });
+                snapshot = HashObservation(snapshot, p.x, p.z, hostile, field.Grid.CellSize);
+            }
+
+            float elapsed = field.Evaluated ? Math.Min(0.5f, Math.Max(0f, now - field.Updated)) : 0f;
+            field.Updated = now;
+            if (field.Evaluated && snapshot == field.Snapshot) return field.Grid;
+
+            field.Snapshot = snapshot;
             field.Grid.Clear();
             compatibility.ReconcileMissionNodes(field.Grid, hq);
-            var units = UnitRegistry.allUnits;
-            for (int i = 0; units != null && i < Math.Min(units.Count, 4096); i++)
+            for (int i = 0; i < field.Observations.Count; i++)
             {
-                if (MissionMapCompatibilityEngine.TryGetGroundObservation(units[i], hq,
-                    out Vector3 p, out float weight, out bool hostile))
-                    field.Grid.AddTroopPresence(p.x, p.z, weight, hostile);
+                Observation observation = field.Observations[i];
+                field.Grid.AddTroopPresence(observation.X, observation.Z, observation.Weight, observation.Hostile);
             }
-            // No accelerated capture from a long gap without observations.
-            field.Grid.EvaluateSectors(field.Updated < 0 ? 0 : Math.Min(0.5f, Math.Max(0, now - field.Updated)));
-            field.Updated = now;
+            field.Grid.EvaluateSectors(elapsed);
+            field.Evaluated = true;
             return field.Grid;
+        }
+
+        private static ulong HashObservation(ulong hash, float x, float z, bool hostile, float gridCellSize)
+        {
+            float cell = gridCellSize > 0f ? gridCellSize : TacticalSectorGrid.DefaultCellSize;
+            long cellX = (long)Math.Floor(x / cell);
+            long cellZ = (long)Math.Floor(z / cell);
+            hash = (hash ^ (uint)cellX) * 1099511628211UL;
+            hash = (hash ^ (uint)cellZ) * 1099511628211UL;
+            hash = (hash ^ (hostile ? 1u : 0u)) * 1099511628211UL;
+            return hash;
         }
 
         public bool TryNearestEdge(int factionId, float playerX, float playerZ, out float x, out float z)

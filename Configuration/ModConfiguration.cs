@@ -2,6 +2,7 @@ using BepInEx.Configuration;
 using BoscaliSummer.Features.Autopilot.Configuration;
 using BoscaliSummer.Features.Campaign.Configuration;
 using BoscaliSummer.Features.Command.Configuration;
+using BoscaliSummer.Features.Comms.Configuration;
 using BoscaliSummer.Features.DynamicOperations.Configuration;
 using BoscaliSummer.Features.Events.Configuration;
 using BoscaliSummer.Features.FireAndDestruction.Configuration;
@@ -15,6 +16,8 @@ using BoscaliSummer.Features.Squad.Configuration;
 using BoscaliSummer.Features.TheaterOps.Configuration;
 using BoscaliSummer.Features.Trenches.Configuration;
 using BoscaliSummer.Features.UrbanCombat.Configuration;
+using BoscaliSummer.Features.Visuals.Configuration;
+using BoscaliSummer.Features.Weather.Configuration;
 using BoscaliSummer.Infrastructure.Diagnostics;
 
 namespace BoscaliSummer
@@ -37,11 +40,14 @@ namespace BoscaliSummer
         public DynamicOperationsSettings DynamicOperations { get; }
         public TrenchesSettings Trenches { get; }
         public EventsSettings Events { get; }
+        public CommsSettings Comms { get; }
         public CampaignSettings Campaign { get; }
         public QoLSettings QoL { get; }
         public AutopilotSettings Autopilot { get; }
         public HudSettings Hud { get; }
         public DiagnosticSettings Diagnostics { get; }
+        public WeatherSettings Weather { get; }
+        public VisualsSettings Visuals { get; }
 
         public ModConfiguration(ConfigFile config)
         {
@@ -61,12 +67,18 @@ namespace BoscaliSummer
                 DynamicOperations = new DynamicOperationsSettings(config);
                 Trenches = new TrenchesSettings(config);
                 Events = new EventsSettings(config);
+                Comms = new CommsSettings(config);
                 Campaign = new CampaignSettings(config);
                 QoL = new QoLSettings(config);
                 Autopilot = new AutopilotSettings(config);
                 Hud = new HudSettings(config);
                 Diagnostics = new DiagnosticSettings(config);
+                Weather = new WeatherSettings(config);
+                Visuals = new VisualsSettings(config);
                 LegacyConfigMigration.RemoveEntries(config);
+                // Last, so every module's entries are present to be sorted into the
+                // F1 window's plain and advanced halves.
+                ConfigMenu.Apply(config, this);
             }
             finally
             {

@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using UnityEngine;
 
 namespace BoscaliSummer.Framework.Contracts
 {
@@ -34,7 +33,7 @@ namespace BoscaliSummer.Framework.Contracts
 
     /// <summary>
     /// The one cockpit HUD element Boscali presentation features draw their held status lines
-    /// and transient notices through. The board owns the canvas, the vanilla typography and
+    /// and transient notices through. The board owns the canvas, the independent typography and
     /// palette, the stacking, the bounds and every presentation setting; a feature owns only
     /// its own words and its own cell art.
     /// </summary>
@@ -72,6 +71,11 @@ namespace BoscaliSummer.Framework.Contracts
         int MaxRows { get; set; }
         bool NoticesEnabled { get; set; }
         float NoticeSeconds { get; set; }
+        int Contrast { get; set; }
+        bool ShowDetails { get; set; }
+        int OffsetX { get; set; }
+        int OffsetY { get; set; }
+        void ResetLayout();
 
         /// <summary>Every declared feed, in declaration order, for the settings page to list.</summary>
         IReadOnlyList<IHudChannel> Channels { get; }

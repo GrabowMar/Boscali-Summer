@@ -116,8 +116,7 @@ namespace BoscaliSummer.Features.Support.Visuals
             Vector3 offset = direction * range;
             var global = new GlobalPosition(offset.x, offset.y, offset.z);
 
-            float edge = Mathf.Min((float)state.TimeInPass, (float)state.TimeToPassEnd);
-            float fade = Mathf.Clamp01(edge / FadeSeconds);
+            float fade = 1f; // Fixed coverage has no pass edge to fade against.
             float size = Mathf.Max(MinimumCubeSize, range * ApparentSize) * Mathf.Lerp(0.15f, 1f, fade);
 
             Transform root = EnsureRoot(station);

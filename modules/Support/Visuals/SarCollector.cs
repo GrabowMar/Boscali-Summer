@@ -25,13 +25,17 @@ namespace BoscaliSummer.Features.Support.Visuals
     /// </summary>
     internal sealed class SarCollector
     {
-        public const int ImageSize = 256;
-        public const float CollectSeconds = 8f;
-        public const float ProcessingSeconds = 2.5f;
-        private const int RangeOversample = 384;
-        private const int MaximumRaysPerFrame = 900;
+        // 16:10 like the uplink feed, and deliberately coarse: this image is a sensor
+        // product, not a photo. Halving the vertical sampling removed most of the ray
+        // storm the old 256² grid cost without changing what the image reads as.
+        public const int ImageWidth = 192;
+        public const int ImageHeight = 120;
+        public const float CollectSeconds = 6f;
+        public const float ProcessingSeconds = 2f;
+        private const int RangeOversample = 192;
+        private const int MaximumRaysPerFrame = 400;
         private const float RayLift = 4000f;
-        private const float PreviewInterval = 0.6f;
+        private const float PreviewInterval = 0.8f;
         private const int MaximumClassified = 4096;
 
         private enum Surface : byte
@@ -44,7 +48,7 @@ namespace BoscaliSummer.Features.Support.Visuals
         }
 
         private readonly Dictionary<int, Surface> surfaces = new Dictionary<int, Surface>();
-        private readonly Color32[] pixels = new Color32[ImageSize * ImageSize];
+        private readonly Color32[] pixels = new Color32[ImageWidth * ImageHeight];
         private SarImageFormer former;
         private Vector3 centreLocal;
         private GlobalPosition centreGlobal;
@@ -68,6 +72,19 @@ namespace BoscaliSummer.Features.Support.Visuals
         public double SceneHalfSize => former != null ? former.HalfSize : 0.0;
         public GlobalPosition Centre => centreGlobal;
 
+        /// <summary>Project a scene-local point into image UV space (0..1, v up). False when it falls outside.</summary>
+        public bool ProjectPoint(Vector3 localPosition, out float u, out float v)
+        {
+            u = 0f;
+            v = 0f;
+            if (former == null) return false;
+            Vector3 relative = localPosition - centreLocal;
+            if (!former.Project(relative.x, relative.y, relative.z, 0.0, out int column, out int row)) return false;
+            u = (column + 0.5f) / ImageWidth;
+            v = 1f - (row + 0.5f) / ImageHeight;
+            return true;
+        }
+
         /// <summary>Ground direction of the image's up axis (azimuth), for north arrows and slewing.</summary>
         public double UpX { get; private set; }
         public double UpZ { get; private set; } = 1.0;
@@ -78,7 +95,7 @@ namespace BoscaliSummer.Features.Support.Visuals
         {
             if (Image == null)
             {
-                Image = new Texture2D(ImageSize, ImageSize, TextureFormat.RGBA32, false)
+                Image = new Texture2D(ImageWidth, ImageHeight, TextureFormat.RGBA32, false)
                 {
                     name = "BoscaliSarProduct",
                     filterMode = FilterMode.Bilinear,
@@ -104,7 +121,7 @@ namespace BoscaliSummer.Features.Support.Visuals
 
             var geometry = new SarGeometry(look.Incidence, look.AzimuthX, look.AzimuthZ, look.SlantRange,
                 OrbitMath.Velocity(state.Altitude));
-            former = new SarImageFormer(ImageSize, ImageSize, sceneHalfSize, geometry, seed);
+            former = new SarImageFormer(ImageWidth, ImageHeight, sceneHalfSize, geometry, seed);
             UpX = geometry.AzimuthX;
             UpZ = geometry.AzimuthZ;
             totalRays = former.RayCount(RangeOversample);
@@ -262,11 +279,11 @@ namespace BoscaliSummer.Features.Support.Visuals
             double floor = 0.0004 * Math.Pow(SlantRange / 600000.0, 2.0);
             byte[] bytes = former.Form(2, floor);
             // Image rows run top-down; texture rows run bottom-up.
-            for (int row = 0; row < ImageSize; row++)
+            for (int row = 0; row < ImageHeight; row++)
             {
-                int target = (ImageSize - 1 - row) * ImageSize;
-                int source = row * ImageSize;
-                for (int column = 0; column < ImageSize; column++)
+                int target = (ImageHeight - 1 - row) * ImageWidth;
+                int source = row * ImageWidth;
+                for (int column = 0; column < ImageWidth; column++)
                 {
                     byte v = bytes[source + column];
                     pixels[target + column] = new Color32(v, v, v, 255);

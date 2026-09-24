@@ -17,11 +17,10 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
     /// from the faction's own active objectives, and publishes it through
     /// <see cref="ITheaterPriorityView"/> for the STR console.
     ///
-    /// <para>The module's only world effect is applied by the MissionPosition patches, which
-    /// read this table on the host: reinforcements spawn nearer the priority and units with
-    /// no better order head for it. No unit is selected, spawned or retasked here. Clients
-    /// receive the host's table read-only over <see cref="Networking.TheaterOpsNet"/> so the
-    /// board can name the effort it cannot set.</para>
+    /// <para>MissionPosition patches read this table on the host: reinforcements spawn nearer
+    /// the priority and units with no better order head for it. Depot-spawned ground AI can
+    /// receive staged destinations from <see cref="GroundFrontService"/> through that same
+    /// query. Clients receive the table read-only over <see cref="Networking.TheaterOpsNet"/>.</para>
     /// </summary>
     internal sealed class TheaterPriorityService : MonoBehaviour, ISceneService, ITheaterPriorityView
     {
@@ -46,10 +45,9 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
         internal bool Authoritative => authoritative;
 
         public bool Available => true;
-        public bool CanCommand => authoritative;
         public string Status => authoritative
-            ? "Host authority."
-            : "The host sets the theater priority.";
+            ? "The staff holds the main effort."
+            : "The host's staff holds the main effort.";
 
         public void Configure(TheaterOpsSettings config, TheaterOpsNet net, ManualLogSource log)
         {
@@ -110,7 +108,11 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             RebuildOptions();
         }
 
-        public bool RequestPriority(string key)
+        /// <summary>
+        /// The director's hand on the effort. No player intent reaches here: stance, axes and
+        /// hold move this through the review, never directly.
+        /// </summary>
+        internal bool SetDirective(string key)
         {
             if (!authoritative || string.IsNullOrEmpty(key)) return false;
             if (!TryGetLocalFaction(out FactionHQ hq)) return false;
@@ -125,7 +127,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             return true;
         }
 
-        public bool RequestClear()
+        internal bool ClearDirective()
         {
             if (!authoritative || !TryGetLocalFaction(out FactionHQ hq)) return false;
             if (!table.TryClear(hq.faction.factionName)) return false;
@@ -180,10 +182,6 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             options.Clear();
             if (!TryGetLocalFaction(out FactionHQ hq)) return;
 
-            string selected = table.TryGet(hq.faction.factionName, out PriorityDirective current)
-                ? current.Key
-                : null;
-
             if (!MissionPosition.TryGetActiveObjectives(hq, out List<Objective> active) || active == null)
                 return;
 
@@ -203,16 +201,23 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
                     ? key
                     : objective.SavedObjective.DisplayName;
 
-                options.Add(new TheaterPriorityOption(
-                    key, label, DetailOf(objective), string.Equals(key, selected, StringComparison.Ordinal)));
+                GlobalPosition position = positioned.Positions[0].Position;
+                if (float.IsNaN(position.x) || float.IsNaN(position.z) ||
+                    float.IsInfinity(position.x) || float.IsInfinity(position.z)) continue;
+                options.Add(new TheaterPriorityOption(key, label, DetailOf(objective),
+                    position.x, position.z));
             }
         }
 
         private static string DetailOf(Objective objective) =>
-            objective.SavedObjective.ObjectiveTypeEnum.ToString() + " · " +
+            objective.SavedObjective.ObjectiveTypeEnum.ToString().ToUpperInvariant() + " · " +
             objective.Status.ToString().ToUpperInvariant();
 
-        private static bool TryResolveObjective(
+        /// <summary>
+        /// Resolves one of the faction's active objectives to its identity, label and world
+        /// position. Shared with the offensive planner, which names the same objective list.
+        /// </summary>
+        internal static bool TryResolveObjective(
             FactionHQ hq, string key, out string label, out Vector3 position)
         {
             label = null;
@@ -228,6 +233,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
                     continue;
                 if (!(objective is IObjectiveWithPosition positioned) || positioned.Positions.Count == 0)
                     return false;
+                if (objective.SavedObjective.Hidden) return false;
 
                 label = string.IsNullOrEmpty(objective.SavedObjective.DisplayName)
                     ? key

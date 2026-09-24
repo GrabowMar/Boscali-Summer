@@ -76,7 +76,9 @@ namespace BoscaliSummer.Features.Radio.Presentation
             const float swatch = 7f;
             const float step = 10f;
             float x = area.x + AvTokens.Space2;
-            float y = area.y - area.height + 5f;
+            float y = area.y - area.height + 16f;
+            AvKit.Panel(parent, new Rect(x - 4f, y + 2f, 148f, 16f),
+                AvTheme.Ground.WithAlpha(.82f));
 
             AvStyled.Label(parent, new Rect(x, y, 50f, 12f), "NOISE", "row-sub");
             x += 50f;

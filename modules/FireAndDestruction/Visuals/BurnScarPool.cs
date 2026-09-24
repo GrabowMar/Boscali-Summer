@@ -14,8 +14,6 @@ namespace BoscaliSummer.Fire
     {
         private const int MaximumScars = 64;
         private const int SeedSalt = 0x4b1d5c07;
-        private const float ProbeHeight = 80f;
-        private const float ProbeRange = 260f;
 
         private readonly List<GameObject> marks = new List<GameObject>(MaximumScars);
         private int ringHead;
@@ -24,10 +22,9 @@ namespace BoscaliSummer.Fire
         public void Stamp(GlobalPosition position, float diameter)
         {
             if (GameManager.IsHeadless || diameter <= 0f) return;
-            Vector3 local = position.ToLocalPosition();
-            if (!Physics.Raycast(local + Vector3.up * ProbeHeight, Vector3.down,
-                    out RaycastHit hit, ProbeRange, PhysicsLayers.StaticsMask,
-                    QueryTriggerInteraction.Ignore)) return;
+            // The same cached ground probe the fire front uses: one terrain cast per 24 m
+            // cell instead of one per decal lobe.
+            if (!TerrainProbeCache.TryProbe(position, out GlobalPosition ground, out Vector3 normal)) return;
 
             GameObject mark = Acquire();
             if (mark == null) return;
@@ -36,16 +33,16 @@ namespace BoscaliSummer.Fire
 
             // Ground projection: the box looks along the surface normal, rolled around it so
             // neighbouring scars never read as identical stamps.
-            Vector3 forward = -hit.normal;
+            Vector3 forward = -normal;
             Vector3 up = Vector3.ProjectOnPlane(Vector3.up, forward);
             if (up.sqrMagnitude < 0.01f) up = Vector3.ProjectOnPlane(Vector3.forward, forward);
             uint seed = Deterministic.Hash(
-                Mathf.RoundToInt(hit.point.x), Mathf.RoundToInt(hit.point.y),
-                Mathf.RoundToInt(hit.point.z), SeedSalt);
+                Mathf.RoundToInt(ground.x), Mathf.RoundToInt(ground.y),
+                Mathf.RoundToInt(ground.z), SeedSalt);
             float roll = Deterministic.UnitFloat(seed) * 360f;
             mark.transform.rotation =
                 Quaternion.AngleAxis(roll, forward) * Quaternion.LookRotation(forward, up);
-            mark.transform.position = hit.point;
+            mark.transform.position = ground.ToLocalPosition();
 
             float depth = Mathf.Clamp(diameter * 0.18f, 1.6f, 6f);
             projector.size = new Vector3(diameter, diameter, depth);

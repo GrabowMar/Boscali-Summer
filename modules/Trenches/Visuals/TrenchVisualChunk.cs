@@ -23,11 +23,14 @@ namespace BoscaliSummer.Features.Trenches.Visuals
         private const float RidgeStep = 18f;
         private const float WireForward = 7f;
         private const float WireHeight = 0.75f;
+        private const float OuterWireForward = 24f;
+        private const float OuterWireHeight = 0.6f;
 
         private TrenchLine line;
         private GameObject lod0Root;
         private GameObject lod1Root;
         private GameObject lod2Root;
+        private GameObject colliderRoot;
 
         private readonly List<Mesh> proceduralMeshes = new List<Mesh>();
         private readonly List<BoxCollider> colliders = new List<BoxCollider>(MaximumColliders);
@@ -71,6 +74,7 @@ namespace BoscaliSummer.Features.Trenches.Visuals
             if (line == null || line.Curve == null || line.Curve.Length < 2) return;
 
             Material earthMat = TrenchMaterialResolver.GetEarthBermMaterial();
+            Material wireMat = TrenchMaterialResolver.GetWireMaterial();
             EarthMaterial = earthMat != null ? earthMat.name + " / " + earthMat.shader?.name : "MISSING";
             if (earthMat == null) return;
 
@@ -89,6 +93,11 @@ namespace BoscaliSummer.Features.Trenches.Visuals
                 lod2Root = new GameObject("LOD2_GroundRibbon");
                 lod2Root.transform.SetParent(transform, false);
             }
+            if (colliderRoot == null)
+            {
+                colliderRoot = new GameObject("ParapetColliders");
+                colliderRoot.transform.SetParent(transform, false);
+            }
 
             float width = WidthFor(line.Stage);
             float parapet = ParapetFor(line.Stage);
@@ -100,7 +109,10 @@ namespace BoscaliSummer.Features.Trenches.Visuals
                 AddMesh(lod0Root.transform, "Fire_LOD0", fire, width, parapet, 1.1f, earthMat, true,
                     BuildBaySchedule(fire));
                 AddFrontColliders(fire, width, parapet, "Fire");
-                AddWireBelt(lod0Root.transform, earthMat);
+                AddWireBelt(lod0Root.transform, wireMat ?? earthMat, WireForward, WireHeight, "WireBelt");
+                // A second, lower belt further out: the double-apron read of a real wired
+                // approach, so the belt is a band of no man's land instead of a single line.
+                AddWireBelt(lod0Root.transform, wireMat ?? earthMat, OuterWireForward, OuterWireHeight, "WireBelt_Outer");
             }
             // Mid and far LODs stay real earthworks at a coarser ring pitch: a wing flying
             // over the front must still read the parapet line and the belt behind it. The
@@ -137,22 +149,22 @@ namespace BoscaliSummer.Features.Trenches.Visuals
         }
 
         /// <summary>
-        /// The wire belt in front of the fire trench: pickets and strands offset onto the
-        /// enemy side of the parapet and draped over the ground, so the approach reads as
-        /// wired no man's land instead of bare field.
+        /// A wire belt in front of the fire trench: pickets and strands offset onto the enemy
+        /// side of the parapet and draped over the ground, so the approach reads as wired no
+        /// man's land instead of bare field.
         /// </summary>
-        private void AddWireBelt(Transform parent, Material material)
+        private void AddWireBelt(Transform parent, Material material, float forward, float height, string name)
         {
             if (parent == null || material == null || line == null) return;
-            Vector3[] wireCurve = OffsetCurve(line.Curve, line.Threat, WireForward);
+            Vector3[] wireCurve = OffsetCurve(line.Curve, line.Threat, forward);
             if (wireCurve == null) return;
             Vector3[] path = BuildDitchPath(wireCurve, CoarseStep);
             if (path == null) return;
 
-            Mesh mesh = TrenchMeshBuilder.BuildWireBeltMesh(path, WireHeight);
+            Mesh mesh = TrenchMeshBuilder.BuildWireBeltMesh(path, height);
             if (mesh == null) return;
             proceduralMeshes.Add(mesh);
-            var go = new GameObject("WireBelt");
+            var go = new GameObject(name);
             go.transform.SetParent(parent, false);
             go.AddComponent<MeshFilter>().sharedMesh = mesh;
             go.AddComponent<MeshRenderer>().sharedMaterial = material;
@@ -266,8 +278,8 @@ namespace BoscaliSummer.Features.Trenches.Visuals
         private void AddFrontColliders(Vector3[] path, float width, float parapetHeight, string tag)
         {
             // The band is the forward parapet wall, not the whole cut: the interior stays
-            // clear so the crew stands on the ditch floor, and the berm wall in front of
-            // them is what stops ground units crossing the line.
+            // clear so the ditch floor reads as a walkable trench, and the berm wall in front
+            // of it is what stops ground units crossing the line.
             float wallHeight = parapetHeight + 0.6f;
             int stride = Mathf.Max(3, path.Length / MaximumColliders);
             for (int i = 0; i < path.Length - 1 && colliders.Count < MaximumColliders; i += stride)
@@ -288,12 +300,13 @@ namespace BoscaliSummer.Features.Trenches.Visuals
                 // Ignore Raycast layer: the obstacle boxes block vehicles only, and placement
                 // queries never mistake the mod's own ditch for an obstacle to spawn into.
                 colObj.layer = PhysicsLayers.IgnoreRaycast;
-                colObj.transform.SetParent(lod0Root.transform, false);
+                // Physics belongs to the host's line, not the viewing camera's mesh LOD.
+                colObj.transform.SetParent(colliderRoot.transform, false);
                 colObj.transform.localPosition = mid + side * (width * 0.5f + 0.55f) +
                     Vector3.up * (wallHeight * 0.5f);
                 colObj.transform.localRotation = Quaternion.LookRotation(fwd, Vector3.up);
                 var box = colObj.AddComponent<BoxCollider>();
-                box.size = new Vector3(width + 1.2f, wallHeight, len + 0.5f);
+                box.size = new Vector3(0.9f, wallHeight, len + 0.5f);
                 colliders.Add(box);
             }
         }
@@ -323,6 +336,12 @@ namespace BoscaliSummer.Features.Trenches.Visuals
 
         private void UpdateLod(bool force)
         {
+            bool collidersActive = NetworkSceneSingleton<Spawner>.i?.IsServer == true &&
+                line != null && !line.Overrun;
+            for (int i = 0; i < colliders.Count; i++)
+                if (colliders[i] != null && colliders[i].enabled != collidersActive)
+                    colliders[i].enabled = collidersActive;
+
             // The distance test must run in one coordinate frame. A line's centre is global
             // (terrain probes return GlobalPosition) while the camera is local, so comparing
             // them raw measures the floating origin, not the chunk: every built earthwork
@@ -349,21 +368,18 @@ namespace BoscaliSummer.Features.Trenches.Visuals
             if (lod1Root != null) lod1Root.SetActive(currentLod == 1);
             if (lod2Root != null) lod2Root.SetActive(currentLod == 2);
 
-            // Colliders only active at close distance (LOD0) to minimize PhysX overhead
-            bool collidersActive = (currentLod == 0 && line != null && !line.Overrun);
-            for (int i = 0; i < colliders.Count; i++)
-            {
-                if (colliders[i] != null) colliders[i].enabled = collidersActive;
-            }
         }
 
         private void ClearMeshes()
         {
+            for (int i = 0; i < colliders.Count; i++)
+                if (colliders[i] != null) colliders[i].enabled = false;
             colliders.Clear();
 
             if (lod0Root != null) { Destroy(lod0Root); lod0Root = null; }
             if (lod1Root != null) { Destroy(lod1Root); lod1Root = null; }
             if (lod2Root != null) { Destroy(lod2Root); lod2Root = null; }
+            if (colliderRoot != null) { Destroy(colliderRoot); colliderRoot = null; }
 
             for (int i = 0; i < proceduralMeshes.Count; i++)
             {

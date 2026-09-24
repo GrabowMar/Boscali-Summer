@@ -1,5 +1,6 @@
 using System;
 using BoscaliSummer.Features.Progression.Runtime;
+using BoscaliSummer.Features.Progression.Domain;
 using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Infrastructure.Diagnostics;
 using BoscaliSummer.Runtime;
@@ -23,10 +24,33 @@ namespace BoscaliSummer.Features.Progression.Patches
                 Player player = __instance == null ? null : __instance.Player;
                 if (manager == null || player == null) return;
                 fuelDrawn *= manager.Multiplier(PlayerIdentity.Of(player), PerkEffect.FuelUse);
+                fuelDrawn *= PlaneEngineMap.FuelFactor(manager.TuneFor(__instance));
             }
             catch (Exception e)
             {
                 PatchGuard.Report("Progression.UseFuel", e);
+            }
+        }
+    }
+
+    /// <summary>Range map limits engine demand after the native control filter.</summary>
+    [HarmonyPatch(typeof(Aircraft), nameof(Aircraft.FilterInputs))]
+    internal static class AircraftEngineMapPatch
+    {
+        private static void Postfix(Aircraft __instance)
+        {
+            try
+            {
+                ProgressionManager manager = ProgressionRuntime.Active;
+                if (manager == null || __instance == null) return;
+                float limit = PlaneEngineMap.ThrottleCeiling(manager.TuneFor(__instance));
+                if (limit >= 1f) return;
+                ControlInputs inputs = __instance.GetInputs();
+                if (inputs != null && inputs.throttle > limit) inputs.throttle = limit;
+            }
+            catch (Exception e)
+            {
+                PatchGuard.Report("Progression.EngineMap", e);
             }
         }
     }

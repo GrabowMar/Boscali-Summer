@@ -15,6 +15,11 @@ namespace BoscaliSummer.Tests.Features.Command
                 "Markup is removed before rendering and internal separators become readable spaces");
             TestAssert.That(MfdSecondaryObjectives.PlainObjective("<color=#B2B2") == "" && MfdSecondaryObjectives.PlainObjective(null) == "OBJECTIVE",
                 "Incomplete markup never leaks into objective labels");
+            TestAssert.That(MfdSecondaryObjectives.Humanize("ThreatenPALADsrtWest") == "Threaten PALA Dsrt West" &&
+                MfdSecondaryObjectives.Humanize("SinkPALACarrierWithNotification") == "Sink PALA Carrier With Notification" &&
+                MfdSecondaryObjectives.Humanize("DestroyDsrtDepots") == "Destroy Dsrt Depots" &&
+                MfdSecondaryObjectives.Humanize("Capture Airstrip") == "Capture Airstrip",
+                "CamelCase and acronym boundaries are humanized for player display");
             TestAssert.That(MfdSecondaryObjectives.PageCount(0, 3) == 1 &&
                 MfdSecondaryObjectives.PageCount(3, 3) == 1 &&
                 MfdSecondaryObjectives.PageCount(7, 3) == 3, "A page count follows the row count the panel could build");
@@ -134,6 +139,7 @@ namespace BoscaliSummer.Tests.Features.Command
                 "Pay figures group with the invariant comma, never the machine's separator");
 
             TestAssert.That(MfdSecondaryObjectives.BoardSummary(3, 1, 2, 4) == "3 OFFERS  ·  1/2 ACTIVE  ·  4 CLOSED" &&
+                MfdSecondaryObjectives.BoardSummary(1, 0, 2, 0).StartsWith("1 OFFER  ·  ") &&
                 MfdSecondaryObjectives.ShortCount(1, 0) == "1",
                 "A host that reports no ceiling yields a plain count");
             TestAssert.That(!string.IsNullOrEmpty(MfdSecondaryObjectives.EmptyMessage(0, BoardEmptyReason.Ready)) &&

@@ -10,10 +10,10 @@ namespace BoscaliSummer.Features.Radio.Runtime
         public const string MarisId = "maris-network";
         public const string BaseId = "base-broadcast";
 
-        public static readonly string[] ImportFolderNames = { "Agrapol FM", "Maris Network" };
+        public static readonly string[] ImportFolderNames =
+            { "Boscali Republic Radio", "PALA State Radio", "Base Broadcast" };
 
-        public static bool AcceptsLocalTracks(string stationId) =>
-            !string.Equals(stationId, BaseId, StringComparison.Ordinal);
+        public static bool AcceptsLocalTracks(string stationId) => IsBuiltIn(stationId);
 
         public static bool IsBuiltIn(string stationId) =>
             string.Equals(stationId, AgrapolId, StringComparison.Ordinal) ||
@@ -21,7 +21,8 @@ namespace BoscaliSummer.Features.Radio.Runtime
             string.Equals(stationId, BaseId, StringComparison.Ordinal);
 
         public static bool UsesVanillaTracks(string stationId, int localTrackCount) =>
-            string.Equals(stationId, BaseId, StringComparison.Ordinal) || localTrackCount == 0;
+            localTrackCount == 0;
+
     }
 
     internal sealed class RadioTrack
@@ -113,6 +114,8 @@ namespace BoscaliSummer.Features.Radio.Runtime
             ref int totalTracks)
         {
             var paths = new List<string>();
+            bool builtIn = Array.Exists(BuiltInStationRules.ImportFolderNames,
+                folder => string.Equals(folder, name, StringComparison.OrdinalIgnoreCase));
             foreach (string candidate in Directory.EnumerateFiles(directory, "*", SearchOption.TopDirectoryOnly))
             {
                 if (totalTracks + paths.Count >= MaximumTracks) break;
@@ -125,6 +128,9 @@ namespace BoscaliSummer.Features.Radio.Runtime
                         info.Length <= 0 || info.Length > MaximumTrackBytes ||
                         !IsContained(root, fullPath) ||
                         !IsSupportedExtension(info.Extension))
+                        continue;
+                    if (builtIn && Path.GetFileNameWithoutExtension(fullPath)
+                            .EndsWith(" Bulletin", StringComparison.OrdinalIgnoreCase))
                         continue;
                 }
                 catch (IOException)

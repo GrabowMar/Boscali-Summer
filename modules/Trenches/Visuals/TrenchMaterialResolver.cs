@@ -13,6 +13,7 @@ namespace BoscaliSummer.Features.Trenches.Visuals
     internal static class TrenchMaterialResolver
     {
         private static Material cachedEarth;
+        private static Material cachedWire;
         private static Texture2D earthTexture;
         private static readonly List<Material> owned = new List<Material>(2);
         private static readonly List<Texture2D> ownedTextures = new List<Texture2D>(2);
@@ -24,6 +25,7 @@ namespace BoscaliSummer.Features.Trenches.Visuals
             foreach (var texture in ownedTextures) if (texture != null) UnityEngine.Object.Destroy(texture);
             ownedTextures.Clear();
             cachedEarth = null;
+            cachedWire = null;
             earthTexture = null;
         }
 
@@ -46,6 +48,21 @@ namespace BoscaliSummer.Features.Trenches.Visuals
             if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.08f);
             owned.Add(mat);
             cachedEarth = mat;
+            return mat;
+        }
+
+        public static Material GetWireMaterial()
+        {
+            if (cachedWire != null) return cachedWire;
+            Shader shader = FindLitShader();
+            if (shader == null) return null;
+            var mat = new Material(shader) { name = "BoscaliSummer.TrenchWire" };
+            Color steel = new Color(0.18f, 0.20f, 0.19f);
+            if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", steel);
+            else mat.color = steel;
+            if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.35f);
+            owned.Add(mat);
+            cachedWire = mat;
             return mat;
         }
 

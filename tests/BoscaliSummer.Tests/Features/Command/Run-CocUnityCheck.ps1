@@ -15,15 +15,20 @@ Copy-Item -LiteralPath `
     "$repo/modules/Command/Presentation/StrMfdPanel.cs", `
     "$repo/modules/Command/Presentation/StrMfdPanel.Coc.cs", `
     "$repo/modules/Command/Presentation/StrMfdPanel.Cmd.cs", `
+    "$repo/modules/Command/Presentation/StrPlanningWindow.cs", `
     "$repo/modules/Command/Domain/CommandRosterOrder.cs", `
     "$repo/modules/Command/Domain/TacticalTheaterState.cs", `
     "$repo/modules/Command/Domain/TheaterReadout.cs", `
+    "$repo/modules/Command/Domain/OperationsBoardFit.cs", `
     "$repo/modules/Command/Domain/SortieClassifier.cs", `
     "$repo/Framework/Contracts/IHighCommandView.cs", `
     "$repo/Framework/Contracts/CommanderLogLine.cs", `
     "$repo/Framework/Contracts/IBaseDefenseAlarmService.cs", `
     "$repo/Framework/Contracts/ITheaterPriorityView.cs", `
     "$repo/Framework/Contracts/ITheaterLogisticsView.cs", `
+    "$repo/Framework/Contracts/IActiveEventsView.cs", `
+    "$repo/Framework/Contracts/ITheaterStrikePicture.cs", `
+    "$repo/Framework/Contracts/ITheaterOperationsView.cs", `
     "$PSScriptRoot/SettingsUnityStubs.cs", `
     "$PSScriptRoot/CocUnityCheck.cs" `
     -Destination "$PreviewDirectory/Assets/"

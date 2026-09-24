@@ -36,16 +36,19 @@ namespace BoscaliSummer.Features.Support
             SupportPanel panel = context.AddSceneService<SupportPanel>(55);
             SupportMapOverlay mapOverlay = context.AddSceneService<SupportMapOverlay>(58);
             Visuals.PlatformSky sky = context.AddSceneService<Visuals.PlatformSky>(59);
+            SupportHudLine hudLine = context.AddSceneService<SupportHudLine>(56);
 
             network.Configure(manager);
             manager.Configure(context.Settings.Support, perks, fortifications, network, context.Logger, fireSuppression);
             manager.ConfigureBypass(context.Settings.Diagnostics.BypassRequirements);
             manager.ConfigureDisableCooldowns(context.Settings.Diagnostics.DisableOpsCooldowns);
             context.AddService<ICameraTargetService>(manager);
+            context.AddService<ITheaterStrikePicture>(manager);
             context.AddService<IGroundForceReadiness>(manager);
             panel.Configure(manager, progression, context.Logger, baseAlarm);
             mapOverlay.Configure(context.Settings.Support, manager, context.Logger);
             sky.Configure(manager);
+            hudLine.Configure(manager);
 
             context.AddHostSettings(SupportHostSettings.Build(context.Settings.Support));
         }

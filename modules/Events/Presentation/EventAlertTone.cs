@@ -3,13 +3,12 @@ using UnityEngine;
 namespace BoscaliSummer.Features.Events.Presentation
 {
     /// <summary>
-    /// The superevent alert tone: a short synthesized three-tone whoop, flat and client-local.
-    /// No file is bundled or downloaded; the clip is generated once in memory and the same
-    /// whoop is rate limited so a stacked rotation cannot machine-gun it.
+    /// A restrained two-note dispatch chime, flat and client-local. Generated once and
+    /// rate-limited so rapid rotations cannot stack a loud alert.
     /// </summary>
     internal sealed class EventAlertTone
     {
-        private const int SampleRate = 22050;
+        private const int SampleRate = 44100;
         private const float Interval = 8f;
         private static AudioClip clip;
 
@@ -23,7 +22,7 @@ namespace BoscaliSummer.Features.Events.Presentation
             source = host.AddComponent<AudioSource>();
             source.playOnAwake = false;
             source.spatialBlend = 0f;
-            source.volume = 0.32f;
+            source.volume = 0.16f;
         }
 
         public void Play()
@@ -36,23 +35,22 @@ namespace BoscaliSummer.Features.Events.Presentation
         private static AudioClip Clip()
         {
             if (clip != null) return clip;
-            const float toneSeconds = 0.26f;
-            const int tones = 3;
+            const float toneSeconds = 0.18f;
+            const int tones = 2;
             int perTone = (int)(SampleRate * toneSeconds);
             var samples = new float[perTone * tones];
             double phase = 0.0;
             for (int t = 0; t < tones; t++)
             {
-                // Rising urgency: a mid broadcast tone climbing into the alert pair.
-                double frequency = t == 0 ? 480.0 : t == 1 ? 700.0 : 940.0;
+                double frequency = t == 0 ? 330.0 : 440.0;
                 for (int i = 0; i < perTone; i++)
                 {
                     float progress = i / (float)perTone;
-                    float envelope = Mathf.Clamp01(progress * 25f) * Mathf.Clamp01((1f - progress) * 16f);
+                    float envelope = Mathf.Clamp01(progress * 18f) *
+                        Mathf.Clamp01((1f - progress) * 9f) * Mathf.Exp(-progress * 2.2f);
                     phase += frequency / SampleRate;
-                    float wave = Mathf.Clamp(
-                        (float)System.Math.Sin(phase * 2.0 * System.Math.PI) * 2.6f, -1f, 1f);
-                    samples[t * perTone + i] = wave * envelope * 0.5f;
+                    float wave = (float)System.Math.Sin(phase * 2.0 * System.Math.PI);
+                    samples[t * perTone + i] = wave * envelope * 0.42f;
                 }
             }
             clip = AudioClip.Create("BoscaliEventAlertTone", samples.Length, 1, SampleRate, false);

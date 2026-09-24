@@ -67,31 +67,5 @@ namespace BoscaliSummer.Features.Support.Runtime
                 return true;
             return definition.unitPrefab.GetComponentInChildren<OpticalSeekerCruiseMissile>(true) != null;
         }
-
-        /// <summary>
-        /// Cheapest vanilla mobile truck — the EW truck's prefab. <c>VehicleType.RDR</c>
-        /// turned out to be a static radar container in this game, not a driveable vehicle
-        /// (confirmed live: it never moved when commanded), so the mobile phase uses a plain
-        /// <c>VehicleType.TRUCK</c> instead — the exact same selection rule
-        /// <c>HighCommandManager</c> already uses for its convoy vehicles (cheapest valid
-        /// TRUCK with a working <c>GroundVehicle.UnitCommand</c>), since that path is proven
-        /// to spawn a correctly-initialised vehicle. A name-based "radar" preference was tried
-        /// and picked a broken/incomplete prefab, so it is deliberately not used.
-        /// </summary>
-        public VehicleDefinition EwTruck()
-        {
-            if (Encyclopedia.i == null || Encyclopedia.i.vehicles == null) return null;
-            VehicleDefinition best = null;
-            for (int i = 0; i < Encyclopedia.i.vehicles.Count; i++)
-            {
-                VehicleDefinition candidate = Encyclopedia.i.vehicles[i];
-                if (candidate == null || candidate.unitPrefab == null) continue;
-                if (candidate.vehicleType != VehicleType.TRUCK) continue;
-                GroundVehicle vehicle = candidate.unitPrefab.GetComponent<GroundVehicle>();
-                if (vehicle == null || vehicle.UnitCommand == null) continue;
-                if (best == null || candidate.value < best.value) best = candidate;
-            }
-            return best;
-        }
     }
 }

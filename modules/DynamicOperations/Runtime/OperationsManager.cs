@@ -54,6 +54,7 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
             public float NextGeneration;
             public OperationKind? PendingFollowOn;
             public int PendingChainDepth;
+            public bool CompletedContract;
         }
 
         private readonly Dictionary<FactionHQ, FactionBoard> boards = new Dictionary<FactionHQ, FactionBoard>();
@@ -73,6 +74,17 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
         private readonly System.Random random = new System.Random();
         public static OperationsManager Active { get; private set; }
         public event Action<int, float> MoraleAwarded;
+
+        public bool HasCompletedContract(int factionInstanceId)
+        {
+            if (!GameAccess.IsServer() || settings?.Enabled.Value != true ||
+                !MissionManager.IsRunning || !ReferenceEquals(missionIdentity, MissionManager.CurrentMission) ||
+                factionInstanceId == 0) return false;
+            foreach (var entry in boards)
+                if (entry.Key != null && entry.Key.GetInstanceID() == factionInstanceId)
+                    return entry.Value.CompletedContract;
+            return false;
+        }
 
         public IReadOnlyList<SecondaryObjectiveView> Objectives { get; private set; } = Array.Empty<SecondaryObjectiveView>();
         public string Status { get; private set; } = "Waiting for a running mission.";
@@ -364,6 +376,9 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
             if (!Operation.Finite(multiplier)) multiplier = 1f;
             multiplier = Mathf.Clamp(multiplier, 0.25f, 4f);
             float scale = multiplier * OperationTempo.Scale(tempoScale);
+            if (ModServices.TryGet(out IFactionMoraleView morale) &&
+                morale.TryGetContractMultiplier(hq.GetInstanceID(), out float moodScale))
+                scale *= moodScale;
             var op = new Operation(++nextId, targetId, kind, reward, now,
                 Mathf.RoundToInt(money * scale), Mathf.RoundToInt(xp * scale), chainDepth);
             if (!board.Rules.TryAdd(op)) return null;
@@ -387,6 +402,7 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
         {
             // Marked taken before any side effects: neither another poll nor a callback may pay twice.
             Operation op = target.Mission;
+            board.CompletedContract = true;
             MoraleAwarded?.Invoke(hq.GetInstanceID(), 3f);
             if (target.OriginalOwner != null && target.OriginalOwner != hq)
                 MoraleAwarded?.Invoke(target.OriginalOwner.GetInstanceID(), -3f);
@@ -494,11 +510,16 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
                     target.Mission.Observe(now, 0f, valid, target.Base != null && target.Base.CurrentHQ == player.HQ,
                         target.Life.Neutralized || target.Unit != null && target.Unit.disabled);
                 if (cancel) return "Contract already ended.";
-                if (!board.Rules.TryAccept(id, now)) return "Cannot accept: offer ended, target unavailable or two contracts already active.";
+                if (!board.Rules.TryAccept(id, now, AcceptingPilot(player))) return "Cannot accept: offer ended, target unavailable or two contracts already active.";
                 target.LastJam = -100f; target.Inserted = false; target.Serviced = false; target.Observer = null;
                 return "Contract accepted for your faction. Objective marked on map.";
             }
             return "Offer no longer available to your faction.";
+        }
+
+        private static string AcceptingPilot(Player player)
+        {
+            return OperationsNet.PilotText(player?.ToString());
         }
 
         private static bool TryKnownPosition(FactionHQ hq, Unit unit, out Vector3 position)
@@ -582,7 +603,8 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
                     op.IsLive || op.State == OperationState.Completed ? target.Outcome : "No reward: " + op.State.ToString().ToLowerInvariant() + ".",
                     op.Progress, op.IsLive ? Mathf.Clamp(op.Deadline - now, 0f, 1200f) : 0f, op.Money, op.Xp,
                     op.State == OperationState.Completed, op.State == OperationState.Offered, active, marker,
-                    marker ? target.Position.x : 0f, marker ? target.Position.z : 0f, marker ? target.Radius : 0f);
+                    marker ? target.Position.x : 0f, marker ? target.Position.z : 0f, marker ? target.Radius : 0f,
+                    op.AcceptedBy);
             }
             return snapshot;
         }

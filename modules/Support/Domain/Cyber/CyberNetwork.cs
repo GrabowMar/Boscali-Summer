@@ -2,166 +2,700 @@ using System;
 
 namespace BoscaliSummer.Features.Support.Domain.Cyber
 {
-    /// <summary>What an operator can do to a site or an incident from the console. Wire-stable.</summary>
+    /// <summary>What an operator can do to a node or an incident from the console. Wire-stable.</summary>
     internal enum CyberVerb : byte
     {
-        /// <summary>Toggle: cut a site's links. Stops an intrusion there; the site stops working.</summary>
+        /// <summary>Toggle: cut a node's links. Stops an intrusion there; the node stops working.</summary>
         Isolate = 0,
 
-        /// <summary>Channel a clean image onto a compromised site.</summary>
+        /// <summary>Channel a clean image onto a compromised node.</summary>
         Patch = 1,
 
-        /// <summary>Dress a site as bait: an intrusion that reaches it stalls and traces faster.</summary>
+        /// <summary>Dress a node as bait: an intrusion that reaches it stalls and traces faster.</summary>
         Honeypot = 2,
 
-        /// <summary>Follow an intrusion or detected operation back to its origin. Needs SIGINT.</summary>
+        /// <summary>Follow an intrusion or detected operation home. Needs a stage-2 location covering it.</summary>
         Trace = 3,
 
-        /// <summary>Overpower a jamming raid with a jammer inside or beside it.</summary>
+        /// <summary>Overpower a jamming raid with a hacked location inside or beside it.</summary>
         BurnThrough = 4
     }
 
-    /// <summary>Why a verb or a site order is refused, in check order.</summary>
+    /// <summary>Why a verb or a node order is refused, in check order.</summary>
     internal enum CyberDenial : byte
     {
         None = 0,
         NoCommand,
         NoTarget,
-        Deploying,
-        Lost,
-        OffNet,
+        Offline,
         CommandProtected,
         NotCompromised,
         AlreadyPatching,
         AlreadyBaited,
-        NeedsSigint,
-        NeedsJammer,
+        NeedsEar,
+        NeedsCoverage,
         NotTraceable,
         AlreadyTracing,
-        LowBandwidth,
+        LowComputing,
         Recharging
     }
 
-    /// <summary>Why a site cannot be ordered.</summary>
-    internal enum SitePlacement : byte
+    /// <summary>One slot of the network: Cyber Command, an owned airbase, or a map location.</summary>
+    internal struct CyberNode
     {
-        None = 0,
-        NeedsCommand,
-        CopyLimit,
-        NetworkFull,
-        NotPlaceable
-    }
+        public NodeKind Kind;
 
-    /// <summary>One slot of the network. Kind None is a free slot.</summary>
-    internal struct CyberSite
-    {
-        public CyberSiteKind Kind;
+        /// <summary>1..4 for a hacked location; 0 for home nodes and unhacked targets.</summary>
+        public byte Stage;
+
         public float X, Z;
 
-        /// <summary>The site's vehicle is still driving to its mark.</summary>
-        public bool Deploying;
-
-        /// <summary>The site's vehicle was destroyed; the slot frees shortly after.</summary>
-        public bool Lost;
-
-        public bool Isolated;
-        public bool Compromised;
-
-        /// <summary>Jammer mode; meaningless for other kinds.</summary>
-        public EwPosture Mode;
-
-        /// <summary>When a running patch completes; 0 when none.</summary>
-        public double PatchDone;
-
-        public double HoneypotUntil;
-        public double CompromisedAt;
-        public double LostAt;
-        public float Paid;
-
-        /// <summary>Airbase infrastructure (Cyber Command or a gateway): raised and removed by the host
-        /// with the base, linked to every other static node by the backbone.</summary>
+        /// <summary>Cyber Command or an owned airbase: the host raises and removes it with the base.</summary>
         public bool Static;
 
-        /// <summary>A static node whose anchor building on the airbase is destroyed: offline until repaired.</summary>
+        /// <summary>A home node whose anchor building on the airbase is destroyed.</summary>
         public bool Down;
 
-        /// <summary>Host identity of the airbase behind a static node. Never on the wire.</summary>
+        /// <summary>This faction has breached the location.</summary>
+        public bool Hacked;
+
+        public bool Compromised;
+        public bool Isolated;
+
+        /// <summary>The stage-4 capstone the location took.</summary>
+        public Capstone Capstone;
+
+        public double PatchDone;
+        public double HoneypotUntil;
+        public double CompromisedAt;
+
+        /// <summary>Set after a backtrace: the location cannot be breached again until it lapses.</summary>
+        public double LockoutUntil;
+
+        /// <summary>Host identity of the airbase (home) or location anchor (target). Never on the wire.</summary>
         public int Anchor;
     }
 
     /// <summary>Network totals the panel and the console show.</summary>
     internal readonly struct CyberStats
     {
-        public readonly int Sites;
-        public readonly int OnNet;
-        public readonly int Links;
-        public readonly float Produced;
-        public readonly float Drawn;
-        public readonly float Capacity;
+        public readonly int Nodes;
+        public readonly int Online;
+        public readonly int Hacked;
+        public readonly int StageTotal;
 
-        public CyberStats(int sites, int onNet, int links, float produced, float drawn, float capacity)
+        public CyberStats(int nodes, int online, int hacked, int stageTotal)
         {
-            Sites = sites;
-            OnNet = onNet;
-            Links = links;
-            Produced = produced;
-            Drawn = drawn;
-            Capacity = capacity;
+            Nodes = nodes;
+            Online = online;
+            Hacked = hacked;
+            StageTotal = stageTotal;
         }
-
-        public float Net => Produced - Drawn;
-        public bool Congested => Drawn > Produced + 0.001f;
     }
 
     /// <summary>
-    /// One faction's integrated spectrum-defence network: airbase infrastructure the host raises
-    /// by itself (Cyber Command plus up to five gateways, wired to each other by the backbone),
-    /// up to ten field sites linked by radio range to any node on the net, a bandwidth pool the
-    /// console verbs draw on, and the adversary campaign run against it
-    /// (<c>CyberNetwork.Campaign.cs</c>). Pure: the host owns every mutation and tells it which
-    /// airbases it holds and where the site vehicles are; a client rebuilds it from
-    /// <see cref="CyberSnapshot"/>s with relative clocks.
+    /// One faction's cyber network: the home nodes the host raises on owned airbases (Cyber
+    /// Command plus a relay node on every other base) and the map locations the faction has
+    /// breached, each with a stage. Computing fuels breaches and console verbs, intel fuels the
+    /// map abilities, and money buys reach, radius, yield and trace resistance — never an
+    /// ability. The adversary campaign runs in <c>CyberNetwork.Campaign.cs</c>. Pure: the host
+    /// owns every mutation; a client rebuilds from <see cref="CyberSnapshot"/>s.
     /// </summary>
     internal sealed partial class CyberNetwork
     {
-        public const int SlotCount = 16;
-
-        /// <summary>Cyber Command plus the gateways.</summary>
-        public const int StaticSlots = 1 + CyberSites.MaximumGateways;
-
-        /// <summary>Slots left for field sites whatever the host limit says.</summary>
-        public const int FieldSlots = SlotCount - StaticSlots;
-
+        public const int SlotCount = CyberLocations.SlotCount;
+        public const int TargetBase = CyberLocations.TargetBase;
+        public const int TargetSlots = CyberLocations.MaximumTargets;
         public const int VerbCount = 5;
-        public const float BaseCapacity = 40f;
-        public const float RelayCapacity = 10f;
-        public const float GatewayCapacity = 5f;
-        public const float IdleRegeneration = 0.25f;
-        public const float PatchSeconds = 8f;
-        public const float HoneypotSeconds = 60f;
-        public const double LostLingerSeconds = 30.0;
-        public const float OffNetScale = 0.5f;
-        public const float CongestedScale = 0.75f;
 
-        /// <summary>Bandwidth Cyber Command arrives with, so the first incident can be answered.</summary>
-        public const float StarterBandwidth = 24f;
-
-        private readonly CyberSite[] sites = new CyberSite[SlotCount];
-        private readonly bool[] onNet = new bool[SlotCount];
-        private readonly bool[,] links = new bool[SlotCount, SlotCount];
-        private readonly int[] hops = new int[SlotCount];
+        private readonly CyberNode[] nodes = new CyberNode[SlotCount];
         private readonly double[] verbReady = new double[VerbCount];
-        private readonly int[] linkQueue = new int[SlotCount];
+        private readonly double[] capstoneReady = new double[3];
+        private readonly int[] upgradeLevels = new int[4];
         private readonly bool[] mirrorSeen = new bool[SlotCount];
-        private int linkCount;
 
-        public float Bandwidth { get; private set; }
+        public float Computing { get; private set; }
+        public float Intel { get; private set; }
 
-        /// <summary>Hostile radar seekers the jammers have broken this scene; host-counted.</summary>
-        public int SeekersDefeated { get; private set; }
+        /// <summary>The host setting for base network reach; upgrades scale it.</summary>
+        public float BaseReach { get; set; } = CyberLocations.DefaultReach;
 
         /// <summary>Host-set: the enemy factions an incident may name, in snapshot order.</summary>
         public int OriginCount { get; set; }
+
+        // ---- Nodes --------------------------------------------------------------------------
+
+        public CyberNode Node(int slot) => slot >= 0 && slot < SlotCount ? nodes[slot] : default;
+
+        public bool Exists(int slot) => slot >= 0 && slot < SlotCount && nodes[slot].Kind != NodeKind.None;
+
+        public bool IsHome(int slot) => Exists(slot) && nodes[slot].Static;
+
+        /// <summary>A target slot this faction has taken.</summary>
+        public bool IsHacked(int slot) => Exists(slot) && nodes[slot].Hacked;
+
+        public bool Static(int slot) => IsHome(slot);
+
+        /// <summary>Exists, alive and, for home nodes, with the anchor building standing.</summary>
+        public bool Online(int slot) =>
+            Exists(slot) && !nodes[slot].Down && (nodes[slot].Static || nodes[slot].Hacked);
+
+        /// <summary>The node is doing its job: online, not isolated, not compromised.</summary>
+        public bool Working(int slot) =>
+            Online(slot) && !nodes[slot].Isolated && !nodes[slot].Compromised;
+
+        public int Stage(int slot) => IsHacked(slot) ? nodes[slot].Stage : (byte)0;
+
+        /// <summary>0 none, 1 basic, 2 mid, 3 capstone.</summary>
+        public int Tier(int slot) => IsHacked(slot) ? CyberLocations.Tier(nodes[slot].Stage) : 0;
+
+        public int CommandSlot
+        {
+            get
+            {
+                for (int i = 0; i < SlotCount; i++)
+                    if (nodes[i].Kind == NodeKind.Command) return i;
+                return -1;
+            }
+        }
+
+        public bool HasCommand => CommandSlot >= 0;
+
+        public bool CommandOnline
+        {
+            get
+            {
+                int slot = CommandSlot;
+                return slot >= 0 && Online(slot);
+            }
+        }
+
+        public bool CommandCompromised
+        {
+            get
+            {
+                int slot = CommandSlot;
+                return slot >= 0 && nodes[slot].Compromised;
+            }
+        }
+
+        public int Count(NodeKind kind)
+        {
+            int count = 0;
+            for (int i = 0; i < SlotCount; i++)
+                if (nodes[i].Kind == kind) count++;
+            return count;
+        }
+
+        public int NodeCount
+        {
+            get
+            {
+                int count = 0;
+                for (int i = 0; i < SlotCount; i++)
+                    if (nodes[i].Kind != NodeKind.None && (nodes[i].Static || nodes[i].Hacked)) count++;
+                return count;
+            }
+        }
+
+        public int HackedCount
+        {
+            get
+            {
+                int count = 0;
+                for (int i = 0; i < SlotCount; i++)
+                    if (nodes[i].Hacked) count++;
+                return count;
+            }
+        }
+
+        public int CapstoneCount(Capstone capstone)
+        {
+            if (capstone == Capstone.None) return 0;
+            int count = 0;
+            for (int i = 0; i < SlotCount; i++)
+                if (nodes[i].Hacked && nodes[i].Capstone == capstone) count++;
+            return count;
+        }
+
+        public bool AnyCapstone(Capstone capstone) => CapstoneCount(capstone) > 0;
+
+        public CyberStats Stats()
+        {
+            int count = 0, online = 0, hacked = 0, stages = 0;
+            for (int i = 0; i < SlotCount; i++)
+            {
+                if (nodes[i].Kind == NodeKind.None) continue;
+                if (!nodes[i].Static && !nodes[i].Hacked) continue;
+                count++;
+                if (Online(i)) online++;
+                if (nodes[i].Hacked)
+                {
+                    hacked++;
+                    stages += nodes[i].Stage;
+                }
+            }
+            return new CyberStats(count, online, hacked, stages);
+        }
+
+        // ---- Resources ----------------------------------------------------------------------
+
+        public float IncomeScale => 1f + CyberLocations.IncomePerLevel * upgradeLevels[(int)CyberUpgrade.Income];
+
+        public float ComputingIncome()
+        {
+            float income = 0f;
+            int command = CommandSlot;
+            if (command >= 0 && Online(command)) income += CyberLocations.CommandComputing;
+            for (int i = 0; i < SlotCount; i++)
+            {
+                if (!Online(i) || i == command) continue;
+                if (nodes[i].Static) income += CyberLocations.BaseComputing;
+                else if (nodes[i].Hacked) income += CyberLocations.Stage(CyberLocations.LocationOf(nodes[i].Kind), nodes[i].Stage).Computing;
+            }
+            return income * IncomeScale;
+        }
+
+        public float IntelIncome()
+        {
+            float income = 0f;
+            for (int i = 0; i < SlotCount; i++)
+            {
+                if (!Online(i) || !nodes[i].Hacked) continue;
+                income += CyberLocations.Stage(CyberLocations.LocationOf(nodes[i].Kind), nodes[i].Stage).Intel;
+            }
+            return income * IncomeScale;
+        }
+
+        public float ComputingCapacity() =>
+            CyberLocations.ComputingBaseCapacity + CyberLocations.ComputingCapacityPerNode * NodeCount;
+
+        public float IntelCapacity()
+        {
+            int stages = 0;
+            for (int i = 0; i < SlotCount; i++)
+                if (nodes[i].Hacked) stages += nodes[i].Stage;
+            return CyberLocations.IntelBaseCapacity + CyberLocations.IntelCapacityPerStage * stages;
+        }
+
+        public bool SpendComputing(float amount)
+        {
+            if (amount > 0f && Computing + 0.001f < amount) return false;
+            Computing = Math.Max(0f, Computing - Math.Max(0f, amount));
+            return true;
+        }
+
+        public bool SpendIntel(float amount)
+        {
+            if (amount > 0f && Intel + 0.001f < amount) return false;
+            Intel = Math.Max(0f, Intel - Math.Max(0f, amount));
+            return true;
+        }
+
+        /// <summary>Host: an ability's loot and the trace reward land here.</summary>
+        public void GrantIntel(float amount) =>
+            Intel = Math.Min(IntelCapacity(), Intel + Math.Max(0f, amount));
+
+        // ---- Upgrades (money; never an ability) ---------------------------------------------
+
+        public int UpgradeLevel(CyberUpgrade upgrade) => upgradeLevels[(int)upgrade];
+
+        public float UpgradeCost(CyberUpgrade upgrade)
+        {
+            int level = UpgradeLevel(upgrade);
+            return level >= CyberLocations.UpgradeLevels ? 0f : CyberLocations.UpgradeCost(upgrade, level);
+        }
+
+        public bool CanUpgrade(CyberUpgrade upgrade) => UpgradeLevel(upgrade) < CyberLocations.UpgradeLevels;
+
+        /// <summary>Authority-free level change; the host checks the price and charges separately.</summary>
+        public bool TryUpgrade(CyberUpgrade upgrade)
+        {
+            if (!CanUpgrade(upgrade)) return false;
+            upgradeLevels[(int)upgrade]++;
+            return true;
+        }
+
+        public float Reach =>
+            Math.Max(1000f, BaseReach) * (1f + CyberLocations.ReachPerLevel * upgradeLevels[(int)CyberUpgrade.Reach]);
+
+        /// <summary>Ability radius of a hacked location, upgraded, halved inside a jamming raid.</summary>
+        public float RadiusOf(int slot, double now)
+        {
+            if (!IsHacked(slot)) return 0f;
+            float radius = CyberLocations.Stage(CyberLocations.LocationOf(nodes[slot].Kind), nodes[slot].Stage).Radius +
+                           CyberLocations.RadiusPerLevel * upgradeLevels[(int)CyberUpgrade.Radius];
+            return Jammed(slot, now) ? radius * 0.5f : radius;
+        }
+
+        /// <summary>A working hacked location of at least <paramref name="tier"/> whose radius covers the point.</summary>
+        public bool AbilityCovers(int tier, float x, float z, double now)
+        {
+            if (tier <= 0) return false;
+            for (int i = 0; i < SlotCount; i++)
+            {
+                if (!Working(i) || Tier(i) < tier) continue;
+                float radius = RadiusOf(i, now);
+                float dx = nodes[i].X - x, dz = nodes[i].Z - z;
+                if (dx * dx + dz * dz <= radius * radius) return true;
+            }
+            return false;
+        }
+
+        /// <summary>Any working location of at least this tier, wherever it is; the panel's readiness hint.</summary>
+        public bool AnyTier(int tier)
+        {
+            for (int i = 0; i < SlotCount; i++)
+                if (Working(i) && Tier(i) >= tier) return true;
+            return false;
+        }
+
+        /// <summary>A working location carrying this capstone whose radius covers the point.</summary>
+        public bool CapstoneCovers(Capstone capstone, float x, float z, double now)
+        {
+            if (capstone == Capstone.None) return false;
+            for (int i = 0; i < SlotCount; i++)
+            {
+                if (!Working(i) || nodes[i].Capstone != capstone) continue;
+                float radius = RadiusOf(i, now);
+                float dx = nodes[i].X - x, dz = nodes[i].Z - z;
+                if (dx * dx + dz * dz <= radius * radius) return true;
+            }
+            return false;
+        }
+
+        /// <summary>The working location of at least this tier whose radius covers the point, best first.</summary>
+        public bool TryCovering(int tier, float x, float z, double now, out int slot)
+        {
+            slot = -1;
+            if (tier <= 0) return false;
+            int bestTier = -1;
+            for (int i = 0; i < SlotCount; i++)
+            {
+                if (!Working(i) || Tier(i) < tier || Tier(i) <= bestTier) continue;
+                float radius = RadiusOf(i, now);
+                float dx = nodes[i].X - x, dz = nodes[i].Z - z;
+                if (dx * dx + dz * dz > radius * radius) continue;
+                slot = i;
+                bestTier = Tier(i);
+            }
+            return slot >= 0;
+        }
+
+        /// <summary>The working capstone location covering the point, best first.</summary>
+        public bool TryCovering(Capstone capstone, float x, float z, double now, out int slot)
+        {
+            slot = -1;
+            if (capstone == Capstone.None) return false;
+            for (int i = 0; i < SlotCount; i++)
+            {
+                if (!Working(i) || nodes[i].Capstone != capstone) continue;
+                float radius = RadiusOf(i, now);
+                float dx = nodes[i].X - x, dz = nodes[i].Z - z;
+                if (dx * dx + dz * dz > radius * radius) continue;
+                slot = i;
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>Capstone recharge left, seconds.</summary>
+        public float CapstoneRechargeRemaining(Capstone capstone, double now) =>
+            capstone == Capstone.None ? 0f : (float)Math.Max(0.0, capstoneReady[(int)capstone] - now);
+
+        /// <summary>Host: spend a capstone use. The caller has already checked coverage.</summary>
+        public bool TryUseCapstone(Capstone capstone, double now)
+        {
+            if (capstone == Capstone.None || CapstoneRechargeRemaining(capstone, now) > 0f) return false;
+            capstoneReady[(int)capstone] = now + Capstones.RechargeSeconds;
+            return true;
+        }
+
+        /// <summary>A working location's ear: stage 2 or better covering the point.</summary>
+        public bool EarCovers(float x, float z, double now) => AbilityCovers(1, x, z, now);
+
+        /// <summary>Any working hacked location covering the point, whatever its stage.</summary>
+        public bool HackedCovers(float x, float z, double now)
+        {
+            for (int i = 0; i < SlotCount; i++)
+            {
+                if (!Working(i) || !nodes[i].Hacked) continue;
+                float radius = RadiusOf(i, now);
+                float dx = nodes[i].X - x, dz = nodes[i].Z - z;
+                if (dx * dx + dz * dz <= radius * radius) return true;
+            }
+            return false;
+        }
+
+        public bool ReachCovers(float x, float z)
+        {
+            float reach = Reach;
+            for (int i = 0; i < SlotCount; i++)
+            {
+                if (!Online(i)) continue;
+                float dx = nodes[i].X - x, dz = nodes[i].Z - z;
+                if (dx * dx + dz * dz <= reach * reach) return true;
+            }
+            return false;
+        }
+
+        // ---- Breach -------------------------------------------------------------------------
+
+        private int breachTarget = -1;
+        private BreachPhase breachPhase;
+        private bool breachQuiet = true;
+        private float breachTrace;
+        private double breachPhaseEnds;
+        private int choiceTarget = -1;
+        private double choiceDeadline;
+
+        public bool BreachActive => breachTarget >= 0 && breachPhase != BreachPhase.None;
+        public int BreachTarget => breachTarget;
+        public BreachPhase BreachPhase => breachPhase;
+        public bool BreachQuiet => breachQuiet;
+        public float BreachTrace => breachTrace;
+        public bool BreachAwaitingChoice => choiceTarget >= 0;
+        public int ChoiceTarget => choiceTarget;
+
+        /// <summary>Seconds left to pick the capstone before the model picks REVEAL itself.</summary>
+        public float ChoiceRemaining(double now) =>
+            choiceTarget >= 0 && choiceDeadline > now ? (float)(choiceDeadline - now) : 0f;
+
+        public float BreachPhaseRemaining(double now) =>
+            breachPhaseEnds > now ? (float)(breachPhaseEnds - now) : 0f;
+
+        public float LockoutRemaining(int slot, double now) =>
+            Exists(slot) && nodes[slot].LockoutUntil > now ? (float)(nodes[slot].LockoutUntil - now) : 0f;
+
+        /// <summary>Computing a phase costs at a stage, in the chosen mode.</summary>
+        public static float PhaseCost(BreachPhase phase, int stage, bool quiet)
+        {
+            float cost;
+            switch (phase)
+            {
+                case BreachPhase.Probe: cost = CyberLocations.ProbeCost; break;
+                case BreachPhase.Exploit: cost = CyberLocations.ExploitCostPerStage * Math.Max(1, stage); break;
+                case BreachPhase.Extract: cost = CyberLocations.ExtractCostPerStage * Math.Max(1, stage); break;
+                default: return 0f;
+            }
+            return quiet ? cost : cost * CyberLocations.ForceCostScale;
+        }
+
+        public static float PhaseSeconds(BreachPhase phase, bool quiet)
+        {
+            float seconds;
+            switch (phase)
+            {
+                case BreachPhase.Probe: seconds = CyberLocations.ProbeSeconds; break;
+                case BreachPhase.Exploit: seconds = CyberLocations.ExploitSeconds; break;
+                case BreachPhase.Extract: seconds = CyberLocations.ExtractSeconds; break;
+                default: return 0f;
+            }
+            return quiet ? seconds : seconds * CyberLocations.ForceDurationScale;
+        }
+
+        public float SpoofRechargeRemaining(double now) =>
+            (float)Math.Max(0.0, capstoneReady[0] - now);
+
+        public BreachDenial CheckBreach(int slot, double now)
+        {
+            if (!HasCommand || !CommandOnline) return BreachDenial.NoCommand;
+            if (!Exists(slot) || slot < TargetBase) return BreachDenial.NoTarget;
+            if (!CyberLocations.Hackable(CyberLocations.LocationOf(nodes[slot].Kind))) return BreachDenial.NotHackable;
+            // Re-breaching a location you hold is how it climbs a stage; a mastered one is done.
+            if (nodes[slot].Hacked && nodes[slot].Stage >= CyberLocations.StageCount) return BreachDenial.AlreadyMine;
+            if (nodes[slot].Hacked && !Working(slot)) return BreachDenial.NotHackable;
+            if (BreachActive) return BreachDenial.Running;
+            if (BreachAwaitingChoice) return BreachDenial.AwaitingChoice;
+            if (LockoutRemaining(slot, now) > 0f) return BreachDenial.Locked;
+            if (!ReachCovers(nodes[slot].X, nodes[slot].Z)) return BreachDenial.OutOfReach;
+            if (Computing + 0.001f < CyberLocations.ProbeCost) return BreachDenial.LowComputing;
+            return BreachDenial.None;
+        }
+
+        /// <summary>Host: start a breach. Charges the probe phase and runs it to completion on Tick.</summary>
+        public BreachDenial TryStartBreach(int slot, bool quiet, double now)
+        {
+            BreachDenial denial = CheckBreach(slot, now);
+            if (denial != BreachDenial.None) return denial;
+            if (!SpendComputing(PhaseCost(BreachPhase.Probe, 1, quiet))) return BreachDenial.LowComputing;
+            breachTarget = slot;
+            breachPhase = BreachPhase.Probe;
+            breachQuiet = quiet;
+            breachTrace = 0f;
+            breachPhaseEnds = now + PhaseSeconds(BreachPhase.Probe, quiet);
+            Notify(CyberNotice.BreachStarted, slot, 0, now);
+            return BreachDenial.None;
+        }
+
+        /// <summary>Host: quiet or force for the next phase.</summary>
+        public bool TryBreachMode(bool quiet)
+        {
+            if (!BreachActive) return false;
+            breachQuiet = quiet;
+            return true;
+        }
+
+        /// <summary>Host: burn computing to knock the trace back.</summary>
+        public BreachDenial TrySpoof(double now)
+        {
+            if (!BreachActive) return BreachDenial.NoSession;
+            if (SpoofRechargeRemaining(now) > 0f) return BreachDenial.Recharging;
+            if (Computing + 0.001f < CyberLocations.SpoofCost) return BreachDenial.LowComputing;
+            SpendComputing(CyberLocations.SpoofCost);
+            capstoneReady[0] = now + CyberLocations.SpoofRecharge;
+            breachTrace = Math.Max(0f, breachTrace - CyberLocations.SpoofTrace);
+            return BreachDenial.None;
+        }
+
+        /// <summary>Host: leave the session safely; the computing spent is gone.</summary>
+        public bool TryDisconnect(double now)
+        {
+            if (!BreachActive) return false;
+            int slot = breachTarget;
+            EndBreach();
+            Notify(CyberNotice.BreachDisconnected, slot, 0, now);
+            return true;
+        }
+
+        /// <summary>Host: pick the capstone a stage-4 location takes.</summary>
+        public bool TryChooseCapstone(Capstone capstone, double now)
+        {
+            if (!BreachAwaitingChoice || !IsHacked(choiceTarget) || nodes[choiceTarget].Stage != CyberLocations.StageCount ||
+                nodes[choiceTarget].Capstone != Capstone.None || capstone == Capstone.None || !Capstones.Known((byte)capstone)) return false;
+            int slot = choiceTarget;
+            nodes[slot].Capstone = capstone;
+            choiceTarget = -1;
+            choiceDeadline = 0.0;
+            Notify(CyberNotice.CapstoneChosen, slot, (byte)capstone, now);
+            return true;
+        }
+
+        private void EndBreach()
+        {
+            breachTarget = -1;
+            breachPhase = BreachPhase.None;
+            breachTrace = 0f;
+            breachPhaseEnds = 0.0;
+        }
+
+        private float TraceScale(int slot, bool quiet)
+        {
+            LocationKind kind = CyberLocations.LocationOf(nodes[slot].Kind);
+            int stage = Math.Max(1, (int)nodes[slot].Stage + 1);
+            float scale = 1f + CyberLocations.StageTraceScale * (stage - 1);
+            scale *= 1f - CyberLocations.TracePerLevel * upgradeLevels[(int)CyberUpgrade.Trace];
+            // A far target is a weak connection: the defender traces it faster.
+            float distance = DistanceToNearest(slot);
+            float reach = Math.Max(1f, Reach);
+            scale *= 1f - CyberLocations.DistanceTraceScale * Math.Min(1f, distance / reach);
+            if (!quiet) scale *= CyberLocations.ForceTraceScale;
+            return Math.Max(0.1f, scale);
+        }
+
+        private float DistanceToNearest(int slot)
+        {
+            float best = float.MaxValue;
+            for (int i = 0; i < SlotCount; i++)
+            {
+                if (!Online(i) || i == slot) continue;
+                float dx = nodes[i].X - nodes[slot].X, dz = nodes[i].Z - nodes[slot].Z;
+                float distance = (float)Math.Sqrt(dx * dx + dz * dz);
+                if (distance < best) best = distance;
+            }
+            return best == float.MaxValue ? 0f : best;
+        }
+
+        private void StepBreach(double now, float dt)
+        {
+            if (!BreachActive) return;
+            float seconds = PhaseSeconds(breachPhase, breachQuiet);
+            if (seconds <= 0f)
+            {
+                EndBreach();
+                return;
+            }
+            float contribution = TraceContribution(breachPhase) * TraceScale(breachTarget, breachQuiet);
+            breachTrace = Math.Min(1f, breachTrace + contribution / seconds * dt);
+            if (breachTrace >= 1f)
+            {
+                Backtrace(now);
+                return;
+            }
+            if (now < breachPhaseEnds) return;
+            switch (breachPhase)
+            {
+                case BreachPhase.Probe:
+                    Advance(BreachPhase.Exploit, now);
+                    return;
+                case BreachPhase.Exploit:
+                    Advance(BreachPhase.Extract, now);
+                    return;
+                default:
+                    Complete(now);
+                    return;
+            }
+        }
+
+        private void Advance(BreachPhase phase, double now)
+        {
+            int slot = breachTarget;
+            float cost = PhaseCost(phase, Math.Max(1, (int)nodes[slot].Stage + 1), breachQuiet);
+            if (Computing + 0.001f < cost)
+            {
+                // No computing to continue: the session ends without loot, not with a backtrace.
+                EndBreach();
+                Notify(CyberNotice.BreachStalled, slot, 0, now);
+                return;
+            }
+            SpendComputing(cost);
+            breachPhase = phase;
+            breachPhaseEnds = now + PhaseSeconds(phase, breachQuiet);
+            Notify(CyberNotice.BreachPhaseDone, slot, (byte)phase, now);
+        }
+
+        private void Complete(double now)
+        {
+            int slot = breachTarget;
+            int stage = Math.Min(CyberLocations.StageCount, (int)nodes[slot].Stage + 1);
+            nodes[slot].Stage = (byte)stage;
+            nodes[slot].Hacked = true;
+            float loot = 10f + 10f * stage;
+            if (CyberLocations.LocationOf(nodes[slot].Kind) == LocationKind.City) loot *= 1.5f;
+            GrantIntel(loot);
+            EndBreach();
+            Notify(CyberNotice.StageUp, slot, (byte)stage, now);
+            if (stage >= CyberLocations.StageCount)
+            {
+                choiceTarget = slot;
+                choiceDeadline = now + CyberLocations.PendingChoiceSeconds;
+                Notify(CyberNotice.CapstoneReady, slot, 0, now);
+            }
+        }
+
+        private void Backtrace(double now)
+        {
+            int slot = breachTarget;
+            nodes[slot].LockoutUntil = now + CyberLocations.LockoutSeconds;
+            Heat = Math.Min(HeatMaximum, Heat + OffensiveHeatSpike);
+            EndBreach();
+            Notify(CyberNotice.BreachBacktrace, slot, 0, now);
+        }
+
+        private static float TraceContribution(BreachPhase phase)
+        {
+            switch (phase)
+            {
+                case BreachPhase.Probe: return CyberLocations.ProbeTrace;
+                case BreachPhase.Exploit: return CyberLocations.ExploitTrace;
+                default: return CyberLocations.ExtractTrace;
+            }
+        }
+
+        // ---- Verbs --------------------------------------------------------------------------
+
+        public float RechargeRemaining(CyberVerb verb, double now) =>
+            (byte)verb < VerbCount ? (float)Math.Max(0.0, verbReady[(byte)verb] - now) : 0f;
 
         public static float VerbCost(CyberVerb verb)
         {
@@ -189,279 +723,6 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
 
         public static bool TargetsIncident(CyberVerb verb) => verb == CyberVerb.Trace || verb == CyberVerb.BurnThrough;
 
-        // ---- Sites --------------------------------------------------------------------------
-
-        public CyberSite Site(int slot) => slot >= 0 && slot < SlotCount ? sites[slot] : default;
-
-        public bool Exists(int slot) => slot >= 0 && slot < SlotCount && sites[slot].Kind != CyberSiteKind.None;
-
-        /// <summary>Built, arrived, alive and, for airbase nodes, with the anchor building standing.</summary>
-        public bool Online(int slot) =>
-            Exists(slot) && !sites[slot].Deploying && !sites[slot].Lost && !sites[slot].Down;
-
-        public bool Static(int slot) => Exists(slot) && sites[slot].Static;
-
-        /// <summary>Both ends are airbase nodes: the link is the backbone, not radio range.</summary>
-        public bool Backbone(int a, int b) => Linked(a, b) && sites[a].Static && sites[b].Static;
-
-        public bool OnNet(int slot) => slot >= 0 && slot < SlotCount && onNet[slot];
-
-        public bool Linked(int a, int b) =>
-            a >= 0 && b >= 0 && a < SlotCount && b < SlotCount && links[a, b];
-
-        /// <summary>Hops from Cyber Command along live links; -1 off the net.</summary>
-        public int Hops(int slot) => OnNet(slot) ? hops[slot] : -1;
-
-        /// <summary>The site is doing its job: online, not isolated, not compromised.</summary>
-        public bool Working(int slot) =>
-            Online(slot) && !sites[slot].Isolated && !sites[slot].Compromised;
-
-        public int CommandSlot
-        {
-            get
-            {
-                for (int i = 0; i < SlotCount; i++)
-                    if (sites[i].Kind == CyberSiteKind.Command && !sites[i].Lost) return i;
-                return -1;
-            }
-        }
-
-        public bool HasCommand => CommandSlot >= 0;
-
-        public bool CommandOnline
-        {
-            get
-            {
-                int slot = CommandSlot;
-                return slot >= 0 && Online(slot);
-            }
-        }
-
-        public bool CommandCompromised
-        {
-            get
-            {
-                int slot = CommandSlot;
-                return slot >= 0 && sites[slot].Compromised;
-            }
-        }
-
-        public int Count(CyberSiteKind kind)
-        {
-            int count = 0;
-            for (int i = 0; i < SlotCount; i++)
-                if (sites[i].Kind == kind && !sites[i].Lost) count++;
-            return count;
-        }
-
-        public int SiteCount
-        {
-            get
-            {
-                int count = 0;
-                for (int i = 0; i < SlotCount; i++)
-                    if (sites[i].Kind != CyberSiteKind.None && !sites[i].Lost) count++;
-                return count;
-            }
-        }
-
-        /// <summary>Live field sites: the ones the host limit counts.</summary>
-        public int FieldCount
-        {
-            get
-            {
-                int count = 0;
-                for (int i = 0; i < SlotCount; i++)
-                    if (sites[i].Kind != CyberSiteKind.None && !sites[i].Lost && !sites[i].Static) count++;
-                return count;
-            }
-        }
-
-        /// <summary>
-        /// How strongly a site's passive effect runs, 0..1: nothing unless it is working, half
-        /// off the net or inside a jamming raid, three quarters on a congested net.
-        /// </summary>
-        public float EffectScale(int slot, double now)
-        {
-            if (!Working(slot)) return 0f;
-            float scale = onNet[slot] ? 1f : OffNetScale;
-            if (Jammed(slot, now)) scale *= 0.5f;
-            if (Stats().Congested) scale *= CongestedScale;
-            return scale;
-        }
-
-        public float EffectRadius(int slot, double now) =>
-            Exists(slot) ? CyberSites.Info(sites[slot].Kind).EffectRadius * (Jammed(slot, now) ? 0.5f : 1f) : 0f;
-
-        /// <summary>Whether a field site of this kind may be ordered. <paramref name="limit"/> is the
-        /// host's field-site limit; airbase infrastructure never counts against it.</summary>
-        public SitePlacement CheckPlacement(CyberSiteKind kind, int limit)
-        {
-            if (!CyberSites.Fieldable((byte)kind)) return SitePlacement.NotPlaceable;
-            if (!HasCommand) return SitePlacement.NeedsCommand;
-            if (Count(kind) >= CyberSites.Info(kind).CopyLimit) return SitePlacement.CopyLimit;
-            int cap = Math.Max(1, Math.Min(FieldSlots, limit));
-            if (FieldCount >= cap || FreeSlot() < 0) return SitePlacement.NetworkFull;
-            return SitePlacement.None;
-        }
-
-        /// <summary>Orders a field site; its vehicle is en route until <see cref="SetPosition"/> says it arrived.</summary>
-        public int TryBuild(CyberSiteKind kind, float x, float z, float paid, int limit)
-        {
-            if (CheckPlacement(kind, limit) != SitePlacement.None || !Finite(x) || !Finite(z)) return -1;
-            int slot = FreeSlot();
-            sites[slot] = new CyberSite
-            {
-                Kind = kind,
-                X = x,
-                Z = z,
-                Deploying = true,
-                Mode = EwPostures.Default,
-                Paid = Math.Max(0f, paid)
-            };
-            RebuildLinks(0.0);
-            return slot;
-        }
-
-        /// <summary>Removes a live field site; returns false for an empty, lost or airbase slot.</summary>
-        public bool TryScrap(int slot, out CyberSiteKind kind, out float paid)
-        {
-            kind = CyberSiteKind.None;
-            paid = 0f;
-            if (!Exists(slot) || sites[slot].Lost || sites[slot].Static) return false;
-            kind = sites[slot].Kind;
-            paid = sites[slot].Paid;
-            sites[slot] = default;
-            DropSiteReferences(slot);
-            RebuildLinks(0.0);
-            return true;
-        }
-
-        /// <summary>Host: the site's vehicle position this tick.</summary>
-        public void SetPosition(int slot, float x, float z, bool arrived)
-        {
-            if (!Exists(slot) || sites[slot].Lost || !Finite(x) || !Finite(z)) return;
-            sites[slot].X = x;
-            sites[slot].Z = z;
-            if (arrived && sites[slot].Deploying)
-            {
-                sites[slot].Deploying = false;
-                if (sites[slot].Kind == CyberSiteKind.Command && Bandwidth < StarterBandwidth)
-                    Bandwidth = StarterBandwidth;
-                Notify(CyberNotice.SiteOnline, slot, 0, lastTick);
-            }
-        }
-
-        /// <summary>Host: the site starts driving to a new mark. It is off the net until it arrives.</summary>
-        public bool TryRelocate(int slot)
-        {
-            if (!Online(slot) || sites[slot].Static) return false;
-            sites[slot].Deploying = true;
-            sites[slot].PatchDone = 0.0;
-            RebuildLinks(lastTick);
-            return true;
-        }
-
-        /// <summary>Host: the site's vehicle is gone.</summary>
-        public void MarkLost(int slot, double now)
-        {
-            if (!Exists(slot) || sites[slot].Lost) return;
-            sites[slot].Lost = true;
-            sites[slot].LostAt = now;
-            sites[slot].PatchDone = 0.0;
-            sites[slot].HoneypotUntil = 0.0;
-            Notify(sites[slot].Kind == CyberSiteKind.Command ? CyberNotice.CommandLost : CyberNotice.SiteLost, slot, 0, now);
-            RebuildLinks(now);
-        }
-
-        public bool TrySetMode(int slot, EwPosture mode)
-        {
-            if (!Online(slot) || sites[slot].Kind != CyberSiteKind.Jammer || (byte)mode > (byte)EwPosture.GhostSpoofing)
-                return false;
-            sites[slot].Mode = mode;
-            return true;
-        }
-
-        /// <summary>How loud the site is right now; a jammer in EMCON is silent.</summary>
-        public Emission EmissionOf(int slot)
-        {
-            if (!Online(slot) || sites[slot].Isolated) return Emission.Silent;
-            CyberSite site = sites[slot];
-            if (site.Kind == CyberSiteKind.Jammer && site.Mode == EwPosture.SigintPassive) return Emission.Silent;
-            return CyberSites.Info(site.Kind).Emission;
-        }
-
-        /// <summary>A working jammer that is emitting (not in EMCON) within <paramref name="radius"/> of a point.</summary>
-        public bool EmittingJammerCovers(float x, float z, float radius)
-        {
-            float r2 = radius * radius;
-            for (int i = 0; i < SlotCount; i++)
-            {
-                if (!EmittingJammer(i)) continue;
-                float dx = sites[i].X - x, dz = sites[i].Z - z;
-                if (dx * dx + dz * dz <= r2) return true;
-            }
-            return false;
-        }
-
-        public bool AnyWorking(CyberSiteKind kind)
-        {
-            for (int i = 0; i < SlotCount; i++)
-                if (sites[i].Kind == kind && Working(i)) return true;
-            return false;
-        }
-
-        /// <summary>Any working jammer in NOISE or DECEPTION: what backs a station operation.</summary>
-        public bool AnyEmittingJammer()
-        {
-            for (int i = 0; i < SlotCount; i++)
-                if (EmittingJammer(i)) return true;
-            return false;
-        }
-
-        private bool EmittingJammer(int slot) =>
-            sites[slot].Kind == CyberSiteKind.Jammer && Working(slot) && EwPostures.Emitting(sites[slot].Mode);
-
-        /// <summary>A working SIGINT post whose ear reaches the point.</summary>
-        public bool SigintCovers(float x, float z, double now)
-        {
-            for (int i = 0; i < SlotCount; i++)
-            {
-                if (sites[i].Kind != CyberSiteKind.Sigint || !Working(i)) continue;
-                float radius = EffectRadius(i, now);
-                float dx = sites[i].X - x, dz = sites[i].Z - z;
-                if (dx * dx + dz * dz <= radius * radius) return true;
-            }
-            return false;
-        }
-
-        public CyberStats Stats()
-        {
-            float produced = 0f, drawn = 0f, capacity = BaseCapacity;
-            int count = 0, net = 0;
-            for (int i = 0; i < SlotCount; i++)
-            {
-                if (sites[i].Kind == CyberSiteKind.None || sites[i].Lost) continue;
-                count++;
-                if (!onNet[i]) continue;
-                net++;
-                float band = CyberSites.Info(sites[i].Kind).Bandwidth;
-                if (band >= 0f)
-                {
-                    if (!sites[i].Compromised && !sites[i].Isolated) produced += band;
-                }
-                else drawn -= band;
-                if (sites[i].Kind == CyberSiteKind.Relay) capacity += RelayCapacity;
-                else if (sites[i].Kind == CyberSiteKind.Gateway) capacity += GatewayCapacity;
-            }
-            return new CyberStats(count, net, linkCount, produced, drawn, capacity);
-        }
-
-        // ---- Verbs --------------------------------------------------------------------------
-
-        public float RechargeRemaining(CyberVerb verb, double now) =>
-            (byte)verb < VerbCount ? (float)Math.Max(0.0, verbReady[(byte)verb] - now) : 0f;
-
         /// <summary>Everything the host re-checks for a verb. <paramref name="target"/> is a slot or,
         /// for TRACE and BURN THROUGH, an incident index.</summary>
         public CyberDenial Check(CyberVerb verb, int target, double now)
@@ -476,41 +737,38 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
                 {
                     if (!Traceable(incident.Kind)) return CyberDenial.NotTraceable;
                     if (incident.Tracing) return CyberDenial.AlreadyTracing;
-                    if (!AnyWorking(CyberSiteKind.Sigint)) return CyberDenial.NeedsSigint;
+                    if (!EarCovers(incident.X, incident.Z, now)) return CyberDenial.NeedsEar;
                 }
                 else
                 {
                     if (incident.Kind != IncidentKind.Raid) return CyberDenial.NotTraceable;
-                    if (!JammerReaches(incident.X, incident.Z, RaidRadius, now)) return CyberDenial.NeedsJammer;
+                    if (!HackedCovers(incident.X, incident.Z, now)) return CyberDenial.NeedsCoverage;
                 }
             }
             else
             {
                 if (!Exists(target)) return CyberDenial.NoTarget;
-                CyberSite site = sites[target];
-                if (site.Lost) return CyberDenial.Lost;
-                if (site.Deploying) return CyberDenial.Deploying;
+                CyberNode node = nodes[target];
+                if (!Online(target)) return CyberDenial.Offline;
                 switch (verb)
                 {
                     case CyberVerb.Isolate:
-                        if (site.Kind == CyberSiteKind.Command) return CyberDenial.CommandProtected;
+                        if (node.Kind == NodeKind.Command) return CyberDenial.CommandProtected;
                         break;
                     case CyberVerb.Patch:
-                        if (!site.Compromised) return CyberDenial.NotCompromised;
-                        if (site.PatchDone > 0.0) return CyberDenial.AlreadyPatching;
+                        if (!node.Compromised) return CyberDenial.NotCompromised;
+                        if (node.PatchDone > 0.0) return CyberDenial.AlreadyPatching;
                         break;
                     case CyberVerb.Honeypot:
-                        if (site.Kind == CyberSiteKind.Command) return CyberDenial.CommandProtected;
-                        if (site.HoneypotUntil > now) return CyberDenial.AlreadyBaited;
+                        if (node.Kind == NodeKind.Command) return CyberDenial.CommandProtected;
+                        if (node.HoneypotUntil > now) return CyberDenial.AlreadyBaited;
                         break;
                 }
-                // Isolating is a local switch; everything else rides the net.
-                if (verb != CyberVerb.Isolate && !onNet[target] && !site.Isolated) return CyberDenial.OffNet;
             }
-            // Re-joining an isolated site is free and immediate.
-            if (verb == CyberVerb.Isolate && Exists(target) && sites[target].Isolated) return CyberDenial.None;
+            // Re-joining an isolated node is free and immediate.
+            if (verb == CyberVerb.Isolate && Exists(target) && nodes[target].Isolated) return CyberDenial.None;
             if (RechargeRemaining(verb, now) > 0f) return CyberDenial.Recharging;
-            if (Bandwidth + 0.001f < VerbCost(verb)) return CyberDenial.LowBandwidth;
+            if (Computing + 0.001f < VerbCost(verb)) return CyberDenial.LowComputing;
             return CyberDenial.None;
         }
 
@@ -518,19 +776,18 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         {
             CyberDenial denial = Check(verb, target, now);
             if (denial != CyberDenial.None) return denial;
-            bool free = verb == CyberVerb.Isolate && sites[target].Isolated;
+            bool free = verb == CyberVerb.Isolate && nodes[target].Isolated;
             switch (verb)
             {
                 case CyberVerb.Isolate:
-                    sites[target].Isolated = !sites[target].Isolated;
-                    Notify(sites[target].Isolated ? CyberNotice.Isolated : CyberNotice.Rejoined, target, 0, now);
-                    RebuildLinks(now);
+                    nodes[target].Isolated = !nodes[target].Isolated;
+                    Notify(nodes[target].Isolated ? CyberNotice.Isolated : CyberNotice.Rejoined, target, 0, now);
                     break;
                 case CyberVerb.Patch:
-                    sites[target].PatchDone = now + PatchSeconds;
+                    nodes[target].PatchDone = now + CyberLocations.PatchSeconds;
                     break;
                 case CyberVerb.Honeypot:
-                    sites[target].HoneypotUntil = now + HoneypotSeconds;
+                    nodes[target].HoneypotUntil = now + CyberLocations.HoneypotSeconds;
                     Notify(CyberNotice.Baited, target, 0, now);
                     break;
                 case CyberVerb.Trace:
@@ -540,12 +797,11 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
                 case CyberVerb.BurnThrough:
                     Resolve(target, IncidentOutcome.Broken, now);
                     Notify(CyberNotice.RaidBroken, -1, incidents[target].Origin, now);
-                    RebuildLinks(now);
                     break;
             }
             if (!free)
             {
-                Bandwidth = Math.Max(0f, Bandwidth - VerbCost(verb));
+                SpendComputing(VerbCost(verb));
                 verbReady[(byte)verb] = now + VerbRecharge(verb);
             }
             return CyberDenial.None;
@@ -555,181 +811,209 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
 
         private double lastTick;
 
-        /// <summary>Host: bandwidth, patches, bait expiry, freed slots, links and the campaign.</summary>
+        /// <summary>Host: resources, patches, bait, lockouts, the breach, links and the campaign.</summary>
         public void Tick(double now, float deltaTime, float campaignIntensity)
         {
             lastTick = now;
             float dt = Math.Max(0f, Math.Min(deltaTime, 5f));
             for (int i = 0; i < SlotCount; i++)
             {
-                if (sites[i].Kind == CyberSiteKind.None) continue;
-                if (sites[i].Lost && now - sites[i].LostAt >= LostLingerSeconds)
+                if (nodes[i].Kind == NodeKind.None) continue;
+                if (nodes[i].PatchDone > 0.0 && now >= nodes[i].PatchDone)
                 {
-                    sites[i] = default;
-                    DropSiteReferences(i);
-                    continue;
-                }
-                if (sites[i].PatchDone > 0.0 && now >= sites[i].PatchDone)
-                {
-                    sites[i].PatchDone = 0.0;
-                    sites[i].Compromised = false;
+                    nodes[i].PatchDone = 0.0;
+                    nodes[i].Compromised = false;
                     Notify(CyberNotice.Patched, i, 0, now);
                 }
-                if (sites[i].HoneypotUntil > 0.0 && now >= sites[i].HoneypotUntil) sites[i].HoneypotUntil = 0.0;
+                if (nodes[i].HoneypotUntil > 0.0 && now >= nodes[i].HoneypotUntil) nodes[i].HoneypotUntil = 0.0;
             }
             SelfRepair(now);
-            RebuildLinks(now);
 
-            CyberStats stats = Stats();
-            if (HasCommand && CommandOnline)
+            Computing = Math.Min(ComputingCapacity(), Computing + ComputingIncome() * dt);
+            Intel = Math.Min(IntelCapacity(), Intel + IntelIncome() * dt);
+
+            if (BreachAwaitingChoice && now >= choiceDeadline)
             {
-                float regen = IdleRegeneration + Math.Max(0f, stats.Net) * 0.5f;
-                Bandwidth = Math.Min(stats.Capacity, Bandwidth + regen * dt);
+                // The operator never chose; the location keeps REVEAL as the watch floor's pick.
+                TryChooseCapstone(Capstone.Reveal, now);
             }
-            Bandwidth = Math.Min(Bandwidth, stats.Capacity);
-
+            StepBreach(now, dt);
             TickCampaign(now, dt, campaignIntensity);
         }
 
-        private void RebuildLinks(double now)
+        private void SelfRepair(double now)
         {
-            Array.Clear(links, 0, links.Length);
-            Array.Clear(onNet, 0, onNet.Length);
-            linkCount = 0;
-            for (int a = 0; a < SlotCount; a++)
+            if (CommandCompromised) return;
+            for (int i = 0; i < SlotCount; i++)
             {
-                if (!Linkable(a)) continue;
-                for (int b = a + 1; b < SlotCount; b++)
-                {
-                    if (!Linkable(b)) continue;
-                    // Airbases are wired to each other: the backbone ignores range and raids.
-                    if (!(sites[a].Static && sites[b].Static))
-                    {
-                        float range = Math.Max(LinkRange(a, now), LinkRange(b, now));
-                        float dx = sites[a].X - sites[b].X, dz = sites[a].Z - sites[b].Z;
-                        if (dx * dx + dz * dz > range * range) continue;
-                    }
-                    links[a, b] = links[b, a] = true;
-                    linkCount++;
-                }
-            }
-
-            int root = CommandSlot;
-            if (root < 0 || !Online(root)) return;
-            // Breadth-first from Cyber Command.
-            int[] queue = linkQueue;
-            int head = 0, tail = 0;
-            onNet[root] = true;
-            hops[root] = 0;
-            queue[tail++] = root;
-            while (head < tail)
-            {
-                int from = queue[head++];
-                for (int to = 0; to < SlotCount; to++)
-                {
-                    if (!links[from, to] || onNet[to]) continue;
-                    onNet[to] = true;
-                    hops[to] = hops[from] + 1;
-                    queue[tail++] = to;
-                }
+                CyberNode node = nodes[i];
+                if (!node.Compromised || node.Kind == NodeKind.Command || node.PatchDone > 0.0) continue;
+                if (now - node.CompromisedAt < CyberLocations.SelfRepairSeconds || IntrusionAt(i)) continue;
+                nodes[i].Compromised = false;
+                Notify(CyberNotice.SelfRepaired, i, 0, now);
             }
         }
 
-        private bool Linkable(int slot) => Online(slot) && !sites[slot].Isolated;
+        private bool IntrusionAt(int slot)
+        {
+            for (int i = 0; i < IncidentSlots; i++)
+                if (IncidentActive(i) && incidents[i].Kind == IncidentKind.Intrusion && incidents[i].Site == slot) return true;
+            return false;
+        }
 
         // ---- Airbase infrastructure ------------------------------------------------------------
 
-        private readonly bool[] staticSeen = new bool[SlotCount];
+        private readonly bool[] homeSeen = new bool[SlotCount];
+        private readonly bool[] targetSeen = new bool[SlotCount];
 
-        /// <summary>Host, once a second: start a reconcile of the airbase nodes.</summary>
-        public void BeginInfrastructure() => Array.Clear(staticSeen, 0, SlotCount);
+        /// <summary>Host, once a second: start a reconcile of the home nodes.</summary>
+        public void BeginInfrastructure() => Array.Clear(homeSeen, 0, SlotCount);
 
         /// <summary>
-        /// Host: this airbase is a node this pass. <paramref name="anchor"/> identifies the base;
-        /// <paramref name="down"/> says its anchor building is destroyed. Returns the slot, or -1
-        /// when the network has no room.
+        /// Host: this airbase is a home node this pass. <paramref name="anchor"/> identifies the
+        /// base; <paramref name="down"/> says its anchor building is destroyed. Returns the slot,
+        /// or -1 when there is no room.
         /// </summary>
-        public int ReportInfrastructure(int anchor, CyberSiteKind kind, float x, float z, bool down, double now)
+        public int ReportInfrastructure(int anchor, NodeKind kind, float x, float z, bool down, double now)
         {
-            if (!CyberSites.IsStatic(kind) || !Finite(x) || !Finite(z)) return -1;
+            if (!CyberLocations.IsHome(kind) || !Finite(x) || !Finite(z)) return -1;
             int slot = -1;
-            for (int i = 0; i < SlotCount; i++)
+            for (int i = 0; i < CyberLocations.HomeSlots; i++)
             {
-                if (!sites[i].Static || sites[i].Anchor != anchor || sites[i].Kind == CyberSiteKind.None) continue;
+                if (!nodes[i].Static || nodes[i].Anchor != anchor || nodes[i].Kind == NodeKind.None) continue;
                 slot = i;
                 break;
             }
             if (slot < 0)
             {
-                slot = FreeSlot();
+                slot = FreeHomeSlot();
                 if (slot < 0) return -1;
-                sites[slot] = new CyberSite { Kind = kind, X = x, Z = z, Static = true, Anchor = anchor, Down = down };
-                staticSeen[slot] = true;
-                if (kind == CyberSiteKind.Command && Bandwidth < StarterBandwidth) Bandwidth = StarterBandwidth;
-                Notify(kind == CyberSiteKind.Command ? CyberNotice.CommandUp : CyberNotice.GatewayJoined, slot, 0, now);
+                nodes[slot] = new CyberNode { Kind = kind, X = x, Z = z, Static = true, Anchor = anchor, Down = down };
+                homeSeen[slot] = true;
+                // The home network is raised by the host, not bought by the player: announce the
+                // command, and further bases only once the network is established, so a fresh
+                // match does not open with six identical "joined" lines.
+                if (kind == NodeKind.Command) Notify(CyberNotice.CommandUp, slot, 0, now);
+                else if (HackedCount > 0) Notify(CyberNotice.BaseJoined, slot, 0, now);
                 return slot;
             }
 
-            staticSeen[slot] = true;
-            CyberSite site = sites[slot];
-            if (site.Kind != kind)
+            homeSeen[slot] = true;
+            CyberNode node = nodes[slot];
+            if (node.Kind != kind)
             {
-                site.Kind = kind;
-                site.Isolated = site.Isolated && kind != CyberSiteKind.Command;
-                if (kind == CyberSiteKind.Command) Notify(CyberNotice.CommandMoved, slot, 0, now);
+                node.Kind = kind;
+                node.Isolated = node.Isolated && kind != NodeKind.Command;
+                if (kind == NodeKind.Command) Notify(CyberNotice.CommandMoved, slot, 0, now);
             }
-            if (site.Down != down) Notify(down ? CyberNotice.NodeDown : CyberNotice.NodeRestored, slot, 0, now);
-            site.Down = down;
-            site.X = x;
-            site.Z = z;
-            sites[slot] = site;
+            if (node.Down != down) Notify(down ? CyberNotice.NodeDown : CyberNotice.NodeRestored, slot, 0, now);
+            node.Down = down;
+            node.X = x;
+            node.Z = z;
+            nodes[slot] = node;
             return slot;
         }
 
-        /// <summary>Host: every airbase node not reported since <see cref="BeginInfrastructure"/>
+        /// <summary>Host: every home node not reported since <see cref="BeginInfrastructure"/>
         /// went with its base.</summary>
         public void EndInfrastructure(double now)
         {
-            for (int i = 0; i < SlotCount; i++)
+            for (int i = 0; i < CyberLocations.HomeSlots; i++)
             {
-                if (!sites[i].Static || staticSeen[i] || sites[i].Kind == CyberSiteKind.None) continue;
-                bool command = sites[i].Kind == CyberSiteKind.Command;
-                Notify(command ? CyberNotice.CommandLost : CyberNotice.GatewayLost, i, 0, now);
-                sites[i] = default;
-                DropSiteReferences(i);
+                if (!nodes[i].Static || homeSeen[i] || nodes[i].Kind == NodeKind.None) continue;
+                bool command = nodes[i].Kind == NodeKind.Command;
+                Notify(command ? CyberNotice.CommandLost : CyberNotice.BaseLost, i, 0, now);
+                nodes[i] = default;
+                DropNodeReferences(i);
             }
-            RebuildLinks(now);
         }
 
-        /// <summary>Test and single-base seam: one airbase node, reported alongside the ones already there.</summary>
-        public int PlaceStatic(int anchor, CyberSiteKind kind, float x, float z, double now = 0.0)
+        /// <summary>Test and single-base seam: one home node, reported alongside the ones already there.</summary>
+        public int PlaceStatic(int anchor, NodeKind kind, float x, float z, double now = 0.0)
         {
-            for (int i = 0; i < SlotCount; i++) staticSeen[i] = sites[i].Static;
-            int slot = ReportInfrastructure(anchor, kind, x, z, false, now);
-            RebuildLinks(now);
+            for (int i = 0; i < CyberLocations.HomeSlots; i++) homeSeen[i] = nodes[i].Static;
+            return ReportInfrastructure(anchor, kind, x, z, false, now);
+        }
+
+        /// <summary>Host, once a second: start a reconcile of the scene's hackable locations.</summary>
+        public void BeginLocations() => Array.Clear(targetSeen, 0, SlotCount);
+
+        /// <summary>Host: a hackable location this pass. Returns its slot, or -1 when full.</summary>
+        public int ReportLocation(int anchor, LocationKind kind, float x, float z, double now)
+        {
+            if (!CyberLocations.Hackable(kind) || !Finite(x) || !Finite(z)) return -1;
+            int slot = -1;
+            for (int i = TargetBase; i < SlotCount; i++)
+            {
+                if (nodes[i].Kind == NodeKind.None || nodes[i].Anchor != anchor) continue;
+                slot = i;
+                break;
+            }
+            if (slot < 0)
+            {
+                slot = FreeTargetSlot();
+                if (slot < 0) return -1;
+                nodes[slot] = new CyberNode
+                {
+                    Kind = kind == LocationKind.City ? NodeKind.City : NodeKind.Airfield,
+                    X = x,
+                    Z = z,
+                    Anchor = anchor
+                };
+            }
+            targetSeen[slot] = true;
+            nodes[slot].X = x;
+            nodes[slot].Z = z;
             return slot;
         }
 
-        private float LinkRange(int slot, double now) =>
-            CyberSites.Info(sites[slot].Kind).LinkRange * (Jammed(slot, now) ? 0.5f : 1f);
-
-        private int FreeSlot()
+        /// <summary>Host: a location that was not reported this pass is gone. A hacked location
+        /// whose airfield was retaken is lost with it.</summary>
+        public void EndLocations(double now)
         {
-            for (int i = 0; i < SlotCount; i++)
-                if (sites[i].Kind == CyberSiteKind.None) return i;
+            for (int i = TargetBase; i < SlotCount; i++)
+            {
+                if (nodes[i].Kind == NodeKind.None || targetSeen[i]) continue;
+                if (nodes[i].Hacked) Notify(CyberNotice.LocationLost, i, 0, now);
+                if (breachTarget == i) EndBreach();
+                if (choiceTarget == i)
+                {
+                    choiceTarget = -1;
+                    choiceDeadline = 0.0;
+                }
+                nodes[i] = default;
+                DropNodeReferences(i);
+            }
+        }
+
+        private int FreeHomeSlot()
+        {
+            for (int i = 0; i < CyberLocations.HomeSlots; i++)
+                if (nodes[i].Kind == NodeKind.None) return i;
+            return -1;
+        }
+
+        private int FreeTargetSlot()
+        {
+            for (int i = TargetBase; i < SlotCount; i++)
+                if (nodes[i].Kind == NodeKind.None) return i;
             return -1;
         }
 
         public void Clear()
         {
-            Array.Clear(sites, 0, SlotCount);
+            Array.Clear(nodes, 0, SlotCount);
             Array.Clear(verbReady, 0, VerbCount);
-            Bandwidth = 0f;
-            SeekersDefeated = 0;
+            Array.Clear(capstoneReady, 0, 3);
+            Array.Clear(upgradeLevels, 0, 4);
+            Computing = 0f;
+            Intel = 0f;
             OriginCount = 0;
             lastTick = 0.0;
+            EndBreach();
+            choiceTarget = -1;
+            choiceDeadline = 0.0;
             ClearCampaign();
-            RebuildLinks(0.0);
         }
 
         // ---- Snapshot -----------------------------------------------------------------------
@@ -741,22 +1025,34 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             int count = 0;
             for (int i = 0; i < SlotCount; i++)
             {
-                CyberSite site = sites[i];
-                if (site.Kind == CyberSiteKind.None) continue;
+                CyberNode node = nodes[i];
+                if (node.Kind == NodeKind.None) continue;
+                if (!node.Static && !node.Hacked && !CyberLocations.Hackable(CyberLocations.LocationOf(node.Kind))) continue;
                 into.Slot[count] = (byte)i;
-                into.Kind[count] = (byte)site.Kind;
-                into.X[count] = site.X;
-                into.Z[count] = site.Z;
-                into.Flags[count] = (byte)((site.Deploying ? 1 : 0) | (site.Lost ? 2 : 0) | (site.Isolated ? 4 : 0) |
-                                           (site.Compromised ? 8 : 0) | (site.Static ? 16 : 0) | (site.Down ? 32 : 0));
-                into.Mode[count] = (byte)site.Mode;
-                into.PatchIn[count] = site.PatchDone > 0.0 ? (float)Math.Max(0.01, site.PatchDone - now) : 0f;
-                into.BaitIn[count] = site.HoneypotUntil > now ? (float)(site.HoneypotUntil - now) : 0f;
+                into.Kind[count] = (byte)node.Kind;
+                into.Stage[count] = node.Stage;
+                into.X[count] = node.X;
+                into.Z[count] = node.Z;
+                into.Flags[count] = (byte)((node.Static ? 1 : 0) | (node.Hacked ? 2 : 0) | (node.Down ? 4 : 0) |
+                                           (node.Isolated ? 8 : 0) | (node.Compromised ? 16 : 0));
+                into.Capstone[count] = (byte)node.Capstone;
+                into.PatchIn[count] = SecondsByte(node.PatchDone > 0.0 ? node.PatchDone - now : 0.0);
+                into.BaitIn[count] = SecondsByte(node.HoneypotUntil > now ? node.HoneypotUntil - now : 0.0);
+                into.LockIn[count] = SecondsByte(node.LockoutUntil > now ? node.LockoutUntil - now : 0.0);
                 count++;
             }
-            into.SiteCount = (byte)count;
-            into.Bandwidth = Bandwidth;
-            into.Defeated = SeekersDefeated;
+            into.NodeCount = (byte)count;
+            into.Computing = Computing;
+            into.Intel = Intel;
+            for (int u = 0; u < 4; u++) into.Upgrade[u] = (byte)upgradeLevels[u];
+            // The choice flag discriminates the same bounded target/timer fields; wire shape is unchanged.
+            int sessionTarget = BreachAwaitingChoice ? choiceTarget : breachTarget;
+            into.BreachTarget = sessionTarget < 0 ? (byte)255 : (byte)sessionTarget;
+            into.BreachPhase = (byte)breachPhase;
+            into.BreachFlags = (byte)((breachQuiet ? 1 : 0) | (choiceTarget >= 0 ? 2 : 0));
+            into.BreachTrace = breachTrace;
+            into.BreachIn = BreachAwaitingChoice ? ChoiceRemaining(now) : BreachPhaseRemaining(now);
+            into.SpoofIn = SpoofRechargeRemaining(now);
             for (int v = 0; v < VerbCount; v++) into.Recharge[v] = RechargeRemaining((CyberVerb)v, now);
             ExportCampaign(now, into);
         }
@@ -767,40 +1063,53 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             if (from == null) return;
             bool[] seen = mirrorSeen;
             Array.Clear(seen, 0, SlotCount);
-            int count = Math.Min((int)from.SiteCount, SlotCount);
+            int count = Math.Min((int)from.NodeCount, SlotCount);
             for (int i = 0; i < count; i++)
             {
                 int slot = from.Slot[i];
-                if (slot >= SlotCount || !CyberSites.Known(from.Kind[i]) || !Finite(from.X[i]) || !Finite(from.Z[i]))
+                if (slot >= SlotCount || !CyberLocations.Known(from.Kind[i]) || !Finite(from.X[i]) || !Finite(from.Z[i]))
                     continue;
                 seen[slot] = true;
                 byte flags = from.Flags[i];
-                CyberSite site = sites[slot];
-                site.Kind = (CyberSiteKind)from.Kind[i];
-                site.X = from.X[i];
-                site.Z = from.Z[i];
-                site.Deploying = (flags & 1) != 0;
-                bool lost = (flags & 2) != 0;
-                if (lost && !site.Lost) site.LostAt = now;
-                site.Lost = lost;
-                site.Isolated = (flags & 4) != 0;
-                site.Compromised = (flags & 8) != 0;
-                site.Static = (flags & 16) != 0 && CyberSites.IsStatic(site.Kind);
-                site.Down = (flags & 32) != 0 && site.Static;
-                site.Mode = EwPostures.Clamp(from.Mode[i]);
-                site.PatchDone = Rebase(site.PatchDone, from.PatchIn[i], now, PatchSeconds);
-                site.HoneypotUntil = Rebase(site.HoneypotUntil, from.BaitIn[i], now, HoneypotSeconds);
-                sites[slot] = site;
+                CyberNode node = nodes[slot];
+                node.Kind = (NodeKind)from.Kind[i];
+                node.Stage = (byte)Math.Max(0, Math.Min(CyberLocations.StageCount, (int)from.Stage[i]));
+                node.X = from.X[i];
+                node.Z = from.Z[i];
+                node.Static = (flags & 1) != 0 && CyberLocations.IsHome(node.Kind);
+                node.Hacked = (flags & 2) != 0 && CyberLocations.IsHacked(node.Kind);
+                node.Down = (flags & 4) != 0 && node.Static;
+                node.Isolated = (flags & 8) != 0;
+                node.Compromised = (flags & 16) != 0;
+                node.Capstone = Capstones.Known(from.Capstone[i]) ? (Capstone)from.Capstone[i] : Capstone.None;
+                node.PatchDone = Rebase(node.PatchDone, from.PatchIn[i], now, CyberLocations.PatchSeconds);
+                node.HoneypotUntil = Rebase(node.HoneypotUntil, from.BaitIn[i], now, CyberLocations.HoneypotSeconds);
+                node.LockoutUntil = Rebase(node.LockoutUntil, from.LockIn[i], now, CyberLocations.LockoutSeconds);
+                nodes[slot] = node;
             }
             for (int i = 0; i < SlotCount; i++)
-                if (!seen[i]) sites[i] = default;
+                if (!seen[i]) nodes[i] = default;
 
-            Bandwidth = Finite(from.Bandwidth) ? Math.Max(0f, Math.Min(from.Bandwidth, 1000f)) : 0f;
-            SeekersDefeated = Math.Max(0, from.Defeated);
+            Computing = Finite(from.Computing) ? Math.Max(0f, Math.Min(from.Computing, 100000f)) : 0f;
+            Intel = Finite(from.Intel) ? Math.Max(0f, Math.Min(from.Intel, 100000f)) : 0f;
+            for (int u = 0; u < 4; u++) upgradeLevels[u] = Math.Max(0, Math.Min(CyberLocations.UpgradeLevels, (int)from.Upgrade[u]));
+
+            int sessionTarget = from.BreachTarget < SlotCount && Exists(from.BreachTarget) ? from.BreachTarget : -1;
+            bool choosing = (from.BreachFlags & 2) != 0 && sessionTarget >= TargetBase && IsHacked(sessionTarget) &&
+                            nodes[sessionTarget].Stage == CyberLocations.StageCount && nodes[sessionTarget].Capstone == Capstone.None &&
+                            from.BreachPhase == (byte)BreachPhase.None;
+            breachTarget = choosing ? -1 : sessionTarget;
+            breachPhase = from.BreachPhase <= (byte)BreachPhase.Extract ? (BreachPhase)from.BreachPhase : BreachPhase.None;
+            if (breachTarget < 0 || breachPhase == BreachPhase.None) breachTarget = -1;
+            breachQuiet = (from.BreachFlags & 1) != 0;
+            breachTrace = Math.Max(0f, Math.Min(1f, from.BreachTrace));
+            breachPhaseEnds = Rebase(breachPhaseEnds, from.BreachIn, now, 120f);
+            choiceTarget = choosing ? sessionTarget : -1;
+            choiceDeadline = choosing ? Rebase(choiceDeadline, from.BreachIn, now, CyberLocations.PendingChoiceSeconds) : 0.0;
+            capstoneReady[0] = Rebase(capstoneReady[0], from.SpoofIn, now, CyberLocations.SpoofRecharge);
             for (int v = 0; v < VerbCount; v++)
                 verbReady[v] = Rebase(verbReady[v], from.Recharge[v], now, 120f);
             MirrorCampaign(from, now);
-            RebuildLinks(now);
         }
 
         /// <summary>Keeps a local absolute clock unless the host's relative reading moved it by
@@ -812,28 +1121,42 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             return Math.Abs(current - target) > 0.5 ? target : current;
         }
 
+        /// <summary>Seconds as one wire byte: a snapshot timer is a hint, not a stopwatch.</summary>
+        internal static byte SecondsByte(double seconds) =>
+            seconds <= 0.0 ? (byte)0 : (byte)Math.Min(255.0, Math.Ceiling(seconds));
+
         internal static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
     }
 
-    /// <summary>Wire-shaped copy of a network: sites, bandwidth, recharges, campaign and notices.</summary>
+    /// <summary>Wire-shaped copy of a network: nodes, resources, upgrades, the breach and the campaign.</summary>
     internal sealed class CyberSnapshot
     {
-        public byte SiteCount;
+        public byte NodeCount;
         public readonly byte[] Slot = new byte[CyberNetwork.SlotCount];
         public readonly byte[] Kind = new byte[CyberNetwork.SlotCount];
+        public readonly byte[] Stage = new byte[CyberNetwork.SlotCount];
         public readonly float[] X = new float[CyberNetwork.SlotCount];
         public readonly float[] Z = new float[CyberNetwork.SlotCount];
         public readonly byte[] Flags = new byte[CyberNetwork.SlotCount];
-        public readonly byte[] Mode = new byte[CyberNetwork.SlotCount];
-        public readonly float[] PatchIn = new float[CyberNetwork.SlotCount];
-        public readonly float[] BaitIn = new float[CyberNetwork.SlotCount];
-        public float Bandwidth;
-        public int Defeated;
-        public int Defended;
-        public int Breached;
+        public readonly byte[] Capstone = new byte[CyberNetwork.SlotCount];
+        public readonly byte[] PatchIn = new byte[CyberNetwork.SlotCount];
+        public readonly byte[] BaitIn = new byte[CyberNetwork.SlotCount];
+        public readonly byte[] LockIn = new byte[CyberNetwork.SlotCount];
+        public float Computing;
+        public float Intel;
+        public readonly byte[] Upgrade = new byte[4];
+
+        public byte BreachTarget;
+        public byte BreachPhase;
+        public byte BreachFlags;
+        public float BreachTrace;
+        public float BreachIn;
+        public float SpoofIn;
         public readonly float[] Recharge = new float[CyberNetwork.VerbCount];
 
         public byte Heat;
+        public int Defended;
+        public int Breached;
         public float NextIncidentIn;
         public float ExposedIn;
         public byte IncidentCount;
@@ -856,20 +1179,30 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
 
         public void Clear()
         {
-            SiteCount = 0;
+            NodeCount = 0;
             Array.Clear(Slot, 0, Slot.Length);
             Array.Clear(Kind, 0, Kind.Length);
+            Array.Clear(Stage, 0, Stage.Length);
             Array.Clear(X, 0, X.Length);
             Array.Clear(Z, 0, Z.Length);
             Array.Clear(Flags, 0, Flags.Length);
-            Array.Clear(Mode, 0, Mode.Length);
+            Array.Clear(Capstone, 0, Capstone.Length);
             Array.Clear(PatchIn, 0, PatchIn.Length);
             Array.Clear(BaitIn, 0, BaitIn.Length);
-            Bandwidth = 0f;
-            Defeated = 0;
-            Defended = Breached = 0;
+            Array.Clear(LockIn, 0, LockIn.Length);
+            Computing = 0f;
+            Intel = 0f;
+            Array.Clear(Upgrade, 0, Upgrade.Length);
+            BreachTarget = 255;
+            BreachPhase = 0;
+            BreachFlags = 0;
+            BreachTrace = 0f;
+            BreachIn = 0f;
+            SpoofIn = 0f;
             Array.Clear(Recharge, 0, Recharge.Length);
             Heat = 0;
+            Defended = 0;
+            Breached = 0;
             NextIncidentIn = 0f;
             ExposedIn = 0f;
             IncidentCount = 0;

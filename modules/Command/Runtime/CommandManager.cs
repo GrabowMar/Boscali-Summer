@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using BepInEx.Logging;
 using BoscaliSummer.Features.Command.Domain;
+using BoscaliSummer.Features.Command.Networking;
 using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Features;
 using BoscaliSummer.Framework.Lifecycle;
@@ -11,26 +12,43 @@ using UnityEngine;
 
 namespace BoscaliSummer.Features.Command.Runtime
 {
-    internal sealed class CommandManager : MonoBehaviour, ISceneService
+    internal sealed class CommandManager : MonoBehaviour, ISceneService, IFactionMoraleView
     {
         public static CommandManager Active { get; internal set; }
 
         private ManualLogSource logger;
         private IOperationOutcomeSource operationOutcomes;
+        private IActiveEventsView activeEvents;
+        private FactionMoraleNet moraleNet;
 
         private void Update()
         {
             ModServices.TryGet(out IOperationOutcomeSource source);
-            if (ReferenceEquals(source, operationOutcomes)) return;
-            if (operationOutcomes != null) operationOutcomes.MoraleAwarded -= OnOperationMorale;
-            operationOutcomes = source;
-            if (operationOutcomes != null) operationOutcomes.MoraleAwarded += OnOperationMorale;
+            if (!ReferenceEquals(source, operationOutcomes))
+            {
+                if (operationOutcomes != null) operationOutcomes.MoraleAwarded -= OnOperationMorale;
+                operationOutcomes = source;
+                if (operationOutcomes != null) operationOutcomes.MoraleAwarded += OnOperationMorale;
+            }
+            ModServices.TryGet(out IActiveEventsView events);
+            if (ReferenceEquals(events, activeEvents)) return;
+            if (activeEvents != null) activeEvents.MoraleAwarded -= OnOperationMorale;
+            activeEvents = events;
+            if (activeEvents != null) activeEvents.MoraleAwarded += OnOperationMorale;
         }
 
         private void OnOperationMorale(int faction, float delta)
         {
             if (GameAccess.IsServer() && Morale.TryGet(faction, out float value))
                 Morale.TrySet(faction, Mathf.Clamp(value + delta, 0f, 100f));
+        }
+
+        public bool TryGetContractMultiplier(int factionId, out float multiplier)
+        {
+            multiplier = 1f;
+            if (!GameAccess.IsServer() || !Morale.TryGet(factionId, out float morale)) return false;
+            multiplier = FactionMoraleState.ContractMultiplier(morale);
+            return true;
         }
 
         public readonly TacticalTheaterState TheaterState = new TacticalTheaterState();
@@ -41,23 +59,33 @@ namespace BoscaliSummer.Features.Command.Runtime
 
         private const int EmitterCacheLimit = 512;
 
-        public void Configure(ManualLogSource log)
+        internal bool TryGetRemoteMorale(string factionName, out float morale)
+        {
+            morale = 0f;
+            return moraleNet != null && moraleNet.TryGet(factionName, out morale);
+        }
+
+        public void Configure(ManualLogSource log, FactionMoraleNet network)
         {
             logger = log;
+            moraleNet = network;
             Active = this;
-            logger?.LogInfo("[COM] Faction Morale storage ready: host-only, 0–100, mission-scoped; no gameplay effects.");
+            logger?.LogInfo("[COM] Faction Morale ready: host-owned, 0–100; new contract rewards scale from 0.8x to 1.1x.");
         }
 
         public void ResetForScene()
         {
             TheaterState.Reset();
             Morale.Reset();
+            moraleNet?.ResetScene();
             emitterCache.Clear();
         }
 
         private void OnDestroy()
         {
             if (operationOutcomes != null) operationOutcomes.MoraleAwarded -= OnOperationMorale;
+            if (activeEvents != null) activeEvents.MoraleAwarded -= OnOperationMorale;
+            moraleNet?.ResetScene();
             if (Active == this) Active = null;
         }
 

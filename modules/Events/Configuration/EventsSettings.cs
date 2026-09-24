@@ -50,7 +50,7 @@ namespace BoscaliSummer.Features.Events.Configuration
                 "interventions that fund, supply and price the theater toward a story. " +
                 "Host-authoritative; off leaves minor and medium events only.");
             AlertsEnabled = config.Bind(section, "AlertsEnabled", true,
-                "Show the full-screen superevent alert when one begins. Client-local: every " +
+                "Show the superevent alert banner when one begins. Client-local: every " +
                 "player chooses for themselves.");
             AlertSeconds = config.Bind(section, "AlertSeconds", 24,
                 new ConfigDescription(

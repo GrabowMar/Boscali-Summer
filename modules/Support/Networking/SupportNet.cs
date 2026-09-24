@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using BoscaliSummer.Features.Support.Domain;
 using BoscaliSummer.Features.Support.Domain.Cyber;
 using BoscaliSummer.Features.Support.Domain.Orbital;
+using BoscaliSummer.Features.Support.Domain.SpecOps;
 using BoscaliSummer.Features.Support.Runtime;
 using BoscaliSummer.Runtime;
 using Mirage;
@@ -51,10 +52,18 @@ namespace BoscaliSummer.Features.Support.Networking
         /// modular orbital station. Protocol 12 replaces the single EW truck with the CYBER
         /// network (sites, incidents, notices, origin names) and its site and console
         /// commands. Protocol 13 raises the network to sixteen slots and adds the static and
-        /// down site flags for the airbase infrastructure. Older peers must not interpret fleet,
-        /// hack, program, garrison or site ids.
+        /// down site flags for the airbase infrastructure. Protocol 14 adds intrusion and field
+        /// operations; protocol 15 adds tactical board state and expected command revisions.
+        /// Protocol 16 removes the truck network: nodes carry a stage and a capstone, the
+        /// faction carries computing and intel, and the snapshot carries the live breach.
+        /// Protocol 18 replaces moving pass seeds with fixed station-sector routes (origin * 9 + destination).
+        /// Protocol 19 extends the SPEC OPS snapshot with three ability recharges and the STEAL mission.
+        /// Command 9 carries the selected sector in Arg. Protocol 17 replaced the programs, reserves, doctrine and infiltration board with the
+        /// SPEC OPS detachment (teams, objectives, recharges, notices) in its own state message,
+        /// sent before each ops snapshot, and its three orders.
+        /// Older peers must not interpret fleet, hack, team or node ids.
         /// </summary>
-        internal const byte ProtocolVersion = 13;
+        internal const byte ProtocolVersion = 19;
 
         private const float QueryInterval = 0.4f;
         private const int MaximumQueries = 64;
@@ -93,10 +102,12 @@ namespace BoscaliSummer.Features.Support.Networking
             {
                 clientHandler?.UnregisterHandler<SupportResultMessage>();
                 clientHandler?.UnregisterHandler<OpsStateMessage>();
+                clientHandler?.UnregisterHandler<SpecOpsStateMessage>();
                 clientHandler?.UnregisterHandler<CyberEffectMessage>();
                 clientHandler = network.Client.MessageHandler;
                 clientHandler.RegisterHandler<SupportResultMessage>(ReceiveResult, false);
                 clientHandler.RegisterHandler<OpsStateMessage>(ReceiveOpsState, false);
+                clientHandler.RegisterHandler<SpecOpsStateMessage>(ReceiveSpecOpsState, false);
                 clientHandler.RegisterHandler<CyberEffectMessage>(ReceiveCyberEffect, false);
             }
         }
@@ -108,6 +119,7 @@ namespace BoscaliSummer.Features.Support.Networking
             serverHandler?.UnregisterHandler<OpsCommandMessage>();
             clientHandler?.UnregisterHandler<SupportResultMessage>();
             clientHandler?.UnregisterHandler<OpsStateMessage>();
+            clientHandler?.UnregisterHandler<SpecOpsStateMessage>();
             clientHandler?.UnregisterHandler<CyberEffectMessage>();
             queries.Clear();
         }
@@ -167,7 +179,8 @@ namespace BoscaliSummer.Features.Support.Networking
                 Radius = radius, X = target.x, Y = target.y, Z = target.z,
                 Contacts = contacts < 0 ? 0 : contacts,
                 Duration = action == SupportActionId.Emp ? SupportEffectPolicy.EmpDuration :
-                    action == SupportActionId.FlareMissile ? manager.Settings.FlareBarrageDuration.Value : 10f
+                    action == SupportActionId.FlareMissile ? manager.Settings.FlareBarrageDuration.Value :
+                    manager.FieldEffectDuration(action, player != null ? player.HQ : null)
             };
         }
 
@@ -200,7 +213,7 @@ namespace BoscaliSummer.Features.Support.Networking
                 client.Send(new OpsQueryMessage { Protocol = ProtocolVersion });
         }
 
-        public void Command(int requestId, OpsCommand command, byte arg, byte arg2, GlobalPosition target)
+        public void Command(int requestId, OpsCommand command, byte arg, byte arg2, GlobalPosition target, uint revision = 0)
         {
             var message = new OpsCommandMessage
             {
@@ -210,7 +223,8 @@ namespace BoscaliSummer.Features.Support.Networking
                 Arg = arg,
                 Arg2 = arg2,
                 X = target.x,
-                Z = target.z
+                Z = target.z,
+                Revision = revision
             };
             if (GameAccess.IsServer() && GameManager.GetLocalPlayer<Player>(out Player local) && local != null)
             {
@@ -231,6 +245,7 @@ namespace BoscaliSummer.Features.Support.Networking
         {
             if (query.Protocol != ProtocolVersion || !GameAccess.IsServer() || !RateLimit(sender)) return;
             if (!sender.TryGetPlayer<Player>(out Player player) || player == null) return;
+            sender.Send(manager.SpecOpsSnapshot(player));
             sender.Send(manager.Snapshot(player, 0, SupportResult.None));
         }
 
@@ -238,15 +253,23 @@ namespace BoscaliSummer.Features.Support.Networking
         {
             if (command.Protocol != ProtocolVersion) return;
             if (sender == null || !sender.IsAuthenticated ||
-                !sender.TryGetPlayer<Player>(out Player player) || player == null ||
-                !RateLimit(sender)) return;
+                !sender.TryGetPlayer<Player>(out Player player) || player == null) return;
+            // Like ordinary support requests, orders use the manager's bounded attempt ledger
+            // and always receive an acknowledgement, including rate denials. Polls cannot
+            // consume their slot and leave a valid client pending until timeout.
             SupportResult result = manager.EvaluateCommand(player, command);
+            sender.Send(manager.SpecOpsSnapshot(player));
             sender.Send(manager.Snapshot(player, command.RequestId, result));
         }
 
         private void ReceiveOpsState(INetworkPlayer _, OpsStateMessage state)
         {
             if (state.Protocol == ProtocolVersion) manager.ReceiveOps(state);
+        }
+
+        private void ReceiveSpecOpsState(INetworkPlayer _, SpecOpsStateMessage state)
+        {
+            if (state.Protocol == ProtocolVersion) manager.ReceiveSpecOps(state);
         }
 
         private void ReceiveCyberEffect(INetworkPlayer _, CyberEffectMessage message)
@@ -349,16 +372,23 @@ namespace BoscaliSummer.Features.Support.Networking
                 w.WriteByte(v.Arg2);
                 w.WriteSingle(v.X);
                 w.WriteSingle(v.Z);
+                w.WriteUInt32(v.Revision);
             });
-            SetReader<OpsCommandMessage>(r => new OpsCommandMessage
+            SetReader<OpsCommandMessage>(r =>
             {
-                Protocol = r.ReadByte(),
-                RequestId = r.ReadPackedInt32(),
-                Command = r.ReadByte(),
-                Arg = r.ReadByte(),
-                Arg2 = r.ReadByte(),
-                X = r.ReadSingle(),
-                Z = r.ReadSingle()
+                byte protocol = r.ReadByte();
+                if (protocol != ProtocolVersion) return new OpsCommandMessage { Protocol = protocol };
+                return new OpsCommandMessage
+                {
+                    Protocol = protocol,
+                    RequestId = r.ReadPackedInt32(),
+                    Command = r.ReadByte(),
+                    Arg = r.ReadByte(),
+                    Arg2 = r.ReadByte(),
+                    X = r.ReadSingle(),
+                    Z = r.ReadSingle(),
+                    Revision = r.ReadUInt32()
+                };
             });
             SetWriter<OpsStateMessage>((w, v) =>
             {
@@ -399,15 +429,7 @@ namespace BoscaliSummer.Features.Support.Networking
                     w.WriteSingle(v.ForeignClocks[i]);
                     w.WritePackedInt32(v.ForeignLayouts[i]);
                 }
-                w.WriteByte(v.Sigint); w.WriteByte(v.Crypto);
-                w.WriteByte(v.Disrupt); w.WriteByte(v.Ew);
                 WriteCyber(w, v.Cyber, v.CyberOriginCount, v.CyberOrigins);
-                for (int i = 0; i < OpsProgramLedger.ProgramCount; i++)
-                    w.WriteByte(v.ProgramTiers != null && i < v.ProgramTiers.Length ? v.ProgramTiers[i] : (byte)0);
-                w.WriteByte(v.SpecOpsTokens); w.WriteByte(v.IntelTokens);
-                w.WriteByte(v.SpecOpsProgress); w.WriteByte(v.IntelProgress);
-                for (int i = 0; i < OpsGarrison.UpgradeCount; i++)
-                    w.WriteByte(v.GarrisonLevels != null && i < v.GarrisonLevels.Length ? v.GarrisonLevels[i] : (byte)0);
             });
             SetReader<OpsStateMessage>(r =>
             {
@@ -453,15 +475,20 @@ namespace BoscaliSummer.Features.Support.Networking
                     message.ForeignClocks[i] = r.ReadSingle();
                     message.ForeignLayouts[i] = r.ReadPackedInt32();
                 }
-                message.Sigint = r.ReadByte(); message.Crypto = r.ReadByte();
-                message.Disrupt = r.ReadByte(); message.Ew = r.ReadByte();
                 if (!ReadCyber(r, ref message)) return new OpsStateMessage { Protocol = 0 };
-                for (int i = 0; i < OpsProgramLedger.ProgramCount; i++)
-                    message.ProgramTiers[i] = r.ReadByte();
-                message.SpecOpsTokens = r.ReadByte(); message.IntelTokens = r.ReadByte();
-                message.SpecOpsProgress = r.ReadByte(); message.IntelProgress = r.ReadByte();
-                for (int i = 0; i < OpsGarrison.UpgradeCount; i++)
-                    message.GarrisonLevels[i] = r.ReadByte();
+                return message;
+            });
+            SetWriter<SpecOpsStateMessage>((w, v) =>
+            {
+                w.WriteByte(v.Protocol);
+                if (v.Protocol == ProtocolVersion) WriteSpecOps(w, v.State);
+            });
+            SetReader<SpecOpsStateMessage>(r =>
+            {
+                byte protocol = r.ReadByte();
+                var message = new SpecOpsStateMessage { Protocol = protocol, State = new SpecOpsSnapshot() };
+                if (protocol != ProtocolVersion) return message;
+                if (!ReadSpecOps(r, message.State)) message.Protocol = 0;
                 return message;
             });
             SetWriter<CyberEffectMessage>((w, v) =>
@@ -488,35 +515,143 @@ namespace BoscaliSummer.Features.Support.Networking
             MessagePacker.RegisterMessage<OpsQueryMessage>();
             MessagePacker.RegisterMessage<OpsCommandMessage>();
             MessagePacker.RegisterMessage<OpsStateMessage>();
+            MessagePacker.RegisterMessage<SpecOpsStateMessage>();
             MessagePacker.RegisterMessage<CyberEffectMessage>();
             MessagePacker.RegisterMessage<SupportRequestMessage>();
             MessagePacker.RegisterMessage<SupportResultMessage>();
         }
 
         private static readonly CyberSnapshot EmptyCyber = new CyberSnapshot();
+        private static readonly SpecOpsSnapshot EmptySpecOps = new SpecOpsSnapshot();
+
+        /// <summary>The SPEC OPS block: four teams, the objective list, two recharges, the notice
+        /// ring. Counts clamp on write; names clip to the detachment's name length.</summary>
+        private static void WriteSpecOps(NetworkWriter w, SpecOpsSnapshot s)
+        {
+            s = s ?? EmptySpecOps;
+            w.WriteByte(s.Flags);
+            for (int i = 0; i < SpecOpsDetachment.TeamCount; i++)
+            {
+                w.WriteByte(s.TeamState[i]);
+                w.WriteByte(s.TeamRank[i]);
+                w.WriteByte(s.TeamWins[i]);
+                w.WriteByte(s.TeamMission[i]);
+                w.WriteByte(s.TeamChance[i]);
+                w.WriteByte(s.TeamLoss[i]);
+                w.WriteByte(s.TeamLast[i]);
+                w.WritePackedInt32(s.TeamAnchor[i]);
+                w.WriteSingle(s.TeamX[i]);
+                w.WriteSingle(s.TeamZ[i]);
+                w.WriteSingle(s.TeamRemaining[i]);
+                w.WriteSingle(s.TeamDuration[i]);
+                w.WriteString(SpecOpsDetachment.Clip(s.TeamTarget[i]));
+            }
+            int objectives = Math.Min((int)s.ObjectiveCount, SpecOpsDetachment.ObjectiveSlots);
+            w.WriteByte((byte)objectives);
+            for (int i = 0; i < objectives; i++)
+            {
+                w.WriteByte(s.ObjectiveKind[i]);
+                w.WritePackedInt32(s.ObjectiveAnchor[i]);
+                w.WriteSingle(s.ObjectiveX[i]);
+                w.WriteSingle(s.ObjectiveZ[i]);
+                w.WriteByte(s.ObjectiveThreat[i]);
+                w.WriteByte(s.ObjectiveRadars[i]);
+                w.WriteByte(s.ObjectiveHostile[i] ? (byte)1 : (byte)0);
+                w.WriteSingle(s.ObjectiveScout[i]);
+                w.WriteString(SpecOpsDetachment.Clip(s.ObjectiveName[i]));
+            }
+            for (int a = 0; a < FieldCatalog.AbilityCount; a++) w.WriteSingle(s.AbilityRecharge[a]);
+            w.WritePackedInt32(s.NoticeSerial);
+            int notices = Math.Min((int)s.NoticeCount, SpecOpsDetachment.NoticeSlots);
+            w.WriteByte((byte)notices);
+            for (int i = 0; i < notices; i++)
+            {
+                w.WriteByte(s.NoticeKind[i]);
+                w.WriteByte(s.NoticeTeam[i]);
+                w.WriteByte(s.NoticeMission[i]);
+            }
+        }
+
+        /// <summary>False for a count past its bound; values themselves clamp in the model's mirror.</summary>
+        private static bool ReadSpecOps(NetworkReader r, SpecOpsSnapshot s)
+        {
+            s.Clear();
+            s.Flags = r.ReadByte();
+            for (int i = 0; i < SpecOpsDetachment.TeamCount; i++)
+            {
+                s.TeamState[i] = r.ReadByte();
+                s.TeamRank[i] = r.ReadByte();
+                s.TeamWins[i] = r.ReadByte();
+                s.TeamMission[i] = r.ReadByte();
+                s.TeamChance[i] = r.ReadByte();
+                s.TeamLoss[i] = r.ReadByte();
+                s.TeamLast[i] = r.ReadByte();
+                s.TeamAnchor[i] = r.ReadPackedInt32();
+                s.TeamX[i] = r.ReadSingle();
+                s.TeamZ[i] = r.ReadSingle();
+                s.TeamRemaining[i] = r.ReadSingle();
+                s.TeamDuration[i] = r.ReadSingle();
+                s.TeamTarget[i] = SpecOpsDetachment.Clip(r.ReadString());
+            }
+            int objectives = r.ReadByte();
+            if (objectives > SpecOpsDetachment.ObjectiveSlots) return false;
+            s.ObjectiveCount = (byte)objectives;
+            for (int i = 0; i < objectives; i++)
+            {
+                s.ObjectiveKind[i] = r.ReadByte();
+                s.ObjectiveAnchor[i] = r.ReadPackedInt32();
+                s.ObjectiveX[i] = r.ReadSingle();
+                s.ObjectiveZ[i] = r.ReadSingle();
+                s.ObjectiveThreat[i] = r.ReadByte();
+                s.ObjectiveRadars[i] = r.ReadByte();
+                s.ObjectiveHostile[i] = r.ReadByte() != 0;
+                s.ObjectiveScout[i] = r.ReadSingle();
+                s.ObjectiveName[i] = SpecOpsDetachment.Clip(r.ReadString());
+            }
+            for (int a = 0; a < FieldCatalog.AbilityCount; a++) s.AbilityRecharge[a] = r.ReadSingle();
+            s.NoticeSerial = r.ReadPackedInt32();
+            int notices = r.ReadByte();
+            if (notices > SpecOpsDetachment.NoticeSlots) return false;
+            s.NoticeCount = (byte)notices;
+            for (int i = 0; i < notices; i++)
+            {
+                s.NoticeKind[i] = r.ReadByte();
+                s.NoticeTeam[i] = r.ReadByte();
+                s.NoticeMission[i] = r.ReadByte();
+            }
+            return true;
+        }
 
         /// <summary>The CYBER block of a snapshot. Counts are clamped to their bounds on write.</summary>
         private static void WriteCyber(NetworkWriter w, CyberSnapshot c, byte originCount, string[] origins)
         {
             c = c ?? EmptyCyber;
-            int sites = Math.Min((int)c.SiteCount, CyberNetwork.SlotCount);
-            w.WriteByte((byte)sites);
-            for (int i = 0; i < sites; i++)
+            int nodes = Math.Min((int)c.NodeCount, CyberNetwork.SlotCount);
+            w.WriteByte((byte)nodes);
+            for (int i = 0; i < nodes; i++)
             {
                 w.WriteByte(c.Slot[i]);
                 w.WriteByte(c.Kind[i]);
+                w.WriteByte(c.Stage[i]);
                 w.WriteSingle(c.X[i]);
                 w.WriteSingle(c.Z[i]);
                 w.WriteByte(c.Flags[i]);
-                w.WriteByte(c.Mode[i]);
-                w.WriteSingle(c.PatchIn[i]);
-                w.WriteSingle(c.BaitIn[i]);
+                w.WriteByte(c.Capstone[i]);
+                w.WriteByte(c.PatchIn[i]);
+                w.WriteByte(c.BaitIn[i]);
+                w.WriteByte(c.LockIn[i]);
             }
-            w.WriteSingle(c.Bandwidth);
-            w.WritePackedInt32(c.Defeated);
+            w.WriteSingle(c.Computing);
+            w.WriteSingle(c.Intel);
+            for (int u = 0; u < c.Upgrade.Length; u++) w.WriteByte(c.Upgrade[u]);
+            w.WriteByte(c.BreachTarget);
+            w.WriteByte(c.BreachPhase);
+            w.WriteByte(c.BreachFlags);
+            w.WriteSingle(c.BreachTrace);
+            w.WriteSingle(c.BreachIn);
+            w.WriteSingle(c.SpoofIn);
             w.WritePackedInt32(c.Defended);
-            w.WritePackedInt32(c.Breached);
-            for (int v = 0; v < CyberNetwork.VerbCount; v++) w.WriteSingle(c.Recharge[v]);
+            w.WritePackedInt32(c.Breached);            for (int v = 0; v < CyberNetwork.VerbCount; v++) w.WriteSingle(c.Recharge[v]);
             w.WriteByte(c.Heat);
             w.WriteSingle(c.NextIncidentIn);
             w.WriteSingle(c.ExposedIn);
@@ -563,22 +698,31 @@ namespace BoscaliSummer.Features.Support.Networking
         private static bool ReadCyber(NetworkReader r, ref OpsStateMessage m)
         {
             CyberSnapshot c = m.Cyber;
-            int sites = r.ReadByte();
-            if (sites > CyberNetwork.SlotCount) return false;
-            c.SiteCount = (byte)sites;
-            for (int i = 0; i < sites; i++)
+            int nodes = r.ReadByte();
+            if (nodes > CyberNetwork.SlotCount) return false;
+            c.NodeCount = (byte)nodes;
+            for (int i = 0; i < nodes; i++)
             {
                 c.Slot[i] = r.ReadByte();
                 c.Kind[i] = r.ReadByte();
+                c.Stage[i] = r.ReadByte();
                 c.X[i] = r.ReadSingle();
                 c.Z[i] = r.ReadSingle();
                 c.Flags[i] = r.ReadByte();
-                c.Mode[i] = r.ReadByte();
-                c.PatchIn[i] = r.ReadSingle();
-                c.BaitIn[i] = r.ReadSingle();
+                c.Capstone[i] = r.ReadByte();
+                c.PatchIn[i] = r.ReadByte();
+                c.BaitIn[i] = r.ReadByte();
+                c.LockIn[i] = r.ReadByte();
             }
-            c.Bandwidth = r.ReadSingle();
-            c.Defeated = r.ReadPackedInt32();
+            c.Computing = r.ReadSingle();
+            c.Intel = r.ReadSingle();
+            for (int u = 0; u < c.Upgrade.Length; u++) c.Upgrade[u] = r.ReadByte();
+            c.BreachTarget = r.ReadByte();
+            c.BreachPhase = r.ReadByte();
+            c.BreachFlags = r.ReadByte();
+            c.BreachTrace = r.ReadSingle();
+            c.BreachIn = r.ReadSingle();
+            c.SpoofIn = r.ReadSingle();
             c.Defended = r.ReadPackedInt32();
             c.Breached = r.ReadPackedInt32();
             for (int v = 0; v < CyberNetwork.VerbCount; v++) c.Recharge[v] = r.ReadSingle();

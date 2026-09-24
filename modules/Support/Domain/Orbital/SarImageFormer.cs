@@ -52,6 +52,9 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
         private static readonly float[] Sidelobes = { 0.12f, 0.05f, 0.02f };
 
         private readonly float[] intensity;
+        private readonly double[] db;
+        private readonly int[] histogram = new int[HistogramBins];
+        private readonly byte[] bytes;
         private readonly SarGeometry geometry;
         private readonly double cotIncidence;
         private readonly int seed;
@@ -65,6 +68,8 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
             cotIncidence = 1.0 / Math.Tan(geometry.Incidence);
             this.seed = seed == 0 ? 0x2545F491 : seed;
             intensity = new float[Width * Height];
+            db = new double[Width * Height];
+            bytes = new byte[Width * Height];
         }
 
         public int Width { get; }
@@ -132,11 +137,11 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
 
         public int RayCount(int rangeSamples) => Math.Max(1, rangeSamples) * Height;
 
-        /// <summary>Speckled, stretched 8-bit image, row 0 at the top (far azimuth).</summary>
+        /// <summary>Speckled, stretched 8-bit image, row 0 at the top (far azimuth). The buffer is
+        /// reused between calls — consume it before forming the next image.</summary>
         public byte[] Form(int looks, double noiseFloor)
         {
             int n = intensity.Length;
-            var db = new double[n];
             uint state = (uint)seed;
             int lookCount = Math.Max(1, Math.Min(8, looks));
             double floor = Math.Max(0.0, noiseFloor);
@@ -150,13 +155,12 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
                 db[i] = 10.0 * Math.Log10(value + 1e-9);
             }
 
-            var histogram = new int[HistogramBins];
+            Array.Clear(histogram, 0, histogram.Length);
             for (int i = 0; i < n; i++) histogram[Bin(db[i])]++;
             double low = Percentile(histogram, n, 0.02);
             double high = Percentile(histogram, n, 0.996);
             if (high - low < 1.0) high = low + 1.0;
 
-            var bytes = new byte[n];
             for (int i = 0; i < n; i++)
             {
                 double t = OrbitMath.Clamp((db[i] - low) / (high - low), 0.0, 1.0);

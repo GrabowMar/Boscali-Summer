@@ -1,5 +1,6 @@
 using BoscaliSummer.Features.Support.Domain;
 using BoscaliSummer.Features.Support.Domain.Cyber;
+using BoscaliSummer.Features.Support.Domain.Layout;
 using NOAvionics;
 using NOAvionics.Ui;
 using TMPro;
@@ -9,73 +10,67 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Features.Support.Presentation
 {
     /// <summary>
-    /// CYBER — the faction's spectrum-defence network. NETWORK is the watch floor (INFOCON,
-    /// annunciators, the live mesh, the console door, the voice loop); ARCHITECT builds it
-    /// (sites on the map, inspector, doctrine); THREATS is the adversary campaign and the
-    /// incident board; OPERATIONS strikes back with the offensive operations. This file is the
-    /// shell plus NETWORK and the work that keeps running with the page closed: the voice loop
-    /// and the alarm. Every figure comes from the network model; every control is a host request.
+    /// CYBER — the faction's cyber network. STATUS is the watch floor: INFOCON, resources, the
+    /// node mesh, the live breach and the voice loop. ACTIONS holds the map abilities the
+    /// network has earned. All hacking lives in the full-screen console. This file is the shell
+    /// plus STATUS and the work that keeps running with the page closed: the voice loop and the
+    /// alarm. Every figure comes from the network model; every control is a host request.
     /// </summary>
     internal sealed partial class SupportPanel
     {
-        private const int CyberNetworkSub = 0;
-        private const int CyberArchitectSub = 1;
-        private const int CyberThreatSub = 2;
-        private const int CyberOpsSub = 3;
-        private const float CyberBannerHeight = 136f;
-        private const float CyberGraphHeight = 170f;
+        private const int CyberStatusSub = 0;
+        private const int CyberActionsSub = 1;
+        private const float CyberBannerHeight = 120f;
+        private const float CyberGraphHeight = 202f;
+        private const int Ladder = 5;
 
-        private static readonly string[] CyberSubLabels = { "NETWORK", "ARCHITECT", "THREATS", "OPERATIONS" };
         private static readonly string[] CyberSubTips =
         {
-            "Watch floor: INFOCON, annunciators, the mesh and the voice loop.",
-            "Build and move field sites; the facility doctrine.",
-            "The adversary campaign and the incident board.",
-            "Offensive operations and the flare barrage."
+            "Watch floor: INFOCON, resources, the node mesh and the voice loop.",
+            "The map abilities the network has earned."
         };
         private static readonly string[] CyberTileKeys =
-            { "BANDWIDTH", "LINKS", "INTRUSION", "JAMMING", "EMCON", "FOOTHOLD", "SITES", "ADVERSARY" };
+            { "COMPUTING", "INTEL", "NODES", "STAGES", "INTRUSION", "JAMMING", "FOOTHOLD", "ADVERSARY" };
 
-        private readonly GameObject[] cyberSubPages = new GameObject[4];
-        private readonly AvButton[] cyberSubTabs = new AvButton[4];
+        private readonly GameObject[] cyberSubPages = new GameObject[2];
         private readonly string[] cyberLoop = new string[LoopLines];
+        private readonly string[] cyberLoopShown = new string[LoopLines];
+        private readonly Image[] ladderFill = new Image[Ladder];
+        private readonly TMP_Text[] ladderText = new TMP_Text[Ladder];
         private readonly Tile[] cyberTiles = new Tile[8];
         private int cyberSub;
         private int cyberLoggedSerial = -1;
         private int selectedSite = -1;
 
         private Image cyberRail;
-        private TMP_Text cyberName, cyberInfocon, cyberPhase, cyberNote;
+        private TMP_Text cyberInfocon, cyberPhase, cyberNote;
         private Image cyberBand;
         private TMP_Text cyberBandText;
-        private CyberGraph cyberGraph;
-        private TMP_Text cyberGraphNote;
+        private Views.MiniNetmap cyberMap;
         private TMP_Text[] cyberLoopLabels;
-        private CyberConsole console;
+        private AvButton openConsoleButton;
         private CyberAlarm alarm;
 
         private void ResetCyberPage()
         {
-            for (int i = 0; i < cyberSubPages.Length; i++)
+            for (int i = 0; i < cyberSubPages.Length; i++) cyberSubPages[i] = null;
+            for (int i = 0; i < cyberLoop.Length; i++) cyberLoop[i] = cyberLoopShown[i] = null;
+            for (int i = 0; i < Ladder; i++)
             {
-                cyberSubPages[i] = null;
-                cyberSubTabs[i] = null;
+                ladderFill[i] = null;
+                ladderText[i] = null;
             }
-            for (int i = 0; i < cyberLoop.Length; i++) cyberLoop[i] = null;
             for (int i = 0; i < cyberTiles.Length; i++) cyberTiles[i] = null;
-            cyberSub = CyberNetworkSub;
+            cyberSub = CyberStatusSub;
             cyberLoggedSerial = -1;
             selectedSite = -1;
             cyberRail = cyberBand = null;
-            cyberName = cyberInfocon = cyberPhase = cyberNote = cyberBandText = cyberGraphNote = null;
-            cyberGraph = null;
+            cyberInfocon = cyberPhase = cyberNote = cyberBandText = null;
+            cyberMap = null;
             cyberLoopLabels = null;
-            if (console != null) Destroy(console.gameObject);
-            console = null;
+            openConsoleButton = null;
             alarm?.Dispose();
             alarm = null;
-            ResetArchitectPage();
-            ResetThreatPage();
             ResetCyberOpsPage();
         }
 
@@ -84,18 +79,8 @@ namespace BoscaliSummer.Features.Support.Presentation
         private void BuildCyberPage()
         {
             var page = (RectTransform)shell.CreatePage(TabCyber, "CyberPage").transform;
-            Rect body = shell.Body;
-            float segment = (body.width - 12f) / CyberSubLabels.Length;
-            for (int i = 0; i < CyberSubLabels.Length; i++)
-            {
-                int sub = i;
-                cyberSubTabs[i] = AvStyled.Button(page,
-                    new Rect(body.x + i * (segment + 4f), body.y, segment, SubNavHeight),
-                    CyberSubLabels[i], "tab", () => SelectCyberSub(sub), AvButtonStyle.Tab)
-                    .WithTooltip(CyberSubTips[i]);
-            }
-
-            var subBody = new Rect(body.x, body.y - SubNavHeight - 8f, body.width, body.height - SubNavHeight - 8f);
+            // Each sub-page carries its own title row with the STATUS / ACTIONS toggle (M1).
+            Rect subBody = shell.Body;
             for (int i = 0; i < cyberSubPages.Length; i++)
             {
                 var go = new GameObject("Cyber" + i, typeof(RectTransform));
@@ -105,11 +90,9 @@ namespace BoscaliSummer.Features.Support.Presentation
                 cyberSubPages[i] = go;
             }
 
-            BuildNetworkPage((RectTransform)cyberSubPages[CyberNetworkSub].transform, subBody);
-            BuildArchitectPage((RectTransform)cyberSubPages[CyberArchitectSub].transform, subBody);
-            BuildThreatPage((RectTransform)cyberSubPages[CyberThreatSub].transform, subBody);
-            BuildCyberOpsPage((RectTransform)cyberSubPages[CyberOpsSub].transform, subBody);
-            SelectCyberSub(CyberNetworkSub);
+            BuildStatusPage((RectTransform)cyberSubPages[CyberStatusSub].transform, subBody);
+            BuildCyberOpsPage((RectTransform)cyberSubPages[CyberActionsSub].transform, subBody);
+            SelectCyberSub(CyberStatusSub);
             alarm = new CyberAlarm(screenRoot != null ? screenRoot.transform : transform);
             CyberLog("WATCH FLOOR ONLINE · " + CyberWords.NetworkName + " STANDING BY");
         }
@@ -119,92 +102,122 @@ namespace BoscaliSummer.Features.Support.Presentation
             cyberSub = Mathf.Clamp(sub, 0, cyberSubPages.Length - 1);
             AvButton.ClearTooltip();
             for (int i = 0; i < cyberSubPages.Length; i++)
-            {
                 if (cyberSubPages[i] != null) cyberSubPages[i].SetActive(i == cyberSub);
-                if (cyberSubTabs[i] != null) cyberSubTabs[i].SetLatched(i == cyberSub);
-            }
             nextRefresh = 0f;
         }
 
-        private void BuildNetworkPage(RectTransform root, Rect body)
+        /// <summary>The board's node click: remember it and open the console on it.</summary>
+        private void SelectSite(int slot)
         {
-            float height = CyberBannerHeight + SectionGap +
-                           HeaderHeight + TileHeight * 2f + 4f + SectionGap +
-                           HeaderHeight + CyberGraphHeight + SectionGap +
-                           HeaderHeight + LoopLines * LoopPitch + SectionGap;
-            // The loop is the last block; on a tall panel it spaces its lines out rather than
-            // leaving the page short above the status strip.
-            float loopPitch = LoopPitch;
-            RectTransform parent = BeginSub(root, body, height, out float x, out float y, out float width);
+            selectedSite = slot;
+            nextRefresh = 0f;
+        }
 
-            var banner = new Rect(x, y, width, CyberBannerHeight);
-            cyberRail = AvKit.TacticalCard(parent, banner, AvTheme.RailInert).Rail;
-            cyberName = AvKit.Label(parent, CyberWords.NetworkName, new Rect(x + 12f, y - 8f, 200f, 20f),
-                AvTheme.TextPrimary, AvTokens.FontTitle, FontStyles.Bold);
-            cyberName.characterSpacing = 2f;
-            cyberPhase = AvKit.Label(parent, "", new Rect(x + width - 232f, y - 10f, 220f, 16f), AvTheme.Dim,
-                AvTokens.FontSmall, FontStyles.Bold, TextAlignmentOptions.Right);
-            cyberInfocon = AvKit.Label(parent, "", new Rect(x + 12f, y - 32f, width * 0.55f, 30f), AvTheme.Dim, 22f,
-                FontStyles.Bold);
+        private void BuildStatusPage(RectTransform root, Rect body)
+        {
+            Rect content = PageFrame(root, body, OpsDomain.Cyber, CyberWords.NetworkName + " · WATCH FLOOR", CyberStatusSub, SelectCyberSub,
+                CyberSubTips, out _);
+            Rect[] at = Stack(content, new[]
+            {
+                new StackPiece(1, Mathf.Min(CyberBannerHeight, content.height), 0f, false),
+                new StackPiece(2, CyberGraphHeight, 170f, false),
+                new StackPiece(3, TileHeight * 2f + 24f, TileHeight * 2f + 24f, false),
+                new StackPiece(4, 0f, 60f, true)
+            }, 8f);
+
+            RectTransform banner = Section(root, "Infocon", at[0]);
+            float w = at[0].width, h = at[0].height;
+            cyberRail = InstrumentPlate(banner, new Rect(0f, 0f, w, h), AvTheme.RailInfo);
+            AvKit.Label(banner, "NETWORK CONDITION / C2", new Rect(12f, -4f, w - 176f, 11f), AvTheme.RailInfo,
+                AvTokens.FontMicro, FontStyles.Bold).characterSpacing = 0.8f;
+            cyberInfocon = AvKit.Label(banner, "", new Rect(12f, -16f, w - 176f, 30f), AvTheme.Dim, 22f, FontStyles.Bold);
             cyberInfocon.enableAutoSizing = true;
             cyberInfocon.fontSizeMin = AvTokens.FontLead;
             cyberInfocon.fontSizeMax = 22f;
-            AvStyled.Button(parent, new Rect(x + width - 150f, y - 34f, 138f, 26f), "OPEN CONSOLE", "btn",
+            cyberPhase = SingleLine(AvKit.Label(banner, "", new Rect(12f, -46f, w - 176f, 16f), AvTheme.Dim, AvTokens.FontSmall,
+                FontStyles.Bold));
+            openConsoleButton = AvStyled.Button(banner, new Rect(w - 152f, -10f, 140f, 28f), "OPEN CONSOLE", "btn",
                 OpenConsole, AvButtonStyle.Primary)
-                .WithTooltip("Full-screen network defence console: isolate, patch, bait and trace in real time.");
-            cyberBandText = SingleLine(AvKit.Label(parent, "", new Rect(x + 12f, y - 68f, width - 24f, 16f), AvTheme.Dim,
+                .WithTooltip("The network-ops terminal: breach locations, answer incidents, buy network upgrades.");
+            cyberBandText = SingleLine(AvKit.Label(banner, "", new Rect(12f, -66f, w - 24f, 16f), AvTheme.Dim,
                 AvTokens.FontSmall, FontStyles.Normal));
-            cyberBand = AvKit.ProgressBar(parent, new Rect(x + 12f, y - 88f, width - 24f, 4f), 0f, AvTheme.RailInfo);
-            cyberNote = Wrapped(AvStyled.Label(parent, new Rect(x + 12f, y - 100f, width - 24f, 30f), "", "row-sub"));
-            y -= CyberBannerHeight + SectionGap;
+            cyberBand = AvKit.ProgressBar(banner, new Rect(12f, -84f, w - 24f, 4f), 0f, AvTheme.RailInfo);
+            cyberNote = Wrapped(AvStyled.Label(banner, new Rect(12f, -91f, w - 24f, Mathf.Max(14f, h - 98f)), "", "row-sub"));
+            cyberNote.gameObject.SetActive(h >= 112f);
 
-            Header(parent, x, ref y, width, "NETWORK HEALTH", "CONNECTION · DEFENCE · READINESS");
-            float tileWidth = (width - 12f) / 4f;
-            for (int i = 0; i < cyberTiles.Length; i++)
+            // The INFOCON ladder beside the compact wire netmap (the page's second instrument).
+            if (at[1].height > 0f)
             {
-                float tx = x + (i % 4) * (tileWidth + 4f);
-                float ty = y - (i / 4) * (TileHeight + 4f);
-                cyberTiles[i] = BuildTile(parent, new Rect(tx, ty, tileWidth, TileHeight), CyberTileKeys[i]);
+                RectTransform board = Section(root, "Netmap", at[1]);
+                AvKit.Rule(board, new Rect(72f, 0f, at[1].width - 72f, 1f), AvTheme.RailInfo.WithAlpha(0.6f));
+                float rung = (at[1].height - 4f * 4f) / Ladder;
+                for (int i = 0; i < Ladder; i++)
+                {
+                    var r = new Rect(0f, -i * (rung + 4f), 64f, rung);
+                    ladderFill[i] = AvKit.Panel(board, r, AvTheme.Surface);
+                    ladderText[i] = AvKit.Label(board, "INFOCON\n" + (Ladder - i), r, AvTheme.Dim, AvTokens.FontMicro, FontStyles.Bold,
+                        TextAlignmentOptions.Center);
+                }
+                cyberMap = new Views.MiniNetmap();
+                cyberMap.Build(board, new Rect(72f, 0f, at[1].width - 72f, at[1].height), slot =>
+                {
+                    SelectSite(slot);
+                    OpenConsole();
+                });
             }
-            y -= TileHeight * 2f + 4f + SectionGap;
 
-            cyberGraphNote = Header(parent, x, ref y, width, "NETWORK MAP", "");
-            cyberGraph = new CyberGraph(parent, new Rect(x, y, width, CyberGraphHeight), false, slot =>
+            if (at[2].height > 0f)
             {
-                SelectSite(slot);
-                SelectCyberSub(CyberArchitectSub);
-            });
-            y -= CyberGraphHeight + SectionGap;
+                RectTransform health = Section(root, "Health", at[2]);
+                AvStyled.Label(health, new Rect(0f, 0f, at[2].width, 16f), "NETWORK HEALTH · RESOURCES · HOLDINGS · THREATS",
+                    "section-title");
+                float tileWidth = (at[2].width - 12f) / 4f;
+                for (int i = 0; i < cyberTiles.Length; i++)
+                    cyberTiles[i] = BuildTile(health, new Rect((i % 4) * (tileWidth + 4f), -20f - (i / 4) * (TileHeight + 4f), tileWidth,
+                        TileHeight), CyberTileKeys[i]);
+            }
 
-            cyberLoopLabels = BuildCyberLoop(parent, x, ref y, width, loopPitch);
+            if (at[3].height > 0f)
+                cyberLoopLabels = BuildLoopLines(Section(root, "Shell", at[3]), at[3].width, at[3].height, "EVENT LOG · NEWEST FIRST");
         }
 
-        private TMP_Text[] BuildCyberLoop(RectTransform parent, float x, ref float y, float width, float pitch)
+        /// <summary>The log in shell style: a prompt and monospace figures, written only when a line changes.</summary>
+        private void WriteShellLoop()
         {
-            Header(parent, x, ref y, width, "EVENT LOG", "NETWORK DEFENCE · NEWEST FIRST");
-            var labels = new TMP_Text[LoopLines];
-            for (int i = 0; i < LoopLines; i++)
+            for (int i = 0; i < cyberLoopLabels.Length && i < cyberLoop.Length; i++)
             {
-                labels[i] = Wrapped(AvStyled.Label(parent, new Rect(x, y - i * pitch, width, 28f), "", "row-sub"));
-                labels[i].color = i == 0 ? AvTheme.TextPrimary : AvTheme.Dim;
+                if (cyberLoopShown[i] == cyberLoop[i]) continue;
+                cyberLoopShown[i] = cyberLoop[i];
+                cyberLoopLabels[i].text = cyberLoop[i] == null ? "" : Mono("$ " + cyberLoop[i]);
             }
-            y -= LoopLines * pitch;
-            return labels;
+        }
+
+        private void PaintLadder(int infocon)
+        {
+            if (ladderFill[0] == null) return;
+            for (int i = 0; i < Ladder; i++)
+            {
+                int level = Ladder - i;
+                bool lit = level == infocon;
+                Color colour = level >= 4 ? AvTheme.RailReady : level == 3 ? AvTheme.RailCaution : AvTheme.RailDanger;
+                ladderFill[i].color = lit ? colour.WithAlpha(0.3f) : AvTheme.Surface;
+                ladderText[i].color = lit ? colour : AvTheme.Dim;
+            }
         }
 
         // ---- Console and loop --------------------------------------------------------------------
 
         private void OpenConsole()
         {
-            if (console == null) console = CyberConsole.Create(support, cyberLoop);
-            console.Show(selectedSite);
+            if (FullscreenInput.AnyOpen && !Window.OpsWindow.IsOpen) return;
+            OpenRoom(CyberRoom(), selectedSite, openConsoleButton);
             CyberLog("CONSOLE · " + CyberWords.NetworkName + " ON THE BIG BOARD");
         }
 
         /// <summary>Work that must not wait for the CYBER page: the loop and the alarm.</summary>
         private void TickCyberBackground()
         {
-            if (cyberSubPages[CyberNetworkSub] == null) return;
+            if (cyberSubPages[CyberStatusSub] == null) return;
             CyberNetwork network = support.LocalCyber;
             if (network == null) return;
             if (cyberLoggedSerial < 0)
@@ -220,7 +233,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             {
                 CyberNotice notice = network.NoticeKind(age);
                 string line = CyberWords.Notice(notice, CyberWords.Callsign(network, network.NoticeSite(age)),
-                    support.CyberOriginName(network.NoticeOrigin(age)));
+                    support.CyberOriginName(network.NoticeOrigin(age)), network.NoticeOrigin(age));
                 if (line == null) continue;
                 if (CyberWords.Klaxon(notice)) alarmed = true;
                 CyberLog(CyberWords.Alarm(notice) ? "!! " + line : line);
@@ -239,24 +252,18 @@ namespace BoscaliSummer.Features.Support.Presentation
 
         private void RefreshCyber(bool bypass)
         {
-            if (cyberSubPages[CyberNetworkSub] == null) return;
+            if (cyberSubPages[CyberStatusSub] == null) return;
             CyberNetwork network = support.LocalCyber;
             double now = support.OrbitNow;
-            switch (cyberSub)
-            {
-                case CyberNetworkSub: RefreshNetworkPage(network, now); break;
-                case CyberArchitectSub: RefreshArchitectPage(bypass, network, now); break;
-                case CyberThreatSub: RefreshThreatPage(network, now); break;
-                default: RefreshCyberOpsPage(bypass, network, now); break;
-            }
+            if (cyberSub == CyberStatusSub) RefreshStatusPage(network, now);
+            else RefreshCyberOpsPage(bypass, network, now);
         }
 
-        private void RefreshNetworkPage(CyberNetwork network, double now)
+        private void RefreshStatusPage(CyberNetwork network, double now)
         {
             if (cyberInfocon == null) return;
             bool built = network != null && network.HasCommand;
             CyberStats stats = network != null ? network.Stats() : default;
-            float time = Time.unscaledTime;
 
             if (!support.CyberEnabled)
             {
@@ -264,7 +271,7 @@ namespace BoscaliSummer.Features.Support.Presentation
                 cyberInfocon.text = "OFFLINE";
                 cyberInfocon.color = AvTheme.Dim;
                 cyberPhase.text = "DISABLED IN HOST CONFIG";
-                cyberNote.text = "The host has switched spectrum defence off.";
+                cyberNote.text = "The host has switched cyber operations off.";
             }
             else if (!built)
             {
@@ -286,17 +293,28 @@ namespace BoscaliSummer.Features.Support.Presentation
                 cyberNote.text = CyberWords.Advice(network, now, out _, out _);
             }
 
-            cyberBandText.text = "BANDWIDTH " + Mathf.FloorToInt(network != null ? network.Bandwidth : 0f) + "/" +
-                                 Mathf.RoundToInt(stats.Capacity) + " MB · NET " +
-                                 (stats.Net >= 0f ? "+" : "") + stats.Net.ToString("0.#", Invariant) + "/S" +
-                                 (stats.Congested ? " · CONGESTED" : "");
-            cyberBand.fillAmount = stats.Capacity > 0f && network != null ? network.Bandwidth / stats.Capacity : 0f;
-            cyberBand.color = stats.Congested ? AvTheme.RailCaution : AvTheme.RailInfo;
+            float computing = network != null ? network.Computing : 0f;
+            float intel = network != null ? network.Intel : 0f;
+            float computingCap = Mathf.Max(1f, network != null ? network.ComputingCapacity() : 1f);
+            float intelCap = Mathf.Max(1f, network != null ? network.IntelCapacity() : 1f);
+            string breach = "";
+            if (network != null && network.BreachActive)
+                breach = " · BREACH " + CyberWords.PhaseOf(network.BreachPhase) + " " +
+                         Mathf.RoundToInt(network.BreachTrace * 100f) + "%";
+            else if (network != null && network.BreachAwaitingChoice)
+                breach = " · CAPSTONE PENDING";
+            cyberBandText.text = "COMP " + Mathf.FloorToInt(computing) + "/" + Mathf.RoundToInt(computingCap) +
+                                 " +" + (network != null ? network.ComputingIncome() : 0f).ToString("0.#", Invariant) + "/S" +
+                                 " · INTEL " + Mathf.FloorToInt(intel) + "/" + Mathf.RoundToInt(intelCap) +
+                                 " +" + (network != null ? network.IntelIncome() : 0f).ToString("0.#", Invariant) + "/S" +
+                                 breach;
+            cyberBand.fillAmount = computing / computingCap;
+            cyberBand.color = computing < 20f ? AvTheme.RailCaution : AvTheme.RailInfo;
 
             RefreshCyberTiles(network, stats, now, built);
-            cyberGraphNote.text = built ? stats.Links + " LINK" + (stats.Links == 1 ? "" : "S") + " · CLICK A SITE" : "";
-            cyberGraph.Paint(network, now, selectedSite, time, built ? null : "NO AIRBASE HELD");
-            WriteLoop(cyberLoopLabels, cyberLoop);
+            PaintLadder(built ? network.Infocon : 0);
+            cyberMap?.Paint(network, now, selectedSite);
+            if (cyberLoopLabels != null) WriteShellLoop();
         }
 
         private void RefreshCyberTiles(CyberNetwork network, in CyberStats stats, double now, bool built)
@@ -306,25 +324,24 @@ namespace BoscaliSummer.Features.Support.Presentation
                 for (int i = 0; i < cyberTiles.Length; i++) PaintTile(cyberTiles[i], "—", Tone.Locked);
                 return;
             }
-            float band = stats.Capacity > 0f ? network.Bandwidth / stats.Capacity : 0f;
-            PaintTile(cyberTiles[0], stats.Congested ? "CONGESTED" : band < 0.25f ? "LOW" : "NOMINAL",
-                stats.Congested ? Tone.Danger : band < 0.25f ? Tone.Armed : Tone.Ready);
-            int offNet = stats.Sites - stats.OnNet;
-            PaintTile(cyberTiles[1], offNet > 0 ? offNet + " OFF-NET" : stats.Links + " UP",
-                offNet > 0 ? Tone.Armed : Tone.Ready);
+            float computing = network.ComputingCapacity() > 0f ? network.Computing / network.ComputingCapacity() : 0f;
+            PaintTile(cyberTiles[0], computing < 0.25f ? "LOW" : "NOMINAL",
+                computing < 0.25f ? Tone.Armed : Tone.Ready);
+            float intel = network.IntelCapacity() > 0f ? network.Intel / network.IntelCapacity() : 0f;
+            PaintTile(cyberTiles[1], Mathf.FloorToInt(network.Intel) + " BANKED",
+                intel < 0.2f ? Tone.Pending : Tone.Ready);
+            int home = network.Count(NodeKind.Command) + network.Count(NodeKind.Base);
+            PaintTile(cyberTiles[2], stats.Hacked + " LOC · " + home + " HOME",
+                stats.Hacked > 0 ? Tone.Ready : Tone.Locked);
+            PaintTile(cyberTiles[3], stats.StageTotal > 0 ? "STAGE " + stats.StageTotal : "NONE",
+                stats.StageTotal >= 8 ? Tone.Ready : stats.StageTotal > 0 ? Tone.Pending : Tone.Locked);
             int intrusions = network.ActiveIncidents(IncidentKind.Intrusion);
-            PaintTile(cyberTiles[2], network.CommandCompromised ? "C2 BREACH" : intrusions > 0 ? intrusions + " ACTIVE" : "CLEAR",
+            PaintTile(cyberTiles[4], network.CommandCompromised ? "C2 BREACH" : intrusions > 0 ? intrusions + " ACTIVE" : "CLEAR",
                 network.CommandCompromised || intrusions > 0 ? Tone.Danger : Tone.Ready);
             int raids = network.ActiveIncidents(IncidentKind.Raid);
-            PaintTile(cyberTiles[3], raids > 0 ? "RAID" : "CLEAR", raids > 0 ? Tone.Armed : Tone.Ready);
-            bool exposed = network.ExposedUntil > now;
-            PaintTile(cyberTiles[4], exposed ? "EXPOSED " + CyberWords.Seconds(network.ExposedUntil - now) : "HOLDING",
-                exposed ? Tone.Danger : Tone.Ready);
-            PaintTile(cyberTiles[5], network.AnyFoothold(now) ? "ESTABLISHED" : "NONE",
+            PaintTile(cyberTiles[5], raids > 0 ? "RAID" : "CLEAR", raids > 0 ? Tone.Armed : Tone.Ready);
+            PaintTile(cyberTiles[6], network.AnyFoothold(now) ? "ESTABLISHED" : "NONE",
                 network.AnyFoothold(now) ? Tone.Ready : Tone.Locked);
-            int field = network.FieldCount;
-            PaintTile(cyberTiles[6], (stats.Sites - field) + " BASE · " + field + "/" + support.CyberSiteLimit,
-                stats.Sites > 0 ? Tone.Ready : Tone.Locked);
             PaintTile(cyberTiles[7], CyberWords.Phase(network.Phase),
                 network.Phase == CampaignPhase.Offensive ? Tone.Danger
                 : network.Phase == CampaignPhase.Active ? Tone.Armed : Tone.Pending);

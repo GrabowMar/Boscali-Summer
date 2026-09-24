@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Features.Autopilot.Configuration;
+using BoscaliSummer.Features.Autopilot.Domain;
 using BoscaliSummer.Framework.Lifecycle;
 using UnityEngine;
 
@@ -11,6 +12,7 @@ namespace BoscaliSummer.Features.Autopilot.Runtime
         private enum Phase
         {
             None,
+            Pattern,
             Join,
             Final,
             Approach,
@@ -44,10 +46,78 @@ namespace BoscaliSummer.Features.Autopilot.Runtime
         private bool storedFlightAssist;
         private bool storedAutoHover;
         private bool padLanding;
+        private bool carrier;
         private bool failureReported;
         private Vector3 glideslopeCorrection;
+        private CarrierLeg patternLeg;
+        private float patternSide;
+        private float patternLegSince;
+        private float bookLandingSpeed;
+        private float severity;
+        private float startHitPoints;
+        private float nextSeveritySample;
 
         public bool IsEngaged => phase != Phase.None;
+
+        /// <summary>
+        /// The current phase as a word for the HUD widget, or null when not engaged. The phase
+        /// enum stays private; the widget reads this and never re-derives the state machine.
+        /// </summary>
+        internal string HudPhaseWord
+        {
+            get
+            {
+                switch (phase)
+                {
+                    case Phase.Pattern: return CarrierPattern.Word(patternLeg);
+                    case Phase.Join: return "JOINING";
+                    case Phase.Final: return "FINAL";
+                    case Phase.Approach: return "APPROACH";
+                    case Phase.HoverTouchdown: return "TOUCHDOWN";
+                    case Phase.Rollout: return "ROLLOUT";
+                    case Phase.PadApproach: return "PAD APPROACH";
+                    case Phase.PadDescent: return "PAD DESCENT";
+                    default: return null;
+                }
+            }
+        }
+
+        /// <summary>The runway or pad being flown to, or null when nothing is engaged.</summary>
+        internal string HudTargetName
+        {
+            get
+            {
+                if (!IsEngaged || airbase == null) return null;
+                return padLanding ? airbase.name : runwayUsage.GetName();
+            }
+        }
+
+        /// <summary>
+        /// Landing-direction ILS frame while engaged: origin at the touchdown, direction
+        /// along the runway, radius of the field. False when nothing is being flown to.
+        /// </summary>
+        internal bool TryIlsFrame(out Vector3 origin, out Vector3 landingDir, out float radius)
+        {
+            origin = default;
+            landingDir = default;
+            radius = 0f;
+            if (!IsEngaged || airbase == null || padLanding) return false;
+            origin = runwayUsage.GetTouchdownPoint().ToLocalPosition();
+            landingDir = runwayUsage.GetDirection();
+            try { radius = airbase.GetRadius(); }
+            catch { radius = 0f; }
+            return landingDir.sqrMagnitude > 0.01f;
+        }
+
+        /// <summary>Distance to the field's own anchor, or -1 when it cannot be read.</summary>
+        internal float HudDistanceMeters
+        {
+            get
+            {
+                if (!IsEngaged || airbase == null || airbase.center == null) return -1f;
+                return FastMath.Distance(aircraft.GlobalPosition(), airbase.center.GlobalPosition());
+            }
+        }
 
         private void Awake() => Instance = this;
         private void Update() => BoscaliRadialMenu.Tick();
@@ -129,10 +199,16 @@ namespace BoscaliSummer.Features.Autopilot.Runtime
             aircraft = candidate;
             parameters = aircraft.GetAircraftParameters();
             padLanding = !(aircraft.autopilot is AutopilotPlane);
-            adjustedLandingSpeed = AutopilotLandPolicy.AdjustedLandingSpeed(
+            bookLandingSpeed = AutopilotLandPolicy.AdjustedLandingSpeed(
                 aircraft.GetMass(), aircraft.definition.aircraftInfo.maxWeight, parameters.landingSpeed);
+            SampleSeverity(true);
+            adjustedLandingSpeed = bookLandingSpeed * LandingEnergy.SpeedScale(severity);
             pad = null;
             airbase = null;
+            carrier = false;
+            patternLeg = CarrierLeg.Upwind;
+            patternSide = 1f;
+            patternLegSince = 0f;
 
             if (padLanding)
             {
@@ -166,6 +242,7 @@ namespace BoscaliSummer.Features.Autopilot.Runtime
                     return;
                 }
                 runwayUsage = usage.Value;
+                carrier = airbase.AttachedAirbase;
             }
 
             storedFlightAssist = aircraft.flightAssist;
@@ -175,7 +252,7 @@ namespace BoscaliSummer.Features.Autopilot.Runtime
             if (!padLanding && filter != null) filter.SetAutoHover(false);
 
             hoverTargetHeight = padLanding ? 45f : 10f;
-            phase = padLanding ? Phase.PadApproach : Phase.Join;
+            phase = padLanding ? Phase.PadApproach : OpeningPhase();
             inputSettled = !ManualInput();
             failureReported = false;
             Report(padLanding ? "Autopilot: landing at " + airbase.name : "Autopilot: " + runwayUsage.GetName());
@@ -245,8 +322,10 @@ namespace BoscaliSummer.Features.Autopilot.Runtime
 
         private void Flight()
         {
+            SampleSeverity(false);
             switch (phase)
             {
+                case Phase.Pattern: FlyPattern(); break;
                 case Phase.Join: FlyJoin(); break;
                 case Phase.Final: FlyFinal(); break;
                 case Phase.Approach: FlyApproach(); break;
@@ -255,6 +334,71 @@ namespace BoscaliSummer.Features.Autopilot.Runtime
                 case Phase.PadApproach: FlyToPad(); break;
                 case Phase.PadDescent: DescendToPad(); break;
             }
+        }
+
+        private Phase OpeningPhase()
+        {
+            if (!carrier) return Phase.Join;
+            Vector3 dir = runwayUsage.GetDirection();
+            GlobalPosition touchdown = runwayUsage.GetTouchdownPoint();
+            Vector3 to = touchdown - aircraft.GlobalPosition();
+            to.y = 0f;
+            float heading = Vector3.Angle(aircraft.transform.forward, dir);
+            if (CarrierPattern.DirectFinal(to.magnitude, heading)) return Phase.Final;
+            Vector3 right = Vector3.Cross(Vector3.up, dir.normalized);
+            patternSide = CarrierPattern.PatternSide(Vector3.Dot(to, -right));
+            patternLeg = CarrierLeg.Upwind;
+            patternLegSince = Time.timeSinceLevelLoad;
+            return Phase.Pattern;
+        }
+
+        private void FlyPattern()
+        {
+            if (!RunwayStillUsable()) return;
+            Vector3 dir = runwayUsage.GetDirection();
+            GlobalPosition touchdown = runwayUsage.GetTouchdownPoint();
+            CarrierPattern.Gate(patternLeg, dir.x, dir.z, patternSide, out float gx, out float gy, out float gz);
+            Vector3 gate = touchdown.ToLocalPosition() + new Vector3(gx, gy, gz);
+            GlobalPosition aim = gate.ToGlobalPosition();
+            Vector3 toGate = aim - aircraft.GlobalPosition();
+            float heading = Vector3.Angle(aircraft.transform.forward, toGate);
+            ControlInputs inputs = aircraft.GetInputs();
+            float target = parameters.cornerSpeed;
+            LandingEnergy.Result energy = LandingEnergy.Compute(
+                aircraft.speed, target, adjustedLandingSpeed, parameters.cruiseThrottle,
+                aircraft.radarAlt, false, false, true, severity);
+            inputs.throttle = energy.Throttle;
+            inputs.brake = energy.Brake;
+            aircraft.autopilot.AutoAim(aim, false, false, false, 0.9f,
+                LandingEnergy.BankLimit(135f, severity), true,
+                parameters.turningRadius * 3f * 0.05f, Vector3.zero);
+
+            if (CarrierPattern.ShouldAdvance(toGate.magnitude, heading,
+                    Time.timeSinceLevelLoad - patternLegSince))
+            {
+                patternLeg = CarrierPattern.Next(patternLeg);
+                patternLegSince = Time.timeSinceLevelLoad;
+                if (patternLeg == CarrierLeg.Final) phase = Phase.Final;
+            }
+        }
+
+        private void SampleSeverity(bool baseline)
+        {
+            if (!baseline && Time.timeSinceLevelLoad < nextSeveritySample) return;
+            nextSeveritySample = Time.timeSinceLevelLoad + 1f;
+            if (aircraft == null) { severity = 0f; return; }
+            UnitPart[] parts = aircraft.GetComponentsInChildren<UnitPart>(true);
+            int count = parts == null ? 0 : parts.Length;
+            float hp = 0f;
+            for (int i = 0; i < count; i++)
+            {
+                UnitPart part = parts[i];
+                if (part == null) continue;
+                hp += part.hitPoints;
+            }
+            if (baseline) startHitPoints = hp;
+            severity = AirframeSeverity.FromParts(count, hp, startHitPoints, 0);
+            adjustedLandingSpeed = bookLandingSpeed * LandingEnergy.SpeedScale(severity);
         }
 
         private void FlyJoin()
@@ -270,8 +414,13 @@ namespace BoscaliSummer.Features.Autopilot.Runtime
 
             float target = parameters.cornerSpeed + FastMath.Distance(aircraft.GlobalPosition(), aim) * 0.02f;
             ControlInputs inputs = aircraft.GetInputs();
-            inputs.throttle = AutopilotLandPolicy.ApproachThrottle(aircraft.speed, target, parameters.cruiseThrottle);
-            aircraft.autopilot.AutoAim(aim, false, false, false, 0.9f, 135f, true,
+            LandingEnergy.Result energy = LandingEnergy.Compute(
+                aircraft.speed, target, adjustedLandingSpeed, parameters.cruiseThrottle,
+                aircraft.radarAlt, false, false, carrier, severity);
+            inputs.throttle = energy.Throttle;
+            inputs.brake = energy.Brake;
+            aircraft.autopilot.AutoAim(aim, false, false, false, 0.9f,
+                LandingEnergy.BankLimit(135f, severity), true,
                 parameters.turningRadius * 3f * 0.05f, Vector3.zero);
 
             if (FastMath.InRange(aim, aircraft.GlobalPosition(), parameters.turningRadius) &&
@@ -291,8 +440,13 @@ namespace BoscaliSummer.Features.Autopilot.Runtime
 
             float target = adjustedLandingSpeed + 0.015f * Mathf.Max(distance - 500f, 0f);
             ControlInputs inputs = aircraft.GetInputs();
-            inputs.throttle = AutopilotLandPolicy.ApproachThrottle(aircraft.speed, target, parameters.cruiseThrottle);
-            aircraft.autopilot.AutoAim(aim, false, false, false, 1.1f, 135f, false, distance * 0.05f, Vector3.zero);
+            LandingEnergy.Result energy = LandingEnergy.Compute(
+                aircraft.speed, target, adjustedLandingSpeed, parameters.cruiseThrottle,
+                aircraft.radarAlt, false, false, carrier, severity);
+            inputs.throttle = energy.Throttle;
+            inputs.brake = energy.Brake;
+            aircraft.autopilot.AutoAim(aim, false, false, false, 1.1f,
+                LandingEnergy.BankLimit(135f, severity), false, distance * 0.05f, Vector3.zero);
 
             if (Vector3.Angle(touchdown - aircraft.GlobalPosition(), aircraft.transform.forward) <
                 AutopilotLandPolicy.AlignmentDegrees)
@@ -351,8 +505,12 @@ namespace BoscaliSummer.Features.Autopilot.Runtime
             Vector3 wind = level != null ? level.GetWind(aircraft.GlobalPosition()) : Vector3.zero;
             float forwardAirspeed = Vector3.Dot(aircraft.transform.forward, aircraft.rb.velocity - wind);
             ControlInputs inputs = aircraft.GetInputs();
-            inputs.throttle = AutopilotLandPolicy.ApproachThrottle(
-                forwardAirspeed, adjustedLandingSpeed + 5f, parameters.cruiseThrottle);
+            bool flare = touchdownTime < 5f;
+            LandingEnergy.Result energy = LandingEnergy.Compute(
+                forwardAirspeed, adjustedLandingSpeed + 5f, adjustedLandingSpeed, parameters.cruiseThrottle,
+                aircraft.radarAlt, flare, false, carrier, severity);
+            inputs.throttle = energy.Throttle;
+            inputs.brake = energy.Brake;
 
             if (parameters.verticalLanding)
             {
@@ -383,7 +541,8 @@ namespace BoscaliSummer.Features.Autopilot.Runtime
                 inputs.throttle = 0f;
                 aim += Vector3.up * 5f;
             }
-            aircraft.autopilot.AutoAim(aim, true, true, touchdownTime < 5f, 1.01f, 65f, false, 0f, Vector3.zero);
+            aircraft.autopilot.AutoAim(aim, true, true, touchdownTime < 5f, 1.01f,
+                LandingEnergy.BankLimit(65f, severity), false, 0f, Vector3.zero);
         }
 
         private void FlyHoverTouchdown()
@@ -422,8 +581,11 @@ namespace BoscaliSummer.Features.Autopilot.Runtime
         {
             timeOnGround += Time.fixedDeltaTime;
             ControlInputs inputs = aircraft.GetInputs();
+            LandingEnergy.Result energy = LandingEnergy.Compute(
+                aircraft.speed, 0f, adjustedLandingSpeed, 0f,
+                aircraft.radarAlt, false, true, carrier, severity);
             inputs.throttle = 0f;
-            inputs.brake = AutopilotLandPolicy.BrakeRamp(timeOnGround);
+            inputs.brake = Mathf.Max(AutopilotLandPolicy.BrakeRamp(timeOnGround), energy.Brake);
             inputs.customAxis1 = 1f;
 
             Vector3 direction = runwayUsage.GetDirection().normalized;
@@ -555,8 +717,16 @@ namespace BoscaliSummer.Features.Autopilot.Runtime
             storedFlightAssist = false;
             storedAutoHover = false;
             padLanding = false;
+            carrier = false;
             failureReported = false;
             glideslopeCorrection = Vector3.zero;
+            patternLeg = CarrierLeg.Upwind;
+            patternSide = 1f;
+            patternLegSince = 0f;
+            bookLandingSpeed = 0f;
+            severity = 0f;
+            startHitPoints = 0f;
+            nextSeveritySample = 0f;
         }
     }
 }

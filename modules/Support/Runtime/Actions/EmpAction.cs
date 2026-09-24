@@ -50,9 +50,8 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
             context.Logger.LogInfo("[Support] EMP airburst using " + definition.jsonKey +
                                    " at " + ground.y.ToString("F0") + " m AGL-local, burst +" +
                                    SupportEffectPolicy.EmpBurstAltitude.ToString("F0") + " m");
-            // The requester's own effect scale and the station's orbit band widen the shock; the
-            // delivery, the altitude band and the jam strength are unchanged.
-            float radius = context.Settings.EmpRadius.Value * context.EffectScale * platform.EmpScale;
+            // The station's online battery banks widen both the jam and its replicated effect.
+            float radius = context.Settings.EmpRadius.Value * platform.EmpScaleAt(context.Host.OrbitNow);
             context.Host.Run(Discharge(context.Host, context.Player, context.Owner, definition, ground,
                 radius, SupportEffectPolicy.EmpName(SupportNaming.Unique("Emp", context), radius)));
             return SupportResult.Accepted;

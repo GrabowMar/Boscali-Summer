@@ -105,10 +105,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             InfoPanel_Faction faction = screen.GetComponent<InfoPanel_Faction>();
             if (faction != null)
             {
-                VanillaMfdPanelId id = faction.selectFaction == InfoPanel_Faction.SelectFaction.Other
-                    ? VanillaMfdPanelId.Pala
-                    : VanillaMfdPanelId.Bdf;
-                return new FactionPresenter(screen, faction, id);
+                if (faction.selectFaction == InfoPanel_Faction.SelectFaction.Other &&
+                    FactionMfdMergePatch.Screen != null) return null;
+                return new FactionPresenter(screen, faction, FactionMfdMergePatch.Other,
+                    VanillaMfdPanelId.Bdf);
             }
 
             MapOptions map = screen.GetComponent<MapOptions>();
@@ -382,7 +382,11 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             protected AvScreen Shell;
             // A shallow bay scrolls a readable page instead of squeezing every control.
             // All owned stock presenters use this same content measure.
-            protected float PageHeight => Mathf.Max(540f, Shell.Body.height);
+            // The page's flight-deck title occupies its own strip above the working area.
+            protected virtual bool PageHasTitle => true;
+            protected virtual float PageTopInset => 0f;
+            protected float PageHeight => Mathf.Max(540f, Shell.Body.height - PageTopInset -
+                                                       (PageHasTitle ? 48f : 0f));
             protected float PageWidth { get; private set; }
 
             public void Build(RectTransform root)
@@ -430,16 +434,36 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             protected abstract void RefreshContent();
             protected abstract string AmbientStatus();
 
-            protected RectTransform CreatePage(string name)
+            protected RectTransform CreatePage(string name, float extraHeight = 0f)
             {
-                GameObject page = Shell.CreatePage(nextPage++, name);
+                int index = nextPage++;
+                GameObject page = Shell.CreatePage(index, name);
                 RectTransform pageRect = page.GetComponent<RectTransform>();
-                AvKit.Place(pageRect, Shell.Body);
+                Rect body = Shell.Body;
+                AvKit.Place(pageRect, new Rect(body.x, body.y - PageTopInset,
+                    body.width, body.height - PageTopInset));
                 if (TabCount <= 0) page.SetActive(true);
                 RectTransform content = AvScreen.Scroll(pageRect,
-                    new Rect(0f, 0f, Shell.Body.width, Shell.Body.height), PageHeight, out Rect area);
+                    new Rect(0f, 0f, body.width, body.height - PageTopInset),
+                    PageHeight + (PageHasTitle ? 48f : 0f) + extraHeight, out Rect area);
                 PageWidth = area.width;
-                return content;
+
+                float width = PageWidth;
+                if (PageHasTitle)
+                {
+                    AvKit.Rule(content, new Rect(AvTokens.Space3, -7f, 18f, 2f), AvTheme.RailInfo);
+                    AvStyled.Label(content, new Rect(AvTokens.Space3 + 27f, -3f, width - 52f, 30f),
+                        name.ToUpperInvariant(), "page-title");
+                    AvKit.Rule(content, new Rect(AvTokens.Space3, -42f,
+                        width - 2f * AvTokens.Space3, 1f), AvTheme.Hairline);
+                    AvKit.Rule(content, new Rect(AvTokens.Space3, -42f, 46f, 2f), AvTheme.RailInfo);
+                }
+
+                var deck = new GameObject("InstrumentDeck", typeof(RectTransform)).GetComponent<RectTransform>();
+                deck.SetParent(content, false);
+                AvKit.Place(deck, new Rect(0f, PageHasTitle ? -48f : 0f,
+                    width, PageHeight + extraHeight));
+                return deck;
             }
 
             protected void ConfigureTabs(string[] labels, Action<int> onTab)
@@ -555,9 +579,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     AvKit.Place(Title.rectTransform,
                         new Rect(AvTokens.Space3, y, width * 0.55f - AvTokens.Space3, 16f));
                     if (Note != null)
-                        AvKit.Place(Note.rectTransform, new Rect(width * 0.57f, y, width * 0.43f, 16f));
+                        AvKit.Place(Note.rectTransform, new Rect(width * 0.57f, y,
+                            width * 0.43f - AvTokens.Space3, 16f));
                     AvKit.Place(Rule.rectTransform,
-                        new Rect(AvTokens.Space3, y - 16f, width - AvTokens.Space3, 1f));
+                        new Rect(AvTokens.Space3, y - 16f, width - 2f * AvTokens.Space3, 1f));
                 }
             }
 
@@ -573,11 +598,17 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     new Rect(AvTokens.Space3, y, width * 0.55f - AvTokens.Space3, 16f), title, "section-title");
                 if (!string.IsNullOrEmpty(note))
                 {
-                    head.Note = AvStyled.Label(parent, new Rect(width * 0.57f, y, width * 0.43f, 16f),
+                    head.Note = AvStyled.Label(parent, new Rect(width * 0.57f, y,
+                            width * 0.43f - AvTokens.Space3, 16f),
                         note, "section-title-note", align: TextAlignmentOptions.MidlineRight);
+                    head.Note.enableWordWrapping = false;
+                    head.Note.enableAutoSizing = true;
+                    head.Note.fontSizeMin = AvTokens.FontMicro;
+                    head.Note.fontSizeMax = head.Note.fontSize;
+                    head.Note.overflowMode = TextOverflowModes.Ellipsis;
                 }
                 head.Rule = AvKit.Rule(parent, new Rect(AvTokens.Space3, y - 16f,
-                                                        width - AvTokens.Space3, 1f),
+                                                        width - 2f * AvTokens.Space3, 1f),
                                        AvTheme.Unity(AvTokens.Hairline));
                 return head;
             }

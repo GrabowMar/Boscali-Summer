@@ -18,10 +18,10 @@ namespace BoscaliSummer.Garrisons
 
         public static Mesh Build()
         {
-            var verts = new List<Vector3>(Segments * (Rings + 1) * 2 + Segments * 8);
+            var verts = new List<Vector3>(Segments * (Rings + 1) * 2 + Segments * 16);
             var uvs = new List<Vector2>(verts.Capacity);
             var canopyTris = new List<int>(Segments * Rings * 12);
-            var lineTris = new List<int>(Segments * 16);
+            var lineTris = new List<int>(Segments * 24);
 
             BuildCanopy(verts, uvs, canopyTris);
             AddInnerCanopy(verts, uvs, canopyTris);
@@ -58,6 +58,8 @@ namespace BoscaliSummer.Garrisons
                 }
             }
 
+            // Outer skin: every triangle faces out, so the apex fan and the rings share smooth
+            // normals; AddInnerCanopy mirrors it for the inside.
             int firstRing = apex + 1;
             for (int s = 0; s < Segments; s++)
                 AddTriangle(tris, apex, firstRing + (s + 1) % Segments, firstRing + s);
@@ -69,7 +71,7 @@ namespace BoscaliSummer.Garrisons
                 for (int s = 0; s < Segments; s++)
                 {
                     int next = (s + 1) % Segments;
-                    AddQuad(tris, ring + s, nextRing + s, nextRing + next, ring + next);
+                    AddQuad(tris, ring + s, ring + next, nextRing + next, nextRing + s);
                 }
             }
         }
@@ -129,18 +131,23 @@ namespace BoscaliSummer.Garrisons
             if (side.sqrMagnitude < 0.0001f) side = Vector3.right;
             side = Quaternion.AngleAxis(roll * Mathf.Rad2Deg, dir) * side.normalized * halfWidth;
 
+            // Front and back each get their own four vertices, so neither face's normal
+            // cancels the other's, and the back is the exact reverse of the front.
             int baseIndex = verts.Count;
-            verts.Add(from - side);
-            verts.Add(from + side);
-            verts.Add(to + side);
-            verts.Add(to - side);
-            uvs.Add(new Vector2(0f, 1f));
-            uvs.Add(new Vector2(1f, 1f));
-            uvs.Add(new Vector2(1f, 0f));
-            uvs.Add(new Vector2(0f, 0f));
+            for (int face = 0; face < 2; face++)
+            {
+                verts.Add(from - side);
+                verts.Add(from + side);
+                verts.Add(to + side);
+                verts.Add(to - side);
+                uvs.Add(new Vector2(0f, 1f));
+                uvs.Add(new Vector2(1f, 1f));
+                uvs.Add(new Vector2(1f, 0f));
+                uvs.Add(new Vector2(0f, 0f));
+            }
 
             AddQuad(tris, baseIndex, baseIndex + 1, baseIndex + 2, baseIndex + 3);
-            AddQuad(tris, baseIndex, baseIndex + 2, baseIndex + 1, baseIndex + 3);
+            AddQuad(tris, baseIndex + 4, baseIndex + 7, baseIndex + 6, baseIndex + 5);
         }
     }
 }

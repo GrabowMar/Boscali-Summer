@@ -170,6 +170,7 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
 
         public byte Regime { get; private set; } = OrbitRegimes.Standard;
         public int Seed { get; private set; }
+        public int PositionIndex => StationKeeping.Target(Seed);
 
         /// <summary>Scene time at which pass zero's slot begins; earlier times are a hold.</summary>
         public double CycleStart { get; private set; }
@@ -221,7 +222,7 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
         public PlatformHold HoldAt(double now) => Exists && now < CycleStart ? Hold : PlatformHold.None;
 
         public OrbitState State(double now, in OrbitClock clock) =>
-            TheaterTrack.State(Seed, Orbit, clock, now - CycleStart);
+            StationKeeping.State(Seed, Orbit, now - CycleStart);
 
         // ---- Grid --------------------------------------------------------------------------
 
@@ -289,6 +290,15 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
             for (int i = 0; i < CellCount; i++)
                 if (cells[i] == kind && now >= offlineUntil[i]) return true;
             return false;
+        }
+
+        /// <summary>One ready magazine releases one rod, up to the remaining ammunition.</summary>
+        public int RodSalvoCount(double now)
+        {
+            int magazines = 0;
+            for (int i = 0; i < CellCount; i++)
+                if (cells[i] == ModuleKind.Rods && now >= offlineUntil[i]) magazines++;
+            return Math.Min(magazines, Rods);
         }
 
         /// <summary>A hot module kind with no online, cooled copy runs degraded.</summary>
@@ -383,7 +393,7 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
                 cells[CoreCell] = ModuleKind.Core;
                 paid[CoreCell] = Math.Max(0f, price);
                 Regime = regime;
-                Seed = seed;
+                Seed = StationKeeping.Route(StationKeeping.Centre, StationKeeping.Centre);
                 LaunchTime = now;
                 CycleStart = now + Math.Max(0.0, insertionSeconds);
                 Hold = PlatformHold.Insertion;
@@ -539,7 +549,7 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
         private void EnterSafeMode(double now)
         {
             Regime = OrbitRegimes.Standard;
-            Seed = (int)Deterministic.Hash(Seed, 0x5afe, 3, 0);
+            Seed = StationKeeping.Route(PositionIndex, PositionIndex);
             CycleStart = now + TransferSeconds;
             Hold = PlatformHold.SafeMode;
             Note(PlatformNotice.SafeMode, CoreCell);
@@ -626,21 +636,30 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
         public double RechargeRemaining(PlatformAbility ability, double now) =>
             PlatformAbilities.Valid((int)ability) ? Math.Max(0.0, readyAt[(int)ability] - now) : 0.0;
 
-        /// <summary>Spend an accepted ability's energy, fuel and rod, and start its recharge.</summary>
-        public void Consume(PlatformAbility ability, double now)
+        /// <summary>Spend an accepted ability's energy, fuel and ammunition, and start its recharge.</summary>
+        public void Consume(PlatformAbility ability, double now, int rodShots = 1)
         {
             AbilityInfo info = PlatformAbilities.Info(ability);
             Energy = Math.Max(0f, Energy - info.EnergyKj);
             if (ability != PlatformAbility.OrbitShift) Fuel = Math.Max(0f, Fuel - info.Fuel);
-            if (ability == PlatformAbility.RodStrike && Rods > 0) Rods--;
+            if (ability == PlatformAbility.RodStrike) Rods = Math.Max(0, Rods - Math.Max(1, rodShots));
             if (info.RechargeSeconds > 0f) readyAt[(int)ability] = now + RechargeSeconds(ability, now);
         }
 
         public bool TryRephase(double now, in OrbitClock clock, int seed)
+            => TryRelocate((PositionIndex + 1) % StationKeeping.Count, now, clock);
+
+        public PlatformDenial CheckRelocate(int sector, double now, in OrbitClock clock)
         {
-            if (Check(PlatformAbility.Rephase, now, clock) != PlatformDenial.None) return false;
+            if (!StationKeeping.Valid(sector) || sector == PositionIndex) return PlatformDenial.SameOrbit;
+            return Check(PlatformAbility.Rephase, now, clock);
+        }
+
+        public bool TryRelocate(int sector, double now, in OrbitClock clock)
+        {
+            if (CheckRelocate(sector, now, clock) != PlatformDenial.None) return false;
             Consume(PlatformAbility.Rephase, now);
-            Seed = seed;
+            Seed = StationKeeping.Route(PositionIndex, sector);
             CycleStart = now + RephaseLeadSeconds;
             Hold = PlatformHold.Rephase;
             return true;
@@ -666,7 +685,14 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
         public float RodScatter(double now) =>
             Orbit.RodScatter * (Stats(now).Stabilised ? GyroScatterFactor : 1f);
 
-        public float EmpScale => Orbit.EmpScale;
+        /// <summary>The first battery enables EMP; each additional online bank widens the pulse by 25%.</summary>
+        public float EmpScaleAt(double now)
+        {
+            int banks = 0;
+            for (int i = 0; i < CellCount; i++)
+                if (cells[i] == ModuleKind.Battery && now >= offlineUntil[i]) banks++;
+            return Orbit.EmpScale * (1f + 0.25f * Math.Max(0, banks - 1));
+        }
 
         // ---- Snapshot -----------------------------------------------------------------------
 
@@ -749,6 +775,7 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
 
         private static bool Valid(PlatformSnapshot from)
         {
+            if (!StationKeeping.ValidRoute(from.Seed)) return false;
             if (from.Modules[CoreCell] != (byte)ModuleKind.Core) return false;
             for (int i = 0; i < CellCount; i++)
             {
@@ -818,6 +845,8 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
 
         public void Mirror(byte regime, int seed, double cycleStart, ushort layout)
         {
+            if (!OrbitRegimes.Valid(regime) || !StationKeeping.ValidRoute(seed) ||
+                double.IsNaN(cycleStart) || double.IsInfinity(cycleStart)) return;
             bool known = Regime == regime && Seed == seed;
             Regime = regime;
             Seed = seed;
@@ -826,6 +855,6 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
         }
 
         public OrbitState State(double now, in OrbitClock clock) =>
-            TheaterTrack.State(Seed, OrbitRegimes.Get(Regime), clock, now - CycleStart);
+            StationKeeping.State(Seed, OrbitRegimes.Get(Regime), now - CycleStart);
     }
 }

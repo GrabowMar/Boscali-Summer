@@ -6,7 +6,8 @@ using UnityEngine;
 namespace BoscaliSummer.Garrisons
 {
     /// <summary>
-    /// Chimera ramp paratrooper drop and Ibis fast-rope visuals.
+    /// Chimera ramp paratrooper drop and Ibis fast-rope visuals. Client-local and cosmetic:
+    /// the server resolves the drop's outcome in AirAssaultController on its own clock.
     /// </summary>
     internal static class AirAssaultVisuals
     {
@@ -18,16 +19,7 @@ namespace BoscaliSummer.Garrisons
         private const int MaximumActiveOperations = 8;
         private static readonly List<GameObject> ActiveOperations = new List<GameObject>(MaximumActiveOperations);
 
-        public static bool HasOperationCapacity
-        {
-            get
-            {
-                ActiveOperations.RemoveAll(operation => operation == null);
-                return ActiveOperations.Count < MaximumActiveOperations;
-            }
-        }
-
-        public static bool HasActiveRappel(Aircraft aircraft)
+        private static bool HasActiveRappel(Aircraft aircraft)
         {
             foreach (GameObject operation in ActiveOperations)
                 if (operation != null && operation.GetComponent<FastRopeRappellingOperation>() is FastRopeRappellingOperation rappel &&
@@ -56,6 +48,7 @@ namespace BoscaliSummer.Garrisons
             if (ActiveOperations.Count >= MaximumActiveOperations)
             {
                 UnityEngine.Object.Destroy(operation);
+                Plugin.Logger.LogInfo($"[Air Assault] Drop visual skipped: {MaximumActiveOperations} drops already in view.");
                 return false;
             }
             ActiveOperations.Add(operation);
@@ -66,8 +59,6 @@ namespace BoscaliSummer.Garrisons
             Aircraft aircraft,
             Vector3 rampPos,
             Vector3 exitVelocity,
-            FactionHQ owner,
-            Airbase airbase,
             int troopCount)
         {
             var dropGo = new GameObject("BoscaliSummer.ParatrooperCargoDrop");
@@ -75,22 +66,18 @@ namespace BoscaliSummer.Garrisons
             if (!Track(dropGo)) return;
 
             ParatrooperCargoDropOperation op = dropGo.AddComponent<ParatrooperCargoDropOperation>();
-            op.Initialize(aircraft, rampPos, exitVelocity, owner, airbase, troopCount);
+            op.Initialize(aircraft, rampPos, exitVelocity, troopCount);
         }
 
-        public static void SpawnFastRopeRappelling(
-            Aircraft aircraft,
-            Vector3 landingPos,
-            FactionHQ owner,
-            int soldierCount,
-            Action onLanded)
+        public static void SpawnFastRopeRappelling(Aircraft aircraft, Vector3 landingPos, int soldierCount)
         {
+            if (aircraft == null || HasActiveRappel(aircraft)) return;
             var opGo = new GameObject("BoscaliSummer.FastRopeRappelling");
-            opGo.transform.position = aircraft != null ? aircraft.transform.position : landingPos;
+            opGo.transform.position = aircraft.transform.position;
             if (!Track(opGo)) return;
 
             FastRopeRappellingOperation op = opGo.AddComponent<FastRopeRappellingOperation>();
-            op.Initialize(aircraft, landingPos, owner, soldierCount, onLanded);
+            op.Initialize(aircraft, landingPos, soldierCount);
         }
 
         public static Mesh GetParachuteMesh()
@@ -107,8 +94,10 @@ namespace BoscaliSummer.Garrisons
             filter.sharedMesh = GetParachuteMesh();
 
             MeshRenderer renderer = rig.AddComponent<MeshRenderer>();
-            Material fabric = GetChuteFabricMaterial() ?? MaterialProvider.GetConcreteMaterial();
-            Material lines = GetChuteLineMaterial() ?? fabric;
+            Material fabric = GetChuteFabricMaterial();
+            if (fabric == null) fabric = MaterialProvider.GetConcreteMaterial();
+            Material lines = GetChuteLineMaterial();
+            if (lines == null) lines = fabric;
             renderer.sharedMaterials = new[] { fabric, lines };
             return rig;
         }
@@ -122,7 +111,8 @@ namespace BoscaliSummer.Garrisons
                 if (mats[i] != null && mats[i].name.IndexOf("parachute", StringComparison.OrdinalIgnoreCase) >= 0)
                     return cachedParachuteMat = mats[i];
             }
-            return cachedParachuteMat = MaterialProvider.GetSandbagMaterial() ?? MaterialProvider.GetConcreteMaterial();
+            // GetSandbagMaterial already falls back to concrete.
+            return cachedParachuteMat = MaterialProvider.GetSandbagMaterial();
         }
 
         public static Material GetChuteFabricMaterial()
@@ -141,7 +131,9 @@ namespace BoscaliSummer.Garrisons
 
         public static Material GetChuteLineMaterial()
         {
-            return cachedChuteLineMat ??= MaterialProvider.GetCargoHookRopeMaterial();
+            if (cachedChuteLineMat == null)
+                cachedChuteLineMat = MaterialProvider.GetCargoHookRopeMaterial();
+            return cachedChuteLineMat;
         }
 
         private sealed class ParatrooperCargoDropOperation : MonoBehaviour
@@ -151,23 +143,17 @@ namespace BoscaliSummer.Garrisons
             private const float FallGravity = 9.81f;
             private const float ChuteOpenDelayMin = 0.7f;
             private const float ChuteDeploySeconds = 0.5f;
-            private const float MinOperationTime = 40f;
-            private const float MaxOperationTime = 110f;
             private const float LandingHoldSeconds = 3.2f;
             private const float SeaMargin = 0.5f;
             private const int MaxParatroopers = 16;
 
-            private FactionHQ owner;
-            private Airbase airbase;
+            private static RuntimeAnimatorController chuteParameterSource;
+            private static readonly List<int> ChuteParameters = new List<int>(4);
+
             private Aircraft aircraft;
             private Vector3 exitAnchorLocal;
             private Vector3 aircraftForward = Vector3.forward;
             private int troopCount;
-            private bool insertionResolved;
-            private int landedCount;
-            private int groundLandingCount;
-            private Vector3 groundLandingSum;
-            private GameObject firstLandingBuilding;
             private float elapsed;
             private float operationTime;
 
@@ -199,25 +185,18 @@ namespace BoscaliSummer.Garrisons
                 public Animator Animator;
             }
 
-            public void Initialize(
-                Aircraft aircraftRef,
-                Vector3 exitPos,
-                Vector3 initialVel,
-                FactionHQ faction,
-                Airbase baseObj,
-                int count)
+            public void Initialize(Aircraft aircraftRef, Vector3 exitPos, Vector3 initialVel, int count)
             {
                 aircraft = aircraftRef;
-                owner = faction;
-                airbase = baseObj;
                 troopCount = Mathf.Max(1, Mathf.Min(MaxParatroopers, count));
                 transform.position = exitPos;
 
                 aircraftForward = aircraft != null ? aircraft.transform.forward : Vector3.forward;
                 exitAnchorLocal = aircraft != null ? aircraft.transform.InverseTransformPoint(exitPos) : exitPos;
 
-                float altitude = Mathf.Max(0f, exitPos.y - Datum.LocalSeaY);
-                operationTime = Mathf.Clamp(altitude / 3.5f + 25f, MinOperationTime, MaxOperationTime);
+                // Height above the sea bounds the height above any landing spot.
+                operationTime = TroopDeploymentMath.ParadropOperationSeconds(
+                    exitPos.y - Datum.LocalSeaY, TroopDeploymentMath.ParachuteDescentRate);
 
                 BuildDroppers(initialVel);
                 StartCoroutine(FlightRoutine());
@@ -239,13 +218,14 @@ namespace BoscaliSummer.Garrisons
                         Velocity = initialVel,
                         DriftSpeed = 1f + UnityEngine.Random.Range(0f, 0.5f),
                         // Earlier jumpers hang longer; later ones sink faster, stretching the trail.
-                        TerminalSpeed = -(5.2f + i * 0.1f + UnityEngine.Random.Range(0f, 0.12f))
+                        TerminalSpeed = -(TroopDeploymentMath.ParachuteDescentRate + i * 0.1f + UnityEngine.Random.Range(0f, 0.12f))
                     };
 
                     drop.Soldier = VanillaSoldierFactory.CreateVisualSoldier(transform.position, Quaternion.identity, transform);
                     if (drop.Soldier == null)
                     {
                         drop.Soldier = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+                        UnityEngine.Object.Destroy(drop.Soldier.GetComponent<Collider>());
                         drop.Soldier.transform.SetParent(transform, false);
                     }
                     drop.Soldier.name = $"Paratrooper_{i + 1}";
@@ -290,7 +270,6 @@ namespace BoscaliSummer.Garrisons
                     yield return null;
                 }
 
-                ResolveInsertionIfPending(true);
                 CleanupAll();
                 yield return new WaitForSeconds(1f);
                 Destroy(gameObject);
@@ -414,7 +393,6 @@ namespace BoscaliSummer.Garrisons
                 drop.Velocity.z *= 0.4f;
 
                 if (drop.Rig != null) drop.Rig.SetActive(true);
-                Plugin.Logger.LogInfo("[Paratroopers] Static-line parachute deployed.");
             }
 
             private void ApplyCanopySway(ParatrooperDrop drop, float dt)
@@ -523,40 +501,6 @@ namespace BoscaliSummer.Garrisons
                 drop.Soldier.transform.position = drop.LandingPosition;
                 if (drop.Animator != null)
                     SetPilotAnimation(drop.Animator, PilotDismounted.PilotState.landing);
-
-                landedCount++;
-                if (inWater)
-                {
-                    Plugin.Logger.LogInfo("[Paratroopers] A paratrooper touched down in water.");
-                }
-                else
-                {
-                    groundLandingCount++;
-                    groundLandingSum += drop.LandingPosition;
-                    if (firstLandingBuilding == null)
-                        firstLandingBuilding = ResolveCivilianBuilding(hit.collider);
-                }
-
-                ResolveInsertionIfPending(false);
-            }
-
-            private void ResolveInsertionIfPending(bool force)
-            {
-                if (insertionResolved || (!force && landedCount < troopCount) || groundLandingCount == 0)
-                    return;
-
-                insertionResolved = true;
-                Vector3 center = groundLandingSum / groundLandingCount;
-
-                if (firstLandingBuilding != null)
-                {
-                    Plugin.Logger.LogInfo($"[AIR ASSAULT] Paratrooper squad ({troopCount} troops) secured and fortified building: {firstLandingBuilding.name}!");
-                    ZoneGarrisonManager.Instance?.TryOccupyBuilding(firstLandingBuilding, owner, airbase);
-                    return;
-                }
-
-                Plugin.Logger.LogInfo($"[AIR ASSAULT] Paratroopers ({troopCount} troops) established combat encampment at ({center.x:0}, {center.z:0})!");
-                ZoneGarrisonManager.Instance?.TryDeployEncampment(center, owner, airbase, troopCount);
             }
 
             private void CleanupAll()
@@ -580,17 +524,18 @@ namespace BoscaliSummer.Garrisons
             {
                 if (anim == null) return;
                 anim.SetInteger("PilotState", (int)state);
-                var paramCount = anim.parameters?.Length ?? 0;
-                for (int i = 0; i < paramCount; i++)
+                // Animator.parameters allocates a fresh array; read it once per controller.
+                if (anim.runtimeAnimatorController != chuteParameterSource)
                 {
-                    var p = anim.parameters[i];
-                    if (p.type == AnimatorControllerParameterType.Bool &&
-                        (p.name.IndexOf("parachute", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                         p.name.IndexOf("chute", StringComparison.OrdinalIgnoreCase) >= 0))
-                    {
-                        anim.SetBool(p.name, true);
-                    }
+                    chuteParameterSource = anim.runtimeAnimatorController;
+                    ChuteParameters.Clear();
+                    foreach (AnimatorControllerParameter p in anim.parameters)
+                        if (p.type == AnimatorControllerParameterType.Bool &&
+                            p.name.IndexOf("chute", StringComparison.OrdinalIgnoreCase) >= 0)
+                            ChuteParameters.Add(p.nameHash);
                 }
+                for (int i = 0; i < ChuteParameters.Count; i++)
+                    anim.SetBool(ChuteParameters[i], true);
             }
         }
 
@@ -615,7 +560,6 @@ namespace BoscaliSummer.Garrisons
             private Aircraft aircraft;
             private Transform helo;
             private Vector3 target;
-            private Action callback;
             private int requestedCount;
 
             private LineRenderer ropeLeft;
@@ -630,7 +574,6 @@ namespace BoscaliSummer.Garrisons
 
             private readonly List<RappellingSoldier> soldiers = new List<RappellingSoldier>();
             private int landedCount;
-            private bool callbackFired;
             private float elapsed;
 
             private sealed class RappellingSoldier
@@ -645,12 +588,11 @@ namespace BoscaliSummer.Garrisons
                 public float LandedAt;
             }
 
-            public void Initialize(Aircraft currentAircraft, Vector3 targetPos, FactionHQ owner, int soldierCount, Action onLanded)
+            public void Initialize(Aircraft currentAircraft, Vector3 targetPos, int soldierCount)
             {
                 aircraft = currentAircraft;
                 helo = aircraft != null ? aircraft.transform : transform;
                 target = targetPos;
-                callback = onLanded;
                 requestedCount = Mathf.Max(1, soldierCount);
 
                 transform.SetParent(helo, false);
@@ -659,7 +601,8 @@ namespace BoscaliSummer.Garrisons
 
                 SetupAudio();
 
-                Material ropeMat = MaterialProvider.GetCargoHookRopeMaterial() ?? MaterialProvider.GetConcreteMaterial();
+                // GetCargoHookRopeMaterial already falls back to concrete.
+                Material ropeMat = MaterialProvider.GetCargoHookRopeMaterial();
                 ropeLeft = CreateRopeLine("Rope_Left", ropeMat);
                 ropeRight = CreateRopeLine("Rope_Right", ropeMat);
 
@@ -919,9 +862,10 @@ namespace BoscaliSummer.Garrisons
                     UpdateRopeRenderer(ropeLeft, 0, deployProgress, elapsed);
                     UpdateRopeRenderer(ropeRight, 1, deployProgress, elapsed);
 
-                    // Break safety check if helo moves out of range
+                    // Break safety check if helo moves out of range; the squad's outcome is the server's.
                     if (Vector3.Distance(helo.position, target) > 65f)
                     {
+                        Plugin.Logger.LogInfo("[IBIS] Fast-rope visual cut short: the helicopter drifted more than 65 m off the LZ.");
                         StopWinchAudio();
                         Destroy(gameObject);
                         yield break;
@@ -1004,19 +948,7 @@ namespace BoscaliSummer.Garrisons
                         }
                     }
 
-                    if (landedCount == soldiers.Count && !callbackFired)
-                    {
-                        callbackFired = true;
-                        callback?.Invoke();
-                    }
-
                     yield return null;
-                }
-
-                if (!callbackFired && landedCount == soldiers.Count)
-                {
-                    callbackFired = true;
-                    callback?.Invoke();
                 }
 
                 // -------------------------------------------------------------
@@ -1077,19 +1009,5 @@ namespace BoscaliSummer.Garrisons
                 Destroy(dust, 3f);
             }
         }
-
-        private static GameObject ResolveCivilianBuilding(Collider col)
-        {
-            if (col == null) return null;
-            MapBuilding mb = col.GetComponentInParent<MapBuilding>();
-            if (mb != null) return mb.gameObject;
-
-            Building b = col.GetComponentInParent<Building>();
-            if (b != null && b.definition is BuildingDefinition bDef && bDef.buildingType == BuildingType.CIV)
-                return b.gameObject;
-
-            return null;
-        }
-
     }
 }

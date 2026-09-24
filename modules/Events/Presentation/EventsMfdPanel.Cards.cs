@@ -65,7 +65,7 @@ namespace BoscaliSummer.Features.Events.Presentation
                 var artObject = new GameObject("Art", typeof(RectTransform), typeof(Image));
                 Image art = artObject.GetComponent<Image>();
                 art.transform.SetParent(root, false);
-                art.preserveAspect = true;
+                art.preserveAspect = false;
                 art.raycastTarget = false;
 
                 var markObject = new GameObject("Mark", typeof(RectTransform), typeof(CanvasRenderer), typeof(EventGlyph));
@@ -75,7 +75,10 @@ namespace BoscaliSummer.Features.Events.Presentation
 
                 AvKit.Place(root, new Rect(x, y, width, height));
                 AvKit.Place(stripes.rectTransform, new Rect(0f, 0f, width, height));
-                AvKit.Place(art.rectTransform, new Rect(0f, 0f, width, width * 9f / 16f));
+                float imageWidth = Mathf.Max(width, height * 16f / 9f);
+                float imageHeight = imageWidth * 9f / 16f;
+                AvKit.Place(art.rectTransform, new Rect((width - imageWidth) * 0.5f,
+                    (imageHeight - height) * 0.5f, imageWidth, imageHeight));
                 AvKit.Place(mark.rectTransform, new Rect(width * 0.5f - markSize * 0.5f,
                     -height * 0.5f + markSize * 0.5f, markSize, markSize));
 
@@ -99,7 +102,8 @@ namespace BoscaliSummer.Features.Events.Presentation
 
         private sealed class ActiveEventCard
         {
-            public const float PlainHeight = 258f;
+            public const float PlainHeight = 366f;
+            private const float CalmHeight = 236f;
 
             /// <summary>
             /// The height the page reserves for a scripted card at the beat cap, so the scroll
@@ -108,23 +112,22 @@ namespace BoscaliSummer.Features.Events.Presentation
             /// </summary>
             public const float ScriptedHeight = ScriptedBaseHeight + MaximumEventSteps * StepPitch;
 
-            private const float PlateWidth = 92f;
-            private const float PlateHeight = 64f;
+            private const float PlateHeight = 132f;
             private const float TextX = 12f;
-            private const float TitleY = -10f;
-            private const float ScopeY = -36f;
-            private const float CountdownY = -54f;
-            private const float EffectY = -104f;
-            private const float ConsequenceY = -128f;
-            private const float FlavorY = -158f;
+            private const float TitleY = -153f;
+            private const float ScopeY = -184f;
+            private const float CountdownY = -201f;
+            private const float EffectY = -229f;
+            private const float ConsequenceY = -260f;
+            private const float FlavorY = -294f;
             private const float FlavorMinHeight = 42f;
             private const float FlavorMaxHeight = 66f;
             private const float ResponseWidth = 250f;
             private const float ResponseNoteX = 268f;
-            private const float StepTop = 204f;
+            private const float StepTop = 347f;
             private const float StepPitch = 16f;
             private const float StepResponseGap = 6f;
-            private const float ScriptedBaseHeight = 264f;
+            private const float ScriptedBaseHeight = 368f;
             private const int MaximumSteps = EventsMfdPanel.MaximumEventSteps;
 
             private readonly float width;
@@ -135,6 +138,7 @@ namespace BoscaliSummer.Features.Events.Presentation
             private readonly Image box;
             private readonly Image rail;
             private readonly PlateUi plate;
+            private readonly TMP_Text posterTag;
             private readonly TMP_Text title;
             private readonly TMP_Text scope;
             private readonly Image countdownRail;
@@ -147,6 +151,7 @@ namespace BoscaliSummer.Features.Events.Presentation
             private readonly TMP_Text[] stepLabel;
             private readonly Image track;
             private readonly Image fill;
+            private readonly Image[] timeTicks;
             private readonly AvButton action;
             private readonly Image actionRail;
             private readonly TMP_Text actionNote;
@@ -158,6 +163,7 @@ namespace BoscaliSummer.Features.Events.Presentation
             private bool critical;
             private bool scripted;
             private bool shapeSet;
+            private bool calm;
             private int scriptedSteps;
             private float flavorExtra;
 
@@ -175,23 +181,23 @@ namespace BoscaliSummer.Features.Events.Presentation
                 box = AvStyled.Box(rootRect, new Rect(0f, 0f, width, PlainHeight), "card");
                 rail = AvStyled.Rail(rootRect, new Rect(0f, 0f, 3f, PlainHeight), "locked");
 
-                plate = PlateUi.Build(rootRect, TextX, -8f, PlateWidth, PlateHeight, 24f);
+                plate = PlateUi.Build(rootRect, TextX, -8f, width - TextX * 2f, PlateHeight, 30f);
+                AvKit.Panel(rootRect, new Rect(TextX + 8f, -17f, 148f, 20f),
+                    AvTheme.Ground.WithAlpha(.86f)).raycastTarget = false;
+                posterTag = AvStyled.Label(rootRect, new Rect(TextX + 16f, -19f, 136f, 16f),
+                    "THEATER / LIVE", "section-title-note");
 
-                float blockX = TextX + PlateWidth + 12f;
-                float blockWidth = width - blockX - TextX;
-
-                // Reading order in the title block: title, then what the event is and who it
-                // is aimed at, then the clock. The clock is row text: the effect owns the big
-                // figure below, and two competing numerals read as noise.
-                title = AvStyled.Label(rootRect, new Rect(blockX, TitleY, blockWidth, 24f), "", "page-title");
+                title = AvStyled.Label(rootRect,
+                    new Rect(TextX, TitleY, width - TextX * 2f, 27f), "", "page-title");
                 title.enableAutoSizing = true;
                 title.fontSizeMin = AvTokens.FontLead;
-                scope = AvStyled.Label(rootRect, new Rect(blockX, ScopeY, blockWidth, 12f), "",
+                scope = AvStyled.Label(rootRect, new Rect(TextX, ScopeY, width - TextX * 2f, 13f), "",
                     "section-title-note");
-                countdownRail = AvKit.Panel(rootRect, new Rect(blockX, CountdownY - 1f, 3f, 12f),
+                countdownRail = AvKit.Panel(rootRect, new Rect(TextX, CountdownY - 1f, 3f, 12f),
                     AvTheme.RailInert);
                 countdownRail.raycastTarget = false;
-                countdown = AvStyled.Label(rootRect, new Rect(blockX + 10f, CountdownY, blockWidth - 10f, 16f),
+                countdown = AvStyled.Label(rootRect,
+                    new Rect(TextX + 10f, CountdownY, width - TextX * 2f - 10f, 16f),
                     "", "row-value", align: TextAlignmentOptions.MidlineLeft);
 
                 effect = AvStyled.Label(rootRect, new Rect(TextX, EffectY, width - TextX * 2f, 22f),
@@ -222,6 +228,11 @@ namespace BoscaliSummer.Features.Events.Presentation
                 track.raycastTarget = false;
                 fill = AvKit.Panel(rootRect, new Rect(barArea.x, barArea.y, 0f, barArea.height), AvTheme.Dim);
                 fill.raycastTarget = false;
+                timeTicks = new Image[3];
+                for (int i = 0; i < timeTicks.Length; i++)
+                    timeTicks[i] = AvKit.Rule(rootRect,
+                        new Rect(barArea.x + barArea.width * (i + 1f) / 4f,
+                            barArea.y - 1f, 1f, 5f), AvTheme.Frame);
 
                 // The decision is one unit: a rail, the button, and the reason beside it. The
                 // reason is a permanent line, never a tooltip-only explanation; the tooltip
@@ -241,10 +252,16 @@ namespace BoscaliSummer.Features.Events.Presentation
                 ApplyShape(false, 0, force: true);
             }
 
+            public void UseExternalDecisionBoard()
+            {
+                HideResponse();
+            }
+
             public void Bind(ActiveEventView view, string effectText, Color effectColor, string consequenceText)
             {
                 if (!root.activeSelf) root.SetActive(true);
-                ApplyShape(view.IsSuper, view.Steps.Count, force: false);
+                calm = false;
+                ApplyShape(view.IsSuper, view.Steps.Count, force: true);
                 tierInk = TierInk(view.Tier);
                 tierRail = TierRail(view.Tier);
                 urgency = 0f;
@@ -253,7 +270,15 @@ namespace BoscaliSummer.Features.Events.Presentation
 
                 plate.Bind(EventArtCache.Get(view.IconKey,
                     view.IsSuper ? "tier_super" : "tier_medium"), CategoryOf(view.Category), tierInk);
+                posterTag.text = "THEATER / " + TierShort(view.Tier);
 
+                scope.gameObject.SetActive(true);
+                countdown.gameObject.SetActive(true);
+                countdownRail.gameObject.SetActive(true);
+                effect.gameObject.SetActive(true);
+                flavor.gameObject.SetActive(true);
+                AvKit.Place(consequence.rectTransform,
+                    new Rect(TextX, ConsequenceY, width - TextX * 2f, 28f));
                 title.text = view.Title.ToUpperInvariant();
                 scope.text = view.Category + "  ·  " + view.Target;
                 scope.color = AvTheme.Dim;
@@ -269,7 +294,9 @@ namespace BoscaliSummer.Features.Events.Presentation
             public void BindPlaceholder(string noteText)
             {
                 if (!root.activeSelf) root.SetActive(true);
-                ApplyShape(false, 0, force: false);
+                calm = true;
+                flavorExtra = 0f;
+                ApplyShape(false, 0, force: true);
                 tierInk = AvTheme.Dim;
                 tierRail = AvTheme.RailInert;
                 urgency = 0f;
@@ -277,13 +304,16 @@ namespace BoscaliSummer.Features.Events.Presentation
                 critical = false;
 
                 plate.Bind(null, 0, AvTheme.Dim);
+                posterTag.text = "THEATER / STANDBY";
                 title.text = "THE THEATER IS QUIET";
-                scope.text = "NO ACTIVE EVENT";
-                scope.color = AvTheme.Dim;
-                effect.text = "NO PRICE EFFECT";
-                effect.color = AvTheme.Dim;
-                consequence.text = "Requisition prices are unchanged.";
-                SetFlavor(noteText);
+                scope.gameObject.SetActive(false);
+                effect.gameObject.SetActive(false);
+                flavor.gameObject.SetActive(false);
+                countdown.gameObject.SetActive(false);
+                countdownRail.gameObject.SetActive(false);
+                consequence.text = noteText;
+                AvKit.Place(consequence.rectTransform,
+                    new Rect(TextX, -184f, width - TextX * 2f, 38f));
                 countdown.text = "";
                 countdownRail.color = AvTheme.RailInert;
                 rail.color = AvTheme.RailInert;
@@ -306,8 +336,8 @@ namespace BoscaliSummer.Features.Events.Presentation
                 scripted = isScripted;
                 scriptedSteps = steps;
                 float shift = flavorExtra;
-                Height = isScripted
-                    ? ScriptedBaseHeight + steps * StepPitch + shift
+                Height = calm ? CalmHeight :
+                    isScripted ? ScriptedBaseHeight + steps * StepPitch + shift
                     : PlainHeight + shift;
                 float h = Height;
 
@@ -336,6 +366,10 @@ namespace BoscaliSummer.Features.Events.Presentation
                 var barArea = new Rect(8f, -(h - 10f), width - 16f, 3f);
                 AvKit.Place(track.rectTransform, barArea);
                 AvKit.Place(fill.rectTransform, new Rect(barArea.x, barArea.y, 0f, barArea.height));
+                for (int i = 0; i < timeTicks.Length; i++)
+                    AvKit.Place(timeTicks[i].rectTransform,
+                        new Rect(barArea.x + barArea.width * (i + 1f) / 4f,
+                            barArea.y - 1f, 1f, 5f));
             }
 
             /// <summary>
@@ -366,6 +400,12 @@ namespace BoscaliSummer.Features.Events.Presentation
                     }
 
                     ActiveEventStep step = view.Steps[i];
+                    if (!view.TargetResolved)
+                    {
+                        SetStep(i, true, "T+" + StepClock(step.AtSeconds),
+                            "[CANCELLED] " + step.Label, AvTheme.Dim);
+                        continue;
+                    }
                     bool fired = now >= start + step.AtSeconds;
                     SetStep(i, true,
                         "T+" + StepClock(step.AtSeconds),
@@ -491,14 +531,14 @@ namespace BoscaliSummer.Features.Events.Presentation
 
                 plate = PlateUi.Build(rootRect, 10f, -8f, ThumbWidth, ThumbHeight, 12f);
 
-                chipFill = AvStyled.Box(rootRect, new Rect(60f, -9f, 66f, 16f), "chip", "inert");
-                chip = AvStyled.Label(rootRect, new Rect(60f, -9f, 66f, 16f), "", "chip", "inert",
+                chipFill = AvStyled.Box(rootRect, new Rect(58f, -9f, 56f, 16f), "chip", "inert");
+                chip = AvStyled.Label(rootRect, new Rect(58f, -9f, 56f, 16f), "", "chip", "inert",
                     align: TextAlignmentOptions.Center);
 
-                title = AvStyled.Label(rootRect, new Rect(126f, -8f, 212f, 18f), "", "row-name");
+                title = AvStyled.Label(rootRect, new Rect(122f, -8f, 212f, 18f), "", "row-name");
                 clock = AvStyled.Label(rootRect, new Rect(338f, -8f, 88f, 16f), "", "row-value-unit",
                     align: TextAlignmentOptions.MidlineRight);
-                meta = AvStyled.Label(rootRect, new Rect(60f, -29f, 190f, 13f), "", "row-sub");
+                meta = AvStyled.Label(rootRect, new Rect(58f, -29f, 190f, 13f), "", "row-sub");
 
                 effectFill = AvStyled.Box(rootRect, new Rect(270f, -28f, 156f, 17f), "chip", "inert");
                 effect = AvStyled.Label(rootRect, new Rect(270f, -28f, 156f, 17f), "", "chip", "inert",
@@ -522,10 +562,10 @@ namespace BoscaliSummer.Features.Events.Presentation
 
                 float top = height > TallThreshold ? -(height * 0.5f) + 40f : -8f;
                 AvKit.Place(plate.Root, new Rect(10f, top, ThumbWidth, ThumbHeight));
-                PlaceChip(new Rect(60f, top - 1f, 66f, 16f), chipFill, chip);
-                AvKit.Place(title.rectTransform, new Rect(126f, top, width - 226f, 18f));
-                AvKit.Place(clock.rectTransform, new Rect(width - 100f, top, 88f, 16f));
-                AvKit.Place(meta.rectTransform, new Rect(60f, top - 21f, width - 248f, 13f));
+                PlaceChip(new Rect(58f, top - 1f, 56f, 16f), chipFill, chip);
+                AvKit.Place(title.rectTransform, new Rect(122f, top, width - 222f, 18f));
+                AvKit.Place(clock.rectTransform, new Rect(width - 96f, top, 88f, 16f));
+                AvKit.Place(meta.rectTransform, new Rect(58f, top - 21f, width - 230f, 13f));
                 PlaceChip(new Rect(width - 168f, top - 20f, 156f, 17f), effectFill, effect);
                 AvKit.Place(help.rectTransform, new Rect(12f, top - 48f, width - 24f, 30f));
             }
@@ -550,7 +590,8 @@ namespace BoscaliSummer.Features.Events.Presentation
 
                 title.text = view.Title.ToUpperInvariant();
                 meta.text = view.Category + "  ·  " + ShortTarget(view.Target);
-                effect.text = view.EffectSummary;
+                effect.text = IsNeutral(view.EffectSummary) && !string.IsNullOrEmpty(view.TempoSummary)
+                    ? view.TempoSummary : view.EffectSummary;
                 effect.color = effectColor;
                 effectFill.color = effectColor.WithAlpha(0.10f);
                 rail.color = railColor;

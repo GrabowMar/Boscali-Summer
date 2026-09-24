@@ -27,6 +27,8 @@ namespace BoscaliSummer.Fire
                     int salt = Mathf.RoundToInt(info.muzzleVelocity) ^ Mathf.RoundToInt(info.pierceDamage * 0.1f);
                     ImpactFireManager.Instance?.SubmitImpact(
                         ___position, false, salt);
+                    // Client-local breach marks; every peer stamps its own outside authority.
+                    BuildingHitLedger.Instance?.SubmitGunHit(___position);
                 }
             }
             catch (Exception e)
@@ -84,8 +86,12 @@ namespace BoscaliSummer.Fire
             try
             {
                 if (!oldState && newState && __instance != null)
-                    ImpactFireManager.Instance?.SubmitVehicleExplosion(
-                        __instance.transform.position.ToGlobalPosition(), __instance.GetInstanceID());
+                {
+                    GlobalPosition at = __instance.transform.position.ToGlobalPosition();
+                    int id = __instance.GetInstanceID();
+                    ImpactFireManager.Instance?.RecordWreck(at, id);
+                    ImpactFireManager.Instance?.SubmitVehicleExplosion(at, id);
+                }
             }
             catch (Exception e)
             {

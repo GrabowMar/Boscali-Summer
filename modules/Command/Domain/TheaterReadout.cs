@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using BoscaliSummer.Framework.Contracts;
 
 namespace BoscaliSummer.Features.Command.Domain
 {
@@ -100,6 +101,101 @@ namespace BoscaliSummer.Features.Command.Domain
             if (captureProgress < 0.05f) return "HOLDING";
             if (captureProgress >= 0.75f) return "FALLING";
             return "UNDER PRESSURE";
+        }
+
+        /// <summary>
+        /// The state word an offensive wears, one word for the phase and, once it is over,
+        /// the outcome. It is the reading the rail colour repeats, never the only carrier.
+        /// </summary>
+        public static string OffensivePhaseWord(TheaterOperationPhase phase, TheaterOperationOutcome outcome)
+        {
+            switch (phase)
+            {
+                case TheaterOperationPhase.Mustering: return "MUSTERING";
+                case TheaterOperationPhase.Planning: return "PLANNING";
+                case TheaterOperationPhase.AwaitingTarget: return "AWAITING TARGET";
+                case TheaterOperationPhase.Launching: return "H-HOUR";
+                case TheaterOperationPhase.Assault: return "ASSAULT";
+                case TheaterOperationPhase.Holding: return "HOLDING";
+                default: return OffensiveOutcomeWord(outcome);
+            }
+        }
+
+        /// <summary>
+        /// The stage an offensive has reached on the staff's own timeline, 0..4. Gathering,
+        /// planning, the target, H-hour and the push itself are the five things that happen,
+        /// and the board draws them as one strip so a plan that runs itself still reads as a
+        /// sequence rather than a single progress bar.
+        /// </summary>
+        public static int OffensiveStage(TheaterOperationPhase phase)
+        {
+            switch (phase)
+            {
+                case TheaterOperationPhase.Mustering: return 0;
+                case TheaterOperationPhase.Planning: return 1;
+                case TheaterOperationPhase.AwaitingTarget: return 2;
+                case TheaterOperationPhase.Launching: return 3;
+                default: return 4;
+            }
+        }
+
+        /// <summary>The five stage captions the strip is drawn with, in order.</summary>
+        public static readonly string[] OffensiveStages =
+        {
+            "MUSTER", "PLAN", "TARGET", "H-HOUR", "PUSH",
+        };
+
+        /// <summary>
+        /// A duration as clock time, minutes and seconds. A battle report says how long the
+        /// push ran, and "7m" cannot say whether a fight lasted 7:02 or 7:58.
+        /// </summary>
+        public static string Clock(float seconds)
+        {
+            if (float.IsNaN(seconds) || float.IsInfinity(seconds)) return "—";
+            int total = (int)Math.Round(Math.Max(0f, seconds), MidpointRounding.AwayFromZero);
+            return (total / 60).ToString(CultureInfo.InvariantCulture) + ":" +
+                   (total % 60).ToString("00", CultureInfo.InvariantCulture);
+        }
+
+        /// <summary>How a concluded offensive reads in its state word.</summary>
+        public static string OffensiveOutcomeWord(TheaterOperationOutcome outcome)
+        {
+            switch (outcome)
+            {
+                case TheaterOperationOutcome.ObjectiveSecured: return "SECURED";
+                case TheaterOperationOutcome.ObjectiveLost: return "OBJECTIVE CLOSED";
+                case TheaterOperationOutcome.Stalled: return "STALLED";
+                case TheaterOperationOutcome.CommitmentSpent: return "COMMITMENT SPENT";
+                case TheaterOperationOutcome.Cancelled: return "CANCELLED";
+                default: return "CONCLUDED";
+            }
+        }
+
+        /// <summary>
+        /// The rail state for an offensive: gathering and planning are armed, awaiting a
+        /// target wants the commander's attention, H-hour is imminent, the assault is running,
+        /// a hold needs a decision, and only a secured objective reads as nominal; a stalled
+        /// or lost one reads danger.
+        /// </summary>
+        public static string OffensiveRail(TheaterOperationPhase phase, TheaterOperationOutcome outcome)
+        {
+            switch (phase)
+            {
+                case TheaterOperationPhase.Mustering:
+                case TheaterOperationPhase.Planning: return "armed";
+                case TheaterOperationPhase.AwaitingTarget: return "contested";
+                case TheaterOperationPhase.Launching: return "info";
+                case TheaterOperationPhase.Holding: return "cooling";
+                case TheaterOperationPhase.Assault: return "ready";
+                default:
+                    switch (outcome)
+                    {
+                        case TheaterOperationOutcome.ObjectiveSecured: return "ready";
+                        case TheaterOperationOutcome.ObjectiveLost:
+                        case TheaterOperationOutcome.Stalled: return "danger";
+                        default: return "locked";
+                    }
+            }
         }
     }
 }

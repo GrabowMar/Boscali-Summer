@@ -15,7 +15,8 @@ namespace BoscaliSummer.Features.FireAndDestruction
             typeof(BulletImpactPatch),
             typeof(MissileImpactPatch),
             typeof(GroundVehicleDestructionPatch),
-            typeof(MapBuildingRuinPatch),
+            typeof(BuildingHitPatch),
+            typeof(BuildingDestructPatch),
             typeof(AircraftWreckPersistencePatch)
         };
 
@@ -27,9 +28,11 @@ namespace BoscaliSummer.Features.FireAndDestruction
             ImpactFireManager fires = context.AddSceneService<ImpactFireManager>(10);
             fires.Configure(context.Services);
             context.AddSceneService<ImpactScorchManager>(15);
+            context.AddSceneService<BuildingHitLedger>(17);
             context.AddSceneService<RuinAftermathManager>(20);
             context.AddSceneService<ModNet>(100);
             context.AddService<IFireSuppressionService>(fires);
+            context.AddService<IFoliageCover>(fires);
 
             context.AddHostSettings(new HostSettingsTable("FIRE AND DESTRUCTION")
                 .Toggle(1, context.Settings.FireAndDestruction.FiresEnabled, "FIRE IGNITION",

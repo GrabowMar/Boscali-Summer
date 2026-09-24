@@ -38,15 +38,15 @@ namespace BoscaliSummer.Features.Trenches.Domain
         public const float MeshSpacing = 3.5f;
         // The traverse wave is a subtle traversed zigzag: a man-scale trench bends gently
         // every nine metres or so, never a flight-visibility sawtooth that reads as blocky
-        // square bays beside 1.8m soldiers and vanilla emplacements.
+        // square bays beside the 1.8m-tall vanilla emplacements.
         public const float TraverseSpacing = 9f;
         public const float TraverseAmplitude = 0.5f;
         public const float MinRunLength = 140f;
         public const int MaximumStations = 320;
 
-        // A fire trench is a chain of bays, not one uniform ribbon: weapon nests and their
-        // crews stand in the ditch at a regular pitch, and the ditch flares around each bay
-        // so a nest and a man fit side by side. The count is capped, so the extra width
+        // A fire trench is a chain of bays, not one uniform ribbon: weapon nests stand in the
+        // ditch at a regular pitch, and the ditch flares around each bay so a nest fits on the
+        // crest. The count is capped, so the extra width
         // stays a bounded widening of one position's earthwork.
         public const float NodeSpacing = 20f;      // fire-bay pitch along the fire trench
         public const int MaximumNodes = 32;
@@ -87,6 +87,16 @@ namespace BoscaliSummer.Features.Trenches.Domain
         public const float FireDepth = 80f;
         public const float SupportDepth = 150f;
         public const float RedoubtDepth = 300f;
+        // A belt trace that the ground refuses at doctrine depth is tried shallower before
+        // the stage gives up on it: a rear line closer in is better than no rear line. A
+        // rear trace may also be shorter than the fire line, and after a bounded number of
+        // refusals the stage advances without it so the belt never holds the defender
+        // budget hostage (live positions sat at three defenders forever for this).
+        private static readonly float[] SupportLadder = { SupportDepth, 120f, 100f };
+        private static readonly float[] RedoubtLadder = { RedoubtDepth, 240f, 190f };
+        public const int BeltLadderLength = 3;
+        public const float BeltMinRunLength = 70f;
+        public const int BeltRefusalLimit = 3;
         public const float DepthSearchStep = 12f;
         public const int DepthSearchLevels = 5;
         public const float DepthStayWeight = 0.045f;
@@ -94,6 +104,35 @@ namespace BoscaliSummer.Features.Trenches.Domain
         public const float LinkSpacing = 150f;
         public const float SapDepth = 45f;
         public const float SapLateralFraction = 0.3f;
+
+        // Siting: a real position is dug for observation and drainage, not for shelter. The
+        // fire line belongs on a crest or knoll standing above the ground either side of the
+        // trace — grazing fire over no man's land, a dry floor, hollows in front skylined.
+        // The first planner minimised ground height and so settled every position into the
+        // lowest hollow it could reach; relief is what is scored now.
+        public const float ReliefProbeDistance = 40f;  // ground sampled either side of the trace
+        public const float ReliefWeight = 0.06f;       // reward per metre above the local low ground
+        public const float ReliefCap = 12f;            // high ground is good; a peak is not a fortress
+        public const float HollowPenalty = 0.5f;       // penalty per metre below the ground either side
+
+        // Beach fallback: a trace along the shore refuses every candidate at the fire depth
+        // (wet ground), so the planner retries one band deeper landward instead of dropping
+        // the beachhead. The wire belts still sit between the ditch and the water.
+        public const float BeachFallbackExtraDepth = 60f;
+
+        // Foliage: a position digs at the forest edge, not inside the stand (no fields of
+        // fire) and not far out in the open (no concealment). The inside penalty outweighs
+        // one depth step, so a boundary line hugs the edge; the edge bonus is a tiebreaker.
+        // Both nudge the route; neither refuses ground on its own.
+        public const float FoliageInsidePenalty = 8f;
+        public const float FoliageEdgeBonus = 0.25f;
+        public const float FoliageEdgeProbeDistance = 40f;
+
+        // Roads: the ditch stays off the road surface (one depth step of penalty), while
+        // anti-tank coverage watches the nearest road inside the watch distance.
+        public const float RoadClearDistance = 15f;
+        public const float RoadDitchPenalty = 8f;
+        public const float RoadWatchDistance = 300f;
 
         // Validated ground: dry, level enough to dig, and a safe trench-side probe distance.
         public const float MinimumGroundHeight = 2f;
@@ -107,16 +146,43 @@ namespace BoscaliSummer.Features.Trenches.Domain
         private static readonly float[] SideProbeDistances = { 40f, 250f, 1000f, 3000f, 8000f };
 
         /// <summary>
-        /// Floor of the contested band. A position digs a hundred-ish metres behind the
-        /// trace, well inside the front cell, and the field is one value per kilometre cell:
-        /// on a ragged front that cell can read slightly hostile (a salient, a cell the enemy
-        /// has just pushed into) while the ground is still the faction's own side of the
-        /// line. Only ground clearly inside the enemy's cells refuses.
+        /// Floor of the contested band a dug line survives in. A position digs a hundred-ish
+        /// metres behind the trace, well inside the front cell, and the field is one value per
+        /// kilometre cell: on a ragged front that cell can read hostile-leaning (a salient, a
+        /// cell the enemy has just pushed into) while the ground is still the faction's own
+        /// side of the line. Only ground deep inside the enemy's cells is given up.
         /// </summary>
-        public const float HoldOwnSideFloor = -0.5f;
+        public const float HoldOwnSideFloor = -0.75f;
 
-        /// <summary>True when a signed control value is the faction's own or contested ground.</summary>
+        /// <summary>
+        /// Floor for digging new ground: firmer than the floor for staying, so a line dug at
+        /// the edge of its band is not abandoned by the next sample. One shared floor dug
+        /// positions at -0.5 and abandoned them at -0.5, which killed every position on a hot
+        /// front within a tick of its commit.
+        /// </summary>
+        public const float DigHoldFloor = -0.25f;
+
+        // A position on a moving front is not given up on a single sample: the field must
+        // read deep enemy at its centre for a sustained spell, and never inside the dig-in
+        // grace after commit while the garrison is still standing up.
+        public const float DigInGraceSeconds = 120f;
+        public const float AbandonSeconds = 30f;
+
+        /// <summary>True when a signed control value is ground a dug line still holds.</summary>
         public static bool HoldsOwnSide(float hold) => !float.IsNaN(hold) && hold >= HoldOwnSideFloor;
+
+        /// <summary>True when a signed control value is ground a new line may dig into.</summary>
+        public static bool CanDig(float hold) => !float.IsNaN(hold) && hold >= DigHoldFloor;
+
+        /// <summary>
+        /// Whether the control field abandons a position: <paramref name="hostileSince"/> is
+        /// the time its centre first read below <see cref="HoldOwnSideFloor"/> (negative
+        /// while it reads own side), and the verdict needs both the dig-in grace spent and
+        /// the hostile read sustained.
+        /// </summary>
+        public static bool FieldAbandons(float now, float dugAt, float hostileSince)
+            => hostileSince >= 0f && now >= dugAt + DigInGraceSeconds &&
+                now - hostileSince >= AbandonSeconds;
 
         /// <summary>
         /// Side of the front the faction holds at a station: samples the signed control field
@@ -151,6 +217,46 @@ namespace BoscaliSummer.Features.Trenches.Domain
         public static bool IsBuildableGround(float heightAboveSea, float normalY)
             => !float.IsNaN(heightAboveSea) && !float.IsInfinity(heightAboveSea) &&
                 heightAboveSea > MinimumGroundHeight && normalY >= MinimumNormalY && normalY <= 1f;
+
+        /// <summary>
+        /// Siting cost of one candidate depth. Ground standing above the land either side of
+        /// the trace (a crest or knoll) is rewarded up to a cap; ground below both sides (the
+        /// hollows the first planner preferred for their low ground alone) is penalised. The
+        /// absolute ground height is deliberately absent, so a valley floor never wins for
+        /// being low. Depth error keeps the line near its intended offset; probes that never
+        /// landed leave only that term.
+        /// </summary>
+        public static float DefensibleCost(float groundHeight, float forwardHeight, float backHeight,
+            float depthError)
+        {
+            float cost = DepthStayWeight * depthError * depthError;
+            if (float.IsNaN(forwardHeight) || float.IsNaN(backHeight)) return cost;
+            float relief = groundHeight - Math.Min(forwardHeight, backHeight);
+            if (relief >= 0f) return cost - ReliefWeight * Math.Min(relief, ReliefCap);
+            return cost + HollowPenalty * -relief;
+        }
+
+        /// <summary>
+        /// Foliage nudge for one candidate: ground inside the stand costs a depth step (no
+        /// fields of fire), ground just outside it earns a small bonus (concealment). Open
+        /// ground far from any stand scores nothing.
+        /// </summary>
+        public static float FoliageCost(bool inside, bool nearEdge)
+        {
+            if (inside) return FoliageInsidePenalty;
+            return nearEdge ? -FoliageEdgeBonus : 0f;
+        }
+
+        /// <summary>
+        /// Road nudge for one candidate: ground on the road surface costs a depth step, so
+        /// the ditch sidesteps onto the verge where the terrain allows. Unknown distance
+        /// (no road index) scores nothing.
+        /// </summary>
+        public static float RoadCost(float distance)
+        {
+            if (float.IsNaN(distance)) return 0f;
+            return distance < RoadClearDistance ? RoadDitchPenalty : 0f;
+        }
 
         /// <summary>
         /// True when a trace's ends meet: Command repeats a pocket ring's first point last,
@@ -360,6 +466,32 @@ namespace BoscaliSummer.Features.Trenches.Domain
             => !float.IsNaN(groundHeight[station, candidate]) && !float.IsNaN(positionCost[station, candidate]);
 
         /// <summary>
+        /// Indices of the packed trace buffers ordered by pressure, hottest first: the scan
+        /// digs the sectors the fighting is on before it walks the quiet stretches. Insertion
+        /// sort over the bounded trace budget, no allocation; equal pressures keep their
+        /// original order. Returns the number of indices written.
+        /// </summary>
+        public static int OrderByPressure(float[] pressure, int count, int[] order)
+        {
+            if (pressure == null || order == null || count <= 0) return 0;
+            count = Math.Min(count, Math.Min(pressure.Length, order.Length));
+            for (int i = 0; i < count; i++) order[i] = i;
+            for (int i = 1; i < count; i++)
+            {
+                int key = order[i];
+                float keyPressure = pressure[key];
+                int j = i - 1;
+                while (j >= 0 && pressure[order[j]] < keyPressure)
+                {
+                    order[j + 1] = order[j];
+                    j--;
+                }
+                order[j + 1] = key;
+            }
+            return count;
+        }
+
+        /// <summary>
         /// Densifies the curve into ditch-mesh rings and lays the traverse wave along it.
         /// The wave is phased off the line's world position, so neighbouring lines continue
         /// one pattern instead of restarting it. Returns the ring count written.
@@ -434,7 +566,23 @@ namespace BoscaliSummer.Features.Trenches.Domain
         public static bool CanAdvance(bool overrun, float now, float suppressedUntil, float nextGrowth)
             => !overrun && now >= suppressedUntil && now >= nextGrowth;
 
-        // Nests and crews share one budget: the two opening MG teams of a Scrape grow into a
+        /// <summary>
+        /// Depth behind the trace of the belt trace <paramref name="stage"/> adds next, on
+        /// rung <paramref name="attempt"/> of the ladder; NaN past the ladder or for a stage
+        /// that adds no belt trace.
+        /// </summary>
+        public static float BeltDepth(TrenchStage stage, int attempt)
+        {
+            float[] ladder = stage == TrenchStage.FireTrench ? SupportLadder
+                : stage == TrenchStage.Support ? RedoubtLadder : null;
+            if (ladder == null || attempt < 0 || attempt >= ladder.Length) return float.NaN;
+            return ladder[attempt];
+        }
+
+        /// <summary>True once a stage has refused its belt trace often enough to advance without it.</summary>
+        public static bool AdvancesWithoutBelt(int refusals) => refusals >= BeltRefusalLimit;
+
+        // One budget for the whole position: the two opening MG teams of a Scrape grow into a
         // full chain of bay strongpoints, not a second free garrison on top of the works.
         public static int DefenderBudget(TrenchStage stage)
             => stage >= TrenchStage.Saps ? 8
@@ -445,7 +593,11 @@ namespace BoscaliSummer.Features.Trenches.Domain
                 : 0;
 
         public static int WorksBudget(TrenchStage stage)
-            => stage >= TrenchStage.Redoubt ? 8 : stage >= TrenchStage.Support ? 6 : stage >= TrenchStage.FireTrench ? 3 : 0;
+            => stage >= TrenchStage.Saps ? 10
+                : stage >= TrenchStage.Redoubt ? 8
+                : stage >= TrenchStage.Support ? 6
+                : stage >= TrenchStage.FireTrench ? 3
+                : 0;
 
         public static bool HasSupport(TrenchStage stage) => stage >= TrenchStage.Support;
         public static bool HasRedoubt(TrenchStage stage) => stage >= TrenchStage.Redoubt;

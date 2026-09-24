@@ -54,6 +54,7 @@ namespace BoscaliSummer.Features.HighCommand.Presentation
         private HighCommandSettings settings;
         private IHighCommandView view;
         private Transform layer;
+        private RectTransform layerRoot;
 
         public void Configure(HighCommandSettings config, IHighCommandView source)
         {
@@ -66,6 +67,8 @@ namespace BoscaliSummer.Features.HighCommand.Presentation
             for (int i = 0; i < pool.Count; i++)
                 if (pool[i].Root != null) Destroy(pool[i].Root);
             pool.Clear();
+            if (layerRoot != null) Destroy(layerRoot.gameObject);
+            layerRoot = null;
             layer = null;
         }
 
@@ -79,7 +82,7 @@ namespace BoscaliSummer.Features.HighCommand.Presentation
                 return;
             }
             DynamicMap map = SceneSingleton<DynamicMap>.i;
-            if (map == null || map.mapImage == null || map.iconLayer == null)
+            if (map == null || map.mapImage == null)
             {
                 HideFrom(0);
                 return;
@@ -93,13 +96,19 @@ namespace BoscaliSummer.Features.HighCommand.Presentation
             }
 
             float inverseScale = 1f / map.mapImage.transform.localScale.x;
+            float displayFactor = map.mapDisplayFactor;
             if (float.IsNaN(inverseScale) || float.IsInfinity(inverseScale) || inverseScale <= 0f)
             {
                 HideFrom(0);
                 return;
             }
 
-            layer = map.iconLayer.transform;
+            layer = EnsureLayer(map);
+            if (layer == null)
+            {
+                HideFrom(0);
+                return;
+            }
             Color friendly = map.HQ != null && map.HQ.faction != null ? map.HQ.faction.color : Color.white;
             float pulse = CommandMarkerPolicy.Pulse(Time.unscaledTime * 2f);
             int highlighted = view.HighlightedId;
@@ -113,12 +122,15 @@ namespace BoscaliSummer.Features.HighCommand.Presentation
                     continue;
 
                 Marker marker = Take(drawn);
+                if (!CommandMarkerPolicy.MapPoint(commander.X, commander.Z, displayFactor,
+                        out float mapX, out float mapZ))
+                    continue;
                 float size = CommandMarkerPolicy.Size(commander.Tier);
                 // Only when the layer is not the parent already: re-parenting every frame
                 // would rewrite the sibling order the selected marker is raised in.
                 if (marker.Root.transform.parent != layer) marker.Root.transform.SetParent(layer, false);
                 marker.Rect.localScale = Vector3.one * inverseScale;
-                marker.Rect.localPosition = new Vector3(commander.X, commander.Z, 0f);
+                marker.Rect.localPosition = new Vector3(mapX, mapZ, 0f);
                 marker.Rect.sizeDelta = new Vector2(size, size);
 
                 // The selected post is drawn in the faction's ink lifted towards white - the
@@ -151,6 +163,32 @@ namespace BoscaliSummer.Features.HighCommand.Presentation
             }
 
             HideFrom(drawn);
+        }
+
+        /// <summary>
+        /// The markers' own container under the map image, kept as the last child so a post is
+        /// never buried under the vanilla icon layer or the support overlay, which both live
+        /// under the same image.
+        /// </summary>
+        private Transform EnsureLayer(DynamicMap map)
+        {
+            Transform parent = map.mapImage.transform;
+            if (layerRoot == null)
+            {
+                var root = new GameObject("BoscaliCommandPostLayer", typeof(RectTransform));
+                layerRoot = (RectTransform)root.transform;
+                layerRoot.SetParent(parent, false);
+                layerRoot.anchorMin = layerRoot.anchorMax = new Vector2(0.5f, 0.5f);
+                layerRoot.pivot = new Vector2(0.5f, 0.5f);
+                layerRoot.anchoredPosition = Vector2.zero;
+                layerRoot.localScale = Vector3.one;
+            }
+            else if (layerRoot.parent != parent)
+            {
+                layerRoot.SetParent(parent, false);
+            }
+            if (layerRoot.GetSiblingIndex() != parent.childCount - 1) layerRoot.SetAsLastSibling();
+            return layerRoot;
         }
 
         private void HideFrom(int first)

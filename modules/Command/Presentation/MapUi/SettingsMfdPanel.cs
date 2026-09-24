@@ -20,10 +20,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
     {
         private const int TabClient = 0;
         private const int TabServer = 1;
-        private const int ClientPageCount = 4;
+        private const int ClientPageCount = 6;
 
-        /// <summary>Display index of the SERVER page, after the four CLIENT sub-pages.</summary>
-        private const int ServerDisplay = 4;
+        /// <summary>Display index of the SERVER page, after the six CLIENT sub-pages.</summary>
+        private const int ServerDisplay = 6;
 
         private const int DisplayCount = ServerDisplay + 1;
 
@@ -61,6 +61,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             logger = log;
             hostSettings = hostSettingsBoard;
             MfdMapDeck.Configure(config);
+            ApplyDisplayEffects();
             if (configFile != null) configFile.SettingChanged -= OnSettingChanged;
             configFile = config.ExpandedMapUi.ConfigFile;
             configFile.SettingChanged += OnSettingChanged;
@@ -74,9 +75,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             // own entries live, and this only repaints the rows so the panel is not left showing
             // a value the config file no longer holds.
             string section = args.ChangedSetting.Definition.Section;
-            if (section != "Command" && section != "Hud") return;
+            if (section != "Command" && section != "Hud" && section != "Avionics" && section != "Visuals") return;
             dirty = true;
-            if (section == "Hud") return;
+            if (section != "Command") return;
             switch (args.ChangedSetting.Definition.Key)
             {
                 case "ExpandedMapUi": layoutPending = true; break;
@@ -248,7 +249,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
         private static readonly string[] PageNames =
         {
-            "TACTICAL DISPLAY", "CONSOLE SURFACE", "BACKGROUND IMAGERY", "COCKPIT VIEW",
+            "TACTICAL DISPLAY", "CONSOLE SURFACE", "BACKGROUND IMAGERY", "COCKPIT VIEW", "HUD OVERLAYS", "VISUAL ENHANCEMENTS",
             "SERVER SETTINGS"
         };
 
@@ -266,13 +267,15 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         {
             const float barHeight = 26f;
             const float gap = 6f;
-            string[] names = { "MAP", "STYLE", "IMAGE", "COCKPIT" };
+            string[] names = { "MAP", "STYLE", "IMAGE", "COCKPIT", "HUD", "VISUALS" };
             string[] hints =
             {
                 "Map layout, overlays and terrain.",
                 "Console surface, backdrop decoration and dispatches.",
                 "Local background imagery and its rescans.",
-                "Third-person HUD, camera and the shared cockpit HUD element.",
+                "Third-person flight HUD, camera framing and instrument board.",
+                "Status stack, readable contrast, placement and individual feeds.",
+                "Post-processing, HDR bloom, G-force effects, transonic blur and foliage dynamics."
             };
 
             AvNode bar = AvBox.Row("subtabs").Height(barHeight);
@@ -303,6 +306,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             BuildStylePage((RectTransform)clientPages[1].transform, area);
             BuildImagePage((RectTransform)clientPages[2].transform, area);
             BuildViewPage((RectTransform)clientPages[3].transform, area);
+            BuildHudPage((RectTransform)clientPages[4].transform, area);
+            BuildVisualsPage((RectTransform)clientPages[5].transform, area);
 
             SetClientPage(0);
         }
@@ -476,9 +481,41 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
         private void BuildStylePage(RectTransform parent, Rect body)
         {
-            parent = Page(1, parent, body, 6, 2, out var area);
+            parent = Page(1, parent, body, 15, 4, out var area);
 
-            Heading(parent, ref area, "01", "SURFACE", "DECK");
+            Heading(parent, ref area, "01", "DISPLAY FILTER", "LOCAL");
+            Toggle(parent, TakeRow(ref area), "DISPLAY EFFECTS", "OFF removes glass and overlays. Your tuning is retained.",
+                () => settings.DisplayEffects.Value, v => settings.DisplayEffects.Value = v);
+            Percent(parent, TakeRow(ref area), "GLASS REFLECTION", settings.DisplayGlass, 0f, 1f, .1f,
+                EffectsEnabled, EffectsDisabled);
+            Toggle(parent, TakeRow(ref area), "ADAPT TO LIGHT", "Let ambient light vary the glass reflection. OFF keeps it steady.",
+                () => settings.DisplayAutoLight.Value, v => settings.DisplayAutoLight.Value = v,
+                EffectsEnabled, EffectsDisabled);
+            Percent(parent, TakeRow(ref area), "CRT SCANLINES", settings.DisplayScanlines, 0f, 1f, .1f,
+                EffectsEnabled, EffectsDisabled);
+            Percent(parent, TakeRow(ref area), "EDGE SHADING", settings.DisplayVignette, 0f, 1f, .1f,
+                EffectsEnabled, EffectsDisabled);
+            string[] tints = { "NEUTRAL", "GREEN", "AMBER", "ICE", "ROSE" };
+            Stepper(parent, TakeRow(ref area), "COLOR TINT",
+                () => tints[Mathf.Clamp(settings.DisplayTint.Value, 0, 4)],
+                d => settings.DisplayTint.Value = (settings.DisplayTint.Value + d + tints.Length) % tints.Length,
+                () => true, () => true, "A gentle color wash across the maximized MFD; warning colors remain distinct.",
+                EffectsEnabled, EffectsDisabled);
+            Percent(parent, TakeRow(ref area), "TINT STRENGTH", settings.DisplayTintStrength, 0f, 1f, .1f,
+                () => EffectsEnabled() && settings.DisplayTint.Value != 0, () => "Enable effects and choose a color tint first.");
+            AvStyled.Button(parent, TakeRow(ref area), "RESET DISPLAY FILTER", "btn", () =>
+            {
+                settings.DisplayEffects.Value = true;
+                settings.DisplayGlass.Value = .6f;
+                settings.DisplayAutoLight.Value = true;
+                settings.DisplayScanlines.Value = 0f;
+                settings.DisplayVignette.Value = 0f;
+                settings.DisplayTint.Value = 0;
+                settings.DisplayTintStrength.Value = .25f;
+                Changed();
+            }).WithTooltip("Restore the default glass finish and remove CRT, edge shading and tint.");
+
+            Heading(parent, ref area, "02", "SURFACE", "DECK");
             Percent(parent, TakeRow(ref area), "CONSOLE OPACITY", settings.DeckOpacity, .1f, 1f, .05f,
                 () => settings.ExpandedMapUi.Value, () => "Turn on expanded layout first.");
             Stepper(parent, TakeRow(ref area), "BACKGROUND",
@@ -495,7 +532,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             Percent(parent, TakeRow(ref area), "MAP DARKENING", settings.MapTrayOpacity, 0f, 1f, .05f,
                 () => settings.ExpandedMapUi.Value, () => "Turn on expanded layout first.");
 
-            Heading(parent, ref area, "02", "DISPATCHES", "WIRE");
+            Heading(parent, ref area, "03", "DISPATCHES", "WIRE");
             Toggle(parent, TakeRow(ref area), "NEWS TICKER", "Show theater dispatches above the map.",
                 () => settings.NewsTickerEnabled.Value, v => settings.NewsTickerEnabled.Value = v,
                 () => settings.ExpandedMapUi.Value, () => "Turn on expanded layout first.");
@@ -506,6 +543,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 "Lower speeds are easier to read. Disable NEWS TICKER to stop motion.",
                 () => settings.ExpandedMapUi.Value && settings.NewsTickerEnabled.Value,
                 () => "Enable expanded layout and news ticker first.");
+
+            Heading(parent, ref area, "04", "INTERFACE AUDIO", "LOCAL");
+            Percent(parent, TakeRow(ref area), "UI VOLUME", settings.UiSoundVolume, 0f, 1f, .1f,
+                () => true, () => "");
         }
 
         private void SetBackground(int mode)
@@ -521,9 +562,28 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
         private void BuildImagePage(RectTransform parent, Rect body)
         {
-            parent = Page(2, parent, body, 4, 1, out var area);
+            parent = Page(2, parent, body, 4, 1, 26f, out var area);
 
             Heading(parent, ref area, "01", "LOCAL IMAGERY", "PNG / JPEG");
+            const float cueHeight = 26f;
+            const float cueButtonWidth = 94f;
+            TMP_Text cue = AvStyled.Label(parent,
+                new Rect(area.x + 8f, area.y, area.width - cueButtonWidth - 18f, cueHeight),
+                "", "row-sub", align: TextAlignmentOptions.MidlineLeft);
+            var prerequisite = AvStyled.Button(parent,
+                new Rect(area.x + area.width - cueButtonWidth, area.y, cueButtonWidth, cueHeight),
+                "OPEN MAP", "btn", () => SetClientPage(settings.ExpandedMapUi.Value ? 1 : 0),
+                AvButtonStyle.Quiet);
+            refreshers.Add(() =>
+            {
+                bool ready = CustomEnabled();
+                prerequisite.gameObject.SetActive(!ready);
+                prerequisite.SetText(settings.ExpandedMapUi.Value ? "OPEN STYLE" : "OPEN MAP");
+                cue.text = ready ? "ADD PNG/JPEG FILES, THEN RESCAN"
+                    : settings.ExpandedMapUi.Value ? "SELECT CUSTOM BACKGROUND ON STYLE"
+                    : "TURN ON EXPANDED LAYOUT ON MAP";
+            });
+            area.y -= 26f;
             Percent(parent, TakeRow(ref area), "IMAGE STRENGTH", settings.BackgroundImageOpacity, .05f, 1f, .05f,
                 ImageEnabled, () => "Choose an image background on STYLE first.");
             Stepper(parent, TakeRow(ref area), "IMAGE FILE", MfdMapDeck.GetCurrentWallpaperFileName,
@@ -555,7 +615,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         }
 
         /// <summary>
-        /// Cockpit-side presentation: the third-person HUD and cameras published by QoL
+        /// Cockpit-side presentation: the third-person HUD and cameras published by Hud
         /// through <see cref="IThirdPersonHud"/>, the common HUD element published by the Hud
         /// module through <see cref="IHudBoard"/>, plus Command's own radial preset page.
         /// Every row here writes live state; the camera rows wait for the HUD they belong to.
@@ -563,21 +623,23 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private void BuildViewPage(RectTransform parent, Rect body)
         {
             ModServices.TryGet(out IThirdPersonHud hud);
-            ModServices.TryGet(out IHudBoard board);
-            int feeds = board != null ? Mathf.Min(board.Channels.Count, HudLayout.MaxChannels) : 0;
-            // The unavailable case still paints one FEEDS row saying so, so the page's
-            // measured height matches what it builds either way.
-            parent = Page(3, parent, body, 5 + HudSettingRows + (board == null ? 1 : feeds), 4, out var area);
+            parent = Page(3, parent, body, 20, 4, out var area);
 
             Heading(parent, ref area, "01", "HUD", "THIRD PERSON");
             Toggle(parent, TakeRow(ref area), "THIRD-PERSON HUD",
-                "Show the compact flight overlay in external orbit and chase views.",
+                "Show mod-owned HUD panels in external orbit and chase views.",
                 () => hud != null && hud.IsEnabled, v => { if (hud != null && hud.IsEnabled != v) hud.Toggle(); },
                 () => hud != null, () => "HUD service unavailable in this scene.");
-            Toggle(parent, TakeRow(ref area), "HIDE PITCH LADDER",
-                "Hide the floating pitch ladder in third person, keeping reticle, ammo and radar.",
-                () => hud != null && hud.HidePitchLadder, v => { if (hud != null) hud.HidePitchLadder = v; },
+            Toggle(parent, TakeRow(ref area), "MODIFY VANILLA HUD",
+                "Opt in to replacement flight instruments, native visibility changes and marker reprojection. Off by default.",
+                () => hud != null && hud.ModifyVanillaHud, v => { if (hud != null) hud.ModifyVanillaHud = v; },
                 () => hud != null && hud.IsEnabled, () => "Turn on third-person HUD first.");
+            Toggle(parent, TakeRow(ref area), "HIDE PITCH LADDER",
+                "Hide the independent attitude ladder. Flight readouts, reticle, ammo and radar stay visible.",
+                () => hud != null && hud.HidePitchLadder, v => { if (hud != null) hud.HidePitchLadder = v; },
+                () => hud != null && hud.IsEnabled && hud.ModifyVanillaHud, () => "Enable MODIFY VANILLA HUD first.");
+
+            BuildFlightStyleRows(parent, ref area, hud);
 
             Heading(parent, ref area, "02", "CAMERA", "CHASE");
             Toggle(parent, TakeRow(ref area), "TARGET CAMERA",
@@ -594,12 +656,12 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 "Offer the TGT quick slots as a page in the native cockpit radial menu.",
                 () => settings.TargetPresetWheel.Value, v => settings.TargetPresetWheel.Value = v);
 
-            Heading(parent, ref area, "04", "COMMON HUD", "OVERLAY");
-            BuildHudRows(parent, ref area, board);
+            Heading(parent, ref area, "04", "INSTRUMENT BOARD", "EXTERNAL VIEW");
+            BuildInstrumentRows(parent, ref area, hud);
         }
 
-        /// <summary>The seven element-wide rows, before one row per declared feed.</summary>
-        private const int HudSettingRows = 7;
+        /// <summary>Element-wide rows, before one row per declared feed.</summary>
+        private const int HudSettingRows = 12;
 
         /// <summary>
         /// The common HUD element's own rows. Everything here is client-local presentation and
@@ -657,6 +719,19 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 () => board != null && board.NoticeSeconds < HudLayout.MaxNoticeSeconds,
                 "How long a transient notice stays up.",
                 () => on() && board.NoticesEnabled, () => "Turn notices on first.");
+
+            Stepper(parent, TakeRow(ref area), "CONTRAST",
+                () => HudLayout.ContrastName(board?.Contrast ?? 1),
+                d => { if (board != null) board.Contrast = HudLayout.Cycle(board.Contrast, 3, d); },
+                () => true, () => true, "CLEAR floating ink, GLASS backing, or SOLID for bright sky.", on, off);
+            Toggle(parent, TakeRow(ref area), "DETAIL LINES", "Supporting text and progress gauges; off uses compact single-line rows.",
+                () => board != null && board.ShowDetails, v => { if (board != null) board.ShowDetails = v; }, on, off);
+            HudOffset(parent, ref area, "HORIZONTAL", () => board?.OffsetX ?? 0,
+                v => { if (board != null) board.OffsetX = v; }, -600, on, off);
+            HudOffset(parent, ref area, "VERTICAL", () => board?.OffsetY ?? 0,
+                v => { if (board != null) board.OffsetY = v; }, -600, on, off);
+            AvStyled.Button(parent, TakeRow(ref area), "RESET STATUS LAYOUT", "btn", () =>
+            { board?.ResetLayout(); Echo("Status layout restored. Feed preferences kept."); Changed(); });
 
             if (board == null)
             {
@@ -754,8 +829,19 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             return target;
         }
 
+        private bool EffectsEnabled() => settings.DisplayEffects.Value;
+        private static string EffectsDisabled() => "Turn on DISPLAY EFFECTS first.";
+
+        private void ApplyDisplayEffects()
+        {
+            AvDisplayGlass.Configure(settings.DisplayEffects.Value, settings.DisplayGlass.Value,
+                settings.DisplayAutoLight.Value, settings.DisplayScanlines.Value,
+                settings.DisplayVignette.Value, settings.DisplayTint.Value, settings.DisplayTintStrength.Value);
+        }
+
         private void ApplyPending()
         {
+            if (appearancePending || layoutPending) ApplyDisplayEffects();
             if (layoutPending) MfdRailPatch.Reconcile();
             if (appearancePending || layoutPending) MfdMapDeck.ApplyAppearance(settings);
             if (overlayPending) overlay?.SyncSettings();
@@ -860,6 +946,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
         private void RefreshPanel()
         {
+            AvUiSound.Volume = settings.UiSoundVolume.Value;
             bool host = HostAuthority();
             shell?.DataBar.SetChip(1, host ? "HOST" : "CLIENT", host ? "live" : "inert");
             foreach (Action refresh in refreshers) refresh();

@@ -52,6 +52,12 @@ namespace BoscaliSummer
             // base grid, so the old size knob no longer means anything.
             BindAndRemove(config, "Command", "GridResolution", 32);
 
+            // Offensives stopped charging one price for the staff work and the first wave
+            // together: the overhead and each wave slot are priced apart now. The old keys are
+            // purged rather than reused so the new defaults are not read as 60 and 40.
+            BindAndRemove(config, "TheaterOps", "OperationSetupCost", 60f);
+            BindAndRemove(config, "TheaterOps", "OperationCommitCost", 40f);
+
             // Support costs stopped being hand-picked constants and became vanilla-value
             // derived. The old keys are purged rather than reused: an existing config would
             // otherwise keep charging 10 and 8 allocation against a four-figure balance.
@@ -61,27 +67,35 @@ namespace BoscaliSummer
             BindAndRemove(config, "Support", "VehicleAirdropCost", 12f);
             BindAndRemove(config, "Support", "ArtilleryDefinitionKey", string.Empty);
 
-            // The original dynamic weather module was removed wholesale. Purge both its
-            // final settings and the presentation keys retired during its earlier rework so
-            // a future lightweight implementation starts with no inherited configuration.
-            // Remove or revise this block before a replacement reuses any [Weather] key.
-            BindAndRemove(config, "Weather", "Enabled", true);
+            // The original dynamic weather module was removed wholesale. Purge its
+            // retired presentation and simulation keys so old legacy entries are cleaned.
             BindAndRemove(config, "Weather", "ForecastSteps", 8);
             BindAndRemove(config, "Weather", "ForecastStepMinutes", 3f);
-            BindAndRemove(config, "Weather", "DebugControls", false);
-            BindAndRemove(config, "Weather", "DebugKey", UnityEngine.KeyCode.F11);
-            BindAndRemove(config, "Weather", "DebugKeyRequiresCtrl", true);
             BindAndRemove(config, "Weather", "RainEffects", true);
             BindAndRemove(config, "Weather", "RainOnCanopy", true);
             BindAndRemove(config, "Weather", "RainAudio", true);
             BindAndRemove(config, "Weather", "RainEffectDensity", 1f);
-            BindAndRemove(config, "Weather", "RainVolume", 1f);
+            // RainVolume is deliberately not purged: the current module owns that key again.
+            BindAndRemove(config, "Weather", "CanopyRainEnabled", true);
             BindAndRemove(config, "Weather", "Hud", true);
             BindAndRemove(config, "Weather", "Supercells", true);
             BindAndRemove(config, "Weather", "SupercellDetail", 0.6f);
             BindAndRemove(config, "Weather", "RadarRangeKm", 40);
             BindAndRemove(config, "Weather", "ReplaceVanillaClouds", false);
             BindAndRemove(config, "Weather", "CloudSortFudge", -100f);
+
+            // The weather overhaul's own [WeatherFronts] section is gone with the module.
+            BindAndRemove(config, "WeatherFronts", "Enabled", true);
+            BindAndRemove(config, "WeatherFronts", "LocalRendering", true);
+            BindAndRemove(config, "WeatherFronts", "Seed", 13u);
+            BindAndRemove(config, "WeatherFronts", "Heading", 90f);
+            BindAndRemove(config, "WeatherFronts", "Speed", 25f);
+            BindAndRemove(config, "WeatherFronts", "Width", 12000f);
+            BindAndRemove(config, "WeatherFronts", "Base", 2000f);
+            BindAndRemove(config, "WeatherFronts", "Top", 6000f);
+            BindAndRemove(config, "WeatherFronts", "Intensity", 1f);
+            BindAndRemove(config, "WeatherFronts", "Quality", "standard");
+            BindAndRemove(config, "WeatherFronts", "DebugActions", false);
         }
 
         private static void BindAndRemove<T>(ConfigFile config, string section, string key, T defaultValue)

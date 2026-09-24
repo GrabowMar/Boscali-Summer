@@ -10,19 +10,14 @@ namespace BoscaliSummer.Tests.Features.Support
         {
             TestTabs();
             TestFormatting();
-            TestPostures();
-            TestInfoGates();
-            TestProgramInvestment();
-            TestProgramAccrual();
-            TestProgramMirror();
-            TestGarrisonDoctrine();
+            TestAbilityGates();
         }
 
         private static void TestTabs()
         {
             string[] labels = OpsDomains.TabLabels();
-            TestAssert.That(labels.Length == 4, "OPS must expose exactly four domain tabs");
-            string[] expected = { "SPACE", "CYBER", "SPEC OPS", "INTEL" };
+            TestAssert.That(labels.Length == 3, "espionage belongs inside SPEC OPS, not a fourth tab");
+            string[] expected = { "SPACE", "CYBER", "SPEC OPS" };
             for (int i = 0; i < expected.Length; i++)
             {
                 TestAssert.That(labels[i] == expected[i], "OPS tab " + i + " must read " + expected[i]);
@@ -42,261 +37,69 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(TheaterGrid.Clock(-1.0) == "--:--", "a negative countdown must not print");
         }
 
-        private static void TestPostures()
+        /// <summary>The ability gates: a stage-2 location unlocks the basic tier, a stage-3 one
+        /// the mid tier, and only a location's own radius carries an ability to a point. The
+        /// tracker verbs reach only where a hacked location's radius does.</summary>
+        private static void TestAbilityGates()
         {
-            TestAssert.That(EwPostures.Default == EwPosture.NoiseJamming, "a fresh jammer comes up in NOISE");
-            TestAssert.That(EwPostures.Umbrella(EwPosture.NoiseJamming) == 1f &&
-                EwPostures.Umbrella(EwPosture.GhostSpoofing) == 0.5f && EwPostures.Umbrella(EwPosture.SigintPassive) == 0f,
-                "NOISE raises the full umbrella, DECEPTION half, EMCON none");
-            TestAssert.That(EwPostures.Clamp(200) == EwPostures.Default, "a hostile posture byte must clamp");
-            TestAssert.That(EwPostures.Clamp(2) == EwPosture.GhostSpoofing, "a valid posture byte must survive");
-
-            TestAssert.That(!EwPostures.StationBacked(HackKind.Ping) && !EwPostures.StationBacked(HackKind.Track),
-                "signals operations must not need a station");
-            TestAssert.That(EwPostures.StationBacked(HackKind.Blackout) && EwPostures.StationBacked(HackKind.Ghost) &&
-                EwPostures.StationBacked(HackKind.Spoof), "attack operations must reach through a station");
-
-            TestAssert.That(EwPostures.Backs(EwPosture.NoiseJamming, HackKind.Blackout) &&
-                EwPostures.Backs(EwPosture.NoiseJamming, HackKind.Spoof), "NOISE backs every station operation");
-            TestAssert.That(EwPostures.Backs(EwPosture.GhostSpoofing, HackKind.Blackout) &&
-                EwPostures.Backs(EwPosture.GhostSpoofing, HackKind.Ghost), "DECEPTION backs every station operation too");
-            TestAssert.That(EwPostures.Emitting(EwPosture.NoiseJamming) && !EwPostures.Emitting(EwPosture.SigintPassive),
-                "only EMCON is silent");
-            TestAssert.That(!EwPostures.Backs(EwPosture.SigintPassive, HackKind.Blackout) &&
-                !EwPostures.Backs(EwPosture.SigintPassive, HackKind.Spoof), "a passive station backs no attack");
-            TestAssert.That(EwPostures.Backs(EwPosture.SigintPassive, HackKind.Ping),
-                "posture must never gate an operation that needs no station");
-
-            for (int i = 0; i < EwPostures.All.Length; i++)
-                TestAssert.That((int)EwPostures.All[i].Posture == i, "posture table must be indexed by its byte");
-        }
-
-        private static void TestInfoGates()
-        {
-            var network = new InfoNetwork();
             var cyber = new CyberNetwork();
-            TestAssert.That(InfoOperations.Evaluate(network, HackKind.Ping, cyber) ==
-                InfoGate.FacilityMissing, "an unbuilt facility must gate first");
-            TestAssert.That(InfoOperations.Evaluate(null, HackKind.Ping, cyber) ==
-                InfoGate.FacilityMissing, "a missing network must read as unbuilt, not ready");
+            TestAssert.That(!cyber.AnyTier(1), "a fresh network unlocks nothing");
+            TestAssert.That(cyber.CheckBreach(CyberNetwork.TargetBase, 0.0) == BreachDenial.NoCommand,
+                "a breach needs Cyber Command");
 
-            network.TryUpgrade(FacilityId.Sigint);
-            TestAssert.That(InfoOperations.Evaluate(network, HackKind.Ping, cyber) ==
-                InfoGate.Ready, "PING needs no jammer");
+            cyber.PlaceStatic(1, NodeKind.Command, 0f, 0f);
+            cyber.BeginLocations();
+            int city = cyber.ReportLocation(100, LocationKind.City, 8000f, 0f, 0.0);
+            cyber.EndLocations(0.0);
+            TestAssert.That(city >= CyberNetwork.TargetBase, "the city lands in a target slot");
+            TestAssert.That(cyber.CheckBreach(city, 0.0) == BreachDenial.LowComputing,
+                "a fresh network cannot pay the probe");
+            TestAssert.That(cyber.TryStartBreach(city, true, 0.0) == BreachDenial.LowComputing,
+                "the start re-checks the computing");
 
-            network.TryUpgrade(FacilityId.Crypto);
-            network.TryUpgrade(FacilityId.Disrupt);
-            TestAssert.That(InfoOperations.Evaluate(network, HackKind.Blackout, cyber) ==
-                InfoGate.StationMissing, "BLACKOUT needs a working jammer");
-
-            cyber.PlaceStatic(1, CyberSiteKind.Command, 0f, 0f);
-            int jammer = cyber.TryBuild(CyberSiteKind.Jammer, 5000f, 0f, 0f, 8);
-            cyber.SetPosition(jammer, 5000f, 0f, true);
-            cyber.Tick(1.0, 0.1f, 0f);
-            cyber.TrySetMode(jammer, EwPosture.SigintPassive);
-            TestAssert.That(InfoOperations.Evaluate(network, HackKind.Blackout, cyber) ==
-                InfoGate.WrongPosture, "a jammer in EMCON backs nothing");
-            cyber.TrySetMode(jammer, EwPosture.GhostSpoofing);
-            TestAssert.That(InfoOperations.Evaluate(network, HackKind.Blackout, cyber) ==
-                InfoGate.Ready, "any emitting jammer backs BLACKOUT");
-            TestAssert.That(cyber.EmittingJammerCovers(9000f, 0f, 5000f) && !cyber.EmittingJammerCovers(30000f, 0f, 5000f),
-                "reach is still measured from the jammer");
-
-            int entry = cyber.Force(IncidentKind.Intrusion, 2.0);
-            TestAssert.That(entry >= 0, "an intrusion must open on a live network");
-            cyber.Tick(2.0 + CyberNetwork.IntrusionLanding + 0.1, 0.1f, 0f);
-            // The only non-command site is the jammer: compromised, it stops backing anything.
-            TestAssert.That(InfoOperations.Evaluate(network, HackKind.Blackout, cyber) ==
-                InfoGate.StationMissing, "a compromised jammer backs nothing");
-
-            // A trace foothold is a backdoor: the operation no longer needs a jammer of your own.
-            var raider = new CyberNetwork { OriginCount = 1 };
-            raider.PlaceStatic(1, CyberSiteKind.Command, 0f, 0f);
-            int ear = raider.TryBuild(CyberSiteKind.Sigint, 6000f, 0f, 0f, 8);
-            // Two ears: the intrusion takes the one it lands on, the other keeps the trace running.
-            int spare = raider.TryBuild(CyberSiteKind.Sigint, 0f, 6000f, 0f, 8);
-            raider.SetPosition(ear, 6000f, 0f, true);
-            raider.SetPosition(spare, 0f, 6000f, true);
-            raider.Tick(1.0, 0.1f, 0f);
-            int incident = raider.Force(IncidentKind.Intrusion, 1.0);
-            TestAssert.That(raider.TryVerb(CyberVerb.Trace, incident, 1.0) == CyberDenial.None, "setup: trace started");
-            double traced = 1.0;
-            while (traced < 1.0 + CyberNetwork.TraceSeconds + 2.0)
+            // Bank computing, take the city to stage 2, and the basic tier opens on its radius.
+            double now = 0.0;
+            double bank = 0.0;
+            while (cyber.Computing < 140f && bank < 400.0)
             {
-                traced += 0.5;
-                raider.Tick(traced, 0.5f, 0f);
+                cyber.Tick(bank, 0.25f, 0f);
+                bank += 0.25;
             }
-            TestAssert.That(raider.AnyFoothold(traced), "setup: the trace opened a foothold");
-            TestAssert.That(!raider.AnyWorking(CyberSiteKind.Jammer) &&
-                InfoOperations.Evaluate(network, HackKind.Blackout, raider, traced) == InfoGate.Ready,
-                "a foothold carries a station-backed operation with no jammer of your own");
-
-            TestAssert.That(InfoOperations.Explain(InfoGate.Ready, HackKind.Ping) == null, "an open gate has no copy");
-            TestAssert.That(InfoOperations.Explain(InfoGate.WrongPosture, HackKind.Spoof).Contains("NOISE OR DECEPTION"),
-                "a mode gate must name the modes that work");
-            TestAssert.That(InfoOperations.Explain(InfoGate.FacilityMissing, HackKind.Track).Contains("LV2"),
-                "a facility gate must name the level to build");
-            TestAssert.That(InfoOperations.Explain(InfoGate.CommandCompromised, HackKind.Ping).Contains("COMPROMISED"),
-                "a compromised command must say so");
-        }
-
-        private static void TestProgramInvestment()
-        {
-            TestAssert.That(OpsProgramLedger.ProgramCount == 6, "three SOF and three intel programs");
-            for (int i = 0; i < OpsProgramLedger.Programs.Length; i++)
+            now = bank;
+            TestAssert.That(cyber.TryStartBreach(city, true, now) == BreachDenial.None, "the breach opens");
+            while (cyber.BreachActive && now < bank + 200.0)
             {
-                OpsProgramInfo info = OpsProgramLedger.Programs[i];
-                TestAssert.That((int)info.Id == i, "program table must be indexed by its wire byte");
-                TestAssert.That(info.Costs.Length == OpsProgramLedger.MaxTier + 1 &&
-                    info.YieldPerMinute.Length == OpsProgramLedger.MaxTier + 1 &&
-                    info.Tiers.Length == OpsProgramLedger.MaxTier, info.Name + " tier tables must match MaxTier");
-                TestAssert.That(info.Costs[0] == 0f && info.YieldPerMinute[0] == 0f,
-                    info.Name + " tier zero must be free and idle");
-                for (int t = 1; t <= OpsProgramLedger.MaxTier; t++)
-                    TestAssert.That(info.Costs[t] > info.Costs[t - 1] && info.YieldPerMinute[t] > info.YieldPerMinute[t - 1],
-                        info.Name + " tiers must cost and yield more as they climb");
+                cyber.Tick(now, 0.25f, 0f);
+                now += 0.25;
             }
-
-            var ledger = new OpsProgramLedger();
-            TestAssert.That(ledger.NextCost(OpsProgramId.Pathfinders) == 400f, "tier one priced from the table");
-            TestAssert.That(ledger.YieldPerMinute(OpsReserve.SpecOps) == 0f, "an unfunded reserve yields nothing");
-            TestAssert.That(ledger.SecondsToNextToken(OpsReserve.SpecOps) < 0f, "an idle reserve has no ETA");
-
-            for (int t = 0; t < OpsProgramLedger.MaxTier; t++)
-                TestAssert.That(ledger.TryInvest(OpsProgramId.Pathfinders), "tier " + (t + 1) + " must apply");
-            TestAssert.That(!ledger.CanInvest(OpsProgramId.Pathfinders) && !ledger.TryInvest(OpsProgramId.Pathfinders),
-                "a maxed program must refuse investment");
-            TestAssert.That(ledger.NextCost(OpsProgramId.Pathfinders) == 0f, "a maxed program has no next cost");
-            TestAssert.That(!ledger.CanInvest((OpsProgramId)99), "an unknown program byte must be refused");
-            TestAssert.That(ledger.FundedTiers(OpsReserve.SpecOps) == 3 && ledger.FundedTiers(OpsReserve.Intel) == 0,
-                "funding must stay inside its own reserve");
-        }
-
-        private static void TestProgramAccrual()
-        {
-            var ledger = new OpsProgramLedger();
-            ledger.TryInvest(OpsProgramId.HumintNetwork); // 0.15 tokens per minute
-
-            ledger.Tick(float.NaN);
-            ledger.Tick(-1f);
-            TestAssert.That(ledger.Progress(OpsReserve.Intel) == 0f, "invalid ticks must not accrue");
-
-            ledger.Tick(1000f);
-            TestAssert.That(ledger.Tokens(OpsReserve.Intel) == 0 &&
-                ledger.Progress(OpsReserve.Intel) <= 0.15f / 60f * OpsProgramLedger.MaximumTickSeconds + 0.0001f,
-                "one stalled frame must not pay out a burst");
-
-            for (int i = 0; i < 400 * 12; i++) ledger.Tick(0.1f); // eight minutes at 10 Hz
-            TestAssert.That(ledger.Tokens(OpsReserve.Intel) == 1, "0.15/min over eight minutes accrues one token");
-            TestAssert.That(ledger.Tokens(OpsReserve.SpecOps) == 0, "intel funding must not fill SOF readiness");
-            TestAssert.That(ledger.SecondsToNextToken(OpsReserve.Intel) > 0f, "a funded reserve reports its ETA");
-
-            TestAssert.That(!ledger.TryConsume(OpsReserve.Intel, 2), "an overdraw must not spend");
-            TestAssert.That(ledger.Tokens(OpsReserve.Intel) == 1, "a refused spend must be all-or-nothing");
-            TestAssert.That(!ledger.TryConsume(OpsReserve.Intel, 0), "a zero spend must be refused");
-            TestAssert.That(ledger.TryConsume(OpsReserve.Intel, 1) && ledger.Tokens(OpsReserve.Intel) == 0,
-                "a covered spend must debit the reserve");
-
-            var full = new OpsProgramLedger();
-            for (int t = 0; t < OpsProgramLedger.MaxTier; t++) full.TryInvest(OpsProgramId.AssetRecruitment);
-            for (int i = 0; i < 2000; i++) full.Tick(OpsProgramLedger.MaximumTickSeconds);
-            TestAssert.That(full.Tokens(OpsReserve.Intel) == OpsProgramLedger.ReserveCap, "a reserve must stop at its cap");
-            TestAssert.That(full.Full(OpsReserve.Intel) && full.Progress(OpsReserve.Intel) == 0f &&
-                full.SecondsToNextToken(OpsReserve.Intel) < 0f, "a full reserve must not bank hidden progress");
-
-            full.Clear();
-            TestAssert.That(full.Tier(OpsProgramId.AssetRecruitment) == 0 && full.Tokens(OpsReserve.Intel) == 0,
-                "scene teardown must clear tiers and tokens");
-        }
-
-        private static void TestProgramMirror()
-        {
-            var host = new OpsProgramLedger();
-            host.TryInvest(OpsProgramId.SabotageCells);
-            host.TryInvest(OpsProgramId.DecryptionArray);
-            host.TryInvest(OpsProgramId.DecryptionArray);
-            for (int i = 0; i < 100; i++) host.Tick(2f);
-
-            var tiers = new byte[OpsProgramLedger.ProgramCount];
-            for (int i = 0; i < tiers.Length; i++) tiers[i] = (byte)host.Tier((OpsProgramId)i);
-
-            var client = new OpsProgramLedger();
-            client.Mirror(tiers, (byte)host.Tokens(OpsReserve.SpecOps), (byte)host.Tokens(OpsReserve.Intel),
-                host.ProgressByte(OpsReserve.SpecOps), host.ProgressByte(OpsReserve.Intel));
-            for (int i = 0; i < tiers.Length; i++)
-                TestAssert.That(client.Tier((OpsProgramId)i) == host.Tier((OpsProgramId)i), "mirrored tiers must match");
-            TestAssert.That(client.Tokens(OpsReserve.Intel) == host.Tokens(OpsReserve.Intel) &&
-                client.Tokens(OpsReserve.SpecOps) == host.Tokens(OpsReserve.SpecOps), "mirrored tokens must match");
-            TestAssert.That(System.Math.Abs(client.Progress(OpsReserve.Intel) - host.Progress(OpsReserve.Intel)) < 0.01f,
-                "mirrored progress must survive byte quantisation");
-
-            client.Mirror(new byte[] { 250, 9, 3 }, 200, 255, 255, 255);
-            TestAssert.That(client.Tier(OpsProgramId.Pathfinders) == OpsProgramLedger.MaxTier &&
-                client.Tier(OpsProgramId.AssetRecruitment) == 0, "hostile or short tier arrays must clamp");
-            TestAssert.That(client.Tokens(OpsReserve.SpecOps) == OpsProgramLedger.ReserveCap &&
-                client.Progress(OpsReserve.SpecOps) == 0f, "hostile token bytes must clamp to the cap");
-            client.Mirror(null, 0, 0, 0, 0);
-            TestAssert.That(client.Tier(OpsProgramId.SabotageCells) == 0, "a null tier array must clear, not throw");
-        }
-
-        private static void TestGarrisonDoctrine()
-        {
-            TestAssert.That(OpsGarrison.UpgradeCount == 2, "fortification and insertion doctrine");
-            for (int i = 0; i < OpsGarrison.Upgrades.Length; i++)
+            TestAssert.That(cyber.Stage(city) == 1, "the city is at stage 1");
+            TestAssert.That(!cyber.AnyTier(1), "stage 1 unlocks nothing");
+            double bank2 = now;
+            while (cyber.Computing < 140f && bank2 < now + 400.0)
             {
-                GarrisonUpgradeInfo info = OpsGarrison.Upgrades[i];
-                TestAssert.That((int)info.Id == i, "the doctrine table must be indexed by its wire byte");
-                TestAssert.That(info.Costs.Length == OpsGarrison.MaxRank + 1 && info.Ranks.Length == OpsGarrison.MaxRank,
-                    info.Name + " rank tables must match MaxRank");
-                TestAssert.That(info.Costs[0] == 0, info.Name + " rank zero must be free");
-                for (int rank = 1; rank <= OpsGarrison.MaxRank; rank++)
-                {
-                    TestAssert.That(info.Costs[rank] > info.Costs[rank - 1], info.Name + " ranks must cost more as they climb");
-                    TestAssert.That(!string.IsNullOrEmpty(info.Ranks[rank - 1]), info.Name + " rank " + rank + " needs copy");
-                }
+                cyber.Tick(bank2, 0.25f, 0f);
+                bank2 += 0.25;
             }
+            now = bank2;
+            TestAssert.That(cyber.TryStartBreach(city, true, now) == BreachDenial.None, "the second breach opens");
+            while (cyber.BreachActive && now < bank2 + 200.0)
+            {
+                cyber.Tick(now, 0.25f, 0f);
+                now += 0.25;
+            }
+            TestAssert.That(cyber.Stage(city) == 2 && cyber.AnyTier(1), "stage 2 opens the basic tier");
+            TestAssert.That(cyber.AbilityCovers(1, 8000f, 0f, now), "the city's radius covers itself");
+            TestAssert.That(!cyber.AbilityCovers(1, 60000f, 0f, now), "the radius does not reach across the map");
+            TestAssert.That(!cyber.AnyTier(2), "the mid tier still needs stage 3");
 
-            TestAssert.That(OpsGarrison.MaxRank == 3, "the rank word is written over a three-rank track");
-            TestAssert.That(OpsGarrison.RankLabel(0) == "UNTRAINED" && OpsGarrison.RankLabel(1) == "RANK I/III" &&
-                OpsGarrison.RankLabel(3) == "RANK III/III" && OpsGarrison.RankLabel(9) == "RANK III/III",
-                "rank words must clamp to the track");
-            TestAssert.That(OpsGarrison.EffectLabel(GarrisonUpgradeId.FortificationDoctrine, 0) == "1 POSITION/ORDER" &&
-                OpsGarrison.EffectLabel(GarrisonUpgradeId.FortificationDoctrine, OpsGarrison.MaxRank) == "4 POSITIONS/ORDER" &&
-                OpsGarrison.EffectLabel(GarrisonUpgradeId.InsertionRigging, 2) == "3 CAMPS/INSERTION",
-                "short effect words must track the rank");
+            // The ear a trace needs: a stage-2 location's radius over the incident.
+            TestAssert.That(cyber.EarCovers(8000f, 0f, now), "a stage-2 location is an ear");
+            TestAssert.That(!cyber.EarCovers(60000f, 0f, now), "the ear ends at the radius");
 
-            var garrison = new OpsGarrison();
-            TestAssert.That(garrison.FortificationShells == 1 && garrison.InsertionCamps == 1,
-                "an untrained garrison does everything once");
-            TestAssert.That(garrison.NextCost(GarrisonUpgradeId.FortificationDoctrine) == 2, "rank one priced from the table");
-            TestAssert.That(garrison.Rank(GarrisonUpgradeId.FortificationDoctrine) == 0 &&
-                garrison.Rank((GarrisonUpgradeId)99) == 0, "unknown doctrine bytes read as untrained");
-
-            for (int rank = 0; rank < OpsGarrison.MaxRank; rank++)
-                TestAssert.That(garrison.TryUpgrade(GarrisonUpgradeId.FortificationDoctrine),
-                    "rank " + (rank + 1) + " must apply");
-            TestAssert.That(!garrison.CanUpgrade(GarrisonUpgradeId.FortificationDoctrine) &&
-                !garrison.TryUpgrade(GarrisonUpgradeId.FortificationDoctrine), "a maxed track must refuse investment");
-            TestAssert.That(garrison.NextCost(GarrisonUpgradeId.FortificationDoctrine) == 0, "a maxed track has no next cost");
-            TestAssert.That(garrison.FortificationShells == 1 + OpsGarrison.MaxRank &&
-                garrison.InsertionCamps == 1, "doctrine effects must stay inside their own track");
-
-            // Mirror is the client path; a hostile byte clamps to the ceiling and a short
-            // array clears rather than throwing.
-            var client = new OpsGarrison();
-            client.Mirror(new byte[] { 250, 2 });
-            TestAssert.That(client.Rank(GarrisonUpgradeId.FortificationDoctrine) == OpsGarrison.MaxRank &&
-                client.Rank(GarrisonUpgradeId.InsertionRigging) == 2, "hostile doctrine bytes must clamp");
-            TestAssert.That(client.FortificationShells == 1 + OpsGarrison.MaxRank &&
-                client.InsertionCamps == 3, "mirrored effects must match the mirrored ranks");
-            client.Mirror(null);
-            TestAssert.That(client.Rank(GarrisonUpgradeId.FortificationDoctrine) == 0 &&
-                client.Rank(GarrisonUpgradeId.InsertionRigging) == 0, "a null mirror must clear, not throw");
-
-            client.Mirror(new byte[] { 1, 1 });
-            client.Clear();
-            TestAssert.That(client.FortificationShells == 1 && client.InsertionCamps == 1,
-                "scene teardown must clear the base of operations");
+            // A compromised location goes dark until patched.
+            TestAssert.That(cyber.TryVerb(CyberVerb.Honeypot, city, now) == CyberDenial.None, "the bait applies");
+            cyber.Tick(now + CyberLocations.HoneypotSeconds + 1.0, 0.25f, 0f);
+            TestAssert.That(cyber.Node(city).HoneypotUntil == 0.0, "the bait lapses");
         }
     }
 }

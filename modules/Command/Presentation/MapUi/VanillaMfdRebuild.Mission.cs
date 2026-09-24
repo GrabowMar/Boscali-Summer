@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Features;
+using BoscaliSummer.Features.Command.Presentation;
 using NOAvionics;
 using NOAvionics.Ui;
 using NuclearOption.SavedMission;
@@ -32,11 +33,20 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private TMP_Text missionMode;
             private TMP_Text briefNote;
             private SectionHead ladderHead;
+            private readonly UnityEngine.UI.Image[] ladderCards = new UnityEngine.UI.Image[3];
             private readonly UnityEngine.UI.Image[] ladderRails = new UnityEngine.UI.Image[3];
             private readonly UnityEngine.UI.Image[] ladderMarkers = new UnityEngine.UI.Image[3];
             private readonly TMP_Text[] ladderNames = new TMP_Text[3];
             private readonly TMP_Text[] ladderThresholds = new TMP_Text[3];
             private readonly TMP_Text[] ladderStates = new TMP_Text[3];
+            private TMP_Text ladderProgressLabel;
+            private readonly UnityEngine.UI.Image[] ladderProgressSegments = new UnityEngine.UI.Image[12];
+            private float ladderProgressWidth;
+            private SectionHead contractHead;
+            private RectTransform contractCard;
+            private UnityEngine.UI.Image contractRail;
+            private TMP_Text contractSummary;
+            private TMP_Text contractDetail;
             private AvButton browseContracts;
             private float briefCardHeight = 170f;
             private ObjectiveBoard objectiveBoard;
@@ -49,6 +59,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private TMP_Text boardStatus;
             private AvButton secondaryPrevious;
             private AvButton secondaryNext;
+            private MissionContractWindow contractWindow;
             private int selectedPage;
             private int secondaryPage;
             private int secondaryCount;
@@ -58,15 +69,17 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private readonly List<SecondaryObjectiveView> filtered = new List<SecondaryObjectiveView>(4);
             private readonly AvButton[] secondaryFilters = new AvButton[3];
             private string secondaryStatus = "SECONDARY MISSIONS UNAVAILABLE";
+            private string previewedOfferCopy;
 
             public MissionPresenter(MFDScreen screen) : base(screen, VanillaMfdPanelId.Mis) { }
 
             protected override int TabCount => 3;
+            protected override bool PageHasTitle => false;
 
             protected override void BuildContent()
             {
                 ConfigureTabs(new[] { "MISSION", "OBJECTIVES", "SECONDARY" }, SelectPage);
-                pages = new[] { CreatePage("Mission"), CreatePage("Objectives"), CreatePage("Secondary") };
+                pages = new[] { CreatePage("Mission"), CreatePage("Objectives"), CreatePage("Contracts") };
                 BuildMissionPage(pages[0]);
                 BuildObjectivesPage(pages[1]);
                 BuildSecondaryPage(pages[2]);
@@ -81,7 +94,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 RefreshObjectives();
                 RefreshSecondaryObjectives();
 
-                Shell.DataBar.State.text = selectedPage == 2 ? "SECONDARY MISSIONS" : "MISSION OVERVIEW";
+                Shell.DataBar.State.text = selectedPage == 0 ? "THEATER / MISSION" :
+                    selectedPage == 1 ? "THEATER / OBJECTIVES" : "THEATER / CONTRACTS";
                 Shell.DataBar.SetChip(0, objectives.Count + " PRIMARY", objectives.Count > 0);
                 Shell.DataBar.SetChip(1, MfdSecondaryObjectives.ShortCount(secondaryActive, secondaryLimit) + " SECONDARY", secondaryActive > 0);
                 Shell.DataBar.SetChip(2, MissionClock(manager), manager != null);
@@ -116,9 +130,12 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 UnityEngine.UI.Image cardRail = AvKit.Rule(briefCard, new Rect(0f, 0f, 0f, 0f),
                     AvTheme.RailInfo);
                 StretchVertical(cardRail.rectTransform, 0f, 3f);
+                UnityEngine.UI.Image cardFrame = AvKit.Panel(briefCard, new Rect(0f, 0f, 0f, 0f),
+                    AvTheme.Hairline, AvSprites.ControlFrame);
+                AvKit.Stretch(cardFrame.rectTransform);
 
                 missionName = AvStyled.Label(briefCard,
-                    new Rect(AvTokens.Space4, -12f, width - AvTokens.Space5, 40f),
+                    new Rect(AvTokens.Space4, -12f, width - AvTokens.Space3 - AvTokens.Space4 - AvTokens.Space5, 40f),
                     "LOADING MISSION", "metric-value");
                 missionName.enableWordWrapping = true;
                 // The identity line shrinks to the micro floor before it is ever cut; the
@@ -128,8 +145,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 missionName.fontSizeMin = AvTokens.FontMicro;
                 missionName.fontSizeMax = AvTokens.FontTitle + 4f;
                 UnityEngine.UI.Image divider = AvKit.Rule(briefCard,
-                    new Rect(AvTokens.Space4, -58f, width - AvTokens.Space5, 1f), AvTheme.Hairline);
-                PinTop(divider.rectTransform, AvTokens.Space4, -58f, width - AvTokens.Space5);
+                    new Rect(AvTokens.Space4, -58f, width - AvTokens.Space3 - AvTokens.Space4 - AvTokens.Space5, 1f), AvTheme.Hairline);
+                PinTop(divider.rectTransform, AvTokens.Space4, -58f,
+                    width - AvTokens.Space3 - AvTokens.Space4 - AvTokens.Space5);
 
                 var viewport = new GameObject("BriefingScroll", typeof(RectTransform), typeof(UnityEngine.UI.Image),
                     typeof(UnityEngine.UI.RectMask2D), typeof(UnityEngine.UI.ScrollRect)).GetComponent<RectTransform>();
@@ -149,7 +167,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 briefingScroll.movementType = UnityEngine.UI.ScrollRect.MovementType.Clamped;
                 // The brief is body copy: a normal measure (~70 characters at 13px), the
                 // sheet's normal leading, and no letter tracking borrowed from a label.
-                float textWidth = width - AvTokens.Space4 - AvTokens.Space5;
+                float textWidth = width - AvTokens.Space3 - AvTokens.Space4 - AvTokens.Space5;
                 missionDescription = AvStyled.Label(viewport, new Rect(0f, 0f, textWidth, 100f), "", "row-sub");
                 briefingScroll.content = missionDescription.rectTransform;
                 missionDescription.enableWordWrapping = true;
@@ -170,21 +188,49 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     "BROWSE CONTRACTS  >", "btn", () => SelectPage(2), AvButtonStyle.Default)
                     .WithTooltip("Open the contract board and browse optional missions.");
 
-                // Three rungs on one rail. Each states its own threshold and its own state
-                // in words, so the current gate reads without relying on colour.
+                // Three adjacent escalation stations read like an aircraft system tape.
+                // Each still states threshold and state in words.
                 ladderHead = Head(page, 0f, width, "ESCALATION LADDER", "CURRENT THRESHOLD");
+                ladderProgressLabel = AvStyled.Label(page, new Rect(AvTokens.Space3, 0f, width - AvTokens.Space3, 16f),
+                    "SCORE LINK PENDING", "row-sub");
+                ladderProgressLabel.enableWordWrapping = false;
+                ladderProgressLabel.overflowMode = TextOverflowModes.Ellipsis;
+                ladderProgressWidth = width - AvTokens.Space3;
+                for (int i = 0; i < ladderProgressSegments.Length; i++)
+                    ladderProgressSegments[i] = AvKit.Panel(page, new Rect(0f, 0f, 1f, 5f), AvTheme.SurfaceInert);
                 for (int i = 0; i < ladderRails.Length; i++)
                 {
-                    ladderRails[i] = AvKit.Rule(page, new Rect(0f, 0f, 3f, 10f),
-                        AvTheme.Unity(AvTokens.RailInert));
+                    ladderCards[i] = AvKit.Panel(page, new Rect(0f, 0f, 0f, 0f),
+                        AvTheme.SurfaceInert);
+                    ladderRails[i] = AvKit.Rule(page, new Rect(0f, 0f, 10f, 3f),
+                        AvTheme.RailInert);
                     ladderMarkers[i] = AvKit.Panel(page, new Rect(0f, 0f, 10f, 10f),
-                        AvTheme.Unity(AvTokens.RailInert), AvSprites.Led);
+                        AvTheme.RailInert, AvSprites.Led);
                     ladderNames[i] = AvStyled.Label(page, new Rect(0f, 0f, 10f, 16f),
                         MfdMissionOverview.StageName(i), "row-name");
+                    ladderNames[i].enableWordWrapping = true;
+                    ladderNames[i].overflowMode = TextOverflowModes.Truncate;
                     ladderThresholds[i] = AvStyled.Label(page, new Rect(0f, 0f, 10f, 14f), "—", "row-sub");
                     ladderStates[i] = AvStyled.Label(page, new Rect(0f, 0f, 110f, 16f), "—", "row-value",
-                        align: TextAlignmentOptions.MidlineRight);
+                        align: TextAlignmentOptions.MidlineLeft);
                 }
+
+                contractHead = Head(page, 0f, width, "FACTION CONTRACTS", "SECONDARY MISSIONS");
+                var cGo = new GameObject("ContractPreviewCard", typeof(RectTransform));
+                contractCard = cGo.GetComponent<RectTransform>();
+                contractCard.SetParent(page, false);
+                UnityEngine.UI.Image cFill = AvKit.Panel(contractCard, new Rect(0f, 0f, 0f, 0f),
+                    AvTheme.Unity(AvTokens.SurfaceInert), AvSprites.Card);
+                AvKit.Stretch(cFill.rectTransform);
+                UnityEngine.UI.Image cFrame = AvKit.Panel(contractCard, new Rect(0f, 0f, 0f, 0f),
+                    AvTheme.Hairline, AvSprites.ControlFrame);
+                AvKit.Stretch(cFrame.rectTransform);
+                contractRail = AvKit.Rule(contractCard, new Rect(0f, 0f, 3f, 0f), AvTheme.RailInfo);
+                StretchVertical(contractRail.rectTransform, 0f, 3f);
+                contractSummary = AvStyled.Label(contractCard, new Rect(14f, -6f, width - 40f, 16f), "", "row-main");
+                contractDetail = AvStyled.Label(contractCard, new Rect(14f, -24f, width - 40f, 30f), "", "row-sub");
+                contractDetail.enableWordWrapping = true;
+                contractDetail.overflowMode = TextOverflowModes.Overflow;
 
                 LayoutMissionPage();
             }
@@ -203,35 +249,69 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
                 AvKit.Place(briefCard, new Rect(AvTokens.Space3, cardTop, width - AvTokens.Space3, cardHeight));
 
-                // The action sits wholly inside the page: its own height is reserved above the
-                // body bottom so it cannot paint over the pinned status strip.
-                float buttonTop = -body + 44f + AvTokens.Space2;
-                AvKit.Place((RectTransform)browseContracts.transform,
-                    new Rect(AvTokens.Space3, buttonTop, width - AvTokens.Space3, 44f));
-
                 float ladderHeadingTop = cardTop - cardHeight - AvTokens.Space2;
-                float ladderBottom = buttonTop + AvTokens.Space3;
                 ladderHead.Place(missionPage, ladderHeadingTop, width);
-                float ladderTop = ladderHeadingTop - HeadingPitch;
-                float rowHeight = Mathf.Clamp((ladderTop - ladderBottom) / 3f, 44f, 64f);
-                AvKit.Place((RectTransform)browseContracts.transform,
-                    new Rect(AvTokens.Space3, ladderTop - rowHeight * 3f - AvTokens.Space3,
-                             width - AvTokens.Space3, 36f));
+                float progressTop = ladderHeadingTop - HeadingPitch;
+                AvKit.Place(ladderProgressLabel.rectTransform,
+                    new Rect(AvTokens.Space3, progressTop, ladderProgressWidth, 16f));
+                // Track and fill share a fixed slot beneath the live score readout.
+                float trackY = progressTop - 19f;
+                float segmentPitch = ladderProgressWidth / ladderProgressSegments.Length;
+                for (int i = 0; i < ladderProgressSegments.Length; i++)
+                    AvKit.Place(ladderProgressSegments[i].rectTransform,
+                        new Rect(AvTokens.Space3 + i * segmentPitch, trackY,
+                            segmentPitch - 3f, 5f));
+                float ladderTop = trackY - 12f;
+                const float rowHeight = 82f;
+                float cardW = width - AvTokens.Space3;
+                float stationWidth = (cardW - 2f * AvTokens.Gap) / 3f;
 
                 for (int i = 0; i < ladderRails.Length; i++)
                 {
-                    float rowTop = ladderTop - i * rowHeight;
-                    float centre = rowTop - rowHeight * 0.5f;
+                    float stationX = AvTokens.Space3 + i * (stationWidth + AvTokens.Gap);
+                    AvKit.Place(ladderCards[i].rectTransform,
+                        new Rect(stationX, ladderTop, stationWidth, rowHeight));
                     AvKit.Place(ladderRails[i].rectTransform,
-                        new Rect(AvTokens.Space3 + 4f, rowTop - 2f, 3f, Mathf.Max(10f, rowHeight - 4f)));
+                        new Rect(stationX, ladderTop - rowHeight + 3f, stationWidth, 3f));
                     AvKit.Place(ladderMarkers[i].rectTransform,
-                        new Rect(AvTokens.Space3 + 0.5f, centre - 5f, 10f, 10f));
+                        new Rect(stationX + 10f, ladderTop - 10f, 8f, 8f));
                     AvKit.Place(ladderNames[i].rectTransform,
-                        new Rect(AvTokens.Space3 + 18f, centre + 16f, width - 148f, 16f));
+                        new Rect(stationX + 22f, ladderTop - 8f, stationWidth - 30f, 31f));
                     AvKit.Place(ladderThresholds[i].rectTransform,
-                        new Rect(AvTokens.Space3 + 18f, centre - 2f, width - 148f, 14f));
+                        new Rect(stationX + 10f, ladderTop - 44f, stationWidth - 20f, 14f));
                     AvKit.Place(ladderStates[i].rectTransform,
-                        new Rect(width - 118f, centre - 8f, 110f, 16f));
+                        new Rect(stationX + 10f, ladderTop - 60f, stationWidth - 20f, 16f));
+                }
+
+                float ladderBottom = ladderTop - rowHeight - AvTokens.Gap;
+                float remainingSpace = body + ladderBottom - AvTokens.Space2;
+                bool showContractPreview = remainingSpace >= 138f;
+
+                if (contractHead != null)
+                {
+                    contractHead.Tick.gameObject.SetActive(showContractPreview);
+                    contractHead.Title.gameObject.SetActive(showContractPreview);
+                    if (contractHead.Note != null) contractHead.Note.gameObject.SetActive(showContractPreview);
+                    contractHead.Rule.gameObject.SetActive(showContractPreview);
+                    contractCard.gameObject.SetActive(showContractPreview);
+                }
+
+                if (showContractPreview)
+                {
+                    float contractHeadingTop = ladderBottom - AvTokens.Space1;
+                    contractHead.Place(missionPage, contractHeadingTop, width);
+                    float contractTop = contractHeadingTop - HeadingPitch;
+                    const float previewH = 62f;
+                    AvKit.Place(contractCard, new Rect(AvTokens.Space3, contractTop, cardW, previewH));
+                    float buttonY = contractTop - previewH - AvTokens.Space2;
+                    AvKit.Place((RectTransform)browseContracts.transform,
+                        new Rect(AvTokens.Space3, buttonY, cardW, 36f));
+                }
+                else
+                {
+                    float buttonY = ladderBottom - AvTokens.Space2;
+                    AvKit.Place((RectTransform)browseContracts.transform,
+                        new Rect(AvTokens.Space3, buttonY, cardW, 36f));
                 }
             }
 
@@ -328,7 +408,16 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 y -= 38f;
 
                 boardSummary = AvStyled.Label(page,
-                    new Rect(AvTokens.Space3, y, width - AvTokens.Space3, 14f), "", "section-title-note");
+                    new Rect(AvTokens.Space3, y, width * .66f - AvTokens.Space3, 18f), "", "section-title-note");
+                boardSummary.enableWordWrapping = false;
+                boardSummary.overflowMode = TextOverflowModes.Ellipsis;
+                AvStyled.Button(page,
+                    new Rect(width * .68f, y + 3f, width * .32f - AvTokens.Space3, 23f),
+                    "OPEN DESK  >", "row-main", () =>
+                    {
+                        if (contractWindow == null) contractWindow = MissionContractWindow.Create();
+                        contractWindow.Show();
+                    }, AvButtonStyle.Default).WithTooltip("Open the shared faction contract record.");
                 y -= 22f;
 
                 // The grid takes the height the panel actually has: a shallow bezel shows
@@ -380,13 +469,23 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 }
 
                 int available = 0, results = 0;
+                SecondaryObjectiveView leadOffer = null;
+                SecondaryObjectiveView leadActive = null;
                 filtered.Clear();
                 secondaryActive = 0;
                 if (entries != null) foreach (SecondaryObjectiveView entry in entries)
                 {
                     if (entry == null) continue;
-                    if (entry.IsActive) secondaryActive++;
-                    else if (entry.IsOffered) available++;
+                    if (entry.IsActive)
+                    {
+                        secondaryActive++;
+                        if (leadActive == null) leadActive = entry;
+                    }
+                    else if (entry.IsOffered)
+                    {
+                        available++;
+                        if (leadOffer == null) leadOffer = entry;
+                    }
                     else results++;
                     if (secondaryFilter == MfdSecondaryObjectives.FilterAvailable ? entry.IsOffered :
                         secondaryFilter == MfdSecondaryObjectives.FilterActive ? entry.IsActive :
@@ -412,8 +511,45 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 }
 
                 boardSummary.text = MfdSecondaryObjectives.BoardSummary(available, secondaryActive, secondaryLimit, results);
-                boardStatus.text = secondaryStatus;
+                boardStatus.text = installed && streamed
+                    ? (secondaryLimit > 0 ? "CAPACITY " + secondaryLimit + " MAX" : "DIRECTOR ONLINE")
+                    : "WAITING FOR HOST";
                 boardStatus.color = installed && streamed ? AvTheme.Dim : AvTheme.Warning;
+
+                if (contractSummary != null)
+                {
+                    bool hasOffers = available > 0;
+                    contractSummary.text = hasOffers
+                        ? (available == 1 ? "1 OFFER AVAILABLE" : available + " OFFERS AVAILABLE") + "  ·  " +
+                          MfdSecondaryObjectives.ShortCount(secondaryActive, secondaryLimit) + " ACTIVE"
+                        : secondaryActive > 0
+                        ? MfdSecondaryObjectives.ShortCount(secondaryActive, secondaryLimit) + " ACTIVE CONTRACTS"
+                        : "NO ACTIVE CONTRACTS";
+                    contractSummary.color = hasOffers ? AvTheme.Accent : secondaryActive > 0 ? AvTheme.RailReady : AvTheme.Dim;
+                }
+                if (contractDetail != null)
+                {
+                    SecondaryObjectiveView preview = leadActive ?? leadOffer;
+                    if (preview != null)
+                    {
+                        string copy = MfdSecondaryObjectives.TitleLine(preview.Id, preview.Title) +
+                            "  ·  " + (preview.IsActive ? "IN FIELD" : preview.Target) +
+                            (string.IsNullOrWhiteSpace(preview.AcceptedBy) ? "" : "  ·  TAKEN BY " + preview.AcceptedBy);
+                        if (copy != previewedOfferCopy)
+                        {
+                            previewedOfferCopy = copy;
+                            contractDetail.text = SecondaryObjectiveCard.ClampedCopy(contractDetail, copy,
+                                contractDetail.rectTransform.rect.width, 30f);
+                            browseContracts.WithTooltip(copy);
+                        }
+                    }
+                    else
+                    {
+                        previewedOfferCopy = null;
+                        contractDetail.text = "Open the contract board to review optional faction missions.";
+                        browseContracts.WithTooltip("Open the contract board and browse optional missions.");
+                    }
+                }
                 BoardEmptyReason emptyReason = !installed ? BoardEmptyReason.Unavailable
                     : !streamed ? BoardEmptyReason.LinkLost
                     : !hasCapacity ? BoardEmptyReason.LimitReached
@@ -479,7 +615,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     float effectTop = -(height - 70f);
                     float payTop = effectTop + LinePitch;
                     float targetTop = payTop + LinePitch;
-                    briefHeight = height >= 200f ? 30f : 15f;
+                    briefHeight = height >= 170f ? 32f : 16f;
                     briefWidth = area.width - AvTokens.Space3 * 2f;
 
                     Root = new GameObject("SecondaryObjective", typeof(RectTransform)).GetComponent<RectTransform>();
@@ -586,7 +722,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 /// words were left out instead of ending in a silent cut. Only re-measured
                 /// when the brief's source text changes.
                 /// </summary>
-                private static string ClampedCopy(TMP_Text label, string text, float width, float height)
+                internal static string ClampedCopy(TMP_Text label, string text, float width, float height)
                 {
                     if (string.IsNullOrEmpty(text)) return "";
                     if (label.GetPreferredValues(text, width, 0f).y <= height + 1f) return text;
@@ -636,9 +772,16 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
                     title.text = MfdSecondaryObjectives.TitleLine(objective.Id, objective.Title);
                     accept.WithTooltip(title.text + " · " + objective.Description + " · " +
-                        objective.Target + " · " + objective.Reward);
+                        objective.Target + " · " + objective.Reward +
+                        (string.IsNullOrWhiteSpace(objective.AcceptedBy) ? "" : " · ACCEPTED BY " + objective.AcceptedBy));
                     glyph.SetKind(MfdMissionLabels.ContractGlyph(objective.Title), color);
                     family.text = MfdMissionLabels.ContractFamily(objective.Title);
+                    if (!string.IsNullOrWhiteSpace(objective.AcceptedBy))
+                        family.text += "  /  TAKEN BY " + objective.AcceptedBy;
+                    family.enableWordWrapping = false;
+                    family.overflowMode = TextOverflowModes.Ellipsis;
+                    family.enableAutoSizing = true;
+                    family.fontSizeMin = AvTokens.FontMicro;
                     state.text = objective.IsOffered ? "AWAITING ACCEPTANCE" : objective.Status;
                     state.color = color;
                     deadline.text = MfdSecondaryObjectives.ChipLabel(objective);
@@ -698,7 +841,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 // Size the card to its copy: a short brief leaves the ladder the room, and
                 // the brief never sits in a card with an empty middle. Only the pooled
                 // widgets move; the measurement runs on the refresh pass it already had.
-                float textWidth = PageWidth - AvTokens.Space4 - AvTokens.Space5;
+                float textWidth = PageWidth - AvTokens.Space3 - AvTokens.Space4 - AvTokens.Space5;
                 float preferred = missionDescription.GetPreferredValues(
                     missionDescription.text, textWidth, 0f).y;
                 float wanted = Mathf.Clamp(Mathf.Round((preferred + BriefCardChrome) * 0.5f) * 2f,
@@ -720,6 +863,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 if (manager == null)
                 {
                     ladderHead.Note.text = "ESCALATION DATA UNAVAILABLE";
+                    ladderProgressLabel.text = "SCORE LINK UNAVAILABLE";
+                    for (int i = 0; i < ladderProgressSegments.Length; i++)
+                        ladderProgressSegments[i].color = AvTheme.SurfaceInert;
                     for (int i = 0; i < ladderRails.Length; i++)
                         SetLadderRow(i, "—", "—", AvTheme.Disabled,
                                      AvTheme.Unity(AvTokens.RailInert), false);
@@ -731,8 +877,13 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 float strategic = manager.strategicThreshold;
                 int stage = MfdMissionOverview.Stage(current, tactical, strategic);
                 ladderHead.Note.text = MfdMissionOverview.Caption(current, tactical, strategic);
+                ladderProgressLabel.text = MfdMissionOverview.NextGateLabel(current, tactical, strategic);
 
                 Color holding = stage == 2 ? AvTheme.Alert : stage == 1 ? AvTheme.Warning : AvTheme.Accent;
+                float progress = MfdMissionOverview.NextGateProgress(current, tactical, strategic);
+                for (int i = 0; i < ladderProgressSegments.Length; i++)
+                    ladderProgressSegments[i].color = (i + 1f) / ladderProgressSegments.Length <= progress
+                        ? holding : AvTheme.SurfaceInert;
                 for (int i = 0; i < ladderRails.Length; i++)
                 {
                     bool set = i == 0 || (i == 1 ? tactical > 0f : strategic > 0f);
@@ -754,6 +905,12 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 ladderStates[index].color = ink;
                 ladderRails[index].color = rail;
                 ladderMarkers[index].color = rail;
+                if (ladderCards[index] != null)
+                {
+                    ladderCards[index].color = currentRung
+                        ? AvTheme.Unity(AvTokens.Wash(rail.ToRgba(), AvTokens.SelectedScale, 0.15f))
+                        : AvTheme.Unity(AvTokens.SurfaceInert);
+                }
             }
 
             private static string ModeLabel(Mission mission)
@@ -854,8 +1011,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
                         SavedObjective saved = objective.SavedObjective;
                         string type = saved == null ? "" : saved.ObjectiveTypeEnum.ToString();
-                        string title = MfdSecondaryObjectives.PlainObjective(saved == null ? null : saved.DisplayName);
-                        string source = saved == null ? "" : MfdSecondaryObjectives.PlainObjective(saved.UniqueName);
+                        string rawTitle = saved == null ? null : saved.DisplayName;
+                        string rawSource = saved == null ? "" : saved.UniqueName;
+                        string title = MfdSecondaryObjectives.Humanize(MfdSecondaryObjectives.PlainObjective(rawTitle));
+                        string source = MfdSecondaryObjectives.Humanize(MfdSecondaryObjectives.PlainObjective(rawSource));
                         string detail = MfdMissionLabels.ObjectiveTypeLabel(type);
                         if (!string.IsNullOrEmpty(source) && source != title) detail += "  ·  " + source;
 
@@ -922,7 +1081,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                         detail.fontSizeMax = detail.fontSize;
 
                         trackWidth = width - 36f;
-                        AvKit.Panel(rect, new Rect(36f, -(height - 9f), trackWidth, 3f), AvTheme.SurfaceInert);
+                        var trackArea = new Rect(36f, -(height - 9f), trackWidth, 3f);
+                        AvKit.Panel(rect, trackArea, AvTheme.SurfaceInert);
+                        AvKit.Outline(rect, trackArea, AvTheme.Hairline);
                         fill = AvKit.Rule(rect, new Rect(36f, -(height - 9f), 0f, 3f), AvTheme.RailInert);
                         AvKit.Rule(rect, new Rect(0f, -height, width, 1f), AvTheme.Hairline);
                         hover = AvKit.HitButton(rect, new Rect(0f, 0f, width, height), null);

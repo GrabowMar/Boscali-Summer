@@ -24,6 +24,40 @@ namespace BoscaliSummer.Fire
             public float SizeScale = 1f;
             public float LifetimeScale = 1f;
             public float ClusterScale = 1f;
+            public bool Sleeping;
+            public CloudDeckSorting Deck;
+            public bool BehindDeck;
+
+            public void SetSleeping(bool sleep)
+            {
+                if (Sleeping == sleep) return;
+                Sleeping = sleep;
+                if (sleep)
+                {
+                    SetLight(false);
+                    if (Systems != null)
+                    {
+                        for (int i = 0; i < Systems.Length; i++)
+                        {
+                            if (Systems[i] != null && Systems[i].isPlaying)
+                                Systems[i].Pause(true);
+                        }
+                    }
+                    if (Root != null) Root.SetActive(false);
+                }
+                else
+                {
+                    if (Root != null) Root.SetActive(true);
+                    if (Systems != null)
+                    {
+                        for (int i = 0; i < Systems.Length; i++)
+                        {
+                            if (Systems[i] != null)
+                                Systems[i].Play(true);
+                        }
+                    }
+                }
+            }
 
             public void SetPosition(GlobalPosition position)
             {
@@ -69,6 +103,8 @@ namespace BoscaliSummer.Fire
             public void SetPhase(float ageSeconds, float remainingFraction, Vector3 wind)
             {
                 if (Systems == null || BaseRates == null) return;
+                if (Root != null && Deck != null)
+                    BehindDeck = Deck.Sync(Systems, Root.transform.position, BehindDeck);
                 float growth = Smooth01(ageSeconds / Mathf.Max(GrowthSeconds, 1f));
                 float flameEnd = Smooth01(remainingFraction / 0.22f);
                 float flare = 0.76f + Mathf.PerlinNoise(FlickerSeed, Time.timeSinceLevelLoad * 0.38f) * 0.34f;
@@ -113,6 +149,7 @@ namespace BoscaliSummer.Fire
         private const int MaximumVisuals = 32;
 
         private readonly List<Visual> visuals = new List<Visual>(24);
+        private readonly CloudDeckSorting deck = new CloudDeckSorting();
         private Material flameMaterial;
         private bool templatesSearched;
 
@@ -136,6 +173,7 @@ namespace BoscaliSummer.Fire
         public void Release(Visual visual)
         {
             if (visual == null || !visual.Active) return;
+            visual.Sleeping = false;
             visual.Active = false;
             visual.FlameIntensity = 0f;
             visual.SetLight(false);
@@ -151,6 +189,7 @@ namespace BoscaliSummer.Fire
             for (int i = 0; i < visuals.Count; i++)
                 if (visuals[i].Root != null) UnityEngine.Object.Destroy(visuals[i].Root);
             visuals.Clear();
+            deck.Clear();
             templatesSearched = false;
             flameMaterial = null;
         }
@@ -198,6 +237,7 @@ namespace BoscaliSummer.Fire
             {
                 Root = root,
                 Systems = systems.ToArray(),
+                Deck = deck,
                 BaseRates = rates.ToArray(),
                 BaseShapes = shapes.ToArray(),
                 Light = light
@@ -424,6 +464,7 @@ namespace BoscaliSummer.Fire
         private static void Activate(Visual visual, GlobalPosition position, bool forest)
         {
             visual.Active = true;
+            visual.Sleeping = false;
             visual.ClusterScale = 1f;
             visual.FlameIntensity = 0f;
             visual.Configure(forest, position);

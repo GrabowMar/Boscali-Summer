@@ -14,9 +14,16 @@ namespace BoscaliSummer.Runtime
             bool missile = AccessTools.Method(typeof(Missile), "UserCode_RpcDetonate_897349600") != null;
             bool vehicle = AccessTools.Method(typeof(GroundVehicle), nameof(GroundVehicle.UnitDisabled)) != null;
             bool capture = AccessTools.Method(typeof(Airbase), "CaptureFaction") != null;
+            bool siege = AccessTools.Method(typeof(Airbase), "ICapturable.get_CaptureDefense") != null &&
+                AccessTools.Method(typeof(Unit), "get_CaptureStrength") != null &&
+                AccessTools.Method(typeof(Capture), "ApplyChange") != null &&
+                AccessTools.Field(typeof(Capture), "target") != null;
             bool blast = AccessTools.Method(typeof(BlastManager), "AddBlast") != null;
             bool blastStamp = AccessTools.Method(typeof(BlastManager), "DrawBlast") != null;
             bool scorchDecal = AccessTools.Field(typeof(GameAssets), "scorchMarkDecal") != null;
+            bool shockwave = AccessTools.Method(typeof(MapBuilding), "TakeShockwave") != null;
+            bool destruct = AccessTools.Method(typeof(MapBuilding), "Destruct") != null;
+            bool cmdGuard = AccessTools.Method(typeof(MapBuildingSet), "UserCode_CmdDestroyBuilding_1002795805") != null;
             bool musicManager = AccessTools.Method(typeof(MusicManager), nameof(MusicManager.PlayMusic)) != null &&
                 AccessTools.Method(typeof(MusicManager), nameof(MusicManager.CrossFadeMusic)) != null;
             bool soundtrackCatalog =
@@ -57,7 +64,9 @@ namespace BoscaliSummer.Runtime
                 "Capabilities: " +
                 $"BulletImpacts={bullet}, MissileImpacts={missile}, VehicleLosses={vehicle}, " +
                 $"MapBuildingHP={GameAccess.MapBuildingHitPointsAvailable}, " +
-                $"ScorchMap={blast}, ScorchStamps={blastStamp}, FacadeScorch={scorchDecal}, AirbaseCapture={capture}, " +
+                $"BuildingHits={shockwave}, Ruins={destruct}, " +
+                $"SetIndex={GameAccess.MapBuildingSetBuildingsAvailable}, CmdGuard={cmdGuard}, " +
+                $"ScorchMap={blast}, ScorchStamps={blastStamp}, FacadeScorch={scorchDecal}, AirbaseCapture={capture}, UrbanSiege={siege}, " +
                 $"RadioMFD={GameAccess.MfdAvailable}, MusicMixer={musicManager}, " +
                 $"MusicOwnership={GameAccess.MusicSourcesAvailable}, " +
                 $"SoundtrackCatalog={soundtrackCatalog}, Progression={progression}, " +

@@ -28,6 +28,7 @@ namespace BoscaliSummer.Fire
         private readonly Queue<PendingExplosion> pending = new Queue<PendingExplosion>(32);
         private readonly Collider[] overlapBuffer = new Collider[32];
         private readonly List<GameObject> marks = new List<GameObject>(64);
+        private readonly List<int> owners = new List<int>(64);
         private int ringHead;
         private bool loggedFirstMark;
 
@@ -80,17 +81,19 @@ namespace BoscaliSummer.Fire
                 QueryTriggerInteraction.Collide);
 
             Collider nearest = null;
+            int owner = 0;
             float nearestSq = float.MaxValue;
             for (int i = 0; i < count; i++)
             {
                 Collider collider = overlapBuffer[i];
                 if (collider == null) continue;
-                Transform root = BuildingRootOf(collider);
-                if (root == null) continue;
+                int candidate = OwnerOf(collider);
+                if (candidate == 0) continue;
                 float distance = (collider.bounds.center - local).sqrMagnitude;
                 if (distance >= nearestSq) continue;
                 nearestSq = distance;
                 nearest = collider;
+                owner = candidate;
             }
             if (nearest == null) return;
 
@@ -119,23 +122,46 @@ namespace BoscaliSummer.Fire
             }
 
             int markCount = ImpactScorchPolicy.DecalCount(explosion.BlastYield);
-            PlaceMark(point, normal, explosion.BlastYield);
+            PlaceMark(point, normal, explosion.BlastYield, owner);
             if (markCount > 1)
             {
                 Vector3 tangent = Vector3.Cross(normal, Vector3.up).normalized;
                 if (tangent.sqrMagnitude < 0.01f) tangent = Vector3.right;
                 Vector3 bitangent = Vector3.Cross(normal, tangent).normalized;
                 float spread = ImpactScorchPolicy.DecalSize(explosion.BlastYield) * 0.32f;
-                PlaceMark(point + tangent * spread + bitangent * spread * 0.3f, normal, explosion.BlastYield * 0.45f);
+                PlaceMark(point + tangent * spread + bitangent * spread * 0.3f, normal, explosion.BlastYield * 0.45f, owner);
                 if (markCount > 2)
-                    PlaceMark(point - tangent * spread * 0.75f - bitangent * spread * 0.45f, normal, explosion.BlastYield * 0.32f);
+                    PlaceMark(point - tangent * spread * 0.75f - bitangent * spread * 0.45f, normal, explosion.BlastYield * 0.32f, owner);
             }
         }
 
-        private void PlaceMark(Vector3 point, Vector3 normal, float blastYield)
+        /// <summary>
+        /// Hides every mark owned by a destroyed building so scorch never floats where
+        /// walls stood. Called from the Destruct path on every peer.
+        /// </summary>
+        internal void ReleaseForBuilding(int buildingId)
+        {
+            if (buildingId == 0) return;
+            for (int i = 0; i < marks.Count; i++)
+            {
+                if (i < owners.Count && owners[i] == buildingId)
+                {
+                    owners[i] = 0;
+                    if (marks[i] != null) marks[i].SetActive(false);
+                }
+            }
+        }
+
+        private void PlaceMark(Vector3 point, Vector3 normal, float blastYield, int owner)
         {
             GameObject mark = AcquireMark();
             if (mark == null) return;
+            int slot = marks.IndexOf(mark);
+            if (slot >= 0)
+            {
+                while (owners.Count <= slot) owners.Add(0);
+                owners[slot] = owner;
+            }
             DecalProjector projector = mark.GetComponent<DecalProjector>();
             if (projector == null) return;
 
@@ -196,12 +222,12 @@ namespace BoscaliSummer.Fire
             return oldest;
         }
 
-        private static Transform BuildingRootOf(Collider collider)
+        private static int OwnerOf(Collider collider)
         {
             MapBuilding map = collider.GetComponentInParent<MapBuilding>();
-            if (map != null) return map.transform;
+            if (map != null) return map.GetInstanceID();
             Building network = collider.GetComponentInParent<Building>();
-            return network != null ? network.transform : null;
+            return network != null ? network.GetInstanceID() : 0;
         }
 
         private void Clear()
@@ -209,6 +235,7 @@ namespace BoscaliSummer.Fire
             for (int i = 0; i < marks.Count; i++)
                 if (marks[i] != null) Object.Destroy(marks[i]);
             marks.Clear();
+            owners.Clear();
             pending.Clear();
             ringHead = 0;
             loggedFirstMark = false;

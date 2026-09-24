@@ -16,12 +16,12 @@ namespace BoscaliSummer.Features.Trenches.Configuration
             Enabled = config.Bind("Trenches", "Enabled", true,
                 "Enable autonomous, dynamic modular trench network growth and battlefield fortification.");
 
-            GrowthIntervalSeconds = config.Bind("Trenches", "GrowthIntervalSeconds", 45f,
+            GrowthIntervalSeconds = config.Bind("Trenches", "GrowthIntervalSeconds", 60f,
                 new ConfigDescription(
                     "Interval in seconds between autonomous trench growth and fortification ticks.",
                     new AcceptableValueRange<float>(15f, 180f)));
 
-            MaxTrenchPositions = config.Bind("Trenches", "MaxNetworks", 16,
+            MaxTrenchPositions = config.Bind("Trenches", "MaxNetworks", 12,
                 new ConfigDescription(
                     "Maximum concurrent trench positions per theater.",
                     new AcceptableValueRange<int>(1, 16)));

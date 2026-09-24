@@ -20,7 +20,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
         private const float WingFriendlyHeight = 112f;
         private const float WingRowHeight = 124f;
         private const float WingPagerHeight = 28f;
-        private const float WingFooterHeight = 36f;
+        private const float WingFooterHeight = 44f;
         private const float WingRowGrowthCap = 28f;
 
         private sealed class FriendlySlot
@@ -78,7 +78,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
         private static float WingMinContentHeight() =>
             SheetHeaderHeight + WingHuntHeight + SheetHeadingHeight + WingFriendlyHeight +
             SheetHeadingHeight + WingPagerHeight + 2f * (WingRowHeight + AvTokens.Space2) +
-            WingFooterHeight + SheetBaseGap * 3f;
+            WingFooterHeight + SheetBaseGap * 3f + AvTokens.Space3;
 
         private void BuildWingsPage(RectTransform page, Rect body)
         {
@@ -94,8 +94,8 @@ namespace BoscaliSummer.Features.Progression.Presentation
             float rowHeight = WingRowHeight + Mathf.Max(0f,
                 Mathf.Min((slack - (gap - SheetBaseGap) * 3f) / 2f, WingRowGrowthCap));
 
-            y = DrawPageHeader(parent, x, y, width, "WINGS  /  03 OF 04", "WING STATUS",
-                "LIVE + ENCOUNTER DATA");
+            y = DrawPageHeader(parent, x, y, width, "ACE INTELLIGENCE",
+                "LIVE + ENCOUNTER DATA", SqdMark.Aircraft);
 
             // ---- Hunt status -------------------------------------------------------------
             AvKit.Panel(parent, new Rect(x, y, width, WingHuntHeight), AvTheme.SurfaceInert);
@@ -232,8 +232,14 @@ namespace BoscaliSummer.Features.Progression.Presentation
             }
 
             y -= gap;
-            AvStyled.Label(parent, new Rect(x, y, width, WingFooterHeight),
+            AvKit.Panel(parent, new Rect(x, y, width, WingFooterHeight), AvTheme.SurfaceInert);
+            AvKit.Outline(parent, new Rect(x, y, width, WingFooterHeight), AvTheme.Frame.WithAlpha(0.6f));
+            AvStyled.Rail(parent, new Rect(x + 4f, y - 6f, 3f, WingFooterHeight - 12f), "info");
+            TMP_Text footer = AvStyled.Label(parent,
+                new Rect(x + 12f, y - 6f, width - 18f, WingFooterHeight - 12f),
                 "ACE KILL: +1 SKILL POINT. Downed aces may return stronger.\nFRIENDLY WING RECRUITING AND ORDERS REMAIN IN WMC.", "row-sub");
+            footer.fontSize = AvTokens.FontSmall;
+            footer.lineSpacing = -10f;
         }
 
         /// <summary>Your own flight, read-only: the career lead plus Wing Command's published

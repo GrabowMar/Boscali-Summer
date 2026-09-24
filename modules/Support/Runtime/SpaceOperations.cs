@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using BoscaliSummer.Features.Support.Domain;
 using BoscaliSummer.Features.Support.Domain.Cyber;
 using BoscaliSummer.Features.Support.Domain.Orbital;
+using BoscaliSummer.Features.Support.Domain.SpecOps;
 using NuclearOption.Networking;
 using UnityEngine;
 
@@ -19,18 +20,14 @@ namespace BoscaliSummer.Features.Support.Runtime
         /// <summary>Jettison the module in a grid cell; the core deorbits the station. Arg = cell.</summary>
         Jettison = 2,
 
-        Upgrade = 3,
-        // 4 and 5 were the single EW truck's deploy and move; retired with the CYBER network.
+        /// <summary>Buy a network-wide CYBER upgrade with allocation. Arg = <see cref="CyberUpgrade"/>.</summary>
+        CyberUpgrade = 3,
+        // 4 and 5 were the single EW truck's deploy and move; retired with the truck network.
 
-        /// <summary>Fund the next tier of a SPEC OPS or INTEL program. Arg = <see cref="OpsProgramId"/>.</summary>
-        Invest = 6,
+        // 6 funded a SPEC OPS/INTEL program and 8 raised a doctrine rank; retired with the
+        // detachment remake (2026-09-21). 7 was the EW truck's posture retune.
 
-        // 7 was the EW truck's posture retune; jammers now carry their own mode (CyberMode).
-
-        /// <summary>Raise the base of operations one rank. Arg = <see cref="GarrisonUpgradeId"/>.</summary>
-        GarrisonUpgrade = 8,
-
-        /// <summary>Phasing burn: the station's next pass begins in seconds.</summary>
+        /// <summary>Relocate to a fixed theatre sector. Protocol 18: Arg = sector 0..8.</summary>
         Rephase = 9,
 
         /// <summary>Raise or lower the station. Arg = target orbit band.</summary>
@@ -39,28 +36,36 @@ namespace BoscaliSummer.Features.Support.Runtime
         /// <summary>Launch a cargo vehicle that refills fuel and rods.</summary>
         Resupply = 11,
 
-        /// <summary>Order a CYBER site. Arg = <see cref="CyberSiteKind"/>, X/Z = mark.</summary>
-        CyberBuild = 12,
+        /// <summary>Breach a location. Arg = node slot, Arg2 = <see cref="BreachTool"/>.</summary>
+        CyberBreach = 12,
 
-        /// <summary>Scrap a CYBER site for a partial refund. Arg = slot.</summary>
-        CyberScrap = 13,
+        /// <summary>Choose a mastered location's capstone. Arg = <see cref="Capstone"/>.</summary>
+        CyberChoice = 13,
 
         /// <summary>Console verb. Arg = slot or incident, Arg2 = <see cref="CyberVerb"/>.</summary>
         CyberVerb = 14,
 
-        /// <summary>Set a jammer's mode. Arg = slot, Arg2 = <see cref="EwPosture"/>.</summary>
-        CyberMode = 15,
+        // 15 was the jammer posture retune and 16 the site move; retired with the truck network.
 
-        /// <summary>Drive a CYBER site to a new mark. Arg = slot, X/Z = mark.</summary>
-        CyberMove = 16
+        // 18 and 19 started and played the retired SPEC OPS infiltration board.
+
+        /// <summary>Raise an empty SPEC OPS team slot. Arg = team.</summary>
+        SpecOpsRaise = 20,
+
+        /// <summary>Send a team on a mission. Arg = team, Arg2 = <see cref="FieldMission"/>,
+        /// Revision = the objective's anchor id, so a reshuffled list can never retarget it.</summary>
+        SpecOpsLaunch = 21,
+
+        /// <summary>Bring a deployed team home. Arg = team.</summary>
+        SpecOpsRecall = 22
     }
 
     /// <summary>
-    /// Per-faction orbital, CYBER network, doctrine and program systems. The host owns every mutation and
-    /// charge; a client keeps the same model objects and rebuilds them from snapshots, so pass
-    /// geometry is computed locally while authority stays with the server. At most eight
-    /// factions, one station each, four facilities and six programs are tracked, plus up to
-    /// four foreign stations a client has been told about; scene teardown clears it.
+    /// Per-faction orbital, CYBER network and SPEC OPS detachment systems. The host owns every
+    /// mutation and charge; a client keeps the same model objects and rebuilds them from
+    /// snapshots, so pass geometry is computed locally while authority stays with the server. At
+    /// most eight factions, one station, one network and one detachment each, plus up to four
+    /// foreign stations a client has been told about; scene teardown clears it.
     /// </summary>
     internal sealed class SpaceOperations
     {
@@ -73,10 +78,8 @@ namespace BoscaliSummer.Features.Support.Runtime
         private sealed class FactionSystems
         {
             public readonly OrbitalPlatform Platform = new OrbitalPlatform();
-            public readonly InfoNetwork Info = new InfoNetwork();
-            public readonly OpsProgramLedger Programs = new OpsProgramLedger();
-            public readonly OpsGarrison Garrison = new OpsGarrison();
             public readonly CyberNetwork Cyber = new CyberNetwork();
+            public readonly SpecOpsDetachment Detachment = new SpecOpsDetachment();
         }
 
         private readonly Dictionary<FactionHQ, FactionSystems> systems = new Dictionary<FactionHQ, FactionSystems>();
@@ -104,27 +107,11 @@ namespace BoscaliSummer.Features.Support.Runtime
             return state == null ? null : state.Platform;
         }
 
-        public InfoNetwork InfoFor(FactionHQ hq)
-        {
-            FactionSystems state = Get(hq);
-            return state == null ? null : state.Info;
-        }
-
-        public OpsProgramLedger ProgramsFor(FactionHQ hq)
-        {
-            FactionSystems state = Get(hq);
-            return state == null ? null : state.Programs;
-        }
-
-        /// <summary>The faction's base-of-operations ranks; the host owns them.</summary>
-        public OpsGarrison GarrisonFor(FactionHQ hq)
-        {
-            FactionSystems state = Get(hq);
-            return state == null ? null : state.Garrison;
-        }
+        /// <summary>The faction's SPEC OPS detachment; the host owns it, clients mirror it.</summary>
+        public SpecOpsDetachment DetachmentFor(FactionHQ hq) => Get(hq)?.Detachment;
 
         /// <summary>
-        /// Host tick: station docking, power, drag and debris, and program accrual. Clients only
+        /// Host tick: station docking, power, drag and debris, and the CYBER campaign. Clients only
         /// mirror all of it. Debris rolls use Unity's random source; the model decides the outcome.
         /// </summary>
         public void TickHost(double now, float deltaTime, bool theaterDaylight, in OrbitClock clock, bool debris,
@@ -134,7 +121,6 @@ namespace BoscaliSummer.Features.Support.Runtime
             {
                 OrbitalPlatform platform = entry.Value.Platform;
                 platform.Tick(now, deltaTime, theaterDaylight, clock);
-                entry.Value.Programs.Tick(deltaTime);
                 entry.Value.Cyber.Tick(now, deltaTime, cyberIntensity);
                 if (!platform.Exists || !debris) continue;
                 if (platform.NextDebris <= 0.0)
@@ -157,24 +143,6 @@ namespace BoscaliSummer.Features.Support.Runtime
         }
 
         // ---- Host commands -----------------------------------------------------------------
-
-        public bool Upgrade(FactionHQ hq, FacilityId facility)
-        {
-            FactionSystems state = Get(hq);
-            return state != null && state.Info.TryUpgrade(facility);
-        }
-
-        public bool Invest(FactionHQ hq, OpsProgramId program)
-        {
-            FactionSystems state = Get(hq);
-            return state != null && state.Programs.TryInvest(program);
-        }
-
-        public bool UpgradeGarrison(FactionHQ hq, GarrisonUpgradeId upgrade)
-        {
-            FactionSystems state = Get(hq);
-            return state != null && state.Garrison.TryUpgrade(upgrade);
-        }
 
         /// <summary>Host: up to <see cref="MaximumForeign"/> stations belonging to anyone but
         /// <paramref name="hq"/>, for the sky, the map and ENEMY ACTIVITY. Modules are not
@@ -200,23 +168,10 @@ namespace BoscaliSummer.Features.Support.Runtime
 
         // ---- Client mirror -----------------------------------------------------------------
 
-        public void Mirror(FactionHQ hq, byte sigint, byte crypto, byte disrupt, byte ew)
+        public void MirrorDetachment(FactionHQ hq, SpecOpsSnapshot snapshot, double now)
         {
             FactionSystems state = Get(hq);
-            if (state != null) state.Info.Mirror(sigint, crypto, disrupt, ew);
-        }
-
-        public void MirrorPrograms(FactionHQ hq, byte[] tiers, byte specOpsTokens, byte intelTokens,
-                                   byte specOpsProgress, byte intelProgress)
-        {
-            FactionSystems state = Get(hq);
-            if (state != null) state.Programs.Mirror(tiers, specOpsTokens, intelTokens, specOpsProgress, intelProgress);
-        }
-
-        public void MirrorGarrison(FactionHQ hq, byte[] levels)
-        {
-            FactionSystems state = Get(hq);
-            if (state != null) state.Garrison.Mirror(levels);
+            if (state != null) state.Detachment.Mirror(snapshot, now);
         }
 
         public void MirrorCyber(FactionHQ hq, CyberSnapshot snapshot, double now)
@@ -236,14 +191,16 @@ namespace BoscaliSummer.Features.Support.Runtime
             int bounded = Math.Min(Math.Min(count, MaximumForeign), Math.Min(regimes?.Length ?? 0,
                 Math.Min(seeds?.Length ?? 0, Math.Min(clocks?.Length ?? 0, layouts?.Length ?? 0))));
             bounded = Math.Max(0, bounded);
-            while (foreign.Count > bounded) foreign.RemoveAt(foreign.Count - 1);
+            int accepted = 0;
             for (int i = 0; i < bounded; i++)
             {
-                if (!OrbitRegimes.Valid(regimes[i]) || float.IsNaN(clocks[i]) || float.IsInfinity(clocks[i])) continue;
-                if (i >= foreign.Count) foreign.Add(new ForeignPlatform());
-                foreign[i].Mirror(regimes[i], seeds[i], now - clocks[i],
+                if (!OrbitRegimes.Valid(regimes[i]) || !StationKeeping.ValidRoute(seeds[i]) ||
+                    float.IsNaN(clocks[i]) || float.IsInfinity(clocks[i])) continue;
+                if (accepted >= foreign.Count) foreign.Add(new ForeignPlatform());
+                foreign[accepted++].Mirror(regimes[i], seeds[i], now - clocks[i],
                     (ushort)(layouts[i] & ((1 << OrbitalPlatform.CellCount) - 1)));
             }
+            while (foreign.Count > accepted) foreign.RemoveAt(foreign.Count - 1);
         }
 
         private FactionSystems Get(FactionHQ hq)

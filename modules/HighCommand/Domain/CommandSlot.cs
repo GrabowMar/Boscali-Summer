@@ -27,7 +27,7 @@ namespace BoscaliSummer.Features.HighCommand.Domain
         public float StatusUntil;
 
         /// <summary>Mission time the post stops reading as under fire; 0 when never hit.</summary>
-        public float AlertUntil;
+        public float AlertUntil = 0f;
 
         public bool Alive => Status != CommanderStatus.Kia;
 

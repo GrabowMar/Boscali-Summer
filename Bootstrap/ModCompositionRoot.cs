@@ -3,12 +3,14 @@ using BepInEx.Logging;
 using BoscaliSummer.Features.Autopilot;
 using BoscaliSummer.Features.Campaign;
 using BoscaliSummer.Features.Command;
+using BoscaliSummer.Features.Comms;
 using BoscaliSummer.Features.DynamicOperations;
 using BoscaliSummer.Features.Events;
 using BoscaliSummer.Features.FireAndDestruction;
 using BoscaliSummer.Features.HighCommand;
 using BoscaliSummer.Features.Hud;
 using BoscaliSummer.Features.Progression;
+using BoscaliSummer.Features.PlayerSpawnPriority;
 using BoscaliSummer.Features.QoL;
 using BoscaliSummer.Features.Radio;
 using BoscaliSummer.Features.Support;
@@ -16,6 +18,8 @@ using BoscaliSummer.Features.Squad;
 using BoscaliSummer.Features.TheaterOps;
 using BoscaliSummer.Features.Trenches;
 using BoscaliSummer.Features.UrbanCombat;
+using BoscaliSummer.Features.Visuals;
+using BoscaliSummer.Features.Weather;
 using BoscaliSummer.Framework.Features;
 using BoscaliSummer.Runtime;
 
@@ -37,6 +41,7 @@ namespace BoscaliSummer.Bootstrap
                     // The common HUD element installs first so every presentation feature below
                     // can find it; each of them resolves it late and works without it.
                     new HudFeature(),
+                    new PlayerSpawnPriorityFeature(),
                     new RadioFeature()
                 };
                 if (settings.QoL.Enabled.Value && !UnityEngine.Application.isBatchMode)
@@ -55,16 +60,25 @@ namespace BoscaliSummer.Bootstrap
                 if (settings.TheaterOps.Enabled.Value) features.Add(new TheaterOpsFeature());
                 if (settings.Trenches.Enabled.Value) features.Add(new TrenchesFeature());
                 if (settings.Events.Enabled.Value) features.Add(new EventsFeature());
+                if (settings.Comms.Enabled.Value) features.Add(new CommsFeature());
                 if (settings.Campaign.Enabled.Value) features.Add(new CampaignFeature());
+                if (settings.Weather.Enabled.Value) features.Add(new WeatherFeature());
+                if (settings.Visuals.Enabled.Value && !UnityEngine.Application.isBatchMode)
+                    features.Add(new VisualsFeature());
                 host.Load(features.ToArray());
                 CapabilityReport.Log();
                 return host;
             }
             catch
             {
-                host.Dispose();
+                Stop(host);
                 throw;
             }
+        }
+
+        internal static void Stop(FeatureHost host)
+        {
+            host?.Dispose();
         }
     }
 }

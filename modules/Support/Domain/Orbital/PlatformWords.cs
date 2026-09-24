@@ -15,7 +15,7 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
             {
                 case PlatformHold.Insertion: return "INSERTION";
                 case PlatformHold.Transfer: return "ORBIT TRANSFER";
-                case PlatformHold.Rephase: return "PHASING BURN";
+                case PlatformHold.Rephase: return "RELOCATING";
                 case PlatformHold.SafeMode: return "SAFE MODE CLIMB";
                 default: return "ON STATION";
             }
@@ -27,10 +27,7 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
             if (platform == null || !platform.Exists) return "NO STATION ON ORBIT";
             PlatformHold hold = platform.HoldAt(now);
             if (hold != PlatformHold.None) return Hold(hold) + " · T-" + Clock(platform.CycleStart - now);
-            OrbitState state = platform.State(now, clock);
-            return state.InPass
-                ? "OVERHEAD · LOS " + Clock(state.TimeToPassEnd)
-                : "AWAY · AOS " + Clock(state.TimeToPass);
+            return "ON STATION · " + StationKeeping.Name(platform.PositionIndex);
         }
 
         public static string Denial(PlatformDenial denial, OrbitalPlatform platform, PlatformAbility ability, double now,
@@ -59,7 +56,7 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
                     return "RECHARGING · " + Clock(platform != null ? platform.RechargeRemaining(ability, now) : 0.0);
                 case PlatformDenial.Expended: return "NO RODS · SEND CARGO";
                 case PlatformDenial.NoFuel: return "NO FUEL · SEND CARGO";
-                case PlatformDenial.SameOrbit: return "ALREADY ON THIS BAND";
+                case PlatformDenial.SameOrbit: return "SELECT ANOTHER POSITION";
                 default: return denial.ToString().ToUpperInvariant();
             }
         }

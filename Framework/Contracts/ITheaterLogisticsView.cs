@@ -21,6 +21,7 @@ namespace BoscaliSummer.Framework.Contracts
         /// <summary>Shared faction pool in millions, or NaN when it could not be read.</summary>
         float FactionFunds { get; }
 
+        /// <summary>Mission groups on every peer; prices and ready gates are host-only.</summary>
         IReadOnlyList<ReinforcementOption> Reinforcements { get; }
         ReadinessSummary Readiness { get; }
 
@@ -31,7 +32,7 @@ namespace BoscaliSummer.Framework.Contracts
         bool RequestReinforcement(string key);
     }
 
-    /// <summary>One mission-defined convoy group and whether the host can afford to call it now.</summary>
+    /// <summary>One mission convoy group; remote price is NaN and its gates are unobserved.</summary>
     internal sealed class ReinforcementOption
     {
         public string Key { get; }
@@ -40,6 +41,7 @@ namespace BoscaliSummer.Framework.Contracts
         public float Cost { get; }
         public bool Ready { get; }
         public bool Affordable { get; }
+        /// <summary>Host-observed vanilla cooldown, even when the faction pool cannot fund a manual call.</summary>
         public float CooldownSeconds { get; }
 
         public ReinforcementOption(

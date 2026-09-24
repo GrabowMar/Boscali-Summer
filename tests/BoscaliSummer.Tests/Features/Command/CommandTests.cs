@@ -23,6 +23,7 @@ namespace BoscaliSummer.Tests.Features.Command
             TestControlledIngress();
             FrontlineTests.Run();
             StrPanelTests.Run();
+            OperationsBoardTests.Run();
             GridLabelsTests.Run();
         }
 

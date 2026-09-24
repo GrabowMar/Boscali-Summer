@@ -47,9 +47,9 @@ namespace BoscaliSummer.Tests.Architecture
 
             VerifySharedArea(sourceRoot, "Framework");
             VerifySharedArea(sourceRoot, "Infrastructure");
-            TestAssert.That(File.Exists(Path.Combine(featuresRoot, "QoL", "Runtime", "ThirdPersonHudController.cs")) &&
+            TestAssert.That(File.Exists(Path.Combine(featuresRoot, "Hud", "Runtime", "ThirdPersonHudController.cs")) &&
                 !File.Exists(Path.Combine(featuresRoot, "Support", "Runtime", "ThirdPersonHudController.cs")),
-                "local HUD ownership must remain in QoL, independent of Support");
+                "local HUD ownership must remain in Hud, independent of gameplay modules");
             string oldNetworking = Path.Combine(sourceRoot, "Infrastructure", "Networking");
             TestAssert.That(!Directory.Exists(oldNetworking) || !Directory.EnumerateFiles(oldNetworking).Any(),
                 "feature-owned networking leaked into shared Infrastructure/Networking");

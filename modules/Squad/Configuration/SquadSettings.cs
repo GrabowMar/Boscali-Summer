@@ -18,10 +18,11 @@ namespace BoscaliSummer.Features.Squad.Configuration
         private string debugResult = "Host only. Fly an aircraft in a running mission.";
 
         // ConfigurationManager reads these public fields by name; no plugin assembly dependency.
+        // Whether the entry is advanced is not decided here - ConfigMenu sorts the whole
+        // config file into the window's two halves in one place.
         private sealed class ConfigurationManagerAttributes
         {
             public Action<ConfigEntryBase> CustomDrawer;
-            public bool? IsAdvanced = false;
             public bool? HideDefaultButton = true;
         }
 

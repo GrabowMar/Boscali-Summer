@@ -45,6 +45,39 @@ namespace BoscaliSummer.Fire
             public float PulseSeed;
             public float ExternalIntensity = 1f;
             public float ForestClusterScale = 1f;
+            public bool Sleeping;
+            public CloudDeckSorting Deck;
+            public bool BehindDeck;
+
+            public void SetSleeping(bool sleep)
+            {
+                if (Sleeping == sleep) return;
+                Sleeping = sleep;
+                if (sleep)
+                {
+                    if (Systems != null)
+                    {
+                        for (int i = 0; i < Systems.Length; i++)
+                        {
+                            if (Systems[i] != null && Systems[i].isPlaying)
+                                Systems[i].Pause(true);
+                        }
+                    }
+                    if (Root != null) Root.SetActive(false);
+                }
+                else
+                {
+                    if (Root != null) Root.SetActive(true);
+                    if (Systems != null)
+                    {
+                        for (int i = 0; i < Systems.Length; i++)
+                        {
+                            if (Systems[i] != null)
+                                Systems[i].Play(true);
+                        }
+                    }
+                }
+            }
 
             public void SetPosition(GlobalPosition position)
             {
@@ -61,6 +94,8 @@ namespace BoscaliSummer.Fire
             public void SetPhase(float ageSeconds, float remainingFraction, Vector3 wind)
             {
                 if (Systems == null || BaseRates == null) return;
+                if (Root != null && Deck != null)
+                    BehindDeck = Deck.Sync(Systems, Root.transform.position, BehindDeck);
                 float fade = Smooth01(remainingFraction / 0.055f);
                 float flameSupport = Mathf.Lerp(0.58f, 1f, Smooth01(remainingFraction / 0.22f));
                 float pulse = 0.78f + Mathf.PerlinNoise(PulseSeed,
@@ -165,6 +200,7 @@ namespace BoscaliSummer.Fire
 
         private readonly int maximumVisuals;
         private readonly List<Visual> visuals;
+        private readonly CloudDeckSorting deck = new CloudDeckSorting();
         private Template template;
         private float nextResolveAttempt;
         private bool warnedUnavailable;
@@ -200,6 +236,7 @@ namespace BoscaliSummer.Fire
         public void Release(Visual visual)
         {
             if (visual == null || !visual.Active) return;
+            visual.Sleeping = false;
             visual.Active = false;
             if (visual.Systems != null)
             {
@@ -215,6 +252,7 @@ namespace BoscaliSummer.Fire
             for (int i = 0; i < visuals.Count; i++)
                 if (visuals[i].Root != null) UnityEngine.Object.Destroy(visuals[i].Root);
             visuals.Clear();
+            deck.Clear();
             template = null;
             nextResolveAttempt = 0f;
             warnedUnavailable = false;
@@ -365,6 +403,7 @@ namespace BoscaliSummer.Fire
             {
                 Root = root,
                 Systems = retained.ToArray(),
+                Deck = deck,
                 BaseRates = rates.ToArray(),
                 BaseVelocityXMin = velocityXMin.ToArray(),
                 BaseVelocityXMax = velocityXMax.ToArray(),
@@ -391,20 +430,34 @@ namespace BoscaliSummer.Fire
             {
                 audio[i].Stop();
                 audio[i].enabled = false;
+                UnityEngine.Object.Destroy(audio[i]);
             }
             Light[] lights = root.GetComponentsInChildren<Light>(true);
-            for (int i = 0; i < lights.Length; i++) lights[i].enabled = false;
+            for (int i = 0; i < lights.Length; i++)
+            {
+                lights[i].enabled = false;
+                UnityEngine.Object.Destroy(lights[i]);
+            }
             Collider[] colliders = root.GetComponentsInChildren<Collider>(true);
-            for (int i = 0; i < colliders.Length; i++) colliders[i].enabled = false;
+            for (int i = 0; i < colliders.Length; i++)
+            {
+                colliders[i].enabled = false;
+                UnityEngine.Object.Destroy(colliders[i]);
+            }
             Rigidbody[] rigidbodies = root.GetComponentsInChildren<Rigidbody>(true);
             for (int i = 0; i < rigidbodies.Length; i++)
             {
                 rigidbodies[i].detectCollisions = false;
                 rigidbodies[i].isKinematic = true;
+                UnityEngine.Object.Destroy(rigidbodies[i]);
             }
             Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
             for (int i = 0; i < renderers.Length; i++)
-                if (!(renderers[i] is ParticleSystemRenderer)) renderers[i].enabled = false;
+                if (!(renderers[i] is ParticleSystemRenderer))
+                {
+                    renderers[i].enabled = false;
+                    UnityEngine.Object.Destroy(renderers[i]);
+                }
 
             MonoBehaviour[] behaviours = root.GetComponentsInChildren<MonoBehaviour>(true);
             for (int i = 0; i < behaviours.Length; i++)
@@ -422,7 +475,12 @@ namespace BoscaliSummer.Fire
                     emission.enabled = false;
                     system.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
                     ParticleSystemRenderer renderer = system.GetComponent<ParticleSystemRenderer>();
-                    if (renderer != null) renderer.enabled = false;
+                    if (renderer != null)
+                    {
+                        renderer.enabled = false;
+                        UnityEngine.Object.Destroy(renderer);
+                    }
+                    UnityEngine.Object.Destroy(system);
                     continue;
                 }
 
@@ -451,6 +509,7 @@ namespace BoscaliSummer.Fire
             Visual visual, GlobalPosition position, Vector2 halfExtents, SmokeProfile profile)
         {
             visual.Active = true;
+            visual.Sleeping = false;
             visual.Profile = profile;
             visual.ExternalIntensity = 1f;
             visual.ForestClusterScale = 1f;

@@ -31,20 +31,41 @@ namespace BoscaliSummer.Garrisons
             public int Id;
             public EncampmentType Type;
             public bool Rappel;
-            public readonly HashSet<int> SpawnedSlots = new HashSet<int>();
-            public readonly List<Building> Emplacements = new List<Building>();
+            /// <summary>One emplacement per slot; a destroyed one frees its slot for reinforcement.</summary>
+            public readonly Building[] Slots = new Building[4];
+
+            public bool Standing
+            {
+                get
+                {
+                    for (int i = 0; i < Slots.Length; i++)
+                        if (IsStanding(Slots[i])) return true;
+                    return false;
+                }
+            }
         }
 
         private static readonly List<EncampmentSite> ActiveSites = new List<EncampmentSite>();
         private static readonly Dictionary<string, BuildingDefinition> CachedDefs =
             new Dictionary<string, BuildingDefinition>(StringComparer.OrdinalIgnoreCase);
         private static bool catalogInitialized;
+        private static int nextSiteId;
 
         public static void ResetForScene()
         {
             ActiveSites.Clear();
             CachedDefs.Clear();
             catalogInitialized = false;
+            nextSiteId = 0;
+        }
+
+        private static bool IsStanding(Building building) => building != null && !building.disabled;
+
+        /// <summary>Drops sites whose emplacements are all gone: at most 12 sites x 4 slots.</summary>
+        private static void PruneFallenSites()
+        {
+            for (int i = ActiveSites.Count - 1; i >= 0; i--)
+                if (!ActiveSites[i].Standing) ActiveSites.RemoveAt(i);
         }
 
         private static void EnsureCatalog()
@@ -105,6 +126,8 @@ namespace BoscaliSummer.Garrisons
 
         public static bool DeployOrReinforce(Vector3 dropPos, FactionHQ owner, Airbase airbase, int troopCount)
         {
+            // A fallen site no longer counts toward the cap, blocks placement or absorbs a drop.
+            PruneFallenSites();
             EncampmentSite existing = FindNearbySite(dropPos, 150f);
             if (existing != null && existing.Owner == owner)
             {
@@ -122,6 +145,7 @@ namespace BoscaliSummer.Garrisons
             BoscaliSummer.Framework.Features.ModServices.TryGet(
                 out BoscaliSummer.Framework.Contracts.IGroundForceReadiness readiness);
             int wanted = Mathf.Clamp(readiness != null ? readiness.InsertionCamps(owner) : 1, 1, MaximumSites);
+            PruneFallenSites();
             int placed = 0;
             for (int camp = 0; camp < wanted && ActiveSites.Count < MaximumSites; camp++)
                 if (TryCreateRappelCamp(position, owner, airbase)) placed++;
@@ -212,14 +236,16 @@ namespace BoscaliSummer.Garrisons
                 Owner = owner,
                 Airbase = airbase,
                 Troops = Math.Max(1, troopCount),
-                Id = ActiveSites.Count,
+                // Ids name the emplacements, so a pruned site's id is never handed out again.
+                Id = nextSiteId,
                 Rappel = rappel,
-                Type = rappel ? EncampmentType.MGNest : (EncampmentType)(ActiveSites.Count % 3)
+                Type = rappel ? EncampmentType.MGNest : (EncampmentType)(nextSiteId % 3)
             };
+            nextSiteId++;
             site.Tier = site.Rappel ? 4 : TroopDeploymentMath.ComputeTier(site.Troops);
 
             SpawnEmplacements(site, spawner);
-            if (site.Emplacements.Count == 0) return false;
+            if (!site.Standing) return false;
 
             ActiveSites.Add(site);
             Plugin.Logger.LogInfo($"[ENCAMPMENT] Established Tier {site.Tier} {site.Type} with {site.Troops} infantry committed at ({groundCenter.x:0}, {groundCenter.z:0}).");
@@ -255,7 +281,7 @@ namespace BoscaliSummer.Garrisons
             for (int slot = 0; slot < slots.Length; slot++)
             {
                 int requiredTier = slot + 1;
-                if (site.Tier < requiredTier || site.SpawnedSlots.Contains(slot))
+                if (site.Tier < requiredTier || IsStanding(site.Slots[slot]))
                     continue;
 
                 Vector3 pos;
@@ -268,11 +294,12 @@ namespace BoscaliSummer.Garrisons
                         break;
                     case 1:
                         pos = SnapToGround(site.Center + site.Forward * 9f + right * 6f);
-                        rot = Quaternion.LookRotation((pos - site.Center).normalized, Vector3.up);
+                        // Yaw only: the flanks face out along the ground, whatever its slope.
+                        rot = Quaternion.LookRotation(Vector3.ProjectOnPlane(pos - site.Center, Vector3.up), Vector3.up);
                         break;
                     case 2:
                         pos = SnapToGround(site.Center + site.Forward * 9f - right * 6f);
-                        rot = Quaternion.LookRotation((pos - site.Center).normalized, Vector3.up);
+                        rot = Quaternion.LookRotation(Vector3.ProjectOnPlane(pos - site.Center, Vector3.up), Vector3.up);
                         break;
                     default:
                         pos = SnapToGround(site.Center - site.Forward * 12f);
@@ -283,7 +310,7 @@ namespace BoscaliSummer.Garrisons
                 Building b = SpawnEmplacement(site, spawner, slots[slot].PrefKey, slots[slot].Fallback, pos, rot, slots[slot].Label);
                 if (b != null)
                 {
-                    site.SpawnedSlots.Add(slot);
+                    site.Slots[slot] = b;
                 }
             }
         }
@@ -295,30 +322,24 @@ namespace BoscaliSummer.Garrisons
             BuildingDefinition def = Resolve(preferredKey, fallbackKeyword);
             if (def == null || def.unitPrefab == null || spawner == null) return null;
 
-            Building b = spawner.SpawnBuilding(
+            return spawner.SpawnBuilding(
                 def.unitPrefab,
                 position.ToGlobalPosition(),
                 rotation,
                 site.Owner,
                 site.Airbase,
-                $"{NamePrefix}{Sanitize(site.Airbase?.name)}:{site.Id}:{label}",
+                $"{NamePrefix}{Sanitize(site.Airbase != null ? site.Airbase.name : null)}:{site.Id}:{label}",
                 false,
                 null);
-
-            if (b != null)
-            {
-                site.Emplacements.Add(b);
-            }
-            return b;
         }
 
 
         private static void ReplenishFirebase(EncampmentSite site)
         {
-            for (int i = 0; i < site.Emplacements.Count; i++)
+            for (int i = 0; i < site.Slots.Length; i++)
             {
-                Building b = site.Emplacements[i];
-                if (b == null) continue;
+                Building b = site.Slots[i];
+                if (!IsStanding(b)) continue;
                 UnitPart part = b.GetComponentInChildren<UnitPart>();
                 if (part != null)
                     part.hitPoints = Mathf.Max(part.hitPoints, 100f);

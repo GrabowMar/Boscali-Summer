@@ -29,6 +29,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             switch (shortName.Trim().ToUpperInvariant())
             {
                 case "BDF": return VanillaMfdPanelId.Bdf;
+                case "FAC": return VanillaMfdPanelId.Bdf;
                 case "MAP": return VanillaMfdPanelId.Map;
                 case "HUD": return VanillaMfdPanelId.Hud;
                 case "PALA": return VanillaMfdPanelId.Pala;
@@ -42,7 +43,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         {
             switch (id)
             {
-                case VanillaMfdPanelId.Bdf: return "BDF";
+                case VanillaMfdPanelId.Bdf: return "FAC";
                 case VanillaMfdPanelId.Map: return "MAP";
                 case VanillaMfdPanelId.Hud: return "HUD";
                 case VanillaMfdPanelId.Pala: return "PALA";

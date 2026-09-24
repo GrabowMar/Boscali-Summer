@@ -87,6 +87,7 @@ namespace BoscaliSummer.Features.Support.Presentation
         private readonly List<OrbitMarker> orbitPool = new List<OrbitMarker>(OrbitMarkers);
         private GameObject aimMarker;
         private CyberMapLayer cyberLayer;
+        private SpecOpsMapLayer fieldLayer;
 
         public void Configure(SupportSettings config, SupportManager manager, ManualLogSource log)
         {
@@ -108,6 +109,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             orbitPool.Clear();
             aimMarker = null;
             cyberLayer = null;
+            fieldLayer = null;
             dynamicMap = null;
             initialized = false;
         }
@@ -156,6 +158,9 @@ namespace BoscaliSummer.Features.Support.Presentation
 
             // 4. The CYBER network: sites, links, covers, incidents and the placement preview
             cyberLayer?.Update(supportManager, dynamicMap, mapFactor, invZoom);
+
+            // 5. SPEC OPS: deployed teams and the reach of every held post
+            fieldLayer?.Update(supportManager, mapFactor, invZoom);
         }
 
         private void TryInitialize()
@@ -185,6 +190,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             BuildMarkerPool();
             BuildOrbitOverlay();
             cyberLayer = new CyberMapLayer(overlayRoot.transform, uiFont);
+            fieldLayer = new SpecOpsMapLayer(overlayRoot.transform, uiFont);
 
             initialized = true;
             logger?.LogInfo("[Support] Tactical theater map overlay initialized.");
@@ -552,8 +558,7 @@ namespace BoscaliSummer.Features.Support.Presentation
                     OrbitState state = platform.State(now, clock);
                     if (state.InPass)
                         DrawOrbit(orbitPool[used++], state, reach, mapFactor, invZoom, StationColour,
-                            "<b>" + OrbitalPlatform.Callsign + "</b> " + platform.Orbit.Code + " · LOS " +
-                            PlatformWords.Clock(state.TimeToPassEnd));
+                            "<b>" + OrbitalPlatform.Callsign + "</b> · " + StationKeeping.Name(platform.PositionIndex));
                 }
 
                 IReadOnlyList<ForeignPlatform> others = supportManager.Space.Foreign;
@@ -590,9 +595,9 @@ namespace BoscaliSummer.Features.Support.Presentation
         private static void DrawOrbit(OrbitMarker marker, in OrbitState state, float reach, float mapFactor, float invZoom,
                                       Color colour, string label)
         {
-            PassPlan pass = state.Pass;
-            double alongNow = state.SubX * pass.DirX + state.SubZ * pass.DirZ;
-            DrawChord(marker.Track, 0, pass, pass.CrossTrack, reach, mapFactor, invZoom, colour, alongNow);
+            // Persistent stations have no travelling ground track.
+            for (int i = 0; i < marker.Track.Length; i++)
+                marker.Track[i].gameObject.SetActive(false);
 
             bool onMap = state.SubX * state.SubX + state.SubZ * state.SubZ <= reach * (double)reach;
             if (marker.Icon.activeSelf != onMap) marker.Icon.SetActive(onMap);
@@ -696,6 +701,7 @@ namespace BoscaliSummer.Features.Support.Presentation
                     {
                         // Impact confirmed / active effect phase
                         string phase = strike.ActionId == SupportActionId.Recon ? "SAR SCENE" :
+                            strike.ActionId == SupportActionId.MtiSweep ? "MTI TRACK" :
                             strike.ActionId == SupportActionId.Fortify ? "REINFORCED" : "EST. ACTIVE";
                         marker.BadgeText.text = $"<b>{code}</b> {phase}\nRADIUS {strike.Radius / 1000f:0.00} km";
                         marker.BadgeText.color = Color.white;
@@ -739,6 +745,8 @@ namespace BoscaliSummer.Features.Support.Presentation
                     return new Color(0.3f, 0.95f, 0.5f, 1f);  // Tactical reconnaissance green
                 case Runtime.SupportActionId.ElintSweep:
                     return new Color(0.55f, 1f, 0.85f, 1f);  // Signals teal
+                case Runtime.SupportActionId.MtiSweep:
+                    return new Color(0.45f, 1f, 0.55f, 1f);  // Moving-target green
                 case Runtime.SupportActionId.FlareMissile:
                     return new Color(1f, 0.82f, 0.2f, 1f);   // Pyrotechnic flare yellow
                 case Runtime.SupportActionId.Fortify:
@@ -749,6 +757,13 @@ namespace BoscaliSummer.Features.Support.Presentation
                 case Runtime.SupportActionId.HackGhost:
                 case Runtime.SupportActionId.HackSpoof:
                     return new Color(0.75f, 0.55f, 1f, 1f);  // Cyber operation violet
+                case Runtime.SupportActionId.SpecSpot:
+                case Runtime.SupportActionId.SpecSkywatch:
+                case Runtime.SupportActionId.SpecEavesdrop:
+                    return new Color(0.3f, 0.95f, 0.5f, 1f);  // Observation post green
+                case Runtime.SupportActionId.SpecSuppress:
+                case Runtime.SupportActionId.SpecHunt:
+                    return new Color(1f, 0.72f, 0.22f, 1f);  // Saboteur cell amber
                 default:
                     return new Color(0.25f, 0.85f, 1f, 1f);
             }
@@ -761,6 +776,7 @@ namespace BoscaliSummer.Features.Support.Presentation
                 case Runtime.SupportActionId.Artillery: return "ROD";
                 case Runtime.SupportActionId.Emp: return "EMP";
                 case Runtime.SupportActionId.Recon: return "SAR";
+                case Runtime.SupportActionId.MtiSweep: return "MTI";
                 case Runtime.SupportActionId.ElintSweep: return "ELT";
                 case Runtime.SupportActionId.FlareMissile: return "FLR";
                 case Runtime.SupportActionId.Fortify: return "FTF";
@@ -769,6 +785,11 @@ namespace BoscaliSummer.Features.Support.Presentation
                 case Runtime.SupportActionId.HackBlackout: return "C2B";
                 case Runtime.SupportActionId.HackGhost: return "GST";
                 case Runtime.SupportActionId.HackSpoof: return "SPF";
+                case Runtime.SupportActionId.SpecSpot: return "SPT";
+                case Runtime.SupportActionId.SpecSuppress: return "SUP";
+                case Runtime.SupportActionId.SpecSkywatch: return "SKY";
+                case Runtime.SupportActionId.SpecEavesdrop: return "EAV";
+                case Runtime.SupportActionId.SpecHunt: return "HNT";
                 default: return "OPS";
             }
         }
@@ -780,6 +801,7 @@ namespace BoscaliSummer.Features.Support.Presentation
                 case Runtime.SupportActionId.Artillery: return "ROD FROM GOD";
                 case Runtime.SupportActionId.Emp: return "EMP SHOCK";
                 case Runtime.SupportActionId.Recon: return "RADAR SCAN";
+                case Runtime.SupportActionId.MtiSweep: return "MTI SWEEP";
                 case Runtime.SupportActionId.ElintSweep: return "ELINT SWEEP";
                 case Runtime.SupportActionId.FlareMissile: return "FLARE BARRAGE";
                 case Runtime.SupportActionId.Fortify: return "FORTIFICATION";
@@ -788,6 +810,11 @@ namespace BoscaliSummer.Features.Support.Presentation
                 case Runtime.SupportActionId.HackBlackout: return "RADAR BLACKOUT";
                 case Runtime.SupportActionId.HackGhost: return "GHOST SHIELD";
                 case Runtime.SupportActionId.HackSpoof: return "SPOOF CONTACTS";
+                case Runtime.SupportActionId.SpecSpot: return "SPOT";
+                case Runtime.SupportActionId.SpecSuppress: return "SUPPRESS";
+                case Runtime.SupportActionId.SpecSkywatch: return "SKYWATCH";
+                case Runtime.SupportActionId.SpecEavesdrop: return "EAVESDROP";
+                case Runtime.SupportActionId.SpecHunt: return "HUNT";
                 default: return "SUPPORT CALL-IN";
             }
         }

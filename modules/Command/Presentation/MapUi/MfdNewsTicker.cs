@@ -22,10 +22,11 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private const string ChromeName = "Chrome";
         private const string ViewportName = "Viewport";
         private const float DefaultHeight = 30f;
-        private const float BadgeWidth = 124f;
+        private const float MinimumBadgeWidth = 124f;
         private const float LoopGap = 64f;
         private const float DefaultSpeed = 45f;
         private const float UrgentFlashSeconds = 8f;
+        private const float HeadlineHoldSeconds = 1.5f;
 
         private static CommandSettings settings;
         private static RectTransform root;
@@ -36,9 +37,11 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private static TMP_Text labelA;
         private static TMP_Text labelB;
         private static TMP_Text badgeLabel;
+        private static TMP_Text deskLabel;
         private static MfdGlyph badgeDot;
         private static Image alertRail;
         private static Vector2 builtSize;
+        private static float builtBadgeWidth;
 
         private static readonly MfdNewsFeed feed = new MfdNewsFeed();
         private static float xOffset;
@@ -48,7 +51,12 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private static bool subscribedToLog;
         private static float lastSeenUrgentTime = -1f;
         private static float alertUntil;
+        private static float holdUntil;
         private static bool alertVisualsClear;
+        private static bool lastLogLive;
+
+        internal static bool IsVisible => root != null && root.gameObject.activeSelf;
+        internal static float BottomY => root == null ? 0f : root.anchoredPosition.y - root.sizeDelta.y;
 
         public static void Configure(CommandSettings config)
         {
@@ -79,9 +87,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             PlaceRoot(area);
 
-            if (!Approximately(builtSize, area.size) || labelA == null)
+            float badgeWidth = Mathf.Min(columns.Panel.width, Mathf.Max(MinimumBadgeWidth, area.width - 180f));
+            if (!Approximately(builtSize, area.size) || Mathf.Abs(builtBadgeWidth - badgeWidth) >= 0.5f || labelA == null)
             {
-                Rebuild(area.size);
+                Rebuild(area.size, badgeWidth);
             }
 
             root.gameObject.SetActive(true);
@@ -105,6 +114,13 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             if (!root.gameObject.activeSelf) root.gameObject.SetActive(true);
 
+            bool logLive = MfdLogPanel.HasTraffic;
+            if (deskLabel != null && logLive != lastLogLive)
+            {
+                deskLabel.text = logLive ? "FIELD LOG / LIVE" : "FIELD LOG / STANDBY";
+                lastLogLive = logLive;
+            }
+
             float now = Time.unscaledTime;
 
             // Periodic theater status updates from CommandManager
@@ -117,13 +133,14 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             if (speed <= 0f) speed = DefaultSpeed;
 
             float dt = Time.unscaledDeltaTime;
-            xOffset -= speed * dt;
+            if (now >= holdUntil) xOffset -= speed * dt;
 
             if (totalCycleDistance > 0f && xOffset <= -totalCycleDistance)
             {
                 xOffset += totalCycleDistance;
                 feed.OnMarqueeCycleComplete();
                 RefreshMarqueeText();
+                holdUntil = now + HeadlineHoldSeconds;
             }
 
             if (contentA != null) contentA.anchoredPosition = new Vector2(xOffset, 0f);
@@ -147,14 +164,18 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             labelA = null;
             labelB = null;
             badgeLabel = null;
+            deskLabel = null;
             badgeDot = null;
             alertRail = null;
             builtSize = Vector2.zero;
+            builtBadgeWidth = 0f;
             xOffset = 0f;
             textWidth = 0f;
             totalCycleDistance = 0f;
             currentMarqueeString = "";
             alertVisualsClear = false;
+            holdUntil = 0f;
+            lastLogLive = false;
         }
 
         public static void Reset()
@@ -211,9 +232,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             root.localScale = Vector3.one;
         }
 
-        private static void Rebuild(Vector2 size)
+        private static void Rebuild(Vector2 size, float badgeWidth)
         {
             builtSize = size;
+            builtBadgeWidth = badgeWidth;
 
             for (int i = root.childCount - 1; i >= 0; i--)
                 UnityEngine.Object.Destroy(root.GetChild(i).gameObject);
@@ -225,17 +247,18 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             AvKit.Stretch(chrome);
 
             var area = new Rect(0f, 0f, size.x, size.y);
+            AvKit.Panel(chrome, area, new Color32(10, 14, 18, 235));
             AvKit.Outline(chrome, area, AvTheme.Frame.WithAlpha(0.55f));
-            alertRail = AvKit.Rule(chrome, new Rect(0f, -size.y + 2f, size.x, 2f), AvTheme.Accent.WithAlpha(0.30f));
+            alertRail = AvKit.Rule(chrome, new Rect(badgeWidth, -size.y + 2f, size.x - badgeWidth, 2f), AvTheme.Accent.WithAlpha(0.30f));
 
-            // Vertical divider separating badge from news viewport
-            AvKit.Rule(chrome, new Rect(BadgeWidth, 0f, 1f, size.y), AvTheme.Frame.WithAlpha(0.60f));
+            // Align the wire's left bay with the Field Log directly beneath it.
+            AvKit.Rule(chrome, new Rect(badgeWidth, 0f, 1f, size.y), AvTheme.Frame.WithAlpha(0.60f));
 
             // 2. Left Badge
             var badgeGo = new GameObject("Badge", typeof(RectTransform));
             var badgeRt = badgeGo.GetComponent<RectTransform>();
             badgeRt.SetParent(root, worldPositionStays: false);
-            AvKit.Place(badgeRt, new Rect(8f, 0f, BadgeWidth - 12f, size.y));
+            AvKit.Place(badgeRt, new Rect(8f, 0f, badgeWidth - 12f, size.y));
 
             var dotObject = new GameObject("Dot", typeof(RectTransform), typeof(MfdGlyph));
             var dotRect = dotObject.GetComponent<RectTransform>();
@@ -247,16 +270,26 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             badgeLabel = AvStyled.Label(
                 badgeRt,
-                new Rect(18f, 0f, BadgeWidth - 30f, size.y),
+                new Rect(18f, 0f, 112f, size.y),
                 "<b>THEATER WIRE</b>",
                 "row-sub",
                 align: TextAlignmentOptions.MidlineLeft);
-            badgeLabel.fontSize = 12f;
-            badgeLabel.characterSpacing = 0f;
+            badgeLabel.fontSize = 11f;
+            badgeLabel.characterSpacing = 1f;
             badgeLabel.richText = true;
 
+            lastLogLive = MfdLogPanel.HasTraffic;
+            deskLabel = AvStyled.Label(
+                badgeRt,
+                new Rect(badgeWidth - 145f, 0f, 112f, size.y),
+                lastLogLive ? "FIELD LOG / LIVE" : "FIELD LOG / STANDBY",
+                "row-sub",
+                align: TextAlignmentOptions.MidlineRight);
+            deskLabel.fontSize = 10f;
+            deskLabel.color = AvTheme.Dim;
+
             // 3. Masked Viewport
-            float viewportX = BadgeWidth + 10f;
+            float viewportX = badgeWidth + 10f;
             float viewportWidth = Mathf.Max(0f, size.x - viewportX - 8f);
 
             var viewportGo = new GameObject(ViewportName, typeof(RectTransform), typeof(Image), typeof(RectMask2D));
@@ -346,6 +379,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             if (feed.LastUrgentTime <= lastSeenUrgentTime) return;
             lastSeenUrgentTime = feed.LastUrgentTime;
             alertUntil = now + UrgentFlashSeconds;
+            holdUntil = now + HeadlineHoldSeconds;
             xOffset = 0f;
             RefreshMarqueeText();
         }

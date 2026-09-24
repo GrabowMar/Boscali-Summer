@@ -15,6 +15,7 @@ namespace BoscaliSummer.Features.Progression
         private static readonly Type[] Patches =
         {
             typeof(AircraftFuelUsePatch),
+            typeof(AircraftEngineMapPatch),
             typeof(RewardAllocationPatch)
         };
 
@@ -32,14 +33,14 @@ namespace BoscaliSummer.Features.Progression
             context.AddService<IPlayerPerks>(manager);
             context.AddService<IProgressionView>(manager);
 
+            // The two dials that decide how a mission's progression feels: how fast picks
+            // arrive, and how much a pick is worth. The ceiling on picks is balance and
+            // stays in the config file.
             context.AddHostSettings(new HostSettingsTable("PROGRESSION")
                 .Number(1, context.Settings.Progression.ScorePerPoint, "SCORE PER GRADE",
                     "Score for the first qualification grade; grade n costs n x this, so grades get longer as they get better.",
                     50)
-                .Number(2, context.Settings.Progression.MaximumPoints, "MAXIMUM PICKS",
-                    "Most picks one player can earn in a mission. Score pays the six grades; ace bonus picks go on top.",
-                    1)
-                .Number(3, context.Settings.Progression.PerkStrength, "PERK STRENGTH",
+                .Number(2, context.Settings.Progression.PerkStrength, "PERK STRENGTH",
                     "Scales every passive perk. Support authorisations are on or off and are unaffected.",
                     0.05f, v => v.ToString("P0")));
 
@@ -48,6 +49,7 @@ namespace BoscaliSummer.Features.Progression
                 context.AddSceneService<SqdMfdPanel>(54).Configure(
                     manager, squad, context.Settings.Progression, context.Logger);
                 context.AddSceneService<AceHuntHud>(54).Configure(squad);
+                context.AddSceneService<AceHuntHudLine>(55).Configure(squad);
             }
         }
     }

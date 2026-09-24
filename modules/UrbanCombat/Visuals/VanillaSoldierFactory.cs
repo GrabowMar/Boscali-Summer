@@ -1,4 +1,5 @@
 using System;
+using Mirage;
 using UnityEngine;
 
 namespace BoscaliSummer.Garrisons
@@ -8,26 +9,37 @@ namespace BoscaliSummer.Garrisons
     /// </summary>
     internal static class VanillaSoldierFactory
     {
+        private static GameObject staging;
+
         public static GameObject CreateVisualSoldier(Vector3 position, Quaternion rotation, Transform parent)
         {
             if (GameAssets.i == null || GameAssets.i.pilotDismounted == null)
                 return null;
 
-            // Instantiate single human soldier prefab
-            GameObject go = UnityEngine.Object.Instantiate(GameAssets.i.pilotDismounted, position, rotation, parent);
+            // Clone under an inactive parent so the networked PilotDismounted (a Unit) and its
+            // NetworkIdentity never run Awake or OnDestroy; they are stripped before the copy
+            // ever activates, leaving a purely local mesh and animator.
+            if (staging == null)
+            {
+                staging = new GameObject("BoscaliSummer.SoldierStaging");
+                staging.SetActive(false);
+                UnityEngine.Object.DontDestroyOnLoad(staging);
+            }
+            GameObject go = UnityEngine.Object.Instantiate(GameAssets.i.pilotDismounted, position, rotation, staging.transform);
             go.name = "BoscaliSummer.Soldier";
 
-            // 1. Remove ejection seat component and GameObject
-            EjectionSeat seat = go.GetComponentInChildren<EjectionSeat>();
-            if (seat != null)
-            {
-                UnityEngine.Object.Destroy(seat.gameObject);
-            }
+            // 1. Remove the networked unit and transform (PilotDismounted,
+            // PilotDismountedNetworkTransform), then the identity, then the ejection seat.
+            NetworkBehaviour[] behaviours = go.GetComponentsInChildren<NetworkBehaviour>(true);
+            for (int i = behaviours.Length - 1; i >= 0; i--)
+                UnityEngine.Object.DestroyImmediate(behaviours[i]);
+            foreach (NetworkIdentity identity in go.GetComponentsInChildren<NetworkIdentity>(true))
+                UnityEngine.Object.DestroyImmediate(identity);
 
-            PilotDismounted pd = go.GetComponent<PilotDismounted>();
-            if (pd != null)
+            EjectionSeat seat = go.GetComponentInChildren<EjectionSeat>(true);
+            if (seat != null && seat.gameObject != go)
             {
-                UnityEngine.Object.Destroy(pd);
+                UnityEngine.Object.DestroyImmediate(seat.gameObject);
             }
 
             // 2. Remove any remaining seat, chair, or bench GameObjects in the hierarchy
@@ -37,9 +49,11 @@ namespace BoscaliSummer.Garrisons
                 string cName = child.name.ToLowerInvariant();
                 if (cName.Contains("seat") || cName.Contains("eject") || cName.Contains("bench") || cName.Contains("chair"))
                 {
-                    UnityEngine.Object.Destroy(child.gameObject);
+                    UnityEngine.Object.DestroyImmediate(child.gameObject);
                 }
             }
+
+            go.transform.SetParent(parent, true);
 
             // 3. Configure physics (kinematic and non-colliding)
             Rigidbody rb = go.GetComponent<Rigidbody>();
@@ -76,7 +90,8 @@ namespace BoscaliSummer.Garrisons
                     if (r.sharedMaterial == null || r.sharedMaterial.shader == null ||
                         r.sharedMaterial.shader.name.IndexOf("InternalError", StringComparison.OrdinalIgnoreCase) >= 0)
                     {
-                        r.sharedMaterial = MaterialProvider.GetSandbagMaterial() ?? MaterialProvider.GetConcreteMaterial();
+                        // GetSandbagMaterial already falls back to concrete.
+                        r.sharedMaterial = MaterialProvider.GetSandbagMaterial();
                     }
                 }
             }
@@ -86,6 +101,7 @@ namespace BoscaliSummer.Garrisons
             if (anim != null)
             {
                 anim.enabled = true;
+                anim.cullingMode = AnimatorCullingMode.CullUpdateTransforms;
                 foreach (var p in anim.parameters)
                 {
                     if (p.name.IndexOf("land", StringComparison.OrdinalIgnoreCase) >= 0 ||

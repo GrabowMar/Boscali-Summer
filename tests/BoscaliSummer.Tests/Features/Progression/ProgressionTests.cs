@@ -72,6 +72,8 @@ namespace BoscaliSummer.Tests.Features.Progression
                 }
                 TestAssert.That(definition.Multiplier != 1f,
                     "passive grade " + definition.Name + " has no effect");
+                TestAssert.That(definition.Effect != PerkEffect.SupportEffectScale,
+                    "pilot skills must not scale orbital weapon effects");
             }
 
             TestAssert.That(PerkCatalog.All.Length <= PerkCatalog.MaximumPerks,

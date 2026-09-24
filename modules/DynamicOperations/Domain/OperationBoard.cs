@@ -53,6 +53,8 @@ namespace BoscaliSummer.Features.DynamicOperations.Domain
         public bool IsStrike => Kind == OperationKind.Interdict || Kind == OperationKind.Intercept ||
             Kind == OperationKind.SupplyInterdict || Kind == OperationKind.ElectronicWarfare;
         public bool AwardTaken { get; private set; }
+        // Informational only: every faction member may still complete or dismiss this contract.
+        public string AcceptedBy { get; private set; } = string.Empty;
         public int ChainDepth { get; }
         public const float RequiredHold = 180f;
 
@@ -65,10 +67,11 @@ namespace BoscaliSummer.Features.DynamicOperations.Domain
             Deadline = now + 300f; Money = Math.Clamp(money, 0, 100000); Xp = Math.Clamp(xp, 0, 10000);
         }
 
-        public bool Accept(float now)
+        public bool Accept(float now, string acceptedBy = null)
         {
             if (State != OperationState.Offered || !Finite(now) || now >= Deadline) return false;
             State = OperationState.Active;
+            AcceptedBy = acceptedBy ?? string.Empty;
             Deadline = now + (Kind == OperationKind.Intercept ? 600f : 1200f);
             return true;
         }
@@ -146,7 +149,7 @@ namespace BoscaliSummer.Features.DynamicOperations.Domain
 
         public bool WasIssued(OperationKind kind, int targetId) => issued.Contains(Key(kind, targetId));
 
-        public bool TryAccept(int id, float now)
+        public bool TryAccept(int id, float now, string acceptedBy = null)
         {
             int active = 0;
             Operation selected = null;
@@ -155,7 +158,7 @@ namespace BoscaliSummer.Features.DynamicOperations.Domain
                 if (operation.State == OperationState.Active) active++;
                 if (operation.Id == id) selected = operation;
             }
-            return active < MaximumActive && selected != null && selected.Accept(now);
+            return active < MaximumActive && selected != null && selected.Accept(now, acceptedBy);
         }
 
         public bool TryAdd(Operation operation)

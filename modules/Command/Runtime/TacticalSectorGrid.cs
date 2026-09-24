@@ -45,10 +45,20 @@ namespace BoscaliSummer.Features.Command.Runtime
         public const float DefaultCellSize = 1000f;
         public const int MaximumCells = 16384;
         public const int MaximumNodes = 128;
+        /// <summary>Cells per side of one dirty chunk. The bake upload is gated per chunk.</summary>
+        public const int ChunkCells = 32;
         private const int MaximumInfluenceCells = 8;
         private const int MaximumContourSegments = 4096;
         private const float MinimumCellSize = 100f;
         private const float PresenceThreshold = 0.05f;
+        /// <summary>Ground-control weight of one vehicle or ordinary building.</summary>
+        public const float VehicleWeight = 2.5f;
+        /// <summary>
+        /// Ground-control weight of one defensive emplacement. Dug-in weapons anchor their
+        /// ground harder than a passing vehicle: a full eight-nest field position outweighs
+        /// one six-vehicle group in its cell and yields to three.
+        /// </summary>
+        public const float DefensiveBuildingWeight = 5f;
         private const float CaptureSeconds = 15f;
         private const float RecoverySeconds = 90f;
         private bool hasEvaluated;
@@ -59,6 +69,11 @@ namespace BoscaliSummer.Features.Command.Runtime
 
         public float CellSize { get; private set; }
         public uint GridVersion { get; private set; }
+        public int ChunkCountX { get; private set; }
+        public int ChunkCountY { get; private set; }
+        public int DirtyChunkCount => dirtyChunkCount;
+        /// <summary>True when the last evaluation materially changed the field (version bumped).</summary>
+        public bool FieldChanged => fieldChanged;
 
         public int ResolutionX { get; private set; }
         public int ResolutionY { get; private set; }
@@ -152,6 +167,16 @@ namespace BoscaliSummer.Features.Command.Runtime
         private int cachedTexWidth;
         private int cachedTexHeight;
 
+        // Dirty-chunk tracking. A chunk is the unit of change: observations paint chunks,
+        // the evaluation marks chunks whose cells actually moved, and the texture bake runs
+        // only when at least one chunk is dirty. Keeps a quiet front free of per-refresh
+        // uploads without ever leaving a changed sector unpainted.
+        // ponytail: whole-texture upload when any chunk is dirty — clusters span chunk
+        // bounds, so a partial upload would need cluster-extent tracking first.
+        private bool[] chunkDirty;
+        private int dirtyChunkCount;
+        private bool fieldChanged;
+
         // Telemetry
         public int FriendlySectorCount { get; private set; }
         public int HostileSectorCount { get; private set; }
@@ -226,6 +251,11 @@ namespace BoscaliSummer.Features.Command.Runtime
             ResolutionX = Math.Max(1, (int)Math.Ceiling((WorldSizeX * 0.5f - OriginX) / cell));
             ResolutionY = Math.Max(1, (int)Math.Ceiling((WorldSizeY * 0.5f - OriginZ) / cell));
             displayClusters = new SectorClusterTree.Cluster[TotalSectors];
+            ChunkCountX = (ResolutionX + ChunkCells - 1) / ChunkCells;
+            ChunkCountY = (ResolutionY + ChunkCells - 1) / ChunkCells;
+            chunkDirty = new bool[Math.Max(1, ChunkCountX * ChunkCountY)];
+            dirtyChunkCount = chunkDirty.Length;
+            for (int i = 0; i < chunkDirty.Length; i++) chunkDirty[i] = true;
         }
 
         private long CellCount(float cell)
@@ -270,6 +300,58 @@ namespace BoscaliSummer.Features.Command.Runtime
             tracesReady = false;
         }
 
+        private void MarkChunk(int col, int row)
+        {
+            if (chunkDirty == null) return;
+            int cx = col / ChunkCells;
+            int cy = row / ChunkCells;
+            if (cx < 0 || cy < 0 || cx >= ChunkCountX || cy >= ChunkCountY) return;
+            int index = cy * ChunkCountX + cx;
+            if (chunkDirty[index]) return;
+            chunkDirty[index] = true;
+            dirtyChunkCount++;
+        }
+
+        private void MarkAllChunks()
+        {
+            if (chunkDirty == null) return;
+            for (int i = 0; i < chunkDirty.Length; i++) chunkDirty[i] = true;
+            dirtyChunkCount = chunkDirty.Length;
+        }
+
+        public bool IsChunkDirty(int chunkX, int chunkY)
+        {
+            if (chunkDirty == null || chunkX < 0 || chunkY < 0 || chunkX >= ChunkCountX || chunkY >= ChunkCountY)
+                return false;
+            return chunkDirty[chunkY * ChunkCountX + chunkX];
+        }
+
+        public void ClearChunkDirty()
+        {
+            if (chunkDirty == null || dirtyChunkCount == 0) return;
+            Array.Clear(chunkDirty, 0, chunkDirty.Length);
+            dirtyChunkCount = 0;
+        }
+
+        /// <summary>
+        /// Stable hash of the node set for the observer-side snapshot check. Unlike the
+        /// accumulating registration signature this is order-independent and does not
+        /// change when the same nodes are re-registered.
+        /// </summary>
+        public ulong ComputeNodeHash()
+        {
+            ulong hash = 1469598103934665603UL;
+            for (int i = 0; i < nodes.Count; i++)
+            {
+                TacticalNode node = nodes[i];
+                hash = (hash ^ (uint)node.Id) * 1099511628211UL;
+                hash = (hash ^ (uint)node.X.GetHashCode()) * 1099511628211UL;
+                hash = (hash ^ (uint)node.Z.GetHashCode()) * 1099511628211UL;
+                hash = (hash ^ (byte)node.Faction) * 1099511628211UL;
+            }
+            return hash ^ (uint)nodes.Count;
+        }
+
         /// <summary>
         /// Fully resets persistent sector hold strengths and states (e.g. on new mission load).
         /// </summary>
@@ -287,6 +369,9 @@ namespace BoscaliSummer.Features.Command.Runtime
             FrontlineLengthMetres = 0f;
             strategicDirty = true;
             displayQuadCount = 0;
+            MarkAllChunks();
+            fieldChanged = true;
+            GridVersion++;
         }
 
         public bool WorldToCell(float worldX, float worldZ, out int col, out int row)
@@ -421,6 +506,10 @@ namespace BoscaliSummer.Features.Command.Runtime
             nodeSignature = nodeSignature * 1099511628211UL ^ (uint)radius.GetHashCode();
         }
 
+        /// <summary>Weight one ground observation adds to its side's force.</summary>
+        public static float GroundObservationWeight(bool defensiveBuilding)
+            => defensiveBuilding ? DefensiveBuildingWeight : VehicleWeight;
+
         public void AddTroopPresence(float worldX, float worldZ, float weight, bool isHostile, float influenceRadius = 12000f)
         {
             if (!IsFinite(weight) || weight <= 0f || !IsFinite(influenceRadius) || influenceRadius < 0f ||
@@ -442,6 +531,11 @@ namespace BoscaliSummer.Features.Command.Runtime
                     force[index] = Math.Min(1000f, force[index] + weight * falloff);
                 }
             }
+            // Record the chunks this observation reached; the evaluation owns the change
+            // verdict, this only keeps the dirty map honest about where pressure landed.
+            MarkChunk(col, row);
+            MarkChunk(Math.Max(0, col - reachX), Math.Max(0, row - reachY));
+            MarkChunk(Math.Min(ResolutionX - 1, col + reachX), Math.Min(ResolutionY - 1, row + reachY));
         }
 
         public void AddAirbasePresence(float worldX, float worldZ, bool isHostile, float influenceRadius = 25000f)
@@ -479,6 +573,7 @@ namespace BoscaliSummer.Features.Command.Runtime
             // exponential response: stable while the pocket fills in, gone when relief arrives.
             BuildPocketClaims(cellCount);
 
+            bool changed = false;
             for (int r = 0; r < ResolutionY; r++)
             {
                 for (int c = 0; c < ResolutionX; c++)
@@ -493,7 +588,8 @@ namespace BoscaliSummer.Features.Command.Runtime
                         (claim == 1 ? hostile <= PresenceThreshold : friendly <= PresenceThreshold))
                         target = claim == 1 ? 1f : -1f;
                     float response = 1f - (float)Math.Exp(-elapsed / (total > PresenceThreshold ? CaptureSeconds : RecoverySeconds));
-                    holdStrength[index] = hasEvaluated ? holdStrength[index] + (target - holdStrength[index]) * response : target;
+                    float previousHold = holdStrength[index];
+                    holdStrength[index] = hasEvaluated ? previousHold + (target - previousHold) * response : target;
 
                     // Actual vanilla airbase ownership anchors its cell; neither this overlay
                     // nor an encirclement claim flips a base without a real capture.
@@ -503,10 +599,20 @@ namespace BoscaliSummer.Features.Command.Runtime
                     bool balancedClash = friendly > PresenceThreshold && hostile > PresenceThreshold &&
                         friendly / total > 0.34f && friendly / total < 0.66f;
                     bool advancing = Math.Abs(pressure) > PresenceThreshold && pressure * hold < 0f;
+                    SectorControl previousState = sectorStates[index];
                     sectorStates[index] = nodeAnchors[index] == 3 || balancedClash || advancing
                         ? SectorControl.Contested
                         : hold > 0.01f ? SectorControl.Friendly : hold < -0.01f ? SectorControl.Hostile
                         : hasStrategicInfluence || total > PresenceThreshold ? SectorControl.Contested : SectorControl.Neutral;
+
+                    // Only a real change dirties a chunk: a repainted but identical front
+                    // must not trigger a texture upload. The hold epsilon catches contested
+                    // stripe widths, which read the control value directly.
+                    if (sectorStates[index] != previousState || Math.Abs(hold - previousHold) > 0.01f)
+                    {
+                        changed = true;
+                        MarkChunk(c, r);
+                    }
                 }
             }
             hasEvaluated = true;
@@ -538,7 +644,8 @@ namespace BoscaliSummer.Features.Command.Runtime
             float frontLength = 0f;
             for (int i = 0; i < segmentCount; i++) frontLength += frontSegments[i].HalfLength * 2f;
             FrontlineLengthMetres = frontLength;
-            GridVersion++;
+            fieldChanged = changed;
+            if (changed) GridVersion++;
         }
 
         /// <summary>
@@ -923,7 +1030,7 @@ namespace BoscaliSummer.Features.Command.Runtime
             if (!showSectors || globalOpacity <= 0f) return pixelBuffer;
 
             byte fillAlpha = (byte)Math.Clamp((int)(globalOpacity * 255f * 0.45f), 18, 56);
-            byte gridLineAlpha = 20;
+            byte gridLineAlpha = 12;
 
             Color32 friendlyBase = new Color32(FriendlyTint.r, FriendlyTint.g, FriendlyTint.b, fillAlpha);
             Color32 hostileBase = new Color32(HostileTint.r, HostileTint.g, HostileTint.b, fillAlpha);

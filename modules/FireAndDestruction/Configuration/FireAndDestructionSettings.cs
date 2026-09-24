@@ -42,7 +42,7 @@ namespace BoscaliSummer.Features.FireAndDestruction.Configuration
             FiresEnabled = config.Bind("Fires", "Enabled", true,
                 "Allow impacts on forests and buildings to ignite fires. " +
                 "Host-authoritative: on a server, only the host's value applies.");
-            FireIntensity = config.Bind("Fires", "Intensity", 1f,
+            FireIntensity = config.Bind("Fires", "Intensity", 0.85f,
                 new ConfigDescription(
                     "Overall ignition, spread and visual intensity. Performance budgets stay " +
                     "bounded at any value, so this cannot turn a long mission into a slideshow. " +

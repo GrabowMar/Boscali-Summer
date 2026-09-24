@@ -19,6 +19,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private static int version;
 
         public static bool Configured => settings != null;
+        public static CommandSettings Settings => settings;
 
         public static TargetPresetLibrary Library => library;
 

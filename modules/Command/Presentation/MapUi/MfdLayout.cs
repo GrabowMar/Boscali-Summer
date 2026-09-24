@@ -27,12 +27,12 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         public const float Margin = 8f;
 
         /// <summary>
-        /// Height kept clear at the bottom of every column for the game's own spawn strip
-        /// — "Select Home Airbase", the Select Aircraft button, the spectator bar. With no
-        /// reserve the map viewport was drawn over the top of that strip and swallowed the
-        /// clicks meant for it, so the button could not be pressed while the map was up.
+        /// Height kept clear for the game's own spawn and spectator controls. Wide screens
+        /// put the instrument and context surfaces on one row; narrow screens retain two
+        /// rows so native buttons keep their usable width.
         /// </summary>
         public const float BottomReserve = 120f;
+        private const float WideBottomReserve = 72f;
 
         /// <summary>
         /// Height kept clear at the top for the mission clock and the kill / chat feed,
@@ -65,7 +65,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             spec.Gutter = Gutter;
             spec.Margin = Margin;
             spec.TopReserve = TopReserve;
-            spec.BottomReserve = BottomReserve;
+            spec.BottomReserve = canvasSize.x >= 1600f ? WideBottomReserve : BottomReserve;
             spec.MapInset = MapInset;
 
             AvRegions regions = AvGrid.Resolve(canvasSize.x, canvasSize.y, panelWidth, RailWidth, spec);

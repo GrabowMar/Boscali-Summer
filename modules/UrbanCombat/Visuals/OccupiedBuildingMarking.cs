@@ -13,7 +13,12 @@ namespace BoscaliSummer.Garrisons
         private readonly List<Material> materials = new List<Material>(6);
         private Material flagMaterial;
         private Material bandMaterial;
+        private Material accentMaterial;
+        private float zoneHealth = 1f;
+        private float shellDamage;
         private Building building;
+        private UnitPart dugoutPart;
+        private string nestZone;
         private float nextCheck;
         private string bannerIdentity;
 
@@ -26,22 +31,85 @@ namespace BoscaliSummer.Garrisons
             return marking;
         }
 
-        private Material CreateMaterial(Color color)
+        private static Shader cachedShader;
+        private static Material sharedSand;
+        private static Material sharedSteel;
+
+        private static Shader SharedShader
         {
-            Shader shader = Shader.Find("Standard") ?? Shader.Find("Universal Render Pipeline/Lit");
+            get
+            {
+                if (cachedShader == null)
+                {
+                    cachedShader = Shader.Find("Universal Render Pipeline/Lit");
+                    if (cachedShader == null) cachedShader = Shader.Find("Standard");
+                }
+                return cachedShader;
+            }
+        }
+
+        private static Material SharedSand
+        {
+            get
+            {
+                if (sharedSand == null)
+                    sharedSand = CreateSharedMaterial(new Color(0.48f, 0.43f, 0.30f));
+                return sharedSand;
+            }
+        }
+
+        private static Material SharedSteel
+        {
+            get
+            {
+                if (sharedSteel == null)
+                    sharedSteel = CreateSharedMaterial(new Color(0.18f, 0.21f, 0.19f));
+                return sharedSteel;
+            }
+        }
+
+        private static Material CreateSharedMaterial(Color color)
+        {
+            Shader shader = SharedShader;
             if (shader == null) return null;
             var material = new Material(shader) { color = color, name = "BoscaliSummer.Fortification" };
+            if (material.HasProperty("_Smoothness")) material.SetFloat("_Smoothness", 0.05f);
+            if (material.HasProperty("_Glossiness")) material.SetFloat("_Glossiness", 0.05f);
+            return material;
+        }
+
+        private Material CreateMaterial(Color color)
+        {
+            Shader shader = SharedShader;
+            if (shader == null) return null;
+            var material = new Material(shader) { color = color, name = "BoscaliSummer.Fortification" };
+            if (material.HasProperty("_Smoothness")) material.SetFloat("_Smoothness", 0.05f);
             if (material.HasProperty("_Glossiness")) material.SetFloat("_Glossiness", 0.05f);
             materials.Add(material);
             return material;
         }
 
+        public void SetZoneHealth(float fraction)
+        {
+            zoneHealth = Mathf.Clamp01(fraction);
+        }
+
+        public void SetShellDamage(float fraction)
+        {
+            shellDamage = Mathf.Clamp01(fraction);
+        }
+
         private void Setup(FactionHQ owner)
         {
+            if (Application.isBatchMode) return;
             building = GetComponent<Building>();
             if (building == null || building.disabled) return;
-            var sand = CreateMaterial(new Color(0.48f, 0.43f, 0.30f));
-            var steel = CreateMaterial(new Color(0.18f, 0.21f, 0.19f));
+            dugoutPart = ResolveDugout(building);
+            if (!GarrisonMarkerInfo.TryReadZone(building.NetworkUniqueName,
+                ZoneGarrisonManager.NamePrefix, out nestZone))
+                nestZone = null;
+            Material sand = SharedSand;
+            Material steel = SharedSteel;
             // White base: the baked banner texture already carries field/device/border colour.
             flagMaterial = CreateMaterial(Color.white);
             if (sand == null || steel == null || flagMaterial == null) { CleanUp(); return; }
@@ -137,7 +205,7 @@ namespace BoscaliSummer.Garrisons
 
             Color faction = FactionColor(owner);
             bandMaterial = CreateMaterial(faction);
-            var accentMaterial = CreateMaterial(ViewerAccent(owner));
+            accentMaterial = CreateMaterial(ViewerAccent(owner));
             if (bandMaterial == null) return;
             bandMaterial.EnableKeyword("_EMISSION");
             bandMaterial.SetColor("_EmissionColor", faction * 0.35f);
@@ -190,16 +258,32 @@ namespace BoscaliSummer.Garrisons
                 enabled = false;
                 return;
             }
+            // Every peer derives the same battle state: shell wear from the replicated
+            // dugout-carrier HP, zone health from the client nest registry. Nests without
+            // a carrier keep the server-pushed shell damage instead.
+            if (dugoutPart != null)
+                shellDamage = StrongpointHitPolicy.DugoutStage(dugoutPart.hitPoints) / 3f;
+            if (nestZone != null)
+                zoneHealth = NestRegistry.ZoneHealth(nestZone);
             if (flagMaterial != null)
             {
                 FactionHQ owner = building.NetworkHQ;
                 Color color = FactionColor(owner);
                 if (FactionBannerTexture.Identity(owner) != bannerIdentity) ApplyBanner(owner);
-                flagMaterial.SetColor("_EmissionColor", color * 0.18f);
+                float dim = 0.35f + 0.65f * zoneHealth;
+                float scorch = Mathf.Clamp01(shellDamage);
+                Color battle = Color.Lerp(color, new Color(0.16f, 0.14f, 0.13f), scorch * 0.8f);
+                flagMaterial.SetColor("_EmissionColor", battle * (0.18f * dim * (1f - 0.7f * scorch)));
                 if (bandMaterial != null)
                 {
-                    bandMaterial.color = color;
-                    bandMaterial.SetColor("_EmissionColor", color * 0.35f);
+                    bandMaterial.color = battle;
+                    bandMaterial.SetColor("_EmissionColor", battle * (0.35f * dim * (1f - 0.7f * scorch)));
+                }
+                if (accentMaterial != null)
+                {
+                    Color accent = ViewerAccent(owner);
+                    accentMaterial.color = accent;
+                    accentMaterial.SetColor("_EmissionColor", accent * 0.25f);
                 }
             }
         }
@@ -214,6 +298,22 @@ namespace BoscaliSummer.Garrisons
             if (flagMaterial.HasProperty("_BaseMap")) flagMaterial.SetTexture("_BaseMap", texture);
             if (flagMaterial.HasProperty("_MainTex")) flagMaterial.SetTexture("_MainTex", texture);
             flagMaterial.mainTexture = texture;
+        }
+
+        private static UnitPart ResolveDugout(Building nest)
+        {
+            Transform dugout = nest.transform.Find("dugout");
+            if (dugout != null)
+            {
+                UnitPart part = dugout.GetComponent<UnitPart>();
+                if (part != null) return part;
+            }
+            UnitPart[] parts = nest.GetComponentsInChildren<UnitPart>(true);
+            for (int i = 0; i < parts.Length; i++)
+                if (parts[i] != null &&
+                    parts[i].name.IndexOf("dugout", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                    return parts[i];
+            return null;
         }
 
         private static Color FactionColor(FactionHQ owner)
@@ -335,7 +435,7 @@ namespace BoscaliSummer.Garrisons
             if (root != null) { root.SetActive(false); Destroy(root); root = null; }
             foreach (Mesh mesh in meshes) if (mesh != null) Destroy(mesh);
             foreach (Material material in materials) if (material != null) Destroy(material);
-            meshes.Clear(); materials.Clear(); flagMaterial = null; bandMaterial = null; bannerIdentity = null;
+            meshes.Clear(); materials.Clear(); flagMaterial = null; bandMaterial = null; accentMaterial = null; bannerIdentity = null;
         }
 
         private void OnDestroy() => CleanUp();

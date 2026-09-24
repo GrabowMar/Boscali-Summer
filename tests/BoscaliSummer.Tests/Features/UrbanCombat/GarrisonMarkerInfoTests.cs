@@ -36,6 +36,50 @@ namespace BoscaliSummer.Tests.Features.UrbanCombat
                 minX == 3.5f && maxX == 15f && minZ == 4f && maxZ == 12f,
                 "the last marker wins over a token inside the base name");
 
+            TestAssert.That(GarrisonMarkerInfo.TryReadTier(
+                GarrisonMarkerInfo.Append("BoscaliSummer:Garrison:Roof:Alpha:2:1:t2", 0f, 10f, 0f, 10f),
+                out int tier) && tier == 2,
+                "zone nests carry their tier before the marker suffix");
+            TestAssert.That(GarrisonMarkerInfo.TryReadTier(
+                GarrisonMarkerInfo.Append("BoscaliSummer:Garrison:Roof:Alpha:2:1:t0", 0f, 10f, 0f, 10f),
+                out tier) && tier == 0,
+                "tier zero parses");
+            TestAssert.That(!GarrisonMarkerInfo.TryReadTier(name, out _),
+                "untiered legacy names report no tier");
+            TestAssert.That(!GarrisonMarkerInfo.TryReadTier(
+                GarrisonMarkerInfo.Append("BoscaliSummer:Garrison:Roof:Assault:412:1:0", 0f, 10f, 0f, 10f),
+                out _),
+                "assault nests carry no tier");
+            TestAssert.That(!GarrisonMarkerInfo.TryReadTier(
+                GarrisonMarkerInfo.Append("BoscaliSummer:Garrison:Roof:theater:2:1", 0f, 10f, 0f, 10f),
+                out _),
+                "a zone starting with 't' is not a tier segment");
+            TestAssert.That(!GarrisonMarkerInfo.TryReadTier(null, out _),
+                "null names report no tier");
+            TestAssert.That(!GarrisonMarkerInfo.TryReadTier("BoscaliSummer:Garrison:Roof:Alpha:2:1:t2",
+                out _),
+                "names without marker data report no tier");
+
+            const string prefix = "BoscaliSummer:Garrison:";
+            TestAssert.That(GarrisonMarkerInfo.TryReadZone(
+                GarrisonMarkerInfo.Append(prefix + "Roof:Alpha:2:1:t2", 0f, 10f, 0f, 10f),
+                prefix, out string zone) && zone == "Alpha",
+                "zone nests report their sanitized zone");
+            TestAssert.That(!GarrisonMarkerInfo.TryReadZone(
+                GarrisonMarkerInfo.Append(prefix + "Roof:Assault:412:1:0", 0f, 10f, 0f, 10f),
+                prefix, out _),
+                "assault nests have no zone membership");
+            TestAssert.That(!GarrisonMarkerInfo.TryReadZone(
+                GarrisonMarkerInfo.Append(prefix + "Roof:Seize:77:1:0", 0f, 10f, 0f, 10f),
+                prefix, out _),
+                "seized buildings have no zone membership");
+            TestAssert.That(!GarrisonMarkerInfo.TryReadZone("Civilian Hut", prefix, out _),
+                "ordinary building names report no zone");
+            TestAssert.That(GarrisonMarkerInfo.SanitizeZone("Airbase Alpha:2") == "Airbase_Alpha_2",
+                "zone segments carry no colons or spaces");
+            TestAssert.That(GarrisonMarkerInfo.SanitizeZone(null) == "Airbase",
+                "null airbase names fall back");
+
             CultureInfo previous = Thread.CurrentThread.CurrentCulture;
             try
             {

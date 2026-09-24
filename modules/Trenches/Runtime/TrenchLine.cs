@@ -26,6 +26,12 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         public bool Overrun { get; set; }
         public float RetireAt { get; set; }
         public int DefenderCount { get; set; }
+        /// <summary>Scene time the position was committed; the dig-in grace runs from here.</summary>
+        public float DugAt { get; set; }
+        /// <summary>Scene time the centre first read deep enemy ground, or -1 while it reads own side.</summary>
+        public float HostileSince { get; set; } = -1f;
+        /// <summary>Consecutive refusals of the belt trace the current stage adds.</summary>
+        public int BeltRefusals { get; set; }
 
         /// <summary>Trace stations on the contour; y is unused, offsets are lateral.</summary>
         public Vector3[] Base { get; }
@@ -42,7 +48,7 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         public Vector3[] Threat { get; set; }
         /// <summary>Anchors for works and defenders, roughly every 60m of ditch.</summary>
         public Vector3[] Anchors { get; set; }
-        /// <summary>Fire-bay schedule: nests, crews and map marks anchor here, ~20m apart.</summary>
+        /// <summary>Fire-bay schedule: nests and map marks anchor here, ~20m apart.</summary>
         public Vector3[] Nodes { get; private set; }
 
         public Vector3[] Support { get; set; }

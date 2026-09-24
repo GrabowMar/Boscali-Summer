@@ -58,6 +58,35 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             return text.ToString().Trim();
         }
 
+        /// <summary>Splits camelCase, PascalCase and acronym boundaries into readable words.</summary>
+        public static string Humanize(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return value ?? string.Empty;
+            var sb = new StringBuilder(value.Length + 8);
+            for (int i = 0; i < value.Length; i++)
+            {
+                char c = value[i];
+                if (i > 0)
+                {
+                    char prev = value[i - 1];
+                    if (char.IsLower(prev) && char.IsUpper(c))
+                    {
+                        sb.Append(' ');
+                    }
+                    else if (char.IsUpper(prev) && char.IsUpper(c) && i + 1 < value.Length && char.IsLower(value[i + 1]))
+                    {
+                        sb.Append(' ');
+                    }
+                    else if (char.IsLetter(prev) && char.IsDigit(c))
+                    {
+                        sb.Append(' ');
+                    }
+                }
+                sb.Append(c);
+            }
+            return sb.ToString();
+        }
+
         public static int PageCount(int count, int perPage) => count <= 0 ? 1 : 1 + (count - 1) / Math.Max(1, perPage);
 
         public static int ClampPage(int page, int count, int perPage) => Math.Max(0, Math.Min(page, PageCount(count, perPage) - 1));
@@ -188,7 +217,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         /// <summary>A count line that never invents a ceiling: an unknown limit reads as a plain count.</summary>
         public static string BoardSummary(int available, int active, int activeLimit, int results)
         {
-            return available + " OFFERS  ·  " + ShortCount(active, activeLimit) + " ACTIVE  ·  " + results + " CLOSED";
+            string offers = available == 1 ? "1 OFFER" : available + " OFFERS";
+            return offers + "  ·  " + ShortCount(active, activeLimit) + " ACTIVE  ·  " + results + " CLOSED";
         }
 
         /// <summary>"1/2" while the host reports a ceiling, a plain count when it does not.</summary>

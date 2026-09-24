@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using BoscaliSummer.Features.Radio.Domain;
 using BoscaliSummer.Features.Radio.Presentation;
 using BoscaliSummer.Features.Radio.Runtime;
 
@@ -11,6 +12,7 @@ namespace BoscaliSummer.Tests.Features.Radio
         public static void Run()
         {
             HuntMusicTransitions();
+            InterceptRules();
             DialAndProgramming();
             TuningMath();
             PropagationMath();
@@ -26,28 +28,37 @@ namespace BoscaliSummer.Tests.Features.Radio
                 Directory.CreateDirectory(Path.Combine(root, "01 Day Ops"));
                 Directory.CreateDirectory(Path.Combine(root, "01 Day Ops", "Nested"));
                 Directory.CreateDirectory(Path.Combine(root, "Empty Starter"));
+                Directory.CreateDirectory(Path.Combine(root, "Boscali Republic Radio"));
                 File.WriteAllBytes(Path.Combine(root, "Root Track.ogg"), new byte[] { 1 });
                 File.WriteAllBytes(Path.Combine(root, "Ignored.mp3"), new byte[] { 1 });
                 File.WriteAllBytes(Path.Combine(root, "01 Day Ops", "Bravo.wav"), new byte[] { 1 });
                 File.WriteAllBytes(Path.Combine(root, "01 Day Ops", "Alpha.ogg"), new byte[] { 1 });
                 File.WriteAllBytes(Path.Combine(root, "01 Day Ops", "Nested", "Too Deep.ogg"), new byte[] { 1 });
                 File.WriteAllBytes(Path.Combine(root, "02 Night Ops", "Night.OGG"), new byte[] { 1 });
+                File.WriteAllBytes(Path.Combine(root, "02 Night Ops", "02 Bulletin.wav"), new byte[] { 1 });
+                File.WriteAllBytes(Path.Combine(root, "Boscali Republic Radio", "Harbor Song.wav"), new byte[] { 1 });
+                File.WriteAllBytes(Path.Combine(root, "Boscali Republic Radio", "02 Bulletin.wav"), new byte[] { 1 });
                 File.WriteAllBytes(Path.Combine(root, "Empty Starter", "station.png"), new byte[] { 1 });
 
                 RadioLibrary library = RadioLibrary.Scan(root);
-                TestAssert.That(library.TrackCount == 4, "radio scan accepted an unsupported or nested track");
-                TestAssert.That(library.Channels.Length == 3, "radio scan produced the wrong station count");
+                TestAssert.That(library.TrackCount == 6, "radio scan accepted an unsupported or generated bulletin track");
+                TestAssert.That(library.Channels.Length == 4, "radio scan produced the wrong station count");
                 TestAssert.That(library.Channels[0].Name == "LOCAL", "root tracks did not become LOCAL");
                 TestAssert.That(library.Channels[1].Name == "01 Day Ops", "stations were not sorted");
                 TestAssert.That(library.Channels[1].Tracks[0].Title == "Alpha", "tracks were not sorted");
+                TestAssert.That(library.Channels[2].Tracks.Length == 2,
+                    "user-owned station tracks were filtered");
+                TestAssert.That(library.Channels[3].Tracks.Length == 1 &&
+                    library.Channels[3].Tracks[0].Title == "Harbor Song",
+                    "generated built-in bulletin was included in the library");
                 TestAssert.That(RadioLibrary.IsSupportedExtension(".WAV"), "WAV extension was rejected");
                 TestAssert.That(!RadioLibrary.IsSupportedExtension(".mp3"), "unprobed MP3 extension was accepted");
 
-                TestAssert.That(BuiltInStationRules.ImportFolderNames.Length == 2 &&
-                    Array.IndexOf(BuiltInStationRules.ImportFolderNames, "Agrapol FM") >= 0 &&
-                    Array.IndexOf(BuiltInStationRules.ImportFolderNames, "Maris Network") >= 0 &&
-                    Array.IndexOf(BuiltInStationRules.ImportFolderNames, "Base Broadcast") < 0,
-                    "starter folders did not preserve the immutable Base station boundary");
+                TestAssert.That(BuiltInStationRules.ImportFolderNames.Length == 3 &&
+                    Array.IndexOf(BuiltInStationRules.ImportFolderNames, "Boscali Republic Radio") >= 0 &&
+                    Array.IndexOf(BuiltInStationRules.ImportFolderNames, "PALA State Radio") >= 0 &&
+                    Array.IndexOf(BuiltInStationRules.ImportFolderNames, "Base Broadcast") >= 0,
+                    "starter folders did not include all three stations");
             }
             finally
             {
@@ -70,13 +81,13 @@ namespace BoscaliSummer.Tests.Features.Radio
                 "Agrapol station rejected local replacement tracks");
             TestAssert.That(BuiltInStationRules.AcceptsLocalTracks(BuiltInStationRules.MarisId),
                 "Maris station rejected local replacement tracks");
-            TestAssert.That(!BuiltInStationRules.AcceptsLocalTracks(BuiltInStationRules.BaseId),
-                "Base station accepted local tracks");
+            TestAssert.That(BuiltInStationRules.AcceptsLocalTracks(BuiltInStationRules.BaseId),
+                "Base station rejected local tracks");
             TestAssert.That(BuiltInStationRules.UsesVanillaTracks(BuiltInStationRules.AgrapolId, 0) &&
                 !BuiltInStationRules.UsesVanillaTracks(BuiltInStationRules.AgrapolId, 1),
                 "Agrapol fallback was not replaced by local tracks");
-            TestAssert.That(BuiltInStationRules.UsesVanillaTracks(BuiltInStationRules.BaseId, 1),
-                "Base station stopped using the original soundtrack when local files existed");
+            TestAssert.That(!BuiltInStationRules.UsesVanillaTracks(BuiltInStationRules.BaseId, 1),
+                "Base local tracks did not replace the original soundtrack");
         }
 
         private static void TuningMath()
@@ -255,6 +266,34 @@ namespace BoscaliSummer.Tests.Features.Radio
             hold.EngageReceiver();
             hold.Reset();
             TestAssert.That(!hold.Held, "a scene reset kept the previous hold");
+        }
+
+        private static void InterceptRules()
+        {
+            TestAssert.That(CombatInterceptNet.KindWord(InterceptKind.Cookoff) == "COOKOFF" &&
+                CombatInterceptNet.KindWord(InterceptKind.Alarm) == "ALARM",
+                "intercept kinds have words, not colours");
+            TestAssert.That(CombatInterceptNet.Line(InterceptKind.Cookoff, "2.1km") ==
+                "INTERCEPT · COOKOFF 2.1km",
+                "cookoff line names range");
+            TestAssert.That(CombatInterceptNet.Line(InterceptKind.Event, null).StartsWith("INTERCEPT · "),
+                "a missing range is dropped");
+            TestAssert.That(CombatInterceptNet.InRange(0f) && CombatInterceptNet.InRange(7f) &&
+                !CombatInterceptNet.InRange(7.1f) && !CombatInterceptNet.InRange(float.NaN),
+                "intercepts cut off at 7 km");
+            TestAssert.That(CombatInterceptNet.TryAccept(0, 10f, 0f, 0f, 0.5f, 0.15f),
+                "a quiet receiver accepts the first intercept");
+            TestAssert.That(!CombatInterceptNet.TryAccept(4, 10f, 0f, 0f, 0.5f, 0.15f),
+                "the live cap refuses a fifth intercept");
+            TestAssert.That(!CombatInterceptNet.TryAccept(0, 10f, 9.5f, 0f, 0.5f, 0.15f),
+                "global gap refuses a rapid second intercept");
+            TestAssert.That(!CombatInterceptNet.TryAccept(0, 10f, 0f, 5f, 0.5f, 0.15f),
+                "per-source gap refuses a repeat from the same wreck");
+            TestAssert.That(!CombatInterceptNet.TryAccept(0, 10f, 0f, 0f, 0.1f, 0.15f),
+                "squelch closed refuses a weak intercept");
+            TestAssert.That(CombatInterceptNet.SourceKey(InterceptKind.Cookoff, 7) !=
+                CombatInterceptNet.SourceKey(InterceptKind.Alarm, 7),
+                "kind and source both key the gap");
         }
 
         private static void LinkStubs()

@@ -96,6 +96,13 @@ namespace BoscaliSummer.Features.Command.Presentation
             SortieRole.Cap, SortieRole.Sead, SortieRole.Cas, SortieRole.Strike, SortieRole.Transit,
         };
 
+        // ---- Shared row tints ------------------------------------------------------------
+
+        // One hover wash and one dimmed-portrait tint for every page: the SA list rows and
+        // the COC roster/dossier share them, so a tint tweak lands everywhere at once.
+        private static readonly Color RowHover = new Color(1f, 1f, 1f, 0.06f);
+        private static readonly Color PortraitDim = new Color(1f, 1f, 1f, 0.45f);
+
         // ---- Dependencies ----------------------------------------------------------------
 
         private CommandSettings settings;
@@ -104,8 +111,11 @@ namespace BoscaliSummer.Features.Command.Presentation
         private ManualLogSource logger;
         private IBaseDefenseAlarmService baseAlarm;
         private IHighCommandView highCommand;
+        private IActiveEventsView activeEvents;
+        private ITheaterStrikePicture strikePicture;
         private ITheaterPriorityView theaterPriority;
         private ITheaterLogisticsView theaterLogistics;
+        private ITheaterOperationsView theaterOperations;
 
         // ---- Screen ----------------------------------------------------------------------
 
@@ -124,6 +134,7 @@ namespace BoscaliSummer.Features.Command.Presentation
         private TMP_Text airCountLabel;
         private GameObject airBarRoot;
         private Image airFill;
+        private Image saAlertRail;
         private TMP_Text sortieNote;
         private readonly SortieRow[] sortieRows = new SortieRow[5];
         private TMP_Text groundValue;
@@ -171,10 +182,12 @@ namespace BoscaliSummer.Features.Command.Presentation
             highCommand = null;
             theaterPriority = null;
             theaterLogistics = null;
+            theaterOperations = null;
 
             defconLabel = threatLabel = airCountLabel = sortieNote = null;
             airBarRoot = null;
             airFill = null;
+            saAlertRail = null;
             Array.Clear(sortieRows, 0, sortieRows.Length);
             groundValue = airbaseValue = radarValue = null;
 
@@ -311,8 +324,11 @@ namespace BoscaliSummer.Features.Command.Presentation
 
             ModServices.TryGet(out baseAlarm);
             ModServices.TryGet(out highCommand);
+            ModServices.TryGet(out activeEvents);
+            ModServices.TryGet(out strikePicture);
             ModServices.TryGet(out theaterPriority);
             ModServices.TryGet(out theaterLogistics);
+            ModServices.TryGet(out theaterOperations);
 
             shell = AvScreen.Build(
                 content, "STR",
@@ -332,7 +348,10 @@ namespace BoscaliSummer.Features.Command.Presentation
             if (shell.Tabs.Length > 1)
                 shell.Tabs[1].WithTooltip("Chain of command: posts, personnel files and the staff log.");
             if (shell.Tabs.Length > 2)
-                shell.Tabs[2].WithTooltip("Theater operations: main effort, objectives and reinforcement calls.");
+                shell.Tabs[2].WithTooltip("Theater operations: offensives, main effort and reinforcement calls.");
+            string[] tabGlyphs = { "theater", "person", "flag" };
+            for (int i = 0; i < shell.Tabs.Length && i < tabGlyphs.Length; i++)
+                DecorateStrTab(shell.Tabs[i], tabGlyphs[i]);
 
             // A caption that gets ellipsised is a reading the panel did not give. The sheet
             // tracks captions for the display type, and the counts they carry ("3264/3188",
@@ -376,6 +395,49 @@ namespace BoscaliSummer.Features.Command.Presentation
 
         // ---- Page scaffolding ------------------------------------------------------------
 
+        private static void DecorateStrTab(AvButton tab, string kind)
+        {
+            if (tab == null) return;
+            var root = (RectTransform)tab.transform;
+            // The shell's layout has not necessarily reached the Canvas pass yet.
+            float width = root.sizeDelta.x > 1f ? root.sizeDelta.x : root.rect.width;
+            float height = root.sizeDelta.y > 1f ? root.sizeDelta.y : root.rect.height;
+            if (width <= 1f) width = Width / 3f;
+            if (height <= 1f) height = AvTokens.TabBarHeight;
+            var icon = new GameObject("TabIcon", typeof(RectTransform), typeof(MfdGlyph));
+            var rect = (RectTransform)icon.transform;
+            rect.SetParent(root, false);
+            AvKit.Place(rect, new Rect(8f, -(height - 14f) * .5f, 14f, 14f));
+            var glyph = icon.GetComponent<MfdGlyph>();
+            glyph.raycastTarget = false;
+            glyph.SetKind(kind, AvTheme.RailInfo);
+            TMP_Text label = tab.GetComponentInChildren<TMP_Text>();
+            if (label == null) return;
+            AvKit.Place(label.rectTransform, new Rect(26f, 0f, width - 30f, height));
+            label.alignment = TextAlignmentOptions.MidlineLeft;
+        }
+
+        private static string SectionGlyph(string title)
+        {
+            if (title.Contains("AIR") || title.Contains("SORTIE")) return "air";
+            if (title.Contains("SECTOR") || title.Contains("GROUND")) return "control";
+            if (title.Contains("COMMAND") || title.Contains("STAFF")) return "person";
+            if (title.Contains("OPERATIONS") || title.Contains("AXES")) return "flag";
+            if (title.Contains("REINFORCE") || title.Contains("READINESS")) return "convoy";
+            return "theater";
+        }
+
+        private static void SectionIcon(RectTransform parent, float x, float y, string title)
+        {
+            var icon = new GameObject("SectionIcon", typeof(RectTransform), typeof(MfdGlyph));
+            var rect = (RectTransform)icon.transform;
+            rect.SetParent(parent, false);
+            AvKit.Place(rect, new Rect(x, y - 1f, 13f, 13f));
+            var glyph = icon.GetComponent<MfdGlyph>();
+            glyph.raycastTarget = false;
+            glyph.SetKind(SectionGlyph(title), AvTheme.RailInfo);
+        }
+
         /// <summary>
         /// The one section header every page wears: a spine tick, the title, the live note
         /// on the right of the same line, and a hairline rule under both. The title and the
@@ -391,7 +453,8 @@ namespace BoscaliSummer.Features.Command.Presentation
             AvStyled.SpineTick(parent, x - AvScreen.SpineInset + 3f, y - 7f);
 
             float titleWidth = width * 0.56f;
-            AvStyled.Label(parent, new Rect(x, y, titleWidth, 14f), title, "section-title");
+            SectionIcon(parent, x, y, title);
+            AvStyled.Label(parent, new Rect(x + 19f, y, titleWidth - 19f, 14f), title, "section-title");
             // The slot exists on every header, even one with nothing to say yet: a live
             // count then has somewhere to land without a second layout pass.
             noteLabel = AvStyled.Label(parent, new Rect(x + titleWidth, y, width - titleWidth, 14f),
@@ -529,8 +592,6 @@ namespace BoscaliSummer.Features.Command.Presentation
         /// </summary>
         private sealed class ListRow
         {
-            private static readonly Color RowHover = new Color(1f, 1f, 1f, 0.06f);
-
             private readonly GameObject root;
             private readonly Image background;
             private readonly Image rail;
@@ -539,11 +600,14 @@ namespace BoscaliSummer.Features.Command.Presentation
             private readonly TMP_Text value;
             private readonly Image track;
             private readonly Image fill;
+            private readonly Image divider;
             private readonly AvButton hit;
-            private readonly float height;
+            private readonly float width;
+            private float height;
 
             public ListRow(RectTransform parent, float x, float y, float width, float pitch)
             {
+                this.width = width;
                 height = pitch - 2f;
 
                 root = new GameObject("ListRow", typeof(RectTransform));
@@ -556,8 +620,12 @@ namespace BoscaliSummer.Features.Command.Presentation
 
                 background = AvKit.Panel(rect, new Rect(0f, 0f, width, height), Color.clear);
                 rail = AvStyled.Rail(rect, new Rect(0f, -2f, 3f, Mathf.Max(8f, height - 6f)), "locked");
+                // The name and its state line are one row tall, so a clipped tail must be an
+                // ellipsis on that row rather than a second line printed over the next one.
                 name = AvStyled.Label(rect, new Rect(12f, -3f, textWidth, 16f), "", "row-name");
                 detail = AvStyled.Label(rect, new Rect(12f, -21f, textWidth, 16f), "", "row-sub");
+                detail.enableWordWrapping = false;
+                detail.overflowMode = TextOverflowModes.Ellipsis;
                 value = AvStyled.Label(rect, new Rect(width - trail, 0f, trail, 14f), "",
                                        "row-value", align: TextAlignmentOptions.MidlineRight);
                 track = AvKit.Panel(rect, new Rect(width - trail, -17f, trail, 3f), AvTheme.SurfaceInert);
@@ -568,10 +636,27 @@ namespace BoscaliSummer.Features.Command.Presentation
                 fill.fillMethod = Image.FillMethod.Horizontal;
                 fill.fillOrigin = 0;
 
-                Divider(rect, 0f, -(height - 2f), width);
+                divider = AvKit.Rule(rect, new Rect(0f, -(height - 2f), width, 1f),
+                                     AvTheme.Unity(AvTokens.Hairline.WithAlpha(0.35f)));
                 hit = AvKit.HitButton(rect, new Rect(0f, 0f, width, height), null);
                 hit.SetEnabled(false);
                 root.SetActive(false);
+            }
+
+            /// <summary>
+            /// Moves the row to a new line of the page. The page re-flows its lists when the
+            /// data changes length, so a row has to be placeable more than once; only the
+            /// pitch changes, which is the rail's height and the closing hairline.
+            /// </summary>
+            public void Place(float x, float y, float pitch)
+            {
+                height = pitch - 2f;
+                var rect = (RectTransform)root.transform;
+                AvKit.Place(rect, new Rect(x, y, width, height));
+                AvKit.Place(background.rectTransform, new Rect(0f, 0f, width, height));
+                AvKit.Place(rail.rectTransform, new Rect(0f, -2f, 3f, Mathf.Max(8f, height - 6f)));
+                AvKit.Place(divider.rectTransform, new Rect(0f, -(height - 2f), width, 1f));
+                AvKit.Place((RectTransform)hit.transform, new Rect(0f, 0f, width, height));
             }
 
             public void Bind(string railState, string title, string sub, string figure,
@@ -650,15 +735,20 @@ namespace BoscaliSummer.Features.Command.Presentation
 
             y = SectionHeader(parent, x, y, width, "AIR PICTURE", "C4ISR", band: false);
 
-            defconLabel = AvStyled.Label(parent, new Rect(x, y, width, 16f),
+            // The alert is a single instrument: classification, warning and air balance.
+            // Draw it before the text so its frame stays below the readings.
+            AvKit.Panel(parent, new Rect(x, y + 3f, width, 67f), AvTheme.Surface);
+            saAlertRail = AvKit.Rule(parent, new Rect(x, y + 3f, 3f, 67f), AvTheme.RailInert);
+
+            defconLabel = AvStyled.Label(parent, new Rect(x + 10f, y, width - 20f, 16f),
                                          "DEFCON —", "row-name");
             y -= 18f;
-            threatLabel = AvStyled.Label(parent, new Rect(x, y, width, 18f), "", "row-main");
+            threatLabel = AvStyled.Label(parent, new Rect(x + 10f, y, width - 20f, 18f), "", "row-main");
             y -= 20f;
 
-            airCountLabel = AvStyled.Label(parent, new Rect(x, y, width, 14f), "", "kv-key");
+            airCountLabel = AvStyled.Label(parent, new Rect(x + 10f, y, width - 20f, 14f), "", "kv-key");
             y -= 16f;
-            airBarRoot = BuildAirTrack(parent, x, y, width);
+            airBarRoot = BuildAirTrack(parent, x + 10f, y, width - 20f);
             y -= 14f;
 
             y = SectionHeader(parent, x, y, width, "SORTIE BOARD", "FRIENDLY AI", band: true);
@@ -720,6 +810,7 @@ namespace BoscaliSummer.Features.Command.Presentation
             defconLabel.color = AvStyleHost.Resolve(
                 AvStyleHost.Style("rail " + TheaterReadout.DefconRail(state.DefconLevel)).Background,
                 AvTheme.TextPrimary);
+            if (saAlertRail != null) saAlertRail.color = defconLabel.color;
 
             // The alert line carries the state in words and the ink follows the same scale,
             // so the warning is never a colour with nothing said.
@@ -960,6 +1051,7 @@ namespace BoscaliSummer.Features.Command.Presentation
             highCommand?.Refresh();
             theaterPriority?.Refresh();
             theaterLogistics?.Refresh();
+            theaterOperations?.Refresh();
 
             DynamicMap map = SceneSingleton<DynamicMap>.i;
             FactionHQ hq = map != null ? map.HQ : null;
@@ -1074,15 +1166,50 @@ namespace BoscaliSummer.Features.Command.Presentation
 
             if (shell != null && shell.Page == TabCmd)
             {
-                text += " · " + (theaterPriority == null || !theaterPriority.Available
+                string offensive = OffensiveAmbient();
+                text += " · " + (offensive ?? (theaterPriority == null || !theaterPriority.Available
                     ? "theater operations not running"
                     : theaterPriority.HasPriority
                         ? "main effort " + theaterPriority.PriorityLabel
-                        : theaterPriority.CanCommand
-                            ? "no main effort set"
-                            : "main effort is host-set");
+                        : "staff holds no main effort"));
             }
             return text;
+        }
+
+        /// <summary>
+        /// The one-line offensive report for the pinned strip, or null when the board has
+        /// nothing of its own to add. The strip is where a running offensive can be watched
+        /// without the page being open, since it ticks on the host whether or not anyone looks.
+        /// </summary>
+        private string OffensiveAmbient()
+        {
+            if (theaterOperations == null || !theaterOperations.Available) return null;
+
+            IReadOnlyList<TheaterOperationView> operations = theaterOperations.Operations;
+            for (int i = 0; i < operations.Count; i++)
+            {
+                TheaterOperationView operation = operations[i];
+                if (operation == null || operation.Phase == TheaterOperationPhase.Concluded) continue;
+
+                string target = string.IsNullOrEmpty(operation.TargetLabel)
+                    ? ""
+                    : " at " + operation.TargetLabel;
+
+                switch (operation.Phase)
+                {
+                    case TheaterOperationPhase.AwaitingTarget:
+                        return operation.Name + " awaits a target";
+                    case TheaterOperationPhase.Holding:
+                        return operation.Name + " is holding for reinforcement" + target;
+                    case TheaterOperationPhase.Launching when operation.IsHeld:
+                        return operation.Name + " is held — " + operation.Holder + " has the effort";
+                    default:
+                        return operation.Name + " " +
+                               TheaterReadout.OffensivePhaseWord(operation.Phase, operation.Outcome)
+                                   .ToLowerInvariant() + target;
+                }
+            }
+            return null;
         }
     }
 }

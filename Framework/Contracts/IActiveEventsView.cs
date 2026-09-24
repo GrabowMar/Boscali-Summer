@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace BoscaliSummer.Framework.Contracts
@@ -10,6 +11,8 @@ namespace BoscaliSummer.Framework.Contracts
     /// </summary>
     internal interface IActiveEventsView
     {
+        /// <summary>Host-only morale changes from authored event beats.</summary>
+        event Action<int, float> MoraleAwarded;
         /// <summary>True once a mission is running on this peer, host or client.</summary>
         bool Available { get; }
 
@@ -28,6 +31,15 @@ namespace BoscaliSummer.Framework.Contracts
         /// client answers it for itself.
         /// </summary>
         float SupportCostMultiplierFor(ulong playerId);
+
+        /// <summary>Live factor on support request cooldowns for one player; exactly 1 when calm.</summary>
+        float SupportCooldownMultiplierFor(ulong playerId);
+
+        /// <summary>Whether the active event's authored effect targets this faction.</summary>
+        bool AffectsFaction(string factionName);
+
+        /// <summary>Current host-priced support effect; includes a local player's response when viewing their own faction.</summary>
+        string PriceSummaryForFaction(string factionName);
     }
 
     /// <summary>One timed beat of a superevent script, as shown.</summary>
@@ -66,10 +78,16 @@ namespace BoscaliSummer.Framework.Contracts
         /// <summary>Display target: ALL THEATER, HARD-PRESSED SIDE or LEADING SIDE.</summary>
         public string Target { get; }
 
+        /// <summary>False when a targeted event lost its side before the host could issue its beats.</summary>
+        public bool TargetResolved { get; }
+
         public bool IsSuper { get; }
 
         /// <summary>Precomputed display line, e.g. "+50% SUPPORT COST" or "NO EFFECT".</summary>
         public string EffectSummary { get; }
+
+        /// <summary>Precomputed support request tempo line; empty when cooldown is unchanged.</summary>
+        public string TempoSummary { get; }
 
         /// <summary>Timed beats, empty for minor and medium events.</summary>
         public IReadOnlyList<ActiveEventStep> Steps { get; }
@@ -79,7 +97,8 @@ namespace BoscaliSummer.Framework.Contracts
 
         public ActiveEventView(string id, string title, string flavorText, string category,
             string tier, string target, bool isSuper, string iconKey, string effectSummary,
-            IReadOnlyList<ActiveEventStep> steps, float startedAtMissionTime, float endsAtMissionTime)
+            IReadOnlyList<ActiveEventStep> steps, float startedAtMissionTime, float endsAtMissionTime,
+            bool targetResolved = true, string tempoSummary = "")
         {
             Id = id;
             Title = title;
@@ -87,9 +106,11 @@ namespace BoscaliSummer.Framework.Contracts
             Category = category;
             Tier = tier;
             Target = target;
+            TargetResolved = targetResolved;
             IsSuper = isSuper;
             IconKey = iconKey;
             EffectSummary = effectSummary;
+            TempoSummary = tempoSummary ?? "";
             Steps = steps ?? NoSteps;
             StartedAtMissionTime = startedAtMissionTime;
             EndsAtMissionTime = endsAtMissionTime;

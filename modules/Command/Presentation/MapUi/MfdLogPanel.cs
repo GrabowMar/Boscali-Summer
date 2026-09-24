@@ -22,7 +22,6 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private const string PanelName = "NOAvionics.TacticalLog";
         private const float MinimumHeight = 72f;
         private const float HeaderHeight = 30f;
-        private const float Inset = 12f;
         private const float RetentionSeconds = 30f;
         private const int MaximumEntries = 120;
 
@@ -34,6 +33,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         }
 
         private static RectTransform panel;
+        private static AvStyled.DataBar statusBar;
         private static TMP_Text body;
         private static RectTransform scrollContent;
         private static ScrollRect scroll;
@@ -45,6 +45,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private static bool messageWasEnabled;
         private static bool killWasEnabled;
         private static Vector2 builtSize;
+        private static bool builtMerged;
         private static float bodyWidth;
         private static float viewportHeight;
         private static readonly Vector3[] corners = new Vector3[4];
@@ -54,6 +55,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private static string lastMessageRaw;
         private static string lastKillRaw;
         internal static event Action<string> OnLineAdded;
+        internal static bool HasTraffic => history.Count > 0;
 
         public static void Ensure(Canvas canvas, MfdLayout.Columns layout, VirtualMFD virtualMfd)
         {
@@ -73,12 +75,6 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 panel = go.GetComponent<RectTransform>();
                 panel.SetParent(canvas.transform, worldPositionStays: false);
             }
-
-            Image background = panel.GetComponent<Image>();
-            background.sprite = AvSprites.Panel;
-            background.type = Image.Type.Sliced;
-            background.color = Color.white;
-            background.raycastTarget = false;
 
             Tick();
         }
@@ -114,25 +110,33 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 return;
             }
 
+            bool merged = MfdNewsTicker.IsVisible;
+            float topOffset = merged ? MfdNewsTicker.BottomY - columns.Panel.y : 0f;
             panel.anchorMin = panel.anchorMax = new Vector2(0.5f, 0.5f);
             panel.pivot = new Vector2(0f, 1f);
-            panel.sizeDelta = new Vector2(columns.Panel.width, height);
-            panel.anchoredPosition = new Vector2(columns.Panel.x, columns.Panel.y);
+            panel.sizeDelta = new Vector2(columns.Panel.width, height + topOffset);
+            panel.anchoredPosition = new Vector2(columns.Panel.x, columns.Panel.y + topOffset);
             panel.localScale = Vector3.one;
             panel.gameObject.SetActive(true);
+            Image background = panel.GetComponent<Image>();
+            background.sprite = merged ? null : AvSprites.Panel;
+            background.type = merged ? Image.Type.Simple : Image.Type.Sliced;
+            background.color = merged ? new Color32(10, 14, 18, 235) : Color.white;
+            background.raycastTarget = false;
             // The log is always subordinate to the instrument surfaces, including
             // during a resize between layout refreshes.
             Transform dock = panel.parent.Find(MfdPanelDock.DockName);
             if (dock != null && panel.GetSiblingIndex() > dock.GetSiblingIndex())
                 panel.SetSiblingIndex(dock.GetSiblingIndex());
 
-            if (!Approximately(builtSize, panel.sizeDelta) || body == null)
-                Rebuild(panel.sizeDelta);
+            if (!Approximately(builtSize, panel.sizeDelta) || builtMerged != merged || body == null)
+                Rebuild(panel.sizeDelta, merged);
 
             HideOriginals();
             if (added || pruned || string.IsNullOrEmpty(body.text))
             {
                 body.text = HistoryText();
+                statusBar?.SetChip(0, history.Count > 0 ? "LIVE" : "STANDBY", history.Count > 0);
                 ResizeScrollContent(added);
             }
         }
@@ -142,6 +146,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             RestoreOriginals();
             if (panel != null) UnityEngine.Object.Destroy(panel.gameObject);
             panel = null;
+            statusBar = null;
             body = null;
             scrollContent = null;
             scroll = null;
@@ -151,6 +156,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             lastMessageRaw = null;
             lastKillRaw = null;
             builtSize = Vector2.zero;
+            builtMerged = false;
             bodyWidth = 0f;
             viewportHeight = 0f;
             history.Clear();
@@ -225,28 +231,40 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             return true;
         }
 
-        private static void Rebuild(Vector2 size)
+        private static void Rebuild(Vector2 size, bool merged)
         {
             for (int i = panel.childCount - 1; i >= 0; i--)
                 UnityEngine.Object.Destroy(panel.GetChild(i).gameObject);
 
             builtSize = size;
-            var bar = AvStyled.TopBar(panel, new Rect(0f, 0f, size.x, HeaderHeight), "LOG", 1);
-            bar.State.text = "TACTICAL EVENT STREAM";
-            bar.SetChip(0, "LIVE", true);
+            builtMerged = merged;
+            statusBar = null;
+            float contentTop = merged ? 0f : HeaderHeight;
+            if (merged)
+            {
+                Color frame = AvTheme.Frame.WithAlpha(0.55f);
+                AvKit.Rule(panel, new Rect(0f, 0f, 1f, size.y), frame);
+                AvKit.Rule(panel, new Rect(size.x - 1f, 0f, 1f, size.y), frame);
+                AvKit.Rule(panel, new Rect(0f, -size.y + 1f, size.x, 1f), frame);
+            }
+            else
+            {
+                statusBar = AvStyled.TopBar(panel, new Rect(0f, 0f, size.x, HeaderHeight), "FIELD LOG", 1);
+                statusBar.State.text = "TACTICAL EVENT STREAM";
+                statusBar.SetChip(0, history.Count > 0 ? "LIVE" : "STANDBY", history.Count > 0);
+            }
 
-            AvStyled.Spine(panel,
-                new Rect(Inset, -HeaderHeight - 8f, 3f,
-                         Mathf.Max(0f, size.y - HeaderHeight - 16f)));
+            float feedHeight = Mathf.Max(0f, size.y - contentTop - 6f);
+            AvStyled.Spine(panel, new Rect(3f, -contentTop - 3f, 3f, feedHeight));
 
-            bodyWidth = Mathf.Max(0f, size.x - Inset * 2f - 24f);
-            viewportHeight = Mathf.Max(0f, size.y - HeaderHeight - 16f);
+            bodyWidth = Mathf.Max(0f, size.x - 24f);
+            viewportHeight = feedHeight;
 
             var scrollGo = new GameObject("EventScroll", typeof(RectTransform), typeof(Image), typeof(ScrollRect));
             var scrollRect = scrollGo.GetComponent<RectTransform>();
             scrollRect.SetParent(panel, worldPositionStays: false);
             AvKit.Place(scrollRect,
-                new Rect(Inset + 12f, -HeaderHeight - 8f, bodyWidth + 12f, viewportHeight));
+                new Rect(12f, -contentTop - 3f, bodyWidth + 8f, viewportHeight));
 
             Image scrollHitArea = scrollGo.GetComponent<Image>();
             scrollHitArea.color = Color.clear;
@@ -275,6 +293,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 "", "row-sub", align: TextAlignmentOptions.TopLeft);
             body.richText = true;
             body.fontSize = 13f;
+            body.lineSpacing = 5f;
+            body.paragraphSpacing = 4f;
             body.characterSpacing = 0f;
             body.enableWordWrapping = true;
             body.overflowMode = TextOverflowModes.Overflow;
@@ -429,7 +449,14 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             for (int i = 0; i < history.Count; i++)
             {
                 if (i > 0) text.Append('\n');
-                text.Append(MfdLogTone.Paint(history[i].Text));
+                string line = history[i].Text;
+                string tone = MfdLogTone.Hex(MfdLogTone.Classify(line));
+                if (i == 0) text.Append("<mark=#193B475C><b>");
+                else if (i > 2) text.Append("<alpha=#A0>");
+                text.Append("<color=#").Append(i == 0 ? tone : MfdLogTone.NeutralHex)
+                    .Append(">›</color>  ").Append(MfdLogTone.Paint(line));
+                if (i == 0) text.Append("</b></mark>");
+                else if (i > 2) text.Append("<alpha=#FF>");
             }
             return text.ToString();
         }

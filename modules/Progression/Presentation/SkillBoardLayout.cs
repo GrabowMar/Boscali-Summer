@@ -24,11 +24,11 @@ namespace BoscaliSummer.Features.Progression.Presentation
         /// <summary>Above this the board reads as scattered tiles instead of a table.</summary>
         public const float MaxCellHeight = 76f;
 
-        public const float FileHeaderHeight = 50f;
+        public const float FileHeaderHeight = 28f;
         public const float TitleHeight = 24f;
         public const float LaneHeaderHeight = 30f;
         public const float LegendHeight = 34f;
-        public const float DetailHeight = 44f;
+        public const float DetailHeight = 58f;
         public const float StateHeight = 14f;
         public const float StateBottomInset = 3f;
 

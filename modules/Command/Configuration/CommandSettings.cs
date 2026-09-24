@@ -31,6 +31,7 @@ namespace BoscaliSummer.Features.Command.Configuration
 
         public ConfigEntry<bool> NewsTickerEnabled { get; }
         public ConfigEntry<float> NewsTickerSpeed { get; }
+        public ConfigEntry<float> UiSoundVolume { get; }
 
         public ConfigEntry<bool> TargetPresetWheel { get; }
         public ConfigEntry<string> TargetPresets { get; }
@@ -38,9 +39,36 @@ namespace BoscaliSummer.Features.Command.Configuration
         public ConfigEntry<KeyCode> TargetPresetKey1 { get; }
         public ConfigEntry<KeyCode> TargetPresetKey2 { get; }
         public ConfigEntry<KeyCode> TargetPresetKey3 { get; }
+        public ConfigEntry<bool> TargetShowMissiles { get; }
+        public ConfigEntry<bool> TargetWeaponOnly { get; }
+        public ConfigEntry<bool> TargetAirOnly { get; }
+        public ConfigEntry<int> TargetRangeKm { get; }
+
+        public ConfigEntry<bool> DisplayEffects { get; }
+        public ConfigEntry<float> DisplayGlass { get; }
+        public ConfigEntry<bool> DisplayAutoLight { get; }
+        public ConfigEntry<float> DisplayScanlines { get; }
+        public ConfigEntry<float> DisplayVignette { get; }
+        public ConfigEntry<int> DisplayTint { get; }
+        public ConfigEntry<float> DisplayTintStrength { get; }
 
         public CommandSettings(ConfigFile config)
         {
+            DisplayEffects = config.Bind("Command", "DisplayEffects", true,
+                "Enable client-local MFD glass and display overlays. OFF gives a clean display.");
+            DisplayAutoLight = config.Bind("Command", "DisplayAutoLight", true,
+                "Adjust glass reflection strength to ambient lighting.");
+            DisplayGlass = config.Bind("Command", "DisplayGlass", 0.6f,
+                new ConfigDescription("MFD glass reflection strength.", new AcceptableValueRange<float>(0f, 1f)));
+            DisplayScanlines = config.Bind("Command", "DisplayScanlines", 0f,
+                new ConfigDescription("Static CRT scanline strength over the maximized MFD; no flicker.", new AcceptableValueRange<float>(0f, 1f)));
+            DisplayVignette = config.Bind("Command", "DisplayVignette", 0f,
+                new ConfigDescription("Soft edge shading over the maximized MFD.", new AcceptableValueRange<float>(0f, 1f)));
+            DisplayTint = config.Bind("Command", "DisplayTint", 0,
+                new ConfigDescription("MFD color wash: 0 Neutral, 1 Green, 2 Amber, 3 Ice, 4 Rose.", new AcceptableValueRange<int>(0, 4)));
+            DisplayTintStrength = config.Bind("Command", "DisplayTintStrength", 0.25f,
+                new ConfigDescription("Color wash strength; limited to preserve symbols and warning colors.", new AcceptableValueRange<float>(0f, 1f)));
+
             ExpandedMapUi = config.Bind("Command", "ExpandedMapUi", true,
                 "Use Boscali's full tactical display: left panel and log, central map, right button rail, and spawn footer.");
             Enabled = config.Bind("Command", "Enabled", true,
@@ -65,7 +93,7 @@ namespace BoscaliSummer.Features.Command.Configuration
                     "Advanced: tactical sector cell size in metres. 1000 matches the map's own base grid squares (the 10 km major squares are 10000). Applied when the module initializes; very large theaters coarsen it in powers of two.",
                     new AcceptableValueRange<int>(250, 10000)));
 
-            GridRefreshInterval = config.Bind("Command", "GridRefreshInterval", 0.5f,
+            GridRefreshInterval = config.Bind("Command", "GridRefreshInterval", 0.75f,
                 new ConfigDescription(
                     "Seconds between influence grid texture updates while the map is open (0.5s = 2 Hz).",
                     new AcceptableValueRange<float>(0.2f, 2.0f)));
@@ -123,6 +151,10 @@ namespace BoscaliSummer.Features.Command.Configuration
                     "Scrolling speed of the tactical news ticker marquee in pixels per second.",
                     new AcceptableValueRange<float>(15f, 150f)));
 
+            UiSoundVolume = config.Bind("Command", "UiSoundVolume", .7f,
+                new ConfigDescription("Volume of Boscali avionics control feedback; zero mutes it.",
+                    new AcceptableValueRange<float>(0f, 1f)));
+
             MapTrayOpacity = config.Bind("Command", "MapTrayOpacity", 0.15f,
                 new ConfigDescription(
                     "Map darkening beneath terrain and symbols, independent of background choice (0.0 = clear, 1.0 = dark solid).",
@@ -145,6 +177,15 @@ namespace BoscaliSummer.Features.Command.Configuration
 
             TargetPresetKey3 = config.Bind("Command", "TargetPresetKey3", KeyCode.F10,
                 "Apply TGT quick-slot 3 while flying. None disables the shortcut.");
+
+            TargetShowMissiles = config.Bind("Command", "TargetShowMissiles", false,
+                "Include missiles in the TGT acquisition browser.");
+            TargetWeaponOnly = config.Bind("Command", "TargetWeaponOnly", false,
+                "Show only targets suitable for the selected weapon in the TGT acquisition browser.");
+            TargetAirOnly = config.Bind("Command", "TargetAirOnly", false,
+                "Show only aircraft in the TGT acquisition browser.");
+            TargetRangeKm = config.Bind("Command", "TargetRangeKm", 0,
+                "Maximum acquisition distance in kilometres: 0 (unlimited), 10, 25, 50, or 100.");
         }
     }
 }

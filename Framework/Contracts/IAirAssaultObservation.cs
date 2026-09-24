@@ -14,5 +14,8 @@ namespace BoscaliSummer.Framework.Contracts
     internal interface IOperationOutcomeSource
     {
         event Action<int, float> MoraleAwarded;
+
+        /// <summary>Host-only mission-scoped record that this faction paid a secondary objective.</summary>
+        bool HasCompletedContract(int factionInstanceId);
     }
 }

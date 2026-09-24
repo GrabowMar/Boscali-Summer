@@ -3,8 +3,7 @@ namespace BoscaliSummer.Framework.Contracts
     /// <summary>
     /// Perk-scaled effect kinds. Lives here so Framework need not import Progression.
     /// Cost, reward and fuel multipliers read as "scale the number by this"; the support
-    /// kinds are the same shape — cooldown and effect size scale by the value, so 0.8
-    /// shortens a cooldown and 1.25 enlarges an effect.
+    /// kinds are the same shape — 0.8 shortens a cooldown.
     /// </summary>
     internal enum PerkEffect : byte
     {
@@ -14,7 +13,7 @@ namespace BoscaliSummer.Framework.Contracts
         ObjectiveReward = 3,
         SupportCost = 4,
         SupportCooldown = 5,
-        SupportEffectScale = 6
+        SupportEffectScale = 6 // Retired; keep its numeric value stable.
     }
 
     /// <summary>
