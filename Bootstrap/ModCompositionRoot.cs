@@ -3,6 +3,7 @@ using BepInEx.Logging;
 using BoscaliSummer.Features.Autopilot;
 using BoscaliSummer.Features.Campaign;
 using BoscaliSummer.Features.Command;
+using BoscaliSummer.Features.Comms;
 using BoscaliSummer.Features.DynamicOperations;
 using BoscaliSummer.Features.Events;
 using BoscaliSummer.Features.FireAndDestruction;
@@ -55,6 +56,7 @@ namespace BoscaliSummer.Bootstrap
                 if (settings.TheaterOps.Enabled.Value) features.Add(new TheaterOpsFeature());
                 if (settings.Trenches.Enabled.Value) features.Add(new TrenchesFeature());
                 if (settings.Events.Enabled.Value) features.Add(new EventsFeature());
+                if (settings.Comms.Enabled.Value) features.Add(new CommsFeature());
                 if (settings.Campaign.Enabled.Value) features.Add(new CampaignFeature());
                 host.Load(features.ToArray());
                 CapabilityReport.Log();

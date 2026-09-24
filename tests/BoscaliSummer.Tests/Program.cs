@@ -50,6 +50,7 @@ namespace BoscaliSummer.Tests
             Features.TheaterOps.LogisticsTests.Run();
             Features.Events.EventSelectorTests.Run();
             Features.Events.EventDirectorTests.Run();
+            Features.Comms.CommsTests.Run();
             Features.Campaign.MissionInstallPlanTests.Run();
             HudTests.Run();
             TrenchTests.Run();

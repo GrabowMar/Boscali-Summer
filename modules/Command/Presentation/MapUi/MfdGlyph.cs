@@ -92,6 +92,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 case "FILTERS": case "PRESETS": case "LAYERS": return "filter";
                 case "MAP": return "map";
                 case "RAD": case "RADIO": return "radio";
+                case "COM": case "COMMS": case "CHAT": return "comms";
                 case "SET": case "SETTINGS": case "CONFIG": return "settings";
                 case "OPS": case "SUPPORT": case "AIRDROP": return "support";
                 case "STR": return "theater";
@@ -159,6 +160,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     Line(mesh,.5f,.08f,.5f,.6f); Line(mesh,.32f,.08f,.68f,.08f);
                     Path(mesh,.36f,.62f,.44f,.88f,.56f,.88f,.64f,.62f);
                     Path(mesh,.2f,.58f,.32f,.98f,.68f,.98f,.8f,.58f); break;
+                // A speech bubble with a map pin in it: talk about places.
+                case "comms":
+                    Path(mesh,.06f,.92f,.94f,.92f,.94f,.34f,.42f,.34f,.2f,.08f,.24f,.34f,.06f,.34f,.06f,.92f);
+                    Path(mesh,.5f,.46f,.36f,.64f,.4f,.8f,.5f,.84f,.6f,.8f,.64f,.64f,.5f,.46f); break;
                 case "settings":
                     Line(mesh,.1f,.32f,.9f,.32f); Line(mesh,.1f,.7f,.9f,.7f);
                     Circle(mesh,.34f,.32f,.11f,10); Circle(mesh,.66f,.7f,.11f,10); break;

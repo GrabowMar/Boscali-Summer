@@ -346,6 +346,7 @@ string[] patchTypes =
     ,"BoscaliSummer.Features.TheaterOps.Patches.MissionPositionDeliveryPriorityPatch"
     ,"BoscaliSummer.Features.Trenches.Visuals.TrenchNestClientPatch"
     ,"BoscaliSummer.Features.Trenches.Visuals.TrenchNestServerPatch"
+    ,"BoscaliSummer.Features.Comms.Patches.CommsMapControlsPatch"
 };
 
 foreach (string patchType in patchTypes)
@@ -369,6 +370,7 @@ string[] featureTypes =
     ,"BoscaliSummer.Features.Campaign.CampaignFeature"
     ,"BoscaliSummer.Features.Trenches.TrenchesFeature"
     ,"BoscaliSummer.Features.Hud.HudFeature"
+    ,"BoscaliSummer.Features.Comms.CommsFeature"
 };
 foreach (string featureType in featureTypes)
     if (pluginAssembly.GetType(featureType, false) == null)
@@ -719,6 +721,8 @@ foreach (var contract in new[] {
     ("BoscaliSummer.Features.Events.Networking.EventIntent", new[] { "Protocol:System.Byte", "Token:System.UInt32", "Action:System.Byte", "CatalogIndex:System.SByte" }),
     ("BoscaliSummer.Features.Events.Networking.EventReply", new[] { "Protocol:System.Byte", "Token:System.UInt32", "CatalogIndex:System.SByte", "Result:System.Byte", "Kind:System.Byte", "Cost:System.Int32" }),
     ("BoscaliSummer.Features.TheaterOps.Networking.TheaterPriorityQuery", new[] { "Protocol:System.Byte" }),
+    ("BoscaliSummer.Features.Comms.Networking.CommsUpMessage", new[] { "Protocol:System.Byte", "Op:System.Byte", "Channel:System.Byte", "Kind:System.Byte", "Style:System.Byte", "Size:System.Byte", "Target:System.UInt32", "Points:System.Int32[]", "Text:System.String", "Items:System.String[]" }),
+    ("BoscaliSummer.Features.Comms.Networking.CommsDownMessage", new[] { "Protocol:System.Byte", "Event:System.Byte", "Id:System.UInt32", "Author:System.UInt64", "AuthorName:System.String", "Faction:System.Int32", "Channel:System.Byte", "Kind:System.Byte", "Style:System.Byte", "Size:System.Byte", "Flags:System.Byte", "Ttl:System.Single", "Points:System.Int32[]", "Text:System.String", "Items:System.String[]", "Values:System.Int32[]", "Players:System.UInt64[]", "Ids:System.UInt32[]" }),
     ("BoscaliSummer.Features.TheaterOps.Networking.TheaterPriorityState", new[] { "Protocol:System.Byte", "Active:System.Byte", "Faction:System.String", "Key:System.String", "Label:System.String", "X:System.Single", "Y:System.Single", "Z:System.Single" }) })
 {
     Type type = pluginAssembly.GetType(contract.Item1, true)!;

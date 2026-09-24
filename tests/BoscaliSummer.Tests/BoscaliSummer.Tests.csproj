@@ -116,6 +116,8 @@
     <Compile Include="..\..\Framework\Contracts\HudPrimitives.cs" Link="Framework\HudPrimitives.cs" />
     <Compile Include="..\..\modules\Hud\Domain\HudNoticeQueue.cs" Link="Features\Hud\HudNoticeQueue.cs" />
     <Compile Include="..\..\Infrastructure\GameInterop\MfdSlots.cs" Link="Infrastructure\MfdSlots.cs" />
+    <Compile Include="..\..\modules\Comms\Domain\*.cs" LinkBase="Features\Comms" />
+    <Compile Include="..\..\modules\Comms\Presentation\CommsGlyphs.cs" Link="Features\Comms\CommsGlyphs.cs" />
     <Compile Include="..\..\Avionics\*.cs" LinkBase="Avionics" />
   </ItemGroup>
   <ItemGroup>

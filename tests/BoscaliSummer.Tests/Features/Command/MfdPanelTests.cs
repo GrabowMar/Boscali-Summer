@@ -94,6 +94,9 @@ namespace BoscaliSummer.Tests.Features.Command
                 "the hosted EVN button carries a readable rail entry");
             TestAssert.That(events.Glyph != MfdRailCatalog.For("MIS").Glyph,
                 "the event feed must not wear the mission flag");
+            MfdRailEntry comms = MfdRailCatalog.For("COM");
+            TestAssert.That(comms.HasName && comms.Name == "COMMS" && comms.Glyph == "comms",
+                "the hosted COM button reads as COMMS with its own glyph");
         }
 
         private static void RunLogToneTests()
