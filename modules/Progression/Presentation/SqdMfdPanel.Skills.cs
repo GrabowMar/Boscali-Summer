@@ -18,7 +18,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
         // Geometry lives in SkillBoardLayout (which a test pins); this file only draws it.
         private const string SkillIdleTitle = "SELECT A CELL";
         private const string SkillHint =
-            "One pick per grade. A grade needs the grade before it, and a career carries two tools.";
+            "Scroll grades. Compare lanes at the same tier, then unlock one pick.";
 
         private TMP_Text skillStripTitle;
         private TMP_Text skillStripDetail;
@@ -101,8 +101,8 @@ namespace BoscaliSummer.Features.Progression.Presentation
             float width = area.width - SpineInset;
             float y = area.y;
 
-            y = DrawPageHeader(parent, x, y, width, "SKILLS  /  02 OF 04",
-                "QUALIFICATION BOARD", "HOST PROGRESSION");
+            y = DrawPageHeader(parent, x, y, width,
+                "QUALIFICATION BOARD", "HOST PROGRESSION", SqdMark.Combat);
             y = DrawSectionTitle(parent, x, y, width, "AVAILABLE QUALIFICATIONS",
                 BudgetNote(), band: false, out skillBudgetNote);
 
@@ -294,9 +294,9 @@ namespace BoscaliSummer.Features.Progression.Presentation
             AvKit.Rule(parent, new Rect(area.x, area.y, 3f, area.height - 4f), AvTheme.RailInfo);
 
             float textWidth = Mathf.Max(0f, area.width - 150f);
-            skillStripTitle = Fitted(PlainLabel(parent, new Rect(area.x + 12f, area.y + 2f, textWidth, 15f),
+            skillStripTitle = Fitted(PlainLabel(parent, new Rect(area.x + 12f, area.y - 7f, textWidth, 15f),
                 skillIdleTitle, "row-name"));
-            skillStripDetail = PlainLabel(parent, new Rect(area.x + 12f, area.y - 16f, textWidth, 26f),
+            skillStripDetail = PlainLabel(parent, new Rect(area.x + 12f, area.y - 26f, textWidth, 24f),
                 skillIdleDetail, "row-sub");
             // Two wrapped lines: the confirm strip is the one place the whole sentence is
             // readable, so it shrinks to the micro floor and overflows rather than truncating
@@ -307,7 +307,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             skillStripDetail.overflowMode = TextOverflowModes.Overflow;
 
             skillConfirmButton = AvStyled.Button(parent,
-                new Rect(area.x + area.width - 138f, area.y - 9f, 128f, 26f),
+                new Rect(area.x + area.width - 138f, area.y - 14f, 128f, 26f),
                 "UNLOCK SELECTED", "btn", CommitSelected, AvButtonStyle.Primary);
             skillConfirmButton.SetEnabled(false);
             skillConfirmButton.WithTooltip("Commit the selected grade. One pick, no undo.");

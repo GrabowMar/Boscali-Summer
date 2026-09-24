@@ -1,5 +1,6 @@
 using System;
 using System.Reflection;
+using BoscaliSummer.Features.Progression.Domain;
 using BoscaliSummer.Features.Progression.Runtime;
 using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Runtime;
@@ -40,16 +41,33 @@ namespace BoscaliSummer.Features.Progression.Networking
         public uint Scene, Token;
         public int ScorePerPoint;
         public byte MaximumPoints;
+        public uint PlaneId;
+        public byte EngineMap;
+    }
+
+    [NetworkMessage]
+    internal struct PlaneTuneRequest
+    {
+        public byte Protocol;
+        public uint AircraftId;
+        public byte Mode;
+    }
+
+    [NetworkMessage]
+    internal struct PlaneTuneState
+    {
+        public byte Protocol;
+        public uint AircraftId;
+        public byte Mode;
+        public byte Accepted;
     }
 
     internal sealed class ProgressionNet : MonoBehaviour
     {
         /// <summary>
-        /// Version 4 adds a sixth grade to every lane. Grade ids are wire identity, so the
-        /// insert renumbered every lane after STRIKE and a version 3 peer would apply the
-        /// wrong grade; the version gate keeps the two builds apart.
+        /// Version 5 adds host-approved per-aircraft engine maps.
         /// </summary>
-        internal const byte ProtocolVersion = 4;
+        internal const byte ProtocolVersion = 5;
 
         /// <summary>Perk id meaning "send me a snapshot, change nothing".</summary>
         internal const byte QueryOnly = byte.MaxValue;
@@ -61,8 +79,26 @@ namespace BoscaliSummer.Features.Progression.Networking
         private uint scene, token;
         private ulong requestedPlayer;
         private FactionHQ requestedHq;
+        private readonly System.Collections.Generic.Dictionary<ulong, float> lastTuneChange =
+            new System.Collections.Generic.Dictionary<ulong, float>();
+        private readonly System.Collections.Generic.Dictionary<uint, byte> tunes =
+            new System.Collections.Generic.Dictionary<uint, byte>();
 
-        internal void ResetScene() { scene++; requestedPlayer = PlayerIdentity.None; requestedHq = null; }
+        internal void ResetScene()
+        {
+            scene++; requestedPlayer = PlayerIdentity.None; requestedHq = null;
+            lastTuneChange.Clear(); tunes.Clear();
+        }
+
+        internal byte TuneFor(Aircraft aircraft) => aircraft != null &&
+            tunes.TryGetValue(aircraft.persistentID.Id, out byte mode) ? mode : (byte)0;
+
+        internal void AcceptSnapshotTune(uint aircraftId, byte mode)
+        {
+            if (aircraftId == 0 || !PlaneEngineMap.IsDefined(mode)) return;
+            if (tunes.Count >= 128 && !tunes.ContainsKey(aircraftId)) tunes.Clear();
+            tunes[aircraftId] = mode;
+        }
 
         public void Configure(ProgressionManager progression)
         {
@@ -80,21 +116,85 @@ namespace BoscaliSummer.Features.Progression.Networking
                 network.Server.MessageHandler != null && network.Server.MessageHandler != serverHandler)
             {
                 serverHandler?.UnregisterHandler<ProgressionSubmit>();
+                serverHandler?.UnregisterHandler<PlaneTuneRequest>();
                 serverHandler = network.Server.MessageHandler;
                 serverHandler.RegisterHandler<ProgressionSubmit>(ReceiveSubmit, false);
+                serverHandler.RegisterHandler<PlaneTuneRequest>(ReceivePlaneTune, false);
             }
             if (network.Client?.MessageHandler != null && network.Client.MessageHandler != clientHandler)
             {
                 clientHandler?.UnregisterHandler<ProgressionSnapshot>();
+                clientHandler?.UnregisterHandler<PlaneTuneState>();
                 clientHandler = network.Client.MessageHandler;
                 clientHandler.RegisterHandler<ProgressionSnapshot>(ReceiveSnapshot, false);
+                clientHandler.RegisterHandler<PlaneTuneState>(ReceivePlaneTuneState, false);
             }
         }
 
         private void OnDestroy()
         {
             serverHandler?.UnregisterHandler<ProgressionSubmit>();
+            serverHandler?.UnregisterHandler<PlaneTuneRequest>();
             clientHandler?.UnregisterHandler<ProgressionSnapshot>();
+            clientHandler?.UnregisterHandler<PlaneTuneState>();
+        }
+
+        internal void RequestPlaneTune(Aircraft aircraft, int mode)
+        {
+            if (aircraft == null || mode < 0 || mode > byte.MaxValue ||
+                !PlaneEngineMap.IsDefined((byte)mode) ||
+                !GameManager.GetLocalPlayer<Player>(out Player local) || local?.Aircraft != aircraft) return;
+            if (GameAccess.IsServer())
+            {
+                manager.ReportTune(ApplyPlaneTune(local, aircraft.persistentID.Id, (byte)mode),
+                    aircraft.persistentID.Id);
+                return;
+            }
+            NetworkClient client = NetworkManagerNuclearOption.i?.Client;
+            if (client != null && client.Active)
+                client.Send(new PlaneTuneRequest { Protocol = ProtocolVersion,
+                    AircraftId = aircraft.persistentID.Id, Mode = (byte)mode });
+        }
+
+        private void ReceivePlaneTune(INetworkPlayer sender, PlaneTuneRequest request)
+        {
+            if (!GameAccess.IsServer() || request.Protocol != ProtocolVersion || sender == null ||
+                !sender.IsAuthenticated || !sender.TryGetPlayer<Player>(out Player player)) return;
+            if (!ApplyPlaneTune(player, request.AircraftId, request.Mode))
+                sender.Send(new PlaneTuneState { Protocol = ProtocolVersion,
+                    AircraftId = request.AircraftId, Mode = request.Mode, Accepted = 0 });
+        }
+
+        private bool ApplyPlaneTune(Player player, uint aircraftId, byte mode)
+        {
+            Aircraft aircraft = player?.Aircraft;
+            if (aircraft == null || aircraft.persistentID.Id != aircraftId || aircraft.disabled ||
+                !aircraft.IsLanded() || !PlaneEngineMap.IsDefined(mode)) return false;
+            ulong owner = PlayerIdentity.Of(player);
+            if (lastTuneChange.TryGetValue(owner, out float last) && Time.unscaledTime - last < 2f) return false;
+            if (lastTuneChange.Count >= 128) lastTuneChange.Clear();
+            lastTuneChange[owner] = Time.unscaledTime;
+            if (tunes.Count >= 128 && !tunes.ContainsKey(aircraftId)) tunes.Clear();
+            tunes[aircraftId] = mode;
+            NetworkServer server = NetworkManagerNuclearOption.i?.Server;
+            if (server != null && server.Active)
+                server.SendToAll(new PlaneTuneState { Protocol = ProtocolVersion,
+                    AircraftId = aircraftId, Mode = mode, Accepted = 1 },
+                    authenticatedOnly: true, excludeLocalPlayer: true);
+            return true;
+        }
+
+        private void ReceivePlaneTuneState(INetworkPlayer _, PlaneTuneState applied)
+        {
+            if (GameAccess.IsServer() || applied.Protocol != ProtocolVersion) return;
+            if (applied.Accepted == 0) { manager.ReportTune(false, applied.AircraftId); return; }
+            if (!PlaneEngineMap.IsDefined(applied.Mode)) return;
+            if (tunes.Count >= 128 && !tunes.ContainsKey(applied.AircraftId)) tunes.Clear();
+            tunes[applied.AircraftId] = applied.Mode;
+            var id = new PersistentID { Id = applied.AircraftId };
+            UnitRegistry.TryGetUnit<Aircraft>(id, out Aircraft aircraft);
+            if (aircraft != null && GameManager.GetLocalPlayer<Player>(out Player local) && local?.Aircraft == aircraft)
+                manager.ReportTune(true, applied.AircraftId);
         }
 
         /// <summary>
@@ -173,6 +273,7 @@ namespace BoscaliSummer.Features.Progression.Networking
                 writer.WritePackedInt32(value.Generation);
                 writer.WritePackedUInt32(value.Scene); writer.WritePackedUInt32(value.Token);
                 writer.WritePackedInt32(value.ScorePerPoint); writer.WriteByte(value.MaximumPoints);
+                writer.WritePackedUInt32(value.PlaneId); writer.WriteByte(value.EngineMap);
             });
             SetReader<ProgressionSnapshot>(reader => new ProgressionSnapshot
             {
@@ -183,10 +284,31 @@ namespace BoscaliSummer.Features.Progression.Networking
                 Rank = reader.ReadByte(),
                 Result = reader.ReadByte(),
                 Generation = reader.ReadPackedInt32(), Scene = reader.ReadPackedUInt32(), Token = reader.ReadPackedUInt32(),
-                ScorePerPoint = reader.ReadPackedInt32(), MaximumPoints = reader.ReadByte()
+                ScorePerPoint = reader.ReadPackedInt32(), MaximumPoints = reader.ReadByte(),
+                PlaneId = reader.ReadPackedUInt32(), EngineMap = reader.ReadByte()
+            });
+            SetWriter<PlaneTuneRequest>((writer, value) =>
+            {
+                writer.WriteByte(value.Protocol); writer.WritePackedUInt32(value.AircraftId); writer.WriteByte(value.Mode);
+            });
+            SetReader<PlaneTuneRequest>(reader => new PlaneTuneRequest
+            {
+                Protocol = reader.ReadByte(), AircraftId = reader.ReadPackedUInt32(), Mode = reader.ReadByte()
+            });
+            SetWriter<PlaneTuneState>((writer, value) =>
+            {
+                writer.WriteByte(value.Protocol); writer.WritePackedUInt32(value.AircraftId); writer.WriteByte(value.Mode);
+                writer.WriteByte(value.Accepted);
+            });
+            SetReader<PlaneTuneState>(reader => new PlaneTuneState
+            {
+                Protocol = reader.ReadByte(), AircraftId = reader.ReadPackedUInt32(), Mode = reader.ReadByte(),
+                Accepted = reader.ReadByte()
             });
             MessagePacker.RegisterMessage<ProgressionSubmit>();
             MessagePacker.RegisterMessage<ProgressionSnapshot>();
+            MessagePacker.RegisterMessage<PlaneTuneRequest>();
+            MessagePacker.RegisterMessage<PlaneTuneState>();
         }
 
         // A failed install used to be swallowed by a null-conditional, leaving every message

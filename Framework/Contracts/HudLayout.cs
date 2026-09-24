@@ -33,12 +33,37 @@ namespace BoscaliSummer.Framework.Contracts
     internal static class HudLayout
     {
         public const int ScaleCount = 4;
+        /// <summary>Keep independently positioned overlays from covering one another. Screen pixels.</summary>
+        public static HudBounds Avoid(HudBounds stack, HudBounds obstacle, HudBounds safe)
+        {
+            const float gap = 12f;
+            if (!obstacle.Visible || stack.X >= obstacle.X + obstacle.Width + gap ||
+                stack.X + stack.Width + gap <= obstacle.X || stack.Y >= obstacle.Y + obstacle.Height + gap ||
+                stack.Y + stack.Height + gap <= obstacle.Y) return stack;
+            if (obstacle.Y + obstacle.Height + gap + stack.Height <= safe.Y + safe.Height)
+                stack.Y = obstacle.Y + obstacle.Height + gap;
+            else if (obstacle.X - gap - stack.Width >= safe.X)
+                stack.X = obstacle.X - gap - stack.Width;
+            else if (obstacle.X + obstacle.Width + gap + stack.Width <= safe.X + safe.Width)
+                stack.X = obstacle.X + obstacle.Width + gap;
+            else if (obstacle.Y - gap - stack.Height >= safe.Y)
+                stack.Y = obstacle.Y - gap - stack.Height;
+            else return default;
+            return stack;
+        }
+        public static string ContrastName(int value) => value == 0 ? "CLEAR" : value == 2 ? "SOLID" : "GLASS";
+        public static float BackdropAlpha(int value) => value == 0 ? 0f : value == 2 ? 0.9f : 0.65f;
+        public static string CornerName(int value) => value == 1 ? "BOTTOM LEFT" : value == 2 ? "TOP RIGHT" : value == 3 ? "TOP LEFT" : "BOTTOM RIGHT";
         public const int OpacityCount = 4;
         public const int MinRows = 1;
         public const int MaxRows = 6;
 
-        /// <summary>Feeds the element will accept. Past this a declaration is refused once.</summary>
-        public const int MaxChannels = 8;
+        /// <summary>
+        /// Feeds the element will accept. Past this a declaration is refused once. Sized for the
+        /// two module feeds plus the seven mechanic widgets a full install declares, with room
+        /// for one more before a feature has to share a channel.
+        /// </summary>
+        public const int MaxChannels = 12;
 
         public const float MinNoticeSeconds = 3f;
         public const float MaxNoticeSeconds = 20f;

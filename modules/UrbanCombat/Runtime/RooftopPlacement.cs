@@ -8,6 +8,8 @@ namespace BoscaliSummer.Garrisons
         internal const string NamePrefix = ZoneGarrisonManager.NamePrefix + "Roof:";
         internal const int MaxBuildings = 96;
         internal const int MaxPerZone = 6;
+        /// <summary>Smallest shell worth a roof search: the nest footprint is at least 8 m square.</summary>
+        internal const float MinRoofSpan = 10f;
         private static readonly string[] Keys = { "Emplacement1_MG", "Emplacement1_ATGM", "Emplacement1_23mm" };
 
         internal static BuildingDefinition ResolveDefinition(int slot)
@@ -23,10 +25,6 @@ namespace BoscaliSummer.Garrisons
 
         internal static string BuildMarkerName(string name, Vector4 roofExtents) =>
             GarrisonMarkerInfo.Append(name, roofExtents.x, roofExtents.y, roofExtents.z, roofExtents.w);
-
-        internal static bool TryPlace(GameObject shell, Bounds bounds, BuildingDefinition definition,
-            out Vector3 position, out Quaternion rotation) =>
-            TryPlace(shell, bounds, definition, out position, out rotation, out _);
 
         internal static bool TryPlace(GameObject shell, Bounds bounds, BuildingDefinition definition,
             out Vector3 position, out Quaternion rotation, out Vector4 roofExtents)

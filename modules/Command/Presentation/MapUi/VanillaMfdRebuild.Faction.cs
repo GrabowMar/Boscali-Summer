@@ -1,7 +1,11 @@
 using System;
 using System.Collections.Generic;
+using BoscaliSummer.Features.Command.Domain;
+using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Framework.Features;
 using NOAvionics;
 using NOAvionics.Ui;
+using NuclearOption.Networking;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -17,8 +21,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         // ----------------------------------------------------------- faction panels
 
         /// <summary>
-        /// The left and right faction screens share a single data adapter.  The source
-        /// controller tells us whose HQ to read; this avoids treating the mutable bezel
+        /// The two faction controllers share a single data adapter. The selected source
+        /// tells us whose HQ to read; this avoids treating the mutable bezel
         /// short-name as a gameplay identifier and deliberately does not call the stock
         /// airbase switch (which currently switches to players internally).
         /// </summary>
@@ -28,10 +32,16 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private enum InfoMode { Airbases, Players }
 
             private readonly InfoPanel_Faction source;
+            private readonly InfoPanel_Faction otherSource;
+            private AvButton[] factionTabs;
+            private int selectedFaction;
             private readonly List<UnitDefinition> definitions = new List<UnitDefinition>();
             private readonly List<string> infoRows = new List<string>();
+            private readonly List<string> infoSubs = new List<string>();
+            private readonly List<Sprite> infoIcons = new List<Sprite>();
 
             private RectTransform[] pages;
+            private RectTransform unavailableCard;
             private MfdPagingGrid definitionGrid;
             private MfdPagingGrid infoGrid;
             private AvButton[] definitionTabs;
@@ -59,35 +69,77 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private float renderedResourceTime = float.NaN;
             private static readonly string[] ResourceLabels = { "FUNDS", "WARHEADS", "MANPOWER", "MORALE" };
             private static readonly string[] ResourceGlyphs = { "funds", "missile", "person", "gauge" };
+            private static readonly string[] PageLabels = { "ECONOMY", "FORCES", "LEDGER", "POLITICS" };
             private FactionHQ observedHq;
             private MfdResourceHistory resourceHistory;
             private AvStyled.Metric[] resourceMetrics;
+            private Image moraleRail;
             private AvButton[] resourceTabs;
             private ResourceHistoryChart resourceChart;
+            private TMP_Text economyHeadline;
+            private TMP_Text economyEffect;
+            private TMP_Text economyContract;
+            private TMP_Text mandateHeadline;
+            private TMP_Text mandateEffect;
+            private Image mandateFlag;
+            private Image mandateRail;
+            private TMP_Text politicalEvent;
+            private TMP_Text politicalEffect;
+            private TMP_Text politicalBrief;
+            private TMP_Text politicalMission;
+            private TMP_Text politicalMissionDetail;
 
-            public FactionPresenter(MFDScreen screen, InfoPanel_Faction source, VanillaMfdPanelId id)
+            public FactionPresenter(MFDScreen screen, InfoPanel_Faction source,
+                                    InfoPanel_Faction otherSource, VanillaMfdPanelId id)
                 : base(screen, id)
             {
                 this.source = source;
+                this.otherSource = otherSource;
             }
 
             protected override int TabCount => 4;
+            protected override bool PageHasTitle => false;
+            protected override float PageTopInset => 42f;
 
             protected override void BuildContent()
             {
-                ConfigureTabs(new[] { "RESOURCES", "FORCES", "LEDGER", "STATUS" }, SelectPage);
+                ConfigureTabs(PageLabels, SelectPage);
+                float factionWidth = (Shell.Body.width - 2f * AvTokens.Space3 - AvTokens.Gap) * 0.5f;
+                factionTabs = new[]
+                {
+                    PanelButton(Shell.Content, new Rect(Shell.Body.x + AvTokens.Space3,
+                        Shell.Body.y, factionWidth, 34f), "OWN FACTION", "tab",
+                        () => SelectFaction(0), AvButtonStyle.Tab),
+                    PanelButton(Shell.Content, new Rect(Shell.Body.x + AvTokens.Space3 +
+                        factionWidth + AvTokens.Gap, Shell.Body.y, factionWidth, 34f),
+                        "OPPOSITION", "tab", () => SelectFaction(1), AvButtonStyle.Tab),
+                };
+                factionTabs[0].SetLatched(true);
                 pages = new[]
                 {
-                    CreatePage("Resources"),
+                    CreatePage("Economy"),
                     CreatePage("Forces"),
                     CreatePage("Ledger"),
-                    CreatePage("Status"),
+                    CreatePage("Politics"),
                 };
 
                 BuildResourcesPage(pages[0]);
                 BuildForcesPage(pages[1]);
                 BuildLedgerPage(pages[2]);
                 BuildStatusPage(pages[3]);
+                var unavailable = new GameObject("FactionUnavailable", typeof(RectTransform));
+                unavailableCard = unavailable.GetComponent<RectTransform>();
+                unavailableCard.SetParent(Shell.Content, false);
+                AvKit.Place(unavailableCard, new Rect(Shell.Body.x + AvTokens.Space3,
+                    Shell.Body.y - PageTopInset - AvTokens.Space3,
+                    Shell.Body.width - 2f * AvTokens.Space3, 104f));
+                AvKit.TacticalCard(unavailableCard,
+                    new Rect(0f, 0f, Shell.Body.width - 2f * AvTokens.Space3, 104f), AvTheme.Warning);
+                AvStyled.Label(unavailableCard, new Rect(14f, -14f, Shell.Body.width - 52f, 22f),
+                    "FACTION HQ UNAVAILABLE", "row-main");
+                AvStyled.Label(unavailableCard, new Rect(14f, -44f, Shell.Body.width - 52f, 40f),
+                    "Waiting for the selected faction and its live mission data.", "row-sub");
+                unavailableCard.gameObject.SetActive(false);
                 // The state line carries the faction's full name; it shrinks before it cuts.
                 Shell.DataBar.State.enableAutoSizing = true;
                 Shell.DataBar.State.fontSizeMin = AvTokens.FontMicro;
@@ -97,7 +149,12 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             protected override void RefreshContent()
             {
-                FactionHQ hq = source == null ? null : source.factionHQ;
+                factionTabs[0].SetText(FactionLabel(source, "OWN FACTION"));
+                factionTabs[1].SetText(FactionLabel(otherSource, "OPPOSITION"));
+                factionTabs[0].SetLatched(selectedFaction == 0);
+                factionTabs[1].SetLatched(selectedFaction == 1);
+                InfoPanel_Faction selected = selectedFaction == 0 ? source : otherSource;
+                FactionHQ hq = selected == null ? null : selected.factionHQ;
                 if (hq != observedHq)
                 {
                     observedHq = hq;
@@ -111,16 +168,19 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 if (hq == null)
                 {
                     foreach (RectTransform page in pages) page.gameObject.SetActive(false);
-                    Shell.DataBar.State.text = "WAITING FOR FACTION HQ";
+                    unavailableCard.gameObject.SetActive(true);
+                    Shell.DataBar.State.text = "FACTION / " + PageLabels[selectedPage] + " / NO HQ";
                     Shell.DataBar.SetChip(0, "LINK", false);
                     Shell.DataBar.SetChip(1, "DATA", false);
                     Shell.DataBar.SetChip(2, "—", false);
                     return;
                 }
+                unavailableCard.gameObject.SetActive(false);
                 pages[selectedPage].gameObject.SetActive(true);
 
                 string name = hq.faction == null ? "FACTION" : hq.faction.factionName;
-                Shell.DataBar.State.text = (name ?? "FACTION").ToUpperInvariant();
+                Shell.DataBar.State.text = (name ?? "FACTION").ToUpperInvariant() +
+                    "  /  " + PageLabels[selectedPage];
                 Shell.DataBar.SetChip(0, "SCORE " + hq.factionScore.ToString("0.0"), true);
                 Shell.DataBar.SetChip(1, UnitConverter.ValueReading(hq.factionFunds), true);
                 Shell.DataBar.SetChip(2, "WHD " + hq.GetWarheadStockpile(), true);
@@ -152,7 +212,11 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     RefreshDefinitionGrid(hq);
                 }
                 else if (selectedPage == 2) RefreshLedger(hq);
-                else if (selectedPage == 3) RefreshInfo(hq);
+                else if (selectedPage == 3)
+                {
+                    RefreshPolitics(hq);
+                    RefreshInfo(hq);
+                }
                 UpdateButtonRows();
             }
 
@@ -161,10 +225,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 if (observedHq == null) return "WAITING FOR FACTION HQ";
                 switch (selectedPage)
                 {
-                    case 0: return "MORALE STORED ON HOST • NO GAMEPLAY EFFECTS YET";
+                    case 0: return "ECONOMY • MORALE SCALES NEW CONTRACT OFFERS";
                     case 1: return "FORCES • CURRENT / LOST UNITS BY CLASS";
                     case 2: return "LEDGER • " + ledgerMode.ToString().ToUpperInvariant() + " BY ASSET CLASS";
-                    default: return infoMode == InfoMode.Airbases ? "STATUS • ACTIVE AIRBASES" : "STATUS • ACTIVE PLAYERS";
+                    default: return "POLITICS • MISSION AND EVENT EFFECTS";
                 }
             }
 
@@ -174,17 +238,27 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 float width = PageWidth;
                 float body = PageHeight;
                 const float cardHeight = 80f;
-                float cardWidth = (width - AvTokens.Space3 - AvTokens.Gap) / 2f;
+                float usable = width - 2f * AvTokens.Space3 - AvTokens.Gap;
+                float wide = usable * 0.59f;
+                float narrow = usable - wide;
 
-                float y = Heading(page, -AvTokens.Space1, width, "FACTION RESOURCES", "LIVE STOCKPILES");
+                float y = Heading(page, -AvTokens.Space1, width, "RESOURCE TELEMETRY", "LIVE STOCKPILES");
+                SectionGlyph(page, "funds", AvTheme.RailInfo);
                 string[] labels = ResourceLabels;
                 string[] units = { "", "WHD", "PAX", "/ 100" };
                 resourceMetrics = new AvStyled.Metric[4];
                 for (int i = 0; i < 4; i++)
                 {
-                    Rect area = new Rect(AvTokens.Space3 + i % 2 * (cardWidth + AvTokens.Gap),
-                        y - i / 2 * (cardHeight + AvTokens.Gap), cardWidth, cardHeight);
-                    AvKit.TacticalCard(page, area, i == 3 ? AvTheme.RailReady : AvTheme.RailInfo);
+                    bool firstRow = i < 2;
+                    float leftWidth = firstRow ? wide : narrow;
+                    Rect area = new Rect(AvTokens.Space3 + (i % 2 == 0 ? 0f : leftWidth + AvTokens.Gap),
+                        y - i / 2 * (cardHeight + AvTokens.Gap), i % 2 == 0 ? leftWidth : usable - leftWidth,
+                        cardHeight);
+                    AvKit.Panel(page, area, AvTheme.SurfaceInert);
+                    AvKit.Rule(page, new Rect(area.x, area.y, area.width, 1f), AvTheme.Hairline);
+                    Image rail = AvKit.Rule(page, new Rect(area.x, area.y, 3f, cardHeight),
+                        i == 3 ? AvTheme.RailReady : AvTheme.RailInfo);
+                    if (i == 3) moraleRail = rail;
                     resourceMetrics[i] = AvStyled.MetricCell(page, area, labels[i], units[i]);
                     CardGlyph(page, area, ResourceGlyphs[i]);
                     // A stock figure shrinks to the micro floor before it is ever cut, so a
@@ -198,12 +272,39 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     // The unit stops short of the card's corner glyph instead of being
                     // printed under it, which is what hid the morale readout.
                     resourceMetrics[i].Unit.rectTransform.sizeDelta = new Vector2(
-                        cardWidth - 50f, resourceMetrics[i].Unit.rectTransform.sizeDelta.y);
+                        area.width - 42f, resourceMetrics[i].Unit.rectTransform.sizeDelta.y);
+                    resourceMetrics[i].Unit.characterSpacing = 0f;
+                    resourceMetrics[i].Unit.overflowMode = TextOverflowModes.Overflow;
+                    resourceMetrics[i].Unit.enableWordWrapping = false;
+                    resourceMetrics[i].Caption.characterSpacing = 0f;
                     // Only morale has a meaningful maximum. Other resources are absolute stocks.
                     if (i != 3) resourceMetrics[i].Fill.enabled = false;
                 }
                 y -= 2f * cardHeight + AvTokens.Gap + AvTokens.Space3;
 
+                float economyY = y;
+                Rect economyCard = new Rect(AvTokens.Space3, economyY,
+                    width - 2f * AvTokens.Space3, 112f);
+                AvKit.Panel(page, economyCard, AvTheme.SurfaceInert);
+                AvKit.Outline(page, economyCard, AvTheme.Hairline.WithAlpha(0.7f));
+                AvKit.Rule(page, new Rect(economyCard.x, economyY, 60f, 2f), AvTheme.RailInfo);
+                CardCorners(page, economyCard, AvTheme.RailInfo);
+                BriefLabel(page, new Rect(economyCard.x + 12f, economyY - 8f, economyCard.width - 24f, 16f),
+                    "WAR ECONOMY / LIVE DIRECTIVE", "metric-key", 11f);
+                economyHeadline = BriefLabel(page,
+                    new Rect(economyCard.x + 12f, economyY - 27f, economyCard.width - 24f, 25f),
+                    "AWAITING DISPATCH", "metric-value", 18f);
+                economyHeadline.enableAutoSizing = true;
+                economyHeadline.fontSizeMin = AvTokens.FontBody;
+                economyEffect = BriefLabel(page,
+                    new Rect(economyCard.x + 12f, economyY - 57f, economyCard.width - 24f, 23f),
+                    "SUPPORT COST / BASELINE", "metric-cap", 12f);
+                AvKit.Rule(page, new Rect(economyCard.x + 12f, economyY - 82f, economyCard.width - 24f, 1f),
+                    AvTheme.Hairline.WithAlpha(0.5f));
+                economyContract = BriefLabel(page,
+                    new Rect(economyCard.x + 12f, economyY - 88f, economyCard.width - 24f, 18f),
+                    "NO CONTRACT PAYOUT REPORTED", "metric-cap", 11f);
+                y -= economyCard.height + AvTokens.Space3;
                 y = Heading(page, y, width, "RESOURCE HISTORY", "LOCAL OBSERVATIONS");
                 resourceTabs = CreateButtonRow(page, y, labels, selected =>
                 {
@@ -231,8 +332,35 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 resourceMetrics[2].Set(MfdResourceHistory.Finite(manpower) ? manpower.ToString("0") : "—",
                     "IN ACTIVE ASSETS", 0f, AvTheme.Accent);
                 resourceMetrics[3].Set(MfdResourceHistory.Finite(morale) ? morale.ToString("0.#") : "—",
-                    MfdResourceHistory.Finite(morale) ? "STORED • INACTIVE" : "HOST DATA UNAVAILABLE",
-                    MfdResourceHistory.Finite(morale) ? morale / 100f : 0f, AvTheme.Accent);
+                    MfdResourceHistory.Finite(morale) ?
+                        "NEW CONTRACTS " + FactionMoraleState.ContractMultiplier(morale).ToString("0.00") + "x" :
+                    "HOST DATA UNAVAILABLE",
+                    MfdResourceHistory.Finite(morale) ? morale / 100f : 0f,
+                    !MfdResourceHistory.Finite(morale) ? AvTheme.Disabled :
+                        morale < 50f ? AvTheme.Warning : AvTheme.Accent);
+                Color moraleTone = !MfdResourceHistory.Finite(morale) ? AvTheme.Disabled :
+                    morale < 50f ? AvTheme.Warning : AvTheme.Accent;
+                resourceMetrics[3].Value.color = moraleTone;
+                if (moraleRail != null) moraleRail.color = moraleTone;
+                ModServices.TryGet(out IActiveEventsView events);
+                ActiveEventView current = events?.Current;
+                bool applies = current != null && events.AffectsFaction(hq.faction?.factionName);
+                string price = current == null ? "NO EFFECT" :
+                    events.PriceSummaryForFaction(hq.faction?.factionName);
+                economyHeadline.text = current == null ? "SUPPLY LINES HOLDING" :
+                    current.Title.ToUpperInvariant();
+                economyEffect.text = current == null ? "SUPPORT COST / BASELINE 1.00x" :
+                    !current.TargetResolved ? "TARGET LOST / EVENT EFFECT CANCELLED" :
+                    applies ? (IsLocalFaction(hq) ? "LOCAL EVENT / " : "BASE EVENT / ") +
+                        price + " • " + EventClock(current) :
+                    "OTHER SIDE / NO EVENT PRICE CHANGE HERE";
+                economyEffect.color = !applies || price == "NO EFFECT" ? AvTheme.TextPrimary :
+                    price.StartsWith("+") ? AvTheme.Warning : AvTheme.Accent;
+                SecondaryObjectiveView contract = FeaturedContract(hq);
+                economyContract.text = contract == null
+                    ? IsLocalFaction(hq) ? ContractsDisabled() ? "FIELD CONTRACTS DISABLED BY HOST" :
+                        "NO OPEN CONTRACT PAYOUT • CHECK MIS" : "CONTRACT PAYOUTS / LOCAL FACTION ONLY"
+                    : "FIELD CONTRACT / " + MfdSecondaryObjectives.PayoutLabel(contract);
                 if (resourceHistory == null) resourceHistory = FactionResourceHistoryStore.For(hq);
                 int latestCount = resourceHistory != null ? resourceHistory.Count : 0;
                 float latest = latestCount > 0 ? resourceHistory.Time(latestCount - 1) : float.NaN;
@@ -263,15 +391,19 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             {
                 private const float AxisWidth = 68f;
                 private readonly Image[] segments = new Image[MfdResourceHistory.Capacity - 1];
-                private readonly TMP_Text summary, upper, lower, window, empty;
-                private readonly Image marker, zero;
+                private readonly TMP_Text summary, upper, lower, window, empty, current;
+                private readonly Image marker, reticleH, reticleV, zero;
                 private readonly float left, top, width, height;
 
                 public ResourceHistoryChart(RectTransform parent, float y, float panelWidth,
                                             float availableHeight)
                 {
+                    AvKit.Rule(parent, new Rect(AvTokens.Space3, y - 3f, 2f, 12f),
+                        AvTheme.Accent);
                     summary = AvStyled.Label(parent,
-                        new Rect(AvTokens.Space3, y, panelWidth - AvTokens.Space3, 18f), "", "row-main");
+                        new Rect(AvTokens.Space3 + 8f, y,
+                            panelWidth - 2f * AvTokens.Space3 - 8f,
+                            18f), "", "row-main");
                     // The series name and its change are data: the line shrinks to the
                     // micro floor and then overflows rather than being clipped.
                     summary.enableWordWrapping = false;
@@ -283,7 +415,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     top = y - 28f;
                     height = Mathf.Max(56f, availableHeight - 74f);
                     left = AvTokens.Space3 + AxisWidth;
-                    width = panelWidth - left - AvTokens.Space2;
+                    width = panelWidth - left - AvTokens.Space3;
 
                     AvKit.Panel(parent, new Rect(left, top, width, height), AvTheme.SurfaceRaised);
                     AvKit.Outline(parent, new Rect(left, top, width, height), AvTheme.Hairline);
@@ -291,7 +423,12 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     {
                         AvKit.Rule(parent, new Rect(left, top - height * i / 4f, width, 1f),
                                    AvTheme.Unity(AvTokens.Hairline.WithAlpha(0.35f)));
+                        AvKit.Rule(parent, new Rect(left + width * i / 4f, top, 1f, height),
+                                   AvTheme.Hairline.WithAlpha(0.2f));
                     }
+                    for (int i = 0; i <= 8; i++)
+                        AvKit.Rule(parent, new Rect(left + width * i / 8f, top - height,
+                            1f, i % 2 == 0 ? 6f : 3f), AvTheme.RailInfo.WithAlpha(0.5f));
 
                     upper = AxisLabel(parent, top, "—");
                     lower = AxisLabel(parent, top - height + 14f, "—");
@@ -301,8 +438,18 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                         segments[i] = AvKit.Rule(parent, new Rect(left, top, 0f, 2f), AvTheme.Accent);
                         segments[i].rectTransform.pivot = new Vector2(0f, .5f);
                     }
+                    reticleH = AvKit.Rule(parent, new Rect(left, top, 14f, 1f), AvTheme.RailInfo);
+                    reticleV = AvKit.Rule(parent, new Rect(left, top, 1f, 14f), AvTheme.RailInfo);
+                    reticleH.rectTransform.pivot = reticleV.rectTransform.pivot =
+                        new Vector2(.5f, .5f);
                     marker = AvKit.Rule(parent, new Rect(left, top, 6f, 6f), AvTheme.TextPrimary);
                     marker.rectTransform.pivot = new Vector2(.5f, .5f);
+                    current = AvStyled.Label(parent,
+                        new Rect(left + width - 76f, top - 17f, 68f, 14f), "", "row-sub",
+                        align: TextAlignmentOptions.MidlineRight);
+                    current.enableAutoSizing = true;
+                    current.fontSizeMin = AvTokens.FontMicro;
+                    current.fontSizeMax = current.fontSize;
 
                     empty = AvStyled.Label(parent,
                         new Rect(left + 10f, top - height * 0.5f - 20f, width - 20f, 40f),
@@ -310,7 +457,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     empty.enableWordWrapping = true;
                     empty.overflowMode = TextOverflowModes.Truncate;
                     window = AvStyled.Label(parent,
-                        new Rect(AvTokens.Space3, top - height - 18f, panelWidth - AvTokens.Space3, 16f),
+                        new Rect(AvTokens.Space3, top - height - 18f,
+                            panelWidth - 2f * AvTokens.Space3, 16f),
                         "", "row-sub");
                 }
 
@@ -342,6 +490,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     {
                         for (int i = 0; i < segments.Length; i++) segments[i].enabled = false;
                         marker.enabled = false;
+                        reticleH.enabled = reticleV.enabled = false;
+                        current.text = "";
                         zero.enabled = false;
                         upper.text = lower.text = "—";
                         empty.gameObject.SetActive(true);
@@ -390,6 +540,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     marker.enabled = true;
                     marker.rectTransform.anchoredPosition =
                         Point(history, series, count - 1, lo, span, duration);
+                    reticleH.enabled = reticleV.enabled = true;
+                    reticleH.rectTransform.anchoredPosition =
+                        reticleV.rectTransform.anchoredPosition = marker.rectTransform.anchoredPosition;
+                    current.text = format(history.Value(series, count - 1));
                     zero.enabled = lo <= 0f && hi >= 0f;
                     if (zero.enabled)
                         zero.rectTransform.anchoredPosition =
@@ -431,14 +585,52 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             /// </summary>
             private static void CardGlyph(RectTransform page, Rect area, string kind)
             {
+                PlaceGlyph(page, new Rect(area.x + area.width - 34f, area.y - 9f, 20f, 20f),
+                    kind, AvTheme.Accent);
+            }
+
+            private static string FactionLabel(InfoPanel_Faction controller, string fallback)
+            {
+                if (controller == null) return fallback;
+                MFDScreen screen = controller.GetComponent<MFDScreen>();
+                if (screen == null || string.IsNullOrWhiteSpace(screen.shortName)) return fallback;
+                return screen.shortName.ToUpperInvariant();
+            }
+
+            private void SelectFaction(int faction)
+            {
+                if (faction == selectedFaction || (faction == 1 && otherSource == null)) return;
+                selectedFaction = faction;
+                Refresh(force: true);
+            }
+
+            private static void PlaceGlyph(RectTransform page, Rect area, string kind, Color tint)
+            {
                 var go = new GameObject("MetricGlyph", typeof(RectTransform), typeof(MfdGlyph));
                 var rt = go.GetComponent<RectTransform>();
                 rt.SetParent(page, worldPositionStays: false);
-                AvKit.Place(rt, new Rect(area.x + area.width - 34f, area.y - 9f, 20f, 20f));
+                AvKit.Place(rt, area);
 
                 MfdGlyph glyph = go.GetComponent<MfdGlyph>();
                 glyph.raycastTarget = false;
-                glyph.SetKind(kind, AvTheme.Accent);
+                glyph.SetKind(kind, tint);
+            }
+
+            private static void SectionGlyph(RectTransform page, string kind, Color tint)
+            {
+                PlaceGlyph(page, new Rect(AvTokens.Space3 + 156f, -AvTokens.Space1 - 1f,
+                    14f, 14f), kind, tint);
+            }
+
+            private static void CardCorners(RectTransform page, Rect area, Color tint)
+            {
+                Color quiet = tint.WithAlpha(0.48f);
+                float right = area.x + area.width;
+                float bottom = area.y - area.height;
+                AvKit.Rule(page, new Rect(right - 13f, area.y - 4f, 9f, 1f), quiet);
+                AvKit.Rule(page, new Rect(right - 4f, area.y - 4f, 1f, 9f), quiet);
+                AvKit.Rule(page, new Rect(area.x + 4f, bottom + 4f, 9f, 1f), quiet);
+                AvKit.Rule(page, new Rect(area.x + 4f, bottom + 13f, 1f, 9f), quiet);
             }
 
             private void BuildForcesPage(RectTransform page)
@@ -446,13 +638,14 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 DrawSpine(page);
                 float y = Heading(page, -AvTokens.Space1, PageWidth,
                                   "FORCE INVENTORY", "LIVE ASSETS");
+                SectionGlyph(page, "faction", AvTheme.RailInfo);
 
                 // The identity card: roundel, name and the faction's own flag art. The flag
                 // keeps the 2:1 aspect it was drawn at — a 456-wide banner would flatten the
                 // emblem into a smear, so it takes a fixed panel on the right instead.
                 const float heroHeight = 96f;
                 const float flagWidth = 112f;
-                Rect hero = new Rect(AvTokens.Space3, y, PageWidth - AvTokens.Space3,
+                Rect hero = new Rect(AvTokens.Space3, y, PageWidth - 2f * AvTokens.Space3,
                                      heroHeight);
                 AvKit.Panel(page, hero, AvTheme.Surface, AvSprites.Card);
                 Rect flagArea = new Rect(hero.x + hero.width - flagWidth - 4f, hero.y - 4f,
@@ -462,6 +655,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 factionFlag.raycastTarget = false;
                 AvKit.Rule(page, new Rect(hero.x, hero.y, 3f, heroHeight), AvTheme.RailReady);
                 AvKit.Outline(page, hero, AvTheme.Hairline);
+                CardCorners(page, hero, AvTheme.RailReady);
+                AvKit.Rule(page, new Rect(hero.x + AvTokens.Space3, hero.y - 12f,
+                    28f, 1f), AvTheme.RailInfo.WithAlpha(0.65f));
 
                 factionLogo = AvKit.Panel(page, new Rect(hero.x + AvTokens.Space3, hero.y - 28f, 40f, 40f),
                                            Color.white);
@@ -487,14 +683,19 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
                 forceTotals = new TMP_Text[4];
                 string[] labels = { "BUILDINGS", "VEHICLES", "SHIPS", "AIRCRAFT" };
-                float totalWidth = (PageWidth - AvTokens.Space3 - AvTokens.Gap * 3f) / 4f;
+                float totalWidth = (PageWidth - 2f * AvTokens.Space3 - AvTokens.Gap * 3f) / 4f;
                 for (int i = 0; i < forceTotals.Length; i++)
                 {
                     float x = AvTokens.Space3 + i * (totalWidth + AvTokens.Gap);
+                    AvKit.Panel(page, new Rect(x, y, totalWidth, 47f), AvTheme.SurfaceInert);
+                    AvKit.Rule(page, new Rect(x, y, totalWidth, 1f), AvTheme.Hairline);
                     AvStyled.Label(page, new Rect(x, y, totalWidth, 11f), labels[i], "metric-key",
                                    align: TextAlignmentOptions.Center);
+                    PlaceGlyph(page, new Rect(x + totalWidth - 16f, y - 2f, 12f, 12f),
+                        new[] { "building", "ground", "ship", "air" }[i],
+                        AvTheme.RailInfo.WithAlpha(0.7f));
                     forceTotals[i] = AvStyled.Label(page, new Rect(x, y - 20f, totalWidth, 20f),
-                                                     "—", "row-value",
+                                                     "—", "metric-value",
                                                      align: TextAlignmentOptions.Center);
                 }
                 for (int i = 0; i < forceBars.Length; i++)
@@ -519,7 +720,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 float readable = PageHeight + y - chrome;
                 int rows = Mathf.Clamp(Mathf.FloorToInt(readable / 46f), 2, 8);
                 float cell = Mathf.Clamp(readable / rows, 46f, 88f);
-                definitionGrid = new MfdPagingGrid(page, y, PageWidth, 2, rows,
+                definitionGrid = new MfdPagingGrid(page, y, PageWidth - AvTokens.Space3, 2, rows,
                                                    readOnly: true, rowHeight: cell);
             }
 
@@ -528,6 +729,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 DrawSpine(page);
                 float y = Heading(page, -AvTokens.Space1, PageWidth,
                                   "THEATER LEDGER", "MISSION ACCOUNTING");
+                SectionGlyph(page, "chart", AvTheme.RailInfo);
                 ledgerTabs = CreateButtonRow(page, y,
                     new[] { "RESERVES", "LOSSES", "VALUE", "MANPOWER" }, SelectLedger);
                 y -= AvTokens.RowHeight + AvTokens.Space3;
@@ -535,19 +737,30 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 y = Heading(page, y, PageWidth, "ASSET BREAKDOWN", "LIVE TOTALS");
                 ledgerMetrics = new AvStyled.Metric[4];
                 string[] labels = { "BUILDINGS", "VEHICLES", "SHIPS", "AIRCRAFT" };
-                float gap = AvTokens.Gap;
-                float cellWidth = (PageWidth - AvTokens.Space3 - gap) * 0.5f;
+                float deckWidth = PageWidth - 2f * AvTokens.Space3;
+                float cellWidth = deckWidth * 0.5f;
+                Rect ledgerDeck = new Rect(AvTokens.Space3, y, deckWidth, 174f);
+                AvKit.Panel(page, ledgerDeck, AvTheme.SurfaceInert);
+                AvKit.Outline(page, ledgerDeck, AvTheme.Hairline.WithAlpha(0.65f));
+                CardCorners(page, ledgerDeck, AvTheme.RailInfo);
+                AvKit.Rule(page, new Rect(ledgerDeck.x, y, 52f, 2f), AvTheme.RailInfo);
+                AvKit.Rule(page, new Rect(ledgerDeck.x + cellWidth, y - 7f, 1f, 160f),
+                    AvTheme.Hairline.WithAlpha(0.45f));
+                AvKit.Rule(page, new Rect(ledgerDeck.x + 7f, y - 87f, deckWidth - 14f, 1f),
+                    AvTheme.Hairline.WithAlpha(0.45f));
                 for (int i = 0; i < ledgerMetrics.Length; i++)
                 {
                     int row = i / 2;
                     int column = i % 2;
-                    AvKit.TacticalCard(page, new Rect(AvTokens.Space3 + column * (cellWidth + gap),
-                        y-row*92f, cellWidth, 82f), AvTheme.RailInfo);
                     ledgerMetrics[i] = AvStyled.MetricCell(page,
-                        new Rect(AvTokens.Space3 + column * (cellWidth + gap),
-                                 y - row * 92f, cellWidth, 82f), labels[i], "UNIT");
+                        new Rect(AvTokens.Space3 + column * cellWidth,
+                                 y - row * 87f, cellWidth, 87f), labels[i], "UNIT");
+                    PlaceGlyph(page, new Rect(AvTokens.Space3 + (column + 1) * cellWidth - 28f,
+                        y - row * 87f - 9f, 16f, 16f),
+                        new[] { "building", "ground", "ship", "air" }[i],
+                        AvTheme.RailInfo.WithAlpha(0.8f));
                 }
-                ledgerChart = new MfdLedgerChart(page, y-184f, PageWidth,
+                ledgerChart = new MfdLedgerChart(page, y - 184f, PageWidth,
                     PageHeight + y - 184f - AvTokens.Space2);
             }
 
@@ -555,12 +768,179 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             {
                 DrawSpine(page);
                 float y = Heading(page, -AvTokens.Space1, PageWidth,
-                                  "FACTION STATUS", "LIVE THEATER LINK");
+                                  "FACTION CABINET", "MANDATE / DIRECTIVES");
+                SectionGlyph(page, "faction", AvTheme.RailInfo);
+                float x = AvTokens.Space3;
+                float width = PageWidth - 2f * x;
+                Rect mandate = new Rect(x, y, width, 102f);
+                mandateRail = AvKit.TacticalCard(page, mandate, AvTheme.RailReady).Rail;
+                CardCorners(page, mandate, AvTheme.RailInfo);
+                PlaceGlyph(page, new Rect(x + width - 30f, y - 9f, 16f, 16f),
+                    "faction", AvTheme.RailInfo);
+                BriefLabel(page, new Rect(x + 12f, y - 9f, width - 48f, 16f),
+                    "PUBLIC MANDATE / HOST MORALE", "metric-key", 11f);
+                mandateHeadline = BriefLabel(page, new Rect(x + 12f, y - 30f, width - 24f, 28f),
+                    "AWAITING HOST", "row-value", 18f);
+                mandateHeadline.rectTransform.sizeDelta = new Vector2(width - 78f, 28f);
+                mandateFlag = AvKit.Panel(page, new Rect(x + width - 58f, y - 17f, 40f, 40f),
+                    Color.white);
+                mandateFlag.preserveAspect = true;
+                mandateFlag.raycastTarget = false;
+                mandateFlag.enabled = false;
+                mandateEffect = BriefLabel(page, new Rect(x + 12f, y - 63f, width - 24f, 34f),
+                    "CONTRACT EFFECT UNAVAILABLE", "metric-cap", 11f);
+                y -= 102f + AvTokens.Space3;
+
+                Rect dispatch = new Rect(x, y, width, 132f);
+                AvKit.TacticalCard(page, dispatch, AvTheme.RailInfo);
+                CardCorners(page, dispatch, AvTheme.RailInfo);
+                PlaceGlyph(page, new Rect(x + width - 30f, y - 9f, 16f, 16f),
+                    "radio", AvTheme.RailInfo);
+                BriefLabel(page, new Rect(x + 12f, y - 9f, width - 48f, 16f),
+                    "WORLD DISPATCH / ACTIVE PRESSURE", "metric-key", 11f);
+                politicalEvent = BriefLabel(page, new Rect(x + 12f, y - 30f, width - 24f, 27f),
+                    "NO ACTIVE EVENT", "row-value", 16f);
+                politicalEffect = BriefLabel(page, new Rect(x + 12f, y - 59f, width - 24f, 23f),
+                    "THEATER CALM", "metric-cap", 11f);
+                politicalBrief = BriefLabel(page, new Rect(x + 12f, y - 86f, width - 24f, 42f),
+                    "AWAITING WORLD NEWS", "metric-cap", 10.5f);
+                y -= 132f + AvTokens.Space3;
+
+                Rect directive = new Rect(x, y, width, 100f);
+                AvKit.TacticalCard(page, directive, AvTheme.RailReady);
+                CardCorners(page, directive, AvTheme.RailInfo);
+                PlaceGlyph(page, new Rect(x + width - 30f, y - 9f, 16f, 16f),
+                    "flag", AvTheme.RailInfo);
+                BriefLabel(page, new Rect(x + 12f, y - 9f, width - 48f, 16f),
+                    "FIELD DIRECTIVE / CONTRACT BOARD", "metric-key", 11f);
+                politicalMission = BriefLabel(page, new Rect(x + 12f, y - 30f, width - 24f, 25f),
+                    "NO DIRECTIVE", "row-value", 15f);
+                politicalMissionDetail = BriefLabel(page, new Rect(x + 12f, y - 60f, width - 24f, 35f),
+                    "MISSIONS CHANGE MORALE AND FILL THE TREASURY", "metric-cap", 11f);
+                y -= 100f + AvTokens.Space3;
+
+                y = Heading(page, y, PageWidth, "THEATER DIRECTORY", "WHO HOLDS THE LINE");
                 infoTabs = CreateButtonRow(page, y, new[] { "AIRBASES", "PLAYERS" }, SelectInfo);
                 y -= AvTokens.RowHeight + AvTokens.Space3;
                 y = Heading(page, y, PageWidth, "ACTIVE ENTRIES", "DIRECTORY");
-                int rows = Mathf.Clamp(Mathf.FloorToInt((PageHeight + y - 44f) / 30f), 4, 16);
-                infoGrid = new MfdPagingGrid(page, y, PageWidth, 1, rows, readOnly: true);
+                const float statusRowHeight = 44f;
+                int rows = Mathf.Clamp(Mathf.FloorToInt((PageHeight + y - 44f) / statusRowHeight), 3, 12);
+                infoGrid = new MfdPagingGrid(page, y, PageWidth - AvTokens.Space3,
+                    1, rows, readOnly: true, rowHeight: statusRowHeight);
+            }
+
+            private void RefreshPolitics(FactionHQ hq)
+            {
+                float morale = FactionResourceHistoryStore.Morale(hq);
+                Sprite seal = hq.faction == null ? null : hq.faction.factionColorLogo;
+                mandateFlag.sprite = seal;
+                mandateFlag.enabled = seal != null;
+                bool known = MfdResourceHistory.Finite(morale);
+                SecondaryObjectiveView contract = FeaturedContract(hq);
+                mandateHeadline.text = known ? MandateName(morale) : "REPORT UNAVAILABLE";
+                mandateHeadline.color = !known || morale >= 50f ? AvTheme.TextPrimary : AvTheme.Warning;
+                if (mandateRail != null) mandateRail.color = !known ? AvTheme.Disabled :
+                    morale < 50f ? AvTheme.Warning : AvTheme.RailReady;
+                int percent = known ? Mathf.RoundToInt((FactionMoraleState.ContractMultiplier(morale) - 1f) * 100f) : 0;
+                mandateEffect.text = known
+                    ? "MORALE " + morale.ToString("0.#") + "/100  •  NEW CONTRACTS " +
+                        (percent >= 0 ? "+" : "") + percent + "% MONEY / XP\n" +
+                        (contract == null ? "MISSION SUCCESS +3  •  ACTIVE ABORT -1" :
+                            (contract.IsActive ? "ACTIVE DIRECTIVE / " : "OFFERED DIRECTIVE / ") +
+                            MfdSecondaryObjectives.PlainObjective(contract.Title).ToUpperInvariant())
+                    : "AWAITING HOST MORALE • CONTRACT EFFECT UNAVAILABLE";
+                ModServices.TryGet(out IActiveEventsView events);
+                ActiveEventView current = events?.Current;
+                bool applies = current != null && events.AffectsFaction(hq.faction?.factionName);
+                string price = current == null ? "NO EFFECT" :
+                    events.PriceSummaryForFaction(hq.faction?.factionName);
+                politicalEvent.text = current == null ? "NO ACTIVE EVENT" : current.Title.ToUpperInvariant();
+                politicalEffect.text = current == null ? "THEATER CALM • SUPPORT PRICES AT BASELINE" :
+                    !current.TargetResolved ? "TARGET LOST • EVENT EFFECT CANCELLED" :
+                    (applies ? IsLocalFaction(hq) ? "LOCAL EVENT" : "BASE EVENT" : "OTHER SIDE") + " • " + price +
+                    " • " + EventClock(current);
+                politicalEffect.color = !applies || price == "NO EFFECT" ? AvTheme.TextPrimary :
+                    price.StartsWith("+") ? AvTheme.Warning : AvTheme.Accent;
+                politicalBrief.text = current == null ? "The cabinet awaits the next world dispatch." :
+                    !current.TargetResolved ? "TARGET LOST • FIELD ORDERS CANCELLED" :
+                    current.IsSuper ? current.Target + " • " + NextEventBeat(current) :
+                    current.Tier + " / " + current.Target + " • " + current.FlavorText;
+                politicalMission.text = contract == null ?
+                    IsLocalFaction(hq) ? ContractsDisabled() ? "FIELD DIRECTIVES DISABLED" :
+                        "NO OPEN FIELD DIRECTIVE" : "FIELD ORDERS CLASSIFIED" :
+                    (contract.IsActive ? "ACTIVE / " : "OFFERED / ") +
+                    MfdSecondaryObjectives.PlainObjective(contract.Title).ToUpperInvariant();
+                politicalMissionDetail.text = contract == null ?
+                    IsLocalFaction(hq) ? ContractsDisabled() ? "HOST HAS OPTIONAL CONTRACTS OFF" :
+                        "CHECK MIS FOR NEW CONTRACTS • SUCCESS +3 MORALE" :
+                    "ONLY YOUR OWN FACTION'S CONTRACTS ARE REPORTED HERE" :
+                    MfdSecondaryObjectives.PayoutLabel(contract) + "  •  SUCCESS +3 MORALE";
+            }
+
+            private static TMP_Text BriefLabel(RectTransform parent, Rect area, string copy,
+                string style, float maxSize)
+            {
+                TMP_Text label = AvStyled.Label(parent, area, copy, style,
+                    align: TextAlignmentOptions.TopLeft);
+                label.alignment = TextAlignmentOptions.TopLeft;
+                label.enableWordWrapping = true;
+                label.enableAutoSizing = true;
+                label.fontSizeMin = AvTokens.FontMicro;
+                label.fontSizeMax = maxSize;
+                return label;
+            }
+
+            private static string MandateName(float morale) => morale >= 80f ? "MOBILIZED HOME FRONT" :
+                morale >= 50f ? "STEADFAST MANDATE" : morale >= 25f ? "WAR WEARY" : "CABINET IN CRISIS";
+
+            private static string EventClock(ActiveEventView active)
+            {
+                MissionManager mission = NetworkSceneSingleton<MissionManager>.i;
+                if (active == null || mission == null) return "LIVE";
+                float left = active.EndsAtMissionTime - mission.MissionTime;
+                if (!MfdResourceHistory.Finite(left)) return "LIVE";
+                int seconds = Mathf.Max(0, Mathf.CeilToInt(left));
+                return (seconds / 60).ToString("00") + ":" + (seconds % 60).ToString("00") + " LEFT";
+            }
+
+            private static string NextEventBeat(ActiveEventView active)
+            {
+                MissionManager mission = NetworkSceneSingleton<MissionManager>.i;
+                if (mission == null || active?.Steps == null) return "OPEN EVN FOR FIELD ORDERS";
+                float elapsed = mission.MissionTime - active.StartedAtMissionTime;
+                for (int i = 0; i < active.Steps.Count; i++)
+                {
+                    ActiveEventStep step = active.Steps[i];
+                    if (step.AtSeconds <= elapsed) continue;
+                    int remaining = Mathf.CeilToInt(step.AtSeconds - elapsed);
+                    return "NEXT ORDER " + (remaining / 60).ToString("00") + ":" +
+                        (remaining % 60).ToString("00") + " / " + step.Label;
+                }
+                return "FIELD ORDERS ISSUED • OPEN EVN FOR DISPATCH";
+            }
+
+            private static bool ContractsDisabled() =>
+                ModServices.TryGet(out ISecondaryObjectivesView board) && board?.Status != null &&
+                board.Status.IndexOf("disabled", StringComparison.OrdinalIgnoreCase) >= 0;
+
+            private static bool IsLocalFaction(FactionHQ hq) =>
+                hq != null && GameManager.GetLocalPlayer<Player>(out Player local) &&
+                local != null && local.HQ == hq;
+
+            private static SecondaryObjectiveView FeaturedContract(FactionHQ hq)
+            {
+                if (!IsLocalFaction(hq) || !ModServices.TryGet(out ISecondaryObjectivesView board) ||
+                    board?.Objectives == null) return null;
+                SecondaryObjectiveView offered = null;
+                IReadOnlyList<SecondaryObjectiveView> objectives = board.Objectives;
+                for (int i = 0; i < Mathf.Min(16, objectives.Count); i++)
+                {
+                    SecondaryObjectiveView entry = objectives[i];
+                    if (entry == null) continue;
+                    if (entry.IsActive) return entry;
+                    if (offered == null && entry.IsOffered) offered = entry;
+                }
+                return offered;
             }
 
             private AvButton[] CreateButtonRow(RectTransform parent, float y, string[] labels,
@@ -568,7 +948,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             {
                 var row = new AvButton[labels.Length];
                 float gap = AvTokens.Gap;
-                float width = (PageWidth - AvTokens.Space3 - gap * (labels.Length - 1)) /
+                float width = (PageWidth - 2f * AvTokens.Space3 - gap * (labels.Length - 1)) /
                               labels.Length;
                 for (int i = 0; i < labels.Length; i++)
                 {
@@ -669,12 +1049,32 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private void RefreshDefinitionGrid(FactionHQ hq)
             {
                 if (!definitionsLoaded) PopulateDefinitions();
+
+                // Sort active units to the front so players don't have to page past dozens of 0/0 items
+                if (hq != null && hq.missionStatsTracker != null)
+                {
+                    definitions.Sort((a, b) =>
+                    {
+                        int aCurr = hq.missionStatsTracker.GetCurrentUnits(a);
+                        int bCurr = hq.missionStatsTracker.GetCurrentUnits(b);
+                        if (aCurr != bCurr) return bCurr.CompareTo(aCurr);
+
+                        int aLost = hq.missionStatsTracker.GetLostUnits(a);
+                        int bLost = hq.missionStatsTracker.GetLostUnits(b);
+                        if (aLost != bLost) return bLost.CompareTo(aLost);
+
+                        string aName = a != null ? a.unitName ?? a.code : "";
+                        string bName = b != null ? b.unitName ?? b.code : "";
+                        return string.Compare(aName, bName, StringComparison.OrdinalIgnoreCase);
+                    });
+                }
+
                 definitionGrid.SetData(definitions.Count,
                     i => DefinitionLabel(definitions[i]),
                     i => false,
                     null,
                     icons: i => definitions[i] == null ? null : definitions[i].mapIcon,
-                    details: i => DefinitionDetail(definitions[i], hq),
+                    details: i => DefinitionTooltip(definitions[i], hq),
                     subs: i => DefinitionDetail(definitions[i], hq));
             }
 
@@ -685,8 +1085,15 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private static string DefinitionLabel(UnitDefinition definition)
             {
                 if (definition == null) return "UNKNOWN";
-                string code = string.IsNullOrEmpty(definition.code) ? definition.unitName : definition.code;
+                string code = !string.IsNullOrEmpty(definition.code) ? definition.code : definition.unitName;
                 return string.IsNullOrEmpty(code) ? "UNIT" : code.ToUpperInvariant();
+            }
+
+            private static string DefinitionTooltip(UnitDefinition definition, FactionHQ hq)
+            {
+                if (definition == null) return "UNIT";
+                string full = !string.IsNullOrEmpty(definition.unitName) ? definition.unitName : definition.code;
+                return (full ?? "UNIT").ToUpperInvariant() + " • " + DefinitionDetail(definition, hq);
             }
 
             private static string DefinitionDetail(UnitDefinition definition, FactionHQ hq)
@@ -816,24 +1223,62 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private void RefreshInfo(FactionHQ hq)
             {
                 infoRows.Clear();
+                infoSubs.Clear();
+                infoIcons.Clear();
+
                 if (infoMode == InfoMode.Airbases)
                 {
                     foreach (Airbase airbase in hq.GetAirbases())
                     {
-                        if (airbase != null) infoRows.Add("AIRBASE  " + airbase.name.ToUpperInvariant());
+                        if (airbase == null) continue;
+                        string title = MfdAirbaseFormatter.Format(airbase);
+                        string sub = MfdAirbaseFormatter.OperationalTelemetry(airbase);
+                        Sprite icon = null;
+
+                        // Check if airbase has attached unit with an icon (e.g. Carrier)
+                        if (airbase.TryGetAttachedUnit(out Unit unit) && unit != null && unit.definition != null)
+                        {
+                            icon = unit.definition.mapIcon;
+                        }
+
+                        infoRows.Add(title.ToUpperInvariant());
+                        infoSubs.Add(sub);
+                        infoIcons.Add(icon);
                     }
                 }
                 else
                 {
-                    foreach (var player in hq.GetPlayers(sortByScore: false))
+                    foreach (var player in hq.GetPlayers(sortByScore: true))
                     {
-                        if (player != null) infoRows.Add("PLAYER   " + player);
+                        if (player == null) continue;
+                        string callsign = player.ToString();
+                        string craft = player.Aircraft != null && player.Aircraft.definition != null
+                            ? player.Aircraft.definition.unitName
+                            : "NO ACTIVE CRAFT";
+                        string score = "SCORE " + player.PlayerScore.ToString("0.0");
+                        Sprite icon = player.Aircraft != null && player.Aircraft.definition != null
+                            ? player.Aircraft.definition.mapIcon
+                            : null;
+
+                        infoRows.Add(callsign.ToUpperInvariant());
+                        infoSubs.Add(craft.ToUpperInvariant() + "  ·  " + score);
+                        infoIcons.Add(icon);
                     }
                 }
 
                 if (infoRows.Count == 0)
+                {
                     infoRows.Add(infoMode == InfoMode.Airbases ? "NO ACTIVE AIRBASES" : "NO ACTIVE PLAYERS");
-                infoGrid.SetData(infoRows.Count, i => infoRows[i], i => false, _ => { });
+                    infoSubs.Add("THEATER DIRECTORY IS CURRENTLY EMPTY");
+                    infoIcons.Add(null);
+                }
+
+                infoGrid.SetData(infoRows.Count,
+                    i => infoRows[i],
+                    i => false,
+                    _ => { },
+                    icons: i => infoIcons[i],
+                    subs: i => infoSubs[i]);
             }
 
             private void UpdateButtonRows()

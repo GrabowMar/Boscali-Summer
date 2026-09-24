@@ -46,6 +46,8 @@ namespace BoscaliSummer.Features.Events.Domain
 
         /// <summary>Fund and queue the target's cheapest ready convoy group.</summary>
         Convoy = 3,
+        /// <summary>Raise or lower target faction morale on the host.</summary>
+        Morale = 4,
     }
 
     /// <summary>One timed beat of a superevent script.</summary>
@@ -82,8 +84,11 @@ namespace BoscaliSummer.Features.Events.Domain
         public EventTarget Target { get; }
         public string IconKey { get; }
 
-        /// <summary>Support allocation cost factor while active; 1f is flavor only.</summary>
+        /// <summary>Support allocation cost factor while active; 1f leaves price unchanged.</summary>
         public float SupportCostMultiplier { get; }
+
+        /// <summary>Support request cooldown factor while active; 1f leaves tempo unchanged.</summary>
+        public float SupportCooldownMultiplier { get; }
 
         public int DurationMinSeconds { get; }
         public int DurationMaxSeconds { get; }
@@ -93,7 +98,8 @@ namespace BoscaliSummer.Features.Events.Domain
 
         public EventDefinition(string id, string title, string flavorText, EventCategory category,
             EventTier tier, EventTarget target, string iconKey, float supportCostMultiplier,
-            int durationMinSeconds, int durationMaxSeconds, EventStep[] script = null)
+            int durationMinSeconds, int durationMaxSeconds, EventStep[] script = null,
+            float supportCooldownMultiplier = 1f)
         {
             Id = id;
             Title = title;
@@ -103,6 +109,7 @@ namespace BoscaliSummer.Features.Events.Domain
             Target = target;
             IconKey = iconKey;
             SupportCostMultiplier = supportCostMultiplier;
+            SupportCooldownMultiplier = supportCooldownMultiplier;
             DurationMinSeconds = durationMinSeconds;
             DurationMaxSeconds = durationMaxSeconds;
             Script = script ?? NoScript;

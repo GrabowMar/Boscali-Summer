@@ -93,6 +93,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 case "MAP": return "map";
                 case "RAD": case "RADIO": return "radio";
                 case "COM": case "COMMS": case "CHAT": return "comms";
+                case "ENV": case "WEATHER": return "weather";
                 case "SET": case "SETTINGS": case "CONFIG": return "settings";
                 case "OPS": case "SUPPORT": case "AIRDROP": return "support";
                 case "STR": return "theater";
@@ -106,12 +107,17 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             switch (kind)
             {
                 case "air":
-                    Poly(mesh, .5f,.97f, .58f,.62f, .96f,.44f, .96f,.31f, .58f,.36f,
-                        .58f,.17f, .74f,.05f, .5f,.12f, .26f,.05f, .42f,.17f,
-                        .42f,.36f, .04f,.31f, .04f,.44f, .42f,.62f); break;
+                    Path(mesh,.5f,.9f,.58f,.55f,.84f,.42f,.84f,.33f,.57f,.39f,
+                        .57f,.14f,.5f,.2f,.43f,.14f,.43f,.39f,.16f,.33f,.16f,.42f,
+                        .42f,.55f,.5f,.9f); break;
                 case "ship":
                     Path(mesh, .06f,.4f, .25f,.15f, .75f,.15f, .94f,.4f, .06f,.4f);
                     Path(mesh, .3f,.4f, .3f,.65f, .65f,.65f, .65f,.4f); Line(mesh,.5f,.65f,.5f,.9f); break;
+                case "weather":
+                    Arc(mesh,.34f,.62f,.16f,0f,290f,12);
+                    Line(mesh,.34f,.88f,.34f,.96f); Line(mesh,.08f,.62f,.16f,.62f);
+                    Path(mesh,.18f,.22f,.18f,.34f,.34f,.43f,.5f,.39f,.59f,.52f,
+                        .74f,.52f,.84f,.39f,.84f,.22f,.18f,.22f); break;
                 case "building":
                     Path(mesh,.15f,.1f,.15f,.8f,.5f,.95f,.85f,.8f,.85f,.1f,.15f,.1f);
                     Line(mesh,.35f,.35f,.35f,.65f); Line(mesh,.65f,.35f,.65f,.65f); break;
@@ -127,11 +133,12 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 case "shield":
                     Path(mesh,.15f,.9f,.85f,.9f,.8f,.4f,.5f,.08f,.2f,.4f,.15f,.9f); break;
                 case "faction":
-                    Path(mesh, .5f,.95f, .86f,.80f, .86f,.44f, .5f,.06f, .14f,.44f, .14f,.80f, .5f,.95f);
-                    Path(mesh, .30f,.60f, .5f,.73f, .70f,.60f); break;
+                    Path(mesh,.5f,.9f,.82f,.72f,.82f,.31f,.5f,.1f,.18f,.31f,.18f,.72f,.5f,.9f);
+                    Path(mesh,.31f,.54f,.5f,.68f,.69f,.54f); Line(mesh,.5f,.68f,.5f,.34f); break;
                 case "target":
-                    Path(mesh,.5f,.9f,.9f,.5f,.5f,.1f,.1f,.5f,.5f,.9f);
-                    Line(mesh,.5f,.3f,.5f,.7f); Line(mesh,.3f,.5f,.7f,.5f); break;
+                    Arc(mesh,.5f,.5f,.4f,20f,70f,4); Arc(mesh,.5f,.5f,.4f,110f,160f,4);
+                    Arc(mesh,.5f,.5f,.4f,200f,250f,4); Arc(mesh,.5f,.5f,.4f,290f,340f,4);
+                    Path(mesh,.5f,.68f,.68f,.5f,.5f,.32f,.32f,.5f,.5f,.68f); break;
                 case "reset":
                     Path(mesh,.85f,.35f,.85f,.75f,.65f,.9f,.25f,.9f,.1f,.65f,.1f,.3f,.35f,.1f,.7f,.1f);
                     Path(mesh,.02f,.88f,.1f,.65f,.35f,.72f); break;
@@ -143,41 +150,50 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     Line(mesh,.5f,.16f,.5f,.84f);
                     Line(mesh,.34f,.68f,.66f,.68f); Line(mesh,.34f,.32f,.66f,.32f); break;
                 case "person":
-                    Ring(mesh,.5f,.72f,.17f,12);
-                    Path(mesh,.12f,.06f, .20f,.42f, .5f,.54f, .80f,.42f, .88f,.06f); break;
+                    Ring(mesh,.5f,.69f,.14f,12);
+                    Path(mesh,.16f,.15f,.2f,.36f,.37f,.49f,.63f,.49f,.8f,.36f,.84f,.15f);
+                    Line(mesh,.26f,.15f,.74f,.15f); break;
                 case "gauge":
                     Arc(mesh,.5f,.3f,.42f, 20f, 160f, 8);
                     Line(mesh,.5f,.3f,.55f,.66f);
                     Line(mesh,.3f,.3f,.7f,.3f); break;
                 case "nav": Path(mesh,.5f,.95f,.9f,.15f,.5f,.35f,.1f,.15f,.5f,.95f); break;
                 case "hud":
-                    Path(mesh,.3f,.9f,.1f,.9f,.1f,.1f,.3f,.1f); Path(mesh,.7f,.9f,.9f,.9f,.9f,.1f,.7f,.1f);
-                    Line(mesh,.25f,.5f,.75f,.5f); Line(mesh,.5f,.35f,.5f,.65f); break;
+                    Path(mesh,.32f,.87f,.13f,.87f,.13f,.68f);
+                    Path(mesh,.68f,.87f,.87f,.87f,.87f,.68f);
+                    Path(mesh,.13f,.32f,.13f,.13f,.32f,.13f);
+                    Path(mesh,.68f,.13f,.87f,.13f,.87f,.32f);
+                    Path(mesh,.43f,.57f,.57f,.57f,.57f,.43f,.43f,.43f,.43f,.57f); break;
                 case "map":
-                    Path(mesh,.05f,.25f,.35f,.4f,.65f,.25f,.95f,.4f,.95f,.8f,.65f,.65f,.35f,.8f,.05f,.65f,.05f,.25f);
-                    Line(mesh,.35f,.8f,.35f,.4f); Line(mesh,.65f,.65f,.65f,.25f); break;
+                    Path(mesh,.1f,.24f,.33f,.34f,.67f,.24f,.9f,.34f,.9f,.76f,
+                        .67f,.66f,.33f,.76f,.1f,.66f,.1f,.24f);
+                    Line(mesh,.33f,.76f,.33f,.34f); Line(mesh,.67f,.66f,.67f,.24f);
+                    Line(mesh,.43f,.53f,.57f,.46f); break;
                 case "radio":
-                    Line(mesh,.5f,.08f,.5f,.6f); Line(mesh,.32f,.08f,.68f,.08f);
-                    Path(mesh,.36f,.62f,.44f,.88f,.56f,.88f,.64f,.62f);
-                    Path(mesh,.2f,.58f,.32f,.98f,.68f,.98f,.8f,.58f); break;
+                    Ring(mesh,.5f,.62f,.07f,8);
+                    Line(mesh,.5f,.13f,.5f,.52f); Line(mesh,.3f,.13f,.7f,.13f);
+                    Arc(mesh,.5f,.62f,.24f,25f,155f,8);
+                    Arc(mesh,.5f,.62f,.41f,25f,155f,10); break;
                 // A speech bubble with a map pin in it: talk about places.
                 case "comms":
                     Path(mesh,.06f,.92f,.94f,.92f,.94f,.34f,.42f,.34f,.2f,.08f,.24f,.34f,.06f,.34f,.06f,.92f);
                     Path(mesh,.5f,.46f,.36f,.64f,.4f,.8f,.5f,.84f,.6f,.8f,.64f,.64f,.5f,.46f); break;
                 case "settings":
-                    Line(mesh,.1f,.32f,.9f,.32f); Line(mesh,.1f,.7f,.9f,.7f);
-                    Circle(mesh,.34f,.32f,.11f,10); Circle(mesh,.66f,.7f,.11f,10); break;
+                    Line(mesh,.12f,.24f,.88f,.24f); Line(mesh,.12f,.5f,.88f,.5f);
+                    Line(mesh,.12f,.76f,.88f,.76f);
+                    Line(mesh,.32f,.13f,.32f,.35f); Line(mesh,.68f,.39f,.68f,.61f);
+                    Line(mesh,.45f,.65f,.45f,.87f); break;
                 case "pulse":
-                    Ring(mesh,.5f,.16f,.10f,8);
-                    Arc(mesh,.5f,.16f,.28f,38f,142f,8);
-                    Arc(mesh,.5f,.16f,.46f,38f,142f,10); break;
+                    Path(mesh,.08f,.5f,.27f,.5f,.36f,.69f,.46f,.28f,.55f,.74f,
+                        .64f,.42f,.73f,.5f,.92f,.5f); break;
                 case "support":
-                    Path(mesh,.14f,.12f, .86f,.12f, .86f,.84f, .14f,.84f, .14f,.12f);
-                    Line(mesh,.5f,.12f,.5f,.84f); Line(mesh,.14f,.48f,.86f,.48f); break;
+                    Path(mesh,.14f,.73f,.43f,.73f,.55f,.83f,.86f,.83f);
+                    Path(mesh,.14f,.5f,.43f,.5f,.55f,.6f,.86f,.6f);
+                    Path(mesh,.14f,.27f,.43f,.27f,.55f,.37f,.86f,.37f); break;
                 case "theater":
-                    Ring(mesh,.5f,.5f,.3f,16);
-                    Line(mesh,.5f,.06f,.5f,.34f); Line(mesh,.5f,.66f,.5f,.94f);
-                    Line(mesh,.06f,.5f,.34f,.5f); Line(mesh,.66f,.5f,.94f,.5f); break;
+                    Arc(mesh,.5f,.5f,.4f,25f,155f,8);
+                    Arc(mesh,.5f,.5f,.4f,205f,335f,8);
+                    Path(mesh,.12f,.46f,.32f,.46f,.43f,.62f,.58f,.34f,.7f,.52f,.88f,.52f); break;
                 case "front":
                     Path(mesh,.04f,.42f,.28f,.6f,.5f,.38f,.72f,.56f,.96f,.34f);
                     Line(mesh,.16f,.5f,.16f,.3f); Line(mesh,.38f,.48f,.38f,.28f);
@@ -206,7 +222,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     Circle(mesh,.78f,.26f,.08f,8); break;
                 case "dot":
                     Circle(mesh,.5f,.5f,.32f,12); break;
-                case "flag": Path(mesh,.15f,.05f,.15f,.95f,.85f,.8f,.15f,.55f); break;
+                case "flag":
+                    Line(mesh,.18f,.1f,.18f,.9f);
+                    Path(mesh,.18f,.86f,.82f,.72f,.18f,.58f); break;
                 case "filter": Path(mesh,.05f,.9f,.95f,.9f,.6f,.5f,.6f,.15f,.4f,.05f,.4f,.5f,.05f,.9f); break;
                 default:
                     Line(mesh,.1f,.8f,.9f,.8f); Line(mesh,.1f,.5f,.75f,.5f); Line(mesh,.1f,.2f,.9f,.2f); break;

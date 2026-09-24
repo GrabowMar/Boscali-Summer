@@ -17,6 +17,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
         public static bool OverControls(Vector2 screenPoint)
         {
+            if (StrPlanningWindow.BlocksMap || MissionContractWindow.BlocksMap) return true;
             if (MfdPanelDock.ContainsScreenPoint(screenPoint)) return true;
             return MfdRail.TryGetRail(out RectTransform rail) && Contains(rail, screenPoint);
         }

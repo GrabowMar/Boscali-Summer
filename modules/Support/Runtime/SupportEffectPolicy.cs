@@ -10,6 +10,7 @@ namespace BoscaliSummer.Features.Support.Runtime
         public const float EmpDelay = 3f;
         public const float EmpDuration = 30f;
         public const float EmpBurstAltitude = 30000f;
+        public const float MaxEmpRadius = 90000f;
 
         public static float RodDamage(float distance)
         {
@@ -27,7 +28,7 @@ namespace BoscaliSummer.Features.Support.Runtime
             int index = name == null ? -1 : name.LastIndexOf(":r=", StringComparison.Ordinal);
             return index >= 0 && float.TryParse(name.Substring(index + 3), NumberStyles.Float,
                 CultureInfo.InvariantCulture, out float value) && !float.IsNaN(value) &&
-                value >= 500f && value <= 60000f ? value : 12000f;
+                value >= 500f && value <= MaxEmpRadius ? value : 12000f;
         }
     }
 }

@@ -28,13 +28,13 @@ public static class RailUnityCheck
     {
         "map", "faction", "hud", "target", "flag", "wing", "support", "theater",
         "person", "radio", "settings", "funds", "gauge", "missile", "radar", "dot",
-        "pulse", "control", "front", "grid",
+        "pulse", "control", "front", "grid", "weather",
     };
 
     private static readonly string[] Labels =
     {
         "BDF", "MAP", "MFD", "SUD", "DPS", "PALA", "TGT", "MIS", "RAD", "SET", "WMC", "STR",
-        "EVN",
+        "EVN", "ENV",
     };
 
     public static void Run()
@@ -60,13 +60,16 @@ public static class RailUnityCheck
             new GameObject("Events", typeof(EventSystem));
 
             CheckGlyphGeometry();
+            CheckUiSounds();
             RenderGlyphStrip();
             CheckRail();
 
             File.WriteAllText("result.txt",
                 "PASS: every catalog glyph builds geometry; the rail brands borrowed buttons with code, descriptor and glyph; " +
                 "unknown codes keep the neutral glyph; a repeated adoption pass does not re-brand, stack a second decoration or " +
-                "rewrite the line; a reset label is re-asserted; the open screen latches; restore returns the vanilla label exactly. " +
+                "rewrite the line; the full-screen finish is single, above planning rooms, and input-transparent; " +
+                "a reset label is re-asserted; the open screen latches; restore returns the vanilla label exactly; " +
+                "seven UI cues have bounded samples, soft starts and silent tails. " +
                 "Game adapters are stubbed; in-game acceptance remains required.");
             EditorApplication.Exit(0);
         }
@@ -79,6 +82,27 @@ public static class RailUnityCheck
     }
 
     // --------------------------------------------------------------------- glyphs
+
+    private static void CheckUiSounds()
+    {
+        var build = typeof(AvUiSound).GetMethod("Build", BindingFlags.NonPublic | BindingFlags.Static);
+        Check(build != null, "UI cue builder missing");
+        foreach (AvUiCue cue in Enum.GetValues(typeof(AvUiCue)))
+        {
+            var clip = (AudioClip)build.Invoke(null, new object[] { cue });
+            Check(clip != null, "UI cue missing: " + cue);
+            Check(clip.frequency == 44100 && clip.channels == 1, "UI cue format: " + cue);
+            var data = new float[clip.samples];
+            Check(clip.GetData(data, 0), "UI cue unreadable: " + cue);
+            float peak = 0f;
+            for (int i = 0; i < data.Length; i++)
+                peak = Mathf.Max(peak, Mathf.Abs(data[i]));
+            Check(peak > .04f && peak < .85f, "UI cue level: " + cue + " " + peak);
+            Check(Mathf.Abs(data[0]) < .001f && Mathf.Abs(data[data.Length - 1]) < .01f,
+                "UI cue edge click: " + cue);
+            Object.DestroyImmediate(clip);
+        }
+    }
 
     private static void CheckGlyphGeometry()
     {
@@ -138,6 +162,43 @@ public static class RailUnityCheck
         MfdLayout.Columns columns = MfdLayout.Resolve(new Vector2(1920f, 1080f));
         Check(columns.Rail.width >= 150f, "the rail must be wide enough for icon, code and descriptor");
         MfdRail.Ensure(canvas, columns);
+        MfdScreenFinish.Ensure(canvas);
+        GameObject finish = GameObject.Find("NOAvionics.ScreenFinish");
+        Check(finish != null, "the screen finish must exist outside the panel dock");
+        Canvas finishCanvas = finish.GetComponent<Canvas>();
+        Canvas.ForceUpdateCanvases();
+        Check(finishCanvas.renderMode == RenderMode.ScreenSpaceOverlay &&
+            finishCanvas.pixelRect.width >= Screen.width - 1f &&
+            finishCanvas.pixelRect.height >= Screen.height - 1f,
+            "the screen finish must span the viewport as its own overlay canvas");
+        Check(finishCanvas.sortingOrder > 30001,
+            "the screen finish must also cover the large planning workspaces (order " +
+            finishCanvas.sortingOrder + ", override " + finishCanvas.overrideSorting + ")");
+        Check(!finish.GetComponent<CanvasGroup>().blocksRaycasts &&
+            !finish.GetComponentInChildren<Image>().raycastTarget,
+            "the screen finish must leave all MFD and map input untouched");
+        MfdScreenFinish.Ensure(canvas);
+        Check(GameObject.Find("NOAvionics.ScreenFinish") == finish,
+            "reconciling the map must reuse the single screen finish");
+        CheckFinishTexture();
+        var glass = finish.GetComponentInChildren<AvDisplayGlass>();
+        AvDisplayGlass.Configure(true, .4f, false, .8f, .6f, 2, .5f);
+        glass.Update();
+        Check(Mathf.Approximately(glass.GetComponent<Image>().color.a, .4f),
+            "manual glass strength must not depend on ambient light");
+        var layers = finish.GetComponentsInChildren<RawImage>();
+        Check(layers.Length == 3, "finish owns only three additional overlay quads");
+        foreach (var layer in layers)
+            Check(layer.enabled && !layer.raycastTarget && layer.color.a > 0f && layer.color.a <= .5f,
+                "enabled overlays must remain bounded and input transparent");
+        AvDisplayGlass.Configure(false, .4f, false, .8f, .6f, 2, .5f);
+        glass.Update();
+        Check(!glass.GetComponent<Image>().enabled, "master OFF removes the original glass");
+        foreach (var layer in layers) Check(!layer.enabled, "master OFF removes every extra overlay");
+        AvDisplayGlass.Configure(true, .6f, true, 0f, 0f, 0, .25f);
+        glass.Update();
+        Check(glass.GetComponent<Image>().enabled, "master ON restores glass without rebuilding");
+        foreach (var layer in layers) Check(!layer.enabled, "default finish has no CRT, vignette or tint");
 
         var buttons = new List<Button>();
         var screens = new List<MFDScreen>();
@@ -149,7 +210,7 @@ public static class RailUnityCheck
 
         var skins = new List<MfdRail.ButtonSkin>();
         Check(MfdRail.PrepareCapacity(columns.Rail.height, Labels.Length),
-            "thirteen keys (six vanilla screens, WMC, the claimed screens and hosted EVN) must fit the rail");
+            "fourteen keys (six vanilla screens, WMC, the claimed screens and hosted EVN/ENV) must fit the rail");
         int adopted = MfdRail.Adopt(buttons, screens, null, null, skins);
         Check(adopted == Labels.Length, "every slot with a screen must be adopted, adopted=" + adopted);
 
@@ -161,6 +222,8 @@ public static class RailUnityCheck
             "SET must be branded with its descriptor");
         Check(skins[12].Label.text.Contains("EVN") && skins[12].Label.text.Contains("EVENTS"),
             "the hosted EVN button must be branded in the rail");
+        Check(skins[13].Label.text.Contains("ENV") && skins[13].Label.text.Contains("WEATHER"),
+            "the hosted ENV button must be branded in the rail");
         Check(skins[4].Label.text == "SUD", "an unknown code keeps its sanitised code and no invented name");
         Check(skins[4].Icon != null, "an unknown code still gets the neutral glyph");
         Check(skins[2].Icon != null && skins[2].Icon.gameObject.activeSelf,
@@ -217,6 +280,32 @@ public static class RailUnityCheck
         for (int i = 0; i < button.transform.childCount; i++)
             if (button.transform.GetChild(i).name == "AvDecoration") count++;
         return count;
+    }
+
+    private static void CheckFinishTexture()
+    {
+        Texture2D source = AvSprites.DisplayScreen.texture;
+        var target = new RenderTexture(source.width, source.height, 0, RenderTextureFormat.ARGB32);
+        Graphics.Blit(source, target);
+        RenderTexture.active = target;
+        var pixels = new Texture2D(source.width, source.height, TextureFormat.RGBA32, false);
+        pixels.ReadPixels(new Rect(0f, 0f, source.width, source.height), 0, 0);
+        pixels.Apply();
+        RenderTexture.active = null;
+
+        Color centre = pixels.GetPixel(source.width / 2, source.height / 2);
+        Color lip = pixels.GetPixel(0, source.height / 2);
+        Color otherLip = pixels.GetPixel(source.width - 1, source.height / 2);
+        Color reflection = pixels.GetPixel(source.width / 4, source.height - 24);
+        Check(centre.a >= 0.035f && centre.a <= 0.07f,
+            "the map-centre screen finish must remain perceptible without obscuring labels (alpha " + centre.a + ")");
+        Check(reflection.a >= centre.a + 0.04f,
+            "the whole-screen glass must carry a visible broad reflection");
+        Check(lip.r >= lip.b + 0.04f && otherLip.b >= otherLip.r + 0.04f,
+            "the screen edges must have a restrained red/cyan fringe");
+
+        Object.DestroyImmediate(pixels);
+        Object.DestroyImmediate(target);
     }
 
     private static Button MakeVanillaButton(string text)

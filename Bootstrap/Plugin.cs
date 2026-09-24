@@ -39,7 +39,7 @@ namespace BoscaliSummer
 
         private void OnDestroy()
         {
-            featureHost?.Dispose();
+            ModCompositionRoot.Stop(featureHost);
             featureHost = null;
         }
     }

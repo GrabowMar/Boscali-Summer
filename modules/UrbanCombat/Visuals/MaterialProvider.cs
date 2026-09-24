@@ -12,11 +12,21 @@ namespace BoscaliSummer.Garrisons
         private static Material cachedConcrete;
         private static Material cachedSandbag;
         private static Material cachedCargoHookRope;
+        private static bool cargoHookRopeSearched;
 
         public static Material GetCargoHookRopeMaterial()
         {
-            if (cachedCargoHookRope != null) return cachedCargoHookRope;
+            // Both searches walk every loaded asset, so a miss is remembered too.
+            if (cachedCargoHookRope == null && !cargoHookRopeSearched)
+            {
+                cargoHookRopeSearched = true;
+                cachedCargoHookRope = FindCargoHookRope();
+            }
+            return cachedCargoHookRope != null ? cachedCargoHookRope : GetConcreteMaterial();
+        }
 
+        private static Material FindCargoHookRope()
+        {
             SlingloadHook[] allHooks = Resources.FindObjectsOfTypeAll<SlingloadHook>();
             for (int i = 0; i < allHooks.Length; i++)
             {
@@ -24,7 +34,7 @@ namespace BoscaliSummer.Garrisons
                 {
                     LineRenderer lr = allHooks[i].GetComponentInChildren<LineRenderer>();
                     if (lr != null && lr.sharedMaterial != null)
-                        return cachedCargoHookRope = lr.sharedMaterial;
+                        return lr.sharedMaterial;
                 }
             }
 
@@ -35,11 +45,11 @@ namespace BoscaliSummer.Garrisons
                                            allMats[i].name.IndexOf("cable", StringComparison.OrdinalIgnoreCase) >= 0 ||
                                            allMats[i].name.IndexOf("hook", StringComparison.OrdinalIgnoreCase) >= 0))
                 {
-                    return cachedCargoHookRope = allMats[i];
+                    return allMats[i];
                 }
             }
 
-            return GetConcreteMaterial();
+            return null;
         }
 
         public static Material GetConcreteMaterial()
@@ -47,7 +57,7 @@ namespace BoscaliSummer.Garrisons
             if (cachedConcrete != null) return cachedConcrete;
 
             BuildingDefinition pillbox = ResolveDef("pillbox");
-            if (pillbox?.unitPrefab != null)
+            if (pillbox != null && pillbox.unitPrefab != null)
             {
                 Renderer r = pillbox.unitPrefab.GetComponentInChildren<Renderer>();
                 if (r != null && r.sharedMaterial != null)
@@ -55,7 +65,7 @@ namespace BoscaliSummer.Garrisons
             }
 
             BuildingDefinition bunker = ResolveDef("gabionBunker1");
-            if (bunker?.unitPrefab != null)
+            if (bunker != null && bunker.unitPrefab != null)
             {
                 Renderer r = bunker.unitPrefab.GetComponentInChildren<Renderer>();
                 if (r != null && r.sharedMaterial != null)
@@ -70,12 +80,12 @@ namespace BoscaliSummer.Garrisons
             if (cachedSandbag != null) return cachedSandbag;
 
             BuildingDefinition bunker = ResolveDef("gabionBunker1");
-            if (bunker?.unitPrefab != null)
+            if (bunker != null && bunker.unitPrefab != null)
             {
                 Renderer[] renderers = bunker.unitPrefab.GetComponentsInChildren<Renderer>();
                 for (int i = 0; i < renderers.Length; i++)
                 {
-                    if (renderers[i]?.sharedMaterial != null)
+                    if (renderers[i] != null && renderers[i].sharedMaterial != null)
                         return cachedSandbag = renderers[i].sharedMaterial;
                 }
             }
@@ -85,10 +95,11 @@ namespace BoscaliSummer.Garrisons
 
         private static BuildingDefinition ResolveDef(string key)
         {
-            if (Encyclopedia.i?.buildings == null) return null;
-            for (int i = 0; i < Encyclopedia.i.buildings.Count; i++)
+            Encyclopedia encyclopedia = Encyclopedia.i;
+            if (encyclopedia == null || encyclopedia.buildings == null) return null;
+            for (int i = 0; i < encyclopedia.buildings.Count; i++)
             {
-                BuildingDefinition def = Encyclopedia.i.buildings[i];
+                BuildingDefinition def = encyclopedia.buildings[i];
                 if (def != null && string.Equals(def.jsonKey, key, StringComparison.OrdinalIgnoreCase))
                     return def;
             }

@@ -10,8 +10,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
     ///
     /// <para>Vanilla draws the clock/speed/altitude/attitude group above the map and the
     /// airport, spectator controls, or unit telemetry on a separate lower canvas. The layout
-    /// already reserves the bottom 120 pixels for those controls; this class turns that reserve
-    /// into one real avionics panel and temporarily hosts the native objects in two centred rows.</para>
+    /// reserves a bottom strip for those controls; this class temporarily hosts the native
+    /// objects side by side on wide screens and in two rows where width is scarce.</para>
     ///
     /// <para>The native objects remain authoritative. Their scripts keep updating their text,
     /// active state and button actions; only their parent and RectTransform presentation are
@@ -23,7 +23,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private const string ChromeName = "Chrome";
         private const string InstrumentsSlotName = "InstrumentsSlot";
         private const string ContextSlotName = "ContextSlot";
-        private const float FooterInset = 8f;
+        private const float FooterInset = 6f;
         private const float RowGap = 4f;
 
         private sealed class RectSnapshot
@@ -206,7 +206,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 UnitDebug ud = Object.FindObjectOfType<UnitDebug>(true);
                 if (ud != null && ud.transform is RectTransform rt && contextSlot != null)
                 {
-                    Adopt(ref unitDebug, rt, contextSlot, new Vector2(contextSlot.rect.width, 48f));
+                    Adopt(ref unitDebug, rt, contextSlot,
+                        new Vector2(contextSlot.rect.width, Mathf.Min(48f, contextSlot.rect.height)));
                     unitDebug?.SuppressBackgroundImages();
                 }
             }
@@ -325,26 +326,52 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             chromeSize = size;
             var area = new Rect(0f, 0f, size.x, size.y);
             AvKit.Outline(chrome, area, AvTheme.Hairline);
+            AvKit.Rule(chrome, new Rect(1f, 0f, size.x - 2f, 2f), AvTheme.Accent.WithAlpha(0.30f));
+            // A small segmented uplink trace ties the footer to the wire and index rail.
+            if (size.x >= 300f)
+                for (int i = 0; i < 7; i++)
+                    AvKit.Rule(chrome, new Rect(size.x - 59f + i * 7f, -1f, 4f, 2f),
+                        i >= 5 ? AvTheme.Accent.WithAlpha(.8f) : AvTheme.Frame.WithAlpha(.75f));
 
-            float innerHeight = Mathf.Max(0f, size.y - FooterInset * 2f);
-            float contextHeight = Mathf.Min(48f, innerHeight * 0.52f);
-            float dividerY = -(FooterInset + Mathf.Max(0f, innerHeight - contextHeight) + RowGap * 0.5f);
-            AvKit.Rule(chrome,
-                new Rect(FooterInset, dividerY, Mathf.Max(0f, size.x - FooterInset * 2f), 1f),
-                AvTheme.Frame.WithAlpha(0.55f));
+            if (size.y < 90f)
+            {
+                float dividerX = FooterInset + (size.x - FooterInset * 2f - RowGap) * 0.50f + RowGap * 0.5f;
+                AvKit.Rule(chrome, new Rect(dividerX, -FooterInset, 1f, size.y - FooterInset * 2f),
+                    AvTheme.Frame.WithAlpha(0.55f));
+            }
+            else
+            {
+                float innerHeight = Mathf.Max(0f, size.y - FooterInset * 2f);
+                float contextHeight = Mathf.Min(48f, innerHeight * 0.52f);
+                float dividerY = -(FooterInset + Mathf.Max(0f, innerHeight - contextHeight) + RowGap * 0.5f);
+                AvKit.Rule(chrome,
+                    new Rect(FooterInset, dividerY, Mathf.Max(0f, size.x - FooterInset * 2f), 1f),
+                    AvTheme.Frame.WithAlpha(0.55f));
+            }
         }
 
         private static void PlaceSlots(Vector2 size)
         {
             float innerWidth = Mathf.Max(0f, size.x - FooterInset * 2f);
             float innerHeight = Mathf.Max(0f, size.y - FooterInset * 2f);
-            float contextHeight = Mathf.Min(48f, innerHeight * 0.52f);
-            float instrumentsHeight = Mathf.Max(0f, innerHeight - contextHeight - RowGap);
-
-            AvKit.Place(instrumentsSlot,
-                new Rect(FooterInset, -FooterInset, innerWidth, instrumentsHeight));
-            AvKit.Place(contextSlot,
-                new Rect(FooterInset, -(FooterInset + instrumentsHeight + RowGap), innerWidth, contextHeight));
+            if (size.y < 90f)
+            {
+                float instrumentsWidth = (innerWidth - RowGap) * 0.50f;
+                AvKit.Place(instrumentsSlot,
+                    new Rect(FooterInset, -FooterInset, instrumentsWidth, innerHeight));
+                AvKit.Place(contextSlot,
+                    new Rect(FooterInset + instrumentsWidth + RowGap, -FooterInset,
+                        innerWidth - instrumentsWidth - RowGap, innerHeight));
+            }
+            else
+            {
+                float contextHeight = Mathf.Min(48f, innerHeight * 0.52f);
+                float instrumentsHeight = Mathf.Max(0f, innerHeight - contextHeight - RowGap);
+                AvKit.Place(instrumentsSlot,
+                    new Rect(FooterInset, -FooterInset, innerWidth, instrumentsHeight));
+                AvKit.Place(contextSlot,
+                    new Rect(FooterInset, -(FooterInset + instrumentsHeight + RowGap), innerWidth, contextHeight));
+            }
 
             EnsureMask(instrumentsSlot);
             EnsureMask(contextSlot);
@@ -366,10 +393,12 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             UnitDebug unitDebugComponent = Object.FindObjectOfType<UnitDebug>(true);
             RectTransform unitDebugPanel = unitDebugComponent != null ? unitDebugComponent.transform as RectTransform : null;
 
-            Adopt(ref instruments, top, instrumentsSlot, new Vector2(1000f, 60f));
+            Adopt(ref instruments, top, instrumentsSlot,
+                new Vector2(1000f, Mathf.Min(60f, instrumentsSlot.rect.height)));
             Adopt(ref airbase, airbasePanel, contextSlot, null);
             Adopt(ref spectator, spectatorPanel, contextSlot, null);
-            Adopt(ref unitDebug, unitDebugPanel, contextSlot, new Vector2(contextSlot != null ? contextSlot.rect.width : 900f, 48f));
+            Adopt(ref unitDebug, unitDebugPanel, contextSlot, new Vector2(contextSlot != null ? contextSlot.rect.width : 900f,
+                contextSlot != null ? Mathf.Min(48f, contextSlot.rect.height) : 48f));
 
             airbase?.SuppressBackgroundImages();
             spectator?.SuppressBackgroundImages();

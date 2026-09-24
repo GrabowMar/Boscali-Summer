@@ -16,11 +16,88 @@ namespace BoscaliSummer.Tests.Features.Trenches
             TestTraverseWave();
             TestDensifyAndWave();
             TestRoutePlanning();
+            TestDefensibleSiting();
+            TestSitingNudges();
+            TestPressureOrder();
             TestRunSplitting();
             TestStageRules();
             TestBaySchedule();
             TestSideResolution();
             TestContestedFrontSide();
+            TestHoldFloors();
+            TestFieldAbandonment();
+            TestBeltLadder();
+        }
+
+        /// <summary>
+        /// Hysteresis on a moving front: the planner digs only well inside its own contested
+        /// band, while a dug line is given up only when the field reads deep enemy. Live
+        /// sessions dug at -0.5 and abandoned at -0.5, so a hot front killed every position at
+        /// birth.
+        /// </summary>
+        private static void TestHoldFloors()
+        {
+            TestAssert.That(TrenchTraceMath.DigHoldFloor > TrenchTraceMath.HoldOwnSideFloor,
+                "Digging needs firmer ground than staying does");
+            TestAssert.That(TrenchTraceMath.CanDig(0.3f) && TrenchTraceMath.CanDig(-0.2f) &&
+                !TrenchTraceMath.CanDig(-0.4f) && !TrenchTraceMath.CanDig(float.NaN),
+                "Candidate ground is the faction's side or the near edge of its contested band");
+            TestAssert.That(TrenchTraceMath.HoldsOwnSide(-0.4f) && TrenchTraceMath.HoldsOwnSide(-0.7f) &&
+                !TrenchTraceMath.HoldsOwnSide(-0.8f),
+                "A dug line stays through the contested band and yields only to deep enemy ground");
+        }
+
+        /// <summary>
+        /// The field abandons a position only after a dig-in grace and a sustained hostile
+        /// read at its centre; a single hostile sample never ends a line.
+        /// </summary>
+        private static void TestFieldAbandonment()
+        {
+            float dug = 100f;
+            float grace = TrenchTraceMath.DigInGraceSeconds;
+            float sustain = TrenchTraceMath.AbandonSeconds;
+            TestAssert.That(grace >= 60f && sustain >= 10f, "Grace and sustain windows are real minutes and seconds");
+            TestAssert.That(!TrenchTraceMath.FieldAbandons(dug + grace + 500f, dug, -1f),
+                "A centre that reads own side is never abandoned");
+            TestAssert.That(!TrenchTraceMath.FieldAbandons(dug + grace - 1f, dug, dug),
+                "Inside the dig-in grace the field cannot end a position");
+            TestAssert.That(!TrenchTraceMath.FieldAbandons(dug + grace + sustain, dug, dug + grace + sustain - 1f),
+                "One hostile sample after the grace is not enough");
+            TestAssert.That(TrenchTraceMath.FieldAbandons(dug + grace + sustain, dug, dug + grace),
+                "A hostile read sustained past the grace abandons the line");
+            TestAssert.That(TrenchTraceMath.FieldAbandons(dug + grace, dug, dug),
+                "A line hostile since it was dug is abandoned the moment the grace ends");
+        }
+
+        /// <summary>
+        /// Belt traces try shallower depths, accept shorter runs than the fire line, and stop
+        /// holding the defender budget after a bounded number of refusals.
+        /// </summary>
+        private static void TestBeltLadder()
+        {
+            TestAssert.That(Near(TrenchTraceMath.BeltDepth(TrenchStage.FireTrench, 0), TrenchTraceMath.SupportDepth) &&
+                Near(TrenchTraceMath.BeltDepth(TrenchStage.Support, 0), TrenchTraceMath.RedoubtDepth),
+                "The first rung is the doctrine depth of the trace the stage adds");
+            for (int rung = 1; rung < TrenchTraceMath.BeltLadderLength; rung++)
+            {
+                float support = TrenchTraceMath.BeltDepth(TrenchStage.FireTrench, rung);
+                float redoubt = TrenchTraceMath.BeltDepth(TrenchStage.Support, rung);
+                TestAssert.That(support < TrenchTraceMath.BeltDepth(TrenchStage.FireTrench, rung - 1) &&
+                    support > TrenchTraceMath.FireDepth + 10f,
+                    "Each support rung is shallower but still behind the fire line");
+                TestAssert.That(redoubt < TrenchTraceMath.BeltDepth(TrenchStage.Support, rung - 1) &&
+                    redoubt > TrenchTraceMath.SupportDepth,
+                    "Each redoubt rung is shallower but still behind the support line");
+            }
+            TestAssert.That(float.IsNaN(TrenchTraceMath.BeltDepth(TrenchStage.FireTrench, TrenchTraceMath.BeltLadderLength)) &&
+                float.IsNaN(TrenchTraceMath.BeltDepth(TrenchStage.Redoubt, 0)),
+                "Past the ladder, or for a stage that adds no belt trace, there is no depth");
+            TestAssert.That(TrenchTraceMath.BeltMinRunLength < TrenchTraceMath.MinRunLength &&
+                TrenchTraceMath.BeltMinRunLength >= 50f,
+                "A rear trace may be shorter than the fire line but is still a real run");
+            TestAssert.That(!TrenchTraceMath.AdvancesWithoutBelt(0) && !TrenchTraceMath.AdvancesWithoutBelt(2) &&
+                TrenchTraceMath.AdvancesWithoutBelt(3) && TrenchTraceMath.AdvancesWithoutBelt(9),
+                "Three refusals let the stage advance without its belt trace");
         }
 
         /// <summary>
@@ -328,6 +405,91 @@ namespace BoscaliSummer.Tests.Features.Trenches
                 "A wholly blocked band fails closed");
         }
 
+        /// <summary>
+        /// Siting: the first planner minimised ground height, so every position settled into
+        /// the lowest hollow it could reach. Relief over the land either side is what is
+        /// scored now, and absolute height is deliberately never scored at all.
+        /// </summary>
+        private static void TestDefensibleSiting()
+        {
+            float level = TrenchTraceMath.DefensibleCost(50f, 50f, 50f, 0f);
+            TestAssert.That(Near(level, TrenchTraceMath.DefensibleCost(5f, 5f, 5f, 0f)),
+                "Siting never rewards absolute height: a valley floor is not cheaper than a plateau");
+            TestAssert.That(TrenchTraceMath.DefensibleCost(13f, 10f, 10f, 0f) < level,
+                "Ground standing above the land either side (a crest) costs less than level ground");
+            TestAssert.That(TrenchTraceMath.DefensibleCost(7f, 10f, 10f, 0f) > level,
+                "Ground below both sides (a hollow) costs more than level ground");
+            TestAssert.That(Near(TrenchTraceMath.DefensibleCost(10f + TrenchTraceMath.ReliefCap, 10f, 10f, 0f),
+                TrenchTraceMath.DefensibleCost(200f, 10f, 10f, 0f)),
+                "The relief reward is capped: a peak is not a fortress");
+            TestAssert.That(Near(TrenchTraceMath.DefensibleCost(20f, 10f, 10f, 4f),
+                TrenchTraceMath.DefensibleCost(20f, 10f, 10f, 0f) + TrenchTraceMath.DepthStayWeight * 16f),
+                "Depth error still pulls the line to its intended offset");
+            TestAssert.That(Near(TrenchTraceMath.DefensibleCost(10f, float.NaN, 10f, 0f), 0f),
+                "A probe that never landed leaves only the depth term");
+            TestAssert.That(TrenchTraceMath.DefensibleCost(80f, 10f, 10f, 0f) <
+                TrenchTraceMath.DefensibleCost(5f, 10f, 10f, 0f),
+                "On a crest the higher candidate wins regardless of its absolute height");
+        }
+
+        /// <summary>
+        /// Strategic siting nudges: a beachhead retries one band deeper landward, the ditch
+        /// hugs the forest edge instead of digging inside the stand, and it sidesteps off
+        /// the road surface. All three nudge the route; none refuses ground on its own.
+        /// </summary>
+        private static void TestSitingNudges()
+        {
+            float step = TrenchTraceMath.DepthStayWeight * 12f * 12f; // one 12m depth level
+            TestAssert.That(TrenchTraceMath.FoliageCost(true, false) > step,
+                "Ground inside the stand costs more than one depth step, so a boundary line hugs the edge");
+            TestAssert.That(TrenchTraceMath.FoliageCost(false, true) < 0f &&
+                TrenchTraceMath.FoliageCost(false, false) == 0f,
+                "The forest edge earns a small bonus; open ground far from any stand scores nothing");
+            TestAssert.That(TrenchTraceMath.FoliageCost(true, true) > 0f,
+                "Inside the stand stays penalised even at its edge");
+
+            TestAssert.That(TrenchTraceMath.RoadCost(0f) > step,
+                "Ground on the road surface costs more than one depth step, so the ditch sidesteps");
+            TestAssert.That(TrenchTraceMath.RoadCost(TrenchTraceMath.RoadClearDistance) == 0f &&
+                TrenchTraceMath.RoadCost(500f) == 0f,
+                "Ground past the verge scores nothing");
+            TestAssert.That(TrenchTraceMath.RoadCost(float.NaN) == 0f,
+                "Unknown road distance (no road index) scores nothing");
+
+            float reach = (TrenchTraceMath.DepthSearchLevels - 1) * 0.5f * TrenchTraceMath.DepthSearchStep;
+            TestAssert.That(TrenchTraceMath.FireDepth + reach <
+                TrenchTraceMath.FireDepth + TrenchTraceMath.BeachFallbackExtraDepth - reach,
+                "The beach fallback band sits clear of the normal fire band instead of overlapping it");
+            TestAssert.That(TrenchTraceMath.FireDepth + TrenchTraceMath.BeachFallbackExtraDepth + reach <
+                TrenchTraceMath.RedoubtDepth + reach,
+                "A beach fallback still leaves room for the belt behind it");
+        }
+
+        /// <summary>
+        /// The trace scan digs the sectors the fighting is on first: pressure order is
+        /// descending, every index is visited exactly once, and equal pressures keep their
+        /// original front order.
+        /// </summary>
+        private static void TestPressureOrder()
+        {
+            var pressure = new[] { 0.1f, 0.9f, 0.0f, 0.9f, 0.4f };
+            var order = new int[pressure.Length];
+            TestAssert.That(TrenchTraceMath.OrderByPressure(pressure, pressure.Length, order) == 5,
+                "Every trace gets an order slot");
+            TestAssert.That(order[0] == 1 && order[1] == 3 && order[2] == 4 && order[3] == 0 && order[4] == 2,
+                "Traces scan hottest first, with equal pressure keeping its front order");
+            var seen = new bool[pressure.Length];
+            for (int i = 0; i < order.Length; i++)
+            {
+                TestAssert.That(order[i] >= 0 && order[i] < pressure.Length && !seen[order[i]],
+                    "No trace is visited twice, none is dropped");
+                seen[order[i]] = true;
+            }
+            TestAssert.That(TrenchTraceMath.OrderByPressure(pressure, 0, order) == 0 &&
+                TrenchTraceMath.OrderByPressure(null, 5, order) == 0,
+                "An empty or missing front orders nothing");
+        }
+
         private static void TestRunSplitting()
         {
             var valid = new[] { false, true, true, true, false, true, false, true, true, true, true };
@@ -353,8 +515,9 @@ namespace BoscaliSummer.Tests.Features.Trenches
                 "Before the first scrape, a position fields nothing");
             TestAssert.That(TrenchTraceMath.WorksBudget(TrenchStage.Scrape) == 0 &&
                 TrenchTraceMath.WorksBudget(TrenchStage.FireTrench) > 0 &&
-                TrenchTraceMath.WorksBudget(TrenchStage.Redoubt) == 8,
-                "Works unlock with the fire trench and cap at eight");
+                TrenchTraceMath.WorksBudget(TrenchStage.Redoubt) == 8 &&
+                TrenchTraceMath.WorksBudget(TrenchStage.Saps) == 10,
+                "Works unlock with the fire trench, grow to eight, and add the two sap listening posts");
             TestAssert.That(!TrenchTraceMath.CanAdvance(false, 59, 60, 45),
                 "Damage suppresses construction");
             TestAssert.That(TrenchTraceMath.CanAdvance(false, 60, 60, 45),

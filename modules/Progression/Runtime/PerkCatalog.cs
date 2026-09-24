@@ -131,12 +131,12 @@ namespace BoscaliSummer.Features.Progression.Runtime
                 "10% cheaper support requests.", PerkEffect.SupportCost, 0.90f, "logistics"),
             new PerkDefinition(14, Signals, 3, "Escort Duty",
                 "15% more allocation from combat rewards.", PerkEffect.CombatReward, 1.15f, "combat"),
-            new PerkDefinition(15, Signals, 4, "Spectrum Overdrive",
-                "25% stronger EMP shock.", PerkEffect.SupportEffectScale, 1.25f, "ew"),
+            new PerkDefinition(15, Signals, 4, "Spectrum Efficiency",
+                "10% cheaper support requests.", PerkEffect.SupportCost, 0.90f, "logistics"),
             new PerkDefinition(16, Signals, 5, "Blackout Tempo",
                 "20% faster support re-tasking.", PerkEffect.SupportCooldown, 0.80f, "logistics"),
             new PerkDefinition(17, Signals, 6, "Full Spectrum",
-                "35% stronger EMP shock.", PerkEffect.SupportEffectScale, 1.35f, "ew"),
+                "15% faster support re-tasking.", PerkEffect.SupportCooldown, 0.85f, "logistics"),
 
             new PerkDefinition(18, Engineer, 1, "Engineer Qualification",
                 "Authorises controlled-zone fortification.",
@@ -198,7 +198,6 @@ namespace BoscaliSummer.Features.Progression.Runtime
                 case PerkEffect.FuelUse: return "-" + percent + "% FUEL";
                 case PerkEffect.SupportCost: return "-" + percent + "% PRICE";
                 case PerkEffect.SupportCooldown: return "-" + percent + "% COOLDOWN";
-                case PerkEffect.SupportEffectScale: return "+" + percent + "% EMP";
                 default: return string.Empty;
             }
         }

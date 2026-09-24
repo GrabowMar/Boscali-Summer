@@ -64,7 +64,17 @@ public static class AvionicsUnityCheck
             AvStyled.Label(scrolling, new Rect(12f, y - 4f, 280f, 18f), "READABLE ROW " + (i + 1), "row-name");
             AvStyled.Label(scrolling, new Rect(12f, y - 23f, 360f, 18f), "Full-width state and clear action labels.", "row-sub");
         }
+        var lateCard = new GameObject("LateNativeCard", typeof(RectTransform));
+        lateCard.transform.SetParent(content, false);
         shell.WriteStatus(null, null, "Hover for help. Selected controls retain their underline and state text.");
+        Transform glass = content.Find("DisplayGlass");
+        Require(glass != null && glass.GetSiblingIndex() == content.childCount - 1,
+            "Display glass must stay above chrome and later-created page content");
+        Image glassImage = glass.GetComponent<Image>();
+        Require(glassImage != null && !glassImage.raycastTarget,
+            "Display glass must never intercept MFD input");
+        Require(page.parent.GetSiblingIndex() < glass.GetSiblingIndex(),
+            "Pages built after the shell must remain behind display glass");
         Canvas.ForceUpdateCanvases();
         foreach (TMP_Text label in canvas.GetComponentsInChildren<TMP_Text>()) label.ForceMeshUpdate();
         for (int i = 0; i < gauges.Length; i++)

@@ -275,17 +275,18 @@ namespace BoscaliSummer.Features.Trenches.Presentation
             return line.OwnerHq != null && line.OwnerHq == map.HQ ? FriendlyInk : HostileInk;
         }
 
-        /// <summary>Strongpoints: one per nest bay of the current budget, plus the support centre.</summary>
+        /// <summary>Strongpoints: one per living defender, spread over the bays, plus the
+        /// support centre, so a shot-up position visibly thins on the map.</summary>
         private static void Marks(VertexHelper vh, TrenchLine line, float factor, float pixel, Color32 ink)
         {
-            int budget = TrenchTraceMath.DefenderBudget(line.Stage);
+            int budget = Mathf.Clamp(line.DefenderCount, 0, TrenchTraceMath.DefenderBudget(line.Stage));
             Vector3[] nodes = line.Nodes;
-            if (nodes != null && nodes.Length > 0)
+            if (budget > 0 && nodes != null && nodes.Length > 0)
             {
                 for (int slot = 0; slot < budget; slot++)
                     Mark(vh, nodes, TrenchTraceMath.NodeFraction(slot, budget), factor, pixel, ink);
             }
-            else
+            else if (budget > 0)
             {
                 Mark(vh, line.Anchors, 0.15f, factor, pixel, ink);
                 Mark(vh, line.Anchors, 0.5f, factor, pixel, ink);
@@ -302,11 +303,12 @@ namespace BoscaliSummer.Features.Trenches.Presentation
             AddRect(vh, ToLocal(anchor, factor), MarkHalfSizePixels * pixel, ink);
         }
 
-        /// <summary>Stage ticks, or a crossed-out centre once the position is neutralized.</summary>
+        /// <summary>Stage ticks, or a crossed-out centre once the position has no defenders
+        /// left; a cut-off line that still fights keeps its ticks under the neutralized ink.</summary>
         private static void States(VertexHelper vh, TrenchLine line, float factor, float pixel, Color32 ink)
         {
             Vector2 at = ToLocal(line.Center, factor);
-            if (line.Overrun)
+            if (line.Overrun && line.DefenderCount <= 0)
             {
                 float arm = 4f * pixel;
                 AddStroke(vh, at + new Vector2(-arm, -arm), at + new Vector2(arm, arm), pixel * 1.2f, ink);

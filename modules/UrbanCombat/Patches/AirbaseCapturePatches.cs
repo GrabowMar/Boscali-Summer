@@ -11,8 +11,8 @@ namespace BoscaliSummer.Garrisons
 
         private static void Postfix(Airbase __instance, FactionHQ newHQ)
         {
-            if (Plugin.Settings.UrbanCombat.GarrisonsEnabled.Value)
-                ZoneGarrisonManager.Instance?.ScheduleCapture(__instance, newHQ);
+            // Always schedule: with garrisons off, the capture still clears the previous owner's record.
+            ZoneGarrisonManager.Instance?.ScheduleCapture(__instance, newHQ);
         }
     }
 
@@ -28,6 +28,7 @@ namespace BoscaliSummer.Garrisons
                 !string.IsNullOrEmpty(__instance.NetworkUniqueName) &&
                 __instance.NetworkUniqueName.StartsWith(ZoneGarrisonManager.NamePrefix, System.StringComparison.Ordinal))
                 GarrisonVisual.Apply(__instance);
+                NestRegistry.Add(__instance);
         }
     }
 }

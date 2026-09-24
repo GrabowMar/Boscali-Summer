@@ -1,4 +1,5 @@
-using BepInEx.Configuration;
+﻿using BepInEx.Configuration;
+using UnityEngine;
 using BoscaliSummer.Framework.Contracts;
 
 namespace BoscaliSummer.Features.Hud.Configuration
@@ -27,8 +28,53 @@ namespace BoscaliSummer.Features.Hud.Configuration
         /// </summary>
         public readonly ConfigEntry<string> DisabledChannels;
 
+        public ConfigEntry<bool> ModifyVanillaHud { get; }
+        public ConfigEntry<bool> ThirdPersonHudEnabled { get; }
+        public ConfigEntry<KeyCode> ThirdPersonHudKey { get; }
+        public ConfigEntry<bool> ThirdPersonHidePitchLadder { get; }
+        public ConfigEntry<bool> ThirdPersonCameraEnabled { get; }
+        public ConfigEntry<bool> ThirdPersonFlightCameraEnabled { get; }
+        public ConfigEntry<bool> ThirdPersonShotsEnabled { get; }
+
+        public readonly ConfigEntry<int> FlightScaleStep, FlightOpacityStep, FlightContrast;
+        public readonly ConfigEntry<bool> BoardEnabled, AirframeEnabled, MarkEnabled, ShowDetails;
+        public readonly ConfigEntry<int> BoardCorner, BoardScaleStep, BoardOpacityStep, BoardContrast;
+        public readonly ConfigEntry<int> BoardInsetX, BoardInsetY, Contrast, OffsetX, OffsetY;
+
         public HudSettings(ConfigFile config)
         {
+            ModifyVanillaHud = config.Bind("Hud", "ModifyVanillaHud", false, "Opt in to replacement flight instruments, native HUD visibility changes and marker reprojection in external view. Independent mod panels remain available with this off.");
+            FlightScaleStep = Step(config, "FlightScaleStep", 1, 3, "Flight readout size: compact, normal, large, huge.");
+            FlightOpacityStep = Step(config, "FlightOpacityStep", 0, 3, "Flight readout opacity: full, high, low, off.");
+            FlightContrast = Step(config, "FlightContrast", 1, 2, "Flight readout backing: clear, glass, solid.");
+            BoardEnabled = config.Bind("Hud", "BoardEnabled", true, "Show the external-view instrument board.");
+            AirframeEnabled = config.Bind("Hud", "AirframeEnabled", true, "Show factual counts of damaged/detached parts and active native failure indications. No aggregate health score.");
+            MarkEnabled = config.Bind("Hud", "MarkEnabled", true, "Show the current camera observation summary on the board.");
+            ShowDetails = config.Bind("Hud", "ShowDetails", true, "Show supporting status text and progress bars.");
+            BoardCorner = Step(config, "BoardCorner", 0, 3, "0 bottom right, 1 bottom left, 2 top right, 3 top left.");
+            BoardScaleStep = Step(config, "BoardScaleStep", 1, 3, "Board size: compact, normal, large, huge.");
+            BoardOpacityStep = Step(config, "BoardOpacityStep", 0, 3, "Board opacity: full, high, low, off.");
+            BoardContrast = Step(config, "BoardContrast", 1, 2, "Backdrop: clear, glass, solid.");
+            Contrast = Step(config, "Contrast", 1, 2, "Status backdrop: clear, glass, solid.");
+            BoardInsetX = Step(config, "BoardInsetX", 0, 600, "Move the board inward horizontally, in reference pixels.");
+            BoardInsetY = Step(config, "BoardInsetY", 0, 600, "Move the board inward vertically, in reference pixels.");
+            OffsetX = config.Bind("Hud", "OffsetX", 0, new ConfigDescription("Status horizontal adjustment in reference pixels.", new AcceptableValueRange<int>(-600, 600)));
+            OffsetY = config.Bind("Hud", "OffsetY", 0, new ConfigDescription("Status vertical adjustment in reference pixels.", new AcceptableValueRange<int>(-600, 600)));
+
+            // Retain the existing keys so moving ownership does not reset user preferences.
+            ThirdPersonHudEnabled = config.Bind("Avionics", "ThirdPersonHudEnabled", true,
+                "Show mod-owned HUD panels in external orbit and chase camera views.");
+            ThirdPersonCameraEnabled = config.Bind("Avionics", "ThirdPersonCameraEnabled", true,
+                "Show the native target camera feed only while targets are selected in third person; no additional world rendering.");
+            ThirdPersonFlightCameraEnabled = config.Bind("Avionics", "ThirdPersonFlightCameraEnabled", true,
+                "Smooth aircraft-relative orbit/rear chase framing with a steady horizon and room above the aircraft for aiming. Native zoom, look-at and other chase presets remain available.");
+            ThirdPersonShotsEnabled = config.Bind("Avionics", "ThirdPersonShotsEnabled", true,
+                "Show live missile shots on the third-person board: own missiles with range and ETA to their targets, plus inbound missiles from the aircraft's own warning system.");
+            ThirdPersonHudKey = config.Bind("Avionics", "ThirdPersonHudKey", KeyCode.F7,
+                "Hotkey to toggle third-person HUD visibility on the fly.");
+            ThirdPersonHidePitchLadder = config.Bind("Avionics", "ThirdPersonHidePitchLadder", true,
+                "Declutter: hide the floating pitch ladder in third person while keeping reticle, ammo, and radar.");
+
             Enabled = config.Bind("Hud", "Enabled", true,
                 "Draw the common cockpit HUD element: feature status lines and notices. " +
                 "The features keep running with it off; only " +
@@ -41,8 +87,8 @@ namespace BoscaliSummer.Features.Hud.Configuration
 
             ScaleStep = config.Bind("Hud", "ScaleStep", 1,
                 new ConfigDescription(
-                    "Text size, from COMPACT to HUGE, as a multiple of the game's own overlay " +
-                    "text size setting.",
+                    "Text size, from COMPACT to HUGE, using the independent overlay " +
+                    "scale.",
                     new AcceptableValueRange<int>(0, HudLayout.ScaleCount - 1)));
 
             OpacityStep = config.Bind("Hud", "OpacityStep", 1,
@@ -68,6 +114,9 @@ namespace BoscaliSummer.Features.Hud.Configuration
                 "Feeds switched off from the HUD settings page. Managed by the panel; edit " +
                 "only if you want to force a feed back on.");
         }
+
+        private static ConfigEntry<int> Step(ConfigFile config, string key, int value, int max, string help) =>
+            config.Bind("Hud", key, value, new ConfigDescription(help, new AcceptableValueRange<int>(0, max)));
 
         private static string AnchorChoices()
         {

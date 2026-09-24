@@ -23,14 +23,23 @@ public static class PresentationUnityCheck
     private static int assertions;
     private static int captures;
 
-    public static void Run()
+    public static void Run() => Execute(false, false);
+
+    public static void RunEventAlertOnly() => Execute(true, false);
+
+    public static void RunSqdOnly() => Execute(false, true);
+
+    public static void RunMfdOnly() => Execute(false, false, true);
+
+    private static void Execute(bool eventAlertOnly, bool sqdOnly, bool mfdOnly = false)
     {
         try
         {
             if (Shader.Find("TextMeshPro/Distance Field") == null)
             {
                 var package = UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(TMP_Text).Assembly);
-                AssetDatabase.importPackageCompleted += _ => EditorApplication.delayCall += Run;
+                AssetDatabase.importPackageCompleted += _ =>
+                    EditorApplication.delayCall += () => Execute(eventAlertOnly, sqdOnly, mfdOnly);
                 AssetDatabase.ImportPackage(Path.Combine(package.resolvedPath,
                     "Package Resources/TMP Essential Resources.unitypackage"), false);
                 return;
@@ -46,14 +55,21 @@ public static class PresentationUnityCheck
             AvStyleHost.Configure(Directory.GetCurrentDirectory(), Debug.Log, Debug.LogWarning);
             AvFont.Font = TMP_FontAsset.CreateFontAsset(new Font("C:/Windows/Fonts/consola.ttf"));
             new GameObject("Events", typeof(EventSystem));
-            foreach (float height in new[] { 420f, 596f, 896f })
+            if (!eventAlertOnly)
             {
-                RenderSqd(height);
-                RenderRadio(height);
-                RenderEvents(height);
+                foreach (float height in new[] { 420f, 596f, 896f })
+                {
+                    RenderSqd(height);
+                    if (!sqdOnly)
+                    {
+                        RenderRadio(height);
+                        RenderEvents(height);
+                        RenderWeather(height);
+                    }
+                }
             }
-            RenderEventAlert();
-            RenderCameraPanel();
+            if (!sqdOnly) RenderEventAlert();
+            if (!eventAlertOnly && !sqdOnly && !mfdOnly) RenderTargetBoard();
             File.WriteAllText("result.txt", "PASS: " + captures +
                 " production-builder renders; " + assertions +
                 " compact scroll/readability assertions. Offline fixture text only; no live game, input, audio or networking claim.");
@@ -70,11 +86,11 @@ public static class PresentationUnityCheck
     private static void RenderSqd(float height)
     {
         GameObject canvasObject = MakeCanvas("SqdPreview", height, out RectTransform root);
-        AvScreen shell = AvScreen.Build(root, "SQD",
-            new[] { "01 PILOT", "02 SKILLS", "03 WINGS", "04 STUDIO" },
+        AvScreen shell = AvScreen.Build(root, "PILOT",
+            new[] { "PILOT", "SKILLS", "ACES", "STUDIO", "PLANE" },
             new[] { new[] { "PILOT SCORE", "THIS PILOT" }, new[] { "QUAL. PICKS", "UNSPENT" } },
             3, 480f, height, _ => { });
-        SeedShell(shell, "SQUADRON STATUS");
+        SeedShell(shell, "PERSONNEL FILE / PILOT");
         shell.Metrics[0].Set("2,450", "NEXT IN 550", .72f, AvTheme.RailReady);
         shell.Metrics[1].Set("2 PICKS", "4/7 EARNED", .57f, AvTheme.RailInfo);
 
@@ -95,13 +111,14 @@ public static class PresentationUnityCheck
         Set(panel, "progression", manager);
         Set(panel, "settings", settings);
         Set(panel, "shell", shell);
+        Call(panel, "PrepareShell");
 
         Type wingLink = TypeOf("BoscaliSummer.Runtime.WingLink");
         SetStatic(wingLink, "studioResolved", true);
         SetStatic(wingLink, "studioUnavailableReason", string.Empty);
 
-        string[] methods = { "BuildPilotPage", "BuildSkillsPage", "BuildWingsPage", "BuildStudioPage" };
-        string[] names = { "pilot", "skills", "wings", "studio" };
+        string[] methods = { "BuildPilotPage", "BuildSkillsPage", "BuildWingsPage", "BuildStudioPage", "BuildPlanePage" };
+        string[] names = { "pilot", "skills", "wings", "studio", "plane" };
         for (int i = 0; i < methods.Length; i++)
         {
             RectTransform page = (RectTransform)shell.CreatePage(i, names[i]).transform;
@@ -113,12 +130,53 @@ public static class PresentationUnityCheck
         for (int page = 0; page < names.Length; page++)
         {
             shell.SetPage(page);
+            shell.DataBar.State.text = "PERSONNEL FILE / " + names[page].ToUpperInvariant();
             ValidateReadable(root, "SQD " + names[page]);
             CaptureScrolled(canvasObject, height, "sqd-" + names[page] + "-" + height);
+            if (page == 4)
+            {
+                SeedPlane(panel);
+                ValidateReadable(root, "SQD plane populated");
+                CaptureScrolled(canvasObject, height, "sqd-plane-populated-" + height);
+            }
         }
         Object.DestroyImmediate(canvasObject);
         Object.DestroyImmediate(panelObject);
         Object.DestroyImmediate(managerObject);
+    }
+
+    private static void SeedPlane(object panel)
+    {
+        Text(panel, "planeName", "SAF-22 CHICANE");
+        Text(panel, "planeState", "AIRBORNE");
+        Text(panel, "planeSelected", "AAM-10  ·  4 / 6");
+        Text(panel, "planeStoreOverflow", "1–4 OF 8");
+        Text(panel, "planePlotState", "LIVE PART CONDITION");
+        Text(panel, "planeTuneName", "RANGE");
+        Text(panel, "planeTuneState", "RANGE: 10% less fuel draw; 85% throttle ceiling.");
+        string[] flight = { "940 km/h", "870 km/h", "6,120m", "+18.2m/s", "287°", "3.4 G" };
+        string[] systems = { "36%", "82%", "UP", "ON", "12 READY", "2 TRACKED" };
+        string[] stores = { "01  AAM-10  ·  4 / 6  SELECTED", "02  AAM-10  ·  2 / 4", "03  CBU-12  ·  3 / 3", "04  20MM CANNON  ·  320" };
+        string[] faults = { "LEFT WINGROOT", "ENGINE RIGHT", "RUDDER", "COCKPIT" };
+        string[] values = { "42%", "67%", "88%", "100%" };
+        TMP_Text[] tiles = (TMP_Text[])Get(panel, "planeFlight");
+        TMP_Text[] rows = (TMP_Text[])Get(panel, "planeSystems");
+        TMP_Text[] storeRows = (TMP_Text[])Get(panel, "planeStores");
+        TMP_Text[] faultNames = (TMP_Text[])Get(panel, "planeFaultNames");
+        TMP_Text[] faultValues = (TMP_Text[])Get(panel, "planeFaultValues");
+        Image[] bars = (Image[])Get(panel, "planeFaultBars");
+        for (int i = 0; i < tiles.Length; i++) tiles[i].text = flight[i];
+        for (int i = 0; i < rows.Length; i++) rows[i].text = systems[i];
+        for (int i = 0; i < storeRows.Length; i++) storeRows[i].text = stores[i];
+        for (int i = 0; i < faultNames.Length; i++)
+        {
+            faultNames[i].text = faults[i];
+            faultValues[i].text = values[i];
+            bars[i].fillAmount = new[] { .42f, .67f, .88f, 1f }[i];
+            Color ink = i == 3 ? new Color(.48f, 1f, .44f) : new Color(1f, .72f, .27f);
+            faultValues[i].color = ink;
+            bars[i].color = ink;
+        }
     }
 
     private static void SeedSqd(object panel)
@@ -213,6 +271,7 @@ public static class PresentationUnityCheck
         for (int page = 0; page < 2; page++)
         {
             shell.SetPage(page);
+            shell.DataBar.State.text = page == 0 ? "RECEIVER / ON AIR" : "MUSIC / PLAYING";
             ValidateReadable(root, "RAD " + page);
             CaptureScrolled(canvasObject, height, "rad-" + (page == 0 ? "receiver" : "music") + "-" + height);
         }
@@ -253,23 +312,90 @@ public static class PresentationUnityCheck
         foreach (object row in (IEnumerable)Get(deck, "Rows"))
         {
             GameObject rowRoot = Get(row, "Root") as GameObject; if (rowRoot != null) rowRoot.SetActive(true);
-            Text(row, "Number", (i + 1).ToString("00"));
+            Text(row, "Number", i == 1 ? ">" : (i + 1).ToString("00"));
             Text(row, "Title", new[] { "WHEELS UP", "NIGHT DRIVE", "LOW ALTITUDE", "RADAR SHADOW",
                 "COAST RUN", "DARK APPROACH", "FUEL STATE", "HOME VECTOR", "RESERVE", "AFTERBURNER",
                 "FINAL TURN", "TOUCHDOWN" }[i]);
+            if (i == 1)
+            {
+                (Get(row, "Ground") as Image).color = AvTheme.RailInfo.WithAlpha(.1f);
+                (Get(row, "Rule") as Image).color = AvTheme.RailInfo;
+                (Get(row, "Title") as TMP_Text).color = AvTheme.RailInfo;
+            }
             i++;
         }
+    }
+
+    private static void RenderWeather(float height)
+    {
+        GameObject canvasObject = MakeCanvas("WeatherPreview", height, out RectTransform root);
+        AvScreen shell = AvScreen.Build(root, "ENV", new[] { "WEATHER", "SKY & AIR" },
+            new[] { new[] { "COVER", "CLOUD COVER" }, new[] { "BASE", "CLOUD BASE" },
+                    new[] { "WIND", "WIND FROM" }, new[] { "DENSITY", "CAMERA ALT" } },
+            2, 480f, height, _ => { });
+        SeedShell(shell, "METOC / BATTLEFIELD");
+        shell.Metrics[0].Set("35%", "BROKEN", .35f, AvTheme.RailInfo);
+        shell.Metrics[1].Set("1,800", "METRES", .60f, AvTheme.RailInfo);
+        shell.Metrics[2].Set("12", "KNOTS", .40f, AvTheme.RailReady);
+        shell.Metrics[3].Set("92%", "SEA LEVEL", .92f, AvTheme.RailInfo);
+
+        var panelObject = new GameObject("WeatherMfdPanel");
+        object panel = panelObject.AddComponent(TypeOf("BoscaliSummer.Features.Weather.Presentation.WeatherMfdPanel"));
+        ((Behaviour)panel).enabled = false;
+        Set(panel, "shell", shell);
+        Call(panel, "BuildForecastPage", shell.CreatePage(0, "Forecast"));
+        Call(panel, "BuildEnvironmentPage", shell.CreatePage(1, "Environment"));
+        SeedWeather(panel);
+        for (int page = 0; page < 2; page++)
+        {
+            shell.SetPage(page);
+            ValidateReadable(root, "ENV page " + page);
+            CaptureScrolled(canvasObject, height, "env-" + (page == 0 ? "weather-" : "sky-") + height);
+        }
+        Object.DestroyImmediate(panelObject);
+        Object.DestroyImmediate(canvasObject);
+    }
+
+    private static void SeedWeather(object panel)
+    {
+        Type regimeType = TypeOf("BoscaliSummer.Features.Weather.Domain.WeatherRegimeType");
+        object liveGlyph = Get(panel, "liveGlyph");
+        Call(liveGlyph, "SetKind", Enum.Parse(regimeType, "Broken"));
+        ((Graphic)liveGlyph).color = AvTheme.Warning;
+        Text(panel, "liveRegimeTitle", "BROKEN DECK");
+        Text(panel, "liveRegimeBadge", "BKN");
+        Text(panel, "liveCoverLabel", "52% COVER");
+        Text(panel, "liveQuickMetrics", "DECK 2200 M   /   WIND 18 KT   /   RAIN 8%");
+        Text(panel, "liveTacticalBrief", "VARIABLE CEILING // WATCH CLOUD BREAKS ON INGRESS");
+        string[] types = { "Clear", "Fair", "Scattered", "Broken", "RainSquall", "Storm" };
+        string[] codes = { "CLR", "FEW", "SCT", "BKN", "RA+", "TS" };
+        int rowIndex = 0;
+        foreach (object row in (IEnumerable)Get(panel, "timelineRows"))
+        {
+            object glyph = Get(row, "Glyph");
+            Call(glyph, "SetKind", Enum.Parse(regimeType, types[rowIndex]));
+            ((Graphic)glyph).color = rowIndex >= 4 ? AvTheme.Warning : AvTheme.RailInfo;
+            (Get(row, "RegimeBadgeText") as TMP_Text).text = codes[rowIndex];
+            (Get(row, "ConditionsLabel") as TMP_Text).text = (5 + rowIndex * 17) + "%";
+            (Get(row, "DeckLabel") as TMP_Text).text = (3200 - rowIndex * 380) + " M";
+            (Get(row, "RainText") as TMP_Text).text = rowIndex >= 4 ?
+                (rowIndex * 15) + "% RAIN" : "— DRY —";
+            rowIndex++;
+        }
+        Text(panel, "advisoryLight", "TWILIGHT");
+        Text(panel, "advisoryDeck", "BASE 2200 M");
+        Text(panel, "advisoryWind", "18 KT");
     }
 
     private static void RenderEvents(float height)
     {
         GameObject canvasObject = MakeCanvas("EventsPreview", height, out RectTransform root);
-        AvScreen shell = AvScreen.Build(root, "EVN", Array.Empty<string>(),
-            new[] { new[] { "SUPPORT COST", "YOUR SIDE" }, new[] { "GROUND CUSTODY", "BASES" } },
+        AvScreen shell = AvScreen.Build(root, "EVN", new[] { "DISPATCH", "DESK" },
+            new[] { new[] { "SUPPORT COST", "YOUR SIDE" }, new[] { "SUPPORT RESET", "TEMPO" } },
             3, 480f, height, _ => { });
         SeedShell(shell, "EVENT ACTIVE");
         shell.Metrics[0].Set("+35%", "SUPPORT COST", .35f, AvTheme.RailCaution);
-        shell.Metrics[1].Set("5 : 3", "CONTESTED", .63f, AvTheme.RailInfo);
+        shell.Metrics[1].Set("x1.20", "LONGER COOLDOWN", .20f, AvTheme.RailCaution);
 
         var panelObject = new GameObject("EventsMfdPanel");
         object panel = panelObject.AddComponent(TypeOf("BoscaliSummer.Features.Events.Presentation.EventsMfdPanel"));
@@ -279,12 +405,63 @@ public static class PresentationUnityCheck
         SetEntry(settings, "HistoryLength", 4);
         Set(panel, "settings", settings); Set(panel, "shell", shell);
         Call(panel, "BuildEventsPage", shell.CreatePage(0, "Events"));
+        GameObject docs = shell.CreatePage(1, "Docs");
+        Call(panel, "BuildDocsPage", docs);
+        foreach (TMP_Text copy in docs.GetComponentsInChildren<TMP_Text>(true))
+        {
+            if (copy.text.Length < 65) continue;
+            RectTransform rect = (RectTransform)copy.transform;
+            Check(copy.GetPreferredValues(copy.text, rect.rect.width, 0f).y <= rect.rect.height + 1f,
+                "EVN docs copy must fit its reading area: " + copy.text.Substring(0, 24));
+        }
         SeedEvents(panel);
         shell.SetPage(0);
-        ValidateReadable(root, "EVN");
+        ValidateReadable(root, "EVN dispatch");
         CaptureScrolled(canvasObject, height, "evn-events-" + height);
+        Call(Get(panel, "activeCard"), "BindPlaceholder", "The theater is quiet. The director is watching for a story worth telling.");
+        Call(Get(panel, "decisionBoard"), "SetStandby");
+        Call(panel, "LayoutHistory", 3);
+        CaptureScrolled(canvasObject, height, "evn-calm-" + height);
+        shell.SetPage(1);
+        ValidateReadable(root, "EVN docs");
+        CaptureScrolled(canvasObject, height, "evn-docs-" + height);
         Object.DestroyImmediate(canvasObject);
         Object.DestroyImmediate(panelObject);
+        if (height >= 896f) RenderArchive();
+    }
+
+    private static void RenderArchive()
+    {
+        object archive = CallStatic(TypeOf("BoscaliSummer.Features.Events.Presentation.EventDeskArchive"), "Create");
+        Call(archive, "Show", 2);
+        GameObject archiveObject = ((Component)archive).gameObject;
+        PrepareWorldCanvas(archiveObject.GetComponent<Canvas>(), 1920f, 1080f);
+        archiveObject.GetComponent<CanvasScaler>().enabled = false;
+        RectTransform archiveRoot = (RectTransform)archiveObject.transform;
+        archiveRoot.pivot = new Vector2(0f, 1f);
+        archiveRoot.position = new Vector3(-960f, 540f, 0f);
+        Set(archive, "fitted", Vector2.zero);
+        Call(archive, "Fit");
+        Capture(archiveObject, 1920f, 1080f, "evn-archive-world.png");
+        Call(archive, "SelectSection", 1);
+        Capture(archiveObject, 1920f, 1080f, "evn-archive-events.png");
+        Call(archive, "SelectSection", 0);
+        Capture(archiveObject, 1920f, 1080f, "evn-archive-aircraft-empty.png");
+        var aircraftDefinition = ScriptableObject.CreateInstance<AircraftDefinition>();
+        aircraftDefinition.unitName = "MODEL PREVIEW FIXTURE";
+        aircraftDefinition.code = "QA-1";
+        aircraftDefinition.description = "Mesh only. No aircraft simulation is created in the field archive.";
+        GameObject prefab = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        prefab.name = "PreviewMeshFixture";
+        aircraftDefinition.unitPrefab = prefab;
+        ((List<AircraftDefinition>)Get(archive, "aircraft")).Add(aircraftDefinition);
+        Call(archive, "SelectSection", 0);
+        Check(Get(archive, "preview") != null, "EVN aircraft preview must create a mesh-only viewer.");
+        Capture(archiveObject, 1920f, 1080f, "evn-archive-aircraft-model.png");
+        Call(archive, "Close");
+        Object.DestroyImmediate(archiveObject);
+        Object.DestroyImmediate(prefab);
+        Object.DestroyImmediate(aircraftDefinition);
     }
 
     private static void SeedEvents(object panel)
@@ -298,6 +475,21 @@ public static class PresentationUnityCheck
         Call(active, "SetClock", "ENDS 04:18", false, false);
         Call(active, "SetProgress", .64f, AvTheme.RailCaution);
 
+        object desk = Get(panel, "decisionBoard");
+        ((RectTransform)Get(desk, "root")).gameObject.SetActive(true);
+        Text(desk, "subheading", "CHOOSE ONE RESPONSE");
+        var choices = (AvButton[])Get(desk, "actions");
+        var details = (TMP_Text[])Get(desk, "details");
+        var reasons = (TMP_Text[])Get(desk, "reasons");
+        string[] names = { "CONTAIN", "TREASURY DIRECTIVE", "CONTRACT INTELLIGENCE", "PILOT CHANNEL" };
+        string[] requirements = { "PERSONAL ALLOCATION", "FACTION FUNDS", "HOST CHECKS FACTION CONTRACT", "RECON QUALIFICATION REQUIRED" };
+        for (int choice = 0; choice < choices.Length; choice++)
+        {
+            choices[choice].SetText(names[choice]);
+            details[choice].text = "HOST COST QUOTE";
+            reasons[choice].text = requirements[choice];
+        }
+
         Call(panel, "LayoutHistory", 3);
         int i = 0;
         foreach (object card in (IEnumerable)Get(panel, "historyCards"))
@@ -305,7 +497,7 @@ public static class PresentationUnityCheck
             if (i >= 3) break;
             object view = Event("history_" + i, new[] { "AIRLIFT SURGE", "RADAR BLACKOUT", "FUEL PRIORITY" }[i],
                 "Completed theater event.", i == 1 ? "HAZARD" : "POLITICAL", i == 0 ? "MEDIUM" : "MINOR",
-                "ALL THEATER", false, i == 1 ? "+20% SUPPORT COST" : "-15% SUPPORT COST", 0f, 1f);
+                "ALL THEATER", false, i == 1 ? "NO EFFECT" : "-15% SUPPORT COST", 0f, 1f);
             Call(card, "Bind", view, AvTheme.TextPrimary, i == 1 ? AvTheme.RailDanger : AvTheme.RailInfo,
                 i == 1 ? AvTheme.RailDanger : AvTheme.RailReady);
             Call(card, "SetClock", (i + 2) + " MIN AGO");
@@ -319,12 +511,22 @@ public static class PresentationUnityCheck
         Type step = TypeOf("BoscaliSummer.Framework.Contracts.ActiveEventStep");
         Type view = TypeOf("BoscaliSummer.Framework.Contracts.ActiveEventView");
         Array steps = Array.CreateInstance(step, 0);
+        string art = category == "HAZARD" ? "fuel_depot_fire" : "industrial_surge";
         return Activator.CreateInstance(view, new object[] { id, title, flavor, category, tier, target,
-            isSuper, string.Empty, effect, steps, start, end });
+            isSuper, art, effect, steps, start, end, true, "+20% SUPPORT RESET" });
     }
 
     private static void RenderEventAlert()
     {
+        Type toneType = TypeOf("BoscaliSummer.Features.Events.Presentation.EventAlertTone");
+        AudioClip tone = (AudioClip)toneType.GetMethod("Clip", All).Invoke(null, null);
+        var toneSamples = new float[tone.samples];
+        Check(tone.GetData(toneSamples, 0), "Superevent chime samples must be readable.");
+        float tonePeak = 0f;
+        foreach (float sample in toneSamples) tonePeak = Mathf.Max(tonePeak, Mathf.Abs(sample));
+        Check(tonePeak > .1f && tonePeak < .5f && Mathf.Abs(toneSamples[0]) < .001f &&
+              Mathf.Abs(toneSamples[toneSamples.Length - 1]) < .01f,
+            "Superevent chime must have headroom and quiet edges.");
         var componentObject = new GameObject("AlertComponent");
         object alert = componentObject.AddComponent(TypeOf("BoscaliSummer.Features.Events.Presentation.SuperEventAlert"));
         ((Behaviour)alert).enabled = false;
@@ -333,41 +535,211 @@ public static class PresentationUnityCheck
         Canvas canvas = root.GetComponent<Canvas>();
         PrepareWorldCanvas(canvas, 1920f, 1080f);
         ((CanvasGroup)Get(alert, "group")).alpha = 1f;
-        Text(alert, "stamp", "SUPEREVENT · THEATER ALERT");
-        Text(alert, "subtitle", "EVENT DIRECTOR · HAZARD · ACTIVE");
-        Text(alert, "title", "BROKEN ARROW");
-        Text(alert, "flavor", "A strategic weapons convoy has gone dark. Every faction is searching, and the next few minutes will decide who reaches it first.");
-        Text(alert, "note", "EFFECT  +50% SUPPORT COST  ·  TARGET  ALL THEATER");
-        Text(alert, "clock", "AUTO-DISMISS 0:24");
-        int i = 0;
-        foreach (TMP_Text label in (IEnumerable)Get(alert, "stepLabels"))
+        Text(alert, "stamp", "SUPEREVENT  /  POLITICAL");
+        Text(alert, "target", "ALL THEATER");
+        Text(alert, "eyebrow", "THEATER DISPATCH  /  LIVE");
+        Text(alert, "title", "CEASEFIRE ULTIMATUM");
+        Text(alert, "scope", "DIRECTED TO  /  ALL THEATER");
+        Text(alert, "flavor", "Diplomats have set a deadline. Both sides rush stocked materiel toward the line before the embargo, temporarily cutting support costs and dispatching convoys.");
+        Text(alert, "impact", "-30% SUPPORT COST");
+        Text(alert, "nextOrder", "T-0:08   FRONTLINE CONVOY REQUESTED");
+        Text(alert, "clock", "ON AIR  0:24");
+        Text(alert, "compactTitle", "CEASEFIRE ULTIMATUM");
+        Text(alert, "compactImpact", "-30% SUPPORT COST");
+        Text(alert, "compactClock", "0:12");
+        var relief = new Color32(111, 219, 191, 255);
+        ((TMP_Text)Get(alert, "impact")).color = relief;
+        ((TMP_Text)Get(alert, "compactImpact")).color = relief;
+        Type cache = TypeOf("BoscaliSummer.Features.Events.Presentation.EventArtCache");
+        Type catalog = TypeOf("BoscaliSummer.Features.Events.Domain.EventCatalog");
+        Array entries = (Array)catalog.GetField("All", All).GetValue(null);
+        MethodInfo atlasTile = cache.GetMethod("AtlasTile", All);
+        Texture2D sharedTexture = null;
+        for (int i = 0; i < entries.Length; i++)
         {
-            label.gameObject.SetActive(i < 3);
-            if (i < 3) label.text = "T+" + (i + 1) + ":00   " + new[] { "SEARCH GRID EXPANDS", "ESCORTS COMMIT", "RECOVERY WINDOW CLOSES" }[i];
-            i++;
+            string key = (string)entries.GetValue(i).GetType().GetProperty("IconKey", All)
+                .GetValue(entries.GetValue(i));
+            Sprite tile = (Sprite)atlasTile.Invoke(null, new object[] { key });
+            Check(tile != null && tile.rect.width == 192f && tile.rect.height == 108f,
+                "Every event must resolve a 192x108 atlas tile.");
+            if (sharedTexture == null) sharedTexture = tile.texture;
+            Check(ReferenceEquals(sharedTexture, tile.texture),
+                "All event tiles must share one decoded atlas texture.");
         }
-        Image art = (Image)Get(alert, "art"); art.enabled = false;
-        Component glyph = (Component)Get(alert, "glyph"); glyph.gameObject.SetActive(true);
+        Sprite poster = (Sprite)cache.GetMethod("Get", All).Invoke(null,
+            new object[] { "ceasefire_ultimatum", "tier_super" });
+        Check(poster != null, "The superevent dispatch must load its embedded poster.");
+        Image art = (Image)Get(alert, "art"); art.sprite = poster; art.enabled = poster != null;
+        Image compactArt = (Image)Get(alert, "compactArt"); compactArt.sprite = poster;
+        compactArt.enabled = poster != null;
+        Component glyph = (Component)Get(alert, "glyph"); glyph.gameObject.SetActive(poster == null);
+        Component compactGlyph = (Component)Get(alert, "compactGlyph");
+        compactGlyph.gameObject.SetActive(poster == null);
+        ((Image)Get(alert, "stripes")).gameObject.SetActive(poster == null);
+        ((Image)Get(alert, "compactStripes")).gameObject.SetActive(poster == null);
+        TMP_Text title = (TMP_Text)Get(alert, "title");
+        TMP_Text next = (TMP_Text)Get(alert, "nextOrder");
+        TMP_Text flavor = (TMP_Text)Get(alert, "flavor");
+        foreach (object entry in entries)
+        {
+            Type entryType = entry.GetType();
+            if (!(bool)entryType.GetProperty("IsSuper", All).GetValue(entry)) continue;
+            title.text = ((string)entryType.GetProperty("Title", All).GetValue(entry)).ToUpperInvariant();
+            flavor.text = (string)entryType.GetProperty("FlavorText", All).GetValue(entry);
+            Canvas.ForceUpdateCanvases();
+            Check(!title.isTextOverflowing && !flavor.isTextOverflowing,
+                "Superevent headline and flavor must fit: " + title.text);
+        }
+        title.text = "CEASEFIRE ULTIMATUM";
+        flavor.text = "Diplomats have set a deadline. Both sides rush stocked materiel toward the line before the embargo, temporarily cutting support costs and dispatching convoys.";
         ValidateReadable((RectTransform)root.transform, "EVN alert");
+        Check(!title.isTextOverflowing && !next.isTextOverflowing,
+            "Superevent headline and next order must fit their dispatch areas.");
         Capture(root, 1920f, 1080f, "evn-alert.png");
+        PrepareWorldCanvas(canvas, 1920f, 1080f);
+        // The production canvas uses ScaleWithScreenSize/Expand: 720p renders the
+        // 1920x1080 layout at two-thirds scale, not at an unscaled 1280-unit width.
+        root.transform.localScale = Vector3.one * (720f / 1080f);
+        Capture(root, 1280f, 720f, "evn-alert-720p.png");
+        PrepareWorldCanvas(canvas, 1920f, 1080f);
+        ((RectTransform)Get(alert, "expandedPanel")).gameObject.SetActive(false);
+        ((RectTransform)Get(alert, "compactPanel")).gameObject.SetActive(true);
+        ((CanvasGroup)Get(alert, "compactGroup")).alpha = 1f;
+        ValidateReadable((RectTransform)root.transform, "EVN compact alert");
+        Capture(root, 1920f, 1080f, "evn-alert-compact.png");
         Object.DestroyImmediate(root); Object.DestroyImmediate(componentObject);
     }
 
-    private static void RenderCameraPanel()
+    private static void RenderTargetBoard()
     {
-        object cameraPanel = Activator.CreateInstance(TypeOf("BoscaliSummer.Features.QoL.Presentation.ThirdPersonCameraPanel"), true);
-        var owner = new GameObject("CameraOwner");
-        Call(cameraPanel, "Create", owner.transform);
-        GameObject root = (GameObject)Get(cameraPanel, "root");
-        PrepareWorldCanvas(root.GetComponent<Canvas>(), 640f, 480f);
-        Call(cameraPanel, "Layout", (object)null);
-        Call(cameraPanel, "PresentFeed", null, true);
-        Text(cameraPanel, "selection", "TRACKING · 3 VALID TARGETS");
-        Text(cameraPanel, "contactAge", "CONTACT · CURRENT");
-        Text(cameraPanel, "markStatus", "MARK · X 2480 / Z 7310 · 2s OLD");
-        ValidateReadable((RectTransform)root.transform, "CAM");
-        Capture(root, 640f, 480f, "qol-target-camera.png");
+        object board = Activator.CreateInstance(TypeOf("BoscaliSummer.Features.QoL.Presentation.ThirdPersonTargetBoard"), true);
+        var owner = new GameObject("BoardOwner");
+        Call(board, "Create", owner.transform);
+        GameObject root = (GameObject)Get(board, "root");
+        PrepareWorldCanvas(root.GetComponent<Canvas>(), 1920f, 1080f);
+
+        // The corner block is placed against the safe area and the game feed's own measurements, so
+        // the check fixes a feed size and looks for the same edges: the feed at the corner inset,
+        // the blocks stacked above it. The words are the copy class's, driven the way the
+        // controller drives them.
+        Set(board, "feedWidth", 336f);
+        Set(board, "feedHeight", 224f);
+        Call(board, "Layout", "MARK 1.2 km  34s");
+        Call(board, "Present", "MARK 1.2 km  34s");
+
+        var panel = (RectTransform)Get(board, "board");
+        var captureCanvas = (Canvas)root.GetComponent<Canvas>();
+        Check(panel != null && Mathf.Approximately(panel.sizeDelta.x, 336f),
+            "Target board must be as wide as the game's camera picture.");
+        Check(Mathf.Approximately(panel.anchoredPosition.x,
+                  Screen.safeArea.xMax / captureCanvas.scaleFactor - 24f - 336f) &&
+              Mathf.Approximately(panel.anchoredPosition.y, 24f),
+            "Target board must hang off the bottom-right corner of the safe area.");
+
+        // Glass: the board draws no ground of its own — the flight HUD it floats beside has none.
+        Check(panel.GetComponent<Image>() == null,
+            "The glass board must draw no ground of its own.");
+
+        var feed = (RawImage)Get(board, "feed");
+        Check(feed != null && feed.texture == null && Mathf.Approximately(feed.rectTransform.sizeDelta.y, 224f) &&
+              Mathf.Approximately(feed.rectTransform.sizeDelta.x, 336f),
+            "The game's picture must keep its own aspect at the board's bottom.");
+
+        // No aircraft here, so no vanilla schematic: the airframe block collapses and the corner
+        // carries on with the expansion row and the picture. There is no drawn fallback.
+        var slot = (RectTransform)Get(board, "schematicSlot");
+        Check(slot == null,
+            "With no vanilla schematic the airframe block must collapse rather than invent a diagram.");
+
+        var rows = (TMP_Text)Get(board, "rows");
+        Check(rows != null && rows.gameObject.activeSelf && rows.text.StartsWith("MARK"),
+            "A held expansion line must be drawn in the board's top row.");
+
+        var rowCorners = new Vector3[4];
+        var boardCorners = new Vector3[4];
+        var feedCorners = new Vector3[4];
+        rows.rectTransform.GetWorldCorners(rowCorners);
+        panel.GetWorldCorners(boardCorners);
+        feed.rectTransform.GetWorldCorners(feedCorners);
+        Check(rowCorners[0].y + .5f >= feedCorners[2].y &&
+              rowCorners[2].y <= boardCorners[2].y + .5f && rowCorners[0].y >= boardCorners[0].y - .5f,
+            "Target board's blocks must stack between the top edge and the picture.");
+
+        ValidateReadable(panel, "Target board");
+        Check(rows.rectTransform.rect.height >= rows.fontSize,
+            "Target board's copy must not be ellipsized by its own box.");
+        Capture(root, 1920f, 1080f, "target-board.png");
+
+        // The corner's usual state: the game runs its target camera only while targets are
+        // selected, so most of the time there is no picture and the reading stands on its own.
+        Set(board, "feedHeight", 0f);
+        Call(board, "Layout", new object[] { null });
+        Call(board, "Present", new object[] { null });
+        Canvas.ForceUpdateCanvases();
+        Check(panel != null && Mathf.Approximately(panel.sizeDelta.x, 336f) &&
+              Mathf.Approximately(panel.anchoredPosition.y, 24f) &&
+              Mathf.Approximately(panel.anchoredPosition.x, Screen.safeArea.xMax / captureCanvas.scaleFactor - 24f - 336f),
+            "With the game's camera off the airframe reading must still stand at the corner.");
+        feed = (RawImage)Get(board, "feed");
+        rows = (TMP_Text)Get(board, "rows");
+        Check(!feed.enabled, "With no live picture the corner must not present a stale frame.");
+        Check(!rows.gameObject.activeSelf, "With no expansion line the top row must collapse.");
+        Capture(root, 1920f, 1080f, "target-board-no-feed.png");
+
+        // Shots states: the live missile card, fed fixed snapshots instead of game reads.
+        Set(board, "feedWidth", 336f);
+        Set(board, "feedHeight", 224f);
+        Type shotEntry = TypeOf("BoscaliSummer.Features.QoL.Presentation.ThirdPersonTargetBoard+ShotEntry");
+        Type shotMath = TypeOf("BoscaliSummer.Features.QoL.Domain.ShotMath");
+        var shown = (IList)Get(board, "shown");
+        shown.Clear();
+        shown.Add(ShotFixture(shotEntry, shotMath, true, "ARH", "MIG-29", "4.2 km", 4200f, 3800f));
+        shown.Add(ShotFixture(shotEntry, shotMath, false, "IR", null, "1.8 km", 2000f, 1500f));
+        Set(board, "shownOutbound", 1);
+        Set(board, "shownInbound", 1);
+        Call(board, "Layout", "MARK 1.2 km  34s");
+        Call(board, "Present", "MARK 1.2 km  34s");
+        Canvas.ForceUpdateCanvases();
+        feed = (RawImage)Get(board, "feed");
+        var shotsStatus = (TMP_Text)Get(board, "shotsStatus");
+        Check(shotsStatus != null && shotsStatus.text == "1 OUT · 1 INB",
+            "The shots card must count both directions in its header.");
+        var shotTexts = new List<TMP_Text>();
+        foreach (TMP_Text line in (IEnumerable)Get(board, "shotTexts")) shotTexts.Add(line);
+        Check(shotTexts.Count == 2 && shotTexts[0].text == "OUT ARH MIG-29 4.2 km 10s" &&
+              shotTexts[1].text == "INB IR 1.8 km 3s",
+            "Each shot row must name its direction, seeker, range and countdown.");
+        var shotBars = new List<Image>();
+        foreach (Image bar in (IEnumerable)Get(board, "shotBars")) shotBars.Add(bar);
+        float rowWidth = shotTexts[0].rectTransform.sizeDelta.x;
+        Check(shotBars.Count == 2 &&
+              Mathf.Abs(shotBars[0].rectTransform.sizeDelta.x - rowWidth * 3800f / 4200f) < 0.5f &&
+              Mathf.Abs(shotBars[1].rectTransform.sizeDelta.x - rowWidth * 0.75f) < 0.5f,
+            "Each shot bar must drain against its first-seen range.");
+        Check(shotsStatus.color.r > 0.9f && shotsStatus.color.g < 0.3f,
+            "An inbound shot must light the shots status red.");
+        var statusCorners = new Vector3[4];
+        shotsStatus.rectTransform.GetWorldCorners(statusCorners);
+        feed.rectTransform.GetWorldCorners(feedCorners);
+        Check(statusCorners[0].y + .5f >= feedCorners[2].y,
+            "The shots block must stack above the picture.");
+        ValidateReadable(panel, "Target board shots");
+        Capture(root, 1920f, 1080f, "target-board-shots.png");
         Object.DestroyImmediate(root); Object.DestroyImmediate(owner);
+    }
+
+    private static object ShotFixture(Type shotEntry, Type shotMath, bool outbound, string seeker,
+        string target, string rangeText, float first, float second)
+    {
+        object track = CallStatic(shotMath, "Start", first, 0f);
+        track = CallStatic(shotMath, "Update", track, second, 1f);
+        object entry = Activator.CreateInstance(shotEntry, true);
+        Set(entry, "Outbound", outbound);
+        Set(entry, "Seeker", seeker);
+        if (target != null) Set(entry, "Target", target);
+        Set(entry, "RangeText", rangeText);
+        Set(entry, "Track", track);
+        return entry;
     }
 
     private static void ValidateSkillRows(object panel)

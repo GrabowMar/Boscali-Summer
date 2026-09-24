@@ -1,4 +1,3 @@
-using BoscaliSummer.Features.Support.Domain;
 using BoscaliSummer.Features.Support.Domain.Cyber;
 using BoscaliSummer.Features.Support.Runtime;
 using NOAvionics.Ui;
@@ -9,23 +8,22 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Features.Support.Presentation
 {
     /// <summary>
-    /// The CYBER network on the maximised map: a labelled marker per site (call sign and state
-    /// word; airbase nodes as larger squares, field trucks as diamonds), link lines coloured by
-    /// health, the backbone as faint blue spokes from each gateway to Cyber Command, jammer
-    /// umbrellas and SIGINT ears as rings, jamming raids as amber rings, intrusions as pulsing
-    /// red rings, and — while a site order is armed — a preview of the new site's link reach
-    /// under the cursor. Pooled, map-local, client-only.
+    /// The CYBER network on the maximised map: a labelled marker per node (call sign and state
+    /// word; Cyber Command and airbases as squares, hacked locations as diamonds, untaken
+    /// locations as dim hollow targets), the ability radius of every working hacked location as a
+    /// ring, the live breach as a pulsing ring with its trace, jamming raids as amber rings and
+    /// intrusions as pulsing red rings. Pooled, map-local, client-only.
     /// </summary>
     internal sealed class CyberMapLayer
     {
         private const int Slots = CyberNetwork.SlotCount;
-        private const int LinkCount = Slots * (Slots - 1) / 2;
         private static readonly Color Healthy = new Color(0.3f, 0.95f, 0.75f, 1f);
         private static readonly Color Warning = new Color(1f, 0.72f, 0.22f, 1f);
         private static readonly Color Hostile = new Color(1f, 0.3f, 0.26f, 1f);
         private static readonly Color Pending = new Color(0.45f, 0.7f, 1f, 1f);
+        private static readonly Color Untaken = new Color(0.6f, 0.6f, 0.65f, 1f);
 
-        private sealed class SiteMark
+        private sealed class NodeMark
         {
             public GameObject Root;
             public Image Icon;
@@ -34,24 +32,16 @@ namespace BoscaliSummer.Features.Support.Presentation
             public string LastLabel;
         }
 
-        private readonly SiteMark[] sites = new SiteMark[Slots];
-        private readonly Image[] links = new Image[LinkCount];
+        private readonly NodeMark[] nodes = new NodeMark[Slots];
         private readonly Image[] incidents = new Image[CyberNetwork.IncidentSlots];
-        private readonly Image preview;
-        private readonly Image previewCore;
+        private readonly Image breach;
 
         public CyberMapLayer(Transform parent, TMP_FontAsset font)
         {
-            for (int i = 0; i < LinkCount; i++)
-            {
-                links[i] = Make(parent, "CyberLink", null);
-                links[i].rectTransform.pivot = new Vector2(0.5f, 0.5f);
-            }
             for (int i = 0; i < incidents.Length; i++)
                 incidents[i] = Make(parent, "CyberIncident", SupportTacticalIcons.RingSprite);
-            for (int i = 0; i < Slots; i++) sites[i] = BuildSite(parent, font);
-            preview = Make(parent, "CyberPreview", SupportTacticalIcons.DottedRingSprite);
-            previewCore = Make(parent, "CyberPreviewCore", SupportTacticalIcons.CrosshairSprite);
+            for (int i = 0; i < Slots; i++) nodes[i] = BuildNode(parent, font);
+            breach = Make(parent, "CyberBreach", SupportTacticalIcons.DottedRingSprite);
         }
 
         public void Update(SupportManager support, DynamicMap map, float mapFactor, float invZoom)
@@ -59,56 +49,24 @@ namespace BoscaliSummer.Features.Support.Presentation
             CyberNetwork network = support != null ? support.LocalCyber : null;
             double now = support != null ? support.OrbitNow : 0.0;
             float time = Time.unscaledTime;
-            bool any = network != null && network.SiteCount > 0 && support.CyberEnabled;
+            bool any = network != null && network.Stats().Nodes > 0 && support.CyberEnabled;
 
-            for (int i = 0; i < Slots; i++) PaintSite(network, i, now, time, any, mapFactor, invZoom);
-
-            int index = 0;
-            for (int a = 0; a < Slots; a++)
-            {
-                for (int b = a + 1; b < Slots; b++, index++)
-                {
-                    Image line = links[index];
-                    bool linked = any && network.Linked(a, b);
-                    // The backbone is a full mesh; drawn as spokes to Cyber Command it reads without clutter.
-                    bool backbone = linked && network.Backbone(a, b);
-                    if (backbone && network.Site(a).Kind != CyberSiteKind.Command &&
-                        network.Site(b).Kind != CyberSiteKind.Command)
-                        linked = false;
-                    Show(line, linked);
-                    if (!linked) continue;
-                    CyberSite from = network.Site(a), to = network.Site(b);
-                    bool hot = from.Compromised || to.Compromised;
-                    bool live = network.OnNet(a) && network.OnNet(b);
-                    var pa = new Vector2(from.X * mapFactor, from.Z * mapFactor);
-                    var pb = new Vector2(to.X * mapFactor, to.Z * mapFactor);
-                    Vector2 d = pb - pa;
-                    RectTransform rt = line.rectTransform;
-                    rt.localPosition = (pa + pb) * 0.5f;
-                    rt.sizeDelta = new Vector2(d.magnitude, (backbone ? 1.5f : 2.5f) * invZoom);
-                    rt.localEulerAngles = new Vector3(0f, 0f, Mathf.Atan2(d.y, d.x) * Mathf.Rad2Deg);
-                    Color colour = hot ? Hostile : !live ? Warning : backbone ? Pending : Healthy;
-                    line.color = colour.WithAlpha(hot ? 0.5f + 0.4f * Mathf.PingPong(time * 3f, 1f)
-                        : !live ? 0.4f : backbone ? 0.3f : 0.75f);
-                }
-            }
-
+            for (int i = 0; i < Slots; i++) PaintNode(network, i, now, time, any, mapFactor, invZoom);
             for (int i = 0; i < incidents.Length; i++) PaintIncident(network, i, now, time, any, mapFactor, invZoom);
-            PaintPreview(support, map, network, mapFactor, invZoom, time);
+            PaintBreach(network, now, time, any, mapFactor, invZoom);
         }
 
-        private SiteMark BuildSite(Transform parent, TMP_FontAsset font)
+        private NodeMark BuildNode(Transform parent, TMP_FontAsset font)
         {
-            var mark = new SiteMark
+            var mark = new NodeMark
             {
                 Cover = Make(parent, "CyberCover", SupportTacticalIcons.RingSprite),
-                Root = new GameObject("CyberSite", typeof(RectTransform))
+                Root = new GameObject("CyberNode", typeof(RectTransform))
             };
             mark.Root.transform.SetParent(parent, false);
             mark.Icon = Make(mark.Root.transform, "Icon", null);
             mark.Icon.rectTransform.sizeDelta = new Vector2(12f, 12f);
             mark.Icon.gameObject.SetActive(true);
-            mark.Icon.rectTransform.localEulerAngles = new Vector3(0f, 0f, 45f);
 
             var textObject = new GameObject("Label", typeof(RectTransform), typeof(TextMeshProUGUI));
             textObject.transform.SetParent(mark.Root.transform, false);
@@ -125,10 +83,10 @@ namespace BoscaliSummer.Features.Support.Presentation
             return mark;
         }
 
-        private void PaintSite(CyberNetwork network, int slot, double now, float time, bool any, float mapFactor,
+        private void PaintNode(CyberNetwork network, int slot, double now, float time, bool any, float mapFactor,
                                float invZoom)
         {
-            SiteMark mark = sites[slot];
+            NodeMark mark = nodes[slot];
             bool exists = any && network.Exists(slot);
             if (mark.Root.activeSelf != exists) mark.Root.SetActive(exists);
             if (!exists)
@@ -136,35 +94,37 @@ namespace BoscaliSummer.Features.Support.Presentation
                 Show(mark.Cover, false);
                 return;
             }
-            CyberSite site = network.Site(slot);
-            var position = new Vector3(site.X * mapFactor, site.Z * mapFactor, 0f);
+            CyberNode node = network.Node(slot);
+            var position = new Vector3(node.X * mapFactor, node.Z * mapFactor, 0f);
             mark.Root.transform.localPosition = position;
             mark.Root.transform.localScale = Vector3.one * invZoom;
 
-            Color colour = site.Lost || site.Compromised || site.Down ? Hostile
-                : site.Deploying ? Pending
-                : site.Isolated || !network.OnNet(slot) || network.Jammed(slot, now) ? Warning
-                : Healthy;
-            bool blink = site.Compromised || site.Deploying || site.Down;
+            bool taken = node.Static || node.Hacked;
+            Color colour = node.Down || node.Compromised ? Hostile
+                : node.Isolated ? Warning
+                : !taken ? Untaken
+                : network.Jammed(slot, now) ? Warning
+                : node.Static ? Pending : Healthy;
+            bool blink = node.Compromised || node.Down;
             mark.Icon.color = colour.WithAlpha(blink ? 0.5f + 0.5f * Mathf.PingPong(time * 2f, 1f) : 1f);
-            // Airbase nodes are squares a size up; field trucks stay diamonds.
-            mark.Icon.rectTransform.sizeDelta = site.Static ? new Vector2(15f, 15f) : new Vector2(12f, 12f);
-            mark.Icon.rectTransform.localEulerAngles = new Vector3(0f, 0f, site.Static ? 0f : 45f);
-            string state = CyberWords.SiteState(network, slot, now);
-            string label = "<b>" + CyberWords.Callsign(network, slot) + "</b>\n" +
-                           (site.Kind == CyberSiteKind.Jammer && state == "ONLINE" ? CyberWords.Mode(site.Mode) : state);
+            // Home nodes are squares a size up; hacked locations and targets stay diamonds.
+            mark.Icon.rectTransform.sizeDelta = node.Static ? new Vector2(15f, 15f) : new Vector2(12f, 12f);
+            mark.Icon.rectTransform.localEulerAngles = new Vector3(0f, 0f, node.Static ? 0f : 45f);
+            string state = CyberWords.NodeState(network, slot, now);
+            if (network.BreachActive && network.BreachTarget == slot)
+                state = "BREACH " + Mathf.RoundToInt(network.BreachTrace * 100f) + "%";
+            string label = "<b>" + CyberWords.Callsign(network, slot) + "</b>\n" + state;
             if (mark.LastLabel != label) mark.Label.text = mark.LastLabel = label;
             mark.Label.color = colour;
 
-            float radius = network.EffectRadius(slot, now);
-            bool cover = network.Working(slot) && radius > 0f &&
-                         (site.Kind != CyberSiteKind.Jammer || EwPostures.Umbrella(site.Mode) > 0f);
+            float radius = network.RadiusOf(slot, now);
+            bool cover = network.Working(slot) && radius > 0f;
             Show(mark.Cover, cover);
             if (!cover) return;
             mark.Cover.transform.localPosition = position;
             mark.Cover.rectTransform.sizeDelta = Vector2.one * radius * 2f * mapFactor;
-            mark.Cover.sprite = site.Kind == CyberSiteKind.Sigint ? SupportTacticalIcons.DottedRingSprite : SupportTacticalIcons.RingSprite;
-            mark.Cover.color = colour.WithAlpha(site.Kind == CyberSiteKind.Jammer ? 0.35f : 0.2f);
+            mark.Cover.sprite = SupportTacticalIcons.RingSprite;
+            mark.Cover.color = colour.WithAlpha(0.16f);
         }
 
         private void PaintIncident(CyberNetwork network, int index, double now, float time, bool any, float mapFactor,
@@ -181,8 +141,8 @@ namespace BoscaliSummer.Features.Support.Presentation
             float x = incident.X, z = incident.Z;
             if (incident.Kind != IncidentKind.Raid && network.Exists(incident.Site))
             {
-                x = network.Site(incident.Site).X;
-                z = network.Site(incident.Site).Z;
+                x = network.Node(incident.Site).X;
+                z = network.Node(incident.Site).Z;
             }
             Show(ring, true);
             ring.transform.localPosition = new Vector3(x * mapFactor, z * mapFactor, 0f);
@@ -195,46 +155,16 @@ namespace BoscaliSummer.Features.Support.Presentation
                 .WithAlpha(0.45f + 0.4f * Mathf.PingPong(time * 1.5f, 1f));
         }
 
-        private void PaintPreview(SupportManager support, DynamicMap map, CyberNetwork network, float mapFactor,
-                                  float invZoom, float time)
+        private void PaintBreach(CyberNetwork network, double now, float time, bool any, float mapFactor, float invZoom)
         {
-            bool armed = support != null && support.CommandArmed &&
-                         (support.ArmedCommand == OpsCommand.CyberBuild || support.ArmedCommand == OpsCommand.CyberMove);
-            GlobalPosition cursor = default;
-            bool show = armed && map != null && map.TryGetCursorCoordinates(out cursor);
-            Show(preview, show);
-            Show(previewCore, show);
+            bool show = any && network.BreachActive && network.Exists(network.BreachTarget);
+            Show(breach, show);
             if (!show) return;
-
-            CyberSiteKind kind = support.ArmedCommand == OpsCommand.CyberBuild
-                ? (CyberSiteKind)support.ArmedCommandArg
-                : network != null ? network.Site(support.ArmedCommandArg).Kind : CyberSiteKind.None;
-            float reach = CyberSites.Known((byte)kind) ? CyberSites.Info(kind).LinkRange : CyberSites.DefaultLinkRange;
-            bool linked = LinksAt(network, cursor, reach, support.ArmedCommand == OpsCommand.CyberMove ? support.ArmedCommandArg : -1);
-            Color colour = linked ? Healthy : Warning;
-
-            var local = new Vector3(cursor.x * mapFactor, cursor.z * mapFactor, 0f);
-            preview.transform.localPosition = local;
-            preview.rectTransform.sizeDelta = Vector2.one * reach * 2f * mapFactor;
-            preview.color = colour.WithAlpha(0.45f + 0.2f * Mathf.PingPong(time, 1f));
-            previewCore.transform.localPosition = local;
-            previewCore.rectTransform.sizeDelta = new Vector2(26f, 26f) * invZoom;
-            previewCore.color = colour;
-        }
-
-        /// <summary>Would a site at the cursor link to anything already on the net?</summary>
-        private static bool LinksAt(CyberNetwork network, GlobalPosition at, float reach, int moving)
-        {
-            if (network == null) return false;
-            for (int i = 0; i < Slots; i++)
-            {
-                if (i == moving || !network.OnNet(i)) continue;
-                CyberSite site = network.Site(i);
-                float range = Mathf.Max(reach, CyberSites.Info(site.Kind).LinkRange);
-                float dx = site.X - at.x, dz = site.Z - at.z;
-                if (dx * dx + dz * dz <= range * range) return true;
-            }
-            return false;
+            CyberNode target = network.Node(network.BreachTarget);
+            breach.transform.localPosition = new Vector3(target.X * mapFactor, target.Z * mapFactor, 0f);
+            float size = (70f + 16f * Mathf.PingPong(time * 2f, 1f)) * invZoom;
+            breach.rectTransform.sizeDelta = new Vector2(size, size);
+            breach.color = Healthy.WithAlpha(0.5f + 0.4f * Mathf.PingPong(time * 2f, 1f));
         }
 
         private static Image Make(Transform parent, string name, Sprite sprite)

@@ -25,6 +25,29 @@ namespace BoscaliSummer.Features.Events.Runtime
         AlreadyResponded = 5,
         Disabled = 6,
         Busy = 7,
+        Prerequisite = 8,
+        TreasuryUnavailable = 9,
+        InsufficientFunds = 10,
+    }
+
+    internal readonly struct EventDecisionQuote
+    {
+        public EventResponseKind Kind { get; }
+        public string Label { get; }
+        public int Cost { get; }
+        public string Unit { get; }
+        public float EffectiveMultiplier { get; }
+        public bool Available { get; }
+        public string Reason { get; }
+        public bool Shared { get; }
+
+        public EventDecisionQuote(EventResponseKind kind, string label, int cost, string unit,
+            float effectiveMultiplier, bool available, string reason, bool shared)
+        {
+            Kind = kind; Label = label; Cost = cost; Unit = unit;
+            EffectiveMultiplier = effectiveMultiplier; Available = available;
+            Reason = reason; Shared = shared;
+        }
     }
 
     /// <summary>
@@ -62,6 +85,8 @@ namespace BoscaliSummer.Features.Events.Runtime
         private readonly List<ActiveEventView> history = new List<ActiveEventView>(16);
         private readonly List<int> recent = new List<int>(EventSelector.RecentWindow);
         private readonly Dictionary<ulong, byte> responses = new Dictionary<ulong, byte>(16);
+        private readonly Dictionary<int, byte> factionResponses = new Dictionary<int, byte>(MaximumFactions);
+        private readonly HashSet<int> usedContractFactions = new HashSet<int>();
         private readonly HashSet<int> usedSupers = new HashSet<int>();
 
         private readonly List<FactionHQ> factions = new List<FactionHQ>(MaximumFactions);
@@ -72,6 +97,18 @@ namespace BoscaliSummer.Features.Events.Runtime
         private object missionIdentity;
         private int missionGeneration;
         private int rotationCounter;
+
+        /// <summary>
+        /// One real-random value drawn per process launch. <see cref="missionGeneration"/> and
+        /// <see cref="rotationCounter"/> both restart at the same values on every fresh game
+        /// process, so without this salt the host's very first rolls of every session hash to
+        /// the same seed and the theater opens on the same event every time the game is
+        /// relaunched. Folding in a per-process salt keeps the roll itself pure and
+        /// reproducible within one host's run while breaking that cross-session repeat; it
+        /// never needs to match across peers because only the host ever calls
+        /// <see cref="EventDirector.Select"/>.
+        /// </summary>
+        private int processSalt;
         private int currentIndex = -1;
         private int queriedIndex = -1;
         private int targetHash;
@@ -82,6 +119,8 @@ namespace BoscaliSummer.Features.Events.Runtime
         private float lastSuperAt = float.NegativeInfinity;
         private float currentStart;
         private float currentEnd;
+        private float viewedStrength = float.NaN;
+        private float replicatedStrength = 1f;
         private float nextRotation;
         private float nextHeartbeat;
         private float nextTick;
@@ -94,6 +133,7 @@ namespace BoscaliSummer.Features.Events.Runtime
 
         public bool Available { get; private set; }
         public ActiveEventView Current => current;
+        public event Action<int, float> MoraleAwarded;
         public IReadOnlyList<ActiveEventView> History => history;
 
         /// <summary>Ground ownership read at 1 Hz on every peer, for the director readout.</summary>
@@ -129,16 +169,53 @@ namespace BoscaliSummer.Features.Events.Runtime
 
         public float SupportCostMultiplier => SupportCostMultiplierFor(LocalPlayerId());
 
+        public bool AffectsFaction(string factionName)
+        {
+            EventDefinition definition = EventCatalog.At(currentIndex);
+            if (definition == null || string.IsNullOrEmpty(factionName)) return false;
+            if (definition.Target == EventTarget.All) return true;
+            int hash = unchecked((int)Deterministic.HashString(factionName));
+            return targetHash != 0 && (hash == 0 ? 1 : hash) == targetHash;
+        }
+
+        public string PriceSummaryForFaction(string factionName)
+        {
+            EventDefinition definition = EventCatalog.At(currentIndex);
+            if (definition == null) return "NO EFFECT";
+            if (GameManager.GetLocalPlayer<Player>(out Player local) && local?.HQ?.faction != null &&
+                string.Equals(local.HQ.faction.factionName, factionName, StringComparison.Ordinal))
+                return EventSelector.EffectSummary(SupportCostMultiplier);
+            return EventSelector.EffectSummary(AffectsFaction(factionName) ? Effective(definition) : 1f);
+        }
+
         public float SupportCostMultiplierFor(ulong playerId)
         {
             float multiplier = BaseMultiplierFor(playerId);
+            if (playerId != PlayerIdentity.None && playerFactions.TryGetValue(playerId, out int factionHash) &&
+                factionResponses.TryGetValue(factionHash, out byte factionKind))
+                multiplier = EventSelector.ApplyResponse(multiplier, (EventResponseKind)factionKind);
             if (playerId != PlayerIdentity.None && responses.TryGetValue(playerId, out byte kind))
                 multiplier = EventSelector.ApplyResponse(multiplier, (EventResponseKind)kind);
             return multiplier;
         }
 
+        public float SupportCooldownMultiplierFor(ulong playerId)
+        {
+            EventDefinition definition = EventCatalog.At(currentIndex);
+            if (definition == null || settings == null) return 1f;
+            if (definition.Target != EventTarget.All &&
+                (playerId == PlayerIdentity.None || !playerFactions.TryGetValue(playerId, out int hash) ||
+                 hash == 0 || hash != targetHash)) return 1f;
+            return EventSelector.EffectiveSupportMultiplier(definition.SupportCooldownMultiplier,
+                GameAccess.IsServer() ? settings.EffectStrength.Value : replicatedStrength);
+        }
+
+        internal float LocalSupportCooldownMultiplier => SupportCooldownMultiplierFor(LocalPlayerId());
+
         /// <summary>The active event's multiplier for the local side, before any response.</summary>
-        internal float LocalBaseMultiplier => BaseMultiplierFor(LocalPlayerId());
+        internal float LocalBaseMultiplier =>
+            GameManager.GetLocalPlayer<Player>(out Player player) && player != null
+                ? BaseMultiplierFor(player) : 1f;
 
         private float BaseMultiplierFor(ulong playerId)
         {
@@ -151,12 +228,19 @@ namespace BoscaliSummer.Features.Events.Runtime
             return hash != 0 && hash == targetHash ? Effective(definition) : 1f;
         }
 
-        private float BaseMultiplierFor(Player player) =>
-            BaseMultiplierFor(PlayerIdentity.Of(player));
+        private float BaseMultiplierFor(Player player)
+        {
+            EventDefinition definition = EventCatalog.At(currentIndex);
+            if (definition == null || settings == null || player == null) return 1f;
+            if (definition.Target == EventTarget.All) return Effective(definition);
+            int hash = HashOf(player.HQ);
+            return hash != 0 && hash == targetHash ? Effective(definition) : 1f;
+        }
 
         private float Effective(EventDefinition definition) =>
             EventSelector.EffectiveSupportMultiplier(
-                definition.SupportCostMultiplier, settings.EffectStrength.Value);
+                definition.SupportCostMultiplier, GameAccess.IsServer()
+                    ? settings.EffectStrength.Value : replicatedStrength);
 
         // ---- Response state ----------------------------------------------------------------
 
@@ -168,25 +252,81 @@ namespace BoscaliSummer.Features.Events.Runtime
             get
             {
                 ulong id = LocalPlayerId();
-                return id != PlayerIdentity.None && responses.TryGetValue(id, out byte kind)
-                    ? (EventResponseKind)kind
-                    : EventResponseKind.None;
+                if (id != PlayerIdentity.None && responses.TryGetValue(id, out byte kind))
+                    return (EventResponseKind)kind;
+                return LocalFactionResponse;
             }
         }
+
+        internal EventResponseKind LocalFactionResponse =>
+            factionResponses.TryGetValue(LocalFactionHash(), out byte kind)
+                ? (EventResponseKind)kind : EventResponseKind.None;
 
         internal bool CanRespond => currentIndex >= 0 &&
             LocalResponse == EventResponseKind.None &&
             EventSelector.ResponseKind(LocalBaseMultiplier) != EventResponseKind.None;
 
-        internal void RequestResponse()
+        internal EventDecisionQuote Quote(EventResponseKind kind)
         {
-            if (currentIndex < 0) return;
-            if (LocalResponse != EventResponseKind.None)
+            float multiplier = LocalBaseMultiplier;
+            int cost = kind == EventResponseKind.Treasury
+                ? EventSelector.TreasuryCost(multiplier)
+                : kind == EventResponseKind.Contain || kind == EventResponseKind.Leverage
+                    ? EventSelector.ResponseCost(multiplier) : 0;
+            bool shared = kind == EventResponseKind.Treasury || kind == EventResponseKind.Contract;
+            string unit = kind == EventResponseKind.Treasury ? "M FUNDS" :
+                cost > 0 ? "ALLOC" : "NO COST";
+            string reason = "";
+            EventResponseKind baseKind = EventSelector.ResponseKind(multiplier);
+            if (currentIndex < 0 || current == null) reason = "NO ACTIVE EVENT";
+            else if (baseKind == EventResponseKind.None) reason = "NO PRICE EFFECT ON YOUR SIDE";
+            else if (LocalResponse != EventResponseKind.None) reason = "RESPONSE ALREADY ACTIVE";
+            else if ((kind == EventResponseKind.Contain || kind == EventResponseKind.Leverage) &&
+                     kind != baseKind) reason = "DIFFERENT PRICE DIRECTION";
+            else if (kind == EventResponseKind.Treasury)
             {
-                SetSignal("RESPONSE ALREADY ACTIVE");
+                if (!GameManager.GetLocalPlayer<Player>(out Player player) || player?.HQ == null ||
+                    !Finite(player.HQ.factionFunds)) reason = "TREASURY UNAVAILABLE";
+                else if (player.HQ.factionFunds + 0.001f < cost) reason = "INSUFFICIENT FACTION FUNDS";
+            }
+            else if (kind == EventResponseKind.Contract)
+            {
+                if (!GameAccess.IsServer()) reason = "HOST CHECKS FACTION CONTRACT";
+                else if (!GameManager.GetLocalPlayer<Player>(out Player player) || player?.HQ == null)
+                    reason = "FACTION UNAVAILABLE";
+                else if (usedContractFactions.Contains(HashOf(player.HQ)))
+                    reason = "CONTRACT DIRECTIVE SPENT THIS MISSION";
+                else if (!ModServices.TryGet(out IOperationOutcomeSource outcomes) ||
+                         !outcomes.HasCompletedContract(player.HQ.GetInstanceID()))
+                    reason = "COMPLETE A FACTION CONTRACT";
+            }
+            else if (kind == EventResponseKind.Perk)
+            {
+                ulong id = LocalPlayerId();
+                if (id == PlayerIdentity.None || !ModServices.TryGet(out IPlayerPerks perks) ||
+                    !perks.Grants(id, SupportCapabilities.Recon)) reason = "RECON QUALIFICATION REQUIRED";
+            }
+            else if (kind != EventResponseKind.Contain && kind != EventResponseKind.Leverage)
+                reason = "UNKNOWN RESPONSE";
+            if (reason.Length == 0 && cost > 0 && kind != EventResponseKind.Treasury &&
+                (!GameManager.GetLocalPlayer<Player>(out Player local) ||
+                 local == null || local.Allocation + 0.001f < cost)) reason = "INSUFFICIENT ALLOCATION";
+            bool available = reason.Length == 0 || reason == "HOST CHECKS FACTION CONTRACT";
+            return new EventDecisionQuote(kind, ResponseLabel(kind), cost, unit,
+                EventSelector.ApplyResponse(multiplier, kind), available, reason, shared);
+        }
+
+        internal void RequestResponse() => RequestResponse(EventSelector.ResponseKind(LocalBaseMultiplier));
+
+        internal void RequestResponse(EventResponseKind kind)
+        {
+            EventDecisionQuote quote = Quote(kind);
+            if (!quote.Available)
+            {
+                SetSignal(quote.Reason);
                 return;
             }
-            network?.RequestResponse((sbyte)currentIndex);
+            network?.RequestResponse((sbyte)currentIndex, kind);
         }
 
         /// <summary>Host validation for one intent (respond or query), addressed to one player.</summary>
@@ -199,29 +339,76 @@ namespace BoscaliSummer.Features.Events.Runtime
             if (player == null || currentIndex < 0 || current == null) return EventResponseResult.NoEvent;
 
             float baseMultiplier = BaseMultiplierFor(player);
-            cost = EventSelector.ResponseCost(baseMultiplier);
-
             ulong id = PlayerIdentity.Of(player);
+            if (id == PlayerIdentity.None) return EventResponseResult.Prerequisite;
             if (responses.TryGetValue(id, out byte existing))
             {
                 kind = (EventResponseKind)existing;
                 return EventResponseResult.AlreadyResponded;
             }
-            // A query only asks what this player already owns; the quote above is the answer.
+            int factionHash = HashOf(player.HQ);
+            if (factionHash != 0 && factionResponses.TryGetValue(factionHash, out byte factionExisting))
+            {
+                kind = (EventResponseKind)factionExisting;
+                return EventResponseResult.AlreadyResponded;
+            }
+            // A query only asks what this player already owns.
             if (action == EventsNet.ActionQuery) return EventResponseResult.Accepted;
             if (catalogIndex != currentIndex) return EventResponseResult.StaleEvent;
 
             EventResponseKind available = EventSelector.ResponseKind(baseMultiplier);
-            if (available == EventResponseKind.None || cost <= 0) return EventResponseResult.NoEffect;
-            if (responses.Count >= MaximumResponses) return EventResponseResult.Busy;
-            if (player.Allocation + 0.001f < cost) return EventResponseResult.Insufficient;
-
-            player.SetAllocation(Mathf.Max(0f, player.Allocation - cost));
-            responses[id] = (byte)available;
-            kind = available;
-            SetSignal("RESPONSE ACCEPTED · " + ResponseLabel(available) + " · " + cost + " ALLOC");
-            logger?.LogInfo("[Events] " + ResponseLabel(available) + " bought for " + cost +
-                            " allocation against " + EventCatalog.At(currentIndex).Title + ".");
+            if (available == EventResponseKind.None) return EventResponseResult.NoEffect;
+            if (action == EventsNet.ActionRespond)
+            {
+                cost = EventSelector.ResponseCost(baseMultiplier);
+                if (cost <= 0) return EventResponseResult.NoEffect;
+                if (responses.Count >= MaximumResponses) return EventResponseResult.Busy;
+                if (!Finite(player.Allocation) || player.Allocation + 0.001f < cost)
+                    return EventResponseResult.Insufficient;
+                player.SetAllocation(Mathf.Max(0f, player.Allocation - cost));
+                kind = available;
+                responses[id] = (byte)kind;
+            }
+            else if (action == EventsNet.ActionTreasury || action == EventsNet.ActionContract)
+            {
+                FactionHQ hq = player.HQ;
+                if (hq == null || factionHash == 0) return EventResponseResult.TreasuryUnavailable;
+                if (factionResponses.Count >= MaximumFactions) return EventResponseResult.Busy;
+                if (action == EventsNet.ActionTreasury)
+                {
+                    cost = EventSelector.TreasuryCost(baseMultiplier);
+                    if (cost <= 0) return EventResponseResult.NoEffect;
+                    if (!Finite(hq.factionFunds)) return EventResponseResult.TreasuryUnavailable;
+                    if (hq.factionFunds + 0.001f < cost) return EventResponseResult.InsufficientFunds;
+                    hq.AddFunds(-cost);
+                    kind = EventResponseKind.Treasury;
+                }
+                else
+                {
+                    if (usedContractFactions.Contains(factionHash) ||
+                        !ModServices.TryGet(out IOperationOutcomeSource outcomes) ||
+                        !outcomes.HasCompletedContract(hq.GetInstanceID()))
+                        return EventResponseResult.Prerequisite;
+                    kind = EventResponseKind.Contract;
+                    usedContractFactions.Add(factionHash);
+                }
+                factionResponses[factionHash] = (byte)kind;
+                network?.Broadcast((sbyte)currentIndex, targetHash, currentStart, currentEnd,
+                    settings.EffectStrength.Value, factionResponses);
+            }
+            else if (action == EventsNet.ActionPerk)
+            {
+                if (responses.Count >= MaximumResponses) return EventResponseResult.Busy;
+                if (id == PlayerIdentity.None || !ModServices.TryGet(out IPlayerPerks perks) ||
+                    !perks.Grants(id, SupportCapabilities.Recon)) return EventResponseResult.Prerequisite;
+                kind = EventResponseKind.Perk;
+                responses[id] = (byte)kind;
+            }
+            else return EventResponseResult.NoEffect;
+            SetSignal("RESPONSE ACCEPTED · " + ResponseLabel(kind) +
+                (cost > 0 ? " · " + cost + (kind == EventResponseKind.Treasury ? "M FUNDS" : " ALLOC") : ""));
+            logger?.LogInfo("[Events] " + ResponseLabel(kind) + " answer to " +
+                EventCatalog.At(currentIndex).Title + " by " + id + ".");
             return EventResponseResult.Accepted;
         }
 
@@ -236,9 +423,15 @@ namespace BoscaliSummer.Features.Events.Runtime
                  result == EventResponseResult.AlreadyResponded))
             {
                 ulong id = LocalPlayerId();
-                if (id != PlayerIdentity.None) responses[id] = kind;
+                if (kind == (byte)EventResponseKind.Treasury || kind == (byte)EventResponseKind.Contract)
+                {
+                    int factionHash = LocalFactionHash();
+                    if (factionHash != 0) factionResponses[factionHash] = kind;
+                }
+                else if (id != PlayerIdentity.None) responses[id] = kind;
                 SetSignal(result == EventResponseResult.Accepted
-                    ? "RESPONSE ACCEPTED · " + ResponseLabel((EventResponseKind)kind) + " · " + cost + " ALLOC"
+                    ? "RESPONSE ACCEPTED · " + ResponseLabel((EventResponseKind)kind) +
+                      (cost > 0 ? " · " + cost + (kind == (byte)EventResponseKind.Treasury ? "M FUNDS" : " ALLOC") : "")
                     : "RESPONSE ALREADY ACTIVE · " + ResponseLabel((EventResponseKind)kind));
                 return;
             }
@@ -267,6 +460,8 @@ namespace BoscaliSummer.Features.Events.Runtime
             history.Clear();
             recent.Clear();
             responses.Clear();
+            factionResponses.Clear();
+            usedContractFactions.Clear();
             usedSupers.Clear();
             factions.Clear();
             factionBases.Clear();
@@ -281,6 +476,8 @@ namespace BoscaliSummer.Features.Events.Runtime
             supersFired = 0;
             lastSuperAt = float.NegativeInfinity;
             currentStart = currentEnd = 0f;
+            viewedStrength = float.NaN;
+            replicatedStrength = 1f;
             nextRotation = nextHeartbeat = nextTick = nextBalance = 0f;
             lastMissionTime = 0f;
             rotationCounter = 0;
@@ -292,6 +489,8 @@ namespace BoscaliSummer.Features.Events.Runtime
             signalUntil = 0f;
             network?.ResetScene();
         }
+
+        private void Awake() => processSalt = UnityEngine.Random.Range(int.MinValue, int.MaxValue);
 
         private void OnDestroy() => ResetForScene();
 
@@ -458,25 +657,33 @@ namespace BoscaliSummer.Features.Events.Runtime
                 StartNext(now);
                 return;
             }
+            if (Mathf.Abs(settings.EffectStrength.Value - viewedStrength) > 0.0001f)
+            {
+                current = View(EventCatalog.At(currentIndex), currentStart, currentEnd);
+                network?.Broadcast((sbyte)currentIndex, targetHash, currentStart, currentEnd,
+                    settings.EffectStrength.Value, factionResponses);
+                nextHeartbeat = now + HeartbeatSeconds;
+            }
             RunScript(now);
             if (now >= currentEnd)
             {
                 Retire();
                 nextRotation = now + RollGap();
-                network?.Broadcast(-1, 0, 0f, 0f);
+                network?.Broadcast(-1, 0, 0f, 0f, settings.EffectStrength.Value, factionResponses);
                 return;
             }
             if (now >= nextHeartbeat)
             {
                 // Cheap resend: covers a late joiner and a dropped broadcast alike.
                 nextHeartbeat = now + HeartbeatSeconds;
-                network?.Broadcast((sbyte)currentIndex, targetHash, currentStart, currentEnd);
+                network?.Broadcast((sbyte)currentIndex, targetHash, currentStart, currentEnd,
+                    settings.EffectStrength.Value, factionResponses);
             }
         }
 
         private void StartNext(float now)
         {
-            uint seed = Deterministic.Hash(missionGeneration, ++rotationCounter, 0x4556);
+            uint seed = Deterministic.Hash(missionGeneration, ++rotationCounter, 0x4556, processSalt);
             var state = new DirectorState(now, supersFired, lastSuperAt, balance,
                 openingRoll: rotationCounter == 1);
             int index = EventDirector.Select(seed, EventCatalog.All, recent, usedSupers,
@@ -518,7 +725,8 @@ namespace BoscaliSummer.Features.Events.Runtime
             logger?.LogInfo("[Events] " + definition.Title + " (" + EventCatalog.TierLabel(definition.Tier) +
                             ", " + EventCatalog.TargetLabel(definition.Target) + ") active for " + duration +
                             "s (" + current.EffectSummary + ").");
-            network?.Broadcast((sbyte)index, targetHash, currentStart, currentEnd);
+            network?.Broadcast((sbyte)index, targetHash, currentStart, currentEnd,
+                settings.EffectStrength.Value, factionResponses);
         }
 
         private FactionHQ ResolveTarget()
@@ -534,7 +742,7 @@ namespace BoscaliSummer.Features.Events.Runtime
             int min = settings.RotationGapMinSeconds.Value;
             int max = Mathf.Max(min, settings.RotationGapMaxSeconds.Value);
             return EventSelector.RollDuration(
-                Deterministic.Hash(missionGeneration, ++rotationCounter, 0x4741), min, max);
+                Deterministic.Hash(missionGeneration, ++rotationCounter, 0x4741, processSalt), min, max);
         }
 
         private void Retire()
@@ -554,6 +762,7 @@ namespace BoscaliSummer.Features.Events.Runtime
             targetFaction = null;
             // Responses buy out the rest of one event's run, not the next one's.
             responses.Clear();
+            factionResponses.Clear();
         }
 
         // ---- Scripted beats (host) ---------------------------------------------------------
@@ -604,7 +813,9 @@ namespace BoscaliSummer.Features.Events.Runtime
                 case EventEffect.Funds:
                 {
                     float amount = step.Amount * strength;
-                    if (amount <= 0f) return;
+                    if (amount < 0f)
+                        amount = -Mathf.Min(-amount, Mathf.Max(0f, hq.factionFunds));
+                    if (Mathf.Abs(amount) <= 0.001f) return;
                     hq.AddFunds(amount);
                     break;
                 }
@@ -623,46 +834,66 @@ namespace BoscaliSummer.Features.Events.Runtime
                     break;
                 }
                 case EventEffect.Convoy:
-                    FundConvoy(hq);
+                    FundConvoy(hq, step.Amount * strength);
+                    break;
+                case EventEffect.Morale:
+                    MoraleAwarded?.Invoke(hq.GetInstanceID(), step.Amount * strength);
                     break;
             }
         }
 
         /// <summary>
-        /// Funds and queues the first group the side can already afford and is not cooling
-        /// down: the vanilla convoy path TheaterOps uses, reached for a target other than
-        /// the local HQ. Nothing is spawned here; the game deploys the group itself.
+        /// Queues the cheapest ready vanilla group. The beat may cover a bounded shortfall,
+        /// so an otherwise empty treasury does not turn the event's battlefield move into
+        /// a silent no-op. Nothing is spawned here; the game deploys the group itself.
         /// </summary>
-        private void FundConvoy(FactionHQ hq)
+        private void FundConvoy(FactionHQ hq, float subsidy)
         {
             if (hq == null || hq.faction == null || hq.preventDonation) return;
             List<Faction.ConvoyGroup> groups = hq.faction.GetConvoyGroups();
             if (groups == null) return;
 
             int count = Mathf.Min(groups.Count, MaximumConvoyGroups);
+            Faction.ConvoyGroup chosen = null;
+            float chosenCost = float.MaxValue;
+            float available = Mathf.Max(0f, hq.factionFunds) + Mathf.Max(0f, subsidy);
             for (int i = 0; i < count; i++)
             {
                 Faction.ConvoyGroup group = groups[i];
                 if (group == null) continue;
                 float cost = group.GetCost();
-                if (cost <= 0f || hq.factionFunds < cost) continue;
+                if (!Finite(cost) || cost <= 0f || cost >= chosenCost || cost > available) continue;
                 if (hq.CmdGetDelaySpawnConvoy((byte)i) > 0f) continue;
-
-                hq.AddFunds(-cost);
-                hq.AddConvoy(group);
-                logger?.LogInfo("[Events] Convoy " + group.Name + " funded for " +
-                                hq.faction.factionName + " at " + cost.ToString("F0") + ".");
+                chosen = group;
+                chosenCost = cost;
+            }
+            if (chosen == null)
+            {
+                logger?.LogInfo("[Events] Convoy beat skipped: no group ready within the event budget for " +
+                                hq.faction.factionName + ".");
                 return;
             }
-            logger?.LogInfo("[Events] Convoy beat skipped: no group ready and affordable for " +
-                            hq.faction.factionName + ".");
+
+            float shortfall = Mathf.Max(0f, chosenCost - Mathf.Max(0f, hq.factionFunds));
+            if (shortfall > 0f) hq.AddFunds(shortfall);
+            hq.AddFunds(-chosenCost);
+            hq.AddConvoy(chosen);
+            logger?.LogInfo("[Events] Convoy " + chosen.Name + " queued for " +
+                            hq.faction.factionName + " at " + chosenCost.ToString("F0") +
+                            " (event grant " + shortfall.ToString("F0") + ").");
         }
 
         // ---- Client apply -----------------------------------------------------------------
 
-        internal void ApplyRemote(sbyte catalogIndex, int remoteTargetHash, float start, float end)
+        internal void ApplyRemote(sbyte catalogIndex, int remoteTargetHash, float start, float end,
+            float effectStrength, int[] responseFactions, byte[] responseKinds)
         {
-            if (!Finite(start) || !Finite(end)) return;
+            if (!Finite(start) || !Finite(end) || !Finite(effectStrength) ||
+                effectStrength < 0f || effectStrength > 2f ||
+                responseFactions == null || responseKinds == null ||
+                responseFactions.Length != responseKinds.Length ||
+                responseFactions.Length > MaximumFactions) return;
+            replicatedStrength = effectStrength;
             if (catalogIndex < 0)
             {
                 if (current != null) Retire();
@@ -679,6 +910,12 @@ namespace BoscaliSummer.Features.Events.Runtime
             }
             // Retire() clears the target, so the new one lands after it.
             targetHash = remoteTargetHash;
+            factionResponses.Clear();
+            for (int i = 0; i < responseFactions.Length; i++)
+                if (responseFactions[i] != 0 &&
+                    (responseKinds[i] == (byte)EventResponseKind.Treasury ||
+                     responseKinds[i] == (byte)EventResponseKind.Contract))
+                    factionResponses[responseFactions[i]] = responseKinds[i];
             if (changed && applied != null && applied.Tier == EventTier.Super)
             {
                 supersFired++;
@@ -709,8 +946,7 @@ namespace BoscaliSummer.Features.Events.Runtime
             string aim = definition.Target == EventTarget.All
                 ? "ALL THEATER"
                 : NameOfHash(targetHash) ?? "A SIDE";
-            float multiplier = EventSelector.EffectiveSupportMultiplier(
-                definition.SupportCostMultiplier, settings.EffectStrength.Value);
+            float multiplier = Effective(definition);
             board.Notice("events", HudTone.Warning,
                 "SUPEREVENT · " + definition.Title.ToUpperInvariant(),
                 aim + " · " + EventSelector.EffectSummary(multiplier));
@@ -734,8 +970,8 @@ namespace BoscaliSummer.Features.Events.Runtime
         private ActiveEventView View(EventDefinition definition, float start, float end)
         {
             if (definition == null) return null;
-            float multiplier = EventSelector.EffectiveSupportMultiplier(
-                definition.SupportCostMultiplier, settings != null ? settings.EffectStrength.Value : 1f);
+            viewedStrength = GameAccess.IsServer() ? settings.EffectStrength.Value : replicatedStrength;
+            float multiplier = Effective(definition);
             return new ActiveEventView(
                 definition.Id, definition.Title, definition.FlavorText,
                 EventCatalog.CategoryLabel(definition.Category),
@@ -744,7 +980,16 @@ namespace BoscaliSummer.Features.Events.Runtime
                 definition.IsSuper,
                 definition.IconKey,
                 EventSelector.EffectSummary(multiplier),
-                StepsOf(definition), start, end);
+                StepsOf(definition), start, end,
+                definition.Target == EventTarget.All || targetHash != 0,
+                TempoSummary(EventSelector.EffectiveSupportMultiplier(definition.SupportCooldownMultiplier,
+                    GameAccess.IsServer() ? settings.EffectStrength.Value : replicatedStrength)));
+        }
+
+        private static string TempoSummary(float multiplier)
+        {
+            int percent = Mathf.RoundToInt((multiplier - 1f) * 100f);
+            return percent == 0 ? "" : "SUPPORT RESET " + (percent > 0 ? "+" : "") + percent + "%";
         }
 
         private static IReadOnlyList<ActiveEventStep> StepsOf(EventDefinition definition)
@@ -764,13 +1009,19 @@ namespace BoscaliSummer.Features.Events.Runtime
 
         internal static string ResponseLabel(EventResponseKind kind) =>
             kind == EventResponseKind.Contain ? "CONTAIN" :
-            kind == EventResponseKind.Leverage ? "LEVERAGE" : "NONE";
+            kind == EventResponseKind.Leverage ? "LEVERAGE" :
+            kind == EventResponseKind.Treasury ? "TREASURY DIRECTIVE" :
+            kind == EventResponseKind.Contract ? "CONTRACT INTELLIGENCE" :
+            kind == EventResponseKind.Perk ? "PILOT CHANNEL" : "NONE";
 
         private static string ResultText(EventResponseResult result)
         {
             switch (result)
             {
                 case EventResponseResult.Insufficient: return "RESPONSE DENIED · INSUFFICIENT ALLOCATION";
+                case EventResponseResult.InsufficientFunds: return "RESPONSE DENIED · INSUFFICIENT FACTION FUNDS";
+                case EventResponseResult.TreasuryUnavailable: return "RESPONSE DENIED · TREASURY UNAVAILABLE";
+                case EventResponseResult.Prerequisite: return "RESPONSE DENIED · REQUIREMENT NOT MET";
                 case EventResponseResult.NoEffect: return "RESPONSE DENIED · EVENT HAS NO COST EFFECT FOR YOU";
                 case EventResponseResult.StaleEvent: return "RESPONSE DENIED · EVENT ALREADY CHANGED";
                 case EventResponseResult.NoEvent: return "RESPONSE DENIED · NO ACTIVE EVENT";
@@ -785,6 +1036,10 @@ namespace BoscaliSummer.Features.Events.Runtime
             GameManager.GetLocalPlayer<Player>(out Player player) && player != null
                 ? PlayerIdentity.Of(player)
                 : PlayerIdentity.None;
+
+        private static int LocalFactionHash() =>
+            GameManager.GetLocalPlayer<Player>(out Player player) && player != null
+                ? HashOf(player.HQ) : 0;
 
         private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
     }

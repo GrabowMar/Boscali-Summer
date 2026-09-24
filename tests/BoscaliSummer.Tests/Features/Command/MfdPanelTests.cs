@@ -60,15 +60,22 @@ namespace BoscaliSummer.Tests.Features.Command
                 "the deleted ADM bezel leaves no rail entry behind");
             MfdRailEntry bdf = MfdRailCatalog.For("bdf");
             TestAssert.That(bdf.Code == "BDF" && bdf.Glyph == "faction", "codes are case-insensitive");
+            MfdRailEntry faction = MfdRailCatalog.For("FAC");
+            TestAssert.That(faction.Code == "FAC" && faction.Name == "FACTIONS" &&
+                            faction.Glyph == "faction", "merged faction bezel is branded");
+            TestAssert.That(VanillaMfdPanelCatalog.FromShortName("FAC") == VanillaMfdPanelId.Bdf &&
+                            VanillaMfdPanelCatalog.Label(VanillaMfdPanelId.Bdf) == "FAC",
+                "merged faction screen has one header identity");
             MfdRailEntry unknown = MfdRailCatalog.For("<SUD>");
             TestAssert.That(unknown.Code == "SUD" && !unknown.HasName && unknown.Glyph == null,
                 "unknown codes survive sanitising without an invented meaning");
             TestAssert.That(MfdRailCatalog.For(null).Code == "" && MfdRailCatalog.For("  ").Code == "",
                 "empty labels stay empty");
-            TestAssert.That(MfdRailCatalog.OrderRank("BDF") < MfdRailCatalog.OrderRank("PALA"),
-                "BDF leads the rail");
+            TestAssert.That(MfdRailCatalog.OrderRank("FAC") < MfdRailCatalog.OrderRank("BDF") &&
+                            MfdRailCatalog.OrderRank("BDF") < MfdRailCatalog.OrderRank("PALA"),
+                "merged faction code leads native faction fallbacks");
             TestAssert.That(MfdRailCatalog.OrderRank("PALA") < MfdRailCatalog.OrderRank("MAP"),
-                "PALA sits directly below BDF, ahead of every unranked button");
+                "native faction fallback precedes unranked buttons");
             TestAssert.That(MfdRailCatalog.OrderRank("MAP") == MfdRailCatalog.OrderRank("WMC"),
                 "unranked buttons share the tail of the order");
             TestAssert.That(MfdRailCatalog.OrderRank("<PALA>") == MfdRailCatalog.OrderRank("PALA"),

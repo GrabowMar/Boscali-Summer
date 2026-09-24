@@ -2,21 +2,21 @@ using System;
 
 namespace BoscaliSummer.Features.Support.Domain.Cyber
 {
-    /// <summary>Wire-stable threat kind on the THREAT BOARD.</summary>
+    /// <summary>Wire-stable threat kind on the incident board.</summary>
     internal enum IncidentKind : byte
     {
         None = 0,
 
-        /// <summary>The adversary maps your emitters; unblocked, it exposes them to that faction.</summary>
+        /// <summary>The adversary maps your network; unblocked, it exposes it to that faction.</summary>
         Probe = 1,
 
-        /// <summary>A break-in that walks your links toward Cyber Command, compromising sites.</summary>
+        /// <summary>A break-in that walks your nodes toward Cyber Command, compromising them.</summary>
         Intrusion = 2,
 
-        /// <summary>A sector barrage: links and radar cover inside it are halved.</summary>
+        /// <summary>A sector barrage: a node's radius and income inside it are halved.</summary>
         Raid = 3,
 
-        /// <summary>An enemy player's cyber operation heard by your SIGINT; traceable while it lasts.</summary>
+        /// <summary>An enemy player's cyber operation heard by your network; traceable while it lasts.</summary>
         HostileOperation = 4
     }
 
@@ -36,14 +36,11 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
     internal enum CyberNotice : byte
     {
         None = 0,
-        SiteOnline,
-        SiteLost,
-        CommandLost,
         ProbeDetected,
         ProbeBlocked,
         ProbeExposed,
         IntrusionDetected,
-        SiteCompromised,
+        NodeCompromised,
         CommandCompromised,
         IntrusionStalled,
         IntrusionContained,
@@ -59,15 +56,24 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         Rejoined,
         Baited,
         PhaseRaised,
-        SeekerDefeated,
-        SelfRepaired,
         PhaseEased,
+        SelfRepaired,
         CommandUp,
-        GatewayJoined,
-        GatewayLost,
+        CommandLost,
+        BaseJoined,
+        BaseLost,
         NodeDown,
         NodeRestored,
-        CommandMoved
+        CommandMoved,
+        BreachStarted,
+        BreachPhaseDone,
+        BreachStalled,
+        StageUp,
+        BreachBacktrace,
+        BreachDisconnected,
+        CapstoneReady,
+        CapstoneChosen,
+        LocationLost
     }
 
     /// <summary>Escalation of the adversary campaign.</summary>
@@ -83,7 +89,7 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         public IncidentKind Kind;
         public IncidentOutcome Outcome;
 
-        /// <summary>Slot the incident sits on (entry, current hop or probe target); -1 for none.</summary>
+        /// <summary>Node slot the incident sits on (entry or current hop); -1 for none.</summary>
         public int Site;
 
         /// <summary>Index into the host's enemy-faction table.</summary>
@@ -104,7 +110,7 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
 
     /// <summary>
     /// The adversary campaign against one network. Heat builds with match time and with the
-    /// faction's own offensive operations; it sets the phase, and the phase sets what the
+    /// faction's own breaches and operations; it sets the phase, and the phase sets what the
     /// adversary tries and how often. Deterministic from the seed so tests can drive it.
     /// </summary>
     internal sealed partial class CyberNetwork
@@ -122,15 +128,10 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         public const float IntrusionLanding = 20f;
         public const float SpreadSeconds = 26f;
         public const float OffensiveSpreadSeconds = 16f;
-        public const float SelfRepairSeconds = 120f;
         public const float DefendedRelief = 4f;
         public const float TracedRelief = 8f;
-        public const double SeekerNoticeGap = 4.0;
-        public const CyberNotice LastNotice = CyberNotice.CommandMoved;
+        public const CyberNotice LastNotice = CyberNotice.LocationLost;
         public const float IntrusionLifetime = 240f;
-        public const float ContainSeconds = 40f;
-        public const float TraceSeconds = 20f;
-        public const float FootholdSeconds = 240f;
         public const float RaidSeconds = 90f;
         public const float RaidRadius = 8000f;
         public const float HostileSeconds = 45f;
@@ -151,7 +152,7 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         /// <summary>Incidents the defender won (blocked, contained, traced, burned through).</summary>
         public int Defended { get; private set; }
 
-        /// <summary>Incidents the adversary won (emitters exposed, intruder left with what it took).</summary>
+        /// <summary>Incidents the adversary won (network exposed, intruder left with what it took).</summary>
         public int Breached { get; private set; }
         public double ExposedUntil { get; private set; }
         public byte ExposedOrigin { get; private set; }
@@ -202,14 +203,14 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             return false;
         }
 
-        /// <summary>Inside an active jamming raid.</summary>
+        /// <summary>Inside an active jamming raid: radius and income are halved.</summary>
         public bool Jammed(int slot, double now)
         {
             if (!Exists(slot)) return false;
             for (int i = 0; i < IncidentSlots; i++)
             {
                 if (!IncidentActive(i) || incidents[i].Kind != IncidentKind.Raid || now >= incidents[i].Ends) continue;
-                float dx = sites[slot].X - incidents[i].X, dz = sites[slot].Z - incidents[i].Z;
+                float dx = nodes[slot].X - incidents[i].X, dz = nodes[slot].Z - incidents[i].Z;
                 if (dx * dx + dz * dz <= RaidRadius * RaidRadius) return true;
             }
             return false;
@@ -227,28 +228,28 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
                     pressure += incidents[i].Kind == IncidentKind.Intrusion ? 2 : 1;
                 }
                 for (int i = 0; i < SlotCount; i++)
-                    if (sites[i].Compromised && !sites[i].Lost) pressure++;
+                    if (nodes[i].Compromised) pressure++;
                 if (CommandCompromised) pressure += 2;
                 return Math.Max(1, 5 - pressure);
             }
         }
 
-        /// <summary>The faction ran an offensive operation: the adversary notices.</summary>
+        /// <summary>The faction ran an offensive operation or a breach: the adversary notices.</summary>
         public void NoteOffensive() => Heat = Math.Min(HeatMaximum, Heat + OffensiveHeatSpike);
 
         /// <summary>
-        /// Host: an enemy player's operation landed near (x, z). Heard only under a working
-        /// SIGINT post; heard, it becomes a traceable incident. Returns whether it was heard.
+        /// Host: an enemy player's operation landed near (x, z). Heard only under a stage-2
+        /// location's ear; heard, it becomes a traceable incident. Returns whether it was heard.
         /// </summary>
         public bool ReportHostile(byte origin, float x, float z, double now)
         {
-            if (!HasCommand || origin >= MaximumOrigins || !SigintCovers(x, z, now)) return false;
+            if (!HasCommand || origin >= MaximumOrigins || !EarCovers(x, z, now)) return false;
             int slot = FreeIncident(now);
             if (slot < 0) return false;
             incidents[slot] = new CyberIncident
             {
                 Kind = IncidentKind.HostileOperation,
-                Site = NearestSite(x, z),
+                Site = NearestNode(x, z),
                 Origin = origin,
                 X = x,
                 Z = z,
@@ -281,9 +282,10 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
                 StepIncident(i, now, dt);
             }
 
-            // Airbase nodes come up by themselves, so the adversary only starts working once the
-            // faction fields a truck: the defence game stays opt-in for players who ignore CYBER.
-            bool running = intensity > 0f && OriginCount > 0 && CommandOnline && FieldCount > 0;
+            // Home nodes come up by themselves, so the adversary only starts working once the
+            // faction takes its first location: the defence game stays opt-in for players who
+            // ignore CYBER.
+            bool running = intensity > 0f && OriginCount > 0 && CommandOnline && HackedCount > 0;
             if (!running)
             {
                 nextIncident = 0.0;
@@ -340,9 +342,9 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             int entry;
             switch (kind)
             {
-                case IncidentKind.Probe: entry = PickSite(emitterOnly: true, edge: false, clean: true); break;
-                case IncidentKind.Intrusion: entry = PickSite(emitterOnly: false, edge: true, clean: true); break;
-                case IncidentKind.Raid: entry = PickSite(emitterOnly: false, edge: false, clean: false); break;
+                case IncidentKind.Probe: entry = PickNode(probe: true, clean: true); break;
+                case IncidentKind.Intrusion: entry = PickNode(probe: false, clean: true); break;
+                case IncidentKind.Raid: entry = PickNode(probe: false, clean: false); break;
                 default: return -1;
             }
             if (entry < 0) return -1;
@@ -354,8 +356,8 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
                 Kind = kind,
                 Site = entry,
                 Origin = origin,
-                X = sites[entry].X,
-                Z = sites[entry].Z,
+                X = nodes[entry].X,
+                Z = nodes[entry].Z,
                 Started = now
             };
             switch (kind)
@@ -370,7 +372,7 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
                     Notify(CyberNotice.IntrusionDetected, entry, origin, now);
                     break;
                 default:
-                    // Offset so the barrage reads as a sector, not a bullseye on one site.
+                    // Offset so the barrage reads as a sector, not a bullseye on one node.
                     float angle = Next(360) * (float)(Math.PI / 180.0);
                     float offset = 1500f + Next(3000);
                     incident.X += (float)Math.Cos(angle) * offset;
@@ -381,7 +383,6 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
                     break;
             }
             incidents[slot] = incident;
-            if (kind == IncidentKind.Raid) RebuildLinks(now);
             return slot;
         }
 
@@ -391,16 +392,16 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
 
             if (incident.Tracing && Traceable(incident.Kind))
             {
-                if (AnyWorking(CyberSiteKind.Sigint))
+                if (EarCovers(incident.X, incident.Z, now))
                 {
-                    float rate = 1f / TraceSeconds;
+                    float rate = 1f / CyberLocations.TraceSeconds;
                     if (incident.Held) rate *= 2f;
-                    if (Count(CyberSiteKind.Sigint) > 1) rate *= 1.25f;
+                    if (CountTier(1) > 1) rate *= 1.25f;
                     incident.Trace = Math.Min(1f, incident.Trace + rate * dt);
                 }
                 if (incident.Trace >= 1f)
                 {
-                    if (incident.Origin < MaximumOrigins) footholdUntil[incident.Origin] = now + FootholdSeconds;
+                    if (incident.Origin < MaximumOrigins) footholdUntil[incident.Origin] = now + CyberLocations.FootholdSeconds;
                     Resolve(index, IncidentOutcome.Traced, now);
                     Notify(CyberNotice.TraceComplete, incident.Site, incident.Origin, now);
                     return;
@@ -411,7 +412,7 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             {
                 case IncidentKind.Probe:
                     if (now < incident.Ends) return;
-                    if (SigintCovers(incident.X, incident.Z, now))
+                    if (EarCovers(incident.X, incident.Z, now))
                     {
                         Resolve(index, IncidentOutcome.Blocked, now);
                         Notify(CyberNotice.ProbeBlocked, incident.Site, incident.Origin, now);
@@ -420,6 +421,8 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
                     {
                         ExposedUntil = now + ExposureSeconds;
                         ExposedOrigin = incident.Origin;
+                        // The adversary mapped the network: the campaign notices.
+                        Heat = Math.Min(HeatMaximum, Heat + OffensiveHeatSpike * 0.5f);
                         Resolve(index, IncidentOutcome.Exposed, now);
                         Notify(CyberNotice.ProbeExposed, incident.Site, incident.Origin, now);
                     }
@@ -429,7 +432,6 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
                     if (now < incident.Ends) return;
                     Resolve(index, IncidentOutcome.Faded, now);
                     Notify(CyberNotice.RaidFaded, -1, incident.Origin, now);
-                    RebuildLinks(now);
                     return;
 
                 case IncidentKind.HostileOperation:
@@ -451,15 +453,15 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
                 Notify(CyberNotice.IntrusionWithdrew, incident.Site, incident.Origin, now);
                 return;
             }
-            if (!Exists(incident.Site) || sites[incident.Site].Lost)
+            if (!Exists(incident.Site) || !Online(incident.Site))
             {
-                // The foothold burned with the site.
+                // The foothold burned with the node.
                 Resolve(index, IncidentOutcome.Contained, now);
                 Notify(CyberNotice.IntrusionContained, incident.Site, incident.Origin, now);
                 return;
             }
 
-            CyberSite here = sites[incident.Site];
+            CyberNode here = nodes[incident.Site];
             if (here.HoneypotUntil > now) incident.Held = true;
             bool stalled = here.Isolated || incident.Held;
             if (stalled)
@@ -469,7 +471,7 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
                     incident.StallSince = now;
                     Notify(CyberNotice.IntrusionStalled, incident.Site, incident.Origin, now);
                 }
-                if (now - incident.StallSince >= ContainSeconds)
+                if (now - incident.StallSince >= CyberLocations.ContainSeconds)
                 {
                     Resolve(index, IncidentOutcome.Contained, now);
                     Notify(CyberNotice.IntrusionContained, incident.Site, incident.Origin, now);
@@ -482,32 +484,41 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
 
             if (!here.Compromised && here.PatchDone <= 0.0)
             {
-                sites[incident.Site].Compromised = true;
-                sites[incident.Site].CompromisedAt = now;
-                bool command = here.Kind == CyberSiteKind.Command;
-                Notify(command ? CyberNotice.CommandCompromised : CyberNotice.SiteCompromised, incident.Site,
+                nodes[incident.Site].Compromised = true;
+                nodes[incident.Site].CompromisedAt = now;
+                bool command = here.Kind == NodeKind.Command;
+                Notify(command ? CyberNotice.CommandCompromised : CyberNotice.NodeCompromised, incident.Site,
                     incident.Origin, now);
                 return;
             }
 
-            // Walk one link toward Cyber Command; bait on the way is taken.
-            int best = -1, bestHops = int.MaxValue;
+            // Walk toward Cyber Command: the uncompromised node nearest the root.
+            int best = -1;
+            float bestDistance = float.MaxValue;
+            int command2 = CommandSlot;
             for (int to = 0; to < SlotCount; to++)
             {
-                if (!links[incident.Site, to] || sites[to].Compromised) continue;
-                int distance = onNet[to] ? hops[to] : SlotCount;
-                if (sites[to].HoneypotUntil > now) distance = -1;
-                if (distance < bestHops)
+                if (to == incident.Site || !Online(to) || nodes[to].Compromised) continue;
+                float distance = command2 >= 0
+                    ? DistanceSquared(to, command2)
+                    : DistanceSquared(to, incident.Site);
+                if (distance < bestDistance)
                 {
+                    bestDistance = distance;
                     best = to;
-                    bestHops = distance;
                 }
             }
             if (best < 0) return;
             incident.Site = best;
-            incident.X = sites[best].X;
-            incident.Z = sites[best].Z;
+            incident.X = nodes[best].X;
+            incident.Z = nodes[best].Z;
             incident.NextStep = now + IntrusionLanding;
+        }
+
+        private float DistanceSquared(int a, int b)
+        {
+            float dx = nodes[a].X - nodes[b].X, dz = nodes[a].Z - nodes[b].Z;
+            return dx * dx + dz * dz;
         }
 
         private void Resolve(int index, IncidentOutcome outcome, double now)
@@ -524,42 +535,6 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             if (Phase != before) Notify(CyberNotice.PhaseEased, -1, 0, now);
         }
 
-        /// <summary>
-        /// A compromised field site the adversary has left alone is reimaged by the watch floor
-        /// after a while, so a network left unattended degrades instead of dying. Cyber Command
-        /// itself never heals on its own.
-        /// </summary>
-        private void SelfRepair(double now)
-        {
-            if (CommandCompromised) return;
-            for (int i = 0; i < SlotCount; i++)
-            {
-                CyberSite site = sites[i];
-                if (!site.Compromised || site.Lost || site.Kind == CyberSiteKind.Command || site.PatchDone > 0.0) continue;
-                if (now - site.CompromisedAt < SelfRepairSeconds || IntrusionAt(i)) continue;
-                sites[i].Compromised = false;
-                Notify(CyberNotice.SelfRepaired, i, 0, now);
-            }
-        }
-
-        private bool IntrusionAt(int slot)
-        {
-            for (int i = 0; i < IncidentSlots; i++)
-                if (IncidentActive(i) && incidents[i].Kind == IncidentKind.Intrusion && incidents[i].Site == slot) return true;
-            return false;
-        }
-
-        private double nextSeekerNotice;
-
-        /// <summary>Host: a jammer pushed a hostile radar seeker past its tolerance.</summary>
-        public void NoteSeekerDefeated(int slot, double now)
-        {
-            SeekersDefeated++;
-            if (now < nextSeekerNotice) return;
-            nextSeekerNotice = now + SeekerNoticeGap;
-            Notify(CyberNotice.SeekerDefeated, slot, 0, now);
-        }
-
         private int FreeIncident(double now)
         {
             int oldest = -1;
@@ -572,52 +547,36 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             return oldest;
         }
 
-        /// <summary>A live site to open an incident on. Edge sites have the fewest links; probes
-        /// want something that radiates; break-ins want a site they do not own yet. Cyber
-        /// Command is never the entry point.</summary>
-        private int PickSite(bool emitterOnly, bool edge, bool clean)
+        /// <summary>A live node to open an incident on. Probes want a location that earns; a
+        /// break-in wants the frontier (a hacked location) before the home bases. Cyber Command
+        /// is never the entry point.</summary>
+        private int PickNode(bool probe, bool clean)
         {
             int candidates = 0;
-            int fewest = int.MaxValue;
             for (int i = 0; i < SlotCount; i++)
-            {
-                if (!Eligible(i, emitterOnly, clean)) continue;
-                candidates++;
-                if (edge) fewest = Math.Min(fewest, Degree(i));
-            }
+                if (Eligible(i, probe, clean)) candidates++;
             if (candidates == 0) return -1;
-            int eligible = 0;
-            for (int i = 0; i < SlotCount; i++)
-                if (Eligible(i, emitterOnly, clean) && (!edge || Degree(i) == fewest)) eligible++;
-            int pick = Next(eligible);
+            int pick = Next(candidates);
             for (int i = 0; i < SlotCount; i++)
             {
-                if (!Eligible(i, emitterOnly, clean) || (edge && Degree(i) != fewest)) continue;
+                if (!Eligible(i, probe, clean)) continue;
                 if (pick-- == 0) return i;
             }
             return -1;
         }
 
-        private bool Eligible(int slot, bool emitterOnly, bool clean) =>
-            Online(slot) && sites[slot].Kind != CyberSiteKind.Command && (!clean || !sites[slot].Compromised) &&
-            (!emitterOnly || EmissionOf(slot) != Emission.Silent);
+        private bool Eligible(int slot, bool probe, bool clean) =>
+            Online(slot) && nodes[slot].Kind != NodeKind.Command && (!clean || !nodes[slot].Compromised) &&
+            (!probe || nodes[slot].Hacked);
 
-        private int Degree(int slot)
-        {
-            int degree = 0;
-            for (int i = 0; i < SlotCount; i++)
-                if (links[slot, i]) degree++;
-            return degree;
-        }
-
-        private int NearestSite(float x, float z)
+        private int NearestNode(float x, float z)
         {
             int best = -1;
             float bestDistance = float.MaxValue;
             for (int i = 0; i < SlotCount; i++)
             {
                 if (!Online(i)) continue;
-                float dx = sites[i].X - x, dz = sites[i].Z - z;
+                float dx = nodes[i].X - x, dz = nodes[i].Z - z;
                 float distance = dx * dx + dz * dz;
                 if (distance < bestDistance)
                 {
@@ -628,20 +587,16 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             return best;
         }
 
-        private bool JammerReaches(float x, float z, float radius, double now)
+        /// <summary>Working locations of at least this tier, wherever they are.</summary>
+        private int CountTier(int tier)
         {
+            int count = 0;
             for (int i = 0; i < SlotCount; i++)
-            {
-                if (sites[i].Kind != CyberSiteKind.Jammer || !Working(i) || sites[i].Mode == EwPosture.SigintPassive)
-                    continue;
-                float reach = radius + CyberSites.Info(CyberSiteKind.Jammer).EffectRadius;
-                float dx = sites[i].X - x, dz = sites[i].Z - z;
-                if (dx * dx + dz * dz <= reach * reach) return true;
-            }
-            return false;
+                if (Working(i) && Tier(i) >= tier) count++;
+            return count;
         }
 
-        private void DropSiteReferences(int slot)
+        private void DropNodeReferences(int slot)
         {
             for (int i = 0; i < IncidentSlots; i++)
             {
@@ -697,7 +652,6 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             nextIncident = 0.0;
             Heat = 0f;
             Defended = Breached = 0;
-            nextSeekerNotice = 0.0;
             ExposedUntil = 0.0;
             ExposedOrigin = 0;
         }
@@ -778,7 +732,7 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
                 };
             }
             for (int i = 0; i < MaximumOrigins; i++)
-                footholdUntil[i] = Rebase(footholdUntil[i], from.Foothold[i], now, FootholdSeconds + 1f);
+                footholdUntil[i] = Rebase(footholdUntil[i], from.Foothold[i], now, CyberLocations.FootholdSeconds + 1f);
 
             noticeCount = Math.Min((int)from.NoticeCount, NoticeSlots);
             for (int i = 0; i < NoticeSlots; i++)

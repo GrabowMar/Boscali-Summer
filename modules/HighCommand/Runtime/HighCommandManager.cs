@@ -27,12 +27,10 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
         private const float IntelMemorySeconds = 45f;
         private const float IntelPostRadius = 2600f;
         private const float IntelConvoyRadius = 4200f;
-        private const float IntelIntervalSeconds = 1f;
         private const float TransferDwellSeconds = 60f;
         private const float TransferTimeoutSeconds = 900f;
         private const float RefreshSeconds = 4f;
         private const float SignalSeconds = 75f;
-        private const float CommendBoostSeconds = 120f;
         private const float AlertSeconds = 12f;
 
         internal enum AssetKind : byte
@@ -94,8 +92,6 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
             public readonly bool[] RespawnScheduled = new bool[CommandTier.MaximumSlots];
             public float NextStipend;
             public float NextTransfer;
-            public float CohesionBoost;
-            public float BoostUntil;
             public int StipendsPaid;
             public int SpawnSerial;
             public int SeedSerial;
@@ -126,7 +122,7 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
         private string status = "Waiting for a running mission.";
         private string signal = "";
         private float cohesion;
-        private int points, active, kia;
+        private int active, kia;
         private int highlightedId = -1;
         private FactionHQ viewHq;
         private bool wasEnabled;
@@ -185,7 +181,7 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
             status = "Waiting for a running mission.";
             signal = "";
             cohesion = 0f;
-            points = active = kia = 0;
+            active = kia = 0;
             highlightedId = -1;
             network?.ResetScene();
         }
@@ -316,8 +312,7 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
                 command.NextStipend = now + Math.Max(30, settings.StipendIntervalSeconds.Value);
                 if (!HasParticipant(command.Hq)) continue;
 
-                float boost = Boost(command, now);
-                float current = command.Tree.Cohesion(boost);
+                float current = command.Tree.Cohesion(0f);
                 float traitMultiplier = 1f;
                 for (int s = 0; s < command.Tree.Slots.Count; s++)
                 {
@@ -380,7 +375,7 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
             snapshot.Nodes = nodes.ToArray();
             snapshot.Log = BuildLog(own, now);
             snapshot.HostileLog = BuildHostileLog(own, observer, now);
-            snapshot.Cohesion = own.Tree.Cohesion(Boost(own, now));
+            snapshot.Cohesion = own.Tree.Cohesion(0f);
             snapshot.Active = own.Tree.LiveCount;
             snapshot.Kia = own.Tree.KiaCount;
             snapshot.Signal = now < own.SignalUntil ? own.Signal : "";
@@ -415,7 +410,15 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
             if ((friendly || known) && now < slot.AlertUntil) flags |= CommanderWire.Alert;
 
             AssetWatch asset = FindActiveAsset(owner, slot);
-            Vector3 position = asset?.Unit != null ? asset.Unit.transform.position : Vector3.zero;
+            // The wire carries an absolute position: the map places icons at global metres
+            // times its own display factor, so a local transform would be shifted by the
+            // floating datum. A post between spawns reports the base it was anchored to
+            // rather than the map origin, which is what piled the gaps at the centre.
+            GlobalPosition position = asset?.Unit != null
+                ? asset.Unit.transform.position.ToGlobalPosition()
+                : owner.HasAnchor[slot.Id]
+                    ? owner.Anchors[slot.Id].ToGlobalPosition()
+                    : default;
             string location = !friendly && !known ? "UNCONFIRMED"
                 : slot.Status == CommanderStatus.InTransit && asset != null
                     ? "EN ROUTE · " + (FindConvoy(owner, slot)?.DestinationName ?? "UNKNOWN")
@@ -589,9 +592,6 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
                 return FindFaction(local.HQ);
             return null;
         }
-
-        private static float Boost(FactionCommand command, float now) =>
-            command.BoostUntil > now ? command.CohesionBoost : 0f;
 
         private static string Percent(float value) => Mathf.RoundToInt(Mathf.Clamp01(value) * 100f) + "%";
 

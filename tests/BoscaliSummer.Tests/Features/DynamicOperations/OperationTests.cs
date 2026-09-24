@@ -136,8 +136,18 @@ namespace BoscaliSummer.Tests.Features.DynamicOperations
             TestAssert.That(!board.TryAccept(99, 100f) && board.TryAccept(1, 100f) && board.TryAccept(2, 100f) &&
                 !board.TryAccept(3, 100f) && !board.TryAccept(1, 101f), "Acceptance validates identity, duplicate transitions and two-active limit");
             TestAssert.That(offer.Deadline == 1300f, "Acceptance starts a fresh execution timer");
+            TestAssert.That(offer.AcceptedBy.Length == 0, "Unattributed test acceptance remains faction-wide");
+            TestAssert.That(board.Operations[1].AcceptedBy.Length == 0 &&
+                !board.TryAccept(3, 101f, "LATE PILOT") && board.Operations[2].AcceptedBy.Length == 0,
+                "A rejected claim must not assign an accepting pilot");
             offer.Cancel(101f);
             TestAssert.That(!offer.TryTakeAward() && board.TryAccept(3, 102f), "Aborting releases capacity without an award");
+            var attributed = new Operation(40, 40, OperationKind.Patrol, OperationReward.None, 0f, 1, 1);
+            TestAssert.That(attributed.Accept(1f, "PILOT ONE") && attributed.AcceptedBy == "PILOT ONE" &&
+                !attributed.Accept(2f, "PILOT TWO") && attributed.AcceptedBy == "PILOT ONE",
+                "Only successful acceptance records the pilot; later faction actions cannot replace it");
+            attributed.Cancel(3f);
+            TestAssert.That(attributed.AcceptedBy == "PILOT ONE", "Result cards retain the accepting pilot");
             var expired = new Operation(4, 4, OperationKind.Capture, OperationReward.None, 0f, 1, 1);
             TestAssert.That(!expired.Accept(300f) && !expired.Accept(float.NaN), "Expired and invalid-time offers cannot be accepted");
             expired.Observe(300f, 1f, true, true, true);

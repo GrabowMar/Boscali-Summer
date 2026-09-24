@@ -15,6 +15,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
         Fortify = 6,
         Strike = 7,
         Ew = 8,
+        Aircraft = 9,
     }
 
     internal static class SqdMarks
@@ -70,6 +71,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 case SqdMark.Fortify: DrawFortify(mesh, r); break;
                 case SqdMark.Strike: DrawStrike(mesh, r); break;
                 case SqdMark.Ew: DrawEw(mesh, r); break;
+                case SqdMark.Aircraft: DrawAircraft(mesh, r); break;
                 default: DrawCombat(mesh, r); break;
             }
         }
@@ -183,6 +185,30 @@ namespace BoscaliSummer.Features.Progression.Presentation
             Arc(mesh, r, 0.5f, 0.12f, 0.28f, -0.2f, 1.2f);
             Arc(mesh, r, 0.5f, 0.12f, 0.5f, -0.2f, 1.2f);
             Arc(mesh, r, 0.5f, 0.12f, 0.72f, -0.2f, 1.2f);
+        }
+
+        // A neutral locator when the aircraft's native damage art is unavailable. This
+        // outline carries no part condition, so it never pretends to be a damage readout.
+        private void DrawAircraft(VertexHelper mesh, Rect r)
+        {
+            Line(mesh, r, .5f, .96f, .44f, .72f);
+            Line(mesh, r, .5f, .96f, .56f, .72f);
+            Line(mesh, r, .44f, .72f, .43f, .57f);
+            Line(mesh, r, .56f, .72f, .57f, .57f);
+            Line(mesh, r, .43f, .57f, .08f, .38f);
+            Line(mesh, r, .57f, .57f, .92f, .38f);
+            Line(mesh, r, .08f, .38f, .08f, .31f);
+            Line(mesh, r, .92f, .38f, .92f, .31f);
+            Line(mesh, r, .08f, .31f, .44f, .38f);
+            Line(mesh, r, .92f, .31f, .56f, .38f);
+            Line(mesh, r, .44f, .38f, .43f, .19f);
+            Line(mesh, r, .56f, .38f, .57f, .19f);
+            Line(mesh, r, .43f, .19f, .28f, .11f);
+            Line(mesh, r, .57f, .19f, .72f, .11f);
+            Line(mesh, r, .28f, .11f, .28f, .05f);
+            Line(mesh, r, .72f, .11f, .72f, .05f);
+            Line(mesh, r, .28f, .05f, .72f, .05f);
+            Line(mesh, r, .5f, .89f, .5f, .12f);
         }
 
         private void QuadOutline(VertexHelper mesh, Rect r, float x, float y, float w, float h)

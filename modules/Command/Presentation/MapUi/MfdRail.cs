@@ -45,18 +45,18 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         /// squeezed into a cockpit frame; a rail with a whole screen edge to itself has no
         /// reason to inherit that constraint, and these are clicked mid-flight.
         /// </summary>
-        private const float ButtonHeight = 58f;
+        private const float ButtonHeight = 60f;
 
         /// <summary>Vertical gap between buttons.</summary>
-        private const float ButtonGap = 8f;
+        private const float ButtonGap = 2f;
 
-        private const float CompactGap = 4f;
+        private const float CompactGap = 1f;
 
         /// <summary>Desktop pointer target floor; below this the stock two-column bezel wins.</summary>
         private const float MinimumButtonHeight = 44f;
 
         /// <summary>Inset from the rail's own edges to a button.</summary>
-        private const float RailPad = 8f;
+        private const float RailPad = 4f;
 
         /// <summary>
         /// Label size fallback for a button the catalog could not brand. Branded buttons
@@ -67,18 +67,24 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         /// <summary>Icon box at the left of a branded button.</summary>
         private const float IconSize = 24f;
 
-        private const float IconInset = 10f;
+        private const float IconBayWidth = 36f;
+        private const float IconInset = (IconBayWidth - IconSize) * 0.5f;
+        private const float HeaderHeight = 26f;
 
         /// <summary>Where a branded label starts, clear of the icon column.</summary>
         private const float LabelInset = 42f;
 
         /// <summary>Distance from the top of the rail to the first button.</summary>
-        private const float RailTop = 8f;
+        private const float RailTop = 4f;
 
         private static RectTransform rail;
         private static float effectiveButtonHeight = ButtonHeight;
         private static float effectiveButtonGap = ButtonGap;
         private static float effectiveLabelSize = LabelSize;
+        private static bool showHeader;
+        private static int buttonCount;
+        private static RectTransform header;
+        private static TMP_Text headerText;
 
         /// <summary>Y offset of the next free slot, measured down from the rail's top.</summary>
         private static float cursor;
@@ -114,13 +120,21 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 rail.SetParent(canvas.transform, worldPositionStays: false);
             }
 
+            Image backdrop = rail.GetComponent<Image>();
+            if (backdrop == null) backdrop = rail.gameObject.AddComponent<Image>();
+            backdrop.sprite = AvSprites.Panel;
+            backdrop.type = Image.Type.Sliced;
+            backdrop.color = Color.white;
+            backdrop.raycastTarget = false;
+
             rail.anchorMin = rail.anchorMax = rail.pivot = new Vector2(0.5f, 0.5f);
             rail.sizeDelta = new Vector2(columns.Rail.width, columns.Rail.height);
             rail.anchoredPosition = MfdLayout.CentreOf(columns.Rail);
             rail.localScale = Vector3.one;
             rail.SetAsLastSibling();
 
-            cursor = RailTop;
+            cursor = RailTop + (showHeader ? HeaderHeight : 0f);
+            UpdateHeader();
             return rail;
         }
 
@@ -134,10 +148,19 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             effectiveButtonHeight = ButtonHeight;
             effectiveButtonGap = ButtonGap;
             effectiveLabelSize = LabelSize;
-            if (itemCount <= 0) return true;
+            buttonCount = itemCount;
+            if (itemCount <= 0)
+            {
+                showHeader = false;
+                UpdateHeader();
+                return true;
+            }
 
             float roomy = RailTop + RailPad + itemCount * ButtonHeight +
                           Mathf.Max(0, itemCount - 1) * ButtonGap;
+            showHeader = roomy + HeaderHeight <= railHeight;
+            cursor = RailTop + (showHeader ? HeaderHeight : 0f);
+            UpdateHeader();
             if (roomy <= railHeight) return true;
 
             effectiveButtonGap = CompactGap;
@@ -152,6 +175,35 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             effectiveLabelSize = Mathf.Clamp(effectiveButtonHeight * 0.42f, 16f, LabelSize);
             return true;
+        }
+
+        private static void UpdateHeader()
+        {
+            if (rail == null) return;
+            if (!showHeader)
+            {
+                if (header != null) header.gameObject.SetActive(false);
+                return;
+            }
+
+            if (header == null)
+            {
+                var go = new GameObject("IndexHeader", typeof(RectTransform));
+                header = go.GetComponent<RectTransform>();
+                header.SetParent(rail, false);
+                AvKit.Place(header, new Rect(0f, 0f, rail.rect.width, HeaderHeight));
+                headerText = AvStyled.Label(header,
+                    new Rect(10f, -2f, rail.rect.width - 48f, 20f), "", "row-sub",
+                    align: TextAlignmentOptions.MidlineLeft);
+                headerText.color = AvTheme.Dim;
+                AvKit.Rule(header, new Rect(4f, -HeaderHeight + 1f, rail.rect.width - 8f, 1f),
+                    AvTheme.Frame.WithAlpha(0.65f));
+                for (int i = 0; i < 3; i++)
+                    AvKit.Rule(header, new Rect(rail.rect.width - 27f + i * 5f, -11f, 3f, 2f),
+                        i == 2 ? AvTheme.Accent.WithAlpha(0.75f) : AvTheme.Frame);
+            }
+            header.gameObject.SetActive(true);
+            if (headerText != null) headerText.text = "MFD INDEX  /  " + buttonCount.ToString("00");
         }
 
         public static int Count(List<Button> buttons, List<MFDScreen> screens)
@@ -186,6 +238,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             if (rail != null) Object.Destroy(rail.gameObject);
             rail = null;
             cursor = RailTop;
+            showHeader = false;
+            buttonCount = 0;
+            header = null;
+            headerText = null;
             effectiveButtonHeight = ButtonHeight;
             effectiveButtonGap = ButtonGap;
             effectiveLabelSize = LabelSize;
@@ -244,6 +300,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             /// <summary>Fill a branded button returns to when it is not the open screen.</summary>
             internal Color RestFill;
             internal Image SelectionRail;
+            internal Image StateTick;
             private bool latched;
 
             /// <summary>
@@ -256,13 +313,11 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 latched = on;
                 if (Background != null)
                 {
-                    Background.color = on
-                        ? AvTheme.Unity(AvTokens.Wash(AvTheme.Accent.ToRgba(),
-                                                      AvTokens.SelectedScale, AvTokens.SelectedAlpha))
-                        : RestFill;
+                    Background.color = on ? Color.Lerp(RestFill, AvTheme.Accent, 0.15f) : RestFill;
                 }
                 if (Icon != null) Icon.color = on ? AvTheme.Accent : AvTheme.TextPrimary;
                 if (SelectionRail != null) SelectionRail.color = on ? AvTheme.Accent : Color.clear;
+                if (StateTick != null) StateTick.color = on ? AvTheme.Accent : AvTheme.Frame.WithAlpha(0.55f);
             }
 
             public void Restore()
@@ -479,9 +534,13 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             AvKit.Stretch(rt);
             rt.SetAsLastSibling();
 
-            var area = new Rect(0f, 0f, slot.width, slot.height);
-            AvKit.Outline(rt, area, AvTheme.Hairline);
-            skin.SelectionRail = AvKit.Rule(rt, new Rect(0f, -4f, 3f, slot.height - 8f), Color.clear);
+            AvKit.Rule(rt, new Rect(0f, -slot.height + 1f, slot.width, 1f),
+                AvTheme.Hairline.WithAlpha(0.65f));
+            AvKit.Rule(rt, new Rect(IconBayWidth, -7f, 1f, slot.height - 14f),
+                AvTheme.Frame.WithAlpha(0.65f));
+            skin.SelectionRail = AvKit.Rule(rt, new Rect(0f, -2f, 3f, slot.height - 4f), Color.clear);
+            skin.StateTick = AvKit.Rule(rt, new Rect(slot.width - 11f, -slot.height * 0.5f, 7f, 1f),
+                AvTheme.Frame.WithAlpha(0.55f));
 
             var brand = button.gameObject.AddComponent<MfdRailBrand>();
             brand.Label = skin.Label;
@@ -508,7 +567,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             string raw = label.text;
             MfdRailEntry entry = MfdRailCatalog.For(raw);
             float codeSize = Mathf.Clamp(slot.height * 0.31f, 13f, 18f);
-            float nameSize = Mathf.Max(AvTokens.FontMicro, Mathf.Clamp(slot.height * 0.18f, AvTokens.FontMicro, 11f));
+            float nameSize = Mathf.Clamp(slot.height * 0.21f, AvTokens.FontMicro, 12f);
             label.fontSize = codeSize;
             label.fontSizeMin = codeSize;
             label.fontSizeMax = codeSize;
@@ -550,8 +609,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         /// <summary>
         /// Lay both bezel columns down the rail in the catalog's preferred order.
         ///
-        /// The game's columns arrive left-then-right, which put BDF at the top of the rail
-        /// and PALA at the top of the right column. Sorting the merged sequence stably lets
+        /// The game's columns arrive left-then-right. Sorting the merged sequence stably lets
         /// the catalog's lead codes sit together while every unranked button keeps the
         /// order the game gave it. Only placement changes: each button keeps its own click
         /// binding and screen.
@@ -645,6 +703,12 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             // its Behaviour.enabled — so filtering on activeSelf would have put five
             // blank buttons in the rail. Ask whether the slot drives a screen instead.
             if (button == null || screen == null) return false;
+
+            if (screen == FactionMfdMergePatch.Screen)
+            {
+                TMP_Text factionLabel = button.GetComponentInChildren<TMP_Text>(true);
+                if (factionLabel != null) factionLabel.text = "FAC";
+            }
 
             // A repeated maximise offers buttons the rail already wears. Branding again
             // would read the rail's own rich text back as a short code and paint the

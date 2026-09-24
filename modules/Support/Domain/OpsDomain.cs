@@ -1,7 +1,7 @@
 namespace BoscaliSummer.Features.Support.Domain
 {
     /// <summary>
-    /// The four OPS warfare domains, in tab order. Panel-local identity: nothing here
+    /// The three OPS warfare domains, in tab order. Panel-local identity: nothing here
     /// crosses the wire, so the order may change without a protocol bump.
     /// </summary>
     internal enum OpsDomain : byte
@@ -19,8 +19,7 @@ namespace BoscaliSummer.Features.Support.Domain
         {
             OpsDomain.Space,
             OpsDomain.Cyber,
-            OpsDomain.SpecialOperations,
-            OpsDomain.Intelligence
+            OpsDomain.SpecialOperations
         };
 
         /// <summary>Short tab label. Eight characters at most so every tab fits the 480px bezel.</summary>
@@ -55,7 +54,7 @@ namespace BoscaliSummer.Features.Support.Domain
                 case OpsDomain.Cyber:
                     return "Build the spectrum-defence net, hold it, trace the attackers, strike back.";
                 case OpsDomain.SpecialOperations:
-                    return "Base of operations, doctrine and task groups for ground action.";
+                    return "Send teams to real objectives; the posts they hold arm SPOT, SUPPRESS and FORTIFY.";
                 default:
                     return "Intelligence networks staged for theater events.";
             }

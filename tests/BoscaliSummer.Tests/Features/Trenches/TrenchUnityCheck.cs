@@ -29,8 +29,8 @@ public static class TrenchUnityCheck
     // Measured numbers from the checks below, quoted in the PASS summary and the log so a
     // regression can be read off result.txt without re-running the harness.
     private static float PlainHalfWidth, PlainCrestHeight, PlainFloorWidth, BayHalfWidth;
-    private static int RedoubtNests, RedoubtSoldiers, SapsNests, SapsSoldiers;
-    private static float MaxNestNodeOffset, MaxSoldierNestOffset, MaxSoldierLateral;
+    private static int RedoubtNests, SapsNests;
+    private static float MaxNestNodeOffset;
 
     public static void Run()
     {
@@ -40,27 +40,28 @@ public static class TrenchUnityCheck
             CheckCurveAndPlanner();
             CheckBaySchedule();
             CheckGrowthAndCombat();
-            CheckSoldiers();
             CheckBayPlacement();
-            CheckFallbackCrew();
+            CheckFallbackNest();
             CheckNestStrip();
             CheckWorksCatalog();
             CheckEarthworkMaterial();
             CheckLodFloatingOrigin();
             Render();
             File.WriteAllText("result.txt",
-                "PASS: eight winding orientations; a man-scale earthwork footprint beside vanilla " +
-                "emplacements and soldiers; a sparse trace fitted to a smooth owned-side curve, " +
+                "PASS: eight winding orientations; a man-scale earthwork footprint beside the " +
+                "vanilla emplacement models that stand in the bays; a sparse trace fitted to a " +
+                "smooth owned-side curve, " +
                 "terrain-refused runs split, a window fitted where its trace is (first and second " +
                 "window), contested band entrenched, stage growth through support/redoubt/saps, " +
                 "native-adapter defender budgets, damage suppression and no respawn after " +
-                "destruction; dismounted soldiers spent from the stage budget in the fire bays, " +
-                "facing the threat, with permanent casualties and a named fail-closed path when " +
-                "no pilot prefab loads; the fire ditch flares around its bay nodes and the " +
+                "destruction; a blocked bay walks to a neighbouring node before the slot gives up; " +
+                "the fire ditch flares around its bay nodes and the " +
                 "garrison stands in those bays; smooth terrain clipping a nest does not block it " +
                 "while solid obstacles still do; works deploy from the encyclopedia's instance " +
-                "lists with vehicle-scale pieces filtered; LOD is measured in local space so a " +
-                "chunk under a large floating origin stays visible at LOD0 with " +
+                "lists with vehicle-scale pieces filtered, a village on the line is fortified " +
+                "while a foreign building is left alone, and the saps stage adds its two " +
+                "listening posts; two wire belts dress the approach; LOD is measured in local " +
+                "space so a chunk under a large floating origin stays visible at LOD0 with " +
                 "CameraStateManager present or absent; a vanilla or foreign building is never " +
                 "stripped while a Boscali nest has its sandbag ring hidden and its unit part " +
                 "kept alive. Native AI/networking require in-game acceptance.\n" +
@@ -68,11 +69,8 @@ public static class TrenchUnityCheck
                 PlainCrestHeight.ToString("0.###") + "m floor=" + PlainFloorWidth.ToString("0.###") +
                 "m; flared bay half=" + BayHalfWidth.ToString("0.###") + "m (gain " +
                 (BayHalfWidth - PlainHalfWidth).ToString("0.###") + "m); " +
-                "redoubt " + RedoubtNests + " nests/" + RedoubtSoldiers + " soldiers, saps " +
-                SapsNests + " nests/" + SapsSoldiers + " soldiers; worst nest-to-node " +
-                MaxNestNodeOffset.ToString("0.###") + "m, worst soldier-to-nest " +
-                MaxSoldierNestOffset.ToString("0.###") + "m, worst soldier lateral " +
-                MaxSoldierLateral.ToString("0.###") + "m.\n" +
+                "redoubt " + RedoubtNests + " nests, saps " + SapsNests + " nests; " +
+                "worst nest-to-node " + MaxNestNodeOffset.ToString("0.###") + "m.\n" +
                 "Renders: stage-0..4.png, bay-closeup.png, closeup-final.png, flight-low.png, " +
                 "flight-cruise.png.");
             EditorApplication.Exit(0);
@@ -108,8 +106,8 @@ public static class TrenchUnityCheck
             "Both ditch ends must be closed with a head-cover cap");
         Object.DestroyImmediate(capped);
 
-        // A fire trench is an earthwork, but a man-scale one: it stands beside vanilla
-        // emplacements and the dismounted soldiers that hold it, so its parapet, berm and
+        // A fire trench is an earthwork, but a man-scale one: it stands beside the vanilla
+        // emplacement models that occupy its bays, so its parapet, berm and
         // skirt must not spread into the dozen-metre field work the flight silhouette
         // started as. The kit numbers are the LOD0 fire-trench call's; the bands below pin
         // the measured profile (half 2.41m, crest 1.24m, floor 0.88m) against accidental drift.
@@ -121,7 +119,7 @@ public static class TrenchUnityCheck
         Check(halfWidth >= 2.3f && halfWidth <= 2.5f,
             "The plain ditch keeps its measured half footprint near 2.41m, got " + halfWidth + "m");
         Check(halfWidth <= 2.6f,
-            "The earthwork stays man-scale beside vanilla emplacements and soldiers: half footprint " +
+            "The earthwork stays man-scale beside the vanilla emplacement models: half footprint " +
             halfWidth + "m");
         float crestHeight = 0f;
         float floorWidth = 0f;
@@ -343,7 +341,7 @@ public static class TrenchUnityCheck
             front, out TrenchLine line, out _, out _), "A front trace plans a position");
 
         Encyclopedia.i = new Encyclopedia();
-        foreach (string key in new[] { "Emplacement1_MG", "Emplacement1_ATGM", "Emplacement1_MANPADS" })
+        foreach (string key in new[] { "Emplacement1_MG", "Emplacement1_ATGM", "Emplacement1_MANPADS", "Emplacement1_23mm" })
         {
             var prefab = new GameObject(key);
             prefab.AddComponent<Building>(); prefab.AddComponent<UnitPart>();
@@ -433,150 +431,10 @@ public static class TrenchUnityCheck
     }
 
     /// <summary>
-    /// Dismounted soldiers hold the ditch, one crewman per bay: a slot waits for its own nest
-    /// to land, so the opening establishment fields only the crews whose nests it actually
-    /// placed and every later stage reinforces nests and crews together up to the budget
-    /// (Scrape 2, fire trench 3, support 5, redoubt 7, saps 8). Each man stands on the
-    /// centreline beside the node his own nest occupies, facing the threat. A casualty is
-    /// permanent — a committed slot never respawns — and a missing pilot prefab fails closed
-    /// with a named cause.
+    /// A nest whose primary bay is blocked falls back to a neighbouring node: one bad bay
+    /// must not cost a whole position.
     /// </summary>
-    private static void CheckSoldiers()
-    {
-        var front = new FlatFront();
-        var trace = new FrontlineTracePoint[3];
-        for (int i = 0; i < 3; i++) trace[i] = new FrontlineTracePoint(0f, -600f + i * 600f);
-        var owner = new GameObject("HQ").AddComponent<FactionHQ>();
-        Check(TrenchPlanner.TryPlanWindow(1, "Soldier_Front", owner, 0.8f, trace, 0, trace.Length, 0,
-            front, out TrenchLine line, out _, out _), "A front trace plans a position for the soldier check");
-
-        var encyclopedia = new Encyclopedia();
-        Encyclopedia.i = encyclopedia;
-        foreach (string key in new[] { "Emplacement1_MG", "Emplacement1_ATGM", "Emplacement1_MANPADS" })
-        {
-            var prefab = new GameObject(key);
-            prefab.AddComponent<Building>(); prefab.AddComponent<UnitPart>();
-            prefab.SetActive(false);
-            encyclopedia.buildings.Add(new BuildingDefinition { jsonKey = key, unitPrefab = prefab });
-        }
-        GameObject pilotPrefab = encyclopedia.AddSoldierPrefab();
-
-        var spawner = NetworkSceneSingleton<Spawner>.i = new Spawner();
-        var garrison = new TrenchGarrison(line);
-        Check(TrenchGarrison.MaximumSoldiers == 8, "The soldier roster is capped at eight");
-        Check(garrison.Establish(), "A scrape establishes its opening defenders: " + garrison.LastFailure);
-        Check(garrison.SoldierBudget == TrenchTraceMath.DefenderBudget(TrenchStage.Scrape),
-            "A scrape unlocks its opening stage budget, got " + garrison.SoldierBudget);
-        Check(spawner.Spawned.Count >= 1 && spawner.Spawned.Count <= 2,
-            "The opening establishment places one or two MG nests, got " + spawner.Spawned.Count);
-        Check(spawner.PilotsSpawned.Count == spawner.Spawned.Count,
-            "Every opening nest gets exactly its own crewman, " + spawner.PilotsSpawned.Count +
-            " soldiers for " + spawner.Spawned.Count + " nests");
-        // SoldiersAlive settles on the next roster poll, like the manager's own tick.
-        garrison.Poll(0f);
-        Check(garrison.SoldiersAlive == spawner.Spawned.Count,
-            "The opening roster holds one soldier per nest, got " + garrison.SoldiersAlive +
-            " (" + garrison.LastSoldierFailure + ")");
-        CheckCrewsShareNests(line, spawner, "opening");
-
-        // Each stage reinforces the chain to its budget; crews arrive with their own bay.
-        for (int stage = 1; stage <= 4; stage++)
-        {
-            Check(TrenchPlanner.TryGrowBelt(line, front), "The soldier check grows to stage " + stage);
-            garrison.Reinforce();
-            garrison.Poll(stage);
-            int budget = TrenchTraceMath.DefenderBudget(line.Stage);
-            Check(spawner.Spawned.Count == budget,
-                "Stage " + stage + " fields " + budget + " nests, got " + spawner.Spawned.Count);
-            Check(spawner.PilotsSpawned.Count == budget,
-                "Stage " + stage + " fields one crew per nest, got " + spawner.PilotsSpawned.Count +
-                " soldiers");
-            CheckCrewsShareNests(line, spawner, "stage " + stage);
-        }
-        Check(garrison.SoldiersAlive == 8, "A saps position holds eight soldiers, got " +
-            garrison.SoldiersAlive + " (" + garrison.LastSoldierFailure + ")");
-        Check(line.Nodes != null && line.Nodes.Length > 0, "A fire trench carries bay nodes");
-        for (int i = 0; i < spawner.PilotsSpawned.Count; i++)
-        {
-            PilotDismounted pilot = spawner.PilotsSpawned[i];
-            Check(spawner.PilotPrefabs[i] == pilotPrefab,
-                "The soldier prefab comes from the encyclopedia's own definition lists");
-            Check(pilot.name.StartsWith(TrenchGarrison.Prefix + line.Id + ":soldier:"),
-                "A soldier is named for its position and slot: " + pilot.name);
-            Check(pilot.NetworkHQ == owner, "A soldier carries the position's owner HQ");
-            float nearest = NearestNodeDistance(line.Nodes, pilot.transform.position);
-            Check(nearest <= 2.6f,
-                "A soldier stands in the ditch beside its bay node, " + nearest + "m away");
-            Check(Mathf.Abs(pilot.transform.position.y - 0.3f) < 0.01f,
-                "A soldier spawns boot-height above the ground, y=" + pilot.transform.position.y);
-            Check(Vector3.Dot(pilot.transform.forward, line.ThreatAt(pilot.transform.position)) > 0.99f,
-                "A soldier faces the threat");
-        }
-
-        // A casualty is permanent: its own committed slot never sends a replacement.
-        Object.DestroyImmediate(spawner.PilotsSpawned[0].gameObject);
-        garrison.Poll(10f);
-        Check(garrison.SoldiersAlive == 7, "A destroyed soldier is one casualty, " + garrison.SoldiersAlive + " alive");
-        garrison.Reinforce(); garrison.Poll(11f);
-        Check(garrison.SoldiersAlive == 7 && spawner.PilotsSpawned.Count == 8,
-            "A permanent casualty is never respawned into its committed slot");
-        garrison.Remove();
-        Check(garrison.SoldiersAlive == 0, "Remove() clears the soldier roster");
-        for (int i = 0; i < spawner.PilotsSpawned.Count; i++)
-            Check(spawner.PilotsSpawned[i] == null, "Remove() destroys every spawned soldier");
-
-        // Without a pilot prefab the position still stands on its native defenders and names
-        // the missing soldier source instead of throwing or silently fielding nobody.
-        Encyclopedia.i = new Encyclopedia();
-        foreach (string key in new[] { "Emplacement1_MG", "Emplacement1_ATGM", "Emplacement1_MANPADS" })
-        {
-            var prefab = new GameObject(key);
-            prefab.AddComponent<Building>(); prefab.AddComponent<UnitPart>();
-            prefab.SetActive(false);
-            Encyclopedia.i.buildings.Add(new BuildingDefinition { jsonKey = key, unitPrefab = prefab });
-        }
-        spawner = NetworkSceneSingleton<Spawner>.i = new Spawner();
-        var defendersOnly = new TrenchGarrison(line);
-        Check(defendersOnly.Establish(),
-            "A position without a pilot prefab still establishes defenders: " + defendersOnly.LastFailure);
-        Check(defendersOnly.SoldiersAlive == 0, "An unloaded pilot prefab fields no soldiers");
-        Check(!string.IsNullOrEmpty(defendersOnly.LastSoldierFailure),
-            "A missing soldier prefab is a named refusal: " + defendersOnly.LastSoldierFailure);
-        defendersOnly.Remove();
-
-        Object.DestroyImmediate(pilotPrefab);
-        Object.DestroyImmediate(owner.gameObject);
-    }
-
-    /// <summary>One crew per nest, every crewman on the bay node its own nest holds.</summary>
-    private static void CheckCrewsShareNests(TrenchLine line, Spawner spawner, string stage)
-    {
-        Check(line.Nodes != null && line.Nodes.Length > 0, "Bay nodes exist for the " + stage + " roster");
-        for (int i = 0; i < spawner.PilotsSpawned.Count; i++)
-        {
-            Vector3 soldier = spawner.PilotsSpawned[i].transform.position;
-            float nestDistance = float.MaxValue;
-            int nestIndex = -1;
-            for (int n = 0; n < spawner.Spawned.Count; n++)
-            {
-                Vector3 nest = spawner.Spawned[n].transform.position;
-                float d = new Vector2(soldier.x - nest.x, soldier.z - nest.z).magnitude;
-                if (d < nestDistance) { nestDistance = d; nestIndex = n; }
-            }
-            Check(nestDistance <= 2.6f,
-                stage + ": a soldier stands beside its own nest, " + nestDistance + "m away");
-            Check(NearestNodeIndex(line.Nodes, spawner.Spawned[nestIndex].transform.position) ==
-                NearestNodeIndex(line.Nodes, soldier),
-                stage + ": a soldier shares its own nest's bay node");
-        }
-    }
-
-    /// <summary>
-    /// A nest whose primary bay is blocked falls back to a neighbouring node, and its crewman
-    /// follows it there: a committed slot never leaves a soldier standing on a node with no
-    /// weapon once its nest has landed.
-    /// </summary>
-    private static void CheckFallbackCrew()
+    private static void CheckFallbackNest()
     {
         var front = new FlatFront();
         var trace = new FrontlineTracePoint[3];
@@ -590,7 +448,7 @@ public static class TrenchUnityCheck
         encyclopedia.AddDefensePrefab("Emplacement1_MG", 2.4f);
         encyclopedia.AddDefensePrefab("Emplacement1_ATGM", 2.4f);
         encyclopedia.AddDefensePrefab("Emplacement1_MANPADS", 3.4f);
-        GameObject pilotPrefab = encyclopedia.AddSoldierPrefab();
+        encyclopedia.AddDefensePrefab("Emplacement1_23mm", 2.4f);
         var spawner = NetworkSceneSingleton<Spawner>.i = new Spawner();
 
         // Block the opening slot's primary bay; its neighbouring node must stay free.
@@ -615,28 +473,19 @@ public static class TrenchUnityCheck
             "The blocked primary bay pushed the nest off it");
         Check(new Vector2(nest.x - fallbackNode.x, nest.z - fallbackNode.z).magnitude <= 1f,
             "The nest landed on the neighbouring fallback bay");
-        Check(spawner.PilotsSpawned.Count >= 1, "The fallback nest still gets its crewman");
-        Vector3 soldier = spawner.PilotsSpawned[0].transform.position;
         int nestNode = NearestNodeIndex(line.Nodes, nest);
         Check(nestNode == primary + 1, "The fallback nest's node is the neighbouring bay, got index " +
             nestNode + " against primary " + primary);
-        Check(NearestNodeIndex(line.Nodes, soldier) == nestNode,
-            "The crewman followed its nest to the fallback bay, not the blocked primary one");
-        Check(new Vector2(soldier.x - nest.x, soldier.z - nest.z).magnitude <= 2.6f,
-            "The crewman stands beside the fallback nest");
 
         garrison.Remove();
         Object.DestroyImmediate(obstacle);
-        Object.DestroyImmediate(pilotPrefab);
         Object.DestroyImmediate(owner.gameObject);
     }
 
     /// <summary>
-    /// The fire ditch is a chain of bays and the garrison stands in them: at Redoubt and
-    /// Saps the nest count is exactly the stage budget, every nest sits on a bay node, every
-    /// soldier shares its nest's node, stands within a crew's reach of it and stays on the
-    /// ditch centreline facing the threat. A line with no bays refuses the site by name
-    /// instead of leaking a defender.
+    /// The fire ditch is a chain of bays and the nests stand in them: at Redoubt and Saps the
+    /// nest count is exactly the stage budget and every nest sits on a bay node facing the
+    /// threat. A line with no bays refuses the site by name instead of leaking a defender.
     /// </summary>
     private static void CheckBayPlacement()
     {
@@ -652,7 +501,7 @@ public static class TrenchUnityCheck
         encyclopedia.AddDefensePrefab("Emplacement1_MG", 2.4f);
         encyclopedia.AddDefensePrefab("Emplacement1_ATGM", 2.4f);
         encyclopedia.AddDefensePrefab("Emplacement1_MANPADS", 3.4f);
-        GameObject pilotPrefab = encyclopedia.AddSoldierPrefab();
+        encyclopedia.AddDefensePrefab("Emplacement1_23mm", 2.4f);
         var spawner = NetworkSceneSingleton<Spawner>.i = new Spawner();
 
         Check(TrenchPlanner.TryGrowBelt(line, front) && TrenchPlanner.TryGrowBelt(line, front) &&
@@ -663,17 +512,12 @@ public static class TrenchUnityCheck
         garrison.Reinforce();
         garrison.Poll(0f);
         RedoubtNests = spawner.Spawned.Count;
-        RedoubtSoldiers = spawner.PilotsSpawned.Count;
         Check(RedoubtNests == TrenchTraceMath.DefenderBudget(TrenchStage.Redoubt),
             "A redoubt fields exactly its seven bay nests, got " + RedoubtNests);
-        Check(RedoubtSoldiers == RedoubtNests, "Every nest has one crewman in the ditch, " +
-            RedoubtSoldiers + " soldiers for " + RedoubtNests + " nests");
         Check(line.Nodes != null && line.Nodes.Length > 0,
-            "A planned position carries bay nodes for nests and crews");
+            "A planned position carries bay nodes for its nests");
 
         MaxNestNodeOffset = 0f;
-        MaxSoldierNestOffset = 0f;
-        MaxSoldierLateral = 0f;
         for (int i = 0; i < spawner.Spawned.Count; i++)
         {
             Vector3 nest = spawner.Spawned[i].transform.position;
@@ -683,39 +527,15 @@ public static class TrenchUnityCheck
             Check(Vector3.Dot(spawner.Spawned[i].transform.forward, line.ThreatAt(nest)) > 0.99f,
                 "A nest faces the threat");
         }
-        for (int i = 0; i < spawner.PilotsSpawned.Count; i++)
-        {
-            Vector3 soldier = spawner.PilotsSpawned[i].transform.position;
-            float nestDistance = float.MaxValue;
-            int nestIndex = -1;
-            for (int n = 0; n < spawner.Spawned.Count; n++)
-            {
-                Vector3 nest = spawner.Spawned[n].transform.position;
-                float d = new Vector2(soldier.x - nest.x, soldier.z - nest.z).magnitude;
-                if (d < nestDistance) { nestDistance = d; nestIndex = n; }
-            }
-            MaxSoldierNestOffset = Mathf.Max(MaxSoldierNestOffset, nestDistance);
-            Check(nestDistance <= 2.6f, "A soldier stands beside its nest, " + nestDistance + "m away");
-            Check(NearestNodeIndex(line.Nodes, spawner.Spawned[nestIndex].transform.position) ==
-                NearestNodeIndex(line.Nodes, soldier), "A soldier shares its nest's bay node");
-            float lateral = DistanceToCurve(line.Curve, soldier);
-            MaxSoldierLateral = Mathf.Max(MaxSoldierLateral, lateral);
-            Check(lateral <= 1f, "A soldier stays inside the ditch on the centreline, " + lateral + "m off it");
-            Check(Vector3.Dot(spawner.PilotsSpawned[i].transform.forward, line.ThreatAt(soldier)) > 0.99f,
-                "A soldier faces the threat");
-        }
 
-        // The chain grows to Saps: the eighth bay and its crewman appear, one per nest.
+        // The chain grows to Saps: the eighth bay appears.
         Check(TrenchPlanner.TryGrowBelt(line, front) && line.Stage == TrenchStage.Saps,
             "The bay placement check grows a position to the saps");
         garrison.Reinforce();
         garrison.Poll(0f);
         SapsNests = spawner.Spawned.Count;
-        SapsSoldiers = spawner.PilotsSpawned.Count;
         Check(SapsNests == TrenchTraceMath.DefenderBudget(TrenchStage.Saps),
             "A saps position fields exactly its eight bay nests, got " + SapsNests);
-        Check(SapsSoldiers == SapsNests,
-            "The eight bays each keep one crewman, " + SapsSoldiers + " for " + SapsNests);
         garrison.Remove();
 
         // No bays and no anchors at all: the position must refuse by name, never spawn a
@@ -729,7 +549,6 @@ public static class TrenchUnityCheck
         Check(noBays.LastFailure == "no anchor", "A bayless line names the refusal: " + noBays.LastFailure);
         Check(spawner.Spawned.Count == before, "A refused bayless line leaks no defender");
 
-        Object.DestroyImmediate(pilotPrefab);
         Object.DestroyImmediate(owner.gameObject);
     }
 
@@ -799,24 +618,6 @@ public static class TrenchUnityCheck
         return best;
     }
 
-    private static float DistanceToCurve(Vector3[] curve, Vector3 point)
-    {
-        if (curve == null || curve.Length == 0) return float.MaxValue;
-        float best = float.MaxValue;
-        for (int i = 0; i < curve.Length - 1; i++)
-        {
-            Vector3 a = curve[i], b = curve[i + 1];
-            float dx = b.x - a.x, dz = b.z - a.z;
-            float lengthSq = dx * dx + dz * dz;
-            float t = lengthSq < 0.0001f ? 0f :
-                Mathf.Clamp01(((point.x - a.x) * dx + (point.z - a.z) * dz) / lengthSq);
-            float px = a.x + dx * t - point.x, pz = a.z + dz * t - point.z;
-            best = Mathf.Min(best, Mathf.Sqrt(px * px + pz * pz));
-        }
-        Vector3 last = curve[curve.Length - 1];
-        return Mathf.Min(best, new Vector2(last.x - point.x, last.z - point.z).magnitude);
-    }
-
     /// <summary>
     /// Works come from the encyclopedia's instance lists once it has loaded. The static
     /// Lookup dictionary is deliberately absent from the stubs: a catalog that reads it
@@ -857,8 +658,42 @@ public static class TrenchUnityCheck
             "Every work must be one vanilla scenery spawn");
         foreach (GameObject prefab in spawner.SceneryPrefabs)
             Check(prefab == smallPrefab, "Vehicle-scale scenery must never be used as a work");
+
+        // A village on the line: the building itself stays vanilla but gets one sandbag piece
+        // against its front, on top of the ditch works. A building owned by the other side is
+        // left alone.
+        var villageGo = new GameObject("Village");
+        var village = villageGo.AddComponent<Building>();
+        village.NetworkHQ = owner;
+        villageGo.transform.position = line.Curve[line.Curve.Length / 2];
+        UnitRegistry.allUnits.Add(village);
+        var foreignGo = new GameObject("ForeignDepot");
+        var foreignOwner = new GameObject("OtherHQ").AddComponent<FactionHQ>();
+        var foreign = foreignGo.AddComponent<Building>();
+        foreign.NetworkHQ = foreignOwner;
+        foreignGo.transform.position = line.Curve[line.Curve.Length / 2] + Vector3.forward * 30f;
+        UnitRegistry.allUnits.Add(foreign);
+
+        var structural = new TrenchWorks(line);
+        structural.Deploy(TrenchStage.FireTrench);
+        Check(structural.Count == TrenchTraceMath.WorksBudget(TrenchStage.FireTrench) &&
+            spawner.ScenerySpawned.Count == works.Count + structural.Count + 1,
+            "A village inside the corridor gets one fortifying piece and the ditch works still deploy");
+        structural.Remove();
+        UnitRegistry.allUnits.Clear();
+
+        // The saps stage unlocks the two listening posts at the sap heads: the works budget
+        // reaches ten and only the sap positions change.
+        for (int i = 0; i < 4; i++)
+            Check(TrenchPlanner.TryGrowBelt(line, front), "The works line must grow to the saps stage");
+        works.Deploy(TrenchStage.Saps);
+        Check(works.Count == TrenchTraceMath.WorksBudget(TrenchStage.Saps),
+            "The saps stage must add two listening posts at the sap heads, got " + works.Count);
         works.Remove();
 
+        Object.DestroyImmediate(villageGo);
+        Object.DestroyImmediate(foreignGo);
+        Object.DestroyImmediate(foreignOwner.gameObject);
         Object.DestroyImmediate(smallPrefab);
         Object.DestroyImmediate(hugePrefab);
         Object.DestroyImmediate(owner.gameObject);
@@ -869,6 +704,11 @@ public static class TrenchUnityCheck
         var material = TrenchMaterialResolver.GetEarthBermMaterial();
         Check(material != null && material.mainTexture != null && material.mainTexture.width >= 64,
             "Earthwork material must carry the procedural cross-section palette texture");
+        var wireMaterial = TrenchMaterialResolver.GetWireMaterial();
+        Check(wireMaterial != null && wireMaterial != material &&
+            (wireMaterial.HasProperty("_BaseColor")
+                ? wireMaterial.GetColor("_BaseColor").r < 0.3f : wireMaterial.color.r < 0.3f),
+            "The wire belt needs a distinct dark steel material");
         TrenchMaterialResolver.ResetForScene();
     }
 
@@ -897,6 +737,9 @@ public static class TrenchUnityCheck
 
         var chunk = new GameObject("LodChunk").AddComponent<TrenchVisualChunk>();
         chunk.Initialize(line);
+        Check(chunk.transform.Find("LOD0_FullDetail/WireBelt") != null &&
+            chunk.transform.Find("LOD0_FullDetail/WireBelt_Outer") != null,
+            "The wired approach must read as two belts in front of the parapet");
         Datum.originPosition = new Vector3(-6400f, 0f, -7300f);
         camera.transform.position = new GlobalPosition(chunk.WorldCenter).ToLocalPosition();
         chunk.Rebuild();
@@ -904,6 +747,21 @@ public static class TrenchUnityCheck
             "LOD distance must be measured in one frame; a camera on the earthwork read " +
             chunk.CameraDistance + "m against Lod0Distance " + chunk.Lod0Distance);
         Check(chunk.ActiveLod == 0, "A camera on the earthwork must select LOD0, got " + chunk.ActiveLod);
+
+        NetworkSceneSingleton<Spawner>.i = new Spawner { IsServer = true };
+        camera.transform.position += Vector3.up * 13000f;
+        chunk.Rebuild();
+        var barriers = chunk.GetComponentsInChildren<BoxCollider>(true);
+        Check(chunk.ActiveLod == 3 && barriers.Length > 0 &&
+            Array.Exists(barriers, barrier => barrier.enabled),
+            "Host parapet collision must persist when the camera culls the visual trench");
+        NetworkSceneSingleton<Spawner>.i.IsServer = false;
+        chunk.Rebuild();
+        barriers = chunk.GetComponentsInChildren<BoxCollider>(true);
+        Check(barriers.Length > 0 && Array.TrueForAll(barriers, barrier => !barrier.enabled),
+            "A client-side visual chunk must not own parapet collision");
+        NetworkSceneSingleton<Spawner>.i.IsServer = true;
+        camera.transform.position = new GlobalPosition(chunk.WorldCenter).ToLocalPosition();
 
         // A scene without a live CameraStateManager must still cull through Camera.main.
         SceneSingleton<CameraStateManager>.i = null;
@@ -916,6 +774,7 @@ public static class TrenchUnityCheck
         Object.DestroyImmediate(cameraGo);
         Object.DestroyImmediate(owner.gameObject);
         Datum.originPosition = Vector3.zero;
+        NetworkSceneSingleton<Spawner>.i = null;
     }
 
     private static void Render()
@@ -961,32 +820,26 @@ public static class TrenchUnityCheck
             RenderTexture.active = target;
             WriteRender(target, "stage-" + stage + ".png");
         }
-        // Who holds the ditch: nest proxies on the bay nodes and one soldier figure beside
-        // each, so the close-up shows the crew standing in the flared bays.
+        // Who holds the ditch: one nest proxy per bay node, so the close-up shows the
+        // emplacements standing in the flared bays.
         var renderEncyclopedia = new Encyclopedia();
         Encyclopedia.i = renderEncyclopedia;
         AddNestProxy(renderEncyclopedia, "Emplacement1_MG", 2.4f, new Color(0.62f, 0.49f, 0.29f));
         AddNestProxy(renderEncyclopedia, "Emplacement1_ATGM", 2.4f, new Color(0.55f, 0.44f, 0.27f));
         AddNestProxy(renderEncyclopedia, "Emplacement1_MANPADS", 3.4f, new Color(0.50f, 0.47f, 0.30f));
-        GameObject renderPilot = renderEncyclopedia.AddSoldierPrefab();
-        AddProxy(renderPilot, PrimitiveType.Capsule, new Color(0.55f, 0.63f, 0.38f),
-            new Vector3(0.4f, 0.9f, 0.4f), new Vector3(0f, 0.6f, 0f));
-        renderPilot.SetActive(false);
+        AddNestProxy(renderEncyclopedia, "Emplacement1_23mm", 2.4f, new Color(0.45f, 0.43f, 0.28f));
         var renderSpawner = NetworkSceneSingleton<Spawner>.i = new Spawner();
         var renderGarrison = new TrenchGarrison(line);
         Check(renderGarrison.Establish(), "The render garrison establishes: " + renderGarrison.LastFailure);
         renderGarrison.Reinforce();
         renderGarrison.Poll(0f);
-        Check(renderSpawner.Spawned.Count == TrenchTraceMath.DefenderBudget(line.Stage) &&
-            renderSpawner.PilotsSpawned.Count == TrenchTraceMath.DefenderBudget(line.Stage),
-            "The render garrison fields the full bay chain: " + renderSpawner.Spawned.Count + " nests, " +
-            renderSpawner.PilotsSpawned.Count + " soldiers");
+        Check(renderSpawner.Spawned.Count == TrenchTraceMath.DefenderBudget(line.Stage),
+            "The render garrison fields the full bay chain: " + renderSpawner.Spawned.Count + " nests");
 
-        // Frame a bay that actually holds a nest and crew, not a bare mid-line node.
+        // Frame a bay that actually holds a nest, not a bare mid-line node.
         Vector3 bay = renderSpawner.Spawned[renderSpawner.Spawned.Count / 2].transform.position;
         Debug.Log("[TrenchUnityCheck] render bay " + bay + " nest0 " +
-            renderSpawner.Spawned[0].transform.position + " soldier0 " +
-            renderSpawner.PilotsSpawned[0].transform.position);
+            renderSpawner.Spawned[0].transform.position);
         camera.transform.position = bay + new Vector3(-4.5f, 2.3f, -9f);
         camera.transform.LookAt(bay + new Vector3(0f, 0.6f, 0f));
         camera.Render();
@@ -1005,7 +858,6 @@ public static class TrenchUnityCheck
         FlightRender(camera, target, chunk, new Vector3(1500, 2400, -700), "flight-cruise.png");
 
         renderGarrison.Remove();
-        Object.DestroyImmediate(renderPilot);
         Object.DestroyImmediate(chunk.gameObject);
         Object.DestroyImmediate(owner.gameObject);
     }

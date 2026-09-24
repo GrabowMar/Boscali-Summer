@@ -8,9 +8,10 @@ namespace BoscaliSummer.Features.Trenches.Runtime
 {
     /// <summary>
     /// Turns a Command front trace into natural trench positions: a Bezier chain through the
-    /// sparse contour, an owned-side offset chosen for the ground it finds (low, level, dry),
-    /// trimmed where the terrain refuses to be dug, then grown stage by stage into a field
-    /// belt. All array sizes are fixed; the pure rules live in <see cref="TrenchTraceMath"/>.
+    /// sparse contour, an owned-side offset chosen for defensible ground (relief over the
+    /// ground either side, dry, near its intended depth), trimmed where the terrain refuses
+    /// to be dug, then grown stage by stage into a field belt. All array sizes are fixed; the
+    /// pure rules live in <see cref="TrenchTraceMath"/>.
     /// </summary>
     internal static class TrenchPlanner
     {
@@ -42,11 +43,15 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         /// Plans one position-length window of a trace, starting at raw trace point
         /// <paramref name="windowStartStation"/>. False means the ground, ownership or length
         /// refused a position; <paramref name="nextStation"/> is 0 once the trace is
-        /// exhausted, so one bad stretch never stalls the scan.
+        /// exhausted, so one bad stretch never stalls the scan. A band the terrain refuses
+        /// (a beachhead) retries once deeper landward before the window is given up.
+        /// <paramref name="foliageAt"/> and <paramref name="roadDistanceAt"/> nudge the route
+        /// toward forest edges and off road surfaces; null keeps the relief-only siting.
         /// </summary>
         public static bool TryPlanWindow(int lineId, string name, FactionHQ owner, float pressure,
             FrontlineTracePoint[] points, int pointOffset, int pointCount, int windowStartStation,
-            ITerritoryIngress territory, out TrenchLine line, out int nextStation, out TrenchRefusal refusal)
+            ITerritoryIngress territory, out TrenchLine line, out int nextStation, out TrenchRefusal refusal,
+            Func<float, float, bool> foliageAt = null, Func<float, float, float> roadDistanceAt = null)
         {
             line = null;
             nextStation = 0;
@@ -106,22 +111,38 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             float spacing = Math.Max(TrenchTraceMath.CurveSpacing,
                 (traceArc[last] - traceArc[first]) / Math.Max(1, count - 1));
 
-            if (!SearchOffsets(territory, owner, count, out refusal)) return false;
-
-            int runs = TrenchTraceMath.SplitRuns(valid, count,
-                Mathf.Max(1, Mathf.CeilToInt(TrenchTraceMath.MinRunLength / spacing)),
-                runStarts, runLengths, MaximumRuns);
-            if (runs <= 0)
+            // Two depth bands: the fire depth, then one band deeper landward. A beachhead
+            // refuses every candidate at the fire depth (wet ground) or fragments into
+            // unbuildable shreds; the second band digs it instead of dropping the window.
+            int runStart = 0, runCount = 0;
+            float depthCenter = TrenchTraceMath.FireDepth;
+            bool placed = false;
+            for (int pass = 0; pass < 2 && !placed; pass++)
             {
-                refusal = TrenchRefusal.NoRun;
-                return false;
+                depthCenter = TrenchTraceMath.FireDepth + pass * TrenchTraceMath.BeachFallbackExtraDepth;
+                if (!SearchOffsets(territory, owner, count, depthCenter, foliageAt, roadDistanceAt,
+                    out refusal))
+                {
+                    // Only refused ground retries deeper: a missing side never resolves landward.
+                    if (pass > 0 || refusal != TrenchRefusal.NoGround) return false;
+                    continue;
+                }
+                int runs = TrenchTraceMath.SplitRuns(valid, count,
+                    Mathf.Max(1, Mathf.CeilToInt(TrenchTraceMath.MinRunLength / spacing)),
+                    runStarts, runLengths, MaximumRuns);
+                if (runs <= 0)
+                {
+                    if (pass > 0) { refusal = TrenchRefusal.NoRun; return false; }
+                    continue;
+                }
+                int best = 0;
+                for (int r = 1; r < runs; r++)
+                    if (runLengths[r] > runLengths[best]) best = r;
+                runStart = (int)runStarts[best];
+                runCount = (int)runLengths[best];
+                placed = true;
             }
-
-            int best = 0;
-            for (int r = 1; r < runs; r++)
-                if (runLengths[r] > runLengths[best]) best = r;
-            int runStart = (int)runStarts[best];
-            int runCount = (int)runLengths[best];
+            if (!placed) return false;
 
             var baseCurve = new Vector3[runCount];
             var inward = new Vector3[runCount];
@@ -132,7 +153,7 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             for (int j = 0; j < runCount; j++)
             {
                 int s = runStart + j;
-                float depth = TrenchTraceMath.FireDepth +
+                float depth = depthCenter +
                     (route[s] - sector) * TrenchTraceMath.DepthSearchStep;
                 baseCurve[j] = new Vector3(stationX[s], 0f, stationZ[s]);
                 inward[j] = new Vector3(inwardX[s], 0f, inwardZ[s]);
@@ -148,7 +169,7 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             };
             int faction = owner.GetInstanceID();
             built.Validator = p => TrenchTerrain.TryGround(p, out _) &&
-                Owns(territory, faction, p) && WithinCorridor(built, p);
+                Diggable(territory, faction, p) && WithinCorridor(built, p);
             line = built;
             return true;
         }
@@ -157,12 +178,15 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         /// Owned-side offset search over the window's resampled stations (window-local
         /// indices — never offset by the window start, or the position is fitted to the
         /// wrong stretch of front and reads stale stations past the buffer's end). Five
-        /// candidate depths around the fire depth, scored by ground height plus distance
-        /// from the intended line, smoothed by the undulation penalty so the position
-        /// settles into the flattest low ground it can reach.
+        /// candidate depths around <paramref name="depthCenter"/>, scored by defensible
+        /// ground — relief over the land either side, hollows penalised — plus distance from
+        /// the intended line, smoothed by the undulation penalty so the position settles onto
+        /// a crest or knoll instead of the lowest hollow it can reach. Foliage and road
+        /// probes nudge the route toward forest edges and off road surfaces when present.
         /// </summary>
         private static bool SearchOffsets(ITerritoryIngress territory, FactionHQ owner, int count,
-            out TrenchRefusal refusal)
+            float depthCenter, Func<float, float, bool> foliageAt,
+            Func<float, float, float> roadDistanceAt, out TrenchRefusal refusal)
         {
             float sector = (TrenchTraceMath.DepthSearchLevels - 1) * 0.5f;
             int faction = owner.GetInstanceID();
@@ -185,23 +209,38 @@ namespace BoscaliSummer.Features.Trenches.Runtime
                 anySide = true;
                 inwardX[s] = ix;
                 inwardZ[s] = iz;
+                // The relief reference is sampled once per station (a fixed probe forward
+                // into no man's land and one behind the line) rather than once per candidate,
+                // so the choice between depths is driven by each candidate's own ground.
+                float forwardY = ProbeHeight(stationX[s] - ix * TrenchTraceMath.ReliefProbeDistance,
+                    stationZ[s] - iz * TrenchTraceMath.ReliefProbeDistance);
+                float backY = ProbeHeight(stationX[s] + ix * TrenchTraceMath.ReliefProbeDistance,
+                    stationZ[s] + iz * TrenchTraceMath.ReliefProbeDistance);
                 for (int k = 0; k < TrenchTraceMath.DepthSearchLevels; k++)
                 {
-                    float depth = TrenchTraceMath.FireDepth + (k - sector) * TrenchTraceMath.DepthSearchStep;
+                    float depth = depthCenter + (k - sector) * TrenchTraceMath.DepthSearchStep;
                     float groundX = stationX[s] + ix * depth;
                     float groundZ = stationZ[s] + iz * depth;
                     // The chosen depth must stay on the faction's own side of the front, so a
                     // ragged trace leaves a gap instead of digging into the enemy's ground.
                     if (!TrenchTerrain.TryGround(groundX, groundZ, out Vector3 ground) ||
-                        !Owns(territory, faction, ground))
+                        !Diggable(territory, faction, ground))
                     {
                         height[s, k] = float.NaN;
                         cost[s, k] = float.NaN;
                         continue;
                     }
                     height[s, k] = ground.y;
-                    cost[s, k] = ground.y + TrenchTraceMath.DepthStayWeight *
-                        (depth - TrenchTraceMath.FireDepth) * (depth - TrenchTraceMath.FireDepth);
+                    cost[s, k] = TrenchTraceMath.DefensibleCost(ground.y, forwardY, backY,
+                        depth - depthCenter);
+                    if (foliageAt != null)
+                    {
+                        bool inside = foliageAt(groundX, groundZ);
+                        cost[s, k] += TrenchTraceMath.FoliageCost(inside,
+                            !inside && NearFoliage(foliageAt, groundX, groundZ));
+                    }
+                    if (roadDistanceAt != null)
+                        cost[s, k] += TrenchTraceMath.RoadCost(roadDistanceAt(groundX, groundZ));
                     anyGround = true;
                 }
             }
@@ -226,13 +265,21 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             {
                 if (route[s] < 0) continue;
                 valid[s] = true;
-                float depth = TrenchTraceMath.FireDepth +
+                float depth = depthCenter +
                     (route[s] - sector) * TrenchTraceMath.DepthSearchStep;
                 curveX[s] = stationX[s] + inwardX[s] * depth;
                 curveZ[s] = stationZ[s] + inwardZ[s] * depth;
             }
             refusal = TrenchRefusal.None;
             return true;
+        }
+
+        /// <summary>True when a forest stand touches the ground near a candidate.</summary>
+        private static bool NearFoliage(Func<float, float, bool> foliageAt, float x, float z)
+        {
+            float d = TrenchTraceMath.FoliageEdgeProbeDistance;
+            return foliageAt(x + d, z) || foliageAt(x - d, z) ||
+                foliageAt(x, z + d) || foliageAt(x, z - d);
         }
 
         /// <summary>
@@ -250,10 +297,18 @@ namespace BoscaliSummer.Features.Trenches.Runtime
                 out ix, out iz);
         }
 
-        /// <summary>Ground on this faction's side of the front, contested or not.</summary>
-        private static bool Owns(ITerritoryIngress territory, int faction, Vector3 ground)
+        /// <summary>
+        /// Ground this faction may dig: its own side or the near edge of its contested band.
+        /// Firmer than the floor a dug line survives at (<see cref="TrenchTraceMath.HoldsOwnSide"/>),
+        /// so a fresh position is not abandoned by the next sample of a moving front.
+        /// </summary>
+        private static bool Diggable(ITerritoryIngress territory, int faction, Vector3 ground)
             => territory.TryGetHoldStrength(faction, ground.x, ground.z, out float hold) &&
-                TrenchTraceMath.HoldsOwnSide(hold);
+                TrenchTraceMath.CanDig(hold);
+
+        /// <summary>Height of the terrain at a point, or NaN where the probe refuses (water, cliff).</summary>
+        private static float ProbeHeight(float x, float z)
+            => TrenchTerrain.TryGround(x, z, out Vector3 ground) ? ground.y : float.NaN;
 
         /// <summary>
         /// Lays out the ground the next stage adds. Every stage is atomic: an invalid belt
@@ -271,30 +326,29 @@ namespace BoscaliSummer.Features.Trenches.Runtime
                 case TrenchStage.FireTrench:
                     if (line.Support == null)
                     {
-                        if (!TryBuildBeltTrace(line, territory,
-                            TrenchTraceMath.SupportDepth - TrenchTraceMath.FireDepth, out Vector3[] support))
-                            return false;
-                        line.Support = support;
+                        if (!TryBuildBelt(line, territory, out Vector3[] support)) return false;
+                        line.Support = support; // null once the stage advances without it
                     }
                     if (line.Links == null) BuildLinks(line);
                     line.SupportAnchors = SampleAnchors(line.Support, AnchorSpacing);
+                    line.BeltRefusals = 0;
                     line.Stage = TrenchStage.Support;
                     return true;
 
                 case TrenchStage.Support:
                     if (line.Redoubt == null)
                     {
-                        if (!TryBuildBeltTrace(line, territory,
-                            TrenchTraceMath.RedoubtDepth - TrenchTraceMath.FireDepth, out Vector3[] redoubt))
-                            return false;
+                        if (!TryBuildBelt(line, territory, out Vector3[] redoubt)) return false;
                         line.Redoubt = redoubt;
                     }
                     line.RedoubtAnchors = SampleAnchors(line.Redoubt, AnchorSpacing);
+                    line.BeltRefusals = 0;
                     line.Stage = TrenchStage.Redoubt;
                     return true;
 
                 case TrenchStage.Redoubt:
-                    if (line.Spurs == null && !TryBuildSaps(line, territory)) return false;
+                    if (line.Spurs == null && !TryBuildSaps(line, territory) && !NoteBeltRefusal(line)) return false;
+                    line.BeltRefusals = 0;
                     line.Stage = TrenchStage.Saps;
                     return true;
 
@@ -304,8 +358,34 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         }
 
         /// <summary>
+        /// The belt trace the current stage adds, tried down the depth ladder: doctrine depth
+        /// first, then shallower rungs, so a position on a narrow band still gets a rear line
+        /// closer in. True with a null trace once the stage has refused often enough to
+        /// advance without it: the belt never holds the defender budget hostage.
+        /// </summary>
+        private static bool TryBuildBelt(TrenchLine line, ITerritoryIngress territory, out Vector3[] trace)
+        {
+            trace = null;
+            for (int rung = 0; rung < TrenchTraceMath.BeltLadderLength; rung++)
+            {
+                float depth = TrenchTraceMath.BeltDepth(line.Stage, rung);
+                if (float.IsNaN(depth)) break;
+                if (TryBuildBeltTrace(line, territory, depth - TrenchTraceMath.FireDepth, out trace)) return true;
+            }
+            trace = null;
+            return NoteBeltRefusal(line);
+        }
+
+        /// <summary>Counts one refusal; true when the stage may now advance without its trace.</summary>
+        private static bool NoteBeltRefusal(TrenchLine line)
+        {
+            line.BeltRefusals++;
+            return TrenchTraceMath.AdvancesWithoutBelt(line.BeltRefusals);
+        }
+
+        /// <summary>
         /// A trace parallel to the fire line, further onto the owned side, trimmed to the
-        /// ground that accepts it.
+        /// ground that accepts it. A rear trace may be shorter than the fire line.
         /// </summary>
         private static bool TryBuildBeltTrace(TrenchLine line, ITerritoryIngress territory,
             float extraDepth, out Vector3[] trace)
@@ -318,7 +398,7 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             {
                 Vector3 p = line.Base[i] + line.Inward[i] * (line.Offset[i] + extraDepth);
                 if (!TrenchTerrain.TryGround(p, out Vector3 ground)) continue;
-                if (!Owns(territory, faction, ground)) continue;
+                if (!Diggable(territory, faction, ground)) continue;
                 curveX[i] = ground.x;
                 curveZ[i] = ground.z;
                 height[i, 0] = ground.y;
@@ -326,7 +406,7 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             }
 
             int runs = TrenchTraceMath.SplitRuns(valid, count,
-                Mathf.Max(1, Mathf.CeilToInt(TrenchTraceMath.MinRunLength / Mathf.Max(1f, line.StationSpacing))),
+                Mathf.Max(1, Mathf.CeilToInt(TrenchTraceMath.BeltMinRunLength / Mathf.Max(1f, line.StationSpacing))),
                 runStarts, runLengths, MaximumRuns);
             if (runs <= 0) return false;
             int best = 0;
@@ -376,7 +456,7 @@ namespace BoscaliSummer.Features.Trenches.Runtime
                 Vector3 forward = line.Threat[i].normalized;
                 Vector3 end = anchor + forward * TrenchTraceMath.SapDepth;
                 if (!TrenchTerrain.TryGround(end, out Vector3 head)) continue;
-                if (!Owns(territory, faction, head)) continue;
+                if (!Diggable(territory, faction, head)) continue;
                 Vector3 mid = anchor + forward * (TrenchTraceMath.SapDepth * 0.5f);
                 Vector3 midGround = TrenchTerrain.TryGround(mid, out Vector3 sampled) ? sampled : mid;
                 spurs.Add(new[] { anchor, midGround, head });

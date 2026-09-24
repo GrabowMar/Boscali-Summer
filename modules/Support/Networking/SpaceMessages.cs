@@ -2,6 +2,7 @@ using System;
 using BoscaliSummer.Features.Support.Domain;
 using BoscaliSummer.Features.Support.Domain.Cyber;
 using BoscaliSummer.Features.Support.Domain.Orbital;
+using BoscaliSummer.Features.Support.Domain.SpecOps;
 using BoscaliSummer.Features.Support.Runtime;
 using Mirage;
 
@@ -14,8 +15,8 @@ namespace BoscaliSummer.Features.Support.Networking
         public byte Protocol;
     }
 
-    /// <summary>One client intent: launch, jettison, burn, resupply, upgrade, invest, doctrine or a CYBER
-    /// site order or console verb. The host validates everything.</summary>
+    /// <summary>One client intent: launch, jettison, burn, resupply, a CYBER upgrade, breach, choice
+    /// or console verb, or a SPEC OPS raise, launch or recall. The host validates everything.</summary>
     [NetworkMessage]
     internal struct OpsCommandMessage
     {
@@ -25,14 +26,18 @@ namespace BoscaliSummer.Features.Support.Networking
         public byte Arg;
         public byte Arg2;
         public float X, Z;
+
+        /// <summary>The objective's anchor id for a SPEC OPS launch; zero otherwise.</summary>
+        public uint Revision;
     }
 
     /// <summary>
     /// Bounded faction snapshot: the faction's station (15 cells, 7 recharge timers), up to four
     /// foreign stations, four facility levels, the CYBER network (12 sites, 6 incidents, 6
-    /// notices, up to 8 origin names), six program tiers and the base-of-operations ranks.
+    /// notices, up to 8 origin names). The SPEC OPS detachment travels beside it in
+    /// <see cref="SpecOpsStateMessage"/>: together they would not fit one datagram.
     /// Clocks are relative to the moment the host took the snapshot, so a client rebuilds the
-    /// same passes and timers locally.
+    /// same fixed positions, relocation and timers locally.
     /// </summary>
     [NetworkMessage]
     internal struct OpsStateMessage
@@ -50,9 +55,10 @@ namespace BoscaliSummer.Features.Support.Networking
         public byte[] PlatformOffline;
 
         public byte PlatformRegime;
+        /// <summary>Protocol 18 sector route: origin * 9 + destination, both 0..8.</summary>
         public int PlatformSeed;
 
-        /// <summary>Seconds since pass zero's slot began; negative during a hold.</summary>
+        /// <summary>Seconds since station arrival; negative during insertion or relocation.</summary>
         public float PlatformClock;
 
         public byte PlatformHold;
@@ -81,23 +87,24 @@ namespace BoscaliSummer.Features.Support.Networking
         public float[] ForeignClocks;
         public int[] ForeignLayouts;
 
-        public byte Sigint, Crypto, Disrupt, Ew;
-
-        /// <summary>The faction's spectrum-defence network; never the live vehicles behind it.</summary>
+        /// <summary>The faction's cyber network; never the live world behind it.</summary>
         public CyberSnapshot Cyber;
 
         /// <summary>Enemy faction names in the network's origin order.</summary>
         public byte CyberOriginCount;
         public string[] CyberOrigins;
+    }
 
-        /// <summary>Funded tier per <c>OpsProgramId</c>, always six entries.</summary>
-        public byte[] ProgramTiers;
-
-        /// <summary>SPEC OPS / INTEL reserve tokens and progress toward the next (0..255).</summary>
-        public byte SpecOpsTokens, IntelTokens, SpecOpsProgress, IntelProgress;
-
-        /// <summary>Base-of-operations rank per <c>GarrisonUpgradeId</c>.</summary>
-        public byte[] GarrisonLevels;
+    /// <summary>
+    /// The faction's SPEC OPS detachment — four teams, up to twelve objectives, two recharges and
+    /// the notice ring — sent immediately before every <see cref="OpsStateMessage"/> on the same
+    /// reliable channel, so a command's reply always finds the detachment already mirrored.
+    /// </summary>
+    [NetworkMessage]
+    internal struct SpecOpsStateMessage
+    {
+        public byte Protocol;
+        public SpecOpsSnapshot State;
     }
 
     /// <summary>Fixed-size arrays for a snapshot, so the writer, the reader and the host all
@@ -120,8 +127,6 @@ namespace BoscaliSummer.Features.Support.Networking
             ForeignSeeds = new int[SpaceOperations.MaximumForeign],
             ForeignClocks = new float[SpaceOperations.MaximumForeign],
             ForeignLayouts = new int[SpaceOperations.MaximumForeign],
-            ProgramTiers = new byte[OpsProgramLedger.ProgramCount],
-            GarrisonLevels = new byte[OpsGarrison.UpgradeCount],
             Cyber = new CyberSnapshot(),
             CyberOrigins = new string[MaximumOriginNames]
         };

@@ -53,7 +53,12 @@ namespace BoscaliSummer.Features.Command.Runtime
             // Objective theater state: the frontline reflects actual ground presence, not
             // either side's tracking knowledge, so both sides see the same cells.
             position = unit.GlobalPosition().AsVector3();
-            weight = 2.5f;
+            // A defensive emplacement (the vanilla DEF building family: MG, ATGM, MANPADS and
+            // AAA nests, placed by the mission or dug in by the trench module) anchors its
+            // ground harder than a passing vehicle or a depot.
+            bool defensive = unit is Building &&
+                unit.definition is BuildingDefinition building && building.buildingType == BuildingType.DEF;
+            weight = TacticalSectorGrid.GroundObservationWeight(defensive);
             return true;
         }
     }

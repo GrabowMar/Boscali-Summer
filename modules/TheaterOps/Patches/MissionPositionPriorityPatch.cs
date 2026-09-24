@@ -2,6 +2,7 @@ using System;
 using System.Reflection;
 using BoscaliSummer.Features.TheaterOps.Domain;
 using BoscaliSummer.Features.TheaterOps.Runtime;
+using BoscaliSummer.Runtime;
 using HarmonyLib;
 using UnityEngine;
 
@@ -49,6 +50,20 @@ namespace BoscaliSummer.Features.TheaterOps.Patches
             if (unit == null ||
                 !MissionPositionPriorityQuery.TryGetDirective(service, unit.NetworkHQ, out PriorityDirective directive))
                 return;
+            if (unit is Aircraft aircraft &&
+                (aircraft.Player != null || WingLink.IsWingMember(aircraft.persistentID.GetHashCode())))
+                return;
+            if (unit is GroundVehicle && GroundFrontService.Active?.HasRtsCommander() == true)
+                return;
+
+            if (unit is GroundVehicle vehicle &&
+                GroundFrontService.Active != null &&
+                GroundFrontService.Active.TryGetDestination(vehicle, directive, out GlobalPosition frontDestination))
+            {
+                destination = frontDestination;
+                __result = true;
+                return;
+            }
 
             destination = new GlobalPosition(directive.X, directive.Y, directive.Z);
             __result = true;

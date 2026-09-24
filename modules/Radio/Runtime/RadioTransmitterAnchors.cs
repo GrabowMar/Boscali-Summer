@@ -21,8 +21,8 @@ namespace BoscaliSummer.Features.Radio.Runtime
     }
 
     /// <summary>
-    /// Where the built-in stations transmit from. A commercial station sits at the player's
-    /// capital, the world service at another faction's, and the forces broadcast at the
+    /// Where the built-in stations transmit from. Republic radio sits at Boscali HQ, state
+    /// radio at Primeva/PALA HQ, and the forces broadcast at the
     /// nearest base the player's side still holds — so flying away from your own airfield
     /// really does cost you the station, and losing the base takes it off the air entirely.
     ///
@@ -108,21 +108,34 @@ namespace BoscaliSummer.Features.Radio.Runtime
             }
 
             FactionHQ own = local.HQ;
-            if (own != null)
-                Add(BuiltInStationRules.AgrapolId, own.transform.position, HqAntennaMetres,
-                    "HQ " + FactionName(own));
-
+            FactionHQ other = null;
             try
             {
                 foreach (FactionHQ hq in FactionRegistry.GetAllHQs())
                 {
-                    if (hq == null || hq == own) continue;
-                    Add(BuiltInStationRules.MarisId, hq.transform.position, HqAntennaMetres,
-                        "HQ " + FactionName(hq));
-                    break;
+                    if (hq == null) continue;
+                    if (hq != own && other == null) other = hq;
+                    string faction = FactionName(hq);
+                    if (faction.IndexOf("Boscali", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                        Add(BuiltInStationRules.AgrapolId, hq.transform.position, HqAntennaMetres,
+                            "HQ " + faction);
+                    else if (faction.IndexOf("Primeva", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                             faction.IndexOf("PALA", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                        Add(BuiltInStationRules.MarisId, hq.transform.position, HqAntennaMetres,
+                            "HQ " + faction);
                 }
             }
             catch { }
+
+            if (towers.Count == 0)
+            {
+                if (own != null)
+                    Add(BuiltInStationRules.AgrapolId, own.transform.position, HqAntennaMetres,
+                        "HQ " + FactionName(own));
+                if (other != null)
+                    Add(BuiltInStationRules.MarisId, other.transform.position, HqAntennaMetres,
+                        "HQ " + FactionName(other));
+            }
 
             Airbase nearest = NearestOwnedAirbase(own);
             if (nearest != null)

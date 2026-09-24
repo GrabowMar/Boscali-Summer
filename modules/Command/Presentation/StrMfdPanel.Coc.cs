@@ -36,12 +36,12 @@ namespace BoscaliSummer.Features.Command.Presentation
         /// <summary>The title line, the hairline under it and the reading, down to the roster.</summary>
         private const float CocHeaderHeight = 38f;
 
-        private const float CocRowGap = 5f;
+        private const float CocRowGap = 4f;
 
         /// <summary>
         /// Personnel details use full-width key/value rows below the portrait and identity.
         /// </summary>
-        private const float CocDetailHeight = 400f;
+        private const float CocDetailHeight = 360f;
         private const float CocPortraitWidth = 84f;
         private const float CocPortraitHeight = 104f;
         private const int CocBonusEntries = 3;
@@ -52,10 +52,10 @@ namespace BoscaliSummer.Features.Command.Presentation
         /// The band the ALLIED/HOSTILE switch sits in. On the header line it overlapped the
         /// card's form number and the card's frame ran through its middle.
         /// </summary>
-        private const float CocToggleBand = 40f;
+        private const float CocToggleBand = 36f;
 
         /// <summary>Where the record's own fields begin, under the fixed identity block.</summary>
-        private const float CocFileFieldsTop = 168f;
+        private const float CocFileFieldsTop = 152f;
         private const float CocFormLine = 14f;
         private const float CocBonusEntryHeight = 27f;
 
@@ -68,8 +68,8 @@ namespace BoscaliSummer.Features.Command.Presentation
         /// <summary>The staff log follows the selected file.</summary>
         private const int CocLogRows = 4;
         /// <summary>A log sentence gets two lines at the small face, not one clipped one.</summary>
-        private const float CocLogPitch = 30f;
-        private const float CocLogHeader = 26f;
+        private const float CocLogPitch = 28f;
+        private const float CocLogHeader = 22f;
         private const float CocLogGap = 6f;
         private const float CocLogBlock = CocLogHeader + CocLogRows * CocLogPitch + CocLogGap;
         private const float CocEmptyDossierHeight = 104f;
@@ -106,7 +106,6 @@ namespace BoscaliSummer.Features.Command.Presentation
         private int cocPortraitSeed = int.MinValue;
 
         private static readonly Color CocPortraitBack = new Color32(6, 10, 16, 255);
-        private static readonly Color CocHover = new Color(1f, 1f, 1f, 0.06f);
 
         private void ResetCoc()
         {
@@ -148,11 +147,11 @@ namespace BoscaliSummer.Features.Command.Presentation
             Rect view = shell.Body;
 
             // Readable rows keep the same rhythm in normal and compact bays.
-            cocRowPitch = 54f;
+            cocRowPitch = 46f;
             cocRowHeight = cocRowPitch - CocRowGap;
 
             float rosterHeight = CocToggleBand + CocHeaderHeight + CocRosterRows * cocRowPitch +
-                                 CocLogBlock + 8f;
+                                 CocLogBlock + 6f;
             Rect body;
             // Always keep a viewport: a long service record can grow after the roster builds.
             cocRoot = AvScreen.Scroll((RectTransform)page.transform, view,
@@ -347,7 +346,7 @@ namespace BoscaliSummer.Features.Command.Presentation
             float y = -CocFileFieldsTop;
             y = cocRankRow.Bind(x, y, inner, "RANK", view?.Rank, value);
             y = cocStationRow.Bind(x, y, inner, "STATION", Pretty(view?.Location), value);
-            y = CocClauseAt(cocRules[CocRuleFields], x, y - 8f, inner);
+            y = CocClauseAt(cocRules[CocRuleFields], x, y - 6f, inner);
 
             y = cocDispositionRow.Bind(x, y - 4f, inner, "STATUS",
                 view == null ? "NO FILE" : StatusOf(view), view == null ? AvTheme.Dim : StatusColor(view));
@@ -359,11 +358,11 @@ namespace BoscaliSummer.Features.Command.Presentation
 
             y = CocSectionHeading(cocBonusNote, "BONUS", x, y - 4f, inner);
             y -= BindBonus(view == null ? null : view.Bonus, x, y, inner);
-            y = CocClauseAt(cocRules[CocRuleBonus], x, y - 8f, inner);
+            y = CocClauseAt(cocRules[CocRuleBonus], x, y - 6f, inner);
 
             y = CocSectionHeading(cocRecordNote, "SERVICE RECORD", x, y - 4f, inner);
             y -= BindRecord(x, y, inner, view);
-            y = CocClauseAt(cocRules[CocRuleRecord], x, y - 10f, inner);
+            y = CocClauseAt(cocRules[CocRuleRecord], x, y - 7f, inner);
             // The closing line is the sheet's footer, not the record's last row: the card is
             // resized after this and PlaceCocEnd pins it to whatever the card's bottom is.
             return -y + CocDetailPad + 16f;
@@ -478,14 +477,14 @@ namespace BoscaliSummer.Features.Command.Presentation
 
             // Full-width master/detail flow: names and service records no longer compete
             // for two cramped columns. The selected file follows the roster, then the log.
-            float detailY = cocRosterTop - posts * cocRowPitch - 12f;
+            float detailY = cocRosterTop - posts * cocRowPitch - 8f;
             float width = cocBody.width - AvScreen.SpineInset;
             float x = cocBody.x + AvScreen.SpineInset;
             if (cocDossierBlock != null)
                 AvKit.Place(cocDossierBlock, new Rect(x, detailY, width, cocDossierHeight));
             if (cocDossierEmpty != null)
                 AvKit.Place(cocDossierEmpty, new Rect(x, detailY, width, CocEmptyDossierHeight));
-            float y = detailY - cocDossierHeight - 16f;
+            float y = detailY - cocDossierHeight - 12f;
             AvKit.Place(cocLogBlock,
                 new Rect(x, y, width, CocLogBlock));
 
@@ -581,7 +580,7 @@ namespace BoscaliSummer.Features.Command.Presentation
             cocDossierPips.Bind(view.Tier, view.IsFriendly ? AvTheme.Accent : AvTheme.Warning);
             SetPortrait(view.Portrait, view.PortraitSeed);
             cocPortrait.color = view.IsKia || (!view.IsFriendly && !view.IsKnown)
-                ? new Color(1f, 1f, 1f, 0.45f)
+                ? PortraitDim
                 : Color.white;
             cocDossierRail.color = StatusColor(view);
 
@@ -687,7 +686,7 @@ namespace BoscaliSummer.Features.Command.Presentation
         /// <summary>Grow the card to the record it holds, frame and all.</summary>
         private void ResizeCocDossier(float height)
         {
-            cocDossierHeight = Mathf.Max(340f, height);
+            cocDossierHeight = Mathf.Max(312f, height);
             cocDossierBlock.sizeDelta = new Vector2(cocDossierWidth, cocDossierHeight);
 
             // The closing line belongs to the sheet, so it sits just above the card's bottom
@@ -728,7 +727,7 @@ namespace BoscaliSummer.Features.Command.Presentation
         private static float CocClauseAt(Image rule, float x, float y, float width)
         {
             AvKit.Place((RectTransform)rule.transform, new Rect(x, y, width, 1f));
-            return y - 10f;
+            return y - 7f;
         }
 
 
@@ -826,16 +825,6 @@ namespace BoscaliSummer.Features.Command.Presentation
             if (view.InTransit) return "info";
             if (view.Disrupted) return "cooling";
             return view.IsFriendly ? "ready" : "hostile";
-        }
-
-        private static string ChipStateOf(CommanderView view)
-        {
-            if (view.IsKia) return "danger";
-            if (!view.IsFriendly && !view.IsKnown) return "inert";
-            if (view.Alert) return "danger";
-            if (view.Disrupted) return "warn";
-            if (view.InTransit) return "info";
-            return view.IsFriendly ? "live" : "warn";
         }
 
         /// <summary>Rail and text colour for a log tone; the mapping lives with the console.</summary>
@@ -1172,7 +1161,7 @@ namespace BoscaliSummer.Features.Command.Presentation
                 {
                     if (id >= 0) select(id);
                 });
-                hit.SetRowHighlight(background, Color.clear, CocHover);
+                hit.SetRowHighlight(background, Color.clear, RowHover);
                 root.SetActive(false);
             }
 
@@ -1207,7 +1196,7 @@ namespace BoscaliSummer.Features.Command.Presentation
                 }
 
                 bool dimPortrait = view.IsKia || (!view.IsFriendly && !view.IsKnown);
-                portrait.color = dimPortrait ? new Color(1f, 1f, 1f, 0.45f) : Color.white;
+                portrait.color = dimPortrait ? PortraitDim : Color.white;
                 if (dimPortrait != portraitDim)
                 {
                     portraitDim = dimPortrait;
@@ -1244,7 +1233,7 @@ namespace BoscaliSummer.Features.Command.Presentation
                 Color rest = selected
                     ? AvTheme.Unity(AvTokens.RowFill(AvTheme.Accent.ToRgba(), true))
                     : Color.clear;
-                hit.SetRowHighlight(background, rest, CocHover);
+                hit.SetRowHighlight(background, rest, RowHover);
 
                 // A row that changed since the last refresh carries a short flash: the page
                 // shows that something happened even when the reading itself is easy to miss.

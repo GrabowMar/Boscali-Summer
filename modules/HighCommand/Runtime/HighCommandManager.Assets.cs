@@ -149,18 +149,20 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
 
             Airbase baseTarget = FindBase(owner, slot.SiteName);
             if (baseTarget == null || baseTarget.center == null) return false;
-            Vector3 anchor = owner.HasAnchor[slot.Id] ? owner.Anchors[slot.Id] : baseTarget.center.position;
+            // Record the anchor before placement, so a post that is between spawns still has
+            // a place on the map instead of reporting the origin.
+            if (!owner.HasAnchor[slot.Id])
+            {
+                owner.Anchors[slot.Id] = baseTarget.center.position;
+                owner.HasAnchor[slot.Id] = true;
+            }
+            Vector3 anchor = owner.Anchors[slot.Id];
 
             int angleSeed = unchecked((int)(uint)(owner.SpawnSerial * 31 + slot.Id * 7));
             if (!TryPlaceAround(definition, anchor, angleSeed, out Vector3 position, out Quaternion rotation))
             {
                 anchor = baseTarget.center.position;
                 if (!TryPlaceAround(definition, anchor, angleSeed + 5, out position, out rotation)) return false;
-            }
-            if (!owner.HasAnchor[slot.Id])
-            {
-                owner.Anchors[slot.Id] = anchor;
-                owner.HasAnchor[slot.Id] = true;
             }
 
             string name = "BoscaliSummer:HighCommand:" + owner.FactionToken + ":" + slot.Id + ":" + (++owner.SpawnSerial);
@@ -696,21 +698,30 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
             Finite(definition.height) && definition.height > 0f && definition.height <= 20f;
 
         private bool TryPlaceAround(UnitDefinition definition, Vector3 anchor, int seed, out Vector3 position, out Quaternion rotation)
-            => TryPlaceAround(definition, anchor, seed, 0f, out position, out rotation);
+            => TryPlaceAround(definition, anchor, seed, 0f, 3, out position, out rotation);
 
         private bool TryPlaceAround(UnitDefinition definition, Vector3 anchor, int seed, float radiusOffset,
             out Vector3 position, out Quaternion rotation)
+            => TryPlaceAround(definition, anchor, seed, radiusOffset, 1, out position, out rotation);
+
+        private bool TryPlaceAround(UnitDefinition definition, Vector3 anchor, int seed, float radiusOffset,
+            int rings, out Vector3 position, out Quaternion rotation)
         {
             position = default;
             rotation = Quaternion.identity;
             if (!Usable(definition)) return false;
-            float radius = 90f + radiusOffset;
-            for (int attempt = 0; attempt < 12; attempt++)
+            // A post is more valuable than a tight footprint: a base apron or a slope can leave
+            // the near ring unusable, so widen outwards before declaring the site unspawnable.
+            for (int ring = 0; ring < rings; ring++)
             {
-                float angle = (seed * 0.618f + attempt) * Mathf.PI / 6f;
-                Vector3 direction = new Vector3(Mathf.Sin(angle), 0f, Mathf.Cos(angle));
-                rotation = Quaternion.LookRotation(direction);
-                if (TryPlace(definition, anchor + direction * radius, rotation, out position)) return true;
+                float radius = (90f + radiusOffset) * (1f + ring * 0.9f);
+                for (int attempt = 0; attempt < 12; attempt++)
+                {
+                    float angle = (seed * 0.618f + attempt + ring * 5) * Mathf.PI / 6f;
+                    Vector3 direction = new Vector3(Mathf.Sin(angle), 0f, Mathf.Cos(angle));
+                    rotation = Quaternion.LookRotation(direction);
+                    if (TryPlace(definition, anchor + direction * radius, rotation, out position)) return true;
+                }
             }
             return false;
         }

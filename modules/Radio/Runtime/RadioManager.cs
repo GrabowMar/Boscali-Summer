@@ -4,6 +4,7 @@ using System.IO;
 using BepInEx;
 using BepInEx.Logging;
 using BoscaliSummer.Features.Radio.Configuration;
+using BoscaliSummer.Features.Radio.Domain;
 using BoscaliSummer.Features.Radio.Presentation;
 using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Features;
@@ -22,7 +23,7 @@ namespace BoscaliSummer.Features.Radio.Runtime
     internal sealed class RadioManager : MonoBehaviour, ISceneService
     {
         private const int TerrainLayerMask = 8256;
-        private const float BulletinSeconds = 8f;
+        private const float BulletinSeconds = 90f;
         private const float HoldSweepSeconds = 0.5f;
 
         private static RadioManager active;
@@ -79,6 +80,18 @@ namespace BoscaliSummer.Features.Radio.Runtime
         private bool appliedNarrow;
         private bool filterApplied;
         private string lastChatter = string.Empty;
+        private IFireSuppressionService fires;
+        private IBaseDefenseAlarmService alarms;
+        private IHighCommandView staff;
+        private IActiveEventsView events;
+        private float nextInterceptAt;
+        private float lastInterceptGlobal;
+        private bool lastAlarm;
+        private string lastEventId = string.Empty;
+        private readonly WreckNotice[] wreckScratch = new WreckNotice[8];
+        private readonly Dictionary<int, float> interceptSources = new Dictionary<int, float>(32);
+        private readonly float[] interceptLive = new float[CombatInterceptNet.LiveCap];
+        private int interceptLiveCount;
 
         // Deck
         private string deckStatus = "Deck stopped";
@@ -228,9 +241,9 @@ namespace BoscaliSummer.Features.Radio.Runtime
             if (index < 0 || index >= ChannelCount) return new Color(0.45f, 0.95f, 0.55f);
             switch (stations[index].Id)
             {
-                case "agrapol-fm": return new Color(1f, 0.68f, 0.20f);
-                case "maris-network": return new Color(0.20f, 0.82f, 1f);
-                case "base-broadcast": return new Color(0.48f, 0.92f, 0.48f);
+                case "agrapol-fm": return new Color(0.95f, 0.77f, 0.43f);
+                case "maris-network": return new Color(0.89f, 0.41f, 0.41f);
+                case "base-broadcast": return new Color(0.62f, 0.80f, 0.88f);
                 default: return new Color(0.45f, 0.95f, 0.55f);
             }
         }
@@ -328,6 +341,12 @@ namespace BoscaliSummer.Features.Radio.Runtime
             bulletinCursor = 0;
             lastProgramName = null;
             lastChatter = string.Empty;
+            lastAlarm = false;
+            lastEventId = string.Empty;
+            lastInterceptGlobal = -100f;
+            nextInterceptAt = 0f;
+            interceptSources.Clear();
+            interceptLiveCount = 0;
             ticker = null;
             programText = string.Empty;
             offStation = false;
@@ -385,6 +404,7 @@ namespace BoscaliSummer.Features.Radio.Runtime
 
             ProbeSoundtrack();
             PollHunt();
+            PollIntercepts();
             fx?.Tick();
             ScanTick();
             BulletinTick();
@@ -840,18 +860,19 @@ namespace BoscaliSummer.Features.Radio.Runtime
         {
             var result = new List<RadioStation>(RadioLibrary.MaximumChannels);
             var usedFmSlots = new HashSet<int>();
-            RadioChannel agrapolLocal = FindLocalChannel("Agrapol FM");
-            RadioChannel marisLocal = FindLocalChannel("Maris Network");
-            AddBuiltInStation(result, BuiltInStationRules.AgrapolId, "AF", "Agrapol FM",
+            RadioChannel agrapolLocal = FindLocalChannel("Boscali Republic Radio");
+            RadioChannel marisLocal = FindLocalChannel("PALA State Radio");
+            RadioChannel baseLocal = FindLocalChannel("Base Broadcast");
+            AddBuiltInStation(result, BuiltInStationRules.AgrapolId, "BR", "Boscali Republic Radio",
                 soundtrackCatalog?.AgrapolSeed == null ? Array.Empty<AudioClip>() :
                     new[] { soundtrackCatalog.AgrapolSeed }, agrapolLocal,
                 BuiltInIcon("agrapol-fm.png"), usedFmSlots);
-            AddBuiltInStation(result, BuiltInStationRules.MarisId, "MN", "Maris Network",
+            AddBuiltInStation(result, BuiltInStationRules.MarisId, "PS", "PALA State Radio",
                 soundtrackCatalog?.MarisSeed == null ? Array.Empty<AudioClip>() :
                     new[] { soundtrackCatalog.MarisSeed }, marisLocal,
                 BuiltInIcon("maris-network.png"), usedFmSlots);
             AddBuiltInStation(result, BuiltInStationRules.BaseId, "BB", "Base Broadcast",
-                soundtrackCatalog?.All ?? Array.Empty<AudioClip>(), null,
+                soundtrackCatalog?.All ?? Array.Empty<AudioClip>(), baseLocal,
                 BuiltInIcon("base-broadcast.png"), usedFmSlots);
 
             if (localLibrary != null)
@@ -938,8 +959,8 @@ namespace BoscaliSummer.Features.Radio.Runtime
         }
 
         private static bool IsBuiltInName(string name) =>
-            string.Equals(name, "Agrapol FM", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(name, "Maris Network", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(name, "Boscali Republic Radio", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(name, "PALA State Radio", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(name, "Base Broadcast", StringComparison.OrdinalIgnoreCase);
 
         private static string StationCode(string name)
@@ -1299,6 +1320,144 @@ namespace BoscaliSummer.Features.Radio.Runtime
             RadioSpectrum.Fill(spectrum, spectrumSignals,
                 RadioBands.Min(tunedDial.Band), RadioBands.Max(tunedDial.Band),
                 0.07f, Time.unscaledTime);
+        }
+
+        // ---------------------------------------------------------------- intercepts
+
+        private void PollIntercepts()
+        {
+            if (Time.unscaledTime < nextInterceptAt) return;
+            nextInterceptAt = Time.unscaledTime + 0.5f;
+            if (!receiver.Engaged || offStation || offAir) return;
+            if (!reception.Open(Squelch)) return;
+            if (!anchors.HasListener) return;
+
+            if (fires == null) services?.TryGet(out fires);
+            if (alarms == null) services?.TryGet(out alarms);
+            if (staff == null) services?.TryGet(out staff);
+            if (events == null) services?.TryGet(out events);
+
+            float now = Time.unscaledTime;
+            float sceneNow = Time.timeSinceLevelLoad;
+            PruneInterceptLive(now);
+            Vector3 listener = anchors.ListenerPosition;
+            float squelch = Squelch;
+
+            if (fires != null)
+            {
+                int n = fires.CopyWrecks(wreckScratch);
+                for (int i = 0; i < n; i++)
+                {
+                    WreckNotice wreck = wreckScratch[i];
+                    if (sceneNow - wreck.Born > 2f) continue;
+                    Vector3 at = new Vector3(wreck.X, wreck.Y, wreck.Z);
+                    float km = Vector3.Distance(listener, at) / 1000f;
+                    if (!CombatInterceptNet.InRange(km)) continue;
+                    bool los = HasLineOfSight(listener + Vector3.up * 3f, at + Vector3.up * 4f);
+                    RadioReception link = RadioPropagation.Evaluate(
+                        km, 4f, anchors.ListenerHeight, los,
+                        RadioModulation.Am, ReceiverModulation);
+                    TryPushIntercept(InterceptKind.Cookoff, wreck.SourceId, now, link.Quality, squelch, km);
+                }
+            }
+
+            if (alarms != null)
+            {
+                bool alarm = alarms.IsBaseUnderAttack;
+                if (alarm && !lastAlarm)
+                    TryPushIntercept(InterceptKind.Alarm, 1, now, reception.Quality, squelch, 0f);
+                lastAlarm = alarm;
+            }
+
+            if (staff != null && staff.Available)
+                ConsiderStaffLog(staff.Log, now, squelch, listener);
+
+            if (events != null && events.Available && events.Current != null)
+            {
+                string id = events.Current.Id ?? string.Empty;
+                if (id.Length > 0 && !string.Equals(id, lastEventId, StringComparison.Ordinal))
+                {
+                    lastEventId = id;
+                    TryPushIntercept(InterceptKind.Event, id.GetHashCode(), now, reception.Quality, squelch, 0f);
+                }
+            }
+            else lastEventId = string.Empty;
+        }
+
+        private void ConsiderStaffLog(IReadOnlyList<CommanderLogLine> log, float now, float squelch, Vector3 listener)
+        {
+            if (log == null) return;
+            for (int i = 0; i < log.Count && i < 4; i++)
+            {
+                CommanderLogLine line = log[i];
+                if (line == null || line.Tone != CommanderLogTone.Loss || line.Age > 2f) continue;
+                float km = 0f;
+                float quality = reception.Quality;
+                if (staff.Commanders != null)
+                {
+                    for (int c = 0; c < staff.Commanders.Count; c++)
+                    {
+                        CommanderView view = staff.Commanders[c];
+                        if (view == null || view.Id != line.TargetId) continue;
+                        Vector3 at = new Vector3(view.X, listener.y, view.Z);
+                        km = Vector3.Distance(listener, at) / 1000f;
+                        if (!CombatInterceptNet.InRange(km)) continue;
+                        bool los = HasLineOfSight(listener + Vector3.up * 3f, at + Vector3.up * 8f);
+                        quality = RadioPropagation.Evaluate(
+                            km, 8f, anchors.ListenerHeight, los,
+                            RadioModulation.Am, ReceiverModulation).Quality;
+                        break;
+                    }
+                }
+                TryPushIntercept(InterceptKind.Staff, line.TargetId, now, quality, squelch, km);
+            }
+        }
+
+        private void TryPushIntercept(InterceptKind kind, int sourceId, float now, float quality, float squelch, float km)
+        {
+            int key = CombatInterceptNet.SourceKey(kind, sourceId);
+            interceptSources.TryGetValue(key, out float lastSource);
+            if (!CombatInterceptNet.TryAccept(LiveIntercepts(now), now, lastInterceptGlobal, lastSource, quality, squelch))
+                return;
+            interceptSources[key] = now;
+            lastInterceptGlobal = now;
+            RememberIntercept(now);
+            string distance = km > 0.05f ? km.ToString("0.0") + "km" : null;
+            PushLog(CombatInterceptNet.Line(kind, distance));
+            fx?.CarrierBurst(0.35f);
+        }
+
+        private int LiveIntercepts(float now)
+        {
+            int n = 0;
+            for (int i = 0; i < interceptLiveCount; i++)
+                if (now - interceptLive[i] < CombatInterceptNet.SourceGap) n++;
+            return n;
+        }
+
+        private void RememberIntercept(float now)
+        {
+            if (interceptLiveCount < interceptLive.Length)
+            {
+                interceptLive[interceptLiveCount++] = now;
+                return;
+            }
+            for (int i = 1; i < interceptLive.Length; i++)
+                interceptLive[i - 1] = interceptLive[i];
+            interceptLive[interceptLive.Length - 1] = now;
+        }
+
+        private void PruneInterceptLive(float now)
+        {
+            int w = 0;
+            for (int i = 0; i < interceptLiveCount; i++)
+            {
+                if (now - interceptLive[i] >= CombatInterceptNet.SourceGap) continue;
+                interceptLive[w++] = interceptLive[i];
+            }
+            interceptLiveCount = w;
+            if (interceptSources.Count <= 32) return;
+            interceptSources.Clear();
         }
 
         // ------------------------------------------------------------------- hunts

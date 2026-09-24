@@ -1,8 +1,10 @@
-#if UNITY_EDITOR
+﻿#if UNITY_EDITOR
 using System;
 using System.IO;
 using System.Reflection;
 using BepInEx.Configuration;
+using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Framework.Features;
 using BoscaliSummer.Features.Command.Configuration;
 using BoscaliSummer.Features.Command.Presentation.MapUi;
 using NOAvionics;
@@ -41,7 +43,7 @@ public static class SettingsUnityCheck
             CheckLayoutCanvas();
             CheckScreenSpaceSizing();
             foreach (int height in new[] { 596, 420 }) CheckPanel(height);
-            File.WriteAllText("result.txt", "PASS: layout resolves the real UI area past stale canvas rects; SET renders CLIENT MAP/STYLE/IMAGE/COCKPIT and SERVER at 596 and 420 units; toggles, background replacement, disabled dependencies, +/- bounds, scrolling and cached page trees checked. Game adapters are stubbed; in-game acceptance remains required.");
+            File.WriteAllText("result.txt", "PASS: layout resolves the real UI area past stale canvas rects; SET renders CLIENT MAP/STYLE/IMAGE/COCKPIT/HUD and SERVER at 596 and 420 units; toggles, background replacement, disabled dependencies, +/- bounds, scrolling and cached page trees checked. Game adapters are stubbed; in-game acceptance remains required.");
             EditorApplication.Exit(0);
         }
         catch (Exception ex)
@@ -87,8 +89,7 @@ public static class SettingsUnityCheck
         Check(MfdLayout.CanvasSize(nestedCanvas) == new Vector2(1920f, 1080f),
             "Layout must resolve the real UI area, not a stale nested-canvas rect");
         Check(MfdLayout.TryResolve(nestedCanvas, out MfdLayout.Columns columns) &&
-              Mathf.Approximately(columns.Map.width, 1256f) &&
-              Mathf.Approximately(columns.Map.height, 920f),
+              columns.Map == MfdLayout.Resolve(new Vector2(1920f, 1080f)).Map,
             "Full-area columns must be resolved while the nested rect is stale");
 
         Object.DestroyImmediate(root);
@@ -118,6 +119,10 @@ public static class SettingsUnityCheck
 
     private static void CheckPanel(int height)
     {
+        var hud = new HudFixture();
+        var external = new ExternalFixture();
+        ModServices.Services[typeof(IHudBoard)] = hud;
+        ModServices.Services[typeof(IThirdPersonHud)] = external;
         var config = new CommandSettings(new ConfigFile(Path.GetFullPath("settings-" + height + "-" + Guid.NewGuid().ToString("N") + ".cfg"), false));
         // Exercise compatibility with an existing layered configuration.
         config.DeckGrid.Value = true;
@@ -141,18 +146,40 @@ public static class SettingsUnityCheck
         Invoke(panel, "BuildServerPage", (RectTransform)shell.CreatePage(1, "ServerPage").transform, shell.Body);
         int objects = canvas.GetComponentsInChildren<Transform>(true).Length;
         shell.SetPage(0);
-        for (int page = 0; page < 4; page++)
+        for (int page = 0; page < 5; page++)
         {
             Invoke(panel, "SetClientPage", page);
             Refresh(panel);
             shell.WriteStatus(null, null, "Saved automatically. Hover a control for help.");
             Render(camera, canvas, height, page);
+            if (page == 1 && height == 596)
+            {
+                Image finish = AvDisplayGlass.AttachFullDisplay((RectTransform)canvas.transform);
+                for (int color = 1; color <= 4; color++)
+                {
+                    config.DisplayTint.Value = color;
+                    config.DisplayTintStrength.Value = .7f;
+                    config.DisplayScanlines.Value = .5f;
+                    config.DisplayVignette.Value = .4f;
+                    Invoke(panel, "ApplyDisplayEffects");
+                    foreach (var glass in canvas.GetComponentsInChildren<AvDisplayGlass>()) glass.Update();
+                    Refresh(panel);
+                    Render(camera, canvas, height, 10 + color);
+                }
+                Object.DestroyImmediate(finish.gameObject);
+                config.DisplayTint.Value = 0;
+                config.DisplayTintStrength.Value = .25f;
+                config.DisplayScanlines.Value = 0f;
+                config.DisplayVignette.Value = 0f;
+                Invoke(panel, "ApplyDisplayEffects");
+                foreach (var glass in canvas.GetComponentsInChildren<AvDisplayGlass>()) glass.Update();
+            }
         }
         shell.SetPage(1);
         shell.DataBar.State.text = "SERVER SETTINGS";
         Refresh(panel);
         shell.WriteStatus(null, null, "Host only. These settings are read-only on a remote client.");
-        Render(camera, canvas, height, 4);
+        Render(camera, canvas, height, 5);
         shell.SetPage(0);
         Invoke(panel, "SetClientPage", 0);
         Refresh(panel);
@@ -160,28 +187,50 @@ public static class SettingsUnityCheck
         Check(!config.ExpandedMapUi.Value, "Expanded toggle must change persisted config");
         Invoke(panel, "SetClientPage", 1);
         Refresh(panel);
-        var disabled = Find(canvas, "+");
+        var plus = Array.FindAll(canvas.GetComponentsInChildren<AvButton>(), b => b.GetComponentInChildren<TMP_Text>().text == "+");
+        for (int i = 0; i < 20; i++) Click(plus[0]);
+        Check(Mathf.Approximately(config.DisplayGlass.Value, 1f), "Glass stepper must clamp at full strength");
+        Click(plus[1]);
+        Click(plus[3]);
+        Check(config.DisplayScanlines.Value > 0f && config.DisplayTint.Value == 1,
+            "CRT and tint controls must write their saved entries");
+        var saved = new CommandSettings(new ConfigFile(config.ExpandedMapUi.ConfigFile.ConfigFilePath, false));
+        Check(saved.DisplayScanlines.Value == config.DisplayScanlines.Value && saved.DisplayTint.Value == 1,
+            "Display effects survive config reload");
+        Click(Find(canvas, "RESET DISPLAY FILTER"));
+        Check(config.DisplayScanlines.Value == 0f && config.DisplayTint.Value == 0 &&
+            Mathf.Approximately(config.DisplayGlass.Value, .6f), "Reset restores the default filter");
+        var disabled = plus[5];
         float before = config.DeckOpacity.Value;
         Click(disabled);
         Check(config.DeckOpacity.Value == before, "Disabled controls must reject clicks");
         config.ExpandedMapUi.Value = true;
         Refresh(panel);
-        for (int i = 0; i < 30; i++) Click(Find(canvas, "+"));
+        for (int i = 0; i < 30; i++) Click(plus[5]);
         Check(Mathf.Approximately(config.DeckOpacity.Value, 1f), "Stepper must stop at its upper limit");
-        var plus = Array.FindAll(canvas.GetComponentsInChildren<AvButton>(), b => b.GetComponentInChildren<TMP_Text>().text == "+");
-        Click(plus[1]);
+        Click(plus[6]);
         Check(!config.DeckGrid.Value && !config.CheckerboardOverlay.Value && !config.BackgroundImage.Value,
             "Selecting plain replaces all old layers");
-        for (int i = 0; i < 6; i++) Click(plus[1]);
+        for (int i = 0; i < 6; i++) Click(plus[6]);
         Check(config.BackgroundImage.Value && config.BackgroundImagePreset.Value == 3 && !config.DeckGrid.Value,
             "Custom image choice is mutually exclusive");
         var reloaded = new CommandSettings(new ConfigFile(config.ExpandedMapUi.ConfigFile.ConfigFilePath, false));
         Check(reloaded.BackgroundImagePreset.Value == 3 && reloaded.BackgroundImage.Value && !reloaded.DeckGrid.Value,
             "Settings survive reloading the saved configuration");
+        Invoke(panel, "SetClientPage", 4); Refresh(panel);
+        Click(Find(canvas, "ON"));
+        Check(!hud.Enabled, "HUD switch must write through its public settings seam");
+        Click(Find(canvas, "RESET STATUS LAYOUT"));
+        Check(hud.Enabled && hud.Resets == 1, "HUD reset must remain usable while the overlay is disabled");
+        Invoke(panel, "SetClientPage", 3); Refresh(panel);
+        Click(Find(canvas, "ON"));
+        Check(!external.IsEnabled, "External HUD switch must write through the HUD module seam");
+        Click(Find(canvas, "RESET INSTRUMENT LAYOUT"));
+        Check(external.Resets == 1, "Instrument reset must be wired on the scrollable cockpit page");
         for (int i = 0; i < 20; i++)
         {
             shell.SetPage(i % 2);
-            Invoke(panel, "SetClientPage", i % 4);
+            Invoke(panel, "SetClientPage", i % 5);
             Refresh(panel);
         }
         Check(objects == canvas.GetComponentsInChildren<Transform>(true).Length, "Tab changes must reuse the same tree");
@@ -217,6 +266,52 @@ public static class SettingsUnityCheck
         camera.targetTexture = null;
         Object.DestroyImmediate(target);
         Object.DestroyImmediate(image);
+    }
+    private sealed class HudFixture : IHudBoard
+    {
+        public int Resets;
+        public bool Enabled { get; set; } = true;
+        public HudAnchor Anchor { get; set; }
+        public int ScaleStep { get; set; } = 1;
+        public int OpacityStep { get; set; }
+        public int MaxRows { get; set; } = 4;
+        public bool NoticesEnabled { get; set; } = true;
+        public float NoticeSeconds { get; set; } = 8;
+        public int Contrast { get; set; } = 1;
+        public bool ShowDetails { get; set; } = true;
+        public int OffsetX { get; set; }
+        public int OffsetY { get; set; }
+        public System.Collections.Generic.IReadOnlyList<IHudChannel> Channels => Array.Empty<IHudChannel>();
+        public void DeclareChannel(string key, string label) { }
+        public IHudLine Acquire(string owner, string channel, string key) => null;
+        public void Notice(string channel, HudTone tone, string text, string detail = null) { }
+        public void ReleaseOwner(string owner) { }
+        public void ResetLayout() { Enabled = true; Resets++; }
+    }
+    private sealed class ExternalFixture : IThirdPersonHud
+    {
+        public int Resets;
+        public bool IsEnabled { get; private set; } = true;
+        public bool ModifyVanillaHud { get; set; }
+        public HudBounds InstrumentBounds => default;
+        public void Toggle() => IsEnabled = !IsEnabled;
+        public bool HidePitchLadder { get; set; } = true;
+        public bool CameraFeedEnabled { get; set; } = true;
+        public bool FlightCameraEnabled { get; set; } = true;
+        public bool BoardEnabled { get; set; } = true;
+        public bool AirframeEnabled { get; set; } = true;
+        public bool ShotsEnabled { get; set; } = true;
+        public bool MarkEnabled { get; set; } = true;
+        public int BoardCorner { get; set; }
+        public int FlightScaleStep { get; set; } = 1;
+        public int FlightOpacityStep { get; set; }
+        public int FlightContrast { get; set; } = 1;
+        public int BoardScaleStep { get; set; } = 1;
+        public int BoardOpacityStep { get; set; }
+        public int BoardContrast { get; set; } = 1;
+        public int BoardInsetX { get; set; }
+        public int BoardInsetY { get; set; }
+        public void ResetLayout() { Resets++; }
     }
 }
 #endif

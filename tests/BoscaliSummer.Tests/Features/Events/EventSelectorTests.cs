@@ -14,11 +14,20 @@ namespace BoscaliSummer.Tests.Features.Events
             DurationStaysInsideItsWindow();
             EffectStrengthScalesTheModifier();
             ResponseOnlyMovesThePriceInThePlayersFavour();
+            DecisionRoutesStayBounded();
         }
 
         private static void CatalogIsWellFormed()
         {
             TestAssert.That(EventCatalog.Count >= 8, "catalog is curated, not a stub");
+            TestAssert.That(EventCatalog.Count <= sbyte.MaxValue + 1,
+                "catalog indices fit the signed-byte event protocol");
+            foreach (string id in new[] { "press_censorship", "dust_storm", "holiday_stand_down", "scrap_drive" })
+            {
+                EventDefinition addition = Array.Find(EventCatalog.All, entry => entry.Id == id);
+                TestAssert.That(addition != null && addition.SupportCostMultiplier != 1f,
+                    "New minor dispatch " + id + " changes a real support price");
+            }
             for (int i = 0; i < EventCatalog.Count; i++)
             {
                 EventDefinition entry = EventCatalog.At(i);
@@ -29,6 +38,8 @@ namespace BoscaliSummer.Tests.Features.Events
                 TestAssert.That(!string.IsNullOrWhiteSpace(entry.IconKey), "entry has an icon key");
                 TestAssert.That(entry.SupportCostMultiplier >= 0.5f && entry.SupportCostMultiplier <= 2f,
                     "modifier stays in a sane band");
+                TestAssert.That(entry.SupportCooldownMultiplier >= 0.8f && entry.SupportCooldownMultiplier <= 1.2f,
+                    "event tempo stays within the authored support reset band");
                 TestAssert.That(entry.DurationMinSeconds > 0 &&
                                 entry.DurationMaxSeconds >= entry.DurationMinSeconds,
                     "duration window is ordered and positive");
@@ -57,24 +68,32 @@ namespace BoscaliSummer.Tests.Features.Events
                 {
                     TestAssert.That(entry.Script.Length > 0,
                         "a superevent is scripted, not a bigger medium");
+                    TestAssert.That(entry.Script.Length <= 4 && entry.Script[0].AtSeconds == 0,
+                        "a super moves the theater immediately and fits the alert timeline");
                     TestAssert.That(entry.DurationMinSeconds >= 180,
                         "a superevent runs long enough to feel like news");
                     TestAssert.That(EventCatalog.TierLabel(entry.Tier) == "SUPEREVENT",
                         "the tier word is the one the panel shows");
+                    bool movesConvoy = false;
                     for (int s = 0; s < entry.Script.Length; s++)
                     {
                         EventStep step = entry.Script[s];
+                        movesConvoy |= step.Effect == EventEffect.Convoy;
                         TestAssert.That(step.Effect != EventEffect.None,
                             "a scripted beat does something");
                         TestAssert.That(!string.IsNullOrWhiteSpace(step.Label),
                             "a scripted beat names itself for the ticker");
                         TestAssert.That(step.AtSeconds < entry.DurationMinSeconds,
                             "every beat lands inside the shortest possible run");
-                        TestAssert.That(step.Amount >= 0f, "a beat never takes a value away");
+                        TestAssert.That(step.Amount >= 0f || step.Effect == EventEffect.Funds ||
+                            step.Effect == EventEffect.Morale,
+                            "only treasury or morale beats may withdraw value");
                         if (s > 0)
                             TestAssert.That(step.AtSeconds > entry.Script[s - 1].AtSeconds,
                                 "scripted beats are ordered");
                     }
+                    TestAssert.That(movesConvoy,
+                        "each super attempts a visible vanilla convoy deployment");
                     TestAssert.That(entry.Target != EventTarget.All ||
                                     entry.SupportCostMultiplier != 1f,
                         "a global superevent still changes a price");
@@ -188,6 +207,40 @@ namespace BoscaliSummer.Tests.Features.Events
                 TestAssert.That(EventSelector.ApplyResponse(effective, kind) < effective,
                     "a response only ever lowers the multiplier in the player's favour");
             }
+        }
+
+        private static void DecisionRoutesStayBounded()
+        {
+            TestAssert.That(EventSelector.TreasuryCost(1f) == 0,
+                "a cost-neutral event cannot spend faction funds on a price response");
+            TestAssert.That(EventSelector.TreasuryCost(1.35f) > 20 &&
+                EventSelector.TreasuryCost(1.5f) > EventSelector.TreasuryCost(1.35f),
+                "treasury price rises with event severity");
+            TestAssert.That(EventSelector.ApplyResponse(
+                EventSelector.ApplyResponse(0.6f, EventResponseKind.Treasury),
+                EventResponseKind.Leverage) >= 0.3f,
+                "a personal response stacked after a faction discount cannot make support free");
+            foreach (float multiplier in new[] { 0.6f, 0.85f, 1.15f, 1.5f, 2f })
+            {
+                float baseline = EventSelector.ApplyResponse(multiplier,
+                    EventSelector.ResponseKind(multiplier));
+                foreach (EventResponseKind kind in new[]
+                    { EventResponseKind.Treasury, EventResponseKind.Contract, EventResponseKind.Perk })
+                {
+                    float answer = EventSelector.ApplyResponse(multiplier, kind);
+                    TestAssert.That(answer >= 0.3f && answer < baseline,
+                        "alternate response improves the price without making support free");
+                }
+            }
+            bool neutralCostWithTempo = false;
+            foreach (EventDefinition entry in EventCatalog.All)
+                neutralCostWithTempo |= entry.SupportCostMultiplier == 1f &&
+                    entry.SupportCooldownMultiplier != 1f;
+            TestAssert.That(neutralCostWithTempo,
+                "a tempo-only event is distinct from a price event");
+            TestAssert.That(Near(EventSelector.EffectiveSupportMultiplier(1.2f, 0f), 1f) &&
+                Near(EventSelector.EffectiveSupportMultiplier(1.2f, 2f), 1.4f),
+                "host strength scales support reset as well as price");
         }
 
         private static bool Near(float a, float b) => Math.Abs(a - b) < 0.0001f;

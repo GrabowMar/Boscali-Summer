@@ -34,7 +34,7 @@ namespace BoscaliSummer.Features.DynamicOperations.Networking
 
     internal sealed class OperationsNet : MonoBehaviour
     {
-        internal const byte ProtocolVersion = 2;
+        internal const byte ProtocolVersion = 3;
         private OperationsManager manager;
         private MessageHandler serverHandler, clientHandler;
         private readonly Dictionary<ulong, float> nextReply = new Dictionary<ulong, float>();
@@ -173,6 +173,18 @@ namespace BoscaliSummer.Features.DynamicOperations.Networking
         // Fixed card and text ceilings keep both late-join replies and parsing bounded.
         internal static string Text(string value) => string.IsNullOrEmpty(value) ? "" :
             value.Length > 128 ? value.Substring(0, 128) : value;
+        internal static string PilotText(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return "";
+            char[] plain = new char[32];
+            int length = 0;
+            foreach (char c in value)
+            {
+                if (length == plain.Length) break;
+                if (!char.IsControl(c) && c != '<' && c != '>') plain[length++] = c;
+            }
+            return new string(plain, 0, length).Trim();
+        }
 
         private static void InstallSerializers()
         {
@@ -196,6 +208,7 @@ namespace BoscaliSummer.Features.DynamicOperations.Networking
                     w.WritePackedInt32(card.Money); w.WritePackedInt32(card.Xp); w.WriteByte(card.IsComplete ? (byte)1 : (byte)0);
                     w.WriteByte(card.IsOffered ? (byte)1 : (byte)0); w.WriteByte(card.IsActive ? (byte)1 : (byte)0); w.WriteByte(card.HasMarker ? (byte)1 : (byte)0);
                     w.WriteSingle(card.X); w.WriteSingle(card.Z); w.WriteSingle(card.Radius);
+                    w.WriteString(PilotText(card.AcceptedBy));
                 }
             }));
             Bind(typeof(Reader<OperationsSnapshot>), "Read", (Func<NetworkReader, OperationsSnapshot>)(r =>
@@ -215,13 +228,14 @@ namespace BoscaliSummer.Features.DynamicOperations.Networking
                     bool complete = r.ReadByte() == 1;
                     bool offered = r.ReadByte() == 1, active = r.ReadByte() == 1, marker = r.ReadByte() == 1;
                     float x = r.ReadSingle(), z = r.ReadSingle(), radius = r.ReadSingle();
+                    string acceptedBy = PilotText(r.ReadString());
                     if (!Operation.Finite(progress) || !Operation.Finite(remaining) || progress < 0f || progress > 1f ||
                         remaining < 0f || remaining > 1200f || money < 0 || money > 100000 || xp < 0 || xp > 10000 ||
                         !Operation.Finite(x) || !Operation.Finite(z) || !Operation.Finite(radius) || radius < 0f || radius > 1500f ||
                         (offered && active) || (complete && (offered || active)) || (marker && !active))
                         throw new InvalidOperationException("Invalid operations snapshot values.");
                     snapshot.Cards[i] = new SecondaryObjectiveView(id, title, description, target, status, reward,
-                        progress, remaining, money, xp, complete, offered, active, marker, x, z, radius);
+                        progress, remaining, money, xp, complete, offered, active, marker, x, z, radius, acceptedBy);
                 }
                 return snapshot;
             }));

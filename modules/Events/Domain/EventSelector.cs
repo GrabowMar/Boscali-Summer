@@ -14,6 +14,15 @@ namespace BoscaliSummer.Features.Events.Domain
 
         /// <summary>Deepen the discount for the rest of the event.</summary>
         Leverage = 2,
+
+        /// <summary>Faction treasury pays for a stronger theater-wide answer.</summary>
+        Treasury = 3,
+
+        /// <summary>A completed faction contract earns a theater-wide answer.</summary>
+        Contract = 4,
+
+        /// <summary>A qualified pilot uses a personal support channel.</summary>
+        Perk = 5,
     }
 
     /// <summary>
@@ -89,9 +98,19 @@ namespace BoscaliSummer.Features.Events.Domain
             switch (kind)
             {
                 case EventResponseKind.Contain: return 1f + deviation * 0.5f;
-                case EventResponseKind.Leverage: return 1f + deviation * 1.5f;
+                case EventResponseKind.Leverage: return Math.Max(0.3f, 1f + deviation * 1.5f);
+                case EventResponseKind.Treasury: return Math.Max(0.3f, 1f + deviation * (deviation >= 0f ? 0.25f : 1.75f));
+                case EventResponseKind.Contract: return Math.Max(0.3f, 1f + deviation * (deviation >= 0f ? 0.35f : 1.65f));
+                case EventResponseKind.Perk: return Math.Max(0.3f, 1f + deviation * (deviation >= 0f ? 0.4f : 1.6f));
                 default: return effectiveMultiplier;
             }
+        }
+
+        /// <summary>Faction funds, in the game's million-unit treasury scale.</summary>
+        public static int TreasuryCost(float effectiveMultiplier)
+        {
+            float deviation = Math.Abs(effectiveMultiplier - 1f);
+            return deviation < ResponseFloor ? 0 : 20 + (int)Math.Ceiling(deviation * 100f / 5f) * 5;
         }
 
         /// <summary>

@@ -85,6 +85,7 @@
     <Reference Include="UnityEngine.UnityWebRequestModule"><HintPath>$(ManagedDir)\UnityEngine.UnityWebRequestModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.UnityWebRequestAudioModule"><HintPath>$(ManagedDir)\UnityEngine.UnityWebRequestAudioModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Unity.RenderPipelines.Universal.Runtime"><HintPath>$(ManagedDir)\Unity.RenderPipelines.Universal.Runtime.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Unity.RenderPipelines.Core.Runtime"><HintPath>$(ManagedDir)\Unity.RenderPipelines.Core.Runtime.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.AnimationModule"><HintPath>$(ManagedDir)\UnityEngine.AnimationModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.AssetBundleModule"><HintPath>$(ManagedDir)\UnityEngine.AssetBundleModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.IMGUIModule"><HintPath>$(ManagedDir)\UnityEngine.IMGUIModule.dll</HintPath><Private>false</Private></Reference>
@@ -117,5 +118,21 @@
     </EmbeddedResource>
   </ItemGroup>
 
+  <ItemGroup Label="Weather shader bundle">
+    <!-- Canopy rain shader, embedded so the dressing works with zero loose files.
+         Source of truth is modules/Weather/Assets/Source/CanopyRain.shader; rebuild with
+         tools/Compile-WeatherAssets.ps1 (Unity 2022.3.62f2, the exact game version).
+         Optional at build time: without the bundle the build passes and the canopy
+         dressing fails closed to droplet particles at runtime. -->
+    <EmbeddedResource Include="modules\Weather\Assets\weatherrain.bundle" Condition="Exists('modules\Weather\Assets\weatherrain.bundle')">
+      <LogicalName>BoscaliSummer.Weather.weatherrain.bundle</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup Label="Superevent posters">
+    <EmbeddedResource Include="modules\Events\Assets\event_atlas.png">
+      <LogicalName>BoscaliSummer.EventsArt.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
 
 </Project>
