@@ -524,10 +524,6 @@ namespace BoscaliSummer.Tests.Features.Trenches
                 "Survivors resume after a full quiet minute");
             TestAssert.That(!TrenchTraceMath.CanAdvance(true, 600, 60, 45),
                 "An overrun position never rebuilds");
-            TestAssert.That(TrenchTraceMath.HasSupport(TrenchStage.Redoubt) &&
-                !TrenchTraceMath.HasSupport(TrenchStage.FireTrench) &&
-                TrenchTraceMath.HasSaps(TrenchStage.Saps) && !TrenchTraceMath.HasSaps(TrenchStage.Redoubt),
-                "Belt predicates follow the stage order");
             TestAssert.That(TrenchTraceMath.SupportDepth - TrenchTraceMath.FireDepth >= 60f &&
                 TrenchTraceMath.RedoubtDepth - TrenchTraceMath.FireDepth >= 180f,
                 "A position digs a real two-line belt: support and reserve lines behind the fire trench");

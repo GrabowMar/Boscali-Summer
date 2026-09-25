@@ -58,8 +58,6 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             for (int i = 0; i < SlotCount; i++) slots[i] = "";
         }
 
-        public IReadOnlyList<TargetPresetSnapshot> Customs => customs;
-
         public int Count => customs.Count;
 
         public string SlotName(int slot) =>

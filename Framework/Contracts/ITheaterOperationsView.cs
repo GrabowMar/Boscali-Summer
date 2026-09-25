@@ -129,16 +129,9 @@ namespace BoscaliSummer.Framework.Contracts
     {
         bool Available { get; }
         bool CanCommand { get; }
-        string Status { get; }
-
-        /// <summary>Pool cost of the staff work behind one offensive, in millions.</summary>
-        float OverheadCost { get; }
 
         /// <summary>Pool cost of one wave slot, in millions. Every slot escrows this much.</summary>
         float WaveBudget { get; }
-
-        /// <summary>The wave slots one offensive may carry, the ceiling the board draws.</summary>
-        int MaximumWaves { get; }
 
         /// <summary>The local faction's offensives, newest first, bounded by the module's ceiling.</summary>
         IReadOnlyList<TheaterOperationView> Operations { get; }

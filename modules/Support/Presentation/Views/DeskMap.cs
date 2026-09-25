@@ -33,7 +33,6 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         {
             public RoomControl Control;
             public Image Disc, Glyph, Threat, Badge, Ring, Pin;
-            public int Anchor;
         }
 
         private sealed class Tag
@@ -331,7 +330,6 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 SetVisible(token, show);
                 if (!show) continue;
                 FieldObjective o = detachment.Objective(i);
-                token.Anchor = o.Anchor;
                 Vector2 p = Board.Project(o.X, o.Z);
                 Lines.Centre(token.Control.Rect, p.x, p.y, DeskStyle.TokenSize);
                 Board.AddMarker(i, p, DeskStyle.TokenSize * 0.7f);

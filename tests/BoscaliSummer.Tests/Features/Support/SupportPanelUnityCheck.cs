@@ -111,9 +111,7 @@ public static class SupportPanelUnityCheck
         // The page builds its own title row and STATUS / ACTIONS toggle inside the whole body (M1).
         Call(panel, tab == 2 ? "Build" + page : "Build" + page + "Page", pageRoot, shell.Body);
         shell.SetPage(tab);
-        object clock = Mod.GetType("BoscaliSummer.Features.Support.Domain.Orbital.OrbitClock", true)
-            .GetProperty("Default", BindingFlags.Static | BindingFlags.Public).GetValue(null);
-        Paint(panel, page, clock);
+        Paint(panel, page);
         Call(panel, "RefreshActionRows", tab, false);
         Canvas.ForceUpdateCanvases();
         foreach (TMP_Text text in root.GetComponentsInChildren<TMP_Text>(true)) text.ForceMeshUpdate();
@@ -161,7 +159,7 @@ public static class SupportPanelUnityCheck
         if (page == "Station")
         {
             // No station: one card, one call to action (M6).
-            Call(panel, "RefreshStationPage", null, 0.0, clock);
+            Call(panel, "RefreshStationPage", null, 0.0);
             Canvas.ForceUpdateCanvases();
             Check(!((RectTransform)Get(panel, "stationHero")).gameObject.activeSelf, "The pass dial must hide with no station.");
             Check(((RectTransform)Get(panel, "stationEmptyCard")).gameObject.activeSelf, "The empty card must show with no station.");
@@ -182,7 +180,7 @@ public static class SupportPanelUnityCheck
         new System.Collections.Generic.Dictionary<string, System.Collections.Generic.HashSet<string>>();
 
     /// <summary>The real page painters, fed production-model fixtures.</summary>
-    private static void Paint(object panel, string page, object clock)
+    private static void Paint(object panel, string page)
     {
         switch (page)
         {
@@ -194,13 +192,13 @@ public static class SupportPanelUnityCheck
                 Call(panel, "Log", "ORBIT INSERTION CONFIRMED · LOW EARTH ORBIT");
                 Call(panel, "Log", "HARD DOCK · IMG PORT");
                 Call(panel, "Log", "LINK · BASTION ON STATION · CENTRE");
-                Call(panel, "RefreshStationPage", station, now, clock);
+                Call(panel, "RefreshStationPage", station, now);
                 break;
             }
             case "SpaceOps":
             {
                 object station = PlatformFixture(out double now);
-                Call(panel, "RefreshSpaceOpsPage", false, station, now, clock);
+                Call(panel, "RefreshSpaceOpsPage", false, station, now);
                 break;
             }
             case "Status":
@@ -352,8 +350,6 @@ public static class SupportPanelUnityCheck
         Type missionsType = Mod.GetType("BoscaliSummer.Features.Support.Domain.Orbital.PlatformMissions", true);
         Type missionType = Mod.GetType("BoscaliSummer.Features.Support.Domain.Orbital.PlatformMission", true);
         Type modulesType = Mod.GetType("BoscaliSummer.Features.Support.Domain.Orbital.PlatformModules", true);
-        Type clockType = Mod.GetType("BoscaliSummer.Features.Support.Domain.Orbital.OrbitClock", true);
-        object clock = clockType.GetProperty("Default", BindingFlags.Static | BindingFlags.Public).GetValue(null);
         object recon = Enum.Parse(missionType, "Recon");
         object platform = Activator.CreateInstance(platformType);
         MethodInfo next = missionsType.GetMethod("Next", BindingFlags.Static | BindingFlags.Public);
@@ -371,15 +367,15 @@ public static class SupportPanelUnityCheck
                 now, (float)price.Invoke(null, new[] { module }), insertion, dock);
             Check(failure.ToString() == "None", "The station fixture must launch " + module + ": " + failure);
             now += dock + insertion;
-            Call(platform, "Tick", now, 0.01f, true, clock);
+            Call(platform, "Tick", now, 0.01f, true);
         }
         Check((bool)Property(platform, "Exists"), "The station fixture must reach orbit.");
         // Settle on a pass so the banner, tiles and console strip all read live figures.
-        object state = Invoke(platform, "State", now, clock);
+        object state = Invoke(platform, "State", now);
         if (!(bool)Property(state, "InPass"))
         {
             now += (double)state.GetType().GetField("TimeToPass", Hidden).GetValue(state) + 0.5;
-            Call(platform, "Tick", now, 0.01f, true, clock);
+            Call(platform, "Tick", now, 0.01f, true);
         }
         return platform;
     }

@@ -16,9 +16,6 @@ namespace BoscaliSummer.Features.QoL.Runtime
         private FactionHQ faction;
         public string Status { get; private set; } = "No camera mark.";
         public static ObservationManager Instance { get; private set; }
-        public string ShortcutHint => settings == null || !settings.ObservationEnabled.Value
-            ? "CAMERA MARKS DISABLED" : settings.MarkCameraKey.Value != KeyCode.None
-                ? settings.MarkCameraKey.Value + ": MARK CAMERA" : "MARK CAMERA IN TGT CAMERA";
 
         private void Awake() => Instance = this;
         public void Configure(QoLSettings config) => settings = config;

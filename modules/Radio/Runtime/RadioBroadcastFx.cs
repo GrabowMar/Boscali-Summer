@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using BoscaliSummer.Features.Radio.Configuration;
 using UnityEngine;
-using UnityEngine.Audio;
 
 namespace BoscaliSummer.Features.Radio.Runtime
 {
@@ -27,7 +26,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
         private AudioSource accent;
         private AudioClip staticClip;
         private AudioClip squelchClip;
-        private AudioMixerGroup mixer;
         private float burstUntil;
         private float identAt = -1f;
         private string identCode;
@@ -46,13 +44,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
         public float Reception { get; private set; } = 1f;
 
         public bool SquelchOpen { get; private set; } = true;
-
-        public void SetMixer(AudioMixerGroup group)
-        {
-            mixer = group;
-            if (bed != null) bed.outputAudioMixerGroup = group;
-            if (accent != null) accent.outputAudioMixerGroup = group;
-        }
 
         public void SetVolume(float value) => volume = Mathf.Clamp01(value);
 
@@ -249,7 +240,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
             source.spatialBlend = 0f;
             source.volume = 1f;
             source.ignoreListenerPause = true;
-            source.outputAudioMixerGroup = mixer;
             return source;
         }
 

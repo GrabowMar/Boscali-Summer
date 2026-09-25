@@ -59,15 +59,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
 
         public static string UnitText(RadioBand band) => band == RadioBand.Mw ? "kHz" : "MHz";
 
-        public static string ModulationText(RadioBand band, RadioModulation mode) =>
-            mode == RadioModulation.Fm ? "FM" : "AM";
-
-        public static RadioBand Next(RadioBand band)
-        {
-            int index = Array.IndexOf(All, band);
-            return All[(index + 1 + All.Length) % All.Length];
-        }
-
         public static string Format(RadioBand band, int kilohertz)
         {
             if (band == RadioBand.Mw)
@@ -86,10 +77,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
     {
         public const int FmMinKilohertz = RadioBands.FmMinKilohertz;
         public const int FmMaxKilohertz = RadioBands.FmMaxKilohertz;
-        public const int FmStepKilohertz = RadioBands.FmStepKilohertz;
-        public const int MwMinKilohertz = RadioBands.MwMinKilohertz;
-        public const int MwMaxKilohertz = RadioBands.MwMaxKilohertz;
-        public const int MwStepKilohertz = RadioBands.MwStepKilohertz;
 
         public RadioBand Band { get; }
         public int Kilohertz { get; }
@@ -212,22 +199,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
                 {
                     found = i;
                     foundKhz = khz;
-                }
-            }
-            return found;
-        }
-
-        public static int FirstInBand(IReadOnlyList<RadioDial> dials, RadioBand band)
-        {
-            int found = -1;
-            int foundKhz = 0;
-            for (int i = 0; dials != null && i < dials.Count; i++)
-            {
-                if (dials[i].Band != band) continue;
-                if (found < 0 || dials[i].Kilohertz < foundKhz)
-                {
-                    found = i;
-                    foundKhz = dials[i].Kilohertz;
                 }
             }
             return found;

@@ -18,7 +18,6 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private static TargetPresetLibrary library = new TargetPresetLibrary();
         private static int version;
 
-        public static bool Configured => settings != null;
         public static CommandSettings Settings => settings;
 
         public static TargetPresetLibrary Library => library;
@@ -38,14 +37,6 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         // ------------------------------------------------------------------ catalog
 
         public static int CatalogCount => BuiltInCount + library.Count;
-
-        public static string CatalogNameAt(int index)
-        {
-            if (index < 0) return null;
-            if (index < BuiltInCount) return MfdTargetPresets.Names[index];
-            TargetPresetSnapshot custom = library.At(index - BuiltInCount);
-            return custom == null ? null : custom.Name;
-        }
 
         public static bool IsBuiltIn(int index) => index >= 0 && index < BuiltInCount;
 
@@ -80,11 +71,6 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             selector.toggleFactionItems != null && selector.toggleFactionItems.Count > 0 &&
             selector.toggleUnitTypesItems != null && selector.toggleUnitTypesItems.Count > 0 &&
             selector.toggleVehicleTypesItems != null && selector.toggleVehicleTypesItems.Count > 0;
-
-        public static void ApplyIndex(TargetListSelector selector, int index)
-        {
-            Apply(selector, CatalogAt(selector, index));
-        }
 
         public static bool TryApplyByName(TargetListSelector selector, string name)
         {

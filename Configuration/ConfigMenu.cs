@@ -63,6 +63,7 @@ namespace BoscaliSummer
                 settings.TheaterOps.Enabled,
                 settings.DynamicOperations.Enabled,
                 settings.Events.Enabled,
+                settings.Comms.Enabled,
                 settings.Trenches.Enabled,
                 settings.UrbanCombat.GarrisonsEnabled,
                 settings.FireAndDestruction.FiresEnabled,
@@ -71,6 +72,7 @@ namespace BoscaliSummer
                 settings.Autopilot.Enabled,
                 settings.QoL.Enabled,
                 settings.Campaign.Enabled,
+                settings.Weather.Enabled,
                 settings.Visuals.Enabled,
                 settings.Immersion.Enabled
             };
@@ -83,6 +85,7 @@ namespace BoscaliSummer
                 "Theater priority",
                 "Dynamic contracts",
                 "World events",
+                "Map comms, polls and games",
                 "Trenches and fortifications",
                 "Zone garrisons",
                 "Fire ignition and spread",
@@ -91,6 +94,7 @@ namespace BoscaliSummer
                 "Autopilot",
                 "Quality of life",
                 "Campaign mission install",
+                "Dynamic weather and ENV screen",
                 "Visual enhancements and post-processing",
                 "Cockpit feel: head motion, shake, sun glare"
             };

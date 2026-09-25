@@ -47,7 +47,6 @@ namespace BoscaliSummer.Features.Support.Runtime
         SpaceOperations ISupportHost.Space => Space;
         SpecOpsTheater ISupportHost.SpecOps => Field;
 
-        public OpsStateMessage OpsState { get; private set; }
         private float opsReceived = -100f;
         public bool OpsStateFresh => Time.unscaledTime - opsReceived < 3f;
         private float nextOpsQuery;
@@ -99,7 +98,6 @@ namespace BoscaliSummer.Features.Support.Runtime
                 pendingCommandArg = 0;
             }
 
-            OpsState = state;
             opsReceived = Time.unscaledTime;
         }
 
@@ -161,8 +159,6 @@ namespace BoscaliSummer.Features.Support.Runtime
         private SupportActionId pendingAction;
         private readonly List<ActiveStrikeInfo> activeStrikes = new List<ActiveStrikeInfo>(8);
 
-        private OpsCommand? armedCommand;
-        private byte armedArg, armedArg2;
         private Action<GlobalPosition> localPick;
 
         public IReadOnlyList<ActiveStrikeInfo> ActiveStrikes => activeStrikes;
@@ -202,11 +198,7 @@ namespace BoscaliSummer.Features.Support.Runtime
             return label != null;
         }
         public SupportSettings Settings => settings;
-        public bool CommandArmed => armedCommand.HasValue;
         public bool CommandPending => pendingCommand != 0;
-        public OpsCommand ArmedCommand => armedCommand.GetValueOrDefault();
-        public byte ArmedCommandArg => armedArg;
-        public byte ArmedCommandArg2 => armedArg2;
 
         /// <summary>The local faction's station for the console, the uplink, the sky and the map.</summary>
         public OrbitalPlatform LocalPlatform
@@ -221,12 +213,7 @@ namespace BoscaliSummer.Features.Support.Runtime
         /// <summary>The clock passes are computed against. Scene-local and reset with the stations.</summary>
         public double OrbitNow => Time.timeSinceLevelLoadAsDouble;
 
-        public OrbitClock OrbitClock => settings == null
-            ? OrbitClock.Default
-            : new OrbitClock(settings.OrbitGapScale.Value);
-
         double ISupportHost.OrbitNow => OrbitNow;
-        OrbitClock ISupportHost.OrbitClock => OrbitClock;
 
         /// <summary>Client-local uplink aim, remembered between uplink sessions; theatre centre until set.</summary>
         public GlobalPosition UplinkAim { get; private set; }
@@ -295,14 +282,7 @@ namespace BoscaliSummer.Features.Support.Runtime
         public PlatformDenial PlatformCheck(PlatformAbility ability)
         {
             OrbitalPlatform platform = LocalPlatform;
-            return platform == null ? PlatformDenial.NoPlatform : platform.Check(ability, OrbitNow, OrbitClock);
-        }
-
-        /// <summary>The station check for a support action; <see cref="PlatformDenial.None"/> when it needs no station.</summary>
-        public PlatformDenial PlatformCheck(SupportActionId action)
-        {
-            PlatformAbility? ability = OrbitalAbility(action);
-            return ability.HasValue ? PlatformCheck(ability.Value) : PlatformDenial.None;
+            return platform == null ? PlatformDenial.NoPlatform : platform.Check(ability, OrbitNow);
         }
 
         /// <summary>Display snapping for zone-targeted actions (Fortify resolves an owned base).</summary>
@@ -416,7 +396,7 @@ namespace BoscaliSummer.Features.Support.Runtime
                 activeStrikes.RemoveAt(0);
             }
 
-            activeStrikes.Add(new ActiveStrikeInfo(requestId, action, target, radius, now, impact, expiry, name));
+            activeStrikes.Add(new ActiveStrikeInfo(requestId, action, target, radius, impact, expiry));
             RegisterInboundStrike(name, etaSeconds);
         }
 
@@ -471,31 +451,15 @@ namespace BoscaliSummer.Features.Support.Runtime
         public bool DisableCooldowns => disableCooldowns != null && disableCooldowns.Value;
         public bool RequestPending => pending;
 
-        private IFireSuppressionService fireSuppressionService;
-
-        public string FireTelemetry
-        {
-            get
-            {
-                if (fireSuppressionService == null) return string.Empty;
-                int active = fireSuppressionService.ActiveFireCount;
-                if (active <= 0) return string.Empty;
-                string hazard = active >= 6 ? "CRITICAL" : active >= 3 ? "HIGH" : "MODERATE";
-                return $"[WILDFIRE CONDITIONS // {active} ACTIVE FRONTS · HAZARD {hazard}]";
-            }
-        }
-
         public void Configure(
             SupportSettings supportSettings, IPlayerPerks playerPerks,
-            IZoneFortificationService fortifications, SupportNet net, ManualLogSource log,
-            IFireSuppressionService fireSuppression = null)
+            IZoneFortificationService fortifications, SupportNet net, ManualLogSource log)
         {
             Field.Fortifications = fortifications;
             settings = supportSettings;
             perks = playerPerks;
             network = net;
             logger = log;
-            fireSuppressionService = fireSuppression;
             catalog = new SupportCatalog(supportSettings, fortifications);
         }
 
@@ -519,7 +483,6 @@ namespace BoscaliSummer.Features.Support.Runtime
             Spectrum.Clear();
             Field.Clear();
             Array.Clear(cyberOrigins, 0, cyberOrigins.Length);
-            OpsState = default;
             opsReceived = -100f;
             nextOpsQuery = 0f;
             pendingCommand = 0;
@@ -538,7 +501,6 @@ namespace BoscaliSummer.Features.Support.Runtime
             localCooldownUntil = 0f;
             ArmedAction = null;
             ArmedFrame = 0;
-            armedCommand = null;
             activeStrikes.Clear();
             mapGesture.Reset();
             SupportMapMode.GestureArmed = false;
@@ -554,13 +516,15 @@ namespace BoscaliSummer.Features.Support.Runtime
         private void Update()
         {
             bool host = GameAccess.IsServer();
+            // Read every frame so a change from the in-game settings page applies at once.
+            if (settings != null) Space.CyberReach = settings.CyberReach.Value;
             if (host)
             {
                 LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
                 double orbitNow = OrbitNow;
                 bool spectrum = settings != null && settings.EwEnabled.Value;
                 Spectrum.Sync(Space, orbitNow, Time.unscaledTime, spectrum);
-                Space.TickHost(orbitNow, Time.deltaTime, level != null && level.isDayLight, OrbitClock,
+                Space.TickHost(orbitNow, Time.deltaTime, level != null && level.isDayLight,
                     settings != null && settings.PlatformDebrisEvents.Value,
                     spectrum ? settings.CyberCampaignIntensity.Value : 0f, LogDebris);
                 if (spectrum) Spectrum.Apply(Space, orbitNow, Time.unscaledTime, logger);
@@ -584,7 +548,7 @@ namespace BoscaliSummer.Features.Support.Runtime
 
             // Publish the armed state for Wing Command to read (BoscaliLink), so a wing
             // point-order and a support call-in never both fire on one right-click.
-            bool anyArmed = ArmedAction.HasValue || armedCommand.HasValue || localPick != null;
+            bool anyArmed = ArmedAction.HasValue || localPick != null;
             SupportMapMode.GestureArmed = anyArmed && mapGesture.Armed;
             mapGesture.Advance(Time.frameCount);
             if (pending && Time.unscaledTime - pendingSince > ReplyTimeout)
@@ -632,20 +596,12 @@ namespace BoscaliSummer.Features.Support.Runtime
                                 CancelArmed();
                                 pick(target);
                             }
-                            else if (ArmedAction.HasValue)
+                            else
                             {
                                 SupportActionId action = ArmedAction.Value;
                                 ArmedAction = null;
                                 mapGesture.Complete(Time.frameCount);
                                 RequestAt(action, target);
-                            }
-                            else
-                            {
-                                OpsCommand command = armedCommand.Value;
-                                byte arg = armedArg;
-                                byte arg2 = armedArg2;
-                                CancelArmed();
-                                SendCommand(command, arg, arg2, target);
                             }
                         }
                     }
@@ -804,21 +760,8 @@ namespace BoscaliSummer.Features.Support.Runtime
             if (!TryArmMap(name + " ARMED · RIGHT-CLICK MAP")) return;
 
             ArmedAction = action;
-            armedCommand = null;
             ArmedFrame = Time.frameCount;
             Status = "ARMED: " + name + " — Right-click on map to execute (ESC to cancel).";
-        }
-
-        /// <summary>Arms the map for a command that needs a point (EW deployment and repositioning).</summary>
-        public void ArmCommand(OpsCommand command, byte arg, byte arg2, string label)
-        {
-            if (!TryArmMap(label + " · RIGHT-CLICK MAP")) return;
-            armedCommand = command;
-            armedArg = arg;
-            armedArg2 = arg2;
-            ArmedAction = null;
-            ArmedFrame = Time.frameCount;
-            Status = "ARMED: " + label + " — Right-click on map to confirm (ESC to cancel).";
         }
 
         private bool TryArmMap(string prompt)
@@ -849,7 +792,6 @@ namespace BoscaliSummer.Features.Support.Runtime
         {
             if (onPick == null || !TryArmMap(label + " · RIGHT-CLICK MAP")) return;
             localPick = onPick;
-            armedCommand = null;
             ArmedAction = null;
             ArmedFrame = Time.frameCount;
             Status = "PICK: " + label + " — Right-click on map (ESC to cancel).";
@@ -866,14 +808,10 @@ namespace BoscaliSummer.Features.Support.Runtime
 
         public void RequestJettison(int cell) => SendCommand(OpsCommand.Jettison, (byte)cell, 0, default);
 
-        public void RequestRephase() => RequestRelocate(((LocalPlatform?.PositionIndex ?? StationKeeping.Centre) + 1) % StationKeeping.Count);
-
         public void RequestRelocate(int sector)
         {
             if (StationKeeping.Valid(sector)) SendCommand(OpsCommand.Rephase, (byte)sector, 0, default);
         }
-
-        public void RequestOrbitShift(byte band) => SendCommand(OpsCommand.OrbitShift, band, 0, default);
 
         public void RequestResupply() => SendCommand(OpsCommand.Resupply, 0, 0, default);
 
@@ -974,7 +912,7 @@ namespace BoscaliSummer.Features.Support.Runtime
 
         public void Disarm()
         {
-            if (!ArmedAction.HasValue && !armedCommand.HasValue && localPick == null) return;
+            if (!ArmedAction.HasValue && localPick == null) return;
             CancelArmed();
             Status = "Support request cancelled.";
         }
@@ -982,14 +920,8 @@ namespace BoscaliSummer.Features.Support.Runtime
         private void CancelArmed()
         {
             ArmedAction = null;
-            armedCommand = null;
             localPick = null;
             mapGesture.Complete(Time.frameCount);
-        }
-
-        public void Request(SupportActionId action)
-        {
-            Arm(action);
         }
 
         /// <summary>Deliver the armed action at a point chosen off the map (the uplink
@@ -1157,7 +1089,6 @@ namespace BoscaliSummer.Features.Support.Runtime
                 case SupportResult.CopyLimit: return "copy limit for that module reached";
                 case SupportResult.WouldStrand: return "it would strand other modules";
                 case SupportResult.PlatformExists: return "the faction already has a station";
-                case SupportResult.NeedsPropulsion: return "LOW orbit needs propulsion — launch to MID or HIGH";
                 case SupportResult.NotBuilt: return "no location of that stage yet (see CYBER)";
                 case SupportResult.NoEwAsset: return "no hacked location covers the target";
                 case SupportResult.WrongPosture: return "the network is not in the right state";
@@ -1378,10 +1309,10 @@ namespace BoscaliSummer.Features.Support.Runtime
                     OrbitalPlatform platform = Space.PlatformFor(player.HQ);
                     if (platform == null) return SupportResult.CapabilityUnavailable;
                     if (!StationKeeping.Valid(message.Arg)) return SupportResult.InvalidTarget;
-                    PlatformDenial denial = platform.CheckRelocate(message.Arg, OrbitNow, OrbitClock);
+                    PlatformDenial denial = platform.CheckRelocate(message.Arg, OrbitNow);
                     if (denial == PlatformDenial.SameOrbit) return SupportResult.InvalidTarget;
                     if (denial != PlatformDenial.None) return SupportContext.Refusal(denial);
-                    if (!platform.TryRelocate(message.Arg, OrbitNow, OrbitClock))
+                    if (!platform.TryRelocate(message.Arg, OrbitNow))
                         return SupportResult.Busy;
                     logger.LogInfo("[Support] " + OrbitalPlatform.Callsign + " relocating to " + StationKeeping.Name(message.Arg) + "; " +
                         Mathf.RoundToInt(platform.Fuel) + " fuel left.");
@@ -1391,10 +1322,10 @@ namespace BoscaliSummer.Features.Support.Runtime
                 {
                     OrbitalPlatform platform = Space.PlatformFor(player.HQ);
                     if (platform == null) return SupportResult.CapabilityUnavailable;
-                    PlatformDenial denial = platform.CheckShift(message.Arg, OrbitNow, OrbitClock);
+                    PlatformDenial denial = platform.CheckShift(message.Arg, OrbitNow);
                     if (denial == PlatformDenial.SameOrbit) return SupportResult.InvalidTarget;
                     if (denial != PlatformDenial.None) return SupportContext.Refusal(denial);
-                    if (!platform.TryShift(message.Arg, OrbitNow, OrbitClock, UnityEngine.Random.Range(1, int.MaxValue)))
+                    if (!platform.TryShift(message.Arg, OrbitNow, UnityEngine.Random.Range(1, int.MaxValue)))
                         return SupportResult.Busy;
                     logger.LogInfo("[Support] " + OrbitalPlatform.Callsign + " transfer burn to " +
                         platform.Orbit.Name + "; " + Mathf.RoundToInt(platform.Fuel) + " fuel left.");
@@ -1509,7 +1440,6 @@ namespace BoscaliSummer.Features.Support.Runtime
                 case PlacementFailure.OverMass: return SupportResult.OverMass;
                 case PlacementFailure.CopyLimit: return SupportResult.CopyLimit;
                 case PlacementFailure.WouldStrand: return SupportResult.WouldStrand;
-                case PlacementFailure.NeedsPropulsion: return SupportResult.NeedsPropulsion;
                 case PlacementFailure.OutsideGrid:
                 case PlacementFailure.CellOccupied:
                 case PlacementFailure.NotAttached:
@@ -1657,9 +1587,6 @@ namespace BoscaliSummer.Features.Support.Runtime
         /// best SPEC OPS team's rank. The host answers from its own detachment; a client mirror
         /// would be its own faction, which is also correct because placement is host-only.
         /// </summary>
-        int IGroundForceReadiness.FortificationShells(FactionHQ owner) =>
-            owner != null ? Space.DetachmentFor(owner)?.GroundReadiness ?? 1 : 1;
-
         int IGroundForceReadiness.InsertionCamps(FactionHQ owner) =>
             owner != null ? Space.DetachmentFor(owner)?.GroundReadiness ?? 1 : 1;
 

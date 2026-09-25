@@ -14,6 +14,7 @@ namespace BoscaliSummer.Tests.Features.Support
             TestCatalogue();
             TestStagesAndIncome();
             TestUpgradesAndReach();
+            TestBaseReach();
             TestBreachPhasesAndLoot();
             TestSpoofAndBacktrace();
             TestCapstone();
@@ -49,9 +50,9 @@ namespace BoscaliSummer.Tests.Features.Support
 
         private static void TestCatalogue()
         {
-            TestAssert.That(CyberCatalog.All.Length == 8, "eight map abilities");
-            for (int i = 0; i < CyberCatalog.All.Length; i++)
-                TestAssert.That((int)CyberCatalog.All[i] == i, "the ability table is indexed by its wire byte");
+            TestAssert.That(CyberCatalog.Table.Length == 8, "eight map abilities");
+            for (int i = 0; i < CyberCatalog.Table.Length; i++)
+                TestAssert.That((int)CyberCatalog.Table[i].Kind == i, "the ability table is indexed by its wire byte");
             TestAssert.That(CyberCatalog.RequiredStage(HackKind.Ping) == 2 &&
                 CyberCatalog.RequiredStage(HackKind.Track) == 3 &&
                 CyberCatalog.RequiredStage(HackKind.Blackout) == 3 &&
@@ -121,6 +122,28 @@ namespace BoscaliSummer.Tests.Features.Support
                 "three levels fit");
             TestAssert.That(!network.CanUpgrade(CyberUpgrade.Reach) && !network.TryUpgrade(CyberUpgrade.Reach),
                 "the fourth level is refused");
+        }
+
+        /// <summary>CyberReachMeters lands in BaseReach: it decides which locations a breach may
+        /// target, and the Reach upgrade scales whatever base the host set.</summary>
+        private static void TestBaseReach()
+        {
+            CyberNetwork network = Fresh(out _, out int city);
+            Tick(network, 30.0);
+            TestAssert.That(network.BaseReach == CyberLocations.DefaultReach, "a network starts at the default base");
+            TestAssert.That(network.CheckBreach(city, 30.0) == BreachDenial.None, "the city 8 km out is in default reach");
+
+            network.BaseReach = 5000f;
+            TestAssert.That(network.Reach == 5000f, "reach follows the base");
+            TestAssert.That(network.CheckBreach(city, 30.0) == BreachDenial.OutOfReach,
+                "a shorter base puts the city out of reach");
+            TestAssert.That(network.TryUpgrade(CyberUpgrade.Reach) && network.TryUpgrade(CyberUpgrade.Reach) &&
+                network.CheckBreach(city, 30.0) == BreachDenial.OutOfReach, "two levels on a 5 km base reach 7.5 km");
+            TestAssert.That(network.TryUpgrade(CyberUpgrade.Reach) && network.Reach > 8000f &&
+                network.CheckBreach(city, 30.0) == BreachDenial.None, "the third level brings the city back");
+
+            network.BaseReach = 120000f;
+            TestAssert.That(network.ReachCovers(150000f, 0f), "a long base reaches where the default never could");
         }
 
         /// <summary>Drive one breach to completion on the city, banking computing first.</summary>
@@ -222,7 +245,7 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(network.TryChooseCapstone(Capstone.Jammer, now), "the capstone applies");
             TestAssert.That(network.CapstoneCount(Capstone.Jammer) == 1 && network.AnyCapstone(Capstone.Jammer),
                 "the location fields the capstone");
-            TestAssert.That(network.CapstoneCovers(Capstone.Jammer, 8000f, 0f, now), "the capstone covers the radius");
+            TestAssert.That(network.TryCovering(Capstone.Jammer, 8000f, 0f, now, out _), "the capstone covers the radius");
             TestAssert.That(network.TryUseCapstone(Capstone.Jammer, now), "the first use is free");
             TestAssert.That(!network.TryUseCapstone(Capstone.Jammer, now), "the second waits for the recharge");
             TestAssert.That(network.CapstoneRechargeRemaining(Capstone.Jammer, now) > 0f, "the recharge is counting");
@@ -273,9 +296,6 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(network.Heat > 0f, "heat builds with the match");
             TestAssert.That(network.Phase != CampaignPhase.Offensive, "the campaign opens probing");
             TestAssert.That(network.Infocon <= 5 && network.Infocon >= 1, "INFOCON stays bounded");
-            network.Clear();
-            TestAssert.That(network.Heat == 0f && network.ActiveIncidents(IncidentKind.None) == 0,
-                "a scene reset clears the campaign");
         }
 
         private static void TestSnapshot()

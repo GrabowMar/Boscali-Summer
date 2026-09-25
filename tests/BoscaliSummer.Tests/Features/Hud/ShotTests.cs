@@ -96,13 +96,6 @@ namespace BoscaliSummer.Tests.Features.Hud
                 "No intercept must print as a dash, never as infinity");
             TestAssert.That(ShotCopy.EtaText(float.PositiveInfinity) == "--" && ShotCopy.EtaText(-5f) == "--",
                 "An infinite or negative countdown must print as a dash too");
-
-            TestAssert.That(ShotCopy.Status(2, 1) == "2 OUT \u00b7 1 INB",
-                "A mixed card must count both directions");
-            TestAssert.That(ShotCopy.Status(3, 0) == "3 OUT" && ShotCopy.Status(0, 2) == "2 INB",
-                "A one-sided card must name only its own side");
-            TestAssert.That(ShotCopy.Status(0, 0) == "—",
-                "A card with no shots must not claim a zero-strong side");
         }
     }
 }

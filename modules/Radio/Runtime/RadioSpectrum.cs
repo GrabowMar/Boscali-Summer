@@ -62,7 +62,7 @@ namespace BoscaliSummer.Features.Radio.Runtime
             }
         }
 
-        /// <summary>The magnitude at one frequency, for tests and for the tuned-carrier read.</summary>
+        /// <summary>The magnitude at one frequency, for tests.</summary>
         public static float Level(float[] magnitudes, float kilohertz, int minKilohertz, int maxKilohertz)
         {
             if (magnitudes == null || magnitudes.Length == 0) return 0f;

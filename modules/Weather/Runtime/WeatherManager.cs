@@ -793,26 +793,6 @@ namespace BoscaliSummer.Features.Weather.Runtime
             NotifyPlayer("DYNAMIC WEATHER RESUMED", null);
         }
 
-        public void AdjustConditions(float delta)
-        {
-            float newCond = Mathf.Clamp01(currentConditions + delta);
-            SetManualOverride(newCond, currentCloudHeight, currentWind, forcedRainIntensity, snapImmediate: true);
-        }
-
-        public void AdjustCeiling(float delta)
-        {
-            float newDeck = Mathf.Clamp(currentCloudHeight + delta, 600f, 6000f);
-            SetManualOverride(currentConditions, newDeck, currentWind, forcedRainIntensity, snapImmediate: true);
-        }
-
-        public void AdjustWind(float deltaKts)
-        {
-            float currentSpeed = currentWind.magnitude;
-            float newSpeed = Mathf.Clamp(currentSpeed + deltaKts * 0.514444f, 0f, 60f);
-            Vector3 newWind = currentSpeed > 0.1f ? (currentWind.normalized * newSpeed) : (Vector3.forward * newSpeed);
-            SetManualOverride(currentConditions, currentCloudHeight, newWind, forcedRainIntensity, snapImmediate: true);
-        }
-
         public void CycleWeatherDebug()
         {
             if (!isManualOverride)

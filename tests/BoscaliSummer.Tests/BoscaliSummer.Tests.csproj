@@ -25,7 +25,6 @@
     <Compile Include="..\..\modules\Support\Domain\Orbital\StationKeeping.cs" Link="Features\Support\StationKeeping.cs" />
     <Compile Include="..\..\modules\Support\Domain\Orbital\PlatformModules.cs" Link="Features\Support\PlatformModules.cs" />
     <Compile Include="..\..\modules\Support\Domain\Orbital\OrbitalPlatform.cs" Link="Features\Support\OrbitalPlatform.cs" />
-    <Compile Include="..\..\modules\Support\Domain\Orbital\PlatformTelemetry.cs" Link="Features\Support\PlatformTelemetry.cs" />
     <Compile Include="..\..\modules\Support\Domain\Orbital\PlatformWords.cs" Link="Features\Support\PlatformWords.cs" />
     <Compile Include="..\..\modules\Support\Domain\Orbital\SarImageFormer.cs" Link="Features\Support\SarImageFormer.cs" />
     <Compile Include="..\..\modules\Command\Presentation\MapUi\SettingsChoices.cs" Link="Features\Command\SettingsChoices.cs" />
@@ -85,7 +84,6 @@
     <Compile Include="..\..\modules\Radio\Runtime\RadioFrequencies.cs" Link="Features\Radio\RadioFrequencies.cs" />
     <Compile Include="..\..\modules\Radio\Runtime\RadioPropagation.cs" Link="Features\Radio\RadioPropagation.cs" />
     <Compile Include="..\..\modules\Radio\Runtime\RadioSpectrum.cs" Link="Features\Radio\RadioSpectrum.cs" />
-    <Compile Include="..\..\modules\Radio\Runtime\RadioLinkStub.cs" Link="Features\Radio\RadioLinkStub.cs" />
     <Compile Include="..\..\modules\Radio\Runtime\VanillaMusicHold.cs" Link="Features\Radio\VanillaMusicHold.cs" />
     <Compile Include="..\..\modules\Radio\Runtime\RadioProgramming.cs" Link="Features\Radio\RadioProgramming.cs" />
     <Compile Include="..\..\modules\Squad\Domain\AceCareer.cs" Link="Features\Squad\AceCareer.cs" />

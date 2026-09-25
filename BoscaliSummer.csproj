@@ -26,8 +26,8 @@
     <!-- Vendored avionics protocol, widget kit, and pure design tokens (namespace
          NOAvionics / NOAvionics.Ui). Wing Command carries a parallel source copy; the
          BCL-only AppDomain protocol coordinates bezel and map-input ownership without a
-         shared DLL or hard dependency. See Avionics/README.md. Unit tests (*Tests.cs)
-         build only into BoscaliSummer.Tests. -->
+         shared DLL or hard dependency (see "Shared avionics" in README.md). Unit tests
+         (*Tests.cs) build only into BoscaliSummer.Tests. -->
     <Compile Include="Avionics\**\*.cs" Exclude="Avionics\**\*Tests.cs" />
     <Compile Include="AvionicsUi\**\*.cs" />
   </ItemGroup>

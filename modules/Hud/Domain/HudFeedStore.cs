@@ -33,11 +33,6 @@ namespace BoscaliSummer.Features.Hud.Domain
             }
             var added = new Line(owner, channel, key, clock); lines.Add(added); return added;
         }
-        public void ReleaseOwner(string owner)
-        {
-            for (int i = lines.Count - 1; i >= 0; i--)
-                if (lines[i].Owner == owner) { lines[i].Valid = false; lines.RemoveAt(i); }
-        }
         public void Notice(string channel, HudTone tone, string text, string detail, float seconds) =>
             notices.Push(channel, tone, Clip(text, 160), Clip(detail, 240), clock(), seconds);
         public void Mute(string channel) => notices.RemoveChannel(channel);

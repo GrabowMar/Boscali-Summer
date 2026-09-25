@@ -3,7 +3,7 @@ using System;
 namespace BoscaliSummer.Features.UrbanCombat.Audio
 {
     /// <summary>
-    /// Pure siren curves: proximity falloff, base volume, anchor hysteresis, fades,
+    /// Pure siren curves: base volume, anchor hysteresis, fades,
     /// loop seams. Engine-free so the curves stay testable without Unity.
     /// </summary>
     internal static class UrbanAmbienceMath
@@ -15,13 +15,6 @@ namespace BoscaliSummer.Features.UrbanCombat.Audio
         public const float SirenReleaseMeters = 6900f;
         public const float AnchorSwitchRatio = 0.85f;
         public const float SirenLevel = 0.35f;
-
-        public static float Proximity01(float distance, float inner, float outer)
-        {
-            if (distance <= inner) return 1f;
-            if (distance >= outer || outer <= inner) return 0f;
-            return 1f - (distance - inner) / (outer - inner);
-        }
 
         public static float SirenVolume(float master)
         {

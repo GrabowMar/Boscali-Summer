@@ -19,9 +19,6 @@ namespace BoscaliSummer.Framework.Contracts
         /// <summary>Whether the priority system is installed and running.</summary>
         bool Available { get; }
 
-        /// <summary>The reason the view cannot be used, in one sentence. Never null when unavailable.</summary>
-        string Status { get; }
-
         bool HasPriority { get; }
         string PriorityLabel { get; }
 

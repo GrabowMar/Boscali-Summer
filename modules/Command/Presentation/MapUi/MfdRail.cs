@@ -33,8 +33,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
     {
         /// <summary>
         /// The well-known name Boscali Summer looks for. Changing it is a breaking change to
-        /// the dual-mod contract and belongs in <c>Avionics/README.md</c> along with the
-        /// bezel and picker rules.
+        /// the dual-mod contract: Wing Command must change its copy in the same release.
         /// </summary>
         public const string RailName = "NOAvionics.Rail";
 

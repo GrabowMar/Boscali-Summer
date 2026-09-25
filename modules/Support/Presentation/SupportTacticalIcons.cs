@@ -24,25 +24,6 @@ namespace BoscaliSummer.Features.Support.Presentation
         public static Sprite FlrIcon { get; private set; }
         public static Sprite FtfIcon { get; private set; }
 
-        /// <summary>Soft coverage dome: no hard rim, fades to nothing at the edge.</summary>
-        public static Sprite CoverageDiscSprite { get; private set; }
-
-        /// <summary>Fine dashed orbit ring, lighter than the strike marker ring.</summary>
-        public static Sprite OrbitTrackSprite { get; private set; }
-
-        /// <summary>Horizontal dashed segment, stretched and rotated for transfer paths.</summary>
-        public static Sprite DashedLineSprite { get; private set; }
-
-        /// <summary>
-        /// A radar-sweep wedge: brightest at its leading edge, fading to nothing across the
-        /// arc. Rotated in place over time for the orbital display's sweep — a pre-baked
-        /// sprite mutated only by transform rotation, never redrawn per frame.
-        /// </summary>
-        public static Sprite SweepWedgeSprite { get; private set; }
-
-        /// <summary>Small soft-glow dot for a data-pulse riding a transfer track or graph edge.</summary>
-        public static Sprite DataPulseSprite { get; private set; }
-
         private static bool initialized;
 
         public static void EnsureInitialized()
@@ -55,11 +36,6 @@ namespace BoscaliSummer.Features.Support.Presentation
             RadialFillSprite = CreateRadialFillSprite(128);
             CrosshairSprite = CreateCrosshairSprite(64);
             BadgeBgSprite = CreateBadgeBgSprite(128, 48);
-            CoverageDiscSprite = CreateCoverageDiscSprite(128);
-            OrbitTrackSprite = CreateOrbitTrackSprite(128);
-            DashedLineSprite = CreateDashedLineSprite(64);
-            SweepWedgeSprite = CreateSweepWedgeSprite(128);
-            DataPulseSprite = CreateDataPulseSprite(32);
 
             RodIcon = CreateRodIcon(64);
             EmpIcon = CreateEmpIcon(64);
@@ -161,88 +137,6 @@ namespace BoscaliSummer.Features.Support.Presentation
             return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f);
         }
 
-        private static Sprite CreateDashedLineSprite(int size)
-        {
-            const int height = 3;
-            var tex = new Texture2D(size, height, TextureFormat.RGBA32, false)
-            {
-                name = "SupportDashedLine",
-                wrapMode = TextureWrapMode.Repeat,
-                filterMode = FilterMode.Point
-            };
-            Color[] pixels = new Color[size * height];
-            for (int x = 0; x < size; x++)
-            {
-                bool on = (x % 8) < 5;
-                for (int y = 0; y < height; y++)
-                    pixels[y * size + x] = on ? new Color(1f, 1f, 1f, 0.9f) : new Color(1f, 1f, 1f, 0f);
-            }
-            tex.SetPixels(pixels);
-            tex.Apply();
-            return Sprite.Create(tex, new Rect(0, 0, size, height), new Vector2(0f, 0.5f), 100f);
-        }
-
-        private static Sprite CreateCoverageDiscSprite(int size)
-        {
-            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false)
-            {
-                name = "SupportCoverageDisc",
-                wrapMode = TextureWrapMode.Clamp,
-                filterMode = FilterMode.Bilinear
-            };
-
-            Vector2 center = new Vector2(size * 0.5f, size * 0.5f);
-            float maxR = size * 0.5f - 1f;
-            Color[] pixels = new Color[size * size];
-
-            for (int y = 0; y < size; y++)
-            {
-                for (int x = 0; x < size; x++)
-                {
-                    float dist = Vector2.Distance(new Vector2(x + 0.5f, y + 0.5f), center);
-                    float norm = Mathf.Clamp01(dist / maxR);
-                    float alpha = dist > maxR ? 0f : Mathf.Pow(1f - norm, 1.7f) * 0.65f;
-                    pixels[y * size + x] = new Color(1f, 1f, 1f, alpha);
-                }
-            }
-
-            tex.SetPixels(pixels);
-            tex.Apply();
-            return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f);
-        }
-
-        private static Sprite CreateOrbitTrackSprite(int size)
-        {
-            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false)
-            {
-                name = "SupportOrbitTrack",
-                wrapMode = TextureWrapMode.Clamp,
-                filterMode = FilterMode.Bilinear
-            };
-
-            Vector2 center = new Vector2(size * 0.5f, size * 0.5f);
-            float radius = size * 0.5f - 3f;
-            Color[] pixels = new Color[size * size];
-
-            for (int y = 0; y < size; y++)
-            {
-                for (int x = 0; x < size; x++)
-                {
-                    Vector2 pos = new Vector2(x + 0.5f, y + 0.5f);
-                    float dist = Vector2.Distance(pos, center);
-                    float ring = Mathf.Clamp01(1f - Mathf.Abs(dist - radius) / 0.9f);
-                    float angle = Mathf.Atan2(pos.y - center.y, pos.x - center.x);
-                    if (angle < 0f) angle += Mathf.PI * 2f;
-                    float dash = Mathf.Sin(angle * 72f) > -0.15f ? 1f : 0.12f;
-                    pixels[y * size + x] = new Color(1f, 1f, 1f, ring * dash * 0.9f);
-                }
-            }
-
-            tex.SetPixels(pixels);
-            tex.Apply();
-            return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f);
-        }
-
         private static Sprite CreateRadialFillSprite(int size)
         {
             var tex = new Texture2D(size, size, TextureFormat.RGBA32, false)
@@ -300,79 +194,6 @@ namespace BoscaliSummer.Features.Support.Presentation
                     bool vLine = Mathf.Abs(x + 0.5f - center.x) <= 0.8f && dist >= 12f && dist <= 24f;
 
                     float alpha = Mathf.Max(ring, centerDot, hLine ? 1f : 0f, vLine ? 1f : 0f);
-                    pixels[y * size + x] = new Color(1f, 1f, 1f, alpha);
-                }
-            }
-
-            tex.SetPixels(pixels);
-            tex.Apply();
-            return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f);
-        }
-
-        private static Sprite CreateSweepWedgeSprite(int size)
-        {
-            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false)
-            {
-                name = "SupportSweepWedge",
-                wrapMode = TextureWrapMode.Clamp,
-                filterMode = FilterMode.Bilinear
-            };
-
-            Vector2 center = new Vector2(size * 0.5f, size * 0.5f);
-            float maxR = size * 0.5f - 1f;
-            const float wedgeDeg = 22f;
-            Color[] pixels = new Color[size * size];
-
-            for (int y = 0; y < size; y++)
-            {
-                for (int x = 0; x < size; x++)
-                {
-                    Vector2 pos = new Vector2(x + 0.5f, y + 0.5f);
-                    float dist = Vector2.Distance(pos, center);
-                    if (dist > maxR)
-                    {
-                        pixels[y * size + x] = Color.clear;
-                        continue;
-                    }
-
-                    float angle = Mathf.Atan2(pos.y - center.y, pos.x - center.x) * Mathf.Rad2Deg;
-                    if (angle < 0f) angle += 360f;
-
-                    // The wedge spans [0, wedgeDeg): brightest at the leading edge (0°),
-                    // fading to nothing at the trailing edge — a rotating sweep, not a pie.
-                    float sweep = angle <= wedgeDeg ? 1f - angle / wedgeDeg : 0f;
-                    float radial = Mathf.Pow(dist / maxR, 0.6f);
-                    pixels[y * size + x] = new Color(1f, 1f, 1f, sweep * radial * 0.32f);
-                }
-            }
-
-            tex.SetPixels(pixels);
-            tex.Apply();
-            return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f);
-        }
-
-        private static Sprite CreateDataPulseSprite(int size)
-        {
-            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false)
-            {
-                name = "SupportDataPulse",
-                wrapMode = TextureWrapMode.Clamp,
-                filterMode = FilterMode.Bilinear
-            };
-
-            Vector2 center = new Vector2(size * 0.5f, size * 0.5f);
-            float coreR = size * 0.22f;
-            float glowR = size * 0.5f - 1f;
-            Color[] pixels = new Color[size * size];
-
-            for (int y = 0; y < size; y++)
-            {
-                for (int x = 0; x < size; x++)
-                {
-                    float dist = Vector2.Distance(new Vector2(x + 0.5f, y + 0.5f), center);
-                    float core = Mathf.Clamp01(1f - dist / coreR);
-                    float glow = Mathf.Clamp01(1f - dist / glowR);
-                    float alpha = Mathf.Max(core, glow * glow * 0.5f);
                     pixels[y * size + x] = new Color(1f, 1f, 1f, alpha);
                 }
             }

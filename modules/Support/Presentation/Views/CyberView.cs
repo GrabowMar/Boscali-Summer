@@ -119,7 +119,6 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         }
 
         public OpsDomain Domain => OpsDomain.Cyber;
-        public string NotchLabel => "CYBER";
         public float EntranceSeconds => CyberStyle.EntranceSeconds;
         public Rect Hero => hero;
         public IReadOnlyList<Rect> Sections => sections;
@@ -421,8 +420,6 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 verbs[i] = BuildRow(body, new Rect(8f, -(top + 6f) - i * (compact ? 21f : 30f), w - 16f, compact ? 20f : 28f), () => Verb(index));
             }
         }
-
-        private static string Column(string text, int width) => text.Length >= width ? text + " " : text.PadRight(width);
 
         // ---- Lifecycle ---------------------------------------------------------------------------
 

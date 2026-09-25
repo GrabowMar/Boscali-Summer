@@ -620,14 +620,6 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 return y - HeadingPitch;
             }
 
-            /// <summary>
-            /// How much room a page has beyond a layout's floor, up to its ceiling. Pages
-            /// size their stretchable blocks from the body the bay actually gave them; a
-            /// hard-coded layout is always wrong at one end of the 596..896 panel range.
-            /// </summary>
-            protected static float Stretch(float bodyHeight, float minimum, float maximum) =>
-                Mathf.Clamp(bodyHeight - minimum, 0f, Mathf.Max(0f, maximum - minimum));
-
             /// <summary>Explanatory copy under a heading: dim, wrapped, and never ellipsised.</summary>
             protected static TMP_Text Hint(RectTransform parent, Rect area, string text)
             {

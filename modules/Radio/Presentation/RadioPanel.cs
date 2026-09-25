@@ -16,7 +16,8 @@ namespace BoscaliSummer.Features.Radio.Presentation
     /// The receiver and the music deck in one set, on two pages.
     ///
     /// <para>RECEIVER leads with the set's own face — the tuned frequency at 34px, the station
-    /// and its programme, an S-meter with a visible squelch gate — then hands the middle of the
+    /// and its programme, the station's text line (bulletins, programme changes, tower loss and
+    /// combat intercepts), an S-meter with a visible squelch gate — then hands the middle of the
     /// page to the band scope: a waterfall, one ruler and one needle that is also the tuning
     /// control (hover to preview a channel, click to tune to it). The preset list is the only
     /// list; the transport, band keys and setup keys state what they do.</para>
@@ -28,7 +29,7 @@ namespace BoscaliSummer.Features.Radio.Presentation
     internal static class RadioPanel
     {
         private const float Width = AvTokens.PanelWidth;
-        private const float TunerCard = 124f;
+        private const float TunerCard = 142f;
         private const float HeaderHeight = 26f;
         private const float WaterfallHeight = 72f;
         private const float RulerBlock = 34f;
@@ -162,6 +163,7 @@ namespace BoscaliSummer.Features.Radio.Presentation
             public TMP_Text ModeLine;
             public TMP_Text Station;
             public TMP_Text Program;
+            public TMP_Text Ticker;
             public TMP_Text OnAir;
             public TMP_Text Time;
             public MeterUi Meter;
@@ -510,17 +512,24 @@ namespace BoscaliSummer.Features.Radio.Presentation
                 string.Empty, "section-title-note", align: TextAlignmentOptions.MidlineRight);
             NoWrap(rx.Program);
 
-            BuildMeter(page, new Rect(area.x + AvTokens.Space2, area.y - 66f, area.width - AvTokens.Space4, 28f));
+            // The station's text line sits under its name the way radiotext does, full width
+            // so a 64-character bulletin reads whole instead of ellipsising beside the readout.
+            rx.Ticker = AvStyled.Label(page,
+                new Rect(area.x + AvTokens.Space2, area.y - 68f, area.width - AvTokens.Space4, 14f),
+                string.Empty, "row-sub");
+            NoWrap(rx.Ticker);
+
+            BuildMeter(page, new Rect(area.x + AvTokens.Space2, area.y - 84f, area.width - AvTokens.Space4, 28f));
 
             rx.OnAir = AvStyled.Label(page,
-                new Rect(area.x + AvTokens.Space2, area.y - 96f, area.width - AvTokens.Space4 - 118f, 16f),
+                new Rect(area.x + AvTokens.Space2, area.y - 114f, area.width - AvTokens.Space4 - 118f, 16f),
                 "ON AIR", "row-main");
             NoWrap(rx.OnAir);
             rx.Time = AvStyled.Label(page,
-                new Rect(area.x + area.width - AvTokens.Space2 - 110f, area.y - 96f, 110f, 16f),
+                new Rect(area.x + area.width - AvTokens.Space2 - 110f, area.y - 114f, 110f, 16f),
                 "--:-- / --:--", "row-value", align: TextAlignmentOptions.MidlineRight);
             rx.Progress = MakeBar(page,
-                new Rect(area.x + AvTokens.Space2, area.y - 116f, area.width - AvTokens.Space4, 4f),
+                new Rect(area.x + AvTokens.Space2, area.y - 134f, area.width - AvTokens.Space4, 4f),
                 AvTheme.Accent);
         }
 
@@ -1365,18 +1374,23 @@ namespace BoscaliSummer.Features.Radio.Presentation
             {
                 rx.Station.text = manager.CurrentChannelName;
                 rx.Program.text = manager.CurrentProgram;
+                rx.Ticker.text = manager.TickerText;
                 SetCardRail(manager.IsEngaged && !manager.IsPaused ? AvTheme.RailReady : AvTheme.RailInert);
             }
             else if (hasChannels)
             {
                 rx.Station.text = manager.IsOffAir ? manager.CurrentChannelName : "NO SIGNAL";
                 rx.Program.text = string.Empty;
+                rx.Ticker.text = manager.IsOffAir
+                    ? "Tower lost. The station is off the air on this mission."
+                    : "Dead air. Tune back to a station.";
                 SetCardRail(manager.IsOffAir ? AvTheme.Alert : AvTheme.Warning);
             }
             else
             {
                 rx.Station.text = "NO STATIONS";
                 rx.Program.text = string.Empty;
+                rx.Ticker.text = "Add music folders, then press RESCAN.";
                 SetCardRail(AvTheme.RailInert);
             }
             rx.StationsNote.text = hasChannels ? manager.ChannelCount + " FOUND" : "0 FOUND";

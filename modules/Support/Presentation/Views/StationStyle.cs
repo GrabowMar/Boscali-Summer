@@ -22,7 +22,6 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         public const float Callsign = 26f;
         public const float Label = 11f;
         public const float LabelTracking = 3f;
-        public const float Body = 12f;
         public const float BodyTracking = 3f;
 
         public static Color Surface { get; private set; }
@@ -67,8 +66,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             FontSize = 11,
             Tracking = LabelTracking,
             Style = FontStyles.Normal,
-            Mono = false,
-            Dashed = false
+            Mono = false
         };
     }
 }

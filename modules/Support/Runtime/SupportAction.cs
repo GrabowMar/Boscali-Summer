@@ -30,7 +30,6 @@ namespace BoscaliSummer.Features.Support.Runtime
         /// <summary>The clock station passes are computed against on this peer.</summary>
         double OrbitNow { get; }
 
-        OrbitClock OrbitClock { get; }
         ManualLogSource Logger { get; }
         VanillaSupportCatalog Vanilla { get; }
 
@@ -87,7 +86,7 @@ namespace BoscaliSummer.Features.Support.Runtime
                 denial = PlatformDenial.NoPlatform;
                 return null;
             }
-            denial = platform.Check(ability, Host.OrbitNow, Host.OrbitClock);
+            denial = platform.Check(ability, Host.OrbitNow);
             return denial == PlatformDenial.None ? platform : null;
         }
 
@@ -135,9 +134,6 @@ namespace BoscaliSummer.Features.Support.Runtime
         public static string Unique(string kind, in SupportContext context) =>
             Prefix + kind + ":" + Framework.Contracts.PlayerIdentity.Of(context.Player) + ":" +
             context.RequestId;
-
-        public static string Unique(string kind, in SupportContext context, int index) =>
-            Unique(kind, context) + ":" + index;
     }
 
     internal sealed class SupportActionDefinition

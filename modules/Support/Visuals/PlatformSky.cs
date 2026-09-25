@@ -14,8 +14,8 @@ namespace BoscaliSummer.Features.Support.Visuals
     /// foreign — is a cluster of cubes laid out like its grid (solar wings and radiators flat,
     /// the core larger), placed along its true line of sight from the theatre centre at a 1/20
     /// display scale, so it rises, crosses and sets where the orbit says at the angular rate
-    /// the orbit says while staying inside the 80 km render distance. It fades in and out at
-    /// the pass edges; a core or module launch leaves a climbing streak at the map edge.
+    /// the orbit says while staying inside the 80 km render distance. A core or module launch
+    /// leaves a climbing streak at the map edge.
     /// Client-local presentation: nothing is networked, no cube carries a collider, so neither
     /// physics nor radar rays can hit one.
     /// </summary>
@@ -26,7 +26,6 @@ namespace BoscaliSummer.Features.Support.Visuals
         private const float MinimumCubeSize = 40f;
         private const float ApparentSize = 0.0022f;
         private const float Pitch = 1.2f;
-        private const float FadeSeconds = 6f;
         private const int Stations = 1 + SpaceOperations.MaximumForeign;
         private const int MaximumRememberedLaunches = 16;
 
@@ -81,7 +80,6 @@ namespace BoscaliSummer.Features.Support.Visuals
             }
 
             double now = support.OrbitNow;
-            OrbitClock clock = support.OrbitClock;
             LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
             float night = level != null ? 1f - Mathf.InverseLerp(0.02f, 0.4f, level.GetAmbientLight()) : 0f;
             int used = 0;
@@ -90,13 +88,13 @@ namespace BoscaliSummer.Features.Support.Visuals
             if (own != null && own.Exists)
             {
                 NoteLaunches(own, now);
-                if (Place(used, own.State(now, clock), night, own, 0, now)) used++;
+                if (Place(used, own.State(now), night, own, 0, now)) used++;
             }
 
             IReadOnlyList<ForeignPlatform> others = support.Space.Foreign;
             for (int i = 0; i < others.Count && used < Stations; i++)
             {
-                if (Place(used, others[i].State(now, clock), night, null, others[i].Layout, now)) used++;
+                if (Place(used, others[i].State(now), night, null, others[i].Layout, now)) used++;
             }
 
             HideFrom(used);

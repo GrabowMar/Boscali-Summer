@@ -142,16 +142,6 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         /// canvas whose anchors are centred and whose <b>pivot is its own top-left</b>.
         /// </summary>
         public static Vector2 TopLeftOf(Rect column) => new Vector2(column.x, column.y);
-
-        /// <summary>
-        /// Place a panel of a known height at the top of the panel column.
-        /// </summary>
-        public static Vector2 PanelPosition(Columns columns, float panelHeight)
-        {
-            Rect column = columns.Panel;
-            float height = Mathf.Min(panelHeight, column.height);
-            return new Vector2(column.x + column.width * 0.5f, column.y - height * 0.5f);
-        }
     }
 }
 

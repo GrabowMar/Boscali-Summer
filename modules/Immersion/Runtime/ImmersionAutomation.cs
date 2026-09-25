@@ -1,7 +1,6 @@
-using System;
 using System.Collections.Generic;
-using System.Globalization;
 using UnityEngine;
+using static BoscaliSummer.Infrastructure.Diagnostics.AutomationArgs;
 
 namespace BoscaliSummer.Features.Immersion.Runtime
 {
@@ -104,33 +103,6 @@ namespace BoscaliSummer.Features.Immersion.Runtime
             return state;
         }
 
-        private static bool Has(Dictionary<string, object> args, string key) => args != null && args.ContainsKey(key);
-
-        private static bool Bool(Dictionary<string, object> args, string key)
-        {
-            try { return Convert.ToBoolean(args[key], CultureInfo.InvariantCulture); }
-            catch (Exception) { return false; }
-        }
-
-        private static float Number(Dictionary<string, object> args, string key, float fallback)
-        {
-            if (args == null || !args.TryGetValue(key, out object value) || value == null) return fallback;
-            try { return Convert.ToSingle(value, CultureInfo.InvariantCulture); }
-            catch (Exception) { return fallback; }
-        }
-
-        private static string Describe(Dictionary<string, object> state)
-        {
-            var parts = new List<string>(state.Count);
-            foreach (KeyValuePair<string, object> pair in state)
-                parts.Add(pair.Key + "=" + Convert.ToString(pair.Value, CultureInfo.InvariantCulture));
-            return string.Join(", ", parts);
-        }
-
-        private static Dictionary<string, object> Fail(string hook, string error)
-        {
-            Debug.LogWarning("[ImmersionAutomation] " + hook + ": " + error);
-            return new Dictionary<string, object> { { "ok", false }, { "error", error } };
-        }
+        private static Dictionary<string, object> Fail(string hook, string error) => Failure("ImmersionAutomation", hook, error);
     }
 }

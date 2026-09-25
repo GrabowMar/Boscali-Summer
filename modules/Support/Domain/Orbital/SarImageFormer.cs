@@ -27,11 +27,6 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
         /// <summary>Along-track axis: range rotated a quarter turn.</summary>
         public double AzimuthX => -RangeZ;
         public double AzimuthZ => RangeX;
-
-        /// <summary>Unit line of sight from the scene up to the sensor.</summary>
-        public double LosX => RangeX * Math.Sin(Incidence);
-        public double LosY => Math.Cos(Incidence);
-        public double LosZ => RangeZ * Math.Sin(Incidence);
     }
 
     /// <summary>
@@ -75,7 +70,6 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
         public int Width { get; }
         public int Height { get; }
         public double HalfSize { get; }
-        public SarGeometry Geometry => geometry;
         public int Accepted { get; private set; }
         public int Dropped { get; private set; }
 
