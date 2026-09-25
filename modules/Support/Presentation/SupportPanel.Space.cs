@@ -258,9 +258,19 @@ namespace BoscaliSummer.Features.Support.Presentation
 
         // ---- Shared widgets --------------------------------------------------------------------
 
-        private static Color CategoryColour(ModuleCategory category) => PlatformTruss.Colour(category);
-
-        private static Color ToneColour(Tone tone) => tone == Tone.Locked ? AvTheme.Dim : StatusColor(tone);
+        /// <summary>Module category tint.</summary>
+        private static Color CategoryColour(ModuleCategory category)
+        {
+            switch (category)
+            {
+                case ModuleCategory.Power: return AvTheme.RailCaution;
+                case ModuleCategory.Utility: return AvTheme.RailInfo;
+                case ModuleCategory.Sensor: return AvTheme.RailReady;
+                case ModuleCategory.Weapon: return AvTheme.RailDanger;
+                case ModuleCategory.Mobility: return AvTheme.Warning;
+                default: return AvTheme.TextPrimary;
+            }
+        }
 
         /// <summary>A flight-deck annunciator: small channel key, large written state, semantic rail.</summary>
         private sealed class Tile
@@ -305,27 +315,6 @@ namespace BoscaliSummer.Features.Support.Presentation
             tile.Fill.color = tone == Tone.Danger ? colour.WithAlpha(0.08f) : AvTheme.SurfaceInert;
             tile.Frame[0].color = colour;
             tile.Frame[1].color = tone == Tone.Locked ? AvTheme.Hairline : colour.WithAlpha(0.5f);
-        }
-
-        /// <summary>A labelled bar: key left, reading right, a bar under both.</summary>
-        private sealed class Gauge
-        {
-            public TMP_Text Reading;
-            public Image Fill;
-            public TMP_Text Note;
-        }
-
-        private static Gauge BuildGauge(RectTransform parent, float x, float y, float width, string key, Color fill)
-        {
-            AvStyled.Label(parent, new Rect(x, y, width, 14f), key, "kv-key");
-            var gauge = new Gauge
-            {
-                Reading = AvStyled.Label(parent, new Rect(x, y - 18f, width, 18f), "—", "kv-value"),
-                Fill = AvKit.ProgressBar(parent, new Rect(x, y - 39f, width, 4f), 0f, fill)
-            };
-            gauge.Note = SingleLine(AvStyled.Label(parent, new Rect(x, y - 47f, width, 14f), "", "row-sub"));
-            gauge.Note.color = AvTheme.Dim;
-            return gauge;
         }
     }
 }

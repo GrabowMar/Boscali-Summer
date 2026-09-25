@@ -113,7 +113,6 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         }
 
         public OpsDomain Domain => OpsDomain.Space;
-        public string NotchLabel => "SPACE";
         public float EntranceSeconds => ImagerStyle.EntranceSeconds;
         public Rect Hero => sections[0];
         public IReadOnlyList<Rect> Sections => sections;
@@ -650,7 +649,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 // The same facts as the MFD's ACTIONS rows: one presenter.
                 AbilityFacts facts = definition != null && support != null
                     ? AbilityStatus.For(support, definition, bypass)
-                    : new AbilityFacts(AbilityTone.Locked, "UNAVAILABLE ON THIS SERVER", "—", "", "", false, false);
+                    : new AbilityFacts(AbilityTone.Locked, "UNAVAILABLE ON THIS SERVER", "—", false, false);
                 bool ready = live && facts.Enabled && facts.Tone == AbilityTone.Ready;
                 taskReady[i] = ready;
                 Set(key.Title, "[" + (i + 1) + "] " + name + (ability == PlatformAbility.EmpBurst ? " · FF" : ""));

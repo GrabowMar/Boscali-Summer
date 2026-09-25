@@ -55,7 +55,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             public RoomControl Select;
             public Image Body;
             public Image[] Outline;
-            public TMP_Text Letter, Callsign, Rank, State, Clock, Detail, Lost;
+            public TMP_Text Letter, Callsign, Rank, State, Clock, Detail;
             public Image StateFrame, Bar, BarTrack, LostFrame, SelectedRail;
             public Image[] Chevrons;
             public Stamp Action;
@@ -137,7 +137,6 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         }
 
         public OpsDomain Domain => OpsDomain.SpecialOperations;
-        public string NotchLabel => "SPEC OPS";
         public float EntranceSeconds => DeskStyle.EntranceSeconds;
         public Rect Hero => ToTopDown(focus);
         public IReadOnlyList<Rect> Sections => sections;
@@ -270,7 +269,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             tag.Bar = AvKit.Panel(tag.Root, new Rect(12f, -h + 33f, 0f, 3f), DeskStyle.Ink);
             tag.Action = BuildStamp(tag.Root, new Rect(12f, -h + 27f, w - 24f, 23f), () => RaiseOrRecall(team), 11f);
             tag.LostFrame = AvKit.Panel(tag.Root, new Rect(w * 0.5f - 70f, -h * 0.5f + 26f, 140f, 44f), AvTheme.RailDanger, OpsSprites.Stamp);
-            tag.Lost = DeskStyle.Title(tag.LostFrame.rectTransform, "LOST", new Rect(0f, 0f, 140f, 44f), 24f, AvTheme.RailDanger,
+            DeskStyle.Title(tag.LostFrame.rectTransform, "LOST", new Rect(0f, 0f, 140f, 44f), 24f, AvTheme.RailDanger,
                 TextAlignmentOptions.Center);
             tag.LostFrame.rectTransform.pivot = new Vector2(0.5f, 0.5f);
             tag.LostFrame.rectTransform.anchoredPosition = new Vector2(w * 0.5f, -h * 0.5f + 4f);

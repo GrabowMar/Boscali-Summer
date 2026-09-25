@@ -31,7 +31,6 @@ namespace BoscaliSummer.Features.Support.Presentation
             public SupportActionDefinition Definition;
             public Image Background;
             public Image Rail;
-            public TMP_Text Name;
             public TMP_Text Coverage;
             public TMP_Text Detail;
             public TMP_Text Cost;
@@ -133,7 +132,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             icon.raycastTarget = false;
             AvKit.Label(parent, AbilityCode(action), new Rect(x + 34f, y - 8f, 30f, 16f), AvTheme.RailInfo, AvTokens.FontMicro,
                 FontStyles.Bold);
-            row.Name = AvStyled.Label(parent, new Rect(x + 70f, y - 8f, width - 70f - 116f, 18f), action.Name,
+            AvStyled.Label(parent, new Rect(x + 70f, y - 8f, width - 70f - 116f, 18f), action.Name,
                 "row-name");
             row.Cost = AvStyled.Label(parent, new Rect(x + width - 104f, y - 8f, 92f, 16f), "", "row-value",
                 align: TextAlignmentOptions.MidlineRight);

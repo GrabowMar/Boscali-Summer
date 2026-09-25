@@ -42,8 +42,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
 
         private sealed class Strip
         {
-            public TMP_Text Label, Value;
-            public Image Track, Fill, Ghost, Mid;
+            public TMP_Text Value;
+            public Image Fill, Ghost, Mid;
             public float X, Top, Height;
             public bool Signed;
         }
@@ -53,7 +53,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             public ModuleKind Kind;
             public RoomControl Control;
             public Image Fill, Glyph;
-            public TMP_Text Code, Name, Stat, Price;
+            public TMP_Text Price;
         }
 
         private sealed class Button
@@ -114,7 +114,6 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         }
 
         public OpsDomain Domain => OpsDomain.Space;
-        public string NotchLabel => "SPACE";
         public float EntranceSeconds => StationStyle.EntranceSeconds;
         public Rect Hero => hero;
         public IReadOnlyList<Rect> Sections => sections;
@@ -256,13 +255,13 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         private Strip BuildStrip(RectTransform parent, float x, float h, string label, bool signed)
         {
             var strip = new Strip { X = x, Signed = signed };
-            strip.Label = StationStyle.Text(parent, label, new Rect(x, 0f, 56f, 14f), 10f, StationStyle.Dim, 3f,
+            StationStyle.Text(parent, label, new Rect(x, 0f, 56f, 14f), 10f, StationStyle.Dim, 3f,
                 TextAlignmentOptions.Center);
             strip.Value = StationStyle.Text(parent, "", new Rect(x - 4f, -16f, 64f, 16f), 11f, StationStyle.Ink, 1f,
                 TextAlignmentOptions.Center);
             strip.Top = -40f;
             strip.Height = h - 50f;
-            strip.Track = AvKit.Panel(parent, new Rect(x + 18f, strip.Top, 20f, strip.Height), StationStyle.Line.WithAlpha(0.12f));
+            AvKit.Panel(parent, new Rect(x + 18f, strip.Top, 20f, strip.Height), StationStyle.Line.WithAlpha(0.12f));
             AvKit.Outline(parent, new Rect(x + 18f, strip.Top, 20f, strip.Height), StationStyle.Line.WithAlpha(0.45f));
             for (int t = 1; t < 10; t++)
                 AvKit.Rule(parent, new Rect(x + 12f, strip.Top - strip.Height * t / 10f, 6f, 1f), StationStyle.Line.WithAlpha(0.5f));
@@ -331,11 +330,11 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             row.Fill = AvKit.Panel(host, new Rect(0f, 0f, at.width, at.height), StationStyle.Console);
             row.Glyph = AvKit.Panel(host, new Rect(6f, -(at.height - 26f) * 0.5f, 26f, 26f), StationStyle.Ink);
             row.Glyph.sprite = OpsSprites.Glyph((int)info.Kind);
-            row.Code = StationStyle.Text(host, info.Code, new Rect(40f, 0f, 60f, at.height), 13f, StationStyle.Ink, 6f,
+            StationStyle.Text(host, info.Code, new Rect(40f, 0f, 60f, at.height), 13f, StationStyle.Ink, 6f,
                 TextAlignmentOptions.MidlineLeft, true);
-            row.Name = StationStyle.Text(host, info.Name, new Rect(100f, 1f, 170f, at.height * 0.5f), 10f, StationStyle.Dim, 2f,
+            StationStyle.Text(host, info.Name, new Rect(100f, 1f, 170f, at.height * 0.5f), 10f, StationStyle.Dim, 2f,
                 TextAlignmentOptions.BottomLeft);
-            row.Stat = StationStyle.Text(host, Stat(info), new Rect(100f, -at.height * 0.5f, 170f, at.height * 0.5f), 10f,
+            StationStyle.Text(host, Stat(info), new Rect(100f, -at.height * 0.5f, 170f, at.height * 0.5f), 10f,
                 StationStyle.Ink, 2f, TextAlignmentOptions.TopLeft);
             row.Price = StationStyle.Text(host, "", new Rect(at.width - 130f, 0f, 122f, at.height), 11f, StationStyle.Ink, 3f,
                 TextAlignmentOptions.MidlineRight);
