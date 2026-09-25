@@ -8,11 +8,10 @@ namespace BoscaliSummer.Features.Support.Domain
     {
         Space = 0,
         Cyber = 1,
-        SpecialOperations = 2,
-        Intelligence = 3
+        SpecialOperations = 2
     }
 
-    /// <summary>Tab labels, headings and one-line mission statements for each domain.</summary>
+    /// <summary>Tab labels and one-line mission statements for each domain.</summary>
     internal static class OpsDomains
     {
         public static readonly OpsDomain[] All =
@@ -31,17 +30,6 @@ namespace BoscaliSummer.Features.Support.Domain
                 case OpsDomain.Cyber: return "CYBER";
                 case OpsDomain.SpecialOperations: return "SPEC OPS";
                 default: return "INTEL";
-            }
-        }
-
-        public static string Title(OpsDomain domain)
-        {
-            switch (domain)
-            {
-                case OpsDomain.Space: return "SPACE WARFARE";
-                case OpsDomain.Cyber: return "SPECTRUM & CYBER WARFARE";
-                case OpsDomain.SpecialOperations: return "SPECIAL OPERATIONS";
-                default: return "ESPIONAGE";
             }
         }
 

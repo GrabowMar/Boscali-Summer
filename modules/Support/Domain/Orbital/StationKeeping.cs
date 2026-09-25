@@ -28,8 +28,8 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
             double z = Z(origin) + (Z(target) - Z(origin)) * progress;
             bool holding = !double.IsNaN(clock) && clock < 0.0;
             return new OrbitState(holding ? OrbitPhase.Hold : OrbitPhase.InPass,
-                new PassPlan(0, true, 0.0, 0.0), regime.Altitude, x, z,
-                0.0, holding ? -clock : 0.0, 0.0, 0.0);
+                new PassPlan(0.0), regime.Altitude, x, z,
+                holding ? -clock : 0.0, 0.0);
         }
     }
 }

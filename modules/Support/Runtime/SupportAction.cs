@@ -135,9 +135,6 @@ namespace BoscaliSummer.Features.Support.Runtime
         public static string Unique(string kind, in SupportContext context) =>
             Prefix + kind + ":" + Framework.Contracts.PlayerIdentity.Of(context.Player) + ":" +
             context.RequestId;
-
-        public static string Unique(string kind, in SupportContext context, int index) =>
-            Unique(kind, context) + ":" + index;
     }
 
     internal sealed class SupportActionDefinition

@@ -66,12 +66,6 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
     /// </summary>
     internal static class CyberCatalog
     {
-        public static readonly HackKind[] All =
-        {
-            HackKind.Ping, HackKind.Track, HackKind.Blackout, HackKind.Ghost, HackKind.Spoof,
-            HackKind.Scan, HackKind.Hijack, HackKind.Overload
-        };
-
         public static readonly CyberAbilityInfo[] Table =
         {
             new CyberAbilityInfo(HackKind.Ping, "PNG", "PING SWEEP",
@@ -129,21 +123,6 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
 
         /// <summary>Jamming strength pushed into hostile sensors by RADAR BLACKOUT.</summary>
         public const float BlackoutStrength = 800f;
-
-        public static string Category(HackKind kind)
-        {
-            switch (kind)
-            {
-                case HackKind.Ping:
-                case HackKind.Track:
-                case HackKind.Scan: return "RECON";
-                case HackKind.Blackout:
-                case HackKind.Hijack:
-                case HackKind.Overload: return "C2";
-                case HackKind.Ghost: return "IFF";
-                default: return "DECEPTION";
-            }
-        }
     }
 
     /// <summary>The three stage-4 capstones: price, recharge and copy.</summary>

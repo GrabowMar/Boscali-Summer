@@ -13,27 +13,22 @@ namespace BoscaliSummer.Features.Support.Runtime
         public readonly SupportActionId ActionId;
         public readonly GlobalPosition Target;
         public readonly float Radius;
-        public readonly float StartTime;
         public readonly float ImpactTime;
         public readonly float ExpiryTime;
-        public readonly string Name;
 
         public ActiveStrikeInfo(
             int requestId, SupportActionId actionId, GlobalPosition target,
-            float radius, float startTime, float impactTime, float expiryTime, string name)
+            float radius, float impactTime, float expiryTime)
         {
             RequestId = requestId;
             ActionId = actionId;
             Target = target;
             Radius = radius;
-            StartTime = startTime;
             ImpactTime = impactTime;
             ExpiryTime = expiryTime;
-            Name = name;
         }
 
         public bool IsActive(float now) => now < ExpiryTime;
-        public bool IsInbound(float now) => now < ImpactTime;
         public float SecondsRemaining(float now) => Mathf.Max(0f, ImpactTime - now);
     }
 }

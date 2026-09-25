@@ -14,8 +14,8 @@ namespace BoscaliSummer.Features.Support.Visuals
     /// foreign — is a cluster of cubes laid out like its grid (solar wings and radiators flat,
     /// the core larger), placed along its true line of sight from the theatre centre at a 1/20
     /// display scale, so it rises, crosses and sets where the orbit says at the angular rate
-    /// the orbit says while staying inside the 80 km render distance. It fades in and out at
-    /// the pass edges; a core or module launch leaves a climbing streak at the map edge.
+    /// the orbit says while staying inside the 80 km render distance. A core or module launch
+    /// leaves a climbing streak at the map edge.
     /// Client-local presentation: nothing is networked, no cube carries a collider, so neither
     /// physics nor radar rays can hit one.
     /// </summary>
@@ -26,7 +26,6 @@ namespace BoscaliSummer.Features.Support.Visuals
         private const float MinimumCubeSize = 40f;
         private const float ApparentSize = 0.0022f;
         private const float Pitch = 1.2f;
-        private const float FadeSeconds = 6f;
         private const int Stations = 1 + SpaceOperations.MaximumForeign;
         private const int MaximumRememberedLaunches = 16;
 

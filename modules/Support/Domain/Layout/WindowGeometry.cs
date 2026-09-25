@@ -26,18 +26,6 @@ namespace BoscaliSummer.Features.Support.Domain.Layout
             return new Box((canvasW - width) * 0.5f, y, width, height);
         }
 
-        public static Box Lerp(Box from, Box to, float t)
-        {
-            if (!float.IsFinite(t)) return Default;
-            if (t <= 0f) return from;
-            if (t >= 1f) return to;
-            return new Box(
-                from.X + (to.X - from.X) * t,
-                from.Y + (to.Y - from.Y) * t,
-                from.Width + (to.Width - from.Width) * t,
-                from.Height + (to.Height - from.Height) * t);
-        }
-
         private static float Clamp(float value, float min, float max) => Math.Max(min, Math.Min(max, value));
     }
 }

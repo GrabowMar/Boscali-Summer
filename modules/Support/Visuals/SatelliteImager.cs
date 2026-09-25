@@ -21,7 +21,6 @@ namespace BoscaliSummer.Features.Support.Visuals
     /// </summary>
     internal sealed class SatelliteImager : MonoBehaviour
     {
-        public const float Standoff = 24000f;
         public const float MaxStandoff = 24000f;
         public const float MinStandoff = 250f;
 
@@ -43,11 +42,7 @@ namespace BoscaliSummer.Features.Support.Visuals
 
         public Texture Output => sarTexture != null && hasProcessedFrame ? (Texture)sarTexture : colour;
         public Camera Camera => cam;
-        public bool InfraredMode => false;
         public int FramesRendered { get; private set; }
-
-        public int Width => width;
-        public float Aspect => width / (float)height;
 
         public static SatelliteImager Create(int pixelsWide, int pixelsHigh)
         {

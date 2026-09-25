@@ -204,8 +204,6 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
 
         public ModuleKind Cell(int cell) => InGrid(cell) ? cells[cell] : ModuleKind.None;
 
-        public float PaidAt(int cell) => InGrid(cell) ? paid[cell] : 0f;
-
         public float TotalPaid
         {
             get
@@ -645,9 +643,6 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
             if (ability == PlatformAbility.RodStrike) Rods = Math.Max(0, Rods - Math.Max(1, rodShots));
             if (info.RechargeSeconds > 0f) readyAt[(int)ability] = now + RechargeSeconds(ability, now);
         }
-
-        public bool TryRephase(double now, in OrbitClock clock, int seed)
-            => TryRelocate((PositionIndex + 1) % StationKeeping.Count, now, clock);
 
         public PlatformDenial CheckRelocate(int sector, double now, in OrbitClock clock)
         {

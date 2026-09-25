@@ -51,7 +51,6 @@ namespace BoscaliSummer.Features.Support.Visuals
         private readonly Color32[] pixels = new Color32[ImageWidth * ImageHeight];
         private SarImageFormer former;
         private Vector3 centreLocal;
-        private GlobalPosition centreGlobal;
         private Vector3 los;
         private Vector3 rangeAxis;
         private float windRoughness;
@@ -66,28 +65,7 @@ namespace BoscaliSummer.Features.Support.Visuals
         public float Progress => totalRays > 0 ? Mathf.Clamp01((float)nextRay / totalRays) : 0f;
         public float ProcessingProgress { get; private set; }
         public string Callsign { get; private set; }
-        public double IncidenceDeg { get; private set; }
         public double SlantRange { get; private set; }
-        public bool LookRight { get; private set; }
-        public double SceneHalfSize => former != null ? former.HalfSize : 0.0;
-        public GlobalPosition Centre => centreGlobal;
-
-        /// <summary>Project a scene-local point into image UV space (0..1, v up). False when it falls outside.</summary>
-        public bool ProjectPoint(Vector3 localPosition, out float u, out float v)
-        {
-            u = 0f;
-            v = 0f;
-            if (former == null) return false;
-            Vector3 relative = localPosition - centreLocal;
-            if (!former.Project(relative.x, relative.y, relative.z, 0.0, out int column, out int row)) return false;
-            u = (column + 0.5f) / ImageWidth;
-            v = 1f - (row + 0.5f) / ImageHeight;
-            return true;
-        }
-
-        /// <summary>Ground direction of the image's up axis (azimuth), for north arrows and slewing.</summary>
-        public double UpX { get; private set; }
-        public double UpZ { get; private set; } = 1.0;
         public int Contacts { get; set; }
 
         public void Begin(GlobalPosition target, in LookAngles look, in OrbitState state, string callsign,
@@ -103,7 +81,6 @@ namespace BoscaliSummer.Features.Support.Visuals
                 };
             }
 
-            centreGlobal = target;
             Vector3 local = target.ToLocalPosition();
             if (Runtime.SupportTargeting.TryMapPoint(target, out Vector3 ground)) local = ground;
             centreLocal = local;
@@ -111,19 +88,12 @@ namespace BoscaliSummer.Features.Support.Visuals
             double sinInc = Math.Sin(look.Incidence), cosInc = Math.Cos(look.Incidence);
             rangeAxis = new Vector3((float)look.AzimuthX, 0f, (float)look.AzimuthZ);
             los = new Vector3((float)(look.AzimuthX * sinInc), (float)cosInc, (float)(look.AzimuthZ * sinInc)).normalized;
-            IncidenceDeg = look.Incidence / OrbitMath.Deg;
             SlantRange = look.SlantRange;
             Callsign = callsign;
-
-            // Right-looking when the sensor sits to the right of the ground track.
-            double cross = state.Pass.DirX * look.AzimuthZ - state.Pass.DirZ * look.AzimuthX;
-            LookRight = cross < 0.0;
 
             var geometry = new SarGeometry(look.Incidence, look.AzimuthX, look.AzimuthZ, look.SlantRange,
                 OrbitMath.Velocity(state.Altitude));
             former = new SarImageFormer(ImageWidth, ImageHeight, sceneHalfSize, geometry, seed);
-            UpX = geometry.AzimuthX;
-            UpZ = geometry.AzimuthZ;
             totalRays = former.RayCount(RangeOversample);
             nextRay = 0;
             elapsed = 0f;
@@ -140,12 +110,6 @@ namespace BoscaliSummer.Features.Support.Visuals
 
             Clear();
             Phase = SarPhase.Collecting;
-        }
-
-        public void Cancel()
-        {
-            Phase = SarPhase.Idle;
-            former = null;
         }
 
         public void Tick(float deltaTime)

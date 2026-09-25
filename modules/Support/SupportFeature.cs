@@ -28,7 +28,6 @@ namespace BoscaliSummer.Features.Support
             IPlayerPerks perks = context.Services.GetRequired<IPlayerPerks>();
             IProgressionView progression = context.Services.GetRequired<IProgressionView>();
             context.Services.TryGet(out IZoneFortificationService fortifications);
-            context.Services.TryGet(out IFireSuppressionService fireSuppression);
             context.Services.TryGet(out IBaseDefenseAlarmService baseAlarm);
 
             SupportManager manager = context.AddSceneService<SupportManager>(50);
@@ -39,7 +38,7 @@ namespace BoscaliSummer.Features.Support
             SupportHudLine hudLine = context.AddSceneService<SupportHudLine>(56);
 
             network.Configure(manager);
-            manager.Configure(context.Settings.Support, perks, fortifications, network, context.Logger, fireSuppression);
+            manager.Configure(context.Settings.Support, perks, fortifications, network, context.Logger);
             manager.ConfigureBypass(context.Settings.Diagnostics.BypassRequirements);
             manager.ConfigureDisableCooldowns(context.Settings.Diagnostics.DisableOpsCooldowns);
             context.AddService<ICameraTargetService>(manager);

@@ -25,7 +25,6 @@
     <Compile Include="..\..\modules\Support\Domain\Orbital\StationKeeping.cs" Link="Features\Support\StationKeeping.cs" />
     <Compile Include="..\..\modules\Support\Domain\Orbital\PlatformModules.cs" Link="Features\Support\PlatformModules.cs" />
     <Compile Include="..\..\modules\Support\Domain\Orbital\OrbitalPlatform.cs" Link="Features\Support\OrbitalPlatform.cs" />
-    <Compile Include="..\..\modules\Support\Domain\Orbital\PlatformTelemetry.cs" Link="Features\Support\PlatformTelemetry.cs" />
     <Compile Include="..\..\modules\Support\Domain\Orbital\PlatformWords.cs" Link="Features\Support\PlatformWords.cs" />
     <Compile Include="..\..\modules\Support\Domain\Orbital\SarImageFormer.cs" Link="Features\Support\SarImageFormer.cs" />
     <Compile Include="..\..\modules\Command\Presentation\MapUi\SettingsChoices.cs" Link="Features\Command\SettingsChoices.cs" />

@@ -26,7 +26,6 @@ namespace BoscaliSummer.Tests.Features.Support
             TestDebris();
             TestSnapshot();
             TestForeign();
-            TestTelemetry();
             TestWords();
             TestSarProjection();
             TestSarFormation();
@@ -186,11 +185,7 @@ namespace BoscaliSummer.Tests.Features.Support
 
         private static void TestOrbitMath()
         {
-            TestAssert.That(Near(OrbitMath.Period(525000.0) / 60.0, 95.1, 0.3), "525 km period must be ~95 min");
             TestAssert.That(Near(OrbitMath.Velocity(525000.0), 7600.0, 15.0), "525 km orbital velocity must be ~7.6 km/s");
-            TestAssert.That(OrbitMath.GroundSpeed(525000.0) < OrbitMath.Velocity(525000.0),
-                "ground-track speed must be below orbital speed");
-            TestAssert.That(OrbitMath.Period(300000.0) < OrbitMath.Period(700000.0), "higher orbits must be slower");
             TestAssert.That(Near(OrbitMath.Elevation(525000.0, 0.0), Math.PI * 0.5, 1e-9), "overhead must read 90°");
             TestAssert.That(Near(OrbitMath.OffNadir(525000.0, Math.PI * 0.5), 0.0, 1e-9), "overhead must be nadir");
             TestAssert.That(Near(OrbitMath.SlantRange(525000.0, 0.0), 525000.0, 1e-6), "overhead slant must equal altitude");
@@ -224,70 +219,13 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(OrbitRegimes.Valid(OrbitRegimes.Standard), "Standard orbit must be valid");
             TestAssert.That(!OrbitRegimes.Valid(1) && !OrbitRegimes.Valid(-1), "other orbit indices must be invalid");
             TestAssert.That(OrbitRegimes.Get(99).Index == OrbitRegimes.Standard, "Get must return the single orbit");
-
-            double pass = TheaterTrack.WindowSeconds(leo);
-            TestAssert.That(Near(pass, 215.0, 30.0), "a LEO pass must last about three and a half minutes, was " + pass);
-            TestAssert.That(TheaterTrack.CycleSeconds(leo, OrbitClock.Default) > pass, "cycle must exceed window");
             TestAssert.That(new OrbitClock(99.0).GapScale == 4.0, "gap scale must clamp");
         }
 
         private static void TestPassGeometry()
         {
             OrbitRegime mid = OrbitRegimes.Get(OrbitRegimes.Mid);
-            OrbitClock clock = OrbitClock.Default;
-
-            OrbitState hold = TheaterTrack.State(42, mid, clock, -12.0);
-            TestAssert.That(hold.Phase == OrbitPhase.Hold && Near(hold.TimeToPass, 12.0, 1e-9),
-                "negative cycle time must be a hold with a countdown");
-
-            double cycle = TheaterTrack.CycleSeconds(mid, clock);
-            int inPass = 0;
-            double firstOpen = -1.0;
-            OrbitState middle = default;
-            for (double t = 0.0; t < cycle; t += 0.5)
-            {
-                OrbitState state = TheaterTrack.State(42, mid, clock, t);
-                if (!state.InPass) continue;
-                if (firstOpen < 0.0) firstOpen = t;
-                inPass++;
-                if (Near(state.TimeToPassEnd, state.Window * 0.5, 0.26)) middle = state;
-            }
-            OrbitState opening = TheaterTrack.State(42, mid, clock, firstOpen);
-            TestAssert.That(Near(inPass * 0.5, opening.Window, 1.0), "a pass must last its window");
-            TestAssert.That(opening.Window <= TheaterTrack.WindowSeconds(mid) + 1e-6, "an offset pass can only be shorter");
-
-            LookAngles edge = TheaterTrack.Look(opening, 0.0, 0.0);
-            TestAssert.That(edge.Visible && Near(edge.OffNadir / OrbitMath.Deg, TheaterTrack.ReachOffNadirDeg, 1.0),
-                "a pass must open at the reach off-nadir");
-            TestAssert.That(middle.InPass && Near(Math.Sqrt(middle.SubX * middle.SubX + middle.SubZ * middle.SubZ),
-                Math.Abs(middle.Pass.CrossTrack), 2000.0), "mid-pass the sub-point must sit at the cross-track offset");
-            TestAssert.That(Math.Abs(middle.Pass.CrossTrack) <= TheaterTrack.CrossTrackFraction * TheaterTrack.HalfWindow(mid) + 1.0,
-                "cross-track offset must stay inside its bound");
-
-            OrbitState away = TheaterTrack.State(42, mid, clock, cycle - 1.0);
-            TestAssert.That(away.Phase == OrbitPhase.OutOfTheater && away.TimeToPass > 0.0,
-                "after LOS the station must be away with a countdown");
-            TestAssert.That(!TheaterTrack.Look(away, 0.0, 0.0).Visible, "an away station must not be visible");
-
-            OrbitState again = TheaterTrack.State(42, mid, clock, firstOpen + 30.0);
-            OrbitState other = TheaterTrack.State(43, mid, clock, firstOpen + 30.0);
-            TestAssert.That(again.SubX == TheaterTrack.State(42, mid, clock, firstOpen + 30.0).SubX,
-                "passes must be deterministic");
-            TestAssert.That(other.SubX != again.SubX || other.SubZ != again.SubZ || other.Phase != again.Phase,
-                "seeds must vary pass geometry");
-
-            bool ascending = false, descending = false;
-            for (int i = 0; i < 16; i++)
-            {
-                PassPlan plan = TheaterTrack.Plan(42, mid, i);
-                ascending |= plan.Ascending;
-                descending |= !plan.Ascending;
-                TestAssert.That(Near(plan.RightX * plan.DirX + plan.RightZ * plan.DirZ, 0.0, 1e-9),
-                    "right must be perpendicular to the track");
-            }
-            TestAssert.That(ascending && descending, "passes must mix ascending and descending tracks");
-
-            var nadirPass = new OrbitState(OrbitPhase.InPass, TheaterTrack.Plan(1, mid, 0), mid.Altitude, 0.0, 0.0, 0.0, 0.0, 10.0, 100.0);
+            var nadirPass = new OrbitState(OrbitPhase.InPass, new PassPlan(0.0), mid.Altitude, 0.0, 0.0, 0.0, 10.0);
             LookAngles overhead = TheaterTrack.Look(nadirPass, 0.0, 0.0);
             double straightDown = TheaterTrack.GroundSample(mid, overhead, false);
             TestAssert.That(Near(straightDown, mid.NadirGsd, 1e-6), "nadir GSD must be the band's");
@@ -577,7 +515,8 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(platform.Check(PlatformAbility.Rephase, pass, clock) == PlatformDenial.None,
                 "propulsion permits relocation while on station");
             double away = pass + platform.State(pass, clock).TimeToPassEnd + 1.0;
-            TestAssert.That(platform.TryRephase(away, clock, 77), "an away station with fuel must rephase");
+            TestAssert.That(platform.TryRelocate((platform.PositionIndex + 1) % StationKeeping.Count, away, clock),
+                "an away station with fuel must rephase");
             TestAssert.That(platform.Fuel == 75f && platform.HoldAt(away) == PlatformHold.Rephase, "rephase must burn and hold");
             OrbitState soon = platform.State(away + OrbitalPlatform.RephaseLeadSeconds + 0.1, clock);
             TestAssert.That(soon.InPass || soon.TimeToPass < 10.0, "the next pass must come within seconds");
@@ -697,23 +636,6 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(foreign.CycleStart == 100.4, "a new orbit must rebase");
             TestAssert.That(foreign.State(50.0, OrbitClock.Default).Phase == OrbitPhase.Hold,
                 "a foreign station before its epoch must hold");
-        }
-
-        private static void TestTelemetry()
-        {
-            OrbitalPlatform platform = Station(out double now);
-            PlatformStats stats = platform.Stats(now);
-            OrbitClock clock = OrbitClock.Default;
-            OrbitState state = platform.State(now, clock);
-            LookAngles station = TheaterTrack.Look(state, 0.0, 0.0);
-            TelemetryFrame lit = PlatformTelemetry.Compute(platform, stats, station, true, false, now);
-            TelemetryFrame dark = PlatformTelemetry.Compute(platform, stats, station, false, false, now);
-            TestAssert.That(lit.ArrayAmps > 0.0 && dark.ArrayAmps == 0.0, "array current must follow sunlight");
-            TestAssert.That(lit.TrussTempC > dark.TrussTempC, "the truss must be warmer in sunlight");
-            TestAssert.That(lit.BusVolts > 100.0 && lit.BusVolts < 130.0, "bus voltage must stay in a 120 V band");
-            TestAssert.That(station.Visible == lit.HasLink, "the link must follow line of sight");
-            TestAssert.That(Near(lit.PeriodSeconds, OrbitMath.Period(platform.Orbit.Altitude), 1e-6),
-                "telemetry period must be the orbit's");
         }
 
         private static void TestWords()

@@ -9,8 +9,7 @@ namespace BoscaliSummer.Features.Support.Domain.Layout
         EnRoute = 1,
         OnTask = 2,
         Holding = 3,
-        Recovering = 4,
-        Pass = 5
+        Recovering = 4
     }
 
     internal struct LaneSegment
@@ -56,25 +55,6 @@ namespace BoscaliSummer.Features.Support.Domain.Layout
             {
                 float recover = state == TeamState.Recovering ? remaining : FieldCatalog.RecoverSeconds;
                 count = Add(into, count, ref cursor, recover, LaneKind.Recovering, state != TeamState.Recovering, window);
-            }
-            return count;
-        }
-
-        /// <summary>At most three passes. Starts and durations are seconds; the result is 0..1 across the window.</summary>
-        public static int Passes(float firstStart, float duration, float period, float window, LaneSegment[] into)
-        {
-            if (into == null || into.Length == 0 || !(window > 0f) || !(duration > 0f)) return 0;
-            int count = 0;
-            for (int i = 0; i < 3 && count < into.Length; i++)
-            {
-                float start = firstStart + i * (period > 0f ? period : 0f);
-                float end = start + duration;
-                if (end <= 0f) continue;
-                if (start >= window) break;
-                if (start < 0f) start = 0f;
-                if (end > window) end = window;
-                into[count++] = Segment(start / window, end / window, LaneKind.Pass, false);
-                if (!(period > 0f)) break;
             }
             return count;
         }

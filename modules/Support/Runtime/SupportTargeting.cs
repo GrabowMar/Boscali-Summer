@@ -6,31 +6,6 @@ namespace BoscaliSummer.Features.Support.Runtime
     internal static class SupportTargeting
     {
         /// <summary>
-        /// Resolves a map coordinate to a usable piece of ground.
-        /// The previous rule also treated <c>StaticsMask</c> as a blocker in the clearance
-        /// sphere, so the terrain the ray had just hit rejected its own impact point on any
-        /// slope and almost every pick came back InvalidTarget. Clearance now looks only for
-        /// units, ships and exclusion zones, and the slope limit is a usable 35 degrees.
-        /// </summary>
-        public static bool TryGround(GlobalPosition target, out Vector3 ground)
-        {
-            ground = default;
-            if (!TryMapPoint(target, out Vector3 hit) || hit.y <= Datum.LocalSeaY + 2f)
-                return false;
-            if (!Physics.Raycast(
-                    new Vector3(hit.x, hit.y + 4f, hit.z), Vector3.down, out RaycastHit sample, 16f,
-                    (int)PhysicsLayers.StaticsMask | (int)PhysicsLayers.ShipsMask))
-                return false;
-            if (Vector3.Angle(sample.normal, Vector3.up) > 35f) return false;
-
-            int blockers = (int)PhysicsLayers.DefaultMask | (int)PhysicsLayers.ShipsMask |
-                (int)PhysicsLayers.ExclusionZonesMask;
-            if (Physics.CheckSphere(hit + Vector3.up * 12f, 6f, blockers)) return false;
-            ground = hit;
-            return true;
-        }
-
-        /// <summary>
         /// Map click to a world point. EMP and kinetic strikes need an XZ, not a buildable
         /// pad: slope and nearby units used to reject the first click as InvalidTarget, and
         /// the missile then never left the ground.
