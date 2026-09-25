@@ -136,6 +136,8 @@
     <Compile Include="..\..\modules\TheaterOps\Domain\StaffLog.cs" Link="Features\TheaterOps\StaffLog.cs" />
     <Compile Include="..\..\modules\TheaterOps\Domain\DirectorWords.cs" Link="Features\TheaterOps\DirectorWords.cs" />
     <Compile Include="..\..\Framework\Contracts\ITheaterOperationsView.cs" Link="Framework\ITheaterOperationsView.cs" />
+    <Compile Include="..\..\Framework\Contracts\IThreatPicture.cs" Link="Framework\IThreatPicture.cs" />
+    <Compile Include="..\..\modules\Intel\Domain\*.cs" LinkBase="Features\Intel\Domain" />
     <Compile Include="..\..\modules\Events\Domain\EventDefinition.cs" Link="Features\Events\EventDefinition.cs" />
     <Compile Include="..\..\modules\Events\Domain\EventCatalog.cs" Link="Features\Events\EventCatalog.cs" />
     <Compile Include="..\..\modules\Events\Domain\EventSelector.cs" Link="Features\Events\EventSelector.cs" />
