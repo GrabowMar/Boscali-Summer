@@ -14,6 +14,7 @@ namespace BoscaliSummer.Tests.Features.Support
             TestCatalogue();
             TestStagesAndIncome();
             TestUpgradesAndReach();
+            TestBaseReach();
             TestBreachPhasesAndLoot();
             TestSpoofAndBacktrace();
             TestCapstone();
@@ -121,6 +122,28 @@ namespace BoscaliSummer.Tests.Features.Support
                 "three levels fit");
             TestAssert.That(!network.CanUpgrade(CyberUpgrade.Reach) && !network.TryUpgrade(CyberUpgrade.Reach),
                 "the fourth level is refused");
+        }
+
+        /// <summary>CyberReachMeters lands in BaseReach: it decides which locations a breach may
+        /// target, and the Reach upgrade scales whatever base the host set.</summary>
+        private static void TestBaseReach()
+        {
+            CyberNetwork network = Fresh(out _, out int city);
+            Tick(network, 30.0);
+            TestAssert.That(network.BaseReach == CyberLocations.DefaultReach, "a network starts at the default base");
+            TestAssert.That(network.CheckBreach(city, 30.0) == BreachDenial.None, "the city 8 km out is in default reach");
+
+            network.BaseReach = 5000f;
+            TestAssert.That(network.Reach == 5000f, "reach follows the base");
+            TestAssert.That(network.CheckBreach(city, 30.0) == BreachDenial.OutOfReach,
+                "a shorter base puts the city out of reach");
+            TestAssert.That(network.TryUpgrade(CyberUpgrade.Reach) && network.TryUpgrade(CyberUpgrade.Reach) &&
+                network.CheckBreach(city, 30.0) == BreachDenial.OutOfReach, "two levels on a 5 km base reach 7.5 km");
+            TestAssert.That(network.TryUpgrade(CyberUpgrade.Reach) && network.Reach > 8000f &&
+                network.CheckBreach(city, 30.0) == BreachDenial.None, "the third level brings the city back");
+
+            network.BaseReach = 120000f;
+            TestAssert.That(network.ReachCovers(150000f, 0f), "a long base reaches where the default never could");
         }
 
         /// <summary>Drive one breach to completion on the city, banking computing first.</summary>
