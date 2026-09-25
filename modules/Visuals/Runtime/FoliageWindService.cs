@@ -1,135 +1,206 @@
 using System;
+using System.Collections.Generic;
 using BepInEx.Logging;
 using BoscaliSummer.Features.Visuals.Configuration;
+using BoscaliSummer.Features.Visuals.Domain;
 using BoscaliSummer.Framework.Lifecycle;
+using HarmonyLib;
 using NuclearOption.Effects;
 using UnityEngine;
 
 namespace BoscaliSummer.Features.Visuals.Runtime
 {
     /// <summary>
-    /// Coordinates vegetation wind dynamics across terrain grass and foliage.
-    /// Modulates native grass wind parameters and broadcasts global wind vector.
+    /// Drives vegetation from the map's synced wind. Trees: each <see cref="TreeRenderer"/> gets a
+    /// swaying copy of its shared clump mesh (<see cref="TreeSwayMesh"/>). Grass: the vanilla
+    /// instanced grass shader already has wind; its strength and speed are scaled with the wind.
+    /// Client-only presentation — nothing here is networked.
     /// </summary>
     internal sealed class FoliageWindService : MonoBehaviour, ISceneService
     {
-        public static FoliageWindService Instance { get; private set; }
+        private const float ScanInterval = 1f;
+        private const int MaxTreeRenderers = 16;
 
+        private static readonly int WindStrengthId = Shader.PropertyToID("_WindStrength");
+        private static readonly int WindSpeedId = Shader.PropertyToID("_WindSpeed");
+
+        private static readonly AccessTools.FieldRef<DetailRenderer, TreeRenderer[]> TreeRenderersRef =
+            AccessTools.FieldRefAccess<DetailRenderer, TreeRenderer[]>("treeRenderers");
+        private static readonly AccessTools.FieldRef<DetailRenderer, GrassRenderer[]> GrassRenderersRef =
+            AccessTools.FieldRefAccess<DetailRenderer, GrassRenderer[]>("grassRenderers");
+        private static readonly AccessTools.FieldRef<GrassRenderer, Material> GrassMaterialRef =
+            AccessTools.FieldRefAccess<GrassRenderer, Material>("grassMaterial");
+
+        public static FoliageWindService Live { get; private set; }
+
+        private readonly List<TreeSwayMesh> trees = new List<TreeSwayMesh>(4);
+        private readonly HashSet<TreeRenderer> refused = new HashSet<TreeRenderer>();
         private VisualsSettings settings;
         private ManualLogSource logger;
-
-        private const float DefaultWindSpeed = 2.12f;
-        private const float DefaultWindStrength = 0.25f;
-        private const float DefaultWindDensity = 4.52f;
+        private float nextScan;
+        private bool grassTouched;
 
         public void Configure(VisualsSettings visualsSettings, ManualLogSource logSource)
         {
             settings = visualsSettings;
             logger = logSource;
-            Instance = this;
-
-            if (settings != null)
-            {
-                settings.OnSettingsChanged += ApplySettings;
-            }
+            Live = this;
         }
 
-        private void Awake()
+        private bool Wanted => settings != null && settings.Enabled.Value && settings.FoliageDynamicsEnabled.Value;
+
+        public void ResetForScene()
         {
-            Instance = this;
+            ReleaseTrees();
+            refused.Clear();
+            grassTouched = false;
+            nextScan = 0f;
         }
 
         private void OnDestroy()
         {
-            if (settings != null)
-            {
-                settings.OnSettingsChanged -= ApplySettings;
-            }
-            RestoreBaseline();
-            if (Instance == this) Instance = null;
-        }
-
-        public void ResetForScene()
-        {
-            if (isActiveAndEnabled && settings != null && settings.Enabled.Value)
-            {
-                ApplySettings();
-            }
+            ReleaseTrees();
+            RestoreGrass();
+            if (Live == this) Live = null;
         }
 
         private void Update()
         {
-            if (Application.isBatchMode || settings == null || !settings.Enabled.Value) return;
-            if (!settings.FoliageDynamicsEnabled.Value) return;
+            if (!Wanted)
+            {
+                if (trees.Count > 0) ReleaseTrees();
+                if (grassTouched) RestoreGrass();
+                return;
+            }
 
-            // Broadcast dynamic global wind vector with gentle turbulence
+            DetailRenderer detail = SceneSingleton<DetailRenderer>.i;
+            if (detail == null) return;
+
+            Vector3 wind = CurrentWind();
+            float speed = new Vector2(wind.x, wind.z).magnitude;
+            float windX = 0.7071f, windZ = 0.7071f;
+            if (speed > 0.05f)
+            {
+                windX = wind.x / speed;
+                windZ = wind.z / speed;
+            }
+
+            if (Time.unscaledTime >= nextScan)
+            {
+                nextScan = Time.unscaledTime + ScanInterval;
+                AdoptTrees(detail);
+                ApplyGrass(detail, speed);
+            }
+
+            float amplitude = VisualsMath.TreeSwayAmplitude(speed) * settings.FoliageSwayStrength.Value;
             float time = Time.time;
-            float swayStrength = settings.FoliageSwayStrength.Value;
-            float headingRad = 0.785f; // ~45 deg
-            float gust = 1.0f + 0.35f * Mathf.Sin(time * 0.8f);
-
-            Vector4 windVec = new Vector4(
-                Mathf.Cos(headingRad) * gust * swayStrength,
-                0f,
-                Mathf.Sin(headingRad) * gust * swayStrength,
-                swayStrength
-            );
-
-            Shader.SetGlobalVector("_GlobalWindVector", windVec);
-        }
-
-        public void ApplySettings()
-        {
-            if (Application.isBatchMode || settings == null) return;
-
-            bool active = settings.Enabled.Value && settings.FoliageDynamicsEnabled.Value;
-            float strengthScale = active ? settings.FoliageSwayStrength.Value : 1.0f;
-
-            // Apply to active GrassRenderers in scene
-            try
+            for (int i = trees.Count - 1; i >= 0; i--)
             {
-                DetailRenderer detailRenderer = SceneSingleton<DetailRenderer>.i;
-                if (detailRenderer != null)
+                TreeSwayMesh tree = trees[i];
+                if (tree.Renderer == null)
                 {
-                    GrassRenderer[] grassList = detailRenderer.GetComponentsInChildren<GrassRenderer>(true);
-                    float targetStrength = active ? (DefaultWindStrength * 1.6f * strengthScale) : DefaultWindStrength;
-                    float targetSpeed = active ? (DefaultWindSpeed * 1.25f) : DefaultWindSpeed;
-
-                    foreach (var grass in grassList)
-                    {
-                        if (grass == null || grass.grassMaterialProps == null) continue;
-                        grass.grassMaterialProps.SetFloat("_WindStrength", targetStrength);
-                        grass.grassMaterialProps.SetFloat("_WindSpeed", targetSpeed);
-                    }
+                    tree.Dispose();
+                    trees.RemoveAt(i);
+                    continue;
                 }
-            }
-            catch (Exception ex)
-            {
-                logger?.LogDebug($"[Visuals] Grass wind update skipped: {ex.Message}");
+                tree.Update(time, windX, windZ, amplitude);
             }
         }
 
-        private void RestoreBaseline()
+        private void AdoptTrees(DetailRenderer detail)
         {
-            try
+            TreeRenderer[] renderers = TreeRenderersRef(detail);
+            if (renderers == null) return;
+            foreach (TreeRenderer renderer in renderers)
             {
-                DetailRenderer detailRenderer = SceneSingleton<DetailRenderer>.i;
-                if (detailRenderer != null)
+                if (renderer == null || refused.Contains(renderer) || Owns(renderer)) continue;
+                if (trees.Count >= MaxTreeRenderers) return;
+
+                TreeSwayMesh sway = TreeSwayMesh.TryCreate(renderer, out string failure);
+                if (sway == null)
                 {
-                    GrassRenderer[] grassList = detailRenderer.GetComponentsInChildren<GrassRenderer>(true);
-                    foreach (var grass in grassList)
-                    {
-                        if (grass == null || grass.grassMaterialProps == null) continue;
-                        grass.grassMaterialProps.SetFloat("_WindStrength", DefaultWindStrength);
-                        grass.grassMaterialProps.SetFloat("_WindSpeed", DefaultWindSpeed);
-                    }
+                    // One attempt per renderer per scene: a mesh that cannot be read back will
+                    // not start working on the next scan.
+                    refused.Add(renderer);
+                    logger?.LogWarning($"[Visuals] Tree sway unavailable for '{renderer.name}': {failure}.");
+                    continue;
                 }
-                Shader.SetGlobalVector("_GlobalWindVector", Vector4.zero);
+                trees.Add(sway);
+                logger?.LogInfo($"[Visuals] Tree sway active on '{renderer.name}' ({sway.VertexCount} vertices).");
             }
-            catch
+        }
+
+        private bool Owns(TreeRenderer renderer)
+        {
+            foreach (TreeSwayMesh tree in trees)
+                if (tree.Renderer == renderer) return true;
+            return false;
+        }
+
+        private void ApplyGrass(DetailRenderer detail, float windSpeed)
+        {
+            GrassRenderer[] grass = GrassRenderersRef(detail);
+            if (grass == null) return;
+            float dial = settings.FoliageSwayStrength.Value;
+            foreach (GrassRenderer renderer in grass)
             {
-                // Ignored on teardown
+                if (renderer == null || renderer.grassMaterialProps == null) continue;
+                Material material = GrassMaterialRef(renderer);
+                if (material == null || !material.HasProperty(WindStrengthId)) continue;
+                // The props block is rebuilt whenever the game re-creates the grass, so this
+                // re-applies on every scan instead of once.
+                renderer.grassMaterialProps.SetFloat(WindStrengthId,
+                    VisualsMath.GrassWindStrength(material.GetFloat(WindStrengthId), windSpeed, dial));
+                renderer.grassMaterialProps.SetFloat(WindSpeedId,
+                    VisualsMath.GrassWindSpeed(material.GetFloat(WindSpeedId), windSpeed));
+                grassTouched = true;
             }
+        }
+
+        private void RestoreGrass()
+        {
+            grassTouched = false;
+            DetailRenderer detail = SceneSingleton<DetailRenderer>.i;
+            if (detail == null) return;
+            GrassRenderer[] grass = GrassRenderersRef(detail);
+            if (grass == null) return;
+            foreach (GrassRenderer renderer in grass)
+            {
+                if (renderer == null || renderer.grassMaterialProps == null) continue;
+                Material material = GrassMaterialRef(renderer);
+                if (material == null || !material.HasProperty(WindStrengthId)) continue;
+                renderer.grassMaterialProps.SetFloat(WindStrengthId, material.GetFloat(WindStrengthId));
+                renderer.grassMaterialProps.SetFloat(WindSpeedId, material.GetFloat(WindSpeedId));
+            }
+        }
+
+        private void ReleaseTrees()
+        {
+            foreach (TreeSwayMesh tree in trees) tree.Dispose();
+            trees.Clear();
+        }
+
+        private static Vector3 CurrentWind()
+        {
+            LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
+            return level != null ? level.windVelocity : Vector3.zero;
+        }
+
+        /// <summary>State for the automation readout.</summary>
+        public void Describe(IDictionary<string, object> state)
+        {
+            int active = 0, frames = 0;
+            foreach (TreeSwayMesh tree in trees)
+            {
+                if (tree.Active) active++;
+                frames += tree.Frames;
+            }
+            state["treeRenderersSwaying"] = active;
+            state["treeRenderersRefused"] = refused.Count;
+            state["treeSwayFrames"] = frames;
+            state["grassWindApplied"] = grassTouched;
+            Vector3 wind = CurrentWind();
+            state["windSpeed"] = new Vector2(wind.x, wind.z).magnitude;
         }
     }
 }
