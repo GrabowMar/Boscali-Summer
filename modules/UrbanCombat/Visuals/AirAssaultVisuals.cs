@@ -180,7 +180,6 @@ namespace BoscaliSummer.Garrisons
                 public bool Exited;
                 public bool ChuteDeployed;
                 public bool Landed;
-                public bool InWater;
                 public int Index;
                 public Animator Animator;
             }
@@ -486,7 +485,6 @@ namespace BoscaliSummer.Garrisons
                     return;
 
                 drop.Landed = true;
-                drop.InWater = inWater;
                 drop.CleanupDelay = LandingHoldSeconds + drop.Slot * 0.15f;
                 drop.LandingPosition = inWater ? hit.point : SnapToGround(hit.point);
                 drop.ChuteCollapse = 1f;

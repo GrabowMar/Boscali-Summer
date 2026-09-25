@@ -36,7 +36,6 @@ namespace BoscaliSummer.Features.Squad.Runtime
             public FactionHQ EnemyHq;
             public Aircraft Target;
             public Aircraft[] Aircraft;
-            public Pilot AcePilot;
             public PersistentID AceId;
             public string Name, Callsign, Symbol, Wing;
             public int Id, Seed, Tier, Returns, Generation, Alive, SpawnedCount;
@@ -490,7 +489,7 @@ namespace BoscaliSummer.Features.Squad.Runtime
             }
             int emblem = (seed & int.MaxValue) % Wings.Length;
             var hunt = new Hunt { Id = id, Owner = career, EnemyHq = career.ProvokedHq, Target = target,
-                Aircraft = aircraft, AcePilot = Primary(aircraft[0]), AceId = aircraft[0].persistentID, Name = name, Callsign = callsign,
+                Aircraft = aircraft, AceId = aircraft[0].persistentID, Name = name, Callsign = callsign,
                 Symbol = chosenRival?.Symbol ?? Symbols[emblem], Wing = chosenRival?.Wing ?? (Wings[emblem] + " " + (sequence % 100).ToString("00")),
                 Seed = seed, Tier = tier, Returns = returns, Returned = chosenRival != null, Generation = career.Rules.Generation,
                 Began = now, NextChatter = now + 35f, Alive = aircraft.Length, SpawnedCount = aircraft.Length, Outcome = HuntOutcome.Hunting,

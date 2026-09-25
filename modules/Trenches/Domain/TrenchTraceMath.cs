@@ -101,7 +101,6 @@ namespace BoscaliSummer.Features.Trenches.Domain
         public const int DepthSearchLevels = 5;
         public const float DepthStayWeight = 0.045f;
         public const float UndulationWeight = 6f;
-        public const float LinkSpacing = 150f;
         public const float SapDepth = 45f;
         public const float SapLateralFraction = 0.3f;
 
@@ -598,9 +597,5 @@ namespace BoscaliSummer.Features.Trenches.Domain
                 : stage >= TrenchStage.Support ? 6
                 : stage >= TrenchStage.FireTrench ? 3
                 : 0;
-
-        public static bool HasSupport(TrenchStage stage) => stage >= TrenchStage.Support;
-        public static bool HasRedoubt(TrenchStage stage) => stage >= TrenchStage.Redoubt;
-        public static bool HasSaps(TrenchStage stage) => stage >= TrenchStage.Saps;
     }
 }

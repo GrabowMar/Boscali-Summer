@@ -320,22 +320,5 @@ namespace BoscaliSummer.Features.Weather.Domain
 
             fromDeg = (towardsDeg + 180) % 360;
         }
-
-        public static string FormatHourTime(float hours)
-        {
-            if (hours < 0f || hours > 24f) return "--:--";
-            int h = (int)Math.Floor(hours) % 24;
-            int m = (int)Math.Floor((hours - Math.Floor(hours)) * 60.0) % 60;
-            return $"{h:D2}:{m:D2}";
-        }
-
-        public static string FormatMinutesDuration(float minutes)
-        {
-            if (minutes < 0f) return "--";
-            int totalM = (int)Math.Round(minutes);
-            int h = totalM / 60;
-            int m = totalM % 60;
-            return h > 0 ? $"{h}H {m:D2}M" : $"{m}M";
-        }
     }
 }

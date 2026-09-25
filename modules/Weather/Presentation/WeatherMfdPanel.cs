@@ -101,7 +101,6 @@ namespace BoscaliSummer.Features.Weather.Presentation
         private sealed class TimelineRowWidgets
         {
             public Image RiskRail;
-            public TMP_Text OffsetLabel;
             public TMP_Text RegimeBadgeText;
             public WeatherGlyph Glyph;
             public Image RegimeBadgeBorder;
@@ -452,7 +451,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
                 };
 
                 string timeText = (i == 0) ? "NOW" : $"+{offsets[i]} MIN";
-                row.OffsetLabel = AvKit.Label(
+                AvKit.Label(
                     container, timeText, new Rect(x + 8f, y, 50f, rowH),
                     (i == 0) ? AvTheme.TextPrimary : AvTheme.Dim, AvTokens.FontMicro, (i == 0) ? FontStyles.Bold : FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
 
