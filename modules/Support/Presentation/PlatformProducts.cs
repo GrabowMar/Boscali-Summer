@@ -29,7 +29,7 @@ namespace BoscaliSummer.Features.Support.Presentation
                 if (platform != null && platform.Exists)
                 {
                     GlobalPosition target = support.RadarScanTarget;
-                    OrbitState state = platform.State(support.OrbitNow, support.OrbitClock);
+                    OrbitState state = platform.State(support.OrbitNow);
                     LookAngles look = TheaterTrack.Look(state, target.x, target.z);
                     if (look.Visible)
                     {

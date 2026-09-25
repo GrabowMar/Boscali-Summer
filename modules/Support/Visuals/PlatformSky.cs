@@ -80,7 +80,6 @@ namespace BoscaliSummer.Features.Support.Visuals
             }
 
             double now = support.OrbitNow;
-            OrbitClock clock = support.OrbitClock;
             LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
             float night = level != null ? 1f - Mathf.InverseLerp(0.02f, 0.4f, level.GetAmbientLight()) : 0f;
             int used = 0;
@@ -89,13 +88,13 @@ namespace BoscaliSummer.Features.Support.Visuals
             if (own != null && own.Exists)
             {
                 NoteLaunches(own, now);
-                if (Place(used, own.State(now, clock), night, own, 0, now)) used++;
+                if (Place(used, own.State(now), night, own, 0, now)) used++;
             }
 
             IReadOnlyList<ForeignPlatform> others = support.Space.Foreign;
             for (int i = 0; i < others.Count && used < Stations; i++)
             {
-                if (Place(used, others[i].State(now, clock), night, null, others[i].Layout, now)) used++;
+                if (Place(used, others[i].State(now), night, null, others[i].Layout, now)) used++;
             }
 
             HideFrom(used);

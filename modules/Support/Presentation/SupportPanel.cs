@@ -745,7 +745,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             else
             {
                 PlatformStats stats = platform.Stats(now);
-                OrbitState state = platform.State(now, support.OrbitClock);
+                OrbitState state = platform.State(now);
                 bool holding = platform.HoldAt(now) != PlatformHold.None;
                 orbitMetric.Set(stats.Modules + "/" + OrbitalPlatform.CellCount,
                                 holding ? PlatformWords.Hold(platform.HoldAt(now))

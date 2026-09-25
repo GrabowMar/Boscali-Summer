@@ -130,13 +130,13 @@ namespace BoscaliSummer.Features.Support.Runtime
         /// Host tick: station docking, power, drag and debris, and the CYBER campaign. Clients only
         /// mirror all of it. Debris rolls use Unity's random source; the model decides the outcome.
         /// </summary>
-        public void TickHost(double now, float deltaTime, bool theaterDaylight, in OrbitClock clock, bool debris,
+        public void TickHost(double now, float deltaTime, bool theaterDaylight, bool debris,
                              float cyberIntensity, Action<FactionHQ, OrbitalPlatform> onDebris)
         {
             foreach (KeyValuePair<FactionHQ, FactionSystems> entry in systems)
             {
                 OrbitalPlatform platform = entry.Value.Platform;
-                platform.Tick(now, deltaTime, theaterDaylight, clock);
+                platform.Tick(now, deltaTime, theaterDaylight);
                 entry.Value.Cyber.Tick(now, deltaTime, cyberIntensity);
                 if (!platform.Exists || !debris) continue;
                 if (platform.NextDebris <= 0.0)

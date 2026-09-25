@@ -345,7 +345,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         {
             OrbitalPlatform platform = support != null ? support.LocalPlatform : null;
             if (platform == null || !platform.Exists) return;
-            OrbitState state = platform.State(support.OrbitNow, support.OrbitClock);
+            OrbitState state = platform.State(support.OrbitNow);
             commandX = state.SubX;
             commandZ = state.SubZ;
         }
@@ -405,9 +405,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             float dt = lastTime < 0f ? 0f : Mathf.Min(time - lastTime, 0.1f);
             lastTime = time;
             OrbitalPlatform platform = support.LocalPlatform;
-            OrbitClock clock = support.OrbitClock;
             bool station = platform != null && platform.Exists;
-            OrbitState state = station ? platform.State(support.OrbitNow, clock) : default;
+            OrbitState state = station ? platform.State(support.OrbitNow) : default;
             float constant = station && platform.Stats(support.OrbitNow).Stabilised ? GyroSlewTimeConstant : SlewTimeConstant;
             double k = dt > 0f ? 1.0 - Math.Exp(-dt / constant) : 0.0;
             aimX += (commandX - aimX) * k;
@@ -419,11 +418,11 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 var probe = new GlobalPosition((float)aimX, 0f, (float)aimZ);
                 aimHeight = SupportTargeting.TryMapPoint(probe, out Vector3 ground) ? ground.ToGlobalPosition().y : 0f;
             }
-            Paint(platform, state, support.OrbitNow, clock, slewing, textTick);
+            Paint(platform, state, support.OrbitNow, slewing, textTick);
         }
 
         /// <summary>Paint the feed and the symbology. The harness calls it with a fixture station.</summary>
-        internal void Paint(OrbitalPlatform platform, in OrbitState state, double now, in OrbitClock clock, bool slewing, bool textTick)
+        internal void Paint(OrbitalPlatform platform, in OrbitState state, double now, bool slewing, bool textTick)
         {
             bool station = platform != null && platform.Exists;
             LookAngles look = station ? TheaterTrack.Look(state, aimX, aimZ) : LookAngles.Hidden;
@@ -439,7 +438,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 pip.texture = products.Scan.Image;
                 pip.enabled = station && products.HasProduct;
             }
-            if (textTick) WriteText(platform, state, look, now, clock, slewing);
+            if (textTick) WriteText(platform, state, look, now, slewing);
         }
 
         public bool HandleKeys()
@@ -447,7 +446,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             if (support == null) return false;
             OrbitalPlatform platform = support.LocalPlatform;
             bool station = platform != null && platform.Exists;
-            OrbitState state = station ? platform.State(support.OrbitNow, support.OrbitClock) : default;
+            OrbitState state = station ? platform.State(support.OrbitNow) : default;
             Vector3 mouse = Input.mousePosition;
             bool overFeed = OverFeed(mouse);
             if (Input.GetMouseButtonDown(0) && overFeed)
@@ -574,7 +573,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             return footprint;
         }
 
-        private void WriteText(OrbitalPlatform platform, in OrbitState state, in LookAngles look, double now, in OrbitClock clock, bool slewing)
+        private void WriteText(OrbitalPlatform platform, in OrbitState state, in LookAngles look, double now, bool slewing)
         {
             bool station = platform != null && platform.Exists;
             OrbitRegime orbit = station ? platform.Orbit : OrbitRegimes.Get(OrbitRegimes.Mid);
@@ -602,13 +601,13 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             }
             else
             {
-                Set(cornerTR, station ? PlatformWords.Phase(platform, now, clock) : "NO STATION");
+                Set(cornerTR, station ? PlatformWords.Phase(platform, now) : "NO STATION");
                 passFill.rectTransform.sizeDelta = new Vector2(0f, 4f);
             }
             Set(cornerBL, look.Visible
                 ? "EL " + Deg(look.Elevation) + "   AZ " + Bearing(look.AzimuthDeg) + "   OFF-NDR " + Deg(look.OffNadir) +
                   (slewing ? " SLEW" : "") + "   SLANT " + TheaterGrid.Km(look.SlantRange) + " KM"
-                : station ? PlatformWords.Phase(platform, now, clock) : "NO TRACK");
+                : station ? PlatformWords.Phase(platform, now) : "NO TRACK");
             Set(cornerBR, "GSD " + (look.Visible ? gsd.ToString("0.00", Invariant) + " M" : "—") + "   AIM " + TheaterGrid.Kilometres(aimX, aimZ));
             Set(scaleLabel, live ? Distance(footprint * ScaleBarPixels / Mathf.Max(1f, area.width)) : "");
             float tagLeft = tagUntil - Time.unscaledTime;
@@ -793,7 +792,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             Vector3 aimLocal = new GlobalPosition((float)aimX, aimHeight, (float)aimZ).ToLocalPosition();
             OrbitalPlatform platform = support.LocalPlatform;
             float footprint = platform != null && platform.Exists
-                ? CurrentFootprint(platform.State(support.OrbitNow, support.OrbitClock))
+                ? CurrentFootprint(platform.State(support.OrbitNow))
                 : Footprints[footprintIndex];
             Camera cam = imager.Camera;
             var units = UnitRegistry.allUnits;

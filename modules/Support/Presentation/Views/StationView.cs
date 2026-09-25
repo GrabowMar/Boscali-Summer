@@ -247,7 +247,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         {
             OrbitalPlatform platform = support != null ? support.LocalPlatform : null;
             if (platform == null || support.CommandPending ||
-                platform.CheckRelocate(relocationSector, support.OrbitNow, support.OrbitClock) != PlatformDenial.None) return;
+                platform.CheckRelocate(relocationSector, support.OrbitNow) != PlatformDenial.None) return;
             support.RequestRelocate(relocationSector);
             Sent("RELOCATION ORDER SENT");
         }
@@ -493,11 +493,11 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         public void Refresh(double now, float time, bool textTick)
         {
             if (support == null) return;
-            Paint(support.LocalPlatform, support.OrbitNow, support.OrbitClock, textTick);
+            Paint(support.LocalPlatform, support.OrbitNow, textTick);
         }
 
         /// <summary>Paint from a station. The game calls it every frame; the harness with a fixture.</summary>
-        internal void Paint(OrbitalPlatform platform, double now, OrbitClock clock, bool textTick)
+        internal void Paint(OrbitalPlatform platform, double now, bool textTick)
         {
             if (awaiting && support != null && !support.CommandPending)
             {
@@ -513,7 +513,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             KeepSelection(platform);
             bool station = platform != null && platform.Exists;
             PlatformStats stats = station ? platform.Stats(now) : default;
-            OrbitState state = station ? platform.State(now, clock) : default;
+            OrbitState state = station ? platform.State(now) : default;
             PlatformFitStep step = PlatformMissions.Next(platform, plan.Mission, now);
 
             ModuleKind preview = station ? hover != ModuleKind.None ? hover : plan.Module : ModuleKind.None;
@@ -531,12 +531,12 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             }
             blueprint.Paint(platform, now, plan.Cell, preview, previewCell, previewText);
 
-            WriteHeader(platform, station, state, now, clock, stats);
-            WritePassTrack(platform, station, state, now, clock);
+            WriteHeader(platform, station, state, now, stats);
+            WritePassTrack(platform, station, state, now);
             WriteStrips(platform, station, stats, preview);
             WriteInspector(platform, station, now);
             WriteRack(platform, station, now);
-            WriteRail(platform, station, stats, step, now, clock);
+            WriteRail(platform, station, stats, step, now);
             WriteLoadout(platform, station, now);
             WriteLoop();
         }
@@ -752,7 +752,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
 
         // ---- Text --------------------------------------------------------------------------------
 
-        private void WriteHeader(OrbitalPlatform platform, bool station, in OrbitState state, double now, in OrbitClock clock,
+        private void WriteHeader(OrbitalPlatform platform, bool station, in OrbitState state, double now,
             in PlatformStats stats)
         {
             Set(subtitle, station ? "ORBITAL PLATFORM · " + stats.Modules + "/" + OrbitalPlatform.CellCount + " CELLS · " +
@@ -782,21 +782,21 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                           "GET " + TheaterGrid.Elapsed(platform != null ? platform.Elapsed(now) : 0.0));
         }
 
-        private void WritePassTrack(OrbitalPlatform platform, bool station, in OrbitState state, double now, in OrbitClock clock)
+        private void WritePassTrack(OrbitalPlatform platform, bool station, in OrbitState state, double now)
         {
             PlatformHold hold = station ? platform.HoldAt(now) : PlatformHold.None;
             Set(coverage, !station ? "Launch the core to establish persistent coverage."
                 : hold != PlatformHold.None ? PlatformWords.Hold(hold) + " · " + PlatformWords.Clock(platform.CycleStart - now)
                 : StationKeeping.Name(platform.PositionIndex) + " · " + TheaterGrid.Kilometres(state.SubX, state.SubZ));
             bool propulsion = station && platform.FittedOnline(ModuleKind.Propulsion, now);
-            PlatformDenial denial = station ? platform.CheckRelocate(relocationSector, now, clock) : PlatformDenial.NoPlatform;
+            PlatformDenial denial = station ? platform.CheckRelocate(relocationSector, now) : PlatformDenial.NoPlatform;
             bool pending = support != null && support.CommandPending;
             bool enabled = station && denial == PlatformDenial.None && support != null && !pending;
             string relocationHint = !station ? "LAUNCH THE CORE TO ESTABLISH COVERAGE"
                 : !propulsion ? "FIT PRP PROPULSION TO RELOCATE"
                 : pending ? "AWAITING HOST REPLY"
                 : relocationSector == platform.PositionIndex ? "SELECT A DIFFERENT SECTOR TO MOVE"
-                : PlatformWords.Denial(denial, platform, PlatformAbility.Rephase, now, clock);
+                : PlatformWords.Denial(denial, platform, PlatformAbility.Rephase, now);
             Set(mobility, "DESTINATION · " + StationKeeping.Name(relocationSector) + "\n" + relocationHint);
             for (int i = 0; i < sectors.Length; i++)
             {
@@ -986,8 +986,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             }
         }
 
-        private void WriteRail(OrbitalPlatform platform, bool station, in PlatformStats stats, in PlatformFitStep step, double now,
-            in OrbitClock clock)
+        private void WriteRail(OrbitalPlatform platform, bool station, in PlatformStats stats, in PlatformFitStep step, double now)
         {
             int current;
             string etaText;

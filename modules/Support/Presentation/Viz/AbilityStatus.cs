@@ -125,7 +125,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
             PlatformDenial denial = support.PlatformCheck(ability.Value);
             // An open orbital gate has nothing to add; "READY · READY" helped nobody.
             reason = denial == PlatformDenial.None ? null
-                : PlatformWords.Denial(denial, support.LocalPlatform, ability.Value, support.OrbitNow, support.OrbitClock);
+                : PlatformWords.Denial(denial, support.LocalPlatform, ability.Value, support.OrbitNow);
             return denial == PlatformDenial.None;
         }
 

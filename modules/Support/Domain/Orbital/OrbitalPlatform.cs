@@ -219,7 +219,7 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
         /// <summary>The hold in force at <paramref name="now"/>, or none once the cycle has begun.</summary>
         public PlatformHold HoldAt(double now) => Exists && now < CycleStart ? Hold : PlatformHold.None;
 
-        public OrbitState State(double now, in OrbitClock clock) =>
+        public OrbitState State(double now) =>
             StationKeeping.State(Seed, Orbit, now - CycleStart);
 
         // ---- Grid --------------------------------------------------------------------------
@@ -521,7 +521,7 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
         /// Dock arrivals, end holds, run the power budget and burn drag fuel. Solar works out of
         /// the theatre arc or over a theatre in daylight; loads are shed during a brownout.
         /// </summary>
-        public void Tick(double now, float deltaTime, bool theaterDaylight, in OrbitClock clock)
+        public void Tick(double now, float deltaTime, bool theaterDaylight)
         {
             if (!Exists || float.IsNaN(deltaTime) || deltaTime <= 0f) return;
             float dt = Math.Min(deltaTime, StepLimitSeconds);
@@ -529,7 +529,7 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
             if (Hold != PlatformHold.None && now >= CycleStart) Hold = PlatformHold.None;
 
             PlatformStats stats = Stats(now);
-            bool sunlit = State(now, clock).Phase != OrbitPhase.InPass || theaterDaylight;
+            bool sunlit = State(now).Phase != OrbitPhase.InPass || theaterDaylight;
             float generation = (sunlit ? stats.SolarKw : 0f) + stats.SteadyKw;
             float load = Brownout ? 0f : stats.LoadKw;
             Energy = Math.Max(0f, Math.Min(stats.StorageKj, Energy + (generation - load) * dt));
@@ -590,7 +590,7 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
 
         // ---- Abilities ----------------------------------------------------------------------
 
-        public PlatformDenial Check(PlatformAbility ability, double now, in OrbitClock clock)
+        public PlatformDenial Check(PlatformAbility ability, double now)
         {
             if (!Exists) return PlatformDenial.NoPlatform;
             AbilityInfo info = PlatformAbilities.Info(ability);
@@ -600,7 +600,7 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
             if (now < CycleStart) return PlatformDenial.Holding;
             if (info.Window != AbilityWindow.Any)
             {
-                bool overhead = State(now, clock).InPass;
+                bool overhead = State(now).InPass;
                 if (info.Window == AbilityWindow.Overhead && !overhead) return PlatformDenial.NotOverhead;
                 if (info.Window == AbilityWindow.Away && overhead) return PlatformDenial.Overhead;
             }
@@ -614,10 +614,10 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
         public float ShiftFuel(byte target) =>
             Math.Abs(target - Regime) * PlatformAbilities.ShiftFuelPerBand;
 
-        public PlatformDenial CheckShift(byte target, double now, in OrbitClock clock)
+        public PlatformDenial CheckShift(byte target, double now)
         {
             if (!OrbitRegimes.Valid(target) || target == Regime) return PlatformDenial.SameOrbit;
-            PlatformDenial denial = Check(PlatformAbility.OrbitShift, now, clock);
+            PlatformDenial denial = Check(PlatformAbility.OrbitShift, now);
             if (denial != PlatformDenial.None) return denial;
             return Fuel + 0.001f < ShiftFuel(target) ? PlatformDenial.NoFuel : PlatformDenial.None;
         }
@@ -644,15 +644,15 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
             if (info.RechargeSeconds > 0f) readyAt[(int)ability] = now + RechargeSeconds(ability, now);
         }
 
-        public PlatformDenial CheckRelocate(int sector, double now, in OrbitClock clock)
+        public PlatformDenial CheckRelocate(int sector, double now)
         {
             if (!StationKeeping.Valid(sector) || sector == PositionIndex) return PlatformDenial.SameOrbit;
-            return Check(PlatformAbility.Rephase, now, clock);
+            return Check(PlatformAbility.Rephase, now);
         }
 
-        public bool TryRelocate(int sector, double now, in OrbitClock clock)
+        public bool TryRelocate(int sector, double now)
         {
-            if (CheckRelocate(sector, now, clock) != PlatformDenial.None) return false;
+            if (CheckRelocate(sector, now) != PlatformDenial.None) return false;
             Consume(PlatformAbility.Rephase, now);
             Seed = StationKeeping.Route(PositionIndex, sector);
             CycleStart = now + RephaseLeadSeconds;
@@ -660,9 +660,9 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
             return true;
         }
 
-        public bool TryShift(byte target, double now, in OrbitClock clock, int seed)
+        public bool TryShift(byte target, double now, int seed)
         {
-            if (CheckShift(target, now, clock) != PlatformDenial.None) return false;
+            if (CheckShift(target, now) != PlatformDenial.None) return false;
             Fuel = Math.Max(0f, Fuel - ShiftFuel(target));
             Regime = target;
             Seed = seed;
@@ -849,7 +849,7 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
             if (!known || Math.Abs(cycleStart - CycleStart) > OrbitalPlatform.MirrorClockTolerance) CycleStart = cycleStart;
         }
 
-        public OrbitState State(double now, in OrbitClock clock) =>
+        public OrbitState State(double now) =>
             StationKeeping.State(Seed, OrbitRegimes.Get(Regime), now - CycleStart);
     }
 }

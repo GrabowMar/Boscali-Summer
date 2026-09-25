@@ -11,9 +11,6 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
         public readonly double Altitude;
         public readonly double InclinationDeg;
 
-        /// <summary>Simulated out-of-theatre arc, seconds, before the next pass begins.</summary>
-        public readonly double GapSeconds;
-
         /// <summary>Imager ground sample distance straight down, metres.</summary>
         public readonly double NadirGsd;
 
@@ -30,7 +27,7 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
         public readonly float DragFuelPerSecond;
 
         public OrbitRegime(byte index, string code, string name, double altitude, double inclinationDeg,
-                           double gapSeconds, double nadirGsd, float scanScale, float rodScatter, float empScale,
+                           double nadirGsd, float scanScale, float rodScatter, float empScale,
                            float dragFuelPerSecond)
         {
             Index = index;
@@ -38,7 +35,6 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
             Name = name;
             Altitude = altitude;
             InclinationDeg = inclinationDeg;
-            GapSeconds = gapSeconds;
             NadirGsd = nadirGsd;
             ScanScale = scanScale;
             RodScatter = rodScatter;
@@ -56,22 +52,12 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
 
         public static readonly OrbitRegime[] All =
         {
-            new OrbitRegime(Standard, "LEO", "LOW EARTH ORBIT", 500000.0, 51.6, 60.0, 0.4, 1f, 15f, 1f, 0f)
+            new OrbitRegime(Standard, "LEO", "LOW EARTH ORBIT", 500000.0, 51.6, 0.4, 1f, 15f, 1f, 0f)
         };
 
         public static bool Valid(int index) => index == 0;
 
         public static OrbitRegime Get(int index) => All[0];
-    }
-
-    /// <summary>Timing knob the host decides; clients use the host's value from settings.</summary>
-    internal readonly struct OrbitClock
-    {
-        public readonly double GapScale;
-
-        public OrbitClock(double gapScale) => GapScale = OrbitMath.Clamp(gapScale, 0.25, 4.0);
-
-        public static OrbitClock Default => new OrbitClock(1.0);
     }
 
     /// <summary>The geometry of one theatre pass: heading and direction.</summary>
