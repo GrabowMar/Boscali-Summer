@@ -113,8 +113,9 @@ Assembly pluginAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(plugi
     ("RadialMenuAction", "TriggerAction"),
     ("PilotPlayerState", "FixedUpdateState"),
     ("NuclearOption.Jobs.DetectorManager", "RequestLoSCheck"),
-    ("GraphicsMenu", "Start"),
-    ("GraphicsMenu", "RefreshUI")
+    ("CameraCockpitState", "UpdateState"),
+    ("CameraCockpitState", "LeaveState"),
+    ("Gun", "SpawnBullet")
 };
 
 foreach ((string typeName, string fieldName) in new[]
@@ -195,8 +196,20 @@ foreach ((string typeName, string methodName) in targets)
     ("Lightning", "flashLight"),
     ("CameraStateManager", "cloudSpeed"),
     ("CameraStateManager", "underwater"),
-    ("GraphicsMenu", "grassToggle"),
-    ("GraphicsMenu", "debugVisToggle")
+    ("NuclearOption.Effects.DetailRenderer", "treeRenderers"),
+    ("NuclearOption.Effects.DetailRenderer", "grassRenderers"),
+    ("NuclearOption.Effects.TreeRenderer", "mesh"),
+    ("NuclearOption.Effects.GrassRenderer", "grassMaterial"),
+    ("NuclearOption.Effects.GrassRenderer", "grassMaterialProps"),
+    ("LevelInfo", "PostProcessing"),
+    ("LevelInfo", "bloom"),
+    ("LevelInfo", "windVelocity"),
+    ("LevelInfo", "sun"),
+    ("CameraStateManager", "cameraPivot"),
+    ("Weapon", "attachedUnit"),
+    ("Weapon", "info"),
+    ("WeaponInfo", "massPerRound"),
+    ("WeaponInfo", "muzzleVelocity")
 };
 
 foreach ((string typeName, string fieldName) in fields)
@@ -432,8 +445,9 @@ string[] patchTypes =
     ,"BoscaliSummer.Features.Trenches.Visuals.TrenchNestServerPatch"
     ,"BoscaliSummer.Features.Comms.Patches.CommsMapControlsPatch"
     ,"BoscaliSummer.Features.Trenches.Runtime.TrenchWorksDetectionPatch"
-    ,"BoscaliSummer.Features.Visuals.Patches.GraphicsMenuStartPatch"
-    ,"BoscaliSummer.Features.Visuals.Patches.GraphicsMenuRefreshPatch"
+    ,"BoscaliSummer.Features.Immersion.Patches.CockpitHeadRotationPatch"
+    ,"BoscaliSummer.Features.Immersion.Patches.CockpitHeadResetPatch"
+    ,"BoscaliSummer.Features.Immersion.Patches.GunShotShakePatch"
 };
 
 foreach (string patchType in patchTypes)
@@ -460,6 +474,7 @@ string[] featureTypes =
     ,"BoscaliSummer.Features.Hud.HudFeature"
     ,"BoscaliSummer.Features.Comms.CommsFeature"
     ,"BoscaliSummer.Features.Visuals.VisualsFeature"
+    ,"BoscaliSummer.Features.Immersion.ImmersionFeature"
 };
 foreach (string featureType in featureTypes)
     if (pluginAssembly.GetType(featureType, false) == null)

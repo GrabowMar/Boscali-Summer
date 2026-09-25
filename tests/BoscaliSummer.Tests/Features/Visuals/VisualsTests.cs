@@ -7,93 +7,99 @@ namespace BoscaliSummer.Tests.Features.Visuals
     {
         public static void Run()
         {
-            GForceVignette_BelowThreshold_RemainsBaseline();
-            GForceVignette_AboveThreshold_RampsTowardsMax();
-            GForceSaturation_LossAtHighG();
-            GForceRedout_NegativeGLoad();
-            TransonicBlur_ScalesWithMachAndRoll();
-            WindSwayDisplacement_RootAnchoredAtZero();
-            WindSwayDisplacement_CanopySwaysNaturally();
+            Redout_OnlyUnderNegativeG();
+            Strain_OnlyUnderHeavyPositiveG();
+            TreeSway_RootsStayPut();
+            TreeSway_CrownMovesAndLeansDownwind();
+            TreeSway_NeighbouringCrownsDriftOutOfStep();
+            TreeSway_StaysBoundedInAGale();
+            TreeSway_CalmAirStillBreathes();
+            GrassWind_ScalesWithWindAndDial();
         }
 
-        private static void GForceVignette_BelowThreshold_RemainsBaseline()
+        private static void Redout_OnlyUnderNegativeG()
         {
-            float v = VisualsMath.CalculateGForceVignette(1.0f, 0.18f, 0.05f);
-            TestAssert.That(Math.Abs(v - 0.18f) < 0.001f, "1G steady flight must retain baseline vignette");
-
-            float vPull = VisualsMath.CalculateGForceVignette(3.0f, 0.18f, 0.05f);
-            TestAssert.That(Math.Abs(vPull - 0.18f) < 0.001f, "3G maneuver below threshold must retain baseline vignette");
+            TestAssert.That(VisualsMath.CalculateGForceRedout(1f) == 0f, "1 G must not red out");
+            TestAssert.That(VisualsMath.CalculateGForceRedout(9f) == 0f, "positive G belongs to the game's own G-LOC, not red-out");
+            TestAssert.That(VisualsMath.CalculateGForceRedout(-1.5f) == 0f, "-1.5 G is the red-out threshold");
+            float mid = VisualsMath.CalculateGForceRedout(-2.75f);
+            TestAssert.That(Math.Abs(mid - 0.5f) < 0.05f, $"-2.75 G must be about half red-out, was {mid}");
+            TestAssert.That(VisualsMath.CalculateGForceRedout(-6f) == 1f, "extreme negative G clamps at 1");
         }
 
-        private static void GForceVignette_AboveThreshold_RampsTowardsMax()
+        private static void Strain_OnlyUnderHeavyPositiveG()
         {
-            float current = 0.18f;
-            // Simulate 1 second of sustained 8.5G pull at 60 FPS
-            for (int i = 0; i < 60; i++)
+            TestAssert.That(VisualsMath.CalculateGStrain(4f) == 0f, "moderate G must not fringe");
+            TestAssert.That(VisualsMath.CalculateGStrain(-5f) == 0f, "negative G must not fringe");
+            float seven = VisualsMath.CalculateGStrain(7f);
+            TestAssert.That(seven > 0.3f && seven < 0.7f, $"7 G must fringe partly, was {seven}");
+            TestAssert.That(VisualsMath.CalculateGStrain(12f) == 1f, "strain clamps at 1");
+        }
+
+        private static void TreeSway_RootsStayPut()
+        {
+            for (float t = 0f; t < 20f; t += 0.37f)
             {
-                current = VisualsMath.CalculateGForceVignette(8.5f, current, 1f / 60f);
+                var (dx, dy, dz) = VisualsMath.TreeSway(t, 3f, 0f, -4f, 26f, 1f, 0f, 1.5f);
+                TestAssert.That(dx == 0f && dy == 0f && dz == 0f, "a vertex on the ground plane must not move");
+                var buried = VisualsMath.TreeSway(t, 3f, -6f, -4f, 26f, 1f, 0f, 1.5f);
+                TestAssert.That(buried == (0f, 0f, 0f), "buried trunk vertices must not move");
             }
-
-            TestAssert.That(current > 0.80f, $"8.5G sustained pull must approach max blackout vignette, was {current}");
-            TestAssert.That(current <= 0.85f, "Blackout vignette must not exceed ceiling");
+            var low = VisualsMath.TreeSway(3f, 3f, 1f, -4f, 26f, 1f, 0f, 1.5f);
+            TestAssert.That(Math.Abs(low.dx) < 0.01f && Math.Abs(low.dz) < 0.01f, "the lower trunk barely moves");
         }
 
-        private static void GForceSaturation_LossAtHighG()
+        private static void TreeSway_CrownMovesAndLeansDownwind()
         {
-            float satNormal = VisualsMath.CalculateGForceSaturation(2.5f, 5f);
-            TestAssert.That(Math.Abs(satNormal - 5f) < 0.01f, "Normal G must preserve color saturation");
-
-            float satGreyout = VisualsMath.CalculateGForceSaturation(6.5f, 5f);
-            TestAssert.That(satGreyout < 0f, $"6.5G must cause greying out (negative saturation), was {satGreyout}");
-
-            float satBlackout = VisualsMath.CalculateGForceSaturation(8.5f, 5f);
-            TestAssert.That(Math.Abs(satBlackout - (-100f)) < 0.01f, $"8.5G peak must cause total desaturation (-100), was {satBlackout}");
+            float sumAlong = 0f, max = 0f;
+            for (int i = 0; i < 400; i++)
+            {
+                float t = i * 0.05f;
+                var (dx, _, dz) = VisualsMath.TreeSway(t, 5f, 24f, 2f, 26f, 0f, 1f, 1f);
+                sumAlong += dz;
+                max = Math.Max(max, (float)Math.Sqrt(dx * dx + dz * dz));
+            }
+            TestAssert.That(max > 0.2f, $"a crown top must visibly sway, peak {max}");
+            TestAssert.That(sumAlong / 400f > 0.05f, $"the crown must lean downwind on average, mean {sumAlong / 400f}");
         }
 
-        private static void GForceRedout_NegativeGLoad()
+        private static void TreeSway_NeighbouringCrownsDriftOutOfStep()
         {
-            float redoutNormal = VisualsMath.CalculateGForceRedout(1.0f);
-            TestAssert.That(redoutNormal == 0f, "Positive G must have zero redout");
+            var a = VisualsMath.TreeSway(4f, 0f, 20f, 0f, 26f, 1f, 0f, 1f);
+            var b = VisualsMath.TreeSway(4f, 20f, 20f, 15f, 26f, 1f, 0f, 1f);
+            TestAssert.That(Math.Abs(a.dx - b.dx) > 0.02f, "crowns 20 m apart must not move in lockstep");
 
-            float redoutMild = VisualsMath.CalculateGForceRedout(-1.5f);
-            TestAssert.That(redoutMild == 0f, "-1.5G threshold must have zero redout");
-
-            float redoutSevere = VisualsMath.CalculateGForceRedout(-2.75f);
-            TestAssert.That(Math.Abs(redoutSevere - 0.5f) < 0.05f, $"-2.75G must yield approximately 0.5 redout, was {redoutSevere}");
-
-            float redoutExtreme = VisualsMath.CalculateGForceRedout(-5.0f);
-            TestAssert.That(redoutExtreme == 1.0f, "Extreme negative G must clamp at 1.0 redout");
+            // Two vertices of one crown, 0.5 m apart, must move almost together.
+            var c = VisualsMath.TreeSway(4f, 7f, 20f, 3f, 26f, 1f, 0f, 1f);
+            var d = VisualsMath.TreeSway(4f, 7.5f, 20f, 3f, 26f, 1f, 0f, 1f);
+            TestAssert.That(Math.Abs(c.dx - d.dx) < 0.15f, "adjacent vertices must not tear the crown apart");
         }
 
-        private static void TransonicBlur_ScalesWithMachAndRoll()
+        private static void TreeSway_StaysBoundedInAGale()
         {
-            float blurSubsonic = VisualsMath.CalculateTransonicBlur(0.70f, 0f);
-            TestAssert.That(blurSubsonic == 0f, "Subsonic cruise must have zero motion blur");
-
-            float blurTransonic = VisualsMath.CalculateTransonicBlur(0.95f, 0f);
-            TestAssert.That(blurTransonic > 0.10f, $"Mach 0.95 straight flight must engage mild motion blur, was {blurTransonic}");
-
-            float blurSupersonicRoll = VisualsMath.CalculateTransonicBlur(1.20f, 180f);
-            TestAssert.That(blurSupersonicRoll > blurTransonic, "Supersonic rolling break must intensify motion blur");
+            float amplitude = VisualsMath.TreeSwayAmplitude(60f) * 2.5f;
+            for (float t = 0f; t < 60f; t += 0.21f)
+            {
+                var (dx, dy, dz) = VisualsMath.TreeSway(t, 11f, 26f, -9f, 26f, 0.6f, 0.8f, amplitude);
+                TestAssert.That(Math.Abs(dx) < 8f && Math.Abs(dz) < 8f && Math.Abs(dy) < 4f,
+                    $"max dial in a gale must stay bounded, got ({dx}, {dy}, {dz})");
+            }
         }
 
-        private static void WindSwayDisplacement_RootAnchoredAtZero()
+        private static void TreeSway_CalmAirStillBreathes()
         {
-            var (dxBase, dzBase) = VisualsMath.CalculateWindSwayDisplacement(10.0f, 100f, 200f, 0f, 16f);
-            TestAssert.That(dxBase == 0f && dzBase == 0f, "Tree root at ground level (localY = 0) must have exactly zero displacement");
-
-            var (dxUnder, dzUnder) = VisualsMath.CalculateWindSwayDisplacement(10.0f, 100f, 200f, -2f, 16f);
-            TestAssert.That(dxUnder == 0f && dzUnder == 0f, "Negative localY must have zero displacement");
+            TestAssert.That(VisualsMath.TreeSwayAmplitude(0f) > 0.1f, "calm air still moves crowns a little");
+            TestAssert.That(VisualsMath.TreeSwayAmplitude(15f) > VisualsMath.TreeSwayAmplitude(3f), "stronger wind sways more");
+            TestAssert.That(VisualsMath.TreeSwayAmplitude(500f) <= 1.8f, "amplitude is capped");
         }
 
-        private static void WindSwayDisplacement_CanopySwaysNaturally()
+        private static void GrassWind_ScalesWithWindAndDial()
         {
-            var (dxCanopy1, dzCanopy1) = VisualsMath.CalculateWindSwayDisplacement(2.5f, 100f, 200f, 16f, 16f);
-            TestAssert.That(Math.Abs(dxCanopy1) > 0.01f || Math.Abs(dzCanopy1) > 0.01f, "Canopy at tree top must sway");
-
-            // Spatial phase shift: distant tree at same height and time must have different displacement phase
-            var (dxCanopy2, dzCanopy2) = VisualsMath.CalculateWindSwayDisplacement(2.5f, 500f, 800f, 16f, 16f);
-            TestAssert.That(dxCanopy1 != dxCanopy2 || dzCanopy1 != dzCanopy2, "Distant trees must have traveling wave phase differences");
+            float calm = VisualsMath.GrassWindStrength(0.25f, 0f, 1f);
+            float windy = VisualsMath.GrassWindStrength(0.25f, 12f, 1f);
+            TestAssert.That(windy > calm, "grass must wave harder in wind");
+            TestAssert.That(VisualsMath.GrassWindStrength(0.25f, 12f, 2f) > windy, "the dial scales grass too");
+            TestAssert.That(VisualsMath.GrassWindSpeed(2.12f, 40f) <= 2.12f * 1.8f + 0.001f, "grass speed is capped");
         }
     }
 }

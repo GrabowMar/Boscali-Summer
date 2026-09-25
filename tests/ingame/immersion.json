@@ -1,0 +1,301 @@
+{
+ "name": "immersion",
+ "mods": [
+  "wingcommand",
+  "boscalisummer"
+ ],
+ "timeout_s": 300,
+ "ops": [
+  {
+   "op": "spawn",
+   "id": "lead",
+   "type": "FS-20 Vortex",
+   "at": {
+    "map": [
+     0,
+     0
+    ]
+   },
+   "altitude": 800,
+   "speed": 170,
+   "heading": 0
+  },
+  {
+   "op": "record",
+   "ids": [
+    "lead"
+   ],
+   "hz": 2
+  },
+  {
+   "op": "fly",
+   "id": "lead",
+   "program": [
+    {
+     "orbit": {
+      "bank": 55,
+      "seconds": 300
+     }
+    }
+   ]
+  },
+  {
+   "op": "wait",
+   "seconds": 8
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Immersion.Runtime.ImmersionAutomation.SetTime",
+   "args": {
+    "hour": 13
+   },
+   "store": "noon"
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Weather.Runtime.WeatherAutomation.View",
+   "args": {
+    "view": "cockpit",
+    "follow": "lead"
+   },
+   "store": "view"
+  },
+  {
+   "op": "wait",
+   "seconds": 5
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Immersion.Runtime.ImmersionAutomation.Readout",
+   "store": "cockpit"
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Visuals.Runtime.VisualsAutomation.Capture",
+   "args": {
+    "name": "head_real"
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 1
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Immersion.Runtime.ImmersionAutomation.DebugForce",
+   "args": {
+    "y": 7.5,
+    "seconds": 5
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 2.5
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Immersion.Runtime.ImmersionAutomation.Readout",
+   "store": "g7"
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Visuals.Runtime.VisualsAutomation.Capture",
+   "args": {
+    "name": "head_g7"
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 1
+  },
+  {
+   "op": "wait",
+   "seconds": 3
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Immersion.Runtime.ImmersionAutomation.DebugForce",
+   "args": {
+    "x": 0.6,
+    "y": 1,
+    "seconds": 4
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 2
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Immersion.Runtime.ImmersionAutomation.Readout",
+   "store": "side"
+  },
+  {
+   "op": "wait",
+   "seconds": 3
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Immersion.Runtime.ImmersionAutomation.Set",
+   "args": {
+    "head": false
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 3
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Immersion.Runtime.ImmersionAutomation.Readout",
+   "store": "headOff"
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Visuals.Runtime.VisualsAutomation.Capture",
+   "args": {
+    "name": "head_off"
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 1
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Immersion.Runtime.ImmersionAutomation.Set",
+   "args": {
+    "head": true
+   }
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Immersion.Runtime.ImmersionAutomation.LookAtSun",
+   "args": {
+    "offset": 9
+   },
+   "store": "sun"
+  },
+  {
+   "op": "wait",
+   "seconds": 2
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Immersion.Runtime.ImmersionAutomation.HideUi",
+   "args": {
+    "hide": true
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 1
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Immersion.Runtime.ImmersionAutomation.Readout",
+   "store": "sunOn"
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Visuals.Runtime.VisualsAutomation.Capture",
+   "args": {
+    "name": "sun_on"
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 1
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Immersion.Runtime.ImmersionAutomation.Set",
+   "args": {
+    "glare": false
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 2
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Immersion.Runtime.ImmersionAutomation.Readout",
+   "store": "sunOff"
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Visuals.Runtime.VisualsAutomation.Capture",
+   "args": {
+    "name": "sun_off"
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 1
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Immersion.Runtime.ImmersionAutomation.Set",
+   "args": {
+    "glare": true
+   }
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Immersion.Runtime.ImmersionAutomation.HideUi",
+   "args": {
+    "hide": false
+   }
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Immersion.Runtime.ImmersionAutomation.Readout",
+   "store": "end"
+  },
+  {
+   "op": "end"
+  }
+ ],
+ "checks": [
+  {
+   "check": "status_ok"
+  },
+  {
+   "check": "alive",
+   "ids": [
+    "lead"
+   ]
+  },
+  {
+   "check": "result_above",
+   "path": "cockpit.forceY",
+   "min": 1.2
+  },
+  {
+   "check": "result_above",
+   "path": "g7.headPitch",
+   "min": 1.5
+  },
+  {
+   "check": "result_below",
+   "path": "side.headRoll",
+   "max": -0.5
+  },
+  {
+   "check": "result_below",
+   "path": "headOff.headPitch",
+   "max": 0.1
+  },
+  {
+   "check": "result_above",
+   "path": "sunOn.sunGlare",
+   "min": 0.3
+  },
+  {
+   "check": "result_below",
+   "path": "sunOff.sunGlare",
+   "max": 0.01
+  }
+ ]
+}

@@ -71,7 +71,8 @@ namespace BoscaliSummer
                 settings.Autopilot.Enabled,
                 settings.QoL.Enabled,
                 settings.Campaign.Enabled,
-                settings.Visuals.Enabled
+                settings.Visuals.Enabled,
+                settings.Immersion.Enabled
             };
             string[] names =
             {
@@ -90,7 +91,8 @@ namespace BoscaliSummer
                 "Autopilot",
                 "Quality of life",
                 "Campaign mission install",
-                "Visual enhancements and post-processing"
+                "Visual enhancements and post-processing",
+                "Cockpit feel: head motion, shake, sun glare"
             };
 
             var hints = new Dictionary<ConfigEntryBase, ConfigurationManagerAttributes>(ordered.Length);
@@ -108,35 +110,6 @@ namespace BoscaliSummer
             return hints;
         }
 
-        private static Dictionary<ConfigEntryBase, ConfigurationManagerAttributes> VisualEntries(
-            ModConfiguration settings)
-        {
-            if (settings.Visuals == null) return new Dictionary<ConfigEntryBase, ConfigurationManagerAttributes>();
-
-            (ConfigEntryBase Entry, string Name, int Order)[] items =
-            {
-                (settings.Visuals.CinematicPostFxEnabled, "Cinematic Post-FX (ACES / Bloom)", 60),
-                (settings.Visuals.GForceEffectsEnabled, "G-Force Visual Dynamics (Blackout / Redout)", 50),
-                (settings.Visuals.MotionBlurEnabled, "High-Speed Transonic Blur", 40),
-                (settings.Visuals.FoliageDynamicsEnabled, "Foliage Wind Dynamics", 30),
-                (settings.Visuals.BloomIntensity, "Bloom Intensity", 20),
-                (settings.Visuals.FoliageSwayStrength, "Foliage Sway Multiplier", 10)
-            };
-
-            var map = new Dictionary<ConfigEntryBase, ConfigurationManagerAttributes>(items.Length);
-            foreach (var item in items)
-            {
-                map[item.Entry] = new ConfigurationManagerAttributes
-                {
-                    IsAdvanced = false,
-                    Category = "Visual Enhancements",
-                    DispName = item.Name,
-                    Order = item.Order
-                };
-            }
-            return map;
-        }
-
         /// <summary>
         /// Marks everything the window should not open on. Call once, after every module has
         /// bound its settings.
@@ -148,7 +121,6 @@ namespace BoscaliSummer
             if (description == null) return;
 
             Dictionary<ConfigEntryBase, ConfigurationManagerAttributes> switches = Switches(settings);
-            Dictionary<ConfigEntryBase, ConfigurationManagerAttributes> visuals = VisualEntries(settings);
             foreach (KeyValuePair<ConfigDefinition, ConfigEntryBase> bound in config)
             {
                 ConfigEntryBase entry = bound.Value;
@@ -161,7 +133,7 @@ namespace BoscaliSummer
                 if (entry.SettingType == typeof(KeyCode)) continue;
 
                 ConfigurationManagerAttributes hint;
-                if (!switches.TryGetValue(entry, out hint) && !visuals.TryGetValue(entry, out hint))
+                if (!switches.TryGetValue(entry, out hint))
                 {
                     hint = new ConfigurationManagerAttributes { IsAdvanced = true };
                 }
