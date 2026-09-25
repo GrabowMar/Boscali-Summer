@@ -98,7 +98,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
         public bool RequestReinforcement(string key)
         {
             if (!authoritative || string.IsNullOrEmpty(key)) return false;
-            if (!TryGetLocalFaction(out FactionHQ hq) || hq.preventDonation) return false;
+            if (!GameAccess.TryGetLocalFaction(out FactionHQ hq) || hq.preventDonation) return false;
             if (!TryResolveGroup(hq, key, out int index, out Faction.ConvoyGroup group)) return false;
 
             float cost = group.GetCost();
@@ -122,7 +122,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             options.Clear();
             funds = float.NaN;
 
-            if (!TryGetLocalFaction(out FactionHQ hq)) return;
+            if (!GameAccess.TryGetLocalFaction(out FactionHQ hq)) return;
             if (authoritative) funds = hq.factionFunds;
 
             if (authoritative && hq.preventDonation) return;
@@ -159,7 +159,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
 
         private void RebuildReadiness()
         {
-            if (!TryGetLocalFaction(out FactionHQ hq) || hq.RearmMissionController == null)
+            if (!GameAccess.TryGetLocalFaction(out FactionHQ hq) || hq.RearmMissionController == null)
             {
                 readiness = default;
                 return;
@@ -234,15 +234,6 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
                 return true;
             }
             return false;
-        }
-
-        private static bool TryGetLocalFaction(out FactionHQ hq)
-        {
-            hq = null;
-            if (!GameManager.GetLocalHQ(out FactionHQ local) || local == null || local.faction == null)
-                return false;
-            hq = local;
-            return true;
         }
     }
 }

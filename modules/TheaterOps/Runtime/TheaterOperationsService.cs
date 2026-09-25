@@ -160,7 +160,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
         {
             if (delta <= 0f) return;
             if (delta > 1f) delta = 1f;
-            if (!TryGetLocalFaction(out FactionHQ hq)) return;
+            if (!GameAccess.TryGetLocalFaction(out FactionHQ hq)) return;
             if (!table.TryGet(hq.faction.factionName, out FactionOffensives faction)) return;
 
             OffensiveTiming timing = Timing();
@@ -186,7 +186,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
 
         private void SyncHost()
         {
-            if (!TryGetLocalFaction(out FactionHQ hq)) return;
+            if (!GameAccess.TryGetLocalFaction(out FactionHQ hq)) return;
             string factionName = hq.faction.factionName;
 
             if (!table.TryGet(factionName, out FactionOffensives faction))
@@ -391,7 +391,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             nextView = now + ViewInterval;
 
             views.Clear();
-            if (!TryGetLocalFaction(out FactionHQ hq) || hq.faction == null) return;
+            if (!GameAccess.TryGetLocalFaction(out FactionHQ hq) || hq.faction == null) return;
             string factionName = hq.faction.factionName;
 
             if (authoritative)
@@ -416,7 +416,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
         {
             get
             {
-                if (!TryGetLocalFaction(out FactionHQ hq) || hq.faction == null) return null;
+                if (!GameAccess.TryGetLocalFaction(out FactionHQ hq) || hq.faction == null) return null;
                 if (authoritative) return director?.DirectionOf(hq.faction.factionName);
                 return remoteDirection.TryGetValue(hq.faction.factionName, out RemoteDirection mirror)
                     ? mirror.Direction : null;
@@ -427,7 +427,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
         {
             get
             {
-                if (!TryGetLocalFaction(out FactionHQ hq) || hq.faction == null) return null;
+                if (!GameAccess.TryGetLocalFaction(out FactionHQ hq) || hq.faction == null) return null;
                 if (authoritative) return director?.InfluenceOf(hq.faction.factionName);
                 return remoteDirection.TryGetValue(hq.faction.factionName, out RemoteDirection mirror)
                     ? mirror.Influence : null;
@@ -439,7 +439,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             get
             {
                 logView.Clear();
-                if (!TryGetLocalFaction(out FactionHQ hq) || hq.faction == null) return logView;
+                if (!GameAccess.TryGetLocalFaction(out FactionHQ hq) || hq.faction == null) return logView;
                 if (authoritative)
                 {
                     director?.CopyStaffLog(hq.faction.factionName, logView);
@@ -474,7 +474,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             if (!Available || director == null) return false;
             if (authoritative)
             {
-                if (!TryGetLocalFaction(out FactionHQ hq) || hq.faction == null) return false;
+                if (!GameAccess.TryGetLocalFaction(out FactionHQ hq) || hq.faction == null) return false;
                 return director.ApplyInfluence(
                     hq.faction.factionName, kind, value, value2, key, LocalSetter());
             }
@@ -505,7 +505,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
         internal bool PrepareOperation(out int id)
         {
             id = -1;
-            if (!authoritative || !TryGetLocalFaction(out FactionHQ hq)) return false;
+            if (!authoritative || !GameAccess.TryGetLocalFaction(out FactionHQ hq)) return false;
             if (hq.preventDonation) return false;
             if (!table.TryCreate(hq.faction.factionName, out FactionOffensives faction)) return false;
 
@@ -526,7 +526,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
 
         internal bool CommitWave(int id)
         {
-            if (!authoritative || !TryGetLocalFaction(out FactionHQ hq)) return false;
+            if (!authoritative || !GameAccess.TryGetLocalFaction(out FactionHQ hq)) return false;
             if (hq.preventDonation) return false;
             if (!table.TryGet(hq.faction.factionName, out FactionOffensives faction)) return false;
 
@@ -547,7 +547,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
         internal bool TargetOperation(int id, string objectiveKey)
         {
             if (!authoritative || string.IsNullOrEmpty(objectiveKey)) return false;
-            if (!TryGetLocalFaction(out FactionHQ hq)) return false;
+            if (!GameAccess.TryGetLocalFaction(out FactionHQ hq)) return false;
             if (!table.TryGet(hq.faction.factionName, out FactionOffensives faction)) return false;
 
             OffensivePlan plan = faction.Find(id);
@@ -568,7 +568,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
 
         internal bool AbortOperation(int id, string reason)
         {
-            if (!authoritative || !TryGetLocalFaction(out FactionHQ hq)) return false;
+            if (!authoritative || !GameAccess.TryGetLocalFaction(out FactionHQ hq)) return false;
             if (!table.TryGet(hq.faction.factionName, out FactionOffensives faction)) return false;
 
             OffensivePlan plan = faction.Find(id);
@@ -585,7 +585,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
         internal bool TryGetFactionPlans(out FactionOffensives faction)
         {
             faction = null;
-            if (!authoritative || !TryGetLocalFaction(out FactionHQ hq)) return false;
+            if (!authoritative || !GameAccess.TryGetLocalFaction(out FactionHQ hq)) return false;
             return table.TryGet(hq.faction.factionName, out faction);
         }
 
@@ -752,15 +752,6 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
         {
             float funds = hq.factionFunds;
             return !float.IsNaN(funds) && !float.IsInfinity(funds) && funds >= cost;
-        }
-
-        private static bool TryGetLocalFaction(out FactionHQ hq)
-        {
-            hq = null;
-            if (!GameManager.GetLocalHQ(out FactionHQ local) || local == null || local.faction == null)
-                return false;
-            hq = local;
-            return true;
         }
     }
 }

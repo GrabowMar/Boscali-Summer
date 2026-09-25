@@ -115,7 +115,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
         internal bool SetDirective(string key)
         {
             if (!authoritative || string.IsNullOrEmpty(key)) return false;
-            if (!TryGetLocalFaction(out FactionHQ hq)) return false;
+            if (!GameAccess.TryGetLocalFaction(out FactionHQ hq)) return false;
             if (!TryResolveObjective(hq, key, out string label, out Vector3 position)) return false;
 
             var directive = new PriorityDirective(key, label, position.x, position.y, position.z);
@@ -129,7 +129,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
 
         internal bool ClearDirective()
         {
-            if (!authoritative || !TryGetLocalFaction(out FactionHQ hq)) return false;
+            if (!authoritative || !GameAccess.TryGetLocalFaction(out FactionHQ hq)) return false;
             if (!table.TryClear(hq.faction.factionName)) return false;
 
             network?.BroadcastState(hq.faction.factionName, null);
@@ -164,23 +164,14 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
         internal bool TryGetLocalDirective(out PriorityDirective directive)
         {
             directive = default;
-            return TryGetLocalFaction(out FactionHQ hq) &&
+            return GameAccess.TryGetLocalFaction(out FactionHQ hq) &&
                    table.TryGet(hq.faction.factionName, out directive);
-        }
-
-        private static bool TryGetLocalFaction(out FactionHQ hq)
-        {
-            hq = null;
-            if (!GameManager.GetLocalHQ(out FactionHQ local) || local == null || local.faction == null)
-                return false;
-            hq = local;
-            return true;
         }
 
         private void RebuildOptions()
         {
             options.Clear();
-            if (!TryGetLocalFaction(out FactionHQ hq)) return;
+            if (!GameAccess.TryGetLocalFaction(out FactionHQ hq)) return;
 
             if (!MissionPosition.TryGetActiveObjectives(hq, out List<Objective> active) || active == null)
                 return;

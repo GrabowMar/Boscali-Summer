@@ -152,6 +152,16 @@ namespace BoscaliSummer.Runtime
             catch { return false; }
         }
 
+        /// <summary>The local player's faction HQ, only once it has a faction assigned.</summary>
+        public static bool TryGetLocalFaction(out FactionHQ hq)
+        {
+            hq = null;
+            if (!GameManager.GetLocalHQ(out FactionHQ local) || local == null || local.faction == null)
+                return false;
+            hq = local;
+            return true;
+        }
+
         private static AccessTools.FieldRef<TInstance, TField> FieldRef<TInstance, TField>(string name)
         {
             FieldInfo field = AccessTools.Field(typeof(TInstance), name) ??
