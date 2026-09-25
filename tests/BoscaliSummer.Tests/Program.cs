@@ -65,6 +65,7 @@ namespace BoscaliSummer.Tests
             Features.Intel.KnownHostileTests.Run();
             Features.Intel.ObservationTests.Run();
             Features.Intel.RingSetTests.Run();
+            Features.Intel.AttackProfileTests.Run();
             Features.TheaterOps.PriorityTests.Run();
             Features.TheaterOps.LogisticsTests.Run();
             Features.TheaterOps.OffensiveTests.Run();
