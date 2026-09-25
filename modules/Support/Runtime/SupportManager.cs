@@ -198,8 +198,6 @@ namespace BoscaliSummer.Features.Support.Runtime
             return label != null;
         }
         public SupportSettings Settings => settings;
-        /// <summary>Always false: no ops command waits on a map click.</summary>
-        public bool CommandArmed => false;
         public bool CommandPending => pendingCommand != 0;
 
         /// <summary>The local faction's station for the console, the uplink, the sky and the map.</summary>

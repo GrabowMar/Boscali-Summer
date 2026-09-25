@@ -64,11 +64,10 @@ namespace BoscaliSummer.Features.Support.Visuals
         public Texture2D Image { get; private set; }
         public float Progress => totalRays > 0 ? Mathf.Clamp01((float)nextRay / totalRays) : 0f;
         public float ProcessingProgress { get; private set; }
-        public string Callsign { get; private set; }
         public double SlantRange { get; private set; }
         public int Contacts { get; set; }
 
-        public void Begin(GlobalPosition target, in LookAngles look, in OrbitState state, string callsign,
+        public void Begin(GlobalPosition target, in LookAngles look, in OrbitState state,
                           double sceneHalfSize, int seed)
         {
             if (Image == null)
@@ -89,7 +88,6 @@ namespace BoscaliSummer.Features.Support.Visuals
             rangeAxis = new Vector3((float)look.AzimuthX, 0f, (float)look.AzimuthZ);
             los = new Vector3((float)(look.AzimuthX * sinInc), (float)cosInc, (float)(look.AzimuthZ * sinInc)).normalized;
             SlantRange = look.SlantRange;
-            Callsign = callsign;
 
             var geometry = new SarGeometry(look.Incidence, look.AzimuthX, look.AzimuthZ, look.SlantRange,
                 OrbitMath.Velocity(state.Altitude));

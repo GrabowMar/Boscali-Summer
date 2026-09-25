@@ -86,10 +86,6 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
             DirX = Math.Sin(heading);
             DirZ = Math.Cos(heading);
         }
-
-        /// <summary>Unit vector to the right of the direction of travel.</summary>
-        public double RightX => DirZ;
-        public double RightZ => -DirX;
     }
 
     internal enum OrbitPhase : byte

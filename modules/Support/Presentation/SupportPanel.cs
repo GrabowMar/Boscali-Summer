@@ -670,7 +670,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             }
             RefreshActionRows(shell.Page, bypass);
 
-            bool armed = support.CommandArmed || support.ArmedAction.HasValue || support.LocalPickArmed;
+            bool armed = support.ArmedAction.HasValue || support.LocalPickArmed;
             string alert = opsSnapshotSeen && !support.OpsStateFresh
                 ? "HOST SNAPSHOT STALE · FIGURES MAY BE OUT OF DATE"
                 : null;
@@ -687,7 +687,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             int sub = shell.Page == TabSpace ? spaceSub : shell.Page == TabCyber ? cyberSub : specSub;
             string location = domain + " / " + (sub == 0 ? "STATUS" : "ACTIONS");
             bool pending = support.RequestPending || support.CommandPending;
-            bool armed = support.CommandArmed || support.ArmedAction.HasValue || support.LocalPickArmed;
+            bool armed = support.ArmedAction.HasValue || support.LocalPickArmed;
             float cooldown = support.LocalCooldownRemaining;
             bool fresh = support.OpsStateFresh;
             opsSnapshotSeen |= fresh;
