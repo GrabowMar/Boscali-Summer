@@ -162,8 +162,9 @@ namespace BoscaliSummer.Features.TheaterOps.Networking
         private readonly List<OffensivePlan> operations =
             new List<OffensivePlan>(OffensiveTable.MaximumOperations);
 
-        private float nextRegistration, nextPrune, lastClientQuery;
+        private float nextRegistration, nextPrune, lastClientQuery, nextFactionCheck;
         private bool queried;
+        private FactionHQ queriedHq;
 
         public void Configure(
             TheaterPriorityService owner, TheaterOperationsService operationOwner,
@@ -187,6 +188,8 @@ namespace BoscaliSummer.Features.TheaterOps.Networking
             serverHandler = null;
             clientHandler = null;
             queried = false;
+            queriedHq = null;
+            nextFactionCheck = 0f;
             nextRegistration = 0f;
             lastClientQuery = -10f;
             nextQuery.Clear();
@@ -227,9 +230,18 @@ namespace BoscaliSummer.Features.TheaterOps.Networking
                 clientHandler?.RegisterHandler<TheaterDirectorLog>(ReceiveDirectorLog, false);
             }
 
-            // One query per connection. Silence is a valid answer (the host has nothing set),
-            // so there is no retry storm; a reconnect re-registers the client handler and asks
-            // again, and a change after that is broadcast.
+            // The host answers only the asker's own faction, so a client that had no faction yet
+            // (the usual state at connect) or switched sides asks again once it has one.
+            if (clientHandler != null && queried && !GameAccess.IsServer() && now >= nextFactionCheck)
+            {
+                nextFactionCheck = now + 1f;
+                GameManager.GetLocalHQ(out FactionHQ localHq);
+                if (!ReferenceEquals(localHq, queriedHq)) queried = false;
+            }
+
+            // One query per connection and faction. Silence is a valid answer (the host has
+            // nothing set), so there is no retry storm; a reconnect re-registers the client
+            // handler and asks again, and a change after that is pushed to the faction.
             if (clientHandler != null && !queried && !GameAccess.IsServer() &&
                 now - lastClientQuery >= ClientQueryInterval)
             {
@@ -238,6 +250,7 @@ namespace BoscaliSummer.Features.TheaterOps.Networking
                 {
                     queried = true;
                     lastClientQuery = now;
+                    GameManager.GetLocalHQ(out queriedHq);
                     transport.Send(new TheaterPriorityQuery { Protocol = ProtocolVersion });
                 }
             }

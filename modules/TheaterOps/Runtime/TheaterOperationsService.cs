@@ -225,7 +225,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
 
         /// <summary>
         /// At H-hour the push starts with one supply wave and the staff hands the objective to
-        /// the AI as the faction's main effort, so every unit with no better order follows it.
+        /// the AI as the faction's main effort, so its battle-group vehicles advance on it.
         /// </summary>
         private void Launch(FactionHQ hq, OffensivePlan plan)
         {

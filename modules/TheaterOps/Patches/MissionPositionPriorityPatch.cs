@@ -14,8 +14,8 @@ namespace BoscaliSummer.Features.TheaterOps.Patches
     /// no state of its own and vanilla behavior resumes the moment the priority is cleared:
     ///
     /// <list type="bullet">
-    /// <item>advance — an advancing ground vehicle, mobile artillery, or an idle aircraft
-    /// with no contact;</item>
+    /// <item>advance — a ground vehicle enrolled in a battle group (nothing else is
+    /// steered);</item>
     /// <item>delivery — the sort key FactionHQ uses to pick which depot or airbase delivers
     /// reinforcements.</item>
     /// </list>

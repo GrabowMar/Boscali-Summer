@@ -185,17 +185,19 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
                 !settings.FrontlineTacticsEnabled.Value || HasRtsCommander() ||
                 !GameAccess.IsServer() ||
                 priority == null || !priority.Authoritative ||
-                !GameManager.GetLocalHQ(out FactionHQ hq) || hq == null || hq.faction == null ||
-                !priority.TryGetDirective(hq.faction.factionName, out PriorityDirective directive))
+                !GameManager.GetLocalHQ(out FactionHQ hq) || hq == null || hq.faction == null)
             {
                 if (groups.Count > 0) ResetForScene();
                 nextUpdate = Time.timeSinceLevelLoad + UpdateSeconds;
                 return;
             }
+            // No effort right now: groups keep their members (the patch leaves them to vanilla)
+            // and the next effort re-keys them.
+            if (!priority.TryGetDirective(hq.faction.factionName, out PriorityDirective directive)) return;
             if (territory == null) ModServices.TryGet(out territory);
-            if (territory == null) return;
             float now = Time.timeSinceLevelLoad;
-            if (now >= nextTrace)
+            if (territory == null) traceCount = 0; // no front field: groups fall back to the effort point
+            else if (now >= nextTrace)
             {
                 nextTrace = now + TraceSeconds;
                 traceCount = Mathf.Clamp(territory.CopyFrontlineTraces(hq.GetInstanceID(),
@@ -214,7 +216,10 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
                     group.Members.RemoveAt(j);
                     group.Sealed = true;
                 }
-                if (group.Members.Count == 0 || group.HQ != hq)
+                // A spent (withdrawing) group is released to vanilla when the effort moves on, so
+                // the 16-group table keeps room for the next offensive's waves.
+                if (group.Members.Count == 0 || group.HQ != hq ||
+                    (group.Key != directive.Key && group.Stage == Stage.Withdraw))
                 {
                     foreach (Member member in group.Members) members.Remove(member.Vehicle);
                     groups.RemoveAt(i);

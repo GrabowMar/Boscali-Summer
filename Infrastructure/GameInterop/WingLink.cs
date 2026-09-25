@@ -20,6 +20,7 @@ namespace BoscaliSummer.Runtime
 
         private static bool membershipResolved;
         private static MethodInfo contains;
+        private static Func<int, bool> containsCall;
         private static PropertyInfo count;
         private static bool mapModeResolved;
         private static PropertyInfo gestureArmed;
@@ -295,10 +296,10 @@ namespace BoscaliSummer.Runtime
 
         public static bool IsWingMember(int persistentIdHash)
         {
-            // Wing Command publishes the wing on the presence board every tick; an empty board is
-            // an empty wing. No reflective fallback: this runs on AI hot paths.
-            int[] ids = WingMemberIdsThisFrame();
-            return ids.Length > 0 && PresenceBoard.Contains(ids, persistentIdHash);
+            // Wing Command 1.0 publishes the wing on the presence board every tick; 0.9.x only has
+            // its membership API, called through a delegate cached once (AI hot path: no Invoke).
+            if (!membershipResolved) ResolveMembership();
+            return WingApiVersions.IsWingMember(WingMemberIdsThisFrame(), containsCall, persistentIdHash);
         }
 
         private static int[] WingMemberIdsThisFrame()
@@ -367,6 +368,13 @@ namespace BoscaliSummer.Runtime
                 contains = type?.GetMethod("Contains", BindingFlags.Public | BindingFlags.Static,
                                            null, new[] { typeof(int) }, null);
                 count = type?.GetProperty("Count", BindingFlags.Public | BindingFlags.Static);
+                if (contains != null && contains.ReturnType == typeof(bool) &&
+                    Delegate.CreateDelegate(typeof(Func<int, bool>), contains, false) is Func<int, bool> raw)
+                    containsCall = hash =>
+                    {
+                        try { return raw(hash); }
+                        catch (Exception error) { FailMembership(error); return false; }
+                    };
             }
             catch (Exception error) { FailMembership(error); }
             return contains;
@@ -488,6 +496,7 @@ namespace BoscaliSummer.Runtime
         private static void FailMembership(Exception error)
         {
             contains = null;
+            containsCall = null;
             count = null;
             Plugin.Logger?.LogWarning(
                 "WingLink membership fallback failed; continuing without wing awareness. " +

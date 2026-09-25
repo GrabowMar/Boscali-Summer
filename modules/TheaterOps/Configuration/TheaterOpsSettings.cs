@@ -46,8 +46,8 @@ namespace BoscaliSummer.Features.TheaterOps.Configuration
         {
             const string section = "TheaterOps";
             Enabled = config.Bind(section, "Enabled", true,
-                "Run the theater priority: friendly AI reinforcement delivery and movement with no " +
-                "better order favour the host-chosen objective.");
+                "Run the theater priority: friendly AI reinforcements are delivered nearer the " +
+                "host-chosen objective and battle-group vehicles advance on it.");
             MapMarkerEnabled = config.Bind(section, "MapMarkerEnabled", true,
                 "Draw the local faction's main effort as a diamond on the vanilla map. Client-local presentation.");
             FrontlineTacticsEnabled = config.Bind(section, "FrontlineTacticsEnabled", true,
