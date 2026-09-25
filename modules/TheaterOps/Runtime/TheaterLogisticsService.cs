@@ -45,8 +45,6 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
         private float nextOptions;
         private bool authoritative;
 
-        internal bool Authoritative => authoritative;
-
         public bool Available => true;
         public bool CanCommand => authoritative;
         public string Status => authoritative

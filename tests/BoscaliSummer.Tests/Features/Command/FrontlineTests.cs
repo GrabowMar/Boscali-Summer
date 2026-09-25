@@ -71,7 +71,6 @@ namespace BoscaliSummer.Tests.Features.Command
                 "A new scene or faction clears nodes, history and telemetry");
 
             TestBoundsAndObservations();
-            TestContactPressure();
             TestContestedPressure();
             TestContestedTint();
             TestContourGeometry();
@@ -159,25 +158,6 @@ namespace BoscaliSummer.Tests.Features.Command
                 if (pressure[i] > 0.5f) contested = true;
             TestAssert.That(contested,
                 "A border with both sides' ground forces present reports contested pressure");
-        }
-
-        private static void TestContactPressure()
-        {
-            var grid = new TacticalSectorGrid(1000f, 100000f);
-            grid.WorldToCell(0f, 0f, out int col, out int row);
-
-            grid.AddTroopPresence(0f, 0f, 4f, false, 0f);
-            TestAssert.That(grid.GetSectorPressure(col, row) == 0f,
-                "One side's presence alone is not contact pressure");
-            grid.AddTroopPresence(0f, 0f, 1f, true, 0f);
-            float oneSided = grid.GetSectorPressure(col, row);
-            TestAssert.That(oneSided > 0.3f && oneSided < 0.5f,
-                "Four-to-one odds read as one-sided contact, not a firefight");
-            grid.AddTroopPresence(0f, 0f, 3f, true, 0f);
-            TestAssert.That(grid.GetSectorPressure(col, row) > 0.95f,
-                "Even forces on one cell read as full contact");
-            TestAssert.That(grid.GetSectorPressure(-1, 0) == 0f && grid.GetSectorPressure(0, grid.ResolutionY) == 0f,
-                "Off-grid cells report no pressure");
         }
 
         /// <summary>

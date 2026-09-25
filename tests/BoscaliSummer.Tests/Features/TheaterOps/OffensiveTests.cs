@@ -16,7 +16,7 @@ namespace BoscaliSummer.Tests.Features.TheaterOps
     internal static class OffensiveTests
     {
         private static readonly OffensiveTiming Fast =
-            new OffensiveTiming(1f, 1f, 1f, 10f, 2f, 5f, 100f);
+            new OffensiveTiming(1f, 1f, 10f, 2f, 5f, 100f);
 
         public static void Run()
         {

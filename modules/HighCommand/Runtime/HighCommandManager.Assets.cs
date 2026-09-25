@@ -240,7 +240,6 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
             assets.Remove(watch);
             lastDamage.Remove(instanceId);
             watch.Unwatch();
-            watch.LastPosition = unit.transform.position;
 
             FactionCommand owner = watch.Owner;
             CommandSlot slot = watch.Slot;
@@ -625,10 +624,6 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
         }
 
         // ---- Signals ----------------------------------------------------------------------
-
-        /// <summary>A faction-wide line with no single post behind it.</summary>
-        private void Broadcast(FactionCommand command, string text, float now) =>
-            Broadcast(command, -1, CommanderLogTone.Staff, text, now);
 
         /// <summary>
         /// The one place a staff event is stated: the status-strip signal and the page's log

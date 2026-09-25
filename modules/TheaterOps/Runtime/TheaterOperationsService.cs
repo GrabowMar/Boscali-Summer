@@ -735,7 +735,6 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
         private OffensiveTiming Timing() => new OffensiveTiming(
             settings.OperationMusterSeconds.Value,
             settings.OperationPlanSeconds.Value / planScale,
-            settings.OperationLaunchDelaySeconds.Value,
             settings.OperationWaveSeconds.Value,
             settings.OperationWaveRetrySeconds.Value,
             settings.OperationHoldSeconds.Value,

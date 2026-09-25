@@ -8,8 +8,6 @@ namespace BoscaliSummer.Features.Command.Runtime
     /// </summary>
     internal struct SectorFrontSegment
     {
-        /// <summary>Site centre, anchored a short step behind the line on the owned side.</summary>
-        public float X, Z;
         /// <summary>The raw contour endpoints, for chaining stretches into ordered traces.</summary>
         public float AX, AZ, BX, BZ;
         public float ThreatX, ThreatZ;
@@ -159,9 +157,6 @@ namespace BoscaliSummer.Features.Command.Runtime
 
             destination[written++] = new SectorFrontSegment
             {
-                // Anchored a short step behind the line so the site reads as owned ground.
-                X = mx - threatX * 60f,
-                Z = mz - threatZ * 60f,
                 AX = ax,
                 AZ = az,
                 BX = bx,
