@@ -527,7 +527,7 @@ namespace BoscaliSummer.Features.Support.Presentation
                     noAccess = denial != PlatformDenial.None;
                     coverage = noAccess
                         ? "<color=#FFAA44>" + PlatformWords.Denial(denial, supportManager.LocalPlatform, needed.Value,
-                            supportManager.OrbitNow, supportManager.OrbitClock) + "</color>\n"
+                            supportManager.OrbitNow) + "</color>\n"
                         : "<color=#66FF99>" + OrbitalPlatform.Callsign + " OVERHEAD · READY</color>\n";
                 }
                 string area = radius <= 0f ? "FLEET-WIDE"
@@ -550,12 +550,11 @@ namespace BoscaliSummer.Features.Support.Presentation
             if (supportManager != null && reach > 0f)
             {
                 double now = supportManager.OrbitNow;
-                OrbitClock clock = supportManager.OrbitClock;
 
                 OrbitalPlatform platform = supportManager.LocalPlatform;
                 if (platform != null && platform.Exists)
                 {
-                    OrbitState state = platform.State(now, clock);
+                    OrbitState state = platform.State(now);
                     if (state.InPass)
                         DrawOrbit(orbitPool[used++], state, reach, mapFactor, invZoom, StationColour,
                             "<b>" + OrbitalPlatform.Callsign + "</b> · " + StationKeeping.Name(platform.PositionIndex));
@@ -564,7 +563,7 @@ namespace BoscaliSummer.Features.Support.Presentation
                 IReadOnlyList<ForeignPlatform> others = supportManager.Space.Foreign;
                 for (int i = 0; i < others.Count && used < orbitPool.Count; i++)
                 {
-                    OrbitState state = others[i].State(now, clock);
+                    OrbitState state = others[i].State(now);
                     if (!state.InPass) continue;
                     DrawOrbit(orbitPool[used++], state, reach, mapFactor, invZoom, HostileStationColour,
                         "<b>UNKNOWN STATION</b> " + OrbitRegimes.Get(others[i].Regime).Code);

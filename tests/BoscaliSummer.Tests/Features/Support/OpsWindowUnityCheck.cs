@@ -528,12 +528,6 @@ public static class OpsWindowUnityCheck
         Object.DestroyImmediate(window.gameObject);
     }
 
-    private static object OrbitClock()
-    {
-        Type clockType = Mod.GetType("BoscaliSummer.Features.Support.Domain.Orbital.OrbitClock", true);
-        return clockType.GetProperty("Default", BindingFlags.Static | BindingFlags.Public).GetValue(null);
-    }
-
     private static void RenderStation(Func<object[]> stationFixture)
     {
         Component window = CreateWindow();
@@ -547,12 +541,11 @@ public static class OpsWindowUnityCheck
         object view = Activator.CreateInstance(viewType, Hidden, null, new[] { support, plan, loop, null }, null);
         SizeCanvas(window, 1920f, 1080f);
         Present(window, view);
-        object clock = OrbitClock();
 
         var emptyLoop = new[] { "---:--:--  CONSOLE ONLINE · FLIGHT HAS THE ROOM", "", "", "", "", "" };
         FieldInfo loopField = viewType.GetField("loop", Hidden);
         loopField.SetValue(view, emptyLoop);
-        PaintStation(view, null, 0.0, clock);
+        PaintStation(view, null, 0.0);
         RoomChecks(window, view, "station-empty", 1920f, 1080f, false);
         Shoot(window, "ops-station-empty", Screens[0]);
         loopField.SetValue(view, loop);
@@ -563,13 +556,13 @@ public static class OpsWindowUnityCheck
         int free = (int)fixture[2];
         Type kind = Mod.GetType("BoscaliSummer.Features.Support.Domain.Orbital.ModuleKind", true);
         Call(view, "Preview", free, Enum.Parse(kind, "Battery"));
-        PaintStation(view, platform, now, clock);
+        PaintStation(view, platform, now);
         RoomChecks(window, view, "station-fitted", 1920f, 1080f, true);
         foreach (var screen in Screens)
         {
             SizeCanvas(window, screen.CanvasW, screen.CanvasH);
             Present(window, view);
-            PaintStation(view, platform, now, clock);
+            PaintStation(view, platform, now);
             if (screen.CanvasW != 1920f) RoomChecks(window, view, "station-fitted-" + screen.Name, screen.CanvasW, screen.CanvasH, true);
             Shoot(window, "ops-station-fitted", screen);
         }
@@ -577,10 +570,10 @@ public static class OpsWindowUnityCheck
         Object.DestroyImmediate(window.gameObject);
     }
 
-    private static void PaintStation(object view, object platform, double now, object clock)
+    private static void PaintStation(object view, object platform, double now)
     {
         SetField(support, "opsReceived", Time.unscaledTime);
-        Call(view, "Paint", platform, now, clock, true);
+        Call(view, "Paint", platform, now, true);
     }
 
     private static void RenderImager(Func<object[]> stationFixture)
@@ -591,12 +584,11 @@ public static class OpsWindowUnityCheck
         object view = Activator.CreateInstance(viewType, Hidden, null, new[] { support, products, null }, null);
         SizeCanvas(window, 1920f, 1080f);
         Present(window, view);
-        object clock = OrbitClock();
 
         object[] fixture = stationFixture();
         object platform = fixture[0];
         double now = (double)fixture[1];
-        object state = platform.GetType().GetMethod("State", Hidden).Invoke(platform, new[] { now, clock });
+        object state = platform.GetType().GetMethod("State", Hidden).Invoke(platform, new object[] { now });
         double subX = (double)state.GetType().GetField("SubX").GetValue(state);
         double subZ = (double)state.GetType().GetField("SubZ").GetValue(state);
         Type position = Mod.GetType("GlobalPosition") ?? typeof(Canvas).Assembly.GetType("GlobalPosition");
@@ -608,12 +600,12 @@ public static class OpsWindowUnityCheck
         object aim = Activator.CreateInstance(position, (float)subX, 0f, (float)subZ);
         Call(view, "Show", aim);
         Call(view, "Fixture", SarScene());
-        Call(view, "Paint", platform, state, now, clock, false, true);
+        Call(view, "Paint", platform, state, now, false, true);
         RoomChecks(window, view, "imager-feed", 1920f, 1080f, true);
         Shoot(window, "ops-imager-feed", Screens[0]);
 
         Call(view, "Fixture", new object[] { null });
-        Call(view, "Paint", null, Activator.CreateInstance(state.GetType()), now, clock, false, true);
+        Call(view, "Paint", null, Activator.CreateInstance(state.GetType()), now, false, true);
         RoomChecks(window, view, "imager-no-station", 1920f, 1080f, false);
         Shoot(window, "ops-imager-no-station", Screens[0]);
         signatures["imager"] = Sections(view);

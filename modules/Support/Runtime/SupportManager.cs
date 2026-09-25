@@ -221,12 +221,7 @@ namespace BoscaliSummer.Features.Support.Runtime
         /// <summary>The clock passes are computed against. Scene-local and reset with the stations.</summary>
         public double OrbitNow => Time.timeSinceLevelLoadAsDouble;
 
-        public OrbitClock OrbitClock => settings == null
-            ? OrbitClock.Default
-            : new OrbitClock(settings.OrbitGapScale.Value);
-
         double ISupportHost.OrbitNow => OrbitNow;
-        OrbitClock ISupportHost.OrbitClock => OrbitClock;
 
         /// <summary>Client-local uplink aim, remembered between uplink sessions; theatre centre until set.</summary>
         public GlobalPosition UplinkAim { get; private set; }
@@ -295,7 +290,7 @@ namespace BoscaliSummer.Features.Support.Runtime
         public PlatformDenial PlatformCheck(PlatformAbility ability)
         {
             OrbitalPlatform platform = LocalPlatform;
-            return platform == null ? PlatformDenial.NoPlatform : platform.Check(ability, OrbitNow, OrbitClock);
+            return platform == null ? PlatformDenial.NoPlatform : platform.Check(ability, OrbitNow);
         }
 
         /// <summary>The station check for a support action; <see cref="PlatformDenial.None"/> when it needs no station.</summary>
@@ -562,7 +557,7 @@ namespace BoscaliSummer.Features.Support.Runtime
                 double orbitNow = OrbitNow;
                 bool spectrum = settings != null && settings.EwEnabled.Value;
                 Spectrum.Sync(Space, orbitNow, Time.unscaledTime, spectrum);
-                Space.TickHost(orbitNow, Time.deltaTime, level != null && level.isDayLight, OrbitClock,
+                Space.TickHost(orbitNow, Time.deltaTime, level != null && level.isDayLight,
                     settings != null && settings.PlatformDebrisEvents.Value,
                     spectrum ? settings.CyberCampaignIntensity.Value : 0f, LogDebris);
                 if (spectrum) Spectrum.Apply(Space, orbitNow, Time.unscaledTime, logger);
@@ -1380,10 +1375,10 @@ namespace BoscaliSummer.Features.Support.Runtime
                     OrbitalPlatform platform = Space.PlatformFor(player.HQ);
                     if (platform == null) return SupportResult.CapabilityUnavailable;
                     if (!StationKeeping.Valid(message.Arg)) return SupportResult.InvalidTarget;
-                    PlatformDenial denial = platform.CheckRelocate(message.Arg, OrbitNow, OrbitClock);
+                    PlatformDenial denial = platform.CheckRelocate(message.Arg, OrbitNow);
                     if (denial == PlatformDenial.SameOrbit) return SupportResult.InvalidTarget;
                     if (denial != PlatformDenial.None) return SupportContext.Refusal(denial);
-                    if (!platform.TryRelocate(message.Arg, OrbitNow, OrbitClock))
+                    if (!platform.TryRelocate(message.Arg, OrbitNow))
                         return SupportResult.Busy;
                     logger.LogInfo("[Support] " + OrbitalPlatform.Callsign + " relocating to " + StationKeeping.Name(message.Arg) + "; " +
                         Mathf.RoundToInt(platform.Fuel) + " fuel left.");
@@ -1393,10 +1388,10 @@ namespace BoscaliSummer.Features.Support.Runtime
                 {
                     OrbitalPlatform platform = Space.PlatformFor(player.HQ);
                     if (platform == null) return SupportResult.CapabilityUnavailable;
-                    PlatformDenial denial = platform.CheckShift(message.Arg, OrbitNow, OrbitClock);
+                    PlatformDenial denial = platform.CheckShift(message.Arg, OrbitNow);
                     if (denial == PlatformDenial.SameOrbit) return SupportResult.InvalidTarget;
                     if (denial != PlatformDenial.None) return SupportContext.Refusal(denial);
-                    if (!platform.TryShift(message.Arg, OrbitNow, OrbitClock, UnityEngine.Random.Range(1, int.MaxValue)))
+                    if (!platform.TryShift(message.Arg, OrbitNow, UnityEngine.Random.Range(1, int.MaxValue)))
                         return SupportResult.Busy;
                     logger.LogInfo("[Support] " + OrbitalPlatform.Callsign + " transfer burn to " +
                         platform.Orbit.Name + "; " + Mathf.RoundToInt(platform.Fuel) + " fuel left.");

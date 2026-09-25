@@ -23,7 +23,6 @@ namespace BoscaliSummer.Features.Support.Configuration
         public ConfigEntry<float> PlatformInsertionSeconds { get; }
         public ConfigEntry<float> PlatformDockingSeconds { get; }
         public ConfigEntry<bool> PlatformDebrisEvents { get; }
-        public ConfigEntry<float> OrbitGapScale { get; }
         public ConfigEntry<float> SarSceneRadius { get; }
         public ConfigEntry<float> ElintCost { get; }
         public ConfigEntry<float> MtiCost { get; }
@@ -123,10 +122,6 @@ namespace BoscaliSummer.Features.Support.Configuration
             PlatformDebrisEvents = config.Bind("Support", "PlatformDebrisEvents", true,
                 "Every 6-10 minutes a micrometeoroid strike hits a random station module: shielded modules " +
                 "deflect it, others go offline for 45 s. Host-authoritative.");
-            OrbitGapScale = config.Bind("Support", "OrbitGapScale", 1f,
-                new ConfigDescription(
-                    "Legacy compatibility setting. Fixed-position stations no longer use pass gaps; this value has no gameplay effect.",
-                    new AcceptableValueRange<float>(0.25f, 4f)));
             SarSceneRadius = config.Bind("Support", "SarSceneRadiusMeters", 1000f,
                 new ConfigDescription(
                     "Half-width of a radar scan scene at MID orbit (x0.8 LOW, x1.4 HIGH, x1.35 with a relay). " +

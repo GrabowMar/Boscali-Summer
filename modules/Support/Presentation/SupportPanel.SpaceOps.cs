@@ -193,12 +193,12 @@ namespace BoscaliSummer.Features.Support.Presentation
 
         // ---- Refresh ---------------------------------------------------------------------------
 
-        private void RefreshSpaceOpsPage(bool bypass, OrbitalPlatform platform, double now, in OrbitClock clock)
+        private void RefreshSpaceOpsPage(bool bypass, OrbitalPlatform platform, double now)
         {
             if (spaceBanner == null) return;
             bool station = platform != null && platform.Exists;
             PlatformStats stats = station ? platform.Stats(now) : default;
-            OrbitState state = station ? platform.State(now, clock) : default;
+            OrbitState state = station ? platform.State(now) : default;
             PlatformHold hold = station ? platform.HoldAt(now) : PlatformHold.None;
 
             string hint, overhead;
@@ -231,7 +231,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             if (spaceOverheadTitle.text != overhead) spaceOverheadTitle.text = overhead;
             spaceOverheadTitle.color = tone == AvTheme.Dim ? AvTheme.TextPrimary : tone;
 
-            foreach (SpaceRow row in spaceRows) PaintSpaceRow(row, bypass, platform, station, stats, now, clock);
+            foreach (SpaceRow row in spaceRows) PaintSpaceRow(row, bypass, platform, station, stats, now);
             OrderSpaceRows();
         }
 
@@ -255,7 +255,7 @@ namespace BoscaliSummer.Features.Support.Presentation
         }
 
         private void PaintSpaceRow(SpaceRow row, bool bypass, OrbitalPlatform platform, bool station,
-                                   in PlatformStats stats, double now, in OrbitClock clock)
+                                   in PlatformStats stats, double now)
         {
             AbilityInfo info = PlatformAbilities.Info(row.Ability);
             string cost, word, verb;
@@ -272,7 +272,7 @@ namespace BoscaliSummer.Features.Support.Presentation
                     cost = "2.0 KW LOAD · REVEALS NOTHING";
                     enabled = fitted;
                     word = denial == PlatformDenial.None ? "READY · FEED LIVE"
-                        : PlatformWords.Denial(denial, platform, row.Ability, now, clock);
+                        : PlatformWords.Denial(denial, platform, row.Ability, now);
                     tone = denial == PlatformDenial.None ? AvTheme.RailReady : fitted ? AvTheme.RailInfo : AvTheme.RailInert;
                     verb = "OPEN";
                     break;

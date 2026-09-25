@@ -12,9 +12,6 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
         public readonly double Altitude;
         public readonly double InclinationDeg;
 
-        /// <summary>Simulated out-of-theatre arc, seconds, before the next pass begins.</summary>
-        public readonly double GapSeconds;
-
         /// <summary>Imager ground sample distance straight down, metres.</summary>
         public readonly double NadirGsd;
 
@@ -33,7 +30,7 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
         public readonly string Summary;
 
         public OrbitRegime(byte index, string code, string name, double altitude, double inclinationDeg,
-                           double gapSeconds, double nadirGsd, float scanScale, float rodScatter, float empScale,
+                           double nadirGsd, float scanScale, float rodScatter, float empScale,
                            float dragFuelPerSecond, string summary)
         {
             Index = index;
@@ -41,7 +38,6 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
             Name = name;
             Altitude = altitude;
             InclinationDeg = inclinationDeg;
-            GapSeconds = gapSeconds;
             NadirGsd = nadirGsd;
             ScanScale = scanScale;
             RodScatter = rodScatter;
@@ -60,23 +56,13 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
 
         public static readonly OrbitRegime[] All =
         {
-            new OrbitRegime(Standard, "LEO", "LOW EARTH ORBIT", 500000.0, 51.6, 60.0, 0.4, 1f, 15f, 1f, 0f,
+            new OrbitRegime(Standard, "LEO", "LOW EARTH ORBIT", 500000.0, 51.6, 0.4, 1f, 15f, 1f, 0f,
                 "Stable space orbit. All-weather SAR radar reconnaissance.")
         };
 
         public static bool Valid(int index) => index == 0;
 
         public static OrbitRegime Get(int index) => All[0];
-    }
-
-    /// <summary>Timing knob the host decides; clients use the host's value from settings.</summary>
-    internal readonly struct OrbitClock
-    {
-        public readonly double GapScale;
-
-        public OrbitClock(double gapScale) => GapScale = OrbitMath.Clamp(gapScale, 0.25, 4.0);
-
-        public static OrbitClock Default => new OrbitClock(1.0);
     }
 
     /// <summary>The geometry of one theatre pass: heading, direction and cross-track offset.</summary>
@@ -186,13 +172,13 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
     }
 
     /// <summary>
-    /// Theatre passes. A pass is the stretch of a straight ground track, flown at real ground
-    /// speed, during which the station is within <see cref="ReachOffNadirDeg"/> of the theatre
-    /// centre — the reach every payload shares — followed by a time-compressed out-of-theatre
-    /// arc. Heading follows from the inclination at a nominal 40°N; ascending and descending
-    /// alternate by seed; each pass gets a deterministic cross-track offset, so geometry varies
-    /// from pass to pass while every peer computes the same sky from the same seed and clock.
-    /// Time is measured from the start of pass zero; negative time is a hold.
+    /// Theatre pass geometry and look angles. A pass is the stretch of a straight ground track,
+    /// flown at real ground speed, during which the station is within <see cref="ReachOffNadirDeg"/>
+    /// of the theatre centre — the reach every payload shares. Heading follows from the
+    /// inclination at a nominal 40°N; ascending and descending alternate by seed; each pass gets a
+    /// deterministic cross-track offset. Stations hold a fixed sector (<see cref="StationKeeping"/>),
+    /// so there is no pass cycle to time; <see cref="Look"/> and <see cref="GroundSample"/> serve
+    /// whatever state the station is in.
     /// </summary>
     internal static class TheaterTrack
     {
@@ -206,9 +192,6 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
         /// <summary>Longest possible pass (zero cross-track), seconds.</summary>
         public static double WindowSeconds(in OrbitRegime regime) =>
             2.0 * HalfWindow(regime) / OrbitMath.GroundSpeed(regime.Altitude);
-
-        public static double CycleSeconds(in OrbitRegime regime, in OrbitClock clock) =>
-            WindowSeconds(regime) + regime.GapSeconds * clock.GapScale;
 
         public static PassPlan Plan(int seed, in OrbitRegime regime, int index)
         {
@@ -227,47 +210,6 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
         {
             double half = HalfWindow(regime);
             return Math.Sqrt(Math.Max(0.0, half * half - crossTrack * crossTrack));
-        }
-
-        public static OrbitState State(int seed, in OrbitRegime regime, in OrbitClock clock, double cycleSeconds)
-        {
-            double speed = OrbitMath.GroundSpeed(regime.Altitude);
-            double maximum = WindowSeconds(regime);
-            if (double.IsNaN(cycleSeconds) || cycleSeconds < 0.0)
-            {
-                PassPlan first = Plan(seed, regime, 0);
-                double wait = double.IsNaN(cycleSeconds) ? 0.0 : -cycleSeconds;
-                return new OrbitState(OrbitPhase.Hold, first, regime.Altitude, 0.0, 0.0, 0.0, wait, 0.0,
-                    2.0 * HalfChord(regime, first.CrossTrack) / speed);
-            }
-
-            double cycle = CycleSeconds(regime, clock);
-            int index = (int)Math.Min(int.MaxValue - 1, Math.Floor(cycleSeconds / cycle));
-            double tau = cycleSeconds - index * cycle;
-            PassPlan plan = Plan(seed, regime, index);
-            double halfChord = HalfChord(regime, plan.CrossTrack);
-            double window = 2.0 * halfChord / speed;
-
-            // A pass with an offset track is shorter than the slot it sits in: it is centred in
-            // the slot, so the station reaches the theatre a little later and leaves earlier.
-            double lead = (maximum - window) * 0.5;
-            double start = lead;
-            double end = lead + window;
-            if (tau < start || tau >= end)
-            {
-                bool before = tau < start;
-                PassPlan next = before ? plan : Plan(seed, regime, index + 1);
-                double nextWindow = before ? window : 2.0 * HalfChord(regime, next.CrossTrack) / speed;
-                double nextStart = before ? start - tau : cycle - tau + (maximum - nextWindow) * 0.5;
-                return new OrbitState(OrbitPhase.OutOfTheater, next, regime.Altitude, 0.0, 0.0, 0.0, nextStart, 0.0,
-                    nextWindow);
-            }
-
-            double along = -halfChord + speed * (tau - start);
-            double subX = plan.DirX * along + plan.RightX * plan.CrossTrack;
-            double subZ = plan.DirZ * along + plan.RightZ * plan.CrossTrack;
-            return new OrbitState(OrbitPhase.InPass, plan, regime.Altitude, subX, subZ, tau - start, 0.0, end - tau,
-                window);
         }
 
         public static LookAngles Look(in OrbitState state, double x, double z)

@@ -116,9 +116,8 @@ namespace BoscaliSummer.Features.Support.Presentation
             if (spaceSubPages[SubStatus] == null) return;
             OrbitalPlatform platform = support.LocalPlatform;
             double now = support.OrbitNow;
-            OrbitClock clock = support.OrbitClock;
-            if (spaceSub == SubStatus) RefreshStationPage(platform, now, clock);
-            else RefreshSpaceOpsPage(bypass, platform, now, clock);
+            if (spaceSub == SubStatus) RefreshStationPage(platform, now);
+            else RefreshSpaceOpsPage(bypass, platform, now);
         }
 
         // ---- Full-screen instruments ---------------------------------------------------------
@@ -155,10 +154,10 @@ namespace BoscaliSummer.Features.Support.Presentation
             if (Time.unscaledTime < nextBackground) return;
             nextBackground = Time.unscaledTime + 0.2f;
             OrbitalPlatform platform = support.LocalPlatform;
-            TrackLoopEvents(platform, support.OrbitNow, support.OrbitClock);
+            TrackLoopEvents(platform, support.OrbitNow);
         }
 
-        private void TrackLoopEvents(OrbitalPlatform platform, double now, in OrbitClock clock)
+        private void TrackLoopEvents(OrbitalPlatform platform, double now)
         {
             string status = support.Status;
             if (status != loggedStatus)
@@ -182,7 +181,7 @@ namespace BoscaliSummer.Features.Support.Presentation
                     loggedPending = platform.Pending;
                     loggedHold = platform.HoldAt(now);
                     loggedRegime = platform.Regime;
-                    loggedPhase = platform.State(now, clock).Phase;
+                    loggedPhase = platform.State(now).Phase;
                 }
                 return;
             }
@@ -219,7 +218,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             }
 
             PlatformHold hold = platform.HoldAt(now);
-            OrbitPhase phase = platform.State(now, clock).Phase;
+            OrbitPhase phase = platform.State(now).Phase;
             if (hold != loggedHold || platform.Regime != loggedRegime)
             {
                 if (hold == PlatformHold.None && loggedHold == PlatformHold.Insertion)
