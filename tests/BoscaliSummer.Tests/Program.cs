@@ -62,6 +62,8 @@ namespace BoscaliSummer.Tests
             Features.DynamicOperations.ContractMarkerTests.Run();
             Features.HighCommand.HighCommandTests.Run();
             Features.Intel.AirDefenceTests.Run();
+            Features.Intel.KnownHostileTests.Run();
+            Features.Intel.ObservationTests.Run();
             Features.TheaterOps.PriorityTests.Run();
             Features.TheaterOps.LogisticsTests.Run();
             Features.TheaterOps.OffensiveTests.Run();
