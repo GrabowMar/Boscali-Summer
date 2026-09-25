@@ -124,7 +124,7 @@ namespace BoscaliSummer.Features.Support.Configuration
                 "deflect it, others go offline for 45 s. Host-authoritative.");
             SarSceneRadius = config.Bind("Support", "SarSceneRadiusMeters", 1000f,
                 new ConfigDescription(
-                    "Half-width of a radar scan scene at MID orbit (x0.8 LOW, x1.4 HIGH, x1.35 with a relay). " +
+                    "Half-width of a radar scan scene (x1.35 while a relay boosts the imager). " +
                     "Stationary ground contacts inside it are revealed; movers faster than 4 m/s smear and are not.",
                     new AcceptableValueRange<float>(400f, 4000f)));
             ElintCost = config.Bind("Support", "ElintSweepCost", 400f,
@@ -133,8 +133,8 @@ namespace BoscaliSummer.Features.Support.Configuration
                     new AcceptableValueRange<float>(0f, 20000f)));
             ElintRadius = config.Bind("Support", "ElintSweepRadiusMeters", 8000f,
                 new ConfigDescription(
-                    "Radius around the mark searched for emitting enemy radars at MID orbit (scaled like the " +
-                    "radar scan).",
+                    "Radius around the mark searched for emitting enemy radars (x1.35 while a relay boosts " +
+                    "the SIGINT array).",
                     new AcceptableValueRange<float>(1000f, 40000f)));
             MtiCost = config.Bind("Support", "MtiSweepCost", 500f,
                 new ConfigDescription(

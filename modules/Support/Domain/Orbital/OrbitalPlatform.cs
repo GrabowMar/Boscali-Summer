@@ -27,8 +27,7 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
         CopyLimit = 9,
         UnknownOrbit = 10,
         WouldStrand = 11,
-        EmptyCell = 12,
-        NeedsPropulsion = 13
+        EmptyCell = 12
     }
 
     /// <summary>Why an ability cannot run now, in check order.</summary>

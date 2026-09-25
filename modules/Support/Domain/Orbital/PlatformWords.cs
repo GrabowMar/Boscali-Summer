@@ -76,7 +76,6 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
                 case PlacementFailure.UnknownOrbit: return "UNKNOWN ORBIT";
                 case PlacementFailure.WouldStrand: return "WOULD STRAND MODULES";
                 case PlacementFailure.EmptyCell: return "EMPTY CELL";
-                case PlacementFailure.NeedsPropulsion: return "LOW NEEDS PROPULSION";
                 default: return "NOT A MODULE";
             }
         }

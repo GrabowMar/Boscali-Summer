@@ -68,7 +68,6 @@ namespace BoscaliSummer.Features.Support.Runtime
         CopyLimit = 30,
         WouldStrand = 31,
         PlatformExists = 32,
-        NeedsPropulsion = 33,
         NeedsCyberCommand = 34,
         NetworkFull = 35,
 

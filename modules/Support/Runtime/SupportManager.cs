@@ -1089,7 +1089,6 @@ namespace BoscaliSummer.Features.Support.Runtime
                 case SupportResult.CopyLimit: return "copy limit for that module reached";
                 case SupportResult.WouldStrand: return "it would strand other modules";
                 case SupportResult.PlatformExists: return "the faction already has a station";
-                case SupportResult.NeedsPropulsion: return "LOW orbit needs propulsion — launch to MID or HIGH";
                 case SupportResult.NotBuilt: return "no location of that stage yet (see CYBER)";
                 case SupportResult.NoEwAsset: return "no hacked location covers the target";
                 case SupportResult.WrongPosture: return "the network is not in the right state";
@@ -1441,7 +1440,6 @@ namespace BoscaliSummer.Features.Support.Runtime
                 case PlacementFailure.OverMass: return SupportResult.OverMass;
                 case PlacementFailure.CopyLimit: return SupportResult.CopyLimit;
                 case PlacementFailure.WouldStrand: return SupportResult.WouldStrand;
-                case PlacementFailure.NeedsPropulsion: return SupportResult.NeedsPropulsion;
                 case PlacementFailure.OutsideGrid:
                 case PlacementFailure.CellOccupied:
                 case PlacementFailure.NotAttached:
