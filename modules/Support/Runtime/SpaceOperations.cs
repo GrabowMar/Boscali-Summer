@@ -84,6 +84,22 @@ namespace BoscaliSummer.Features.Support.Runtime
 
         private readonly Dictionary<FactionHQ, FactionSystems> systems = new Dictionary<FactionHQ, FactionSystems>();
         private readonly List<FactionHQ> order = new List<FactionHQ>(MaximumFactions);
+        private float cyberReach = CyberLocations.DefaultReach;
+
+        /// <summary>
+        /// Base breach reach of every network, from <c>CyberReachMeters</c>. The host's value
+        /// authorises breaches; a client's only changes what its own page predicts.
+        /// </summary>
+        public float CyberReach
+        {
+            get => cyberReach;
+            set
+            {
+                if (cyberReach == value) return;
+                cyberReach = value;
+                foreach (FactionSystems state in systems.Values) state.Cyber.BaseReach = value;
+            }
+        }
 
         /// <summary>Factions with systems, in the order they were first seen.</summary>
         public int FactionCount => order.Count;
@@ -210,6 +226,7 @@ namespace BoscaliSummer.Features.Support.Runtime
             if (systems.Count >= MaximumFactions) return null;
             if (OrbitalBounds.Radius() <= 0f) return null;
             state = new FactionSystems();
+            state.Cyber.BaseReach = cyberReach;
             state.Cyber.Seed(hq.GetInstanceID() ^ Environment.TickCount);
             systems.Add(hq, state);
             order.Add(hq);

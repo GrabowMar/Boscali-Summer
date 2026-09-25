@@ -521,6 +521,8 @@ namespace BoscaliSummer.Features.Support.Runtime
         private void Update()
         {
             bool host = GameAccess.IsServer();
+            // Read every frame so a change from the in-game settings page applies at once.
+            if (settings != null) Space.CyberReach = settings.CyberReach.Value;
             if (host)
             {
                 LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
