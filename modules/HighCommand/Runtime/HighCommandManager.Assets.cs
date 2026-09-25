@@ -657,7 +657,7 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
                 {
                     BuildingDefinition candidate = encyclopedia.buildings[i];
                     if (candidate == null || candidate.buildingType != preference[p]) continue;
-                    if (!Usable(candidate) || candidate.unitPrefab.GetComponent<Building>() == null) continue;
+                    if (!GroundPlacement.Usable(candidate) || candidate.unitPrefab.GetComponent<Building>() == null) continue;
                     if (postDefinition == null || candidate.value < postDefinition.value) postDefinition = candidate;
                 }
             }
@@ -677,20 +677,12 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
             for (int i = 0; i < count; i++)
             {
                 VehicleDefinition candidate = encyclopedia.vehicles[i];
-                if (candidate == null || !Usable(candidate) ||
+                if (candidate == null || !GroundPlacement.Usable(candidate) ||
                     candidate.unitPrefab.GetComponent<GroundVehicle>()?.UnitCommand == null) continue;
                 if (convoyDefinition == null || candidate.value < convoyDefinition.value) convoyDefinition = candidate;
             }
             return convoyDefinition;
         }
-
-        private static bool Usable(UnitDefinition definition) => definition != null && definition.unitPrefab != null &&
-            definition.IsAllowed(MissionManager.AllowEventContent) &&
-            Finite(definition.spawnOffset) && definition.spawnOffset.sqrMagnitude <= 400f &&
-            Finite(definition.value) && definition.value > 0f &&
-            Finite(definition.width) && definition.width > 0f && definition.width <= 20f &&
-            Finite(definition.length) && definition.length > 0f && definition.length <= 25f &&
-            Finite(definition.height) && definition.height > 0f && definition.height <= 20f;
 
         private bool TryPlaceAround(UnitDefinition definition, Vector3 anchor, int seed, out Vector3 position, out Quaternion rotation)
             => TryPlaceAround(definition, anchor, seed, 0f, 3, out position, out rotation);
@@ -704,7 +696,7 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
         {
             position = default;
             rotation = Quaternion.identity;
-            if (!Usable(definition)) return false;
+            if (!GroundPlacement.Usable(definition)) return false;
             // A post is more valuable than a tight footprint: a base apron or a slope can leave
             // the near ring unusable, so widen outwards before declaring the site unspawnable.
             for (int ring = 0; ring < rings; ring++)
@@ -715,43 +707,10 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
                     float angle = (seed * 0.618f + attempt + ring * 5) * Mathf.PI / 6f;
                     Vector3 direction = new Vector3(Mathf.Sin(angle), 0f, Mathf.Cos(angle));
                     rotation = Quaternion.LookRotation(direction);
-                    if (TryPlace(definition, anchor + direction * radius, rotation, out position)) return true;
+                    if (GroundPlacement.TryPlace(definition, anchor + direction * radius, rotation, out position)) return true;
                 }
             }
             return false;
         }
-
-        private static bool TryPlace(UnitDefinition definition, Vector3 desired, Quaternion rotation, out Vector3 position)
-        {
-            position = default;
-            if (!Usable(definition)) return false;
-            Vector3 offset = rotation * definition.spawnOffset;
-            desired += new Vector3(offset.x, 0f, offset.z);
-            if (!DryGround(desired, out Vector3 center)) return false;
-            Vector3 half = new Vector3(definition.width * 0.5f + 1f, definition.height * 0.5f, definition.length * 0.5f + 1f);
-            for (int i = 0; i < 4; i++)
-            {
-                Vector3 corner = center + rotation * new Vector3((i & 1) == 0 ? -half.x : half.x, 0f, (i & 2) == 0 ? -half.z : half.z);
-                if (!DryGround(corner, out Vector3 hit) || Mathf.Abs(hit.y - center.y) > 1f) return false;
-            }
-            Vector3 volume = center + Vector3.up * (half.y + 0.15f);
-            if (Physics.CheckBox(volume, half, rotation, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)) return false;
-            position = center + Vector3.up * (offset.y + 0.2f);
-            return Finite(position);
-        }
-
-        private static bool DryGround(Vector3 desired, out Vector3 point)
-        {
-            point = default;
-            if (!Finite(desired) || GameAssets.i?.terrainMaterial == null ||
-                !Physics.Raycast(desired + Vector3.up * 500f, Vector3.down, out RaycastHit hit, 2000f,
-                    Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore) ||
-                hit.collider == null || hit.collider.sharedMaterial != GameAssets.i.terrainMaterial ||
-                hit.normal.y < 0.96f || hit.point.y <= Datum.LocalSeaY + 1f) return false;
-            point = hit.point;
-            return Finite(point);
-        }
-
-        private static bool Finite(Vector3 value) => Finite(value.x) && Finite(value.y) && Finite(value.z);
     }
 }

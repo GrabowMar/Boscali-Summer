@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using BepInEx.Logging;
 using BoscaliSummer.Features.DynamicOperations.Domain;
+using BoscaliSummer.Runtime;
 using NuclearOption.Networking;
 using RoadPathfinding;
 using UnityEngine;
@@ -166,7 +167,7 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
                 for (int i = 0; i < vehicleCount; i++)
                 {
                     VehicleDefinition candidate = catalog.vehicles[i];
-                    if (!Usable(candidate) || candidate.unitPrefab.GetComponent<GroundVehicle>()?.UnitCommand == null) continue;
+                    if (!GroundPlacement.Usable(candidate) || candidate.unitPrefab.GetComponent<GroundVehicle>()?.UnitCommand == null) continue;
                     if ((candidate.vehicleType == VehicleType.AFV || candidate.vehicleType == VehicleType.MBT) &&
                         (escort == null || candidate.value < escort.value)) escort = candidate;
                     if (candidate.vehicleType == VehicleType.TRUCK && candidate.unitPrefab.GetComponentInChildren<Rearmer>() != null &&
@@ -176,19 +177,12 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
                 for (int i = 0; i < buildingCount; i++)
                 {
                     BuildingDefinition candidate = catalog.buildings[i];
-                    if (Usable(candidate) && candidate.buildingType == BuildingType.DEF &&
+                    if (GroundPlacement.Usable(candidate) && candidate.buildingType == BuildingType.DEF &&
                         candidate.unitPrefab.GetComponent<Building>() != null &&
                         (defense == null || candidate.value < defense.value)) defense = candidate;
                 }
             log?.LogInfo("[DynamicOperations] Reward catalogue: convoy=" + (escort != null && supply != null) + ", fortification=" + (defense != null));
         }
-
-        private static bool Usable(UnitDefinition definition) => definition != null && definition.unitPrefab != null &&
-            definition.IsAllowed(MissionManager.AllowEventContent) && Finite(definition.spawnOffset) && definition.spawnOffset.sqrMagnitude <= 400f &&
-            Finite(definition.value) && definition.value > 0f &&
-            Finite(definition.width) && definition.width > 0f && definition.width <= 20f &&
-            Finite(definition.length) && definition.length > 0f && definition.length <= 25f &&
-            Finite(definition.height) && definition.height > 0f && definition.height <= 20f;
 
         private bool PlanConvoy(FactionHQ hq, Airbase target, out GlobalPosition destination)
         {
@@ -209,7 +203,7 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
                 !NearestRoad(network, target.center.position, out _, out Vector3 endpoint, out _)) return false;
             if ((origin - source.center.position).sqrMagnitude > 1200f * 1200f ||
                 (endpoint - target.center.position).sqrMagnitude > 1200f * 1200f ||
-                !DryGround(endpoint, out Vector3 destinationGround)) return false;
+                !GroundPlacement.DryGround(endpoint, out Vector3 destinationGround)) return false;
             destination = destinationGround.ToGlobalPosition();
             // A base often lies at a road endpoint; try either side before rejecting its road.
             for (int layout = 0; layout < 3; layout++)
@@ -229,7 +223,7 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
                 definitions[i] = i < 4 ? escort : supply;
                 Vector3 desired = origin + forward * ((i - 2.5f) * 32f);
                 if (!NearestPoint(road, desired, out Vector3 point, out Vector3 heading) ||
-                    !TryPlace(definitions[i], point, Quaternion.LookRotation(heading), out positions[i])) return false;
+                    !GroundPlacement.TryPlace(definitions[i], point, Quaternion.LookRotation(heading), out positions[i])) return false;
                 rotations[i] = Quaternion.LookRotation(heading);
                 for (int j = 0; j < i; j++)
                     if ((positions[i] - positions[j]).sqrMagnitude < 28f * 28f) return false;
@@ -252,7 +246,7 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
                 float angle = attempt * Mathf.PI / 6f;
                 Vector3 direction = new Vector3(Mathf.Sin(angle), 0f, Mathf.Cos(angle));
                 Quaternion rotation = Quaternion.LookRotation(direction);
-                if (!TryPlace(defense, target.center.position + direction * radius, rotation, out Vector3 point)) continue;
+                if (!GroundPlacement.TryPlace(defense, target.center.position + direction * radius, rotation, out Vector3 point)) continue;
                 definitions[found] = defense;
                 positions[found] = point;
                 rotations[found++] = rotation;
@@ -310,37 +304,6 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
                 direction = horizontal.normalized;
             }
             return best < float.MaxValue;
-        }
-
-        private static bool TryPlace(UnitDefinition definition, Vector3 desired, Quaternion rotation, out Vector3 position)
-        {
-            position = default;
-            if (!Usable(definition)) return false;
-            Vector3 offset = rotation * definition.spawnOffset;
-            desired += new Vector3(offset.x, 0f, offset.z);
-            if (!DryGround(desired, out Vector3 center)) return false;
-            Vector3 half = new Vector3(definition.width * 0.5f + 1f, definition.height * 0.5f, definition.length * 0.5f + 1f);
-            for (int i = 0; i < 4; i++)
-            {
-                Vector3 corner = center + rotation * new Vector3((i & 1) == 0 ? -half.x : half.x, 0f, (i & 2) == 0 ? -half.z : half.z);
-                if (!DryGround(corner, out Vector3 hit) || Mathf.Abs(hit.y - center.y) > 1f) return false;
-            }
-            Vector3 volume = center + Vector3.up * (half.y + 0.15f);
-            if (Physics.CheckBox(volume, half, rotation, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)) return false;
-            position = center + Vector3.up * (offset.y + 0.2f);
-            return Finite(position);
-        }
-
-        private static bool DryGround(Vector3 desired, out Vector3 point)
-        {
-            point = default;
-            if (!Finite(desired) || GameAssets.i?.terrainMaterial == null ||
-                !Physics.Raycast(desired + Vector3.up * 500f, Vector3.down, out RaycastHit hit, 2000f,
-                    Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore) ||
-                hit.collider == null || hit.collider.sharedMaterial != GameAssets.i.terrainMaterial ||
-                hit.normal.y < 0.96f || hit.point.y <= Datum.LocalSeaY + 1f) return false;
-            point = hit.point;
-            return Finite(point);
         }
 
         private void RemoveOwnedFrom(int start)
