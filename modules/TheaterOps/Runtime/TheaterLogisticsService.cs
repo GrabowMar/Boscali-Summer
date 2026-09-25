@@ -47,9 +47,6 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
 
         public bool Available => true;
         public bool CanCommand => authoritative;
-        public string Status => authoritative
-            ? "Host authority."
-            : "The host funds reinforcements.";
         public float FactionFunds => funds;
         public IReadOnlyList<ReinforcementOption> Reinforcements => options;
         public ReadinessSummary Readiness => readiness;

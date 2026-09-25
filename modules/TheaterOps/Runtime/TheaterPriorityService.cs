@@ -45,9 +45,6 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
         internal bool Authoritative => authoritative;
 
         public bool Available => true;
-        public string Status => authoritative
-            ? "The staff holds the main effort."
-            : "The host's staff holds the main effort.";
 
         public void Configure(TheaterOpsSettings config, TheaterOpsNet net, ManualLogSource log)
         {

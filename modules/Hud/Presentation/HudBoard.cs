@@ -26,7 +26,6 @@ namespace BoscaliSummer.Features.Hud.Presentation
             channels.Add(new Channel(this, key, string.IsNullOrEmpty(label) ? key : label));
         }
         public IHudLine Acquire(string owner, string channel, string key) => store.Acquire(owner, channel, key);
-        public void ReleaseOwner(string owner) => store.ReleaseOwner(owner);
         public void Notice(string channel, HudTone tone, string text, string detail = null)
         {
             if (NoticesEnabled && ChannelEnabled(channel)) store.Notice(channel, tone, text, detail, NoticeSeconds);

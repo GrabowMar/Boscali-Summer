@@ -16,7 +16,6 @@ public static class TrenchUnityCheck
         public float BoundaryX;
         public bool TryNearestEdge(int factionId, float playerX, float playerZ, out float x, out float z)
         { x = z = 0f; return false; }
-        public bool OwnsPosition(int factionId, float x, float z) => x < BoundaryX;
         public bool TryGetHoldStrength(int factionId, float x, float z, out float hold)
         {
             hold = BoundaryX - x;
@@ -209,7 +208,6 @@ public static class TrenchUnityCheck
     {
         public bool TryNearestEdge(int factionId, float playerX, float playerZ, out float x, out float z)
         { x = z = 0f; return false; }
-        public bool OwnsPosition(int factionId, float x, float z) => Hold(x) >= 0f;
         public bool TryGetHoldStrength(int factionId, float x, float z, out float hold)
         { hold = Hold(x); return true; }
         public int CopyFrontlineTraces(int factionId, FrontlineTracePoint[] points, int[] lengths, float[] pressure)

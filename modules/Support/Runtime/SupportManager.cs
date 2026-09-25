@@ -1594,9 +1594,6 @@ namespace BoscaliSummer.Features.Support.Runtime
         /// best SPEC OPS team's rank. The host answers from its own detachment; a client mirror
         /// would be its own faction, which is also correct because placement is host-only.
         /// </summary>
-        int IGroundForceReadiness.FortificationShells(FactionHQ owner) =>
-            owner != null ? Space.DetachmentFor(owner)?.GroundReadiness ?? 1 : 1;
-
         int IGroundForceReadiness.InsertionCamps(FactionHQ owner) =>
             owner != null ? Space.DetachmentFor(owner)?.GroundReadiness ?? 1 : 1;
 

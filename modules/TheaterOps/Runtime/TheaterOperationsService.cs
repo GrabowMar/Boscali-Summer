@@ -96,16 +96,12 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
 
         /// <summary>Any faction member conducts; the host validates every intent.</summary>
         public bool CanCommand => Available;
-        public string Status => authoritative
-            ? "Host authority. The staff fights the faction's war."
-            : "The host's staff fights the faction's war.";
         public float OverheadCost => settings != null
             ? Mathf.Max(0f, settings.OperationOverheadCost.Value)
             : 0f;
         public float WaveBudget => settings != null
             ? Mathf.Max(0f, settings.OperationWaveBudget.Value)
             : 0f;
-        public int MaximumWaves => OffensivePlan.MaximumWaves;
         public IReadOnlyList<TheaterOperationView> Operations => views;
 
         public void Configure(

@@ -8,7 +8,6 @@ namespace BoscaliSummer.Framework.Contracts
     /// </summary>
     internal interface IHudChannel
     {
-        string Key { get; }
         string Label { get; }
         bool Enabled { get; }
         void Toggle();
@@ -57,9 +56,6 @@ namespace BoscaliSummer.Framework.Contracts
         /// text refreshes the dwell instead of stacking a duplicate.
         /// </summary>
         void Notice(string channel, HudTone tone, string text, string detail = null);
-
-        /// <summary>Drop every line one feature owns. Called by the owner on scene reset.</summary>
-        void ReleaseOwner(string owner);
 
         // ------------------------------------------------------------------ presentation
         /// <summary>Draw the element at all. Off keeps every consumer running, silently.</summary>
