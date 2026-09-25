@@ -88,6 +88,7 @@ namespace BoscaliSummer.Tests
             Features.Weather.CanopyScoringTests.Run();
             Features.Weather.RainSkyMathTests.Run();
             Features.Visuals.VisualsTests.Run();
+            Features.Immersion.ImmersionTests.Run();
             ModuleBoundaryTests.Run();
 
             TestAssert.That(

@@ -31,6 +31,15 @@ namespace BoscaliSummer
             BindAndRemove(config, "Fires", "SpreadDistance", 62f);
             BindAndRemove(config, "Fires", "SpreadGenerations", 2);
 
+            // Replaced by BloomBoost, a multiplier on the game's own bloom (2026-09-24).
+            BindAndRemove(config, "Visuals", "BloomIntensity", 0.4f);
+            // The game's own renderer already runs SSAO; the duplicate switch was dropped.
+            BindAndRemove(config, "Visuals", "AmbientOcclusionEnabled", false);
+            // URP camera motion blur smears the whole view through the game's overlay post camera.
+            BindAndRemove(config, "Visuals", "MotionBlurEnabled", true);
+            // Runtime point lights never reached the cockpit shaders (tested 2026-09-25).
+            BindAndRemove(config, "Immersion", "CockpitFloodLightEnabled", true);
+
             BindAndRemove(config, "Destruction", "MaximumPersistentRuins", 256);
             BindAndRemove(config, "Destruction", "MaximumRuinSmokeVisuals", 24);
             BindAndRemove(config, "Destruction", "MaximumCollapseBursts", 4);

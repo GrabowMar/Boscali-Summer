@@ -162,6 +162,7 @@
     <Compile Include="..\..\modules\Weather\Domain\CanopyShaderParams.cs" Link="Features\Weather\CanopyShaderParams.cs" />
     <Compile Include="..\..\modules\Weather\Domain\RainSkyMath.cs" Link="Features\Weather\RainSkyMath.cs" />
     <Compile Include="..\..\modules\Visuals\Domain\VisualsMath.cs" Link="Features\Visuals\VisualsMath.cs" />
+    <Compile Include="..\..\modules\Immersion\Domain\ImmersionMath.cs" Link="Features\Immersion\ImmersionMath.cs" />
     <Compile Include="..\..\Infrastructure\GameInterop\MfdSlots.cs" Link="Infrastructure\MfdSlots.cs" />
     <Compile Include="..\..\modules\Comms\Domain\*.cs" LinkBase="Features\Comms" />
     <Compile Include="..\..\modules\Comms\Presentation\CommsGlyphs.cs" Link="Features\Comms\CommsGlyphs.cs" />

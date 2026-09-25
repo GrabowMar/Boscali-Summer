@@ -43,7 +43,7 @@ public static class SettingsUnityCheck
             CheckLayoutCanvas();
             CheckScreenSpaceSizing();
             foreach (int height in new[] { 596, 420 }) CheckPanel(height);
-            File.WriteAllText("result.txt", "PASS: layout resolves the real UI area past stale canvas rects; SET renders CLIENT MAP/STYLE/IMAGE/COCKPIT/HUD and SERVER at 596 and 420 units; toggles, background replacement, disabled dependencies, +/- bounds, scrolling and cached page trees checked. Game adapters are stubbed; in-game acceptance remains required.");
+            File.WriteAllText("result.txt", "PASS: layout resolves the real UI area past stale canvas rects; SET renders CLIENT MAP/STYLE/IMAGE/COCKPIT/HUD/VISUALS (with COCKPIT FEEL) and SERVER at 596 and 420 units; toggles, background replacement, disabled dependencies, +/- bounds, scrolling and cached page trees checked. Game adapters are stubbed; in-game acceptance remains required.");
             EditorApplication.Exit(0);
         }
         catch (Exception ex)
@@ -123,6 +123,9 @@ public static class SettingsUnityCheck
         var external = new ExternalFixture();
         ModServices.Services[typeof(IHudBoard)] = hud;
         ModServices.Services[typeof(IThirdPersonHud)] = external;
+        var visuals = new VisualsFixture();
+        ModServices.Services[typeof(IVisualEnhancements)] = visuals;
+        ModServices.Services[typeof(IImmersionSettings)] = new ImmersionFixture();
         var config = new CommandSettings(new ConfigFile(Path.GetFullPath("settings-" + height + "-" + Guid.NewGuid().ToString("N") + ".cfg"), false));
         // Exercise compatibility with an existing layered configuration.
         config.DeckGrid.Value = true;
@@ -146,12 +149,23 @@ public static class SettingsUnityCheck
         Invoke(panel, "BuildServerPage", (RectTransform)shell.CreatePage(1, "ServerPage").transform, shell.Body);
         int objects = canvas.GetComponentsInChildren<Transform>(true).Length;
         shell.SetPage(0);
-        for (int page = 0; page < 5; page++)
+        for (int page = 0; page < 6; page++)
         {
             Invoke(panel, "SetClientPage", page);
             Refresh(panel);
             shell.WriteStatus(null, null, "Saved automatically. Hover a control for help.");
-            Render(camera, canvas, height, page);
+            // 5 is the SERVER render's file name; VISUALS goes to 20.
+            Render(camera, canvas, height, page == 5 ? 20 : page);
+            if (page == 5)
+            {
+                Check(Array.Exists(canvas.GetComponentsInChildren<TMP_Text>(), t => t.text == "TREE & GRASS SWAY")
+                    && Array.Exists(canvas.GetComponentsInChildren<TMP_Text>(), t => t.text == "SHARPEN STRENGTH")
+                    && Array.Exists(canvas.GetComponentsInChildren<TMP_Text>(), t => t.text == "SUN GLARE"),
+                    "VISUALS page must list its rows");
+                Click(Array.Find(canvas.GetComponentsInChildren<AvButton>(),
+                    b => b.GetComponentInChildren<TMP_Text>().text == "-" && b.gameObject.activeInHierarchy));
+                Check(visuals.BloomBoost < 1.35f, "BLOOM BOOST stepper must write through the visuals seam");
+            }
             if (page == 1 && height == 596)
             {
                 Image finish = AvDisplayGlass.AttachFullDisplay((RectTransform)canvas.transform);
@@ -267,6 +281,28 @@ public static class SettingsUnityCheck
         Object.DestroyImmediate(target);
         Object.DestroyImmediate(image);
     }
+    private sealed class VisualsFixture : IVisualEnhancements
+    {
+        public bool IsEnabled => true;
+        public bool CinematicPostFxEnabled { get; set; } = true;
+        public float BloomBoost { get; set; } = 1.35f;
+        public bool SharpenEnabled { get; set; } = true;
+        public float SharpenStrength { get; set; } = 0.5f;
+        public bool GForceEffectsEnabled { get; set; } = true;
+        public bool FoliageDynamicsEnabled { get; set; } = true;
+        public float FoliageSwayStrength { get; set; } = 1f;
+    }
+
+    private sealed class ImmersionFixture : IImmersionSettings
+    {
+        public bool IsEnabled => true;
+        public bool HeadMotionEnabled { get; set; } = true;
+        public float HeadMotionStrength { get; set; } = 1f;
+        public bool ExtraShakeEnabled { get; set; } = true;
+        public float ShakeStrength { get; set; } = 1f;
+        public bool SunGlareEnabled { get; set; } = true;
+    }
+
     private sealed class HudFixture : IHudBoard
     {
         public int Resets;

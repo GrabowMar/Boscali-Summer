@@ -1,65 +1,53 @@
-using System;
 using BepInEx.Configuration;
 
 namespace BoscaliSummer.Features.Visuals.Configuration
 {
     /// <summary>
-    /// Configuration settings for the Visuals module, cinematic post-processing,
-    /// dynamic G-force effects, transonic motion blur, and foliage dynamics.
+    /// Client-side visual layer. Everything but <see cref="Enabled"/> is read every frame, so the
+    /// MFD SET page can flip it mid-flight.
     /// </summary>
     internal sealed class VisualsSettings
     {
         public ConfigEntry<bool> Enabled { get; }
         public ConfigEntry<bool> CinematicPostFxEnabled { get; }
+        public ConfigEntry<float> BloomBoost { get; }
+        public ConfigEntry<bool> SharpenEnabled { get; }
+        public ConfigEntry<float> SharpenStrength { get; }
         public ConfigEntry<bool> GForceEffectsEnabled { get; }
-        public ConfigEntry<bool> MotionBlurEnabled { get; }
         public ConfigEntry<bool> FoliageDynamicsEnabled { get; }
-        public ConfigEntry<float> BloomIntensity { get; }
         public ConfigEntry<float> FoliageSwayStrength { get; }
-
-        public event Action OnSettingsChanged;
 
         public VisualsSettings(ConfigFile config)
         {
             const string section = "Visuals";
 
             Enabled = config.Bind(section, "Enabled", true,
-                "Master switch for Boscali Visual Enhancements, including cinematic post-processing and flight visual feedback.");
+                "Master switch for Boscali's visual layer (colour grade, sharpening, G effects, tree and grass sway). Read at startup.");
 
             CinematicPostFxEnabled = config.Bind(section, "CinematicPostFxEnabled", true,
-                "Enable cinematic URP post-processing (ACES tonemapping, HDR bloom, calibrated color grading, subtle film grain).");
+                "Filmic grade on top of the game's own tonemapping and auto-exposure: a touch more contrast, cool shadows and warm highlights, fine film grain and stronger bloom.");
+
+            BloomBoost = config.Bind(section, "BloomBoost", 1.35f,
+                new ConfigDescription(
+                    "Multiplier on the game's own day/night bloom (afterburners, tracers, sun glint, explosions). 1 = vanilla.",
+                    new AcceptableValueRange<float>(0.5f, 2.5f)));
+
+            SharpenEnabled = config.Bind(section, "SharpenEnabled", true,
+                "AMD FidelityFX contrast-adaptive sharpening (RCAS) at native resolution: crisper distant aircraft, terrain and cockpit text.");
+
+            SharpenStrength = config.Bind(section, "SharpenStrength", 0.5f,
+                new ConfigDescription("Sharpening strength, 0 (off) to 1 (strongest).",
+                    new AcceptableValueRange<float>(0f, 1f)));
 
             GForceEffectsEnabled = config.Bind(section, "GForceEffectsEnabled", true,
-                "Enable pilot physiological G-force visual effects (tunnel vision / blackout on high positive G, redout on negative G).");
-
-            MotionBlurEnabled = config.Bind(section, "MotionBlurEnabled", true,
-                "Enable dynamic transonic camera motion blur at high speeds (Mach 0.85+) and high roll rates.");
+                "Cockpit-only G effects added to the game's own G-LOC blackout: red-out under negative G and lens fringing under heavy positive G.");
 
             FoliageDynamicsEnabled = config.Bind(section, "FoliageDynamicsEnabled", true,
-                "Enable enhanced wind sway and ambient dynamics on terrain foliage.");
-
-            BloomIntensity = config.Bind(section, "BloomIntensity", 0.40f,
-                new ConfigDescription(
-                    "Intensity of HDR bloom on afterburners, tracer rounds, solar glint, and explosions.",
-                    new AcceptableValueRange<float>(0.0f, 1.0f)));
+                "Trees sway and grass waves with the map's wind.");
 
             FoliageSwayStrength = config.Bind(section, "FoliageSwayStrength", 1.0f,
-                new ConfigDescription(
-                    "Strength multiplier for terrain vegetation wind response.",
-                    new AcceptableValueRange<float>(0.1f, 2.5f)));
-
-            Enabled.SettingChanged += (_, _) => NotifyChanged();
-            CinematicPostFxEnabled.SettingChanged += (_, _) => NotifyChanged();
-            GForceEffectsEnabled.SettingChanged += (_, _) => NotifyChanged();
-            MotionBlurEnabled.SettingChanged += (_, _) => NotifyChanged();
-            FoliageDynamicsEnabled.SettingChanged += (_, _) => NotifyChanged();
-            BloomIntensity.SettingChanged += (_, _) => NotifyChanged();
-            FoliageSwayStrength.SettingChanged += (_, _) => NotifyChanged();
-        }
-
-        public void NotifyChanged()
-        {
-            OnSettingsChanged?.Invoke();
+                new ConfigDescription("Strength of tree sway and grass wind.",
+                    new AcceptableValueRange<float>(0.2f, 2.5f)));
         }
     }
 }

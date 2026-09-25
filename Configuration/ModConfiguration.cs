@@ -17,6 +17,7 @@ using BoscaliSummer.Features.TheaterOps.Configuration;
 using BoscaliSummer.Features.Trenches.Configuration;
 using BoscaliSummer.Features.UrbanCombat.Configuration;
 using BoscaliSummer.Features.Visuals.Configuration;
+using BoscaliSummer.Features.Immersion.Configuration;
 using BoscaliSummer.Features.Weather.Configuration;
 using BoscaliSummer.Infrastructure.Diagnostics;
 
@@ -48,6 +49,7 @@ namespace BoscaliSummer
         public DiagnosticSettings Diagnostics { get; }
         public WeatherSettings Weather { get; }
         public VisualsSettings Visuals { get; }
+        public ImmersionSettings Immersion { get; }
 
         public ModConfiguration(ConfigFile config)
         {
@@ -75,6 +77,7 @@ namespace BoscaliSummer
                 Diagnostics = new DiagnosticSettings(config);
                 Weather = new WeatherSettings(config);
                 Visuals = new VisualsSettings(config);
+                Immersion = new ImmersionSettings(config);
                 LegacyConfigMigration.RemoveEntries(config);
                 // Last, so every module's entries are present to be sorted into the
                 // F1 window's plain and advanced halves.

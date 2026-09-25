@@ -19,6 +19,7 @@ using BoscaliSummer.Features.TheaterOps;
 using BoscaliSummer.Features.Trenches;
 using BoscaliSummer.Features.UrbanCombat;
 using BoscaliSummer.Features.Visuals;
+using BoscaliSummer.Features.Immersion;
 using BoscaliSummer.Features.Weather;
 using BoscaliSummer.Framework.Features;
 using BoscaliSummer.Runtime;
@@ -65,6 +66,8 @@ namespace BoscaliSummer.Bootstrap
                 if (settings.Weather.Enabled.Value) features.Add(new WeatherFeature());
                 if (settings.Visuals.Enabled.Value && !UnityEngine.Application.isBatchMode)
                     features.Add(new VisualsFeature());
+                if (settings.Immersion.Enabled.Value && !UnityEngine.Application.isBatchMode)
+                    features.Add(new ImmersionFeature());
                 host.Load(features.ToArray());
                 CapabilityReport.Log();
                 return host;

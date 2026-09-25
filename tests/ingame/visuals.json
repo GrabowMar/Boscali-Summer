@@ -1,0 +1,434 @@
+{
+ "name": "visuals",
+ "mods": [
+  "wingcommand",
+  "boscalisummer"
+ ],
+ "timeout_s": 300,
+ "ops": [
+  {
+   "op": "spawn",
+   "id": "lead",
+   "type": "FS-20 Vortex",
+   "at": {
+    "map": [
+     0,
+     0
+    ]
+   },
+   "altitude": 600,
+   "speed": 160,
+   "heading": 0
+  },
+  {
+   "op": "record",
+   "ids": [
+    "lead"
+   ],
+   "hz": 1
+  },
+  {
+   "op": "fly",
+   "id": "lead",
+   "program": [
+    {
+     "orbit": {
+      "bank": 15,
+      "seconds": 300
+     }
+    }
+   ]
+  },
+  {
+   "op": "wait",
+   "seconds": 10
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Visuals.Runtime.VisualsAutomation.Readout",
+   "store": "boot"
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Visuals.Runtime.VisualsAutomation.Set",
+   "args": {
+    "grade": false,
+    "sharpen": false,
+    "foliage": true,
+    "sway": 1.0
+   }
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Visuals.Runtime.VisualsAutomation.LookAtTrees",
+   "args": {
+    "distance": 110,
+    "height": 30
+   },
+   "store": "trees"
+  },
+  {
+   "op": "wait",
+   "seconds": 8
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Visuals.Runtime.VisualsAutomation.Capture",
+   "args": {
+    "name": "sway_a"
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 0.7
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Visuals.Runtime.VisualsAutomation.Capture",
+   "args": {
+    "name": "sway_b"
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 0.7
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Visuals.Runtime.VisualsAutomation.Capture",
+   "args": {
+    "name": "sway_c"
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 0.2
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Visuals.Runtime.VisualsAutomation.Readout",
+   "store": "swaying"
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Visuals.Runtime.VisualsAutomation.Set",
+   "args": {
+    "foliage": false
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 2
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Visuals.Runtime.VisualsAutomation.Capture",
+   "args": {
+    "name": "still_a"
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 0.7
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Visuals.Runtime.VisualsAutomation.Capture",
+   "args": {
+    "name": "still_b"
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 1
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Visuals.Runtime.VisualsAutomation.Capture",
+   "args": {
+    "name": "near_vanilla"
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 1
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Visuals.Runtime.VisualsAutomation.Set",
+   "args": {
+    "sharpen": true
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 2
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Visuals.Runtime.VisualsAutomation.Capture",
+   "args": {
+    "name": "near_sharpen"
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 1
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Visuals.Runtime.VisualsAutomation.Set",
+   "args": {
+    "grade": true
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 2
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Visuals.Runtime.VisualsAutomation.Capture",
+   "args": {
+    "name": "near_graded"
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 1
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Visuals.Runtime.VisualsAutomation.Readout",
+   "store": "graded"
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Visuals.Runtime.VisualsAutomation.Set",
+   "args": {
+    "grade": false,
+    "sharpen": false
+   }
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Visuals.Runtime.VisualsAutomation.LookAtTrees",
+   "args": {
+    "distance": 450,
+    "height": 160
+   },
+   "store": "wide"
+  },
+  {
+   "op": "wait",
+   "seconds": 8
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Visuals.Runtime.VisualsAutomation.Capture",
+   "args": {
+    "name": "wide_vanilla"
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 1
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Visuals.Runtime.VisualsAutomation.Readout",
+   "store": "wideVanilla"
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Visuals.Runtime.VisualsAutomation.Set",
+   "args": {
+    "grade": true,
+    "sharpen": true
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 2
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Visuals.Runtime.VisualsAutomation.Capture",
+   "args": {
+    "name": "wide_enhanced"
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 1
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Visuals.Runtime.VisualsAutomation.Readout",
+   "store": "wideEnhanced"
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Visuals.Runtime.VisualsAutomation.Set",
+   "args": {
+    "foliage": true
+   }
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Weather.Runtime.WeatherAutomation.View",
+   "store": "cockpit",
+   "args": {
+    "view": "cockpit",
+    "follow": "lead"
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 4
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Visuals.Runtime.VisualsAutomation.Capture",
+   "args": {
+    "name": "cockpit_plain"
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 1
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Visuals.Runtime.VisualsAutomation.DebugFlight",
+   "args": {
+    "g": -3.5,
+    "seconds": 5
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 2.5
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Visuals.Runtime.VisualsAutomation.Capture",
+   "args": {
+    "name": "cockpit_redout"
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 1
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Visuals.Runtime.VisualsAutomation.Readout",
+   "store": "redout"
+  },
+  {
+   "op": "wait",
+   "seconds": 4
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Visuals.Runtime.VisualsAutomation.DebugFlight",
+   "args": {
+    "g": 8.5,
+    "seconds": 5
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 2.5
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Visuals.Runtime.VisualsAutomation.Capture",
+   "args": {
+    "name": "cockpit_strain"
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 1
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Visuals.Runtime.VisualsAutomation.Readout",
+   "store": "strain"
+  },
+  {
+   "op": "wait",
+   "seconds": 4
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Features.Visuals.Runtime.VisualsAutomation.Readout",
+   "store": "recovered"
+  },
+  {
+   "op": "end"
+  }
+ ],
+ "checks": [
+  {
+   "check": "status_ok"
+  },
+  {
+   "check": "result_above",
+   "path": "trees.treeCount",
+   "min": 1
+  },
+  {
+   "check": "result_above",
+   "path": "swaying.treeRenderersSwaying",
+   "min": 0.5
+  },
+  {
+   "check": "result_above",
+   "path": "swaying.treeSwayFrames",
+   "min": 10
+  },
+  {
+   "check": "result_above",
+   "path": "graded.sharpen",
+   "min": 0.1
+  },
+  {
+   "check": "result_above",
+   "path": "graded.volumeLayer",
+   "min": 0
+  },
+  {
+   "check": "result_above",
+   "path": "graded.stackContrast",
+   "min": 1
+  },
+  {
+   "check": "result_below",
+   "path": "wideVanilla.stackContrast",
+   "max": 0.5
+  },
+  {
+   "check": "result_above",
+   "path": "redout.redout",
+   "min": 0.5
+  },
+  {
+   "check": "result_above",
+   "path": "strain.strain",
+   "min": 0.5
+  },
+  {
+   "check": "result_below",
+   "path": "recovered.redout",
+   "max": 0.05
+  },
+  {
+   "check": "result_below",
+   "path": "recovered.strain",
+   "max": 0.05
+  }
+ ]
+}
