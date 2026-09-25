@@ -9,15 +9,16 @@ expanded tactical map. Every expensive system is pooled, event-driven and has a 
 - **Version:** `0.1.1`, a development build. There is no binary release yet; build from source.
 - **Game:** Nuclear Option 0.34.2 (Unity 2022.3, Mono).
 - **Requires:** [BepInEx 5](https://github.com/BepInEx/BepInEx/releases) (5.4.23 or newer) and
-  Wing Command 0.9.2.6 or newer.
+  [Wing Command](https://github.com/GrabowMar/NuclearOption-WingCommand) 0.9.2.6 or newer.
 - **Multiplayer:** supported; the host and every client must run the same version.
 - **Licence:** [MIT](LICENSE).
 
 > [!NOTE]
-> World state is host-authoritative: fires, garrisons, trenches, careers, support requests,
-> events and the theater director are decided by the host and replicated to clients,
-> including late joiners. Many features still await in-game and multiplayer acceptance, and
-> balance may change between versions.
+> World state is host-authoritative: the host decides fires, garrisons, trench growth,
+> careers, support requests, events and the theater director, and replicates the results to
+> clients, including late joiners. The one exception is trench earthworks: their carved
+> ditches, wire and map marks are drawn on the host only. Many features still await in-game
+> and multiplayer acceptance, and balance may change between versions.
 
 ## Contents
 
@@ -33,8 +34,8 @@ expanded tactical map. Every expensive system is pooled, event-driven and has a 
 
 ## Features
 
-Each feature is a self-contained module under `modules/` with its own settings section and
-master switch. The tables name the switch; [Configuration](#configuration) lists them all.
+Each feature is a self-contained module under `modules/` with its own settings section. The
+tables name its main switch; [Configuration](#configuration) explains what each one covers.
 
 ### Battlefield
 
@@ -42,16 +43,16 @@ master switch. The tables name the switch; [Configuration](#configuration) lists
 |---|---|---|
 | **Fire and destruction** | `Fires.Enabled` | Gun, missile and vehicle-loss impacts can ignite forests and civilian buildings. Forest fires spread downwind and leave burnt ground; buildings burn to smouldering ruins; explosive hits leave scorch marks; aircraft wrecks linger and smoke. |
 | **Urban combat** | `Garrisons.Enabled` | Civilian buildings near owned airbases become defensive positions with rooftop MG, AT and AA nests. Cities resist capture (urban siege), armour leads urban assaults, and an air-raid siren sounds near cities. Air-assault insertions (paradrop and fast-rope) are shown as visible sequences. |
-| **Trenches** | `Trenches.Enabled` | Trench positions grow along contested stretches of the front: man-scale earthworks carved into the terrain, with fire bays, wire, support and redoubt belts and manned nests, drawn on the map with NATO symbols. Needs Command. |
+| **Trenches** | `Trenches.Enabled` | Trench positions grow along contested stretches of the front: man-scale earthworks carved into the terrain, with fire bays, wire, support and redoubt belts and manned native MG, ATGM and AA nests. The defenders replicate to every player; the carved ditches, wire and NATO map marks show on the host only. Needs Command. |
 
 ### Theater
 
 | Feature | Switch | What it does |
 |---|---|---|
 | **Command** | `Command.Enabled` | The `STR` theater screen (DEFCON, air picture, sortie board, sector control, chain of command and the operations board) and the expanded tactical map: rebuilt `MAP`, `TGT`, `MIS` and `FAC` pages, a bezel rail, control-field, front-line and threat-heat overlays, target-filter presets and a news ticker. Needs Progression. |
-| **Theater operations** | `TheaterOps.Enabled` | A staff director names the faction's main effort, funds offensives from the shared faction pool in waves, and stages newly spawned ground vehicles at the front. Friendly AI reinforcements and units without better orders favour the main effort. |
+| **Theater operations** | `TheaterOps.Enabled` | On the host, a staff director fights the host faction's ground war: it names the main effort, funds offensives from the shared faction pool in waves, and stages newly spawned ground vehicles at the front. Players steer it with standing orders (stance, hold, war chest, axes) on the `STR` CMD page. Friendly AI reinforcements and units without better orders favour the main effort. |
 | **High command** | `HighCommand.Enabled` | Generated staffs for both factions with portraits and service records, command posts at airbases, VIP convoys between bases, survival stipends and kill bounties. Killing a commander promotes a successor at reduced cohesion. |
-| **World events** | `Events.Enabled` | The `EVN` screen and a host-run event director: one event at a time with a real modifier on support costs and cooldowns, and rare superevents that fund or supply a hard-pressed side. |
+| **World events** | `Events.Enabled` | The `EVN` screen and a host-run event director: one event at a time, most with a real modifier on support costs and cooldowns, and rare scripted superevents when the theater leans: some aid the side losing ground, others hit the leader or both sides. |
 | **Dynamic operations** | `DynamicOperations.Enabled` (off by default) | Experimental pool of 17 contract families (capture, defence, hunts, patrol, jamming, insertion, rescue, reconnaissance, escort and more) on the `MIS` page, with map markers, cockpit pointers and money and score rewards. |
 | **Campaign** | `Campaign.Enabled` | Installs the authored *Boscali Summer* mission into the game's own mission list at startup, once per shipped revision. A same-named mission the mod did not write is never overwritten. |
 
@@ -60,8 +61,8 @@ master switch. The tables name the switch; [Configuration](#configuration) lists
 | Feature | Switch | What it does |
 |---|---|---|
 | **Squad and aces** | `Progression.Enabled`; hunts: `Squad.EnemyAceHunts` | Pilot careers from Wing Command identities, either respawning or one life. Hostile damage draws escalating enemy ace wings that hunt you; beating an ace grants a bonus pick. |
-| **Progression** | `Progression.Enabled` | The `SQD` screen: pilot dossier, a skill board of four qualifications with six grades each earned from mission score, the enemy ace roster, and a studio for Wing Command custom pilots and the local squadron emblem. |
-| **Support** | `Support.Enabled` | The `OPS` screen, with three domains. **SPACE**: design and fly your faction's orbital station for radar scans, ELINT and MTI sweeps, kinetic rod strikes and EMP. **CYBER**: a spectrum-defence network of airbase nodes and field trucks, attacked by a simulated adversary. **SPEC OPS**: teams sent to real map objectives, whose posts unlock spotting, suppression and zone fortification. A flare-barrage rocket that seduces IR missiles is also on call. Needs Progression. |
+| **Progression** | `Progression.Enabled` | The `SQD` screen: the pilot dossier; a skill board of four qualifications (STRIKE, RECON, SIGNALS, ENGINEER) with six grades each, earned from mission score; the enemy ace roster; a studio for Wing Command custom pilots and the local squadron emblem; and a preflight engine tune for your aircraft. |
+| **Support** | `Support.Enabled` | The `OPS` screen, with three domains. **SPACE**: design and fly your faction's orbital station for radar scans, ELINT and MTI sweeps, kinetic rod strikes and EMP. **CYBER**: a spectrum-defence network of airbase nodes and field trucks, attacked by a simulated adversary. **SPEC OPS**: teams sent to real map objectives, whose posts unlock spotting, suppression and zone fortification. A flare-barrage rocket that seduces IR missiles is also on call. Each tool needs its qualification on the `SQD` skill board, and a career holds two, so plan which tools to take. Needs Progression. |
 
 ### Cockpit and presentation
 
@@ -73,7 +74,7 @@ master switch. The tables name the switch; [Configuration](#configuration) lists
 | **Weather** | `Weather.Enabled` | The `ENV` screen and dynamic weather: smooth regime changes over mission time, procedural rain with canopy droplets and runoff, wet terrain and synthesized rain audio. |
 | **Visuals** | `Visuals.Enabled` | A filmic colour grade, stronger bloom, contrast-adaptive sharpening, cockpit G effects and wind-driven tree and grass sway. |
 | **Immersion** | `Immersion.Enabled` | Head movement under G, extra camera shake from guns and touchdowns, and sun glare. |
-| **Quality of life** | `QoL.Enabled` | A camera observation mark: one local point at the centre of the live camera view, which expires after two minutes. |
+| **Quality of life** | `QoL.Enabled` | A camera observation mark (one local point at the centre of the live camera view, expiring after two minutes), a fuel and divert-field line on the HUD, and night vision that survives camera switches. It also turns off the game's stick-input aim assist for guns, keeping its lead and impact prediction. |
 | **Autopilot landing** | `Autopilot.Enabled` | A **Boscali Summer** entry in the native radial menu that lands your own aircraft on a runway or pad with the game's autopilot, plus a gear-down ILS line on the HUD. Any stick input cancels it. |
 | **Spawn priority** | always on | When you request an aircraft and the only suitable hangar is blocked by an AI aircraft sitting on its spawn point (never a Wing Command wingman), the AI aircraft is removed so you can spawn. |
 
@@ -89,7 +90,7 @@ own pages and Wing Command's `WMC`.
 |---|---|
 | `STR` | Theater picture, chain of command and the operations board |
 | `OPS` | Support: SPACE, CYBER and SPEC OPS |
-| `SQD` | Pilot dossier, skill board, enemy aces and studio |
+| `SQD` | Pilot dossier, skill board, enemy aces, studio and engine tune |
 | `EVN` | World events |
 | `RAD` | Radio receiver and music deck |
 | `COM` | Multiplayer comms |
@@ -105,7 +106,9 @@ own pages and Wing Command's `WMC`.
 | Left Shift + drag | Draw on the open map | `Comms.DrawHoldKey` |
 | Middle mouse | Drop a ping at the cursor on the open map | `Comms.QuickPingKey` |
 
-Every key can be rebound or set to `None` in the configuration.
+Every key above can be rebound or set to `None` in the configuration. Inside the `OPS`
+window, Ctrl+1 to Ctrl+3 switch domain, Ctrl+Tab cycles them and Esc closes it; the SPACE
+imager pans with WASD or the arrow keys and zooms with Q and E.
 
 ## Installation
 
@@ -125,7 +128,7 @@ Optional content goes beside the plugin or in the config folder:
 | Content | Location |
 |---|---|
 | Radio music: one folder per station, OGG or WAV | `BepInEx/plugins/BoscaliSummer/Music/` |
-| Event poster art (PNG) | `BepInEx/plugins/BoscaliSummer/Events/` |
+| Event poster art: `<event key>.png` or `default.png`, up to 2 MB | `BepInEx/plugins/BoscaliSummer/Events/` |
 | Squadron emblem (PNG) | `BepInEx/config/BoscaliSummer/Emblems/` |
 | Map wallpaper | `BepInEx/config/BoscaliSummer/wallpapers/` |
 | Panel stylesheet override | `BepInEx/config/NOAvionics/avionics.avss` |
@@ -133,14 +136,19 @@ Optional content goes beside the plugin or in the config folder:
 ## Configuration
 
 Settings live in `BepInEx/config/com.marci.boscalisummer.cfg`. Edit them in game with
-[ConfigurationManager](https://github.com/BepInEx/BepInEx.ConfigurationManager) (**F1**),
-which shows every key with its description; the `SET` screen also edits the map, HUD and
-server settings. Descriptions say whether a setting is **host-authoritative** (in
+[ConfigurationManager](https://github.com/BepInEx/BepInEx.ConfigurationManager) (**F1**):
+its Modules group lists every module switch, and ticking "Advanced settings" shows the rest,
+each with its description. The `SET` screen also edits the map, HUD and server settings;
+it belongs to Command, as does `STR`. Descriptions say whether a setting is **host-authoritative** (in
 multiplayer only the host's value applies) or **client-local** (your own game only).
 Budgets such as particle counts and active fires stay bounded whatever a setting says.
 
-Master switches, all read at startup. A feature whose dependency is switched off is skipped
-with a warning in the log.
+Module switches. Most are read at startup and leave the whole module out when off; a module
+whose dependency is off is skipped with a warning in the log. Fires, Garrisons, Hud and
+Radio are always loaded, and their switch turns off only the core behaviour: fire ignition,
+the garrisons, the common HUD element and the radio. Their other parts have their
+own settings, such as `Buildings.ImpactScorchEnabled`, `Garrisons.UrbanAmbience` and
+`Hud.BoardEnabled`.
 
 | Section | Setting | Default | Depends on |
 |---|---|---|---|
@@ -164,8 +172,8 @@ with a warning in the log.
 | QoL | `Enabled` | `true` | |
 | Autopilot | `Enabled` | `true` | |
 
-The `Debug` section holds testing aids (`BypassRequirements`, `DisableOpsCooldowns`,
-`VerboseLogging`); leave them off for play. Settings that a version retires are removed
+The `Debug` section holds testing aids, such as `BypassRequirements` and
+`DisableOpsCooldowns`; leave them off for play. Settings that a version retires are removed
 from the file automatically on the next start.
 
 ## Building from source
@@ -230,9 +238,10 @@ flowchart TD
   `Runtime/` holds the MonoBehaviours and services; `Presentation/` holds the UI;
   `Networking/` holds the module's own messages; `Configuration/` holds its settings; and,
   where present, `Patches/` holds its Harmony patches.
-- **Game access** goes through `Infrastructure/GameInterop`. Private game members are resolved
-  once by reflection, and the matching feature degrades with a log warning instead of failing
-  when a game update moves them. `CapabilityReport` logs what resolved at startup.
+- **Game access:** private game members are resolved once by reflection, in
+  `Infrastructure/GameInterop` for shared ones and inside the module for its own. When a game
+  update moves one, the matching feature degrades with a log warning instead of failing.
+  `CapabilityReport` logs what resolved at startup.
 
 | Path | Contents |
 |---|---|
