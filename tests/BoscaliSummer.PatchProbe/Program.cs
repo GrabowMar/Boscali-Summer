@@ -460,6 +460,7 @@ string[] featureTypes =
     ,"BoscaliSummer.Features.Hud.HudFeature"
     ,"BoscaliSummer.Features.Comms.CommsFeature"
     ,"BoscaliSummer.Features.Visuals.VisualsFeature"
+    ,"BoscaliSummer.Features.Intel.IntelFeature"
 };
 foreach (string featureType in featureTypes)
     if (pluginAssembly.GetType(featureType, false) == null)
@@ -735,6 +736,64 @@ RequireMetadataSignature(Path.Combine(managedDir, "Mirage.dll"), "Mirage.ServerO
 };
 foreach (var seam in operationFields)
     RequireMetadataField(operationAssembly, seam.Type, seam.Field, seam.FieldType);
+// Intel (S1) reads each faction's own tracking through public seams only; it has no patch
+// targets. The discover/forget events, the tracking database, a missile's owner and weapon,
+// the weapon-station envelope and the radar-carrier test are its whole surface.
+(string Type, string Method, string Signature)[] intelMethods =
+{
+    ("FactionHQ", "add_onDiscoverUnit", "System.Void(System.Action`1<PersistentID>)"),
+    ("FactionHQ", "remove_onDiscoverUnit", "System.Void(System.Action`1<PersistentID>)"),
+    ("FactionHQ", "add_onForgetUnit", "System.Void(System.Action`1<PersistentID>)"),
+    ("FactionHQ", "remove_onForgetUnit", "System.Void(System.Action`1<PersistentID>)"),
+    ("FactionRegistry", "GetAllHQs", "System.Collections.Generic.Dictionary`2+ValueCollection<Faction,FactionHQ>()"),
+    ("GameManager", "GetLocalHQ", "System.Boolean(FactionHQ&)"),
+    ("TrackingInfo", "TryGetUnit", "System.Boolean(Unit&)"),
+    ("UnitRegistry", "TryGetUnit", "System.Boolean(System.Nullable`1<PersistentID>,Unit&)"),
+    ("Unit", "HasRadarEmission", "System.Boolean()"),
+    ("Unit", "get_NetworkHQ", "FactionHQ()"),
+    ("Unit", "get_SavedUnit", "NuclearOption.SavedMission.SavedUnit()"),
+    ("Missile", "GetWeaponInfo", "WeaponInfo()"),
+    ("GlobalPositionExtensions", "GlobalPosition", "GlobalPosition(Unit)")
+};
+foreach (var seam in intelMethods)
+    RequireMetadataSignature(operationAssembly, seam.Type, seam.Method, seam.Signature);
+(string Type, string Field, string FieldType)[] intelFields =
+{
+    ("FactionHQ", "trackingDatabase", "System.Collections.Generic.Dictionary`2<PersistentID,TrackingInfo>"),
+    ("FactionHQ", "factionUnits", "Mirage.Collections.SyncList`1<PersistentID>"),
+    ("PersistentID", "Id", "System.UInt32"),
+    ("Missile", "ownerID", "PersistentID"),
+    ("Unit", "radar", "TargetDetector"),
+    ("Unit", "weaponStations", "System.Collections.Generic.List`1<WeaponStation>"),
+    ("Unit", "definition", "UnitDefinition"),
+    ("Unit", "UniqueName", "System.String"),
+    ("WeaponStation", "WeaponInfo", "WeaponInfo"),
+    ("WeaponInfo", "effectiveness", "RoleIdentity"),
+    ("WeaponInfo", "targetRequirements", "TargetRequirements"),
+    ("WeaponInfo", "gun", "System.Boolean"),
+    ("WeaponInfo", "jammer", "System.Boolean"),
+    ("TargetRequirements", "maxRange", "System.Single"),
+    ("TargetRequirements", "minAltitude", "System.Single"),
+    ("TargetRequirements", "maxAltitude", "System.Single"),
+    ("TargetRequirements", "minIR", "System.Single"),
+    ("TargetRequirements", "minRadar", "System.Single"),
+    ("RoleIdentity", "antiAir", "System.Single"),
+    ("RoleIdentity", "antiSurface", "System.Single"),
+    ("UnitDefinition", "typeIdentity", "TypeIdentity"),
+    ("UnitDefinition", "roleIdentity", "RoleIdentity"),
+    ("UnitDefinition", "code", "System.String"),
+    ("TypeIdentity", "radar", "System.Single"),
+    ("GlobalPosition", "x", "System.Single"),
+    ("GlobalPosition", "z", "System.Single")
+};
+foreach (var seam in intelFields)
+    RequireMetadataField(operationAssembly, seam.Type, seam.Field, seam.FieldType);
+if (gameAssembly.GetType("Radar", true)!.BaseType?.FullName != "TargetDetector")
+    throw new TypeLoadException("Radar no longer derives from TargetDetector; Intel reads Unit.radar as a Radar");
+foreach (string type in new[] {
+    "BoscaliSummer.Framework.Contracts.IThreatPicture",
+    "BoscaliSummer.Features.Intel.Runtime.ThreatPictureService" })
+    if (pluginAssembly.GetType(type, false) == null) throw new TypeLoadException(type);
 if (Convert.ToInt32(Enum.Parse(gameAssembly.GetType("FactionHQ+RewardType", true)!, "None")) != 0)
     throw new InvalidOperationException("Dynamic operations reward category changed");
 foreach (string type in new[] {
