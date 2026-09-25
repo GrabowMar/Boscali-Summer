@@ -1,4 +1,6 @@
 using System;
+using BoscaliSummer.Features.Intel.Runtime;
+using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Features;
 
 namespace BoscaliSummer.Features.Intel
@@ -18,7 +20,12 @@ namespace BoscaliSummer.Features.Intel
 
         public void Install(FeatureContext context)
         {
-            // Installs ThreatPictureService from Task 6; the composition root registers it there.
+            // Resets before TheaterOps (50), whose director reads the picture.
+            ThreatPictureService picture = context.AddSceneService<ThreatPictureService>(49);
+            picture.Configure(context.Settings.Intel, context.Logger);
+            context.AddService<IThreatPicture>(picture);
+            context.Logger.LogInfo("Intel: threat picture installed (PreWarIntel=" +
+                                   context.Settings.Intel.PreWarIntel.Value + ").");
         }
     }
 }

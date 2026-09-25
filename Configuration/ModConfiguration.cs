@@ -8,6 +8,7 @@ using BoscaliSummer.Features.Events.Configuration;
 using BoscaliSummer.Features.FireAndDestruction.Configuration;
 using BoscaliSummer.Features.HighCommand.Configuration;
 using BoscaliSummer.Features.Hud.Configuration;
+using BoscaliSummer.Features.Intel.Configuration;
 using BoscaliSummer.Features.Progression.Configuration;
 using BoscaliSummer.Features.QoL.Configuration;
 using BoscaliSummer.Features.Radio.Configuration;
@@ -36,6 +37,7 @@ namespace BoscaliSummer
         public SupportSettings Support { get; }
         public CommandSettings Command { get; }
         public HighCommandSettings HighCommand { get; }
+        public IntelSettings Intel { get; }
         public TheaterOpsSettings TheaterOps { get; }
         public DynamicOperationsSettings DynamicOperations { get; }
         public TrenchesSettings Trenches { get; }
@@ -63,6 +65,7 @@ namespace BoscaliSummer
                 Support = new SupportSettings(config);
                 Command = new CommandSettings(config);
                 HighCommand = new HighCommandSettings(config);
+                Intel = new IntelSettings(config);
                 TheaterOps = new TheaterOpsSettings(config);
                 DynamicOperations = new DynamicOperationsSettings(config);
                 Trenches = new TrenchesSettings(config);
