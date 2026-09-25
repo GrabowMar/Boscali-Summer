@@ -46,6 +46,11 @@ namespace BoscaliSummer.Tests.Framework
             });
             TestAssert.That(missing[0] == "trenches" && missing[1] == "command" && missing[2] == null,
                 "a feature whose dependency is switched off, and anything built on it, must be left out by name");
+            TestAssert.Throws<InvalidOperationException>(() => FeatureGraph.MissingDependencies(new[]
+            {
+                new FeatureMetadata("same", "One", "missing"),
+                new FeatureMetadata("same", "Two")
+            }), "duplicate feature IDs must not hide behind a missing dependency");
 
             var registry = new ServiceRegistry();
             var expected = new ExampleService();

@@ -16,7 +16,9 @@ namespace BoscaliSummer.Framework.Features
 
             var missing = new string[features.Count];
             var loadable = new HashSet<string>(StringComparer.Ordinal);
-            for (int i = 0; i < features.Count; i++) loadable.Add(features[i].Id);
+            for (int i = 0; i < features.Count; i++)
+                if (!loadable.Add(features[i].Id))
+                    throw new InvalidOperationException("Duplicate feature ID: " + features[i].Id);
 
             for (bool changed = true; changed;)
             {

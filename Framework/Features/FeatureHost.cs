@@ -58,7 +58,7 @@ namespace BoscaliSummer.Framework.Features
             {
                 if (missing[i] == null) loadable.Add(features[i]);
                 else logger.LogWarning("Skipped feature '" + requested[i].DisplayName +
-                    "' because the feature it needs, '" + missing[i] + "', is turned off.");
+                    "' because it needs feature '" + missing[i] + "', which is turned off or skipped.");
             }
             features = loadable;
             var metadata = new FeatureMetadata[features.Count];
