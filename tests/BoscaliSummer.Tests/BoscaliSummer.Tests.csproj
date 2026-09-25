@@ -85,7 +85,6 @@
     <Compile Include="..\..\modules\Radio\Runtime\RadioFrequencies.cs" Link="Features\Radio\RadioFrequencies.cs" />
     <Compile Include="..\..\modules\Radio\Runtime\RadioPropagation.cs" Link="Features\Radio\RadioPropagation.cs" />
     <Compile Include="..\..\modules\Radio\Runtime\RadioSpectrum.cs" Link="Features\Radio\RadioSpectrum.cs" />
-    <Compile Include="..\..\modules\Radio\Runtime\RadioLinkStub.cs" Link="Features\Radio\RadioLinkStub.cs" />
     <Compile Include="..\..\modules\Radio\Runtime\VanillaMusicHold.cs" Link="Features\Radio\VanillaMusicHold.cs" />
     <Compile Include="..\..\modules\Radio\Runtime\RadioProgramming.cs" Link="Features\Radio\RadioProgramming.cs" />
     <Compile Include="..\..\modules\Squad\Domain\AceCareer.cs" Link="Features\Squad\AceCareer.cs" />

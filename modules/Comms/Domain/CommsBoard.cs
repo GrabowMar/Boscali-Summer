@@ -43,13 +43,6 @@ namespace BoscaliSummer.Features.Comms.Domain
 
         public float X => Points != null && Points.Length >= 2 ? StrokeCodec.Restore(Points[0]) : 0f;
         public float Z => Points != null && Points.Length >= 2 ? StrokeCodec.Restore(Points[1]) : 0f;
-
-        public CommsItem Clone()
-        {
-            var copy = (CommsItem)MemberwiseClone();
-            copy.Points = Points == null ? null : (int[])Points.Clone();
-            return copy;
-        }
     }
 
     /// <summary>

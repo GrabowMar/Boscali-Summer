@@ -24,7 +24,6 @@ namespace BoscaliSummer.Features.Comms.Domain
     /// <summary>Something that just arrived and may deserve a HUD notice.</summary>
     internal struct CommsArrival
     {
-        public ulong Author;
         public CommsTone Tone;
         public string Text;
         public string Detail;
@@ -37,7 +36,6 @@ namespace BoscaliSummer.Features.Comms.Domain
         public uint Id;
         public ulong Author;
         public string AuthorName;
-        public CommsChannel Channel;
         public float Ends;
         public int GuessCount;
         public bool Revealed;
@@ -58,12 +56,10 @@ namespace BoscaliSummer.Features.Comms.Domain
 
     internal struct HuntPlacingView
     {
-        public ulong Player;
         public string Name;
         public float X;
         public float Z;
         public int Metres;
-        public int Points;
     }
 
     /// <summary>A rock-paper-scissors challenge as a peer sees it.</summary>
@@ -72,7 +68,6 @@ namespace BoscaliSummer.Features.Comms.Domain
         public uint Id;
         public ulong Challenger;
         public string ChallengerName;
-        public CommsChannel Channel;
         public float Expires;
     }
 
@@ -268,19 +263,6 @@ namespace BoscaliSummer.Features.Comms.Domain
             return null;
         }
 
-        public void AddLocalLine(CommsFeedKind kind, CommsTone tone, string text, float now)
-        {
-            Push(new CommsFeedLine
-            {
-                Time = now,
-                Author = LocalId,
-                AuthorName = "YOU",
-                Kind = kind,
-                Tone = tone,
-                Text = text,
-            });
-        }
-
         // ---- Events ------------------------------------------------------------------------
 
         private void ApplyItem(CommsEnvelope e, float now)
@@ -470,7 +452,6 @@ namespace BoscaliSummer.Features.Comms.Domain
                 Id = e.Id,
                 Challenger = e.Author,
                 ChallengerName = name,
-                Channel = e.Channel,
                 Expires = now + Math.Max(0f, e.Ttl),
             });
             Revision++;
@@ -495,7 +476,6 @@ namespace BoscaliSummer.Features.Comms.Domain
             }
             hunt.Author = e.Author;
             hunt.AuthorName = name;
-            hunt.Channel = e.Channel;
 
             if ((e.Flags & CommsFlags.Revealed) == 0)
             {
@@ -534,12 +514,10 @@ namespace BoscaliSummer.Features.Comms.Domain
                 {
                     hunt.Placings.Add(new HuntPlacingView
                     {
-                        Player = e.Players != null && i < e.Players.Length ? e.Players[i] : 0UL,
                         Name = CommsText.Name(e.Items != null && i < e.Items.Length ? e.Items[i] : null),
                         X = StrokeCodec.Restore(e.Points[2 + i * 2]),
                         Z = StrokeCodec.Restore(e.Points[3 + i * 2]),
                         Metres = e.Values != null && i * 2 < e.Values.Length ? e.Values[i * 2] : 0,
-                        Points = e.Values != null && i * 2 + 1 < e.Values.Length ? e.Values[i * 2 + 1] : 0,
                     });
                 }
             }
@@ -589,7 +567,7 @@ namespace BoscaliSummer.Features.Comms.Domain
         private void Arrive(ulong author, CommsTone tone, string text, string detail, bool ping)
         {
             if (author != 0UL && (author == LocalId || muted.Contains(author))) return;
-            arrivals.Add(new CommsArrival { Author = author, Tone = tone, Text = text, Detail = detail, Ping = ping });
+            arrivals.Add(new CommsArrival { Tone = tone, Text = text, Detail = detail, Ping = ping });
             if (arrivals.Count > 16) arrivals.RemoveAt(0);
         }
 
