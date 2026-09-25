@@ -99,7 +99,8 @@ namespace BoscaliSummer.Framework.Contracts
                 case HudAnchor.MiddleLeft: return new HudPlacement { AnchorX = 0f, AnchorY = 0.5f };
                 case HudAnchor.BottomRight: return new HudPlacement { AnchorX = 1f, AnchorY = 0f };
                 case HudAnchor.BottomLeft: return new HudPlacement { AnchorX = 0f, AnchorY = 0f };
-                // TopRight, and UnderWeapons, which the status feed then pins below the weapon column.
+                // UnderWeapons starts here too; the status feed then pins it below the weapon column.
+                case HudAnchor.TopRight:
                 default: return new HudPlacement { AnchorX = 1f, AnchorY = 1f };
             }
         }
