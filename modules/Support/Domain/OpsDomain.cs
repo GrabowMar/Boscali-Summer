@@ -29,7 +29,7 @@ namespace BoscaliSummer.Features.Support.Domain
                 case OpsDomain.Space: return "SPACE";
                 case OpsDomain.Cyber: return "CYBER";
                 case OpsDomain.SpecialOperations: return "SPEC OPS";
-                default: return "INTEL";
+                default: return string.Empty;
             }
         }
 
@@ -44,7 +44,7 @@ namespace BoscaliSummer.Features.Support.Domain
                 case OpsDomain.SpecialOperations:
                     return "Send teams to real objectives; the posts they hold arm SPOT, SUPPRESS and FORTIFY.";
                 default:
-                    return "Intelligence networks staged for theater events.";
+                    return string.Empty;
             }
         }
 
