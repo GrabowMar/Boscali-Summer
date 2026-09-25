@@ -74,6 +74,7 @@ namespace BoscaliSummer.Tests
             Features.TheaterOps.DirectorDecisionTests.Run();
             Features.TheaterOps.DirectorScenarioTests.Run();
             Features.TheaterOps.StaffLogTests.Run();
+            Features.TheaterOps.AreaResistanceTests.Run();
             Features.Events.EventSelectorTests.Run();
             Features.Events.EventDirectorTests.Run();
             Features.Comms.CommsTests.Run();

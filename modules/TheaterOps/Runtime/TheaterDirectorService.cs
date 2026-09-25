@@ -28,9 +28,10 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
     /// so all peers read the same war.</para>
     ///
     /// <para>Only the local faction is ticked: every lever the director pulls (pool, main
-    /// effort, convoy queue) is the host faction's own. Sensing reads vanilla state alone
-    /// — objectives, the unit registry, the tracking database — so no sibling contract
-    /// carries the assessment anywhere.</para>
+    /// effort, convoy queue) is the host faction's own. Sensing reads vanilla state — the
+    /// objectives, the unit registry, the tracking database — plus, for ground the faction
+    /// does not hold, its own threat picture (Intel's IThreatPicture, when installed and
+    /// ready), so an unscouted objective never reads as undefended.</para>
     /// </summary>
     internal sealed class TheaterDirectorService : MonoBehaviour, ISceneService
     {
@@ -80,6 +81,13 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
         private readonly int[] friendlyFieldworks = new int[MaximumObjectives];
         private readonly int[] suppressedFieldworks = new int[MaximumObjectives];
         private IFieldworksReadiness fieldworks;
+        private IThreatPicture threatPicture;
+        private bool intelAbsentLogged;
+        private readonly bool[] heldObjective = new bool[MaximumObjectives];
+        private readonly bool[] intelKnown = new bool[MaximumObjectives];
+        private readonly bool[] intelScouted = new bool[MaximumObjectives];
+        private readonly float[] intelPower = new float[MaximumObjectives];
+        private readonly int[] resistanceScratch = new int[MaximumObjectives];
 
         private TheaterOpsSettings settings;
         private TheaterPriorityService priority;
@@ -111,6 +119,8 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             nextAuthority = 0f;
             authoritative = false;
             fieldworks = null;
+            threatPicture = null;
+            intelAbsentLogged = false;
         }
 
         private void Update()
@@ -150,6 +160,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
 
             SenseObjectives(hq, state.Fixes);
             ScanPresence(hq, state.Fixes, MaximumUnitScan);
+            ReadAreaResistance(hq, state.Fixes);
             reads.Clear();
             for (int i = 0; i < state.Fixes.Count; i++)
             {
@@ -444,6 +455,41 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
                     else hostileCounts[f]++;
                 }
             }
+        }
+
+        /// <summary>
+        /// Replaces the live contact count with the faction's own area intel for ground it does
+        /// not hold (see AreaResistance). ScanPresence still counts friendly presence and live
+        /// contacts; the 10 s threat check keeps using those alone. Without a ready picture
+        /// nothing changes.
+        /// </summary>
+        private void ReadAreaResistance(FactionHQ hq, List<ObjectiveFix> fixes)
+        {
+            if (threatPicture == null) ModServices.TryGet(out threatPicture);
+            if (threatPicture == null && !intelAbsentLogged)
+            {
+                intelAbsentLogged = true;
+                logger?.LogInfo("Director: no threat picture (Intel off); resistance reads live contacts only.");
+            }
+            int observer = hq.GetInstanceID();
+            bool intel = threatPicture != null && threatPicture.IsReady(observer);
+            for (int i = 0; i < fixes.Count; i++)
+            {
+                heldObjective[i] = friendlyCounts[i] + friendlyFieldworks[i] > 0;
+                intelKnown[i] = false;
+                intelScouted[i] = false;
+                intelPower[i] = 0f;
+                if (!intel || heldObjective[i]) continue;
+                if (threatPicture.TryGetAreaIntel(observer, fixes[i].Position.x, fixes[i].Position.z,
+                        PresenceRadiusMeters, out AreaIntel area))
+                {
+                    intelKnown[i] = true;
+                    intelScouted[i] = area.Scouted;
+                    intelPower[i] = area.Power;
+                }
+            }
+            AreaResistance.Resolve(fixes.Count, heldObjective, intelKnown, intelScouted, intelPower,
+                hostileCounts, resistanceScratch);
         }
 
         // ---- Influence ---------------------------------------------------------------------

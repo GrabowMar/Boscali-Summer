@@ -133,6 +133,7 @@
     <Compile Include="..\..\modules\TheaterOps\Domain\FrontlineTactics.cs" Link="Features\TheaterOps\FrontlineTactics.cs" />
     <Compile Include="..\..\modules\TheaterOps\Domain\InfluenceState.cs" Link="Features\TheaterOps\InfluenceState.cs" />
     <Compile Include="..\..\modules\TheaterOps\Domain\DirectorDecision.cs" Link="Features\TheaterOps\Domain\DirectorDecision.cs" />
+    <Compile Include="..\..\modules\TheaterOps\Domain\AreaResistance.cs" Link="Features\TheaterOps\Domain\AreaResistance.cs" />
     <Compile Include="..\..\modules\TheaterOps\Domain\StaffLog.cs" Link="Features\TheaterOps\StaffLog.cs" />
     <Compile Include="..\..\modules\TheaterOps\Domain\DirectorWords.cs" Link="Features\TheaterOps\DirectorWords.cs" />
     <Compile Include="..\..\Framework\Contracts\ITheaterOperationsView.cs" Link="Framework\ITheaterOperationsView.cs" />
