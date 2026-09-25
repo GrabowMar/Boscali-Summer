@@ -98,7 +98,6 @@ Assembly pluginAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(plugi
     ("Spawner", "SpawnSavedMissile"),
     ("Missile", "GetYield"),
     ("Missile", "SetAimpoint"),
-    ("FactionHQ", "SetTrackingState"),
     ("FactionHQ", "GetTrackingData"),
     ("MountedTroops", "Fire"),
     ("DynamicMap", "Maximize"),
