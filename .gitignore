@@ -36,8 +36,10 @@ decompiled_src/
 Thumbs.db
 .DS_Store
 
-# Markdown docs and agent instructions are local-only, never published
+# Markdown docs and agent instructions are local-only, never published; the README is the
+# one public document.
 *.md
+!/README.md
 
 # Local agent tooling (kept on disk, out of the repo)
 .agents/

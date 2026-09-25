@@ -1,5 +1,18 @@
 root = true
 
+# The conventions every tracked file already follows, so any editor keeps them.
+[*]
+indent_style = space
+indent_size = 4
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{csproj,props,json,asmdef,Config}]
+indent_size = 2
+
+[*.sln]
+indent_style = tab
+
 [*.cs]
 
 # Dead-code tripwire, matching Wing Command's build.
