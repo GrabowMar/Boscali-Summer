@@ -21,8 +21,6 @@ namespace BoscaliSummer.Runtime
         private static AccessTools.FieldRef<MusicManager, AudioSource> fadeMusicSourceRef;
         private static AccessTools.FieldRef<FactionHQ, List<Radar>> hqRadarsRef;
         private static AccessTools.FieldRef<AIPilotCombatModes, Unit> aiCurrentTargetRef;
-        private static AccessTools.FieldRef<AIPilotCombatModes, GlobalPosition> aiTargetKnownPosRef;
-        private static FieldInfo aiAttackModeField;
 
         public static bool MapBuildingHitPointsAvailable { get; private set; }
         public static bool MapBuildingSetBuildingsAvailable { get; private set; }
@@ -99,8 +97,6 @@ namespace BoscaliSummer.Runtime
             try
             {
                 aiCurrentTargetRef = FieldRef<AIPilotCombatModes, Unit>("currentTarget");
-                aiTargetKnownPosRef = FieldRef<AIPilotCombatModes, GlobalPosition>("targetKnownPosition");
-                aiAttackModeField = AccessTools.Field(typeof(AIPilotCombatModes), "attackMode");
                 AiPilotCombatAvailable = true;
             }
             catch (Exception e)
@@ -150,28 +146,9 @@ namespace BoscaliSummer.Runtime
         public static Unit GetAiCurrentTarget(AIPilotCombatModes modes) =>
             aiCurrentTargetRef == null || modes == null ? null : aiCurrentTargetRef(modes);
 
-        public static GlobalPosition GetAiTargetKnownPosition(AIPilotCombatModes modes) =>
-            aiTargetKnownPosRef == null || modes == null ? default : aiTargetKnownPosRef(modes);
-
-        public static int GetAiAttackMode(AIPilotCombatModes modes)
-        {
-            if (aiAttackModeField != null && modes != null)
-            {
-                object val = aiAttackModeField.GetValue(modes);
-                if (val != null) return (int)val;
-            }
-            return 3;
-        }
-
         public static bool IsServer()
         {
             try { return NetworkManagerNuclearOption.i != null && NetworkManagerNuclearOption.i.Server.Active; }
-            catch { return false; }
-        }
-
-        public static bool IsSoloAuthority()
-        {
-            try { return IsServer() && !NuclearOption.Networking.NetworkManagerNuclearOption.HasOtherPlayers(out _); }
             catch { return false; }
         }
 
