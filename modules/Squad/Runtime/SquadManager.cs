@@ -319,18 +319,9 @@ namespace BoscaliSummer.Features.Squad.Runtime
             if (!UnitRegistry.TryGetPersistentUnit(dealer, out PersistentUnit source)) return;
             Player player = source.player;
 
-            if (aceHunt != null)
-            {
-                if (player != null && aceHunt.Owner != null && player == aceHunt.Owner.Player)
-                {
-                    aceHunt.PlayerHitAce = true;
-                }
-                else if (aceHunt.Owner?.Player != null && source.GetHQ() == aceHunt.Owner.Player.HQ)
-                {
-                    // Mitigate friendly AI damage on the ace by 75% to preserve the duel for the player
-                    MitigateFriendlyDamage(victim, amount * 0.75f);
-                }
-            }
+            // No hidden damage reduction: an ace's only advantages are its visible perks.
+            if (aceHunt != null && player != null && aceHunt.Owner != null && player == aceHunt.Owner.Player)
+                aceHunt.PlayerHitAce = true;
 
             if (player == null || !connected.Contains(player) || !Hostile(victim.NetworkHQ, player.HQ) || source.GetHQ() != player.HQ) return;
             Career career = GetCareer(player);
@@ -345,20 +336,6 @@ namespace BoscaliSummer.Features.Squad.Runtime
             float now = NetworkSceneSingleton<MissionManager>.i?.MissionTime ?? 0;
             if (career.Rules.Damage(amount, now, career.Rules.Threshold(settings.DamageThreshold.Value)))
                 career.ProvokedHq = victim.NetworkHQ;
-        }
-
-        private static void MitigateFriendlyDamage(Unit victim, float amountToRestore)
-        {
-            if (victim == null || !(victim is Aircraft aircraft) || aircraft.partLookup == null) return;
-            for (int i = 0; i < aircraft.partLookup.Count; i++)
-            {
-                UnitPart part = aircraft.partLookup[i];
-                if (part != null && part.hitPoints > 0f)
-                {
-                    part.hitPoints += amountToRestore;
-                    break;
-                }
-            }
         }
 
         internal void RecordKill(Unit victim)

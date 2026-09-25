@@ -160,6 +160,10 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             nextUpdate = 0f;
         }
 
+        /// <summary>Patch-side membership test: only enrolled vehicles follow the effort.</summary>
+        internal bool IsEnrolled(GroundVehicle vehicle) =>
+            vehicle != null && priority != null && priority.Authoritative && members.ContainsKey(vehicle);
+
         /// <summary>Patch-side lookup; a failed lookup leaves vanilla's main effort untouched.</summary>
         internal bool TryGetDestination(GroundVehicle vehicle, PriorityDirective directive,
             out GlobalPosition destination)
@@ -204,18 +208,21 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
                 {
                     Member member = group.Members[j];
                     if (member.Vehicle != null && !member.Vehicle.disabled &&
-                        ReferenceEquals(member.Vehicle.NetworkHQ, hq) && group.Key == directive.Key)
+                        ReferenceEquals(member.Vehicle.NetworkHQ, hq))
                         continue;
                     members.Remove(member.Vehicle);
                     group.Members.RemoveAt(j);
                     group.Sealed = true;
                 }
-                if (group.Members.Count == 0 || group.HQ != hq || group.Key != directive.Key)
+                if (group.Members.Count == 0 || group.HQ != hq)
                 {
                     foreach (Member member in group.Members) members.Remove(member.Vehicle);
                     groups.RemoveAt(i);
                     continue;
                 }
+                // A new effort re-keys the group; its vehicles stay together instead of
+                // dissolving back to vanilla's nearest-objective spread.
+                if (group.Key != directive.Key) Rekey(group, directive, now);
                 if (!group.Sealed && now - group.Born >= JoinSeconds) group.Sealed = true;
                 RefreshGroup(group, directive, now);
             }
@@ -350,6 +357,15 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
                 if (member.HasDestination)
                     member.Destination = ground.point.ToGlobalPosition();
             }
+        }
+
+        private void Rekey(Group group, PriorityDirective directive, float now)
+        {
+            group.Key = directive.Key;
+            group.Offensive = operations != null && operations.IsLaunchedTarget(directive.Key);
+            group.ReportedRally = false;
+            ClearDestinations(group);
+            SetStage(group, Stage.Rally, now);
         }
 
         private void SetStage(Group group, Stage stage, float now)

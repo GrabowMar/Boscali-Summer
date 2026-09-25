@@ -32,7 +32,9 @@ namespace BoscaliSummer.Features.TheaterOps.Domain
         internal const int MaximumAxes = 4;
         internal const int MaximumSetterLength = 24;
         internal const float DefaultStance = 0.6f;
-        internal const float DefaultMaxEscrow = 15f;
+        // Covers the default opening charge (overhead 25 + one 45 wave) plus one more wave;
+        // the old 15 sat below the opening and held every offensive at CHEST CAP.
+        internal const float DefaultMaxEscrow = 100f;
         internal const float MaximumEscrowCap = 100f;
 
         private readonly List<AxisWeight> axes = new List<AxisWeight>(MaximumAxes);

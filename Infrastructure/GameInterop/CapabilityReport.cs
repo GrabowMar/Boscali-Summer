@@ -73,6 +73,11 @@ namespace BoscaliSummer.Runtime
                 $"SquadWingCommandApi={WingLink.SquadAvailable}, " +
                 $"SupportSpawning={supportSpawning}, SupportRecon={supportRecon}, SupportOrbitalScan={supportRecon}, DynamicOperations={dynamicOperations}, OperationServices={operationServices}, " +
                 $"HighCommand={highCommand}, AutopilotLanding={autopilotLanding}.");
+            Plugin.Logger.LogInfo(
+                "Wing Command API: squad " +
+                (WingLink.SquadAvailable ? "OK" : WingLink.SquadUnavailableReason) +
+                "; pilot studio " +
+                (WingLink.PilotStudioAvailable ? "OK" : WingLink.PilotStudioUnavailableReason) + ".");
 
             try
             {

@@ -46,26 +46,18 @@ namespace BoscaliSummer.Features.TheaterOps.Patches
         [HarmonyPostfix]
         private static void Postfix(Unit unit, ref GlobalPosition destination, ref bool __result)
         {
-            TheaterPriorityService service = TheaterPriorityService.Active;
-            if (unit == null ||
-                !MissionPositionPriorityQuery.TryGetDirective(service, unit.NetworkHQ, out PriorityDirective directive))
-                return;
-            if (unit is Aircraft aircraft &&
-                (aircraft.Player != null || WingLink.IsWingMember(aircraft.persistentID.GetHashCode())))
-                return;
-            if (unit is GroundVehicle && GroundFrontService.Active?.HasRtsCommander() == true)
+            // Only vehicles enrolled in a battle group follow the effort. Unenrolled units and
+            // every aircraft keep vanilla's own answer: no more faction-wide pull to one point.
+            if (!(unit is GroundVehicle vehicle)) return;
+            GroundFrontService front = GroundFrontService.Active;
+            if (front == null || !front.IsEnrolled(vehicle) ||
+                !MissionPositionPriorityQuery.TryGetDirective(TheaterPriorityService.Active, unit.NetworkHQ,
+                    out PriorityDirective directive))
                 return;
 
-            if (unit is GroundVehicle vehicle &&
-                GroundFrontService.Active != null &&
-                GroundFrontService.Active.TryGetDestination(vehicle, directive, out GlobalPosition frontDestination))
-            {
-                destination = frontDestination;
-                __result = true;
-                return;
-            }
-
-            destination = new GlobalPosition(directive.X, directive.Y, directive.Z);
+            destination = front.TryGetDestination(vehicle, directive, out GlobalPosition frontDestination)
+                ? frontDestination
+                : new GlobalPosition(directive.X, directive.Y, directive.Z);
             __result = true;
         }
 

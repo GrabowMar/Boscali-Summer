@@ -254,13 +254,35 @@ namespace BoscaliSummer.Features.TheaterOps.Networking
             for (int i = 0; i < expired.Count; i++) nextIntent.Remove(expired[i]);
         }
 
+        private const int MaximumRecipients = 64;
+
+        /// <summary>
+        /// A faction's staff state goes only to that faction's own players: an opposing client
+        /// never receives the other side's plans. Bounded and allocation-free.
+        /// </summary>
+        private static void SendToFaction<T>(NetworkServer server, string faction, T message)
+        {
+            IReadOnlyList<INetworkPlayer> players = server.AuthenticatedPlayers;
+            int count = Math.Min(players.Count, MaximumRecipients);
+            for (int i = 0; i < count; i++)
+            {
+                INetworkPlayer connection = players[i];
+                if (connection == null || ReferenceEquals(connection, server.LocalPlayer) ||
+                    !connection.TryGetPlayer<Player>(out Player player) || player == null ||
+                    player.HQ == null || player.HQ.faction == null ||
+                    !string.Equals(player.HQ.faction.factionName, faction, StringComparison.Ordinal))
+                    continue;
+                connection.Send(message);
+            }
+        }
+
         /// <summary>Host broadcast: one faction set, replaced or cleared.</summary>
         internal void BroadcastState(string faction, PriorityDirective? directive)
         {
             if (!GameAccess.IsServer()) return;
             NetworkServer server = NetworkManagerNuclearOption.i?.Server;
             if (server == null || !server.Active) return;
-            server.SendToAll(StateOf(faction, directive), authenticatedOnly: true, excludeLocalPlayer: true);
+            SendToFaction(server, faction, StateOf(faction, directive));
         }
 
         /// <summary>
@@ -276,14 +298,12 @@ namespace BoscaliSummer.Features.TheaterOps.Networking
             int count = offensives != null ? offensives.Count : 0;
             if (count == 0)
             {
-                server.SendToAll(OperationOf(faction, 0, 0, null),
-                    authenticatedOnly: true, excludeLocalPlayer: true);
+                SendToFaction(server, faction, OperationOf(faction, 0, 0, null));
                 return;
             }
 
             for (int i = 0; i < count; i++)
-                server.SendToAll(OperationOf(faction, (byte)count, (byte)i, offensives[i]),
-                    authenticatedOnly: true, excludeLocalPlayer: true);
+                SendToFaction(server, faction, OperationOf(faction, (byte)count, (byte)i, offensives[i]));
         }
 
         /// <summary>Client send: one standing order for the director. The host validates all of it.</summary>
@@ -310,9 +330,8 @@ namespace BoscaliSummer.Features.TheaterOps.Networking
             if (!GameAccess.IsServer()) return;
             NetworkServer server = NetworkManagerNuclearOption.i?.Server;
             if (server == null || !server.Active) return;
-            server.SendToAll(
-                DirectorStateOf(faction, influence, posture, effortDefense, defenseLabel, activePlans),
-                authenticatedOnly: true, excludeLocalPlayer: true);
+            SendToFaction(server, faction,
+                DirectorStateOf(faction, influence, posture, effortDefense, defenseLabel, activePlans));
         }
 
         internal void BroadcastDirectorLog(string faction, StaffLog log)
@@ -320,8 +339,7 @@ namespace BoscaliSummer.Features.TheaterOps.Networking
             if (!GameAccess.IsServer()) return;
             NetworkServer server = NetworkManagerNuclearOption.i?.Server;
             if (server == null || !server.Active) return;
-            server.SendToAll(DirectorLogOf(faction, log),
-                authenticatedOnly: true, excludeLocalPlayer: true);
+            SendToFaction(server, faction, DirectorLogOf(faction, log));
         }
 
         private void ReceiveQuery(INetworkPlayer sender, TheaterPriorityQuery query)
@@ -331,13 +349,15 @@ namespace BoscaliSummer.Features.TheaterOps.Networking
                 !RateLimit(player))
                 return;
 
-            int count = service.CopyDirectives(buffer);
-            for (int i = 0; i < count; i++)
-                sender.Send(StateOf(buffer[i].Key, buffer[i].Value));
-
-            // The offensive board and the director are the querying player's own faction's business.
+            // The effort, the offensive board and the director are the querying player's own
+            // faction's business; another side's plans are never answered.
             if (player.HQ != null && player.HQ.faction != null)
             {
+                string own = player.HQ.faction.factionName;
+                int count = service.CopyDirectives(buffer);
+                for (int i = 0; i < count; i++)
+                    if (string.Equals(buffer[i].Key, own, StringComparison.Ordinal))
+                        sender.Send(StateOf(buffer[i].Key, buffer[i].Value));
                 SendOperations(sender, player.HQ.faction.factionName);
                 SendDirector(sender, player.HQ.faction.factionName);
             }

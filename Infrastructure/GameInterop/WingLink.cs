@@ -295,13 +295,10 @@ namespace BoscaliSummer.Runtime
 
         public static bool IsWingMember(int persistentIdHash)
         {
+            // Wing Command publishes the wing on the presence board every tick; an empty board is
+            // an empty wing. No reflective fallback: this runs on AI hot paths.
             int[] ids = WingMemberIdsThisFrame();
-            if (ids.Length > 0) return PresenceBoard.Contains(ids, persistentIdHash);
-
-            MethodInfo method = ResolveMembership();
-            if (method == null) return false;
-            try { return method.Invoke(null, new object[] { persistentIdHash }) is bool hit && hit; }
-            catch (Exception error) { FailMembership(error); return false; }
+            return ids.Length > 0 && PresenceBoard.Contains(ids, persistentIdHash);
         }
 
         private static int[] WingMemberIdsThisFrame()
@@ -379,13 +376,13 @@ namespace BoscaliSummer.Runtime
         {
             if (squadResolved) return string.IsNullOrEmpty(squadUnavailableReason);
             squadResolved = true;
-            squadUnavailableReason = "Install the companion Wing Command build with WingSquad API 1.";
+            squadUnavailableReason = "Install Wing Command with WingSquad API 1 or 2.";
             if (!Chainloader.PluginInfos.ContainsKey(WingCommandGuid)) return false;
             try
             {
                 Type type = Type.GetType(SquadType, throwOnError: false);
                 if (!(type?.GetProperty("ApiVersion", BindingFlags.Public | BindingFlags.Static)
-                          ?.GetValue(null) is int version) || version != 1) return false;
+                          ?.GetValue(null) is int version) || !WingApiVersions.SupportsSquad(version)) return false;
                 const BindingFlags flags = BindingFlags.Public | BindingFlags.Static;
                 createPilot = type.GetMethod("CreatePilot", flags, null, new[] { typeof(int) }, null);
                 portrait = type.GetMethod("Portrait", flags, null, new[] { typeof(string), typeof(string) }, null);
@@ -416,7 +413,7 @@ namespace BoscaliSummer.Runtime
             {
                 Type type = Type.GetType(SquadType, throwOnError: false);
                 if (!(type?.GetProperty("ApiVersion", BindingFlags.Public | BindingFlags.Static)
-                          ?.GetValue(null) is int version) || version != 1) return false;
+                          ?.GetValue(null) is int version) || !WingApiVersions.SupportsSquad(version)) return false;
                 const BindingFlags flags = BindingFlags.Public | BindingFlags.Static;
                 portraitForSelection = type.GetMethod("PortraitForSelection", flags, null,
                     new[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int) }, null);
