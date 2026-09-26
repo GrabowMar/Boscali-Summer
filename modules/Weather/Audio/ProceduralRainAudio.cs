@@ -6,7 +6,7 @@ using UnityEngine.Audio;
 namespace BoscaliSummer.Features.Weather.Audio
 {
     /// <summary>
-    /// Synthesizes procedural rain and cockpit canopy patter audio in RAM. Requires 0 external
+    /// Synthesizes procedural rain, cockpit canopy patter and thunder audio in RAM. Requires 0 external
     /// .wav or .mp3 files. The sample bake runs on a worker thread; clips are created on the
     /// main thread once the buffers exist, so the first rain never hitches. Volume changes
     /// always ramp through a short fade envelope so mutes and view switches never pop.
@@ -18,12 +18,15 @@ namespace BoscaliSummer.Features.Weather.Audio
         private const int SampleRate = 44100;
         private const float HissSeconds = 17.0f;
         private const float PatterSeconds = 24.0f;
+        private const float ThunderSeconds = 4.0f;
 
         private AudioSource hissSource;
         private AudioSource patterSource;
         private AudioLowPassFilter hissMuffle;
         private AudioClip hissClip;
         private AudioClip patterClip;
+        private AudioSource thunderSource;
+        private AudioClip thunderClip;
         private float hissLevel;
         private float patterLevel;
 
@@ -32,6 +35,8 @@ namespace BoscaliSummer.Features.Weather.Audio
         private float[] patterBake;
         private int hissFrames;
         private int patterFrames;
+        private float[] thunderBake;
+        private int thunderFrames;
         private volatile int bakeState; // 0 pending, 1 ready, 2 failed
         private bool clipsReady;
 
@@ -52,6 +57,11 @@ namespace BoscaliSummer.Features.Weather.Audio
             patterSource.playOnAwake = false;
             patterSource.spatialBlend = 0f;
 
+            thunderSource = gameObject.AddComponent<AudioSource>();
+            thunderSource.loop = false;
+            thunderSource.playOnAwake = false;
+            thunderSource.spatialBlend = 0f;
+
             bakeState = 0;
             ThreadPool.QueueUserWorkItem(_ =>
             {
@@ -59,6 +69,7 @@ namespace BoscaliSummer.Features.Weather.Audio
                 {
                     hissBake = BakePinkHiss(HissSeconds, SampleRate, out hissFrames);
                     patterBake = BakeCanopyPatter(PatterSeconds, SampleRate, out patterFrames);
+                    thunderBake = BakeThunder(ThunderSeconds, SampleRate, out thunderFrames);
                     bakeState = 1;
                 }
                 catch (System.Exception)
@@ -73,6 +84,7 @@ namespace BoscaliSummer.Features.Weather.Audio
         {
             if (hissSource != null) hissSource.outputAudioMixerGroup = group;
             if (patterSource != null) patterSource.outputAudioMixerGroup = group;
+            if (thunderSource != null) thunderSource.outputAudioMixerGroup = group;
         }
 
         /// <summary>True once the sources play through a mixer group.</summary>
@@ -112,12 +124,55 @@ namespace BoscaliSummer.Features.Weather.Audio
             if (bakeState != 1) return false;
             hissClip = CreateClip("BoscaliRainHiss", hissBake, hissFrames, SampleRate);
             patterClip = CreateClip("BoscaliCanopyPatter", patterBake, patterFrames, SampleRate);
+            thunderClip = CreateClip("BoscaliThunder", thunderBake, thunderFrames, SampleRate);
             hissBake = null;
             patterBake = null;
+            thunderBake = null;
             hissSource.clip = hissClip;
             patterSource.clip = patterClip;
             clipsReady = true;
             return true;
+        }
+
+        /// <summary>One thunderclap, scaled 0-1 by the lightning director's distance gain.</summary>
+        public void PlayThunder(float gain)
+        {
+            if (!clipsReady || thunderSource == null || thunderClip == null) return;
+            float g = Mathf.Clamp01(gain);
+            if (g <= 0.01f) return;
+            thunderSource.PlayOneShot(thunderClip, g);
+        }
+
+        private static float[] BakeThunder(float duration, int sampleRate, out int playableFrames)
+        {
+            int total = (int)(duration * sampleRate);
+            float[] samples = new float[total * 2];
+            var rng = new System.Random(4242);
+            float brown = 0f, low = 0f;
+            for (int i = 0; i < total; i++)
+            {
+                float t = (float)i / sampleRate;
+                float white = (float)(rng.NextDouble() * 2.0 - 1.0);
+                brown = (brown + 0.02f * white) / 1.02f;
+                low += 0.06f * (white - low);
+                float env = Mathf.Exp(-t * 1.1f);
+                float crack = Mathf.Exp(-t * 14f);
+                float thump = Mathf.Sin(2f * Mathf.PI * 45f * t) * Mathf.Exp(-t * 3f);
+                float s = (brown * 3.2f * env + low * 0.5f * crack + thump * 0.35f) * Mathf.Min(1f, t / 0.03f);
+                samples[i * 2] = s;
+                samples[i * 2 + 1] = s;
+            }
+            float peak = 0.0001f;
+            for (int i = 0; i < samples.Length; i++)
+            {
+                float a = Mathf.Abs(samples[i]);
+                if (a > peak) peak = a;
+            }
+            float norm = 0.85f / peak;
+            for (int i = 0; i < samples.Length; i++)
+                samples[i] = Mathf.Clamp(samples[i] * norm, -1.0f, 1.0f);
+            playableFrames = total;
+            return samples;
         }
 
         private static void DriveLayer(AudioSource source, ref float level, float target, float pitch)
@@ -259,6 +314,7 @@ namespace BoscaliSummer.Features.Weather.Audio
         {
             if (hissClip != null) Destroy(hissClip);
             if (patterClip != null) Destroy(patterClip);
+            if (thunderClip != null) Destroy(thunderClip);
         }
     }
 }

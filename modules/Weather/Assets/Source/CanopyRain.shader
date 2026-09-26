@@ -44,7 +44,7 @@ Shader "Boscali/CanopyRain"
             float4 _Salt, _SunDir, _SunColor, _FogColor, _Tint;
 
             #define DENSITY 1.5 // pattern tiles per metre, identical on every pane
-            #define TEXEL (1.0 / 256.0)
+            #define TEXEL (1.0 / 512.0)
 
             struct Input
             {
@@ -99,6 +99,7 @@ Shader "Boscali/CanopyRain"
                     + (mul(objToWorld, exO) * -hx + mul(objToWorld, eyO) * -hy) * 3.5 * side);
 
                 float bead = smoothstep(0.05, 0.45, hC);
+                float rim = saturate(length(float2(hx, hy)) * 2.0);
                 float cover = saturate(bead + trail * 0.35);
                 clip(cover - 0.004);
 
@@ -119,7 +120,7 @@ Shader "Boscali/CanopyRain"
                 }
 
                 float sky = pow(saturate(nW.y), 3.0) * 0.14 * _LightLevel;
-                float3 finalColor = body + _SunColor.rgb * glint * 0.65 + _FogColor.rgb * (sky + bead * hC * 0.25 * _LightLevel);
+                float3 finalColor = body * (1.0 - rim * 0.18 * bead) + _SunColor.rgb * glint * 0.65 + _FogColor.rgb * (sky + bead * hC * 0.25 * _LightLevel);
 
                 float alpha = saturate(cover * lerp(0.10 + bead * 0.25, 0.25 + bead * 0.55, _Refract)) * _Intensity;
                 return float4(finalColor, alpha);

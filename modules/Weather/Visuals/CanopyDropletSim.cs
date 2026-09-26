@@ -3,15 +3,15 @@ using UnityEngine;
 
 namespace BoscaliSummer.Features.Weather.Visuals
 {
-    // Owns one persistent droplet layer per canopy pane (ping-pong 256x256 RGBA32,
-    // hard-capped at MaxPanes pairs = 4 MB). Keyed by renderer+submesh so a lost
+    // Owns one persistent droplet layer per canopy pane (ping-pong 512x512 RGBA32,
+    // hard-capped at MaxPanes pairs = 16 MB). Keyed by renderer+submesh so a lost
     // pane never donates its puddles to a sibling. All panes step with the same dt
     // and parameters; only the projected flow differs, which is the physically
     // correct per-pane difference (librain-style shared model, auto-calibrated).
     internal sealed class CanopyDropletSim
     {
         internal const int MaxPanes = 8;
-        internal const int StateSize = 256;
+        internal const int StateSize = 512;
 
         private static readonly int MainTexId = Shader.PropertyToID("_MainTex");
         private static readonly int FlowTilesId = Shader.PropertyToID("_FlowTiles");

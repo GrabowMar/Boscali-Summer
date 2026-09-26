@@ -25,6 +25,7 @@ namespace BoscaliSummer.Features.Weather.Configuration
         public ConfigEntry<bool> CanopyShaderEnabled { get; }
         public ConfigEntry<bool> TerrainRainEnabled { get; }
         public ConfigEntry<bool> RainAtmosphereEnabled { get; }
+        public ConfigEntry<bool> LightningEnabled { get; }
 
         public ConfigEntry<bool> DebugControlsEnabled { get; }
         public ConfigEntry<KeyCode> DebugKey { get; }
@@ -99,6 +100,10 @@ namespace BoscaliSummer.Features.Weather.Configuration
             TerrainRainEnabled = config.Bind(section, "TerrainRainEnabled", true,
                 "Wet darkening, puddles and sun glints on nearby native terrain, with gradual drying. " +
                 "At most eight visible terrain submeshes receive an extra texture-free pass.");
+
+            LightningEnabled = config.Bind(section, "LightningEnabled", true,
+                "Lightning flashes and delayed thunder in heavy rain. The flash pulses the vanilla " +
+                "sun and is restored exactly when it ends.");
 
             RainAtmosphereEnabled = config.Bind(section, "RainAtmosphereEnabled", true,
                 "Thicken and grey the haze and dim ambient light under local rain. Layered on the " +

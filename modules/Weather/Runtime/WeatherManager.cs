@@ -67,6 +67,7 @@ namespace BoscaliSummer.Features.Weather.Runtime
         private int canopyAircraftId;
         private readonly TerrainRainDressing terrainRain = new TerrainRainDressing();
         private readonly RainAtmosphere atmosphere = new RainAtmosphere();
+        private readonly LightningDirector lightning = new LightningDirector();
         private bool rainAudioRouted;
         private bool canopyShaderActive;
         private int canopyDrawnFrames;
@@ -168,6 +169,7 @@ namespace BoscaliSummer.Features.Weather.Runtime
         {
             canopyShader.Detach();
             canopyWetness = 0f;
+            lightning.Reset();
             rainAudioRouted = false;
             if (rainRoot != null)
             {
@@ -405,6 +407,9 @@ namespace BoscaliSummer.Features.Weather.Runtime
                     settings != null ? settings.RainVolume.Value : 0.75f);
             }
 
+            if (settings.LightningEnabled.Value)
+                lightning.Tick(Time.deltaTime, rainIntensity, LevelInfo.i, rainAudio,
+                    settings != null ? settings.RainVolume.Value : 0.75f);
             // The sim ticks in every view so rain stays live; only the draw needs the cockpit.
             float speedNorm = Mathf.Clamp01(ias / 250f);
             if (canopyEnabled && hasGlass)
