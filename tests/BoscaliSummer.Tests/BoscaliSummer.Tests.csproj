@@ -87,6 +87,7 @@
     <Compile Include="..\..\modules\Radio\Runtime\VanillaMusicHold.cs" Link="Features\Radio\VanillaMusicHold.cs" />
     <Compile Include="..\..\modules\Radio\Runtime\RadioProgramming.cs" Link="Features\Radio\RadioProgramming.cs" />
     <Compile Include="..\..\modules\Squad\Domain\AceCareer.cs" Link="Features\Squad\AceCareer.cs" />
+    <Compile Include="..\..\modules\Squad\Domain\SnapshotRevision.cs" Link="Features\Squad\SnapshotRevision.cs" />
     <Compile Include="..\..\modules\Radio\Presentation\PngIconHeader.cs" Link="Features\Radio\PngIconHeader.cs" />
     <Compile Include="..\..\Framework\Contracts\IPlayerPerks.cs" Link="Framework\IPlayerPerks.cs" />
     <Compile Include="..\..\Framework\Contracts\IProgressionView.cs" Link="Framework\IProgressionView.cs" />

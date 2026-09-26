@@ -816,8 +816,8 @@ foreach (var contract in new[] {
     ("BoscaliSummer.Features.Progression.Networking.ProgressionSnapshot", new[] { "Protocol:System.Byte", "PerkMask:System.UInt32", "Score:System.Int32", "EarnedPoints:System.Byte", "Rank:System.Byte", "Result:System.Byte", "Generation:System.Int32", "Scene:System.UInt32", "Token:System.UInt32", "ScorePerPoint:System.Int32", "MaximumPoints:System.Byte", "PlaneId:System.UInt32", "EngineMap:System.Byte" }),
     ("BoscaliSummer.Features.Progression.Networking.PlaneTuneRequest", new[] { "Protocol:System.Byte", "AircraftId:System.UInt32", "Mode:System.Byte" }),
     ("BoscaliSummer.Features.Progression.Networking.PlaneTuneState", new[] { "Protocol:System.Byte", "AircraftId:System.UInt32", "Mode:System.Byte", "Accepted:System.Byte" }),
-    ("BoscaliSummer.Features.Squad.Networking.SquadQuery", new[] { "Protocol:System.Byte", "Scene:System.UInt32", "Token:System.UInt32" }),
-    ("BoscaliSummer.Features.Squad.Networking.SquadSnapshot", new[] { "Protocol:System.Byte", "Scene:System.UInt32", "Token:System.UInt32", "Event:System.UInt32", "Pilot:BoscaliSummer.Framework.Contracts.PilotView", "Hunt:System.Boolean", "Bonus:System.Int32", "Origin:System.Int32", "ActiveIndex:System.Int32", "HuntId:System.Int32", "Status:System.String", "Speaker:System.String", "Chatter:System.String", "Wings:BoscaliSummer.Framework.Contracts.EnemyWingView[]" }),
+    ("BoscaliSummer.Features.Squad.Networking.SquadQuery", new[] { "Protocol:System.Byte", "Scene:System.UInt32", "Token:System.UInt32", "Revision:System.UInt32" }),
+    ("BoscaliSummer.Features.Squad.Networking.SquadSnapshot", new[] { "Protocol:System.Byte", "Scene:System.UInt32", "Token:System.UInt32", "Event:System.UInt32", "Pilot:BoscaliSummer.Framework.Contracts.PilotView", "Hunt:System.Boolean", "Bonus:System.Int32", "Origin:System.Int32", "ActiveIndex:System.Int32", "HuntId:System.Int32", "Status:System.String", "Speaker:System.String", "Chatter:System.String", "Wings:BoscaliSummer.Framework.Contracts.EnemyWingView[]", "Revision:System.UInt32", "Unchanged:System.Boolean" }),
     ("BoscaliSummer.Features.Command.Networking.FactionMoraleChanged", new[] { "Protocol:System.Byte", "FactionHash:System.Int32", "Morale:System.Single" }),
     ("BoscaliSummer.Features.Events.Networking.ActiveEventChanged", new[] { "Protocol:System.Byte", "CatalogIndex:System.SByte", "TargetFactionHash:System.Int32", "StartedAtMissionTime:System.Single", "EndsAtMissionTime:System.Single", "EffectStrength:System.Single", "FactionResponseHashes:System.Int32[]", "FactionResponseKinds:System.Byte[]" }),
     ("BoscaliSummer.Features.Events.Networking.EventIntent", new[] { "Protocol:System.Byte", "Token:System.UInt32", "Action:System.Byte", "CatalogIndex:System.SByte" }),
@@ -1019,7 +1019,7 @@ static void ProbeSquadSerialization(Assembly plugin, Assembly mirage)
 {
     const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance;
     Type net = plugin.GetType("BoscaliSummer.Features.Squad.Networking.SquadNet", true)!;
-    if ((byte)net.GetField("ProtocolVersion", flags)!.GetRawConstantValue()! != 2)
+    if ((byte)net.GetField("ProtocolVersion", flags)!.GetRawConstantValue()! != 3)
         throw new InvalidOperationException("Squad protocol changed without updating its probe");
     net.GetMethod("InstallSerializers", flags)!.Invoke(null, null);
     Type progression = plugin.GetType("BoscaliSummer.Features.Progression.Networking.ProgressionNet", true)!;
@@ -1058,7 +1058,8 @@ static void ProbeSquadSerialization(Assembly plugin, Assembly mirage)
     object Snapshot(int count, object wing)
     {
         object snapshot = Activator.CreateInstance(snapshotType)!;
-        Set(snapshot, "Protocol", (byte)2); Set(snapshot, "Scene", 345u); Set(snapshot, "Token", 678u); Set(snapshot, "Event", uint.MaxValue);
+        Set(snapshot, "Protocol", (byte)3); Set(snapshot, "Scene", 345u); Set(snapshot, "Token", 678u); Set(snapshot, "Event", uint.MaxValue);
+        Set(snapshot, "Revision", 0xDEADBEEFu);
         Set(snapshot, "Pilot", Activator.CreateInstance(pilotType, "Pilot Name", "CALDER", "Alive", true, 4, 5, "background")!);
         Set(snapshot, "Hunt", true); Set(snapshot, "Bonus", 20); Set(snapshot, "Origin", 1000); Set(snapshot, "ActiveIndex", count == 0 ? -1 : 0); Set(snapshot, "HuntId", 41);
         Set(snapshot, "Status", new string('S', 240)); Set(snapshot, "Speaker", "Cinder"); Set(snapshot, "Chatter", "Contact.");
@@ -1067,14 +1068,14 @@ static void ProbeSquadSerialization(Assembly plugin, Assembly mirage)
         Set(snapshot, "Wings", wings);
         return snapshot;
     }
+    // Readers never throw inside a Mirage handler; malformed data decodes as protocol 0, which handlers ignore.
     void Reject(object writer)
     {
-        try { Decode(snapshotType, writer); }
-        catch (TargetInvocationException error) when (error.InnerException is InvalidOperationException) { return; }
-        throw new InvalidOperationException("Malformed Squad snapshot was accepted");
+        if ((byte)Get(Decode(snapshotType, writer), "Protocol") != 0)
+            throw new InvalidOperationException("Malformed Squad snapshot was accepted");
     }
     object query = Activator.CreateInstance(queryType)!;
-    Set(query, "Protocol", (byte)2); Set(query, "Scene", uint.MaxValue); Set(query, "Token", 987654u);
+    Set(query, "Protocol", (byte)3); Set(query, "Scene", uint.MaxValue); Set(query, "Token", 987654u); Set(query, "Revision", 0xCAFEF00Du);
     object queryResult = Decode(queryType, Encode(queryType, query));
     foreach (FieldInfo field in queryType.GetFields(BindingFlags.Public | BindingFlags.Instance))
         if (!Equals(field.GetValue(query), field.GetValue(queryResult))) throw new InvalidOperationException("Squad query roundtrip changed " + field.Name);
@@ -1082,8 +1083,22 @@ static void ProbeSquadSerialization(Assembly plugin, Assembly mirage)
     Array output = (Array)Get(decoded, "Wings");
     if (output.Length != 8 || (string)Get(decoded, "Status") != new string('S', 192) ||
         (uint)Get(decoded, "Scene") != 345u || (uint)Get(decoded, "Token") != 678u || (uint)Get(decoded, "Event") != uint.MaxValue ||
-        (int)Get(decoded, "Bonus") != 20 || (int)Get(decoded, "Origin") != 1000 || (int)Get(decoded, "ActiveIndex") != 0 || (int)Get(decoded, "HuntId") != 41 || !(bool)Get(decoded, "Hunt"))
+        (int)Get(decoded, "Bonus") != 20 || (int)Get(decoded, "Origin") != 1000 || (int)Get(decoded, "ActiveIndex") != 0 || (int)Get(decoded, "HuntId") != 41 || !(bool)Get(decoded, "Hunt") ||
+        (uint)Get(decoded, "Revision") != 0xDEADBEEFu || (bool)Get(decoded, "Unchanged"))
         throw new InvalidOperationException("Squad snapshot bounds/header roundtrip failed");
+    object unchanged = Activator.CreateInstance(snapshotType)!;
+    Set(unchanged, "Protocol", (byte)3); Set(unchanged, "Scene", 345u); Set(unchanged, "Token", 678u);
+    Set(unchanged, "Revision", 0xDEADBEEFu); Set(unchanged, "Unchanged", true);
+    object unchangedEncoded = Encode(snapshotType, unchanged);
+    object unchangedDecoded = Decode(snapshotType, unchangedEncoded);
+    if ((int)writerType.GetProperty("BitPosition")!.GetValue(unchangedEncoded)! > 12 * 8 ||
+        (byte)Get(unchangedDecoded, "Protocol") != 3 || !(bool)Get(unchangedDecoded, "Unchanged") ||
+        (uint)Get(unchangedDecoded, "Revision") != 0xDEADBEEFu || (uint)Get(unchangedDecoded, "Token") != 678u)
+        throw new InvalidOperationException("Squad unchanged reply must stay a header-only roundtrip");
+    object foreign = Snapshot(1, Wing()); Set(foreign, "Protocol", (byte)2);
+    if ((byte)Get(Decode(snapshotType, Encode(snapshotType, foreign)), "Protocol") != 2 ||
+        Get(Decode(snapshotType, Encode(snapshotType, foreign)), "Wings") != null)
+        throw new InvalidOperationException("Squad reader must keep only the header of a foreign protocol");
     Reject(Encode(snapshotType, Snapshot(1, Wing(abilities: 16))));
     Reject(Encode(snapshotType, Snapshot(1, Wing(abilities: -1))));
     object expectedWing = Wing();
@@ -1108,7 +1123,7 @@ static void ProbeSquadSerialization(Assembly plugin, Assembly mirage)
     Reject(excessiveCount);
     Type progressType = plugin.GetType("BoscaliSummer.Features.Progression.Networking.ProgressionSnapshot", true)!;
     object progress = Activator.CreateInstance(progressType)!;
-    Set(progress, "Protocol", (byte)4); Set(progress, "Generation", 10001); Set(progress, "PerkMask", 123u);
+    Set(progress, "Protocol", (byte)5); Set(progress, "Generation", 10001); Set(progress, "PerkMask", 123u);
     Set(progress, "Score", 70000); Set(progress, "Scene", 456u); Set(progress, "Token", 789u);
     Set(progress, "ScorePerPoint", 10000); Set(progress, "MaximumPoints", (byte)20);
     object progressResult = Decode(progressType, Encode(progressType, progress));
@@ -1118,11 +1133,15 @@ static void ProbeSquadSerialization(Assembly plugin, Assembly mirage)
         throw new InvalidOperationException("Progression generation roundtrip failed");
     Type submitType = plugin.GetType("BoscaliSummer.Features.Progression.Networking.ProgressionSubmit", true)!;
     object submit = Activator.CreateInstance(submitType)!;
-    Set(submit, "Protocol", (byte)4); Set(submit, "Perk", (byte)4); Set(submit, "Scene", 456u); Set(submit, "Token", 789u); Set(submit, "Generation", 10001);
+    Set(submit, "Protocol", (byte)5); Set(submit, "Perk", (byte)4); Set(submit, "Scene", 456u); Set(submit, "Token", 789u); Set(submit, "Generation", 10001);
     object submitResult = Decode(submitType, Encode(submitType, submit));
     foreach (FieldInfo field in submitType.GetFields(BindingFlags.Public | BindingFlags.Instance))
         if (!Equals(field.GetValue(submit), field.GetValue(submitResult))) throw new InvalidOperationException("Progression intent roundtrip changed " + field.Name);
-    Console.WriteLine("  Squad serializers: pilot/wing/query roundtrip, 8-wing/192-char bounds, invalid strength/tier/return/header/count rejection; progression generation v3");
+    Set(progress, "Protocol", (byte)4);
+    object oldProgress = Decode(progressType, Encode(progressType, progress));
+    if ((byte)Get(oldProgress, "Protocol") != 4 || (int)Get(oldProgress, "Generation") != 0)
+        throw new InvalidOperationException("Progression reader must keep only the header of a foreign protocol");
+    Console.WriteLine("  Squad protocol-3 serializers: pilot/wing/query/revision roundtrip, header-only unchanged reply, 8-wing/192-char bounds, invalid strength/tier/return/header/count read as protocol 0; progression v5 foreign-header drop");
 }
 
 static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)

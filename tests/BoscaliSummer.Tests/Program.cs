@@ -34,6 +34,7 @@ namespace BoscaliSummer.Tests
             UrbanAmbienceMathTests.Run();
             RadioTests.Run();
             Features.Squad.AceCareerTests.Run();
+            Features.Squad.SnapshotRevisionTests.Run();
             ProgressionTests.Run();
             PlaneEngineMapTests.Run();
             EmblemTests.Run();
