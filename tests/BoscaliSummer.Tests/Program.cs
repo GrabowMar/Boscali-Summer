@@ -18,6 +18,7 @@ namespace BoscaliSummer.Tests
         private static int Main()
         {
             FrameworkTests.Run();
+            Features.Session.SessionTests.Run();
             ImpactScorchTests.Run();
             FireScorchTests.Run();
             CookoffTests.Run();

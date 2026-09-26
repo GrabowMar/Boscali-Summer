@@ -35,6 +35,7 @@ namespace BoscaliSummer
             public string Category;
             public string DispName;
             public int? Order;
+            public bool? ReadOnly;
         }
 
         /// <summary>The group the master switches are listed under, ahead of their own sections.</summary>
@@ -143,6 +144,26 @@ namespace BoscaliSummer
                 }
 
                 Tag(description, entry, hint);
+            }
+        }
+
+        /// <summary>
+        /// Locks or unlocks entries in the window while a server's values stand in for them,
+        /// so a client cannot edit a value that the session would overwrite and that the host
+        /// ignores anyway. Entries the window was never told about are left alone.
+        /// </summary>
+        public static void SetReadOnly(ConfigEntryBase[] entries, bool readOnly)
+        {
+            for (int i = 0; i < entries.Length; i++)
+            {
+                object[] tags = entries[i]?.Description?.Tags;
+                if (tags == null) continue;
+                for (int t = tags.Length - 1; t >= 0; t--)
+                {
+                    if (!(tags[t] is ConfigurationManagerAttributes hint)) continue;
+                    hint.ReadOnly = readOnly ? true : (bool?)null;
+                    break;
+                }
             }
         }
 

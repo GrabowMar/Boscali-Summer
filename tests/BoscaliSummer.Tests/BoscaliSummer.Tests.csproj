@@ -6,6 +6,7 @@
     <RootNamespace>BoscaliSummer.Tests</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="..\..\modules\Session\Domain\HostValueLedger.cs" Link="Features\Session\HostValueLedger.cs" />
     <Compile Include="..\..\modules\Progression\Domain\PlaneEngineMap.cs" Link="Features\Progression\PlaneEngineMap.cs" />
     <Compile Include="..\..\modules\PlayerSpawnPriority\SpawnPriorityPolicy.cs" Link="Features\PlayerSpawnPriority\SpawnPriorityPolicy.cs" />
     <Compile Include="..\..\modules\Support\Domain\OpsDomain.cs" Link="Features\Support\OpsDomain.cs" />
