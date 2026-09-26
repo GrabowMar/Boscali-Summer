@@ -52,6 +52,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private ObjectiveBoard objectiveBoard;
             private TMP_Text objectiveSummary;
             private readonly List<string> objectiveTypes = new List<string>();
+        private int objectiveSummarySignature;
+        private bool hasObjectiveSummary;
             private SecondaryObjectiveCard[] secondaryCards;
             private TMP_Text secondaryEmpty;
             private TMP_Text secondaryPageLabel;
@@ -940,9 +942,28 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     SavedObjective saved = objectives[i] == null ? null : objectives[i].SavedObjective;
                     objectiveTypes.Add(saved == null ? "" : saved.ObjectiveTypeEnum.ToString());
                 }
-                objectiveSummary.text = MfdMissionLabels.TypeSummary(objectiveTypes);
+                // The summary only depends on the type multiset in order: rebuild it when
+                // that changes, not on every refresh.
+                int signature = HashObjectiveTypes(objectiveTypes);
+                if (!hasObjectiveSummary || signature != objectiveSummarySignature)
+                {
+                    hasObjectiveSummary = true;
+                    objectiveSummarySignature = signature;
+                    objectiveSummary.text = MfdMissionLabels.TypeSummary(objectiveTypes);
+                }
 
                 objectiveBoard.Bind(objectives);
+            }
+
+            private static int HashObjectiveTypes(List<string> types)
+            {
+                unchecked
+                {
+                    int hash = types.Count;
+                    for (int i = 0; i < types.Count; i++)
+                        hash = hash * 31 + (types[i] != null ? types[i].GetHashCode() : 0);
+                    return hash;
+                }
             }
 
             private static string MissionClock(MissionManager manager)

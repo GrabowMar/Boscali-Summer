@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using System.Linq;
+using System.Text;
 
 namespace BoscaliSummer.Features.Command.Presentation.MapUi
 {
@@ -98,8 +98,27 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 counts[label] = count + 1;
             }
             if (order.Count == 0) return "";
-            return string.Join("   ·   ",
-                order.OrderByDescending(label => counts[label]).Select(label => label + " " + counts[label]));
+            // Stable insertion sort, most common first: ties keep first-seen order, so a
+            // live board never reshuffles itself between refreshes. No LINQ on the path.
+            for (int i = 1; i < order.Count; i++)
+            {
+                string candidate = order[i];
+                int weight = counts[candidate];
+                int at = i - 1;
+                while (at >= 0 && counts[order[at]] < weight)
+                {
+                    order[at + 1] = order[at];
+                    at--;
+                }
+                order[at + 1] = candidate;
+            }
+            var text = new StringBuilder();
+            for (int i = 0; i < order.Count; i++)
+            {
+                if (i > 0) text.Append("   ·   ");
+                text.Append(order[i]).Append(' ').Append(counts[order[i]]);
+            }
+            return text.ToString();
         }
 
         /// <summary>Maps a vanilla <c>ObjectiveType</c> name to a short readable tag.</summary>
