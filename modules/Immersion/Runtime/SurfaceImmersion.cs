@@ -126,7 +126,7 @@ namespace BoscaliSummer.Features.Immersion.Runtime
             float throttle = aircraft.GetInputs().throttle;
 
             // Cloud density & rain rate from LevelInfo
-            float cloudDensity = level != null ? level.GetCloudOcclusion(aircraft.GlobalPosition()) : 0f;
+            float cloudDensity = level != null ? level.GetCloudOcclusion(aircraft.transform.position) : 0f;
             float rainRate = 0f;
             if (level != null && cloudDensity > 0.6f && altitudeM < 3000f)
             {
