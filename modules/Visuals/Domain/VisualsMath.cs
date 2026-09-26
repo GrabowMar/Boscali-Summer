@@ -86,6 +86,41 @@ namespace BoscaliSummer.Features.Visuals.Domain
             return (dx, dy, dz);
         }
 
+        /// <summary>
+        /// <see cref="TreeSway"/> evaluated through <see cref="SinLut"/>: identical inputs,
+        /// identical shape within a centimetre, no transcendental per vertex. The per-frame
+        /// mesh pass calls this; the exact version above is the tested reference.
+        /// </summary>
+        public static (float dx, float dy, float dz) TreeSwayLut(
+            float time, float x, float y, float z, float height,
+            float windX, float windZ, float amplitude)
+        {
+            if (y <= 0f || height <= 0.001f || amplitude <= 0f) return (0f, 0f, 0f);
+
+            float h = Clamp01(y / height);
+            float bend = h * h;
+
+            float along = x * windX + z * windZ;
+            float crown = 1.6f * SinLut.Sin(x * 0.07f + 1.7f) + 1.6f * SinLut.Sin(z * 0.08f + 0.4f);
+            float phase = along * 0.09f + crown;
+
+            float gust = 0.7f + 0.3f * SinLut.Sin(time * 0.31f + 1.3f) * SinLut.Sin(time * 0.13f);
+
+            float sway = SinLut.Sin(time * 1.15f - phase) * 0.6f
+                         + SinLut.Sin(time * 2.45f - phase * 1.7f) * 0.22f
+                         + 0.35f; // standing lean downwind
+            float main = amplitude * bend * sway * gust;
+            float cross = amplitude * bend * 0.18f * SinLut.Sin(time * 0.93f + crown);
+
+            float flutterPhase = time * 6.3f + (x + y * 1.3f + z) * 2.1f;
+            float flutter = amplitude * 0.06f * h * SinLut.Sin(flutterPhase);
+
+            float dx = windX * main - windZ * cross + flutter;
+            float dz = windZ * main + windX * cross + flutter * 0.7f;
+            float dy = -(dx * dx + dz * dz) / (2f * Math.Max(y, 1f)) + flutter * 0.4f;
+            return (dx, dy, dz);
+        }
+
         /// <summary>Vanilla grass wind strength scaled by map wind (m/s) and the player's dial.</summary>
         public static float GrassWindStrength(float vanillaStrength, float windSpeed, float dial)
         {

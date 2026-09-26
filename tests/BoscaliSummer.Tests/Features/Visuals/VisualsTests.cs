@@ -14,6 +14,7 @@ namespace BoscaliSummer.Tests.Features.Visuals
             TreeSway_NeighbouringCrownsDriftOutOfStep();
             TreeSway_StaysBoundedInAGale();
             TreeSway_CalmAirStillBreathes();
+            TreeSwayLut_MatchesExactWithinTolerance();
             GrassWind_ScalesWithWindAndDial();
         }
 
@@ -91,6 +92,28 @@ namespace BoscaliSummer.Tests.Features.Visuals
             TestAssert.That(VisualsMath.TreeSwayAmplitude(0f) > 0.1f, "calm air still moves crowns a little");
             TestAssert.That(VisualsMath.TreeSwayAmplitude(15f) > VisualsMath.TreeSwayAmplitude(3f), "stronger wind sways more");
             TestAssert.That(VisualsMath.TreeSwayAmplitude(500f) <= 1.8f, "amplitude is capped");
+        }
+
+        private static void TreeSwayLut_MatchesExactWithinTolerance()
+        {
+            foreach (float t in new[] { 0f, 3.7f, 41f, 300f })
+            {
+                for (float y = 1f; y <= 26f; y += 5f)
+                {
+                    foreach (float x in new[] { -40f, 3f, 20f })
+                    {
+                        foreach (float z in new[] { -15f, 2f, 30f })
+                        {
+                            var exact = VisualsMath.TreeSway(t, x, y, z, 26f, 0.6f, 0.8f, 1.5f);
+                            var fast = VisualsMath.TreeSwayLut(t, x, y, z, 26f, 0.6f, 0.8f, 1.5f);
+                            TestAssert.That(Math.Abs(exact.dx - fast.dx) < 0.01f &&
+                                Math.Abs(exact.dy - fast.dy) < 0.01f &&
+                                Math.Abs(exact.dz - fast.dz) < 0.01f,
+                                "The lookup sway matches the exact formula within a centimetre");
+                        }
+                    }
+                }
+            }
         }
 
         private static void GrassWind_ScalesWithWindAndDial()
