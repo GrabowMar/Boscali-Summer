@@ -7,14 +7,6 @@ namespace BoscaliSummer.Tests.Features.UrbanCombat
     {
         public static void Run()
         {
-            // Proximity falloff: full inside, silent outside, linear between.
-            TestAssert.That(UrbanAmbienceMath.Proximity01(0f, 500f, 4000f) == 1f, "at the airbase is full");
-            TestAssert.That(UrbanAmbienceMath.Proximity01(500f, 500f, 4000f) == 1f, "inner edge is full");
-            TestAssert.That(UrbanAmbienceMath.Proximity01(4000f, 500f, 4000f) == 0f, "outer edge is silent");
-            TestAssert.That(UrbanAmbienceMath.Proximity01(20000f, 500f, 4000f) == 0f, "far away is silent");
-            TestAssert.That(UrbanAmbienceMath.Proximity01(2250f, 500f, 4000f) == 0.5f, "midpoint is half");
-            TestAssert.That(UrbanAmbienceMath.Proximity01(600f, 500f, 500f) == 0f, "collapsed band is silent");
-
             // Siren band: full inside the city, released past the outer edge.
             TestAssert.That(UrbanAmbienceMath.SirenInnerMeters < UrbanAmbienceMath.SirenOuterMeters, "siren band is ordered");
             TestAssert.That(UrbanAmbienceMath.SirenOuterMeters < UrbanAmbienceMath.SirenReleaseMeters, "release trails the outer edge");

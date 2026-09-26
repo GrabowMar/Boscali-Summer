@@ -52,7 +52,7 @@ namespace BoscaliSummer.Features.Support.Runtime
 
             actions.Add(new SupportActionDefinition(
                 SupportActionId.Emp, "EMP SHOCK",
-                "High-altitude airburst and 30 s radar blackout. Extra station batteries widen the pulse; hits friend and foe.",
+                "High-altitude airburst and 30 s radar blackout. Extra station batteries widen the pulse; hostile units only.",
                 SupportCapabilities.Emp, settings.EmpEnabled, new EmpAction()));
 
             actions.Add(new SupportActionDefinition(
@@ -60,20 +60,19 @@ namespace BoscaliSummer.Features.Support.Runtime
                 "Airburst IR countermeasure cloud.",
                 SupportCapabilities.Recon, settings.FlareBarrageEnabled, new FlareMissileAction()));
 
-            if (settings.CyberEnabled.Value)
-            {
-                AddHack(settings, SupportActionId.HackPing, HackKind.Ping);
-                AddHack(settings, SupportActionId.HackTrack, HackKind.Track);
-                AddHack(settings, SupportActionId.HackBlackout, HackKind.Blackout);
-                AddHack(settings, SupportActionId.HackGhost, HackKind.Ghost);
-                AddHack(settings, SupportActionId.HackSpoof, HackKind.Spoof);
-                AddHack(settings, SupportActionId.HackScan, HackKind.Scan);
-                AddHack(settings, SupportActionId.HackHijack, HackKind.Hijack);
-                AddHack(settings, SupportActionId.HackOverload, HackKind.Overload);
-                AddCapstone(settings, SupportActionId.CapReveal, Capstone.Reveal);
-                AddCapstone(settings, SupportActionId.CapJammer, Capstone.Jammer);
-                AddCapstone(settings, SupportActionId.CapSabotage, Capstone.Sabotage);
-            }
+            // Always built: the rows' live CyberOperations gate refuses them while the host has it off,
+            // so a peer that booted with it off still matches a host that has it on.
+            AddHack(settings, SupportActionId.HackPing, HackKind.Ping);
+            AddHack(settings, SupportActionId.HackTrack, HackKind.Track);
+            AddHack(settings, SupportActionId.HackBlackout, HackKind.Blackout);
+            AddHack(settings, SupportActionId.HackGhost, HackKind.Ghost);
+            AddHack(settings, SupportActionId.HackSpoof, HackKind.Spoof);
+            AddHack(settings, SupportActionId.HackScan, HackKind.Scan);
+            AddHack(settings, SupportActionId.HackHijack, HackKind.Hijack);
+            AddHack(settings, SupportActionId.HackOverload, HackKind.Overload);
+            AddCapstone(settings, SupportActionId.CapReveal, Capstone.Reveal);
+            AddCapstone(settings, SupportActionId.CapJammer, Capstone.Jammer);
+            AddCapstone(settings, SupportActionId.CapSabotage, Capstone.Sabotage);
 
             // SPEC OPS: gated by a held post, like the CYBER abilities, never by a perk.
             actions.Add(new SupportActionDefinition(SupportActionId.SpecSpot, FieldAbility.Spot,

@@ -18,6 +18,8 @@ namespace BoscaliSummer.Tests
         private static int Main()
         {
             FrameworkTests.Run();
+            Features.Session.SessionTests.Run();
+            WingApiVersionTests.Run();
             ImpactScorchTests.Run();
             FireScorchTests.Run();
             CookoffTests.Run();
@@ -34,6 +36,7 @@ namespace BoscaliSummer.Tests
             UrbanAmbienceMathTests.Run();
             RadioTests.Run();
             Features.Squad.AceCareerTests.Run();
+            Features.Squad.SnapshotRevisionTests.Run();
             ProgressionTests.Run();
             PlaneEngineMapTests.Run();
             EmblemTests.Run();
@@ -48,6 +51,7 @@ namespace BoscaliSummer.Tests
             Features.Hud.TargetBoardTests.Run();
             Features.Hud.ShotTests.Run();
             Features.Autopilot.AutopilotLandTests.Run();
+            Features.Autopilot.AceRadialMathTests.Run();
             CommandTests.Run();
             ThreatEnvelopeTests.Run();
             MfdNewsTickerTests.Run();
@@ -59,7 +63,13 @@ namespace BoscaliSummer.Tests
             Features.DynamicOperations.OperationDirectorTests.Run();
             Features.DynamicOperations.OperationMarkerCopyTests.Run();
             Features.DynamicOperations.ContractMarkerTests.Run();
+            Features.DynamicOperations.ContractSharesTests.Run();
             Features.HighCommand.HighCommandTests.Run();
+            Features.Intel.AirDefenceTests.Run();
+            Features.Intel.KnownHostileTests.Run();
+            Features.Intel.ObservationTests.Run();
+            Features.Intel.RingSetTests.Run();
+            Features.Intel.AttackProfileTests.Run();
             Features.TheaterOps.PriorityTests.Run();
             Features.TheaterOps.LogisticsTests.Run();
             Features.TheaterOps.OffensiveTests.Run();
@@ -68,6 +78,7 @@ namespace BoscaliSummer.Tests
             Features.TheaterOps.DirectorDecisionTests.Run();
             Features.TheaterOps.DirectorScenarioTests.Run();
             Features.TheaterOps.StaffLogTests.Run();
+            Features.TheaterOps.AreaResistanceTests.Run();
             Features.Events.EventSelectorTests.Run();
             Features.Events.EventDirectorTests.Run();
             Features.Comms.CommsTests.Run();
@@ -79,6 +90,8 @@ namespace BoscaliSummer.Tests
             Features.Progression.AceHuntHudCopyTests.Run();
             Features.Radio.RadioHudCopyTests.Run();
             Features.TheaterOps.TheaterOpsHudCopyTests.Run();
+            Features.Weather.WeatherFieldTests.Run();
+            Features.Weather.DropSimTests.Run();
             TrenchTests.Run();
             Features.Weather.WeatherRegimeTests.Run();
             Features.Weather.WeatherForecastTests.Run();
@@ -87,6 +100,7 @@ namespace BoscaliSummer.Tests
             Features.Weather.RainVisualMathTests.Run();
             Features.Weather.CanopyScoringTests.Run();
             Features.Weather.RainSkyMathTests.Run();
+            Features.Weather.LightningMathTests.Run();
             Features.Visuals.VisualsTests.Run();
             Features.Immersion.ImmersionTests.Run();
             ModuleBoundaryTests.Run();

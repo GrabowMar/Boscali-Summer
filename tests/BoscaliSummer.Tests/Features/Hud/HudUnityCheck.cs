@@ -51,7 +51,7 @@ public static class HudUnityCheck
         var board = new ThirdPersonTargetBoard(parent.transform);
         var video = new RenderTexture(320,180,0); video.Create();
         RenderTexture.active = video; GL.Clear(true,true,new Color(.18f,.24f,.28f)); RenderTexture.active = null;
-        var systems = new SystemsReading { Valid = true, FaultsAvailable = true, Parts = 24, Damaged = 2, Failures = 1 };
+        var systems = new SystemsReading { Valid = true, FaultsAvailable = true, Damaged = 2, Failures = 1 };
         board.Present(config, systems, missiles, video, "FORWARD", "MARK 4.2 km   12s"); Canvas.ForceUpdateCanvases();
         var surface = Field<HudSurface>(board, "surface"); var panel = Field<RectTransform>(board, "panel");
         Require(surface.Root.activeSelf, "Dock visible with camera");

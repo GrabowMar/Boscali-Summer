@@ -146,10 +146,10 @@ namespace BoscaliSummer.Fire
             indexRoutine = StartCoroutine(RebuildIndexDelayed());
         }
 
-        public int ActiveFireCount => fires.Count;
-
         bool IFoliageCover.Ready => forestIndex.Ready;
         bool IFoliageCover.Contains(float x, float z) => forestIndex.Contains(x, z);
+
+        public int ActiveFireCount => fires.Count;
 
         public int CopyWrecks(WreckNotice[] dest)
         {

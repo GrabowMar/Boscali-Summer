@@ -22,7 +22,7 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
         }
 
         /// <summary>One-line flight status: OVERHEAD · LOS 01:22, AWAY · AOS 00:41, INSERTION · T-00:31.</summary>
-        public static string Phase(OrbitalPlatform platform, double now, in OrbitClock clock)
+        public static string Phase(OrbitalPlatform platform, double now)
         {
             if (platform == null || !platform.Exists) return "NO STATION ON ORBIT";
             PlatformHold hold = platform.HoldAt(now);
@@ -30,8 +30,7 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
             return "ON STATION · " + StationKeeping.Name(platform.PositionIndex);
         }
 
-        public static string Denial(PlatformDenial denial, OrbitalPlatform platform, PlatformAbility ability, double now,
-                                    in OrbitClock clock)
+        public static string Denial(PlatformDenial denial, OrbitalPlatform platform, PlatformAbility ability, double now)
         {
             AbilityInfo info = PlatformAbilities.Info(ability);
             switch (denial)
@@ -46,10 +45,10 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
                         : Hold(platform.HoldAt(now)) + " · T-" + Clock(platform.CycleStart - now);
                 case PlatformDenial.NotOverhead:
                     return platform == null ? "NOT OVERHEAD"
-                        : "AWAY · AOS " + Clock(platform.State(now, clock).TimeToPass);
+                        : "AWAY · AOS " + Clock(platform.State(now).TimeToPass);
                 case PlatformDenial.Overhead:
                     return platform == null ? "OVERHEAD"
-                        : "OVERHEAD · BURN AFTER LOS " + Clock(platform.State(now, clock).TimeToPassEnd);
+                        : "OVERHEAD · BURN AFTER LOS " + Clock(platform.State(now).TimeToPassEnd);
                 case PlatformDenial.LowEnergy:
                     return "LOW ENERGY · " + Whole(platform != null ? platform.Energy : 0f) + "/" + Whole(info.EnergyKj) + " KJ";
                 case PlatformDenial.Recharging:
@@ -77,7 +76,6 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
                 case PlacementFailure.UnknownOrbit: return "UNKNOWN ORBIT";
                 case PlacementFailure.WouldStrand: return "WOULD STRAND MODULES";
                 case PlacementFailure.EmptyCell: return "EMPTY CELL";
-                case PlacementFailure.NeedsPropulsion: return "LOW NEEDS PROPULSION";
                 default: return "NOT A MODULE";
             }
         }

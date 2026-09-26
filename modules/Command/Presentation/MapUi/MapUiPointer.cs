@@ -26,11 +26,25 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         {
             if (rect == null) return false;
 
-            var canvas = rect.GetComponentInParent<Canvas>();
+            Canvas canvas = CanvasFor(rect);
             Camera camera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay
                 ? canvas.worldCamera
                 : null;
             return RectTransformUtility.RectangleContainsScreenPoint(rect, screenPoint, camera);
+        }
+
+        // Hit tests cluster on one rect during a gesture, so one cached canvas answers
+        // almost every call. A destroyed canvas fails the null check and re-resolves;
+        // a destroyed rect never reaches the lookup.
+        private static RectTransform cachedRect;
+        private static Canvas cachedCanvas;
+
+        private static Canvas CanvasFor(RectTransform rect)
+        {
+            if (cachedCanvas != null && ReferenceEquals(cachedRect, rect)) return cachedCanvas;
+            cachedRect = rect;
+            cachedCanvas = rect.GetComponentInParent<Canvas>();
+            return cachedCanvas;
         }
     }
 }

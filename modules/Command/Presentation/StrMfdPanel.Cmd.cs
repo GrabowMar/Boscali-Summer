@@ -472,10 +472,14 @@ namespace BoscaliSummer.Features.Command.Presentation
             if (theaterOperations.RequestHold(!theaterOperations.Influence.HoldOffense)) nextRefresh = 0f;
         }
 
-        private void StepCmdEscrow(float waves)
+        // Chest steps in 10s: a whole-wave step (45) jumped the default cap past useful values
+        // and from 15 could never reach the 70 opening charge.
+        private const float CmdEscrowStep = 10f;
+
+        private void StepCmdEscrow(float steps)
         {
             if (theaterOperations == null || theaterOperations.Influence == null) return;
-            float step = waves * theaterOperations.WaveBudget;
+            float step = steps * CmdEscrowStep;
             float escrow = theaterOperations.Influence.MaxEscrowPerPlan + step;
             if (theaterOperations.RequestChest(escrow, theaterOperations.Influence.ReserveFloor))
                 nextRefresh = 0f;

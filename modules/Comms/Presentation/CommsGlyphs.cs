@@ -28,7 +28,7 @@ namespace BoscaliSummer.Features.Comms.Presentation
         /// <summary>Every key the table draws on purpose, for the geometry test.</summary>
         public static readonly string[] Keys =
         {
-            "mark", "enemy", "sam", "attack", "defend", "rally", "help",
+            "mark", "enemy", "sam", "attack", "defend", "rally", "help", "spike",
             "star", "heart", "smile", "skull", "flame", "crown", "bolt", "flag", "question", "exclaim", "eye", "mug",
             "pen", "line", "arrow", "circle", "box", "eraser", "measure", "text", "sticker", "ping", "off",
             "undo", "hunt", "guess", "dice", "rps", "poll", "comms", "trash",
@@ -75,6 +75,14 @@ namespace BoscaliSummer.Features.Comms.Presentation
                     {
                         Circle(0f, 0f, 0.85f, 22),
                         Line(0f, 0.5f, 0f, -0.5f), Line(-0.5f, 0f, 0.5f, 0f),
+                    };
+                case "spike":
+                    // A radar beam fanning onto a small aircraft chevron: "they have me".
+                    return new[]
+                    {
+                        Poly(0f, 0.95f, 0.45f, 0.35f, 0f, 0.5f, -0.45f, 0.35f),
+                        Arc(0f, -0.9f, 0.55f, 40f, 140f, 8), Arc(0f, -0.9f, 0.95f, 50f, 130f, 10),
+                        Circle(0f, -0.9f, 0.08f, 6),
                     };
 
                 // ---- stickers: the fun ones

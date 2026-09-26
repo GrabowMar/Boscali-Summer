@@ -38,7 +38,7 @@ namespace BoscaliSummer.Features.Comms.Presentation
         private const int TabPoll = 2;
         private const int TabGame = 3;
         private const int TabLog = 4;
-        private static readonly string[] TabNames = { "MAP", "CALL", "POLL", "GAME", "LOG" };
+        private static readonly string[] TabNames = { "MAP", "CALL", "POLL", "CREW", "LOG" };
 
         private const float HeadingHeight = 22f;
         private const float Gap = 4f;

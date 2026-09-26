@@ -42,7 +42,7 @@ namespace BoscaliSummer.Garrisons
             if (!GameAccess.IsServer()) return true;
             try
             {
-                if (__instance == null) return true;
+                if (__instance == null || !ZoneGarrisonManager.MightBeStrongpointHit(__instance)) return true;
                 ArmorProperties armor = __instance.GetArmorProperties();
                 if (armor == null) return true;
                 float blastTerm = StrongpointHitPolicy.BlastTerm(

@@ -8,7 +8,7 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
     /// <summary>
     /// Tactical Flare Barrage: launches a high-velocity countermeasure delivery missile that
     /// strikes the designated sector and initiates an intensive 15-second pyrotechnic flare barrage
-    /// directly at the impact point, completely seducing and misguiding all IR-seeking missiles.
+    /// directly at the impact point, completely seducing and misguiding hostile IR-seeking missiles.
     /// </summary>
     internal sealed class FlareMissileAction : ISupportAction
     {
@@ -38,12 +38,13 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
                     return SupportResult.OutOfRange;
             }
 
-            if (!context.Host.TryReserve(SupportPool.Strike)) return SupportResult.Busy;
+            if (!context.Host.TryReserve(context.Owner, SupportPool.Strike)) return SupportResult.Busy;
 
             float radius = context.Settings.FlareBarrageRadius.Value;
             int count = context.Settings.FlareBarrageCount.Value;
             float duration = context.Settings.FlareBarrageDuration.Value;
-            string unique = SupportNaming.Unique("Flare", context);
+            // The host's barrage values ride in the replicated name, so every peer seduces alike.
+            string unique = SupportEffectPolicy.FlareName(SupportNaming.Unique("Flare", context), radius, duration, count);
 
             context.Logger.LogInfo($"[Support] Flare Barrage using {definition.jsonKey} onto {ground} (radius: {radius:F0}m, duration: {duration:F0}s).");
             context.Host.Run(Launch(context.Host, context.Player, context.Owner, definition, ground, radius, duration, count, unique));
@@ -96,7 +97,7 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
             }
             finally
             {
-                host.Release(SupportPool.Strike);
+                host.Release(owner, SupportPool.Strike);
             }
         }
     }
@@ -111,6 +112,7 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
             if (missile == null) return;
             var tracker = missile.gameObject.AddComponent<FlareMissileFlightTracker>();
             tracker.missile = missile;
+            tracker.owner = missile != null ? missile.NetworkHQ : null;
             tracker.targetGround = targetGround;
             tracker.Radius = radius;
             tracker.Duration = duration;
@@ -123,6 +125,7 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
         public int FlareCount { get; private set; }
 
         private Missile missile;
+        private FactionHQ owner;
         private Vector3 targetGround;
         private float timeout;
         private bool hasDetonated;
@@ -163,7 +166,7 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
                 try { missile.Detonate(Vector3.up, false, false); } catch { }
             }
 
-            FlareMissileBurstVisuals.TriggerBarrage(impactPos, Radius, Duration, FlareCount);
+            FlareMissileBurstVisuals.TriggerBarrage(impactPos, Radius, Duration, FlareCount, owner);
         }
 
         private void OnDestroy()

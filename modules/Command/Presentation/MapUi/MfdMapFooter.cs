@@ -174,6 +174,14 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private static RectSnapshot unitDebug;
         private static float nextUnitProbe;
 
+        /// <summary>
+        /// Miss backoff for the UnitDebug adoption probe: a scene-wide type scan every
+        /// second forever is rude when the panel never arrives. Doubles per miss to 30 s.
+        /// </summary>
+        private const float UnitProbeInitialSeconds = 1f;
+        private const float UnitProbeMaxSeconds = 30f;
+        private static float unitProbeInterval = UnitProbeInitialSeconds;
+
         public static void Ensure(Canvas canvas, MfdLayout.Columns columns, VirtualMFD mfd)
         {
             if (canvas == null || mfd == null || !MapUiAccess.MfdFooterAvailable) return;
@@ -202,7 +210,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             // Late adoption if UnitDebug was instantiated or activated after initial layout
             if ((unitDebug == null || unitDebug.Target == null) && Time.unscaledTime >= nextUnitProbe)
             {
-                nextUnitProbe = Time.unscaledTime + 1f;
+                nextUnitProbe = Time.unscaledTime + unitProbeInterval;
+                unitProbeInterval = Mathf.Min(unitProbeInterval * 2f, UnitProbeMaxSeconds);
                 UnitDebug ud = Object.FindObjectOfType<UnitDebug>(true);
                 if (ud != null && ud.transform is RectTransform rt && contextSlot != null)
                 {
@@ -264,6 +273,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             contextSlot = null;
             chromeSize = Vector2.zero;
             nextUnitProbe = 0f;
+            unitProbeInterval = UnitProbeInitialSeconds;
         }
 
         public static void Reset() => Restore();

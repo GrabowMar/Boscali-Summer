@@ -75,6 +75,7 @@ namespace BoscaliSummer.Tests.Features.Support
             OpsDomainTests.Run();
             CyberNetworkTests.Run();
             OrbitalTests.Run();
+            TeamRulesTests.Run();
             TestAssert.That(SupportEffectPolicy.EmpDuration == 30f,
                 "EMP disruption must retain its 30-second operational duration");
             TestAssert.That(SupportEffectPolicy.EmpBurstAltitude >= 20000f &&
@@ -94,6 +95,16 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(SupportEffectPolicy.EmpRadius("bad:r=NaN") == 12000f &&
                 SupportEffectPolicy.EmpRadius("bad:r=Infinity") == 12000f &&
                 SupportEffectPolicy.EmpRadius("bad:r=999999") == 12000f, "invalid EMP metadata must use bounded fallback");
+            SupportEffectPolicy.FlareBarrage(SupportEffectPolicy.FlareName("BoscaliSummer:Support:Flare:42:7", 6500.5f, 22f, 48),
+                out float flareRadius, out float flareSeconds, out int flareCount);
+            TestAssert.That(flareRadius == 6500.5f && flareSeconds == 22f && flareCount == 48,
+                "the flare barrage's host values must survive native name replication");
+            SupportEffectPolicy.FlareBarrage("bad:f=NaN,99,1000", out flareRadius, out flareSeconds, out flareCount);
+            TestAssert.That(flareRadius == 4000f && flareSeconds == 15f && flareCount == 36,
+                "invalid flare metadata must use bounded fallback");
+            SupportEffectPolicy.FlareBarrage("BoscaliSummer:Support:Flare:42:7", out flareRadius, out flareSeconds, out flareCount);
+            TestAssert.That(flareRadius == 4000f && flareSeconds == 15f && flareCount == 36,
+                "a name without flare metadata must use the defaults");
             TestMapGesture();
             TestClickVsDrag();
 

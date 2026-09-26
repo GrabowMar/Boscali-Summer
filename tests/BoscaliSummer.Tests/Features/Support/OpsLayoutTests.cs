@@ -49,16 +49,7 @@ namespace BoscaliSummer.Tests.Features.Support
             Same(wide, new Box(360f, 72f, 1840f, 968f), "21:9 clamps width and clears theater wire");
             Box floor = WindowGeometry.Window(1280f, 720f);
             Same(floor, new Box(0f, 0f, 1280f, 720f), "the floor wins on a small canvas");
-            Box origin = new Box(800f, 400f, 40f, 24f);
-            Same(WindowGeometry.Lerp(origin, hd, 0f), origin, "lerp 0 is the origin");
-            Same(WindowGeometry.Lerp(origin, hd, 1f), hd, "lerp 1 is the window");
-            Box half = WindowGeometry.Lerp(origin, hd, 0.5f);
-            Near(half.X, (origin.X + hd.X) * 0.5f, "lerp x");
-            Near(half.Y, (origin.Y + hd.Y) * 0.5f, "lerp y");
-            Near(half.Width, (origin.Width + hd.Width) * 0.5f, "lerp width");
-            Near(half.Height, (origin.Height + hd.Height) * 0.5f, "lerp height");
             Same(WindowGeometry.Window(float.NaN, 1080f), hd, "non-finite canvas uses the centred default");
-            Same(WindowGeometry.Lerp(origin, hd, float.PositiveInfinity), hd, "non-finite lerp uses the centred default");
 
             Box mark = new Box(10f, 20f, 30f, 40f);
             TestAssert.That(mark.Contains(10f, 20f) && !mark.Contains(40f, 20f), "contains is half-open");
@@ -222,13 +213,6 @@ namespace BoscaliSummer.Tests.Features.Support
             int clipped = TimelineMath.Team(TeamState.EnRoute, 500f, FieldMission.Seize, 0, 100f, lanes);
             TestAssert.That(clipped == 1 && lanes[0].Kind == LaneKind.EnRoute, "a phase past the window is clipped");
             Near(lanes[0].End, 1f, "the clip ends at the window");
-
-            int passes = TimelineMath.Passes(0f, 60f, 400f, 1800f, lanes);
-            TestAssert.That(passes == 3, "at most three passes in the window");
-            Near(lanes[0].Start, 0f, "first pass");
-            Near(lanes[1].Start, 400f / 1800f, "second pass");
-            Near(lanes[2].Start, 800f / 1800f, "third pass");
-            TestAssert.That(lanes[0].Kind == LaneKind.Pass, "a pass segment");
         }
 
         private static void CheckStack()

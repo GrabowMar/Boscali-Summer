@@ -16,7 +16,6 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         public const float EntranceSeconds = 0.30f;
         public const string Mono = "<mspace=0.6em>";
 
-        public const float Block = 64f;
         public const float Body = 15f;
         public const float Small = 13f;
         public const float Micro = 12f;
@@ -95,8 +94,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             FontSize = 12,
             Tracking = 0f,
             Style = FontStyles.Normal,
-            Mono = true,
-            Dashed = true
+            Mono = true
         };
     }
 }

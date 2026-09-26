@@ -18,7 +18,7 @@ namespace BoscaliSummer.Tests.Features.Radio
             PropagationMath();
             SpectrumRows();
             VanillaHoldRules();
-            LinkStubs();
+            StationRules();
             string root = Path.Combine(
                 Path.GetTempPath(), "BoscaliSummer.RadioTests." + Guid.NewGuid().ToString("N"));
             try
@@ -108,10 +108,6 @@ namespace BoscaliSummer.Tests.Features.Radio
                 RadioDialTuning.Step(RadioDial.Mw(780), -1).Equals(RadioDial.Mw(770)),
                 "the MW dial stepped by the wrong increment");
 
-            TestAssert.That(RadioBands.Next(RadioBand.Fm) == RadioBand.Air &&
-                RadioBands.Next(RadioBand.Air) == RadioBand.Mw &&
-                RadioBands.Next(RadioBand.Mw) == RadioBand.Fm,
-                "the band knob did not cycle FM → VHF → MW");
             TestAssert.That(RadioDial.Air(118000).FrequencyText == "118.000" &&
                 RadioDial.Air(118000).UnitText == "MHz" &&
                 RadioDial.Mw(780).FrequencyText == "780",
@@ -138,9 +134,6 @@ namespace BoscaliSummer.Tests.Features.Radio
             TestAssert.That(RadioDialTuning.Seek(dials, RadioDial.Fm(90000), 1) == 1 &&
                 RadioDialTuning.Seek(dials, RadioDial.Fm(90000), -1) == 0,
                 "seek from between stations did not pick the nearest station each way");
-            TestAssert.That(RadioDialTuning.FirstInBand(dials, RadioBand.Mw) == 2 &&
-                RadioDialTuning.FirstInBand(dials, RadioBand.Fm) == 0,
-                "first-in-band did not find the lowest station of the band");
 
             TestAssert.That(RadioDialTuning.Nearest(RadioBand.Fm, 88460).Equals(RadioDial.Fm(88500)) &&
                 RadioDialTuning.Nearest(RadioBand.Fm, 88540).Equals(RadioDial.Fm(88500)),
@@ -296,22 +289,8 @@ namespace BoscaliSummer.Tests.Features.Radio
                 "kind and source both key the gap");
         }
 
-        private static void LinkStubs()
+        private static void StationRules()
         {
-            TestAssert.That(RadioLinkStub.DeckGain(false) == 1f,
-                "the deck was attenuated with nothing transmitting at the player");
-            TestAssert.That(RadioLinkStub.DeckGain(true) == RadioLinkStub.TransmissionDuck &&
-                RadioLinkStub.TransmissionDuck > 0f && RadioLinkStub.TransmissionDuck < 1f,
-                "a received transmission did not duck the deck");
-
-            var link = new RadioLinkStub();
-            TestAssert.That(!link.CanTransmit() && !link.TransmissionActive && link.JamLevel == 0f,
-                "a radio link stub became active without an implementation");
-            link.ToggleSecure();
-            TestAssert.That(link.Secure, "the crypto placeholder did not latch");
-            link.Reset();
-            TestAssert.That(!link.Secure, "a scene reset kept the crypto placeholder latched");
-
             TestAssert.That(BuiltInStationRules.IsBuiltIn(BuiltInStationRules.AgrapolId) &&
                 BuiltInStationRules.IsBuiltIn(BuiltInStationRules.BaseId) &&
                 !BuiltInStationRules.IsBuiltIn("user-local"),

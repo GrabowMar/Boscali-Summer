@@ -42,7 +42,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
         private RadioProgram deck;
         private RadioBroadcastFx fx;
         private readonly RadioTransmitterAnchors anchors = new RadioTransmitterAnchors();
-        private readonly RadioLinkStub link = new RadioLinkStub();
         private ServiceRegistry services;
         private ISquadView squad;
         private readonly HuntMusicGate huntMusic = new HuntMusicGate();
@@ -60,9 +59,7 @@ namespace BoscaliSummer.Features.Radio.Runtime
         private bool dialResume;
         private bool scanning;
         private bool offAir;
-        private string towerLabel = "—";
         private float towerDistanceKm;
-        private float towerHorizonKm;
         private bool towerLineOfSight = true;
         private readonly VanillaMusicHold hold = new VanillaMusicHold();
         private RadioReception reception = RadioReception.Perfect;
@@ -144,15 +141,12 @@ namespace BoscaliSummer.Features.Radio.Runtime
         /// </summary>
         public bool IsOffAir => offAir;
 
-        public string TowerLabel => towerLabel;
         public float TowerDistanceKm => towerDistanceKm;
-        public float TowerHorizonKm => towerHorizonKm;
         public bool TowerLineOfSight => towerLineOfSight;
         public RadioDial TunedDial => tunedDial;
         public RadioReception Reception => reception;
         public float SignalLevel => fx == null ? 0f : fx.Level;
         public float[] Spectrum => spectrum;
-        public RadioLinkStub Link => link;
 
         /// <summary>
         /// True when the tuned station has a resolved tower and the player has a position, so
@@ -194,16 +188,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
         public float Elapsed => receiver.Elapsed;
         public float Duration => receiver.Duration;
         public float Progress => receiver.Progress;
-
-        public int TrackCount => huntTrack != null
-            ? 0
-            : CurrentChannel() == null ? 0 : CurrentChannel().Tracks.Length;
-        public int CurrentTrackIndex => huntTrack != null || TrackCount == 0
-            ? -1
-            : Mathf.Clamp(selectedTrack, 0, TrackCount - 1);
-
-        public string GetTrackTitle(int index) =>
-            index >= 0 && index < TrackCount ? CurrentChannel().Tracks[index].Title : string.Empty;
 
         public string CurrentChannelName => huntTrack != null ? "HUNT" : ChannelCount == 0
             ? "NO CHANNEL"
@@ -352,14 +336,11 @@ namespace BoscaliSummer.Features.Radio.Runtime
             offStation = false;
             dialResume = false;
             offAir = false;
-            towerLabel = "—";
             towerDistanceKm = 0f;
-            towerHorizonKm = 0f;
             towerLineOfSight = true;
             hold.Reset();
             deckStatus = "Deck stopped";
             deckTrack = 0;
-            link.Reset();
             bandPositions[0] = 88500;
             bandPositions[1] = 121500;
             bandPositions[2] = 780;
@@ -423,8 +404,7 @@ namespace BoscaliSummer.Features.Radio.Runtime
             fx?.SetReception(offStation ? 0f : reception.Quality,
                 !offStation && reception.Open(Squelch));
             receiver.SetVolume(Volume * ReceiverGain);
-            // The deck's one piece of world awareness: duck under a received transmission.
-            deck.SetVolume(Volume * RadioLinkStub.DeckGain(link.TransmissionActive));
+            deck.SetVolume(Volume);
 
             SyncVanillaHold();
             RadioPanel.Tick(this);
@@ -488,15 +468,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
 
         // -------------------------------------------------------------------- receiver
 
-        public void PlayTrack(int index)
-        {
-            if (huntTrack != null || index < 0 || index >= TrackCount) return;
-            StopScanning();
-            ManualTransport();
-            selectedTrack = index;
-            PlayCurrent();
-        }
-
         public void SelectChannel(int index)
         {
             if (index < 0 || index >= ChannelCount) return;
@@ -531,14 +502,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
                 return;
             }
             SetDial(stationDials[index]);
-        }
-
-        /// <summary>Band knob: FM → VHF → MW, each remembering its last frequency.</summary>
-        public void CycleBand()
-        {
-            RememberBandPosition(tunedDial);
-            RadioBand next = RadioBands.Next(tunedDial.Band);
-            SetDial(RadioDial.At(next, bandPositions[(int)next]));
         }
 
         /// <summary>Band key: switch straight to a band, which keeps its last frequency.</summary>
@@ -624,23 +587,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
             SyncVanillaHold();
         }
 
-        public void Previous()
-        {
-            StopScanning();
-            ManualTransport();
-            RadioStation channel = CurrentChannel();
-            if (channel == null || channel.Tracks.Length == 0) return;
-            selectedTrack = (selectedTrack - 1 + channel.Tracks.Length) % channel.Tracks.Length;
-            PlayCurrent();
-        }
-
-        public void Next()
-        {
-            StopScanning();
-            ManualTransport();
-            NextTrack();
-        }
-
         public void ToggleScan()
         {
             if (scanning)
@@ -678,17 +624,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
             settings.RepeatTrack.Value = !settings.RepeatTrack.Value;
             status = settings.RepeatTrack.Value ? "Repeat enabled" : "Repeat disabled";
             deckStatus = status;
-        }
-
-        public void Transmit()
-        {
-            status = RadioLinkStub.TransmitStatus;
-        }
-
-        public void ToggleSecure()
-        {
-            link.ToggleSecure();
-            status = RadioLinkStub.SecureStatus;
         }
 
         public void Rescan()
@@ -1211,8 +1146,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
             ? string.Empty
             : stations[Mathf.Clamp(selectedChannel, 0, ChannelCount - 1)].Id;
 
-        public string CurrentChannelId => CurrentStationId;
-
         // -------------------------------------------------------------- propagation
 
         private void PropagationTick()
@@ -1261,9 +1194,7 @@ namespace BoscaliSummer.Features.Radio.Runtime
             {
                 offAir = false;
                 reception = RadioReception.Perfect;
-                towerLabel = builtIn ? "NO FIX" : "LOCAL ARCHIVE";
                 towerDistanceKm = 0f;
-                towerHorizonKm = 0f;
                 towerLineOfSight = true;
                 return;
             }
@@ -1279,18 +1210,14 @@ namespace BoscaliSummer.Features.Radio.Runtime
                 }
                 offAir = lost;
                 reception = lost ? RadioPropagation.OffAir : RadioReception.Perfect;
-                towerLabel = lost ? "LOST" : "NO FIX";
                 towerDistanceKm = 0f;
-                towerHorizonKm = 0f;
                 towerLineOfSight = true;
                 return;
             }
 
             offAir = false;
-            towerLabel = tower.Label;
             Vector3 towerTop = tower.Position + Vector3.up * tower.Height;
             towerDistanceKm = Vector3.Distance(listenerPosition, towerTop) / 1000f;
-            towerHorizonKm = RadioPropagation.HorizonKilometres(tower.Height, listenerHeight);
             towerLineOfSight = HasLineOfSight(listenerPosition + Vector3.up * 3f, towerTop);
             reception = RadioPropagation.Evaluate(towerDistanceKm, tower.Height, listenerHeight,
                 towerLineOfSight, station.Dial.Modulation, ReceiverModulation);

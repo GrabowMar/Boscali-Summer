@@ -12,6 +12,7 @@ namespace BoscaliSummer.Features.Comms.Domain
         public uint Id;
         public ulong Challenger;
         public string ChallengerName;
+        public ulong TargetPlayer;
         public int Faction;
         public CommsChannel Channel;
         public float Expires;

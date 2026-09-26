@@ -8,9 +8,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
     ///
     /// The game raises escalation to the highest faction score reached and clears
     /// tactical / strategic employment at the mission's own thresholds. The ladder names
-    /// each rung, its threshold and its state; <see cref="Fraction"/> keeps the equal-thirds
-    /// position for any caller that still draws the old single track. A zero threshold
-    /// means the mission never gated that stage.
+    /// each rung, its threshold and its state. A zero threshold means the mission never
+    /// gated that stage.
     /// </summary>
     internal static class MfdMissionOverview
     {
@@ -19,20 +18,6 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             if (strategic > 0f) return current >= strategic ? 2 : tactical > 0f && current < tactical ? 0 : 1;
             if (tactical > 0f) return current < tactical ? 0 : 1;
             return 2;
-        }
-
-        public static float Fraction(float current, float tactical, float strategic)
-        {
-            current = Math.Max(0f, current);
-            if (strategic > 0f)
-            {
-                if (current < tactical) return Unit(current / Math.Max(tactical, 0.001f)) / 3f;
-                if (current < strategic)
-                    return 1f / 3f + Unit((current - tactical) / Math.Max(strategic - tactical, 0.001f)) / 3f;
-                return 2f / 3f + Unit((current - strategic) / strategic) / 3f;
-            }
-            if (tactical > 0f) return current < tactical ? Unit(current / tactical) / 3f : 2f / 3f;
-            return 1f;
         }
 
         /// <summary>The rungs in order, as the ladder names them.</summary>

@@ -52,14 +52,12 @@ namespace BoscaliSummer.Features.Support.Presentation
         private sealed class StrikeMarker
         {
             public GameObject Root;
-            public RectTransform RootRect;
             public Image DangerRing;
             public Image DangerFill;
             public Image Core;
             public GameObject CenterObj;
             public Image CenterIcon;
             public GameObject BadgeObj;
-            public RectTransform BadgeRect;
             public Image BadgeBg;
             public TextMeshProUGUI BadgeText;
             public bool IsInUse;
@@ -68,11 +66,9 @@ namespace BoscaliSummer.Features.Support.Presentation
         private readonly List<StrikeMarker> markerPool = new List<StrikeMarker>(MaxActiveMarkers);
         private bool initialized;
 
-        // Orbital overlay: the sub-station point and the chord of the current pass's ground
-        // track that crosses the map, for our station and (as unknown red tracks) foreign ones,
-        // plus the last uplink aim. Everything is pooled and bounded.
+        // Orbital overlay: the sub-station point, for our station and (as unknown red tracks)
+        // foreign ones, plus the last uplink aim. Everything is pooled and bounded.
         private const int OrbitMarkers = 1 + SpaceOperations.MaximumForeign;
-        private const int TrackDots = 24;
         private static readonly Color StationColour = new Color(0.35f, 0.9f, 1f, 1f);
         private static readonly Color HostileStationColour = new Color(1f, 0.32f, 0.26f, 1f);
 
@@ -81,7 +77,6 @@ namespace BoscaliSummer.Features.Support.Presentation
             public GameObject Icon;
             public Image IconImage;
             public TextMeshProUGUI BadgeText;
-            public Image[] Track;
         }
 
         private readonly List<OrbitMarker> orbitPool = new List<OrbitMarker>(OrbitMarkers);
@@ -345,14 +340,12 @@ namespace BoscaliSummer.Features.Support.Presentation
                 markerPool.Add(new StrikeMarker
                 {
                     Root = markerObj,
-                    RootRect = rootRect,
                     Core = CreateCore(markerObj.transform),
                     DangerRing = ringImg,
                     DangerFill = fillImg,
                     CenterObj = centerObj,
                     CenterIcon = centerImg,
                     BadgeObj = badgeObj,
-                    BadgeRect = badgeRect,
                     BadgeBg = badgeBg,
                     BadgeText = badgeText,
                     IsInUse = false
@@ -364,9 +357,7 @@ namespace BoscaliSummer.Features.Support.Presentation
         {
             for (int i = 0; i < OrbitMarkers; i++)
             {
-                var marker = new OrbitMarker { Track = new Image[TrackDots] };
-                for (int d = 0; d < TrackDots; d++) marker.Track[d] = Dot(overlayRoot.transform, "GroundTrack");
-
+                var marker = new OrbitMarker();
                 marker.Icon = new GameObject("StationPoint", typeof(RectTransform), typeof(Image));
                 marker.Icon.transform.SetParent(overlayRoot.transform, false);
                 var iconRect = (RectTransform)marker.Icon.transform;
@@ -414,17 +405,6 @@ namespace BoscaliSummer.Features.Support.Presentation
             aim.color = new Color(1f, 0.72f, 0.22f, 0.95f);
             aim.raycastTarget = false;
             aimMarker.SetActive(false);
-        }
-
-        private static Image Dot(Transform parent, string name)
-        {
-            var go = new GameObject(name, typeof(RectTransform), typeof(Image));
-            go.transform.SetParent(parent, false);
-            ((RectTransform)go.transform).sizeDelta = new Vector2(4f, 4f);
-            Image image = go.GetComponent<Image>();
-            image.raycastTarget = false;
-            go.SetActive(false);
-            return image;
         }
 
         private void UpdateArmedReticle(float mapFactor, float invZoom)
@@ -527,7 +507,7 @@ namespace BoscaliSummer.Features.Support.Presentation
                     noAccess = denial != PlatformDenial.None;
                     coverage = noAccess
                         ? "<color=#FFAA44>" + PlatformWords.Denial(denial, supportManager.LocalPlatform, needed.Value,
-                            supportManager.OrbitNow, supportManager.OrbitClock) + "</color>\n"
+                            supportManager.OrbitNow) + "</color>\n"
                         : "<color=#66FF99>" + OrbitalPlatform.Callsign + " OVERHEAD · READY</color>\n";
                 }
                 string area = radius <= 0f ? "FLEET-WIDE"
@@ -550,12 +530,11 @@ namespace BoscaliSummer.Features.Support.Presentation
             if (supportManager != null && reach > 0f)
             {
                 double now = supportManager.OrbitNow;
-                OrbitClock clock = supportManager.OrbitClock;
 
                 OrbitalPlatform platform = supportManager.LocalPlatform;
                 if (platform != null && platform.Exists)
                 {
-                    OrbitState state = platform.State(now, clock);
+                    OrbitState state = platform.State(now);
                     if (state.InPass)
                         DrawOrbit(orbitPool[used++], state, reach, mapFactor, invZoom, StationColour,
                             "<b>" + OrbitalPlatform.Callsign + "</b> · " + StationKeeping.Name(platform.PositionIndex));
@@ -564,7 +543,7 @@ namespace BoscaliSummer.Features.Support.Presentation
                 IReadOnlyList<ForeignPlatform> others = supportManager.Space.Foreign;
                 for (int i = 0; i < others.Count && used < orbitPool.Count; i++)
                 {
-                    OrbitState state = others[i].State(now, clock);
+                    OrbitState state = others[i].State(now);
                     if (!state.InPass) continue;
                     DrawOrbit(orbitPool[used++], state, reach, mapFactor, invZoom, HostileStationColour,
                         "<b>UNKNOWN STATION</b> " + OrbitRegimes.Get(others[i].Regime).Code);
@@ -575,8 +554,6 @@ namespace BoscaliSummer.Features.Support.Presentation
             {
                 OrbitMarker marker = orbitPool[i];
                 if (marker.Icon.activeSelf) marker.Icon.SetActive(false);
-                for (int d = 0; d < marker.Track.Length; d++)
-                    if (marker.Track[d].gameObject.activeSelf) marker.Track[d].gameObject.SetActive(false);
             }
 
             if (aimMarker != null)
@@ -595,10 +572,6 @@ namespace BoscaliSummer.Features.Support.Presentation
         private static void DrawOrbit(OrbitMarker marker, in OrbitState state, float reach, float mapFactor, float invZoom,
                                       Color colour, string label)
         {
-            // Persistent stations have no travelling ground track.
-            for (int i = 0; i < marker.Track.Length; i++)
-                marker.Track[i].gameObject.SetActive(false);
-
             bool onMap = state.SubX * state.SubX + state.SubZ * state.SubZ <= reach * (double)reach;
             if (marker.Icon.activeSelf != onMap) marker.Icon.SetActive(onMap);
             if (!onMap) return;
@@ -606,32 +579,6 @@ namespace BoscaliSummer.Features.Support.Presentation
             marker.Icon.transform.localScale = Vector3.one * invZoom;
             marker.IconImage.color = colour;
             marker.BadgeText.text = label;
-        }
-
-        /// <summary>Dots along the part of a line parallel to the track that lies within the map.
-        /// Track already flown fades; a NaN position draws the whole chord at one weight.</summary>
-        private static void DrawChord(Image[] dots, int first, in PassPlan pass, double crossTrack, float reach,
-                                      float mapFactor, float invZoom, Color colour, double alongNow, int count = TrackDots)
-        {
-            double halfSquared = reach * (double)reach - crossTrack * crossTrack;
-            for (int k = 0; k < count; k++)
-            {
-                Image dot = dots[first + k];
-                if (halfSquared <= 0.0)
-                {
-                    if (dot.gameObject.activeSelf) dot.gameObject.SetActive(false);
-                    continue;
-                }
-                double half = Math.Sqrt(halfSquared);
-                double along = -half + 2.0 * half * k / (count - 1);
-                double x = pass.DirX * along + pass.RightX * crossTrack;
-                double z = pass.DirZ * along + pass.RightZ * crossTrack;
-                if (!dot.gameObject.activeSelf) dot.gameObject.SetActive(true);
-                dot.transform.localPosition = new Vector3((float)x * mapFactor, (float)z * mapFactor, 0f);
-                dot.transform.localScale = Vector3.one * invZoom;
-                bool flown = !double.IsNaN(alongNow) && along < alongNow;
-                dot.color = new Color(colour.r, colour.g, colour.b, flown ? colour.a * 0.3f : colour.a * 0.9f);
-            }
         }
 
         private void UpdateActiveStrikes(float mapFactor, float invZoom)

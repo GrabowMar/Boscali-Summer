@@ -25,7 +25,6 @@ namespace BoscaliSummer.Runtime
 
         private static FieldInfo overlayPrefabField;
         private static FieldInfo markerPrefabField;
-        private static FieldInfo topRightPanelField;
         private static FieldInfo overlayPointerField;
         private static FieldInfo overlayDotField;
         private static FieldInfo overlayRingField;
@@ -38,7 +37,6 @@ namespace BoscaliSummer.Runtime
         private static MapStyle map;
         private static bool cockpitReady;
         private static bool mapReady;
-        private static bool weaponPanelProbed;
         private static float nextAttempt;
 
         internal struct CockpitStyle
@@ -86,21 +84,6 @@ namespace BoscaliSummer.Runtime
         /// <summary>The vanilla objective label size, live from the player's options.</summary>
         internal static float OverlayTextSize => PlayerSettings.overlayTextSize;
 
-        /// <summary>
-        /// The size vanilla's own objective label actually renders at: the player's overlay text
-        /// size carried through the label's 0.5 transform scale, i.e. 16 px at the default 32.
-        /// Imitating the font size alone is what makes a mod's marker text twice as loud.
-        /// </summary>
-        internal static float ObjectiveTextSize
-        {
-            get
-            {
-                float size = OverlayTextSize;
-                float scale = cockpitReady && cockpit.LabelScale > 0.01f ? cockpit.LabelScale : 0.5f;
-                return !float.IsNaN(size) && !float.IsInfinity(size) && size >= 1f ? size * scale : 16f;
-            }
-        }
-
         /// <summary>Vanilla HUD colours, live so a custom theme carries over.</summary>
         internal static Palette Colours
         {
@@ -135,7 +118,6 @@ namespace BoscaliSummer.Runtime
         {
             try
             {
-                topRightPanelField = AccessTools.Field(typeof(CombatHUD), "topRightPanel");
                 overlayPrefabField = AccessTools.Field(typeof(ObjectiveOverlayManager), "overlayPrefab");
                 markerPrefabField = AccessTools.Field(typeof(ObjectiveMarkerManager), "markerPrefab");
                 overlayPointerField = AccessTools.Field(typeof(ObjectiveOverlay), "objectivePointer");
@@ -160,40 +142,6 @@ namespace BoscaliSummer.Runtime
             cockpit = default;
             map = default;
             nextAttempt = 0f;
-            weaponPanelProbed = false;
-        }
-
-        /// <summary>
-        /// The vanilla weapon and capacitor column's own rectangle, for anything that wants to
-        /// sit under it and share its edges. Read only: nothing here writes to, re-parents or
-        /// disables the column, and a scene without it simply says no. Probed once, so a game
-        /// build that renames the field costs one reflection lookup and not one per tick.
-        /// </summary>
-        internal static bool TryWeaponPanel(out RectTransform panel)
-        {
-            panel = null;
-            if (topRightPanelField == null)
-            {
-                if (weaponPanelProbed) return false;
-                weaponPanelProbed = true;
-                Initialise();
-                if (topRightPanelField == null) return false;
-            }
-
-            try
-            {
-                CombatHUD hud = SceneSingleton<CombatHUD>.i;
-                GameObject column = hud != null ? topRightPanelField.GetValue(hud) as GameObject : null;
-                if (column == null) return false;
-                panel = column.transform as RectTransform;
-                return panel != null;
-            }
-            catch (Exception e)
-            {
-                Plugin.Logger?.LogWarning("Vanilla weapon column unavailable: " + e.Message);
-                weaponPanelProbed = true;
-                return false;
-            }
         }
 
         internal static bool TryCockpit(out CockpitStyle style)

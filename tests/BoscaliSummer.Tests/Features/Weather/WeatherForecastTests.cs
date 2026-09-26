@@ -65,12 +65,6 @@ namespace BoscaliSummer.Tests.Features.Weather
             TestAssert.That(Math.Abs(speedKts - 19.44f) < 0.1f, "10 m/s is ~19.4 kts");
             TestAssert.That(towardsDeg == 90, "Wind blowing east has heading 90");
             TestAssert.That(fromDeg == 270, "Wind blowing east comes from west (270)");
-
-            // 5. Time & duration formatting
-            TestAssert.That(WeatherForecast.FormatHourTime(6.5f) == "06:30", "6.5h must format to 06:30");
-            TestAssert.That(WeatherForecast.FormatHourTime(18.25f) == "18:15", "18.25h must format to 18:15");
-            TestAssert.That(WeatherForecast.FormatMinutesDuration(45f) == "45M", "45 min format");
-            TestAssert.That(WeatherForecast.FormatMinutesDuration(125f) == "2H 05M", "125 min format");
         }
     }
 }

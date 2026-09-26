@@ -40,16 +40,16 @@ namespace BoscaliSummer.Features.Command.Runtime
             }
         }
 
-        internal static bool TryGetGroundObservation(Unit unit, FactionHQ localHq, out Vector3 position, out float weight, out bool hostile)
+        internal static bool TryGetGroundObservation(Unit unit, out Vector3 position, out float weight, out FactionHQ owner)
         {
             position = default;
             weight = 0f;
-            hostile = false;
+            owner = null;
             // Dismounted pilots are survivors, not capture infantry. Aircraft (including
             // parked aircraft) likewise never contribute ground-control pressure.
-            if (unit == null || unit.disabled || localHq == null || unit.NetworkHQ == null ||
+            if (unit == null || unit.disabled || unit.NetworkHQ == null ||
                 !(unit is GroundVehicle || unit is Building)) return false;
-            hostile = unit.NetworkHQ != localHq;
+            owner = unit.NetworkHQ;
             // Objective theater state: the frontline reflects actual ground presence, not
             // either side's tracking knowledge, so both sides see the same cells.
             position = unit.GlobalPosition().AsVector3();
@@ -59,6 +59,17 @@ namespace BoscaliSummer.Features.Command.Runtime
             bool defensive = unit is Building &&
                 unit.definition is BuildingDefinition building && building.buildingType == BuildingType.DEF;
             weight = TacticalSectorGrid.GroundObservationWeight(defensive);
+            return true;
+        }
+
+        internal static bool TryGetGroundObservation(Unit unit, FactionHQ localHq, out Vector3 position, out float weight, out bool hostile)
+        {
+            position = default;
+            weight = 0f;
+            hostile = false;
+            if (localHq == null) return false;
+            if (!TryGetGroundObservation(unit, out position, out weight, out FactionHQ owner)) return false;
+            hostile = owner != localHq;
             return true;
         }
     }

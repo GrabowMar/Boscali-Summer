@@ -21,11 +21,13 @@ namespace BoscaliSummer.Features.Weather.Presentation
     {
         private const int TabForecast = 0;
         private const int TabEnvironment = 1;
+        private const int TabSynoptic = 2;
         private const float Width = AvTokens.PanelWidth;
         private const int ChipCount = 2;
 
         private WeatherSettings settings;
         private WeatherManager weather;
+        private readonly WeatherSynopticPage synopticPage = new WeatherSynopticPage();
         private ManualLogSource logger;
 
         private GameObject screenRoot;
@@ -101,7 +103,6 @@ namespace BoscaliSummer.Features.Weather.Presentation
         private sealed class TimelineRowWidgets
         {
             public Image RiskRail;
-            public TMP_Text OffsetLabel;
             public TMP_Text RegimeBadgeText;
             public WeatherGlyph Glyph;
             public Image RegimeBadgeBorder;
@@ -111,11 +112,13 @@ namespace BoscaliSummer.Features.Weather.Presentation
             public TMP_Text RainText;
         }
 
-        public void Configure(WeatherSettings config, WeatherManager manager, ManualLogSource log)
+        public void Configure(WeatherSettings config, WeatherManager manager,
+            SynopticWeather synopticWeather, ManualLogSource log)
         {
             settings = config;
             weather = manager;
             logger = log;
+            synopticPage.Configure(config, synopticWeather);
         }
 
         public void ResetForScene()
@@ -127,6 +130,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
             screen = null;
             shell = null;
             timelineRows.Clear();
+            synopticPage.Reset();
             nextAttempt = 0f;
             nextRefresh = 0f;
             failed = false;
@@ -250,7 +254,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
             content.SetParent(rootRect, false);
             AvKit.Stretch(content);
 
-            string[] tabs = { "WEATHER", "SKY & AIR" };
+            string[] tabs = { "WEATHER", "SKY & AIR", "SYNOPTIC" };
 
             shell = AvScreen.Build(
                 content, MfdSlots.Weather,
@@ -271,6 +275,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
 
             BuildForecastPage(shell.CreatePage(TabForecast, "ForecastPage"));
             BuildEnvironmentPage(shell.CreatePage(TabEnvironment, "EnvironmentPage"));
+            synopticPage.BuildPage(shell.CreatePage(TabSynoptic, "SynopticPage"), shell.Body);
 
             MFDScreen result = root.AddComponent<MFDScreen>();
             result.shortName = MfdSlots.Weather;
@@ -436,7 +441,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
             y -= 20f;
 
             // 6 Timeline Rows
-            int[] offsets = WeatherForecast.DefaultOffsetsMinutes;
+            int[] offsets = Domain.WeatherForecast.DefaultOffsetsMinutes;
             timelineRows.Clear();
 
             float rowH = 38f;
@@ -452,7 +457,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
                 };
 
                 string timeText = (i == 0) ? "NOW" : $"+{offsets[i]} MIN";
-                row.OffsetLabel = AvKit.Label(
+                AvKit.Label(
                     container, timeText, new Rect(x + 8f, y, 50f, rowH),
                     (i == 0) ? AvTheme.TextPrimary : AvTheme.Dim, AvTokens.FontMicro, (i == 0) ? FontStyles.Bold : FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
 
@@ -731,7 +736,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
 
             // Top metrics row
             float cond = weather.CurrentConditions;
-            WeatherRegime regime = weather.CurrentRegime;
+            RegimeSnapshot regime = weather.CurrentRegime;
             Color condColor = GetRegimeColor(regime.Type);
             shell.Metrics[0].Set($"{Mathf.RoundToInt(cond * 100f)}% {regime.Code}", "CLOUD COVER", cond, condColor);
 
@@ -739,7 +744,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
             Color deckColor = deck < 1600f ? AvTheme.Warning : AvTheme.Accent;
             shell.Metrics[1].Set($"{Mathf.RoundToInt(deck)} M", "CLOUD BASE", Mathf.Clamp01(deck / 4000f), deckColor);
 
-            WeatherForecast.FormatWind(weather.CurrentWindVelocity.x, weather.CurrentWindVelocity.z, out float kts, out int towards, out int from);
+            Domain.WeatherForecast.FormatWind(weather.CurrentWindVelocity.x, weather.CurrentWindVelocity.z, out float kts, out int towards, out int from);
             Color windColor = kts > 25f ? AvTheme.Warning : AvTheme.Accent;
             shell.Metrics[2].Set($"{Mathf.RoundToInt(kts)}K {from:D3}°", "WIND FROM", Mathf.Clamp01(kts / 40f), windColor);
 
@@ -763,9 +768,13 @@ namespace BoscaliSummer.Features.Weather.Presentation
             {
                 RefreshEnvironmentTab(level, kts, towards);
             }
+            else if (shell.Page == TabSynoptic)
+            {
+                synopticPage.Refresh(shell);
+            }
 
-            // Status strip
-            if (shell.Status != null)
+            // Status strip (the synoptic tab writes its own through WriteStatus)
+            if (shell.Status != null && shell.Page != TabSynoptic)
             {
                 if (weather.IsManualOverride)
                 {
@@ -787,7 +796,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
 
         private void RefreshForecastTab(
             float cond,
-            WeatherRegime regime,
+            RegimeSnapshot regime,
             float deck,
             float windKts,
             Vector3 samplePos,
@@ -829,7 +838,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
 
             if (liveQuickMetrics != null)
             {
-                float rain = WeatherForecast.ResolveRainIntensity(cond, weather.ForcedRainIntensity);
+                float rain = Domain.WeatherForecast.ResolveRainIntensity(cond, weather.ForcedRainIntensity);
                 liveQuickMetrics.text = $"DECK {Mathf.RoundToInt(deck)} M   /   WIND {Mathf.RoundToInt(windKts)} KT   /   RAIN {Mathf.RoundToInt(rain * 100f)}%";
             }
 
@@ -1099,7 +1108,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
             }
 
             // 3. Wind Dynamics
-            WeatherForecast.FormatWind(weather.CurrentWindVelocity.x, weather.CurrentWindVelocity.z, out _, out _, out int fromDeg);
+            Domain.WeatherForecast.FormatWind(weather.CurrentWindVelocity.x, weather.CurrentWindVelocity.z, out _, out _, out int fromDeg);
             if (windCardRail != null) windCardRail.color = kts > 25f ? AvTheme.Warning : AvTheme.Accent;
             if (windNeedle != null)
             {

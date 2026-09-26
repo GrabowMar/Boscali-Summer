@@ -13,13 +13,13 @@ namespace BoscaliSummer.Features.Comms.Networking
     /// </summary>
     internal static class CommsWire
     {
-        private const int MaxItems = CommsScoreboard.MaxRows;
-        private const int MaxValues = CommsScoreboard.MaxRows * 2;
-        private const int MaxIds = CommsBoard.MaxItems;
+        private const int MaxItems = 64;
+        private const int MaxValues = 128;
+        private const int MaxIds = 256;
         public const int MaxText = 64;
 
         /// <summary>Bump on any change to either message's layout.</summary>
-        public const byte ProtocolVersion = 1;
+        public const byte ProtocolVersion = 2;
 
         public static void WriteUp(NetworkWriter w, CommsUpMessage v)
         {

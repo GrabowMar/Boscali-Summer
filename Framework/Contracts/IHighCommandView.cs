@@ -38,6 +38,12 @@ namespace BoscaliSummer.Framework.Contracts
 
         /// <summary>Ask the host for a fresh staff snapshot. Rate-limited by the transport.</summary>
         void Refresh();
+
+        /// <summary>
+        /// Host only: one faction's staff cohesion, 0..1, read from the host's own command
+        /// tree rather than the local board. False on a client or before that staff formed.
+        /// </summary>
+        bool TryGetCohesion(FactionHQ hq, out float cohesion);
     }
 
     /// <summary>

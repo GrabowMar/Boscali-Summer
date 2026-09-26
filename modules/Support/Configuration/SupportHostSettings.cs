@@ -29,7 +29,7 @@ namespace BoscaliSummer.Features.Support.Configuration
                 .Toggle(5, settings.ElintEnabled, "ELINT SWEEP",
                     "A station with a SIGINT array, overhead, locates emitting enemy ground and ship radars near the mark.")
                 .Toggle(6, settings.FlareBarrageEnabled, "FLARE BARRAGE",
-                    "An airburst countermeasure rocket that disperses intense flares, seducing and misguiding IR missiles in the area.")
+                    "An airburst countermeasure rocket that disperses intense flares, seducing and misguiding hostile IR missiles in the area.")
                 .Toggle(7, settings.PlatformDebrisEvents, "DEBRIS STRIKES",
                     "A micrometeoroid strike hits a random station module every 6-10 minutes; unshielded modules go offline for 45 s.")
                 .Toggle(8, settings.EwEnabled, "CYBER NETWORK",

@@ -87,9 +87,6 @@ namespace BoscaliSummer.Features.Weather.Visuals
             emission.rateOverTime = 0f;
         }
 
-        /// <summary>True while the system is alive; the owner may tear down once false.</summary>
-        public bool IsEmitting => ps != null && ps.IsAlive();
-
         /// <summary>Fog colour the streaks are tinted from, so they sit inside the haze.</summary>
         public void SetTint(Color fog)
         {

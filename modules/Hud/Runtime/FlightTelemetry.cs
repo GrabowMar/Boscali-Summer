@@ -14,7 +14,7 @@ namespace BoscaliSummer.Features.Hud.Runtime
     internal struct SystemsReading
     {
         public bool Valid, FaultsAvailable;
-        public int Parts, Damaged, Detached, Failures;
+        public int Damaged, Detached, Failures;
         public bool Affected => Damaged > 0 || Detached > 0 || Failures > 0;
     }
 
@@ -56,7 +56,7 @@ namespace BoscaliSummer.Features.Hud.Runtime
             };
             if (Time.unscaledTime < nextSystems) return;
             nextSystems = Time.unscaledTime + .25f;
-            var reading = new SystemsReading { Valid = parts.Count > 0, Parts = parts.Count };
+            var reading = new SystemsReading { Valid = parts.Count > 0 };
             foreach (UnitPart part in parts)
             {
                 if (part == null || part.IsDetached()) reading.Detached++;

@@ -15,7 +15,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
         private bool deck;
 
         public bool Held => receiver || deck;
-        public bool ReceiverHeld => receiver;
 
         /// <summary>Called when the receiver actually starts a programme.</summary>
         public void EngageReceiver() => receiver = true;

@@ -7,12 +7,9 @@ Set-Content "$fixture/ProjectSettings/ProjectVersion.txt" 'm_EditorVersion: 2022
 Set-Content "$fixture/Packages/manifest.json" '{"dependencies":{"com.unity.modules.audio":"1.0.0","com.unity.modules.assetbundle":"1.0.0","com.unity.modules.particlesystem":"1.0.0","com.unity.modules.imageconversion":"1.0.0","com.unity.modules.physics":"1.0.0"}}'
 Copy-Item "$repo/modules/Weather/Visuals/*.cs" "$fixture/Assets/Code/"
 Copy-Item "$repo/modules/Weather/Audio/ProceduralRainAudio.cs" "$fixture/Assets/Code/"
-Copy-Item "$repo/modules/Weather/Domain/RainAudioMath.cs" "$fixture/Assets/Code/"
-Copy-Item "$repo/modules/Weather/Domain/Canopy*.cs" "$fixture/Assets/Code/"
-Copy-Item "$repo/modules/Weather/Domain/RainVisualMath.cs" "$fixture/Assets/Code/"
-Copy-Item "$repo/modules/Weather/Domain/RainSkyMath.cs" "$fixture/Assets/Code/"
+Copy-Item "$repo/modules/Weather/Domain/*.cs" "$fixture/Assets/Code/"
 Copy-Item "$PSScriptRoot/WeatherUnityCheck.cs" "$fixture/Assets/Code/"
-Copy-Item "$repo/modules/Weather/Assets/Source/*.shader" "$fixture/Assets/Resources/"
+Copy-Item "$repo/modules/Weather/Assets/Source/*" "$fixture/Assets/Resources/" -Recurse -Force
 Set-Content "$fixture/Assets/Resources/Fixture.shader" @'
 Shader "Hidden/WeatherFixture" {
 Properties { _Color("Color",Color)=(0.3,0.3,0.3,1) }

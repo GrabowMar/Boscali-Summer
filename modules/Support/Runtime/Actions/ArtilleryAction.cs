@@ -37,7 +37,7 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
             }
             OrbitalPlatform platform = context.PlatformAccess(PlatformAbility.RodStrike, out PlatformDenial denial);
             if (platform == null) return SupportContext.Refusal(denial);
-            if (!context.Host.TryReserve(SupportPool.Strike)) return SupportResult.Busy;
+            if (!context.Host.TryReserve(context.Owner, SupportPool.Strike)) return SupportResult.Busy;
 
             double now = context.Host.OrbitNow;
             int shots = platform.RodSalvoCount(now);
@@ -102,7 +102,7 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
             }
             finally
             {
-                host.Release(SupportPool.Strike);
+                host.Release(owner, SupportPool.Strike);
             }
         }
     }

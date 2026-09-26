@@ -35,8 +35,8 @@ namespace BoscaliSummer.Runtime
             bool supportSpawning = AccessTools.Method(typeof(Spawner), nameof(Spawner.SpawnVehicle)) != null &&
                 AccessTools.Method(typeof(Spawner), nameof(Spawner.SpawnBuilding)) != null &&
                 AccessTools.Method(typeof(DynamicMap), nameof(DynamicMap.TryGetCursorCoordinates)) != null;
-            bool supportRecon = AccessTools.Method(typeof(FactionHQ), "SetTrackingState",
-                new[] { typeof(PersistentID), typeof(GlobalPosition), typeof(float) }) != null;
+            bool supportRecon = AccessTools.Method(typeof(FactionHQ), nameof(FactionHQ.RpcUpdateTrackingInfo),
+                new[] { typeof(PersistentID) }) != null;
             bool dynamicOperations = AccessTools.Property(typeof(MissionManager), nameof(MissionManager.IsRunning)) != null &&
                 AccessTools.Method(typeof(FactionHQ), nameof(FactionHQ.RewardPlayer)) != null &&
                   AccessTools.Method(typeof(FactionHQ), nameof(FactionHQ.GetTrackingData)) != null &&
@@ -60,6 +60,9 @@ namespace BoscaliSummer.Runtime
                 AccessTools.Method(typeof(FactionHQ), nameof(FactionHQ.AddFunds)) != null &&
                 AccessTools.Method(typeof(FactionHQ), nameof(FactionHQ.AddScore)) != null &&
                 AccessTools.Method(typeof(Unit), "add_onDisableUnit") != null;
+            bool threatPictureFeed = AccessTools.Method(typeof(FactionHQ), "add_onDiscoverUnit") != null &&
+                AccessTools.Method(typeof(FactionHQ), "add_onForgetUnit") != null &&
+                AccessTools.Field(typeof(FactionHQ), nameof(FactionHQ.trackingDatabase)) != null;
             Plugin.Logger.LogInfo(
                 "Capabilities: " +
                 $"BulletImpacts={bullet}, MissileImpacts={missile}, VehicleLosses={vehicle}, " +
@@ -72,7 +75,12 @@ namespace BoscaliSummer.Runtime
                 $"SoundtrackCatalog={soundtrackCatalog}, Progression={progression}, " +
                 $"SquadWingCommandApi={WingLink.SquadAvailable}, " +
                 $"SupportSpawning={supportSpawning}, SupportRecon={supportRecon}, SupportOrbitalScan={supportRecon}, DynamicOperations={dynamicOperations}, OperationServices={operationServices}, " +
-                $"HighCommand={highCommand}, AutopilotLanding={autopilotLanding}.");
+                $"HighCommand={highCommand}, AutopilotLanding={autopilotLanding}, ThreatPictureFeed={threatPictureFeed}.");
+            Plugin.Logger.LogInfo(
+                "Wing Command API: squad " +
+                (WingLink.SquadAvailable ? "OK" : WingLink.SquadUnavailableReason) +
+                "; pilot studio " +
+                (WingLink.PilotStudioAvailable ? "OK" : WingLink.PilotStudioUnavailableReason) + ".");
 
             try
             {

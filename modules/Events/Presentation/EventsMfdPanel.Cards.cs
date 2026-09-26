@@ -1,4 +1,3 @@
-using System;
 using BoscaliSummer.Framework.Contracts;
 using NOAvionics;
 using NOAvionics.Ui;
@@ -14,11 +13,10 @@ namespace BoscaliSummer.Features.Events.Presentation
     /// <para>The active event is a media card read top to bottom in one order: the 16:9 plate
     /// (the event's poster when the player has drawn one, a generated stripe plate over the
     /// category mark when not — never a blank rectangle), the title, the category and scope,
-    /// the countdown, the live effect, its plain-words consequence, the flavor copy, the
-    /// scripted beats and the one decision. The title is the headline and the effect is the
-    /// figure; the countdown is quiet row text on a state rail, so it never competes with
-    /// either. Every state the card can hold — ENDING, INSUFFICIENT ALLOCATION, a finished
-    /// response — is carried by words and a rail, never by colour alone.</para>
+    /// the countdown, the live effect, its plain-words consequence, the flavor copy and the
+    /// scripted beats. The title is the headline and the effect is the figure; the countdown
+    /// is quiet row text on a state rail, so it never competes with either. Every state the
+    /// card can hold, such as ENDING, is carried by words and a rail, never by colour alone.</para>
     ///
     /// <para>Bars are placed by width, not by <c>fillAmount</c>: Unity's filled image type
     /// draws a full quad without a sprite, which is the module's oldest layout lesson.</para>
@@ -122,11 +120,8 @@ namespace BoscaliSummer.Features.Events.Presentation
             private const float FlavorY = -294f;
             private const float FlavorMinHeight = 42f;
             private const float FlavorMaxHeight = 66f;
-            private const float ResponseWidth = 250f;
-            private const float ResponseNoteX = 268f;
             private const float StepTop = 347f;
             private const float StepPitch = 16f;
-            private const float StepResponseGap = 6f;
             private const float ScriptedBaseHeight = 368f;
             private const int MaximumSteps = EventsMfdPanel.MaximumEventSteps;
 
@@ -152,9 +147,6 @@ namespace BoscaliSummer.Features.Events.Presentation
             private readonly Image track;
             private readonly Image fill;
             private readonly Image[] timeTicks;
-            private readonly AvButton action;
-            private readonly Image actionRail;
-            private readonly TMP_Text actionNote;
 
             private Color tierInk = AvTheme.Dim;
             private Color tierRail = AvTheme.RailInert;
@@ -234,27 +226,7 @@ namespace BoscaliSummer.Features.Events.Presentation
                         new Rect(barArea.x + barArea.width * (i + 1f) / 4f,
                             barArea.y - 1f, 1f, 5f), AvTheme.Frame);
 
-                // The decision is one unit: a rail, the button, and the reason beside it. The
-                // reason is a permanent line, never a tooltip-only explanation; the tooltip
-                // adds the arithmetic.
-                actionRail = AvKit.Panel(rootRect, new Rect(TextX, -212f, 3f, AvTokens.RowHeight),
-                    AvTheme.RailInert);
-                actionRail.raycastTarget = false;
-                action = AvStyled.Button(rootRect, new Rect(TextX + 10f, -212f, ResponseWidth, AvTokens.RowHeight),
-                    "", "btn", null, AvButtonStyle.Primary);
-                actionNote = AvStyled.Label(rootRect,
-                    new Rect(TextX + ResponseNoteX, -212f, width - TextX * 2f - ResponseNoteX, AvTokens.RowHeight),
-                    "", "row-sub");
-                action.gameObject.SetActive(false);
-                actionRail.gameObject.SetActive(false);
-                actionNote.gameObject.SetActive(false);
-
                 ApplyShape(false, 0, force: true);
-            }
-
-            public void UseExternalDecisionBoard()
-            {
-                HideResponse();
             }
 
             public void Bind(ActiveEventView view, string effectText, Color effectColor, string consequenceText)
@@ -319,7 +291,6 @@ namespace BoscaliSummer.Features.Events.Presentation
                 rail.color = AvTheme.RailInert;
 
                 for (int i = 0; i < MaximumSteps; i++) SetStep(i, false, "", "", AvTheme.Dim);
-                HideResponse();
                 SetProgress(0f, AvTheme.RailInert);
             }
 
@@ -354,15 +325,6 @@ namespace BoscaliSummer.Features.Events.Presentation
                     AvKit.Place(stepLabel[i].rectTransform, new Rect(TextX + 66f, rowY, width - TextX - 78f, 14f));
                 }
 
-                float responseY = isScripted
-                    ? -(StepTop + steps * StepPitch + StepResponseGap + shift)
-                    : -(212f + shift);
-                AvKit.Place(actionRail.rectTransform, new Rect(TextX, responseY, 3f, AvTokens.RowHeight));
-                AvKit.Place((RectTransform)action.transform,
-                    new Rect(TextX + 10f, responseY, ResponseWidth, AvTokens.RowHeight));
-                AvKit.Place(actionNote.rectTransform,
-                    new Rect(TextX + ResponseNoteX, responseY, width - TextX * 2f - ResponseNoteX, AvTokens.RowHeight));
-
                 var barArea = new Rect(8f, -(h - 10f), width - 16f, 3f);
                 AvKit.Place(track.rectTransform, barArea);
                 AvKit.Place(fill.rectTransform, new Rect(barArea.x, barArea.y, 0f, barArea.height));
@@ -374,7 +336,7 @@ namespace BoscaliSummer.Features.Events.Presentation
 
             /// <summary>
             /// Writes the copy and gives the block the height it measured, growing the card and
-            /// shifting the beats and the response down with it. The copy is never ellipsised.
+            /// shifting the beats down with it. The copy is never ellipsised.
             /// </summary>
             private void SetFlavor(string copy)
             {
@@ -463,34 +425,6 @@ namespace BoscaliSummer.Features.Events.Presentation
                 fill.color = color;
                 fill.rectTransform.sizeDelta = new Vector2(
                     Mathf.Clamp01(fraction) * (width - 16f), fill.rectTransform.sizeDelta.y);
-            }
-
-            /// <summary>
-            /// The action and its reason are one unit. <paramref name="ready"/> drives the
-            /// rail, <paramref name="enabled"/> the button; an unaffordable response keeps
-            /// the reason on screen in caution ink beside a disabled button.
-            /// </summary>
-            public void SetResponse(string label, string text, bool ready, bool enabled,
-                string tooltip, Action onClick)
-            {
-                if (!action.gameObject.activeSelf) action.gameObject.SetActive(true);
-                if (!actionRail.gameObject.activeSelf) actionRail.gameObject.SetActive(true);
-                if (!actionNote.gameObject.activeSelf) actionNote.gameObject.SetActive(true);
-                action.SetText(label);
-                action.SetEnabled(enabled);
-                action.SetAction(enabled ? onClick : null);
-                action.WithTooltip(tooltip);
-                actionRail.color = ready ? AvTheme.RailReady : AvTheme.RailCaution;
-                actionNote.text = text ?? "";
-                actionNote.color = enabled || ready ? AvTheme.Dim : AvTheme.RailCaution;
-            }
-
-            public void HideResponse()
-            {
-                if (action.gameObject.activeSelf) action.gameObject.SetActive(false);
-                if (actionRail.gameObject.activeSelf) actionRail.gameObject.SetActive(false);
-                if (actionNote.gameObject.activeSelf) actionNote.gameObject.SetActive(false);
-                actionNote.text = "";
             }
 
             private static string StepClock(int seconds)

@@ -5,18 +5,16 @@ using UnityEngine;
 
 namespace BoscaliSummer.Features.Radio.Runtime
 {
-    /// <summary>One station's transmitting site: where it is, how high, and what it is.</summary>
+    /// <summary>One station's transmitting site: where it is and how high.</summary>
     internal readonly struct RadioTower
     {
         public Vector3 Position { get; }
         public float Height { get; }
-        public string Label { get; }
 
-        public RadioTower(Vector3 position, float height, string label)
+        public RadioTower(Vector3 position, float height)
         {
             Position = position;
             Height = height;
-            Label = label;
         }
     }
 
@@ -35,7 +33,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
         private const float RefreshSeconds = 10f;
         private const float HqAntennaMetres = 40f;
         private const float BaseAntennaMetres = 25f;
-        private const int MaximumLabel = 28;
 
         private readonly Dictionary<string, RadioTower> towers =
             new Dictionary<string, RadioTower>(System.StringComparer.Ordinal);
@@ -117,12 +114,10 @@ namespace BoscaliSummer.Features.Radio.Runtime
                     if (hq != own && other == null) other = hq;
                     string faction = FactionName(hq);
                     if (faction.IndexOf("Boscali", System.StringComparison.OrdinalIgnoreCase) >= 0)
-                        Add(BuiltInStationRules.AgrapolId, hq.transform.position, HqAntennaMetres,
-                            "HQ " + faction);
+                        Add(BuiltInStationRules.AgrapolId, hq.transform.position, HqAntennaMetres);
                     else if (faction.IndexOf("Primeva", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
                              faction.IndexOf("PALA", System.StringComparison.OrdinalIgnoreCase) >= 0)
-                        Add(BuiltInStationRules.MarisId, hq.transform.position, HqAntennaMetres,
-                            "HQ " + faction);
+                        Add(BuiltInStationRules.MarisId, hq.transform.position, HqAntennaMetres);
                 }
             }
             catch { }
@@ -130,25 +125,22 @@ namespace BoscaliSummer.Features.Radio.Runtime
             if (towers.Count == 0)
             {
                 if (own != null)
-                    Add(BuiltInStationRules.AgrapolId, own.transform.position, HqAntennaMetres,
-                        "HQ " + FactionName(own));
+                    Add(BuiltInStationRules.AgrapolId, own.transform.position, HqAntennaMetres);
                 if (other != null)
-                    Add(BuiltInStationRules.MarisId, other.transform.position, HqAntennaMetres,
-                        "HQ " + FactionName(other));
+                    Add(BuiltInStationRules.MarisId, other.transform.position, HqAntennaMetres);
             }
 
             Airbase nearest = NearestOwnedAirbase(own);
             if (nearest != null)
-                Add(BuiltInStationRules.BaseId, nearest.transform.position, BaseAntennaMetres,
-                    "BASE " + nearest.name);
+                Add(BuiltInStationRules.BaseId, nearest.transform.position, BaseAntennaMetres);
 
             MapResolved = towers.Count > 0;
         }
 
-        private void Add(string id, Vector3 position, float height, string label)
+        private void Add(string id, Vector3 position, float height)
         {
             if (towers.ContainsKey(id)) return;
-            towers[id] = new RadioTower(position, height, Clean(label));
+            towers[id] = new RadioTower(position, height);
         }
 
         private static string FactionName(FactionHQ hq)
@@ -162,13 +154,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
             {
                 return "COMMAND";
             }
-        }
-
-        private static string Clean(string label)
-        {
-            if (string.IsNullOrWhiteSpace(label)) return "TOWER";
-            string clean = label.Trim();
-            return clean.Length <= MaximumLabel ? clean : clean.Substring(0, MaximumLabel);
         }
 
         private Airbase NearestOwnedAirbase(FactionHQ owner)

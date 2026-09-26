@@ -16,20 +16,16 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
 
         // Type personality.
         public const float Stencil = 18f;
-        public const float StencilLarge = 22f;
         public const float StencilSmall = 13f;
         public const float StencilTracking = 2f;
         public const float Typewriter = 12f;
         public const float TypewriterSmall = 11f;
-        public const float Figure = 30f;
         public const string Mono = "<mspace=0.6em>";
 
         // Geometry.
         public const float Gutter = 16f;
         public const float BannerHeight = 22f;
         public const float HeaderHeight = 48f;
-        public const float RosterWidth = 300f;
-        public const float TagHeight = 150f;
         public const float TagGap = 12f;
         public const float FolderWidth = 488f;
         public const float TimelineHeight = 138f;
@@ -103,8 +99,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             FontSize = 11,
             Tracking = 0f,
             Style = FontStyles.Normal,
-            Mono = true,
-            Dashed = false
+            Mono = true
         };
     }
 }

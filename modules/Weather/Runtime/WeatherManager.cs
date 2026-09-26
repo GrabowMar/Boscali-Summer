@@ -67,6 +67,7 @@ namespace BoscaliSummer.Features.Weather.Runtime
         private int canopyAircraftId;
         private readonly TerrainRainDressing terrainRain = new TerrainRainDressing();
         private readonly RainAtmosphere atmosphere = new RainAtmosphere();
+        private readonly LightningDirector lightning = new LightningDirector();
         private bool rainAudioRouted;
         private bool canopyShaderActive;
         private int canopyDrawnFrames;
@@ -82,21 +83,25 @@ namespace BoscaliSummer.Features.Weather.Runtime
         private float? forcedRainIntensity;
 
         /// <summary>The installed manager, for the automation hook; null outside a mod session.</summary>
+        private SynopticWeather synoptic;
+
         internal static WeatherManager Live { get; private set; }
 
         public float CurrentConditions => currentConditions;
         public float CurrentCloudHeight => currentCloudHeight;
         public Vector3 CurrentWindVelocity => currentWind;
         public float CurrentTurbulence => currentTurbulence;
-        public WeatherRegime CurrentRegime => WeatherRegime.FromConditions(currentConditions);
+        public RegimeSnapshot CurrentRegime => RegimeSnapshot.FromConditions(currentConditions);
         public float TransitionProgress => transitionProgress;
         public bool IsManualOverride => isManualOverride;
         public float? ForcedRainIntensity => forcedRainIntensity;
 
-        public void Configure(WeatherSettings weatherSettings, WeatherNet weatherNet, ManualLogSource log)
+        public void Configure(WeatherSettings weatherSettings, WeatherNet weatherNet,
+            SynopticWeather synopticWeather, ManualLogSource log)
         {
             settings = weatherSettings;
             network = weatherNet;
+            synoptic = synopticWeather;
             logger = log;
             network?.Configure(this);
             Live = this;
@@ -168,6 +173,7 @@ namespace BoscaliSummer.Features.Weather.Runtime
         {
             canopyShader.Detach();
             canopyWetness = 0f;
+            lightning.Reset();
             rainAudioRouted = false;
             if (rainRoot != null)
             {
@@ -254,13 +260,16 @@ namespace BoscaliSummer.Features.Weather.Runtime
 
             float missionTime = NetworkSceneSingleton<MissionManager>.i?.MissionTime ?? Time.time;
 
-            if (settings != null && settings.DebugControlsEnabled.Value &&
+            // Host only: on a client the keys would change its own wind and visibility until
+            // the next sync, and the change never reaches anyone else.
+            if (settings != null && settings.DebugControlsEnabled.Value && GameAccess.IsServer() &&
                 !InputFieldChecker.InsideInputField && !GameplayUI.GameIsPaused)
             {
                 CheckDebugHotkeys();
             }
 
-            if (settings != null && settings.DynamicWeatherEnabled.Value)
+            if (settings != null && settings.DynamicWeatherEnabled.Value &&
+                (synoptic == null || !synoptic.Driving))
             {
                 if (GameAccess.IsServer())
                 {
@@ -403,13 +412,22 @@ namespace BoscaliSummer.Features.Weather.Runtime
                     settings != null ? settings.RainVolume.Value : 0.75f);
             }
 
+            if (settings.LightningEnabled.Value)
+                lightning.Tick(Time.deltaTime, rainIntensity, LevelInfo.i, rainAudio,
+                    settings != null ? settings.RainVolume.Value : 0.75f);
+            // The sim ticks in every view so rain stays live; only the draw needs the cockpit.
+            float speedNorm = Mathf.Clamp01(ias / 250f);
+            if (canopyEnabled && hasGlass)
+                canopyShader.UpdateSim(canopySurfaces, rainIntensity, speedNorm,
+                    currentWind - airVel, Time.deltaTime);
             bool shaderDrawn = false;
             if (isCockpit && canopyEnabled && settings.CanopyShaderEnabled.Value && hasGlass)
             {
-                Vector3 flow = Vector3.down * 9f + (currentWind - airVel) * 0.08f;
+
                 canopyShader.SetLighting(sunDirection, sunColor, RenderSettings.fogColor, sceneRefraction);
-                shaderDrawn = canopyShader.Draw(canopySurfaces, glassCamera, canopyWetness, flow,
-                    Mathf.Clamp01(ias / 250f), lightLevel);
+
+                shaderDrawn = canopyShader.Draw(canopySurfaces, glassCamera, canopyWetness, lightLevel);
+
                 if (shaderDrawn && !canopyShaderLogged) LogCanopyShaderOnce("Canopy rain active on " + canopySurfaces.Count + " glass submeshes; native materials preserved.");
             }
             canopyShaderActive = shaderDrawn;
@@ -750,13 +768,13 @@ namespace BoscaliSummer.Features.Weather.Runtime
             float missionTime = NetworkSceneSingleton<MissionManager>.i?.MissionTime ?? Time.time;
             BroadcastSync(missionTime);
 
-            WeatherRegime reg = WeatherRegime.FromConditions(currentConditions);
+            RegimeSnapshot reg = RegimeSnapshot.FromConditions(currentConditions);
             NotifyPlayer(reg.Name, forcedRain);
         }
 
         public void SetRegimeOverride(WeatherRegimeType regime, float? forcedRain = null, bool snapImmediate = true)
         {
-            WeatherRegime r = WeatherRegime.FromType(regime);
+            RegimeSnapshot r = RegimeSnapshot.FromType(regime);
             // Changing the visual weather does not double mission wind or invent wind in calm missions.
             Vector3 targetW = baselineWindVelocity;
 
@@ -793,26 +811,6 @@ namespace BoscaliSummer.Features.Weather.Runtime
             NotifyPlayer("DYNAMIC WEATHER RESUMED", null);
         }
 
-        public void AdjustConditions(float delta)
-        {
-            float newCond = Mathf.Clamp01(currentConditions + delta);
-            SetManualOverride(newCond, currentCloudHeight, currentWind, forcedRainIntensity, snapImmediate: true);
-        }
-
-        public void AdjustCeiling(float delta)
-        {
-            float newDeck = Mathf.Clamp(currentCloudHeight + delta, 600f, 6000f);
-            SetManualOverride(currentConditions, newDeck, currentWind, forcedRainIntensity, snapImmediate: true);
-        }
-
-        public void AdjustWind(float deltaKts)
-        {
-            float currentSpeed = currentWind.magnitude;
-            float newSpeed = Mathf.Clamp(currentSpeed + deltaKts * 0.514444f, 0f, 60f);
-            Vector3 newWind = currentSpeed > 0.1f ? (currentWind.normalized * newSpeed) : (Vector3.forward * newSpeed);
-            SetManualOverride(currentConditions, currentCloudHeight, newWind, forcedRainIntensity, snapImmediate: true);
-        }
-
         public void CycleWeatherDebug()
         {
             if (!isManualOverride)
@@ -821,7 +819,7 @@ namespace BoscaliSummer.Features.Weather.Runtime
             }
             else
             {
-                WeatherRegime current = CurrentRegime;
+                RegimeSnapshot current = CurrentRegime;
                 switch (current.Type)
                 {
                     case WeatherRegimeType.Clear:

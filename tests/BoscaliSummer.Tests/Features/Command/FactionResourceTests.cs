@@ -34,12 +34,6 @@ namespace BoscaliSummer.Tests.Features.Command
                 "Only a full interval makes the next observation due");
             TestAssert.That(!history.Due(float.NaN), "Invalid timestamps are never due");
             history.Sample(5f, 20f, 2f, float.NaN, 100f);
-            history.Range(0, out float min, out float max);
-            TestAssert.That(min == -10f && max == 20f, "Signed funds graph covers debt and credit");
-            history.Range(3, out min, out max);
-            TestAssert.That(min == 0f && max == 100f, "Morale graph uses its meaningful fixed scale");
-            history.Range(2, out min, out max);
-            TestAssert.That(MfdResourceHistory.Finite(min) && max > min, "Unavailable data never poisons chart geometry");
             for (int i = 2; i <= 65; i++) history.Sample(i * 5f, i, i, i, 100f);
             TestAssert.That(history.Count == 60 && history.Time(0) == 30f && history.Value(0, 0) == 6f &&
                 history.Value(0, 59) == 65f, "History retains the newest sixty samples in order");

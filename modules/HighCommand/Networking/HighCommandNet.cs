@@ -93,8 +93,14 @@ namespace BoscaliSummer.Features.HighCommand.Networking
 
         public void ResetScene()
         {
-            scene++; pending = false; requestedHq = null;
-            nextReply.Clear(); expired.Clear(); lastQuery = -10f;
+            ResetClient();
+            nextReply.Clear(); expired.Clear();
+        }
+
+        // Client correlation only. A listen host changing faction must keep the server's reply limits.
+        private void ResetClient()
+        {
+            scene++; pending = false; requestedHq = null; lastQuery = -10f;
         }
 
         private void Update()
@@ -145,7 +151,7 @@ namespace BoscaliSummer.Features.HighCommand.Networking
             }
             if (requestedHq != player.HQ)
             {
-                ResetScene(); requestedHq = player.HQ;
+                ResetClient(); requestedHq = player.HQ;
                 manager.SetLocalStatus("Waiting for the staff board.");
             }
             if (pending || Time.unscaledTime - lastQuery < 4f) return;
@@ -203,6 +209,11 @@ namespace BoscaliSummer.Features.HighCommand.Networking
         internal static string Text(string value, int max) => string.IsNullOrEmpty(value) ? "" :
             value.Length > max ? value.Substring(0, max) : value;
 
+        /// <summary>
+        /// Readers never throw: a throw inside a Mirage handler can drop the connection. A foreign
+        /// protocol keeps only its header; a board that fails validation reads as protocol 0,
+        /// which the handler ignores.
+        /// </summary>
         private static void InstallSerializers()
         {
             Bind(typeof(Writer<HighCommandQuery>), "Write", (Action<NetworkWriter, HighCommandQuery>)((w, v) =>
@@ -210,10 +221,14 @@ namespace BoscaliSummer.Features.HighCommand.Networking
                 w.WriteByte(v.Protocol); w.WritePackedUInt32(v.Scene); w.WritePackedUInt32(v.Token);
             }));
             Bind(typeof(Reader<HighCommandQuery>), "Read", (Func<NetworkReader, HighCommandQuery>)(r =>
-                new HighCommandQuery
+            {
+                byte protocol = r.ReadByte();
+                if (protocol != ProtocolVersion) return new HighCommandQuery { Protocol = protocol };
+                return new HighCommandQuery
                 {
-                    Protocol = r.ReadByte(), Scene = r.ReadPackedUInt32(), Token = r.ReadPackedUInt32(),
-                }));
+                    Protocol = protocol, Scene = r.ReadPackedUInt32(), Token = r.ReadPackedUInt32(),
+                };
+            }));
 
             Bind(typeof(Writer<HighCommandSnapshot>), "Write", (Action<NetworkWriter, HighCommandSnapshot>)((w, v) =>
             {
@@ -229,22 +244,23 @@ namespace BoscaliSummer.Features.HighCommand.Networking
             }));
             Bind(typeof(Reader<HighCommandSnapshot>), "Read", (Func<NetworkReader, HighCommandSnapshot>)(r =>
             {
+                byte protocol = r.ReadByte();
+                if (protocol != ProtocolVersion) return new HighCommandSnapshot { Protocol = protocol };
                 var snapshot = new HighCommandSnapshot
                 {
-                    Protocol = r.ReadByte(), Scene = r.ReadPackedUInt32(), Token = r.ReadPackedUInt32(),
+                    Protocol = protocol, Scene = r.ReadPackedUInt32(), Token = r.ReadPackedUInt32(),
                     Status = Text(r.ReadString(), 96), Signal = Text(r.ReadString(), 96),
                     Cohesion = r.ReadSingle(),
                     Active = r.ReadPackedInt32(), Kia = r.ReadPackedInt32(),
                 };
+                if (!CommandSnapshotRules.ValidHeader(snapshot.Cohesion, snapshot.Active, snapshot.Kia))
+                    return default;
                 int count = r.ReadByte();
-                if (count > CommandSnapshotRules.MaximumNodes) throw new InvalidOperationException("High command snapshot exceeds node limit.");
+                if (count > CommandSnapshotRules.MaximumNodes) return default;
                 snapshot.Nodes = new CommanderWire[count];
-                for (int i = 0; i < count; i++) snapshot.Nodes[i] = ReadNode(r);
-                snapshot.Log = ReadLog(r);
-                snapshot.HostileLog = ReadLog(r);
-                if (!CommandSnapshotRules.ValidHeader(snapshot.Cohesion,
-                        snapshot.Active, snapshot.Kia))
-                    throw new InvalidOperationException("Invalid high command snapshot header.");
+                for (int i = 0; i < count; i++)
+                    if (!ReadNode(r, out snapshot.Nodes[i])) return default;
+                if (!ReadLog(r, out snapshot.Log) || !ReadLog(r, out snapshot.HostileLog)) return default;
                 return snapshot;
             }));
 
@@ -263,9 +279,9 @@ namespace BoscaliSummer.Features.HighCommand.Networking
             w.WriteString(Text(node.Role, 24)); w.WriteString(Text(node.Location, 32));
         }
 
-        private static CommanderWire ReadNode(NetworkReader r)
+        private static bool ReadNode(NetworkReader r, out CommanderWire node)
         {
-            var node = new CommanderWire
+            node = new CommanderWire
             {
                 Id = r.ReadPackedInt32(), ParentId = r.ReadPackedInt32(),
                 Tier = r.ReadByte(), Flags = r.ReadByte(), TraitMask = r.ReadByte(),
@@ -274,11 +290,9 @@ namespace BoscaliSummer.Features.HighCommand.Networking
                 Name = Text(r.ReadString(), 24), Rank = Text(r.ReadString(), 8),
                 Role = Text(r.ReadString(), 24), Location = Text(r.ReadString(), 32),
             };
-            if (!CommandSnapshotRules.ValidNode(node.Id, node.ParentId, node.Tier, node.Flags,
-                    node.IntelAge, node.Weight, node.X, node.Z) ||
-                (node.TraitMask & ~CommandTraits.All) != 0)
-                throw new InvalidOperationException("Invalid high command node.");
-            return node;
+            return CommandSnapshotRules.ValidNode(node.Id, node.ParentId, node.Tier, node.Flags,
+                    node.IntelAge, node.Weight, node.X, node.Z) &&
+                (node.TraitMask & ~CommandTraits.All) == 0;
         }
 
         private static void WriteLog(NetworkWriter w, CommanderLogWire[] rows)
@@ -295,12 +309,12 @@ namespace BoscaliSummer.Features.HighCommand.Networking
             }
         }
 
-        private static CommanderLogWire[] ReadLog(NetworkReader r)
+        private static bool ReadLog(NetworkReader r, out CommanderLogWire[] rows)
         {
             int count = r.ReadByte();
-            if (count > CommandSnapshotRules.MaximumLogRows)
-                throw new InvalidOperationException("High command log exceeds its row limit.");
-            var rows = new CommanderLogWire[count];
+            rows = null;
+            if (count > CommandSnapshotRules.MaximumLogRows) return false;
+            rows = new CommanderLogWire[count];
             for (int i = 0; i < count; i++)
             {
                 var row = new CommanderLogWire
@@ -310,11 +324,10 @@ namespace BoscaliSummer.Features.HighCommand.Networking
                     Text = Text(r.ReadString(), CommandSnapshotRules.MaximumLogText),
                     Age = r.ReadSingle(),
                 };
-                if (!CommandSnapshotRules.ValidLogRow(row.TargetId, row.Tone, row.Text, row.Age))
-                    throw new InvalidOperationException("Invalid high command log row.");
+                if (!CommandSnapshotRules.ValidLogRow(row.TargetId, row.Tone, row.Text, row.Age)) return false;
                 rows[i] = row;
             }
-            return rows;
+            return true;
         }
 
         private static void Bind(Type holder, string property, object value)

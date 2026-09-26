@@ -1,0 +1,14 @@
+RainyGlassShader Provenance & Notice
+====================================
+
+Source: https://github.com/toadstorm/RainyGlassShader
+Commit: a9f08a4242dbfcf5f74a20cec3b2319feaaf686b
+Author: toadstorm (https://www.toadstorm.com/blog/?p=742)
+License: GNU Lesser General Public License v2.1 (see LICENSE)
+
+Adapted Assets:
+- droplets_mask.tif: droplet normal map (RG), random phase offset (B), height/mask (A)
+- rivulets_mask.tif: rivulet normal map (RG), flow distortion vectors (BA)
+- CanopyRain.shader: adapted shader algorithm featuring droplet strike & erosion animation,
+  dual-rest-field flow distortion for continuous seamless rivulets, adapted for Unity URP,
+  local airflow orientation, and dynamic aircraft speed.

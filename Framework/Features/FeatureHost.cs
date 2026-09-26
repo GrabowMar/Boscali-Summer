@@ -46,10 +46,23 @@ namespace BoscaliSummer.Framework.Features
                 throw new InvalidOperationException("Features have already been loaded.");
             loadAttempted = true;
 
-            var metadata = new FeatureMetadata[features.Count];
+            var requested = new FeatureMetadata[features.Count];
             for (int i = 0; i < features.Count; i++)
-                metadata[i] = features[i]?.Metadata ??
+                requested[i] = features[i]?.Metadata ??
                     throw new ArgumentException("Feature entries cannot be null.", nameof(features));
+
+            // A feature whose dependency is switched off in settings is left out, not fatal.
+            string[] missing = FeatureGraph.MissingDependencies(requested);
+            var loadable = new List<IModFeature>(features.Count);
+            for (int i = 0; i < features.Count; i++)
+            {
+                if (missing[i] == null) loadable.Add(features[i]);
+                else logger.LogWarning("Skipped feature '" + requested[i].DisplayName +
+                    "' because it needs feature '" + missing[i] + "', which is turned off or skipped.");
+            }
+            features = loadable;
+            var metadata = new FeatureMetadata[features.Count];
+            for (int i = 0; i < features.Count; i++) metadata[i] = features[i].Metadata;
 
             int[] order = FeatureGraph.Sort(metadata);
             ValidatePatchOwnership(features);

@@ -1,20 +1,13 @@
 using System;
-using System.Reflection;
-using HarmonyLib;
 
 namespace BoscaliSummer.Features.Support.Runtime
 {
     /// <summary>
-    /// Resolves vanilla definitions for support actions. Recon needs the private
-    /// <c>FactionHQ.SetTrackingState</c> seam (probed once); strikes need a non-nuclear
-    /// missile definition from the encyclopedia.
+    /// Resolves vanilla definitions for support actions. Strikes need a non-nuclear missile
+    /// definition from the encyclopedia.
     /// </summary>
     internal sealed class VanillaSupportCatalog
     {
-        internal static readonly MethodInfo SetTrackingState =
-            AccessTools.Method(typeof(FactionHQ), "SetTrackingState",
-                new[] { typeof(PersistentID), typeof(GlobalPosition), typeof(float) });
-
         public static bool ReconAvailable => true;
 
         public MissileDefinition Artillery(string key)

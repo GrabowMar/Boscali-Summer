@@ -74,19 +74,12 @@ namespace BoscaliSummer.Framework.Contracts
         /// setting instead of assuming the shipped default.
         /// </summary>
         int MaximumPoints { get; }
-        string Status { get; }
         bool UnlockPending { get; }
 
         /// <summary>Score required for each perk point, so a view can render a score-progress bar.</summary>
         int ScorePerPoint { get; }
         PerkView[] GetPerks();
         void RequestUnlock(byte perkId);
-
-        /// <summary>
-        /// Name of the perk that grants a support capability, so the support page can say what
-        /// authorises an action without importing the perk catalogue.
-        /// </summary>
-        string PerkNameFor(string capability);
 
         /// <summary>
         /// Drives the snapshot poll. The client refreshes its perk state only while a view is

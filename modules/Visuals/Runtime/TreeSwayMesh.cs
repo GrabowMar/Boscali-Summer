@@ -186,7 +186,7 @@ namespace BoscaliSummer.Features.Visuals.Runtime
             {
                 int p = v * strideFloats + positionFloat;
                 float x = rest[p], y = rest[p + 1], z = rest[p + 2];
-                (float dx, float dy, float dz) = VisualsMath.TreeSway(time, x, y, z, height, windX, windZ, amplitude);
+                (float dx, float dy, float dz) = VisualsMath.TreeSwayLut(time, x, y, z, height, windX, windZ, amplitude);
                 live[p] = x + dx;
                 live[p + 1] = y + dy;
                 live[p + 2] = z + dz;

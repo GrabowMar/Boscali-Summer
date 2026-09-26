@@ -99,14 +99,12 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
 
     internal readonly struct StageInfo
     {
-        public readonly string Name;
         public readonly float Computing;
         public readonly float Intel;
         public readonly float Radius;
 
-        public StageInfo(string name, float computing, float intel, float radius)
+        public StageInfo(float computing, float intel, float radius)
         {
-            Name = name;
             Computing = computing;
             Intel = intel;
             Radius = radius;
@@ -215,12 +213,12 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         public static StageInfo Stage(LocationKind kind, int stage)
         {
             int s = Math.Max(0, Math.Min(StageCount, stage));
-            if (s == 0) return new StageInfo("—", 0f, 0f, 0f);
+            if (s == 0) return new StageInfo(0f, 0f, 0f);
             bool city = kind == LocationKind.City;
             float computing = (city ? 0.25f : 0.4f) * s + (city ? 0f : 0.2f) * (s - 1);
             float intel = s >= 2 ? (city ? 0.15f : 0.1f) * (s - 1) : 0f;
             float radius = (city ? 5000f : 4000f) + (city ? 3000f : 2000f) * (s - 1);
-            return new StageInfo(StageNames[s], computing, intel, radius);
+            return new StageInfo(computing, intel, radius);
         }
 
         /// <summary>0 none, 1 basic, 2 mid, 3 capstone: the highest ability tier a stage opens.</summary>

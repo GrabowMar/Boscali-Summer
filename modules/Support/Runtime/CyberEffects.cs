@@ -30,8 +30,6 @@ namespace BoscaliSummer.Features.Support.Runtime
         private readonly List<Active> active = new List<Active>(MaximumActive);
         private float nextApply;
 
-        public int ActiveCount => active.Count;
-
         public bool Begin(HackKind kind, FactionHQ attacker, float x, float z, float duration, float now)
         {
             if (attacker == null || active.Count >= MaximumActive) return false;

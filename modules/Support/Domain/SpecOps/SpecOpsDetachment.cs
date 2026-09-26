@@ -35,16 +35,14 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
     /// <summary>A mission the host just resolved, handed to the runtime that touches the world.</summary>
     internal readonly struct FieldResult
     {
-        public readonly int Team;
         public readonly FieldMission Mission;
         public readonly MissionOutcome Outcome;
         public readonly float X, Z;
         public readonly int Rank;
         public readonly int Anchor;
 
-        public FieldResult(int team, FieldMission mission, MissionOutcome outcome, float x, float z, int rank, int anchor)
+        public FieldResult(FieldMission mission, MissionOutcome outcome, float x, float z, int rank, int anchor)
         {
-            Team = team;
             Mission = mission;
             Outcome = outcome;
             X = x;
@@ -345,7 +343,7 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
                 return;
             }
 
-            var result = new FieldResult(index, team.Mission, outcome, team.X, team.Z, team.Rank, team.Anchor);
+            var result = new FieldResult(team.Mission, outcome, team.X, team.Z, team.Rank, team.Anchor);
             bool landed = apply == null || apply(result);
             if (landed)
             {

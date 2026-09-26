@@ -1,4 +1,5 @@
 using System.Globalization;
+using BoscaliSummer.Features.Support.Domain;
 using BoscaliSummer.Features.Support.Domain.Cyber;
 using BoscaliSummer.Features.Support.Domain.Orbital;
 using BoscaliSummer.Features.Support.Domain.SpecOps;
@@ -22,19 +23,14 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
         public readonly AbilityTone Tone;
         public readonly string Readiness;
         public readonly string CostText;
-        public readonly string Recharge;
-        public readonly string Coverage;
         public readonly bool Enabled;
         public readonly bool Armed;
 
-        public AbilityFacts(AbilityTone tone, string readiness, string costText, string recharge, string coverage,
-            bool enabled, bool armed)
+        public AbilityFacts(AbilityTone tone, string readiness, string costText, bool enabled, bool armed)
         {
             Tone = tone;
             Readiness = readiness;
             CostText = costText;
-            Recharge = recharge;
-            Coverage = coverage;
             Enabled = enabled;
             Armed = armed;
         }
@@ -125,12 +121,23 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
                 reason = "TARGET MUST BE INSIDE A LOCATION'S RADIUS";
                 return true;
             }
+            TeamGate? gate = action.Id == SupportActionId.FlareMissile ? TeamGate.FlareBarrage :
+                action.Id == SupportActionId.Fortify ? TeamGate.Fortify : (TeamGate?)null;
+            if (gate.HasValue)
+            {
+                float left = support.TeamCooldownRemaining(gate.Value);
+                if (left > 0.5f)
+                {
+                    reason = "TEAM RE-TASKING · T-" + Mathf.CeilToInt(left) + "s";
+                    return false;
+                }
+            }
             PlatformAbility? ability = SupportManager.OrbitalAbility(action.Id);
             if (!ability.HasValue) return true;
             PlatformDenial denial = support.PlatformCheck(ability.Value);
             // An open orbital gate has nothing to add; "READY · READY" helped nobody.
             reason = denial == PlatformDenial.None ? null
-                : PlatformWords.Denial(denial, support.LocalPlatform, ability.Value, support.OrbitNow, support.OrbitClock);
+                : PlatformWords.Denial(denial, support.LocalPlatform, ability.Value, support.OrbitNow);
             return denial == PlatformDenial.None;
         }
 
@@ -139,31 +146,26 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
             float heldIntel, bool gateOpen, string gate)
         {
             string costText = cyber ? Figure(intel) + " INT" : cost > 0f ? Figure(cost) : "—";
-            string recharge = "";
-            string coverage = gate ?? "";
             if (!action.Enabled)
-                return Make(AbilityTone.Locked, "DISABLED IN HOST CONFIG", costText, recharge, coverage, false, armed);
+                return Make(AbilityTone.Locked, "DISABLED IN HOST CONFIG", costText, false, armed);
             if (cost <= 0f && !cyber)
-                return Make(AbilityTone.Locked, "UNAVAILABLE ON THIS MAP", costText, recharge, coverage, false, armed);
+                return Make(AbilityTone.Locked, "UNAVAILABLE ON THIS MAP", costText, false, armed);
             if (armed)
-                return Make(AbilityTone.Armed, "ARMED · RIGHT-CLICK MAP OR TGT MARK", costText, recharge, coverage, true, true);
+                return Make(AbilityTone.Armed, "ARMED · RIGHT-CLICK MAP OR TGT MARK", costText, true, true);
             if (pending)
-                return Make(AbilityTone.Pending, "REQUEST PENDING · AWAITING HOST", costText, recharge, coverage, false, false);
+                return Make(AbilityTone.Pending, "REQUEST PENDING · AWAITING HOST", costText, false, false);
             if (!authorised)
-                return Make(AbilityTone.Locked, Locked(action), costText, recharge, coverage, false, false);
+                return Make(AbilityTone.Locked, Locked(action), costText, false, false);
             if (!gateOpen)
-                return Make(AbilityTone.Locked, gate, costText, recharge, coverage, false, false);
+                return Make(AbilityTone.Locked, gate, costText, false, false);
             if (cooldown > 0.5f)
-            {
-                recharge = "NET COOLING · T-" + Mathf.CeilToInt(cooldown) + "s";
-                return Make(AbilityTone.Armed, recharge, costText, recharge, coverage, false, false);
-            }
+                return Make(AbilityTone.Armed, "NET COOLING · T-" + Mathf.CeilToInt(cooldown) + "s", costText, false, false);
             if (!cyber && !bypass && allocation + 0.001f < cost)
-                return Make(AbilityTone.Danger, "INSUFFICIENT ALLOCATION", costText, recharge, coverage, false, false);
+                return Make(AbilityTone.Danger, "INSUFFICIENT ALLOCATION", costText, false, false);
             if (cyber && !bypass && heldIntel + 0.001f < intel)
-                return Make(AbilityTone.Danger, "INSUFFICIENT INTEL", costText, recharge, coverage, false, false);
+                return Make(AbilityTone.Danger, "INSUFFICIENT INTEL", costText, false, false);
             string ready = gate != null ? "READY · " + gate : "READY · ARM, THEN RIGHT-CLICK MAP";
-            return Make(AbilityTone.Ready, ready, costText, recharge, coverage, true, false);
+            return Make(AbilityTone.Ready, ready, costText, true, false);
         }
 
         private static string Locked(SupportActionDefinition action)
@@ -175,9 +177,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
             return "LOCKED · UNLOCK IN SQD ABILITIES";
         }
 
-        private static AbilityFacts Make(AbilityTone tone, string readiness, string cost, string recharge,
-            string coverage, bool enabled, bool armed) =>
-            new AbilityFacts(tone, readiness, cost, recharge, coverage, enabled, armed);
+        private static AbilityFacts Make(AbilityTone tone, string readiness, string cost, bool enabled, bool armed) =>
+            new AbilityFacts(tone, readiness, cost, enabled, armed);
 
         private static string Figure(float value) => Mathf.Round(value).ToString("N0", Invariant);
     }

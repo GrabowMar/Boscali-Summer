@@ -14,18 +14,26 @@ namespace BoscaliSummer.Features.Weather.Visuals
     {
         private const string ResourceName = "BoscaliSummer.Weather.weatherrain.bundle";
         private const string ShaderName = "Boscali/CanopyRain";
+        private const string UpdateShaderName = "Hidden/BoscaliCanopyDroplets";
         private const int MaxBundleBytes = 4 * 1024 * 1024;
 
         private static AssetBundle bundle;
         private static Shader shader;
         private static Shader terrainShader;
+        private static Shader updateShader;
+        private static bool attempted;
 
         internal static Shader GetTerrainShader()
         {
             GetShader();
             return terrainShader;
         }
-        private static bool attempted;
+
+        internal static Shader GetUpdateShader()
+        {
+            GetShader();
+            return updateShader;
+        }
 
         internal static Shader GetShader()
         {
@@ -53,16 +61,19 @@ namespace BoscaliSummer.Features.Weather.Visuals
 
                 if (bundle == null) return null;
                 Shader[] shaders = bundle.LoadAllAssets<Shader>();
-                if (shaders == null) return null;
-                for (int i = 0; i < shaders.Length; i++)
+                if (shaders != null)
                 {
-                    if (shaders[i] != null && shaders[i].name == ShaderName && shaders[i].isSupported)
+                    for (int i = 0; i < shaders.Length; i++)
                     {
-                        shader = shaders[i];
-
+                        if (shaders[i] != null && shaders[i].name == ShaderName && shaders[i].isSupported)
+                        {
+                            shader = shaders[i];
+                        }
+                        if (shaders[i] != null && shaders[i].name == "Boscali/TerrainRain" && shaders[i].isSupported)
+                            terrainShader = shaders[i];
+                        if (shaders[i] != null && shaders[i].name == UpdateShaderName && shaders[i].isSupported)
+                            updateShader = shaders[i];
                     }
-                    if (shaders[i] != null && shaders[i].name == "Boscali/TerrainRain" && shaders[i].isSupported)
-                        terrainShader = shaders[i];
                 }
                 if (shader != null || terrainShader != null) return shader;
                 bundle.Unload(true);

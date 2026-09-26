@@ -20,6 +20,7 @@ namespace BoscaliSummer.Runtime
 
         private static bool membershipResolved;
         private static MethodInfo contains;
+        private static Func<int, bool> containsCall;
         private static PropertyInfo count;
         private static bool mapModeResolved;
         private static PropertyInfo gestureArmed;
@@ -36,7 +37,7 @@ namespace BoscaliSummer.Runtime
         // Wing Command build keeps every existing feature and only the SQD studio is disabled.
         private static bool studioResolved;
         private static string studioUnavailableReason = "Wing Command companion pilot API has not been checked.";
-        private static MethodInfo portraitForSelection, listCustomPilots, getCustomPilot, getCustomPilots, saveCustomPilot;
+        private static MethodInfo portraitForSelection, getCustomPilot, getCustomPilots, saveCustomPilot;
         private static MethodInfo deleteCustomPilot, isPilotRecruited, recruitCustomPilot, dischargeCustomPilot;
         private static MethodInfo importAllCustomPilots, personaLabel, rankNameForXp, bodyLabel, uniformLabel;
         private static PropertyInfo bodyCount, faceCount, hairCount, uniformCount, backdropCount;
@@ -213,13 +214,6 @@ namespace BoscaliSummer.Runtime
             }
         }
 
-        public static string[] ListCustomPilots()
-        {
-            if (!ResolveStudio()) return Array.Empty<string>();
-            try { return listCustomPilots.Invoke(null, null) as string[] ?? Array.Empty<string>(); }
-            catch (Exception error) { FailStudio(error); return Array.Empty<string>(); }
-        }
-
         public static bool TryGetCustomPilot(string callsign, out WingPilotRecord record)
         {
             record = default;
@@ -295,13 +289,10 @@ namespace BoscaliSummer.Runtime
 
         public static bool IsWingMember(int persistentIdHash)
         {
-            int[] ids = WingMemberIdsThisFrame();
-            if (ids.Length > 0) return PresenceBoard.Contains(ids, persistentIdHash);
-
-            MethodInfo method = ResolveMembership();
-            if (method == null) return false;
-            try { return method.Invoke(null, new object[] { persistentIdHash }) is bool hit && hit; }
-            catch (Exception error) { FailMembership(error); return false; }
+            // Wing Command 1.0 publishes the wing on the presence board every tick; 0.9.x only has
+            // its membership API, called through a delegate cached once (AI hot path: no Invoke).
+            if (!membershipResolved) ResolveMembership();
+            return WingApiVersions.IsWingMember(WingMemberIdsThisFrame(), containsCall, persistentIdHash);
         }
 
         private static int[] WingMemberIdsThisFrame()
@@ -370,6 +361,13 @@ namespace BoscaliSummer.Runtime
                 contains = type?.GetMethod("Contains", BindingFlags.Public | BindingFlags.Static,
                                            null, new[] { typeof(int) }, null);
                 count = type?.GetProperty("Count", BindingFlags.Public | BindingFlags.Static);
+                if (contains != null && contains.ReturnType == typeof(bool) &&
+                    Delegate.CreateDelegate(typeof(Func<int, bool>), contains, false) is Func<int, bool> raw)
+                    containsCall = hash =>
+                    {
+                        try { return raw(hash); }
+                        catch (Exception error) { FailMembership(error); return false; }
+                    };
             }
             catch (Exception error) { FailMembership(error); }
             return contains;
@@ -379,13 +377,13 @@ namespace BoscaliSummer.Runtime
         {
             if (squadResolved) return string.IsNullOrEmpty(squadUnavailableReason);
             squadResolved = true;
-            squadUnavailableReason = "Install the companion Wing Command build with WingSquad API 1.";
+            squadUnavailableReason = "Install Wing Command with WingSquad API 1 or 2.";
             if (!Chainloader.PluginInfos.ContainsKey(WingCommandGuid)) return false;
             try
             {
                 Type type = Type.GetType(SquadType, throwOnError: false);
                 if (!(type?.GetProperty("ApiVersion", BindingFlags.Public | BindingFlags.Static)
-                          ?.GetValue(null) is int version) || version != 1) return false;
+                          ?.GetValue(null) is int version) || !WingApiVersions.SupportsSquad(version)) return false;
                 const BindingFlags flags = BindingFlags.Public | BindingFlags.Static;
                 createPilot = type.GetMethod("CreatePilot", flags, null, new[] { typeof(int) }, null);
                 portrait = type.GetMethod("Portrait", flags, null, new[] { typeof(string), typeof(string) }, null);
@@ -416,11 +414,10 @@ namespace BoscaliSummer.Runtime
             {
                 Type type = Type.GetType(SquadType, throwOnError: false);
                 if (!(type?.GetProperty("ApiVersion", BindingFlags.Public | BindingFlags.Static)
-                          ?.GetValue(null) is int version) || version != 1) return false;
+                          ?.GetValue(null) is int version) || !WingApiVersions.SupportsSquad(version)) return false;
                 const BindingFlags flags = BindingFlags.Public | BindingFlags.Static;
                 portraitForSelection = type.GetMethod("PortraitForSelection", flags, null,
                     new[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int) }, null);
-                listCustomPilots = type.GetMethod("ListCustomPilots", flags, null, Type.EmptyTypes, null);
                 getCustomPilot = type.GetMethod("GetCustomPilot", flags, null, new[] { typeof(string) }, null);
                 getCustomPilots = type.GetMethod("GetCustomPilots", flags, null, Type.EmptyTypes, null);
                 saveCustomPilot = type.GetMethod("SaveCustomPilot", flags, null, new[] { typeof(object[]) }, null);
@@ -438,7 +435,7 @@ namespace BoscaliSummer.Runtime
                 hairCount = type.GetProperty("PortraitHairCount", flags);
                 uniformCount = type.GetProperty("PortraitUniformCount", flags);
                 backdropCount = type.GetProperty("PortraitBackdropCount", flags);
-                if (portraitForSelection == null || listCustomPilots == null || getCustomPilot == null ||
+                if (portraitForSelection == null || getCustomPilot == null ||
                     getCustomPilots == null || saveCustomPilot == null || deleteCustomPilot == null || isPilotRecruited == null ||
                     recruitCustomPilot == null || dischargeCustomPilot == null || importAllCustomPilots == null ||
                     personaLabel == null || rankNameForXp == null || bodyLabel == null || uniformLabel == null ||
@@ -491,6 +488,7 @@ namespace BoscaliSummer.Runtime
         private static void FailMembership(Exception error)
         {
             contains = null;
+            containsCall = null;
             count = null;
             Plugin.Logger?.LogWarning(
                 "WingLink membership fallback failed; continuing without wing awareness. " +

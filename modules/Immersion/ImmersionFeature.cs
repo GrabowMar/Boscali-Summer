@@ -24,7 +24,7 @@ namespace BoscaliSummer.Features.Immersion
         public void Install(FeatureContext context)
         {
             ImmersionManager immersion = context.AddSceneService<ImmersionManager>(47);
-            immersion.Configure(context.Settings.Immersion);
+            immersion.Configure(context.Settings.Immersion, context.Logger);
             context.AddService<IImmersionSettings>(immersion);
         }
     }

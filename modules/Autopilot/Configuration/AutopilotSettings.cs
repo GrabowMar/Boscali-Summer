@@ -8,6 +8,7 @@ namespace BoscaliSummer.Features.Autopilot.Configuration
         public ConfigEntry<bool> Enabled { get; }
         public ConfigEntry<bool> IlsHud { get; }
         public ConfigEntry<float> GlideslopeDegrees { get; }
+        public ConfigEntry<UnityEngine.KeyCode> AceRadialKey { get; }
 
         public AutopilotSettings(ConfigFile config)
         {
@@ -22,6 +23,9 @@ namespace BoscaliSummer.Features.Autopilot.Configuration
                 new ConfigDescription(
                     "ILS glideslope angle in degrees for the gear-down HUD and the landing autopilot.",
                     new AcceptableValueRange<float>(IlsGuidance.MinSlope, IlsGuidance.MaxSlope)));
+            AceRadialKey = config.Bind("Autopilot", "AceRadialKey", UnityEngine.KeyCode.C,
+                "Key to open the ACE3 radial interaction menu (default: C). " +
+                "Hold and release to execute hovered command, or tap to open and mouse click.");
         }
 
         public float Slope => IlsGuidance.ClampSlope(GlideslopeDegrees.Value);

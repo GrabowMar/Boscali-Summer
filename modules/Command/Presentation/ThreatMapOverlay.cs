@@ -476,20 +476,21 @@ namespace BoscaliSummer.Features.Command.Presentation
             int minY = Mathf.Max(0, Mathf.FloorToInt((centre.z - radius + halfY) / cellY));
             int maxY = Mathf.Min(height - 1, Mathf.CeilToInt((centre.z + radius + halfY) / cellY));
             float radiusSquared = radius * radius;
+            float invRadius = 1f / radius;
 
             for (int y = minY; y <= maxY; y++)
             {
                 float dz = y * cellY - halfY - centre.z;
                 float dzSquared = dz * dz;
+                // The whole row is outside the disc: every pixel in it would skip.
+                if (dzSquared >= radiusSquared) continue;
                 int row = y * width;
 
                 for (int x = minX; x <= maxX; x++)
                 {
                     float dx = x * cellX - halfX - centre.x;
-                    float distanceSquared = dx * dx + dzSquared;
-                    if (distanceSquared >= radiusSquared) continue;
-
-                    float heat = ThreatEnvelope.Heat01(radius, Mathf.Sqrt(distanceSquared)) * weight;
+                    float heat = ThreatEnvelope.SplatHeat(invRadius, radiusSquared, dx, dzSquared, weight);
+                    if (heat <= 0f) continue;
                     int index = row + x;
                     if (heat > field[index]) field[index] = heat;
                 }

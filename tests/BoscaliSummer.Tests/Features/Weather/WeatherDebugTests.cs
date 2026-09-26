@@ -9,16 +9,16 @@ namespace BoscaliSummer.Tests.Features.Weather
         public static void Run()
         {
             // 1. Verify Regime Presets Parameters
-            WeatherRegime clear = WeatherRegime.FromType(WeatherRegimeType.Clear);
+            RegimeSnapshot clear = RegimeSnapshot.FromType(WeatherRegimeType.Clear);
             TestAssert.That(clear.TargetConditions == 0.05f, "Clear must target 0.05 conditions");
             TestAssert.That(clear.TargetCloudHeight == 3800f, "Clear ceiling must target 3800m");
 
-            WeatherRegime squall = WeatherRegime.FromType(WeatherRegimeType.RainSquall);
+            RegimeSnapshot squall = RegimeSnapshot.FromType(WeatherRegimeType.RainSquall);
             TestAssert.That(squall.TargetConditions == 0.82f, "RainSquall must target 0.82 conditions");
             TestAssert.That(squall.TargetCloudHeight == 1500f, "RainSquall ceiling must target 1500m");
             TestAssert.That(squall.TargetConditions >= 0.60f, "RainSquall conditions must naturally trigger rain");
 
-            WeatherRegime storm = WeatherRegime.FromType(WeatherRegimeType.Storm);
+            RegimeSnapshot storm = RegimeSnapshot.FromType(WeatherRegimeType.Storm);
             TestAssert.That(storm.TargetConditions == 0.95f, "Storm must target 0.95 conditions");
             TestAssert.That(storm.TargetCloudHeight == 1200f, "Storm ceiling must target 1200m");
             TestAssert.That(storm.TargetTurbulence > squall.TargetTurbulence, "Storm turbulence must exceed squall");
@@ -51,8 +51,8 @@ namespace BoscaliSummer.Tests.Features.Weather
 
             for (int i = 0; i < expectedCycle.Length - 1; i++)
             {
-                WeatherRegime current = WeatherRegime.FromType(expectedCycle[i]);
-                WeatherRegime next = WeatherRegime.FromType(expectedCycle[i + 1]);
+                RegimeSnapshot current = RegimeSnapshot.FromType(expectedCycle[i]);
+                RegimeSnapshot next = RegimeSnapshot.FromType(expectedCycle[i + 1]);
                 TestAssert.That(next.TargetConditions > current.TargetConditions,
                     $"Regime {next.Type} conditions must be strictly greater than {current.Type}");
             }

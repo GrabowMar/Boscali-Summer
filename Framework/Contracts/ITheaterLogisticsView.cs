@@ -16,7 +16,6 @@ namespace BoscaliSummer.Framework.Contracts
     {
         bool Available { get; }
         bool CanCommand { get; }
-        string Status { get; }
 
         /// <summary>Shared faction pool in millions, or NaN when it could not be read.</summary>
         float FactionFunds { get; }

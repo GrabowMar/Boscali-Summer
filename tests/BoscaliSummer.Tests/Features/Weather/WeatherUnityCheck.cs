@@ -28,6 +28,7 @@ public sealed class WeatherUnityCheck : MonoBehaviour
             Shader shader = Resources.Load<Shader>("CanopyRain");
             Check(shader != null && !ShaderUtil.ShaderHasError(shader), "Shader compile failed");
             Check(!ShaderUtil.ShaderHasError(Resources.Load<Shader>("TerrainRain")), "Terrain shader compile failed");
+            Check(!ShaderUtil.ShaderHasError(Resources.Load<Shader>("CanopyDroplets")), "Droplet update shader compile failed");
             AssetDatabase.CreateAsset(new Material(Shader.Find("Particles/Standard Unlit")), "Assets/Resources/RainFallback.mat");
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             new GameObject("WeatherCheck").AddComponent<WeatherUnityCheck>();
@@ -120,11 +121,14 @@ public sealed class WeatherUnityCheck : MonoBehaviour
         var dressing = new CanopyShaderDressing();
         typeof(CanopyShaderDressing).GetField("material", BindingFlags.Instance | BindingFlags.NonPublic)
             .SetValue(dressing, new Material(shader));
-        Check(dressing.Draw(surfaces, camera, 1f, Vector3.down, 0f, 1f), "Draw non-readable glass");
+        Shader updateShader = Resources.Load<Shader>("CanopyDroplets");
+        Check(updateShader != null, "Droplet update shader loads");
+        PrimeSim(dressing, updateShader, surfaces, 30, 1f, 0f, Vector3.down);
+        Check(dressing.Draw(surfaces, camera, 1f, 1f), "Draw non-readable glass");
         Check(renderer.sharedMaterials[0] == opaque && renderer.sharedMaterials[2] == glass,
             "Overlay must never replace original materials");
         renderer.enabled = false;
-        Check(!dressing.Draw(surfaces, camera, 1f, Vector3.down, 0f, 1f), "Hidden canopy must not draw");
+        Check(!dressing.Draw(surfaces, camera, 1f, 1f), "Hidden canopy must not draw");
         renderer.enabled = true;
         dressing.Detach(); dressing.Detach();
         Check(renderer.sharedMaterials[2] == glass, "Idempotent teardown preserves glass");
@@ -165,62 +169,110 @@ public sealed class WeatherUnityCheck : MonoBehaviour
         typeof(CanopyShaderDressing).GetField("material", BindingFlags.Instance | BindingFlags.NonPublic)
             .SetValue(dressing, new Material(shader));
         camera.cullingMask = 1;
-        Check(!dressing.Draw(interiorSurfaces, camera, 1f, Vector3.down, 0f, 1f),
-            "World camera cannot draw interior glass");
+        Check(!dressing.Draw(interiorSurfaces, camera, 1f, 1f), "World camera cannot draw interior glass");
         camera.cullingMask = 1 << 3;
-        Check(dressing.Draw(interiorSurfaces, camera, 1f, Vector3.down, 0f, 1f),
-            "Cockpit camera draws GPU-only interior glass");
+        PrimeSim(dressing, updateShader, interiorSurfaces, 30, 1f, 0f, Vector3.down);
+        Check(dressing.Draw(interiorSurfaces, camera, 1f, 1f), "Cockpit camera draws GPU-only interior glass");
         Check(CanopyGlassResolver.Resolve(cockpit.transform, Vector3.zero, 1).Count == 0,
             "Camera mask changes invalidate cached discovery");
         dressing.Detach(); cockpit.SetActive(false); camera.cullingMask = -1;
 
-        // Render the actual shader, checking sparse coverage and a completely clear dry state.
+        // Droplet sim: step real frames through the dressing, then render. Drops must
+        // accumulate with rain, run with the slipstream, agree across split panes,
+        // refract a scene gradient, and vanish fully when dry.
         root.SetActive(false);
         camera.enabled = false;
         camera = UnityEngine.Object.Instantiate(camera);
         camera.enabled = true;
-        var sheet = new GameObject("RainShaderFixture");
-        sheet.AddComponent<MeshFilter>().sharedMesh = Quad();
-        Material rain = new Material(shader);
-        sheet.AddComponent<MeshRenderer>().sharedMaterial = rain;
-        rain.SetFloat("_LightLevel", 1f);
-        var texture = new RenderTexture(256,256,24);
-        camera.targetTexture = texture;
-        rain.SetFloat("_Intensity", 0f);
-        Color32[] dry = Capture(camera, texture, "dry.png");
-        rain.SetFloat("_Intensity", 1f);
-        Color32[] wet = Capture(camera, texture, "wet.png");
-        int changed = 0;
-        for (int i = 0; i < dry.Length; i++)
-            if (Math.Abs(dry[i].r-wet[i].r) + Math.Abs(dry[i].g-wet[i].g) + Math.Abs(dry[i].b-wet[i].b) > 6) changed++;
-        Check(changed > 100 && changed < dry.Length / 2, "Wet shader must draw sparse drops, not a full-screen veil: " + changed);
-        // Close glass at a useful inspection resolution; check motion, fast airflow and drying.
-        texture.Release();
-        texture = new RenderTexture(1024,1024,24);
-        camera.targetTexture = texture;
-        camera.orthographicSize = 0.16f;
-        Color32[] close = Capture(camera, texture, "canopy-close.png");
-        rain.SetFloat("_FlowPhase", 4.7f);
-        Color32[] moved = Capture(camera, texture, "canopy-later.png");
-        int motion = 0, opaquePixels = 0;
-        for (int i = 0; i < close.Length; i++)
-        {
-            if (Math.Abs(close[i].r - moved[i].r) > 2) motion++;
-            if (Math.Abs(close[i].r - dry[0].r) > 40) opaquePixels++;
-        }
-        Check(motion > 100, "Canopy water must evolve over time");
-        Check(opaquePixels == 0, "Fallback beads must not become opaque grey blobs");
-        rain.SetFloat("_Speed", 1f);
-        Capture(camera, texture, "canopy-fast.png");
-        rain.SetFloat("_Intensity", 0f);
-        Color32[] dried = Capture(camera, texture, "canopy-dried.png");
-        Check(Array.TrueForAll(dried, pixel => pixel.Equals(dried[0])), "Dry glass must leave no residual filter");
-        camera.orthographicSize = 0.65f;
-        texture.Release();
-        texture = new RenderTexture(256,256,24);
+        camera.orthographicSize = 1.05f;
+        var texture = new RenderTexture(256, 256, 24);
         camera.targetTexture = texture;
 
-        sheet.SetActive(false);
+        var rigRoot = new GameObject("SimRig");
+        string[] paneNames = { "WindshieldC", "WindshieldL", "WindshieldR" };
+        Vector3[] paneAt = { new Vector3(0f, 0f, 0f), new Vector3(-0.77f, 0f, -0.12f), new Vector3(0.77f, 0f, -0.12f) };
+        float[] paneYaw = { 0f, 35f, -35f };
+        float[] paneWide = { 1.0f, 0.6f, 0.6f };
+        for (int p = 0; p < 3; p++)
+        {
+            var pane = new GameObject(paneNames[p]);
+            pane.transform.SetParent(rigRoot.transform, false);
+            pane.transform.position = paneAt[p];
+            pane.transform.rotation = Quaternion.Euler(0f, paneYaw[p], 0f);
+            var paneMesh = new Mesh();
+            float x = paneWide[p] / 2f;
+            paneMesh.vertices = new[] { new Vector3(-x, -0.5f, 0f), new Vector3(x, -0.5f, 0f),
+                new Vector3(x, 0.5f, 0f), new Vector3(-x, 0.5f, 0f) };
+            paneMesh.triangles = new[] { 0, 1, 2, 0, 2, 3 };
+            paneMesh.RecalculateNormals();
+            paneMesh.RecalculateBounds();
+            pane.AddComponent<MeshFilter>().sharedMesh = paneMesh;
+            pane.AddComponent<MeshRenderer>().sharedMaterial = glass;
+        }
+        CanopyGlassResolver.ResetForScene();
+        var simSurfaces = CanopyGlassResolver.Resolve(rigRoot.transform, camera.transform.position, -1);
+        Check(simSurfaces.Count == 3, "All three split panes resolve as glass: " + simSurfaces.Count);
+        typeof(CanopyShaderDressing).GetField("material", BindingFlags.Instance | BindingFlags.NonPublic)
+            .SetValue(dressing, new Material(shader));
+        dressing.SetLighting(Vector3.up, Color.black, new Color(0.55f, 0.6f, 0.68f, 1f), false);
+
+        Color32[] simBg = Capture(camera, texture, "sim-bg.png");
+        PrimeSim(dressing, updateShader, simSurfaces, 5, 1f, 0f, Vector3.down);
+        Check(dressing.Draw(simSurfaces, camera, 1f, 1f), "Fresh sim draws");
+        Color32[] simFresh = Capture(camera, texture, "sim-fresh.png");
+        PrimeSim(dressing, updateShader, simSurfaces, 85, 1f, 0f, Vector3.down);
+        Check(dressing.Draw(simSurfaces, camera, 1f, 1f), "Developed sim draws");
+        Color32[] simWet = Capture(camera, texture, "sim-wet.png");
+        int freshCount = DiffCount(simBg, simFresh, 6);
+        double freshMass = DiffMass(simBg, simFresh);
+        int wetCount = DiffCount(simBg, simWet, 6);
+        double wetMass = DiffMass(simBg, simWet);
+        Check(freshCount > 10, "Drops spawn within frames: " + freshCount);
+        Check(wetMass > freshMass, "Rain accumulates water mass over time: " + freshMass + " -> " + wetMass);
+        Check(wetCount < simBg.Length / 2, "Developed rain must not veil the pane: " + wetCount);
+        Check(ThirdSpread(simWet, texture.width) < 5.0, "Split panes agree when parked");
+
+        PrimeSim(dressing, updateShader, simSurfaces, 60, 1f, 1f, new Vector3(2f, 0.5f, 0f));
+        Check(dressing.Draw(simSurfaces, camera, 1f, 1f), "Slipstream sim draws");
+        Color32[] simSlip = Capture(camera, texture, "sim-slip.png");
+        Check(DiffCount(simWet, simSlip, 8) > 100, "Slipstream advects the pattern");
+        Check(ThirdSpread(simSlip, texture.width) < 5.0, "Split panes agree at speed");
+
+        var gradient = new Texture2D(64, 64, TextureFormat.RGB24, false);
+        for (int y = 0; y < 64; y++)
+            for (int gx = 0; gx < 64; gx++)
+                gradient.SetPixel(gx, y, new Color(y / 63f, y / 63f, y / 63f));
+        gradient.Apply();
+        Shader.SetGlobalTexture("_CameraOpaqueTexture", gradient);
+        dressing.SetLighting(Vector3.up, Color.black, new Color(0.55f, 0.6f, 0.68f, 1f), true);
+        Check(dressing.Draw(simSurfaces, camera, 1f, 1f), "Refracting sim draws");
+        Color32[] simRefract = Capture(camera, texture, "sim-refract.png");
+        Check(DiffCount(simBg, simRefract, 6) < simBg.Length / 2, "Refraction must not veil the pane");
+        Shader.SetGlobalTexture("_CameraOpaqueTexture", Texture2D.blackTexture);
+        UnityEngine.Object.Destroy(gradient);
+
+        texture.Release();
+        texture = new RenderTexture(1024, 1024, 24);
+        camera.targetTexture = texture;
+        camera.transform.position = new Vector3(-0.50f, 0f, -3f);
+        camera.orthographicSize = 0.16f;
+        dressing.SetLighting(Vector3.up, Color.black, new Color(0.55f, 0.6f, 0.68f, 1f), false);
+        Check(dressing.Draw(simSurfaces, camera, 1f, 1f), "Close-up sim draws");
+        Color32[] simClose = Capture(camera, texture, "sim-close.png");
+        int closeCount = 0;
+        for (int i = 0; i < simClose.Length; i++)
+            if (Math.Abs(simClose[i].r - simBg[0].r) + Math.Abs(simClose[i].g - simBg[0].g) + Math.Abs(simClose[i].b - simBg[0].b) > 6) closeCount++;
+        Check(closeCount > 5000, "Drops stay visible at close-up scale: " + closeCount);
+        camera.transform.position = new Vector3(0f, 0f, -3f);
+        camera.orthographicSize = 0.65f;
+        texture.Release();
+        texture = new RenderTexture(256, 256, 24);
+        camera.targetTexture = texture;
+
+        Check(!dressing.Draw(simSurfaces, camera, 0f, 1f), "Dry glass draws nothing and frees the sim");
+        Color32[] simDried = Capture(camera, texture, "sim-dried.png");
+        Check(Array.TrueForAll(simDried, pixel => pixel.Equals(simDried[0])), "Dry glass must leave no residual filter");
+        UnityEngine.Object.Destroy(rigRoot);
         var terrainMap = new GameObject("Map");
         var ground = GameObject.CreatePrimitive(PrimitiveType.Plane);
         ground.transform.SetParent(terrainMap.transform, false);
@@ -260,6 +312,49 @@ public sealed class WeatherUnityCheck : MonoBehaviour
             "Relative rain needs translating simulation frame and fixed budget");
     }
 
+    // Steps the dressing sim with an injected update material (the fixture player
+    // has no embedded bundle to load it from).
+    private static void PrimeSim(CanopyShaderDressing dressing, Shader updateShader,
+        System.Collections.Generic.IReadOnlyList<CanopySurface> surfaces,
+        int frames, float rain, float speed, Vector3 slip)
+    {
+        var updateField = typeof(CanopyShaderDressing).GetField("updateMaterial", BindingFlags.Instance | BindingFlags.NonPublic);
+
+        if (updateField.GetValue(dressing) as Material == null)
+            updateField.SetValue(dressing, new Material(updateShader));
+        for (int f = 0; f < frames; f++)
+            dressing.UpdateSim(surfaces, rain, speed, slip, 1f / 30f);
+    }
+
+    private static double DiffMass(Color32[] a, Color32[] b)
+    {
+        double mass = 0;
+        for (int i = 0; i < a.Length; i++)
+            mass += Math.Abs(a[i].r - b[i].r) + Math.Abs(a[i].g - b[i].g) + Math.Abs(a[i].b - b[i].b);
+        return mass;
+    }
+
+    private static int DiffCount(Color32[] a, Color32[] b, int threshold)
+    {
+        int count = 0;
+        for (int i = 0; i < a.Length; i++)
+            if (Math.Abs(a[i].r - b[i].r) + Math.Abs(a[i].g - b[i].g) + Math.Abs(a[i].b - b[i].b) > threshold) count++;
+        return count;
+    }
+
+    private static double ThirdSpread(Color32[] wet, int width)
+    {
+        double[] third = new double[3];
+        int[] count = new int[3];
+        for (int i = 0; i < wet.Length; i++)
+        {
+            int slot = (i % width) * 3 / width;
+            third[slot] += wet[i].r + wet[i].g + wet[i].b;
+            count[slot]++;
+        }
+        return Math.Max(Math.Abs(third[0] / count[0] - third[1] / count[1]),
+            Math.Abs(third[2] / count[2] - third[1] / count[1]));
+    }
     private static Mesh Quad()
     {
         var mesh = new Mesh();

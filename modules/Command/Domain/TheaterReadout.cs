@@ -70,6 +70,43 @@ namespace BoscaliSummer.Features.Command.Domain
         }
 
         /// <summary>
+        /// The SA page's known enemy air defence in one line: distinct known sites, how many
+        /// carry a radar SAM, how many are still only pre-war intel, and how many have gone
+        /// stale. A picture that is not ready reads as a dash; a ready one with nothing in it
+        /// says so in words rather than printing a row of confident zeroes.
+        /// </summary>
+        public static string KnownAirDefence(bool ready, AirDefenceRing[] rings, int count)
+        {
+            if (!ready || rings == null) return "—";
+            if (count > rings.Length) count = rings.Length;
+            int sites = 0, radar = 0, preWar = 0, stale = 0;
+            for (int i = 0; i < count; i++)
+            {
+                int site = rings[i].SiteHash;
+                bool counted = false;
+                for (int j = 0; j < i && !counted; j++) counted = rings[j].SiteHash == site;
+                if (counted) continue;
+                bool anyRadar = false, allPreWar = true, allStale = true;
+                for (int j = i; j < count; j++)
+                {
+                    if (rings[j].SiteHash != site) continue;
+                    anyRadar |= rings[j].Kind == AirDefenceKind.RadarSam;
+                    allPreWar &= rings[j].Source == RingSource.PreWar && !rings[j].Confirmed;
+                    allStale &= rings[j].Stale;
+                }
+                sites++;
+                if (anyRadar) radar++;
+                if (allPreWar) preWar++;
+                if (allStale) stale++;
+            }
+            if (sites == 0) return "NONE KNOWN";
+            return sites.ToString(CultureInfo.InvariantCulture) + (sites == 1 ? " SITE · " : " SITES · ") +
+                   radar.ToString(CultureInfo.InvariantCulture) + " RADAR (" +
+                   preWar.ToString(CultureInfo.InvariantCulture) + " PRE-WAR, " +
+                   stale.ToString(CultureInfo.InvariantCulture) + " STALE)";
+        }
+
+        /// <summary>
         /// How a DEFCON level reads as a rail state, so severity is carried by position on
         /// the scale rather than by a colour the caller picked.
         /// </summary>

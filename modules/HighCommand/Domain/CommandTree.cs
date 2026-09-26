@@ -35,7 +35,7 @@ namespace BoscaliSummer.Features.HighCommand.Domain
                 string siteName = siteCount > 0
                     ? siteNames[Math.Max(0, siteIndex)]
                     : "FIELD HQ";
-                var slot = new CommandSlot(i, parent, tier, Roles[i], siteIndex, siteName)
+                var slot = new CommandSlot(i, parent, tier, Roles[i], siteName)
                 {
                     Person = CommanderGenerator.Create(unchecked(seed + 101 * (i + 1)), tier),
                     Status = CommanderStatus.Active,

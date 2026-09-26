@@ -93,6 +93,17 @@ namespace BoscaliSummer.Garrisons
         }
 
         /// <summary>
+        /// Cheap candidacy probe so the damage patch checks siege strongpoint status before
+        /// doing the armour maths: siegeless scenes and unoccupied shells never count.
+        /// </summary>
+        internal static bool MightBeStrongpointHit(MapBuilding shell)
+        {
+            if (shell == null || Instance == null || !SiegeActive) return false;
+            GameObject go = shell.gameObject;
+            return go != null && GarrisonOccupancy.IsOccupied(go);
+        }
+
+        /// <summary>
         /// Server-side strongpoint verdict for one TakeDamage call. Returns true when
         /// vanilla must run (unoccupied shells, siege off, final and overkill hits),
         /// false when the hit was counted or ignored and vanilla must be skipped.

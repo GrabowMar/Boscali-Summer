@@ -4,14 +4,13 @@ namespace BoscaliSummer.Framework.Contracts
     internal interface ITerritoryIngress
     {
         bool TryNearestEdge(int factionId, float playerX, float playerZ, out float x, out float z);
-        bool OwnsPosition(int factionId, float x, float z);
 
         /// <summary>
         /// Signed control of a point from <paramref name="factionId"/>'s perspective: positive
         /// is ground the faction holds, negative is the enemy's, and the zero crossing is the
-        /// front trace itself. Unlike <see cref="OwnsPosition"/> this stays meaningful inside
-        /// the contested band a real front digs its fieldworks in. False off-map, for an
-        /// unknown faction, or when no control value exists.
+        /// front trace itself, so it stays meaningful inside the contested band a real front
+        /// digs its fieldworks in. False off-map, for an unknown faction, or when no control
+        /// value exists.
         /// </summary>
         bool TryGetHoldStrength(int factionId, float x, float z, out float hold);
 

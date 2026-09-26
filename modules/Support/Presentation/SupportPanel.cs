@@ -39,7 +39,6 @@ namespace BoscaliSummer.Features.Support.Presentation
 
         private const int ChipCount = 3;
         private const float SectionGap = 16f;
-        private const float HeaderHeight = 38f;
 
         private const int TabSpace = (int)OpsDomain.Space;
         private const int TabCyber = (int)OpsDomain.Cyber;
@@ -340,35 +339,6 @@ namespace BoscaliSummer.Features.Support.Presentation
             return button.GetComponent<Image>();
         }
 
-        // ---- Page scaffolding ------------------------------------------------------------
-
-        /// <summary>
-        /// A page root with its spine, scrolled when <paramref name="contentHeight"/> exceeds
-        /// the body. Returns the transform to build into and the content column beside the spine.
-        /// </summary>
-        private RectTransform BeginPage(int tab, string name, float contentHeight,
-                                        out float x, out float y, out float width)
-        {
-            var page = (RectTransform)shell.CreatePage(tab, name).transform;
-            RectTransform parent = AvScreen.Scroll(page, shell.Body, contentHeight, out Rect area);
-            x = area.x + 4f;
-            y = area.y;
-            width = area.width - 8f;
-            return parent;
-        }
-
-        /// <summary>A numbered section heading tied to the spine. Returns its live note.</summary>
-        private static TMP_Text Header(RectTransform parent, float x, ref float y, float width,
-                                       string title, string note)
-        {
-            AvStyled.Label(parent, new Rect(x, y, width, 16f), title, "section-title");
-            TMP_Text noteLabel = AvStyled.Label(parent, new Rect(x, y - 17f, width, 14f), note ?? "",
-                                                "section-title-note");
-            AvKit.Rule(parent, new Rect(x, y - 33f, width, 1f), AvTheme.Hairline);
-            y -= HeaderHeight;
-            return noteLabel;
-        }
-
         // ---- Rows ------------------------------------------------------------------------
 
         private enum Tone : byte
@@ -389,13 +359,10 @@ namespace BoscaliSummer.Features.Support.Presentation
         {
             public Image Background;
             public Image Rail;
-            public TMP_Text Code;
-            public TMP_Text Name;
             public TMP_Text Status;
             public TMP_Text Detail;
             public TMP_Text Value;
             public AvButton Primary;
-            public AvButton Secondary;
             public string LastStatus;
             public Tone LastTone = (Tone)255;
         }
@@ -438,13 +405,13 @@ namespace BoscaliSummer.Features.Support.Presentation
             Image symbol = AvKit.Panel(parent, new Rect(x + 14f, y - 13f, 32f, 32f), AvTheme.RailInfo,
                 OpsSprites.Glyph(glyph));
             symbol.raycastTarget = false;
-            row.Code = AvKit.Label(parent, code, new Rect(x + 10f, y - 51f, 42f, 16f),
+            AvKit.Label(parent, code, new Rect(x + 10f, y - 51f, 42f, 16f),
                 AvTheme.Dim, AvTokens.FontMicro, FontStyles.Bold, TextAlignmentOptions.Center);
 
             float textX = x + 74f;
             float textWidth = textRight - textX - (trail ? RowValueWidth + RowColumnGap : 0f);
 
-            row.Name = AvStyled.Label(parent, new Rect(textX, y - 12f, textWidth, 20f), name, "row-name");
+            AvStyled.Label(parent, new Rect(textX, y - 12f, textWidth, 20f), name, "row-name");
             row.Status = Wrapped(AvStyled.Label(parent,
                 new Rect(textX, y - 40f, compact && trail ? actionX - textX - 8f : width - 86f, 30f), "", "row-sub"));
             if (!compact)
@@ -469,8 +436,8 @@ namespace BoscaliSummer.Features.Support.Presentation
                 if (secondaryText != null)
                 {
                     float half = (actionWidth - 8f) * 0.5f;
-                    row.Secondary = AvStyled.Button(parent, new Rect(actionX, buttonY, half, 28f),
-                                                    secondaryText, "btn", onSecondary, AvButtonStyle.Danger);
+                    AvStyled.Button(parent, new Rect(actionX, buttonY, half, 28f),
+                                    secondaryText, "btn", onSecondary, AvButtonStyle.Danger);
                     row.Primary = AvStyled.Button(parent, new Rect(actionX + half + 8f, buttonY, half, 28f),
                                                   primaryText, "btn", onPrimary, primaryStyle);
                 }
@@ -557,9 +524,6 @@ namespace BoscaliSummer.Features.Support.Presentation
                 default: return AvTheme.Dim;
             }
         }
-
-        private static void SetSelected(OpsRow row, bool selected) =>
-            row.Background.color = selected ? AvTheme.Accent.WithAlpha(0.08f) : Color.clear;
 
         // ---- Support-action rows (shared by SPACE, CYBER and SPEC OPS) --------------------
 
@@ -688,10 +652,6 @@ namespace BoscaliSummer.Features.Support.Presentation
             }
         }
 
-        /// <summary>Domain gates the host would refuse; one copy, in <see cref="AbilityStatus.Gate"/>.</summary>
-        private bool Gate(SupportActionDefinition action, out string reason) =>
-            AbilityStatus.Gate(support, action, out reason);
-
         // ---- Refresh ---------------------------------------------------------------------
 
         private void Refresh()
@@ -710,7 +670,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             }
             RefreshActionRows(shell.Page, bypass);
 
-            bool armed = support.CommandArmed || support.ArmedAction.HasValue || support.LocalPickArmed;
+            bool armed = support.ArmedAction.HasValue || support.LocalPickArmed;
             string alert = opsSnapshotSeen && !support.OpsStateFresh
                 ? "HOST SNAPSHOT STALE · FIGURES MAY BE OUT OF DATE"
                 : null;
@@ -727,7 +687,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             int sub = shell.Page == TabSpace ? spaceSub : shell.Page == TabCyber ? cyberSub : specSub;
             string location = domain + " / " + (sub == 0 ? "STATUS" : "ACTIONS");
             bool pending = support.RequestPending || support.CommandPending;
-            bool armed = support.CommandArmed || support.ArmedAction.HasValue || support.LocalPickArmed;
+            bool armed = support.ArmedAction.HasValue || support.LocalPickArmed;
             float cooldown = support.LocalCooldownRemaining;
             bool fresh = support.OpsStateFresh;
             opsSnapshotSeen |= fresh;
@@ -785,7 +745,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             else
             {
                 PlatformStats stats = platform.Stats(now);
-                OrbitState state = platform.State(now, support.OrbitClock);
+                OrbitState state = platform.State(now);
                 bool holding = platform.HoldAt(now) != PlatformHold.None;
                 orbitMetric.Set(stats.Modules + "/" + OrbitalPlatform.CellCount,
                                 holding ? PlatformWords.Hold(platform.HoldAt(now))
@@ -838,12 +798,6 @@ namespace BoscaliSummer.Features.Support.Presentation
             if (value >= 100000f) return (value / 1000f).ToString("0", Invariant) + "K";
             if (value >= 10000f) return (value / 1000f).ToString("0.0", Invariant) + "K";
             return Figure(value);
-        }
-
-        private static string Clock(float seconds)
-        {
-            int total = Mathf.Max(0, Mathf.CeilToInt(seconds));
-            return (total / 60).ToString(Invariant) + ":" + (total % 60).ToString("00", Invariant);
         }
     }
 }

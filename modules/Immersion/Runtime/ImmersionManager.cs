@@ -18,10 +18,15 @@ namespace BoscaliSummer.Features.Immersion.Runtime
         private readonly HeadMotion head = new HeadMotion();
         private readonly CockpitShake shake = new CockpitShake();
         private readonly SunGlare glare = new SunGlare();
+        private readonly MfdGlow mfdGlow = new MfdGlow();
+        private readonly SurfaceImmersion surface = new SurfaceImmersion();
+        private Audio.AirframeAudio airframeAudio;
 
-        public void Configure(ImmersionSettings immersionSettings)
+        public void Configure(ImmersionSettings immersionSettings, BepInEx.Logging.ManualLogSource logger)
         {
             settings = immersionSettings;
+            mfdGlow.Logger = logger;
+            surface.Logger = logger;
             Live = this;
         }
 
@@ -63,11 +68,32 @@ namespace BoscaliSummer.Features.Immersion.Runtime
             set { if (settings != null) settings.SunGlareEnabled.Value = value; }
         }
 
+        public bool MfdGlowEnabled
+        {
+            get => settings != null && settings.MfdGlowEnabled.Value;
+            set { if (settings != null) settings.MfdGlowEnabled.Value = value; }
+        }
+
+        public bool AirframeAudioEnabled
+        {
+            get => settings != null && settings.AirframeAudioEnabled.Value;
+            set { if (settings != null) settings.AirframeAudioEnabled.Value = value; }
+        }
+
+        public bool SurfaceImmersionEnabled
+        {
+            get => settings != null && settings.SurfaceImmersionEnabled.Value;
+            set { if (settings != null) settings.SurfaceImmersionEnabled.Value = value; }
+        }
+
         public void ResetForScene()
         {
             head.Reset();
             shake.Release();
             glare.Release();
+            mfdGlow.Release();
+            surface.Reset();
+            if (airframeAudio != null) airframeAudio.Silence();
         }
 
         private void OnDestroy()
@@ -97,6 +123,18 @@ namespace BoscaliSummer.Features.Immersion.Runtime
 
             LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
             glare.Tick(level, cameras.mainCamera, settings.SunGlareEnabled.Value, Time.unscaledDeltaTime);
+
+            float ambient = level != null ? level.GetAmbientLight() : 1f;
+            mfdGlow.Tick(aircraft, cockpit, ambient, settings.MfdGlowEnabled.Value);
+            surface.Tick(aircraft, cockpit, level, settings.SurfaceImmersionEnabled.Value, dt);
+
+            if (airframeAudio == null)
+            {
+                airframeAudio = gameObject.AddComponent<Audio.AirframeAudio>();
+                airframeAudio.Initialize();
+            }
+            airframeAudio.TryRoute();
+            airframeAudio.Tick(head.ForceG, dt, cockpit, 1f, settings.AirframeAudioEnabled.Value);
         }
 
         /// <summary>Harmony hook: one round left a gun.</summary>
@@ -116,6 +154,13 @@ namespace BoscaliSummer.Features.Immersion.Runtime
             state["shots"] = shake.Shots;
             state["touchdowns"] = shake.Touchdowns;
             state["sunGlare"] = glare.Intensity;
+            state["mfdPanels"] = mfdGlow.PanelCount;
+            state["mfdBoost"] = mfdGlow.Boost;
+            state["surfaceWetness"] = surface.Wetness;
+            state["surfaceFrost"] = surface.Frost;
+            state["surfaceScorch"] = surface.Scorch;
+            state["surfaceDirt"] = surface.Dirt;
+            state["creaks"] = airframeAudio != null ? airframeAudio.Creaks : 0;
             LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
             state["ambient"] = level != null ? level.GetAmbientLight() : -1f;
             state["timeOfDay"] = level != null ? level.timeOfDay : -1f;

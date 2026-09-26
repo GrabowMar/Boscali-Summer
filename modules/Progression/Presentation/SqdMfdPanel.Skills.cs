@@ -153,7 +153,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             for (int l = 0; l < lanes.Count; l++)
             {
                 float laneX = SkillBoardLayout.CellX(x, cellWidth, l);
-                var header = new SkillBranchRow { Name = lanes[l].Name };
+                var header = new SkillBranchRow();
                 for (int n = 0; n < lanes[l].Nodes.Count; n++) header.Ids.Add(lanes[l].Nodes[n].Id);
                 header.Caption = PlainLabel(parent, new Rect(laneX, y, cellWidth, 14f),
                     lanes[l].Name, "section-title");

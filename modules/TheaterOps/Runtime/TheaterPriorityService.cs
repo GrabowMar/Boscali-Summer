@@ -18,9 +18,9 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
     /// <see cref="ITheaterPriorityView"/> for the STR console.
     ///
     /// <para>MissionPosition patches read this table on the host: reinforcements spawn nearer
-    /// the priority and units with no better order head for it. Depot-spawned ground AI can
-    /// receive staged destinations from <see cref="GroundFrontService"/> through that same
-    /// query. Clients receive the table read-only over <see cref="Networking.TheaterOpsNet"/>.</para>
+    /// the priority, and depot-spawned ground AI enrolled in a battle group receives staged
+    /// destinations from <see cref="GroundFrontService"/> through the advance query; nothing
+    /// else is steered. Clients receive the table read-only over <see cref="Networking.TheaterOpsNet"/>.</para>
     /// </summary>
     internal sealed class TheaterPriorityService : MonoBehaviour, ISceneService, ITheaterPriorityView
     {
@@ -45,9 +45,6 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
         internal bool Authoritative => authoritative;
 
         public bool Available => true;
-        public string Status => authoritative
-            ? "The staff holds the main effort."
-            : "The host's staff holds the main effort.";
 
         public void Configure(TheaterOpsSettings config, TheaterOpsNet net, ManualLogSource log)
         {
@@ -109,13 +106,12 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
         }
 
         /// <summary>
-        /// The director's hand on the effort. No player intent reaches here: stance, axes and
-        /// hold move this through the review, never directly.
+        /// The director's hand on one faction's effort. No player intent reaches here: stance,
+        /// axes and hold move it through the review, and a passed vote through the director.
         /// </summary>
-        internal bool SetDirective(string key)
+        internal bool SetDirective(FactionHQ hq, string key)
         {
-            if (!authoritative || string.IsNullOrEmpty(key)) return false;
-            if (!TryGetLocalFaction(out FactionHQ hq)) return false;
+            if (!authoritative || string.IsNullOrEmpty(key) || hq == null || hq.faction == null) return false;
             if (!TryResolveObjective(hq, key, out string label, out Vector3 position)) return false;
 
             var directive = new PriorityDirective(key, label, position.x, position.y, position.z);
@@ -127,9 +123,9 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             return true;
         }
 
-        internal bool ClearDirective()
+        internal bool ClearDirective(FactionHQ hq)
         {
-            if (!authoritative || !TryGetLocalFaction(out FactionHQ hq)) return false;
+            if (!authoritative || hq == null || hq.faction == null) return false;
             if (!table.TryClear(hq.faction.factionName)) return false;
 
             network?.BroadcastState(hq.faction.factionName, null);
@@ -161,26 +157,18 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
 
         // ---- Internals --------------------------------------------------------------------
 
+        /// <summary>The local player's side, for presentation only; host logic names the faction.</summary>
         internal bool TryGetLocalDirective(out PriorityDirective directive)
         {
             directive = default;
-            return TryGetLocalFaction(out FactionHQ hq) &&
+            return GameAccess.TryGetLocalFaction(out FactionHQ hq) &&
                    table.TryGet(hq.faction.factionName, out directive);
-        }
-
-        private static bool TryGetLocalFaction(out FactionHQ hq)
-        {
-            hq = null;
-            if (!GameManager.GetLocalHQ(out FactionHQ local) || local == null || local.faction == null)
-                return false;
-            hq = local;
-            return true;
         }
 
         private void RebuildOptions()
         {
             options.Clear();
-            if (!TryGetLocalFaction(out FactionHQ hq)) return;
+            if (!GameAccess.TryGetLocalFaction(out FactionHQ hq)) return;
 
             if (!MissionPosition.TryGetActiveObjectives(hq, out List<Objective> active) || active == null)
                 return;

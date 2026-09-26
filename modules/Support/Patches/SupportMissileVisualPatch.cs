@@ -68,7 +68,7 @@ namespace BoscaliSummer.Features.Support.Patches
 
                     float radius = Runtime.SupportEffectPolicy.EmpRadius(unique);
                     Visuals.EmpVisualEffect.Trigger(world, radius);
-                    Visuals.CockpitEmpDisruption.CheckLocalDisruption(world, radius);
+                    Visuals.CockpitEmpDisruption.CheckLocalDisruption(world, radius, __instance.NetworkHQ);
                 }
                 else if (unique.StartsWith("BoscaliSummer:Support:Flare:", StringComparison.Ordinal))
                 {
@@ -79,18 +79,10 @@ namespace BoscaliSummer.Features.Support.Patches
                         r.enabled = false;
                     }
 
-                    float radius = 4000f;
-                    float duration = 15f;
-                    int count = 36;
-
+                    // Every peer reads the host's values from the replicated name, not local settings.
+                    Runtime.SupportEffectPolicy.FlareBarrage(unique, out float radius, out float duration, out int count);
                     var tracker = __instance.GetComponent<Runtime.Actions.FlareMissileFlightTracker>();
-                    if (tracker != null)
-                    {
-                        tracker.MarkDetonated();
-                        radius = tracker.Radius;
-                        duration = tracker.Duration;
-                        count = tracker.FlareCount;
-                    }
+                    if (tracker != null) tracker.MarkDetonated();
 
                     Vector3 burstPos = world;
                     if (burstPos.y < Datum.LocalSeaY + 5f)
@@ -98,7 +90,7 @@ namespace BoscaliSummer.Features.Support.Patches
                         burstPos = new Vector3(burstPos.x, Datum.LocalSeaY + 12f, burstPos.z);
                     }
 
-                    Visuals.FlareMissileBurstVisuals.TriggerBarrage(burstPos, radius, duration, count);
+                    Visuals.FlareMissileBurstVisuals.TriggerBarrage(burstPos, radius, duration, count, __instance.NetworkHQ);
                 }
             }
             catch (Exception e)

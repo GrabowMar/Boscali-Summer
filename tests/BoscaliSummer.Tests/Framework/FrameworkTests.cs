@@ -36,6 +36,22 @@ namespace BoscaliSummer.Tests.Framework
                 new FeatureMetadata("cycle-b", "Cycle B", "cycle-a")
             }), "feature dependency cycle was accepted");
 
+            // Settings can switch off a feature another one needs (Command under Trenches); the
+            // dependent must drop out with a reason instead of failing the whole load.
+            string[] missing = FeatureGraph.MissingDependencies(new[]
+            {
+                new FeatureMetadata("overlay", "Overlay", "trenches"),
+                new FeatureMetadata("trenches", "Trenches", "command"),
+                new FeatureMetadata("radio", "Radio")
+            });
+            TestAssert.That(missing[0] == "trenches" && missing[1] == "command" && missing[2] == null,
+                "a feature whose dependency is switched off, and anything built on it, must be left out by name");
+            TestAssert.Throws<InvalidOperationException>(() => FeatureGraph.MissingDependencies(new[]
+            {
+                new FeatureMetadata("same", "One", "missing"),
+                new FeatureMetadata("same", "Two")
+            }), "duplicate feature IDs must not hide behind a missing dependency");
+
             var registry = new ServiceRegistry();
             var expected = new ExampleService();
             registry.Add<IExampleService>(expected);

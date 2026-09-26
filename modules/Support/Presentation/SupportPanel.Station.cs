@@ -250,7 +250,7 @@ namespace BoscaliSummer.Features.Support.Presentation
 
         // ---- Refresh ---------------------------------------------------------------------------
 
-        private void RefreshStationPage(OrbitalPlatform platform, double now, in OrbitClock clock)
+        private void RefreshStationPage(OrbitalPlatform platform, double now)
         {
             if (bannerWord == null) return;
             bool station = platform != null && platform.Exists;
@@ -263,8 +263,8 @@ namespace BoscaliSummer.Features.Support.Presentation
             if (stationLoop != null) WriteLoop(stationLoop, loop);
             if (!station) return;
             PlatformStats stats = platform.Stats(now);
-            OrbitState state = platform.State(now, clock);
-            RefreshStationPosition(platform, state, now, clock);
+            OrbitState state = platform.State(now);
+            RefreshStationPosition(platform, state, now);
             if (miniFill[0] != null) RefreshMiniBlueprint(platform, stats, now);
             if (tiles[0] != null)
             {
@@ -273,7 +273,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             }
         }
 
-        private void RefreshStationPosition(OrbitalPlatform platform, in OrbitState state, double now, in OrbitClock clock)
+        private void RefreshStationPosition(OrbitalPlatform platform, in OrbitState state, double now)
         {
             OrbitRegime orbit = platform.Orbit;
             bannerBand.text = orbit.Name + " · " + TheaterGrid.Km(orbit.Altitude) + " KM · " +

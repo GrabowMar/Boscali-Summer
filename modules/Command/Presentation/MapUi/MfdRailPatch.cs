@@ -193,12 +193,6 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             MfdScreenFinish.Ensure(display == null ? null : display.maximizedMapCanvas);
         }
 
-        public static void Refresh(DynamicMap dynamicMap)
-        {
-            Restore();
-            MaximizePostfix(dynamicMap);
-        }
-
         /// <summary>
         /// Install or update layout when a new MFD screen appears. Does not tear down an
         /// already-applied layout — Restore+rebuild was dropping docked screens back onto

@@ -24,6 +24,7 @@ namespace BoscaliSummer.Tests.Features.Command
             FrontlineTests.Run();
             StrPanelTests.Run();
             OperationsBoardTests.Run();
+            StrRevampTests.Run();
             GridLabelsTests.Run();
         }
 

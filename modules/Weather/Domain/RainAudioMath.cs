@@ -14,14 +14,14 @@ namespace BoscaliSummer.Features.Weather.Domain
         public const float SilenceEpsilon = 0.001f;
 
         /// <summary>
-        /// Continuous aerodynamic rain hiss. Louder with airspeed; slightly muffled inside
-        /// the cockpit where the canopy patter layer carries the detail.
+        /// Continuous aerodynamic rain hiss. Louder with airspeed; the closed canopy dulls
+        /// it through the lowpass cutoff, not through level. Patter peaks carry detail.
         /// </summary>
         public static float HissVolume(float speedNorm, float intensity, float master, bool cockpit)
         {
             float n = Clamp01(speedNorm);
-            float viewAtten = cockpit ? 0.06f : 0.40f;
-            return (0.25f + n * 0.75f) * Clamp01(intensity) * 0.50f * Math.Max(0f, master) * viewAtten;
+            float viewAtten = cockpit ? 0.75f : 0.85f;
+            return (0.25f + n * 0.75f) * Clamp01(intensity) * 0.55f * Math.Max(0f, master) * viewAtten;
         }
 
         /// <summary>Cockpit-only canopy droplet impacts; silent in external views.</summary>

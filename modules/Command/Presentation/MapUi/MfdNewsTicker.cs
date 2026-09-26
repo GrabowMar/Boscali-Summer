@@ -58,11 +58,6 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         internal static bool IsVisible => root != null && root.gameObject.activeSelf;
         internal static float BottomY => root == null ? 0f : root.anchoredPosition.y - root.sizeDelta.y;
 
-        public static void Configure(CommandSettings config)
-        {
-            settings = config;
-        }
-
         public static void Ensure(Canvas canvas, MfdLayout.Columns columns, CommandSettings config = null)
         {
             if (canvas == null) return;

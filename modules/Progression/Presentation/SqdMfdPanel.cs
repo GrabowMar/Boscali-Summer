@@ -791,7 +791,6 @@ namespace BoscaliSummer.Features.Progression.Presentation
         /// <summary>One lane's caption and committed count, refreshed as grades are taken.</summary>
         private sealed class SkillBranchRow
         {
-            public string Name;
             public TMP_Text Caption;
             public TMP_Text Note;
             public readonly List<byte> Ids = new List<byte>(PerkCatalog.MaximumDepth);

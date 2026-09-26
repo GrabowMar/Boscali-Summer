@@ -547,6 +547,12 @@ public static class CocUnityCheck
         public void Highlight(int id) => HighlightedId = id;
 
         public void Refresh() { }
+
+        public bool TryGetCohesion(FactionHQ hq, out float cohesion)
+        {
+            cohesion = FriendlyCohesion;
+            return available;
+        }
     }
 
     // ------------------------------------------------------------------ plumbing
@@ -557,10 +563,7 @@ public static class CocUnityCheck
     {
         public bool Available => true;
         public bool CanCommand => true;
-        public string Status => "READY";
-        public float OverheadCost => 2f;
         public float WaveBudget => 4f;
-        public int MaximumWaves => 6;
         public IReadOnlyList<TheaterOperationView> Operations { get; }
         public TheaterDirectionView Direction => new TheaterDirectionView(TheaterDirectorPosture.Defending, true, "WEST DEPOT", 2);
         public TheaterInfluenceView Influence => new TheaterInfluenceView(.7f, false, 20f, 8f,
@@ -592,7 +595,6 @@ public static class CocUnityCheck
         private readonly string label;
         public PriorityStub(string priorityLabel = "WEST DEPOT") { label = priorityLabel; }
         public bool Available => true;
-        public string Status => "READY";
         public bool HasPriority => label != null;
         public string PriorityLabel => label;
         public IReadOnlyList<TheaterPriorityOption> Options => new[]
@@ -614,7 +616,6 @@ public static class CocUnityCheck
         }
         public bool Available => true;
         public bool CanCommand => canCommand;
-        public string Status => "HOST";
         public float FactionFunds => emptyPool ? 0f : 40f;
         public IReadOnlyList<ReinforcementOption> Reinforcements => new[]
         {

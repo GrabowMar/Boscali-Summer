@@ -12,19 +12,17 @@ namespace BoscaliSummer.Features.TheaterOps.Domain
     {
         public float MusterSeconds { get; }
         public float PlanSeconds { get; }
-        public float LaunchSeconds { get; }
         public float WaveSeconds { get; }
         public float WaveRetrySeconds { get; }
         public float HoldSeconds { get; }
         public float AssaultSeconds { get; }
 
         public OffensiveTiming(
-            float musterSeconds, float planSeconds, float launchSeconds,
+            float musterSeconds, float planSeconds,
             float waveSeconds, float waveRetrySeconds, float holdSeconds, float assaultSeconds)
         {
             MusterSeconds = Positive(musterSeconds, 75f);
             PlanSeconds = Positive(planSeconds, 45f);
-            LaunchSeconds = Positive(launchSeconds, 15f);
             WaveSeconds = Positive(waveSeconds, 35f);
             WaveRetrySeconds = Positive(waveRetrySeconds, 8f);
             HoldSeconds = Positive(holdSeconds, 90f);
@@ -84,9 +82,6 @@ namespace BoscaliSummer.Features.TheaterOps.Domain
         public TheaterOperationOutcome Outcome { get; private set; }
         public string TargetKey { get; private set; }
         public string TargetLabel { get; private set; }
-        public float TargetX { get; private set; }
-        public float TargetY { get; private set; }
-        public float TargetZ { get; private set; }
 
         /// <summary>Unspent escrow, in millions, still available to the remaining waves.</summary>
         public float Budget { get; private set; }
@@ -171,9 +166,6 @@ namespace BoscaliSummer.Features.TheaterOps.Domain
 
             TargetKey = Bound(key, MaximumTargetKeyLength);
             TargetLabel = Bound(label, MaximumTargetLabelLength);
-            TargetX = x;
-            TargetY = y;
-            TargetZ = z;
             Phase = TheaterOperationPhase.Launching;
             Countdown = launchSeconds > 0f && !float.IsInfinity(launchSeconds) ? launchSeconds : 0f;
             return true;
@@ -368,13 +360,6 @@ namespace BoscaliSummer.Features.TheaterOps.Domain
                 return true;
             }
             return false;
-        }
-
-        public void Clear()
-        {
-            Array.Clear(plans, 0, plans.Length);
-            Count = 0;
-            nextId = 1;
         }
     }
 

@@ -37,11 +37,18 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private readonly Vector2[] stations = new Vector2[MaximumSamples];
 
         private TacticalSectorGrid grid;
+        private ulong drawnFrontlineHash;
 
-        /// <summary>Source of the next rebuild; null draws nothing.</summary>
+        /// <summary>Source of the next rebuild; null draws nothing. An unchanged front skips the mesh rebuild.</summary>
         public void SetSource(TacticalSectorGrid source)
         {
+            if (source == grid)
+            {
+                if (source == null) return;
+                if (source.FrontlineHash == drawnFrontlineHash) return;
+            }
             grid = source;
+            drawnFrontlineHash = source != null ? source.FrontlineHash : 0UL;
             SetVerticesDirty();
         }
 

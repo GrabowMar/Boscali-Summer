@@ -1,5 +1,3 @@
-using System;
-
 namespace BoscaliSummer.Features.Command.Presentation.MapUi
 {
     // Local observations only: no backfill and no simulated resource production.
@@ -44,20 +42,6 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             values[2, slot] = manpower;
             values[3, slot] = morale;
             return true;
-        }
-
-        internal void Range(int series, out float minimum, out float maximum)
-        {
-            minimum = 0f;
-            maximum = series == 3 ? 100f : 0f;
-            for (int i = 0; i < Count; i++)
-            {
-                float value = Value(series, i);
-                if (!Finite(value)) continue;
-                minimum = Math.Min(minimum, value);
-                maximum = Math.Max(maximum, value);
-            }
-            if (minimum == maximum) maximum = minimum + 1f;
         }
 
         internal static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);

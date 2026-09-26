@@ -20,7 +20,6 @@ namespace BoscaliSummer.Features.HighCommand.Domain
         public int ParentId;
         public int Tier;
         public string Role;
-        public int SiteIndex;
         public string SiteName;
         public CommandPerson Person;
         public CommanderStatus Status;
@@ -31,10 +30,10 @@ namespace BoscaliSummer.Features.HighCommand.Domain
 
         public bool Alive => Status != CommanderStatus.Kia;
 
-        public CommandSlot(int id, int parentId, int tier, string role, int siteIndex, string siteName)
+        public CommandSlot(int id, int parentId, int tier, string role, string siteName)
         {
             Id = id; ParentId = parentId; Tier = tier; Role = role;
-            SiteIndex = siteIndex; SiteName = siteName ?? "FIELD HQ";
+            SiteName = siteName ?? "FIELD HQ";
             StatusUntil = 0f;
         }
     }

@@ -5,8 +5,9 @@ namespace BoscaliSummer.Tests.Features.TheaterOps
 {
     internal static class DirectorDecisionTests
     {
-        private const float Overhead = 2f;
-        private const float Wave = 3f;
+        // The shipped TheaterOps defaults (OperationOverheadCost / OperationWaveBudget).
+        private const float Overhead = 25f;
+        private const float Wave = 45f;
 
         public static void Run()
         {
@@ -16,16 +17,18 @@ namespace BoscaliSummer.Tests.Features.TheaterOps
             TheCommittedTargetSurvivesBetterOffers();
             HoldReserveAndCapacityShowInTheLog();
             ChestCapBlocksTheOpening();
+            TheRealDefaultCostsOpenAnOffensive();
             ThreatOwnsTheEffortAtLowStance();
             OpportunityKeepsItAtHighStance();
             AnEmptyTheaterStaysQuiet();
             GroundUnderAttackIsNotAttackedTwice();
             EffortNamesTheLabelNotTheKey();
             OutcomeWordsMatchTheBoard();
+            TheDefaultChestOpensAnOffensive();
         }
 
         private static DirectorAssessment Assess(
-            List<ObjectiveRead> objectives, InfluenceState influence, float funds = 50f,
+            List<ObjectiveRead> objectives, InfluenceState influence, float funds = 500f,
             int active = 0, string committed = null, int held = 9,
             string launched = null, string effort = null, List<string> running = null) =>
             new DirectorAssessment(
@@ -140,6 +143,25 @@ namespace BoscaliSummer.Tests.Features.TheaterOps
                 "a chest below the opening charge holds the offensive and says so");
         }
 
+        private static void TheRealDefaultCostsOpenAnOffensive()
+        {
+            // The shipped settings: 25 overhead and 45 per wave. A default chest once capped
+            // escrow at 15, so the staff never opened a single offensive out of the box.
+            TestAssert.That(InfluenceState.DefaultOverheadCost == 25f && InfluenceState.DefaultWaveBudget == 45f,
+                "the pinned costs are the settings' own defaults");
+            var objectives = new List<ObjectiveRead> { new ObjectiveRead("outpost", "Outpost", 2, 0) };
+            DirectorOrders orders = DirectorDecision.Review(new DirectorAssessment(
+                objectives, new InfluenceState(), 200f, 25f, 45f, 0, 2, null, 9, null, null, null));
+            TestAssert.That(orders.OpenOffensive && orders.TargetKey == "outpost",
+                "a default staff opens an offensive at the default costs");
+            TestAssert.That(!Join(orders).Contains("CHEST CAP"), "the default chest is not the cap");
+
+            var sixWaves = new InfluenceState();
+            sixWaves.SetChest(sixWaves.EscrowCap, 0f, "VOTE");
+            TestAssert.That(sixWaves.MaxEscrowPerPlan >= 25f + 6f * 45f,
+                "the chest can hold every wave a plan may fund");
+        }
+
         private static void ThreatOwnsTheEffortAtLowStance()
         {
             var influence = new InfluenceState();
@@ -200,6 +222,14 @@ namespace BoscaliSummer.Tests.Features.TheaterOps
             TestAssert.That(DirectorWords.OutcomeWord(BoscaliSummer.Framework.Contracts.TheaterOperationOutcome.CommitmentSpent) == "COMMITMENT SPENT", "spent waves read spent");
             TestAssert.That(DirectorWords.OutcomeWord(BoscaliSummer.Framework.Contracts.TheaterOperationOutcome.Cancelled) == "CANCELLED", "a stand-down reads cancelled");
             TestAssert.That(DirectorWords.OutcomeWord(BoscaliSummer.Framework.Contracts.TheaterOperationOutcome.None) == "CONCLUDED", "an unmarked end reads concluded");
+        }
+
+        private static void TheDefaultChestOpensAnOffensive()
+        {
+            var objectives = new List<ObjectiveRead> { new ObjectiveRead("alpha", "Alpha", 1, 0) };
+            DirectorOrders orders = DirectorDecision.Review(Assess(objectives, new InfluenceState()));
+            TestAssert.That(orders.OpenOffensive && orders.TargetKey == "alpha",
+                "a fresh staff with the default chest opens an offensive at the real 25 + 45 cost");
         }
 
         private static string Join(DirectorOrders orders) => string.Join(" ", orders.Log);

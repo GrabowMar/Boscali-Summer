@@ -68,7 +68,7 @@ namespace BoscaliSummer.Features.Comms.Presentation
                 RectTransform container = Container(parent, new Rect(x, y - i * (LogRow + 2f), width, LogRow), "Log" + i);
                 logRows[i] = container;
                 Image fill = AvKit.Panel(container, new Rect(0f, 0f, width, LogRow), AvTheme.Ground);
-                logHits[i] = AvKit.HitButton(container, new Rect(0f, 0f, width, LogRow), () => FindOnMap(row));
+                logHits[i] = AvKit.HitButton(container, new Rect(0f, 0f, width, LogRow), () => OpenLogLine(row));
                 logHits[i].SetRowHighlight(fill, AvTheme.Ground, AvTheme.SurfaceRaised);
                 logRails[i] = AvKit.Panel(container, new Rect(0f, -4f, 3f, LogRow - 8f), AvTheme.RailInert);
                 logTimes[i] = AvStyled.Label(container, new Rect(8f, 0f, 34f, LogRow), "", "row-sub");
@@ -113,8 +113,10 @@ namespace BoscaliSummer.Features.Comms.Presentation
                 logRails[shown].color = ToneColour(line.Tone);
                 logTimes[shown].text = Ago(now - line.Time);
                 string channel = line.Channel == CommsChannel.All && line.Kind != CommsFeedKind.System ? "[ALL] " : "";
-                logTexts[shown].text = channel + Who(line.Author, line.AuthorName) + " · " + line.Text;
-                logHits[shown].WithTooltip(line.HasPosition ? "Flash this position on the map." : null);
+                logTexts[shown].text = channel + (line.RematchPlayer != 0 ? "REMATCH › " : "") +
+                    Who(line.Author, line.AuthorName) + " · " + line.Text;
+                logHits[shown].WithTooltip(line.RematchPlayer != 0 ? "Choose a throw on CREW to challenge this pilot again." :
+                    line.HasPosition ? "Flash this position on the map." : null);
                 Show(logRows[shown], true);
                 shown++;
             }
@@ -124,7 +126,7 @@ namespace BoscaliSummer.Features.Comms.Presentation
                 Show(logRows[i], false);
             }
             Show(logEmpty, shown == 0);
-            logNote.text = shown == 0 ? "" : "CLICK A LINE WITH A GRID TO FIND IT";
+            logNote.text = shown == 0 ? "" : "CLICK RESULT TO REMATCH · GRID TO FIND";
 
             // ---- players: alphabetical, so a row never jumps out from under the pointer.
             var seen = new List<KeyValuePair<ulong, string>>(state.Seen);
@@ -153,10 +155,18 @@ namespace BoscaliSummer.Features.Comms.Presentation
                 : "MUTE HIDES THEIR MARKS, CALLS AND NOTICES";
         }
 
-        private void FindOnMap(int row)
+        private void OpenLogLine(int row)
         {
             CommsFeedLine line = row >= 0 && row < logBound.Length ? logBound[row] : null;
-            if (line == null || !line.HasPosition) return;
+            if (line == null) return;
+            if (line.RematchPlayer != 0)
+            {
+                string name = comms.State.Seen.TryGetValue(line.RematchPlayer, out string known) ? known : "PILOT";
+                SelectRematch(line.RematchPlayer, name, line.Channel);
+                shell.SetPage(TabGame);
+                return;
+            }
+            if (!line.HasPosition) return;
             comms.Highlight(line.X, line.Z);
             comms.State.SetNotice("FLASHING " + CommsText.Grid(line.X, line.Z) + " ON THE MAP", false, Time.unscaledTime);
         }

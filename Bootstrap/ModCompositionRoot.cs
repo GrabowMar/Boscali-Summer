@@ -9,10 +9,12 @@ using BoscaliSummer.Features.Events;
 using BoscaliSummer.Features.FireAndDestruction;
 using BoscaliSummer.Features.HighCommand;
 using BoscaliSummer.Features.Hud;
+using BoscaliSummer.Features.Intel;
 using BoscaliSummer.Features.Progression;
 using BoscaliSummer.Features.PlayerSpawnPriority;
 using BoscaliSummer.Features.QoL;
 using BoscaliSummer.Features.Radio;
+using BoscaliSummer.Features.Session;
 using BoscaliSummer.Features.Support;
 using BoscaliSummer.Features.Squad;
 using BoscaliSummer.Features.TheaterOps;
@@ -37,6 +39,7 @@ namespace BoscaliSummer.Bootstrap
                 // Progression, Support and Command disabled at startup are not installed.
                 var features = new List<IModFeature>
                 {
+                    new SessionFeature(),
                     new FireAndDestructionFeature(),
                     new UrbanCombatFeature(),
                     // The common HUD element installs first so every presentation feature below
@@ -58,6 +61,9 @@ namespace BoscaliSummer.Bootstrap
                 }
                 if (settings.DynamicOperations.Enabled.Value) features.Add(new DynamicOperationsFeature());
                 if (settings.HighCommand.Enabled.Value) features.Add(new HighCommandFeature());
+                // Intel publishes IThreatPicture ahead of TheaterOps, whose director reads it
+                // late; neither depends on the other.
+                if (settings.Intel.Enabled.Value) features.Add(new IntelFeature());
                 if (settings.TheaterOps.Enabled.Value) features.Add(new TheaterOpsFeature());
                 if (settings.Trenches.Enabled.Value) features.Add(new TrenchesFeature());
                 if (settings.Events.Enabled.Value) features.Add(new EventsFeature());

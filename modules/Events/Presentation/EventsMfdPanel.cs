@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using BepInEx.Logging;
-using BoscaliSummer.Core;
 using BoscaliSummer.Features.Events.Configuration;
 using BoscaliSummer.Features.Events.Domain;
 using BoscaliSummer.Features.Events.Runtime;
@@ -340,7 +339,6 @@ namespace BoscaliSummer.Features.Events.Presentation
             y -= DirectorLineHeight + CardGap;
 
             activeCard = new ActiveEventCard(parent, x, y, width);
-            activeCard.UseExternalDecisionBoard();
             baseCardHeight = activeCard.Height;
             lastCardHeight = baseCardHeight;
             y -= activeCard.Height + CardGap;
@@ -672,7 +670,6 @@ namespace BoscaliSummer.Features.Events.Presentation
 
         private void RefreshResponse(bool aimedAtLocal)
         {
-            activeCard.HideResponse();
             decisionBoard?.Refresh(events, aimedAtLocal);
         }
 
@@ -716,9 +713,6 @@ namespace BoscaliSummer.Features.Events.Presentation
 
         private static float MissionTime() =>
             NetworkSceneSingleton<MissionManager>.i?.MissionTime ?? 0f;
-
-        private static float LocalAllocation() =>
-            GameManager.GetLocalPlayer<Player>(out Player player) && player != null ? player.Allocation : 0f;
 
         private static string MultiplierLabel(float multiplier) =>
             "x" + multiplier.ToString("0.00", CultureInfo.InvariantCulture);
@@ -778,33 +772,6 @@ namespace BoscaliSummer.Features.Events.Presentation
             tier == "SUPEREVENT" ? AvTheme.RailDanger
             : tier == "MEDIUM" ? AvTheme.RailCaution
             : AvTheme.RailInert;
-
-        /// <summary>One line naming the ground war; the numbers live in the metric cell.</summary>
-        private static string CustodyLine(TheaterBalance balance) =>
-            !balance.Known ? "UNOBSERVED"
-            : !balance.Contested ? "NO FRONT-RUNNER"
-            : NameOf(balance.LeaderHash) + " AHEAD";
-
-        private static float BalanceFraction(TheaterBalance balance)
-        {
-            if (!balance.Known) return 0f;
-            int total = Mathf.Max(1, balance.LeaderBases + balance.LoserBases + balance.NeutralBases);
-            return Mathf.Clamp01(balance.LeaderBases / (float)total);
-        }
-
-        /// <summary>Short faction tag from the name hash: the name itself, upper-cased.</summary>
-        private static string NameOf(int factionHash)
-        {
-            if (factionHash == 0) return "—";
-            foreach (FactionHQ hq in FactionRegistry.GetAllHQs())
-            {
-                string name = hq != null && hq.faction != null ? hq.faction.factionName : null;
-                if (string.IsNullOrEmpty(name)) continue;
-                if (unchecked((int)Deterministic.HashString(name)) == factionHash)
-                    return name.ToUpperInvariant();
-            }
-            return "—";
-        }
 
         private static string GlyphKind(int category) =>
             category == 1 ? EventGlyph.Political

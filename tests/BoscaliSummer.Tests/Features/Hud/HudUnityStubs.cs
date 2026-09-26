@@ -137,9 +137,7 @@ namespace BoscaliSummer.Runtime
         public struct CockpitStyle { public TMP_FontAsset Font; public Material FontMaterial; public Color Colour; }
         public struct Palette { public Color AllClear, Warning, Alert; }
         public static Palette Colours => new Palette { AllClear = Color.green, Warning = Color.yellow, Alert = Color.red };
-        public static float ObjectiveTextSize => 16;
         public static bool TryCockpit(out CockpitStyle style) { style = default; return false; }
-        public static bool TryWeaponPanel(out RectTransform panel) { panel = null; return false; }
         public static void Invalidate() { }
     }
 }

@@ -13,9 +13,6 @@ namespace BoscaliSummer.Features.Support.Presentation.Window
     {
         OpsDomain Domain { get; }
 
-        /// <summary>The only text the root shows for this room (its switcher notch).</summary>
-        string NotchLabel { get; }
-
         /// <summary>The length of the room's own entrance; the root only feeds it progress.</summary>
         float EntranceSeconds { get; }
 

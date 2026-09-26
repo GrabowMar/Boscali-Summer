@@ -4,6 +4,7 @@ using BoscaliSummer.Features.TheaterOps.Domain;
 using BoscaliSummer.Features.TheaterOps.Runtime;
 using BoscaliSummer.Runtime;
 using HarmonyLib;
+using NOAvionics;
 using UnityEngine;
 
 namespace BoscaliSummer.Features.TheaterOps.Patches
@@ -14,8 +15,8 @@ namespace BoscaliSummer.Features.TheaterOps.Patches
     /// no state of its own and vanilla behavior resumes the moment the priority is cleared:
     ///
     /// <list type="bullet">
-    /// <item>advance — an advancing ground vehicle, mobile artillery, or an idle aircraft
-    /// with no contact;</item>
+    /// <item>advance — a ground vehicle enrolled in a battle group (nothing else is
+    /// steered);</item>
     /// <item>delivery — the sort key FactionHQ uses to pick which depot or airbase delivers
     /// reinforcements.</item>
     /// </list>
@@ -34,6 +35,25 @@ namespace BoscaliSummer.Features.TheaterOps.Patches
             return service != null && hq != null && hq.faction != null &&
                    service.TryGetDirective(hq.faction.factionName, out directive);
         }
+
+        private static int wingFrame = -1;
+        private static int[] wingIds = Array.Empty<int>();
+
+        /// <summary>
+        /// Whether an aircraft flies in the local player's Wing Command wing. Reads the
+        /// published wing board once per frame and stops there when it is empty, so an AI
+        /// destination query never pays WingLink's reflective fallback.
+        /// </summary>
+        internal static bool IsWingMember(Aircraft aircraft)
+        {
+            int frame = Time.frameCount;
+            if (wingFrame != frame)
+            {
+                wingFrame = frame;
+                wingIds = PresenceBoard.GetInts(PresenceBoard.WingMemberIds);
+            }
+            return wingIds.Length > 0 && PresenceBoard.Contains(wingIds, aircraft.persistentID.GetHashCode());
+        }
     }
 
     [HarmonyPatch]
@@ -46,26 +66,19 @@ namespace BoscaliSummer.Features.TheaterOps.Patches
         [HarmonyPostfix]
         private static void Postfix(Unit unit, ref GlobalPosition destination, ref bool __result)
         {
-            TheaterPriorityService service = TheaterPriorityService.Active;
-            if (unit == null ||
-                !MissionPositionPriorityQuery.TryGetDirective(service, unit.NetworkHQ, out PriorityDirective directive))
-                return;
-            if (unit is Aircraft aircraft &&
-                (aircraft.Player != null || WingLink.IsWingMember(aircraft.persistentID.GetHashCode())))
-                return;
-            if (unit is GroundVehicle && GroundFrontService.Active?.HasRtsCommander() == true)
+            // Only vehicles enrolled in a battle group follow the effort. Unenrolled units and
+            // every aircraft keep vanilla's own answer: no more faction-wide pull to one point.
+            if (!(unit is GroundVehicle vehicle)) return;
+            if (GroundFrontService.Active?.HasRtsCommander() == true) return;
+            GroundFrontService front = GroundFrontService.Active;
+            if (front == null || !front.IsEnrolled(vehicle) ||
+                !MissionPositionPriorityQuery.TryGetDirective(TheaterPriorityService.Active, unit.NetworkHQ,
+                    out PriorityDirective directive))
                 return;
 
-            if (unit is GroundVehicle vehicle &&
-                GroundFrontService.Active != null &&
-                GroundFrontService.Active.TryGetDestination(vehicle, directive, out GlobalPosition frontDestination))
-            {
-                destination = frontDestination;
-                __result = true;
-                return;
-            }
-
-            destination = new GlobalPosition(directive.X, directive.Y, directive.Z);
+            destination = front.TryGetDestination(vehicle, directive, out GlobalPosition frontDestination)
+                ? frontDestination
+                : new GlobalPosition(directive.X, directive.Y, directive.Z);
             __result = true;
         }
 

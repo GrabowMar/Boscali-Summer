@@ -4,7 +4,7 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
 {
     /// <summary>
     /// Two-body circular-orbit and spherical-Earth viewing geometry. Pure double-precision
-    /// arithmetic with textbook constants, so a period, a horizon or an off-nadir angle the
+    /// arithmetic with textbook constants, so a slant range, a horizon or an off-nadir angle the
     /// console shows is the real number for that altitude, not a gameplay table.
     /// </summary>
     internal static class OrbitMath
@@ -15,24 +15,7 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
 
         public static double Radius(double altitude) => EarthRadius + Math.Max(0.0, altitude);
 
-        public static double Period(double altitude)
-        {
-            double r = Radius(altitude);
-            return 2.0 * Math.PI * Math.Sqrt(r * r * r / GravitationalParameter);
-        }
-
         public static double Velocity(double altitude) => Math.Sqrt(GravitationalParameter / Radius(altitude));
-
-        /// <summary>Speed of the sub-satellite point over a non-rotating Earth.</summary>
-        public static double GroundSpeed(double altitude) => Velocity(altitude) * EarthRadius / Radius(altitude);
-
-        /// <summary>Earth central angle from a ground point to the sub-satellite point at which
-        /// the satellite sits exactly at <paramref name="elevation"/> above the horizon.</summary>
-        public static double CentralAngleForElevation(double altitude, double elevation)
-        {
-            double ratio = EarthRadius * Math.Cos(elevation) / Radius(altitude);
-            return Math.Acos(Clamp(ratio, -1.0, 1.0)) - elevation;
-        }
 
         /// <summary>Elevation of the satellite seen from a ground point at the given central angle.</summary>
         public static double Elevation(double altitude, double centralAngle)

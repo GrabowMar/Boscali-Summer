@@ -13,7 +13,7 @@ namespace BoscaliSummer.Features.Support.Visuals
     /// 1. Initiates an immediate detonation flash, acoustic airburst snap, and primary flare bloom.
     /// 2. Continuously dispenses sequential mortar waves of authentic vanilla <c>IRFlare</c> pyrotechnics
     ///    over the full 15-second duration, keeping a thick canopy of glowing flares in the sky.
-    /// 3. Throughout the entire 15 seconds, actively monitors and completely misguides all IR-seeking missiles:
+    /// 3. Throughout the entire 15 seconds, actively monitors and completely misguides hostile IR-seeking missiles:
     ///    - Breaks tracking locks via <c>IRSeeker.LoseLock()</c>.
     ///    - Injects maximum optical/IR dazzle (<c>dazzleAmount = 1500f</c>).
     ///    - Continuously binds missile seekers onto active burning flares in the cluster.
@@ -49,7 +49,8 @@ namespace BoscaliSummer.Features.Support.Visuals
         private static readonly FieldInfo FlareDragField = AccessTools.Field(typeof(IRFlare), "drag");
         private static readonly FieldInfo FlareGravityField = AccessTools.Field(typeof(IRFlare), "gravityVector");
 
-        public static void TriggerBarrage(Vector3 impactPoint, float radius = 4000f, float duration = 15f, int initialFlares = 36)
+        public static void TriggerBarrage(Vector3 impactPoint, float radius = 4000f, float duration = 15f, int initialFlares = 36,
+            FactionHQ owner = null)
         {
             float now = Time.time;
 
@@ -74,7 +75,7 @@ namespace BoscaliSummer.Features.Support.Visuals
 
             if (GameManager.IsHeadless)
             {
-                MisguideVicinity(impactPoint, radius, null);
+                MisguideVicinity(impactPoint, radius, null, owner);
                 return;
             }
 
@@ -93,7 +94,7 @@ namespace BoscaliSummer.Features.Support.Visuals
                 if (oldest != null) Destroy(oldest.gameObject);
             }
             Live.Add(barrage);
-            barrage.StartCoroutine(barrage.BarrageRoutine(impactPoint, radius, duration, initialFlares));
+            barrage.StartCoroutine(barrage.BarrageRoutine(impactPoint, radius, duration, initialFlares, owner));
         }
 
         public static void Reset()
@@ -115,7 +116,7 @@ namespace BoscaliSummer.Features.Support.Visuals
             Live.Remove(this);
         }
 
-        private IEnumerator BarrageRoutine(Vector3 impactPoint, float radius, float duration, int initialFlares)
+        private IEnumerator BarrageRoutine(Vector3 impactPoint, float radius, float duration, int initialFlares, FactionHQ owner)
         {
             EnsureAudio();
             var bloom = SupportParticles.Layer(transform, "Flare ignition bloom", true, 96, 2f, 16f, new Color(3f, 1.7f, 0.4f));
@@ -212,7 +213,7 @@ namespace BoscaliSummer.Features.Support.Visuals
                 if (Time.time >= nextMisguideTime)
                 {
                     nextMisguideTime = Time.time + 0.1f;
-                    MisguideVicinity(impactPoint, radius, activeSources);
+                    MisguideVicinity(impactPoint, radius, activeSources, owner);
                 }
 
                 yield return null;
@@ -232,7 +233,7 @@ namespace BoscaliSummer.Features.Support.Visuals
 
                 if (activeSources.Count > 0)
                 {
-                    MisguideVicinity(impactPoint, radius, activeSources);
+                    MisguideVicinity(impactPoint, radius, activeSources, owner);
                 }
 
                 yield return new WaitForSeconds(0.1f);
@@ -344,7 +345,7 @@ namespace BoscaliSummer.Features.Support.Visuals
             }
         }
 
-        private static void MisguideVicinity(Vector3 impactPoint, float radius, List<IRSource> flareSources)
+        private static void MisguideVicinity(Vector3 impactPoint, float radius, List<IRSource> flareSources, FactionHQ owner)
         {
             float radiusSquared = radius * radius;
             var allUnits = UnitRegistry.allUnits;
@@ -358,6 +359,8 @@ namespace BoscaliSummer.Features.Support.Visuals
                 // 1. Check for in-flight missiles
                 if (unit is Missile missile)
                 {
+                    // The barrage protects its own faction: friendly missiles fly through.
+                    if (owner != null && missile.NetworkHQ == owner) continue;
                     float missileDistSq = (missile.transform.position - impactPoint).sqrMagnitude;
                     bool targetInRange = false;
 

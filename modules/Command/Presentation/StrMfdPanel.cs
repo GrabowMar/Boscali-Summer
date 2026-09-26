@@ -49,6 +49,9 @@ namespace BoscaliSummer.Features.Command.Presentation
         private const float Width = AvTokens.PanelWidth;
         private const float RefreshInterval = 0.25f;
 
+        /// <summary>The known-AD line asks Intel at 1 Hz, and only while the SA page shows.</summary>
+        private const float KnownAdInterval = 1f;
+
         private const int TabSa = 0;
         private const int TabCoc = 1;
         private const int TabCmd = 2;
@@ -87,7 +90,7 @@ namespace BoscaliSummer.Features.Command.Presentation
         private const float SaFixedHeight =
             HeaderStep + 18f + 20f + 16f + 14f +                            // AIR PICTURE
             HeaderStep + 16f + 5f * SortiePitch + 6f +                       // SORTIE BOARD
-            HeaderStep + 3f * KvPitch + 4f +                                 // SURFACE & INFRASTRUCTURE
+            HeaderStep + 4f * KvPitch + 4f +                                 // SURFACE & INFRASTRUCTURE
             HeaderStep + 12f + 4f * LegendPitch + 6f + 2f * KvPitch + 4f +   // SECTOR CONTROL
             HeaderStep + 16f + 2f;                                           // CONTESTED GROUND
 
@@ -116,6 +119,7 @@ namespace BoscaliSummer.Features.Command.Presentation
         private ITheaterPriorityView theaterPriority;
         private ITheaterLogisticsView theaterLogistics;
         private ITheaterOperationsView theaterOperations;
+        private IThreatPicture threatPicture;
 
         // ---- Screen ----------------------------------------------------------------------
 
@@ -140,6 +144,9 @@ namespace BoscaliSummer.Features.Command.Presentation
         private TMP_Text groundValue;
         private TMP_Text airbaseValue;
         private TMP_Text radarValue;
+        private TMP_Text knownAdValue;
+        private float nextKnownAdRefresh;
+        private readonly AirDefenceRing[] knownAdRings = new AirDefenceRing[ThreatPictureLimits.MaximumRings];
 
         // ---- FRONT page ------------------------------------------------------------------
 
@@ -183,13 +190,15 @@ namespace BoscaliSummer.Features.Command.Presentation
             theaterPriority = null;
             theaterLogistics = null;
             theaterOperations = null;
+            threatPicture = null;
 
             defconLabel = threatLabel = airCountLabel = sortieNote = null;
             airBarRoot = null;
             airFill = null;
             saAlertRail = null;
             Array.Clear(sortieRows, 0, sortieRows.Length);
-            groundValue = airbaseValue = radarValue = null;
+            groundValue = airbaseValue = radarValue = knownAdValue = null;
+            nextKnownAdRefresh = 0f;
 
             frontRoot = null;
             Array.Clear(controlBarFill, 0, controlBarFill.Length);
@@ -329,6 +338,7 @@ namespace BoscaliSummer.Features.Command.Presentation
             ModServices.TryGet(out theaterPriority);
             ModServices.TryGet(out theaterLogistics);
             ModServices.TryGet(out theaterOperations);
+            ModServices.TryGet(out threatPicture);
 
             shell = AvScreen.Build(
                 content, "STR",
@@ -772,6 +782,18 @@ namespace BoscaliSummer.Features.Command.Presentation
 
             // "SAMS" was this number's old label. It is the friendly radar list, so it says so.
             radarValue = KeyValue(parent, x, y, width, "FRIENDLY RADARS ON NET");
+            y -= KvPitch;
+
+            // Fog of war, not truth: only sites this faction has tracked, been shot at from, or
+            // was given as pre-war intel. The figure is long, so the key takes the narrower share
+            // and the figure shrinks to fit rather than ellipsising a reading.
+            AvStyled.Label(parent, new Rect(x, y, width * 0.3f, 16f), "KNOWN ENEMY AD", "kv-key");
+            knownAdValue = AvStyled.Label(parent, new Rect(x + width * 0.3f, y, width * 0.7f, 16f), "—",
+                                          "kv-value", align: TextAlignmentOptions.MidlineRight);
+            knownAdValue.enableWordWrapping = false;
+            knownAdValue.fontSizeMax = knownAdValue.fontSize;
+            knownAdValue.fontSizeMin = 9f;
+            knownAdValue.enableAutoSizing = true;
             return y - KvPitch - 4f;
         }
 
@@ -865,6 +887,22 @@ namespace BoscaliSummer.Features.Command.Presentation
                 : AvTheme.TextPrimary;
 
             radarValue.text = GameAccess.HqSensorsAvailable ? state.FriendlyRadarCount.ToString() : "—";
+        }
+
+        /// <summary>
+        /// The one SA line that reads Intel: this faction's known enemy air defence, at 1 Hz and
+        /// only while the SA page shows. Asking is what makes a client build its own picture.
+        /// </summary>
+        private void RefreshKnownAirDefence(FactionHQ hq)
+        {
+            if (knownAdValue == null || Time.unscaledTime < nextKnownAdRefresh) return;
+            nextKnownAdRefresh = Time.unscaledTime + KnownAdInterval;
+            if (threatPicture == null) ModServices.TryGet(out threatPicture);
+            int observer = hq != null ? hq.GetInstanceID() : 0;
+            bool ready = hq != null && threatPicture != null && threatPicture.IsReady(observer);
+            int count = ready ? threatPicture.CopyAirDefence(observer, knownAdRings) : 0;
+            knownAdValue.text = TheaterReadout.KnownAirDefence(ready, knownAdRings, count);
+            knownAdValue.color = ready ? AvTheme.TextPrimary : AvTheme.Disabled;
         }
 
         // ---- Frontline (merged into SA) --------------------------------------------------
@@ -1067,7 +1105,10 @@ namespace BoscaliSummer.Features.Command.Presentation
 
             switch (shell.Page)
             {
-                case TabSa: RefreshSa(state); break;
+                case TabSa:
+                    RefreshSa(state);
+                    RefreshKnownAirDefence(hq);
+                    break;
                 case TabCoc: RefreshCoc(); break;
                 case TabCmd: RefreshCmd(); break;
             }

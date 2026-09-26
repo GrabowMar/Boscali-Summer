@@ -21,8 +21,7 @@ namespace BoscaliSummer.Runtime
         private static AccessTools.FieldRef<MusicManager, AudioSource> fadeMusicSourceRef;
         private static AccessTools.FieldRef<FactionHQ, List<Radar>> hqRadarsRef;
         private static AccessTools.FieldRef<AIPilotCombatModes, Unit> aiCurrentTargetRef;
-        private static AccessTools.FieldRef<AIPilotCombatModes, GlobalPosition> aiTargetKnownPosRef;
-        private static FieldInfo aiAttackModeField;
+        private static AccessTools.FieldRef<Aircraft, Renderer[]> cockpitRenderersRef;
 
         public static bool MapBuildingHitPointsAvailable { get; private set; }
         public static bool MapBuildingSetBuildingsAvailable { get; private set; }
@@ -30,6 +29,7 @@ namespace BoscaliSummer.Runtime
         public static bool MusicSourcesAvailable { get; private set; }
         public static bool HqSensorsAvailable { get; private set; }
         public static bool AiPilotCombatAvailable { get; private set; }
+        public static bool CockpitRenderersAvailable { get; private set; }
 
         public static void Initialise()
         {
@@ -99,14 +99,23 @@ namespace BoscaliSummer.Runtime
             try
             {
                 aiCurrentTargetRef = FieldRef<AIPilotCombatModes, Unit>("currentTarget");
-                aiTargetKnownPosRef = FieldRef<AIPilotCombatModes, GlobalPosition>("targetKnownPosition");
-                aiAttackModeField = AccessTools.Field(typeof(AIPilotCombatModes), "attackMode");
                 AiPilotCombatAvailable = true;
             }
             catch (Exception e)
             {
                 AiPilotCombatAvailable = false;
                 Plugin.Logger?.LogWarning("AI pilot combat state access unavailable: " + e.Message);
+            }
+
+            try
+            {
+                cockpitRenderersRef = FieldRef<Aircraft, Renderer[]>("cockpitRenderers");
+                CockpitRenderersAvailable = true;
+            }
+            catch (Exception e)
+            {
+                CockpitRenderersAvailable = false;
+                Plugin.Logger?.LogWarning("Cockpit renderer access unavailable: " + e.Message);
             }
         }
 
@@ -150,18 +159,13 @@ namespace BoscaliSummer.Runtime
         public static Unit GetAiCurrentTarget(AIPilotCombatModes modes) =>
             aiCurrentTargetRef == null || modes == null ? null : aiCurrentTargetRef(modes);
 
-        public static GlobalPosition GetAiTargetKnownPosition(AIPilotCombatModes modes) =>
-            aiTargetKnownPosRef == null || modes == null ? default : aiTargetKnownPosRef(modes);
-
-        public static int GetAiAttackMode(AIPilotCombatModes modes)
-        {
-            if (aiAttackModeField != null && modes != null)
-            {
-                object val = aiAttackModeField.GetValue(modes);
-                if (val != null) return (int)val;
-            }
-            return 3;
-        }
+        /// <summary>
+        /// The prefab-assigned first-person cockpit renderers (toggled by
+        /// <c>Aircraft.SetCockpitRenderers</c>), or null when the seam is unavailable.
+        /// Readable even while disabled, so the glow can bind outside cockpit view.
+        /// </summary>
+        public static Renderer[] GetCockpitRenderers(Aircraft aircraft) =>
+            cockpitRenderersRef == null || aircraft == null ? null : cockpitRenderersRef(aircraft);
 
         public static bool IsServer()
         {
@@ -169,10 +173,14 @@ namespace BoscaliSummer.Runtime
             catch { return false; }
         }
 
-        public static bool IsSoloAuthority()
+        /// <summary>The local player's faction HQ, only once it has a faction assigned.</summary>
+        public static bool TryGetLocalFaction(out FactionHQ hq)
         {
-            try { return IsServer() && !NuclearOption.Networking.NetworkManagerNuclearOption.HasOtherPlayers(out _); }
-            catch { return false; }
+            hq = null;
+            if (!GameManager.GetLocalHQ(out FactionHQ local) || local == null || local.faction == null)
+                return false;
+            hq = local;
+            return true;
         }
 
         private static AccessTools.FieldRef<TInstance, TField> FieldRef<TInstance, TField>(string name)

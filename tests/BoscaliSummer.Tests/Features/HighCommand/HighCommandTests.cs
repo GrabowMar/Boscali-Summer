@@ -51,7 +51,6 @@ namespace BoscaliSummer.Tests.Features.HighCommand
                 TestAssert.That(bio.Length > 0 && bio.Length <= CommanderGenerator.MaxBio, "bio stays bounded");
                 TestAssert.That(bio.IndexOf('\n') < 0 && bio.IndexOf('\r') < 0, "bio is a flat string");
                 TestAssert.That((person.Traits & ~(CommandTrait)CommandTraits.All) == 0, "traits stay in the catalogue");
-                TestAssert.That(CommandTraits.Labels(person.Traits).Length <= 64, "trait labels fit the dossier");
                 TestAssert.That(CommandTraits.BonusLine(person.Traits).Length <= 128, "the bonus line fits the card");
             }
 

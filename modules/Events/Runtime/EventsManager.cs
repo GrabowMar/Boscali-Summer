@@ -32,7 +32,6 @@ namespace BoscaliSummer.Features.Events.Runtime
 
     internal readonly struct EventDecisionQuote
     {
-        public EventResponseKind Kind { get; }
         public string Label { get; }
         public int Cost { get; }
         public string Unit { get; }
@@ -41,10 +40,10 @@ namespace BoscaliSummer.Features.Events.Runtime
         public string Reason { get; }
         public bool Shared { get; }
 
-        public EventDecisionQuote(EventResponseKind kind, string label, int cost, string unit,
+        public EventDecisionQuote(string label, int cost, string unit,
             float effectiveMultiplier, bool available, string reason, bool shared)
         {
-            Kind = kind; Label = label; Cost = cost; Unit = unit;
+            Label = label; Cost = cost; Unit = unit;
             EffectiveMultiplier = effectiveMultiplier; Available = available;
             Reason = reason; Shared = shared;
         }
@@ -244,9 +243,6 @@ namespace BoscaliSummer.Features.Events.Runtime
 
         // ---- Response state ----------------------------------------------------------------
 
-        /// <summary>Allocation this player would pay to respond to the active event; 0 = none.</summary>
-        internal int ResponseCost => currentIndex < 0 ? 0 : EventSelector.ResponseCost(LocalBaseMultiplier);
-
         internal EventResponseKind LocalResponse
         {
             get
@@ -261,10 +257,6 @@ namespace BoscaliSummer.Features.Events.Runtime
         internal EventResponseKind LocalFactionResponse =>
             factionResponses.TryGetValue(LocalFactionHash(), out byte kind)
                 ? (EventResponseKind)kind : EventResponseKind.None;
-
-        internal bool CanRespond => currentIndex >= 0 &&
-            LocalResponse == EventResponseKind.None &&
-            EventSelector.ResponseKind(LocalBaseMultiplier) != EventResponseKind.None;
 
         internal EventDecisionQuote Quote(EventResponseKind kind)
         {
@@ -312,11 +304,9 @@ namespace BoscaliSummer.Features.Events.Runtime
                 (!GameManager.GetLocalPlayer<Player>(out Player local) ||
                  local == null || local.Allocation + 0.001f < cost)) reason = "INSUFFICIENT ALLOCATION";
             bool available = reason.Length == 0 || reason == "HOST CHECKS FACTION CONTRACT";
-            return new EventDecisionQuote(kind, ResponseLabel(kind), cost, unit,
+            return new EventDecisionQuote(ResponseLabel(kind), cost, unit,
                 EventSelector.ApplyResponse(multiplier, kind), available, reason, shared);
         }
-
-        internal void RequestResponse() => RequestResponse(EventSelector.ResponseKind(LocalBaseMultiplier));
 
         internal void RequestResponse(EventResponseKind kind)
         {

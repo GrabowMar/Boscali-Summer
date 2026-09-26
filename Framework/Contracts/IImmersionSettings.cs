@@ -12,5 +12,8 @@ namespace BoscaliSummer.Framework.Contracts
         bool ExtraShakeEnabled { get; set; }
         float ShakeStrength { get; set; }
         bool SunGlareEnabled { get; set; }
+        bool MfdGlowEnabled { get; set; }
+        bool AirframeAudioEnabled { get; set; }
+        bool SurfaceImmersionEnabled { get; set; }
     }
 }

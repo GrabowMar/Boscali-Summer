@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using UnityEngine;
 
 namespace BoscaliSummer.Features.Support.Presentation.Window
@@ -6,8 +5,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Window
     /// <summary>
     /// Procedural sprites for the OPS window and its rooms. Created once, cached, never written to
     /// disk. Every texture is white with alpha so the room tints it with its own stylesheet ink.
-    /// The ring, disc and pulse sprites already owned by <see cref="SupportTacticalIcons"/> are
-    /// reused rather than drawn twice.
+    /// The ring sprites already owned by <see cref="SupportTacticalIcons"/> are reused rather than
+    /// drawn twice.
     /// </summary>
     internal static class OpsSprites
     {
@@ -64,9 +63,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Window
         public static Sprite Atlas { get; private set; }
 
         public static int Bytes { get; private set; }
-        public static int TextureCount => textures.Count;
 
-        private static readonly List<Texture2D> textures = new List<Texture2D>(40);
         private static readonly Sprite[] glyphs = new Sprite[G.Count];
         private static bool ready;
 
@@ -122,10 +119,6 @@ namespace BoscaliSummer.Features.Support.Presentation.Window
 
         public static Sprite Ring => SupportTacticalIcons.RingSprite;
         public static Sprite DottedRing => SupportTacticalIcons.DottedRingSprite;
-        public static Sprite Disc32 => SupportTacticalIcons.CoverageDiscSprite;
-        public static Sprite Pulse => SupportTacticalIcons.DataPulseSprite;
-        public static Sprite Sweep => SupportTacticalIcons.SweepWedgeSprite;
-        public static Sprite RadialFill => SupportTacticalIcons.RadialFillSprite;
 
         // ---- Plumbing -------------------------------------------------------------------------
 
@@ -138,7 +131,6 @@ namespace BoscaliSummer.Features.Support.Presentation.Window
             texture.filterMode = FilterMode.Bilinear;
             texture.Apply(false, true);
             Bytes += texture.width * texture.height * 4;
-            textures.Add(texture);
             var sprite = Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height),
                 new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect, border);
             sprite.hideFlags = HideFlags.HideAndDontSave;

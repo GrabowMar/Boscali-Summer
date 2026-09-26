@@ -26,6 +26,7 @@ namespace BoscaliSummer.Tests.Features.Command
             RosterDrawsTheChainOfCommand();
             RosterSurvivesAMissingParent();
             OutcomeWordsMatchTheStaffLog();
+            KnownAirDefenceReadsHonestly();
         }
 
         private static void RosterDrawsTheChainOfCommand()
@@ -232,6 +233,30 @@ namespace BoscaliSummer.Tests.Features.Command
             TestAssert.That(TheaterReadout.OffensiveOutcomeWord(TheaterOperationOutcome.Cancelled) == "CANCELLED", "a stand-down reads cancelled");
             TestAssert.That(TheaterReadout.OffensiveOutcomeWord(TheaterOperationOutcome.None) == "CONCLUDED", "an unmarked end reads concluded");
         }
+
+        private static void KnownAirDefenceReadsHonestly()
+        {
+            TestAssert.That(TheaterReadout.KnownAirDefence(false, new AirDefenceRing[4], 0) == "—",
+                "no ready picture reads as a dash");
+            TestAssert.That(TheaterReadout.KnownAirDefence(true, new AirDefenceRing[4], 0) == "NONE KNOWN",
+                "a ready picture with nothing in it says so in words, not zeroes");
+
+            AirDefenceRing[] rings =
+            {
+                Site(1, AirDefenceKind.RadarSam, RingSource.PreWar, false, false),
+                Site(1, AirDefenceKind.RadarSam, RingSource.Tracked, true, false),
+                Site(2, AirDefenceKind.IrSam, RingSource.PreWar, false, false),
+                Site(3, AirDefenceKind.Gun, RingSource.Tracked, true, true)
+            };
+            TestAssert.That(TheaterReadout.KnownAirDefence(true, rings, rings.Length) == "3 SITES · 1 RADAR (1 PRE-WAR, 1 STALE)",
+                "two cones at one site are one site; a site with a tracked member is not pre-war");
+            TestAssert.That(TheaterReadout.KnownAirDefence(true, rings, 1) == "1 SITE · 1 RADAR (1 PRE-WAR, 0 STALE)",
+                "one site reads singular");
+        }
+
+        private static AirDefenceRing Site(int site, AirDefenceKind kind, RingSource source, bool confirmed, bool stale) =>
+            new AirDefenceRing(site * 10000f, 0f, 15000f, 2f, 20000f, kind, kind == AirDefenceKind.RadarSam, false,
+                source, confirmed, 10f, stale, 1, site, 0);
 
         private static bool Near(float a, float b) => a - b < 0.0005f && b - a < 0.0005f;
     }

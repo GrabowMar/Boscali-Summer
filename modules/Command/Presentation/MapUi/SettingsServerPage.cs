@@ -120,7 +120,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
         private static string RowReason(HostSettingView row) =>
             !HostAuthority()
-                ? "Host only. Only the server host can change how the mission plays."
+                ? "Host only. This is the host's value; only the host can change how the mission plays."
                 : row.Reason ?? row.Help;
 
         private void RefreshTasking()

@@ -170,24 +170,6 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             }
         }
 
-        public static string Outcome(IncidentOutcome outcome)
-        {
-            switch (outcome)
-            {
-                case IncidentOutcome.Blocked: return "BLOCKED";
-                case IncidentOutcome.Exposed: return "NETWORK EXPOSED";
-                case IncidentOutcome.Contained: return "CONTAINED";
-                case IncidentOutcome.Traced: return "TRACED · FOOTHOLD";
-                case IncidentOutcome.Withdrew: return "ATTACKER WITHDREW";
-                case IncidentOutcome.Broken: return "BURNED THROUGH";
-                case IncidentOutcome.Faded: return "ENDED";
-                default: return "ACTIVE";
-            }
-        }
-
-        /// <summary>A good outcome for the defender; the model owns the rule.</summary>
-        public static bool Won(IncidentOutcome outcome) => CyberNetwork.Won(outcome);
-
         public static string Phase(CampaignPhase phase)
         {
             switch (phase)

@@ -73,7 +73,6 @@ namespace BoscaliSummer.Features.TheaterOps.Domain
     {
         public bool OpenOffensive { get; }
         public string TargetKey { get; }
-        public string TargetLabel { get; }
         public int Waves { get; }
         public string EffortKey { get; }
         public bool ClearEffort { get; }
@@ -90,13 +89,12 @@ namespace BoscaliSummer.Features.TheaterOps.Domain
         public string[] Log { get; }
 
         public DirectorOrders(
-            bool openOffensive, string targetKey, string targetLabel, int waves,
+            bool openOffensive, string targetKey, int waves,
             string effortKey, bool clearEffort, bool effortIsDefense,
             string defenseKey, string defenseLabel, string preferredKey, string[] log)
         {
             OpenOffensive = openOffensive;
             TargetKey = targetKey;
-            TargetLabel = targetLabel;
             Waves = waves;
             EffortKey = effortKey;
             ClearEffort = clearEffort;
@@ -166,13 +164,15 @@ namespace BoscaliSummer.Features.TheaterOps.Domain
             IReadOnlyList<ObjectiveRead> objectives = assessment.Objectives;
             if (objectives == null || objectives.Count == 0)
                 return new DirectorOrders(
-                    false, null, null, 0, null, false, false, null, null, null, log.ToArray());
+                    false, null, 0, null, false, false, null, null, null, log.ToArray());
 
             InfluenceState influence = assessment.Influence;
             float stance = influence != null ? influence.Stance : InfluenceState.DefaultStance;
             bool hold = influence != null && influence.HoldOffense;
             float reserve = influence != null ? influence.ReserveFloor : 0f;
-            float maxEscrow = influence != null ? influence.MaxEscrowPerPlan : InfluenceState.DefaultMaxEscrow;
+            float maxEscrow = influence != null ? influence.MaxEscrowPerPlan
+                : Math.Max(0f, assessment.OverheadCost) +
+                  InfluenceState.DefaultEscrowWaves * Math.Max(0f, assessment.WaveBudget);
 
             string bestKey = null;
             string bestLabel = null;
@@ -308,7 +308,7 @@ namespace BoscaliSummer.Features.TheaterOps.Domain
                 log.Add("EFFORT RELEASED");
 
             return new DirectorOrders(
-                open, open ? bestKey : null, open ? bestLabel : null, waves,
+                open, open ? bestKey : null, waves,
                 wantsEffort ? effortKey : null, clearEffort, effortIsDefense,
                 defenseKey, defenseLabel, bestKey, log.ToArray());
         }

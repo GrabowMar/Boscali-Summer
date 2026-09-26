@@ -35,6 +35,7 @@ namespace BoscaliSummer
             public string Category;
             public string DispName;
             public int? Order;
+            public bool? ReadOnly;
         }
 
         /// <summary>The group the master switches are listed under, ahead of their own sections.</summary>
@@ -60,9 +61,11 @@ namespace BoscaliSummer
                 settings.Support.Enabled,
                 settings.Command.Enabled,
                 settings.HighCommand.Enabled,
+                settings.Intel.Enabled,
                 settings.TheaterOps.Enabled,
                 settings.DynamicOperations.Enabled,
                 settings.Events.Enabled,
+                settings.Comms.Enabled,
                 settings.Trenches.Enabled,
                 settings.UrbanCombat.GarrisonsEnabled,
                 settings.FireAndDestruction.FiresEnabled,
@@ -71,6 +74,7 @@ namespace BoscaliSummer
                 settings.Autopilot.Enabled,
                 settings.QoL.Enabled,
                 settings.Campaign.Enabled,
+                settings.Weather.Enabled,
                 settings.Visuals.Enabled,
                 settings.Immersion.Enabled
             };
@@ -80,9 +84,11 @@ namespace BoscaliSummer
                 "Support call-ins and orbital platforms",
                 "Command map console",
                 "Chain of command",
+                "Threat picture (AI intel)",
                 "Theater priority",
                 "Dynamic contracts",
                 "World events",
+                "Map comms, polls and games",
                 "Trenches and fortifications",
                 "Zone garrisons",
                 "Fire ignition and spread",
@@ -91,6 +97,7 @@ namespace BoscaliSummer
                 "Autopilot",
                 "Quality of life",
                 "Campaign mission install",
+                "Dynamic weather and ENV screen",
                 "Visual enhancements and post-processing",
                 "Cockpit feel: head motion, shake, sun glare"
             };
@@ -139,6 +146,26 @@ namespace BoscaliSummer
                 }
 
                 Tag(description, entry, hint);
+            }
+        }
+
+        /// <summary>
+        /// Locks or unlocks entries in the window while a server's values stand in for them,
+        /// so a client cannot edit a value that the session would overwrite and that the host
+        /// ignores anyway. Entries the window was never told about are left alone.
+        /// </summary>
+        public static void SetReadOnly(ConfigEntryBase[] entries, bool readOnly)
+        {
+            for (int i = 0; i < entries.Length; i++)
+            {
+                object[] tags = entries[i]?.Description?.Tags;
+                if (tags == null) continue;
+                for (int t = tags.Length - 1; t >= 0; t--)
+                {
+                    if (!(tags[t] is ConfigurationManagerAttributes hint)) continue;
+                    hint.ReadOnly = readOnly ? true : (bool?)null;
+                    break;
+                }
             }
         }
 

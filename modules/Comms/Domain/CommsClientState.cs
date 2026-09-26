@@ -13,6 +13,7 @@ namespace BoscaliSummer.Features.Comms.Domain
         public CommsTone Tone;
         public CommsChannel Channel;
         public string Text;
+        public ulong RematchPlayer;
 
         /// <summary>A position the line refers to, for the log's GO TO; NaN when it has none.</summary>
         public float X = float.NaN;
@@ -24,11 +25,20 @@ namespace BoscaliSummer.Features.Comms.Domain
     /// <summary>Something that just arrived and may deserve a HUD notice.</summary>
     internal struct CommsArrival
     {
-        public ulong Author;
         public CommsTone Tone;
         public string Text;
+
+        /// <summary>The second line; the manager writes bearing and range instead when <see cref="HasPosition"/>.</summary>
         public string Detail;
-        public bool Ping;
+
+        /// <summary>Worth the tick: a teammate's ping or an urgent call, never chatter or the other side.</summary>
+        public bool Sound;
+
+        /// <summary>World position the notice is about; NaN when it has none.</summary>
+        public float X;
+        public float Z;
+
+        public bool HasPosition => !float.IsNaN(X) && !float.IsNaN(Z);
     }
 
     /// <summary>A map hunt as a peer sees it: open with a clock and a guess count, then revealed.</summary>
@@ -37,7 +47,6 @@ namespace BoscaliSummer.Features.Comms.Domain
         public uint Id;
         public ulong Author;
         public string AuthorName;
-        public CommsChannel Channel;
         public float Ends;
         public int GuessCount;
         public bool Revealed;
@@ -58,12 +67,10 @@ namespace BoscaliSummer.Features.Comms.Domain
 
     internal struct HuntPlacingView
     {
-        public ulong Player;
         public string Name;
         public float X;
         public float Z;
         public int Metres;
-        public int Points;
     }
 
     /// <summary>A rock-paper-scissors challenge as a peer sees it.</summary>
@@ -72,8 +79,21 @@ namespace BoscaliSummer.Features.Comms.Domain
         public uint Id;
         public ulong Challenger;
         public string ChallengerName;
-        public CommsChannel Channel;
+        public ulong TargetPlayer;
         public float Expires;
+    }
+
+    /// <summary>Small, local recap of duels witnessed during this mission.</summary>
+    internal sealed class RivalryView
+    {
+        public ulong First;
+        public ulong Second;
+        public string FirstName;
+        public string SecondName;
+        public int FirstWins;
+        public int SecondWins;
+        public int Draws;
+        public int Streak;
     }
 
     /// <summary>
@@ -89,14 +109,23 @@ namespace BoscaliSummer.Features.Comms.Domain
         public const float RevealSeconds = 40f;
         public const float ClosedPollSeconds = 90f;
 
+        /// <summary>How long after a map or cockpit request a refusal also goes to the HUD.</summary>
+        public const float RefusalWatchSeconds = 4f;
+
+        /// <summary>How old a replayed item pretends to be: past its pulse, so a resync never re-pulses the map.</summary>
+        public const float ReplayedAgeSeconds = 3600f;
+
         private readonly List<CommsPoll> polls = new List<CommsPoll>();
         private readonly List<DuelView> duels = new List<DuelView>();
         private readonly List<HuntView> hunts = new List<HuntView>();
         private readonly List<CommsFeedLine> feed = new List<CommsFeedLine>();
+        private readonly List<RivalryView> rivalries = new List<RivalryView>();
         private readonly List<CommsArrival> arrivals = new List<CommsArrival>();
         private readonly HashSet<ulong> muted = new HashSet<ulong>();
         private readonly Dictionary<ulong, string> seen = new Dictionary<ulong, string>();
         private readonly Dictionary<uint, float> pollClosedAt = new Dictionary<uint, float>();
+        private readonly Dictionary<uint, int> pendingVotes = new Dictionary<uint, int>();
+        private float refusalWatchUntil = float.NegativeInfinity;
         private bool pendingHide;
         private float pendingHideX;
         private float pendingHideZ;
@@ -106,6 +135,9 @@ namespace BoscaliSummer.Features.Comms.Domain
 
         /// <summary>This peer's own id; posts from it make no HUD noise.</summary>
         public ulong LocalId;
+
+        /// <summary>This peer's side; an ALL post from any other side is announced as such, quietly.</summary>
+        public int LocalFaction;
 
         public string Notice { get; private set; }
         public bool NoticeIsError { get; private set; }
@@ -118,6 +150,9 @@ namespace BoscaliSummer.Features.Comms.Domain
         public IReadOnlyList<DuelView> Duels => duels;
         public IReadOnlyList<HuntView> Hunts => hunts;
         public IReadOnlyList<CommsFeedLine> Feed => feed;
+        public IReadOnlyList<RivalryView> Rivalries => rivalries;
+        public int BestHuntMetres { get; private set; } = int.MaxValue;
+        public int HuntWins { get; private set; }
 
         /// <summary>Players this peer has heard from, by id, for the mute list.</summary>
         public IReadOnlyDictionary<ulong, string> Seen => seen;
@@ -141,12 +176,39 @@ namespace BoscaliSummer.Features.Comms.Domain
             duels.Clear();
             hunts.Clear();
             feed.Clear();
+            rivalries.Clear();
+            BestHuntMetres = int.MaxValue;
+            HuntWins = 0;
             arrivals.Clear();
             seen.Clear();
             pollClosedAt.Clear();
+            pendingVotes.Clear();
+            refusalWatchUntil = float.NegativeInfinity;
             Notice = null;
             NoticeAt = float.NegativeInfinity;
             Revision++;
+        }
+
+        /// <summary>
+        /// This player changed sides: drop everything the old side could see now, rather than
+        /// leaving its marks up until the new side's snapshot lands. The log stays; it is a
+        /// record of what was heard.
+        /// </summary>
+        public void ForgetSide()
+        {
+            Board.Clear();
+            ForgetGames();
+            Revision++;
+        }
+
+        private void ForgetGames()
+        {
+            polls.Clear();
+            duels.Clear();
+            pollClosedAt.Clear();
+            pendingVotes.Clear();
+            for (int i = hunts.Count - 1; i >= 0; i--)
+                if (!hunts[i].Revealed) hunts.RemoveAt(i);
         }
 
         /// <summary>Take the arrivals gathered since the last call.</summary>
@@ -196,14 +258,7 @@ namespace BoscaliSummer.Features.Comms.Domain
                     break;
                 case CommsEvent.Reset:
                     Board.Clear();
-                    if ((e.Flags & CommsFlags.Snapshot) != 0)
-                    {
-                        polls.Clear();
-                        duels.Clear();
-                        pollClosedAt.Clear();
-                        for (int i = hunts.Count - 1; i >= 0; i--)
-                            if (!hunts[i].Revealed) hunts.RemoveAt(i);
-                    }
+                    if ((e.Flags & CommsFlags.Snapshot) != 0) ForgetGames();
                     Revision++;
                     break;
                 case CommsEvent.Feed: ApplyFeed(e, now); break;
@@ -211,25 +266,36 @@ namespace BoscaliSummer.Features.Comms.Domain
                 case CommsEvent.Rps: ApplyDuel(e, now); break;
                 case CommsEvent.Hunt: ApplyHunt(e, now); break;
                 case CommsEvent.Scores: ApplyScores(e); break;
-                case CommsEvent.Notice:
-                    SetNotice(e.Text, (e.Flags & CommsFlags.Self) == 0, now);
-                    break;
+                case CommsEvent.Notice: ApplyNotice(e, now); break;
             }
         }
 
-        /// <summary>A local message for the status strip: a refusal the peer made itself, or a tip.</summary>
-        public void SetNotice(string text, bool error, float now)
+        /// <summary>
+        /// A local message for the status strip: a refusal the peer made itself, or a tip. A
+        /// refusal of something done on the map or in the cockpit also goes to the HUD, where
+        /// the player is looking.
+        /// </summary>
+        public void SetNotice(string text, bool error, float now, bool hud = false)
         {
             Notice = CommsText.Clean(text, 60);
             NoticeIsError = error;
             NoticeAt = now;
+            if (hud && error && Notice.Length > 0) Arrive(0UL, CommsTone.Caution, "COMMS · " + Notice, null, sound: false);
         }
 
-        /// <summary>Remember this peer's choice at click time; the host's tally follows.</summary>
+        /// <summary>A map or cockpit request just went up: a refusal in the next few seconds belongs on the HUD.</summary>
+        public void WatchRefusal(float now) => refusalWatchUntil = now + RefusalWatchSeconds;
+
+        /// <summary>
+        /// Remember this peer's choice at click time; the host's tally follows. The choice it
+        /// replaced is kept until the host has had its say, so a refused vote springs back.
+        /// </summary>
         public void NoteLocalVote(uint pollId, int option)
         {
-            for (int i = 0; i < polls.Count; i++)
-                if (polls[i].Id == pollId && !polls[i].Closed) polls[i].LocalVote = option;
+            CommsPoll poll = FindPoll(pollId);
+            if (poll == null || poll.Closed) return;
+            pendingVotes[pollId] = poll.LocalVote;
+            poll.LocalVote = option;
             Revision++;
         }
 
@@ -268,25 +334,30 @@ namespace BoscaliSummer.Features.Comms.Domain
             return null;
         }
 
-        public void AddLocalLine(CommsFeedKind kind, CommsTone tone, string text, float now)
-        {
-            Push(new CommsFeedLine
-            {
-                Time = now,
-                Author = LocalId,
-                AuthorName = "YOU",
-                Kind = kind,
-                Tone = tone,
-                Text = text,
-            });
-        }
-
         // ---- Events ------------------------------------------------------------------------
+
+        private void ApplyNotice(CommsEnvelope e, float now)
+        {
+            if ((e.Flags & CommsFlags.Retry) != 0) return; // for the manager's resync, not for the player
+            bool error = (e.Flags & CommsFlags.Self) == 0;
+            // A refusal that names a poll this peer just voted in takes the optimistic vote back.
+            if (error && e.Id != 0 && pendingVotes.TryGetValue(e.Id, out int previous))
+            {
+                pendingVotes.Remove(e.Id);
+                CommsPoll poll = FindPoll(e.Id);
+                if (poll != null) poll.LocalVote = previous;
+                Revision++;
+            }
+            bool hud = error && now <= refusalWatchUntil;
+            if (hud) refusalWatchUntil = float.NegativeInfinity;
+            SetNotice(e.Text, error, now, hud);
+        }
 
         private void ApplyItem(CommsEnvelope e, float now)
         {
             if (e.Points == null || e.Points.Length < 2) return;
             bool isNew = Board.Find(e.Id) == null;
+            bool replay = (e.Flags & CommsFlags.Replay) != 0;
             var item = new CommsItem
             {
                 Id = e.Id,
@@ -299,28 +370,32 @@ namespace BoscaliSummer.Features.Comms.Domain
                 Size = e.Size,
                 Points = (int[])e.Points.Clone(),
                 Text = CommsText.Clean(e.Text, CommsText.MaxLabel),
-                Created = now,
+                Created = replay ? now - ReplayedAgeSeconds : now,
                 Expires = now + Math.Max(0f, e.Ttl),
             };
+            if (item.IsCall && e.Values != null && e.Values.Length > 0)
+                item.Height = Math.Max(0, Math.Min(CommsAuthority.MaxCallAltitude, e.Values[0]));
             Board.Add(item, false, null);
             Revision++;
 
-            if (!isNew || item.Kind != CommsItemKind.Ping || !CommsCatalog.ValidPing(item.Style)) return;
+            // A call's own mark is announced by the call's line; a replay was announced before.
+            if (!isNew || replay || item.IsCall || item.Kind != CommsItemKind.Ping || !CommsCatalog.ValidPing(item.Style)) return;
             PingKind kind = CommsCatalog.Pings[item.Style];
-            string grid = CommsText.Grid(item.X, item.Z);
+            bool foreign = Foreign(item.Channel, item.Faction);
             Push(new CommsFeedLine
             {
                 Time = now,
                 Author = item.Author,
                 AuthorName = item.AuthorName,
                 Kind = CommsFeedKind.Call,
-                Tone = kind.Tone,
+                Tone = foreign ? CommsTone.Info : kind.Tone,
                 Channel = item.Channel,
-                Text = kind.Phrase + " · " + grid,
+                Text = kind.Phrase + " · " + CommsText.Grid(item.X, item.Z),
                 X = item.X,
                 Z = item.Z,
             });
-            Arrive(item.Author, kind.Tone, item.AuthorName + " · " + kind.Phrase, grid, ping: true);
+            if (foreign) Arrive(item.Author, CommsTone.Info, "[ALL] " + item.AuthorName + " · " + kind.Phrase, null, false, item.X, item.Z);
+            else Arrive(item.Author, kind.Tone, item.AuthorName + " · " + kind.Phrase, null, true, item.X, item.Z);
         }
 
         private void ApplyFeed(CommsEnvelope e, float now)
@@ -345,11 +420,16 @@ namespace BoscaliSummer.Features.Comms.Domain
                 case CommsFeedKind.Call:
                     if (!CommsCatalog.ValidCall(e.Style)) return;
                     BrevityCall call = CommsCatalog.Calls[e.Style];
-                    line.Tone = call.Tone;
+                    bool foreign = Foreign(e.Channel, e.Faction);
+                    line.Tone = foreign ? CommsTone.Info : call.Tone;
                     line.Text = call.Code + (line.HasPosition ? " · " + CommsText.Grid(line.X, line.Z) : "");
-                    // A located call already announces itself through its ping on the HUD.
-                    if (!line.HasPosition)
-                        Arrive(e.Author, call.Tone, name + " · " + call.Code, call.Meaning.ToUpperInvariant(), ping: false);
+                    // The call speaks for its own mark: a located call's notice carries bearing
+                    // and range to the caller, an unlocated one says what the code means.
+                    if (foreign)
+                        Arrive(e.Author, CommsTone.Info, "[ALL] " + name + " · " + call.Code, call.Meaning.ToUpperInvariant(), false, line.X, line.Z);
+                    else
+                        Arrive(e.Author, call.Tone, name + " · " + call.Code, call.Meaning.ToUpperInvariant(),
+                            call.Tone == CommsTone.Caution || call.Tone == CommsTone.Danger, line.X, line.Z);
                     break;
                 case CommsFeedKind.Roll:
                     if (e.Values == null || e.Values.Length < 2) return;
@@ -363,7 +443,7 @@ namespace BoscaliSummer.Features.Comms.Domain
                     line.Tone = CommsTone.Info;
                     line.Text = CommsText.Clean(e.Text, 60);
                     if (line.Text.Length == 0) return;
-                    Arrive(e.Author, CommsTone.Caution, name + " · " + line.Text, null, ping: false);
+                    Arrive(e.Author, CommsTone.Caution, name + " · " + line.Text, null, sound: false);
                     break;
             }
             Push(line);
@@ -399,17 +479,21 @@ namespace BoscaliSummer.Features.Comms.Domain
             if (e.Style > 0 && e.Style <= count) poll.LocalVote = e.Style - 1;
             Revision++;
 
-            if (isNew && !poll.Closed)
+            bool replay = (e.Flags & CommsFlags.Replay) != 0;
+            if (isNew && !poll.Closed && !replay)
             {
                 Push(new CommsFeedLine
                 {
                     Time = now, Author = poll.Author, AuthorName = poll.AuthorName, Kind = CommsFeedKind.Poll,
                     Tone = CommsTone.Info, Channel = poll.Channel, Text = "ASKS: " + poll.Question,
                 });
-                Arrive(poll.Author, CommsTone.Caution, "POLL · " + poll.Question, "OPEN COM › POLL TO VOTE", ping: false);
+                bool foreign = Foreign(poll.Channel, poll.Faction);
+                Arrive(poll.Author, foreign ? CommsTone.Info : CommsTone.Caution,
+                    (foreign ? "[ALL] POLL · " : "POLL · ") + poll.Question, "OPEN COM › POLL TO VOTE", sound: false);
             }
             if (poll.Closed && !wasClosed)
             {
+                pendingVotes.Remove(poll.Id);
                 pollClosedAt[poll.Id] = now;
                 Push(new CommsFeedLine
                 {
@@ -417,7 +501,7 @@ namespace BoscaliSummer.Features.Comms.Domain
                     Tone = CommsTone.Friendly, Channel = poll.Channel,
                     Text = "POLL CLOSED: " + poll.Question + " → " + poll.Verdict(),
                 });
-                Arrive(poll.Author, CommsTone.Info, "POLL RESULT · " + poll.Verdict(), poll.Question, ping: false);
+                Arrive(poll.Author, CommsTone.Info, "POLL RESULT · " + poll.Verdict(), poll.Question, sound: false);
                 TrimClosedPolls();
             }
         }
@@ -444,6 +528,11 @@ namespace BoscaliSummer.Features.Comms.Domain
                 int a = e.Values[0], b = e.Values[1], outcome = e.Values[2];
                 if (!CommsCatalog.ValidThrow(a) || !CommsCatalog.ValidThrow(b)) return;
                 string left = CommsText.Name(e.Items[0]), right = CommsText.Name(e.Items[1]);
+                if (e.Players != null && e.Players.Length >= 2)
+                {
+                    if (e.Players[0] != LocalId) seen[e.Players[0]] = left;
+                    if (e.Players[1] != LocalId) seen[e.Players[1]] = right;
+                }
                 string text = outcome == 0
                     ? "RPS DRAW: " + left + " AND " + right + " BOTH THREW " + CommsCatalog.Throws[a]
                     : outcome > 0
@@ -453,15 +542,20 @@ namespace BoscaliSummer.Features.Comms.Domain
                 {
                     Time = now, Author = e.Author, AuthorName = name, Kind = CommsFeedKind.Duel,
                     Tone = CommsTone.Fun, Channel = e.Channel, Text = text,
+                    RematchPlayer = e.Players != null && e.Players.Length >= 2
+                        ? (e.Players[0] == LocalId ? e.Players[1] : e.Players[1] == LocalId ? e.Players[0] : 0UL) : 0UL,
                 });
+                if (e.Players != null && e.Players.Length >= 2)
+                    RecordRivalry(e.Players[0], left, e.Players[1], right, outcome);
                 bool involved = e.Players != null && Array.IndexOf(e.Players, LocalId) >= 0;
-                if (involved) Arrive(0UL, CommsTone.Info, text, null, ping: false);
+                if (involved) Arrive(0UL, CommsTone.Info, text, null, sound: false);
                 return;
             }
 
             if (index >= 0)
             {
                 duels[index].Expires = now + Math.Max(0f, e.Ttl);
+                duels[index].TargetPlayer = e.Players != null && e.Players.Length > 0 ? e.Players[0] : 0UL;
                 Revision++;
                 return;
             }
@@ -470,16 +564,44 @@ namespace BoscaliSummer.Features.Comms.Domain
                 Id = e.Id,
                 Challenger = e.Author,
                 ChallengerName = name,
-                Channel = e.Channel,
+                TargetPlayer = e.Players != null && e.Players.Length > 0 ? e.Players[0] : 0UL,
                 Expires = now + Math.Max(0f, e.Ttl),
             });
             Revision++;
+            if ((e.Flags & CommsFlags.Replay) != 0) return;
             Push(new CommsFeedLine
             {
                 Time = now, Author = e.Author, AuthorName = name, Kind = CommsFeedKind.Duel,
                 Tone = CommsTone.Fun, Channel = e.Channel, Text = "THROWS DOWN A ROCK-PAPER-SCISSORS CHALLENGE",
             });
-            Arrive(e.Author, CommsTone.Info, name + " CHALLENGES YOU · RPS", "OPEN COM › GAME TO ANSWER", ping: false);
+            if (e.Players == null || e.Players.Length == 0 || e.Players[0] == LocalId)
+                Arrive(e.Author, CommsTone.Info, name + " CHALLENGES YOU · RPS", "OPEN COM › CREW TO ANSWER", sound: false);
+        }
+
+        private void RecordRivalry(ulong first, string firstName, ulong second, string secondName, int outcome)
+        {
+            if (first == 0 || second == 0 || first == second) return;
+            if (first > second)
+            {
+                ulong id = first; first = second; second = id;
+                string name = firstName; firstName = secondName; secondName = name;
+                outcome = -outcome;
+            }
+            RivalryView row = null;
+            for (int i = 0; i < rivalries.Count; i++)
+                if (rivalries[i].First == first && rivalries[i].Second == second) { row = rivalries[i]; break; }
+            if (row == null)
+            {
+                if (rivalries.Count >= 32) rivalries.RemoveAt(0);
+                row = new RivalryView { First = first, Second = second };
+                rivalries.Add(row);
+            }
+            row.FirstName = firstName;
+            row.SecondName = secondName;
+            if (outcome > 0) { row.FirstWins++; row.Streak = row.Streak > 0 ? row.Streak + 1 : 1; }
+            else if (outcome < 0) { row.SecondWins++; row.Streak = row.Streak < 0 ? row.Streak - 1 : -1; }
+            else { row.Draws++; row.Streak = 0; }
+            Revision++;
         }
 
         private void ApplyHunt(CommsEnvelope e, float now)
@@ -495,14 +617,13 @@ namespace BoscaliSummer.Features.Comms.Domain
             }
             hunt.Author = e.Author;
             hunt.AuthorName = name;
-            hunt.Channel = e.Channel;
 
             if ((e.Flags & CommsFlags.Revealed) == 0)
             {
                 hunt.Ends = now + Math.Max(0f, e.Ttl);
                 hunt.GuessCount = e.Values != null && e.Values.Length > 0 ? Math.Max(0, e.Values[0]) : 0;
                 Revision++;
-                if (!isNew) return;
+                if (!isNew || (e.Flags & CommsFlags.Replay) != 0) return;
                 if (e.Author == LocalId && pendingHide)
                 {
                     pendingHide = false;
@@ -515,7 +636,7 @@ namespace BoscaliSummer.Features.Comms.Domain
                     Time = now, Author = e.Author, AuthorName = name, Kind = CommsFeedKind.Hunt, Tone = CommsTone.Fun,
                     Channel = e.Channel, Text = "HID A TARGET — FIND IT ON THE MAP (" + CommsText.Countdown(e.Ttl) + ")",
                 });
-                Arrive(e.Author, CommsTone.Info, "MAP HUNT · " + name + " HID A TARGET", "OPEN COM › GAME TO GUESS", ping: false);
+                Arrive(e.Author, CommsTone.Info, "MAP HUNT · " + name + " HID A TARGET", "OPEN COM › GAME TO GUESS", sound: false);
                 return;
             }
 
@@ -532,14 +653,18 @@ namespace BoscaliSummer.Features.Comms.Domain
                 int count = (e.Points.Length - 2) / 2;
                 for (int i = 0; i < count; i++)
                 {
+                    if (e.Players != null && i < e.Players.Length && e.Players[i] == LocalId &&
+                        e.Values != null && i * 2 < e.Values.Length)
+                    {
+                        BestHuntMetres = Math.Min(BestHuntMetres, Math.Max(0, e.Values[i * 2]));
+                        if (i == 0) HuntWins++;
+                    }
                     hunt.Placings.Add(new HuntPlacingView
                     {
-                        Player = e.Players != null && i < e.Players.Length ? e.Players[i] : 0UL,
                         Name = CommsText.Name(e.Items != null && i < e.Items.Length ? e.Items[i] : null),
                         X = StrokeCodec.Restore(e.Points[2 + i * 2]),
                         Z = StrokeCodec.Restore(e.Points[3 + i * 2]),
                         Metres = e.Values != null && i * 2 < e.Values.Length ? e.Values[i * 2] : 0,
-                        Points = e.Values != null && i * 2 + 1 < e.Values.Length ? e.Values[i * 2 + 1] : 0,
                     });
                 }
             }
@@ -556,7 +681,7 @@ namespace BoscaliSummer.Features.Comms.Domain
                 Time = now, Author = e.Author, AuthorName = name, Kind = CommsFeedKind.Hunt, Tone = CommsTone.Fun,
                 Channel = e.Channel, Text = "HUNT OVER: " + text, X = hunt.HiddenX, Z = hunt.HiddenZ,
             });
-            Arrive(0UL, CommsTone.Info, "HUNT OVER · " + text, null, ping: false);
+            Arrive(0UL, CommsTone.Info, "HUNT OVER · " + text, null, sound: false);
         }
 
         private void ApplyScores(CommsEnvelope e)
@@ -586,12 +711,16 @@ namespace BoscaliSummer.Features.Comms.Domain
             Revision++;
         }
 
-        private void Arrive(ulong author, CommsTone tone, string text, string detail, bool ping)
+        private void Arrive(ulong author, CommsTone tone, string text, string detail, bool sound,
+            float x = float.NaN, float z = float.NaN)
         {
             if (author != 0UL && (author == LocalId || muted.Contains(author))) return;
-            arrivals.Add(new CommsArrival { Author = author, Tone = tone, Text = text, Detail = detail, Ping = ping });
+            arrivals.Add(new CommsArrival { Tone = tone, Text = text, Detail = detail, Sound = sound, X = x, Z = z });
             if (arrivals.Count > 16) arrivals.RemoveAt(0);
         }
+
+        /// <summary>An ALL post from another side: heard, but neither loud nor in its own colours.</summary>
+        public bool Foreign(CommsChannel channel, int faction) => channel == CommsChannel.All && faction != LocalFaction;
 
         private void TrimClosedPolls()
         {

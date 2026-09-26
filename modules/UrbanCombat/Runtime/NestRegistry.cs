@@ -135,14 +135,6 @@ namespace BoscaliSummer.Garrisons
             return Mathf.Clamp01(live / (float)peak);
         }
 
-        /// <summary>Dugout-carrier stage for one nest. 0 when the nest has no carrier.</summary>
-        public static int StageFor(Building nest)
-        {
-            if (nest == null) return 0;
-            if (!byNest.TryGetValue(nest.GetInstanceID(), out Entry entry)) return 0;
-            return StrongpointHitPolicy.DugoutStage(DugoutHitPoints(entry));
-        }
-
         /// <summary>Fills the destination with live nests for the dressing rebuild.</summary>
         public static int CopyLiveNests(List<Building> dest, int cap)
         {

@@ -17,16 +17,6 @@ namespace BoscaliSummer.Tests.Features.Command
                 MfdMissionOverview.Stage(10f, 25f, 0f) == 0,
                 "An unset threshold never gates a stage the game already cleared");
 
-            TestAssert.That(Near(MfdMissionOverview.Fraction(0f, 25f, 50f), 0f) &&
-                Near(MfdMissionOverview.Fraction(25f, 25f, 50f), 1f / 3f) &&
-                Near(MfdMissionOverview.Fraction(50f, 25f, 50f), 2f / 3f),
-                "The ladder gives each stage an equal third of the track");
-
-            TestAssert.That(Near(MfdMissionOverview.Fraction(100f, 25f, 50f), 1f) &&
-                Near(MfdMissionOverview.Fraction(0f, 0f, 0f), 1f) &&
-                Near(MfdMissionOverview.Fraction(0f, 0f, 50f), 1f / 3f),
-                "A saturated or unset ladder stays inside the track");
-
             TestAssert.That(MfdMissionOverview.Caption(0f, 25f, 50f) ==
                 "CUR 0 · TAC IN 25",
                 "Before the tactical gate the caption states the remaining score");

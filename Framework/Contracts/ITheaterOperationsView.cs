@@ -129,16 +129,9 @@ namespace BoscaliSummer.Framework.Contracts
     {
         bool Available { get; }
         bool CanCommand { get; }
-        string Status { get; }
-
-        /// <summary>Pool cost of the staff work behind one offensive, in millions.</summary>
-        float OverheadCost { get; }
 
         /// <summary>Pool cost of one wave slot, in millions. Every slot escrows this much.</summary>
         float WaveBudget { get; }
-
-        /// <summary>The wave slots one offensive may carry, the ceiling the board draws.</summary>
-        int MaximumWaves { get; }
 
         /// <summary>The local faction's offensives, newest first, bounded by the module's ceiling.</summary>
         IReadOnlyList<TheaterOperationView> Operations { get; }
@@ -214,12 +207,16 @@ namespace BoscaliSummer.Framework.Contracts
         /// <summary>Escrow that went back to the pool: everything committed that no wave drew.</summary>
         public float Returned => Committed > Spent ? Committed - Spent : 0f;
 
+        /// <summary>The host's plan identity within its faction; 0 when the source did not say.</summary>
+        public int Id { get; }
+
         public TheaterOperationView(
             string name, TheaterOperationPhase phase, TheaterOperationOutcome outcome,
             string targetLabel, float progress, float budget, float committed, float spent,
             float elapsedSeconds, float holdRemaining,
-            int wavesPlanned, int wavesLaunched, float countdown, string holder)
+            int wavesPlanned, int wavesLaunched, float countdown, string holder, int id = 0)
         {
+            Id = id;
             Name = name;
             Phase = phase;
             Outcome = outcome;

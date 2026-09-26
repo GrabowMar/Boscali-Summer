@@ -19,10 +19,5 @@ namespace BoscaliSummer.Features.Command.Runtime
                 ? CommandManager.Active.Morale.TryGet(faction.GetInstanceID(), out morale)
                 : CommandManager.Active.TryGetRemoteMorale(faction.faction?.factionName, out morale);
         }
-
-        /// <summary>Rejects non-finite/out-of-range values; never changes native resources.</summary>
-        public static bool TrySetMorale(FactionHQ faction, float morale) =>
-            faction != null && GameAccess.IsServer() && CommandManager.Active != null &&
-            CommandManager.Active.Morale.TrySet(faction.GetInstanceID(), morale);
     }
 }

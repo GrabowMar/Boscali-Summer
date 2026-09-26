@@ -25,13 +25,18 @@ namespace BoscaliSummer.Features.Command.Networking
     {
         internal const byte ProtocolVersion = 1;
         private const float BroadcastInterval = 2f;
+        // Unchanged morale is only repeated this often, for clients that joined since.
+        private const float HeartbeatInterval = 15f;
+        private const float ChangeThreshold = 0.1f;
         private const int MaximumFactions = FactionMoraleState.MaximumFactions;
 
         private readonly Dictionary<int, float> remote = new Dictionary<int, float>(MaximumFactions);
+        private readonly Dictionary<int, float> sent = new Dictionary<int, float>(MaximumFactions);
         private CommandManager owner;
         private MessageHandler clientHandler;
         private float nextRegistration;
         private float nextBroadcast;
+        private float nextHeartbeat;
 
         internal void Configure(CommandManager manager)
         {
@@ -66,7 +71,8 @@ namespace BoscaliSummer.Features.Command.Networking
         internal void ResetScene()
         {
             remote.Clear();
-            nextBroadcast = 0f;
+            sent.Clear();
+            nextBroadcast = nextHeartbeat = 0f;
         }
 
         internal bool TryGet(string factionName, out float morale)
@@ -95,22 +101,28 @@ namespace BoscaliSummer.Features.Command.Networking
             nextBroadcast = Time.unscaledTime + BroadcastInterval;
             NetworkServer server = NetworkManagerNuclearOption.i?.Server;
             if (server == null || !server.Active) return;
-            int sent = 0;
             var factions = FactionRegistry.GetAllHQs();
             if (factions == null) return;
+            bool heartbeat = Time.unscaledTime >= nextHeartbeat;
+            if (heartbeat) nextHeartbeat = Time.unscaledTime + HeartbeatInterval;
+            int inspected = 0;
             foreach (FactionHQ hq in factions)
             {
-                if (sent >= MaximumFactions) break;
+                if (++inspected > MaximumFactions) break;
                 string name = hq?.faction?.factionName;
                 if (string.IsNullOrEmpty(name) ||
                     !owner.Morale.TryGet(hq.GetInstanceID(), out float morale)) continue;
+                int hash = Hash(name);
+                if (!heartbeat && sent.TryGetValue(hash, out float last) &&
+                    Mathf.Abs(morale - last) < ChangeThreshold) continue;
+                if (sent.Count >= MaximumFactions && !sent.ContainsKey(hash)) sent.Clear();
+                sent[hash] = morale;
                 server.SendToAll(new FactionMoraleChanged
                 {
                     Protocol = ProtocolVersion,
-                    FactionHash = Hash(name),
+                    FactionHash = hash,
                     Morale = morale,
                 }, authenticatedOnly: true, excludeLocalPlayer: true);
-                sent++;
             }
         }
 
