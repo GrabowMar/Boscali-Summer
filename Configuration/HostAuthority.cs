@@ -53,7 +53,7 @@ namespace BoscaliSummer
             s.Support.CyberUpgradeCostScale, s.Support.CyberCampaignIntensity, s.Support.CyberReach,
             s.Support.SpecOpsCostScale,
 
-            s.TheaterOps.FrontlineTacticsEnabled, s.TheaterOps.OperationOverheadCost,
+            s.TheaterOps.DirectorFactions, s.TheaterOps.FrontlineTacticsEnabled, s.TheaterOps.OperationOverheadCost,
             s.TheaterOps.OperationWaveBudget, s.TheaterOps.OperationMusterSeconds,
             s.TheaterOps.OperationPlanSeconds, s.TheaterOps.OperationLaunchDelaySeconds,
             s.TheaterOps.OperationWaveSeconds, s.TheaterOps.OperationWaveRetrySeconds,
