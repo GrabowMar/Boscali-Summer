@@ -36,6 +36,8 @@ namespace BoscaliSummer.Framework.Lifecycle
 
         private void SceneLoaded(Scene scene, LoadSceneMode mode)
         {
+            // An additive load joins the running mission; resetting there would wipe host world state.
+            if (mode == LoadSceneMode.Additive) return;
             ResetAll();
         }
 
