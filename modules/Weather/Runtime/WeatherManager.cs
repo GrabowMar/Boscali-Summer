@@ -254,7 +254,9 @@ namespace BoscaliSummer.Features.Weather.Runtime
 
             float missionTime = NetworkSceneSingleton<MissionManager>.i?.MissionTime ?? Time.time;
 
-            if (settings != null && settings.DebugControlsEnabled.Value &&
+            // Host only: on a client the keys would change its own wind and visibility until
+            // the next sync, and the change never reaches anyone else.
+            if (settings != null && settings.DebugControlsEnabled.Value && GameAccess.IsServer() &&
                 !InputFieldChecker.InsideInputField && !GameplayUI.GameIsPaused)
             {
                 CheckDebugHotkeys();

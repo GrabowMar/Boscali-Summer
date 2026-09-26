@@ -141,7 +141,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             if (shell != null && shell.Page == TabServer)
                 return HostAuthority()
                     ? "Host settings apply immediately and are saved to the configuration file."
-                    : "Host only. These settings are read-only on a remote client.";
+                    : "Host only. You are seeing the host's values, which apply to everyone on this server.";
             if (DisplayIndex == 2) return MfdMapDeck.WallpaperStatus;
             return pageScrolls[Mathf.Clamp(DisplayIndex, 0, DisplayCount - 1)]
                 ? "Saved automatically. Scroll for more; hover for help."

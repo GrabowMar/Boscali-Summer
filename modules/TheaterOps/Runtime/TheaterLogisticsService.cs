@@ -92,24 +92,81 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             RebuildReinforcements();
         }
 
-        public bool RequestReinforcement(string key)
+        public bool RequestReinforcement(string key) =>
+            GameAccess.TryGetLocalFaction(out FactionHQ hq) && FundReinforcement(hq, key, 0f, out _);
+
+        /// <summary>
+        /// Funds one named convoy group for <paramref name="hq"/> from its own pool, never
+        /// below <paramref name="reserveFloor"/>. The refusal says why a call did not land.
+        /// </summary>
+        internal bool FundReinforcement(FactionHQ hq, string key, float reserveFloor, out string refusal)
         {
-            if (!authoritative || string.IsNullOrEmpty(key)) return false;
-            if (!GameAccess.TryGetLocalFaction(out FactionHQ hq) || hq.preventDonation) return false;
+            refusal = "THEATER OPS NOT RUNNING";
+            if (!authoritative || string.IsNullOrEmpty(key) || hq == null || hq.faction == null) return false;
+            refusal = "SUPPLY IS CLOSED";
+            if (hq.preventDonation) return false;
+            refusal = "NO SUCH CONVOY GROUP";
             if (!TryResolveGroup(hq, key, out int index, out Faction.ConvoyGroup group)) return false;
 
             float cost = group.GetCost();
             float cooldown = hq.CmdGetDelaySpawnConvoy((byte)index);
-            if (ReinforcementGatePolicy.Evaluate(true, hq.factionFunds, cost, cooldown) != ReinforcementGate.Ready)
+            ReinforcementGate gate = ReinforcementGatePolicy.Evaluate(
+                true, hq.factionFunds - Mathf.Max(0f, reserveFloor), cost, cooldown);
+            if (gate != ReinforcementGate.Ready)
+            {
+                refusal = gate == ReinforcementGate.Cooling ? "CONVOY STILL COOLING"
+                    : reserveFloor > 0f ? "POOL AT THE RESERVE FLOOR" : "INSUFFICIENT FUNDS";
                 return false;
+            }
 
+            Fund(hq, group, cost);
+            refusal = null;
+            return true;
+        }
+
+        /// <summary>
+        /// The director's shield: funds the cheapest ready group <paramref name="hq"/> can
+        /// afford within <paramref name="spendable"/>. Reports the group and its price.
+        /// </summary>
+        internal bool FundCheapest(FactionHQ hq, float spendable, out string name, out float cost)
+        {
+            name = null;
+            cost = 0f;
+            if (!authoritative || hq == null || hq.faction == null || hq.preventDonation) return false;
+            List<Faction.ConvoyGroup> groups = hq.faction.GetConvoyGroups();
+            if (groups == null) return false;
+
+            Faction.ConvoyGroup cheapest = null;
+            float cheapestCost = float.MaxValue;
+            int count = Mathf.Min(groups.Count, MaximumConvoyRows);
+            for (int i = 0; i < count; i++)
+            {
+                Faction.ConvoyGroup group = groups[i];
+                if (group == null || string.IsNullOrEmpty(group.Name)) continue;
+                float price = group.GetCost();
+                if (ReinforcementGatePolicy.Evaluate(true, spendable, price,
+                        hq.CmdGetDelaySpawnConvoy((byte)i)) != ReinforcementGate.Ready) continue;
+                if (price < cheapestCost)
+                {
+                    cheapestCost = price;
+                    cheapest = group;
+                }
+            }
+            if (cheapest == null || !(hq.factionFunds >= cheapestCost)) return false;
+
+            Fund(hq, cheapest, cheapestCost);
+            name = cheapest.Name;
+            cost = cheapestCost;
+            return true;
+        }
+
+        private void Fund(FactionHQ hq, Faction.ConvoyGroup group, float cost)
+        {
             hq.AddFunds(-cost);
             hq.AddConvoy(group);
             logger?.LogInfo("Reinforcement " + group.Name + " funded for " +
                             hq.faction.factionName + " at " + cost.ToString("F0") + ".");
-            RebuildReadiness();
-            RebuildReinforcements();
-            return true;
+            nextOptions = 0f;
         }
 
         // ---- Internals --------------------------------------------------------------------

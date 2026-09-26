@@ -36,6 +36,12 @@ namespace BoscaliSummer.Tests.Features.Comms
             ClientAppliesTheWholeLifecycle();
             ClientMutesAndSkipsSelfNoise();
             GlyphsStayInTheUnitBox();
+            SnapshotReplaysSilently();
+            SyncSkipsTheBucketButIsGated();
+            CallPingsHaveTheirOwnSlotAndWords();
+            RemovalsStayWithTheirAudience();
+            OtherSideIsQuietAndLabelled();
+            RefusalsReachTheHudAndUndoVotes();
         }
 
         private static void CatalogIsWellFormed()
@@ -79,6 +85,8 @@ namespace BoscaliSummer.Tests.Features.Comms
                 "metric distances");
             TestAssert.That(CommsText.Distance(1852f * 3f, false) == "3.0 NM", "imperial distances are nautical miles");
             TestAssert.That(CommsText.Countdown(42.2f) == "43s" && CommsText.Countdown(185f) == "3m 05s", "countdowns");
+            TestAssert.That(CommsText.BearingRange(0f, 0f, 3000f, 0f, true) == "BRG 090 · 3.0 KM",
+                "a HUD notice says where it is from the reader's aircraft");
         }
 
         private static void CodecRoundTripsAndValidates()
@@ -219,10 +227,12 @@ namespace BoscaliSummer.Tests.Features.Comms
 
             output.Clear();
             host.Handle(Wing, Stroke(new[] { 0, 0, 5, 5 }), 3f, output);
+            host.Handle(Wing, Stroke(new[] { 0, 0, 9, 9 }), 3f, output);
             host.Handle(Wing, Ping(1, CommsChannel.All), 3f, output);
             output.Clear();
             host.Handle(Wing, new CommsIntent { Op = CommsOp.ClearMine }, 4f, output);
-            TestAssert.That(host.Board.Count == 0 && output[0].Envelope.Ids.Length == 2, "clear mine takes all of mine");
+            TestAssert.That(host.Board.Count == 0 && output.Count == 2 &&
+                            output[0].Envelope.Ids.Length + output[1].Envelope.Ids.Length == 3, "clear mine takes all of mine");
 
             output.Clear();
             host.Handle(Wing, new CommsIntent { Op = CommsOp.ClearAll }, 5f, output);
@@ -263,6 +273,11 @@ namespace BoscaliSummer.Tests.Features.Comms
             TestAssert.That(output.Count == 2 && output[0].Envelope.Event == CommsEvent.Feed &&
                             output[1].Envelope.Event == CommsEvent.Item, "a located call is a feed line plus a ping");
             TestAssert.That(output[1].Envelope.Style == CommsCatalog.PingHelp, "the ping is the call's own kind");
+
+            output.Clear();
+            int spike = Array.FindIndex(CommsCatalog.Calls, c => c.Code == "SPIKE");
+            host.Handle(Third, new CommsIntent { Op = CommsOp.Call, Style = (byte)spike, Points = new[] { 50, 60 } }, 0f, output);
+            TestAssert.That(output[1].Envelope.Style == CommsCatalog.PingSpike, "SPIKE marks the caller, not a SAM site");
 
             output.Clear();
             int copy = Array.FindIndex(CommsCatalog.Calls, c => c.Code == "COPY");
@@ -467,7 +482,8 @@ namespace BoscaliSummer.Tests.Features.Comms
             TestAssert.That(client.Feed.Count == 2 && client.Feed[0].Text.StartsWith("SAM THREAT"), "the ping and the roll are logged");
             var arrivals = new List<CommsArrival>();
             client.DrainArrivals(arrivals);
-            TestAssert.That(arrivals.Count == 1 && arrivals[0].Ping && arrivals[0].Tone == CommsTone.Danger, "a SAM ping is a danger notice");
+            TestAssert.That(arrivals.Count == 1 && arrivals[0].Sound && arrivals[0].Tone == CommsTone.Danger &&
+                            arrivals[0].HasPosition, "a SAM ping is a danger notice with a position");
 
             client.Tick(CommsRules.Default.PingSeconds + 1f);
             TestAssert.That(client.Board.CountOf(CommsItemKind.Ping) == 0 && client.Board.CountOf(CommsItemKind.Stroke) == 1,
@@ -550,6 +566,153 @@ namespace BoscaliSummer.Tests.Features.Comms
                 }
             }
             TestAssert.That(CommsGlyphs.Get("no-such-glyph").Length == 1, "an unknown glyph falls back to a ring");
+        }
+
+        private static void SnapshotReplaysSilently()
+        {
+            var host = new CommsAuthority(7);
+            var client = new CommsClientState { LocalId = Third.Id, LocalFaction = Blue };
+            var output = new List<CommsOutbound>();
+            host.Handle(Wing, Ping(CommsCatalog.PingSam, CommsChannel.Team), 0f, output);
+            host.Handle(Wing, new CommsIntent { Op = CommsOp.PollCreate, Text = "rtb?", Items = new[] { "rtb", "stay" } }, 0f, output);
+            output.Clear();
+            host.Snapshot(Third, 10f, output);
+            foreach (CommsOutbound o in output)
+                if (o.Envelope.Event == CommsEvent.Item || o.Envelope.Event == CommsEvent.Poll)
+                    TestAssert.That((o.Envelope.Flags & CommsFlags.Replay) != 0, "snapshot items and polls are flagged as replays");
+
+            Deliver(output, client, Third, 10f);
+            var arrivals = new List<CommsArrival>();
+            client.DrainArrivals(arrivals);
+            TestAssert.That(client.Board.Count == 1 && client.Polls.Count == 1, "a replay still lands");
+            TestAssert.That(client.Feed.Count == 0 && arrivals.Count == 0, "but is neither logged nor announced again");
+            TestAssert.That(10f - client.Board.Items[0].Created > 8f, "and does not pulse as if it were new");
+        }
+
+        private static void SyncSkipsTheBucketButIsGated()
+        {
+            var host = new CommsAuthority(7);
+            var output = new List<CommsOutbound>();
+            for (int i = 0; i < 40; i++) host.Handle(Wing, Ping(0, CommsChannel.Team), 0f, output);
+            output.Clear();
+            host.Handle(Wing, new CommsIntent { Op = CommsOp.Sync }, 0f, output);
+            TestAssert.That(output.Count > 0 && output[0].Envelope.Event == CommsEvent.Reset, "a busy drawer still gets a snapshot");
+
+            output.Clear();
+            host.Handle(Wing, new CommsIntent { Op = CommsOp.Sync }, 1f, output);
+            TestAssert.That(output.Count == 1 && output[0].Envelope.Event == CommsEvent.Notice &&
+                            (output[0].Envelope.Flags & CommsFlags.Retry) != 0 && (output[0].Envelope.Flags & CommsFlags.Self) != 0,
+                "a second snapshot within the gap is a quiet retry, not a burst");
+            output.Clear();
+            host.Handle(Wing, new CommsIntent { Op = CommsOp.Sync }, 1f + CommsAuthority.SyncGapSeconds, output);
+            TestAssert.That(output[0].Envelope.Event == CommsEvent.Reset, "after the gap it is served again");
+
+            var client = new CommsClientState { LocalId = Wing.Id };
+            client.Apply(new CommsEnvelope { Event = CommsEvent.Notice, Flags = CommsFlags.Self | CommsFlags.Retry }, 2f);
+            TestAssert.That(client.Notice == null, "a retry is for the manager, not the status strip");
+        }
+
+        private static void CallPingsHaveTheirOwnSlotAndWords()
+        {
+            var host = new CommsAuthority(7);
+            var output = new List<CommsOutbound>();
+            for (int i = 0; i < CommsBoard.AuthorBudget(CommsItemKind.Ping); i++)
+                host.Handle(Wing, Ping(CommsCatalog.PingSam, CommsChannel.Team), i, output);
+            int needSupport = Array.FindIndex(CommsCatalog.Calls, c => c.Code == "NEED SUPPORT");
+            output.Clear();
+            host.Handle(Wing, new CommsIntent { Op = CommsOp.Call, Style = (byte)needSupport, Points = new[] { 50, 60 }, Target = 3200 }, 10f, output);
+            TestAssert.That(output.Count == 2, "a call ping retires none of the caller's own pings");
+            CommsEnvelope mark = output[1].Envelope;
+            TestAssert.That(mark.Size == CommsItem.CallMark && mark.Text == "NEED SUPPORT" && mark.Values[0] == 3200,
+                "a call ping names its call and carries the caller's altitude");
+            output.Clear();
+            host.Handle(Wing, new CommsIntent { Op = CommsOp.Call, Style = (byte)needSupport, Points = new[] { 70, 80 } }, 20f, output);
+            TestAssert.That(output.Count == 3 && output[2].Envelope.Event == CommsEvent.Remove &&
+                            output[2].Envelope.Ids[0] == mark.Id, "a new call moves the caller's one call mark");
+
+            var client = new CommsClientState { LocalId = Third.Id, LocalFaction = Blue };
+            Deliver(output, client, Third, 20f);
+            var arrivals = new List<CommsArrival>();
+            client.DrainArrivals(arrivals);
+            TestAssert.That(client.Feed.Count == 1 && client.Feed[0].Text.StartsWith("NEED SUPPORT"), "a call is logged once, by its own name");
+            TestAssert.That(arrivals.Count == 1 && arrivals[0].Text == "WING · NEED SUPPORT" && arrivals[0].HasPosition && arrivals[0].Sound,
+                "and announced once, with a position for bearing and range");
+            TestAssert.That(client.Board.Items[client.Board.Count - 1].IsCall, "its mark is on the map");
+
+            output.Clear();
+            int gg = Array.FindIndex(CommsCatalog.Calls, c => c.Code == "GG");
+            host.Handle(Wing, new CommsIntent { Op = CommsOp.Call, Style = (byte)gg }, 30f, output);
+            Deliver(output, client, Third, 30f);
+            arrivals.Clear();
+            client.DrainArrivals(arrivals);
+            TestAssert.That(arrivals.Count == 1 && !arrivals[0].Sound, "a GG is shown but never ticks");
+        }
+
+        private static void RemovalsStayWithTheirAudience()
+        {
+            var host = new CommsAuthority(7);
+            var output = new List<CommsOutbound>();
+            host.Handle(Wing, Ping(0, CommsChannel.Team), 0f, output);
+            uint id = output[0].Envelope.Id;
+            output.Clear();
+            host.Handle(Wing, new CommsIntent { Op = CommsOp.Erase, Target = id }, 1f, output);
+            TestAssert.That(output.Count == 1 && output[0].Envelope.Event == CommsEvent.Remove &&
+                            !output[0].Reaches(Bandit.Id, Bandit.Faction), "a team mark's removal never reaches the other side");
+
+            var crowded = new CommsAuthority(7);
+            crowded.Handle(Bandit, Ping(0, CommsChannel.Team), 0f, output);
+            uint enemyMark = output[output.Count - 1].Envelope.Id;
+            for (int i = 0; i < CommsBoard.MaxPerAudience + 5; i++)
+                crowded.Handle(new CommsSender { Id = (ulong)(500 + i), Name = "P", Faction = Blue }, Stroke(new[] { 0, 0, i, i }), i * 10f, output);
+            TestAssert.That(crowded.Board.Find(enemyMark) != null, "a crowded side never evicts the other side's marks");
+            TestAssert.That(crowded.Board.Count == CommsBoard.MaxPerAudience + 1, "each audience keeps its own ceiling");
+        }
+
+        private static void OtherSideIsQuietAndLabelled()
+        {
+            var host = new CommsAuthority(7);
+            var client = new CommsClientState { LocalId = Wing.Id, LocalFaction = Blue };
+            var output = new List<CommsOutbound>();
+            host.Handle(Bandit, Ping(CommsCatalog.PingSam, CommsChannel.All), 0f, output);
+            Deliver(output, client, Wing, 0f);
+            var arrivals = new List<CommsArrival>();
+            client.DrainArrivals(arrivals);
+            TestAssert.That(arrivals.Count == 1 && arrivals[0].Text.StartsWith("[ALL] ") &&
+                            arrivals[0].Tone == CommsTone.Info && !arrivals[0].Sound,
+                "an ALL ping from the other side is labelled, calm and silent");
+        }
+
+        private static void RefusalsReachTheHudAndUndoVotes()
+        {
+            var host = new CommsAuthority(7);
+            var client = new CommsClientState { LocalId = Wing.Id, LocalFaction = Blue };
+            var output = new List<CommsOutbound>();
+            var arrivals = new List<CommsArrival>();
+
+            client.WatchRefusal(0f);
+            host.Rules.AllowAllChannel = false;
+            host.Handle(Wing, Ping(0, CommsChannel.All), 1f, output);
+            Deliver(output, client, Wing, 1f);
+            client.DrainArrivals(arrivals);
+            TestAssert.That(arrivals.Count == 1 && arrivals[0].Text.StartsWith("COMMS · "), "a refused ping is told on the HUD");
+            output.Clear();
+            arrivals.Clear();
+            host.Handle(Wing, Ping(0, CommsChannel.All), 20f, output);
+            Deliver(output, client, Wing, 20f);
+            client.DrainArrivals(arrivals);
+            TestAssert.That(arrivals.Count == 0 && client.NoticeIsError, "later refusals stay on the status strip");
+
+            output.Clear();
+            host.Handle(Third, new CommsIntent { Op = CommsOp.PollCreate, Text = "q", Items = new[] { "a", "b" } }, 30f, output);
+            Deliver(output, client, Wing, 30f);
+            uint poll = client.Polls[0].Id;
+            host.Handle(Third, new CommsIntent { Op = CommsOp.PollClose, Target = poll }, 31f, output);
+            client.NoteLocalVote(poll, 1);
+            TestAssert.That(client.Polls[0].LocalVote == 1, "a vote shows at once");
+            output.Clear();
+            host.Handle(Wing, Vote(poll, 1), 32f, output);
+            Deliver(output, client, Wing, 32f);
+            TestAssert.That(client.Polls[0].LocalVote == -1, "and springs back when the host refuses it");
         }
 
         // ---- helpers -----------------------------------------------------------------------

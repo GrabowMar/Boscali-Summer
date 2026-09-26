@@ -120,6 +120,7 @@ namespace BoscaliSummer.Features.Comms.Domain
         public const int PingDefend = 4;
         public const int PingRally = 5;
         public const int PingHelp = 6;
+        public const int PingSpike = 7;
 
         public static readonly PingKind[] Pings =
         {
@@ -129,11 +130,12 @@ namespace BoscaliSummer.Features.Comms.Domain
             new PingKind("ATTACK", "ATTACK HERE", "attack", CommsTone.Caution, false),
             new PingKind("DEFEND", "DEFEND HERE", "defend", CommsTone.Friendly, true),
             new PingKind("RALLY", "RALLY HERE", "rally", CommsTone.Friendly, false),
-            // Not offered on the palette: the NEED SUPPORT call drops it at the caller.
+            // Not offered on the palette: the NEED SUPPORT and SPIKE calls drop these at the caller.
             new PingKind("HELP", "NEEDS SUPPORT", "help", CommsTone.Caution, true),
+            new PingKind("SPIKE", "SPIKED", "spike", CommsTone.Danger, false),
         };
 
-        /// <summary>Ping kinds a player picks from; HELP only comes from its call.</summary>
+        /// <summary>Ping kinds a player picks from; HELP and SPIKE only come from their calls.</summary>
         public const int PalettePings = 6;
 
         public static readonly StickerKind[] Stickers =
@@ -172,7 +174,7 @@ namespace BoscaliSummer.Features.Comms.Domain
             new BrevityCall("ON MY WAY", "Moving to support.", CommsTone.Friendly, PingRally),
             new BrevityCall("NEED SUPPORT", "Requesting help at my position.", CommsTone.Caution, PingHelp),
             new BrevityCall("ENGAGING", "Engaging targets near my position.", CommsTone.Caution, PingAttack),
-            new BrevityCall("SPIKE", "Being tracked by enemy radar.", CommsTone.Danger, PingSam),
+            new BrevityCall("SPIKE", "Being tracked by enemy radar.", CommsTone.Danger, PingSpike),
             new BrevityCall("WINCHESTER", "Out of weapons.", CommsTone.Info),
             new BrevityCall("BINGO FUEL", "Fuel low, heading home soon.", CommsTone.Caution),
             new BrevityCall("RTB", "Returning to base.", CommsTone.Info),

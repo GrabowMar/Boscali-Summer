@@ -13,6 +13,7 @@ using BoscaliSummer.Features.Progression;
 using BoscaliSummer.Features.PlayerSpawnPriority;
 using BoscaliSummer.Features.QoL;
 using BoscaliSummer.Features.Radio;
+using BoscaliSummer.Features.Session;
 using BoscaliSummer.Features.Support;
 using BoscaliSummer.Features.Squad;
 using BoscaliSummer.Features.TheaterOps;
@@ -37,6 +38,7 @@ namespace BoscaliSummer.Bootstrap
                 // Progression, Support and Command disabled at startup are not installed.
                 var features = new List<IModFeature>
                 {
+                    new SessionFeature(),
                     new FireAndDestructionFeature(),
                     new UrbanCombatFeature(),
                     // The common HUD element installs first so every presentation feature below

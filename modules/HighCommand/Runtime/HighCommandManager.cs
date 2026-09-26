@@ -141,6 +141,16 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
 
         public void Highlight(int id) => highlightedId = id;
 
+        public bool TryGetCohesion(FactionHQ hq, out float value)
+        {
+            value = 0f;
+            if (settings == null || !settings.Enabled.Value || !GameAccess.IsServer()) return false;
+            FactionCommand command = FindFaction(hq);
+            if (command == null || command.Tree == null) return false;
+            value = command.Tree.Cohesion(0f);
+            return true;
+        }
+
         public void Refresh()
         {
             if (settings == null || !settings.Enabled.Value) return;
@@ -512,10 +522,16 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
             return rows;
         }
 
+        /// <summary>
+        /// The ring never expires entries, so a quiet faction's oldest line can outlive the
+        /// wire's age bound; clamping keeps that line "15+ minutes old" instead of making every
+        /// remote client reject the whole snapshot.
+        /// </summary>
         private static float LogAge(float time, float now)
         {
             float age = now - time;
-            return Finite(age) && age > 0f ? age : 0f;
+            if (!Finite(age) || age <= 0f) return 0f;
+            return age < CommandSnapshotRules.MaximumLogAge ? age : CommandSnapshotRules.MaximumLogAge;
         }
 
         internal void Apply(HighCommandSnapshot snapshot)

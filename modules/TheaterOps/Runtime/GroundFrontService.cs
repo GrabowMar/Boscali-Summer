@@ -15,8 +15,9 @@ using UnityEngine;
 namespace BoscaliSummer.Features.TheaterOps.Runtime
 {
     /// <summary>
-    /// Host-side destinations for depot-spawned AI vehicles. Vanilla owns spawning, driving,
-    /// targeting and player orders; this service only answers its uncommanded objective query.
+    /// Host-side destinations for depot-spawned AI vehicles of every faction with a main
+    /// effort. Vanilla owns spawning, driving, targeting and player orders; this service only
+    /// answers its uncommanded objective query.
     /// </summary>
     internal sealed class GroundFrontService : MonoBehaviour, ISceneService
     {
@@ -45,6 +46,16 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             internal float HoldX, HoldZ;
         }
 
+        /// <summary>One faction's front traces, copied every few seconds.</summary>
+        private sealed class FrontTrace
+        {
+            internal readonly FrontlineTracePoint[] Points = new FrontlineTracePoint[FrontlineTraceLimits.MaximumPoints];
+            internal readonly int[] Lengths = new int[FrontlineTraceLimits.MaximumTraces];
+            internal readonly float[] Pressure = new float[FrontlineTraceLimits.MaximumTraces];
+            internal int Count;
+            internal float Next;
+        }
+
         private sealed class Group
         {
             internal int Id;
@@ -66,9 +77,10 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
         private readonly Dictionary<GroundVehicle, Member> members =
             new Dictionary<GroundVehicle, Member>(MaximumMembers);
         private readonly List<Group> groups = new List<Group>(MaximumGroups);
-        private readonly FrontlineTracePoint[] points = new FrontlineTracePoint[FrontlineTraceLimits.MaximumPoints];
-        private readonly int[] lengths = new int[FrontlineTraceLimits.MaximumTraces];
-        private readonly float[] pressure = new float[FrontlineTraceLimits.MaximumTraces];
+        private readonly Dictionary<FactionHQ, FrontTrace> traces = new Dictionary<FactionHQ, FrontTrace>(8);
+
+        /// <summary>Chainloader's plugin list is fixed once the game runs; looked up once.</summary>
+        private static int rtsInstalled = -1;
 
         private TheaterOpsSettings settings;
         private TheaterPriorityService priority;
@@ -76,9 +88,8 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
         private TheaterDirectorService director;
         private ManualLogSource logger;
         private ITerritoryIngress territory;
-        private int traceCount;
         private int nextGroupId = 1;
-        private float nextUpdate, nextTrace;
+        private float nextUpdate;
         private bool warnedConflict;
 
         internal void Configure(TheaterOpsSettings config, TheaterPriorityService priorityService,
@@ -104,10 +115,10 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
         {
             members.Clear();
             groups.Clear();
+            traces.Clear();
             territory = null;
-            traceCount = 0;
             nextGroupId = 1;
-            nextUpdate = nextTrace = 0f;
+            nextUpdate = 0f;
         }
 
         /// <summary>Called only after vanilla's depot exit order has been issued.</summary>
@@ -120,9 +131,10 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
                 !settings.FrontlineTacticsEnabled.Value || HasRtsCommander() ||
                 !GameAccess.IsServer() || !vehicle.IsServer ||
                 members.ContainsKey(vehicle) || members.Count >= MaximumMembers ||
-                priority == null || !priority.Authoritative ||
-                !GameManager.GetLocalHQ(out FactionHQ hq) || hq == null ||
-                !ReferenceEquals(vehicle.NetworkHQ, hq) || hq.faction == null ||
+                priority == null || !priority.Authoritative)
+                return;
+            FactionHQ hq = vehicle.NetworkHQ;
+            if (hq == null || hq.faction == null ||
                 !priority.TryGetDirective(hq.faction.factionName, out PriorityDirective directive))
                 return;
 
@@ -146,7 +158,8 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
                     Id = nextGroupId++,
                     HQ = hq,
                     Key = directive.Key,
-                    Offensive = operations != null && operations.IsLaunchedTarget(directive.Key),
+                    Offensive = operations != null &&
+                                operations.IsLaunchedTarget(hq.faction.factionName, directive.Key),
                     Born = now,
                     StageSince = now
                 };
@@ -180,50 +193,68 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             if (settings == null || !settings.Enabled.Value ||
                 !settings.FrontlineTacticsEnabled.Value || HasRtsCommander() ||
                 !GameAccess.IsServer() ||
-                priority == null || !priority.Authoritative ||
-                !GameManager.GetLocalHQ(out FactionHQ hq) || hq == null || hq.faction == null ||
-                !priority.TryGetDirective(hq.faction.factionName, out PriorityDirective directive))
+                priority == null || !priority.Authoritative)
             {
                 if (groups.Count > 0) ResetForScene();
                 nextUpdate = Time.timeSinceLevelLoad + UpdateSeconds;
                 return;
             }
+            if (groups.Count == 0) return;
             if (territory == null) ModServices.TryGet(out territory);
             if (territory == null) return;
             float now = Time.timeSinceLevelLoad;
-            if (now >= nextTrace)
-            {
-                nextTrace = now + TraceSeconds;
-                traceCount = Mathf.Clamp(territory.CopyFrontlineTraces(hq.GetInstanceID(),
-                    points, lengths, pressure), 0, FrontlineTraceLimits.MaximumTraces);
-            }
             for (int i = groups.Count - 1; i >= 0; i--)
             {
                 Group group = groups[i];
+                FactionHQ hq = group.HQ;
+                // Each group follows its own side's effort; a side whose effort cleared or
+                // moved releases its groups to vanilla.
+                PriorityDirective directive = default;
+                bool live = hq != null && hq.faction != null &&
+                            priority.TryGetDirective(hq.faction.factionName, out directive) &&
+                            group.Key == directive.Key;
                 for (int j = group.Members.Count - 1; j >= 0; j--)
                 {
                     Member member = group.Members[j];
-                    if (member.Vehicle != null && !member.Vehicle.disabled &&
-                        ReferenceEquals(member.Vehicle.NetworkHQ, hq) && group.Key == directive.Key)
+                    if (live && member.Vehicle != null && !member.Vehicle.disabled &&
+                        ReferenceEquals(member.Vehicle.NetworkHQ, hq))
                         continue;
                     members.Remove(member.Vehicle);
                     group.Members.RemoveAt(j);
                     group.Sealed = true;
                 }
-                if (group.Members.Count == 0 || group.HQ != hq || group.Key != directive.Key)
+                if (!live || group.Members.Count == 0)
                 {
                     foreach (Member member in group.Members) members.Remove(member.Vehicle);
                     groups.RemoveAt(i);
                     continue;
                 }
                 if (!group.Sealed && now - group.Born >= JoinSeconds) group.Sealed = true;
-                RefreshGroup(group, directive, now);
+                RefreshGroup(group, directive, TraceOf(hq, now), now);
             }
         }
 
-        private void RefreshGroup(Group group, PriorityDirective directive, float now)
+        /// <summary>The side's front, re-copied at most every few seconds per faction.</summary>
+        private FrontTrace TraceOf(FactionHQ hq, float now)
         {
-            group.HasFront = traceCount > 0 && FrontlineTactics.TrySlot(points, lengths, traceCount,
+            if (!traces.TryGetValue(hq, out FrontTrace trace))
+            {
+                if (traces.Count >= 8) traces.Clear();
+                trace = new FrontTrace();
+                traces.Add(hq, trace);
+            }
+            if (now >= trace.Next)
+            {
+                trace.Next = now + TraceSeconds;
+                trace.Count = Mathf.Clamp(territory.CopyFrontlineTraces(hq.GetInstanceID(),
+                    trace.Points, trace.Lengths, trace.Pressure), 0, FrontlineTraceLimits.MaximumTraces);
+            }
+            return trace;
+        }
+
+        private void RefreshGroup(Group group, PriorityDirective directive, FrontTrace trace, float now)
+        {
+            group.HasFront = trace.Count > 0 && FrontlineTactics.TrySlot(trace.Points, trace.Lengths, trace.Count,
                 directive.X, directive.Z, 0, out group.CenterX, out group.CenterZ,
                 out group.TangentX, out group.TangentZ);
             if (!group.HasFront) { ClearDestinations(group); return; }
@@ -409,7 +440,9 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
 
         internal bool HasRtsCommander()
         {
-            bool installed = Chainloader.PluginInfos.ContainsKey("com.groundcontrol.rts");
+            if (rtsInstalled < 0)
+                rtsInstalled = Chainloader.PluginInfos.ContainsKey("com.groundcontrol.rts") ? 1 : 0;
+            bool installed = rtsInstalled == 1;
             if (installed && !warnedConflict)
             {
                 warnedConflict = true;
