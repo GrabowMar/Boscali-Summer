@@ -395,7 +395,8 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
         private void Rekey(Group group, PriorityDirective directive, float now)
         {
             group.Key = directive.Key;
-            group.Offensive = operations != null && operations.IsLaunchedTarget(directive.Key);
+            group.Offensive = operations != null && group.HQ != null && group.HQ.faction != null &&
+                operations.IsLaunchedTarget(group.HQ.faction.factionName, directive.Key);
             group.ReportedRally = false;
             ClearDestinations(group);
             SetStage(group, Stage.Rally, now);
