@@ -429,6 +429,62 @@ namespace BoscaliSummer.Features.Command.Runtime
         public static float GroundObservationWeight(bool defensiveBuilding)
             => defensiveBuilding ? DefensiveBuildingWeight : VehicleWeight;
 
+        /// <summary>
+        /// Linear falloff for stencil offset (dc, dr) with the unit's sub-cell offset
+        /// (ox, oz) in cell units: exact at quarter-cell offsets, within an eighth of a
+        /// cell of truth elsewhere, so one kernel serves every similarly-placed unit.
+        /// </summary>
+        internal static float KernelFalloff(int dc, int dr, float cellSize, float radius, float ox, float oz)
+        {
+            if (dc == 0 && dr == 0) return 1f;
+            if (!(radius > 0f)) return 0f;
+            float dx = (dc - ox) * cellSize, dz = (dr - oz) * cellSize;
+            float distance = (float)Math.Sqrt(dx * dx + dz * dz);
+            return Math.Max(0f, 1f - distance / radius);
+        }
+
+        /// <summary>Snaps a sub-cell offset to the nearest quarter cell, as the kernel reads it.</summary>
+        internal static int QuantizeOffset(float fraction)
+        {
+            int q = (int)Math.Round(fraction * 4.0);
+            return q < -2 ? -2 : q > 2 ? 2 : q;
+        }
+
+        // Cached presence stencils keyed by cell size, influence radius and quantized
+        // sub-cell offset: one build serves every similarly-placed unit until any of
+        // them changes — no sqrt per cell per unit on the observation refresh.
+        private const int KernelCacheCap = 128;
+        private readonly Dictionary<long, float[]> kernelCache = new Dictionary<long, float[]>();
+
+        private static long KernelKey(float cellSize, float radius, int qx, int qz)
+        {
+            unchecked
+            {
+                long hash = 1469598103934665603L;
+                hash = (hash ^ cellSize.GetHashCode()) * 1099511628211L;
+                hash = (hash ^ radius.GetHashCode()) * 1099511628211L;
+                hash = (hash ^ (qx + 2)) * 1099511628211L;
+                hash = (hash ^ (qz + 2)) * 1099511628211L;
+                return hash;
+            }
+        }
+
+        private float[] EnsureFalloffKernel(float radius, int qx, int qz)
+        {
+            long key = KernelKey(CellSize, radius, qx, qz);
+            if (kernelCache.TryGetValue(key, out float[] kernel)) return kernel;
+            if (kernelCache.Count >= KernelCacheCap) kernelCache.Clear();
+            int stride = MaximumInfluenceCells * 2 + 1;
+            kernel = new float[stride * stride];
+            float ox = qx * 0.25f, oz = qz * 0.25f;
+            for (int dr = -MaximumInfluenceCells; dr <= MaximumInfluenceCells; dr++)
+                for (int dc = -MaximumInfluenceCells; dc <= MaximumInfluenceCells; dc++)
+                    kernel[(dr + MaximumInfluenceCells) * stride + dc + MaximumInfluenceCells] =
+                        KernelFalloff(dc, dr, CellSize, radius, ox, oz);
+            kernelCache.Add(key, kernel);
+            return kernel;
+        }
+
         public void AddTroopPresence(float worldX, float worldZ, float weight, bool isHostile, float influenceRadius = 12000f)
         {
             if (!IsFinite(weight) || weight <= 0f || !IsFinite(influenceRadius) || influenceRadius < 0f ||
@@ -436,16 +492,20 @@ namespace BoscaliSummer.Features.Command.Runtime
             weight = Math.Min(weight, 100f);
             float radius = Math.Min(influenceRadius, 16000f);
             // Even the finest grid scans at most a 17 x 17 stencil per unit.
-            int reachX = Math.Min(MaximumInfluenceCells, (int)Math.Ceiling(radius / CellSize));
-            int reachY = Math.Min(MaximumInfluenceCells, (int)Math.Ceiling(radius / CellSize));
+            int reach = Math.Min(MaximumInfluenceCells, (int)Math.Ceiling(radius / CellSize));
+            CellToCenter(col, row, out float centerX, out float centerZ);
+            int qx = QuantizeOffset((worldX - centerX) / CellSize);
+            int qz = QuantizeOffset((worldZ - centerZ) / CellSize);
+            float[] kernel = EnsureFalloffKernel(radius, qx, qz);
+            int stride = MaximumInfluenceCells * 2 + 1;
             float[] force = isHostile ? hostileForce : friendlyForce;
-            for (int r = Math.Max(0, row - reachY); r <= Math.Min(ResolutionY - 1, row + reachY); r++)
+            for (int r = Math.Max(0, row - reach); r <= Math.Min(ResolutionY - 1, row + reach); r++)
             {
-                for (int c = Math.Max(0, col - reachX); c <= Math.Min(ResolutionX - 1, col + reachX); c++)
+                for (int c = Math.Max(0, col - reach); c <= Math.Min(ResolutionX - 1, col + reach); c++)
                 {
-                    CellToCenter(c, r, out float x, out float z);
-                    float distance = (float)Math.Sqrt((x - worldX) * (x - worldX) + (z - worldZ) * (z - worldZ));
-                    float falloff = c == col && r == row ? 1f : (radius > 0f ? Math.Max(0f, 1f - distance / radius) : 0f);
+                    float falloff = kernel[(r - row + MaximumInfluenceCells) * stride +
+                        c - col + MaximumInfluenceCells];
+                    if (!(falloff > 0f)) continue;
                     int index = r * ResolutionX + c;
                     force[index] = Math.Min(1000f, force[index] + weight * falloff);
                 }

@@ -28,6 +28,39 @@ namespace BoscaliSummer.Features.Command.Runtime
         private readonly Dictionary<FactionHQ, Field> fields = new Dictionary<FactionHQ, Field>();
         private MissionMapCompatibilityEngine compatibility;
         private float cellSize;
+
+        // One unit scan shared by every faction's field: each Read used to walk the
+        // whole registry itself, so eight factions paid eight scans per window. Entries
+        // keep the owner's instance id, never a live reference.
+        private struct SharedObservation
+        {
+            public float X;
+            public float Z;
+            public float Weight;
+            public int OwnerId;
+        }
+
+        private const int SharedScanCap = 4096;
+        private static readonly SharedObservation[] sharedScan = new SharedObservation[SharedScanCap];
+        private static int sharedScanCount;
+        private static float sharedScanStamp = -1f;
+
+        private static void ScanShared(float now)
+        {
+            if (sharedScanStamp >= 0f && now - sharedScanStamp < 0.5f) return;
+            sharedScanStamp = now;
+            sharedScanCount = 0;
+            List<Unit> units = UnitRegistry.allUnits;
+            int count = units != null ? Math.Min(units.Count, SharedScanCap) : 0;
+            for (int i = 0; i < count; i++)
+            {
+                if (!MissionMapCompatibilityEngine.TryGetGroundObservation(units[i], out Vector3 p,
+                    out float weight, out FactionHQ owner) || owner == null) continue;
+                sharedScan[sharedScanCount++] = new SharedObservation
+                    { X = p.x, Z = p.z, Weight = weight, OwnerId = owner.GetInstanceID() };
+            }
+        }
+
         internal void Configure(MissionMapCompatibilityEngine adapter, float cellSizeMetres)
         { compatibility = adapter; cellSize = cellSizeMetres; }
 
@@ -53,14 +86,14 @@ namespace BoscaliSummer.Features.Command.Runtime
             compatibility.ReconcileMissionNodes(field.Grid, hq);
             ulong snapshot = field.Grid.ComputeNodeHash();
             field.Observations.Clear();
-            var units = UnitRegistry.allUnits;
-            int count = units != null ? Math.Min(units.Count, 4096) : 0;
-            for (int i = 0; i < count; i++)
+            ScanShared(now);
+            int hqId = hq.GetInstanceID();
+            for (int i = 0; i < sharedScanCount; i++)
             {
-                if (!MissionMapCompatibilityEngine.TryGetGroundObservation(units[i], hq,
-                    out Vector3 p, out float weight, out bool hostile)) continue;
-                field.Observations.Add(new Observation { X = p.x, Z = p.z, Weight = weight, Hostile = hostile });
-                snapshot = HashObservation(snapshot, p.x, p.z, hostile, field.Grid.CellSize);
+                SharedObservation shared = sharedScan[i];
+                bool hostile = shared.OwnerId != hqId;
+                field.Observations.Add(new Observation { X = shared.X, Z = shared.Z, Weight = shared.Weight, Hostile = hostile });
+                snapshot = HashObservation(snapshot, shared.X, shared.Z, hostile, field.Grid.CellSize);
             }
 
             float elapsed = field.Evaluated ? Math.Min(0.5f, Math.Max(0f, now - field.Updated)) : 0f;
@@ -127,7 +160,11 @@ namespace BoscaliSummer.Features.Command.Runtime
             return !float.IsNaN(hold) && !float.IsInfinity(hold);
         }
 
-        public void ResetForScene() => fields.Clear();
+        public void ResetForScene()
+        {
+            fields.Clear();
+            sharedScanStamp = -1f;
+        }
         private void OnDestroy() => ResetForScene();
     }
 }

@@ -77,6 +77,7 @@ namespace BoscaliSummer.Tests.Features.Command
             TestClusterTree();
             TestEncirclement();
             TestDefensiveWeight();
+            TestFalloffKernel();
         }
 
         /// <summary>
@@ -90,6 +91,53 @@ namespace BoscaliSummer.Tests.Features.Command
             TestAssert.That(vehicle > 0f && nest > vehicle, "A defensive building weighs more than a vehicle");
             TestAssert.That(8f * nest > 6f * vehicle && 8f * nest < 18f * vehicle,
                 "A mature position holds against a platoon, not a battalion");
+        }
+
+        private static void TestFalloffKernel()
+        {
+            foreach (float cell in new[] { 1000f, 2500f })
+            {
+                foreach (float radius in new[] { 0f, 12000f, 16000f })
+                {
+                    foreach (float oz in new[] { -0.5f, -0.25f, 0f, 0.25f })
+                    {
+                        foreach (float ox in new[] { -0.5f, -0.25f, 0f, 0.25f })
+                        {
+                            for (int dr = -8; dr <= 8; dr++)
+                            {
+                                for (int dc = -8; dc <= 8; dc++)
+                                {
+                                    float expected;
+                                    if (dc == 0 && dr == 0) expected = 1f;
+                                    else if (!(radius > 0f)) expected = 0f;
+                                    else
+                                    {
+                                        double dx = (dc - ox) * cell, dz = (dr - oz) * cell;
+                                        double dist = Math.Sqrt(dx * dx + dz * dz);
+                                        expected = (float)Math.Max(0.0, 1.0 - dist / radius);
+                                    }
+                                    float got = TacticalSectorGrid.KernelFalloff(dc, dr, cell, radius, ox, oz);
+                                    TestAssert.That(Math.Abs(got - expected) < 0.0001f,
+                                        "The cached kernel matches the direct falloff at every stencil offset");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            TestAssert.That(TacticalSectorGrid.QuantizeOffset(-0.5f) == -2 &&
+                TacticalSectorGrid.QuantizeOffset(0.13f) == 1 &&
+                TacticalSectorGrid.QuantizeOffset(0.4999f) == 2,
+                "Sub-cell offsets snap to the nearest quarter cell");
+            // A corner-placed unit reads exactly: the quantized kernel is the direct
+            // formula there, so the front it draws does not move.
+            var grid = new TacticalSectorGrid(1000f, 100000f);
+            grid.WorldToCell(0f, 0f, out int col, out int row);
+            grid.CellToCenter(col, row, out float cx, out float cz);
+            grid.AddTroopPresence(cx - 500f, cz - 500f, 10f, false);
+            grid.EvaluateSectors(30f);
+            TestAssert.That(grid.GetSectorHoldStrength(col, row) > 0.5f,
+                "A corner observation still takes its own cell through the kernel");
         }
 
         private static void TestContourGeometry()
