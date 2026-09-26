@@ -93,6 +93,9 @@ namespace BoscaliSummer.Features.Support.Networking
         /// <summary>Enemy faction names in the network's origin order.</summary>
         public byte CyberOriginCount;
         public string[] CyberOrigins;
+
+        /// <summary>Seconds until each <c>TeamGate</c> reopens, in gate order; never null.</summary>
+        public float[] TeamCooldown;
     }
 
     /// <summary>
@@ -128,7 +131,8 @@ namespace BoscaliSummer.Features.Support.Networking
             ForeignClocks = new float[SpaceOperations.MaximumForeign],
             ForeignLayouts = new int[SpaceOperations.MaximumForeign],
             Cyber = new CyberSnapshot(),
-            CyberOrigins = new string[MaximumOriginNames]
+            CyberOrigins = new string[MaximumOriginNames],
+            TeamCooldown = new float[TeamGates.Count]
         };
 
         public static bool ValidCyber(in OpsStateMessage state) =>
@@ -143,7 +147,8 @@ namespace BoscaliSummer.Features.Support.Networking
             state.ForeignRegimes != null && state.ForeignRegimes.Length >= state.ForeignCount &&
             state.ForeignSeeds != null && state.ForeignSeeds.Length >= state.ForeignCount &&
             state.ForeignClocks != null && state.ForeignClocks.Length >= state.ForeignCount &&
-            state.ForeignLayouts != null && state.ForeignLayouts.Length >= state.ForeignCount;
+            state.ForeignLayouts != null && state.ForeignLayouts.Length >= state.ForeignCount &&
+            state.TeamCooldown != null && state.TeamCooldown.Length >= TeamGates.Count;
 
         public static void Write(PlatformSnapshot from, ref OpsStateMessage into)
         {

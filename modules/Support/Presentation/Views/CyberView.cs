@@ -1043,10 +1043,14 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         {
             CyberDenial denial = network.Check(verb, target, now);
             bool rejoin = verb == CyberVerb.Isolate && network.Exists(target) && network.Node(target).Isolated;
-            SetRow(row, "[" + ((int)verb + 1) + "] " + (rejoin ? "rejoin" : VerbCommand(verb)), denial == CyberDenial.None && !pending, false,
+            float teamLeft = verb == CyberVerb.Isolate && !rejoin && support != null
+                ? support.TeamCooldownRemaining(TeamGate.Isolate) : 0f;
+            SetRow(row, "[" + ((int)verb + 1) + "] " + (rejoin ? "rejoin" : VerbCommand(verb)),
+                denial == CyberDenial.None && !pending && teamLeft <= 0.5f, false,
                 CyberWords.Verb(verb) + " — " + CyberWords.VerbHelp(verb));
             CyberStyle.Type(row.Right, (rejoin ? "free" : Mathf.RoundToInt(CyberNetwork.VerbCost(verb)) + " comp") + " · " +
-                                       CyberWords.Denial(denial).ToLowerInvariant());
+                                       (teamLeft > 0.5f ? "team t-" + Mathf.CeilToInt(teamLeft) + "s"
+                                           : CyberWords.Denial(denial).ToLowerInvariant()));
         }
 
         /// <summary>The selected incident: what it is, then its countermeasures, the recommended one first.</summary>
@@ -1195,15 +1199,19 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 Row row = verbs[i];
                 int target = CyberNetwork.TargetsIncident(verb) ? selectedIncident : selectedSite;
                 CyberDenial denial = network != null ? network.Check(verb, target, now) : CyberDenial.NoCommand;
+                bool rejoin = verb == CyberVerb.Isolate && network != null && network.Exists(target) && network.Node(target).Isolated;
+                float teamLeft = verb == CyberVerb.Isolate && !rejoin && support != null
+                    ? support.TeamCooldownRemaining(TeamGate.Isolate) : 0f;
                 float recharge = network != null ? network.RechargeRemaining(verb, now) : 0f;
                 float total = CyberNetwork.VerbRecharge(verb);
                 string on = network != null && denial == CyberDenial.None ? Target(network, verb, target).ToLowerInvariant()
                     : CyberNetwork.TargetsIncident(verb) ? "<incident>" : "<node>";
                 CyberStyle.Type(row.Text, "[" + (i + 1) + "] " + VerbCommand(verb).ToUpperInvariant() + "  " +
                                           (recharge > 0f ? CyberWords.Seconds(recharge) : Clip(on, compact ? 10 : 24)));
-                CyberStyle.Type(row.Right, Mathf.RoundToInt(CyberNetwork.VerbCost(verb)) + " comp · " + CyberWords.Denial(denial).ToLowerInvariant());
+                CyberStyle.Type(row.Right, Mathf.RoundToInt(CyberNetwork.VerbCost(verb)) + " comp · " +
+                    (teamLeft > 0.5f ? "team t-" + Mathf.CeilToInt(teamLeft) + "s" : CyberWords.Denial(denial).ToLowerInvariant()));
                 row.Text.rectTransform.sizeDelta = new Vector2(row.Control.Rect.sizeDelta.x * 0.51f - 16f, row.Control.Rect.sizeDelta.y);
-                row.Control.SetEnabled(denial == CyberDenial.None && !pending);
+                row.Control.SetEnabled(denial == CyberDenial.None && !pending && teamLeft <= 0.5f);
                 row.Control.WithTooltip(CyberWords.Verb(verb) + " — " + CyberWords.VerbHelp(verb));
             }
         }

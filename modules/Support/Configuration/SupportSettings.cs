@@ -42,6 +42,14 @@ namespace BoscaliSummer.Features.Support.Configuration
         public ConfigEntry<float> MaximumRange { get; }
         public ConfigEntry<float> RequestCooldown { get; }
 
+        public ConfigEntry<float> TeamFlareCooldown { get; }
+        public ConfigEntry<float> TeamFortifyCooldown { get; }
+        public ConfigEntry<float> TeamRelocateCooldown { get; }
+        public ConfigEntry<float> TeamIsolateCooldown { get; }
+        public ConfigEntry<float> TeamCostPerExtra { get; }
+        public ConfigEntry<float> TeamCostCap { get; }
+        public ConfigEntry<bool> TeamOwnershipGuards { get; }
+
         public ConfigEntry<float> CyberUpgradeCostScale { get; }
         public ConfigEntry<float> CyberCampaignIntensity { get; }
         public ConfigEntry<float> CyberReach { get; }
@@ -69,9 +77,9 @@ namespace BoscaliSummer.Features.Support.Configuration
                 "the mark, scattered by orbit band. Uses the FireMissionDefinitionKey missile.");
             EmpEnabled = config.Bind("Support", "EmpShock", true,
                 "EMP shock: a high-altitude airburst. The prompt pulse upsets electronics; the " +
-                "geomagnetic disturbance jams radars across a wide area, friendly and hostile " +
-                "alike. Needs the station's EMP emitter overhead. Uses the FireMissionDefinitionKey missile " +
-                "as a delivery visual.");
+                "geomagnetic disturbance jams hostile radars across a wide area while friendly " +
+                "units keep theirs. Needs the station's EMP emitter overhead. Uses the " +
+                "FireMissionDefinitionKey missile as a delivery visual.");
             ElintEnabled = config.Bind("Support", "ElintSweep", true,
                 "ELINT sweep: an orbital station with a SIGINT array, overhead, locates enemy ground and ship " +
                 "radars that are emitting near the mark. Spawns nothing.");
@@ -80,7 +88,8 @@ namespace BoscaliSummer.Features.Support.Configuration
                 "contacts near the mark. Shares the radar scan tasking. Spawns nothing.");
             FlareBarrageEnabled = config.Bind("Support", "FlareBarrage", true,
                 "Flare barrage: launches an airburst countermeasure missile that disperses a cluster of " +
-                "intense pyrotechnic flares, seducing and misguiding all IR-seeking missiles in the area.");
+                "intense pyrotechnic flares, seducing and misguiding hostile IR-seeking missiles in the area. " +
+                "Friendly missiles fly through.");
             CyberEnabled = config.Bind("Support", "CyberOperations", true,
                 "Enable OPS CYBER operations: doctrine investment and the offensive operations " +
                 "it unlocks. Host-authoritative.");
@@ -171,8 +180,8 @@ namespace BoscaliSummer.Features.Support.Configuration
                     new AcceptableValueRange<float>(0f, 20000f)));
             EmpRadius = config.Bind("Support", "EmpShockRadiusMeters", 12000f,
                 new ConfigDescription(
-                    "Radius around the mark whose radars are jammed by the geomagnetic phase of " +
-                    "an EMP shock. Affects friendly and hostile units alike.",
+                    "Radius around the mark whose hostile radars are jammed by the geomagnetic phase of " +
+                    "an EMP shock. Friendly units are unaffected.",
                     new AcceptableValueRange<float>(1000f, 60000f)));
             FlareBarrageCost = config.Bind("Support", "FlareBarrageCost", 500f,
                 new ConfigDescription(
@@ -181,7 +190,7 @@ namespace BoscaliSummer.Features.Support.Configuration
                     new AcceptableValueRange<float>(0f, 20000f)));
             FlareBarrageRadius = config.Bind("Support", "FlareBarrageRadiusMeters", 4000f,
                 new ConfigDescription(
-                    "Radius around the mark in which IR missiles are seduced and misguided.",
+                    "Radius around the mark in which hostile IR missiles are seduced and misguided.",
                     new AcceptableValueRange<float>(500f, 15000f)));
             FlareBarrageCount = config.Bind("Support", "FlareBarrageCount", 36,
                 new ConfigDescription(
@@ -202,6 +211,42 @@ namespace BoscaliSummer.Features.Support.Configuration
                     "Cooldown after an accepted request, per player and shared across all actions. " +
                     "The OPS page counts it down on the request button.",
                     new AcceptableValueRange<float>(5f, 600f)));
+
+            TeamFlareCooldown = config.Bind("Support", "TeamFlareCooldownSeconds", 90f,
+                new ConfigDescription(
+                    "Faction-wide cooldown after a flare barrage goes out; the whole faction's " +
+                    "rocket team re-tasks. 0 turns the gate off. Host-authoritative.",
+                    new AcceptableValueRange<float>(0f, 900f)));
+            TeamFortifyCooldown = config.Bind("Support", "TeamFortifyCooldownSeconds", 120f,
+                new ConfigDescription(
+                    "Faction-wide cooldown after a zone fortification goes out. 0 turns the gate off. " +
+                    "Host-authoritative.",
+                    new AcceptableValueRange<float>(0f, 900f)));
+            TeamRelocateCooldown = config.Bind("Support", "TeamRelocateCooldownSeconds", 300f,
+                new ConfigDescription(
+                    "Faction-wide cooldown after a station relocation burn. 0 turns the gate off. " +
+                    "Host-authoritative.",
+                    new AcceptableValueRange<float>(0f, 1800f)));
+            TeamIsolateCooldown = config.Bind("Support", "TeamIsolateCooldownSeconds", 45f,
+                new ConfigDescription(
+                    "Faction-wide cooldown after a CYBER console ISOLATE goes out. 0 turns the gate off. " +
+                    "Host-authoritative.",
+                    new AcceptableValueRange<float>(0f, 900f)));
+            TeamCostPerExtra = config.Bind("Support", "TeamCostPerExtraPilot", 0.15f,
+                new ConfigDescription(
+                    "Consumable abilities (flare barrage, zone fortification) cost this much more for " +
+                    "every faction pilot after the first. 0 charges every faction the base price. " +
+                    "Host-authoritative.",
+                    new AcceptableValueRange<float>(0f, 1f)));
+            TeamCostCap = config.Bind("Support", "TeamCostCap", 2f,
+                new ConfigDescription(
+                    "The faction-size price multiplier stops here. Host-authoritative.",
+                    new AcceptableValueRange<float>(1f, 4f)));
+            TeamOwnershipGuards = config.Bind("Support", "TeamOwnershipGuards", true,
+                "Offensive team assets answer to the pilot who paid for or launched them: a teammate " +
+                "may not jettison a module, deorbit a station others paid for, recall a team in the " +
+                "field or work a live breach it does not own while the owner is still present. " +
+                "Host-authoritative.");
 
             CyberUpgradeCostScale = config.Bind("Support", "CyberUpgradeCostScale", 1f,
                 new ConfigDescription(

@@ -33,11 +33,12 @@ namespace BoscaliSummer.Features.Support.Visuals
             disruption.Disrupt(severity);
         }
 
-        public static void CheckLocalDisruption(Vector3 burstPoint, float radius)
+        public static void CheckLocalDisruption(Vector3 burstPoint, float radius, FactionHQ owner = null)
         {
             if (GameManager.IsHeadless) return;
             if (GameManager.GetLocalPlayer<Player>(out Player localPlayer) && localPlayer != null && localPlayer.Aircraft != null)
             {
+                if (owner != null && localPlayer.HQ == owner) return;
                 Vector3 delta = localPlayer.Aircraft.transform.position - burstPoint;
                 float dist = new Vector2(delta.x, delta.z).magnitude;
                 if (dist <= radius && localPlayer.Aircraft.transform.position.y <= Datum.LocalSeaY + 25000f)

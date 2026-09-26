@@ -8,7 +8,7 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
     /// <summary>
     /// Tactical Flare Barrage: launches a high-velocity countermeasure delivery missile that
     /// strikes the designated sector and initiates an intensive 15-second pyrotechnic flare barrage
-    /// directly at the impact point, completely seducing and misguiding all IR-seeking missiles.
+    /// directly at the impact point, completely seducing and misguiding hostile IR-seeking missiles.
     /// </summary>
     internal sealed class FlareMissileAction : ISupportAction
     {
@@ -112,6 +112,7 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
             if (missile == null) return;
             var tracker = missile.gameObject.AddComponent<FlareMissileFlightTracker>();
             tracker.missile = missile;
+            tracker.owner = missile != null ? missile.NetworkHQ : null;
             tracker.targetGround = targetGround;
             tracker.Radius = radius;
             tracker.Duration = duration;
@@ -124,6 +125,7 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
         public int FlareCount { get; private set; }
 
         private Missile missile;
+        private FactionHQ owner;
         private Vector3 targetGround;
         private float timeout;
         private bool hasDetonated;
@@ -164,7 +166,7 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
                 try { missile.Detonate(Vector3.up, false, false); } catch { }
             }
 
-            FlareMissileBurstVisuals.TriggerBarrage(impactPos, Radius, Duration, FlareCount);
+            FlareMissileBurstVisuals.TriggerBarrage(impactPos, Radius, Duration, FlareCount, owner);
         }
 
         private void OnDestroy()

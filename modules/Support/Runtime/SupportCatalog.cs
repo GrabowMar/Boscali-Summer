@@ -52,7 +52,7 @@ namespace BoscaliSummer.Features.Support.Runtime
 
             actions.Add(new SupportActionDefinition(
                 SupportActionId.Emp, "EMP SHOCK",
-                "High-altitude airburst and 30 s radar blackout. Extra station batteries widen the pulse; hits friend and foe.",
+                "High-altitude airburst and 30 s radar blackout. Extra station batteries widen the pulse; hostile units only.",
                 SupportCapabilities.Emp, settings.EmpEnabled, new EmpAction()));
 
             actions.Add(new SupportActionDefinition(

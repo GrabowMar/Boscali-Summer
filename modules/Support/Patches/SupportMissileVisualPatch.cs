@@ -68,7 +68,7 @@ namespace BoscaliSummer.Features.Support.Patches
 
                     float radius = Runtime.SupportEffectPolicy.EmpRadius(unique);
                     Visuals.EmpVisualEffect.Trigger(world, radius);
-                    Visuals.CockpitEmpDisruption.CheckLocalDisruption(world, radius);
+                    Visuals.CockpitEmpDisruption.CheckLocalDisruption(world, radius, __instance.NetworkHQ);
                 }
                 else if (unique.StartsWith("BoscaliSummer:Support:Flare:", StringComparison.Ordinal))
                 {
@@ -90,7 +90,7 @@ namespace BoscaliSummer.Features.Support.Patches
                         burstPos = new Vector3(burstPos.x, Datum.LocalSeaY + 12f, burstPos.z);
                     }
 
-                    Visuals.FlareMissileBurstVisuals.TriggerBarrage(burstPos, radius, duration, count);
+                    Visuals.FlareMissileBurstVisuals.TriggerBarrage(burstPos, radius, duration, count, __instance.NetworkHQ);
                 }
             }
             catch (Exception e)

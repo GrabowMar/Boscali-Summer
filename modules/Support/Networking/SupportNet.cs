@@ -58,12 +58,13 @@ namespace BoscaliSummer.Features.Support.Networking
         /// faction carries computing and intel, and the snapshot carries the live breach.
         /// Protocol 18 replaces moving pass seeds with fixed station-sector routes (origin * 9 + destination).
         /// Protocol 19 extends the SPEC OPS snapshot with three ability recharges and the STEAL mission.
+        /// Protocol 20 stamps the four team-gate cooldowns on the ops snapshot.
         /// Command 9 carries the selected sector in Arg. Protocol 17 replaced the programs, reserves, doctrine and infiltration board with the
         /// SPEC OPS detachment (teams, objectives, recharges, notices) in its own state message,
         /// sent before each ops snapshot, and its three orders.
         /// Older peers must not interpret fleet, hack, team or node ids.
         /// </summary>
-        internal const byte ProtocolVersion = 19;
+        internal const byte ProtocolVersion = 20;
 
         private const float QueryInterval = 0.4f;
         private const int MaximumQueries = 64;
@@ -430,6 +431,8 @@ namespace BoscaliSummer.Features.Support.Networking
                     w.WritePackedInt32(v.ForeignLayouts[i]);
                 }
                 WriteCyber(w, v.Cyber, v.CyberOriginCount, v.CyberOrigins);
+                for (int i = 0; i < TeamGates.Count; i++)
+                    w.WriteSingle(v.TeamCooldown != null && i < v.TeamCooldown.Length ? v.TeamCooldown[i] : 0f);
             });
             SetReader<OpsStateMessage>(r =>
             {
@@ -476,6 +479,7 @@ namespace BoscaliSummer.Features.Support.Networking
                     message.ForeignLayouts[i] = r.ReadPackedInt32();
                 }
                 if (!ReadCyber(r, ref message)) return new OpsStateMessage { Protocol = 0 };
+                for (int i = 0; i < TeamGates.Count; i++) message.TeamCooldown[i] = r.ReadSingle();
                 return message;
             });
             SetWriter<SpecOpsStateMessage>((w, v) =>

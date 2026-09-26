@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using BoscaliSummer.Features.Support.Domain;
@@ -791,10 +791,12 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             bool propulsion = station && platform.FittedOnline(ModuleKind.Propulsion, now);
             PlatformDenial denial = station ? platform.CheckRelocate(relocationSector, now) : PlatformDenial.NoPlatform;
             bool pending = support != null && support.CommandPending;
-            bool enabled = station && denial == PlatformDenial.None && support != null && !pending;
+            float teamLeft = support != null ? support.TeamCooldownRemaining(TeamGate.Relocate) : 0f;
+            bool enabled = station && denial == PlatformDenial.None && support != null && !pending && teamLeft <= 0.5f;
             string relocationHint = !station ? "LAUNCH THE CORE TO ESTABLISH COVERAGE"
                 : !propulsion ? "FIT PRP PROPULSION TO RELOCATE"
                 : pending ? "AWAITING HOST REPLY"
+                : teamLeft > 0.5f ? "TEAM RE-TASKING · T-" + Mathf.CeilToInt(teamLeft) + "s"
                 : relocationSector == platform.PositionIndex ? "SELECT A DIFFERENT SECTOR TO MOVE"
                 : PlatformWords.Denial(denial, platform, PlatformAbility.Rephase, now);
             Set(mobility, "DESTINATION · " + StationKeeping.Name(relocationSector) + "\n" + relocationHint);

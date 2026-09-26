@@ -7,8 +7,8 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
 {
     /// <summary>
     /// EMP shock: a burst from high altitude that blinds radars across a wide area. The
-    /// missile is a delivery visual; the effect is a vanilla <c>Unit.Jam</c> on every unit in
-    /// the radius - friendly and hostile alike.
+    /// missile is a delivery visual; the effect is a vanilla <c>Unit.Jam</c> on every hostile
+    /// unit in the radius. Friendly units keep their radars.
     /// </summary>
     internal sealed class EmpAction : ISupportAction
     {
@@ -115,6 +115,7 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
                         {
                             Unit unit = units[i];
                             if (unit == null || unit.disabled) continue;
+                            if (owner != null && unit.NetworkHQ == owner) continue;
 
                             float dx = unit.transform.position.x - target.x;
                             float dz = unit.transform.position.z - target.z;
@@ -136,7 +137,7 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
 
                     if (elapsed < 0.5f)
                     {
-                        Visuals.CockpitEmpDisruption.CheckLocalDisruption(burstPoint, radius);
+                        Visuals.CockpitEmpDisruption.CheckLocalDisruption(burstPoint, radius, owner);
                     }
 
                     yield return new WaitForSeconds(0.25f);

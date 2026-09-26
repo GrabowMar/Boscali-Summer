@@ -587,6 +587,7 @@ using (Stream campaignMission = pluginAssembly.GetManifestResourceStream(campaig
     ,("BoscaliSummer.Features.Support.Networking.OpsStateMessage", "ForeignLayouts", typeof(int[]))
     ,("BoscaliSummer.Features.Support.Networking.OpsStateMessage", "CyberOriginCount", typeof(byte))
     ,("BoscaliSummer.Features.Support.Networking.OpsStateMessage", "CyberOrigins", typeof(string[]))
+    ,("BoscaliSummer.Features.Support.Networking.OpsStateMessage", "TeamCooldown", typeof(float[]))
     ,("BoscaliSummer.Features.Support.Networking.OpsCommandMessage", "Revision", typeof(uint))
     ,("BoscaliSummer.Features.Support.Networking.SpecOpsStateMessage", "Protocol", typeof(byte))
     ,("BoscaliSummer.Features.Support.Networking.CyberEffectMessage", "Protocol", typeof(byte))
@@ -1152,7 +1153,7 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
 {
     const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance;
     Type net = plugin.GetType("BoscaliSummer.Features.Support.Networking.SupportNet", true)!;
-    if ((byte)net.GetField("ProtocolVersion", flags)!.GetRawConstantValue()! != 19)
+    if ((byte)net.GetField("ProtocolVersion", flags)!.GetRawConstantValue()! != 20)
         throw new InvalidOperationException("Support protocol differs from the operations contract");
     net.GetMethod("InstallSerializers", flags)!.Invoke(null, null);
 
@@ -1203,13 +1204,13 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
 
     Type requestType = plugin.GetType("BoscaliSummer.Features.Support.Networking.SupportRequestMessage", true)!;
     object request = Activator.CreateInstance(requestType)!;
-    Set(request, "Protocol", (byte)19); Set(request, "RequestId", 7123); Set(request, "Action", (byte)6);
+    Set(request, "Protocol", (byte)20); Set(request, "RequestId", 7123); Set(request, "Action", (byte)6);
     Set(request, "X", 1234.5f); Set(request, "Y", 2345.5f); Set(request, "Z", -3456.5f);
     Roundtrip(requestType, request, "request");
 
     Type resultType = plugin.GetType("BoscaliSummer.Features.Support.Networking.SupportResultMessage", true)!;
     object resultMessage = Activator.CreateInstance(resultType)!;
-    Set(resultMessage, "Protocol", (byte)19); Set(resultMessage, "RequestId", 7123);
+    Set(resultMessage, "Protocol", (byte)20); Set(resultMessage, "RequestId", 7123);
     Set(resultMessage, "Action", (byte)4); Set(resultMessage, "Result", (byte)1);
     Set(resultMessage, "CooldownSeconds", 30f); Set(resultMessage, "Radius", 6000f);
     Set(resultMessage, "Duration", 10f); Set(resultMessage, "Contacts", 48);
@@ -1220,12 +1221,12 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
 
     Type queryType = plugin.GetType("BoscaliSummer.Features.Support.Networking.OpsQueryMessage", true)!;
     object query = Activator.CreateInstance(queryType)!;
-    Set(query, "Protocol", (byte)19);
+    Set(query, "Protocol", (byte)20);
     Roundtrip(queryType, query, "ops query");
 
     Type commandType = plugin.GetType("BoscaliSummer.Features.Support.Networking.OpsCommandMessage", true)!;
     object command = Activator.CreateInstance(commandType)!;
-    Set(command, "Protocol", (byte)19); Set(command, "RequestId", 91); Set(command, "Command", (byte)0);
+    Set(command, "Protocol", (byte)20); Set(command, "RequestId", 91); Set(command, "Command", (byte)0);
     Set(command, "Arg", (byte)14); Set(command, "Arg2", (byte)9); Set(command, "X", 1234.5f); Set(command, "Z", -3456.5f);
     Roundtrip(commandType, command, "ops module launch command");
     Set(command, "Command", (byte)2); Set(command, "Arg", (byte)7); Set(command, "Arg2", (byte)0);
@@ -1261,7 +1262,7 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
 
     Type stateType = plugin.GetType("BoscaliSummer.Features.Support.Networking.OpsStateMessage", true)!;
     object state = Activator.CreateInstance(stateType)!;
-    Set(state, "Protocol", (byte)19); Set(state, "RequestId", 91); Set(state, "Result", (byte)1);
+    Set(state, "Protocol", (byte)20); Set(state, "RequestId", 91); Set(state, "Result", (byte)1);
     Set(state, "PlatformActive", true);
     Set(state, "PlatformModules", new byte[] { 0, 0, 5, 0, 0, 2, 11, 1, 14, 0, 0, 0, 13, 0, 0 });
     Set(state, "PlatformOffline", new byte[] { 0, 0, 0, 0, 0, 0, 44, 0, 0, 0, 0, 0, 0, 0, 0 });
@@ -1319,6 +1320,7 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
     Set(state, "Cyber", network);
     Set(state, "CyberOriginCount", (byte)2);
     Set(state, "CyberOrigins", new[] { "BOSCALI", "PRIMEVA", null, null, null, null, null, null });
+    Set(state, "TeamCooldown", new float[] { 12.5f, 0f, 44f, 0f });
     // The snapshot goes to every polling client: keep it inside one datagram.
     int stateBytes = Encode(stateType, state).Length;
     if (stateBytes > 900)
@@ -1418,14 +1420,17 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
         (byte)Get(stateBack, "CyberOriginCount") != 2 ||
         ((string[])Get(stateBack, "CyberOrigins"))[1] != "PRIMEVA")
         throw new InvalidOperationException("Support ops state CYBER network roundtrip failed");
+    if (Math.Abs(((float[])Get(stateBack, "TeamCooldown"))[0] - 12.5f) > 0.001f ||
+        Math.Abs(((float[])Get(stateBack, "TeamCooldown"))[2] - 44f) > 0.001f)
+        throw new InvalidOperationException("Support ops state team cooldown roundtrip failed");
     // A station flag past its bound must stop the reader instead of consuming later fields.
-    if ((byte)Get(Decode(stateType, new byte[] { 19, 0, 1, 9 }), "Protocol") != 0)
+    if ((byte)Get(Decode(stateType, new byte[] { 20, 0, 1, 9 }), "Protocol") != 0)
         throw new InvalidOperationException("Support accepted an out-of-range station flag");
     // An inactive station followed by an over-bound foreign count must be refused too.
-    if ((byte)Get(Decode(stateType, new byte[] { 19, 0, 1, 0, 9 }), "Protocol") != 0)
+    if ((byte)Get(Decode(stateType, new byte[] { 20, 0, 1, 0, 9 }), "Protocol") != 0)
         throw new InvalidOperationException("Support accepted an over-bound foreign station count");
     // No station, no foreign stations, then twenty-six CYBER nodes: refused.
-    if ((byte)Get(Decode(stateType, new byte[] { 19, 0, 1, 0, 0, 26 }), "Protocol") != 0)
+    if ((byte)Get(Decode(stateType, new byte[] { 20, 0, 1, 0, 0, 26 }), "Protocol") != 0)
         throw new InvalidOperationException("Support accepted an over-bound CYBER node count");
     if ((byte)Get(Decode(stateType, new byte[] { 17 }), "Protocol") != 17 ||
         (bool)Get(Decode(stateType, new byte[] { 17 }), "PlatformActive"))
@@ -1433,7 +1438,7 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
 
     Type cyberType = plugin.GetType("BoscaliSummer.Features.Support.Networking.CyberEffectMessage", true)!;
     object cyber = Activator.CreateInstance(cyberType)!;
-    Set(cyber, "Protocol", (byte)19); Set(cyber, "Kind", (byte)3);
+    Set(cyber, "Protocol", (byte)20); Set(cyber, "Kind", (byte)3);
     Set(cyber, "FactionName", "Vulture");
     Set(cyber, "X", 1234.5f); Set(cyber, "Z", -3456.5f); Set(cyber, "Duration", 15f);
     object cyberBack = Roundtrip(cyberType, cyber, "cyber effect");
@@ -1442,7 +1447,7 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
 
     ProbeSpecOpsState(plugin, Encode, Decode, Set, Get);
 
-    Console.WriteLine("  Support protocol-19 serializers: support/station/CYBER-network/SPEC OPS roundtrips; raise/launch/recall orders with anchor ids; malformed CYBER-node/objective/array bounds and old-header rejection");
+    Console.WriteLine("  Support protocol-20 serializers: support/station/CYBER-network/SPEC OPS roundtrips; raise/launch/recall orders with anchor ids; malformed CYBER-node/objective/array bounds and old-header rejection");
 }
 
 /// <summary>
@@ -1478,14 +1483,14 @@ static void ProbeSpecOpsState(Assembly plugin, Func<Type, object, byte[]> Encode
     ((float[])Get(snapshot, "AbilityRecharge"))[4] = 37.5f; // HUNT uses the expanded recharge array.
 
     object message = Activator.CreateInstance(messageType)!;
-    Set(message, "Protocol", (byte)19);
+    Set(message, "Protocol", (byte)20);
     Set(message, "State", snapshot);
     byte[] bytes = Encode(messageType, message);
     if (bytes.Length > 900)
         throw new InvalidOperationException("SPEC OPS snapshot worst case is " + bytes.Length +
             " bytes; keep it under 900 so it stays in one datagram");
     object back = Get(Decode(messageType, bytes), "State");
-    if ((byte)Get(Decode(messageType, bytes), "Protocol") != 19 ||
+    if ((byte)Get(Decode(messageType, bytes), "Protocol") != 20 ||
         (byte)Get(back, "ObjectiveCount") != 12 ||
         ((int[])Get(back, "ObjectiveAnchor"))[11] != -100011 ||
         ((string[])Get(back, "ObjectiveName"))[0].Length != 20 ||

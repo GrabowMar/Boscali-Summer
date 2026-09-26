@@ -148,6 +148,9 @@ namespace BoscaliSummer.Tests.Features.DynamicOperations
                 "Only successful acceptance records the pilot; later faction actions cannot replace it");
             attributed.Cancel(3f);
             TestAssert.That(attributed.AcceptedBy == "PILOT ONE", "Result cards retain the accepting pilot");
+            var identified = new Operation(41, 41, OperationKind.Patrol, OperationReward.None, 0f, 1, 1);
+            TestAssert.That(identified.AcceptorId == 0 && identified.Accept(1f, "PILOT ONE", 7) && identified.AcceptorId == 7,
+                "Acceptance records the acceptor identity the host pays and guards by");
             var expired = new Operation(4, 4, OperationKind.Capture, OperationReward.None, 0f, 1, 1);
             TestAssert.That(!expired.Accept(300f) && !expired.Accept(float.NaN), "Expired and invalid-time offers cannot be accepted");
             expired.Observe(300f, 1f, true, true, true);
