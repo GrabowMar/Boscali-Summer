@@ -11,7 +11,7 @@ namespace BoscaliSummer.Features.Weather.Domain
         public float Conditions { get; }
         public float CloudDeckMetres { get; }
         public float RainProbability { get; }
-        public WeatherRegime Regime { get; }
+        public RegimeSnapshot Regime { get; }
 
         public ForecastStep(int offsetMinutes, float conditions, float cloudDeckMetres, float rainProbability)
         {
@@ -19,7 +19,7 @@ namespace BoscaliSummer.Features.Weather.Domain
             Conditions = Math.Max(0f, Math.Min(1f, conditions));
             CloudDeckMetres = cloudDeckMetres;
             RainProbability = Math.Max(0f, Math.Min(1f, rainProbability));
-            Regime = WeatherRegime.FromConditions(Conditions);
+            Regime = RegimeSnapshot.FromConditions(Conditions);
         }
     }
 

@@ -3,6 +3,13 @@ using UnityEngine;
 
 namespace BoscaliSummer.Features.Weather.Configuration
 {
+    internal enum RainQuality
+    {
+        Low = 0,
+        Medium = 1,
+        High = 2,
+    }
+
     /// <summary>
     /// Configuration settings for the Weather feature, dynamic transitions, and procedural rain.
     /// </summary>
@@ -31,12 +38,28 @@ namespace BoscaliSummer.Features.Weather.Configuration
         public ConfigEntry<KeyCode> DebugKey { get; }
         public ConfigEntry<bool> DebugKeyRequiresCtrl { get; }
 
+        // Synoptic sky (deterministic field, host key).
+        public ConfigEntry<RainQuality> Quality { get; }
+        public ConfigEntry<bool> RainOnCanopy { get; }
+        public ConfigEntry<bool> RainAudio { get; }
+        public ConfigEntry<bool> Hud { get; }
+        public ConfigEntry<float> RadarRangeKm { get; }
+        public ConfigEntry<int> ForecastSteps { get; }
+        public ConfigEntry<int> ForecastStepMinutes { get; }
+        public ConfigEntry<bool> DynamicWeather { get; }
+        public ConfigEntry<int> StartRegime { get; }
+        public ConfigEntry<bool> StormTurbulence { get; }
+        public ConfigEntry<bool> SensorEffects { get; }
+        public ConfigEntry<bool> LightningHazard { get; }
+        public ConfigEntry<bool> DebugControls { get; }
+        public ConfigEntry<float> DebugRainPreview { get; }
+
         public WeatherSettings(ConfigFile config)
         {
             const string section = "Weather";
 
             Enabled = config.Bind(section, "Enabled", true,
-                "Enable the Weather module, including the ENV bezel screen and dynamic weather.");
+                "Enable the Weather module: the ENV bezel screen, dynamic weather, and the synoptic sky.");
 
             DynamicWeatherEnabled = config.Bind(section, "DynamicWeatherEnabled", true,
                 "Enable smooth dynamic weather transitions over mission time by gently modulating " +
@@ -113,10 +136,57 @@ namespace BoscaliSummer.Features.Weather.Configuration
                 "Enable in-game debug weather shortcuts. The ENV panel remains read-only.");
 
             DebugKey = config.Bind(section, "DebugKey", KeyCode.F11,
-                "Keyboard hotkey to cycle weather regimes (Shift + key cycles rain mode). Set to None to disable.");
+                "Keyboard hotkey to cycle weather regimes (Shift + key cycles rain mode) and open the synoptic debug window. Set to None to disable.");
 
             DebugKeyRequiresCtrl = config.Bind(section, "DebugKeyRequiresCtrl", false,
                 "Require holding Ctrl when pressing the debug weather hotkey.");
+
+            // Synoptic sky: presentation is client-local, the sky rules are host-authoritative.
+            Quality = config.Bind(section, "RainQuality", RainQuality.High,
+                "How many rain drops are drawn around the aircraft and on the canopy. " +
+                "Client-local; lower it if heavy rain costs frames.");
+            RainOnCanopy = config.Bind(section, "RainOnCanopy", true,
+                "Rain drops that bead, run and blow off the canopy glass. Client-local.");
+            RainAudio = config.Bind(section, "RainAudio", true,
+                "Rain, canopy-impact and thunder sound. Client-local.");
+            Hud = config.Bind(section, "Hud", true,
+                "One weather line on the HUD board: nearby cells, heavy rain, turbulence, " +
+                "lightning, hail. Client-local.");
+            RadarRangeKm = config.Bind(section, "RadarRangeKm", 40f,
+                new ConfigDescription("Half-height of the WEA radar picture, in km. Client-local.",
+                    new AcceptableValueRange<float>(10f, 200f)));
+            ForecastSteps = config.Bind(section, "ForecastSteps", 8,
+                new ConfigDescription("Forecast rows on the synoptic page. Client-local.",
+                    new AcceptableValueRange<int>(2, 12)));
+            ForecastStepMinutes = config.Bind(section, "ForecastStepMinutes", 5,
+                new ConfigDescription("Minutes between forecast rows. Client-local.",
+                    new AcceptableValueRange<int>(1, 30)));
+
+            DynamicWeather = config.Bind(section, "DynamicWeather", true,
+                "The sky moves through regimes on its own. Off holds the starting regime. " +
+                "Host-authoritative.");
+            StartRegime = config.Bind(section, "StartRegime", 0,
+                new ConfigDescription(
+                    "Sky a mission opens with: 0 = automatic (seeded, usually flyable), 1 CLEAR, " +
+                    "2 FAIR, 3 SHOWERS, 4 OVERCAST, 5 FRONTAL, 6 STORMS, 7 SEVERE. Host-authoritative.",
+                    new AcceptableValueRange<int>(0, 7)));
+            StormTurbulence = config.Bind(section, "StormTurbulence", true,
+                "Updrafts, downdrafts, gust fronts and turbulence near storm cells push aircraft " +
+                "around. Host-authoritative.");
+            SensorEffects = config.Bind(section, "SensorEffects", true,
+                "Rain and haze limit how far units can spot each other visually, and heavy rain " +
+                "makes infrared seekers easier to decoy. Host-authoritative.");
+            LightningHazard = config.Bind(section, "LightningHazard", true,
+                "A rare lightning strike on an aircraft deep in a mature storm core: a flash and " +
+                "a brief instrument flicker. Never damages. Host-authoritative.");
+
+            DebugControls = config.Bind(section, "DebugControls", false,
+                "Show the weather debug window hotkey (host only can change the sky).");
+            DebugRainPreview = config.Bind(section, "DebugRainPreview", -1f,
+                new ConfigDescription(
+                    "Debug: when 0 or more, draw this rain rate (mm/h) at the camera regardless of the " +
+                    "sky. Presentation only and client-local; -1 is off.",
+                    new AcceptableValueRange<float>(-1f, 150f)));
         }
     }
 }

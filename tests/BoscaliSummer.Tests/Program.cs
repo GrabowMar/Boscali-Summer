@@ -90,6 +90,8 @@ namespace BoscaliSummer.Tests
             Features.Progression.AceHuntHudCopyTests.Run();
             Features.Radio.RadioHudCopyTests.Run();
             Features.TheaterOps.TheaterOpsHudCopyTests.Run();
+            Features.Weather.WeatherFieldTests.Run();
+            Features.Weather.DropSimTests.Run();
             TrenchTests.Run();
             Features.Weather.WeatherRegimeTests.Run();
             Features.Weather.WeatherForecastTests.Run();

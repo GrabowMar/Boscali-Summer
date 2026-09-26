@@ -21,11 +21,14 @@ namespace BoscaliSummer.Features.Weather.Presentation
     {
         private const int TabForecast = 0;
         private const int TabEnvironment = 1;
+        private const int TabSynoptic = 2;
         private const float Width = AvTokens.PanelWidth;
         private const int ChipCount = 2;
 
         private WeatherSettings settings;
         private WeatherManager weather;
+        private SynopticWeather synoptic;
+        private readonly WeatherSynopticPage synopticPage = new WeatherSynopticPage();
         private ManualLogSource logger;
 
         private GameObject screenRoot;
@@ -110,11 +113,14 @@ namespace BoscaliSummer.Features.Weather.Presentation
             public TMP_Text RainText;
         }
 
-        public void Configure(WeatherSettings config, WeatherManager manager, ManualLogSource log)
+        public void Configure(WeatherSettings config, WeatherManager manager,
+            SynopticWeather synopticWeather, ManualLogSource log)
         {
             settings = config;
             weather = manager;
+            synoptic = synopticWeather;
             logger = log;
+            synopticPage.Configure(config, synopticWeather);
         }
 
         public void ResetForScene()
@@ -126,6 +132,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
             screen = null;
             shell = null;
             timelineRows.Clear();
+            synopticPage.Reset();
             nextAttempt = 0f;
             nextRefresh = 0f;
             failed = false;
@@ -249,7 +256,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
             content.SetParent(rootRect, false);
             AvKit.Stretch(content);
 
-            string[] tabs = { "WEATHER", "SKY & AIR" };
+            string[] tabs = { "WEATHER", "SKY & AIR", "SYNOPTIC" };
 
             shell = AvScreen.Build(
                 content, MfdSlots.Weather,
@@ -270,6 +277,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
 
             BuildForecastPage(shell.CreatePage(TabForecast, "ForecastPage"));
             BuildEnvironmentPage(shell.CreatePage(TabEnvironment, "EnvironmentPage"));
+            synopticPage.BuildPage(shell.CreatePage(TabSynoptic, "SynopticPage"), shell.Body);
 
             MFDScreen result = root.AddComponent<MFDScreen>();
             result.shortName = MfdSlots.Weather;
@@ -730,7 +738,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
 
             // Top metrics row
             float cond = weather.CurrentConditions;
-            WeatherRegime regime = weather.CurrentRegime;
+            RegimeSnapshot regime = weather.CurrentRegime;
             Color condColor = GetRegimeColor(regime.Type);
             shell.Metrics[0].Set($"{Mathf.RoundToInt(cond * 100f)}% {regime.Code}", "CLOUD COVER", cond, condColor);
 
@@ -762,9 +770,13 @@ namespace BoscaliSummer.Features.Weather.Presentation
             {
                 RefreshEnvironmentTab(level, kts, towards);
             }
+            else if (shell.Page == TabSynoptic)
+            {
+                synopticPage.Refresh(shell);
+            }
 
-            // Status strip
-            if (shell.Status != null)
+            // Status strip (the synoptic tab writes its own through WriteStatus)
+            if (shell.Status != null && shell.Page != TabSynoptic)
             {
                 if (weather.IsManualOverride)
                 {
@@ -786,7 +798,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
 
         private void RefreshForecastTab(
             float cond,
-            WeatherRegime regime,
+            RegimeSnapshot regime,
             float deck,
             float windKts,
             Vector3 samplePos,

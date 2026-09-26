@@ -83,21 +83,25 @@ namespace BoscaliSummer.Features.Weather.Runtime
         private float? forcedRainIntensity;
 
         /// <summary>The installed manager, for the automation hook; null outside a mod session.</summary>
+        private SynopticWeather synoptic;
+
         internal static WeatherManager Live { get; private set; }
 
         public float CurrentConditions => currentConditions;
         public float CurrentCloudHeight => currentCloudHeight;
         public Vector3 CurrentWindVelocity => currentWind;
         public float CurrentTurbulence => currentTurbulence;
-        public WeatherRegime CurrentRegime => WeatherRegime.FromConditions(currentConditions);
+        public RegimeSnapshot CurrentRegime => RegimeSnapshot.FromConditions(currentConditions);
         public float TransitionProgress => transitionProgress;
         public bool IsManualOverride => isManualOverride;
         public float? ForcedRainIntensity => forcedRainIntensity;
 
-        public void Configure(WeatherSettings weatherSettings, WeatherNet weatherNet, ManualLogSource log)
+        public void Configure(WeatherSettings weatherSettings, WeatherNet weatherNet,
+            SynopticWeather synopticWeather, ManualLogSource log)
         {
             settings = weatherSettings;
             network = weatherNet;
+            synoptic = synopticWeather;
             logger = log;
             network?.Configure(this);
             Live = this;
@@ -264,7 +268,8 @@ namespace BoscaliSummer.Features.Weather.Runtime
                 CheckDebugHotkeys();
             }
 
-            if (settings != null && settings.DynamicWeatherEnabled.Value)
+            if (settings != null && settings.DynamicWeatherEnabled.Value &&
+                (synoptic == null || !synoptic.Driving))
             {
                 if (GameAccess.IsServer())
                 {
@@ -763,13 +768,13 @@ namespace BoscaliSummer.Features.Weather.Runtime
             float missionTime = NetworkSceneSingleton<MissionManager>.i?.MissionTime ?? Time.time;
             BroadcastSync(missionTime);
 
-            WeatherRegime reg = WeatherRegime.FromConditions(currentConditions);
+            RegimeSnapshot reg = RegimeSnapshot.FromConditions(currentConditions);
             NotifyPlayer(reg.Name, forcedRain);
         }
 
         public void SetRegimeOverride(WeatherRegimeType regime, float? forcedRain = null, bool snapImmediate = true)
         {
-            WeatherRegime r = WeatherRegime.FromType(regime);
+            RegimeSnapshot r = RegimeSnapshot.FromType(regime);
             // Changing the visual weather does not double mission wind or invent wind in calm missions.
             Vector3 targetW = baselineWindVelocity;
 
@@ -814,7 +819,7 @@ namespace BoscaliSummer.Features.Weather.Runtime
             }
             else
             {
-                WeatherRegime current = CurrentRegime;
+                RegimeSnapshot current = CurrentRegime;
                 switch (current.Type)
                 {
                     case WeatherRegimeType.Clear:

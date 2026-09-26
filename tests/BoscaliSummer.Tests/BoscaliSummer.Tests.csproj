@@ -171,6 +171,16 @@
     <Compile Include="..\..\modules\Weather\Domain\CanopyShaderParams.cs" Link="Features\Weather\CanopyShaderParams.cs" />
     <Compile Include="..\..\modules\Weather\Domain\RainSkyMath.cs" Link="Features\Weather\RainSkyMath.cs" />
     <Compile Include="..\..\modules\Weather\Domain\LightningMath.cs" Link="Features\Weather\LightningMath.cs" />
+    <Compile Include="..\..\modules\Weather\Domain\DropSim.cs" Link="Features\Weather\DropSim.cs" />
+    <Compile Include="..\..\modules\Weather\Domain\Lightning.cs" Link="Features\Weather\Lightning.cs" />
+    <Compile Include="..\..\modules\Weather\Domain\RegimeSchedule.cs" Link="Features\Weather\RegimeSchedule.cs" />
+    <Compile Include="..\..\modules\Weather\Domain\StormCell.cs" Link="Features\Weather\StormCell.cs" />
+    <Compile Include="..\..\modules\Weather\Domain\WeatherField.cs" Link="Features\Weather\WeatherField.cs" />
+    <Compile Include="..\..\modules\Weather\Domain\WeatherFront.cs" Link="Features\Weather\WeatherFront.cs" />
+    <Compile Include="..\..\modules\Weather\Domain\WeatherKey.cs" Link="Features\Weather\WeatherKey.cs" />
+    <Compile Include="..\..\modules\Weather\Domain\WeatherMaps.cs" Link="Features\Weather\WeatherMaps.cs" />
+    <Compile Include="..\..\modules\Weather\Domain\WeatherMath.cs" Link="Features\Weather\WeatherMath.cs" />
+    <Compile Include="..\..\modules\Weather\Domain\WeatherWords.cs" Link="Features\Weather\WeatherWords.cs" />
     <Compile Include="..\..\modules\Visuals\Domain\VisualsMath.cs" Link="Features\Visuals\VisualsMath.cs" />
     <Compile Include="..\..\modules\Visuals\Domain\SinLut.cs" Link="Features\Visuals\SinLut.cs" />
     <Compile Include="..\..\modules\Immersion\Domain\ImmersionMath.cs" Link="Features\Immersion\ImmersionMath.cs" />
