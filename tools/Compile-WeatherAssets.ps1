@@ -61,6 +61,8 @@ public static class BuildWeatherBundle
                     !path.EndsWith(".tif", StringComparison.OrdinalIgnoreCase) &&
                     !path.EndsWith(".tiff", StringComparison.OrdinalIgnoreCase) &&
                     !path.EndsWith(".png", StringComparison.OrdinalIgnoreCase)) continue;
+                if (path.IndexOf("droplets_mask", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    path.IndexOf("rivulets_mask", StringComparison.OrdinalIgnoreCase) >= 0) continue;
                 assetPaths.Add(path);
                 Debug.Log("Bundling asset: " + path);
             }

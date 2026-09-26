@@ -403,13 +403,19 @@ namespace BoscaliSummer.Features.Weather.Runtime
                     settings != null ? settings.RainVolume.Value : 0.75f);
             }
 
+            // The sim ticks in every view so rain stays live; only the draw needs the cockpit.
+            float speedNorm = Mathf.Clamp01(ias / 250f);
+            if (canopyEnabled && hasGlass)
+                canopyShader.UpdateSim(canopySurfaces, rainIntensity, speedNorm,
+                    currentWind - airVel, Time.deltaTime);
             bool shaderDrawn = false;
             if (isCockpit && canopyEnabled && settings.CanopyShaderEnabled.Value && hasGlass)
             {
-                Vector3 flow = Vector3.down * 9f + (currentWind - airVel) * 0.08f;
+
                 canopyShader.SetLighting(sunDirection, sunColor, RenderSettings.fogColor, sceneRefraction);
-                shaderDrawn = canopyShader.Draw(canopySurfaces, glassCamera, canopyWetness, flow,
-                    Mathf.Clamp01(ias / 250f), lightLevel);
+
+                shaderDrawn = canopyShader.Draw(canopySurfaces, glassCamera, canopyWetness, lightLevel);
+
                 if (shaderDrawn && !canopyShaderLogged) LogCanopyShaderOnce("Canopy rain active on " + canopySurfaces.Count + " glass submeshes; native materials preserved.");
             }
             canopyShaderActive = shaderDrawn;
