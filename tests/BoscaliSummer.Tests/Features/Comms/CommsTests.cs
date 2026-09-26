@@ -31,6 +31,7 @@ namespace BoscaliSummer.Tests.Features.Comms
             PollsCountOneBallotPerVoter();
             PollsCloseOnTime();
             DuelThrowStaysSecretAndResolves();
+            DirectDuelsBuildRivalry();
             HuntRanksAndRevealsOnlyAtTheEnd();
             SnapshotShowsOnlyWhatTheViewerMaySee();
             ClientAppliesTheWholeLifecycle();
@@ -379,6 +380,35 @@ namespace BoscaliSummer.Tests.Features.Comms
             output.Clear();
             host.Tick(3f + CommsAuthority.DuelSeconds + 1f, output);
             TestAssert.That(output.Count == 1 && (output[0].Envelope.Flags & CommsFlags.Lapsed) != 0, "an untaken challenge lapses");
+        }
+
+        private static void DirectDuelsBuildRivalry()
+        {
+            var host = new CommsAuthority(7);
+            var client = new CommsClientState { LocalId = Third.Id, LocalFaction = Blue };
+            var output = new List<CommsOutbound>();
+            for (int round = 0; round < 3; round++)
+            {
+                output.Clear();
+                host.Handle(Wing, new CommsIntent { Op = CommsOp.RpsChallenge, Style = 0,
+                    Text = Third.Id.ToString() }, round * 100f, output);
+                uint id = output[0].Envelope.Id;
+                TestAssert.That(output[0].Envelope.Players[0] == Third.Id && output[0].Envelope.Values == null,
+                    "a direct invite names only its recipient and keeps the throw secret");
+                Deliver(output, client, Third, round * 100f);
+                TestAssert.That(client.Duels[0].TargetPlayer == Third.Id, "the invite is addressed on the client");
+                output.Clear();
+                host.Handle(Host, new CommsIntent { Op = CommsOp.RpsAccept, Target = id, Style = 1 }, round * 100f + 1f, output);
+                TestAssert.That(Refused(output), "a bystander cannot take a direct invite");
+                output.Clear();
+                host.Handle(Third, new CommsIntent { Op = CommsOp.RpsAccept, Target = id, Style = 2 }, round * 100f + 2f, output);
+                Deliver(output, client, Third, round * 100f + 2f);
+            }
+            TestAssert.That(client.Rivalries.Count == 1 && client.Rivalries[0].FirstWins == 3 &&
+                client.Rivalries[0].Streak == 3 && client.Duels.Count == 0,
+                "three settled duels make one bounded rivalry and clear the invites");
+            TestAssert.That(client.Feed[client.Feed.Count - 1].RematchPlayer == Wing.Id,
+                "the result offers the opponent as a rematch target");
         }
 
         private static void HuntRanksAndRevealsOnlyAtTheEnd()

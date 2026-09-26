@@ -13,6 +13,7 @@ namespace BoscaliSummer.Features.Comms.Domain
         public CommsTone Tone;
         public CommsChannel Channel;
         public string Text;
+        public ulong RematchPlayer;
 
         /// <summary>A position the line refers to, for the log's GO TO; NaN when it has none.</summary>
         public float X = float.NaN;
@@ -78,7 +79,21 @@ namespace BoscaliSummer.Features.Comms.Domain
         public uint Id;
         public ulong Challenger;
         public string ChallengerName;
+        public ulong TargetPlayer;
         public float Expires;
+    }
+
+    /// <summary>Small, local recap of duels witnessed during this mission.</summary>
+    internal sealed class RivalryView
+    {
+        public ulong First;
+        public ulong Second;
+        public string FirstName;
+        public string SecondName;
+        public int FirstWins;
+        public int SecondWins;
+        public int Draws;
+        public int Streak;
     }
 
     /// <summary>
@@ -104,6 +119,7 @@ namespace BoscaliSummer.Features.Comms.Domain
         private readonly List<DuelView> duels = new List<DuelView>();
         private readonly List<HuntView> hunts = new List<HuntView>();
         private readonly List<CommsFeedLine> feed = new List<CommsFeedLine>();
+        private readonly List<RivalryView> rivalries = new List<RivalryView>();
         private readonly List<CommsArrival> arrivals = new List<CommsArrival>();
         private readonly HashSet<ulong> muted = new HashSet<ulong>();
         private readonly Dictionary<ulong, string> seen = new Dictionary<ulong, string>();
@@ -134,6 +150,9 @@ namespace BoscaliSummer.Features.Comms.Domain
         public IReadOnlyList<DuelView> Duels => duels;
         public IReadOnlyList<HuntView> Hunts => hunts;
         public IReadOnlyList<CommsFeedLine> Feed => feed;
+        public IReadOnlyList<RivalryView> Rivalries => rivalries;
+        public int BestHuntMetres { get; private set; } = int.MaxValue;
+        public int HuntWins { get; private set; }
 
         /// <summary>Players this peer has heard from, by id, for the mute list.</summary>
         public IReadOnlyDictionary<ulong, string> Seen => seen;
@@ -157,6 +176,9 @@ namespace BoscaliSummer.Features.Comms.Domain
             duels.Clear();
             hunts.Clear();
             feed.Clear();
+            rivalries.Clear();
+            BestHuntMetres = int.MaxValue;
+            HuntWins = 0;
             arrivals.Clear();
             seen.Clear();
             pollClosedAt.Clear();
@@ -506,6 +528,11 @@ namespace BoscaliSummer.Features.Comms.Domain
                 int a = e.Values[0], b = e.Values[1], outcome = e.Values[2];
                 if (!CommsCatalog.ValidThrow(a) || !CommsCatalog.ValidThrow(b)) return;
                 string left = CommsText.Name(e.Items[0]), right = CommsText.Name(e.Items[1]);
+                if (e.Players != null && e.Players.Length >= 2)
+                {
+                    if (e.Players[0] != LocalId) seen[e.Players[0]] = left;
+                    if (e.Players[1] != LocalId) seen[e.Players[1]] = right;
+                }
                 string text = outcome == 0
                     ? "RPS DRAW: " + left + " AND " + right + " BOTH THREW " + CommsCatalog.Throws[a]
                     : outcome > 0
@@ -515,7 +542,11 @@ namespace BoscaliSummer.Features.Comms.Domain
                 {
                     Time = now, Author = e.Author, AuthorName = name, Kind = CommsFeedKind.Duel,
                     Tone = CommsTone.Fun, Channel = e.Channel, Text = text,
+                    RematchPlayer = e.Players != null && e.Players.Length >= 2
+                        ? (e.Players[0] == LocalId ? e.Players[1] : e.Players[1] == LocalId ? e.Players[0] : 0UL) : 0UL,
                 });
+                if (e.Players != null && e.Players.Length >= 2)
+                    RecordRivalry(e.Players[0], left, e.Players[1], right, outcome);
                 bool involved = e.Players != null && Array.IndexOf(e.Players, LocalId) >= 0;
                 if (involved) Arrive(0UL, CommsTone.Info, text, null, sound: false);
                 return;
@@ -524,6 +555,7 @@ namespace BoscaliSummer.Features.Comms.Domain
             if (index >= 0)
             {
                 duels[index].Expires = now + Math.Max(0f, e.Ttl);
+                duels[index].TargetPlayer = e.Players != null && e.Players.Length > 0 ? e.Players[0] : 0UL;
                 Revision++;
                 return;
             }
@@ -532,6 +564,7 @@ namespace BoscaliSummer.Features.Comms.Domain
                 Id = e.Id,
                 Challenger = e.Author,
                 ChallengerName = name,
+                TargetPlayer = e.Players != null && e.Players.Length > 0 ? e.Players[0] : 0UL,
                 Expires = now + Math.Max(0f, e.Ttl),
             });
             Revision++;
@@ -541,7 +574,34 @@ namespace BoscaliSummer.Features.Comms.Domain
                 Time = now, Author = e.Author, AuthorName = name, Kind = CommsFeedKind.Duel,
                 Tone = CommsTone.Fun, Channel = e.Channel, Text = "THROWS DOWN A ROCK-PAPER-SCISSORS CHALLENGE",
             });
-            Arrive(e.Author, CommsTone.Info, name + " CHALLENGES YOU · RPS", "OPEN COM › GAME TO ANSWER", sound: false);
+            if (e.Players == null || e.Players.Length == 0 || e.Players[0] == LocalId)
+                Arrive(e.Author, CommsTone.Info, name + " CHALLENGES YOU · RPS", "OPEN COM › CREW TO ANSWER", sound: false);
+        }
+
+        private void RecordRivalry(ulong first, string firstName, ulong second, string secondName, int outcome)
+        {
+            if (first == 0 || second == 0 || first == second) return;
+            if (first > second)
+            {
+                ulong id = first; first = second; second = id;
+                string name = firstName; firstName = secondName; secondName = name;
+                outcome = -outcome;
+            }
+            RivalryView row = null;
+            for (int i = 0; i < rivalries.Count; i++)
+                if (rivalries[i].First == first && rivalries[i].Second == second) { row = rivalries[i]; break; }
+            if (row == null)
+            {
+                if (rivalries.Count >= 32) rivalries.RemoveAt(0);
+                row = new RivalryView { First = first, Second = second };
+                rivalries.Add(row);
+            }
+            row.FirstName = firstName;
+            row.SecondName = secondName;
+            if (outcome > 0) { row.FirstWins++; row.Streak = row.Streak > 0 ? row.Streak + 1 : 1; }
+            else if (outcome < 0) { row.SecondWins++; row.Streak = row.Streak < 0 ? row.Streak - 1 : -1; }
+            else { row.Draws++; row.Streak = 0; }
+            Revision++;
         }
 
         private void ApplyHunt(CommsEnvelope e, float now)
@@ -593,6 +653,12 @@ namespace BoscaliSummer.Features.Comms.Domain
                 int count = (e.Points.Length - 2) / 2;
                 for (int i = 0; i < count; i++)
                 {
+                    if (e.Players != null && i < e.Players.Length && e.Players[i] == LocalId &&
+                        e.Values != null && i * 2 < e.Values.Length)
+                    {
+                        BestHuntMetres = Math.Min(BestHuntMetres, Math.Max(0, e.Values[i * 2]));
+                        if (i == 0) HuntWins++;
+                    }
                     hunt.Placings.Add(new HuntPlacingView
                     {
                         Name = CommsText.Name(e.Items != null && i < e.Items.Length ? e.Items[i] : null),

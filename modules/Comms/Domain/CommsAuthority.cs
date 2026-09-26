@@ -474,6 +474,13 @@ namespace BoscaliSummer.Features.Comms.Domain
         private void Challenge(CommsSender sender, string name, CommsIntent intent, float now, List<CommsOutbound> output)
         {
             if (!GamesAllowed(sender, output) || !ChannelAllowed(sender, intent.Channel, output)) return;
+            ulong target = 0;
+            if (!string.IsNullOrEmpty(intent.Text) &&
+                (!ulong.TryParse(intent.Text, out target) || target == 0 || target == sender.Id))
+            {
+                Refuse(sender, "INVALID CHALLENGE TARGET", output);
+                return;
+            }
             if (!CommsCatalog.ValidThrow(intent.Style))
             {
                 Refuse(sender, "PICK ROCK, PAPER OR SCISSORS", output);
@@ -496,6 +503,7 @@ namespace BoscaliSummer.Features.Comms.Domain
                 Id = NextId(),
                 Challenger = sender.Id,
                 ChallengerName = name,
+                TargetPlayer = target,
                 Faction = sender.Faction,
                 Channel = intent.Channel,
                 Expires = now + DuelSeconds,
@@ -516,6 +524,11 @@ namespace BoscaliSummer.Features.Comms.Domain
             if (duel.Challenger == sender.Id)
             {
                 Refuse(sender, "YOU CAN'T DUEL YOURSELF", output);
+                return;
+            }
+            if (duel.TargetPlayer != 0 && duel.TargetPlayer != sender.Id)
+            {
+                Refuse(sender, "THIS CHALLENGE IS FOR ANOTHER PILOT", output);
                 return;
             }
             if (!CommsCatalog.ValidThrow(intent.Style))
@@ -716,6 +729,7 @@ namespace BoscaliSummer.Features.Comms.Domain
             Channel = duel.Channel,
             Flags = flags,
             Ttl = Math.Max(0f, duel.Expires - now),
+            Players = duel.TargetPlayer == 0 ? null : new[] { duel.TargetPlayer },
         };
 
         private static CommsEnvelope HuntEnvelope(HuntRound hunt, float now) => new CommsEnvelope

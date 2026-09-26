@@ -96,7 +96,7 @@ own pages and Wing Command's `WMC`.
 | `SQD` | Pilot dossier, skill board, enemy aces, studio and engine tune |
 | `EVN` | World events |
 | `RAD` | Radio receiver and music deck |
-| `COM` | Multiplayer comms |
+| `COM` | Multiplayer map comms and Crew Deck: polls, hunts, direct duels, rematches and session rivalry |
 | `ENV` | Weather briefing |
 | `SET` | Map, style and HUD settings, and the host-only server page |
 

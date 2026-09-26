@@ -790,8 +790,10 @@ namespace BoscaliSummer.Features.Comms.Runtime
         public void Roll(int die) =>
             Submit(new CommsIntent { Op = CommsOp.Roll, Channel = TakeChannel(), Style = (byte)Mathf.Clamp(die, 0, 255) });
 
-        public void Challenge(int throwIndex) =>
-            Submit(new CommsIntent { Op = CommsOp.RpsChallenge, Channel = TakeChannel(), Style = (byte)Mathf.Clamp(throwIndex, 0, 255) });
+        public void Challenge(int throwIndex, ulong targetPlayer = 0, CommsChannel? channel = null) =>
+            Submit(new CommsIntent { Op = CommsOp.RpsChallenge, Channel = channel ?? TakeChannel(),
+                Style = (byte)Mathf.Clamp(throwIndex, 0, 255),
+                Text = targetPlayer == 0 ? null : targetPlayer.ToString() });
 
         public void AcceptDuel(uint duel, int throwIndex) =>
             Submit(new CommsIntent { Op = CommsOp.RpsAccept, Target = duel, Style = (byte)Mathf.Clamp(throwIndex, 0, 255) });

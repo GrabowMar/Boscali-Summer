@@ -18,6 +18,17 @@ namespace BoscaliSummer.Features.Comms.Presentation
 
         private TMP_Text diceNote;
         private TMP_Text lastRoll;
+        private TMP_Text liveNow;
+        private AvButton liveAction;
+        private uint liveHunt;
+        private TMP_Text duelNote;
+        private TMP_Text rivalryNote;
+        private TMP_Text profileNote;
+        private AvButton ggButton;
+        private float nextGg;
+        private ulong rematchTarget;
+        private string rematchName;
+        private CommsChannel rematchChannel;
 
         private RectTransform[] duelRows;
         private TMP_Text[] duelLabels;
@@ -40,6 +51,13 @@ namespace BoscaliSummer.Features.Comms.Presentation
         private void ResetGames()
         {
             diceNote = lastRoll = null;
+            liveNow = duelNote = rivalryNote = profileNote = null;
+            liveAction = null;
+            ggButton = null;
+            nextGg = 0f;
+            liveHunt = 0;
+            rematchTarget = 0;
+            rematchName = null;
             duelRows = null;
             duelLabels = null;
             duelAnswers = null;
@@ -55,11 +73,29 @@ namespace BoscaliSummer.Features.Comms.Presentation
             scoreEmpty = null;
         }
 
+        private void SelectRematch(ulong player, string name, CommsChannel channel)
+        {
+            rematchTarget = player;
+            rematchName = CommsText.Name(name);
+            rematchChannel = channel;
+            nextRefresh = 0f;
+        }
+
         private void BuildGamePage(GameObject page)
         {
-            float build = HeadingHeight * 4 + (GameRow + Gap) * (2 + DuelRows + 1 + HuntRows) + 20f +
-                          SectionGap * 4 + ScoreRows * 20f + 10f;
+            float build = HeadingHeight * 7 + (GameRow + Gap) * (3 + DuelRows + 1 + HuntRows) + 70f +
+                          SectionGap * 6 + ScoreRows * 20f + 10f;
             RectTransform parent = PageBody(page, build, out float x, out float y, out float width);
+
+            Heading(parent, x, ref y, width, "LIVE NOW", "JOIN THE MOMENT");
+            liveNow = AvStyled.Label(parent, new Rect(x, y, width - 112f, GameRow), "Nothing running. Start a hunt, poll or challenge.", "row-main");
+            liveNow.overflowMode = TextOverflowModes.Ellipsis;
+            liveAction = Button(parent, new Rect(x + width - 106f, y, 106f, GameRow), "JOIN", () =>
+            {
+                if (liveHunt != 0) comms.ArmHuntGuess(liveHunt);
+                else shell.SetPage(TabPoll);
+            }, "Join the current hunt or poll.");
+            y -= GameRow + SectionGap;
 
             // ---- dice
             diceNote = Heading(parent, x, ref y, width, "DICE", "");
@@ -76,12 +112,18 @@ namespace BoscaliSummer.Features.Comms.Presentation
             y -= 20f + SectionGap;
 
             // ---- rock paper scissors
-            Heading(parent, x, ref y, width, "ROCK · PAPER · SCISSORS", "PICK A THROW TO CHALLENGE");
+            duelNote = Heading(parent, x, ref y, width, "ROCK · PAPER · SCISSORS", "PICK A THROW TO CHALLENGE");
+            duelNote.overflowMode = TextOverflowModes.Ellipsis;
             for (int i = 0; i < CommsCatalog.Throws.Length; i++)
             {
                 int throwIndex = i;
                 IconButton(parent, Cell(x, y, width, GameRow, CommsCatalog.Throws.Length, i), "rps", CommsCatalog.Throws[i],
-                    ToneColour(CommsTone.Fun), () => comms.Challenge(throwIndex),
+                    ToneColour(CommsTone.Fun), () =>
+                    {
+                        comms.Challenge(throwIndex, rematchTarget, rematchTarget == 0 ? (CommsChannel?)null : rematchChannel);
+                        rematchTarget = 0;
+                        rematchName = null;
+                    },
                     "Challenge with " + CommsCatalog.Throws[i] + ". Your throw stays secret on the host until someone answers.", out _);
             }
             y -= GameRow + Gap;
@@ -150,6 +192,22 @@ namespace BoscaliSummer.Features.Comms.Presentation
             }
             y -= HuntRows * (GameRow + Gap) + SectionGap;
 
+            Heading(parent, x, ref y, width, "RIVALRY", "SINCE YOU JOINED");
+            rivalryNote = AvStyled.Label(parent, new Rect(x, y, width, 20f), "Challenge someone twice to start a friendly rivalry.", "row-sub");
+            rivalryNote.overflowMode = TextOverflowModes.Ellipsis;
+            y -= 20f + SectionGap;
+
+            Heading(parent, x, ref y, width, "YOUR SESSION", "FOR FUN ONLY");
+            profileNote = AvStyled.Label(parent, new Rect(x, y, width - 76f, GameRow), "No rounds yet.", "row-sub");
+            profileNote.overflowMode = TextOverflowModes.Ellipsis;
+            ggButton = Button(parent, new Rect(x + width - 70f, y, 70f, GameRow), "GG", () =>
+            {
+                if (Time.unscaledTime < nextGg) return;
+                for (int i = 0; i < CommsCatalog.Calls.Length; i++)
+                    if (CommsCatalog.Calls[i].Code == "GG") { comms.Call(i); nextGg = Time.unscaledTime + 8f; break; }
+            }, "Send a quiet GG to your team for the latest game result.");
+            y -= GameRow + SectionGap;
+
             // ---- leaderboard
             Heading(parent, x, ref y, width, "LEADERBOARD", "FUN POINTS · THIS MISSION");
             scoreRanks = new TMP_Text[ScoreRows];
@@ -171,6 +229,42 @@ namespace BoscaliSummer.Features.Comms.Presentation
             if (duelRows == null) return;
             CommsClientState state = comms.State;
 
+            liveHunt = 0;
+            bool pollLive = false;
+            bool duelLive = false;
+            for (int i = state.Hunts.Count - 1; i >= 0; i--)
+            {
+                HuntView hunt = state.Hunts[i];
+                if (hunt.Revealed || hunt.Author == comms.LocalId || hunt.HasLocalGuess || state.IsMuted(hunt.Author)) continue;
+                liveHunt = hunt.Id;
+                liveNow.text = hunt.AuthorName + " HID A TARGET · " + CommsText.Countdown(hunt.Ends - now);
+                break;
+            }
+            if (liveHunt == 0)
+                for (int i = state.Polls.Count - 1; i >= 0; i--)
+                {
+                    CommsPoll poll = state.Polls[i];
+                    if (poll.Closed || poll.LocalVote >= 0 || state.IsMuted(poll.Author)) continue;
+                    pollLive = true;
+                    liveNow.text = "POLL · " + poll.Question;
+                    break;
+                }
+            if (liveHunt == 0 && !pollLive)
+                for (int i = state.Duels.Count - 1; i >= 0; i--)
+                {
+                    DuelView duel = state.Duels[i];
+                    if (duel.Challenger == comms.LocalId || state.IsMuted(duel.Challenger) ||
+                        duel.TargetPlayer != 0 && duel.TargetPlayer != comms.LocalId) continue;
+                    duelLive = true;
+                    liveNow.text = duel.ChallengerName + " CHALLENGES · PICK A THROW BELOW";
+                    break;
+                }
+            if (liveHunt == 0 && !pollLive && !duelLive)
+                liveNow.text = "Nothing to join. Start a hunt, poll or challenge.";
+            liveAction.SetText(liveHunt != 0 ? "GUESS" : "VOTE");
+            Show(liveAction, liveHunt != 0 || pollLive);
+            duelNote.text = rematchTarget == 0 ? "PICK A THROW TO CHALLENGE" : "REMATCH " + rematchName;
+
             // ---- dice: the latest roll anyone in earshot made
             string roll = null;
             IReadOnlyList<CommsFeedLine> feed = state.Feed;
@@ -190,12 +284,15 @@ namespace BoscaliSummer.Features.Comms.Presentation
             for (int i = duels.Count - 1; i >= 0 && shown < DuelRows; i--)
             {
                 DuelView duel = duels[i];
-                if (state.IsMuted(duel.Challenger)) continue;
+                if (state.IsMuted(duel.Challenger) ||
+                    (duel.TargetPlayer != 0 && duel.TargetPlayer != comms.LocalId && duel.Challenger != comms.LocalId)) continue;
                 bool mine = duel.Challenger == comms.LocalId;
                 duelIds[shown] = duel.Id;
-                duelLabels[shown].text = (mine ? "YOUR CHALLENGE" : duel.ChallengerName + " CHALLENGES") + " · " +
+                duelLabels[shown].text = (mine ? duel.TargetPlayer == 0 ? "YOUR CHALLENGE" : "YOUR DIRECT CHALLENGE" :
+                    duel.ChallengerName + (duel.TargetPlayer == comms.LocalId ? " CHALLENGES YOU" : " CHALLENGES")) + " · " +
                                          CommsText.Countdown(duel.Expires - now);
-                for (int t = 0; t < duelAnswers[shown].Length; t++) Show(duelAnswers[shown][t], !mine);
+                for (int t = 0; t < duelAnswers[shown].Length; t++) Show(duelAnswers[shown][t], !mine &&
+                    (duel.TargetPlayer == 0 || duel.TargetPlayer == comms.LocalId));
                 Show(duelWithdraw[shown], mine);
                 Show(duelRows[shown], true);
                 shown++;
@@ -244,6 +341,47 @@ namespace BoscaliSummer.Features.Comms.Presentation
                 Show(huntRows[i], false);
             }
             Show(huntEmpty, shown == 0);
+
+            // ---- the local player's most active head-to-head story
+            RivalryView rivalry = null;
+            IReadOnlyList<RivalryView> rivalries = state.Rivalries;
+            for (int i = 0; i < rivalries.Count; i++)
+            {
+                RivalryView row = rivalries[i];
+                if ((row.First != comms.LocalId && row.Second != comms.LocalId) ||
+                    state.IsMuted(row.First == comms.LocalId ? row.Second : row.First)) continue;
+                if (rivalry == null || row.FirstWins + row.SecondWins + row.Draws >
+                    rivalry.FirstWins + rivalry.SecondWins + rivalry.Draws) rivalry = row;
+            }
+            if (rivalryNote != null)
+            {
+                if (rivalry == null) rivalryNote.text = "Challenge someone twice to start a friendly rivalry.";
+                else
+                {
+                    bool first = rivalry.First == comms.LocalId;
+                    string opponent = first ? rivalry.SecondName : rivalry.FirstName;
+                    int mine = first ? rivalry.FirstWins : rivalry.SecondWins;
+                    int theirs = first ? rivalry.SecondWins : rivalry.FirstWins;
+                    rivalryNote.text = (mine + theirs + rivalry.Draws >= 3 ? "NEMESIS · " : "RIVAL · ") +
+                        opponent + " · YOU " + mine + " : " + theirs + " · " + rivalry.Draws + " DRAWS";
+                }
+            }
+            int wins = 0;
+            IReadOnlyList<ScoreRow> allScores = state.Scores.Rows;
+            for (int i = 0; i < allScores.Count; i++)
+                if (allScores[i].Player == comms.LocalId) { wins = allScores[i].Wins; break; }
+            profileNote.text = state.Scores.PointsOf(comms.LocalId) + " PTS · " + wins + " WINS · " +
+                state.HuntWins + " HUNTS WON" + (state.BestHuntMetres == int.MaxValue ? "" :
+                " · CLOSEST " + CommsText.Distance(state.BestHuntMetres, BoscaliSummer.Runtime.VanillaHudStyle.Metric));
+            bool recentResult = false;
+            for (int i = state.Feed.Count - 1; i >= 0; i--)
+            {
+                CommsFeedLine line = state.Feed[i];
+                if (now - line.Time > 30f) break;
+                if (!state.IsMuted(line.Author) && (line.Kind == CommsFeedKind.Duel ||
+                    line.Kind == CommsFeedKind.Hunt && line.Text.StartsWith("HUNT OVER"))) { recentResult = true; break; }
+            }
+            Show(ggButton, recentResult && now >= nextGg);
 
             // ---- leaderboard
             IReadOnlyList<ScoreRow> rows = state.Scores.Rows;
