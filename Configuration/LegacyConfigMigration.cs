@@ -80,18 +80,15 @@ namespace BoscaliSummer
 
             // The original dynamic weather module was removed wholesale. Purge its
             // retired presentation and simulation keys so old legacy entries are cleaned.
-            BindAndRemove(config, "Weather", "ForecastSteps", 8);
-            BindAndRemove(config, "Weather", "ForecastStepMinutes", 3f);
+            // ForecastSteps, ForecastStepMinutes, RainOnCanopy, RainAudio, Hud and
+            // RadarRangeKm are deliberately not purged: the merged synoptic module owns
+            // those keys again (some with new types), and rebinding a live key here throws.
             BindAndRemove(config, "Weather", "RainEffects", true);
-            BindAndRemove(config, "Weather", "RainOnCanopy", true);
-            BindAndRemove(config, "Weather", "RainAudio", true);
             BindAndRemove(config, "Weather", "RainEffectDensity", 1f);
             // RainVolume is deliberately not purged: the current module owns that key again.
             BindAndRemove(config, "Weather", "CanopyRainEnabled", true);
-            BindAndRemove(config, "Weather", "Hud", true);
             BindAndRemove(config, "Weather", "Supercells", true);
             BindAndRemove(config, "Weather", "SupercellDetail", 0.6f);
-            BindAndRemove(config, "Weather", "RadarRangeKm", 40);
             BindAndRemove(config, "Weather", "ReplaceVanillaClouds", false);
             BindAndRemove(config, "Weather", "CloudSortFudge", -100f);
 
