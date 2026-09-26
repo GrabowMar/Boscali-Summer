@@ -547,6 +547,12 @@ public static class CocUnityCheck
         public void Highlight(int id) => HighlightedId = id;
 
         public void Refresh() { }
+
+        public bool TryGetCohesion(FactionHQ hq, out float cohesion)
+        {
+            cohesion = FriendlyCohesion;
+            return available;
+        }
     }
 
     // ------------------------------------------------------------------ plumbing

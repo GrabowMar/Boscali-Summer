@@ -361,7 +361,7 @@ namespace BoscaliSummer.Features.TheaterOps.Networking
                 setter = null;
             }
             directorService.ApplyInfluence(
-                player.HQ.faction.factionName, intent.Kind, intent.Value, intent.Value2,
+                player.HQ, intent.Kind, intent.Value, intent.Value2,
                 Text(intent.Key, MaximumKeyLength), setter);
         }
 

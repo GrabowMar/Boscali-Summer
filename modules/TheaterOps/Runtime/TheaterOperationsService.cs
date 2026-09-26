@@ -26,22 +26,25 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
     /// funded wave is on the road the push holds, and the director funds more or lets it
     /// report. Every wave is real vanilla supply; GroundFrontService later stages eligible
     /// depot ground AI through vanilla's destination query. This service owns the escrow and
-    /// the board; the director owns every
-    /// decision, and players conduct through standing orders.</para>
+    /// the board of every faction; the director owns every decision, and players conduct
+    /// through standing orders.</para>
     ///
-    /// <para>Only one push may hold the faction's effort: a plan due at H-hour while
+    /// <para>Only one push may hold a faction's effort: a plan due at H-hour while
     /// another objective holds the order waits, visibly, and launches itself when the
     /// effort frees. A concluded offensive releases an effort it still owns, so the AI is
     /// never left pushing a dead objective.</para>
     ///
-    /// <para>Clients receive the host's board read-only over <see cref="TheaterOpsNet"/> and
-    /// never tick or mutate it.</para>
+    /// <para>Clients receive their own faction's board read-only over
+    /// <see cref="TheaterOpsNet"/> when it changes, and never tick or mutate it.</para>
     /// </summary>
     internal sealed class TheaterOperationsService : MonoBehaviour, ISceneService, ITheaterOperationsView
     {
         private const float AuthorityInterval = 1f;
         private const float SyncInterval = 1f;
         private const float ViewInterval = 0.5f;
+
+        /// <summary>An unchanged running board is re-sent this often anyway.</summary>
+        private const float HeartbeatSeconds = 10f;
 
         /// <summary>How long a concluded plan keeps reporting its outcome before its slot frees.</summary>
         private const float ResolvedHoldSeconds = 24f;
@@ -54,6 +57,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             internal readonly TheaterOperationView[] Plans =
                 new TheaterOperationView[OffensiveTable.MaximumOperations];
             internal int Count;
+            internal float ReceivedAt;
 
             internal void Reset()
             {
@@ -69,6 +73,13 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             internal readonly List<string> Log = new List<string>(Domain.StaffLog.MaximumEntries);
         }
 
+        /// <summary>What one faction's players last received, so an unchanged board stays unsent.</summary>
+        private sealed class BoardSync
+        {
+            internal int Signature;
+            internal float NextHeartbeat;
+        }
+
         private readonly OffensiveTable table = new OffensiveTable();
         private readonly List<TheaterOperationView> views =
             new List<TheaterOperationView>(OffensiveTable.MaximumOperations);
@@ -76,6 +87,10 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             new Dictionary<string, RemoteBoard>(OffensiveTable.MaximumFactions, StringComparer.Ordinal);
         private readonly Dictionary<string, RemoteDirection> remoteDirection =
             new Dictionary<string, RemoteDirection>(OffensiveTable.MaximumFactions, StringComparer.Ordinal);
+        private readonly Dictionary<string, BoardSync> synced =
+            new Dictionary<string, BoardSync>(OffensiveTable.MaximumFactions, StringComparer.Ordinal);
+        private readonly Dictionary<string, float> planScales =
+            new Dictionary<string, float>(OffensiveTable.MaximumFactions, StringComparer.Ordinal);
         private readonly List<string> logView = new List<string>(Domain.StaffLog.MaximumEntries);
 
         private TheaterOpsSettings settings;
@@ -86,8 +101,6 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
         private IHighCommandView highCommand;
 
         private bool authoritative;
-        private bool broadcastHadOperations;
-        private float planScale = 1f;
         private float nextAuthority;
         private float nextSync;
         private float nextView;
@@ -121,9 +134,9 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             views.Clear();
             remote.Clear();
             remoteDirection.Clear();
+            synced.Clear();
+            planScales.Clear();
             logView.Clear();
-            broadcastHadOperations = false;
-            planScale = 1f;
             nextAuthority = 0f;
             nextSync = 0f;
             nextView = 0f;
@@ -139,15 +152,15 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             {
                 nextAuthority = now + AuthorityInterval;
                 authoritative = settings.Enabled.Value && GameAccess.IsServer();
-                RefreshPlanScale();
+                if (authoritative) RefreshPlanScales();
             }
-            if (!settings.Enabled.Value || !authoritative) return;
+            if (!settings.Enabled.Value || !authoritative || table.Count == 0) return;
 
             TickHost(Time.deltaTime);
 
             if (now < nextSync) return;
             nextSync = now + SyncInterval;
-            SyncHost();
+            SyncHost(now);
         }
 
         // ---- Host simulation ---------------------------------------------------------------
@@ -156,67 +169,113 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
         {
             if (delta <= 0f) return;
             if (delta > 1f) delta = 1f;
-            if (!GameAccess.TryGetLocalFaction(out FactionHQ hq)) return;
-            if (!table.TryGet(hq.faction.factionName, out FactionOffensives faction)) return;
 
-            OffensiveTiming timing = Timing();
-            for (int i = 0; i < faction.Count; i++)
+            int inspected = 0;
+            foreach (FactionHQ hq in FactionRegistry.GetAllHQs())
             {
-                OffensivePlan plan = faction[i];
-                if (plan == null) continue;
+                if (++inspected > OffensiveTable.MaximumFactions) break;
+                if (hq == null || hq.faction == null) continue;
+                string faction = hq.faction.factionName;
+                if (!table.TryGet(faction, out FactionOffensives board) || board.Count == 0) continue;
 
-                // One push owns the faction's effort at a time. A plan due at H-hour while
-                // another objective holds the order waits here rather than stealing it; it
-                // launches by itself the moment the effort frees.
-                if (plan.IsAtHHour && !EffortFree(plan)) continue;
+                OffensiveTiming timing = Timing(faction);
+                for (int i = 0; i < board.Count; i++)
+                {
+                    OffensivePlan plan = board[i];
+                    if (plan == null) continue;
 
-                OffensiveTick tick = plan.Tick(delta, timing);
-                if (tick.LaunchDue) Launch(hq, plan);
-                if (tick.WaveDue) DeliverWave(hq, plan);
-                if (tick.AssaultExpired)
-                    Conclude(hq, plan,
-                        plan.Launched ? TheaterOperationOutcome.CommitmentSpent : TheaterOperationOutcome.Stalled,
-                        plan.Launched ? "waves spent" : "no wave found the road");
+                    // One push owns the faction's effort at a time. A plan due at H-hour while
+                    // another objective holds the order waits here rather than stealing it; it
+                    // launches by itself the moment the effort frees.
+                    if (plan.IsAtHHour && !EffortFree(faction, plan)) continue;
+
+                    OffensiveTick tick = plan.Tick(delta, timing);
+                    if (tick.LaunchDue) Launch(hq, plan);
+                    if (tick.WaveDue) DeliverWave(hq, plan);
+                    if (tick.AssaultExpired)
+                        Conclude(hq, plan,
+                            plan.Launched ? TheaterOperationOutcome.CommitmentSpent : TheaterOperationOutcome.Stalled,
+                            plan.Launched ? "waves spent" : "no wave found the road");
+                }
             }
         }
 
-        private void SyncHost()
+        /// <summary>
+        /// Once a second: closes plans whose objective left the board, drops reports that
+        /// have been read, and sends a faction's board to its own players only when it
+        /// changed, plus a slow heartbeat while it runs.
+        /// </summary>
+        private void SyncHost(float now)
         {
-            if (!GameAccess.TryGetLocalFaction(out FactionHQ hq)) return;
-            string factionName = hq.faction.factionName;
-
-            if (!table.TryGet(factionName, out FactionOffensives faction))
+            int inspected = 0;
+            foreach (FactionHQ hq in FactionRegistry.GetAllHQs())
             {
-                BroadcastEmpty(factionName);
-                return;
+                if (++inspected > OffensiveTable.MaximumFactions) break;
+                if (hq == null || hq.faction == null) continue;
+                string faction = hq.faction.factionName;
+                if (!table.TryGet(faction, out FactionOffensives board)) continue;
+
+                CheckObjectives(hq, board);
+                for (int i = board.Count - 1; i >= 0; i--)
+                {
+                    OffensivePlan plan = board[i];
+                    if (plan != null && plan.ConcludedExpired(ResolvedHoldSeconds)) board.Remove(plan.Id);
+                }
+
+                BoardSync sync = SyncOf(faction);
+                if (sync == null) continue;
+                int signature = Signature(faction, board);
+                bool heartbeat = board.Count > 0 && now >= sync.NextHeartbeat;
+                if (signature == sync.Signature && !heartbeat) continue;
+
+                sync.Signature = signature;
+                sync.NextHeartbeat = now + HeartbeatSeconds;
+                network?.BroadcastOperations(faction, board);
+                nextView = 0f;
             }
-
-            CheckObjectives(hq, faction);
-
-            for (int i = faction.Count - 1; i >= 0; i--)
-            {
-                OffensivePlan plan = faction[i];
-                if (plan != null && plan.ConcludedExpired(ResolvedHoldSeconds)) faction.Remove(plan.Id);
-            }
-
-            if (faction.Count == 0)
-            {
-                table.Prune(factionName);
-                BroadcastEmpty(factionName);
-                return;
-            }
-
-            network?.BroadcastOperations(factionName, faction);
-            broadcastHadOperations = true;
-            nextView = 0f;
         }
 
-        private void BroadcastEmpty(string factionName)
+        /// <summary>
+        /// Everything on the board a player can see move, folded into one number. Clocks
+        /// are left out: clients run them down from the last message, and the heartbeat
+        /// corrects the drift.
+        /// </summary>
+        private int Signature(string faction, FactionOffensives board)
         {
-            if (!broadcastHadOperations) return;
-            network?.BroadcastOperations(factionName, null);
-            broadcastHadOperations = false;
-            nextView = 0f;
+            if (board.Count == 0) return 0;
+            string effort = priority != null && priority.TryGetDirective(faction, out PriorityDirective directive)
+                ? directive.Key : null;
+            unchecked
+            {
+                int hash = board.Count;
+                for (int i = 0; i < board.Count; i++)
+                {
+                    OffensivePlan plan = board[i];
+                    if (plan == null) continue;
+                    hash = hash * 31 + plan.Id;
+                    hash = hash * 31 + (int)plan.Phase;
+                    hash = hash * 31 + (int)plan.Outcome;
+                    hash = hash * 31 + plan.WavesPlanned;
+                    hash = hash * 31 + plan.WavesLaunched;
+                    hash = hash * 31 + (int)(plan.Progress * 20f);
+                    hash = hash * 31 + (int)plan.Budget;
+                    hash = hash * 31 + (int)plan.Committed;
+                    hash = hash * 31 + (int)plan.Spent;
+                    hash = hash * 31 + (plan.TargetKey != null ? plan.TargetKey.GetHashCode() : 0);
+                    // A held H-hour names who holds the effort; the effort's key marks a change.
+                    if (plan.IsAtHHour && effort != null) hash = hash * 31 + effort.GetHashCode();
+                }
+                return hash == 0 ? 1 : hash;
+            }
+        }
+
+        private BoardSync SyncOf(string faction)
+        {
+            if (synced.TryGetValue(faction, out BoardSync sync)) return sync;
+            if (synced.Count >= OffensiveTable.MaximumFactions) return null;
+            sync = new BoardSync();
+            synced.Add(faction, sync);
+            return sync;
         }
 
         /// <summary>
@@ -226,13 +285,13 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
         private void Launch(FactionHQ hq, OffensivePlan plan)
         {
             // Make the effort visible before a depot can release an immediately ready unit.
-            if (priority != null && plan.TargetKey != null) priority.SetDirective(plan.TargetKey);
+            if (priority != null && plan.TargetKey != null) priority.SetDirective(hq, plan.TargetKey);
             int firstGroup = DeliverWave(hq, plan);
             // A cohesive staff can release two distinct funded groups at H-hour. The
             // ordinary wave schedule resumes afterward; no extra escrow or unit order.
             if (firstGroup >= 0 && plan.WavesPlanned >= 3 &&
-                highCommand != null && highCommand.Available &&
-                highCommand.FriendlyCohesion >= .65f &&
+                highCommand != null && highCommand.TryGetCohesion(hq, out float cohesion) &&
+                cohesion >= .65f &&
                 DeliverWave(hq, plan, firstGroup) >= 0)
                 director?.ReportBattle(hq.faction.factionName,
                     plan.Name.ToUpperInvariant() + " SHOCK PUSH — TWO GROUPS RELEASED");
@@ -286,14 +345,15 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             return best;
         }
 
-        private void CheckObjectives(FactionHQ hq, FactionOffensives faction)
+        private void CheckObjectives(FactionHQ hq, FactionOffensives board)
         {
+            if (board.Count == 0) return;
             if (!MissionPosition.TryGetActiveObjectives(hq, out List<Objective> active) || active == null)
                 return;
 
-            for (int i = 0; i < faction.Count; i++)
+            for (int i = 0; i < board.Count; i++)
             {
-                OffensivePlan plan = faction[i];
+                OffensivePlan plan = board[i];
                 if (plan == null || plan.TargetKey == null) continue;
                 if (plan.Phase != TheaterOperationPhase.Launching &&
                     plan.Phase != TheaterOperationPhase.Assault &&
@@ -327,19 +387,19 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             // ends with it: leaving it set would point the AI at a dead objective and would
             // block the next offensive from ever taking the effort.
             if (launched && priority != null && plan.TargetKey != null &&
-                priority.TryGetLocalDirective(out PriorityDirective directive) &&
+                priority.TryGetDirective(hq.faction.factionName, out PriorityDirective directive) &&
                 string.Equals(directive.Key, plan.TargetKey, StringComparison.Ordinal))
-                priority.ClearDirective();
+                priority.ClearDirective(hq);
 
             logger?.LogInfo("Offensive \"" + plan.Name + "\" concluded (" + outcome + "): " +
                             reason + " (" + refund.ToString("F0") + " refunded).");
         }
 
         /// <summary>Whether the faction's effort already points where this plan is going.</summary>
-        private bool EffortFree(OffensivePlan plan)
+        private bool EffortFree(string faction, OffensivePlan plan)
         {
             if (priority == null || plan.TargetKey == null) return true;
-            if (!priority.TryGetLocalDirective(out PriorityDirective directive)) return true;
+            if (!priority.TryGetDirective(faction, out PriorityDirective directive)) return true;
             return string.Equals(directive.Key, plan.TargetKey, StringComparison.Ordinal);
         }
 
@@ -347,15 +407,15 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
         /// What is holding the effort when a due plan is not free to launch: the other
         /// offensive that owns it, or the staff's defense when it holds the order.
         /// </summary>
-        private string EffortHolder(FactionOffensives faction, OffensivePlan plan)
+        private string EffortHolder(string faction, FactionOffensives board, OffensivePlan plan)
         {
             if (priority == null || plan.TargetKey == null) return null;
-            if (!priority.TryGetLocalDirective(out PriorityDirective directive)) return null;
+            if (!priority.TryGetDirective(faction, out PriorityDirective directive)) return null;
             if (string.Equals(directive.Key, plan.TargetKey, StringComparison.Ordinal)) return null;
 
-            for (int i = 0; i < faction.Count; i++)
+            for (int i = 0; i < board.Count; i++)
             {
-                OffensivePlan other = faction[i];
+                OffensivePlan other = board[i];
                 if (other == null || ReferenceEquals(other, plan) || !other.Launched) continue;
                 if (string.Equals(other.TargetKey, directive.Key, StringComparison.Ordinal))
                     return other.Name;
@@ -392,18 +452,19 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
 
             if (authoritative)
             {
-                if (!table.TryGet(factionName, out FactionOffensives faction)) return;
-                for (int i = 0; i < faction.Count; i++)
+                if (!table.TryGet(factionName, out FactionOffensives board)) return;
+                for (int i = 0; i < board.Count; i++)
                 {
-                    OffensivePlan plan = faction[i];
-                    if (plan != null) views.Add(ViewOf(faction, plan));
+                    OffensivePlan plan = board[i];
+                    if (plan != null) views.Add(ViewOf(factionName, board, plan));
                 }
                 return;
             }
 
-            if (!remote.TryGetValue(factionName, out RemoteBoard board)) return;
-            for (int i = 0; i < board.Count; i++)
-                if (board.Plans[i] != null) views.Add(board.Plans[i]);
+            if (!remote.TryGetValue(factionName, out RemoteBoard mirror)) return;
+            float age = now - mirror.ReceivedAt;
+            for (int i = 0; i < mirror.Count; i++)
+                if (mirror.Plans[i] != null) views.Add(Aged(mirror.Plans[i], age));
         }
 
         // ---- Direction, influence and staff log -------------------------------------------
@@ -471,8 +532,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             if (authoritative)
             {
                 if (!GameAccess.TryGetLocalFaction(out FactionHQ hq) || hq.faction == null) return false;
-                return director.ApplyInfluence(
-                    hq.faction.factionName, kind, value, value2, key, LocalSetter());
+                return director.ApplyInfluence(hq, kind, value, value2, key, LocalSetter());
             }
             if (network == null) return false;
             network.SendInfluenceIntent(kind, value, value2, key);
@@ -496,38 +556,32 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             return "HOST";
         }
 
-        // ---- Director drive (host only, no player intent reaches here) ---------------------
+        // ---- Director drive (host only, per faction) ----------------------------------------
 
-        internal bool PrepareOperation(out int id)
+        internal bool PrepareOperation(FactionHQ hq, out int id)
         {
             id = -1;
-            if (!authoritative || !GameAccess.TryGetLocalFaction(out FactionHQ hq)) return false;
-            if (hq.preventDonation) return false;
-            if (!table.TryCreate(hq.faction.factionName, out FactionOffensives faction)) return false;
+            if (!authoritative || hq == null || hq.faction == null || hq.preventDonation) return false;
+            if (!table.TryCreate(hq.faction.factionName, out FactionOffensives board)) return false;
 
             // Preparing escrows the staff overhead and the first wave slot in one charge.
             float cost = OverheadCost + WaveBudget;
             if (!Affordable(hq, cost)) return false;
-            if (!faction.TryPrepare(cost, out OffensivePlan plan)) return false;
+            if (!board.TryPrepare(cost, out OffensivePlan plan)) return false;
 
             hq.AddFunds(-cost);
             logger?.LogInfo("Offensive \"" + plan.Name + "\" prepared for " +
                             hq.faction.factionName + " (" + cost.ToString("F0") + ").");
-            broadcastHadOperations = true;
             nextView = 0f;
             nextSync = 0f;
             id = plan.Id;
             return true;
         }
 
-        internal bool CommitWave(int id)
+        internal bool CommitWave(FactionHQ hq, int id)
         {
-            if (!authoritative || !GameAccess.TryGetLocalFaction(out FactionHQ hq)) return false;
-            if (hq.preventDonation) return false;
-            if (!table.TryGet(hq.faction.factionName, out FactionOffensives faction)) return false;
-
-            OffensivePlan plan = faction.Find(id);
-            if (plan == null || !plan.CanCommit) return false;
+            OffensivePlan plan = Find(hq, id);
+            if (plan == null || hq.preventDonation || !plan.CanCommit) return false;
 
             float cost = WaveBudget;
             if (!Affordable(hq, cost) || !plan.Commit(cost)) return false;
@@ -540,13 +594,10 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             return true;
         }
 
-        internal bool TargetOperation(int id, string objectiveKey)
+        internal bool TargetOperation(FactionHQ hq, int id, string objectiveKey)
         {
-            if (!authoritative || string.IsNullOrEmpty(objectiveKey)) return false;
-            if (!GameAccess.TryGetLocalFaction(out FactionHQ hq)) return false;
-            if (!table.TryGet(hq.faction.factionName, out FactionOffensives faction)) return false;
-
-            OffensivePlan plan = faction.Find(id);
+            if (string.IsNullOrEmpty(objectiveKey)) return false;
+            OffensivePlan plan = Find(hq, id);
             if (plan == null || !plan.CanTarget) return false;
             if (!TheaterPriorityService.TryResolveObjective(
                     hq, objectiveKey, out string label, out Vector3 position))
@@ -562,12 +613,9 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             return true;
         }
 
-        internal bool AbortOperation(int id, string reason)
+        internal bool AbortOperation(FactionHQ hq, int id, string reason)
         {
-            if (!authoritative || !GameAccess.TryGetLocalFaction(out FactionHQ hq)) return false;
-            if (!table.TryGet(hq.faction.factionName, out FactionOffensives faction)) return false;
-
-            OffensivePlan plan = faction.Find(id);
+            OffensivePlan plan = Find(hq, id);
             if (plan == null || !plan.CanAbort) return false;
 
             Conclude(hq, plan, TheaterOperationOutcome.Cancelled,
@@ -577,25 +625,30 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             return true;
         }
 
-        /// <summary>The director's read of its own plans: the local faction's board, if any.</summary>
-        internal bool TryGetFactionPlans(out FactionOffensives faction)
+        /// <summary>The director's read of one faction's plans, if it has a board.</summary>
+        internal bool TryGetFactionPlans(string faction, out FactionOffensives board)
         {
-            faction = null;
-            if (!authoritative || !GameAccess.TryGetLocalFaction(out FactionHQ hq)) return false;
-            return table.TryGet(hq.faction.factionName, out faction);
+            board = null;
+            return authoritative && table.TryGet(faction, out board);
         }
 
-        internal bool IsLaunchedTarget(string key)
+        internal bool IsLaunchedTarget(string faction, string key)
         {
-            if (string.IsNullOrEmpty(key) || !TryGetFactionPlans(out FactionOffensives faction))
+            if (string.IsNullOrEmpty(key) || !TryGetFactionPlans(faction, out FactionOffensives board))
                 return false;
-            for (int i = 0; i < faction.Count; i++)
+            for (int i = 0; i < board.Count; i++)
             {
-                OffensivePlan plan = faction[i];
+                OffensivePlan plan = board[i];
                 if (plan != null && plan.IsActive && plan.Launched && plan.TargetKey == key)
                     return true;
             }
             return false;
+        }
+
+        private OffensivePlan Find(FactionHQ hq, int id)
+        {
+            if (!authoritative || hq == null || hq.faction == null) return null;
+            return table.TryGet(hq.faction.factionName, out FactionOffensives board) ? board.Find(id) : null;
         }
 
         // ---- Client mirror -----------------------------------------------------------------
@@ -610,6 +663,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             if (count == 0)
             {
                 remote.Remove(faction);
+                nextView = 0f;
                 return;
             }
             if (count > OffensiveTable.MaximumOperations || index >= count) return;
@@ -632,7 +686,36 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
                 state.WavesPlanned, state.WavesLaunched, state.Countdown,
                 TheaterOpsNet.Text(state.Holder, OffensivePlan.MaximumNameLength));
             board.Count = count;
+            board.ReceivedAt = Time.unscaledTime;
             nextView = 0f;
+        }
+
+        /// <summary>A mirrored plan with its clocks run down by the time since the host sent it.</summary>
+        private static TheaterOperationView Aged(TheaterOperationView plan, float age)
+        {
+            if (age <= 0.05f || plan.Outcome != TheaterOperationOutcome.None) return plan;
+            float countdown = plan.Countdown;
+            float elapsed = plan.ElapsedSeconds;
+            float hold = plan.HoldRemaining;
+            switch (plan.Phase)
+            {
+                case TheaterOperationPhase.Launching:
+                    if (countdown > 0f) countdown = Mathf.Max(0f, countdown - age);
+                    break;
+                case TheaterOperationPhase.Assault:
+                    elapsed += age;
+                    break;
+                case TheaterOperationPhase.Holding:
+                    elapsed += age;
+                    if (hold > 0f) hold = Mathf.Max(0f, hold - age);
+                    break;
+                default:
+                    return plan;
+            }
+            return new TheaterOperationView(
+                plan.Name, plan.Phase, plan.Outcome, plan.TargetLabel, plan.Progress,
+                plan.Budget, plan.Committed, plan.Spent, elapsed, hold,
+                plan.WavesPlanned, plan.WavesLaunched, countdown, plan.Holder, plan.Id);
         }
 
         /// <summary>Applies a host director snapshot on a client. Never overwrites host truth.</summary>
@@ -717,31 +800,44 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
         {
             if (plan == null || !plan.IsAtHHour) return null;
             if (string.IsNullOrEmpty(factionName) ||
-                !table.TryGet(factionName, out FactionOffensives faction))
+                !table.TryGet(factionName, out FactionOffensives board))
                 return null;
-            return EffortHolder(faction, plan);
+            return EffortHolder(factionName, board, plan);
         }
 
-        private TheaterOperationView ViewOf(FactionOffensives faction, OffensivePlan plan) => new TheaterOperationView(
-            plan.Name, plan.Phase, plan.Outcome, plan.TargetLabel,
-            plan.Progress, plan.Budget, plan.Committed, plan.Spent, plan.ElapsedSeconds, plan.HoldRemaining,
-            plan.WavesPlanned, plan.WavesLaunched, plan.Countdown,
-            plan.IsAtHHour ? EffortHolder(faction, plan) : null);
+        private TheaterOperationView ViewOf(string faction, FactionOffensives board, OffensivePlan plan) =>
+            new TheaterOperationView(
+                plan.Name, plan.Phase, plan.Outcome, plan.TargetLabel,
+                plan.Progress, plan.Budget, plan.Committed, plan.Spent, plan.ElapsedSeconds, plan.HoldRemaining,
+                plan.WavesPlanned, plan.WavesLaunched, plan.Countdown,
+                plan.IsAtHHour ? EffortHolder(faction, board, plan) : null, plan.Id);
 
-        private OffensiveTiming Timing() => new OffensiveTiming(
+        private OffensiveTiming Timing(string faction) => new OffensiveTiming(
             settings.OperationMusterSeconds.Value,
-            settings.OperationPlanSeconds.Value / planScale,
+            settings.OperationPlanSeconds.Value /
+                (planScales.TryGetValue(faction, out float scale) ? scale : 1f),
             settings.OperationWaveSeconds.Value,
             settings.OperationWaveRetrySeconds.Value,
             settings.OperationHoldSeconds.Value,
             settings.OperationAssaultSeconds.Value);
 
-        private void RefreshPlanScale()
+        /// <summary>
+        /// A cohesive staff plans faster. Read once a second per faction with a board, from
+        /// the host's own command tree rather than whatever staff page happens to be open.
+        /// </summary>
+        private void RefreshPlanScales()
         {
             if (highCommand == null) ModServices.TryGet(out highCommand);
-            planScale = highCommand != null && highCommand.Available
-                ? 0.75f + Mathf.Clamp01(highCommand.FriendlyCohesion) * 0.75f
-                : 1f;
+            planScales.Clear();
+            if (highCommand == null || table.Count == 0) return;
+            int inspected = 0;
+            foreach (FactionHQ hq in FactionRegistry.GetAllHQs())
+            {
+                if (++inspected > OffensiveTable.MaximumFactions) break;
+                if (hq == null || hq.faction == null || !table.TryGet(hq.faction.factionName, out _)) continue;
+                if (highCommand.TryGetCohesion(hq, out float cohesion))
+                    planScales[hq.faction.factionName] = 0.75f + Mathf.Clamp01(cohesion) * 0.75f;
+            }
         }
 
         private static bool Affordable(FactionHQ hq, float cost)
