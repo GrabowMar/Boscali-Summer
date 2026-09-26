@@ -11,6 +11,7 @@ namespace BoscaliSummer.Tests.Features.Trenches
         {
             TestBuildableGround();
             TestResample();
+            TestSplinePlacer();
             TestWindowByArc();
             TestNormalsAndClosure();
             TestTraverseWave();
@@ -252,6 +253,46 @@ namespace BoscaliSummer.Tests.Features.Trenches
             TestAssert.That(loop >= 30, "A closed pocket keeps its full ring");
             TestAssert.That(Near(outX[loop - 1], 0f) && Near(outZ[loop - 1], 0f),
                 "A closed ring returns to its first station");
+        }
+
+        /// <summary>
+        /// SplinePlacer Catmull-Rom Hermite spline with dense arc-length parameterization:
+        /// Station spacing remains constant regardless of curvature, tangents are exact unit vectors,
+        /// and chord-length weighting eliminates overshoot cusps.
+        /// </summary>
+        private static void TestSplinePlacer()
+        {
+            var rawX = new[] { 0f, 40f, 180f, 220f, 350f };
+            var rawZ = new[] { 0f, 80f, 40f, 150f, 100f };
+            var outX = new float[128];
+            var outZ = new float[128];
+            var tanX = new float[128];
+            var tanZ = new float[128];
+            var normX = new float[128];
+            var normZ = new float[128];
+
+            int count = TrenchTraceMath.ResampleSpline(rawX, rawZ, 0, rawX.Length, 10f, false,
+                outX, outZ, tanX, tanZ, normX, normZ);
+
+            TestAssert.That(count > 20, "Spline samples all segments");
+            TestAssert.That(Near(outX[0], rawX[0]) && Near(outZ[0], rawZ[0]), "Spline starts at first waypoint");
+            TestAssert.That(Near(outX[count - 1], rawX[rawX.Length - 1]) && Near(outZ[count - 1], rawZ[rawZ.Length - 1]),
+                "Spline terminates at final waypoint");
+
+            for (int i = 1; i < count - 1; i++)
+            {
+                float dx = outX[i] - outX[i - 1];
+                float dz = outZ[i] - outZ[i - 1];
+                float stepDist = (float)Math.Sqrt(dx * dx + dz * dz);
+                TestAssert.That(stepDist <= 10.1f && stepDist >= 8.5f,
+                    "Arc-length parameterization maintains constant station spacing");
+
+                float tLen = (float)Math.Sqrt(tanX[i] * tanX[i] + tanZ[i] * tanZ[i]);
+                TestAssert.That(Near(tLen, 1f), "Tangents are normalized unit vectors");
+
+                float dot = tanX[i] * normX[i] + tanZ[i] * normZ[i];
+                TestAssert.That(Math.Abs(dot) < 0.001f, "Station normals are strictly perpendicular to tangents");
+            }
         }
 
         /// <summary>

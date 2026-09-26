@@ -122,6 +122,12 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 () => immersion != null && immersion.AirframeAudioEnabled,
                 v => { if (immersion != null) immersion.AirframeAudioEnabled = v; },
                 available, unavailable);
+
+            Toggle(parent, TakeRow(ref area), "SURFACE SHADERS",
+                "Cockpit view: dynamic canopy wetness, frost, combat scorch, and ground dirt (D.I.R.T. system).",
+                () => immersion != null && immersion.SurfaceImmersionEnabled,
+                v => { if (immersion != null) immersion.SurfaceImmersionEnabled = v; },
+                available, unavailable);
         }
 
         private void Percent(RectTransform parent, Rect area, string title, Func<float> read, Action<float> write,

@@ -1,4 +1,4 @@
-﻿#if UNITY_EDITOR
+#if UNITY_EDITOR
 using System;
 using System.IO;
 using System.Reflection;
@@ -301,6 +301,9 @@ public static class SettingsUnityCheck
         public bool ExtraShakeEnabled { get; set; } = true;
         public float ShakeStrength { get; set; } = 1f;
         public bool SunGlareEnabled { get; set; } = true;
+        public bool MfdGlowEnabled { get; set; } = true;
+        public bool AirframeAudioEnabled { get; set; } = true;
+        public bool SurfaceImmersionEnabled { get; set; } = true;
     }
 
     private sealed class HudFixture : IHudBoard

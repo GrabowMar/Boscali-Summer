@@ -312,59 +312,235 @@ namespace BoscaliSummer.Features.Trenches.Domain
 
         /// <summary>
         /// Resamples the stretch of a trace that starts at <paramref name="start"/> and is
-        /// <paramref name="count"/> points long, so one planning window can be fitted at the
-        /// real station spacing without dragging the whole trace through the buffer.
+        /// <paramref name="count"/> points long, using a cubic Hermite spline with chord-length
+        /// Catmull-Rom tangents and dense arc-length parameterization (ported from Arma 3 SplinePlacer).
+        /// Produces constant station spacing along the curve regardless of curvature.
         /// </summary>
         public static int Resample(float[] x, float[] z, int start, int count, float spacing, bool closed,
             float[] outX, float[] outZ)
+            => ResampleSpline(x, z, start, count, spacing, closed, outX, outZ, null, null, null, null);
+
+        /// <summary>
+        /// Full spline sampling: evaluates cubic Hermite spline along the trace with arc-length
+        /// parameterization, outputting positions, tangents, and station normals without distortion.
+        /// </summary>
+        public static int ResampleSpline(float[] x, float[] z, int start, int count, float spacing, bool closed,
+            float[] outX, float[] outZ, float[] outTanX = null, float[] outTanZ = null, float[] outNormX = null, float[] outNormZ = null)
         {
             if (x == null || z == null || outX == null || outZ == null || count < 2 ||
                 outX.Length < 2 || outZ.Length < 2) return 0;
             if (start < 0 || start + count > x.Length || start + count > z.Length) return 0;
             spacing = Math.Max(1f, spacing);
 
-            int written = 0;
-            int segments = closed ? count : count - 1;
-            for (int i = 0; i < segments; i++)
+            int m = closed ? count + 3 : count + 2;
+            Span<float> px = stackalloc float[m];
+            Span<float> pz = stackalloc float[m];
+
+            if (closed)
             {
-                int j1 = closed ? Neighbour(i, count, true) : i;
-                int j2 = closed ? Neighbour(i + 1, count, true) : i + 1;
-                // Open ends reflect their phantom control point, so a straight trace stays
-                // straight and evenly spaced instead of easing short at both ends.
-                float x0, z0, x3, z3;
-                if (closed)
+                px[0] = x[start + count - 1];
+                pz[0] = z[start + count - 1];
+                for (int i = 0; i < count; i++)
                 {
-                    int j0 = Neighbour(i - 1, count, true), j3 = Neighbour(i + 2, count, true);
-                    x0 = x[start + j0]; z0 = z[start + j0];
-                    x3 = x[start + j3]; z3 = z[start + j3];
+                    px[i + 1] = x[start + i];
+                    pz[i + 1] = z[start + i];
+                }
+                px[count + 1] = x[start];
+                pz[count + 1] = z[start];
+                px[count + 2] = x[start + 1];
+                pz[count + 2] = z[start + 1];
+            }
+            else
+            {
+                px[0] = 2f * x[start] - x[start + 1];
+                pz[0] = 2f * z[start] - z[start + 1];
+                for (int i = 0; i < count; i++)
+                {
+                    px[i + 1] = x[start + i];
+                    pz[i + 1] = z[start + i];
+                }
+                px[count + 1] = 2f * x[start + count - 1] - x[start + count - 2];
+                pz[count + 1] = 2f * z[start + count - 1] - z[start + count - 2];
+            }
+
+            int chordCount = m - 1;
+            Span<float> chords = stackalloc float[chordCount];
+            for (int i = 0; i < chordCount; i++)
+            {
+                float cdx = px[i + 1] - px[i];
+                float cdz = pz[i + 1] - pz[i];
+                chords[i] = Math.Max(1e-4f, (float)Math.Sqrt(cdx * cdx + cdz * cdz));
+            }
+
+            Span<float> tanX = stackalloc float[m];
+            Span<float> tanZ = stackalloc float[m];
+            for (int i = 1; i < m - 1; i++)
+            {
+                float dp = chords[i - 1];
+                float dn = chords[i];
+                float scale = dn / (dp + dn);
+                tanX[i] = (px[i + 1] - px[i - 1]) * scale;
+                tanZ[i] = (pz[i + 1] - pz[i - 1]) * scale;
+            }
+
+            const int Resolution = 16;
+            int segments = closed ? count : count - 1;
+            int tableCapacity = segments * Resolution + 1;
+
+            float[] heapCumDist = null, heapX = null, heapZ = null, heapTX = null, heapTZ = null;
+            Span<float> arcCumDist = tableCapacity <= 1024 ? stackalloc float[tableCapacity] : (heapCumDist = new float[tableCapacity]);
+            Span<float> arcX = tableCapacity <= 1024 ? stackalloc float[tableCapacity] : (heapX = new float[tableCapacity]);
+            Span<float> arcZ = tableCapacity <= 1024 ? stackalloc float[tableCapacity] : (heapZ = new float[tableCapacity]);
+            Span<float> arcTX = tableCapacity <= 1024 ? stackalloc float[tableCapacity] : (heapTX = new float[tableCapacity]);
+            Span<float> arcTZ = tableCapacity <= 1024 ? stackalloc float[tableCapacity] : (heapTZ = new float[tableCapacity]);
+
+            int tableCount = 0;
+            float cumDist = 0f;
+            float prevX = px[1], prevZ = pz[1];
+
+            for (int seg = 1; seg <= segments; seg++)
+            {
+                float paX = px[seg], paZ = pz[seg];
+                float pbX = px[seg + 1], pbZ = pz[seg + 1];
+                float taX = tanX[seg], taZ = tanZ[seg];
+                float tbX = tanX[seg + 1], tbZ = tanZ[seg + 1];
+
+                int startK = (seg == 1) ? 0 : 1;
+                for (int k = startK; k <= Resolution; k++)
+                {
+                    float t = (float)k / Resolution;
+                    float t2 = t * t;
+                    float t3 = t2 * t;
+
+                    float h00 = 2f * t3 - 3f * t2 + 1f;
+                    float h10 = t3 - 2f * t2 + t;
+                    float h01 = -2f * t3 + 3f * t2;
+                    float h11 = t3 - t2;
+
+                    float curX = h00 * paX + h10 * taX + h01 * pbX + h11 * tbX;
+                    float curZ = h00 * paZ + h10 * taZ + h01 * pbZ + h11 * tbZ;
+
+                    if (k > 0 || seg > 1)
+                    {
+                        float ddx = curX - prevX;
+                        float ddz = curZ - prevZ;
+                        cumDist += (float)Math.Sqrt(ddx * ddx + ddz * ddz);
+                    }
+
+                    float dh00 = 6f * t2 - 6f * t;
+                    float dh10 = 3f * t2 - 4f * t + 1f;
+                    float dh01 = -6f * t2 + 6f * t;
+                    float dh11 = 3f * t2 - 2f * t;
+
+                    float curTX = dh00 * paX + dh10 * taX + dh01 * pbX + dh11 * tbX;
+                    float curTZ = dh00 * paZ + dh10 * taZ + dh01 * pbZ + dh11 * tbZ;
+                    float tlen = (float)Math.Sqrt(curTX * curTX + curTZ * curTZ);
+                    if (tlen > 1e-4f) { curTX /= tlen; curTZ /= tlen; }
+                    else { curTX = 0f; curTZ = 1f; }
+
+                    if (tableCount < tableCapacity)
+                    {
+                        arcCumDist[tableCount] = cumDist;
+                        arcX[tableCount] = curX;
+                        arcZ[tableCount] = curZ;
+                        arcTX[tableCount] = curTX;
+                        arcTZ[tableCount] = curTZ;
+                        tableCount++;
+                    }
+
+                    prevX = curX;
+                    prevZ = curZ;
+                }
+            }
+
+            float totalLength = cumDist;
+            if (totalLength < 1e-4f) return 0;
+
+            int written = 0;
+            float targetDist = 0f;
+            int tableIdx = 0;
+            int maxOut = Math.Min(outX.Length, outZ.Length);
+
+            while (targetDist <= totalLength && written < maxOut)
+            {
+                while (tableIdx < tableCount - 1 && arcCumDist[tableIdx + 1] <= targetDist)
+                {
+                    tableIdx++;
+                }
+
+                float sampleX, sampleZ, sampleTX, sampleTZ;
+
+                if (tableIdx >= tableCount - 1)
+                {
+                    sampleX = arcX[tableCount - 1];
+                    sampleZ = arcZ[tableCount - 1];
+                    sampleTX = arcTX[tableCount - 1];
+                    sampleTZ = arcTZ[tableCount - 1];
+                    targetDist = totalLength + spacing;
                 }
                 else
                 {
-                    x0 = i == 0 ? 2f * x[start + j1] - x[start + j2] : x[start + i - 1];
-                    z0 = i == 0 ? 2f * z[start + j1] - z[start + j2] : z[start + i - 1];
-                    x3 = j2 + 1 >= count ? 2f * x[start + j2] - x[start + j1] : x[start + j2 + 1];
-                    z3 = j2 + 1 >= count ? 2f * z[start + j2] - z[start + j1] : z[start + j2 + 1];
+                    float dLo = arcCumDist[tableIdx];
+                    float dHi = arcCumDist[tableIdx + 1];
+                    float delta = dHi - dLo;
+                    float frac = delta > 1e-5f ? Math.Clamp((targetDist - dLo) / delta, 0f, 1f) : 0f;
+
+                    sampleX = arcX[tableIdx] + frac * (arcX[tableIdx + 1] - arcX[tableIdx]);
+                    sampleZ = arcZ[tableIdx] + frac * (arcZ[tableIdx + 1] - arcZ[tableIdx]);
+                    sampleTX = arcTX[tableIdx] + frac * (arcTX[tableIdx + 1] - arcTX[tableIdx]);
+                    sampleTZ = arcTZ[tableIdx] + frac * (arcTZ[tableIdx + 1] - arcTZ[tableIdx]);
+
+                    float tlen = (float)Math.Sqrt(sampleTX * sampleTX + sampleTZ * sampleTZ);
+                    if (tlen > 1e-4f) { sampleTX /= tlen; sampleTZ /= tlen; }
+
+                    targetDist += spacing;
                 }
 
-                float dx = x[start + j2] - x[start + j1], dz = z[start + j2] - z[start + j1];
-                float length = (float)Math.Sqrt(dx * dx + dz * dz);
-                int steps = Math.Max(1, (int)Math.Ceiling(length / spacing));
-                for (int s = 0; s < steps && written < outX.Length; s++)
-                {
-                    float t = (float)s / steps;
-                    CatmullRom(x0, z0, x[start + j1], z[start + j1], x[start + j2], z[start + j2], x3, z3, t,
-                        out outX[written], out outZ[written]);
-                    written++;
-                }
-            }
-            if (written < outX.Length)
-            {
-                // The far end is the last contour point, not a Bezier extrapolation.
-                int last = closed ? start : start + count - 1;
-                outX[written] = x[last];
-                outZ[written] = z[last];
+                outX[written] = sampleX;
+                outZ[written] = sampleZ;
+                if (outTanX != null && written < outTanX.Length) outTanX[written] = sampleTX;
+                if (outTanZ != null && written < outTanZ.Length) outTanZ[written] = sampleTZ;
+                if (outNormX != null && written < outNormX.Length) outNormX[written] = -sampleTZ;
+                if (outNormZ != null && written < outNormZ.Length) outNormZ[written] = sampleTX;
+
                 written++;
             }
+
+            if (!closed && written > 0 && written < maxOut)
+            {
+                float lastX = x[start + count - 1];
+                float lastZ = z[start + count - 1];
+                float dx = lastX - outX[written - 1];
+                float dz = lastZ - outZ[written - 1];
+                float endGap = (float)Math.Sqrt(dx * dx + dz * dz);
+
+                if (endGap > 0.4f * spacing)
+                {
+                    outX[written] = lastX;
+                    outZ[written] = lastZ;
+                    if (outTanX != null && written < outTanX.Length) outTanX[written] = arcTX[tableCount - 1];
+                    if (outTanZ != null && written < outTanZ.Length) outTanZ[written] = arcTZ[tableCount - 1];
+                    if (outNormX != null && written < outNormX.Length) outNormX[written] = -arcTZ[tableCount - 1];
+                    if (outNormZ != null && written < outNormZ.Length) outNormZ[written] = arcTX[tableCount - 1];
+                    written++;
+                }
+                else
+                {
+                    outX[written - 1] = lastX;
+                    outZ[written - 1] = lastZ;
+                }
+            }
+            else if (closed && written < maxOut)
+            {
+                outX[written] = x[start];
+                outZ[written] = z[start];
+                if (outTanX != null && written < outTanX.Length) outTanX[written] = arcTX[0];
+                if (outTanZ != null && written < outTanZ.Length) outTanZ[written] = arcTZ[0];
+                if (outNormX != null && written < outNormX.Length) outNormX[written] = -arcTZ[0];
+                if (outNormZ != null && written < outNormZ.Length) outNormZ[written] = arcTX[0];
+                written++;
+            }
+
             return written;
         }
 
