@@ -61,6 +61,7 @@ namespace BoscaliSummer.Tests
             Features.DynamicOperations.OperationDirectorTests.Run();
             Features.DynamicOperations.OperationMarkerCopyTests.Run();
             Features.DynamicOperations.ContractMarkerTests.Run();
+            Features.DynamicOperations.ContractSharesTests.Run();
             Features.HighCommand.HighCommandTests.Run();
             Features.TheaterOps.PriorityTests.Run();
             Features.TheaterOps.LogisticsTests.Run();

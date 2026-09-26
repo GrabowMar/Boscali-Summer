@@ -51,8 +51,8 @@ namespace BoscaliSummer.Features.Support.Configuration
 
         public SupportSettings(ConfigFile config)
         {
-            // Every value in this section is decided by the host. A client's copy only
-            // affects what its own OPS page predicts before the host answers.
+            // Every gameplay value in this section is decided by the host; while connected, the
+            // host's values are replicated to clients, so an OPS page predicts with them too.
             Enabled = config.Bind("Support", "Enabled", true,
                 "Enable the Boscali support board. Turning this off skips the whole feature, " +
                 "including its network handlers and the SUPPORT page. " +
@@ -146,7 +146,7 @@ namespace BoscaliSummer.Features.Support.Configuration
                     "Scales every support cost at once. 1.0 charges roughly what the effect is " +
                     "worth and stays balanced when the game rebalances. Raise it to make support " +
                     "a real sacrifice, drop it toward 0 for a sandbox. " +
-                    "Host-authoritative: a client's value only changes what its own page predicts.",
+                    "Host-authoritative: the host's value applies and is shown on every OPS page.",
                     new AcceptableValueRange<float>(0f, 10f)));
             ReconCost = config.Bind("Support", "ReconCost", 600f,
                 new ConfigDescription(

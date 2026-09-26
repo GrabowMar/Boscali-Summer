@@ -88,7 +88,7 @@ namespace BoscaliSummer.Features.Support.Runtime
 
         /// <summary>
         /// Base breach reach of every network, from <c>CyberReachMeters</c>. The host's value
-        /// authorises breaches; a client's only changes what its own page predicts.
+        /// authorises breaches and is replicated to clients, whose pages predict with it.
         /// </summary>
         public float CyberReach
         {

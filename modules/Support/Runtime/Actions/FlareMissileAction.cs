@@ -43,7 +43,8 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
             float radius = context.Settings.FlareBarrageRadius.Value;
             int count = context.Settings.FlareBarrageCount.Value;
             float duration = context.Settings.FlareBarrageDuration.Value;
-            string unique = SupportNaming.Unique("Flare", context);
+            // The host's barrage values ride in the replicated name, so every peer seduces alike.
+            string unique = SupportEffectPolicy.FlareName(SupportNaming.Unique("Flare", context), radius, duration, count);
 
             context.Logger.LogInfo($"[Support] Flare Barrage using {definition.jsonKey} onto {ground} (radius: {radius:F0}m, duration: {duration:F0}s).");
             context.Host.Run(Launch(context.Host, context.Player, context.Owner, definition, ground, radius, duration, count, unique));

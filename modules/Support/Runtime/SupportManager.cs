@@ -1595,6 +1595,8 @@ namespace BoscaliSummer.Features.Support.Runtime
             OrbitalPlatform platform = player != null ? Space.PlatformFor(player.HQ) : null;
             double now = OrbitNow;
             OpsStateMessage message = OpsStateMessageBuffers.Create();
+            // Without the header a client's reader drops the whole snapshot as an old protocol.
+            message.Protocol = SupportNet.ProtocolVersion;
             message.RequestId = requestId;
             message.Result = (byte)result;
             if (platform != null)
