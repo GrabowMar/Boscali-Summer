@@ -128,5 +128,21 @@ namespace BoscaliSummer.Features.Command.Domain
             float closeness = 1f - Math.Max(0f, distanceMetres) / radius;
             return closeness * closeness * closeness;
         }
+
+        /// <summary>
+        /// One raster pixel's heat from an emitter disc, for the per-pixel loop: 0 outside
+        /// the disc (the skip check), otherwise the cubed closeness from the hoisted
+        /// reciprocal — the inner loop must not divide by the radius. Matches
+        /// <see cref="Heat01"/> times the weight within float rounding.
+        /// </summary>
+        public static float SplatHeat(float invRadius, float radiusSquared, float dx, float dzSquared, float weight)
+        {
+            if (!(invRadius > 0f) || !(weight > 0f)) return 0f;
+            float distanceSquared = dx * dx + dzSquared;
+            if (distanceSquared >= radiusSquared) return 0f;
+            float closeness = 1f - (float)Math.Sqrt(distanceSquared) * invRadius;
+            if (closeness <= 0f) return 0f;
+            return closeness * closeness * closeness * weight;
+        }
     }
 }

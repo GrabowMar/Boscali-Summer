@@ -106,6 +106,37 @@ namespace BoscaliSummer.Tests.Features.Command
                 TestAssert.That(heat <= previous, "Heat never rises with distance");
                 previous = heat;
             }
+
+            // The raster fast path: the disc skip plus the hoisted reciprocal match the
+            // reference heat times the weight within float rounding, at every radius,
+            // weight and sub-pixel position the sweep covers.
+            foreach (float radius in new[] { 1f, 1000f, 80000f })
+            {
+                float invRadius = 1f / radius;
+                float radiusSquared = radius * radius;
+                foreach (float weight in new[] { 0.5f, 1f })
+                {
+                    for (int i = -12; i <= 12; i++)
+                    {
+                        float dx = i * radius / 12f;
+                        float dz = (i * 7 % 12) * radius / 12f;
+                        float distance = (float)Math.Sqrt(dx * dx + dz * dz);
+                        float baseline = ThreatEnvelope.Heat01(radius, distance) * weight;
+                        float got = ThreatEnvelope.SplatHeat(invRadius, radiusSquared, dx, dz * dz, weight);
+                        TestAssert.That(Math.Abs(got - baseline) < 0.00001f,
+                            "The hoisted reciprocal matches the reference heat within rounding");
+                    }
+                }
+            }
+            TestAssert.That(ThreatEnvelope.SplatHeat(0f, 1000000f, 0f, 0f, 1f) == 0f &&
+                            ThreatEnvelope.SplatHeat(-1f, 1000000f, 0f, 0f, 1f) == 0f,
+                "A non-positive reciprocal contributes no heat");
+            TestAssert.That(ThreatEnvelope.SplatHeat(0.001f, 1000000f, 0f, 0f, 0f) == 0f &&
+                            ThreatEnvelope.SplatHeat(0.001f, 1000000f, 0f, 0f, -1f) == 0f,
+                "A non-positive weight contributes no heat");
+            TestAssert.That(ThreatEnvelope.SplatHeat(0.001f, 1000000f, 1000f, 0f, 1f) == 0f &&
+                            ThreatEnvelope.SplatHeat(0.001f, 1000000f, 0f, 990000f, 1f) > 0f,
+                "The disc edge skips; just inside still burns");
         }
 
         private static void Close(float actual, float expected, string message)
