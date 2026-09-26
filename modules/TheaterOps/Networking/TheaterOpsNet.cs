@@ -523,7 +523,7 @@ namespace BoscaliSummer.Features.TheaterOps.Networking
                 Faction = Text(faction, MaximumFactionLength),
                 Stance = influence != null ? influence.Stance : InfluenceState.DefaultStance,
                 Hold = influence != null && influence.HoldOffense ? (byte)1 : (byte)0,
-                MaxEscrow = influence != null ? influence.MaxEscrowPerPlan : InfluenceState.DefaultMaxEscrow,
+                MaxEscrow = influence != null ? influence.MaxEscrowPerPlan : 0f,
                 Reserve = influence != null ? influence.ReserveFloor : 0f,
                 Setter = Text(influence != null ? influence.Setter : null, MaximumSetterLength),
                 Posture = (byte)posture,

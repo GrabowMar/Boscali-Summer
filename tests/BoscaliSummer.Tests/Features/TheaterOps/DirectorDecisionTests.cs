@@ -16,6 +16,7 @@ namespace BoscaliSummer.Tests.Features.TheaterOps
             TheCommittedTargetSurvivesBetterOffers();
             HoldReserveAndCapacityShowInTheLog();
             ChestCapBlocksTheOpening();
+            TheRealDefaultCostsOpenAnOffensive();
             ThreatOwnsTheEffortAtLowStance();
             OpportunityKeepsItAtHighStance();
             AnEmptyTheaterStaysQuiet();
@@ -138,6 +139,25 @@ namespace BoscaliSummer.Tests.Features.TheaterOps
             DirectorOrders narrow = DirectorDecision.Review(Assess(objectives, capped));
             TestAssert.That(!narrow.OpenOffensive && Join(narrow).Contains("CHEST CAP"),
                 "a chest below the opening charge holds the offensive and says so");
+        }
+
+        private static void TheRealDefaultCostsOpenAnOffensive()
+        {
+            // The shipped settings: 25 overhead and 45 per wave. A default chest once capped
+            // escrow at 15, so the staff never opened a single offensive out of the box.
+            TestAssert.That(InfluenceState.DefaultOverheadCost == 25f && InfluenceState.DefaultWaveBudget == 45f,
+                "the pinned costs are the settings' own defaults");
+            var objectives = new List<ObjectiveRead> { new ObjectiveRead("outpost", "Outpost", 2, 0) };
+            DirectorOrders orders = DirectorDecision.Review(new DirectorAssessment(
+                objectives, new InfluenceState(), 200f, 25f, 45f, 0, 2, null, 9, null, null, null));
+            TestAssert.That(orders.OpenOffensive && orders.TargetKey == "outpost",
+                "a default staff opens an offensive at the default costs");
+            TestAssert.That(!Join(orders).Contains("CHEST CAP"), "the default chest is not the cap");
+
+            var sixWaves = new InfluenceState();
+            sixWaves.SetChest(sixWaves.EscrowCap, 0f, "VOTE");
+            TestAssert.That(sixWaves.MaxEscrowPerPlan >= 25f + 6f * 45f,
+                "the chest can hold every wave a plan may fund");
         }
 
         private static void ThreatOwnsTheEffortAtLowStance()

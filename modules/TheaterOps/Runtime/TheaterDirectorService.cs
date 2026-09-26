@@ -147,6 +147,9 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             logistics?.Refresh();
             float funds = logistics != null ? logistics.FactionFunds : float.NaN;
             if (float.IsNaN(funds) || float.IsInfinity(funds)) funds = 0f;
+            // The chest is priced in waves: a host cost change moves an unset chest with it.
+            bool repriced = operations != null &&
+                            state.Influence.Price(operations.OverheadCost, operations.WaveBudget);
 
             SenseObjectives(hq, state.Fixes);
             ScanPresence(hq, state.Fixes, MaximumUnitScan);
@@ -188,7 +191,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             DirectorOrders orders = DirectorDecision.Review(assessment);
 
             string oldDefense = state.DefenseKey;
-            bool changed = ExecuteOrders(hq, faction, state, orders, funds, now);
+            bool changed = ExecuteOrders(hq, faction, state, orders, funds, now) | repriced;
             // A defense that ends without moving the effort still changes the replicated posture.
             if (!string.Equals(oldDefense, state.DefenseKey, StringComparison.Ordinal)) changed = true;
             for (int i = 0; i < orders.Log.Length; i++)
@@ -255,7 +258,9 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
                     }
 
                     int desired = state.DesiredWaves.TryGetValue(plan.Id, out int waves) ? waves : 1;
-                    while (plan.WavesPlanned < desired && plan.CanCommit && plan.Committed < maxEscrow &&
+                    // The cap bounds what the plan holds after the wave, not before it.
+                    while (plan.WavesPlanned < desired && plan.CanCommit &&
+                           plan.Committed + waveBudget <= maxEscrow + 0.01f &&
                            waveBudget > 0f && funds - spent - reserve >= waveBudget)
                     {
                         if (!operations.CommitWave(plan.Id)) break;
