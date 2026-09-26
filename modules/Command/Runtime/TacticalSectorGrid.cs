@@ -68,6 +68,12 @@ namespace BoscaliSummer.Features.Command.Runtime
         public float CellSize { get; private set; }
         public uint GridVersion { get; private set; }
 
+        /// <summary>What the texture bake draws: display clusters plus contested stripe shares.</summary>
+        public ulong DisplayHash { get; private set; }
+
+        /// <summary>What the vector front draws: contour segments, metre endpoints, pressure.</summary>
+        public ulong FrontlineHash { get; private set; }
+
         public int ResolutionX { get; private set; }
         public int ResolutionY { get; private set; }
 
@@ -314,6 +320,8 @@ namespace BoscaliSummer.Features.Command.Runtime
             FrontlineLengthMetres = 0f;
             strategicDirty = true;
             displayQuadCount = 0;
+            DisplayHash = 0UL;
+            FrontlineHash = 0UL;
             GridVersion++;
         }
 
@@ -615,8 +623,27 @@ namespace BoscaliSummer.Features.Command.Runtime
             float frontLength = 0f;
             for (int i = 0; i < segmentCount; i++) frontLength += frontSegments[i].HalfLength * 2f;
             FrontlineLengthMetres = frontLength;
+            FrontlineHash = HashFrontline(frontSegments, segmentCount);
             if (changed) GridVersion++;
         }
+
+        private static ulong HashFrontline(SectorFrontSegment[] segments, int count)
+        {
+            ulong hash = 1469598103934665603UL;
+            hash = HashStep(hash, (uint)count);
+            for (int i = 0; i < count; i++)
+            {
+                SectorFrontSegment s = segments[i];
+                hash = HashStep(hash, (uint)(int)Math.Round(s.AX));
+                hash = HashStep(hash, (uint)(int)Math.Round(s.AZ));
+                hash = HashStep(hash, (uint)(int)Math.Round(s.BX));
+                hash = HashStep(hash, (uint)(int)Math.Round(s.BZ));
+                hash = HashStep(hash, (uint)(int)Math.Round(s.Pressure * 1000f));
+            }
+            return hash;
+        }
+
+        private static ulong HashStep(ulong hash, uint word) => (hash ^ word) * 1099511628211UL;
 
         /// <summary>
         /// Rebuilds the node influence field only when the observation snapshot actually
@@ -800,6 +827,33 @@ namespace BoscaliSummer.Features.Command.Runtime
                 cellKeys[i] = key;
             }
             displayQuadCount = SectorClusterTree.Build(cellKeys, ResolutionX, ResolutionY, displayClusters);
+            DisplayHash = HashDisplay(displayClusters, displayQuadCount);
+        }
+
+        /// <summary>
+        /// What the texture bake actually draws: every display cluster plus the
+        /// contested stripe share, so the overlay re-bakes only on visible change.
+        /// </summary>
+        private ulong HashDisplay(SectorClusterTree.Cluster[] quads, int count)
+        {
+            ulong hash = 1469598103934665603UL;
+            hash = HashStep(hash, (uint)count);
+            for (int q = 0; q < count; q++)
+            {
+                SectorClusterTree.Cluster quad = quads[q];
+                hash = HashStep(hash, quad.Key);
+                hash = HashStep(hash, (uint)quad.X);
+                hash = HashStep(hash, (uint)quad.Y);
+                hash = HashStep(hash, (uint)quad.Width);
+                hash = HashStep(hash, (uint)quad.Height);
+                if (((quad.Key >> 2) & 3) == (int)SectorControl.Contested)
+                {
+                    float hold = holdStrength[quad.Y * ResolutionX + quad.X];
+                    float share = Math.Clamp((IsFinite(hold) ? hold : 0f) * 0.5f + 0.5f, 0f, 1f);
+                    hash = HashStep(hash, (uint)(share * 256f));
+                }
+            }
+            return hash;
         }
 
         /// <summary>

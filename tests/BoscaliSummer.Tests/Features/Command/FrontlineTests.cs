@@ -78,6 +78,7 @@ namespace BoscaliSummer.Tests.Features.Command
             TestEncirclement();
             TestDefensiveWeight();
             TestFalloffKernel();
+            TestDisplayAndFrontlineHashes();
         }
 
         /// <summary>
@@ -91,6 +92,29 @@ namespace BoscaliSummer.Tests.Features.Command
             TestAssert.That(vehicle > 0f && nest > vehicle, "A defensive building weighs more than a vehicle");
             TestAssert.That(8f * nest > 6f * vehicle && 8f * nest < 18f * vehicle,
                 "A mature position holds against a platoon, not a battalion");
+        }
+
+        private static void TestDisplayAndFrontlineHashes()
+        {
+            var a = MakeFront();
+            var b = MakeFront();
+            TestAssert.That(a.DisplayHash != 0UL && a.DisplayHash == b.DisplayHash,
+                "Identical fronts bake identical display hashes");
+            TestAssert.That(a.FrontlineHash == b.FrontlineHash,
+                "Identical fronts stitch identical frontline hashes");
+
+            Advance(a, 30f, 1);
+            TestAssert.That(a.DisplayHash != b.DisplayHash,
+                "Moving the front moves the display hash, so the overlay re-bakes");
+            TestAssert.That(a.FrontlineHash != b.FrontlineHash,
+                "Moving the front moves the frontline hash, so the vector line rebuilds");
+
+            // A zero-elapsed re-evaluation changes nothing observable: both hashes hold.
+            ulong display = a.DisplayHash;
+            ulong front = a.FrontlineHash;
+            a.EvaluateSectors(0f);
+            TestAssert.That(a.DisplayHash == display && a.FrontlineHash == front,
+                "Re-evaluating a settled front without new observations changes no hash");
         }
 
         private static void TestFalloffKernel()

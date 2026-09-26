@@ -34,7 +34,7 @@ namespace BoscaliSummer.Features.Command.Presentation
         private bool isMapMaximized;
         private bool initialized;
 
-        private uint lastBakeGridVersion;
+        private ulong lastBakeDisplayHash;
         private bool lastBakeShowSectors;
         private float lastBakeOverlayAlpha = -1f;
         private int lastBakeTexW;
@@ -132,6 +132,7 @@ namespace BoscaliSummer.Features.Command.Presentation
             nextGridUpdate = 0f;
             gridHq = null;
             hasBakedTexture = false;
+            lastBakeDisplayHash = 0UL;
             TheaterFrame.Invalidate();
         }
 
@@ -360,7 +361,7 @@ namespace BoscaliSummer.Features.Command.Presentation
 
                 // 4. Fast Procedural Texture Bake (dirty-checked)
                 bool bakeDirty = !hasBakedTexture
-                    || lastBakeGridVersion != sectorGrid.GridVersion
+                    || lastBakeDisplayHash != sectorGrid.DisplayHash
                     || lastBakeShowSectors != showSectors
                     || !Mathf.Approximately(lastBakeOverlayAlpha, overlayAlpha)
                     || lastBakeTexW != texW
@@ -377,7 +378,7 @@ namespace BoscaliSummer.Features.Command.Presentation
                     overlayTexture.SetPixels32(pixels);
                     overlayTexture.Apply(false);
 
-                    lastBakeGridVersion = sectorGrid.GridVersion;
+                    lastBakeDisplayHash = sectorGrid.DisplayHash;
                     lastBakeShowSectors = showSectors;
                     lastBakeOverlayAlpha = overlayAlpha;
                     lastBakeTexW = texW;
