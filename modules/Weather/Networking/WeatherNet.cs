@@ -128,6 +128,8 @@ namespace BoscaliSummer.Features.Weather.Networking
             target.SetValue(null, value);
         }
 
+    }
+
     [NetworkMessage]
     internal struct WeatherKeyMessage
     {

@@ -149,6 +149,8 @@ namespace BoscaliSummer.Fire
         bool IFoliageCover.Ready => forestIndex.Ready;
         bool IFoliageCover.Contains(float x, float z) => forestIndex.Contains(x, z);
 
+        public int ActiveFireCount => fires.Count;
+
         public int CopyWrecks(WreckNotice[] dest)
         {
             if (dest == null || dest.Length == 0) return 0;

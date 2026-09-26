@@ -148,6 +148,8 @@ namespace BoscaliSummer.Features.Weather.Domain
             if (c < 0.88f) return FromType(WeatherRegimeType.RainSquall);
             return FromType(WeatherRegimeType.Storm);
         }
+    }
+
     /// <summary>The seven skies the schedule moves between, mildest first.</summary>
     internal enum WeatherRegime : byte
     {
@@ -313,4 +315,5 @@ namespace BoscaliSummer.Features.Weather.Domain
                 Frontal = frontal,
             };
         }
+    }
 }

@@ -40,6 +40,17 @@ namespace BoscaliSummer.Features.Weather.Domain
 
         /// <summary>0..1 how deep in cloud the aircraft is (adds mist beads).</summary>
         public float CloudDepth;
+
+        public CanopyForces(float airspeed, float gravityRight, float gravityUp,
+            float gravityForward, float rainRate, float cloudDepth)
+        {
+            Airspeed = airspeed;
+            GravityRight = gravityRight;
+            GravityUp = gravityUp;
+            GravityForward = gravityForward;
+            RainRate = rainRate;
+            CloudDepth = cloudDepth;
+        }
     }
 
     /// <summary>

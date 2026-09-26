@@ -7,5 +7,8 @@ namespace BoscaliSummer.Framework.Contracts
         /// Returns how many were written, capped by dest.Length.
         /// </summary>
         int CopyWrecks(WreckNotice[] dest);
+
+        /// <summary>Live fire sites currently tracked (for smoke-haze scaling).</summary>
+        int ActiveFireCount { get; }
     }
 }

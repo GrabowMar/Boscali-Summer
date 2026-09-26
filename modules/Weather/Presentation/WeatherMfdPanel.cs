@@ -27,7 +27,6 @@ namespace BoscaliSummer.Features.Weather.Presentation
 
         private WeatherSettings settings;
         private WeatherManager weather;
-        private SynopticWeather synoptic;
         private readonly WeatherSynopticPage synopticPage = new WeatherSynopticPage();
         private ManualLogSource logger;
 
@@ -118,7 +117,6 @@ namespace BoscaliSummer.Features.Weather.Presentation
         {
             settings = config;
             weather = manager;
-            synoptic = synopticWeather;
             logger = log;
             synopticPage.Configure(config, synopticWeather);
         }
@@ -443,7 +441,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
             y -= 20f;
 
             // 6 Timeline Rows
-            int[] offsets = WeatherForecast.DefaultOffsetsMinutes;
+            int[] offsets = Domain.WeatherForecast.DefaultOffsetsMinutes;
             timelineRows.Clear();
 
             float rowH = 38f;
@@ -746,7 +744,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
             Color deckColor = deck < 1600f ? AvTheme.Warning : AvTheme.Accent;
             shell.Metrics[1].Set($"{Mathf.RoundToInt(deck)} M", "CLOUD BASE", Mathf.Clamp01(deck / 4000f), deckColor);
 
-            WeatherForecast.FormatWind(weather.CurrentWindVelocity.x, weather.CurrentWindVelocity.z, out float kts, out int towards, out int from);
+            Domain.WeatherForecast.FormatWind(weather.CurrentWindVelocity.x, weather.CurrentWindVelocity.z, out float kts, out int towards, out int from);
             Color windColor = kts > 25f ? AvTheme.Warning : AvTheme.Accent;
             shell.Metrics[2].Set($"{Mathf.RoundToInt(kts)}K {from:D3}°", "WIND FROM", Mathf.Clamp01(kts / 40f), windColor);
 
@@ -840,7 +838,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
 
             if (liveQuickMetrics != null)
             {
-                float rain = WeatherForecast.ResolveRainIntensity(cond, weather.ForcedRainIntensity);
+                float rain = Domain.WeatherForecast.ResolveRainIntensity(cond, weather.ForcedRainIntensity);
                 liveQuickMetrics.text = $"DECK {Mathf.RoundToInt(deck)} M   /   WIND {Mathf.RoundToInt(windKts)} KT   /   RAIN {Mathf.RoundToInt(rain * 100f)}%";
             }
 
@@ -1110,7 +1108,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
             }
 
             // 3. Wind Dynamics
-            WeatherForecast.FormatWind(weather.CurrentWindVelocity.x, weather.CurrentWindVelocity.z, out _, out _, out int fromDeg);
+            Domain.WeatherForecast.FormatWind(weather.CurrentWindVelocity.x, weather.CurrentWindVelocity.z, out _, out _, out int fromDeg);
             if (windCardRail != null) windCardRail.color = kts > 25f ? AvTheme.Warning : AvTheme.Accent;
             if (windNeedle != null)
             {
