@@ -110,6 +110,18 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 () => immersion != null && immersion.SunGlareEnabled,
                 v => { if (immersion != null) immersion.SunGlareEnabled = v; },
                 available, unavailable);
+
+            Toggle(parent, TakeRow(ref area), "MFD GLOW",
+                "Cockpit view: the MFD glass brightens as the light fades, glowing at dusk and night.",
+                () => immersion != null && immersion.MfdGlowEnabled,
+                v => { if (immersion != null) immersion.MfdGlowEnabled = v; },
+                available, unavailable);
+
+            Toggle(parent, TakeRow(ref area), "AIRFRAME CREAKS",
+                "Cockpit view: the airframe creaks and groans when the G load snaps on or off.",
+                () => immersion != null && immersion.AirframeAudioEnabled,
+                v => { if (immersion != null) immersion.AirframeAudioEnabled = v; },
+                available, unavailable);
         }
 
         private void Percent(RectTransform parent, Rect area, string title, Func<float> read, Action<float> write,

@@ -14,6 +14,9 @@ namespace BoscaliSummer.Features.Immersion.Configuration
         public ConfigEntry<bool> ExtraShakeEnabled { get; }
         public ConfigEntry<float> ShakeStrength { get; }
         public ConfigEntry<bool> SunGlareEnabled { get; }
+        public ConfigEntry<bool> MfdGlowEnabled { get; }
+        public ConfigEntry<bool> AirframeAudioEnabled { get; }
+        public ConfigEntry<bool> SurfaceImmersionEnabled { get; }
 
         public ImmersionSettings(ConfigFile config)
         {
@@ -38,6 +41,16 @@ namespace BoscaliSummer.Features.Immersion.Configuration
 
             SunGlareEnabled = config.Bind(section, "SunGlareEnabled", true,
                 "Lens flare and glare when looking towards the sun; hidden behind terrain and cloud.");
+
+            MfdGlowEnabled = config.Bind(section, "MfdGlowEnabled", true,
+                "Cockpit view: the MFD glass brightens as the light fades, so the panels glow at dusk and night.");
+
+            AirframeAudioEnabled = config.Bind(section, "AirframeAudioEnabled", true,
+                "Cockpit view: the airframe creaks and groans when the G load snaps on or off.");
+
+            SurfaceImmersionEnabled = config.Bind(section, "SurfaceImmersionEnabled", true,
+                "Cockpit view: dynamic environmental surface shaders (rain wetness, high-altitude frost, " +
+                "combat scorch, and ground dirt) driven via MaterialPropertyBlocks with zero performance impact.");
         }
     }
 }

@@ -98,6 +98,101 @@ namespace BoscaliSummer.Features.Immersion.Domain
             return horizon * Clamp(1f - cloudOcclusion, 0f, 1f);
         }
 
+        /// <summary>
+        /// Pilot breathing: a slow asymmetric pitch sway in degrees. Exhale is longer than inhale
+        /// (the 2:3 duty comes from the second harmonic), so it reads as breath, not a metronome.
+        /// </summary>
+        public static float BreathingOffset(float timeSec, float breathsPerMin, float amplitudeDeg)
+        {
+            if (amplitudeDeg <= 0f || breathsPerMin <= 0f) return 0f;
+            double phase = 2.0 * Math.PI * breathsPerMin / 60.0 * timeSec;
+            return amplitudeDeg * (float)(Math.Sin(phase) - 0.25 * Math.Sin(2.0 * phase + 0.6));
+        }
+
+        /// <summary>
+        /// Airframe creak volume 0-1 from the specific-force jerk in G/s: silence below the
+        /// threshold, then a quick ramp to a low ceiling. Creaks season the cockpit, never lead it.
+        /// </summary>
+        public static float CreakVolume(float jerkGPerSec, float thresholdGPerSec = 2.5f)
+        {
+            if (jerkGPerSec < thresholdGPerSec) return 0f;
+            return Clamp((jerkGPerSec - thresholdGPerSec) / 20f, 0.15f, 0.5f);
+        }
+
+        /// <summary>
+        /// MFD glass brightness multiplier from ambient light 0-1: a whisper by day (the tubes are
+        /// already bright), up to ~1.5x on a dark night so the panels glow against the cockpit.
+        /// </summary>
+        public static float MfdBoost(float ambient01)
+        {
+            return 1.05f + 0.45f * (1f - Clamp(ambient01, 0f, 1f));
+        }
+
+        /// <summary>
+        /// Environmental canopy/airframe surface wetness 0-1 (inspired by D.I.R.T.):
+        /// accumulates with rain rate and cloud density, and shears away at airspeed (> 40 m/s).
+        /// </summary>
+        public static float SurfaceWetnessStep(float current, float rainRate, float cloudDensity, float airspeedMps, float dt)
+        {
+            if (dt <= 0f) return current;
+            float accum = (rainRate * 0.45f + cloudDensity * 0.25f) * dt;
+            float shear = (0.015f + Math.Max(0f, airspeedMps - 40f) * 0.0015f) * dt;
+            return Clamp(current + accum - shear * current, 0f, 1f);
+        }
+
+        /// <summary>
+        /// High-altitude canopy/wing frost 0-1:
+        /// standard lapse rate (-6.5°C/km from sea level 15°C) yields freezing above ~2300 m.
+        /// Cold air and high altitude accumulate frost; descending into warm low air melts it.
+        /// </summary>
+        public static float SurfaceFrostStep(float current, float altitudeM, float dt)
+        {
+            if (dt <= 0f) return current;
+            float tempC = 15f - 0.0065f * Math.Max(0f, altitudeM);
+            if (tempC < 0f)
+            {
+                float rate = Math.Min(1f, -tempC / 40f) * 0.05f * dt;
+                return Clamp(current + rate, 0f, 1f);
+            }
+            else
+            {
+                float melt = (tempC / 15f) * 0.15f * dt;
+                return Clamp(current - melt, 0f, 1f);
+            }
+        }
+
+        /// <summary>
+        /// Combat scorch / carbon soot 0-1:
+        /// spikes upon damage/blast impact or prolonged afterburner, with slow environmental weathering.
+        /// </summary>
+        public static float SurfaceScorchStep(float current, float damageSpike, float throttle, float dt)
+        {
+            if (dt <= 0f) return current;
+            float afterburnerSoot = throttle > 1.01f ? 0.02f * dt : 0f;
+            float weathering = 0.001f * dt;
+            return Clamp(current + damageSpike + afterburnerSoot - weathering, 0f, 1f);
+        }
+
+        /// <summary>
+        /// Runway and low-altitude dirt / dust accumulation 0-1:
+        /// kicks up during ground roll or flight < 30 m AGL over terrain, washed away by rain/wetness.
+        /// </summary>
+        public static float SurfaceDirtStep(float current, float radarAltM, float groundSpeedMps, bool onGround, float wetness, float dt)
+        {
+            if (dt <= 0f) return current;
+            float kickup = 0f;
+            if (onGround)
+            {
+                kickup = Math.Min(1f, groundSpeedMps / 45f) * 0.04f * dt;
+            }
+            else if (radarAltM < 30f && radarAltM > 0f)
+            {
+                kickup = (1f - radarAltM / 30f) * Math.Min(1f, groundSpeedMps / 100f) * 0.015f * dt;
+            }
+            float wash = (0.001f + wetness * 0.06f) * dt;
+            return Clamp(current + kickup - wash, 0f, 1f);
+        }
+
         private static float Clamp(float v, float min, float max) => v < min ? min : (v > max ? max : v);
     }
 }

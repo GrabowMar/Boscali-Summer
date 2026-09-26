@@ -82,6 +82,9 @@ namespace BoscaliSummer.Features.Immersion.Runtime
                 Vector3 f = Time.unscaledTime < debugUntil ? debugForce : force;
                 // Unity rolls counter-clockwise about +z, so a right roll is a negative z rate.
                 (tp, ty, tr) = ImmersionMath.HeadTarget(f.x, f.y, f.z, -rateDeg.z, rateDeg.y, strength);
+                // The pilot keeps breathing under G: ~13 breaths/min at rest, faster when loaded.
+                float breathRate = 13f + Mathf.Min(9f, Mathf.Abs(f.y - 1f) * 4f);
+                tp += ImmersionMath.BreathingOffset(Time.unscaledTime, breathRate, 0.12f) * strength;
             }
             (pitch, pitchVel) = ImmersionMath.SpringStep(pitch, pitchVel, tp, dt);
             (yaw, yawVel) = ImmersionMath.SpringStep(yaw, yawVel, ty, dt);

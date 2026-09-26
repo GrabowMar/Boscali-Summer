@@ -21,6 +21,7 @@ namespace BoscaliSummer.Runtime
         private static AccessTools.FieldRef<MusicManager, AudioSource> fadeMusicSourceRef;
         private static AccessTools.FieldRef<FactionHQ, List<Radar>> hqRadarsRef;
         private static AccessTools.FieldRef<AIPilotCombatModes, Unit> aiCurrentTargetRef;
+        private static AccessTools.FieldRef<Aircraft, Renderer[]> cockpitRenderersRef;
 
         public static bool MapBuildingHitPointsAvailable { get; private set; }
         public static bool MapBuildingSetBuildingsAvailable { get; private set; }
@@ -28,6 +29,7 @@ namespace BoscaliSummer.Runtime
         public static bool MusicSourcesAvailable { get; private set; }
         public static bool HqSensorsAvailable { get; private set; }
         public static bool AiPilotCombatAvailable { get; private set; }
+        public static bool CockpitRenderersAvailable { get; private set; }
 
         public static void Initialise()
         {
@@ -104,6 +106,17 @@ namespace BoscaliSummer.Runtime
                 AiPilotCombatAvailable = false;
                 Plugin.Logger?.LogWarning("AI pilot combat state access unavailable: " + e.Message);
             }
+
+            try
+            {
+                cockpitRenderersRef = FieldRef<Aircraft, Renderer[]>("cockpitRenderers");
+                CockpitRenderersAvailable = true;
+            }
+            catch (Exception e)
+            {
+                CockpitRenderersAvailable = false;
+                Plugin.Logger?.LogWarning("Cockpit renderer access unavailable: " + e.Message);
+            }
         }
 
         public static float GetMapBuildingHitPoints(MapBuilding building)
@@ -145,6 +158,14 @@ namespace BoscaliSummer.Runtime
 
         public static Unit GetAiCurrentTarget(AIPilotCombatModes modes) =>
             aiCurrentTargetRef == null || modes == null ? null : aiCurrentTargetRef(modes);
+
+        /// <summary>
+        /// The prefab-assigned first-person cockpit renderers (toggled by
+        /// <c>Aircraft.SetCockpitRenderers</c>), or null when the seam is unavailable.
+        /// Readable even while disabled, so the glow can bind outside cockpit view.
+        /// </summary>
+        public static Renderer[] GetCockpitRenderers(Aircraft aircraft) =>
+            cockpitRenderersRef == null || aircraft == null ? null : cockpitRenderersRef(aircraft);
 
         public static bool IsServer()
         {

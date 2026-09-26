@@ -259,7 +259,8 @@ foreach ((string typeName, string fieldName) in fields)
     ("RadialMenuAction", "iconSprite", "UnityEngine.Sprite"),
     ("RadialMenuAction", "backgroundSprite", "UnityEngine.Sprite"),
     ("RadialMenuAction", "backgroundColorInactive", "UnityEngine.Color"),
-    ("RadialMenuAction", "backgroundColorActive", "UnityEngine.Color")
+    ("RadialMenuAction", "backgroundColorActive", "UnityEngine.Color"),
+    ("Aircraft", "cockpitRenderers", "UnityEngine.Renderer[]")
 };
 foreach (var seam in cameraFields)
 {
