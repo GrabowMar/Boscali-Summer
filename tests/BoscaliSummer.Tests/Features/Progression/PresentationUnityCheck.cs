@@ -623,6 +623,10 @@ public static class PresentationUnityCheck
         object systems = Activator.CreateInstance(TypeOf("BoscaliSummer.Features.Hud.Runtime.SystemsReading"));
         Set(systems, "Valid", true);
         Set(systems, "FaultsAvailable", true);
+<<<<<<< HEAD
+=======
+        Set(systems, "Parts", 24);
+>>>>>>> origin/claude/sleepy-johnson-ho9g0d
         Set(systems, "Damaged", 2);
         Set(systems, "Failures", 1);
         object missiles = Activator.CreateInstance(TypeOf("BoscaliSummer.Features.Hud.Runtime.MissileTelemetry"));
