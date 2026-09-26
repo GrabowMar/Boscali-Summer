@@ -60,7 +60,7 @@ namespace BoscaliSummer.Features.Comms.Domain
         /// <summary>Stroke width, poll or hunt duration index — by verb.</summary>
         public byte Size;
 
-        /// <summary>The item, poll, challenge or hunt the verb acts on.</summary>
+        /// <summary>The item, poll, challenge or hunt the verb acts on; a located call's altitude in metres.</summary>
         public uint Target;
 
         /// <summary>Quantised interleaved points.</summary>
@@ -141,6 +141,15 @@ namespace BoscaliSummer.Features.Comms.Domain
 
         /// <summary>On a reset: a snapshot follows, so forget polls and games as well as the map.</summary>
         public const byte Snapshot = 16;
+
+        /// <summary>
+        /// On a snapshot's items, polls and games: old news replayed after a resync. Apply it,
+        /// but do not log, announce or pulse it a second time.
+        /// </summary>
+        public const byte Replay = 32;
+
+        /// <summary>On a quiet notice: the host is up but served this player a snapshot moments ago; ask again shortly.</summary>
+        public const byte Retry = 64;
     }
 
     /// <summary>Feed line categories; they pick the rail colour and the HUD channel's tone.</summary>
