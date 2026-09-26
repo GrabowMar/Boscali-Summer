@@ -118,13 +118,6 @@ namespace BoscaliSummer.Features.Command.Runtime
         public int CopyFrontlineTraces(int factionId, FrontlineTracePoint[] points, int[] lengths, float[] pressure)
             => ReadFaction(factionId)?.CopyFrontlineTraces(points, lengths, pressure) ?? 0;
 
-        public bool OwnsPosition(int factionId, float x, float z)
-        {
-            TacticalSectorGrid grid = ReadFaction(factionId);
-            return grid != null && grid.WorldToCell(x, z, out int c, out int r) &&
-                grid.GetSectorControl(c, r) == SectorControl.Friendly;
-        }
-
         public bool TryGetHoldStrength(int factionId, float x, float z, out float hold)
         {
             hold = 0f;

@@ -43,7 +43,6 @@ namespace BoscaliSummer.Features.Comms.Domain
 
         public CommsBoard Board => board;
         public IReadOnlyList<CommsPoll> Polls => polls.Open;
-        public IReadOnlyList<RpsChallenge> Duels => duels;
         public IReadOnlyList<HuntRound> Hunts => hunts;
         public CommsScoreboard Scores => scores;
 

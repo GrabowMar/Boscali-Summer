@@ -163,7 +163,7 @@ namespace BoscaliSummer.Features.Support.Presentation
                     if (action.Id == support.ArmedAction.Value && HomeTab(action) == tab) armed = action;
             bool on = armed != null;
             if (banner.Abort.gameObject.activeSelf != on) banner.Abort.gameObject.SetActive(on);
-            bool next = showNext && !on && !support.CommandArmed && !support.ArmedAction.HasValue && !support.LocalPickArmed;
+            bool next = showNext && !on && !support.ArmedAction.HasValue && !support.LocalPickArmed;
             if (banner.Next.gameObject.activeSelf != next) banner.Next.gameObject.SetActive(next);
             string text = on ? "ARMED · " + armed.Name + " · RIGHT-CLICK THE MAP" : hint ?? "";
             if (banner.Text.text != text) banner.Text.text = text;

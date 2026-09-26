@@ -237,35 +237,6 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 Line(mesh, points[i-2], points[i-1], points[i], points[i+1]);
         }
 
-        /// <summary>
-        /// Filled silhouette, fanned from the centroid. Small icons read better as one solid
-        /// mass than as a thin outline that blurs into itself; only star-shaped outlines
-        /// (aircraft, ground vehicles) belong here.
-        /// </summary>
-        private void Poly(VertexHelper mesh, params float[] points)
-        {
-            int count = points.Length / 2;
-            if (count < 3) return;
-
-            float cx = 0f, cy = 0f;
-            for (int i = 0; i < count; i++)
-            {
-                cx += points[i * 2];
-                cy += points[i * 2 + 1];
-            }
-            cx /= count;
-            cy /= count;
-
-            Rect r = rectTransform.rect;
-            int start = mesh.currentVertCount;
-            mesh.AddVert(new Vector2(r.x + cx * r.width, r.y + cy * r.height), color, Vector2.zero);
-            for (int i = 0; i < count; i++)
-                mesh.AddVert(new Vector2(r.x + points[i * 2] * r.width, r.y + points[i * 2 + 1] * r.height),
-                             color, Vector2.zero);
-            for (int i = 0; i < count; i++)
-                mesh.AddTriangle(start, start + 1 + i, start + 1 + (i + 1) % count);
-        }
-
         private void Circle(VertexHelper mesh, float cx, float cy, float radius, int segments)
         {
             Rect r = rectTransform.rect;

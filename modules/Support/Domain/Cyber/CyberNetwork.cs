@@ -80,14 +80,12 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
     internal readonly struct CyberStats
     {
         public readonly int Nodes;
-        public readonly int Online;
         public readonly int Hacked;
         public readonly int StageTotal;
 
-        public CyberStats(int nodes, int online, int hacked, int stageTotal)
+        public CyberStats(int nodes, int hacked, int stageTotal)
         {
             Nodes = nodes;
-            Online = online;
             Hacked = hacked;
             StageTotal = stageTotal;
         }
@@ -105,7 +103,6 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
     {
         public const int SlotCount = CyberLocations.SlotCount;
         public const int TargetBase = CyberLocations.TargetBase;
-        public const int TargetSlots = CyberLocations.MaximumTargets;
         public const int VerbCount = 5;
 
         private readonly CyberNode[] nodes = new CyberNode[SlotCount];
@@ -129,12 +126,8 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
 
         public bool Exists(int slot) => slot >= 0 && slot < SlotCount && nodes[slot].Kind != NodeKind.None;
 
-        public bool IsHome(int slot) => Exists(slot) && nodes[slot].Static;
-
         /// <summary>A target slot this faction has taken.</summary>
         public bool IsHacked(int slot) => Exists(slot) && nodes[slot].Hacked;
-
-        public bool Static(int slot) => IsHome(slot);
 
         /// <summary>Exists, alive and, for home nodes, with the anchor building standing.</summary>
         public bool Online(int slot) =>
@@ -222,20 +215,19 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
 
         public CyberStats Stats()
         {
-            int count = 0, online = 0, hacked = 0, stages = 0;
+            int count = 0, hacked = 0, stages = 0;
             for (int i = 0; i < SlotCount; i++)
             {
                 if (nodes[i].Kind == NodeKind.None) continue;
                 if (!nodes[i].Static && !nodes[i].Hacked) continue;
                 count++;
-                if (Online(i)) online++;
                 if (nodes[i].Hacked)
                 {
                     hacked++;
                     stages += nodes[i].Stage;
                 }
             }
-            return new CyberStats(count, online, hacked, stages);
+            return new CyberStats(count, hacked, stages);
         }
 
         // ---- Resources ----------------------------------------------------------------------
@@ -347,20 +339,6 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         {
             for (int i = 0; i < SlotCount; i++)
                 if (Working(i) && Tier(i) >= tier) return true;
-            return false;
-        }
-
-        /// <summary>A working location carrying this capstone whose radius covers the point.</summary>
-        public bool CapstoneCovers(Capstone capstone, float x, float z, double now)
-        {
-            if (capstone == Capstone.None) return false;
-            for (int i = 0; i < SlotCount; i++)
-            {
-                if (!Working(i) || nodes[i].Capstone != capstone) continue;
-                float radius = RadiusOf(i, now);
-                float dx = nodes[i].X - x, dz = nodes[i].Z - z;
-                if (dx * dx + dz * dz <= radius * radius) return true;
-            }
             return false;
         }
 
@@ -998,22 +976,6 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             for (int i = TargetBase; i < SlotCount; i++)
                 if (nodes[i].Kind == NodeKind.None) return i;
             return -1;
-        }
-
-        public void Clear()
-        {
-            Array.Clear(nodes, 0, SlotCount);
-            Array.Clear(verbReady, 0, VerbCount);
-            Array.Clear(capstoneReady, 0, 3);
-            Array.Clear(upgradeLevels, 0, 4);
-            Computing = 0f;
-            Intel = 0f;
-            OriginCount = 0;
-            lastTick = 0.0;
-            EndBreach();
-            choiceTarget = -1;
-            choiceDeadline = 0.0;
-            ClearCampaign();
         }
 
         // ---- Snapshot -----------------------------------------------------------------------

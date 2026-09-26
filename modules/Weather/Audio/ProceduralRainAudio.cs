@@ -85,11 +85,6 @@ namespace BoscaliSummer.Features.Weather.Audio
         /// <summary>True once the worker bake finished and both clips exist.</summary>
         public bool ClipsReady => clipsReady;
 
-        /// <summary>True once both layers faded out and stopped; the owner may tear down.</summary>
-        public bool IsSilent =>
-            (hissSource == null || !hissSource.isPlaying) &&
-            (patterSource == null || !patterSource.isPlaying);
-
         public void UpdateAudio(float indicatedAirspeedMs, float rainIntensity, bool isCockpitView, float masterVolume = 1.0f)
         {
             if (hissSource == null || patterSource == null) return;
@@ -147,13 +142,6 @@ namespace BoscaliSummer.Features.Weather.Audio
             var clip = AudioClip.Create(name, frames, 2, sampleRate, false);
             clip.SetData(samples, 0);
             return clip;
-        }
-
-        /// <summary>Main-thread convenience used by the standalone fixture: bake and create at once.</summary>
-        private static AudioClip SynthesizePinkHissClip(string name, float duration, int sampleRate)
-        {
-            float[] samples = BakePinkHiss(duration, sampleRate, out int frames);
-            return CreateClip(name, samples, frames, sampleRate);
         }
 
         /// <summary>Main-thread convenience used by the standalone fixture: bake and create at once.</summary>

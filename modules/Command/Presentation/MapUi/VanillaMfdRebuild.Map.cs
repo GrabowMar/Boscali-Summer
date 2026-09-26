@@ -82,7 +82,6 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             protected override bool PageHasTitle => false;
 
             private bool Available => options != null && SceneSingleton<DynamicMap>.i != null;
-            private bool OverlaysReady => Available && Overlay != null && Overlay.LayersAvailable;
 
             /// <summary>Resolved once and re-resolved after a rollback; never a scene scan.</summary>
             private ComMapOverlay Overlay

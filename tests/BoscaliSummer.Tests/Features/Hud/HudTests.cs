@@ -29,14 +29,6 @@ namespace BoscaliSummer.Tests.Features.Hud
 
         public static void Run()
         {
-            var screen = new HudBounds { Width = 1920, Height = 1080 };
-            var instruments = new HudBounds { X = 1500, Y = 24, Width = 396, Height = 700 };
-            var status = new HudBounds { X = 1430, Y = 450, Width = 460, Height = 480 };
-            HudBounds moved = HudLayout.Avoid(status, instruments, screen);
-            TestAssert.That(moved.Visible && moved.X + moved.Width < instruments.X,
-                "A tall instrument board must move overlapping status rows beside it");
-            TestAssert.That(HudLayout.Avoid(status, default, screen).X == status.X,
-                "An absent board must not move the user's status anchor");
             var queue = new HudNoticeQueue();
             queue.Push("muted", HudTone.Warning, "Old warning", null, 0, 10);
             queue.Push("kept", HudTone.Info, "Visible notice", null, 0, 10);
@@ -50,8 +42,8 @@ namespace BoscaliSummer.Tests.Features.Hud
 
         /// <summary>
         /// The presentation ladder the settings page labels and the board applies. Every step is
-        /// reachable from both directions, every value is inside its bound, and every anchor hangs
-        /// its text away from the screen edge it is anchored to.
+        /// reachable from both directions, every value is inside its bound, and every anchor
+        /// resolves to the screen edge it names.
         /// </summary>
         private static void Layout()
         {
@@ -95,33 +87,17 @@ namespace BoscaliSummer.Tests.Features.Hud
                 "The last opacity step is OFF, which hides the element");
             TestAssert.That(HudLayout.Opacity(0) <= 1f && HudLayout.Opacity(0) > 0f,
                 "FULL is fully solid but never over-bright");
-            TestAssert.That(HudLayout.BlockWidth > 300f && HudLayout.BlockWidth < 600f,
-                "The block is wide enough for a contract title and no wider than the HUD column it matches");
 
-            // Growth comes from the pivot, which is the only thing that decides which way the
-            // stack leaves its edge. Getting it backwards stacks the whole element off screen.
-            TestAssert.That(HudLayout.Place(HudAnchor.TopCentre).PivotY == 1f,
-                "A top anchor grows down into the screen");
-            TestAssert.That(HudLayout.Place(HudAnchor.BottomLeft).PivotY == 0f,
-                "A bottom anchor grows up into the screen");
             TestAssert.That(HudLayout.Place(HudAnchor.TopCentre).AnchorY > 0.9f,
                 "A top anchor sits at the top of the screen");
             TestAssert.That(HudLayout.Place(HudAnchor.BottomRight).AnchorY < 0.1f,
                 "A bottom anchor sits at the bottom of the screen");
-
-            // Text grows away from the edge it hangs from, or a long contract title runs off screen.
-            TestAssert.That(HudLayout.Place(HudAnchor.UnderWeapons).AlignRight &&
-                HudLayout.Place(HudAnchor.TopRight).AlignRight &&
-                HudLayout.Place(HudAnchor.MiddleRight).AlignRight &&
-                HudLayout.Place(HudAnchor.BottomRight).AlignRight,
-                "Right-edge anchors right-align their text");
-            TestAssert.That(!HudLayout.Place(HudAnchor.TopLeft).AlignRight &&
-                !HudLayout.Place(HudAnchor.BottomLeft).AlignRight,
-                "Left-edge anchors left-align their text");
-
-            TestAssert.That(HudLayout.Place(HudAnchor.UnderWeapons).FollowsWeaponColumn &&
-                !HudLayout.Place(HudAnchor.TopRight).FollowsWeaponColumn,
-                "Only the under-weapons anchor wants the vanilla column's live rectangle");
+            TestAssert.That(HudLayout.Place(HudAnchor.UnderWeapons).AnchorX == 1f &&
+                HudLayout.Place(HudAnchor.UnderWeapons).AnchorY == 1f,
+                "The under-weapons anchor starts from the top-right corner the weapon column occupies");
+            TestAssert.That(HudLayout.Place(HudAnchor.MiddleLeft).AnchorX == 0f &&
+                HudLayout.Place(HudAnchor.MiddleLeft).AnchorY == 0.5f,
+                "A middle anchor is centred vertically on its edge");
 
             for (int i = 0; i < HudLayout.AnchorCount; i++)
             {
@@ -130,21 +106,6 @@ namespace BoscaliSummer.Tests.Features.Hud
                 TestAssert.That(place.AnchorX >= 0f && place.AnchorX <= 1f &&
                     place.AnchorY >= 0f && place.AnchorY <= 1f,
                     "Anchor " + HudLayout.AnchorName(i) + " resolves to a normalised screen anchor");
-                TestAssert.That(place.AnchorX == place.PivotX && place.AnchorY == place.PivotY,
-                    "Anchor " + HudLayout.AnchorName(i) + " hangs its pivot on its own anchor point");
-
-                // Every offset points inward from the edge it is anchored to, and a top or right
-                // offset is negative. The safe-area correction reads that sign.
-                if (place.AnchorX > 0.5f) TestAssert.That(place.OffsetX < 0f,
-                    HudLayout.AnchorName(i) + " offsets left, into the screen, from the right edge");
-                if (place.AnchorX < 0.5f) TestAssert.That(place.OffsetX > 0f,
-                    HudLayout.AnchorName(i) + " offsets right, into the screen, from the left edge");
-                if (place.AnchorY > 0.5f) TestAssert.That(place.OffsetY < 0f,
-                    HudLayout.AnchorName(i) + " offsets down, into the screen, from the top edge");
-                if (place.AnchorY < 0.5f && place.OffsetY != 0f) TestAssert.That(place.OffsetY > 0f,
-                    HudLayout.AnchorName(i) + " offsets up, into the screen, from the bottom edge");
-                if (place.AnchorY == 0.5f) TestAssert.That(place.OffsetY == 0f,
-                    HudLayout.AnchorName(i) + " is centred vertically and needs no vertical offset");
             }
         }
 

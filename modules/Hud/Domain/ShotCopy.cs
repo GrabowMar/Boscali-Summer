@@ -29,17 +29,5 @@
             return ((int)System.Math.Round(eta, System.MidpointRounding.AwayFromZero))
                 .ToString(System.Globalization.CultureInfo.InvariantCulture) + "s";
         }
-
-        public static string Status(int outbound, int inbound)
-        {
-            bool hasOut = outbound > 0;
-            bool hasIn = inbound > 0;
-            if (!hasOut && !hasIn) return "—";
-            if (hasOut && hasIn)
-                return outbound.ToString(System.Globalization.CultureInfo.InvariantCulture) + " OUT \u00b7 " +
-                    inbound.ToString(System.Globalization.CultureInfo.InvariantCulture) + " INB";
-            if (hasOut) return outbound.ToString(System.Globalization.CultureInfo.InvariantCulture) + " OUT";
-            return inbound.ToString(System.Globalization.CultureInfo.InvariantCulture) + " INB";
-        }
     }
 }

@@ -75,6 +75,8 @@ namespace BoscaliSummer
             BindAndRemove(config, "Support", "VehicleAirdrops", true);
             BindAndRemove(config, "Support", "VehicleAirdropCost", 12f);
             BindAndRemove(config, "Support", "ArtilleryDefinitionKey", string.Empty);
+            // Stations hold a fixed sector now, so there are no pass gaps left to scale.
+            BindAndRemove(config, "Support", "OrbitGapScale", 1f);
 
             // The original dynamic weather module was removed wholesale. Purge its
             // retired presentation and simulation keys so old legacy entries are cleaned.

@@ -155,7 +155,6 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         /// <summary>Incidents the adversary won (network exposed, intruder left with what it took).</summary>
         public int Breached { get; private set; }
         public double ExposedUntil { get; private set; }
-        public byte ExposedOrigin { get; private set; }
         public int NoticeSerial { get; private set; }
         public double NextIncident => nextIncident;
 
@@ -189,12 +188,6 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             outcome == IncidentOutcome.Exposed || outcome == IncidentOutcome.Withdrew;
 
         public static bool Traceable(IncidentKind kind) => kind == IncidentKind.Intrusion || kind == IncidentKind.HostileOperation;
-
-        public bool FootholdOn(int origin, double now) =>
-            origin >= 0 && origin < MaximumOrigins && footholdUntil[origin] > now;
-
-        public float FootholdRemaining(int origin, double now) =>
-            origin >= 0 && origin < MaximumOrigins ? (float)Math.Max(0.0, footholdUntil[origin] - now) : 0f;
 
         public bool AnyFoothold(double now)
         {
@@ -420,7 +413,6 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
                     else
                     {
                         ExposedUntil = now + ExposureSeconds;
-                        ExposedOrigin = incident.Origin;
                         // The adversary mapped the network: the campaign notices.
                         Heat = Math.Min(HeatMaximum, Heat + OffensiveHeatSpike * 0.5f);
                         Resolve(index, IncidentOutcome.Exposed, now);
@@ -638,22 +630,6 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             noticeOrigin[0] = origin;
             noticeCount = Math.Min(NoticeSlots, noticeCount + 1);
             NoticeSerial++;
-        }
-
-        private void ClearCampaign()
-        {
-            Array.Clear(incidents, 0, IncidentSlots);
-            Array.Clear(footholdUntil, 0, MaximumOrigins);
-            Array.Clear(noticeKind, 0, NoticeSlots);
-            Array.Clear(noticeSite, 0, NoticeSlots);
-            Array.Clear(noticeOrigin, 0, NoticeSlots);
-            noticeCount = 0;
-            NoticeSerial = 0;
-            nextIncident = 0.0;
-            Heat = 0f;
-            Defended = Breached = 0;
-            ExposedUntil = 0.0;
-            ExposedOrigin = 0;
         }
 
         private void ExportCampaign(double now, CyberSnapshot into)

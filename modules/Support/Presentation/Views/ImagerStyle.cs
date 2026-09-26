@@ -55,8 +55,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             FontSize = 11,
             Tracking = Tracking,
             Style = FontStyles.Bold,
-            Mono = false,
-            Dashed = false
+            Mono = false
         };
     }
 }

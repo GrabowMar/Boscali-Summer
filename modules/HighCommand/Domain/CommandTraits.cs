@@ -23,7 +23,6 @@ namespace BoscaliSummer.Features.HighCommand.Domain
     internal static class CommandTraits
     {
         public const int All = (1 << 5) - 1;
-        public const int MinimumLabelBudget = 48;
         public const int MinimumBonusBudget = 96;
 
         public static bool Has(CommandTrait mask, CommandTrait trait) => (mask & trait) == trait;
@@ -73,20 +72,6 @@ namespace BoscaliSummer.Features.HighCommand.Domain
                 case CommandTrait.Recluse: return "-30% PATROL SIGHT";
                 default: return "";
             }
-        }
-
-        /// <summary>Display form for the console, bounded so a dossier line never overprints.</summary>
-        public static string Labels(CommandTrait mask)
-        {
-            var builder = new StringBuilder(MinimumLabelBudget);
-            for (int bit = 0; bit < 5 && builder.Length < MinimumLabelBudget; bit++)
-            {
-                var trait = (CommandTrait)(1 << bit);
-                if (!Has(mask, trait)) continue;
-                if (builder.Length > 0) builder.Append(", ");
-                builder.Append(Label(trait));
-            }
-            return builder.Length == 0 ? "NO NOTABLE TRAITS" : builder.ToString();
         }
 
         /// <summary>

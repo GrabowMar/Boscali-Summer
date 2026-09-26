@@ -29,11 +29,11 @@ namespace BoscaliSummer.Features.Support.Presentation
                 if (platform != null && platform.Exists)
                 {
                     GlobalPosition target = support.RadarScanTarget;
-                    OrbitState state = platform.State(support.OrbitNow, support.OrbitClock);
+                    OrbitState state = platform.State(support.OrbitNow);
                     LookAngles look = TheaterTrack.Look(state, target.x, target.z);
                     if (look.Visible)
                     {
-                        scan.Begin(target, look, state, OrbitalPlatform.Callsign,
+                        scan.Begin(target, look, state,
                             support.GetEffectRadius(SupportActionId.Recon), serialSeen * 7919 + platform.Seed);
                         scan.Contacts = support.RadarScanContacts;
                         started = true;

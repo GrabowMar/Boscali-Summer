@@ -383,7 +383,6 @@ namespace BoscaliSummer.Features.Command.Presentation
                     lastBakeTexW = texW;
                     lastBakeTexH = texH;
                     hasBakedTexture = true;
-                    sectorGrid.ClearChunkDirty();
                 }
 
                 if (frontlineGraphic != null)

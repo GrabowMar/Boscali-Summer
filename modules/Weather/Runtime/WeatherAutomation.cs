@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using UnityEngine;
+using static BoscaliSummer.Infrastructure.Diagnostics.AutomationArgs;
 
 namespace BoscaliSummer.Features.Weather.Runtime
 {
@@ -91,31 +91,6 @@ namespace BoscaliSummer.Features.Weather.Runtime
             return unit.unitName;
         }
 
-        private static object Arg(Dictionary<string, object> args, string key) =>
-            args != null && args.TryGetValue(key, out object value) ? value : null;
-
-        private static string Text(Dictionary<string, object> args, string key) => Arg(args, key) as string;
-
-        private static float Number(Dictionary<string, object> args, string key, float fallback)
-        {
-            object value = Arg(args, key);
-            if (value == null) return fallback;
-            try { return Convert.ToSingle(value, CultureInfo.InvariantCulture); }
-            catch (Exception) { return fallback; }
-        }
-
-        private static string Describe(Dictionary<string, object> state)
-        {
-            var parts = new List<string>(state.Count);
-            foreach (KeyValuePair<string, object> pair in state)
-                parts.Add(pair.Key + "=" + Convert.ToString(pair.Value, CultureInfo.InvariantCulture));
-            return string.Join(", ", parts);
-        }
-
-        private static Dictionary<string, object> Fail(string hook, string error)
-        {
-            Debug.LogWarning("[WeatherAutomation] " + hook + ": " + error);
-            return new Dictionary<string, object> { { "ok", false }, { "error", error } };
-        }
+        private static Dictionary<string, object> Fail(string hook, string error) => Failure("WeatherAutomation", hook, error);
     }
 }

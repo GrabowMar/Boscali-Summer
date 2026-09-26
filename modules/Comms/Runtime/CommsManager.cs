@@ -102,7 +102,6 @@ namespace BoscaliSummer.Features.Comms.Runtime
         private bool hudDeclared;
 
         public CommsClientState State => client;
-        public CommsSettings Settings => settings;
         public ulong LocalId => client.LocalId;
         public int LocalFaction { get; private set; }
         public bool IsHost => GameAccess.IsServer();

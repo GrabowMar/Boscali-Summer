@@ -35,8 +35,8 @@ namespace BoscaliSummer.Runtime
             bool supportSpawning = AccessTools.Method(typeof(Spawner), nameof(Spawner.SpawnVehicle)) != null &&
                 AccessTools.Method(typeof(Spawner), nameof(Spawner.SpawnBuilding)) != null &&
                 AccessTools.Method(typeof(DynamicMap), nameof(DynamicMap.TryGetCursorCoordinates)) != null;
-            bool supportRecon = AccessTools.Method(typeof(FactionHQ), "SetTrackingState",
-                new[] { typeof(PersistentID), typeof(GlobalPosition), typeof(float) }) != null;
+            bool supportRecon = AccessTools.Method(typeof(FactionHQ), nameof(FactionHQ.RpcUpdateTrackingInfo),
+                new[] { typeof(PersistentID) }) != null;
             bool dynamicOperations = AccessTools.Property(typeof(MissionManager), nameof(MissionManager.IsRunning)) != null &&
                 AccessTools.Method(typeof(FactionHQ), nameof(FactionHQ.RewardPlayer)) != null &&
                   AccessTools.Method(typeof(FactionHQ), nameof(FactionHQ.GetTrackingData)) != null &&

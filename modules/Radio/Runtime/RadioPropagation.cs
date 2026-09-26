@@ -28,7 +28,6 @@ namespace BoscaliSummer.Features.Radio.Runtime
         }
 
         public bool BeyondHorizon => HorizonKm > 0f && DistanceKm > HorizonKm;
-        public bool Blocked => PenaltyDb > 0f;
         public bool Open(float squelch) => Quality >= squelch;
 
         /// <summary>S-units: S1..S9, then the over-nine decibels, as a receiver reports it.</summary>
@@ -55,8 +54,7 @@ namespace BoscaliSummer.Features.Radio.Runtime
     /// better, and a mode mismatch on the same frequency is garble rather than silence.
     ///
     /// <para>Pure maths on purpose: the caller supplies positions and the line-of-sight
-    /// answer, so this is testable without a mission running. Voice, crypto, jamming and
-    /// the per-transmitter network live in <see cref="RadioLinkStub"/> for a later pass.</para>
+    /// answer, so this is testable without a mission running.</para>
     /// </summary>
     internal static class RadioPropagation
     {
@@ -106,15 +104,8 @@ namespace BoscaliSummer.Features.Radio.Runtime
             return new RadioReception(quality, distanceKm, horizon, penalty, signal);
         }
 
-        /// <summary>Reception with no transmitter to measure: a local deck or unknown tower.</summary>
-        public static RadioReception Local() => RadioReception.Perfect;
-
         /// <summary>No transmitter at all: a built-in station whose tower is gone.</summary>
         public static RadioReception OffAir => new RadioReception(0f, 0f, 0f, 0f, NoiseFloorDbm);
-
-        /// <summary>Garble from a wrong-mode transmission, used by the mode override.</summary>
-        public static bool ModeMismatch(RadioModulation transmit, RadioModulation receive) =>
-            transmit != receive;
 
         public static float StaticFor(float quality) =>
             Clamp01(1f - Math.Max(0f, quality) * 1.35f);

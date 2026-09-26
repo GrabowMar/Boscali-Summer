@@ -18,7 +18,7 @@ namespace BoscaliSummer.Features.Trenches.Visuals
     {
         private const int MaximumColliders = 48;
         private const int MaximumRings = 1200;
-        private const float TraceStep = 3.5f;
+        private const float TraceStep = TrenchTraceMath.MeshSpacing;
         private const float CoarseStep = 9f;
         private const float RidgeStep = 18f;
         private const float WireForward = 7f;

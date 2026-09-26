@@ -57,11 +57,6 @@ namespace BoscaliSummer.Features.UrbanCombat.Audio
             if (sirenSource != null) sirenSource.outputAudioMixerGroup = group;
         }
 
-        public bool IsRouted => sirenSource != null && sirenSource.outputAudioMixerGroup != null;
-        public bool ClipsReady => clipsReady;
-
-        public bool IsSilent => sirenSource == null || !sirenSource.isPlaying;
-
         public void UpdateAudio(float sirenTarget, Vector3 anchorPos, bool hasAnchor)
         {
             if (sirenSource == null || voiceRoot == null) return;

@@ -53,7 +53,6 @@ namespace BoscaliSummer.Features.Progression.Runtime
         int IProgressionView.AvailablePoints => localState.AvailablePoints(localEarnedPoints);
         int IProgressionView.MaximumPoints => localMaximumPoints;
         int IProgressionView.ScorePerPoint => localScorePerPoint;
-        string IProgressionView.Status => LastResult;
         bool IProgressionView.UnlockPending => unlockPending;
 
         public bool BypassRequirements => bypassRequirements != null && bypassRequirements.Value;
@@ -156,13 +155,6 @@ namespace BoscaliSummer.Features.Progression.Runtime
                     block, unlocked, !unlockPending && affordable);
             }
             return result;
-        }
-
-        string IProgressionView.PerkNameFor(string capability)
-        {
-            for (int i = 0; i < PerkCatalog.All.Length; i++)
-                if (PerkCatalog.All[i].Capability == capability) return PerkCatalog.All[i].Name;
-            return "unknown";
         }
 
         void IProgressionView.RequestUnlock(byte perkId)

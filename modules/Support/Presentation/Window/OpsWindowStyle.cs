@@ -3,10 +3,6 @@ namespace BoscaliSummer.Features.Support.Presentation.Window
     /// <summary>Root geometry and motion only. Nothing here describes a room interior.</summary>
     internal static class OpsWindowStyle
     {
-        public const float SideMargin = NOAvionics.Ui.AvRoomFrame.SideMargin;
-        public const float TopMargin = NOAvionics.Ui.AvRoomFrame.TopMargin;
-        public const float BottomMargin = NOAvionics.Ui.AvRoomFrame.BottomMargin;
-        public const float Outline = 1f;
         public const float ShadowFalloff = 48f;
         public const float ShadowOffsetY = -8f;
         public const float ShadowAlpha = 0.55f;

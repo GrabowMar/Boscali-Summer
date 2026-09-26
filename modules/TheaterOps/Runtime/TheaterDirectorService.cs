@@ -121,7 +121,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
                 nextAuthority = now + AuthorityInterval;
                 authoritative = settings != null && settings.Enabled.Value && GameAccess.IsServer();
             }
-            if (!authoritative || !TryGetLocalFaction(out FactionHQ hq)) return;
+            if (!authoritative || !GameAccess.TryGetLocalFaction(out FactionHQ hq)) return;
 
             string faction = hq.faction.factionName;
             FactionDirection state = StateOf(faction);
@@ -456,7 +456,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             string faction, byte kind, float value, float value2, string key, string setter)
         {
             if (!authoritative || settings == null || !settings.Enabled.Value) return false;
-            if (!TryGetLocalFaction(out FactionHQ hq) || hq.faction == null) return false;
+            if (!GameAccess.TryGetLocalFaction(out FactionHQ hq) || hq.faction == null) return false;
             if (!string.Equals(hq.faction.factionName, faction, StringComparison.Ordinal))
                 return false;
 
@@ -628,15 +628,6 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             string name = key.Length > 24 ? key.Substring(0, 24) : key;
             string lean = weight >= 0f ? "+" + weight.ToString("F1") : weight.ToString("F1");
             return "AXIS " + name.ToUpperInvariant() + " " + lean + " — " + SetterOf(setter);
-        }
-
-        private static bool TryGetLocalFaction(out FactionHQ hq)
-        {
-            hq = null;
-            if (!GameManager.GetLocalHQ(out FactionHQ local) || local == null || local.faction == null)
-                return false;
-            hq = local;
-            return true;
         }
     }
 }

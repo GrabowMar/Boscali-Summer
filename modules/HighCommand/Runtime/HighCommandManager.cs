@@ -46,7 +46,6 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
             public Unit Unit;
             public AssetKind Kind;
             public int InstanceId;
-            public Vector3 LastPosition;
 
             public void Watch()
             {

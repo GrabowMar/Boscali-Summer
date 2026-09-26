@@ -321,7 +321,6 @@ public static class SettingsUnityCheck
         public void DeclareChannel(string key, string label) { }
         public IHudLine Acquire(string owner, string channel, string key) => null;
         public void Notice(string channel, HudTone tone, string text, string detail = null) { }
-        public void ReleaseOwner(string owner) { }
         public void ResetLayout() { Enabled = true; Resets++; }
     }
     private sealed class ExternalFixture : IThirdPersonHud

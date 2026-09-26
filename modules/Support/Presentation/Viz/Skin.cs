@@ -27,7 +27,6 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
         public FontStyles Style;
         /// <summary>Monospaced figures (terminal and typewriter rooms).</summary>
         public bool Mono;
-        public bool Dashed;
 
         public string Text(string value) => Mono && !string.IsNullOrEmpty(value) ? "<mspace=0.6em>" + value : value ?? "";
     }

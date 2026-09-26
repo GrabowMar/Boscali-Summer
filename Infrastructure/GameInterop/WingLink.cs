@@ -36,7 +36,7 @@ namespace BoscaliSummer.Runtime
         // Wing Command build keeps every existing feature and only the SQD studio is disabled.
         private static bool studioResolved;
         private static string studioUnavailableReason = "Wing Command companion pilot API has not been checked.";
-        private static MethodInfo portraitForSelection, listCustomPilots, getCustomPilot, getCustomPilots, saveCustomPilot;
+        private static MethodInfo portraitForSelection, getCustomPilot, getCustomPilots, saveCustomPilot;
         private static MethodInfo deleteCustomPilot, isPilotRecruited, recruitCustomPilot, dischargeCustomPilot;
         private static MethodInfo importAllCustomPilots, personaLabel, rankNameForXp, bodyLabel, uniformLabel;
         private static PropertyInfo bodyCount, faceCount, hairCount, uniformCount, backdropCount;
@@ -211,13 +211,6 @@ namespace BoscaliSummer.Runtime
                 }
                 return null;
             }
-        }
-
-        public static string[] ListCustomPilots()
-        {
-            if (!ResolveStudio()) return Array.Empty<string>();
-            try { return listCustomPilots.Invoke(null, null) as string[] ?? Array.Empty<string>(); }
-            catch (Exception error) { FailStudio(error); return Array.Empty<string>(); }
         }
 
         public static bool TryGetCustomPilot(string callsign, out WingPilotRecord record)
@@ -420,7 +413,6 @@ namespace BoscaliSummer.Runtime
                 const BindingFlags flags = BindingFlags.Public | BindingFlags.Static;
                 portraitForSelection = type.GetMethod("PortraitForSelection", flags, null,
                     new[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int) }, null);
-                listCustomPilots = type.GetMethod("ListCustomPilots", flags, null, Type.EmptyTypes, null);
                 getCustomPilot = type.GetMethod("GetCustomPilot", flags, null, new[] { typeof(string) }, null);
                 getCustomPilots = type.GetMethod("GetCustomPilots", flags, null, Type.EmptyTypes, null);
                 saveCustomPilot = type.GetMethod("SaveCustomPilot", flags, null, new[] { typeof(object[]) }, null);
@@ -438,7 +430,7 @@ namespace BoscaliSummer.Runtime
                 hairCount = type.GetProperty("PortraitHairCount", flags);
                 uniformCount = type.GetProperty("PortraitUniformCount", flags);
                 backdropCount = type.GetProperty("PortraitBackdropCount", flags);
-                if (portraitForSelection == null || listCustomPilots == null || getCustomPilot == null ||
+                if (portraitForSelection == null || getCustomPilot == null ||
                     getCustomPilots == null || saveCustomPilot == null || deleteCustomPilot == null || isPilotRecruited == null ||
                     recruitCustomPilot == null || dischargeCustomPilot == null || importAllCustomPilots == null ||
                     personaLabel == null || rankNameForXp == null || bodyLabel == null || uniformLabel == null ||
