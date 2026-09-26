@@ -16,15 +16,23 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Features.Weather.Presentation
 {
     /// <summary>
-    /// "WEA" — the environment panel. Observation first: the hazard banner and the current
-    /// conditions carry the weight and the top of the page, then the single wind rose, the
-    /// nearest front and the deterministic forecast. The host alone gets one compact row of
-    /// schedule control; a client reads the same forecast, because every peer derives it from
-    /// the mission clock and nothing here is transmitted.
+    /// "WEA" — the environment panel, one page and five sections: the hazard banner and the
+    /// current observation, the single wind rose, the deterministic forecast, the radar picture
+    /// with its bounded cell table, and — on the host alone — one row of schedule control. The
+    /// radar is a section of this page, not a second tab, so there is one panel to open and one
+    /// grid everything is measured against.
+    ///
+    /// <para>Every displayed fact has one source. The world reads from <c>Live</c>, the synced
+    /// vanilla channels and the storm buffer; the physics the schedule alone can see — flight
+    /// category, visibility, temperature, dewpoint — reads from <c>Atmosphere</c> and is marked
+    /// <c>· SCHED</c> whenever a held sky makes the schedule an estimate rather than an
+    /// observation. A forced sky therefore reads self-consistent from the banner to the forecast.</para>
     ///
     /// <para>Every block is measured and arranged once, at build, to fit the bay the panel was
-    /// placed in. Nothing scrolls and nothing moves at refresh: a refresh writes text, tints and
-    /// needle rotations only.</para>
+    /// placed in. A bay too short for even one forecast row drops that whole section and gives
+    /// its room to the radar and the wind rose; only a bay too short even for those scrolls,
+    /// rather than clipping the page. Nothing moves at refresh: a refresh writes text, tints
+    /// and needle rotations only.</para>
     /// </summary>
     internal sealed class WeatherMfdPanel : MonoBehaviour, ISceneService
     {
@@ -32,37 +40,55 @@ namespace BoscaliSummer.Features.Weather.Presentation
         private const float RefreshInterval = 0.25f;
 
         private const int ChipCount = 2;
-        private const int PageEnvironment = 0;
-        private const int PageRadar = 1;
 
-        // ---- Layout grid, in AvTokens spacing steps --------------------------------------
-        private const float RowHeight = 16f;
-        private const float RowPitch = 17f;
-        private const float RowPitchMax = 34f;
-        private const float HeaderHeight = 22f;
+        // ---- Layout grid -------------------------------------------------------------------
+        //
+        // One grid for the whole page: every section hangs off the same left column, every
+        // reading row is one 30px row (AvTokens.RowHeight), and every label/value pair is the
+        // same two classes. The two data tables are the deliberate exception — they share one
+        // denser grid (WeatherRadarPage.TableInset / TableColumnEdges / RowPitch) so a column
+        // edge lands on the same x in the forecast and in the echo table.
+        private const float HeaderHeight = 20f;
         private const float BannerHeight = 38f;
-        private const float CellHeight = 32f;
-        private const float CellGap = 8f;
-        private const float FrontRowHeight = 18f;
-        private const float LegendHeight = 30f;
-        private const float ControlHeight = 22f;
+
+        /// <summary>One metric cell: the key line over the reading line, exactly the row token.</summary>
+        private const float MetricRowHeight = AvTokens.RowHeight;
+        private const float MetricKeyHeight = 13f;
+        private const float MetricGap = 6f;
+
+        /// <summary>One wind reading: label and value on one 30px row, two rows beside the rose.</summary>
+        private const float WindLabelWidth = 44f;
+        private const int WindColumns = 2;
+        private const int WindRows = 2;
+
+        private const float LegendHeight = 14f;
+        private const float ControlHeight = AvTokens.RowHeight;
         private const float TrackGap = 8f;
         private const float TrackHeight = 6f;
-        private const float TrackLabelHeight = 14f;
-        private const float RoseBase = 76f;
-        private const float RoseMax = 132f;
-        private const float SectionGap = 6f;
-        private const float SectionGapMax = 20f;
+        private const float TrackLabelHeight = 12f;
+        private const float RoseBase = 60f;
+        private const float RoseMax = 130f;
+        private const float MapBase = 72f;
+        private const float MapMax = 220f;
+        private const float MapShare = 0.40f;
+        private const float SectionGap = AvTokens.Space2;
+        private const float SectionGapMax = 16f;
         private const float ToggleWidth = 54f;
-        private const float TickHeight = 10f;
-        private const float MarkerHeight = 12f;
+        private const float MarkerHeight = 10f;
         private const float BarWidth = 3f;
         private const float BarGap = 2f;
         private const float BarHeight = 12f;
-        private const float BarBlock = 4f * BarWidth + 3f * BarGap;
+        private const float PipSize = 7f;
+        private const float PipGap = 3f;
+        private const float PrecipBarWidth = 2f;
+        private const float PrecipBarHeight = 11f;
 
         private const int BarCount = 4;
         private const int RampRungs = 4;
+        private const int PipCount = 4;
+        private const int PrecipBarCount = 3;
+        private const int ObsColumns = 3;
+        private const int ObsRows = 2;
 
         private const int ObsCategory = 0;
         private const int ObsCloudBase = 1;
@@ -71,6 +97,12 @@ namespace BoscaliSummer.Features.Weather.Presentation
         private const int ObsPrecipitation = 4;
         private const int ObsOcclusion = 5;
         private const int ObsCount = 6;
+
+        /// <summary>The metric row's fixed keys, so all six cells share one label baseline.</summary>
+        private static readonly string[] ObsKeys =
+        {
+            "FLIGHT CATEGORY", "CEILING", "VISIBILITY", "TEMP / DEW", "PRECIPITATION", "DECK OCCLUSION"
+        };
 
         /// <summary>Rain below this is not worth naming as precipitation, the HUD's own floor.</summary>
         private const float PrecipitationVisible = 0.02f;
@@ -89,7 +121,6 @@ namespace BoscaliSummer.Features.Weather.Presentation
         private GameObject screenRoot;
         private AvScreen shell;
         private int rowCapacity;
-        private float trackWidth;
 
         private TMP_Text bannerTier;
         private TMP_Text bannerDetail;
@@ -99,22 +130,25 @@ namespace BoscaliSummer.Features.Weather.Presentation
 
         private readonly TMP_Text[] obsValue = new TMP_Text[ObsCount];
         private readonly TMP_Text[] obsKey = new TMP_Text[ObsCount];
-        private readonly string[] obsKeyText = new string[ObsCount];
-        private readonly Image[] obsBar = new Image[BarCount];
+        private readonly TMP_Text[] obsNote = new TMP_Text[ObsCount];
+        private readonly Image[] obsPip = new Image[PipCount];
+        private readonly Image[] obsPrecip = new Image[PrecipBarCount];
+        private TMP_Text conditionsNote;
 
         private RectTransform roseMean;
+        private RectTransform roseMeanTail;
         private RectTransform roseGust;
         private RectTransform roseVeer;
+        private RectTransform roseVeerRim;
         private TMP_Text roseMeanText;
         private TMP_Text roseGustText;
         private TMP_Text roseVeerText;
         private TMP_Text roseShearText;
+        private TMP_Text roseShearNote;
 
-        private TMP_Text frontGlyph;
-        private TMP_Text frontText;
-
-        private TMP_Text forecastLegend;
-        private TMP_Text forecastKey;
+        private TMP_Text forecastNote;
+        private TMP_Text forecastEmpty;
+        private TMP_Text radarNote;
 
         private TMP_Text controlClock;
         private TMP_Text controlNext;
@@ -166,7 +200,6 @@ namespace BoscaliSummer.Features.Weather.Presentation
             screen = null;
             shell = null;
             rowCapacity = 0;
-            trackWidth = 0f;
 
             bannerTier = null;
             bannerDetail = null;
@@ -175,20 +208,25 @@ namespace BoscaliSummer.Features.Weather.Presentation
             Array.Clear(bannerBar, 0, bannerBar.Length);
             Array.Clear(obsValue, 0, obsValue.Length);
             Array.Clear(obsKey, 0, obsKey.Length);
-            Array.Clear(obsBar, 0, obsBar.Length);
+            Array.Clear(obsNote, 0, obsNote.Length);
+            Array.Clear(obsPip, 0, obsPip.Length);
+            Array.Clear(obsPrecip, 0, obsPrecip.Length);
+            conditionsNote = null;
 
             roseMean = null;
+            roseMeanTail = null;
             roseGust = null;
             roseVeer = null;
+            roseVeerRim = null;
             roseMeanText = null;
             roseGustText = null;
             roseVeerText = null;
             roseShearText = null;
+            roseShearNote = null;
 
-            frontGlyph = null;
-            frontText = null;
-            forecastLegend = null;
-            forecastKey = null;
+            forecastNote = null;
+            forecastEmpty = null;
+            radarNote = null;
 
             controlClock = null;
             controlNext = null;
@@ -215,17 +253,14 @@ namespace BoscaliSummer.Features.Weather.Presentation
         {
             if (failed || settings == null || manager == null) return;
             if (Application.isBatchMode) { failed = true; return; }
-            if (!settings.Enabled.Value) { failed = true; return; }
-            if (!GameAccess.MfdAvailable) { failed = true; return; }
-
-            // A manager that latched failed has nothing to read; take the panel down with it
-            // rather than render dashes for the rest of the session.
-            if (!manager.Enabled)
+            if (!settings.Enabled.Value)
             {
-                ResetForScene();
-                failed = true;
+                // Releasing instead of latching: re-enabling during the same mission rebuilds
+                // the panel, exactly as the Events screen behaves.
+                if (screen != null) ResetForScene();
                 return;
             }
+            if (!GameAccess.MfdAvailable) { failed = true; return; }
 
             if (screen == null)
             {
@@ -325,19 +360,18 @@ namespace BoscaliSummer.Features.Weather.Presentation
             content.SetParent(rootRect, false);
             AvKit.Stretch(content);
 
-            // Two tabs, and only two: everything else the bar used to pretend to tab is a status
-            // chip. No metric row — the observation block below the tabs carries the numbers and
-            // needs the room the row would have taken.
+            // One page, so no tab bar: the radar lives inside the environment page.
             shell = AvScreen.Build(
                 content, MfdSlots.Weather,
-                new[] { "ENV", "RADAR" },
+                Array.Empty<string>(),
                 null,
                 ChipCount, Width, height, _ => nextRefresh = 0f);
+            GapDataBar(shell);
 
             ResolvePalette();
 
-            BuildEnvironmentPage(shell.CreatePage(PageEnvironment, "EnvironmentPage"));
-            BuildRadarPage(shell.CreatePage(PageRadar, "RadarPage"));
+            radar = new WeatherRadarPage(settings);
+            BuildPage(shell.CreatePage(0, "EnvironmentPage"));
 
             MFDScreen result = root.AddComponent<MFDScreen>();
             result.shortName = MfdSlots.Weather;
@@ -351,7 +385,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
                 return null;
             }
 
-            shell.SetPage(PageEnvironment);
+            shell.SetPage(0);
             return result;
         }
 
@@ -364,6 +398,40 @@ namespace BoscaliSummer.Features.Weather.Presentation
                 if (images[i].gameObject != button.gameObject) return images[i];
             }
             return button.GetComponent<Image>();
+        }
+
+        /// <summary>
+        /// The shared data bar sizes its id tag with a character estimate and starts the state
+        /// line exactly at that estimate, so a tracked tag overruns its own box and the state
+        /// line runs under it. Measure the tag the bar actually built — the label sharing the
+        /// bar's row and sitting left of the state line — and start the state line clear of it.
+        /// </summary>
+        private static void GapDataBar(AvScreen screen)
+        {
+            if (screen == null || screen.Content == null || screen.DataBar == null || screen.DataBar.State == null)
+                return;
+
+            var state = (RectTransform)screen.DataBar.State.transform;
+            Transform row = state.parent;
+            if (row == null) return;
+
+            TMP_Text tag = null;
+            for (int i = 0; i < row.childCount; i++)
+            {
+                TMP_Text label = row.GetChild(i).GetComponent<TMP_Text>();
+                if (label == null || ReferenceEquals(label, screen.DataBar.State)) continue;
+                var rect = label.rectTransform;
+                if (rect.anchoredPosition.x >= state.anchoredPosition.x) continue;
+                if (Mathf.Abs(rect.anchoredPosition.y - state.anchoredPosition.y) > 1f) continue;
+                tag = label;
+                break;
+            }
+            if (tag == null) return;
+
+            float shift = tag.rectTransform.anchoredPosition.x + tag.preferredWidth + 8f - state.anchoredPosition.x;
+            if (shift <= 0f) return;
+            state.anchoredPosition = new Vector2(state.anchoredPosition.x + shift, state.anchoredPosition.y);
+            state.sizeDelta = new Vector2(Mathf.Max(0f, state.sizeDelta.x - shift), state.sizeDelta.y);
         }
 
         /// <summary>
@@ -388,7 +456,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
             {
                 StormWarning warning = (StormWarning)tier;
                 AvStyle rail = AvStyleHost.Style(StormReadout.RailClass(warning));
-                AvStyle chip = AvStyleHost.Style(StormReadout.ChipClass(warning));
+                AvStyle chip = AvStyleHost.Style("chip " + StormReadout.ChipClass(warning));
                 tierFill[tier] = AvStyleHost.Resolve(rail.Background, AvTheme.RailInert);
                 tierInk[tier] = AvStyleHost.Resolve(chip.Color, AvTheme.Dim);
             }
@@ -407,13 +475,15 @@ namespace BoscaliSummer.Features.Weather.Presentation
 
         // ---- Page ------------------------------------------------------------------------
 
-        private void BuildEnvironmentPage(GameObject page)
+        /// <summary>
+        /// The one page, laid out on the panel's grid from the top down. Fixed furniture is
+        /// measured first, then the wind rose, the radar map and the forecast row count share
+        /// what is left; a short bay drops forecast rows before it touches the radar.
+        /// </summary>
+        private void BuildPage(GameObject page)
         {
             Rect body = shell.Body;
             var pageRect = (RectTransform)page.transform;
-            float x = body.x + AvScreen.SpineInset;
-            float width = body.width - AvScreen.SpineInset;
-            AvStyled.Spine(pageRect, new Rect(body.x, body.y, 3f, body.height));
 
             bool host = manager != null && manager.HostAuthority;
             int configured = settings != null
@@ -422,88 +492,120 @@ namespace BoscaliSummer.Features.Weather.Presentation
             float controlBlock = host
                 ? HeaderHeight + ControlHeight + TrackGap + TrackHeight + TrackLabelHeight
                 : 0f;
+            float metricBlock = MetricRowHeight * ObsRows + AvTokens.Space1 * (ObsRows - 1);
+            int gapCount = host ? 4 : 3;
+            float forecastBlock = HeaderHeight + LegendHeight;
 
-            // The observation block, the section headers and the legends are fixed. What is left
-            // over is split between the wind rose, the forecast row pitch and the four section
-            // gaps, so the page fills its bay and never leaves a hole above CONTROL. When the bay
-            // is too short for even one row, the row count drops instead of overflowing.
-            float fixedHeight = HeaderHeight + BannerHeight + AvTokens.Space1 + CellHeight
-                              + AvTokens.Space1 + CellHeight
-                              + HeaderHeight + HeaderHeight + FrontRowHeight
-                              + HeaderHeight + LegendHeight;
-            float flexible = Mathf.Max(0f, body.height - fixedHeight - controlBlock - 4f * SectionGap);
+            float fixedHeight = HeaderHeight + BannerHeight + AvTokens.Space1 + metricBlock
+                              + HeaderHeight
+                              + forecastBlock
+                              + HeaderHeight + WeatherRadarPage.ChromeHeight
+                              + controlBlock;
 
-            float roseSize = Mathf.Clamp(flexible * 0.28f, RoseBase, RoseMax);
-            int capacity = Mathf.FloorToInt((flexible - roseSize) / RowPitch);
-            rowCapacity = Mathf.Clamp(Mathf.Min(configured, capacity), 0, WeatherForecast.MaxEntries);
-            float pitch = rowCapacity > 0
-                ? Mathf.Clamp((flexible - roseSize) / rowCapacity, RowPitch, RowPitchMax)
-                : RowPitch;
-            float residual = Mathf.Max(0f, flexible - roseSize - pitch * rowCapacity);
-            float gap = SectionGap + Mathf.Clamp(residual / 4f, 0f, SectionGapMax);
+            float pool = body.height - fixedHeight - gapCount * SectionGap;
+            float mapHeight = Mathf.Clamp(pool * MapShare, MapBase, MapMax);
+            rowCapacity = Mathf.Clamp(
+                Mathf.FloorToInt((pool - mapHeight - RoseBase) / WeatherRadarPage.RowPitch), 0, configured);
 
-            float y = body.y;
-            y = SectionHeader(pageRect, x, y, width, "CONDITIONS", "OBSERVATION", band: false);
-            BuildBanner(pageRect, x, y, width);
+            // Not one forecast row fits beside everything else. A header over an empty block
+            // reads as a broken panel, so the section is not built at all and the radar and the
+            // wind rose take its room: the page drops forecast rows before it touches the map.
+            bool showForecast = rowCapacity > 0;
+            if (!showForecast)
+            {
+                gapCount -= 1;
+                fixedHeight -= forecastBlock;
+                pool = body.height - fixedHeight - gapCount * SectionGap;
+                mapHeight = Mathf.Clamp(pool * MapShare, MapBase, MapMax);
+            }
+
+            float roseSize = Mathf.Clamp(pool - mapHeight - rowCapacity * WeatherRadarPage.RowPitch, RoseBase, RoseMax);
+            float residual = pool - mapHeight - rowCapacity * WeatherRadarPage.RowPitch - roseSize;
+            float gap = SectionGap;
+
+            // A bay taller than the sections need: the picture takes the slack first, then the
+            // rose, then the gaps evenly. The map takes the last of it, so the page ends on the
+            // glass instead of leaving a strip of nothing under the radar.
+            float grow = Mathf.Min(residual, MapMax - mapHeight);
+            mapHeight += grow;
+            residual -= grow;
+            grow = Mathf.Min(residual, RoseMax - roseSize);
+            roseSize += grow;
+            residual -= grow;
+            if (residual > 0f)
+            {
+                grow = Mathf.Min(residual / gapCount, SectionGapMax - SectionGap);
+                gap += grow;
+                residual -= grow * gapCount;
+                if (residual > 0f) mapHeight += residual;
+            }
+
+            float contentHeight = fixedHeight + gapCount * gap + mapHeight
+                                + rowCapacity * WeatherRadarPage.RowPitch + roseSize;
+
+            RectTransform parent = AvScreen.Scroll(pageRect, body, contentHeight, out Rect area);
+            float x = area.x + AvScreen.SpineInset;
+            float width = area.width - AvScreen.SpineInset;
+            AvStyled.Spine(parent, new Rect(area.x, area.y, 3f, contentHeight));
+
+            float y = area.y;
+            conditionsNote = SectionNote(parent, x, y, width, "AT YOUR POSITION");
+            y = SectionHeader(parent, x, y, width, "CONDITIONS", null, band: false);
+            BuildBanner(parent, x, y, width);
             y -= BannerHeight + AvTokens.Space1;
 
-            float column = (width - CellGap * 2f) / 3f;
+            float column = (width - MetricGap * (ObsColumns - 1)) / ObsColumns;
             for (int i = 0; i < ObsCount; i++)
             {
-                float cx = x + i % 3 * (column + CellGap);
-                float cy = y - i / 3 * (CellHeight + AvTokens.Space1);
-                BuildObsCell(pageRect, cx, cy, column, i);
+                float cx = x + i % ObsColumns * (column + MetricGap);
+                float cy = y - i / ObsColumns * (MetricRowHeight + AvTokens.Space1);
+                BuildObsCell(parent, cx, cy, column, i);
             }
-            y -= CellHeight * 2f + AvTokens.Space1 + gap;
+            y -= metricBlock + gap;
 
-            y = SectionHeader(pageRect, x, y, width, "WIND", "MEAN · GUST · VEER · SHEAR", band: false);
-            BuildRose(pageRect, x, y, width, roseSize);
+            // The header note says the one thing the cells do not; the four readings name
+            // themselves, so the old "MEAN · GUST · VEER · SHEAR" note was every label twice.
+            y = SectionHeader(parent, x, y, width, "WIND", "WIND FROM · AT YOUR POSITION", band: false);
+            BuildRose(parent, x, y, width, roseSize);
             y -= roseSize + gap;
 
-            y = SectionHeader(pageRect, x, y, width, "FRONT", "NEAREST BOUNDARY", band: false);
-            frontGlyph = AvStyled.Label(pageRect, new Rect(x, y, 26f, FrontRowHeight), "", "row-name");
-            frontText = AvStyled.Label(pageRect, new Rect(x + 26f, y, width - 26f, FrontRowHeight), "",
-                "row-main", align: TextAlignmentOptions.MidlineLeft);
-            frontText.enableWordWrapping = false;
-            frontText.overflowMode = TextOverflowModes.Ellipsis;
-            y -= FrontRowHeight + gap;
-
-            y = SectionHeader(pageRect, x, y, width, "FORECAST", "IDENTICAL ON EVERY PEER", band: true);
-            forecastLegend = AvStyled.Label(pageRect, new Rect(x, y, width, 14f),
-                "▲ BUILDING   ▼ EASING   = STEADY", "section-title-note");
-            forecastKey = AvStyled.Label(pageRect, new Rect(x, y - 14f, width, 14f),
-                "CHIP COLOUR = SEVERITY   ·   WIND = POINT SPEED (CHANGE M/S)", "section-title-note");
-            y -= LegendHeight;
-
-            forecastRows.Clear();
-            for (int i = 0; i < rowCapacity; i++)
+            if (showForecast)
             {
-                forecastRows.Add(ForecastRow.Build(pageRect, x, y - i * pitch, width, pitch));
+                forecastNote = SectionNote(parent, x, y, width, "IDENTICAL ON EVERY PEER");
+                y = SectionHeader(parent, x, y, width, "FORECAST", null, band: false);
+                BuildForecastLegend(parent, x, y, width);
+                y -= LegendHeight;
+
+                forecastRows.Clear();
+                for (int i = 0; i < rowCapacity; i++)
+                {
+                    forecastRows.Add(ForecastRow.Build(parent, x, y - i * WeatherRadarPage.RowPitch, width));
+                }
+
+                // When no row can be shown, the reserved row block would read as a hole in the
+                // page. One line sitting on the middle of it says why, which is the difference
+                // between "no forecast" and "the panel is broken".
+                forecastEmpty = AvStyled.Label(
+                    parent, new Rect(x, y, width, rowCapacity * WeatherRadarPage.RowPitch),
+                    "", "section-title-note");
+                SetActive(forecastEmpty.gameObject, false);
+                y -= rowCapacity * WeatherRadarPage.RowPitch + gap;
             }
-            y -= pitch * rowCapacity + gap;
 
-            if (host) BuildControl(pageRect, x, y, width);
+            float radarHeaderY = y;
+            y = SectionHeader(parent, x, y, width, "RADAR", null, band: true);
+            radarNote = SectionNote(parent, x, radarHeaderY, width, "");
+            y = radar.Build(parent, radarNote, x, y, width, mapHeight);
+            y -= gap;
+
+            if (host) BuildControl(parent, x, y, width);
         }
 
-        private void BuildRadarPage(GameObject page)
+        private static TMP_Text SectionNote(RectTransform parent, float x, float y, float width, string text)
         {
-            Rect body = shell.Body;
-            var pageRect = (RectTransform)page.transform;
-            // The radar stack is fixed-height and owned by the radar page, so it keeps the one
-            // viewport in this panel: only it can still be taller than the bay.
-            RectTransform parent = AvScreen.Scroll(pageRect, body, 560f, out body);
-            radar = new WeatherRadarPage(parent, body.x + AvScreen.SpineInset, body.y,
-                body.width - AvScreen.SpineInset, settings);
-            radar.Build(parent, body.x + AvScreen.SpineInset, body.y, body.width - AvScreen.SpineInset);
-        }
-
-        private void RefreshRadar(WeatherSnapshot snapshot)
-        {
-            if (radar == null) return;
-            CameraStateManager cameras = SceneSingleton<CameraStateManager>.i;
-            if (cameras == null) return;
-            Vector3 position = cameras.transform.position;
-            radar.Refresh(snapshot, manager, position.x, position.z);
+            float titleWidth = width * 0.5f;
+            return AvStyled.Label(parent, new Rect(x + titleWidth, y, width - titleWidth, 14f), text,
+                "section-title-note", align: TextAlignmentOptions.MidlineRight);
         }
 
         private static float SectionHeader(
@@ -525,7 +627,9 @@ namespace BoscaliSummer.Features.Weather.Presentation
 
         /// <summary>
         /// The hazard banner. It is the top of the page and the largest type on it: the tier
-        /// word and its bars, then the cell and the hazard in words.
+        /// word and its bars, then the cell and the hazard in words. A held sky shows the held
+        /// regime, not the storm cells, because the cells are gated by the schedule's air mass
+        /// and would contradict the forced sky.
         /// </summary>
         private void BuildBanner(RectTransform parent, float x, float y, float width)
         {
@@ -533,7 +637,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
             bannerRail = AvKit.Rule(parent, new Rect(x, y, 3f, BannerHeight), AvTheme.RailInert);
             bannerTier = AvStyled.Label(parent, new Rect(x + 12f, y, width - 12f, 22f), "", "page-title");
 
-            float barX = x + width - BarBlock - 2f;
+            float barX = x + width - (BarCount * BarWidth + (BarCount - 1) * BarGap) - 2f;
             for (int i = 0; i < BarCount; i++)
             {
                 bannerBar[i] = AvKit.Rule(parent,
@@ -550,29 +654,70 @@ namespace BoscaliSummer.Features.Weather.Presentation
                 align: TextAlignmentOptions.MidlineRight);
         }
 
-        /// <summary>One observation cell: the value, its severity bars where it has a ramp, and its name.</summary>
+        /// <summary>
+        /// One observation cell, exactly one 30px row: the key on the first line and the reading
+        /// on the second, with the unit or the secondary reading right-aligned on that same
+        /// reading line. All six cells therefore share every baseline, and a reading with two
+        /// units keeps the primary in the value and the secondary in the note — "4587" with
+        /// "FT · 1398 M AGL" — instead of a value that has to be cut to fit.
+        /// </summary>
         private void BuildObsCell(RectTransform parent, float x, float y, float width, int index)
         {
-            bool category = index == ObsCategory;
-            float valueWidth = category ? width - BarBlock - 6f : width;
+            const float pad = 10f;
+            const float valueTop = MetricKeyHeight;
+            const float valueHeight = MetricRowHeight - MetricKeyHeight;
 
-            TMP_Text value = AvStyled.Label(parent, new Rect(x, y, valueWidth, 17f), "", "row-name");
-            value.fontSize = AvTokens.FontTitle;
+            AvStyled.Box(parent, new Rect(x, y, width, MetricRowHeight), "metric");
+            obsKey[index] = AvStyled.Label(
+                parent, new Rect(x + pad, y - 1f, width - pad * 2f, MetricKeyHeight), ObsKeys[index], "kv-key");
+
+            TMP_Text value = AvStyled.Label(
+                parent, new Rect(x + pad, y - valueTop, width - pad * 2f, valueHeight), "", "row-name");
+            // A readout is not a label: the sheet's tracked capitals pushed "35°C / 24°C" past
+            // its cell once the game's own (wider) MFD font was on it. Untracked, shrinking only
+            // if it must, and never ellipsised.
+            value.fontSizeMin = AvTokens.FontMicro;
+            value.fontSizeMax = AvTokens.FontBody;
+            value.enableAutoSizing = true;
+            value.characterSpacing = 0f;
             obsValue[index] = value;
 
-            if (category)
+            obsNote[index] = AvStyled.Label(
+                parent, new Rect(x + pad, y - valueTop, width - pad * 2f, valueHeight), "",
+                "section-title-note", align: TextAlignmentOptions.MidlineRight);
+
+            if (index == ObsCategory)
             {
-                float barX = x + width - BarBlock - 2f;
-                for (int i = 0; i < BarCount; i++)
+                float pipX = x + width - pad - (PipCount * PipSize + (PipCount - 1) * PipGap);
+                for (int i = 0; i < PipCount; i++)
                 {
-                    obsBar[i] = AvKit.Rule(parent,
-                        new Rect(barX + i * (BarWidth + BarGap), y, BarWidth, BarHeight), AvTheme.RailInert);
+                    obsPip[i] = AvKit.Panel(parent,
+                        new Rect(pipX + i * (PipSize + PipGap), y - valueTop - (valueHeight - PipSize) * 0.5f,
+                            PipSize, PipSize),
+                        AvTheme.RailInert, AvSprites.Led);
                 }
             }
-
-            obsKey[index] = AvStyled.Label(parent, new Rect(x, y - 17f, width, 13f), "", "section-title-note");
+            else if (index == ObsPrecipitation)
+            {
+                float iconBlock = PrecipBarCount * PrecipBarWidth + (PrecipBarCount - 1) * 4f;
+                float barX = x + width - pad - iconBlock - 2f;
+                for (int i = 0; i < PrecipBarCount; i++)
+                {
+                    obsPrecip[i] = AvKit.Rule(parent,
+                        new Rect(barX + i * (PrecipBarWidth + 4f),
+                            y - valueTop - (valueHeight - PrecipBarHeight) * 0.5f,
+                            PrecipBarWidth, PrecipBarHeight),
+                        AvTheme.RailInfo);
+                    obsPrecip[i].rectTransform.localRotation = Quaternion.Euler(0f, 0f, -20f);
+                }
+            }
         }
 
+        /// <summary>
+        /// The wind rose. A compass ring with cardinal letters, the gust needle longest, the mean
+        /// needle over a tail so it reads as a vector, and the veered heading marked on the rim —
+        /// all three rotate from the hub at refresh.
+        /// </summary>
         private void BuildRose(RectTransform parent, float x, float y, float width, float size)
         {
             var roseObject = new GameObject("WindRose", typeof(RectTransform), typeof(Image));
@@ -581,33 +726,85 @@ namespace BoscaliSummer.Features.Weather.Presentation
             AvKit.Place(rose, new Rect(x, y, size, size));
 
             Image ground = roseObject.GetComponent<Image>();
-            ground.sprite = AvSprites.Control;
+            ground.sprite = AvSprites.Card;
             ground.type = Image.Type.Sliced;
-            ground.color = AvTheme.SurfaceInert;
+            ground.color = AvTheme.Unity(AvTokens.SurfaceInert);
             ground.raycastTarget = false;
 
             AvKit.Outline(rose, new Rect(0f, 0f, size, size), AvTheme.Hairline);
             float centre = size * 0.5f;
-            AvKit.Rule(rose, new Rect(centre - 0.5f, 0f, 1f, size), AvTheme.Hairline);
-            AvKit.Rule(rose, new Rect(0f, -centre, size, 1f), AvTheme.Hairline);
-            AvKit.Rule(rose, new Rect(centre - 1f, 0f, 2f, 6f), AvTheme.TextPrimary);
+            Color hairline = AvTheme.Unity(AvTokens.Hairline.WithAlpha(0.5f));
+            AvKit.Rule(rose, new Rect(centre - 0.5f, 0f, 1f, size), hairline);
+            AvKit.Rule(rose, new Rect(0f, -centre, size, 1f), hairline);
 
-            // Needles pivot at the hub and point at the heading they came from, so a refresh
-            // rotates one transform and rebuilds nothing.
-            roseVeer = Needle(rose, size * 0.30f, 1f, AvTheme.RailInfo);
-            roseGust = Needle(rose, size * 0.46f, 2f, AvTheme.RailCaution);
-            roseMean = Needle(rose, size * 0.40f, 2f, AvTheme.Accent);
+            AvStyled.Label(rose, new Rect(centre - 10f, 1f, 20f, 12f), "N", "section-title-note",
+                align: TextAlignmentOptions.Center);
+            AvStyled.Label(rose, new Rect(size - 12f, -centre + 6f, 11f, 12f), "E", "section-title-note",
+                align: TextAlignmentOptions.Center);
+            AvStyled.Label(rose, new Rect(centre - 10f, -size + 12f, 20f, 12f), "S", "section-title-note",
+                align: TextAlignmentOptions.Center);
+            AvStyled.Label(rose, new Rect(1f, -centre + 6f, 11f, 12f), "W", "section-title-note",
+                align: TextAlignmentOptions.Center);
 
-            float legendX = x + size + AvTokens.Space3;
-            float legendWidth = width - size - AvTokens.Space3;
-            float line = y;
-            roseMeanText = AvStyled.Label(parent, new Rect(legendX, line, legendWidth, 14f), "", "kv-key");
-            line -= 15f;
-            roseGustText = AvStyled.Label(parent, new Rect(legendX, line, legendWidth, 14f), "", "kv-key");
-            line -= 15f;
-            roseVeerText = AvStyled.Label(parent, new Rect(legendX, line, legendWidth, 14f), "", "kv-key");
-            line -= 15f;
-            roseShearText = AvStyled.Label(parent, new Rect(legendX, line, legendWidth, 14f), "", "kv-key");
+            // The rim tick rides a pivot at the hub, so one rotation marks the arriving heading.
+            roseVeerRim = Pivot(rose);
+            AvKit.Rule(roseVeerRim, new Rect(centre - 1f, size - 9f, 2f, 8f), AvTheme.RailInfo);
+            roseVeerRim.gameObject.SetActive(false);
+
+            roseVeer = Needle(rose, size * 0.30f, 1.5f, AvTheme.RailInfo);
+            roseGust = Needle(rose, size * 0.78f, 2f, AvTheme.RailCaution);
+            roseMeanTail = Needle(rose, size * 0.18f, 2f, AvTheme.Accent);
+            roseMean = Needle(rose, size * 0.56f, 2.5f, AvTheme.Accent);
+            AvKit.Panel(rose, new Rect(centre - 2f, -centre + 2f, 4f, 4f), AvTheme.Accent);
+
+            // The readings sit beside the rose as two rows of two kv pairs, on the same 30px
+            // rhythm as every other reading row: one shared label column and one shared value
+            // column, and the block is centred on the rose so the pair cannot overhang it.
+            float numericX = x + size + AvTokens.Space3;
+            float numericWidth = width - size - AvTokens.Space3;
+            float column = (numericWidth - AvTokens.Space2 * (WindColumns - 1)) / WindColumns;
+            float gridTop = y - (size - WindRows * MetricRowHeight) * 0.5f;
+            roseMeanText = WindCell(parent, numericX, gridTop, column, 0, 0, "MEAN", 0f, out _);
+            roseGustText = WindCell(parent, numericX, gridTop, column, 1, 0, "GUST", 0f, out _);
+            roseVeerText = WindCell(parent, numericX, gridTop, column, 0, 1, "VEER", 0f, out _);
+            roseShearText = WindCell(parent, numericX, gridTop, column, 1, 1, "SHEAR", 56f, out roseShearNote);
+        }
+
+        /// <summary>
+        /// One wind reading: its name in the shared label column and its value in the shared
+        /// value column. The value is returned so the refresh can write it without touching
+        /// the label.
+        /// </summary>
+        private static TMP_Text WindCell(
+            RectTransform parent, float x, float y, float width, int column, int row, string label,
+            float qualifierWidth, out TMP_Text qualifier)
+        {
+            float cx = x + column * (width + AvTokens.Space2);
+            float cy = y - row * MetricRowHeight;
+            AvStyled.Label(parent, new Rect(cx, cy, WindLabelWidth, MetricRowHeight), label, "kv-key");
+            // A qualifier word gets its own right-aligned note, so the value never shares a box
+            // with it and "0.85  MODERATE" cannot ellipsise at the rose's largest size.
+            qualifier = qualifierWidth > 0f
+                ? AvStyled.Label(parent,
+                    new Rect(cx + width - qualifierWidth, cy, qualifierWidth, MetricRowHeight), "",
+                    "section-title-note", align: TextAlignmentOptions.MidlineRight)
+                : null;
+            float valueWidth = width - WindLabelWidth -
+                (qualifierWidth > 0f ? qualifierWidth + AvTokens.Space1 : 0f);
+            return AvStyled.Label(parent,
+                new Rect(cx + WindLabelWidth, cy, valueWidth, MetricRowHeight), "", "kv-value");
+        }
+
+        private static RectTransform Pivot(RectTransform parent)
+        {
+            var go = new GameObject("Pivot", typeof(RectTransform));
+            var rect = (RectTransform)go.transform;
+            rect.SetParent(parent, false);
+            rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.anchoredPosition = Vector2.zero;
+            rect.sizeDelta = Vector2.zero;
+            return rect;
         }
 
         private static RectTransform Needle(RectTransform rose, float length, float width, Color color)
@@ -620,17 +817,38 @@ namespace BoscaliSummer.Features.Weather.Presentation
             return rect;
         }
 
+        /// <summary>
+        /// The forecast's own column keys, on the echo table's grid so a column edge lands on
+        /// the same x down the page. The unit appears here once; the rows never repeat it.
+        /// </summary>
+        private void BuildForecastLegend(RectTransform parent, float x, float y, float width)
+        {
+            float[] edges = WeatherRadarPage.TableColumnEdges;
+            float inset = x + WeatherRadarPage.TableInset;
+            float c0 = inset + edges[0];
+            float c1 = inset + edges[1];
+            float c2 = inset + edges[2];
+            float c3 = inset + edges[3];
+
+            AvStyled.Label(parent, new Rect(c0, y, c1 - c0, LegendHeight), "AGE", "section-title-note");
+            AvStyled.Label(parent, new Rect(c1, y, c2 - c1, LegendHeight), "SKY", "section-title-note");
+            AvStyled.Label(parent, new Rect(c2, y, c3 - c2, LegendHeight), "TREND %", "section-title-note",
+                align: TextAlignmentOptions.MidlineRight);
+            AvStyled.Label(parent, new Rect(c3, y, x + width - c3, LegendHeight), "WIND · DIR SPEED (M/S)",
+                "section-title-note", align: TextAlignmentOptions.MidlineRight);
+        }
+
         private void BuildControl(RectTransform parent, float x, float y, float width)
         {
             y = SectionHeader(parent, x, y, width, "CONTROL", "HOST ONLY", band: false);
 
             scheduleHover = RowHover(parent, new Rect(x, y, width, ControlHeight), ScheduleOnTooltip);
-            AvStyled.Label(parent, new Rect(x, y, 78f, ControlHeight), "SCHEDULE", "row-value",
+            AvStyled.Label(parent, new Rect(x, y, 78f, ControlHeight), "SCHEDULE", "kv-key");
+            controlClock = AvStyled.Label(parent, new Rect(x + 78f, y, 72f, ControlHeight), "", "kv-value",
                 align: TextAlignmentOptions.MidlineLeft);
-            controlClock = AvStyled.Label(parent, new Rect(x + 78f, y, 72f, ControlHeight), "", "kv-key");
             controlNext = AvStyled.Label(
                 parent, new Rect(x + 150f, y, width - 150f - ToggleWidth - 6f, ControlHeight),
-                "", "kv-key", align: TextAlignmentOptions.MidlineRight);
+                "", "kv-value", align: TextAlignmentOptions.MidlineRight);
             scheduleButton = AvStyled.Button(
                 parent, new Rect(x + width - ToggleWidth, y, ToggleWidth, ControlHeight),
                 "ON", "btn", ToggleSchedule);
@@ -641,7 +859,6 @@ namespace BoscaliSummer.Features.Weather.Presentation
             var track = trackObject.GetComponent<RectTransform>();
             track.SetParent(parent, false);
             AvKit.Place(track, new Rect(x, y, width, TrackHeight));
-            trackWidth = width;
             Image trackGround = trackObject.GetComponent<Image>();
             trackGround.sprite = AvSprites.Control;
             trackGround.type = Image.Type.Sliced;
@@ -657,7 +874,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
 
             for (int i = 0; i < trackTicks.Length; i++)
             {
-                trackTicks[i] = AvKit.Rule(track, new Rect(0f, 0f, 1f, TickHeight), AvTheme.RailInert);
+                trackTicks[i] = AvKit.Rule(track, new Rect(0f, 0f, 1f, 10f), AvTheme.RailInert);
                 trackTicks[i].rectTransform.anchorMin = trackTicks[i].rectTransform.anchorMax = new Vector2(0f, 0.5f);
                 trackTicks[i].rectTransform.pivot = new Vector2(0.5f, 0.5f);
                 trackTicks[i].gameObject.SetActive(false);
@@ -685,42 +902,51 @@ namespace BoscaliSummer.Features.Weather.Presentation
         {
             if (shell == null || manager == null) return;
 
-            WeatherSnapshot snapshot = manager.Snapshot;
-            WeatherForecast forecast = manager.Forecast;
+            WeatherSnapshot snapshot = WeatherView.Capture(manager, 0);
+            WeatherForecast forecast = WeatherView.Forecast(manager);
             bool available = snapshot.Available;
             WeatherState live = snapshot.Live;
             Atmosphere atmosphere = snapshot.Atmosphere;
             WeatherFront front = snapshot.Front;
             StormWarning warning = snapshot.Warning;
+            bool forced = WeatherView.OverrideActive(manager);
 
-            // Exactly two status chips: who owns the sky, and whether the schedule still does.
+            // Exactly two status chips: who owns the sky, and what is steering it.
             bool host = manager.HostAuthority;
             shell.DataBar.SetChip(0, host ? "HOST" : "CLIENT", host ? "live" : "inert");
-            bool overridden = manager.OverrideActive || snapshot.Overridden;
-            shell.DataBar.SetChip(1, overridden ? "OVERRIDE" : "SCHEDULE",
-                                  overridden ? "warn" : available ? "live" : "inert");
+            shell.DataBar.SetChip(1,
+                forced ? "OVERRIDE" : snapshot.Overridden ? "SETTLING" : available ? "SCHEDULE" : "INERT",
+                forced ? "warn" : snapshot.Overridden ? "info" : available ? "live" : "inert");
 
-            // The state line's budget is the bar minus the tag and the two chips. Keep it short:
-            // the truncated title the old panel wore was the reason to measure this at all.
+            // The state line names the same sky the banner and the observation read, so the
+            // header can never call a storm clear.
             text.Length = 0;
-            text.Append(available ? WeatherReadout.Regime(live.Regime) : WeatherReadout.Unknown);
-            if (available)
+            if (forced)
             {
+                text.Append("OVERRIDE — ");
+                text.Append(WeatherReadout.Regime(live.Regime));
+            }
+            else if (available)
+            {
+                text.Append(WeatherReadout.Regime(live.Regime));
                 text.Append(" — ");
-                text.Append(StormReadout.Warning(warning));
+                text.Append(WarningWord(warning));
+            }
+            else
+            {
+                text.Append("NO READOUT");
             }
             shell.DataBar.State.text = text.ToString();
 
-            RefreshBanner(snapshot, atmosphere, warning);
-            RefreshObservation(snapshot, atmosphere, live, available);
+            RefreshBanner(snapshot, atmosphere, warning, live, forced);
+            RefreshObservation(snapshot, atmosphere, live, available, forced);
             RefreshRose(snapshot, atmosphere, front, live);
-            RefreshFront(atmosphere, front);
-            RefreshForecast(snapshot, forecast);
-            RefreshControl(snapshot, forecast, front);
+            RefreshForecast(snapshot, forecast, forced);
+            RefreshControl(snapshot, forecast, front, live, forced);
             RefreshRadar(snapshot);
 
-            // The hazard already owns the top of the page and the banner, so the strip stays
-            // quiet: a host action or an armed map gesture, else the mission clock.
+            // The hazard already owns the top of the page, so the strip stays quiet: a host
+            // action or an armed map gesture, an override notice, else the mission clock.
             string echo = Time.unscaledTime < actionEchoUntil ? actionEcho : null;
             text.Length = 0;
             text.Append("MISSION T+");
@@ -728,22 +954,60 @@ namespace BoscaliSummer.Features.Weather.Presentation
             shell.WriteStatus(
                 available ? null : "NO READOUT — NO WEATHER SCHEDULE ON THIS MISSION",
                 echo ?? MapPicker.Prompt,
-                text.ToString());
+                forced ? "OVERRIDE — SCHEDULE RESUMES WHEN RELEASED" : text.ToString());
         }
 
-        private void RefreshBanner(WeatherSnapshot snapshot, Atmosphere atmosphere, StormWarning warning)
+        private static string WarningWord(StormWarning warning) =>
+            warning == StormWarning.None ? "NO WARNING" : StormReadout.Warning(warning);
+
+        /// <summary>
+        /// A reading with its unit removed, for a cell whose note already carries that unit:
+        /// "4587 FT" becomes "4587". An unknown or unexpected shape is handed back untouched.
+        /// </summary>
+        private static string Bare(string reading, string unit)
         {
-            int tier = Mathf.Clamp((int)warning, 0, RampRungs - 1);
-            bannerTier.text = StormReadout.Warning(warning);
-            bannerTier.color = tierInk[tier];
-            bannerRail.color = tierFill[tier];
-            for (int i = 0; i < BarCount; i++)
+            if (string.IsNullOrEmpty(reading) || !reading.EndsWith(unit, StringComparison.Ordinal)) return reading;
+            return reading.Substring(0, reading.Length - unit.Length);
+        }
+
+        private void RefreshBanner(
+            WeatherSnapshot snapshot, Atmosphere atmosphere, StormWarning warning, WeatherState live, bool forced)
+        {
+            if (forced)
             {
-                bannerBar[i].color = i < tier ? tierFill[tier] : AvTheme.RailInert;
+                int rung = Mathf.Clamp(WeatherReadout.Severity(live.Regime) - 1, 0, RampRungs - 1);
+                int bars = WeatherReadout.Severity(live.Regime);
+                bannerTier.text = WeatherReadout.Regime(live.Regime);
+                bannerTier.color = regimeInk[rung];
+                bannerRail.color = regimeRail[rung];
+                for (int i = 0; i < BarCount; i++)
+                {
+                    bannerBar[i].color = i < bars ? regimeRail[rung] : AvTheme.RailInert;
+                }
+            }
+            else
+            {
+                int tier = Mathf.Clamp((int)warning, 0, RampRungs - 1);
+                // "NO WARNING" beside a hazard line that reads EXPECT LIGHTNING is the banner
+                // arguing with itself. No cell in range is what that state is, and it is the
+                // same phrase the cockpit HUD uses.
+                bannerTier.text = !snapshot.Available ? "NO READOUT"
+                    : warning == StormWarning.None ? "NO STORM IN RANGE"
+                    : WarningWord(warning);
+                bannerTier.color = tierInk[tier];
+                bannerRail.color = tierFill[tier];
+                for (int i = 0; i < BarCount; i++)
+                {
+                    bannerBar[i].color = i < tier ? tierFill[tier] : AvTheme.RailInert;
+                }
             }
 
             text.Length = 0;
-            if (warning != StormWarning.None && snapshot.Available)
+            if (forced)
+            {
+                text.Append("SKY HELD BY OVERRIDE");
+            }
+            else if (warning != StormWarning.None && snapshot.Available)
             {
                 float x = ReaderX();
                 float z = ReaderZ();
@@ -754,119 +1018,181 @@ namespace BoscaliSummer.Features.Weather.Presentation
                 text.Append("  ");
                 text.Append(WeatherReadout.Compass16(StormReadout.BearingDegrees(x, z, source.X, source.Z)));
             }
-            else if (atmosphere.Available)
+            else if (atmosphere.Available && !snapshot.Overridden)
             {
                 text.Append(atmosphere.IsSevereConvection ? "CONVECTIVE" : "STABLE AIR");
                 text.Append("   ·   ");
-                text.Append(AirMasses.Name(atmosphere.AirMass));
+                text.Append(WeatherReadout.Regime(live.Regime));
+            }
+            else if (snapshot.Available)
+            {
+                text.Append("WORLD SETTLING — ");
+                text.Append(WeatherReadout.Regime(live.Regime));
             }
             bannerDetail.text = text.ToString();
             bannerHazard.text = Hazard(snapshot);
         }
 
         /// <summary>
-        /// The current conditions. Without the new physics the panel still has the synced cloud
-        /// base, cloud cover and rain to read, so those cells stay live and the rest say so.
+        /// The current conditions. World readings — cloud base, rain, deck occlusion, the live
+        /// regime — are always shown. The schedule's physics is an observation only while the
+        /// schedule owns the sky; under an override it stays visible but marked
+        /// <c>· SCHED</c>, so a held sky never reads as something it is not.
         /// </summary>
         private void RefreshObservation(
-            WeatherSnapshot snapshot, Atmosphere atmosphere, WeatherState live, bool available)
+            WeatherSnapshot snapshot, Atmosphere atmosphere, WeatherState live, bool available, bool forced)
         {
             bool hasAtmosphere = available && atmosphere.Available;
-            int rung = 0;
 
-            if (hasAtmosphere)
+            // The flight category, or the live regime when the schedule no longer owns the sky.
+            // The category's own pips ride the reading line, so the word and the ramp agree.
+            string skyNote = "";
+            if (hasAtmosphere && !forced)
             {
-                rung = Mathf.Clamp(WeatherReadout.FlightSeverity(atmosphere.Category), 0, RampRungs - 1);
+                int rung = Mathf.Clamp(WeatherReadout.FlightSeverity(atmosphere.Category), 0, RampRungs - 1);
                 obsValue[ObsCategory].text = Atmospheres.Label(atmosphere.Category);
+                obsValue[ObsCategory].color = flightInk[rung];
+                for (int i = 0; i < PipCount; i++)
+                {
+                    obsPip[i].color = i <= rung ? flightFill[rung] : AvTheme.RailInert;
+                }
             }
             else if (available)
             {
-                // No physics yet: the schedule's regime is the honest headline, and its own
-                // severity rank paints the same ramp.
-                rung = Mathf.Clamp(WeatherReadout.Severity(live.Regime) - 1, 0, RampRungs - 1);
+                int rung = Mathf.Clamp(WeatherReadout.Severity(live.Regime) - 1, 0, RampRungs - 1);
+                int bars = WeatherReadout.Severity(live.Regime);
                 obsValue[ObsCategory].text = WeatherReadout.Regime(live.Regime);
+                obsValue[ObsCategory].color = regimeInk[rung];
+                skyNote = hasAtmosphere ? "OVERRIDE" : "";
+                for (int i = 0; i < PipCount; i++)
+                {
+                    obsPip[i].color = i < bars ? regimeRail[rung] : AvTheme.RailInert;
+                }
             }
             else
             {
                 obsValue[ObsCategory].text = WeatherReadout.Unknown;
+                obsValue[ObsCategory].color = AvTheme.Disabled;
+                for (int i = 0; i < PipCount; i++) obsPip[i].color = AvTheme.RailInert;
             }
-            obsValue[ObsCategory].color = available ? flightInk[rung] : AvTheme.Disabled;
-            for (int i = 0; i < BarCount; i++)
-            {
-                obsBar[i].color = available && i < rung ? flightFill[rung] : AvTheme.RailInert;
-            }
+            obsNote[ObsCategory].text = skyNote;
 
-            // The vanilla cloud base is the ceiling in every way that matters, so it reads in
-            // both units whether or not the new physics has landed.
-            float baseMetres = hasAtmosphere ? atmosphere.Lcl : live.CloudBase;
+            // Ceiling: the altimeter's feet are the primary reading and the metric height is the
+            // caption, so one cell carries both units without either being cut.
+            float baseMetres = live.CloudBase;
+            if (float.IsNaN(baseMetres) && hasAtmosphere) baseMetres = atmosphere.Lcl;
             bool hasBase = available && !float.IsNaN(baseMetres);
-            obsValue[ObsCloudBase].text = hasBase ? WeatherReadout.Feet(baseMetres) : WeatherReadout.Unknown;
-            obsKeyText[ObsCloudBase] = hasBase ? WeatherReadout.MetersAgL(baseMetres) : "CLOUD BASE";
+            string feet = hasBase ? WeatherReadout.Feet(baseMetres) : WeatherReadout.Unknown;
+            obsValue[ObsCloudBase].text = Bare(feet, " FT");
+            obsNote[ObsCloudBase].text = hasBase ? "FT · " + WeatherReadout.MetersAgL(baseMetres) : "";
 
             obsValue[ObsVisibility].text = hasAtmosphere
-                ? WeatherReadout.Kilometres(atmosphere.Visibility) : WeatherReadout.Unknown;
-            obsKeyText[ObsVisibility] = "VISIBILITY";
+                ? Bare(WeatherReadout.Kilometres(atmosphere.Visibility), " KM") : WeatherReadout.Unknown;
+            obsNote[ObsVisibility].text = hasAtmosphere ? (forced ? "KM · SCHED" : "KM") : "";
 
-            obsValue[ObsTemperature].text = hasAtmosphere
-                ? WeatherReadout.Celsius(atmosphere.TemperatureC) : WeatherReadout.Unknown;
-            obsKeyText[ObsTemperature] = hasAtmosphere
-                ? "DEW " + WeatherReadout.Celsius(atmosphere.DewpointC) : "TEMP / DEWPOINT";
+            text.Length = 0;
+            if (hasAtmosphere)
+            {
+                text.Append(WeatherReadout.Decimal(atmosphere.TemperatureC, 0));
+                text.Append(" / ");
+                text.Append(WeatherReadout.Decimal(atmosphere.DewpointC, 0));
+            }
+            else
+            {
+                text.Append(WeatherReadout.Unknown);
+            }
+            obsValue[ObsTemperature].text = text.ToString();
+            obsNote[ObsTemperature].text = hasAtmosphere ? (forced ? "°C · SCHED" : "°C") : "";
 
-            obsValue[ObsPrecipitation].text = Precipitation(snapshot, atmosphere, hasAtmosphere);
-            obsKeyText[ObsPrecipitation] = "PRECIPITATION";
+            PrecipitationKind precipitation = PrecipitationAt(snapshot, atmosphere, hasAtmosphere, forced);
+            obsValue[ObsPrecipitation].text = Atmospheres.Label(precipitation);
+            obsNote[ObsPrecipitation].text = "";
 
             obsValue[ObsOcclusion].text = available
                 ? WeatherReadout.Percent01(snapshot.CloudOcclusion) : WeatherReadout.Unknown;
-            obsKeyText[ObsOcclusion] = "CLOUD OCCLUSION";
+            obsNote[ObsOcclusion].text = available ? OcclusionKey(snapshot.CloudOcclusion, true) : "";
 
-            // The key has to match what the value actually is: a category when the physics has
-            // landed, the schedule's regime when it has not.
-            obsKeyText[ObsCategory] = hasAtmosphere ? "FLIGHT CATEGORY" : "SKY";
-            for (int i = 0; i < ObsCount; i++) obsKey[i].text = obsKeyText[i];
-        }
-
-        private static string Precipitation(WeatherSnapshot snapshot, Atmosphere atmosphere, bool hasAtmosphere)
-        {
-            if (hasAtmosphere) return Atmospheres.Label(atmosphere.Precipitation);
-            if (snapshot.RainIntensity <= PrecipitationVisible) return Atmospheres.Label(PrecipitationKind.None);
-            return Atmospheres.Label(snapshot.Precipitation);
+            int drops = Mathf.Clamp((int)precipitation, 0, PrecipBarCount);
+            Color dropInk = precipitation == PrecipitationKind.Hail ? AvTheme.RailCaution : AvTheme.RailInfo;
+            for (int i = 0; i < PrecipBarCount; i++)
+            {
+                obsPrecip[i].color = dropInk;
+                SetActive(obsPrecip[i].gameObject, i < drops);
+            }
+            if (conditionsNote != null)
+            {
+                conditionsNote.text = forced ? "OVERRIDE — SCHED ITEMS MARKED" : "AT YOUR POSITION";
+            }
         }
 
         /// <summary>
-        /// One rose for every wind reading: the synced mean, the gust, the veer the arriving air
-        /// mass carries and the shear. Mean and gust share a heading, so the gust needle simply
-        /// reaches further; the veer needle points where the wind is going.
+        /// What is falling at the reader. The atmosphere's own kind while the schedule owns the
+        /// sky; otherwise the live rain the cells and the front are actually producing, which is
+        /// the same number the canopy rain reads.
+        /// </summary>
+        private static PrecipitationKind PrecipitationAt(
+            WeatherSnapshot snapshot, Atmosphere atmosphere, bool hasAtmosphere, bool forced)
+        {
+            if (hasAtmosphere && !forced) return atmosphere.Precipitation;
+            if (snapshot.RainIntensity <= PrecipitationVisible) return PrecipitationKind.None;
+            return snapshot.RainIntensity >= 0.25f ? PrecipitationKind.Showers : PrecipitationKind.Drizzle;
+        }
+
+        /// <summary>
+        /// The deck reading is the reader's own occlusion from <c>LevelInfo.GetCloudOcclusion</c>:
+        /// zero below half cloud cover, all of it under the deck. Naming the side of the deck
+        /// keeps a full reading beside a high cloud base physically coherent.
+        /// </summary>
+        private static string OcclusionKey(float occlusion, bool available)
+        {
+            if (!available || float.IsNaN(occlusion) || occlusion >= 0.5f) return "DECK ABOVE";
+            return occlusion >= 0.05f ? "PART DECK" : "CLEAR ABOVE";
+        }
+
+        /// <summary>
+        /// One rose for every wind reading: the synced mean with its tail, the gust, the veer the
+        /// arriving air mass carries and the shear. Mean and gust share a heading, so the gust
+        /// needle simply reaches further; the veer is marked on the rim at its own heading.
         /// </summary>
         private void RefreshRose(WeatherSnapshot snapshot, Atmosphere atmosphere, WeatherFront front, WeatherState live)
         {
             bool hasAtmosphere = snapshot.Available && atmosphere.Available;
             float heading = live.WindHeading;
 
-            PlaceNeedle(roseMean, heading);
-            PlaceNeedle(roseGust, heading);
+            // The dial follows the pilot's convention: the needle tip points at the bearing the
+            // wind comes FROM, and the tail lies along the direction it is travelling.
+            PlaceNeedle(roseMean, WeatherReadout.WindFrom(heading));
+            PlaceNeedle(roseMeanTail, heading);
+            PlaceNeedle(roseGust, WeatherReadout.WindFrom(heading));
+            SetActive(roseMean.gameObject, snapshot.Available);
+            SetActive(roseMeanTail.gameObject, snapshot.Available);
             SetActive(roseGust.gameObject, hasAtmosphere && atmosphere.GustSpeed > live.WindSpeed + 0.5f);
 
-            // WeatherFront.Behind is the air mass the boundary leaves in its wake, which is the
-            // one the reader ends up in once it has passed.
-            float arriving = front.Present ? AirMasses.Get(front.Behind).WindHeading : heading;
-            PlaceNeedle(roseVeer, arriving);
+            // BehindHeading is the wind the boundary leaves in its wake, which is the one the
+            // reader ends up in once it has passed.
+            float arriving = front.Present ? front.BehindHeading : heading;
+            PlaceNeedle(roseVeer, WeatherReadout.WindFrom(arriving));
             SetActive(roseVeer.gameObject, front.Present);
+            if (roseVeerRim != null)
+            {
+                roseVeerRim.localRotation = Quaternion.Euler(0f, 0f, -WeatherState.WrapHeading(WeatherReadout.WindFrom(arriving)));
+                SetActive(roseVeerRim.gameObject, front.Present);
+            }
 
-            text.Length = 0;
-            text.Append("MEAN   ");
-            text.Append(snapshot.Available
+            // The label is a fixed column beside the rose, so the value is only the reading;
+            // a name printed again in the value would be every label twice.
+            roseMeanText.text = snapshot.Available
                 ? WeatherReadout.Wind(live.WindSpeed, live.WindHeading)
-                : WeatherReadout.Unknown);
-            roseMeanText.text = text.ToString();
+                : WeatherReadout.Unknown;
 
             text.Length = 0;
-            text.Append("GUST   ");
             if (hasAtmosphere)
             {
-                text.Append(WeatherReadout.Speed(atmosphere.GustSpeed));
-                text.Append("  ");
+                // The unit is the mean's, one row over; the gust carries its delta instead.
+                text.Append(WeatherReadout.Decimal(atmosphere.GustSpeed, 1));
+                text.Append("  (");
                 text.Append(WeatherReadout.SignedDecimal(atmosphere.GustSpeed - live.WindSpeed, 1));
-                text.Append(" M/S");
+                text.Append(')');
             }
             else
             {
@@ -874,33 +1200,21 @@ namespace BoscaliSummer.Features.Weather.Presentation
             }
             roseGustText.text = text.ToString();
 
-            text.Length = 0;
-            text.Append("VEER   ");
-            if (front.Present)
-            {
-                text.Append(WeatherReadout.Veer(heading, arriving));
-                text.Append("  ");
-                text.Append(FrontKinds.Label(front.Kind));
-            }
-            else
-            {
-                text.Append(WeatherReadout.Unknown);
-            }
-            roseVeerText.text = text.ToString();
+            // The front kind is named once on the radar's boundary line and in the banner; the
+            // veer here is only how far the arriving air turns the wind.
+            roseVeerText.text = front.Present
+                ? WeatherReadout.Veer(heading, arriving)
+                : WeatherReadout.Unknown;
 
-            text.Length = 0;
-            text.Append("SHEAR  ");
-            if (hasAtmosphere)
+            roseShearText.text = hasAtmosphere
+                ? WeatherReadout.Decimal(atmosphere.Shear, 2)
+                : WeatherReadout.Unknown;
+            if (roseShearNote != null)
             {
-                text.Append(WeatherReadout.Decimal(atmosphere.Shear, 2));
-                text.Append("  ");
-                text.Append(WeatherReadout.ShearLabel(atmosphere.Shear));
+                roseShearNote.text = hasAtmosphere
+                    ? WeatherReadout.ShearLabel(atmosphere.Shear)
+                    : string.Empty;
             }
-            else
-            {
-                text.Append(WeatherReadout.Unknown);
-            }
-            roseShearText.text = text.ToString();
         }
 
         private static void PlaceNeedle(RectTransform needle, float heading)
@@ -914,47 +1228,30 @@ namespace BoscaliSummer.Features.Weather.Presentation
             if (target != null && target.activeSelf != on) target.SetActive(on);
         }
 
-        private void RefreshFront(Atmosphere atmosphere, WeatherFront front)
+        /// <summary>
+        /// The forecast rows. A held sky suspends them: the schedule's forward sample is not what
+        /// the next hours will bring while an override owns the world, and showing it beside a
+        /// forced sky is exactly the contradiction this panel no longer prints.
+        /// </summary>
+        private void RefreshForecast(WeatherSnapshot snapshot, WeatherForecast forecast, bool forced)
         {
-            if (front.Present)
+            if (forecastNote != null)
             {
-                float x = ReaderX();
-                float z = ReaderZ();
-                bool passed = front.SignedDistanceTo(x, z) >= 0f;
-
-                text.Length = 0;
-                text.Append(FrontKinds.Label(front.Kind));
-                text.Append("   ");
-                text.Append(StormReadout.NauticalMiles(front.DistanceTo(x, z)));
-                text.Append(passed ? "   PASSED" : "   AHEAD");
-                if (!passed)
-                {
-                    text.Append("   ETA ");
-                    text.Append(WeatherReadout.Clock(front.SecondsUntil(x, z)));
-                }
-                frontText.text = text.ToString();
-                frontText.color = AvTheme.TextPrimary;
-                frontGlyph.text = FrontKinds.Glyph(front.Kind);
-                frontGlyph.color = AvTheme.RailInfo;
-                return;
+                forecastNote.text = !snapshot.Available ? "NO SCHEDULE ON THIS MISSION"
+                    : forced ? "HELD BY OVERRIDE — NOT SHOWN"
+                    : "IDENTICAL ON EVERY PEER";
             }
 
-            frontGlyph.text = "";
-            frontText.color = AvTheme.Dim;
-            frontText.text = atmosphere.Available
-                ? "NO ACTIVE FRONT — " + AirMasses.Name(atmosphere.AirMass)
-                : "NO ACTIVE FRONT — UNIFORM AIR MASS";
-        }
-
-        private void RefreshForecast(WeatherSnapshot snapshot, WeatherForecast forecast)
-        {
-            bool hasForecast = forecast != null && forecast.Count > 0;
-            forecastLegend.text = hasForecast
-                ? "▲ BUILDING   ▼ EASING   = STEADY"
-                : "NO FORECAST — THE SCHEDULE HAS NOT SEEDED A MISSION";
-            SetActive(forecastKey.gameObject, hasForecast);
-
+            bool hasForecast = !forced && forecast != null && forecast.Count > 0;
             int shown = hasForecast ? Mathf.Min(rowCapacity, forecast.Count) : 0;
+
+            if (forecastEmpty != null)
+            {
+                forecastEmpty.text = !snapshot.Available ? "NO READOUT — NO WEATHER SCHEDULE ON THIS MISSION"
+                    : forced ? "SCHEDULE HELD BY OVERRIDE — FORECAST NOT SHOWN"
+                    : "NO FORECAST";
+                SetActive(forecastEmpty.gameObject, shown == 0);
+            }
             for (int i = 0; i < forecastRows.Count; i++)
             {
                 ForecastRow row = forecastRows[i];
@@ -972,21 +1269,37 @@ namespace BoscaliSummer.Features.Weather.Presentation
                 row.ChipText.text = WeatherReadout.Regime(entry.State.Regime);
                 row.ChipText.color = regimeInk[rung];
                 row.Chip.color = regimeChipFill[rung];
-                row.Trend.text = WeatherReadout.TrendMark(entry.ConditionsDelta, WeatherReadout.TrendDeadband) +
-                                 " " + WeatherReadout.SignedPercent(entry.ConditionsDelta);
-                // The compass point is the wind glyph; the legend names the units once.
-                row.Wind.text = WeatherReadout.Compass16(entry.State.WindHeading) + " " +
-                                WeatherReadout.Decimal(entry.State.WindSpeed, 1) + " (" +
-                                WeatherReadout.SignedDecimal(entry.WindDelta, 1) + ")";
+
+                // The mark owns the dead band and the number follows the same decision, so a
+                // level row reads "0" and can never print a signed zero. The unit is the column
+                // header's, and the sign says the direction the colour repeats. The mark's own
+                // glyph is not printed: the cockpit font has no triangles.
+                string mark = WeatherReadout.TrendMark(entry.ConditionsDelta, WeatherReadout.TrendDeadband);
+                row.Trend.text = mark == "=" ? "0"
+                    : WeatherReadout.SignedDecimal(entry.ConditionsDelta * 100f, 0);
+                row.Trend.color = mark == "▲" ? AvTheme.RailCaution
+                                : mark == "▼" ? AvTheme.RailInfo
+                                : AvTheme.Dim;
+
+                text.Length = 0;
+                text.Append(WeatherReadout.Compass16(WeatherReadout.WindFrom(entry.State.WindHeading)));
+                text.Append(' ');
+                text.Append(WeatherReadout.Decimal(entry.State.WindSpeed, 1));
+                text.Append(" (");
+                text.Append(WeatherReadout.SignedDecimal(entry.WindDelta, 1));
+                text.Append(')');
+                row.Wind.text = text.ToString();
             }
         }
 
         /// <summary>
         /// The host's one row of control, and the schedule it shows: the mission clock, the next
         /// transition, the front's approach drawn along the forecast horizon, and a tick per
-        /// transition, tinted by that transition's severity.
+        /// transition, tinted by that transition's severity. A held sky shows the hold instead of
+        /// a schedule that will not run.
         /// </summary>
-        private void RefreshControl(WeatherSnapshot snapshot, WeatherForecast forecast, WeatherFront front)
+        private void RefreshControl(
+            WeatherSnapshot snapshot, WeatherForecast forecast, WeatherFront front, WeatherState live, bool forced)
         {
             if (controlClock == null) return;
 
@@ -995,8 +1308,15 @@ namespace BoscaliSummer.Features.Weather.Presentation
             text.Append(WeatherReadout.Clock(snapshot.Available ? snapshot.MissionTime : manager.MissionTime));
             controlClock.text = text.ToString();
 
-            bool hasForecast = forecast != null && forecast.Count > 0;
-            if (hasForecast)
+            bool hasForecast = !forced && forecast != null && forecast.Count > 0;
+            if (forced)
+            {
+                text.Length = 0;
+                text.Append("HELD — ");
+                text.Append(WeatherReadout.Regime(live.Regime));
+                controlNext.text = text.ToString();
+            }
+            else if (hasForecast)
             {
                 text.Length = 0;
                 text.Append("NEXT ");
@@ -1010,9 +1330,11 @@ namespace BoscaliSummer.Features.Weather.Presentation
                 controlNext.text = "AWAITING SCHEDULE";
             }
 
-            bool scheduleOn = !manager.OverrideActive;
+            bool scheduleOn = !WeatherView.OverrideActive(manager);
             string tooltip = scheduleOn ? ScheduleOnTooltip : ScheduleOffTooltip;
             scheduleButton.SetText(scheduleOn ? "ON" : "OFF");
+            // Latched, not painted: the sheet's latched button is a translucent wash, and the
+            // word ON/OFF carries the state without a solid accent plate.
             scheduleButton.SetLatched(scheduleOn);
             scheduleButton.WithTooltip(tooltip);
             if (scheduleHover != null) scheduleHover.SetText(tooltip);
@@ -1022,6 +1344,8 @@ namespace BoscaliSummer.Features.Weather.Presentation
                             forecast[forecast.Count - 1].AtSeconds - snapshot.MissionTime)
                 : 0f;
 
+            var track = marker.parent as RectTransform;
+            float trackWidth = track != null ? track.sizeDelta.x : 0f;
             for (int i = 0; i < trackTicks.Length; i++)
             {
                 if (!hasForecast || i >= forecast.Count || horizon <= 0f)
@@ -1037,7 +1361,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
                 SetActive(trackTicks[i].gameObject, true);
             }
 
-            trackLeft.text = hasForecast ? "NOW" : "NO FORECAST";
+            trackLeft.text = forced ? "SCHEDULE HELD" : hasForecast ? "NOW" : "NO FORECAST";
             text.Length = 0;
             text.Append("T+");
             text.Append(WeatherReadout.Clock(horizon));
@@ -1047,7 +1371,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
             // the picture of the approach always agree.
             float fill = 0f;
             bool frontAhead = false;
-            if (front.Present && horizon > 0f)
+            if (!forced && front.Present && horizon > 0f)
             {
                 float x = ReaderX();
                 float z = ReaderZ();
@@ -1062,7 +1386,16 @@ namespace BoscaliSummer.Features.Weather.Presentation
             if (frontAhead) marker.anchoredPosition = new Vector2(fill * trackWidth, 0f);
         }
 
-        /// <summary>The reader's world position, the same reading the radar page is handed.</summary>
+        private void RefreshRadar(WeatherSnapshot snapshot)
+        {
+            if (radar == null) return;
+            CameraStateManager cameras = SceneSingleton<CameraStateManager>.i;
+            if (cameras == null) return;
+            Vector3 position = cameras.transform.position;
+            radar.Refresh(snapshot, manager, position.x, position.z);
+        }
+
+        /// <summary>The reader's world position, the same reading the radar section is handed.</summary>
         private static float ReaderX()
         {
             CameraStateManager cameras = SceneSingleton<CameraStateManager>.i;
@@ -1085,19 +1418,23 @@ namespace BoscaliSummer.Features.Weather.Presentation
         {
             if (manager == null) return;
 
-            if (manager.OverrideActive)
+            if (WeatherView.OverrideActive(manager))
             {
-                manager.ReleaseOverride();
+                manager.ReleaseOverrides();
                 Echo("SCHEDULE — ON");
-            }
-            else if (manager.Snapshot.Available)
-            {
-                manager.ApplyOverride(manager.Snapshot.Live);
-                Echo("SCHEDULE — OFF, HOLDING " + WeatherReadout.Regime(manager.Snapshot.Live.Regime));
             }
             else
             {
-                Echo("NO READOUT — SCHEDULE UNCHANGED");
+                WeatherSnapshot snapshot = WeatherView.Capture(manager, 0);
+                if (!snapshot.Available)
+                {
+                    Echo("NO READOUT — SCHEDULE UNCHANGED");
+                }
+                else
+                {
+                    manager.ForceRegime(snapshot.Model.Regime);
+                    Echo("SCHEDULE — OFF, HOLDING " + WeatherReadout.Regime(snapshot.Model.Regime));
+                }
             }
             nextRefresh = 0f;
         }
@@ -1117,6 +1454,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
         /// </summary>
         private static string Hazard(WeatherSnapshot snapshot)
         {
+            if (!snapshot.Available) return "NO WEATHER READOUT";
             if (snapshot.Live.IsSevere) return "EXPECT LIGHTNING";
             if (snapshot.CloudOcclusion > 0.5f) return "IR SEEKERS DEGRADED";
             if (snapshot.LocalWindSpeed > 15f) return "GUSTY WINDS";
@@ -1125,11 +1463,9 @@ namespace BoscaliSummer.Features.Weather.Presentation
 
         private sealed class ForecastRow
         {
-            /// <summary>Column edges inside one row: age, severity chip, trend, wind.</summary>
-            private const float AgeWidth = 78f;
-            private const float ChipWidth = 94f;
-            private const float TrendWidth = 108f;
-            private const float ColumnGap = 6f;
+            /// <summary>A row is one 16px table line, a shade tighter than the reading rhythm.</summary>
+            private const float LabelHeight = 14f;
+            private const float ChipHeight = 14f;
 
             public GameObject Root;
             public TMP_Text Age;
@@ -1138,32 +1474,45 @@ namespace BoscaliSummer.Features.Weather.Presentation
             public TMP_Text Trend;
             public TMP_Text Wind;
 
-            public static ForecastRow Build(RectTransform parent, float x, float y, float width, float pitch)
+            public static ForecastRow Build(RectTransform parent, float x, float y, float width)
             {
                 var row = new ForecastRow();
                 var root = new GameObject("ForecastRow", typeof(RectTransform));
                 row.Root = root;
                 var rect = (RectTransform)root.transform;
                 rect.SetParent(parent, false);
-                AvKit.Place(rect, new Rect(x, y, width, pitch));
+                AvKit.Place(rect, new Rect(x, y, width, WeatherRadarPage.RowPitch));
 
-                float labelTop = -(pitch - RowHeight) * 0.5f;
-                float chipTop = -(pitch - 14f) * 0.5f;
+                // The echo table's own column edges, so AGE / SKY / TREND / WIND land on the
+                // same x as KIND / TOP / WARN / VECTOR + RNG·BRG: one column grid for both.
+                float[] edges = WeatherRadarPage.TableColumnEdges;
+                float inset = WeatherRadarPage.TableInset;
+                float ageX = inset + edges[0];
+                float skyX = inset + edges[1];
+                float trendX = inset + edges[2];
+                float windX = inset + edges[3];
 
-                row.Age = AvStyled.Label(rect, new Rect(0f, labelTop, AgeWidth, RowHeight), "", "kv-key");
+                float labelTop = -(WeatherRadarPage.RowPitch - LabelHeight) * 0.5f;
+                float chipTop = -(WeatherRadarPage.RowPitch - ChipHeight) * 0.5f;
 
-                float chipX = AgeWidth + ColumnGap;
-                var chipRect = new Rect(chipX, chipTop, ChipWidth, 14f);
-                row.Chip = AvStyled.Box(rect, chipRect, "chip live");
-                row.ChipText = AvStyled.Label(rect, chipRect, "", "chip live",
+                row.Age = AvStyled.Label(rect, new Rect(ageX, labelTop, skyX - ageX, LabelHeight), "", "kv-key");
+
+                var chipRect = new Rect(skyX, chipTop, trendX - skyX, ChipHeight);
+                // Neutral frame at build: the refresh tints the fill and the text with the
+                // row's own severity, and a baked "live" frame would stay green under a red
+                // storm chip.
+                row.Chip = AvStyled.Box(rect, chipRect, "chip");
+                row.ChipText = AvStyled.Label(rect, chipRect, "", "chip",
                     align: TextAlignmentOptions.Center);
 
-                float trendX = chipX + ChipWidth + ColumnGap;
-                row.Trend = AvStyled.Label(rect, new Rect(trendX, labelTop, TrendWidth, RowHeight),
-                    "", "kv-value", align: TextAlignmentOptions.MidlineLeft);
-                row.Wind = AvStyled.Label(
-                    rect, new Rect(trendX + TrendWidth, labelTop, width - trendX - TrendWidth, RowHeight),
+                row.Trend = AvStyled.Label(rect, new Rect(trendX, labelTop, windX - trendX, LabelHeight),
                     "", "kv-value");
+                // The column takes the table's remaining width, so the reading is guaranteed to
+                // fit; overflow rather than ellipsis, which could cut the gust delta away.
+                row.Wind = AvStyled.Label(
+                    rect, new Rect(windX, labelTop, width - windX, LabelHeight), "", "kv-value");
+                row.Wind.enableWordWrapping = false;
+                row.Wind.overflowMode = TextOverflowModes.Overflow;
                 return row;
             }
 

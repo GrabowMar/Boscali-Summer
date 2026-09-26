@@ -1,7 +1,9 @@
 using System;
 using BepInEx.Logging;
+using BoscaliSummer.Core;
 using BoscaliSummer.Features.Weather.Configuration;
 using BoscaliSummer.Features.Weather.Domain;
+using BoscaliSummer.Features.Weather.Networking;
 using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Features;
 using BoscaliSummer.Framework.Lifecycle;
@@ -12,483 +14,283 @@ using UnityEngine;
 namespace BoscaliSummer.Features.Weather.Runtime
 {
     /// <summary>
-    /// The only thing in the module that touches the game. The host drives the vanilla sky from
-    /// the deterministic schedule; a client reads the same schedule and the replicated vanilla
-    /// values, which is why the forecast needs no wire format of its own.
+    /// Owns the weather key and the one <see cref="WeatherField"/> every renderer reads.
     ///
-    /// Every driven value goes through <see cref="WeatherDrive"/>: the ramp is bounded, and a
-    /// foreign write — an authored <c>ModifyEnvironment</c> beat, another mod, the debug
-    /// override — wins for a bounded hold while the model resumes around it.
+    /// <para>The host builds the key (seed, schedule rules, gameplay switches, override
+    /// keyframes), publishes it, and drives vanilla's synced channels — conditions, cloud height,
+    /// wind, turbulence — from the field's regional values, so vanilla's fog, IR, ambient and
+    /// SAR keep working. A foreign write to <c>conditions</c> (a mission's ModifyEnvironment
+    /// beat) becomes an override keyframe, so rain and cells follow the authored beat.</para>
+    ///
+    /// <para>Clients take the key from the host and derive everything else. Until a key has
+    /// arrived a client renders no weather of its own rather than a wrong one.</para>
     /// </summary>
     internal sealed class WeatherManager : MonoBehaviour, ISceneService
     {
-        private enum Channel
-        {
-            Conditions,
-            CloudBase,
-            WindSpeed,
-            Turbulence,
-            Heading
-        }
-
         private const float WriteInterval = 0.25f;
-        private const float ConditionsRate = 0.012f;
-        private const float CloudBaseRate = 18f;
-        private const float WindSpeedRate = 0.35f;
+        private const float ConditionsRate = 0.01f;
+        private const float CloudBaseRate = 15f;
+        private const float WindRate = 0.3f;
+        private const float HeadingRate = 3f;
         private const float TurbulenceRate = 0.02f;
-        private const float HeadingRate = 4f;
-        private const float MaxElapsed = 2f;
-        private const float ForecastInterval = 1f;
-        private const float OverrideDetection = 0.08f;
-        private const float OverrideRateMultiplier = 20f;
-        private const float HazePerFire = 1f / 24f;
-
-        private readonly WeatherDrive[] channels =
-        {
-            new WeatherDrive(), new WeatherDrive(), new WeatherDrive(), new WeatherDrive(), new WeatherDrive()
-        };
+        private const float AdoptEpsilon = 0.02f;
+        private const int StrikeBuffer = 64;
 
         private WeatherSettings settings;
         private ManualLogSource log;
+        private WeatherNet net;
 
+        private readonly WeatherField field = new WeatherField();
+        private readonly Strike[] strikes = new Strike[StrikeBuffer];
         private string missionIdentity;
-        private int seed;
-        private float previousTime;
-        private float writeElapsed;
-        private float nextWriteAt;        private float nextForecastAt;
-        private bool announced;
-        private int announcedRegime = -1;
-        private int announcedStorms = int.MinValue;
+        private WeatherKey hostKey;
+        private WeatherKey remoteKey;
+        private uint sessionSalt;
+        private float nextWrite;
+        private float lastConditionsWritten = -1f;
+        private float previousStrikeTime = float.NaN;
 
-        private WeatherState live;
-        private WeatherForecast forecast;
-        private WeatherSnapshot snapshot;
-        private Atmosphere atmosphere;
-        private WeatherFront front;
-        private StormMode stormMode;
-        private float daylight;
-
-        private readonly StormCell[] cells = new StormCell[StormField.MaxCells];
-        private int cellCount;
-
-        private bool overrideActive;
-        private WeatherState overrideState;
-
-        public bool HostAuthority => GameAccess.IsServer();
-
-        public bool Enabled => settings != null && settings.Enabled.Value;
-
+        public WeatherField Field => field;
+        public WeatherKey Key { get; private set; }
+        public bool Ready => Key != null && field.IsBuilt;
+        public bool HostAuthority { get; private set; }
         public float MissionTime { get; private set; }
+        public float HourOfDay { get; private set; } = 12f;
 
-        public WeatherForecast Forecast => forecast;
+        /// <summary>The sky at the camera this frame.</summary>
+        public WeatherPoint Local { get; private set; }
 
-        public WeatherSnapshot Snapshot => snapshot;
+        /// <summary>Camera position in map coordinates (x east, z north) and altitude above sea.</summary>
+        public Vector3 CameraGlobal { get; private set; }
 
-        public bool OverrideActive => overrideActive;
+        /// <summary>Strikes whose time fell inside this frame (read by lightning, audio, HUD).</summary>
+        public int StrikeCount { get; private set; }
+        public Strike StrikeAt(int index) => strikes[index];
+
+        public WeatherSettings Settings => settings;
+
+        /// <summary>Lightning light this frame (HDR-ish colour, 0 when dark); written by the lightning director.</summary>
+        public Color Flash { get; set; }
 
         /// <summary>
-        /// The live storm population. Read-only by contract: the renderer, the rain and the radar
-        /// all read this same array so they cannot disagree about where the weather is. Valid up
-        /// to <see cref="CellCount"/>; the buffer is reused every tick and never resized.
+        /// Debug only, client-local: when ≥ 0, the rain rate the renderers are told about at the
+        /// camera. Never touches the field, the key or the network.
         /// </summary>
-        public StormCell[] CellBuffer => cells;
+        public float RainPreview
+        {
+            get => settings != null ? settings.DebugRainPreview.Value : -1f;
+            set { if (settings != null) settings.DebugRainPreview.Value = Mathf.Clamp(value, -1f, 150f); }
+        }
 
-        public int CellCount => cellCount;
+        private WeatherPoint ApplyPreview(WeatherPoint p)
+        {
+            if (RainPreview < 0f) return p;
+            p.RainRate = RainPreview;
+            if (RainPreview > 0f)
+            {
+                p.Cover = Mathf.Max(p.Cover, 0.9f);
+                p.CloudTop = Mathf.Max(p.CloudTop, CameraGlobal.y + 2000f);
+                p.Hail = RainPreview >= 90f;
+                float extinction = 3.912f / 20f + 0.25f * Mathf.Pow(RainPreview, 0.66f);
+                p.VisibilityKm = Mathf.Min(p.VisibilityKm, 3.912f / extinction);
+            }
+            return p;
+        }
 
-        public void Configure(WeatherSettings weatherSettings, ManualLogSource logger)
+        public void Configure(WeatherSettings weatherSettings, WeatherNet network, ManualLogSource logger)
         {
             settings = weatherSettings;
+            net = network;
             log = logger;
-        }
-
-        /// <summary>Debug control: aim the sky directly and stop the schedule steering it.</summary>
-        public void ApplyOverride(WeatherState state)
-        {
-            if (!overrideActive) log?.LogInfo("Weather: debug override engaged.");
-            overrideActive = true;
-            overrideState = state;
-            for (int i = 0; i < channels.Length; i++) channels[i].Release();
-        }
-
-        /// <summary>Debug control: force a named regime rather than a numeric delta.</summary>
-        public void ForceRegime(WeatherRegime regime)
-        {
-            WeatherState basis = overrideActive ? overrideState : live;
-            int index = WeatherRegimes.Index(regime);
-            float severity = index / (float)(WeatherRegimes.Count - 1);
-            ApplyOverride(new WeatherState(
-                regime,
-                WeatherState.Lerp(WeatherRegimes.ConditionsLo(index), WeatherRegimes.ConditionsHi(index), severity),
-                WeatherState.Lerp(WeatherRegimes.CloudBaseLo(index), WeatherRegimes.CloudBaseHi(index), severity),
-                WeatherState.Lerp(WeatherRegimes.WindLo(index), WeatherRegimes.WindHi(index), severity),
-                basis.WindHeading,
-                WeatherState.Lerp(WeatherRegimes.TurbulenceLo(index), WeatherRegimes.TurbulenceHi(index), severity)));
-        }
-
-        public void ReleaseOverride()
-        {
-            if (!overrideActive) return;
-            overrideActive = false;
-            for (int i = 0; i < channels.Length; i++) channels[i].Reset();
-            log?.LogInfo("Weather: debug override released, schedule resumed.");
+            sessionSalt = unchecked((uint)Environment.TickCount * 2654435761u);
+            net.Configure(ApplyRemoteKey);
         }
 
         public void ResetForScene()
         {
             missionIdentity = null;
-            seed = 0;
-            previousTime = 0f;
-            writeElapsed = 0f;
-            nextWriteAt = 0f;
-            announcedRegime = -1;
-            announcedStorms = int.MinValue;
-            nextForecastAt = 0f;
-            MissionTime = 0f;
-            live = default;
-            forecast = null;
-            snapshot = WeatherSnapshot.Unavailable;
-            cellCount = 0;
-            overrideActive = false;
-            overrideState = default;
-            for (int i = 0; i < channels.Length; i++) channels[i].Reset();
+            hostKey = null;
+            remoteKey = null;
+            Key = null;
+            nextWrite = 0f;
+            lastConditionsWritten = -1f;
+            previousStrikeTime = float.NaN;
+            StrikeCount = 0;
+            net?.ResetScene();
         }
 
-        private void OnDestroy() => ResetForScene();
+        /// <summary>Host: blend the sky into a regime now (debug window, scripted beats).</summary>
+        public void ForceRegime(WeatherRegime regime)
+        {
+            if (!HostAuthority || hostKey == null) return;
+            hostKey = hostKey.WithOverride(MissionTime, regime);
+            log?.LogInfo("[Weather] Forced " + RegimeTable.Name(regime) + " at mission time " + MissionTime.ToString("0"));
+        }
+
+        /// <summary>Host: drop every override and return to the seeded chain.</summary>
+        public void ReleaseOverrides()
+        {
+            if (!HostAuthority || hostKey == null) return;
+            hostKey = hostKey.WithoutOverrides();
+        }
+
+        private void ApplyRemoteKey(WeatherKey key)
+        {
+            if (key == null) return;
+            if (!key.Equals(remoteKey)) log?.LogInfo("[Weather] Received host weather key (seed " + key.Seed + ", " + key.OverrideCount + " override(s)).");
+            remoteKey = key;
+        }
 
         private void Update()
         {
-            if (!Enabled) return;
-
             MissionManager mission = NetworkSceneSingleton<MissionManager>.i;
-            if (mission == null || !MissionManager.IsRunning)
+            LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
+            if (mission == null || level == null || !MissionManager.IsRunning)
             {
                 if (missionIdentity != null) ResetForScene();
                 return;
             }
 
-            string identity = MissionIdentity();
+            HostAuthority = GameAccess.IsServer();
+            string identity = MissionIdentity(level);
             if (!string.Equals(identity, missionIdentity, StringComparison.Ordinal))
             {
                 ResetForScene();
                 missionIdentity = identity;
-                seed = WeatherModel.Seed(identity);
-                live = ReadLive();
-                if (!announced)
+                if (HostAuthority) hostKey = BuildHostKey(identity, level);
+            }
+
+            MissionTime = mission.MissionTime;
+            HourOfDay = level.timeOfDay;
+
+            if (HostAuthority)
+            {
+                if (hostKey == null) hostKey = BuildHostKey(identity, level);
+                hostKey = ApplyHostRules(hostKey);
+                Key = hostKey;
+            }
+            else
+            {
+                Key = remoteKey;
+            }
+            if (Key == null) return;
+
+            Vector2 span = TheaterFrame.Resolve();
+            field.Build(Key, MissionTime, span.x * 0.5f, span.y * 0.5f, HourOfDay, HazeScale());
+
+            CameraGlobal = CameraPosition();
+            Local = ApplyPreview(field.Sample(CameraGlobal.x, CameraGlobal.z));
+
+            CollectStrikes();
+
+            if (HostAuthority)
+            {
+                net.Publish(Key);
+                if (Time.unscaledTime >= nextWrite)
                 {
-                    announced = true;
-                    log?.LogInfo("Weather schedule active for mission '" + identity + "'; a front lasts " +
-                                 WeatherReadout.Decimal(WeatherModel.FrontSeconds / 60f, 0) + " minutes.");
+                    float dt = nextWrite <= 0f ? WriteInterval : Time.unscaledTime - nextWrite + WriteInterval;
+                    nextWrite = Time.unscaledTime + WriteInterval;
+                    DriveVanilla(level, Mathf.Clamp(dt, 0f, 1f));
                 }
             }
+        }
 
-            float now = mission.MissionTime;
-            float elapsed = now - previousTime;
-            if (elapsed < 0f || elapsed > MaxElapsed) elapsed = 0f;
-            previousTime = now;
-            MissionTime = now;
-
-            live = ReadLive();
-            for (int i = 0; i < channels.Length; i++)
+        private void CollectStrikes()
+        {
+            float now = MissionTime;
+            if (float.IsNaN(previousStrikeTime) || now < previousStrikeTime || now - previousStrikeTime > 5f)
             {
-                channels[i].Advance(elapsed);
-                channels[i].Observe(LiveValue(live, (Channel)i));
+                previousStrikeTime = now;
+                StrikeCount = 0;
+                return;
             }
+            StrikeCount = LightningSchedule.Collect(field, previousStrikeTime, now, strikes);
+            previousStrikeTime = now;
+        }
 
-            float mapSize = MapSize();
-            daylight = Daylight();
-            front = WeatherModel.SampleFront(seed, now, mapSize);
-            atmosphere = WeatherModel.SampleAtmosphere(seed, now, mapSize, Haze(), daylight);
-            WeatherState model = overrideActive ? overrideState : WeatherModel.ToState(atmosphere, front, 0f, 0f);
-            model = WeatherState.WithHaze(model, Haze());
-            Announce(model);
-            RefreshCells(now, model, atmosphere, front);
-            AnnounceStorms();
-            // The ramp must advance by the real time since the last write, not by the write
-            // interval, or every driven value crawls at a fraction of its stated rate.
-            writeElapsed += elapsed;
-            if (HostAuthority && now - nextWriteAt >= 0f)
+        private WeatherKey BuildHostKey(string identity, LevelInfo level)
+        {
+            uint seed = unchecked(Deterministic.HashString(identity) ^ sessionSalt);
+            byte start = WeatherKey.AutoRegime;
+            if (settings.StartRegime.Value > 0) start = (byte)(settings.StartRegime.Value - 1);
+            else start = (byte)RegimeTable.FromConditions(level.conditions);
+            var key = new WeatherKey(seed, 0f, settings.DynamicWeather.Value, start, Flags());
+            log?.LogInfo("[Weather] Sky for '" + identity + "': opens " + RegimeTable.Name(RegimeTable.Clamp(start)) +
+                         (key.Dynamic ? ", dynamic" : ", held") + ", seed " + seed + ".");
+            lastConditionsWritten = level.conditions;
+            return key;
+        }
+
+        /// <summary>Keeps the host key in step with the host's own settings as they change.</summary>
+        private WeatherKey ApplyHostRules(WeatherKey key)
+        {
+            WeatherFlags flags = Flags();
+            if (key.Flags != flags) key = key.WithFlags(flags);
+            if (key.Dynamic != settings.DynamicWeather.Value) key = key.WithSchedule(settings.DynamicWeather.Value, key.StartRegime);
+            return key;
+        }
+
+        private WeatherFlags Flags()
+        {
+            WeatherFlags flags = WeatherFlags.None;
+            if (settings.StormTurbulence.Value) flags |= WeatherFlags.StormTurbulence;
+            if (settings.SensorEffects.Value) flags |= WeatherFlags.SensorEffects;
+            if (settings.LightningHazard.Value) flags |= WeatherFlags.LightningHazard;
+            return flags;
+        }
+
+        private void DriveVanilla(LevelInfo level, float dt)
+        {
+            // A write we did not make is authored weather: fold it into the schedule.
+            if (lastConditionsWritten >= 0f && Mathf.Abs(level.conditions - lastConditionsWritten) > AdoptEpsilon)
             {
-                nextWriteAt = now + WriteInterval;
-                WriteWorld(model, Mathf.Max(writeElapsed, WriteInterval));
-                writeElapsed = 0f;
-            }
-
-            if (forecast == null || now >= nextForecastAt)
-            {
-                nextForecastAt = now + ForecastInterval;
-                forecast = WeatherForecast.Build(
-                    seed,
-                    now,
-                    settings.ForecastSteps.Value,
-                    settings.ForecastStepMinutes.Value * 60f,
-                    daylight);
-            }
-
-            snapshot = BuildSnapshot(model);
-        }
-
-        /// <summary>
-        /// Place the storm population for this instant. A cell exists only where the air mass has
-        /// the energy for one, so a stable clear sky raises nothing at all.
-        /// </summary>
-        private void RefreshCells(float now, WeatherState model, in Atmosphere sky, in WeatherFront boundary)
-        {
-            cellCount = StormField.Fill(
-                cells,
-                seed,
-                now,
-                MapSize(),
-                model.Conditions,
-                model.WindHeading,
-                model.WindSpeed,
-                boundary,
-                sky,
-                out stormMode);
-        }
-
-        /// <summary>
-        /// The map extent in metres. A map that reports a small number is reporting kilometres,
-        /// so scale it rather than silently raising no storms at all.
-        /// </summary>
-        private static float MapSize()
-        {
-            LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
-            float mapSize = level != null ? level.mapSize : 0f;
-            if (mapSize > 0f && mapSize < 1000f) mapSize *= 1000f;
-            return mapSize;
-        }
-
-        /// <summary>
-        /// Daylight from the level's synced time of day, and deliberately **not**
-        /// <c>GetDaylightFactor(position)</c>. That multiplies in the reader's own cloud
-        /// occlusion, so a host under the deck and a client above it would derive different
-        /// temperatures, different CAPE and different storm fields — exactly the divergence this
-        /// module exists to prevent. <c>timeOfDay</c> is a sync var: identical on every peer.
-        /// </summary>
-        private static float Daylight()
-        {
-            LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
-            if (level == null) return Diurnal.UnknownDaylight;
-            float timeOfDay = level.timeOfDay;
-            if (float.IsNaN(timeOfDay) || float.IsInfinity(timeOfDay)) return Diurnal.UnknownDaylight;
-            float daylight = 1f;
-            if (timeOfDay > 18f) daylight -= (timeOfDay - 18f) * 2f;
-            else if (timeOfDay < 6f) daylight -= (6f - timeOfDay) * 2f;
-            return daylight < 0f ? 0f : daylight > 1f ? 1f : daylight;
-        }
-
-        /// <summary>Where the reader is looking from, for every local storm reading.</summary>
-        private static bool TryLocalPosition(out float x, out float z)
-        {
-            CameraStateManager cameras = SceneSingleton<CameraStateManager>.i;
-            if (cameras == null)
-            {
-                x = 0f;
-                z = 0f;
-                return false;
-            }
-
-            x = cameras.transform.position.x;
-            z = cameras.transform.position.z;
-            return true;
-        }
-
-        /// <summary>
-        /// One line when the storm picture changes: how many cells, and the worst one's place
-        /// relative to the reader. This is what makes "is the weather doing anything" answerable
-        /// from the log without the debug overlay.
-        /// </summary>
-        private void AnnounceStorms()
-        {
-            int signature = cellCount;
-            for (int i = 0; i < cellCount; i++)
-                signature = signature * 31 + (int)(cells[i].Intensity * 4f) * 7 + (int)cells[i].Kind;
-            if (signature == announcedStorms) return;
-            announcedStorms = signature;
-
-            if (cellCount <= 0)
-            {
-                log?.LogInfo("Weather: no storm cells in this front.");
+                WeatherRegime regime = RegimeTable.FromConditions(level.conditions);
+                hostKey = hostKey.WithOverride(MissionTime, regime);
+                Key = hostKey;
+                log?.LogInfo("[Weather] Adopted authored weather " + level.conditions.ToString("0.00") + " as " +
+                             RegimeTable.Name(regime) + " at mission time " + MissionTime.ToString("0") + ".");
+                lastConditionsWritten = level.conditions;
                 return;
             }
 
-            int strongest = 0;
-            for (int i = 1; i < cellCount; i++)
-                if (cells[i].Intensity > cells[strongest].Intensity) strongest = i;
-            StormCell cell = cells[strongest];
-            log?.LogInfo("Weather: " + cellCount + " storm cell(s) — strongest " +
-                         StormReadout.Kind(cell.Kind) +
-                         ", intensity " + WeatherReadout.Percent01(cell.Intensity) +
-                         ", top " + WeatherReadout.Meters(cell.TopHeight) +
-                         ", radius " + WeatherReadout.Meters(cell.Radius) + ".");
+            float conditions = Step(level.conditions, field.MeanCover(4), ConditionsRate * dt);
+            level.Networkconditions = conditions;
+            lastConditionsWritten = conditions;
+
+            float cloudBase = Step(level.cloudHeight, field.Regime.Params.CloudBase, CloudBaseRate * dt);
+            level.NetworkcloudHeight = cloudBase;
+
+            field.MeanWind(out float speed, out float heading, out float turbulence);
+            level.SetWindSpeed(Step(level.windSpeed, speed, WindRate * dt));
+            level.SetWindTurbulence(Step(level.windTurbulence, turbulence, TurbulenceRate * dt));
+
+            float liveHeading = WeatherMath.VectorToHeading(level.windVelocity.x, level.windVelocity.z);
+            float delta = WeatherMath.DeltaAngle(liveHeading, heading);
+            float stepped = liveHeading + Mathf.Clamp(delta, -HeadingRate * dt, HeadingRate * dt);
+            if (Mathf.Abs(delta) > 0.05f) level.SetWindHeading(WeatherMath.WrapHeading(stepped));
         }
 
-        /// <summary>
-        /// One line per regime change, so a player reading the log can see the schedule is alive
-        /// without opening the debug overlay. A front lasts minutes, so this cannot spam.
-        /// </summary>
-        private void Announce(WeatherState model)
+        private static float Step(float current, float target, float maxDelta)
+            => Mathf.MoveTowards(current, target, Mathf.Max(maxDelta, 0f));
+
+        private static float HazeScale()
         {
-            int regime = WeatherRegimes.Index(model.Regime);
-            if (regime == announcedRegime) return;
-            announcedRegime = regime;
-            log?.LogInfo("Weather: " + (overrideActive ? "override" : "front") + " — " +
-                         WeatherReadout.Regime(model.Regime) +
-                         ", conditions " + WeatherReadout.Percent01(model.Conditions) +
-                         ", cloud base " + WeatherReadout.Meters(model.CloudBase) +
-                         ", wind " + WeatherReadout.Wind(model.WindSpeed, model.WindHeading) +
-                         ", turbulence " + WeatherReadout.Decimal(model.Turbulence, 2) + ".");
+            if (!ModServices.TryGet(out IFireSuppressionService fires) || fires == null) return 1f;
+            return 1f - 0.5f * Mathf.Clamp01(fires.ActiveFireCount / 24f);
         }
 
-        private void WriteWorld(WeatherState model, float elapsed)
+        private static Vector3 CameraPosition()
         {
-            LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
-            if (level == null) return;
-
-            Drive(level, Channel.Conditions, model.Conditions, elapsed);
-            Drive(level, Channel.CloudBase, model.CloudBase, elapsed);
-            Drive(level, Channel.WindSpeed, model.WindSpeed, elapsed);
-            Drive(level, Channel.Turbulence, model.Turbulence, elapsed);
-            Drive(level, Channel.Heading, model.WindHeading, elapsed);
+            CameraStateManager camera = SceneSingleton<CameraStateManager>.i;
+            if (camera == null) return Vector3.zero;
+            GlobalPosition g = camera.transform.GlobalPosition();
+            return new Vector3(g.x, g.y, g.z);
         }
 
-        private void Drive(LevelInfo level, Channel channel, float target, float elapsed)
-        {
-            WeatherDrive drive = channels[(int)channel];
-            if (!drive.ShouldWrite) return;
-            float current = LiveValue(live, channel);
-            float rate = Rate(channel) * (overrideActive ? OverrideRateMultiplier : 1f);
-            float next = channel == Channel.Heading
-                ? drive.StepAngle(current, target, elapsed, rate)
-                : drive.Step(current, target, elapsed, rate);
-            if (Mathf.Approximately(next, current)) return;
-            // Mathf.Approximately(NaN, NaN) is false, so a NaN that ever reached a sync var
-            // would be written back forever. One clause keeps the world finite.
-            if (float.IsNaN(next) || float.IsInfinity(next)) return;
-            Write(level, channel, next);
-            drive.Acknowledge(next);
-        }
-
-        private static void Write(LevelInfo level, Channel channel, float value)
-        {
-            switch (channel)
-            {
-                case Channel.Conditions: level.Networkconditions = value; break;
-                case Channel.CloudBase: level.NetworkcloudHeight = value; break;
-                case Channel.WindSpeed: level.SetWindSpeed(value); break;
-                case Channel.Turbulence: level.SetWindTurbulence(value); break;
-                case Channel.Heading: level.SetWindHeading(value); break;
-            }
-        }
-
-        private static float Rate(Channel channel)
-        {
-            switch (channel)
-            {
-                case Channel.Conditions: return ConditionsRate;
-                case Channel.CloudBase: return CloudBaseRate;
-                case Channel.WindSpeed: return WindSpeedRate;
-                case Channel.Turbulence: return TurbulenceRate;
-                default: return HeadingRate;
-            }
-        }
-
-        private static float LiveValue(WeatherState state, Channel channel)
-        {
-            switch (channel)
-            {
-                case Channel.Conditions: return state.Conditions;
-                case Channel.CloudBase: return state.CloudBase;
-                case Channel.WindSpeed: return state.WindSpeed;
-                case Channel.Turbulence: return state.Turbulence;
-                default: return state.WindHeading;
-            }
-        }
-
-        private WeatherState ReadLive()
-        {
-            LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
-            if (level == null) return live;
-            return new WeatherState(
-                WeatherRegimes.FromConditions(level.conditions),
-                level.conditions,
-                level.cloudHeight,
-                level.windSpeed,
-                WeatherState.WrapHeading(HeadingFromVelocity(level.windVelocity)),
-                level.windTurbulence);
-        }
-
-        /// <summary>
-        /// The synced mean wind vector, not <c>GetWind(position)</c>: only the server ever rotates
-        /// the vanilla wind zone, so a client-side per-position sample points the wrong way.
-        /// </summary>
-        private static float HeadingFromVelocity(Vector3 velocity)
-        {
-            if (Mathf.Abs(velocity.x) < 1e-4f && Mathf.Abs(velocity.z) < 1e-4f) return 0f;
-            return (float)(Math.Atan2(velocity.x, velocity.z) * 180.0 / Math.PI);
-        }
-
-        private WeatherSnapshot BuildSnapshot(WeatherState model)
-        {
-            LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
-            if (level == null) return WeatherSnapshot.Unavailable;
-
-            float occlusion = 0f;
-            float daylight = 1f;
-            CameraStateManager cameras = SceneSingleton<CameraStateManager>.i;
-            if (cameras != null)
-            {
-                Vector3 position = cameras.transform.position;
-                occlusion = level.GetCloudOcclusion(position);
-                daylight = level.GetDaylightFactor(position);
-            }
-
-            Vector3 wind = level.windVelocity;
-            bool overridden = overrideActive ||
-                              Mathf.Abs(live.Conditions - model.Conditions) > OverrideDetection;
-
-            float influence = 0f;
-            StormWarning warning = StormWarning.None;
-            StormCell warningSource = default;
-            if (TryLocalPosition(out float x, out float z))
-            {
-                StormField.StrongestAt(cells, cellCount, x, z, out influence);
-                warning = StormField.WarningAt(cells, cellCount, x, z, out warningSource);
-            }
-
-            return new WeatherSnapshot(
-                true,
-                MissionTime,
-                model,
-                live,
-                wind.x,
-                wind.y,
-                wind.z,
-                occlusion,
-                daylight,
-                overridden,
-                HostAuthority,
-                cells,
-                cellCount,
-                influence,
-                warning,
-                warningSource,
-                atmosphere,
-                front,
-                stormMode);
-        }
-
-        private float Haze()
-        {
-            if (!ModServices.TryGet<IFireSuppressionService>(out IFireSuppressionService fires)) return 0f;
-            return WeatherRegimes.Clamp01(fires.ActiveFireCount * HazePerFire);
-        }
-
-        private static string MissionIdentity()
+        private static string MissionIdentity(LevelInfo level)
         {
             Mission mission = MissionManager.CurrentMission;
             if (mission != null && !string.IsNullOrEmpty(mission.Name)) return mission.Name;
-            LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
             MapSettings map = level != null ? level.LoadedMapSettings : null;
             return map != null ? "map:" + map.name : "unknown";
         }

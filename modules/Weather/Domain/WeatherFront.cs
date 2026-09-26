@@ -2,168 +2,146 @@ using System;
 
 namespace BoscaliSummer.Features.Weather.Domain
 {
-    /// <summary>
-    /// The kind of boundary between two air masses. This is what a forecaster draws on a chart,
-    /// and each one has its own signature in the sky, the wind and the precipitation.
-    /// </summary>
-    internal enum FrontKind
+    internal enum FrontKind : byte
     {
-        None = 0,
+        Cold = 0,
+        Warm = 1,
 
-        /// <summary>Fast, narrow, sharp. Squall lines, gust fronts, the violent one.</summary>
-        Cold = 1,
-
-        /// <summary>Slow, broad, layered. Long murky periods and poor visibility.</summary>
-        Warm = 2,
-
-        /// <summary>A cold front that has caught a warm one. Long, messy, persistent rain.</summary>
-        Occluded = 3,
-
-        /// <summary>Moisture boundary without a temperature boundary. High-based storms.</summary>
-        DryLine = 4
-    }
-
-    internal static class FrontKinds
-    {
-        public const int Count = 5;
-
-        private static readonly string[] Labels = { "NONE", "COLD", "WARM", "OCCLUDED", "DRY LINE" };
-
-        /// <summary>Plotted glyph, triangle for cold, semicircle for warm, mixed for occluded.</summary>
-        private static readonly string[] Glyphs = { "·", "▲", "◗", "▲◗", "△" };
-
-        private static readonly float[] Widths = { 0f, 14000f, 62000f, 40000f, 9000f };
-
-        public static int Index(FrontKind kind)
-        {
-            int index = (int)kind;
-            return index < 0 ? 0 : index >= Count ? Count - 1 : index;
-        }
-
-        public static string Label(FrontKind kind) => Labels[Index(kind)];
-
-        public static string Glyph(FrontKind kind) => Glyphs[Index(kind)];
-
-        /// <summary>Width of the transition band in metres.</summary>
-        public static float Width(FrontKind kind) => Widths[Index(kind)];
-
-        /// <summary>
-        /// Cold, occluded and dry-line boundaries lift air hard enough to build thunderstorms.
-        /// A warm front glides over and makes stratus, not squall lines.
-        /// </summary>
-        public static bool IsConvective(FrontKind kind) =>
-            kind == FrontKind.Cold || kind == FrontKind.Occluded || kind == FrontKind.DryLine;
+        /// <summary>A SEVERE-regime cold front: a narrow violent line with a strong gust front.</summary>
+        Squall = 2,
     }
 
     /// <summary>
-    /// One frontal boundary, as a line crossing the map that moves. Everything about the front's
-    /// effect at a point is a pure function of this struct, so the host, every client and a late
-    /// joiner all place the same boundary without a byte of front data on the wire — the same
-    /// trick the storm field already uses.
-    ///
-    /// The normal points the way the front travels. <see cref="SignedDistance"/> is negative
-    /// before the front arrives and positive once it has passed.
+    /// A frontal boundary resolved at one instant: a straight line crossing the map with its
+    /// steering wind. <see cref="SignedDistance"/> is <b>negative while the front is still
+    /// approaching a point and positive once it has passed</b>; the normal points the way the
+    /// front travels. That sign is load-bearing — the rain band, the wind veer and the radar all
+    /// read it, and getting it backwards runs a frontal passage in reverse.
     /// </summary>
-    internal readonly struct WeatherFront
+    internal struct FrontState
     {
-        public readonly bool Present;
-        public readonly FrontKind Kind;
+        public FrontKind Kind;
+        public float NormalX;
+        public float NormalZ;
+        public float Speed;
 
-        /// <summary>Unit vector in world X, the direction of travel.</summary>
-        public readonly float NormalX;
+        /// <summary>Distance of the line from the map centre along the normal, at this instant.</summary>
+        public float Offset;
 
-        /// <summary>Unit vector in world Z, the direction of travel.</summary>
-        public readonly float NormalZ;
+        /// <summary>0..1, eased in and out with the regime that brings it.</summary>
+        public float Strength;
 
-        /// <summary>Distance of the boundary from the map centre along the normal, metres.</summary>
-        public readonly float Position;
-
-        /// <summary>Translation speed along the normal, metres per second. Never negative.</summary>
-        public readonly float Speed;
-
-        /// <summary>Half-width of the transition band, metres. Outside this the front is not felt.</summary>
-        public readonly float Width;
-
-        /// <summary>0..1: how hard this boundary is lifting. Scales its cloud, wind and rain.</summary>
-        public readonly float Activity;
-        /// <summary>
-        /// The air mass on the trailing side: what you are in once the boundary has passed.
-        /// </summary>
-        public readonly AirMassKind Behind;
+        public int Id;
 
         /// <summary>
-        /// The air mass on the leading side: what you are in before it arrives. The boundary
-        /// always travels from <see cref="Behind"/> toward <see cref="Ahead"/>, so for a cold
-        /// front the cold air is behind and the warm sector ahead of it.
+        /// How far the line has travelled past a point: the line sits at <see cref="Offset"/>
+        /// along the normal, so a point further along the normal is still ahead of it (negative).
         /// </summary>
-        public readonly AirMassKind Ahead;
+        public float SignedDistance(float x, float z) => Offset - (x * NormalX + z * NormalZ);
 
-        public WeatherFront(
-            bool present,
-            FrontKind kind,
-            float normalX,
-            float normalZ,
-            float position,
-            float speed,
-            float width,
-            float activity,
-            AirMassKind behind,
-            AirMassKind ahead)
+        /// <summary>Seconds until the line reaches a point (negative once passed).</summary>
+        public float SecondsUntil(float x, float z) => Speed > 0.01f ? -SignedDistance(x, z) / Speed : float.PositiveInfinity;
+    }
+
+    /// <summary>What a front contributes at one point, before strength weighting.</summary>
+    internal struct FrontEffect
+    {
+        public float Rain;
+        public float Cover;
+        public float VeerDegrees;
+        public float WindBoost;
+        public float Turbulence;
+    }
+
+    /// <summary>
+    /// Front geometry and band profiles. A front's direction and speed come from its segment
+    /// (seed, id, midpoint) and the prevailing wind at that midpoint, so they never change while
+    /// the front is on the map; it crosses the map centre at the segment's midpoint.
+    /// </summary>
+    internal static class WeatherFronts
+    {
+        public static FrontState Resolve(FrontSource source, uint fieldSeed, float time)
         {
-            float length = (float)Math.Sqrt(normalX * normalX + normalZ * normalZ);
-            if (length < 1e-5f)
+            RegimeParams regime = RegimeTable.Get(source.Regime);
+            FrontKind kind = source.Regime == WeatherRegime.Severe
+                ? FrontKind.Squall
+                : WeatherMath.Hash01(source.Seed, source.Id, 31) < 0.65f ? FrontKind.Cold : FrontKind.Warm;
+
+            float heading = WeatherField.PrevailingHeading(fieldSeed, source.Mid)
+                            + WeatherMath.HashRange(source.Seed, source.Id, 32, 0, -30f, 30f);
+            WeatherMath.HeadingToVector(heading, out float nx, out float nz);
+
+            float speed;
+            switch (kind)
             {
-                normalX = 0f;
-                normalZ = 1f;
-            }
-            else
-            {
-                normalX /= length;
-                normalZ /= length;
+                case FrontKind.Warm:
+                    speed = WeatherMath.Clamp(0.9f * regime.WindSpeed, 8f, 18f);
+                    break;
+                case FrontKind.Squall:
+                    speed = WeatherMath.Clamp(1.8f * regime.WindSpeed, 15f, 32f);
+                    break;
+                default:
+                    speed = WeatherMath.Clamp(1.5f * regime.WindSpeed, 12f, 28f);
+                    break;
             }
 
-            Present = present;
-            Kind = kind;
-            NormalX = normalX;
-            NormalZ = normalZ;
-            Position = position;
-            Speed = speed < 0f ? 0f : speed;
-            Width = width < 1f ? 1f : width;
-            Activity = WeatherRegimes.Clamp01(activity);
-            Behind = behind;
-            Ahead = ahead;
+            return new FrontState
+            {
+                Kind = kind,
+                NormalX = nx,
+                NormalZ = nz,
+                Speed = speed,
+                Offset = speed * (time - source.Mid),
+                Strength = WeatherMath.Clamp01(source.Strength),
+                Id = source.Id,
+            };
         }
 
-        public static WeatherFront None => default;
-
-        /// <summary>
-        /// Signed distance from a world point to the boundary, metres. Negative while the
-        /// boundary is still approaching, positive once it has passed, so the sign reads as
-        /// "has this front gone by" rather than as a raw coordinate.
-        /// </summary>
-        public float SignedDistanceTo(float x, float z) => Position - (x * NormalX + z * NormalZ);
-
-        /// <summary>Absolute distance from a world point to the boundary, metres.</summary>
-        public float DistanceTo(float x, float z) => Math.Abs(SignedDistanceTo(x, z));
-
-        /// <summary>
-        /// How much of this front a point feels, 0..1. Smooth across the whole band so the
-        /// transition is a passage and not a step.
-        /// </summary>
-        public float InfluenceAt(float x, float z)
+        /// <summary>The band profile across the line at signed distance <paramref name="d"/> (metres).</summary>
+        public static FrontEffect Profile(FrontKind kind, float d)
         {
-            if (!Present || Activity <= 0f) return 0f;
-            float t = WeatherRegimes.Clamp01(1f - DistanceTo(x, z) / Width);
-            return t * t * (3f - 2f * t) * Activity;
+            var e = new FrontEffect();
+            switch (kind)
+            {
+                case FrontKind.Warm:
+                    // A wide shield of light rain ahead of the line, thickening toward it.
+                    e.Rain = 3f * WeatherMath.Envelope(d, -55000f, -35000f, -8000f, 2000f)
+                           + 1.2f * Gauss(d + 4000f, 5000f);
+                    e.Cover = 0.95f * WeatherMath.Envelope(d, -80000f, -45000f, 0f, 12000f);
+                    e.VeerDegrees = 30f * WeatherMath.Smoothstep(-5000f, 5000f, d);
+                    e.WindBoost = 2f * Gauss(d, 8000f);
+                    e.Turbulence = 0.08f * Gauss(d, 6000f);
+                    break;
+
+                case FrontKind.Squall:
+                    // A narrow violent line with trailing rain behind it.
+                    e.Rain = 30f * Gauss(d - 1500f, 1800f)
+                           + 4f * WeatherMath.Envelope(d, 0f, 2500f, 15000f, 28000f)
+                           + (d < 0f ? 0.8f * (float)Math.Exp(d / 3000f) : 0f);
+                    e.Cover = 0.97f * WeatherMath.Envelope(d, -8000f, -2500f, 20000f, 38000f);
+                    e.VeerDegrees = 60f * WeatherMath.Smoothstep(-2000f, 2000f, d);
+                    e.WindBoost = 10f * Gauss(d - 800f, 2500f);
+                    e.Turbulence = 0.5f * Gauss(d - 1200f, 2500f);
+                    break;
+
+                default:
+                    // Cold: a heavy line just behind the boundary, then stratiform clearing.
+                    e.Rain = 18f * Gauss(d - 2000f, 2200f)
+                           + 3.5f * WeatherMath.Envelope(d, 0f, 3000f, 18000f, 32000f)
+                           + (d < 0f ? 0.6f * (float)Math.Exp(d / 4000f) : 0f);
+                    e.Cover = 0.95f * WeatherMath.Envelope(d, -9000f, -3000f, 22000f, 40000f);
+                    e.VeerDegrees = 50f * WeatherMath.Smoothstep(-2500f, 2500f, d);
+                    e.WindBoost = 6f * Gauss(d - 1000f, 3000f);
+                    e.Turbulence = 0.3f * Gauss(d - 1500f, 3000f);
+                    break;
+            }
+            return e;
         }
 
-        /// <summary>Seconds until the boundary reaches a point, or a large number if it never will.</summary>
-        public float SecondsUntil(float x, float z)
+        private static float Gauss(float x, float width)
         {
-            if (!Present || Speed <= 0f) return float.MaxValue;
-            float distance = -SignedDistanceTo(x, z);
-            if (distance <= 0f) return 0f;
-            return distance / Speed;
+            float u = x / width;
+            return (float)Math.Exp(-u * u);
         }
     }
 }

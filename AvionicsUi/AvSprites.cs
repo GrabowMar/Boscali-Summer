@@ -12,6 +12,7 @@ namespace NOAvionics.Ui
         private static Sprite cardSprite;
         private static Sprite controlSprite;
         private static Sprite groundGradientSprite;
+        private static Sprite ledSprite;
 
         /// <summary>Outer panel frame: 6px chamfer, 2px edge. The interior fades from
         /// ground-dark at the top to mostly see-through at the bottom — legible over a busy
@@ -31,12 +32,16 @@ namespace NOAvionics.Ui
         /// </summary>
         public static Sprite GroundGradient => groundGradientSprite != null ? groundGradientSprite : (groundGradientSprite = CreateGradientSprite("Avionics_GroundGradient", 64));
 
+        /// <summary>Radial diode indicator LED pip: hot luminous white core with a steep exponential bloom.</summary>
+        public static Sprite Led => ledSprite != null ? ledSprite : (ledSprite = CreateLedSprite("Avionics_Led", 14));
+
         public static void Reset()
         {
             if (panelSprite != null) { Object.Destroy(panelSprite.texture); Object.Destroy(panelSprite); panelSprite = null; }
             if (cardSprite != null) { Object.Destroy(cardSprite.texture); Object.Destroy(cardSprite); cardSprite = null; }
             if (controlSprite != null) { Object.Destroy(controlSprite.texture); Object.Destroy(controlSprite); controlSprite = null; }
             if (groundGradientSprite != null) { Object.Destroy(groundGradientSprite.texture); Object.Destroy(groundGradientSprite); groundGradientSprite = null; }
+            if (ledSprite != null) { Object.Destroy(ledSprite.texture); Object.Destroy(ledSprite); ledSprite = null; }
         }
 
         private enum FillMode { None, Solid, Gradient }
@@ -117,6 +122,63 @@ namespace NOAvionics.Ui
                 0u,
                 SpriteMeshType.FullRect,
                 new Vector4(border, border, border, border));
+            sprite.name = name;
+            sprite.hideFlags = HideFlags.HideAndDontSave;
+            return sprite;
+        }
+
+        /// <summary>Radial LED pip: white core, exponential bloom to the rim.</summary>
+        private static Sprite CreateLedSprite(string name, int size)
+        {
+            var texture = new Texture2D(size, size, TextureFormat.RGBA32, mipChain: false)
+            {
+                name = name,
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp,
+                hideFlags = HideFlags.HideAndDontSave,
+            };
+
+            float centre = (size - 1) * 0.5f;
+            float maxR = centre;
+            const float coreR = 2.2f;
+
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    float dx = x - centre;
+                    float dy = y - centre;
+                    float dist = Mathf.Sqrt(dx * dx + dy * dy);
+
+                    if (dist > maxR)
+                    {
+                        texture.SetPixel(x, y, Color.clear);
+                        continue;
+                    }
+
+                    float alpha;
+                    if (dist <= coreR)
+                    {
+                        alpha = 1f;
+                    }
+                    else
+                    {
+                        float t = (dist - coreR) / (maxR - coreR);
+                        alpha = Mathf.Exp(-t * 3.2f);
+                    }
+
+                    texture.SetPixel(x, y, new Color(1f, 1f, 1f, alpha));
+                }
+            }
+
+            texture.Apply(updateMipmaps: false, makeNoLongerReadable: true);
+            var sprite = Sprite.Create(
+                texture,
+                new Rect(0f, 0f, size, size),
+                new Vector2(0.5f, 0.5f),
+                100f,
+                0u,
+                SpriteMeshType.FullRect);
             sprite.name = name;
             sprite.hideFlags = HideFlags.HideAndDontSave;
             return sprite;

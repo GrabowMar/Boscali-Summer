@@ -15,67 +15,68 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Features.Weather.Presentation
 {
     /// <summary>
-    /// The WEA panel's radar page: a north-up reflectivity picture of the whole map, painted from
-    /// the deterministic storm field and the front. The page is model output and says so once,
-    /// quietly; it is never dressed as a game radar return.
+    /// The WEA panel's radar section: a north-up reflectivity picture of the whole map, painted
+    /// from the deterministic storm field and the front, with the bounded cell table that
+    /// describes it. It is model output and says so once, quietly; it is never dressed as a game
+    /// radar return.
     ///
-    /// <para>The texture is rebuilt on a 1 Hz budget, and immediately when the storm mode, the
-    /// front's step or a layer/zoom/time control changes — never per frame. One texture, one pixel
-    /// buffer and one <see cref="RadarImage"/> grid are reused for the whole scene; every marker is
-    /// moved rather than rebuilt, and every label is written through a reused
-    /// <see cref="StringBuilder"/>.</para>
+    /// <para>This is a section of the one ENV page, not a page of its own. It draws nothing above
+    /// its own map and nothing over it: the page budgets <see cref="ChromeHeight"/> below the
+    /// picture, the section trims the cell table to <see cref="MaxTableRows"/> nearest cells and
+    /// counts the remainder instead of overflowing.</para>
     ///
-    /// <para>The time scrub is exact rather than animated: the schedule is a pure function of
-    /// (seed, mission time), so +30 and +60 are the same closed-form sample the manager's own
-    /// forecast takes, and the boundary is translated along its own normal.</para>
+    /// <para>The texture is rebuilt on a 1 Hz budget, and immediately when the view (range, time
+    /// or the map layer) changes — never per frame. One texture, one pixel buffer and one
+    /// <see cref="RadarImage"/> grid are reused for the whole scene; every marker is moved rather
+    /// than rebuilt, and every label is written through a reused <see cref="StringBuilder"/>.</para>
     /// </summary>
     internal sealed class WeatherRadarPage
     {
-        // ---- layers
-        private const int LayerMap = 1;
-        private const int LayerEcho = 2;
-        private const int LayerWind = 4;
-        private const int LayerTemp = 8;
-        private const int LayerDefault = LayerMap | LayerEcho;
+        /// <summary>Cell rows the section can afford. The nearest cells win; the rest are counted.</summary>
+        public const int MaxTableRows = 3;
+
+        /// <summary>One table row's pitch, shared by the forecast table above the radar.</summary>
+        public const float RowPitch = 16f;
+
+        private const float MapGap = 4f;
+        private const float RampHeight = 18f;
+        private const float ControlHeight = AvTokens.RowHeight;
+        private const float RefHeight = 12f;
+        private const float TableHeaderHeight = 12f;
+        private const float NoteHeight = 12f;
+
+        /// <summary>Everything this section draws below its map, so the page can budget for it.</summary>
+        public const float ChromeHeight = RampHeight + ControlHeight + RefHeight
+                                        + TableHeaderHeight + MaxTableRows * RowPitch + NoteHeight
+                                        + 3f * MapGap;
+
+        /// <summary>
+        /// The one table grid both data tables read. The forecast puts AGE, SKY and TREND on
+        /// the first three edges and its WIND column across the last two; the echo table adds
+        /// RNG / BRG on the fifth. A column edge therefore lands on the same x in both tables,
+        /// and the last column takes whatever width the section has left.
+        /// </summary>
+        public const float TableInset = 8f;
+        public static readonly float[] TableColumnEdges = { 0f, 100f, 184f, 248f, 306f };
 
         /// <summary>Owner id for the shared armed map gesture. Not a MapPicker constant: this one is ours.</summary>
         private const string PickOwner = "boscali.weather.radar";
 
-        /// <summary>The scope's old range ladder, now the half-height of the window in metres.</summary>
+        /// <summary>The scope's range ladder: the half-height of the window in metres.</summary>
         private static readonly float[] RangeMetres = { 20000f, 40000f, 80000f, 160000f };
         private const int DefaultRangeIndex = 1;
 
         private static readonly float[] ForecastOffsets = { 0f, 1800f, 3600f };
         private static readonly string[] ForecastLabels = { "NOW", "+30", "+60" };
 
-        private static readonly string[] LayerLabels = { "MAP", "ECHO", "WIND", "TEMP" };
-        private static readonly int[] LayerFlags = { LayerMap, LayerEcho, LayerWind, LayerTemp };
-
         /// <summary>The two rings, as fractions of the window's half-height, so they scale with the zoom.</summary>
         private static readonly float[] RingFractions = { 0.5f, 1f };
 
-        private const float HeaderHeight = 16f;
-        private const float ReadoutHeight = 13f;
-        private const float MapHeightRatio = 0.5f;
-        private const float MinMapHeight = 140f;
-        private const float MaxMapHeight = 260f;
-        private const float MapGap = 6f;
-        private const float LegendHeight = 18f;
-        private const float ControlHeight = 22f;
-        private const float ControlGap = 4f;
-        private const float SectionHeight = 14f;
-        private const float TableHeaderHeight = 12f;
-        private const float RowHeight = 16f;
-        private const float RowPitch = 16f;
-        private const float RailWidth = 3f;
-        private const float RowInset = 10f;
-        private const float NoteHeight = 12f;
+        /// <summary>How far the boundary has to move before the picture is worth repainting.</summary>
+        private const float FrontStepMetres = 1500f;
 
         /// <summary>Repaint cadence. The picture is 1 Hz; the markers ride the panel's own tick.</summary>
         private const float RebuildInterval = 1f;
-
-        /// <summary>How far the boundary has to move before the picture is worth repainting.</summary>
-        private const float FrontStepMetres = 1500f;
 
         private const float MinPipPixels = 5f;
         private const float PipAlphaMin = 0.35f;
@@ -88,24 +89,26 @@ namespace BoscaliSummer.Features.Weather.Presentation
 
         private const float FrontThickness = 2f;
         private const float FrontArrowOffset = 12f;
-        private const float FrontGlyphWidth = 40f;
+        private const float FrontTokenPixels = 9f;
         private const float FrontLabelWidth = 150f;
         private const int MaxFrontGlyphs = 3;
 
-        private const float WindArrowPixels = 28f;
-        private const float WindArrowMargin = 42f;
         private const float PickSlopPixels = 6f;
         private const float PickTimeout = 25f;
 
         private const int MaxAirfields = 16;
         private const int MaxAirfieldScan = 64;
         private const int MaxWaypoints = 16;
-        private const int Columns = 7;
+        private const int Columns = 5;
+        private const int ColumnKind = 0;
+        private const int ColumnWarn = 2;
 
         private const int RingSpriteSize = 128;
         private const float RingSpriteThickness = 1.5f;
         private const int DotSpriteSize = 64;
         private const int ArrowSpriteSize = 32;
+
+        private const float ControlGap = 4f;
 
         private static readonly Color32 ClearPixel = new Color32(0, 0, 0, 0);
         private static readonly Color32 RampLight = new Color32(77, 199, 92, 190);
@@ -116,7 +119,8 @@ namespace BoscaliSummer.Features.Weather.Presentation
 
         /// <summary>
         /// One reflectivity band: the threshold, the colour and the label together, so the picture
-        /// and the legend cannot drift apart and severity never rides on colour alone.
+        /// and the legend cannot drift apart and severity never rides on colour alone. Labels are
+        /// short enough for five equal cells at the panel width.
         /// </summary>
         private readonly struct Band
         {
@@ -134,34 +138,44 @@ namespace BoscaliSummer.Features.Weather.Presentation
 
         private static readonly Band[] Bands =
         {
-            new Band(RadarImage.NoEcho, RampLight, "8-30 LIGHT"),
-            new Band(0.30f, RampModerate, "30-50 MOD"),
-            new Band(0.50f, RampHeavy, "50-68 HEAVY"),
-            new Band(0.68f, RampIntense, "68-85 INTENSE"),
-            new Band(0.85f, RampExtreme, "85-100% EXTREME"),
+            new Band(RadarImage.NoEcho, RampLight, "LIGHT 8-30"),
+            new Band(0.30f, RampModerate, "MOD 30-50"),
+            new Band(0.50f, RampHeavy, "HEAVY 50-68"),
+            new Band(0.68f, RampIntense, "INTENSE 68-85"),
+            new Band(0.85f, RampExtreme, "EXTREME 85+"),
         };
 
-        private static readonly string[] ColumnKeys = { "KIND", "TOP", "BASE", "RAD", "VECTOR M/S", "WARN", "RNG / BRG" };
-        private static readonly float[] ColumnWidths = { 78f, 54f, 54f, 48f, 66f, 52f, 74f };
+        private static readonly string[] ColumnKeys = { "KIND", "TOP", "WARN", "VECTOR", "RNG / BRG" };
 
-        private const string MarkerLegend =
-            "FRONT ▲ COLD ◗ WARM ▲◗ OCD △ DRY · AIRFIELD AND WAYPOINT PIPS · DOT IS YOU";
+        /// <summary>The map is the armed pick's target, so it carries the help a control would.</summary>
+        private const string MapTooltip =
+            "The scope is north-up, centred on the map. Arm PICK, then click it to set a reference point.";
+
+        /// <summary>Wide enough for "21.6 NM / 40 KM"; a 90px box ellipsised the unit away.</summary>
+        private const float RingLabelWidth = 132f;
+
+        /// <summary>
+        /// What the picture's own marks are, read on the ref line when nothing is picked: the
+        /// front kind is already named in words on the map and in the wind section, so this only
+        /// spells the two marks that have no word of their own.
+        /// </summary>
+        private const string MarkerHint = "DOTS = CELLS · RING = YOU";
 
         private readonly WeatherSettings settings;
         private readonly StringBuilder text = new StringBuilder(96);
         private readonly RadarImage radarImage = new RadarImage();
         private readonly StormCell[] forecastCells = new StormCell[StormField.MaxCells];
+        private readonly StormCell[] tableCells = new StormCell[MaxTableRows];
         private readonly StormCell[] oneCell = new StormCell[1];
 
         private readonly Image[] cells = new Image[StormField.MaxCells];
-        private readonly Image[] rails = new Image[StormField.MaxCells];
-        private readonly TMP_Text[] table = new TMP_Text[StormField.MaxCells * Columns];
+        private readonly Image[] rails = new Image[MaxTableRows];
+        private readonly TMP_Text[] table = new TMP_Text[MaxTableRows * Columns];
         private readonly Image[] airfields = new Image[MaxAirfields];
         private readonly Image[] waypoints = new Image[MaxWaypoints];
         private readonly Image[] ringImages = new Image[RingFractions.Length];
         private readonly TMP_Text[] ringLabels = new TMP_Text[RingFractions.Length];
-        private readonly TMP_Text[] glyphs = new TMP_Text[MaxFrontGlyphs];
-        private readonly AvButton[] layerButtons = new AvButton[LayerFlags.Length];
+        private readonly Image[] glyphs = new Image[MaxFrontGlyphs];
 
         private RectTransform mapRoot;
         private Rect mapArea;
@@ -169,22 +183,19 @@ namespace BoscaliSummer.Features.Weather.Presentation
         private RawImage echoImage;
         private Image frontLine;
         private Image frontArrow;
-        private Image windArrow;
         private Image ownship;
         private Image trackLine;
         private Image selection;
         private TMP_Text frontEta;
-        private TMP_Text windValue;
-        private TMP_Text tempValue;
-        private TMP_Text stabilityValue;
-        private TMP_Text ownValue;
         private TMP_Text refValue;
         private TMP_Text headerNote;
-        private TMP_Text sectionNote;
         private TMP_Text noteLine;
         private AvButton zoomButton;
         private AvButton forecastButton;
         private AvButton pickButton;
+        private AvButton mapButton;
+        private Image pickRail;
+        private AvTooltipTarget mapHover;
         private Sprite ringSprite;
         private Sprite dotSprite;
         private Sprite arrowSprite;
@@ -192,16 +203,14 @@ namespace BoscaliSummer.Features.Weather.Presentation
         private Texture2D texture;
         private Color32[] pixels;
 
-        private int layers = LayerDefault;
+        private bool mapLayer = true;
         private int rangeIndex = DefaultRangeIndex;
         private int forecastIndex;
         private int paintedStormMode = -1;
         private int paintedFrontKey = int.MinValue;
         private int paintedViewKey = int.MinValue;
-        private int paintedCount;
 
         private WeatherSnapshot lastSnapshot = WeatherSnapshot.Unavailable;
-        private WeatherFront paintedFront = WeatherFront.None;
         private float lastPlayerX;
         private float lastPlayerZ;
         private float nextPaintAt;
@@ -229,15 +238,15 @@ namespace BoscaliSummer.Features.Weather.Presentation
         private float echoUntil;
 
         private string shownHeader;
-        private string shownSection;
         private string shownNote;
+        private string shownRef;
 
         private int seed;
         private Mission seedMission;
         private string seedMapName;
         private bool seedValid;
 
-        public WeatherRadarPage(RectTransform parent, float x, float y, float width, WeatherSettings settings)
+        public WeatherRadarPage(WeatherSettings settings)
         {
             this.settings = settings;
             rangeIndex = InitialRangeIndex(settings);
@@ -247,41 +256,46 @@ namespace BoscaliSummer.Features.Weather.Presentation
 
         // ---- Build -----------------------------------------------------------------------
 
-        /// <summary>Draws the whole page inside <paramref name="width"/> and returns the bottom y.</summary>
-        public float Build(RectTransform parent, float x, float y, float width)
+        /// <summary>
+        /// Draws the whole section inside <paramref name="width"/>, starting at
+        /// <paramref name="y"/> with the map <paramref name="mapHeight"/> tall. The page owns the
+        /// section header and hands in its note label; the section writes the scan line into it.
+        /// Returns the bottom y so the page can carry on with its grid.
+        /// </summary>
+        public float Build(RectTransform parent, TMP_Text header, float x, float y, float width, float mapHeight)
         {
             if (parent == null) return y;
+            headerNote = header;
 
-            AvStyled.Label(parent, new Rect(x, y, width * 0.5f, 14f), "WEATHER RADAR", "section-title");
-            headerNote = AvStyled.Label(parent, new Rect(x + width * 0.5f, y, width * 0.5f, 14f), "",
-                "section-title-note", align: TextAlignmentOptions.MidlineRight);
-            y -= HeaderHeight;
-
-            ownValue = AvStyled.Label(parent, new Rect(x, y, width, ReadoutHeight), "", "row-sub");
-            y -= ReadoutHeight;
-            refValue = AvStyled.Label(parent, new Rect(x, y, width, ReadoutHeight), "", "row-sub");
-            y -= ReadoutHeight;
-
-            BuildMap(parent, x, y, width);
+            BuildMap(parent, x, y, width, mapHeight);
             y -= mapArea.height + MapGap;
 
             BuildLegend(parent, x, y, width);
-            y -= LegendHeight + MapGap;
+            y -= RampHeight + MapGap;
 
             BuildControls(parent, x, y, width);
-            y -= ControlHeight * 2f + ControlGap + MapGap;
+            y -= ControlHeight + MapGap;
+
+            // The line takes the section's full width and its readings are bounded, so overflow
+            // rather than ellipsis: a clipped reference reading is worse than a long one.
+            refValue = AvStyled.Label(parent, new Rect(x, y, width, RefHeight), "", "row-sub");
+            refValue.enableWordWrapping = false;
+            refValue.overflowMode = TextOverflowModes.Overflow;
+            y -= RefHeight;
 
             BuildTable(parent, x, y, width);
-            y -= SectionHeight + TableHeaderHeight + StormField.MaxCells * RowPitch + NoteHeight;
+            y -= TableHeaderHeight + MaxTableRows * RowPitch + NoteHeight;
 
             paintedViewKey = int.MinValue;
             return y;
         }
 
-        private void BuildMap(RectTransform parent, float x, float y, float width)
+        private void BuildMap(RectTransform parent, float x, float y, float width, float height)
         {
-            float height = Mathf.Clamp(width * MapHeightRatio, MinMapHeight, MaxMapHeight);
-            mapArea = new Rect(x, y - height, width, height);
+            // AvKit.Place writes the rect's y as the *top* edge (pivot 0,1), which is the one
+            // convention every rect on the page uses. A bottom-edge rect here placed the whole
+            // map one map-height low, over the legend and the cell table.
+            mapArea = new Rect(x, y, width, height);
 
             ringSprite = CreateRingSprite();
             dotSprite = CreateDotSprite();
@@ -296,7 +310,12 @@ namespace BoscaliSummer.Features.Weather.Presentation
 
             // A dark bed under everything: the map raster is clipped to its own extent, so the
             // corners of a zoomed-out window read as empty water rather than as the panel behind.
-            AvKit.Panel(mapRoot, new Rect(0f, 0f, mapArea.width, mapArea.height), AvTheme.Ground);
+            // It is also the section's one pointer surface, so the map itself can publish hover
+            // help even though the click it takes is the armed picker's, not a button's.
+            Image bed = AvKit.Panel(mapRoot, new Rect(0f, 0f, mapArea.width, mapArea.height), AvTheme.Ground);
+            bed.raycastTarget = true;
+            mapHover = bed.gameObject.AddComponent<AvTooltipTarget>();
+            mapHover.Initialise(MapTooltip);
 
             var mapObject = new GameObject("RadarTerrain", typeof(RectTransform), typeof(Image));
             var mapRect = (RectTransform)mapObject.transform;
@@ -314,12 +333,14 @@ namespace BoscaliSummer.Features.Weather.Presentation
             echoRect.offsetMax = Vector2.zero;
             echoImage = echoObject.GetComponent<RawImage>();
             echoImage.raycastTarget = false;
-            echoImage.color = Color.white;
+            // A RawImage with no texture is an opaque white quad. Stay invisible until the
+            // first paint hands it a texture, or the section flashes white over the legend.
+            echoImage.color = Color.clear;
 
             for (int i = 0; i < ringImages.Length; i++)
             {
                 ringImages[i] = Marker(mapRoot, ringSprite, AvTheme.Hairline);
-                ringLabels[i] = AvStyled.Label(mapRoot, new Rect(0f, 0f, 90f, 11f), "", "section-title-note",
+                ringLabels[i] = AvStyled.Label(mapRoot, new Rect(0f, 0f, RingLabelWidth, 11f), "", "section-title-note",
                     align: TextAlignmentOptions.Center);
             }
 
@@ -329,39 +350,30 @@ namespace BoscaliSummer.Features.Weather.Presentation
 
             frontLine = Bar(mapRoot, AvTheme.RailDanger);
             frontArrow = Marker(mapRoot, arrowSprite, AvTheme.Accent);
-            windArrow = Marker(mapRoot, arrowSprite, AvTheme.RailInfo);
-            for (int i = 0; i < glyphs.Length; i++)
-            {
-                glyphs[i] = AvStyled.Label(mapRoot, new Rect(0f, 0f, FrontGlyphWidth, 12f), "", "row-sub",
-                    align: TextAlignmentOptions.Center);
-            }
+            for (int i = 0; i < glyphs.Length; i++) glyphs[i] = Marker(mapRoot, arrowSprite, AvTheme.RailDanger);
 
             trackLine = Bar(mapRoot, AvTheme.Accent);
             ownship = Marker(mapRoot, dotSprite, AvTheme.Accent);
             selection = Marker(mapRoot, ringSprite, AvTheme.RailInfo);
             frontEta = AvStyled.Label(mapRoot, new Rect(0f, 0f, FrontLabelWidth, 12f), "", "row-sub",
                 align: TextAlignmentOptions.Center);
+            // The boundary's ETA rides over the echo band, so it is the one map label read at
+            // full ink rather than the dim note weight.
+            frontEta.color = AvTheme.TextPrimary;
 
+            // The raster runs under this tag; a bed keeps it readable over bright terrain.
+            AvKit.Panel(mapRoot, new Rect(3f, 11f, 74f, 13f), AvTheme.Ground);
             AvStyled.Label(mapRoot, new Rect(5f, 12f, 70f, 11f), "SYNTHETIC", "section-title-note");
-            windValue = AvStyled.Label(mapRoot, new Rect(mapArea.width - 150f, 12f, 144f, 12f), "", "row-value");
-            tempValue = AvStyled.Label(mapRoot, new Rect(5f, -(mapArea.height - 4f), mapArea.width - 12f, 11f),
-                "", "row-sub");
-            stabilityValue = AvStyled.Label(mapRoot, new Rect(5f, -(mapArea.height - 14f), mapArea.width - 12f, 11f),
-                "", "row-sub");
 
             HideAirfields(0);
             HideWaypoints(0);
             for (int i = 0; i < cells.Length; i++) SetActive(cells[i], false);
             SetActive(frontLine, false);
             SetActive(frontArrow, false);
-            SetActive(windArrow, false);
             SetActive(ownship, false);
             SetActive(trackLine, false);
             SetActive(selection, false);
             SetActive(frontEta, false);
-            SetActive(windValue, false);
-            SetActive(tempValue, false);
-            SetActive(stabilityValue, false);
 
             AvKit.Outline(parent, mapArea, AvTheme.Hairline);
             AvKit.CornerTicks(parent, mapArea, AvTheme.Hairline);
@@ -373,82 +385,91 @@ namespace BoscaliSummer.Features.Weather.Presentation
             for (int i = 0; i < Bands.Length; i++)
             {
                 float cellX = x + i * cell;
+                // Swatch over label, both on the cell's left edge and the cell's width, so the
+                // colour and the dBZ range read as one entry and cannot drift apart.
                 AvKit.Panel(parent, new Rect(cellX, y, Mathf.Max(1f, cell - 3f), 7f), Bands[i].Colour);
-                AvStyled.Label(parent, new Rect(cellX, y - 7f, cell, 11f), Bands[i].Label, "section-title-note");
+                TMP_Text label = AvStyled.Label(
+                    parent, new Rect(cellX, y - 7f, cell, 11f), Bands[i].Label, "section-title-note");
+                // The sheet's tracking pushes "INTENSE 68-85" past its cell at the game's own
+                // (wider) MFD font; the legend drops the tracking rather than the range.
+                label.characterSpacing = 0f;
             }
         }
 
         private void BuildControls(RectTransform parent, float x, float y, float width)
         {
-            float toggleWidth = (width - ControlGap * (LayerFlags.Length - 1)) / LayerFlags.Length;
-            for (int i = 0; i < LayerFlags.Length; i++)
-            {
-                int flag = LayerFlags[i];
-                layerButtons[i] = AvStyled.Button(
-                    parent, new Rect(x + i * (toggleWidth + ControlGap), y, toggleWidth, ControlHeight),
-                    LayerLabels[i], "btn", () => ToggleLayer(flag), AvButtonStyle.Toggle);
-                layerButtons[i].WithTooltip(LayerTooltip(i));
-            }
-
-            float buttonY = y - ControlHeight - ControlGap;
-            float buttonWidth = (width - ControlGap * 2f) / 3f;
-            zoomButton = AvStyled.Button(parent, new Rect(x, buttonY, buttonWidth, ControlHeight), "", "btn", CycleRange)
+            float buttonWidth = (width - ControlGap * 3f) / 4f;
+            mapButton = AvStyled.Button(
+                parent, new Rect(x, y, buttonWidth, ControlHeight), MapLabel(), "btn", ToggleMap, AvButtonStyle.Toggle)
+                .WithTooltip("Draw the mission map under the picture: coastline, terrain and airfields. " +
+                             "The echoes are always painted.");
+            zoomButton = AvStyled.Button(
+                parent, new Rect(x + buttonWidth + ControlGap, y, buttonWidth, ControlHeight), "", "btn", CycleRange)
                 .WithTooltip("Cycle the window: the half-height of the picture in kilometres. " +
                              "Weather beyond the map edge still paints.");
             forecastButton = AvStyled.Button(
-                parent, new Rect(x + buttonWidth + ControlGap, buttonY, buttonWidth, ControlHeight), "", "btn", CycleForecast)
+                parent, new Rect(x + (buttonWidth + ControlGap) * 2f, y, buttonWidth, ControlHeight), "", "btn",
+                CycleForecast)
                 .WithTooltip("Deterministic forecast: the same pure schedule sampled at +30 and +60 minutes. " +
                              "Nothing is simulated, nothing is synced.");
             pickButton = AvStyled.Button(
-                parent, new Rect(x + (buttonWidth + ControlGap) * 2f, buttonY, buttonWidth, ControlHeight), "", "btn", TogglePick)
-                .WithTooltip("Arm a map click for a reference point: bearing and range from you, on the status panel strip.");
+                parent, new Rect(x + (buttonWidth + ControlGap) * 3f, y, buttonWidth, ControlHeight), "", "btn",
+                TogglePick)
+                .WithTooltip("Arm a map click for a reference point: bearing and range from you, read under the map.");
+
+            // Armed is a state, not a colour: the button prints ARMED and this rail repeats it,
+            // so the caution tint is never the only thing carrying the mode.
+            pickRail = AvKit.Rule(parent,
+                new Rect(x + (buttonWidth + ControlGap) * 3f, y - ControlHeight + 1f, buttonWidth, 3f),
+                AvTheme.RailInert);
             SetPickLabel(false);
         }
 
         private void BuildTable(RectTransform parent, float x, float y, float width)
         {
-            AvStyled.Label(parent, new Rect(x, y, width * 0.5f, 14f), "CELLS", "section-title");
-            sectionNote = AvStyled.Label(parent, new Rect(x + width * 0.5f, y, width * 0.5f, 14f), "",
-                "section-title-note", align: TextAlignmentOptions.MidlineRight);
-            y -= SectionHeight;
-
-            float columnX = x + RowInset;
+            // The shared column edges; the last column takes whatever the table has left, so a
+            // range/bearing reading is never ellipsised while the row sits empty.
+            float[] edges = TableColumnEdges;
+            float columnX = x + TableInset;
             for (int i = 0; i < Columns; i++)
             {
-                AvStyled.Label(parent, new Rect(columnX, y, ColumnWidths[i], TableHeaderHeight), ColumnKeys[i],
-                    "section-title-note");
-                columnX += ColumnWidths[i];
+                float right = i + 1 < edges.Length ? x + TableInset + edges[i + 1] : x + width;
+                AvStyled.Label(parent, new Rect(columnX, y, right - columnX, TableHeaderHeight), ColumnKeys[i],
+                    "section-title-note", align: ColumnAlign(i));
+                columnX = right;
             }
             y -= TableHeaderHeight;
 
-            for (int i = 0; i < StormField.MaxCells; i++)
+            for (int i = 0; i < MaxTableRows; i++)
             {
                 float rowY = y - i * RowPitch;
-                rails[i] = AvStyled.Rail(parent, new Rect(x, rowY, RailWidth, RowHeight), "locked");
-                columnX = x + RowInset;
+                rails[i] = AvStyled.Rail(parent, new Rect(x, rowY, TableInset - 5f, RowPitch - 1f), "locked");
+                columnX = x + TableInset;
                 for (int c = 0; c < Columns; c++)
                 {
-                    table[i * Columns + c] = AvStyled.Label(
-                        parent, new Rect(columnX, rowY, ColumnWidths[c], RowHeight), "", "row-sub");
-                    columnX += ColumnWidths[c];
+                    float right = c + 1 < edges.Length ? x + TableInset + edges[c + 1] : x + width;
+                    // The kind is a name, the other four columns are readings: the same dim/bold
+                    // pair the forecast rows use, so a column reads the same in either table.
+                    // Column widths are chosen to fit their own readings (the last takes the
+                    // remainder), so overflow is safe where ellipsis could cut a warning away.
+                    TMP_Text label = AvStyled.Label(
+                        parent, new Rect(columnX, rowY, right - columnX, RowPitch - 1f), "",
+                        c == ColumnKind ? "kv-key" : "kv-value");
+                    label.enableWordWrapping = false;
+                    label.overflowMode = TextOverflowModes.Overflow;
+                    table[i * Columns + c] = label;
+                    columnX = right;
                 }
                 HideRow(i);
             }
-            y -= StormField.MaxCells * RowPitch;
+            y -= MaxTableRows * RowPitch;
 
-            noteLine = AvStyled.Label(parent, new Rect(x, y + 2f, width, NoteHeight), "", "section-title-note");
+            noteLine = AvStyled.Label(parent, new Rect(x, y, width, NoteHeight), "", "section-title-note");
         }
 
-        private static string LayerTooltip(int index)
-        {
-            switch (index)
-            {
-                case 1: return "Paint the model's reflectivity field over the map. Every echo is derived, not received.";
-                case 2: return "Wind and gust at your aircraft, from the atmosphere model.";
-                case 3: return "Temperature, dewpoint and stability from the atmosphere model.";
-                default: return "Draw the mission map under the picture: coastline, terrain and airfields.";
-            }
-        }
+        /// <summary>The kind column is a name read left; every numeric column reads right.</summary>
+        private static TextAlignmentOptions ColumnAlign(int column) =>
+            column == ColumnKind ? TextAlignmentOptions.MidlineLeft : TextAlignmentOptions.MidlineRight;
 
         // ---- Refresh ---------------------------------------------------------------------
 
@@ -463,7 +484,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
             if (armed && Time.unscaledTime - armedAt > PickTimeout) Disarm();
             ConsumePick();
             BindOwnship();
-            BindReadouts(snapshot, manager);
+            BindRef(manager);
 
             int viewKey = ViewKey();
             if (Time.unscaledTime < nextPaintAt &&
@@ -480,7 +501,8 @@ namespace BoscaliSummer.Features.Weather.Presentation
 
         /// <summary>
         /// Rebuild the picture at the painted instant, then move every marker that belongs to it.
-        /// The table is bound here too: it describes the picture, so the two cannot disagree.
+        /// The scan line, the cell table and the note all read the one <c>count</c> this pass
+        /// produced, so they cannot disagree about how many echoes exist.
         /// </summary>
         private void Paint(WeatherSnapshot snapshot, WeatherManager manager, int viewKey)
         {
@@ -506,8 +528,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
                 source = forecastCells;
             }
 
-            paintedFront = front;
-            paintedCount = count;
+            lastSnapshot = snapshot;
             paintedStormMode = (int)snapshot.StormMode;
             paintedFrontKey = FrontKey(snapshot.Front);
             paintedViewKey = viewKey;
@@ -525,7 +546,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
             BindWaypoints();
             BindTable(source, count);
             BindHeader(count);
-            BindLayers();
+            BindControls();
         }
 
         /// <summary>
@@ -606,7 +627,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
             return count > StormField.MaxCells ? StormField.MaxCells : count;
         }
 
-        private int ViewKey() => ((layers * 4 + rangeIndex) * 3) + forecastIndex;
+        private int ViewKey() => ((mapLayer ? 1 : 0) * 4 + rangeIndex) * 3 + forecastIndex;
 
         private static int FrontKey(in WeatherFront front)
         {
@@ -618,8 +639,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
 
         private void BindMapSprite(Vector2 span)
         {
-            bool visible = (layers & LayerMap) != 0;
-            if (!visible)
+            if (!mapLayer)
             {
                 SetActive(mapImage, false);
                 return;
@@ -653,7 +673,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
         private void BindAirfields()
         {
             int placed = 0;
-            if ((layers & LayerMap) != 0 && mapImage.sprite != null)
+            if (mapLayer && mapImage.sprite != null)
             {
                 var lookup = FactionRegistry.airbaseLookup;
                 if (lookup != null)
@@ -690,7 +710,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
         private void BindWaypoints()
         {
             int placed = 0;
-            if ((layers & LayerMap) != 0)
+            if (mapLayer)
             {
                 DynamicMap map = SceneSingleton<DynamicMap>.i;
                 if (map != null && map.waypoints != null)
@@ -754,6 +774,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
                 hideFlags = HideFlags.HideAndDontSave,
             };
             echoImage.texture = texture;
+            echoImage.color = Color.white;
         }
 
         private void RampIntoTexture()
@@ -806,7 +827,8 @@ namespace BoscaliSummer.Features.Weather.Presentation
                 text.Append(Kilometres(distance));
                 text.Append(" KM");
                 ringLabels[i].SetText(text);
-                PlaceRotated(ringLabels[i].rectTransform, ClampIntoArea(MapPoint(0f, distance, out _), 6f), 90f, 11f, 0f);
+                PlaceRotated(ringLabels[i].rectTransform, ClampIntoArea(MapPoint(0f, distance, out _), 6f),
+                    RingLabelWidth, 11f, 0f);
             }
         }
 
@@ -842,7 +864,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
 
         private void BindFront(WeatherFront front)
         {
-            bool visible = front.Present && (layers & LayerEcho) != 0;
+            bool visible = front.Present;
             SetActive(frontLine, false);
             SetActive(frontArrow, visible);
             SetActive(frontEta, visible);
@@ -865,9 +887,12 @@ namespace BoscaliSummer.Features.Weather.Presentation
 
             for (int i = 0; i < glyphs.Length; i++)
             {
-                glyphs[i].SetText(FrontKinds.Glyph(front.Kind));
+                // Tokens, not text: the cockpit font has no triangles, so the boundary's own
+                // symbol is the same drawn arrow the travel marker uses, pointing the way the
+                // front moves — which is what the meteorology means anyway.
                 PlaceRotated(glyphs[i].rectTransform,
-                    Vector2.Lerp(start, end, (i + 1f) / (glyphs.Length + 1f)), FrontGlyphWidth, 12f, 0f);
+                    Vector2.Lerp(start, end, (i + 1f) / (glyphs.Length + 1f)), FrontTokenPixels, FrontTokenPixels,
+                    PixelAngle(front.NormalX, front.NormalZ));
                 SetActive(glyphs[i], true);
             }
 
@@ -887,6 +912,38 @@ namespace BoscaliSummer.Features.Weather.Presentation
             SetActive(frontEta, true);
         }
 
+        /// <summary>
+        /// The nearest <see cref="MaxTableRows"/> cells, nearest first. A bounded selection sort
+        /// over the manager's buffer: no allocation and no LINQ in a path that runs on every
+        /// repaint.
+        /// </summary>
+        private int SelectNearest(StormCell[] source, int count, float x, float z)
+        {
+            int rows = Mathf.Min(MaxTableRows, count);
+            uint taken = 0u;
+            for (int row = 0; row < rows; row++)
+            {
+                int best = -1;
+                float bestDistance = float.MaxValue;
+                for (int i = 0; i < count; i++)
+                {
+                    if ((taken & (1u << i)) != 0u) continue;
+                    float distance = source[i].DistanceTo(x, z);
+                    if (distance >= bestDistance) continue;
+                    bestDistance = distance;
+                    best = i;
+                }
+                if (best < 0)
+                {
+                    rows = row;
+                    break;
+                }
+                taken |= 1u << best;
+                tableCells[row] = source[best];
+            }
+            return rows;
+        }
+
         private void BindTable(StormCell[] source, int count)
         {
             if (!lastSnapshot.Available)
@@ -903,42 +960,64 @@ namespace BoscaliSummer.Features.Weather.Presentation
             }
 
             SetActive(noteLine, true);
-            SetNote(noteLine, ref shownNote, MarkerLegend);
-            for (int i = 0; i < StormField.MaxCells; i++)
+            int rows = SelectNearest(source, count, lastPlayerX, lastPlayerZ);
+            for (int i = 0; i < MaxTableRows; i++)
             {
-                if (i >= count)
+                if (i >= rows)
                 {
                     HideRow(i);
                     continue;
                 }
 
-                StormCell cell = source[i];
+                StormCell cell = tableCells[i];
                 StormWarning tier = cell.WarningAt(lastPlayerX, lastPlayerZ);
                 float speed = (float)Math.Sqrt(cell.VelocityX * cell.VelocityX + cell.VelocityZ * cell.VelocityZ);
+                float heading = StormReadout.BearingDegrees(0f, 0f, cell.VelocityX, cell.VelocityZ);
 
-                SetCell(i, 0, StormReadout.Kind(cell.Kind));
+                SetCell(i, 0, TableKind(cell.Kind));
                 SetCell(i, 1, WeatherReadout.Meters(cell.TopHeight));
-                SetCell(i, 2, WeatherReadout.Meters(cell.CloudBase));
-                SetCell(i, 3, WeatherReadout.Meters(cell.Radius));
-                SetCell(i, 4, StormReadout.BearingTo(0f, 0f, cell.VelocityX, cell.VelocityZ) + " " +
-                              speed.ToString("0", CultureInfo.InvariantCulture));
-                SetCell(i, 5, StormReadout.WarningShortCode(tier));
-                SetCell(i, 6, StormReadout.BearingTo(lastPlayerX, lastPlayerZ, cell.X, cell.Z) + " " +
-                              StormReadout.NauticalMiles(cell.DistanceTo(lastPlayerX, lastPlayerZ)));
+                SetCell(i, 2, StormReadout.WarningShortCode(tier));
+                // The warning word is the state; the tint and the rail only repeat it.
+                table[i * Columns + ColumnWarn].color = WarningInk(tier);
+                text.Length = 0;
+                text.Append(WeatherReadout.Compass16(heading));
+                text.Append(' ');
+                text.Append(speed.ToString("0", CultureInfo.InvariantCulture));
+                SetCell(i, 3, text.ToString());
+                text.Length = 0;
+                text.Append(StormReadout.BearingTo(lastPlayerX, lastPlayerZ, cell.X, cell.Z));
+                text.Append(' ');
+                text.Append(StormReadout.NauticalMiles(cell.DistanceTo(lastPlayerX, lastPlayerZ)));
+                SetCell(i, 4, text.ToString());
 
                 rails[i].color = RailColor(tier);
                 SetActive(rails[i], true);
             }
 
             text.Length = 0;
+            text.Append(rows);
+            text.Append(rows == 1 ? " CELL" : " CELLS");
+            if (count > rows)
+            {
+                text.Append(" SHOWN OF ");
+                text.Append(count);
+            }
+            text.Append(" · ");
             text.Append(ForecastLabels[forecastIndex]);
             text.Append(" · ");
             text.Append(StormModes.Label(lastSnapshot.StormMode));
-            text.Append(" · ");
-            text.Append(count);
-            text.Append(count == 1 ? " CELL" : " CELLS");
-            text.Append(forecastView ? " · FORECAST" : "");
-            SetNote(sectionNote, ref shownSection, text.ToString());
+            SetNote(noteLine, ref shownNote, text.ToString());
+        }
+
+        /// <summary>"TOWERING CUMULUS" does not fit the kind column; the table's own short form does.</summary>
+        private static string TableKind(StormKind kind)
+        {
+            switch (kind)
+            {
+                case StormKind.Supercell: return "SUPERCELL";
+                case StormKind.ToweringCumulus: return "TOW CUMULUS";
+                default: return "CUMULUS";
+            }
         }
 
         private void SetCell(int row, int column, string value)
@@ -956,7 +1035,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
 
         private void ShowNote(string message)
         {
-            for (int i = 0; i < StormField.MaxCells; i++) HideRow(i);
+            for (int i = 0; i < MaxTableRows; i++) HideRow(i);
             SetActive(noteLine, true);
             SetNote(noteLine, ref shownNote, message);
         }
@@ -971,13 +1050,56 @@ namespace BoscaliSummer.Features.Weather.Presentation
         private void BindHeader(int count)
         {
             text.Length = 0;
-            text.Append(ForecastLabels[forecastIndex]);
+            if (forecastIndex > 0)
+            {
+                text.Append("FORECAST ");
+                text.Append(ForecastLabels[forecastIndex]);
+            }
+            else
+            {
+                text.Append("SCAN NOW");
+            }
             text.Append(" · ");
             text.Append(Kilometres(rangeMetres));
             text.Append(" KM · ");
             text.Append(count);
             text.Append(count == 1 ? " ECHO" : " ECHOES");
             SetNote(headerNote, ref shownHeader, text.ToString());
+        }
+
+        /// <summary>The picker's persistent readout, under the map where it cannot cover it.</summary>
+        private void BindRef(WeatherManager manager)
+        {
+            if (refValue == null) return;
+
+            text.Length = 0;
+            if (hasSelection)
+            {
+                text.Append("REF · ");
+                text.Append(StormReadout.BearingTo(lastPlayerX, lastPlayerZ, selectionX, selectionZ));
+                text.Append(" · ");
+                text.Append(StormReadout.NauticalMiles(Distance(lastPlayerX, lastPlayerZ, selectionX, selectionZ)));
+            }
+            else if (armed)
+            {
+                text.Append("REF · CLICK THE MAP TO SET A REFERENCE");
+            }
+            else if (Time.unscaledTime < echoUntil && !string.IsNullOrEmpty(echoText))
+            {
+                text.Append(echoText);
+            }
+            else if (!lastSnapshot.Available)
+            {
+                text.Append("REF · NO READOUT — NO WEATHER SCHEDULE ON THIS MISSION");
+            }
+            else
+            {
+                text.Append("REF · PICK THE MAP · ");
+                text.Append(MarkerHint);
+                text.Append(" · ");
+                text.Append(manager.HostAuthority ? "HOST" : "CLIENT");
+            }
+            SetNote(refValue, ref shownRef, text.ToString());
         }
 
         // ---- Markers ---------------------------------------------------------------------
@@ -1048,126 +1170,6 @@ namespace BoscaliSummer.Features.Weather.Presentation
             return true;
         }
 
-        // ---- Readouts --------------------------------------------------------------------
-
-        private void BindReadouts(WeatherSnapshot snapshot, WeatherManager manager)
-        {
-            bool available = snapshot.Available;
-            StormCell[] source = forecastView ? forecastCells : snapshot.Cells;
-            int count = forecastView ? paintedCount : ClampCount(snapshot);
-
-            StormWarning tier = StormWarning.None;
-            float local = 0f;
-            if (available && source != null && count > 0)
-            {
-                tier = StormField.WarningAt(source, count, lastPlayerX, lastPlayerZ, out _);
-                local = RadarImage.ReflectivityAt(source, count, in paintedFront, lastPlayerX, lastPlayerZ);
-            }
-
-            text.Length = 0;
-            text.Append("YOU · WARN ");
-            text.Append(available ? StormReadout.Warning(tier) : WeatherReadout.Unknown);
-            text.Append(" · ECHO ");
-            text.Append(available ? WeatherReadout.Percent01(local) : WeatherReadout.Unknown);
-            if (hasTrack)
-            {
-                float speed = (float)Math.Sqrt(trackVx * trackVx + trackVz * trackVz);
-                text.Append(" · GS ");
-                text.Append(speed.ToString("0", CultureInfo.InvariantCulture));
-                text.Append(" · TRK ");
-                text.Append(WeatherReadout.Compass16((float)(Math.Atan2(trackVx, trackVz) * 180.0 / Math.PI)));
-            }
-            if (!available) text.Append(" · NO SCHEDULE");
-            ownValue.SetText(text);
-
-            text.Length = 0;
-            if (hasSelection)
-            {
-                text.Append("REF · ");
-                text.Append(StormReadout.BearingTo(lastPlayerX, lastPlayerZ, selectionX, selectionZ));
-                text.Append(" · ");
-                text.Append(StormReadout.NauticalMiles(Distance(lastPlayerX, lastPlayerZ, selectionX, selectionZ)));
-                text.Append(" · ");
-                text.Append(manager.HostAuthority ? "HOST" : "CLIENT");
-            }
-            else if (armed)
-            {
-                text.Append("REF · CLICK THE MAP TO SET A REFERENCE");
-            }
-            else if (Time.unscaledTime < echoUntil && !string.IsNullOrEmpty(echoText))
-            {
-                text.Append(echoText);
-            }
-            else if (!available)
-            {
-                text.Append("REF · NO READOUT — NO WEATHER SCHEDULE ON THIS MISSION");
-            }
-            else
-            {
-                text.Append("REF · PICK A POINT ON THE MAP · ");
-                text.Append(manager.HostAuthority ? "HOST" : "CLIENT");
-            }
-            refValue.SetText(text);
-
-            BindAtmosphere(snapshot);
-        }
-
-        /// <summary>
-        /// WIND and TEMP are read-outs of the atmosphere model, not interpolated rasters: the model
-        /// carries no field to paint, and a fabricated gradient would be a lie on a chart. Both stay
-        /// dark until the physics that fills <c>Atmosphere</c> is present.
-        /// </summary>
-        private void BindAtmosphere(WeatherSnapshot snapshot)
-        {
-            Atmosphere atmosphere = snapshot.Atmosphere;
-            bool available = atmosphere.Available;
-
-            bool wind = available && (layers & LayerWind) != 0;
-            SetActive(windArrow, wind);
-            SetActive(windValue, wind);
-            if (wind)
-            {
-                text.Length = 0;
-                text.Append(WeatherReadout.Wind(snapshot.LocalWindSpeed, snapshot.LocalWindHeading));
-                text.Append(" · GUST ");
-                text.Append(atmosphere.GustSpeed.ToString("0", CultureInfo.InvariantCulture));
-                windValue.SetText(text);
-
-                float emphasis = Mathf.Clamp01(atmosphere.GustSpeed / 25f);
-                Vector2 point = new Vector2(mapArea.width - WindArrowMargin, -WindArrowMargin * 0.5f);
-                PlaceRotated(windArrow.rectTransform, point, WindArrowPixels * Mathf.Lerp(0.6f, 1f, emphasis),
-                    WindArrowPixels * 0.5f, PixelAngle(snapshot.LocalWindX, snapshot.LocalWindZ));
-            }
-
-            bool temp = available && (layers & LayerTemp) != 0;
-            SetActive(tempValue, temp);
-            SetActive(stabilityValue, temp);
-            if (!temp) return;
-
-            text.Length = 0;
-            text.Append("T ");
-            text.Append(WeatherReadout.Decimal(atmosphere.TemperatureC, 1));
-            text.Append("°C · TD ");
-            text.Append(WeatherReadout.Decimal(atmosphere.DewpointC, 1));
-            text.Append(" · LCL ");
-            text.Append(WeatherReadout.Meters(atmosphere.Lcl));
-            text.Append(" · ");
-            text.Append(AirMasses.Name(atmosphere.AirMass));
-            tempValue.SetText(text);
-
-            text.Length = 0;
-            text.Append(Atmospheres.Label(atmosphere.Category));
-            text.Append(" · CAPE ");
-            text.Append(WeatherReadout.Percent01(atmosphere.Cape));
-            text.Append(" · CIN ");
-            text.Append(WeatherReadout.Percent01(atmosphere.Cin));
-            text.Append(" · SHEAR ");
-            text.Append(WeatherReadout.Percent01(atmosphere.Shear));
-            text.Append(" · ");
-            text.Append(Atmospheres.Label(atmosphere.Precipitation));
-            stabilityValue.SetText(text);
-        }
-
         private static float Distance(float fromX, float fromZ, float toX, float toZ)
         {
             float dx = toX - fromX;
@@ -1180,16 +1182,21 @@ namespace BoscaliSummer.Features.Weather.Presentation
 
         // ---- Controls --------------------------------------------------------------------
 
-        private void ToggleLayer(int flag)
+        private string MapLabel() => mapLayer ? "MAP ON" : "MAP OFF";
+
+        private void ToggleMap()
         {
-            if ((flag == LayerWind || flag == LayerTemp) && !lastSnapshot.Atmosphere.Available) return;
-            layers ^= flag;
+            mapLayer = !mapLayer;
+            if (mapButton != null) mapButton.SetText(MapLabel());
         }
 
         private void CycleRange()
         {
             rangeIndex = (rangeIndex + 1) % RangeMetres.Length;
             rangeMetres = RangeMetres[rangeIndex];
+            // The settings write is deliberate and client-local: RadarRangeKm is documented as
+            // the scope's own initial range, cycled on the scope itself, so a pilot keeps their
+            // chosen zoom across missions. It changes nothing in the world.
             if (settings != null) settings.RadarRangeKm.Value = (int)(rangeMetres / 1000f);
             if (zoomButton != null) zoomButton.SetText(ZoomLabel());
         }
@@ -1203,7 +1210,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
         }
 
         private string TimeLabel() => Label("TIME ", ForecastLabels[forecastIndex],
-            forecastIndex > 0 ? " FORECAST" : "");
+            forecastIndex > 0 ? " F" : "");
 
         private string Label(string first, string middle, string last)
         {
@@ -1253,15 +1260,18 @@ namespace BoscaliSummer.Features.Weather.Presentation
         private void SetPickLabel(bool on)
         {
             if (pickButton == null) return;
-            pickButton.SetText(on ? "PICK ARMED" : "PICK");
+            pickButton.SetText(on ? "ARMED" : "PICK");
+            // Latched, not painted: the sheet's latched button is a translucent wash, and the
+            // word plus the rail carry the state without a solid warning plate.
             pickButton.SetLatched(on);
+            if (pickRail != null) pickRail.color = on ? AvTheme.RailCaution : AvTheme.RailInert;
         }
 
         /// <summary>
         /// The armed click, read through the shared picker like every other map gesture: a press
-        /// released without travel, inside this page's own map, resolves to a world point. It is
-        /// consumed only while this page owns the picker, so it cannot double as a wing order or a
-        /// support call-in.
+        /// released without travel, inside this section's own map, resolves to a world point. It is
+        /// consumed only while this section owns the picker, so it cannot double as a wing order or
+        /// a support call-in.
         /// </summary>
         private void ConsumePick()
         {
@@ -1320,24 +1330,13 @@ namespace BoscaliSummer.Features.Weather.Presentation
             return best;
         }
 
-        private void BindLayers()
+        private void BindControls()
         {
-            if (!lastSnapshot.Atmosphere.Available) layers &= ~(LayerWind | LayerTemp);
-
-            for (int i = 0; i < layerButtons.Length; i++)
+            if (mapButton != null)
             {
-                AvButton button = layerButtons[i];
-                if (button == null) continue;
-
-                bool gated = LayerFlags[i] == LayerWind || LayerFlags[i] == LayerTemp;
-                bool supported = !gated || lastSnapshot.Atmosphere.Available;
-                button.SetEnabled(supported);
-                button.SetLatched((layers & LayerFlags[i]) != 0);
-                button.WithTooltip(supported
-                    ? LayerTooltip(i)
-                    : "The atmosphere model is not in this build yet: this layer has nothing honest to draw.");
+                mapButton.SetText(MapLabel());
+                mapButton.SetLatched(mapLayer);
             }
-
             if (zoomButton != null) zoomButton.SetText(ZoomLabel());
             if (forecastButton != null) forecastButton.SetText(TimeLabel());
         }
@@ -1424,6 +1423,18 @@ namespace BoscaliSummer.Features.Weather.Presentation
 
         private static Color RailColor(StormWarning warning) =>
             AvStyleHost.Resolve(AvStyleHost.Style(StormReadout.RailClass(warning)).Background, AvTheme.RailInert);
+
+        /// <summary>The warning word's ink, on the same literal ladder as its rail.</summary>
+        private static Color WarningInk(StormWarning warning)
+        {
+            switch (warning)
+            {
+                case StormWarning.Warning: return AvTheme.RailDanger;
+                case StormWarning.Watch: return AvTheme.RailCaution;
+                case StormWarning.Advisory: return AvTheme.RailInfo;
+                default: return AvTheme.Dim;
+            }
+        }
 
         private static Image Marker(Transform parent, Sprite sprite, Color color)
         {
@@ -1554,9 +1565,9 @@ namespace BoscaliSummer.Features.Weather.Presentation
         // ---- Teardown --------------------------------------------------------------------
 
         /// <summary>
-        /// Called before the page's GameObjects are destroyed, and again on every scene reset.
+        /// Called before the section's GameObjects are destroyed, and again on every scene reset.
         /// Safe to call twice: the picker, the texture, its pixels and the generated sprites are the
-        /// only things this page owns, and the panel owns the GameObjects.
+        /// only things this section owns, and the panel owns the GameObjects.
         /// </summary>
         public void Reset()
         {
@@ -1574,36 +1585,31 @@ namespace BoscaliSummer.Features.Weather.Presentation
                 ringLabels[i] = null;
             }
             for (int i = 0; i < glyphs.Length; i++) glyphs[i] = null;
-            for (int i = 0; i < layerButtons.Length; i++) layerButtons[i] = null;
 
             mapRoot = null;
             mapImage = null;
             echoImage = null;
             frontLine = null;
             frontArrow = null;
-            windArrow = null;
             ownship = null;
             trackLine = null;
             selection = null;
             frontEta = null;
-            windValue = null;
-            tempValue = null;
-            stabilityValue = null;
-            ownValue = null;
             refValue = null;
             headerNote = null;
-            sectionNote = null;
             noteLine = null;
             zoomButton = null;
             forecastButton = null;
             pickButton = null;
+            mapButton = null;
+            pickRail = null;
+            mapHover = null;
 
             ReleaseSprite(ref ringSprite);
             ReleaseSprite(ref dotSprite);
             ReleaseSprite(ref arrowSprite);
 
             lastSnapshot = WeatherSnapshot.Unavailable;
-            paintedFront = WeatherFront.None;
             painted = false;
             hasTrack = false;
             hasSelection = false;
@@ -1614,10 +1620,9 @@ namespace BoscaliSummer.Features.Weather.Presentation
             paintedStormMode = -1;
             paintedFrontKey = int.MinValue;
             paintedViewKey = int.MinValue;
-            paintedCount = 0;
             shownHeader = null;
-            shownSection = null;
             shownNote = null;
+            shownRef = null;
             nextPaintAt = 0f;
         }
 
@@ -1626,6 +1631,11 @@ namespace BoscaliSummer.Features.Weather.Presentation
             if (texture != null) UnityEngine.Object.Destroy(texture);
             texture = null;
             pixels = null;
+            if (echoImage != null)
+            {
+                echoImage.texture = null;
+                echoImage.color = Color.clear;
+            }
         }
 
         private static void ReleaseSprite(ref Sprite sprite)

@@ -48,10 +48,8 @@ namespace BoscaliSummer.Tests
             Features.TheaterOps.LogisticsTests.Run();
             Features.Events.EventSelectorTests.Run();
             Features.Campaign.MissionInstallPlanTests.Run();
-            Features.Weather.WeatherTests.Run();
-            Features.Weather.ThermoTests.Run();
-            Features.Weather.RainDropsTests.Run();
-            Features.Weather.RadarTests.Run();
+            Features.Weather.WeatherFieldTests.Run();
+            Features.Weather.DropSimTests.Run();
             TrenchTests.Run();
             ModuleBoundaryTests.Run();
 

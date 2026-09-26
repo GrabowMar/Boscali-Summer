@@ -3,81 +3,110 @@ using UnityEngine;
 
 namespace BoscaliSummer.Features.Weather.Configuration
 {
+    internal enum RainQuality
+    {
+        Low = 0,
+        Medium = 1,
+        High = 2,
+    }
+
     /// <summary>
-    /// The schedule itself is deliberately not configurable: every peer derives the same sky
-    /// from the mission identity, so a host-side knob would desync an unmodified client's
-    /// forecast. Only the local presentation and the debug tools are settings.
+    /// Weather settings. Two kinds live here and the difference matters:
+    /// <list type="bullet">
+    /// <item>presentation (rain look, canopy, sound, HUD, radar, forecast) is client-local — every
+    /// player tunes their own screen;</item>
+    /// <item>the sky's rules (dynamic weather, starting regime, the three gameplay switches) are
+    /// host-authoritative: the host's values travel in the weather key, a client's are ignored in
+    /// multiplayer.</item>
+    /// </list>
+    /// The schedule itself is not configurable: every peer must derive the same sky.
     /// </summary>
     internal sealed class WeatherSettings
     {
-        public readonly ConfigEntry<bool> Enabled;
-        public readonly ConfigEntry<int> ForecastSteps;
-        public readonly ConfigEntry<float> ForecastStepMinutes;
-        public readonly ConfigEntry<bool> DebugControls;
-        public readonly ConfigEntry<KeyCode> DebugKey;
-        public readonly ConfigEntry<bool> DebugKeyRequiresCtrl;
-        public readonly ConfigEntry<bool> RainEffects;
-        public readonly ConfigEntry<bool> RainOnCanopy;
-        public readonly ConfigEntry<bool> RainAudio;
-        public readonly ConfigEntry<float> RainEffectDensity;
-        public readonly ConfigEntry<bool> Hud;
-        public readonly ConfigEntry<int> RadarRangeKm;
+        public ConfigEntry<bool> Enabled { get; }
+
+        // Presentation (client-local).
+        public ConfigEntry<RainQuality> Quality { get; }
+        public ConfigEntry<bool> RainOnCanopy { get; }
+        public ConfigEntry<bool> RainAudio { get; }
+        public ConfigEntry<float> RainVolume { get; }
+        public ConfigEntry<bool> Hud { get; }
+        public ConfigEntry<float> RadarRangeKm { get; }
+        public ConfigEntry<int> ForecastSteps { get; }
+        public ConfigEntry<int> ForecastStepMinutes { get; }
+
+        // Host rules (travel in the key).
+        public ConfigEntry<bool> DynamicWeather { get; }
+        public ConfigEntry<int> StartRegime { get; }
+        public ConfigEntry<bool> StormTurbulence { get; }
+        public ConfigEntry<bool> SensorEffects { get; }
+        public ConfigEntry<bool> LightningHazard { get; }
+
+        // Debug.
+        public ConfigEntry<bool> DebugControls { get; }
+        public ConfigEntry<KeyCode> DebugKey { get; }
+        public ConfigEntry<bool> DebugKeyRequiresCtrl { get; }
+        public ConfigEntry<float> DebugRainPreview { get; }
 
         public WeatherSettings(ConfigFile config)
         {
-            Enabled = config.Bind("Weather", "Enabled", true,
-                "Drive the mission's sky from the dynamic weather schedule and add the WEA " +
-                "environment panel. The host owns the weather for everyone; a client with this " +
-                "off still flies through the host's weather, it just hides the panel and the " +
-                "debug tools.");
+            const string section = "Weather";
+            Enabled = config.Bind(section, "Enabled", true,
+                "Dynamic weather: a deterministic sky of regimes, fronts and storm cells that " +
+                "places vanilla's clouds, rain, lightning and wind, the WEA screen with its radar, " +
+                "and the weather HUD line. The host decides the sky; every peer derives it.");
 
-            ForecastSteps = config.Bind("Weather", "ForecastSteps", 8,
-                new ConfigDescription(
-                    "How many forecast entries the WEA panel lists. Client-local; it changes " +
-                    "nothing in the world.",
+            Quality = config.Bind(section, "RainQuality", RainQuality.High,
+                "How many rain drops are drawn around the aircraft and on the canopy. " +
+                "Client-local; lower it if heavy rain costs frames.");
+            RainOnCanopy = config.Bind(section, "RainOnCanopy", true,
+                "Rain drops that bead, run and blow off the canopy glass. Client-local.");
+            RainAudio = config.Bind(section, "RainAudio", true,
+                "Rain, canopy-impact and thunder sound. Client-local.");
+            RainVolume = config.Bind(section, "RainVolume", 1f,
+                new ConfigDescription("Scales the rain and thunder mix. Client-local.",
+                    new AcceptableValueRange<float>(0f, 2f)));
+            Hud = config.Bind(section, "Hud", true,
+                "One weather line on the HUD board: nearby cells, heavy rain, turbulence, " +
+                "lightning, hail. Client-local.");
+            RadarRangeKm = config.Bind(section, "RadarRangeKm", 40f,
+                new ConfigDescription("Half-height of the WEA radar picture, in km. Client-local.",
+                    new AcceptableValueRange<float>(10f, 200f)));
+            ForecastSteps = config.Bind(section, "ForecastSteps", 8,
+                new ConfigDescription("Forecast rows on the WEA screen. Client-local.",
                     new AcceptableValueRange<int>(2, 12)));
+            ForecastStepMinutes = config.Bind(section, "ForecastStepMinutes", 5,
+                new ConfigDescription("Minutes between forecast rows. Client-local.",
+                    new AcceptableValueRange<int>(1, 30)));
 
-            ForecastStepMinutes = config.Bind("Weather", "ForecastStepMinutes", 3f,
+            DynamicWeather = config.Bind(section, "DynamicWeather", true,
+                "The sky moves through regimes on its own. Off holds the starting regime. " +
+                "Host-authoritative.");
+            StartRegime = config.Bind(section, "StartRegime", 0,
                 new ConfigDescription(
-                    "Minutes between forecast entries. Client-local.",
-                    new AcceptableValueRange<float>(0.5f, 30f)));
+                    "Sky a mission opens with: 0 = automatic (seeded, usually flyable), 1 CLEAR, " +
+                    "2 FAIR, 3 SHOWERS, 4 OVERCAST, 5 FRONTAL, 6 STORMS, 7 SEVERE. Host-authoritative.",
+                    new AcceptableValueRange<int>(0, 7)));
+            StormTurbulence = config.Bind(section, "StormTurbulence", true,
+                "Updrafts, downdrafts, gust fronts and turbulence near storm cells push aircraft " +
+                "around. Host-authoritative.");
+            SensorEffects = config.Bind(section, "SensorEffects", true,
+                "Rain and haze limit how far units can spot each other visually, and heavy rain " +
+                "makes infrared seekers easier to decoy. Host-authoritative.");
+            LightningHazard = config.Bind(section, "LightningHazard", true,
+                "A rare lightning strike on an aircraft deep in a mature storm core: a flash and " +
+                "a brief instrument flicker. Never damages. Host-authoritative.");
 
-            DebugControls = config.Bind("Weather", "DebugControls", false,
-                "Show the weather debug overlay. Only the host can change the weather; on a " +
-                "client the overlay is read-only.");
-
-            DebugKey = config.Bind("Weather", "DebugKey", KeyCode.F11,
-                "Key that shows and hides the weather debug overlay.");
-
-            DebugKeyRequiresCtrl = config.Bind("Weather", "DebugKeyRequiresCtrl", true,
-                "Require Ctrl to be held with the debug key, so the overlay cannot be opened " +
-                "by accident during a flight.");
-
-            RainEffects = config.Bind("Weather", "RainEffects", true,
-                "Render falling rain when you are inside a storm cell.");
-
-            RainOnCanopy = config.Bind("Weather", "RainOnCanopy", true,
-                "Draw rain streaking across the cockpit canopy.");
-
-            RainAudio = config.Bind("Weather", "RainAudio", true,
-                "Synthesised rain and storm wind audio. The game has no rain sounds; these are " +
-                "generated in memory, never loaded from disk.");
-
-            RainEffectDensity = config.Bind("Weather", "RainEffectDensity", 1f,
+            DebugControls = config.Bind(section, "DebugControls", false,
+                "Show the weather debug window hotkey (host only can change the sky).");
+            DebugKey = config.Bind(section, "DebugKey", KeyCode.F11, "Weather debug window key.");
+            DebugKeyRequiresCtrl = config.Bind(section, "DebugKeyRequiresCtrl", true,
+                "The debug key needs Ctrl held.");
+            DebugRainPreview = config.Bind(section, "DebugRainPreview", -1f,
                 new ConfigDescription(
-                    "Scales rain particle counts and canopy overlay strength. 0 turns the " +
-                    "visuals off.",
-                    new AcceptableValueRange<float>(0f, 1f)));
-
-            Hud = config.Bind("Weather", "Hud", true,
-                "Show the cockpit weather HUD: warning tier, storm range and bearing, wind and " +
-                "cloud base.");
-
-            RadarRangeKm = config.Bind("Weather", "RadarRangeKm", 40,
-                new ConfigDescription(
-                    "Initial range of the WEA radar scope in kilometres. Cycled on the scope " +
-                    "itself.",
-                    new AcceptableValueRange<int>(10, 200)));
+                    "Debug: when 0 or more, draw this rain rate (mm/h) at the camera regardless of the " +
+                    "sky. Presentation only and client-local; -1 is off.",
+                    new AcceptableValueRange<float>(-1f, 150f)));
         }
     }
 }

@@ -99,6 +99,14 @@
     </EmbeddedResource>
   </ItemGroup>
 
+  <ItemGroup Label="Weather shader bundle">
+    <!-- Built by tools/build-weather-shaders.ps1 from tools/WeatherShaders (Unity 2022.3.62,
+         URP 14.0.12). Committed so an ordinary build never needs Unity. -->
+    <EmbeddedResource Include="modules\Weather\Assets\boscali_weather.bundle">
+      <LogicalName>BoscaliSummer.Weather.boscali_weather.bundle</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
   <ItemGroup Label="Radio station assets">
     <EmbeddedResource Include="modules\Radio\Assets\*.png">
       <LogicalName>BoscaliSummer.RadioAssets.%(Filename)%(Extension)</LogicalName>
