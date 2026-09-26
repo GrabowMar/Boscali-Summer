@@ -512,10 +512,16 @@ namespace BoscaliSummer.Features.HighCommand.Runtime
             return rows;
         }
 
+        /// <summary>
+        /// The ring never expires entries, so a quiet faction's oldest line can outlive the
+        /// wire's age bound; clamping keeps that line "15+ minutes old" instead of making every
+        /// remote client reject the whole snapshot.
+        /// </summary>
         private static float LogAge(float time, float now)
         {
             float age = now - time;
-            return Finite(age) && age > 0f ? age : 0f;
+            if (!Finite(age) || age <= 0f) return 0f;
+            return age < CommandSnapshotRules.MaximumLogAge ? age : CommandSnapshotRules.MaximumLogAge;
         }
 
         internal void Apply(HighCommandSnapshot snapshot)

@@ -1095,7 +1095,7 @@ static void ProbeSquadSerialization(Assembly plugin, Assembly mirage)
     Reject(Encode(snapshotType, Snapshot(1, Wing(tier: 6))));
     Reject(Encode(snapshotType, Snapshot(1, Wing(alive: 4, members: 3))));
     Reject(Encode(snapshotType, Snapshot(1, Wing(members: 5))));
-    Reject(Encode(snapshotType, Snapshot(1, Wing(returns: 3))));
+    Reject(Encode(snapshotType, Snapshot(1, Wing(returns: 4))));
     foreach (var invalid in new[] { ("Bonus", 21), ("Origin", -1), ("ActiveIndex", 8), ("HuntId", -1) })
     {
         object snapshot = Snapshot(1, Wing()); Set(snapshot, invalid.Item1, invalid.Item2);

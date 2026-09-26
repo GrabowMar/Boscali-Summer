@@ -148,7 +148,7 @@ namespace BoscaliSummer.Features.Squad.Networking
                 {
                     string symbol = ReadText(r), wing = ReadText(r), ace = ReadText(r); int tier = ReadInt(r, 5);
                     string skill = ReadText(r), state = ReadText(r); int alive = ReadInt(r, 4), members = ReadInt(r, 4);
-                    string target = ReadText(r); int returns = ReadInt(r, 2);
+                    string target = ReadText(r); int returns = ReadInt(r, 3);
                     if (alive > members) throw new InvalidOperationException("Invalid Squad strength.");
                     int abilities = ReadInt(r, 15);
                     v.Wings[i] = new EnemyWingView(symbol, wing, ace, tier, skill, state, alive, members, target, returns, abilities);
