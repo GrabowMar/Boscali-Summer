@@ -10,6 +10,7 @@
     <Compile Include="..\..\modules\PlayerSpawnPriority\SpawnPriorityPolicy.cs" Link="Features\PlayerSpawnPriority\SpawnPriorityPolicy.cs" />
     <Compile Include="..\..\modules\Support\Domain\OpsDomain.cs" Link="Features\Support\OpsDomain.cs" />
     <Compile Include="..\..\modules\Support\Domain\TheaterGrid.cs" Link="Features\Support\TheaterGrid.cs" />
+    <Compile Include="..\..\modules\Support\Domain\TeamRules.cs" Link="Features\Support\TeamRules.cs" />
     <Compile Include="..\..\modules\Support\Domain\SpecOps\FieldCatalog.cs" Link="Features\Support\FieldCatalog.cs" />
     <Compile Include="..\..\modules\Support\Domain\SpecOps\SpecOpsDetachment.cs" Link="Features\Support\SpecOpsDetachment.cs" />
     <Compile Include="..\..\modules\Support\Domain\SpecOps\FieldWords.cs" Link="Features\Support\FieldWords.cs" />
@@ -49,6 +50,7 @@
     <Compile Include="..\..\modules\Campaign\Domain\MissionInstallPlan.cs" Link="Features\Campaign\MissionInstallPlan.cs" />
     <Compile Include="..\..\modules\DynamicOperations\Domain\OperationTempo.cs" Link="Features\DynamicOperations\OperationTempo.cs" />
     <Compile Include="..\..\modules\DynamicOperations\Domain\OperationFailure.cs" Link="Features\DynamicOperations\OperationFailure.cs" />
+    <Compile Include="..\..\modules\DynamicOperations\Domain\ContractShares.cs" Link="Features\DynamicOperations\ContractShares.cs" />
     <Compile Include="..\..\modules\DynamicOperations\Domain\OperationMarkerCopy.cs" Link="Features\DynamicOperations\OperationMarkerCopy.cs" />
     <Compile Include="..\..\modules\DynamicOperations\Domain\ContractMarkerMath.cs" Link="Features\DynamicOperations\ContractMarkerMath.cs" />
     <Compile Include="..\..\modules\DynamicOperations\Domain\ContractMarkerLook.cs" Link="Features\DynamicOperations\ContractMarkerLook.cs" />

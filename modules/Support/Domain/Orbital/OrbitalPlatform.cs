@@ -163,8 +163,10 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
         private readonly ModuleKind[] cells = new ModuleKind[CellCount];
         private readonly double[] offlineUntil = new double[CellCount];
         private readonly float[] paid = new float[CellCount];
+        private readonly ulong[] payer = new ulong[CellCount];
         private readonly double[] readyAt = new double[PlatformAbilities.Count];
         private float pendingPaid;
+        private ulong pendingPayer;
         private byte noticeSerial;
 
         public byte Regime { get; private set; } = OrbitRegimes.Standard;
@@ -202,6 +204,11 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
             InGrid(cell) ? ((char)('A' + Row(cell))).ToString() + (Column(cell) + 1) : "--";
 
         public ModuleKind Cell(int cell) => InGrid(cell) ? cells[cell] : ModuleKind.None;
+
+        /// <summary>Host only: who paid for the module docked in a cell (0 when unknown) and how much.</summary>
+        public ulong Payer(int cell) => InGrid(cell) ? payer[cell] : 0UL;
+
+        public float Paid(int cell) => InGrid(cell) ? paid[cell] : 0f;
 
         public float TotalPaid
         {
@@ -377,9 +384,10 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
         /// <summary>
         /// Launch the core (onto <paramref name="regime"/>, charged and in insertion hold) or a
         /// module that docks at <paramref name="cell"/> after <paramref name="dockSeconds"/>.
+        /// <paramref name="buyer"/> is remembered with the price, so a refund can go back to them.
         /// </summary>
         public PlacementFailure TryLaunch(ModuleKind kind, int cell, byte regime, int seed, double now, float price,
-                                          double insertionSeconds, double dockSeconds)
+                                          double insertionSeconds, double dockSeconds, ulong buyer = 0)
         {
             PlacementFailure failure = CheckPlacement(kind, cell, regime, now);
             if (failure != PlacementFailure.None) return failure;
@@ -389,6 +397,7 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
                 Clear();
                 cells[CoreCell] = ModuleKind.Core;
                 paid[CoreCell] = Math.Max(0f, price);
+                payer[CoreCell] = buyer;
                 Regime = regime;
                 Seed = StationKeeping.Route(StationKeeping.Centre, StationKeeping.Centre);
                 LaunchTime = now;
@@ -402,6 +411,7 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
             PendingCell = cell;
             DockAt = now + Math.Max(0.0, dockSeconds);
             pendingPaid = Math.Max(0f, price);
+            pendingPayer = buyer;
             return PlacementFailure.None;
         }
 
@@ -414,6 +424,7 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
             PendingCell = CoreCell;
             DockAt = now + Math.Max(0.0, dockSeconds);
             pendingPaid = 0f;
+            pendingPayer = 0;
             return PlacementFailure.None;
         }
 
@@ -440,6 +451,7 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
             refundBase = paid[cell];
             cells[cell] = ModuleKind.None;
             paid[cell] = 0f;
+            payer[cell] = 0;
             offlineUntil[cell] = 0.0;
             ClampResources();
             return PlacementFailure.None;
@@ -496,6 +508,7 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
             {
                 cells[cell] = kind;
                 paid[cell] = pendingPaid;
+                payer[cell] = pendingPayer;
                 offlineUntil[cell] = 0.0;
                 ModuleInfo info = PlatformModules.Info(kind);
                 Fuel += info.Fuel;
@@ -503,6 +516,7 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
                 ClampResources();
             }
             pendingPaid = 0f;
+            pendingPayer = 0;
             Note(PlatformNotice.Docked, cell);
         }
 
@@ -796,6 +810,7 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
             Array.Clear(cells, 0, cells.Length);
             Array.Clear(offlineUntil, 0, offlineUntil.Length);
             Array.Clear(paid, 0, paid.Length);
+            Array.Clear(payer, 0, payer.Length);
             Array.Clear(readyAt, 0, readyAt.Length);
             Regime = OrbitRegimes.Standard;
             Seed = 0;
@@ -809,6 +824,7 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
             PendingCell = 0;
             DockAt = 0.0;
             pendingPaid = 0f;
+            pendingPayer = 0;
             Notice = PlatformNotice.None;
             NoticeCell = 0;
             NextDebris = 0.0;
