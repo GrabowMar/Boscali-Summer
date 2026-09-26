@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using BoscaliSummer.Features.Command.Domain;
 using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Lifecycle;
 using UnityEngine;
@@ -96,9 +97,14 @@ namespace BoscaliSummer.Features.Command.Runtime
                 snapshot = HashObservation(snapshot, shared.X, shared.Z, hostile, field.Grid.CellSize);
             }
 
-            float elapsed = field.Evaluated ? Math.Min(0.5f, Math.Max(0f, now - field.Updated)) : 0f;
-            field.Updated = now;
-            if (field.Evaluated && snapshot == field.Snapshot) return field.Grid;
+            // COREControl elapsed policy: a 5 s cap at host cadence, and an unchanged
+            // snapshot preserves its interval instead of consuming it, re-evaluating at
+            // 1 Hz while the field is still converging.
+            bool snapshotChanged = !field.Evaluated || snapshot != field.Snapshot;
+            if (!ControlFieldCore.TryElapsed(now, field.Updated, field.Evaluated, snapshotChanged,
+                out float elapsed, out float consumed))
+                return field.Grid;
+            field.Updated = consumed;
 
             field.Snapshot = snapshot;
             field.Grid.Clear();

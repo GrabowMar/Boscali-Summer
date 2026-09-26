@@ -5,8 +5,9 @@ namespace BoscaliSummer.Tests.Features.TheaterOps
 {
     internal static class DirectorDecisionTests
     {
-        private const float Overhead = 2f;
-        private const float Wave = 3f;
+        // The shipped TheaterOps defaults (OperationOverheadCost / OperationWaveBudget).
+        private const float Overhead = 25f;
+        private const float Wave = 45f;
 
         public static void Run()
         {
@@ -23,10 +24,11 @@ namespace BoscaliSummer.Tests.Features.TheaterOps
             GroundUnderAttackIsNotAttackedTwice();
             EffortNamesTheLabelNotTheKey();
             OutcomeWordsMatchTheBoard();
+            TheDefaultChestOpensAnOffensive();
         }
 
         private static DirectorAssessment Assess(
-            List<ObjectiveRead> objectives, InfluenceState influence, float funds = 50f,
+            List<ObjectiveRead> objectives, InfluenceState influence, float funds = 500f,
             int active = 0, string committed = null, int held = 9,
             string launched = null, string effort = null, List<string> running = null) =>
             new DirectorAssessment(
@@ -220,6 +222,14 @@ namespace BoscaliSummer.Tests.Features.TheaterOps
             TestAssert.That(DirectorWords.OutcomeWord(BoscaliSummer.Framework.Contracts.TheaterOperationOutcome.CommitmentSpent) == "COMMITMENT SPENT", "spent waves read spent");
             TestAssert.That(DirectorWords.OutcomeWord(BoscaliSummer.Framework.Contracts.TheaterOperationOutcome.Cancelled) == "CANCELLED", "a stand-down reads cancelled");
             TestAssert.That(DirectorWords.OutcomeWord(BoscaliSummer.Framework.Contracts.TheaterOperationOutcome.None) == "CONCLUDED", "an unmarked end reads concluded");
+        }
+
+        private static void TheDefaultChestOpensAnOffensive()
+        {
+            var objectives = new List<ObjectiveRead> { new ObjectiveRead("alpha", "Alpha", 1, 0) };
+            DirectorOrders orders = DirectorDecision.Review(Assess(objectives, new InfluenceState()));
+            TestAssert.That(orders.OpenOffensive && orders.TargetKey == "alpha",
+                "a fresh staff with the default chest opens an offensive at the real 25 + 45 cost");
         }
 
         private static string Join(DirectorOrders orders) => string.Join(" ", orders.Log);

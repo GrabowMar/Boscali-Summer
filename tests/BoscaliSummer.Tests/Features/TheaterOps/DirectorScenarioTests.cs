@@ -11,8 +11,8 @@ namespace BoscaliSummer.Tests.Features.TheaterOps
     /// </summary>
     internal static class DirectorScenarioTests
     {
-        private const float Overhead = 2f;
-        private const float Wave = 3f;
+        private const float Overhead = 25f;
+        private const float Wave = 45f;
 
         private sealed class Plan
         {
@@ -28,7 +28,7 @@ namespace BoscaliSummer.Tests.Features.TheaterOps
             string committed = null;
             int held = 0;
             string effort = null;
-            float funds = 50f;
+            float funds = 500f;
 
             for (int review = 1; review <= 10; review++)
             {
@@ -44,7 +44,7 @@ namespace BoscaliSummer.Tests.Features.TheaterOps
                 if (review == 6) influence.SetHold(true, "VIPER-1");
                 if (review == 7) influence.SetHold(false, "VIPER-1");
                 if (review == 8 && plans.Count > 0) plans.RemoveAt(0); // oldest push reported
-                if (review >= 8) funds = 4f;
+                if (review >= 8) funds = 40f;
 
                 var running = new List<string>();
                 string launchedTarget = null;

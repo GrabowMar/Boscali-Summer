@@ -19,6 +19,7 @@ namespace BoscaliSummer.Tests
         {
             FrameworkTests.Run();
             Features.Session.SessionTests.Run();
+            WingApiVersionTests.Run();
             ImpactScorchTests.Run();
             FireScorchTests.Run();
             CookoffTests.Run();
@@ -64,6 +65,11 @@ namespace BoscaliSummer.Tests
             Features.DynamicOperations.ContractMarkerTests.Run();
             Features.DynamicOperations.ContractSharesTests.Run();
             Features.HighCommand.HighCommandTests.Run();
+            Features.Intel.AirDefenceTests.Run();
+            Features.Intel.KnownHostileTests.Run();
+            Features.Intel.ObservationTests.Run();
+            Features.Intel.RingSetTests.Run();
+            Features.Intel.AttackProfileTests.Run();
             Features.TheaterOps.PriorityTests.Run();
             Features.TheaterOps.LogisticsTests.Run();
             Features.TheaterOps.OffensiveTests.Run();
@@ -72,6 +78,7 @@ namespace BoscaliSummer.Tests
             Features.TheaterOps.DirectorDecisionTests.Run();
             Features.TheaterOps.DirectorScenarioTests.Run();
             Features.TheaterOps.StaffLogTests.Run();
+            Features.TheaterOps.AreaResistanceTests.Run();
             Features.Events.EventSelectorTests.Run();
             Features.Events.EventDirectorTests.Run();
             Features.Comms.CommsTests.Run();

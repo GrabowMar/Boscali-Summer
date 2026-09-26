@@ -7,7 +7,7 @@ namespace BoscaliSummer.Framework.Contracts
     /// STR console's CMD page.
     ///
     /// <para>The priority names one of the faction's active objectives. Friendly AI
-    /// reinforcements are delivered nearer it and units with no better order head for it;
+    /// reinforcements are delivered nearer it and battle-group vehicles advance on it;
     /// it never selects, moves or retasks a unit itself. The view is scoped to the local
     /// faction. The theater director owns it outright — players lean on axes through the
     /// operations view, never by setting the effort — and a remote client reads the

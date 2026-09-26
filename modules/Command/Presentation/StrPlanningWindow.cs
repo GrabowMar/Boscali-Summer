@@ -815,7 +815,7 @@ namespace BoscaliSummer.Features.Command.Presentation
                 ? "GUARD  /  " + operations.Direction.DefenseLabel.ToUpperInvariant() +
                   "  ·  the director holds the main effort on this line"
                 : !string.IsNullOrEmpty(effort)
-                ? "LIVE  /  " + effort.ToUpperInvariant() + "  ·  unassigned ground and mission AI air follow the effort"
+                ? "LIVE  /  " + effort.ToUpperInvariant() + "  ·  battle-group vehicles follow the effort"
                 : "WAITING  /  the director has not committed a main effort";
             TheaterPriorityOption objective = SelectedObjective();
             string strikeLabel = null;

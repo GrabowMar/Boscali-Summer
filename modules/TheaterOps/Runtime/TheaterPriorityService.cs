@@ -18,9 +18,9 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
     /// <see cref="ITheaterPriorityView"/> for the STR console.
     ///
     /// <para>MissionPosition patches read this table on the host: reinforcements spawn nearer
-    /// the priority and units with no better order head for it. Depot-spawned ground AI can
-    /// receive staged destinations from <see cref="GroundFrontService"/> through that same
-    /// query. Clients receive the table read-only over <see cref="Networking.TheaterOpsNet"/>.</para>
+    /// the priority, and depot-spawned ground AI enrolled in a battle group receives staged
+    /// destinations from <see cref="GroundFrontService"/> through the advance query; nothing
+    /// else is steered. Clients receive the table read-only over <see cref="Networking.TheaterOpsNet"/>.</para>
     /// </summary>
     internal sealed class TheaterPriorityService : MonoBehaviour, ISceneService, ITheaterPriorityView
     {
