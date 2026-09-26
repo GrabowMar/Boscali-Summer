@@ -10,7 +10,10 @@ expanded tactical map. Every expensive system is pooled, event-driven and has a 
 - **Game:** Nuclear Option 0.34.2 (Unity 2022.3, Mono).
 - **Requires:** [BepInEx 5](https://github.com/BepInEx/BepInEx/releases) (5.4.23 or newer) and
   [Wing Command](https://github.com/GrabowMar/NuclearOption-WingCommand) 0.9.2.6 or newer.
-- **Multiplayer:** supported; the host and every client must run the same version.
+- **Multiplayer:** supported; the host and every client must run the same version. While
+  connected, a client plays on the host's gameplay settings (prices, rules, timers) and gets
+  its own back on leaving; a version, module-switch or missing-mod mismatch is reported once
+  on the HUD.
 - **Licence:** [MIT](LICENSE).
 
 > [!NOTE]
@@ -50,7 +53,7 @@ tables name its main switch; [Configuration](#configuration) explains what each 
 | Feature | Switch | What it does |
 |---|---|---|
 | **Command** | `Command.Enabled` | The `STR` theater screen (DEFCON, air picture, sortie board, sector control, chain of command and the operations board) and the expanded tactical map: rebuilt `MAP`, `TGT`, `MIS` and `FAC` pages, a bezel rail, control-field, front-line and threat-heat overlays, target-filter presets and a news ticker. Needs Progression. |
-| **Theater operations** | `TheaterOps.Enabled` | On the host, a staff director fights the host faction's ground war: it names the main effort, funds offensives from the shared faction pool in waves, and stages newly spawned ground vehicles at the front. Players steer it with standing orders (stance, hold, war chest, axes) on the `STR` CMD page. Friendly AI reinforcements and units without better orders favour the main effort. |
+| **Theater operations** | `TheaterOps.Enabled` | On the host, a staff director fights the ground war for every faction with players on it (`TheaterOps.DirectorFactions`), dedicated servers included: it names the main effort, funds offensives from the shared faction pool in waves, and stages newly spawned ground vehicles at the front. Players steer it with standing orders (stance, hold, war chest, axes) on the `STR` CMD page. Friendly AI reinforcements and units without better orders favour the main effort. |
 | **High command** | `HighCommand.Enabled` | Generated staffs for both factions with portraits and service records, command posts at airbases, VIP convoys between bases, survival stipends and kill bounties. Killing a commander promotes a successor at reduced cohesion. |
 | **World events** | `Events.Enabled` | The `EVN` screen and a host-run event director: one event at a time, most with a real modifier on support costs and cooldowns, and rare scripted superevents when the theater leans: some aid the side losing ground, others hit the leader or both sides. |
 | **Dynamic operations** | `DynamicOperations.Enabled` (off by default) | Experimental pool of 17 contract families (capture, defence, hunts, patrol, jamming, insertion, rescue, reconnaissance, escort and more) on the `MIS` page, with map markers, cockpit pointers and money and score rewards. |
