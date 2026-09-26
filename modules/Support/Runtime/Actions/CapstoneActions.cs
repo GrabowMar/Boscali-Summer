@@ -57,7 +57,7 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
                     }
 
                 case Capstone.Jammer:
-                    if (!context.Host.TryReserve(SupportPool.Cyber)) return SupportResult.Busy;
+                    if (!context.Host.TryReserve(context.Owner, SupportPool.Cyber)) return SupportResult.Busy;
                     context.Host.Run(JammerRoutine(context.Host, context.Player, context.Owner, target, radius));
                     return SupportResult.Accepted;
 
@@ -105,7 +105,7 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
             }
             finally
             {
-                host.Release(SupportPool.Cyber);
+                host.Release(owner, SupportPool.Cyber);
             }
         }
 

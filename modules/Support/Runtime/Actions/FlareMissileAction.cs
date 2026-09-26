@@ -38,7 +38,7 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
                     return SupportResult.OutOfRange;
             }
 
-            if (!context.Host.TryReserve(SupportPool.Strike)) return SupportResult.Busy;
+            if (!context.Host.TryReserve(context.Owner, SupportPool.Strike)) return SupportResult.Busy;
 
             float radius = context.Settings.FlareBarrageRadius.Value;
             int count = context.Settings.FlareBarrageCount.Value;
@@ -97,7 +97,7 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
             }
             finally
             {
-                host.Release(SupportPool.Strike);
+                host.Release(owner, SupportPool.Strike);
             }
         }
     }

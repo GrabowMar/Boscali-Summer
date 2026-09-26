@@ -33,8 +33,8 @@ namespace BoscaliSummer.Features.Support.Runtime
         ManualLogSource Logger { get; }
         VanillaSupportCatalog Vanilla { get; }
 
-        bool TryReserve(SupportPool pool);
-        void Release(SupportPool pool);
+        bool TryReserve(FactionHQ owner, SupportPool pool);
+        void Release(FactionHQ owner, SupportPool pool);
         void Run(IEnumerator routine);
 
         /// <summary>Number of contacts a sweep produced, echoed to the requester's reply.</summary>

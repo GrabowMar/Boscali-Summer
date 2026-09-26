@@ -42,7 +42,7 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
             OrbitalPlatform platform = context.PlatformAccess(PlatformAbility.EmpBurst, out PlatformDenial denial);
             if (platform == null) return SupportContext.Refusal(denial);
 
-            if (!context.Host.TryReserve(SupportPool.Strike)) return SupportResult.Busy;
+            if (!context.Host.TryReserve(context.Owner, SupportPool.Strike)) return SupportResult.Busy;
             platform.Consume(PlatformAbility.EmpBurst, context.Host.OrbitNow);
             context.Logger.LogInfo("[Support] EMP burst package released by " + OrbitalPlatform.Callsign + " from " +
                                    platform.Orbit.Code + " orbit.");
@@ -145,7 +145,7 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
             }
             finally
             {
-                host.Release(SupportPool.Strike);
+                host.Release(owner, SupportPool.Strike);
             }
         }
     }

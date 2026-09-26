@@ -134,7 +134,9 @@ namespace BoscaliSummer.Features.Support.Runtime
         private readonly SupportRequestLedger ledger = new SupportRequestLedger();
         private readonly SupportRequestLedger commandLedger = new SupportRequestLedger();
         private readonly SupportMapGesture mapGesture = new SupportMapGesture();
-        private readonly int[] reserved = new int[2];
+        private const int MaximumFactionLedgers = 8;
+        private readonly Dictionary<FactionHQ, TeamLedger> teamLedgers = new Dictionary<FactionHQ, TeamLedger>();
+        private readonly TeamLedger fallbackLedger = new TeamLedger();
         private readonly Dictionary<int, int> contactReplies = new Dictionary<int, int>();
 
         private SupportSettings settings;
@@ -495,7 +497,8 @@ namespace BoscaliSummer.Features.Support.Runtime
             ledger.Clear();
             commandLedger.Clear();
             contactReplies.Clear();
-            Array.Clear(reserved, 0, reserved.Length);
+            teamLedgers.Clear();
+            fallbackLedger.Clear();
             StopAllCoroutines();
             pending = false;
             localCooldownUntil = 0f;
@@ -1473,15 +1476,22 @@ namespace BoscaliSummer.Features.Support.Runtime
 
         // ---- Host services ---------------------------------------------------------------
 
-        bool ISupportHost.TryReserve(SupportPool pool)
+        /// <summary>The faction's team ledger, created on demand; ownerless work shares one fallback.</summary>
+        private TeamLedger TeamLedgerFor(FactionHQ owner)
         {
-            if (reserved[(int)pool] >= MaximumStrikeJobs) return false;
-            reserved[(int)pool]++;
-            return true;
+            if (owner == null) return fallbackLedger;
+            if (teamLedgers.TryGetValue(owner, out TeamLedger ledger)) return ledger;
+            if (teamLedgers.Count >= MaximumFactionLedgers) teamLedgers.Clear();
+            ledger = new TeamLedger();
+            teamLedgers.Add(owner, ledger);
+            return ledger;
         }
 
-        void ISupportHost.Release(SupportPool pool) =>
-            reserved[(int)pool] = Math.Max(0, reserved[(int)pool] - 1);
+        bool ISupportHost.TryReserve(FactionHQ owner, SupportPool pool) =>
+            TeamLedgerFor(owner).TryReserve((int)pool, MaximumStrikeJobs);
+
+        void ISupportHost.Release(FactionHQ owner, SupportPool pool) =>
+            TeamLedgerFor(owner).Release((int)pool);
 
         void ISupportHost.Run(IEnumerator routine) => StartCoroutine(routine);
 
