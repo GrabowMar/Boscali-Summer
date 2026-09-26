@@ -8,6 +8,7 @@ using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Features;
 using BoscaliSummer.Framework.Lifecycle;
 using BoscaliSummer.Runtime;
+using NuclearOption.Networking;
 using NuclearOption.SavedMission;
 using UnityEngine;
 
