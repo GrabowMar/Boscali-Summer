@@ -23,6 +23,16 @@ namespace BoscaliSummer.Features.Comms.Domain
         /// <summary>Most map items one snapshot carries.</summary>
         public const int SnapshotItems = 200;
 
+        /// <summary>
+        /// One snapshot per player per this many seconds. A snapshot is the one request that
+        /// makes the host send far more than it received, so it skips the token bucket (a busy
+        /// drawer must still resync after a side change) and is gated on its own instead.
+        /// </summary>
+        public const float SyncGapSeconds = 5f;
+
+        /// <summary>Highest altitude a located call may claim, in metres.</summary>
+        public const int MaxCallAltitude = 60000;
+
         private readonly CommsBoard board = new CommsBoard();
         private readonly CommsPollBook polls = new CommsPollBook();
         private readonly List<RpsChallenge> duels = new List<RpsChallenge>();
@@ -30,6 +40,9 @@ namespace BoscaliSummer.Features.Comms.Domain
         private readonly CommsScoreboard scores = new CommsScoreboard();
         private readonly TokenBucket bucket = new TokenBucket(16f, 2.5f);
         private readonly List<uint> scratchIds = new List<uint>();
+        private readonly List<CommsItem> scratchItems = new List<CommsItem>();
+        private readonly Dictionary<ulong, float> lastSync = new Dictionary<ulong, float>();
+        private readonly List<ulong> staleSync = new List<ulong>();
         private readonly List<CommsPoll> scratchPolls = new List<CommsPoll>();
         private readonly Random random;
         private uint nextId = 1;
@@ -54,6 +67,7 @@ namespace BoscaliSummer.Features.Comms.Domain
             hunts.Clear();
             scores.Clear();
             bucket.Clear();
+            lastSync.Clear();
             nextId = 1;
         }
 
@@ -62,9 +76,14 @@ namespace BoscaliSummer.Features.Comms.Domain
         public void Handle(CommsSender sender, CommsIntent intent, float now, List<CommsOutbound> output)
         {
             if (output == null) return;
+            if (intent.Op == CommsOp.Sync)
+            {
+                Sync(sender, now, output);
+                return;
+            }
             if (!bucket.TryTake(sender.Id, now, Cost(intent.Op)))
             {
-                Refuse(sender, "SLOW DOWN — TOO MANY COMMS", output);
+                Refuse(sender, "SLOW DOWN — TOO MANY COMMS", output, intent.Op == CommsOp.PollVote ? intent.Target : 0u);
                 return;
             }
 
@@ -85,7 +104,6 @@ namespace BoscaliSummer.Features.Comms.Domain
                 case CommsOp.RpsCancel: CancelDuel(sender, intent.Target, now, output); break;
                 case CommsOp.HuntStart: StartHunt(sender, name, intent, now, output); break;
                 case CommsOp.HuntGuess: Guess(sender, name, intent, now, output); break;
-                case CommsOp.Sync: Snapshot(sender, now, output); break;
                 default: Refuse(sender, "UNKNOWN COMMS REQUEST", output); break;
             }
         }
@@ -123,7 +141,37 @@ namespace BoscaliSummer.Features.Comms.Domain
             }
         }
 
-        /// <summary>Everything this viewer may see, addressed to them alone, after a reset.</summary>
+        /// <summary>A snapshot, at most once per <see cref="SyncGapSeconds"/> per player; too soon earns a quiet retry.</summary>
+        private void Sync(CommsSender sender, float now, List<CommsOutbound> output)
+        {
+            if (lastSync.TryGetValue(sender.Id, out float last) && now >= last && now - last < SyncGapSeconds)
+            {
+                output.Add(CommsOutbound.To(sender.Id, new CommsEnvelope
+                {
+                    Event = CommsEvent.Notice,
+                    Flags = CommsFlags.Self | CommsFlags.Retry,
+                }));
+                return;
+            }
+            if (lastSync.Count >= MaxSyncSenders)
+            {
+                staleSync.Clear();
+                foreach (KeyValuePair<ulong, float> pair in lastSync)
+                    if (!(now - pair.Value < SyncGapSeconds)) staleSync.Add(pair.Key);
+                for (int i = 0; i < staleSync.Count; i++) lastSync.Remove(staleSync[i]);
+                if (lastSync.Count >= MaxSyncSenders) return;
+            }
+            lastSync[sender.Id] = now;
+            Snapshot(sender, now, output);
+        }
+
+        private const int MaxSyncSenders = 256;
+
+        /// <summary>
+        /// Everything this viewer may see, addressed to them alone, after a reset. Every item,
+        /// poll and game in it is flagged as a replay: the viewer has most likely heard it
+        /// before, and a side change or reconnect must not ring every notice again.
+        /// </summary>
         public void Snapshot(CommsSender viewer, float now, List<CommsOutbound> output)
         {
             output.Add(CommsOutbound.To(viewer.Id, new CommsEnvelope { Event = CommsEvent.Reset, Flags = CommsFlags.Snapshot }));
@@ -136,18 +184,24 @@ namespace BoscaliSummer.Features.Comms.Domain
                 if (CommsBoard.Visible(items[first - 1].Channel, items[first - 1].Faction, viewer.Faction)) visible++;
             for (int i = first; i < items.Count; i++)
                 if (CommsBoard.Visible(items[i].Channel, items[i].Faction, viewer.Faction))
-                    output.Add(CommsOutbound.To(viewer.Id, ItemEnvelope(items[i], now)));
+                    Replay(viewer, ItemEnvelope(items[i], now), output);
             IReadOnlyList<CommsPoll> open = polls.Open;
             for (int i = 0; i < open.Count; i++)
                 if (CommsBoard.Visible(open[i].Channel, open[i].Faction, viewer.Faction))
-                    output.Add(CommsOutbound.To(viewer.Id, PollEnvelope(open[i], now, viewer.Id)));
+                    Replay(viewer, PollEnvelope(open[i], now, viewer.Id), output);
             for (int i = 0; i < duels.Count; i++)
                 if (CommsBoard.Visible(duels[i].Channel, duels[i].Faction, viewer.Faction))
-                    output.Add(CommsOutbound.To(viewer.Id, DuelEnvelope(duels[i], now, 0)));
+                    Replay(viewer, DuelEnvelope(duels[i], now, 0), output);
             for (int i = 0; i < hunts.Count; i++)
                 if (CommsBoard.Visible(hunts[i].Channel, hunts[i].Faction, viewer.Faction))
-                    output.Add(CommsOutbound.To(viewer.Id, HuntEnvelope(hunts[i], now)));
+                    Replay(viewer, HuntEnvelope(hunts[i], now), output);
             output.Add(CommsOutbound.To(viewer.Id, ScoresEnvelope()));
+        }
+
+        private static void Replay(CommsSender viewer, CommsEnvelope envelope, List<CommsOutbound> output)
+        {
+            envelope.Flags |= CommsFlags.Replay;
+            output.Add(CommsOutbound.To(viewer.Id, envelope));
         }
 
         // ---- Map ---------------------------------------------------------------------------
@@ -220,10 +274,30 @@ namespace BoscaliSummer.Features.Comms.Domain
 
         private void Store(CommsItem item, float now, List<CommsOutbound> output)
         {
-            scratchIds.Clear();
-            board.Add(item, true, scratchIds);
+            scratchItems.Clear();
+            board.Add(item, true, scratchItems);
             output.Add(CommsOutbound.For(item.Channel, item.Faction, ItemEnvelope(item, now)));
-            if (scratchIds.Count > 0) output.Add(CommsOutbound.Everyone(RemoveEnvelope(scratchIds)));
+            AnnounceRemoved(output);
+        }
+
+        /// <summary>
+        /// Tell whoever could see them that the items in <see cref="scratchItems"/> are gone:
+        /// one message per audience, so a TEAM mark's removal never reaches the other side.
+        /// </summary>
+        private void AnnounceRemoved(List<CommsOutbound> output)
+        {
+            while (scratchItems.Count > 0)
+            {
+                CommsItem first = scratchItems[scratchItems.Count - 1];
+                scratchIds.Clear();
+                for (int i = scratchItems.Count - 1; i >= 0; i--)
+                {
+                    if (!scratchItems[i].SameAudience(first)) continue;
+                    scratchIds.Add(scratchItems[i].Id);
+                    scratchItems.RemoveAt(i);
+                }
+                output.Add(CommsOutbound.For(first.Channel, first.Faction, RemoveEnvelope(scratchIds)));
+            }
         }
 
         private void Erase(CommsSender sender, uint id, List<CommsOutbound> output)
@@ -236,17 +310,17 @@ namespace BoscaliSummer.Features.Comms.Domain
                 return;
             }
             board.Remove(id);
-            scratchIds.Clear();
-            scratchIds.Add(id);
-            output.Add(CommsOutbound.Everyone(RemoveEnvelope(scratchIds)));
+            scratchItems.Clear();
+            scratchItems.Add(item);
+            AnnounceRemoved(output);
         }
 
         private void ClearMine(CommsSender sender, List<CommsOutbound> output)
         {
-            scratchIds.Clear();
+            scratchItems.Clear();
             ulong author = sender.Id;
-            if (board.RemoveWhere(item => item.Author == author, scratchIds) > 0)
-                output.Add(CommsOutbound.Everyone(RemoveEnvelope(scratchIds)));
+            board.RemoveWhere(item => item.Author == author, scratchItems);
+            AnnounceRemoved(output);
         }
 
         private void ClearAll(CommsSender sender, string name, List<CommsOutbound> output)
@@ -294,6 +368,8 @@ namespace BoscaliSummer.Features.Comms.Domain
             }));
 
             if (!located) return;
+            // The caller's own mark: it names the call and sits at the caller's altitude, so a
+            // cockpit marker points at the aircraft rather than at the ground beneath it.
             Store(new CommsItem
             {
                 Id = NextId(),
@@ -303,8 +379,10 @@ namespace BoscaliSummer.Features.Comms.Domain
                 Faction = sender.Faction,
                 Channel = intent.Channel,
                 Style = (byte)call.PingAtSelf,
+                Size = CommsItem.CallMark,
                 Points = (int[])intent.Points.Clone(),
-                Text = "",
+                Text = call.Code,
+                Height = Math.Min(intent.Target, (uint)MaxCallAltitude),
                 Created = now,
                 Expires = now + Rules.LifetimeOf(CommsItemKind.Ping),
             }, now, output);
@@ -348,7 +426,7 @@ namespace BoscaliSummer.Features.Comms.Domain
             CommsPoll poll = polls.Find(intent.Target);
             if (poll == null || !CommsBoard.Visible(poll.Channel, poll.Faction, sender.Faction))
             {
-                Refuse(sender, "THAT POLL HAS CLOSED", output);
+                Refuse(sender, "THAT POLL HAS CLOSED", output, intent.Target);
                 return;
             }
             if (CommsPollBook.Vote(poll, sender.Id, intent.Style))
@@ -598,6 +676,7 @@ namespace BoscaliSummer.Features.Comms.Domain
             Ttl = Math.Max(0f, item.Expires - now),
             Points = item.Points,
             Text = item.Text,
+            Values = item.IsCall && !float.IsNaN(item.Height) ? new[] { (int)item.Height } : null,
         };
 
         private static CommsEnvelope RemoveEnvelope(List<uint> ids) => new CommsEnvelope
@@ -684,8 +763,9 @@ namespace BoscaliSummer.Features.Comms.Domain
             return false;
         }
 
-        private static void Refuse(CommsSender sender, string reason, List<CommsOutbound> output) =>
-            output.Add(CommsOutbound.To(sender.Id, new CommsEnvelope { Event = CommsEvent.Notice, Text = reason }));
+        /// <summary>A refusal to the sender alone; <paramref name="about"/> names the poll or game it concerns, if any.</summary>
+        private static void Refuse(CommsSender sender, string reason, List<CommsOutbound> output, uint about = 0u) =>
+            output.Add(CommsOutbound.To(sender.Id, new CommsEnvelope { Event = CommsEvent.Notice, Text = reason, Id = about }));
 
         private static float Cost(CommsOp op)
         {

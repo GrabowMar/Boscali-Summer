@@ -34,7 +34,9 @@ namespace BoscaliSummer.Features.Comms.Presentation
         private TMP_Text[] optionCounts;
         private float optionTrackWidth;
         private int pollIndex;
+        private int pollStep;
         private uint shownPoll;
+        private readonly List<CommsPoll> orderedPolls = new List<CommsPoll>(8);
 
         private TMP_Text askNote;
         private TMP_Text templateValue;
@@ -56,7 +58,9 @@ namespace BoscaliSummer.Features.Comms.Presentation
             optionFills = null;
             optionCounts = null;
             pollIndex = 0;
+            pollStep = 0;
             shownPoll = 0;
+            orderedPolls.Clear();
             askNote = templateValue = durationValue = null;
             questionField = optionsField = null;
         }
@@ -129,9 +133,9 @@ namespace BoscaliSummer.Features.Comms.Presentation
 
             pollNote = Heading(parent, x, ref y, width, "OPEN POLL", "");
             // The pager sits right after the title so it never collides with the count on the right.
-            pollPrev = Button(parent, new Rect(x + 96f, y + HeadingHeight + 1f, 24f, 16f), "<", () => pollIndex--,
+            pollPrev = Button(parent, new Rect(x + 96f, y + HeadingHeight + 1f, 24f, 16f), "<", () => pollStep--,
                 "Previous poll.", AvButtonStyle.Quiet);
-            pollNext = Button(parent, new Rect(x + 124f, y + HeadingHeight + 1f, 24f, 16f), ">", () => pollIndex++,
+            pollNext = Button(parent, new Rect(x + 124f, y + HeadingHeight + 1f, 24f, 16f), ">", () => pollStep++,
                 "Next poll.", AvButtonStyle.Quiet);
 
             pollQuestion = AvStyled.Label(parent, new Rect(x, y, width - 84f, 18f), "", "row-name");
@@ -214,12 +218,18 @@ namespace BoscaliSummer.Features.Comms.Presentation
             IReadOnlyList<CommsPoll> polls = comms.State.Polls;
 
             // Open polls first, newest first; then the settled ones, so a result stays readable.
-            var ordered = new List<CommsPoll>(polls.Count);
+            List<CommsPoll> ordered = orderedPolls;
+            ordered.Clear();
             for (int i = polls.Count - 1; i >= 0; i--) if (!polls[i].Closed && !comms.State.IsMuted(polls[i].Author)) ordered.Add(polls[i]);
             int open = ordered.Count;
             for (int i = polls.Count - 1; i >= 0; i--) if (polls[i].Closed && !comms.State.IsMuted(polls[i].Author)) ordered.Add(polls[i]);
 
-            pollIndex = ordered.Count == 0 ? 0 : Wrap(pollIndex, ordered.Count);
+            // The page follows the poll on screen, not its place in a list that re-sorts as
+            // polls open and close: a vote lands on the question the player read.
+            for (int i = 0; i < ordered.Count; i++)
+                if (ordered[i].Id == shownPoll) pollIndex = i;
+            pollIndex = ordered.Count == 0 ? 0 : Wrap(pollIndex + pollStep, ordered.Count);
+            pollStep = 0;
             pollNote.text = ordered.Count == 0 ? "NONE" : (pollIndex + 1) + " OF " + ordered.Count + (open > 0 ? " · " + open + " OPEN" : "");
             Show(pollPrev, ordered.Count > 1);
             Show(pollNext, ordered.Count > 1);

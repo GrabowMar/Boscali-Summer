@@ -55,6 +55,9 @@ namespace BoscaliSummer.Features.Comms.Runtime
         private const float EraseRadiusPixels = 16f;
         private const int MaxRawPenPoints = 4096;
         private const float SyncRetrySeconds = 5f;
+
+        /// <summary>A little over the host's own snapshot gate, so a side change right after a join is not turned away.</summary>
+        private const float SyncGapSeconds = CommsAuthority.SyncGapSeconds + 0.5f;
         private const float SilentHostSeconds = 8f;
         private const float HighlightSeconds = 3.5f;
         private const float SoundGapSeconds = 0.35f;
@@ -75,7 +78,9 @@ namespace BoscaliSummer.Features.Comms.Runtime
         public int StickerKind;
         public int PenInk = 1;
         public int PenWidth = 1;
-        public CommsChannel Channel = CommsChannel.Team;
+
+        /// <summary>Who the next post reaches. ALL holds for one post, then falls back to TEAM.</summary>
+        public CommsChannel Channel { get; private set; }
         public string LabelText = "";
         public int PollDurationIndex = 1;
         public int HuntDurationIndex = 1;
@@ -97,6 +102,8 @@ namespace BoscaliSummer.Features.Comms.Runtime
         private bool awaitingSnapshot;
         private float nextSync;
         private float syncSentAt;
+        private float lastSyncSent = float.NegativeInfinity;
+        private float heardAt = float.NegativeInfinity;
         private bool wasEnabled;
         private float nextSound;
         private bool hudDeclared;
@@ -153,11 +160,13 @@ namespace BoscaliSummer.Features.Comms.Runtime
             huntTarget = 0;
             HasMeasure = false;
             HighlightUntil = 0f;
+            Channel = CommsChannel.Team;
             lastFaction = int.MinValue;
             syncWanted = true;
             awaitingSnapshot = false;
             HostSilent = false;
             nextSync = 0f;
+            lastSyncSent = heardAt = float.NegativeInfinity;
             hudDeclared = false;
         }
 
@@ -212,6 +221,10 @@ namespace BoscaliSummer.Features.Comms.Runtime
         {
             if (settings == null || !settings.Enabled.Value) return false;
             float now = Time.unscaledTime;
+            // Pings, marks and calls are made on the map or from the cockpit, often with COM
+            // closed: their refusals go to the HUD as well as the status strip.
+            bool cockpit = intent.Op == CommsOp.Place || intent.Op == CommsOp.Call;
+            if (cockpit) client.WatchRefusal(now);
             if (GameAccess.IsServer())
             {
                 if (!CommsIdentity.TryLocal(out Player local)) return false;
@@ -222,7 +235,7 @@ namespace BoscaliSummer.Features.Comms.Runtime
                 return true;
             }
             if (net != null && net.SendUp(intent)) return true;
-            client.SetNotice("NOT CONNECTED TO A HOST", true, now);
+            client.SetNotice("NOT CONNECTED TO A HOST", true, now, hud: cockpit);
             return false;
         }
 
@@ -240,12 +253,29 @@ namespace BoscaliSummer.Features.Comms.Runtime
         public void ApplyRemote(CommsEnvelope envelope)
         {
             if (settings == null || !settings.Enabled.Value) return;
+            float now = Time.unscaledTime;
+            Heard(envelope, now);
+            client.Apply(envelope, now);
+        }
+
+        /// <summary>
+        /// Anything from the host proves it runs COMMS. A snapshot ends the wait; a retry means
+        /// the host served this player moments ago, so ask again once its gate has passed.
+        /// </summary>
+        private void Heard(CommsEnvelope envelope, float now)
+        {
+            heardAt = now;
+            HostSilent = false;
             if (envelope.Event == CommsEvent.Reset && (envelope.Flags & CommsFlags.Snapshot) != 0)
             {
                 awaitingSnapshot = false;
-                HostSilent = false;
             }
-            client.Apply(envelope, Time.unscaledTime);
+            else if (envelope.Event == CommsEvent.Notice && (envelope.Flags & CommsFlags.Retry) != 0)
+            {
+                awaitingSnapshot = false;
+                syncWanted = true;
+                nextSync = Mathf.Max(now, lastSyncSent + SyncGapSeconds);
+            }
         }
 
         private void Dispatch()
@@ -259,7 +289,9 @@ namespace BoscaliSummer.Features.Comms.Runtime
             {
                 CommsOutbound outbound = outbox[i];
                 net?.Route(outbound);
-                if (hasLocal && outbound.Reaches(localId, faction)) client.Apply(outbound.Envelope, now);
+                if (!hasLocal || !outbound.Reaches(localId, faction)) continue;
+                Heard(outbound.Envelope, now);
+                client.Apply(outbound.Envelope, now);
             }
             outbox.Clear();
         }
@@ -292,11 +324,19 @@ namespace BoscaliSummer.Features.Comms.Runtime
             if (awaitingSnapshot && now - syncSentAt > SilentHostSeconds)
             {
                 awaitingSnapshot = false;
-                if (!HostSilent)
-                    logger?.LogWarning("[COMMS] The host did not answer a snapshot request; comms need Boscali Summer with COMMS enabled on the host.");
-                HostSilent = true;
                 syncWanted = true;
-                nextSync = now + SyncRetrySeconds * 3f;
+                if (heardAt >= syncSentAt)
+                {
+                    // The host is talking, just not to this request: ask again, quietly.
+                    nextSync = now;
+                }
+                else
+                {
+                    if (!HostSilent)
+                        logger?.LogWarning("[COMMS] The host did not answer a snapshot request; comms need Boscali Summer with COMMS enabled on the host.");
+                    HostSilent = true;
+                    nextSync = now + SyncRetrySeconds * 3f;
+                }
             }
 
             if (!CommsIdentity.TryLocal(out Player local)) return;
@@ -304,17 +344,27 @@ namespace BoscaliSummer.Features.Comms.Runtime
             LocalFaction = CommsIdentity.Faction(local);
             if (LocalFaction != lastFaction)
             {
+                // The old side's marks, polls and games go now, not when the new snapshot lands.
+                if (lastFaction != int.MinValue) client.ForgetSide();
                 lastFaction = LocalFaction;
+                client.LocalFaction = LocalFaction;
                 syncWanted = true;
-                nextSync = 0f;
+                nextSync = Mathf.Max(now, lastSyncSent + SyncGapSeconds);
             }
             if (!syncWanted || now < nextSync) return;
             nextSync = now + SyncRetrySeconds;
 
             bool host = GameAccess.IsServer();
             if (!host && (net == null || !net.ClientActive)) return;
-            if (!Submit(new CommsIntent { Op = CommsOp.Sync })) return;
+            // Cleared before the request: on the host the answer (a snapshot, or a retry that
+            // asks again) arrives inside Submit itself.
+            lastSyncSent = now;
             syncWanted = false;
+            if (!Submit(new CommsIntent { Op = CommsOp.Sync }))
+            {
+                syncWanted = true;
+                return;
+            }
             if (host)
             {
                 HostSilent = false;
@@ -339,11 +389,20 @@ namespace BoscaliSummer.Features.Comms.Runtime
                 board.DeclareChannel(HudChannel, "COMMS");
                 hudDeclared = true;
             }
+            bool fromAircraft = GameManager.GetLocalAircraft(out Aircraft aircraft) && aircraft != null;
+            GlobalPosition self = fromAircraft ? aircraft.transform.position.ToGlobalPosition() : default;
             for (int i = 0; i < arrivals.Count; i++)
             {
                 CommsArrival arrival = arrivals[i];
-                if (board != null) board.Notice(HudChannel, HudToneOf(arrival.Tone), arrival.Text, arrival.Detail);
-                sound |= arrival.Ping || arrival.Tone >= CommsTone.Caution;
+                if (board != null)
+                {
+                    // Where it is from here, not where it is on a grid nobody has open.
+                    string detail = !arrival.HasPosition ? arrival.Detail
+                        : fromAircraft ? CommsText.BearingRange(self.x, self.z, arrival.X, arrival.Z, VanillaHudStyle.Metric)
+                        : CommsText.Grid(arrival.X, arrival.Z);
+                    board.Notice(HudChannel, HudToneOf(arrival.Tone), arrival.Text, detail);
+                }
+                sound |= arrival.Sound;
             }
             if (sound && settings.PingSound.Value && now >= nextSound)
             {
@@ -410,9 +469,10 @@ namespace BoscaliSummer.Features.Comms.Runtime
                 {
                     quickTracked = false;
                     Vector2 release = Input.mousePosition;
+                    // A quick ping is a tactical call: always to the team, whatever COM is set to.
                     if ((release - quickScreen).sqrMagnitude <= ClickSlopPixels * ClickSlopPixels &&
                         TryCursor(map, out float qx, out float qz))
-                        PlacePoint(CommsItemKind.Ping, PingKind, qx, qz, null);
+                        PlacePoint(CommsItemKind.Ping, PingKind, qx, qz, null, CommsChannel.Team);
                 }
             }
 
@@ -448,9 +508,10 @@ namespace BoscaliSummer.Features.Comms.Runtime
 
         private void BeginGesture(CommsTool tool, float x, float z)
         {
-            if (tool == CommsTool.Pen && !settings.AllowDrawing.Value && GameAccess.IsServer())
+            // While connected the host's rules are this peer's settings too, so say no up front.
+            if (tool != CommsTool.Measure && !settings.AllowDrawing.Value)
             {
-                client.SetNotice("DRAWING IS OFF ON THIS SERVER", true, Time.unscaledTime);
+                client.SetNotice("DRAWING IS OFF ON THIS SERVER", true, Time.unscaledTime, hud: true);
                 return;
             }
             gesture = true;
@@ -490,7 +551,7 @@ namespace BoscaliSummer.Features.Comms.Runtime
             switch (tool)
             {
                 case CommsTool.Pen:
-                    SubmitStroke(map, pen);
+                    SubmitStroke(map, pen, TakeChannel());
                     break;
                 case CommsTool.Measure:
                     if (!moved) return;
@@ -506,12 +567,13 @@ namespace BoscaliSummer.Features.Comms.Runtime
                 case CommsTool.Box:
                     if (!moved) return;
                     float[][] shape = CommsShapes.Build(ShapeOf(tool), anchorX, anchorZ, currentX, currentZ);
-                    for (int i = 0; i < shape.Length; i++) SubmitStroke(map, shape[i]);
+                    CommsChannel channel = TakeChannel(); // an arrow's head goes where its shaft went
+                    for (int i = 0; i < shape.Length; i++) SubmitStroke(map, shape[i], channel);
                     break;
             }
         }
 
-        private void SubmitStroke(DynamicMap map, float[] xz)
+        private void SubmitStroke(DynamicMap map, float[] xz, CommsChannel channel)
         {
             if (xz == null || xz.Length < 4) return;
             float[] thin = StrokeCodec.Simplify(xz, MetresPerPixel(map) * 1.2f);
@@ -521,7 +583,7 @@ namespace BoscaliSummer.Features.Comms.Runtime
             {
                 Op = CommsOp.Place,
                 Kind = (byte)CommsItemKind.Stroke,
-                Channel = Channel,
+                Channel = channel,
                 Style = (byte)Mathf.Clamp(PenInk, 0, CommsCatalog.Pens.Length - 1),
                 Size = (byte)Mathf.Clamp(PenWidth, 0, CommsCatalog.PenWidths.Length - 1),
                 Points = points,
@@ -533,10 +595,10 @@ namespace BoscaliSummer.Features.Comms.Runtime
             switch (Tool)
             {
                 case CommsTool.Ping:
-                    PlacePoint(CommsItemKind.Ping, PingKind, x, z, null);
+                    PlacePoint(CommsItemKind.Ping, PingKind, x, z, null, TakeChannel());
                     break;
                 case CommsTool.Sticker:
-                    PlacePoint(CommsItemKind.Sticker, StickerKind, x, z, null);
+                    PlacePoint(CommsItemKind.Sticker, StickerKind, x, z, null, TakeChannel());
                     break;
                 case CommsTool.Label:
                     string text = CommsText.Clean(LabelText, CommsText.MaxLabel);
@@ -545,7 +607,7 @@ namespace BoscaliSummer.Features.Comms.Runtime
                         client.SetNotice("TYPE THE LABEL IN COM › MAP FIRST", true, now);
                         return;
                     }
-                    PlacePoint(CommsItemKind.Label, 0, x, z, text);
+                    PlacePoint(CommsItemKind.Label, 0, x, z, text, TakeChannel());
                     break;
                 case CommsTool.Eraser:
                     float radius = MetresPerPixel(map) * EraseRadiusPixels;
@@ -562,7 +624,7 @@ namespace BoscaliSummer.Features.Comms.Runtime
                     Submit(new CommsIntent
                     {
                         Op = CommsOp.HuntStart,
-                        Channel = Channel,
+                        Channel = TakeChannel(),
                         Size = (byte)Mathf.Clamp(HuntDurationIndex, 0, CommsCatalog.HuntDurations.Length - 1),
                         Points = StrokeCodec.Point(x, z),
                     });
@@ -577,13 +639,13 @@ namespace BoscaliSummer.Features.Comms.Runtime
             }
         }
 
-        private void PlacePoint(CommsItemKind kind, int style, float x, float z, string text)
+        private void PlacePoint(CommsItemKind kind, int style, float x, float z, string text, CommsChannel channel)
         {
             Submit(new CommsIntent
             {
                 Op = CommsOp.Place,
                 Kind = (byte)kind,
-                Channel = Channel,
+                Channel = channel,
                 Style = (byte)Mathf.Max(0, style),
                 Points = StrokeCodec.Point(x, z),
                 Text = text,
@@ -686,17 +748,23 @@ namespace BoscaliSummer.Features.Comms.Runtime
             }
         }
 
+        /// <summary>A brevity call. Always to the team: a call is for the people flying with you.</summary>
         public void Call(int call)
         {
             if (!CommsCatalog.ValidCall(call)) return;
             int[] points = null;
+            uint altitude = 0u;
             if (CommsCatalog.Calls[call].MarksPosition &&
                 GameManager.GetLocalAircraft(out Aircraft aircraft) && aircraft != null)
             {
                 GlobalPosition at = aircraft.transform.position.ToGlobalPosition();
                 points = StrokeCodec.Point(at.x, at.z);
+                altitude = (uint)Mathf.Clamp(Mathf.RoundToInt((float)at.y), 0, CommsAuthority.MaxCallAltitude);
             }
-            Submit(new CommsIntent { Op = CommsOp.Call, Channel = Channel, Style = (byte)call, Points = points });
+            Submit(new CommsIntent
+            {
+                Op = CommsOp.Call, Channel = CommsChannel.Team, Style = (byte)call, Points = points, Target = altitude,
+            });
         }
 
         public void CreatePoll(string question, string[] options)
@@ -704,7 +772,7 @@ namespace BoscaliSummer.Features.Comms.Runtime
             Submit(new CommsIntent
             {
                 Op = CommsOp.PollCreate,
-                Channel = Channel,
+                Channel = TakeChannel(),
                 Size = (byte)Mathf.Clamp(PollDurationIndex, 0, CommsCatalog.PollDurations.Length - 1),
                 Text = question,
                 Items = options,
@@ -720,10 +788,10 @@ namespace BoscaliSummer.Features.Comms.Runtime
         public void ClosePoll(uint poll) => Submit(new CommsIntent { Op = CommsOp.PollClose, Target = poll });
 
         public void Roll(int die) =>
-            Submit(new CommsIntent { Op = CommsOp.Roll, Channel = Channel, Style = (byte)Mathf.Clamp(die, 0, 255) });
+            Submit(new CommsIntent { Op = CommsOp.Roll, Channel = TakeChannel(), Style = (byte)Mathf.Clamp(die, 0, 255) });
 
         public void Challenge(int throwIndex) =>
-            Submit(new CommsIntent { Op = CommsOp.RpsChallenge, Channel = Channel, Style = (byte)Mathf.Clamp(throwIndex, 0, 255) });
+            Submit(new CommsIntent { Op = CommsOp.RpsChallenge, Channel = TakeChannel(), Style = (byte)Mathf.Clamp(throwIndex, 0, 255) });
 
         public void AcceptDuel(uint duel, int throwIndex) =>
             Submit(new CommsIntent { Op = CommsOp.RpsAccept, Target = duel, Style = (byte)Mathf.Clamp(throwIndex, 0, 255) });
@@ -751,8 +819,24 @@ namespace BoscaliSummer.Features.Comms.Runtime
 
         public void ClearAll() => Submit(new CommsIntent { Op = CommsOp.ClearAll });
 
-        public void ToggleChannel() =>
+        /// <summary>Arm ALL for the next post, or take it back. The host's rule is checked here too.</summary>
+        public void ToggleChannel()
+        {
+            if (Channel == CommsChannel.Team && !settings.AllowAllChannel.Value)
+            {
+                client.SetNotice("THE HOST HAS THE ALL CHANNEL OFF", true, Time.unscaledTime);
+                return;
+            }
             Channel = Channel == CommsChannel.Team ? CommsChannel.All : CommsChannel.Team;
+        }
+
+        /// <summary>The audience for this post: ALL once when armed, then back to TEAM.</summary>
+        private CommsChannel TakeChannel()
+        {
+            CommsChannel channel = Channel;
+            Channel = CommsChannel.Team;
+            return channel;
+        }
 
         /// <summary>Flash a ring on the map at a logged position so the reader can find it.</summary>
         public void Highlight(float x, float z)
