@@ -50,6 +50,7 @@ namespace BoscaliSummer.Tests
             Features.Hud.TargetBoardTests.Run();
             Features.Hud.ShotTests.Run();
             Features.Autopilot.AutopilotLandTests.Run();
+            Features.Autopilot.AceRadialMathTests.Run();
             CommandTests.Run();
             ThreatEnvelopeTests.Run();
             MfdNewsTickerTests.Run();
@@ -90,6 +91,7 @@ namespace BoscaliSummer.Tests
             Features.Weather.RainVisualMathTests.Run();
             Features.Weather.CanopyScoringTests.Run();
             Features.Weather.RainSkyMathTests.Run();
+            Features.Weather.LightningMathTests.Run();
             Features.Visuals.VisualsTests.Run();
             Features.Immersion.ImmersionTests.Run();
             ModuleBoundaryTests.Run();

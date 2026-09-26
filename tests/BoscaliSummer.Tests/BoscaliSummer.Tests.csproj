@@ -40,6 +40,7 @@
     <Compile Include="..\..\modules\Autopilot\Domain\AirframeSeverity.cs" Link="Features\Autopilot\AirframeSeverity.cs" />
     <Compile Include="..\..\modules\Autopilot\Domain\IlsGuidance.cs" Link="Features\Autopilot\IlsGuidance.cs" />
     <Compile Include="..\..\modules\Autopilot\Domain\IlsHudCopy.cs" Link="Features\Autopilot\IlsHudCopy.cs" />
+    <Compile Include="..\..\modules\Autopilot\Domain\AceRadialMath.cs" Link="Features\Autopilot\AceRadialMath.cs" />
     <Compile Include="..\..\modules\FireAndDestruction\Domain\CookoffPolicy.cs" Link="Features\FireAndDestruction\CookoffPolicy.cs" />
     <Compile Include="..\..\modules\FireAndDestruction\Domain\HitEscalation.cs" Link="Features\FireAndDestruction\HitEscalation.cs" />
     <Compile Include="..\..\modules\UrbanCombat\Runtime\StrongpointHitPolicy.cs" Link="Features\UrbanCombat\StrongpointHitPolicy.cs" />
@@ -163,6 +164,7 @@
     <Compile Include="..\..\modules\Weather\Domain\CanopyScoring.cs" Link="Features\Weather\CanopyScoring.cs" />
     <Compile Include="..\..\modules\Weather\Domain\CanopyShaderParams.cs" Link="Features\Weather\CanopyShaderParams.cs" />
     <Compile Include="..\..\modules\Weather\Domain\RainSkyMath.cs" Link="Features\Weather\RainSkyMath.cs" />
+    <Compile Include="..\..\modules\Weather\Domain\LightningMath.cs" Link="Features\Weather\LightningMath.cs" />
     <Compile Include="..\..\modules\Visuals\Domain\VisualsMath.cs" Link="Features\Visuals\VisualsMath.cs" />
     <Compile Include="..\..\modules\Visuals\Domain\SinLut.cs" Link="Features\Visuals\SinLut.cs" />
     <Compile Include="..\..\modules\Immersion\Domain\ImmersionMath.cs" Link="Features\Immersion\ImmersionMath.cs" />
