@@ -170,7 +170,9 @@ namespace BoscaliSummer.Features.TheaterOps.Domain
             float stance = influence != null ? influence.Stance : InfluenceState.DefaultStance;
             bool hold = influence != null && influence.HoldOffense;
             float reserve = influence != null ? influence.ReserveFloor : 0f;
-            float maxEscrow = influence != null ? influence.MaxEscrowPerPlan : InfluenceState.DefaultMaxEscrow;
+            float maxEscrow = influence != null ? influence.MaxEscrowPerPlan
+                : Math.Max(0f, assessment.OverheadCost) +
+                  InfluenceState.DefaultEscrowWaves * Math.Max(0f, assessment.WaveBudget);
 
             string bestKey = null;
             string bestLabel = null;

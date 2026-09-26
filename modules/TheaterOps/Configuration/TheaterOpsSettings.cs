@@ -2,6 +2,17 @@ using BepInEx.Configuration;
 
 namespace BoscaliSummer.Features.TheaterOps.Configuration
 {
+    /// <summary>Which factions the host's theater director fights for.</summary>
+    internal enum TheaterDirectorFactions
+    {
+        /// <summary>Every faction with a connected player, plus the listen host's own.</summary>
+        PlayerFactions,
+        AllFactions,
+
+        /// <summary>Only the listen host's faction; a dedicated server runs none.</summary>
+        HostFaction,
+    }
+
     /// <summary>
     /// Theater priority and offensive pacing. Vanilla supplies the vehicles; the optional
     /// frontline route gives eligible depot ground AI staged destinations through its normal
@@ -12,6 +23,7 @@ namespace BoscaliSummer.Features.TheaterOps.Configuration
         public ConfigEntry<bool> Enabled { get; }
         public ConfigEntry<bool> MapMarkerEnabled { get; }
         public ConfigEntry<bool> FrontlineTacticsEnabled { get; }
+        public ConfigEntry<TheaterDirectorFactions> DirectorFactions { get; }
 
         // ---- Offensive planner ------------------------------------------------------------
 
@@ -53,6 +65,10 @@ namespace BoscaliSummer.Features.TheaterOps.Configuration
             FrontlineTacticsEnabled = config.Bind(section, "FrontlineTacticsEnabled", true,
                 "Stage newly depot-spawned AI ground vehicles at the front, spread them into a line, " +
                 "and let offensive groups advance after assembling. Vanilla supply and player orders remain authoritative.");
+            DirectorFactions = config.Bind(section, "DirectorFactions", TheaterDirectorFactions.PlayerFactions,
+                "Host-authoritative: which factions the theater director fights for. PlayerFactions runs every " +
+                "faction with at least one connected player (plus the listen host's own), AllFactions runs every " +
+                "faction, HostFaction runs only the listen host's side (a dedicated server then runs none).");
 
             OperationOverheadCost = config.Bind(section, "OperationOverheadCost", 25f,
                 "Faction-pool cost of the staff work behind one offensive (millions). Non-refundable " +

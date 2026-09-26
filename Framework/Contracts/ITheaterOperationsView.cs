@@ -207,12 +207,16 @@ namespace BoscaliSummer.Framework.Contracts
         /// <summary>Escrow that went back to the pool: everything committed that no wave drew.</summary>
         public float Returned => Committed > Spent ? Committed - Spent : 0f;
 
+        /// <summary>The host's plan identity within its faction; 0 when the source did not say.</summary>
+        public int Id { get; }
+
         public TheaterOperationView(
             string name, TheaterOperationPhase phase, TheaterOperationOutcome outcome,
             string targetLabel, float progress, float budget, float committed, float spent,
             float elapsedSeconds, float holdRemaining,
-            int wavesPlanned, int wavesLaunched, float countdown, string holder)
+            int wavesPlanned, int wavesLaunched, float countdown, string holder, int id = 0)
         {
+            Id = id;
             Name = name;
             Phase = phase;
             Outcome = outcome;

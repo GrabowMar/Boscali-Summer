@@ -24,25 +24,69 @@ namespace BoscaliSummer.Features.TheaterOps.Domain
     /// One faction's standing orders to the theater director: the stance it fights with,
     /// whether new offensives are held, the chest it may spend from, and the axes it leans
     /// on. Pure state: every mutation clamps, bounds and reports whether anything moved,
-    /// so the host broadcasts only on change. Last writer wins; the setter is whoever the
-    /// host derived from the intent's sender, never a client-sent name.
+    /// so the host broadcasts only on change. The setter is whoever the host derived from
+    /// the order's origin (a passed vote, or the sender when votes are off), never a
+    /// client-sent name.
+    ///
+    /// <para>The chest is priced in waves, not in raw millions: the default escrow opens a
+    /// plan with two waves, the cap funds every wave a plan may hold, and the reserve stops
+    /// at ten waves, so no single order can freeze the pool. An unset chest follows the
+    /// host's costs; a set one is only re-clamped when they change.</para>
     /// </summary>
     internal sealed class InfluenceState
     {
         internal const int MaximumAxes = 4;
         internal const int MaximumSetterLength = 24;
         internal const float DefaultStance = 0.6f;
-        internal const float DefaultMaxEscrow = 15f;
-        internal const float MaximumEscrowCap = 100f;
+
+        /// <summary>The settings' own default costs; the settings bind with these.</summary>
+        internal const float DefaultOverheadCost = 25f;
+        internal const float DefaultWaveBudget = 45f;
+
+        internal const int DefaultEscrowWaves = 2;
+        internal const int MaximumReserveWaves = 10;
 
         private readonly List<AxisWeight> axes = new List<AxisWeight>(MaximumAxes);
+        private bool chestSet;
 
         public float Stance { get; private set; } = DefaultStance;
         public bool HoldOffense { get; private set; }
-        public float MaxEscrowPerPlan { get; private set; } = DefaultMaxEscrow;
+        public float MaxEscrowPerPlan { get; private set; }
         public float ReserveFloor { get; private set; }
         public string Setter { get; private set; } = "";
         public IReadOnlyList<AxisWeight> Axes => axes;
+
+        /// <summary>Escrow of an unset chest: the overhead plus two waves.</summary>
+        public float DefaultMaxEscrow { get; private set; }
+
+        /// <summary>Most one plan may escrow: the overhead plus every wave a plan may hold.</summary>
+        public float EscrowCap { get; private set; }
+
+        /// <summary>Highest reserve floor: ten waves.</summary>
+        public float ReserveCap { get; private set; }
+
+        public InfluenceState() => Price(DefaultOverheadCost, DefaultWaveBudget);
+
+        /// <summary>
+        /// Prices the chest from the offensive costs. Reports whether a figure the board
+        /// shows moved, so the host re-broadcasts only when a cost change moved it.
+        /// </summary>
+        public bool Price(float overheadCost, float waveBudget)
+        {
+            float overhead = Math.Max(0f, Finite(overheadCost, DefaultOverheadCost));
+            float wave = Math.Max(0f, Finite(waveBudget, DefaultWaveBudget));
+            DefaultMaxEscrow = overhead + DefaultEscrowWaves * wave;
+            EscrowCap = overhead + OffensivePlan.MaximumWaves * wave;
+            ReserveCap = MaximumReserveWaves * wave;
+
+            float escrow = chestSet ? Math.Min(MaxEscrowPerPlan, EscrowCap) : DefaultMaxEscrow;
+            float floor = Math.Min(ReserveFloor, ReserveCap);
+            if (Math.Abs(escrow - MaxEscrowPerPlan) < 0.001f && Math.Abs(floor - ReserveFloor) < 0.001f)
+                return false;
+            MaxEscrowPerPlan = escrow;
+            ReserveFloor = floor;
+            return true;
+        }
 
         public bool SetStance(float stance, string setter)
         {
@@ -63,17 +107,25 @@ namespace BoscaliSummer.Features.TheaterOps.Domain
 
         public bool SetChest(float maxEscrow, float reserve, string setter)
         {
-            float escrow = Finite(maxEscrow, DefaultMaxEscrow);
-            if (escrow < 0f) escrow = 0f;
-            if (escrow > MaximumEscrowCap) escrow = MaximumEscrowCap;
-            float floor = Finite(reserve, 0f);
-            if (floor < 0f) floor = 0f;
-            if (Math.Abs(escrow - MaxEscrowPerPlan) < 0.001f && Math.Abs(floor - ReserveFloor) < 0.001f)
+            ShapeChest(ref maxEscrow, ref reserve);
+            if (Math.Abs(maxEscrow - MaxEscrowPerPlan) < 0.001f && Math.Abs(reserve - ReserveFloor) < 0.001f)
                 return false;
-            MaxEscrowPerPlan = escrow;
-            ReserveFloor = floor;
+            MaxEscrowPerPlan = maxEscrow;
+            ReserveFloor = reserve;
+            chestSet = true;
             Setter = Bound(setter);
             return true;
+        }
+
+        /// <summary>The chest an order would actually land: finite and inside both caps.</summary>
+        public void ShapeChest(ref float maxEscrow, ref float reserve)
+        {
+            maxEscrow = Finite(maxEscrow, DefaultMaxEscrow);
+            if (maxEscrow < 0f) maxEscrow = 0f;
+            if (maxEscrow > EscrowCap) maxEscrow = EscrowCap;
+            reserve = Finite(reserve, 0f);
+            if (reserve < 0f) reserve = 0f;
+            if (reserve > ReserveCap) reserve = ReserveCap;
         }
 
         /// <summary>
@@ -118,16 +170,6 @@ namespace BoscaliSummer.Features.TheaterOps.Domain
             for (int i = 0; i < axes.Count; i++)
                 if (string.Equals(axes[i].Key, key, StringComparison.Ordinal)) return axes[i].Weight;
             return 0f;
-        }
-
-        public void Reset()
-        {
-            Stance = DefaultStance;
-            HoldOffense = false;
-            MaxEscrowPerPlan = DefaultMaxEscrow;
-            ReserveFloor = 0f;
-            Setter = "";
-            axes.Clear();
         }
 
         private static float Clamp01(float value)
