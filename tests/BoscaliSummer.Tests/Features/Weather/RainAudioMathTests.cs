@@ -11,10 +11,10 @@ namespace BoscaliSummer.Tests.Features.Weather
             // 1. Volume response curves
             TestAssert.That(RainAudioMath.HissVolume(1f, 0f, 1f, true) == 0f, "Dry hiss must be silent");
             TestAssert.That(RainAudioMath.HissVolume(1f, 1f, 0f, false) == 0f, "Muted master must silence hiss");
-            TestAssert.That(Math.Abs(RainAudioMath.HissVolume(1f, 1f, 1f, true) - 0.03f) < 0.0001f,
-                "Full storm cockpit hiss must stay subdued at 0.03");
-            TestAssert.That(Math.Abs(RainAudioMath.HissVolume(1f, 1f, 1f, false) - 0.20f) < 0.0001f,
-                "Full storm external hiss must be 0.20");
+            TestAssert.That(Math.Abs(RainAudioMath.HissVolume(1f, 1f, 1f, true) - 0.4125f) < 0.0001f,
+                "Full storm cockpit hiss must stay audible at 0.4125");
+            TestAssert.That(Math.Abs(RainAudioMath.HissVolume(1f, 1f, 1f, false) - 0.4675f) < 0.0001f,
+                "Full storm external hiss must be 0.4675");
             TestAssert.That(RainAudioMath.HissVolume(2f, 1f, 1f, false) == RainAudioMath.HissVolume(1f, 1f, 1f, false),
                 "Speed norm above 1 must clamp");
             TestAssert.That(RainAudioMath.HissVolume(1f, -1f, 1f, false) == 0f, "Negative intensity must clamp to 0");

@@ -17,6 +17,8 @@ namespace BoscaliSummer.Features.Weather.Visuals
         private static readonly int SunColorId = Shader.PropertyToID("_SunColor");
         private static readonly int FogColorId = Shader.PropertyToID("_FogColor");
         private static readonly int RefractId = Shader.PropertyToID("_Refract");
+        private static readonly int DropletMaskId = Shader.PropertyToID("_DropletMask");
+        private static readonly int RivuletMaskId = Shader.PropertyToID("_RivuletMask");
         private readonly MaterialPropertyBlock properties = new MaterialPropertyBlock();
         private Material material;
         private float phase;
@@ -24,6 +26,15 @@ namespace BoscaliSummer.Features.Weather.Visuals
         private Color sunColor = Color.black;
         private Color fogColor = new Color(0.55f, 0.6f, 0.68f, 1f);
         private bool refract;
+
+        private static void BindMasks(Material mat)
+        {
+            if (mat == null) return;
+            Texture2D dMask = CanopyShaderBundle.GetDropletMask() ?? Resources.Load<Texture2D>("droplets_mask");
+            if (dMask != null) mat.SetTexture(DropletMaskId, dMask);
+            Texture2D rMask = CanopyShaderBundle.GetRivuletMask() ?? Resources.Load<Texture2D>("rivulets_mask");
+            if (rMask != null) mat.SetTexture(RivuletMaskId, rMask);
+        }
 
         /// <summary>
         /// World-space lighting for the glass: sun direction (toward the sun, zero when it
@@ -47,8 +58,16 @@ namespace BoscaliSummer.Features.Weather.Visuals
                 Shader shader = CanopyShaderBundle.GetShader();
                 if (shader == null || !shader.isSupported) return false;
                 material = new Material(shader) { name = "BoscaliCanopyRain", hideFlags = HideFlags.HideAndDontSave };
+                BindMasks(material);
             }
-            phase = (phase + Time.deltaTime * CanopyShaderParams.FlowPhaseRate(wetness, speedNorm)) % 1024f;
+            else if (material.GetTexture(DropletMaskId) == null)
+            {
+                BindMasks(material);
+            }
+            // Unbounded: wrapping at 1024 jumps every linear scroll term (1024 times
+            // the strike/rivulet/scroll rates is never an integer), visibly popping the
+            // whole pattern every 6-26 min. Float precision holds for day-long sessions.
+            phase += Time.deltaTime * CanopyShaderParams.FlowPhaseRate(wetness, speedNorm);
             properties.SetFloat(IntensityId, wetness);
             properties.SetFloat(FlowPhaseId, phase);
             properties.SetFloat(LightId, Mathf.Clamp(lightLevel, 0.04f, 1f));

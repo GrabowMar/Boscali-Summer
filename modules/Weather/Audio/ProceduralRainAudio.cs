@@ -243,6 +243,19 @@ namespace BoscaliSummer.Features.Weather.Audio
                 }
             }
 
+            // Normalise so droplet transients peak above the hiss bed: the filtered
+            // impacts bake ~20 dB too quiet to survive cockpit gain staging unscaled.
+            float peak = 0.0001f;
+            for (int i = 0; i < samples.Length; i++)
+            {
+                float a = Mathf.Abs(samples[i]);
+                if (a > peak) peak = a;
+            }
+            float norm = 0.65f / peak;
+            for (int i = 0; i < samples.Length; i++)
+            {
+                samples[i] = Mathf.Clamp(samples[i] * norm, -1.0f, 1.0f);
+            }
             // Normalization & clamping
             for (int i = 0; i < samples.Length; i++)
             {

@@ -2,7 +2,13 @@ param(
     [string]$SourceDir = (Join-Path $PSScriptRoot "../modules/Weather/Assets/Source"),
     [string]$OutputDir = (Join-Path $PSScriptRoot "../modules/Weather/Assets"),
     [string]$BundleName = "weatherrain.bundle",
-    [string]$Unity = "C:/Program Files/Unity/Hub/Editor/2022.3.62f2/Editor/Unity.exe"
+    [string]$Unity = $(
+        if (Test-Path "C:/Program Files/Unity/Hub/Editor/2022.3.62f3/Editor/Unity.exe") {
+            "C:/Program Files/Unity/Hub/Editor/2022.3.62f3/Editor/Unity.exe"
+        } else {
+            "C:/Program Files/Unity/Hub/Editor/2022.3.62f2/Editor/Unity.exe"
+        }
+    )
 )
 
 $ErrorActionPreference = "Stop"
@@ -19,7 +25,8 @@ $tempProject = Join-Path $env:TEMP ("WeatherBundleBuild-" + [guid]::NewGuid().To
 Write-Host "Creating temporary Unity project at: $tempProject"
 
 New-Item -ItemType Directory -Force -Path "$tempProject/Assets/WeatherShader", "$tempProject/Assets/Editor", "$tempProject/ProjectSettings", "$tempProject/Packages", "$tempProject/BundleOutput" | Out-Null
-Set-Content -LiteralPath "$tempProject/ProjectSettings/ProjectVersion.txt" -Value "m_EditorVersion: 2022.3.62f2"
+$editorVer = if ($Unity -like "*62f3*") { "2022.3.62f3" } else { "2022.3.62f2" }
+Set-Content -LiteralPath "$tempProject/ProjectSettings/ProjectVersion.txt" -Value "m_EditorVersion: $editorVer"
 Set-Content -LiteralPath "$tempProject/Packages/manifest.json" -Value '{"dependencies":{"com.unity.modules.assetbundle":"1.0.0"}}'
 
 # Copy shader sources into project
@@ -50,8 +57,10 @@ public static class BuildWeatherBundle
             {
                 string path = AssetDatabase.GUIDToAssetPath(guid);
                 if (Directory.Exists(path)) continue;
-                if (path.EndsWith(".meta", StringComparison.OrdinalIgnoreCase)) continue;
-                if (path.EndsWith(".bundle", StringComparison.OrdinalIgnoreCase)) continue;
+                if (!path.EndsWith(".shader", StringComparison.OrdinalIgnoreCase) &&
+                    !path.EndsWith(".tif", StringComparison.OrdinalIgnoreCase) &&
+                    !path.EndsWith(".tiff", StringComparison.OrdinalIgnoreCase) &&
+                    !path.EndsWith(".png", StringComparison.OrdinalIgnoreCase)) continue;
                 assetPaths.Add(path);
                 Debug.Log("Bundling asset: " + path);
             }

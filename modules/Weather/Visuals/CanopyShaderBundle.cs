@@ -19,11 +19,25 @@ namespace BoscaliSummer.Features.Weather.Visuals
         private static AssetBundle bundle;
         private static Shader shader;
         private static Shader terrainShader;
+        private static Texture2D dropletMask;
+        private static Texture2D rivuletMask;
 
         internal static Shader GetTerrainShader()
         {
             GetShader();
             return terrainShader;
+        }
+
+        internal static Texture2D GetDropletMask()
+        {
+            GetShader();
+            return dropletMask;
+        }
+
+        internal static Texture2D GetRivuletMask()
+        {
+            GetShader();
+            return rivuletMask;
         }
         private static bool attempted;
 
@@ -53,16 +67,29 @@ namespace BoscaliSummer.Features.Weather.Visuals
 
                 if (bundle == null) return null;
                 Shader[] shaders = bundle.LoadAllAssets<Shader>();
-                if (shaders == null) return null;
-                for (int i = 0; i < shaders.Length; i++)
+                if (shaders != null)
                 {
-                    if (shaders[i] != null && shaders[i].name == ShaderName && shaders[i].isSupported)
+                    for (int i = 0; i < shaders.Length; i++)
                     {
-                        shader = shaders[i];
-
+                        if (shaders[i] != null && shaders[i].name == ShaderName && shaders[i].isSupported)
+                        {
+                            shader = shaders[i];
+                        }
+                        if (shaders[i] != null && shaders[i].name == "Boscali/TerrainRain" && shaders[i].isSupported)
+                            terrainShader = shaders[i];
                     }
-                    if (shaders[i] != null && shaders[i].name == "Boscali/TerrainRain" && shaders[i].isSupported)
-                        terrainShader = shaders[i];
+                }
+                Texture2D[] textures = bundle.LoadAllAssets<Texture2D>();
+                if (textures != null)
+                {
+                    for (int i = 0; i < textures.Length; i++)
+                    {
+                        if (textures[i] == null) continue;
+                        if (textures[i].name.IndexOf("droplet", StringComparison.OrdinalIgnoreCase) >= 0)
+                            dropletMask = textures[i];
+                        else if (textures[i].name.IndexOf("rivulet", StringComparison.OrdinalIgnoreCase) >= 0)
+                            rivuletMask = textures[i];
+                    }
                 }
                 if (shader != null || terrainShader != null) return shader;
                 bundle.Unload(true);
