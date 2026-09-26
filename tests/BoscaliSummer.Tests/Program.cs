@@ -18,6 +18,7 @@ namespace BoscaliSummer.Tests
         private static int Main()
         {
             FrameworkTests.Run();
+            Features.Session.SessionTests.Run();
             ImpactScorchTests.Run();
             FireScorchTests.Run();
             CookoffTests.Run();
@@ -34,6 +35,7 @@ namespace BoscaliSummer.Tests
             UrbanAmbienceMathTests.Run();
             RadioTests.Run();
             Features.Squad.AceCareerTests.Run();
+            Features.Squad.SnapshotRevisionTests.Run();
             ProgressionTests.Run();
             PlaneEngineMapTests.Run();
             EmblemTests.Run();
@@ -59,6 +61,7 @@ namespace BoscaliSummer.Tests
             Features.DynamicOperations.OperationDirectorTests.Run();
             Features.DynamicOperations.OperationMarkerCopyTests.Run();
             Features.DynamicOperations.ContractMarkerTests.Run();
+            Features.DynamicOperations.ContractSharesTests.Run();
             Features.HighCommand.HighCommandTests.Run();
             Features.TheaterOps.PriorityTests.Run();
             Features.TheaterOps.LogisticsTests.Run();

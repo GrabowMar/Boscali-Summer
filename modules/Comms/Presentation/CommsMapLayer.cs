@@ -161,8 +161,9 @@ namespace BoscaliSummer.Features.Comms.Presentation
             ulong self = manager.LocalId;
             int side = manager.LocalFaction;
 
+            // Newest first, so a fresh ping always gets its name when the tags run out.
             IReadOnlyList<CommsItem> items = state.Board.Items;
-            for (int i = 0; i < items.Count && usedTags < MaxTags; i++)
+            for (int i = items.Count - 1; i >= 0 && usedTags < MaxTags; i--)
             {
                 CommsItem item = items[i];
                 if (state.IsMuted(item.Author)) continue;
@@ -176,7 +177,8 @@ namespace BoscaliSummer.Features.Comms.Presentation
                 {
                     float fade = Mathf.Clamp01((item.Expires - now) / 5f);
                     string who = item.Author == self ? "YOU" : item.AuthorName;
-                    string text = CommsCatalog.Pings[item.Style].Code + " · " + who + (enemy ? " (OTHER SIDE)" : "");
+                    string code = item.IsCall && !string.IsNullOrEmpty(item.Text) ? item.Text : CommsCatalog.Pings[item.Style].Code;
+                    string text = code + " · " + who + (enemy ? " (OTHER SIDE)" : "");
                     Color32 colour = enemy ? CommsMesh.Tone(CommsTone.Caution) : CommsMesh.Tone(CommsCatalog.Pings[item.Style].Tone);
                     Tag(at, inverse, text, CommsMesh.Fade(colour, fade), new Vector2(0f, -22f), 11f, bold: false);
                 }
@@ -319,18 +321,10 @@ namespace BoscaliSummer.Features.Comms.Presentation
             CommsClientState state = manager.State;
             IReadOnlyList<CommsItem> items = state.Board.Items;
 
-            // Strokes first so every glyph sits on top of the drawings.
-            for (int i = 0; i < items.Count; i++)
-            {
-                CommsItem item = items[i];
-                if (item.Kind != CommsItemKind.Stroke || state.IsMuted(item.Author)) continue;
-                float half = CommsCatalog.PenWidths[item.Size < CommsCatalog.PenWidths.Length ? item.Size : 0] * px;
-                Stroke(vh, item.Points, factor, half + UnderExtra * px, CommsMesh.Under);
-                Stroke(vh, item.Points, factor, half, CommsMesh.Ink(item.Style, 235));
-                if (vh.currentVertCount > MaxVertices) return;
-            }
-
-            for (int i = 0; i < items.Count; i++)
+            // Stickers and labels first, then strokes newest first, all out of one vertex
+            // budget: a heavy doodler can only lose their own oldest lines, never anyone's
+            // stickers.
+            for (int i = items.Count - 1; i >= 0 && vh.currentVertCount < MaxVertices; i--)
             {
                 CommsItem item = items[i];
                 if (state.IsMuted(item.Author)) continue;
@@ -347,8 +341,17 @@ namespace BoscaliSummer.Features.Comms.Presentation
                 }
             }
 
+            for (int i = items.Count - 1; i >= 0 && vh.currentVertCount < MaxVertices; i--)
+            {
+                CommsItem item = items[i];
+                if (item.Kind != CommsItemKind.Stroke || state.IsMuted(item.Author)) continue;
+                float half = CommsCatalog.PenWidths[item.Size < CommsCatalog.PenWidths.Length ? item.Size : 0] * px;
+                Stroke(vh, item.Points, factor, half + UnderExtra * px, CommsMesh.Under);
+                Stroke(vh, item.Points, factor, half, CommsMesh.Ink(item.Style, 235));
+            }
+
             IReadOnlyList<HuntView> hunts = state.Hunts;
-            for (int i = 0; i < hunts.Count; i++)
+            for (int i = 0; i < hunts.Count && vh.currentVertCount < MaxVertices; i++)
             {
                 HuntView hunt = hunts[i];
                 if (!hunt.Revealed) continue;
@@ -389,6 +392,7 @@ namespace BoscaliSummer.Features.Comms.Presentation
     /// </summary>
     internal sealed class CommsPulseGraphic : MaskableGraphic
     {
+        private const int MaxVertices = 60000;
         private const float PulseSeconds = 8f;
         private const float PulsePeriod = 1.4f;
         private const float FadeSeconds = 5f;
@@ -434,15 +438,18 @@ namespace BoscaliSummer.Features.Comms.Presentation
             float now = Time.unscaledTime;
             CommsClientState state = manager.State;
 
+            // Newest first under one vertex budget: Unity UI blanks a mesh past 65k vertices.
             IReadOnlyList<CommsItem> items = state.Board.Items;
-            for (int i = 0; i < items.Count; i++)
+            for (int i = items.Count - 1; i >= 0 && vh.currentVertCount < MaxVertices; i--)
             {
                 CommsItem item = items[i];
                 if (item.Kind != CommsItemKind.Ping || !CommsCatalog.ValidPing(item.Style) || state.IsMuted(item.Author)) continue;
                 PingKind kind = CommsCatalog.Pings[item.Style];
                 Vector2 at = new Vector2(item.X * factor, item.Z * factor);
                 float fade = Mathf.Clamp01((item.Expires - now) / FadeSeconds);
-                Color32 tone = CommsMesh.Fade(CommsMesh.Tone(kind.Tone), fade);
+                // The other side's ALL pings wear one colour everywhere: tags, markers and here.
+                CommsTone ink = item.Faction != manager.LocalFaction ? CommsTone.Caution : kind.Tone;
+                Color32 tone = CommsMesh.Fade(CommsMesh.Tone(ink), fade);
                 float age = now - item.Created;
                 if (age < PulseSeconds)
                 {

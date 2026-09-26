@@ -68,6 +68,9 @@ namespace BoscaliSummer.Features.Support.Runtime
         CopyLimit = 30,
         WouldStrand = 31,
         PlatformExists = 32,
+
+        /// <summary>Another present pilot owns the asset and the faction guards it.</summary>
+        TeamDenied = 33,
         NeedsCyberCommand = 34,
         NetworkFull = 35,
 
@@ -79,6 +82,9 @@ namespace BoscaliSummer.Features.Support.Runtime
 
         /// <summary>No held SPEC OPS post of the ability's kind covers the target.</summary>
         NoFieldPost = 38,
+
+        /// <summary>The faction's team for this asset is still re-tasking.</summary>
+        TeamCoolingDown = 39,
 
         /// <summary>A console verb refused by the network model: <c>CyberRefused + (byte)CyberDenial</c>.</summary>
         CyberRefused = 64,

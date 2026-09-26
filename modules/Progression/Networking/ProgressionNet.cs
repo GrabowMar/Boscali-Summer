@@ -72,6 +72,13 @@ namespace BoscaliSummer.Features.Progression.Networking
         /// <summary>Perk id meaning "send me a snapshot, change nothing".</summary>
         internal const byte QueryOnly = byte.MaxValue;
 
+        // A client polls every 2 s while a view is open and holds each pick until its reply, so
+        // these only bind a peer that floods; queries and picks are limited apart so a poll can
+        // never swallow the pick clicked right after it.
+        private const float QueryInterval = 1f;
+        private const float IntentInterval = 0.25f;
+        private const int MaximumSenders = 64;
+
         private ProgressionManager manager;
         private MessageHandler serverHandler;
         private MessageHandler clientHandler;
@@ -83,11 +90,17 @@ namespace BoscaliSummer.Features.Progression.Networking
             new System.Collections.Generic.Dictionary<ulong, float>();
         private readonly System.Collections.Generic.Dictionary<uint, byte> tunes =
             new System.Collections.Generic.Dictionary<uint, byte>();
+        private readonly System.Collections.Generic.Dictionary<ulong, float> nextQuery =
+            new System.Collections.Generic.Dictionary<ulong, float>();
+        private readonly System.Collections.Generic.Dictionary<ulong, float> nextIntent =
+            new System.Collections.Generic.Dictionary<ulong, float>();
+        private readonly System.Collections.Generic.List<ulong> expired = new System.Collections.Generic.List<ulong>(64);
+        private float nextPrune;
 
         internal void ResetScene()
         {
             scene++; requestedPlayer = PlayerIdentity.None; requestedHq = null;
-            lastTuneChange.Clear(); tunes.Clear();
+            lastTuneChange.Clear(); tunes.Clear(); nextQuery.Clear(); nextIntent.Clear();
         }
 
         internal byte TuneFor(Aircraft aircraft) => aircraft != null &&
@@ -159,7 +172,8 @@ namespace BoscaliSummer.Features.Progression.Networking
         private void ReceivePlaneTune(INetworkPlayer sender, PlaneTuneRequest request)
         {
             if (!GameAccess.IsServer() || request.Protocol != ProtocolVersion || sender == null ||
-                !sender.IsAuthenticated || !sender.TryGetPlayer<Player>(out Player player)) return;
+                !sender.IsAuthenticated || !sender.TryGetPlayer<Player>(out Player player) || player == null ||
+                !Allow(nextIntent, PlayerIdentity.Of(player), IntentInterval)) return;
             if (!ApplyPlaneTune(player, request.AircraftId, request.Mode))
                 sender.Send(new PlaneTuneState { Protocol = ProtocolVersion,
                     AircraftId = request.AircraftId, Mode = request.Mode, Accepted = 0 });
@@ -228,11 +242,35 @@ namespace BoscaliSummer.Features.Progression.Networking
                 !sender.TryGetPlayer<Player>(out Player player) || player == null)
                 return;
             if (submit.Perk != QueryOnly && !PerkCatalog.IsDefined(submit.Perk)) return;
+            if (!Allow(submit.Perk == QueryOnly ? nextQuery : nextIntent, PlayerIdentity.Of(player),
+                    submit.Perk == QueryOnly ? QueryInterval : IntentInterval)) return;
             bool oldCareer = submit.Perk != QueryOnly && submit.Generation != manager.Generation(player);
             ProgressionSnapshot snapshot = manager.Handle(player, oldCareer ? QueryOnly : submit.Perk);
             if (oldCareer) snapshot.Result = ProgressionSnapshot.Denied;
             snapshot.Scene = submit.Scene; snapshot.Token = submit.Token;
             sender.Send(snapshot);
+        }
+
+        /// <summary>Bounded per-player throttle; stale entries are pruned so the cap never locks out a newcomer.</summary>
+        private bool Allow(System.Collections.Generic.Dictionary<ulong, float> limits, ulong id, float interval)
+        {
+            float now = Time.unscaledTime;
+            if (now >= nextPrune)
+            {
+                nextPrune = now + 10f;
+                Prune(nextQuery, now); Prune(nextIntent, now);
+            }
+            if (limits.TryGetValue(id, out float next) ? now < next : limits.Count >= MaximumSenders) return false;
+            limits[id] = now + interval;
+            return true;
+        }
+
+        private void Prune(System.Collections.Generic.Dictionary<ulong, float> limits, float now)
+        {
+            expired.Clear();
+            foreach (var pair in limits)
+                if (now - pair.Value > 30f) expired.Add(pair.Key);
+            for (int i = 0; i < expired.Count; i++) limits.Remove(expired[i]);
         }
 
         private void ReceiveSnapshot(INetworkPlayer _, ProgressionSnapshot snapshot)
@@ -257,10 +295,17 @@ namespace BoscaliSummer.Features.Progression.Networking
                 writer.WriteByte(value.Perk);
                 writer.WritePackedUInt32(value.Scene); writer.WritePackedUInt32(value.Token); writer.WritePackedInt32(value.Generation);
             });
-            SetReader<ProgressionSubmit>(reader => new ProgressionSubmit
+            // A foreign protocol keeps only its header: its layout may differ, and reading past the
+            // end would throw inside a Mirage handler.
+            SetReader<ProgressionSubmit>(reader =>
             {
-                Protocol = reader.ReadByte(),
-                Perk = reader.ReadByte(), Scene = reader.ReadPackedUInt32(), Token = reader.ReadPackedUInt32(), Generation = reader.ReadPackedInt32()
+                byte protocol = reader.ReadByte();
+                if (protocol != ProtocolVersion) return new ProgressionSubmit { Protocol = protocol };
+                return new ProgressionSubmit
+                {
+                    Protocol = protocol,
+                    Perk = reader.ReadByte(), Scene = reader.ReadPackedUInt32(), Token = reader.ReadPackedUInt32(), Generation = reader.ReadPackedInt32()
+                };
             });
             SetWriter<ProgressionSnapshot>((writer, value) =>
             {
@@ -275,35 +320,47 @@ namespace BoscaliSummer.Features.Progression.Networking
                 writer.WritePackedInt32(value.ScorePerPoint); writer.WriteByte(value.MaximumPoints);
                 writer.WritePackedUInt32(value.PlaneId); writer.WriteByte(value.EngineMap);
             });
-            SetReader<ProgressionSnapshot>(reader => new ProgressionSnapshot
+            SetReader<ProgressionSnapshot>(reader =>
             {
-                Protocol = reader.ReadByte(),
-                PerkMask = reader.ReadPackedUInt32(),
-                Score = reader.ReadPackedInt32(),
-                EarnedPoints = reader.ReadByte(),
-                Rank = reader.ReadByte(),
-                Result = reader.ReadByte(),
-                Generation = reader.ReadPackedInt32(), Scene = reader.ReadPackedUInt32(), Token = reader.ReadPackedUInt32(),
-                ScorePerPoint = reader.ReadPackedInt32(), MaximumPoints = reader.ReadByte(),
-                PlaneId = reader.ReadPackedUInt32(), EngineMap = reader.ReadByte()
+                byte protocol = reader.ReadByte();
+                if (protocol != ProtocolVersion) return new ProgressionSnapshot { Protocol = protocol };
+                return new ProgressionSnapshot
+                {
+                    Protocol = protocol,
+                    PerkMask = reader.ReadPackedUInt32(),
+                    Score = reader.ReadPackedInt32(),
+                    EarnedPoints = reader.ReadByte(),
+                    Rank = reader.ReadByte(),
+                    Result = reader.ReadByte(),
+                    Generation = reader.ReadPackedInt32(), Scene = reader.ReadPackedUInt32(), Token = reader.ReadPackedUInt32(),
+                    ScorePerPoint = reader.ReadPackedInt32(), MaximumPoints = reader.ReadByte(),
+                    PlaneId = reader.ReadPackedUInt32(), EngineMap = reader.ReadByte()
+                };
             });
             SetWriter<PlaneTuneRequest>((writer, value) =>
             {
                 writer.WriteByte(value.Protocol); writer.WritePackedUInt32(value.AircraftId); writer.WriteByte(value.Mode);
             });
-            SetReader<PlaneTuneRequest>(reader => new PlaneTuneRequest
+            SetReader<PlaneTuneRequest>(reader =>
             {
-                Protocol = reader.ReadByte(), AircraftId = reader.ReadPackedUInt32(), Mode = reader.ReadByte()
+                byte protocol = reader.ReadByte();
+                if (protocol != ProtocolVersion) return new PlaneTuneRequest { Protocol = protocol };
+                return new PlaneTuneRequest { Protocol = protocol, AircraftId = reader.ReadPackedUInt32(), Mode = reader.ReadByte() };
             });
             SetWriter<PlaneTuneState>((writer, value) =>
             {
                 writer.WriteByte(value.Protocol); writer.WritePackedUInt32(value.AircraftId); writer.WriteByte(value.Mode);
                 writer.WriteByte(value.Accepted);
             });
-            SetReader<PlaneTuneState>(reader => new PlaneTuneState
+            SetReader<PlaneTuneState>(reader =>
             {
-                Protocol = reader.ReadByte(), AircraftId = reader.ReadPackedUInt32(), Mode = reader.ReadByte(),
-                Accepted = reader.ReadByte()
+                byte protocol = reader.ReadByte();
+                if (protocol != ProtocolVersion) return new PlaneTuneState { Protocol = protocol };
+                return new PlaneTuneState
+                {
+                    Protocol = protocol, AircraftId = reader.ReadPackedUInt32(), Mode = reader.ReadByte(),
+                    Accepted = reader.ReadByte()
+                };
             });
             MessagePacker.RegisterMessage<ProgressionSubmit>();
             MessagePacker.RegisterMessage<ProgressionSnapshot>();

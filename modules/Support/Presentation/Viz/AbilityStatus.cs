@@ -1,4 +1,5 @@
 using System.Globalization;
+using BoscaliSummer.Features.Support.Domain;
 using BoscaliSummer.Features.Support.Domain.Cyber;
 using BoscaliSummer.Features.Support.Domain.Orbital;
 using BoscaliSummer.Features.Support.Domain.SpecOps;
@@ -119,6 +120,17 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
                 // The host still re-checks that a location's radius covers the point.
                 reason = "TARGET MUST BE INSIDE A LOCATION'S RADIUS";
                 return true;
+            }
+            TeamGate? gate = action.Id == SupportActionId.FlareMissile ? TeamGate.FlareBarrage :
+                action.Id == SupportActionId.Fortify ? TeamGate.Fortify : (TeamGate?)null;
+            if (gate.HasValue)
+            {
+                float left = support.TeamCooldownRemaining(gate.Value);
+                if (left > 0.5f)
+                {
+                    reason = "TEAM RE-TASKING · T-" + Mathf.CeilToInt(left) + "s";
+                    return false;
+                }
             }
             PlatformAbility? ability = SupportManager.OrbitalAbility(action.Id);
             if (!ability.HasValue) return true;

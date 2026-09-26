@@ -99,8 +99,24 @@ namespace BoscaliSummer.Features.Comms.Presentation
                 CommsItem item = items[i];
                 if (item.Kind != CommsItemKind.Ping || item.Expires <= now || state.IsMuted(item.Author) ||
                     !CommsCatalog.ValidPing(item.Style)) continue;
+                if (float.IsNaN(item.Height)) item.Height = GroundHeight(item.X, item.Z);
                 pings.Add(item);
             }
+        }
+
+        /// <summary>
+        /// The ground (or deck) under a map point, in global metres: looked up once per ping,
+        /// the way the OPS call-ins find theirs. A miss on terrain that is not loaded yet
+        /// answers sea level for now and leaves the ping to be asked again.
+        /// </summary>
+        private static float GroundHeight(float x, float z)
+        {
+            Vector3 local = new GlobalPosition(x, 0f, z).ToLocalPosition();
+            Vector3 origin = new Vector3(local.x, Mathf.Max(local.y, Datum.LocalSeaY) + 8000f, local.z);
+            if (Physics.Raycast(origin, Vector3.down, out RaycastHit hit, 16000f,
+                (int)PhysicsLayers.StaticsMask | (int)PhysicsLayers.ShipsMask))
+                return (float)hit.point.ToGlobalPosition().y;
+            return float.NaN;
         }
 
         private void Render(Camera camera, Vector3 self)
@@ -123,8 +139,9 @@ namespace BoscaliSummer.Features.Comms.Presentation
                     continue;
                 }
                 CommsItem ping = pings[i];
-                var target = new GlobalPosition(ping.X, 0f, ping.Z);
-                if (!Project(camera, target.ToLocalPosition(), halfWidth, halfHeight, out Vector2 at, out float bearing, out bool clamped))
+                // Until the ground under it is known, a ping sits at sea level as it always did.
+                Vector3 target = new GlobalPosition(ping.X, float.IsNaN(ping.Height) ? 0f : ping.Height, ping.Z).ToLocalPosition();
+                if (!Project(camera, target, halfWidth, halfHeight, out Vector2 at, out float bearing, out bool clamped))
                 {
                     markers[i].SetVisible(false);
                     continue;
@@ -137,7 +154,8 @@ namespace BoscaliSummer.Features.Comms.Presentation
                 float fade = Mathf.Clamp01((ping.Expires - now) / 5f);
                 Color colour = CommsMesh.Tone(ping.Faction == manager.LocalFaction ? kind.Tone : CommsTone.Caution);
                 colour.a *= fade;
-                markers[i].Show(at, kind.Glyph, kind.Code + " · " + who + " · " + CommsText.Distance(range, metric),
+                string code = ping.IsCall && !string.IsNullOrEmpty(ping.Text) ? ping.Text : kind.Code;
+                markers[i].Show(at, kind.Glyph, code + " · " + who + " · " + CommsText.Distance(range, metric),
                     colour, clamped, bearing);
             }
         }

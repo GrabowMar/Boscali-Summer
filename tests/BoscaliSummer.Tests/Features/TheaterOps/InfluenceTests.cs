@@ -10,6 +10,9 @@ namespace BoscaliSummer.Tests.Features.TheaterOps
             EverySetterIsBoundedAndReported();
             AxesLeanFavorAndAvoidWithinCeiling();
             DegenerateInputCannotCorrupt();
+            TheChestIsPricedFromTheOffensiveCosts();
+            AVotedChestIsReclampedNotReplaced();
+            TheReserveIsBoundedByWaves();
         }
 
         private static void DefaultsLeanAttackWithAnOpenChest()
@@ -17,7 +20,9 @@ namespace BoscaliSummer.Tests.Features.TheaterOps
             var state = new InfluenceState();
             TestAssert.That(state.Stance == InfluenceState.DefaultStance, "a new staff leans attack");
             TestAssert.That(!state.HoldOffense, "a new staff holds nothing");
-            TestAssert.That(state.MaxEscrowPerPlan == InfluenceState.DefaultMaxEscrow, "a new chest is open");
+            TestAssert.That(state.MaxEscrowPerPlan == state.DefaultMaxEscrow, "a new chest is open");
+            TestAssert.That(state.DefaultMaxEscrow == 25f + 2f * 45f,
+                "the default chest opens a plan with two waves at the settings' default costs");
             TestAssert.That(state.ReserveFloor == 0f, "a new staff keeps no reserve");
             TestAssert.That(state.Setter == "" && state.Axes.Count == 0, "a new staff names no setter and no axes");
         }
@@ -55,10 +60,43 @@ namespace BoscaliSummer.Tests.Features.TheaterOps
             state.SetStance(9f, "VIPER-1");
             TestAssert.That(state.Stance == 1f, "a wild stance clamps");
             state.SetChest(float.PositiveInfinity, -5f, "VIPER-1");
-            TestAssert.That(state.MaxEscrowPerPlan == InfluenceState.DefaultMaxEscrow, "a wild escrow falls back");
+            TestAssert.That(state.MaxEscrowPerPlan == state.DefaultMaxEscrow, "a wild escrow falls back");
             TestAssert.That(state.ReserveFloor == 0f, "a negative reserve clamps");
             TestAssert.That(!state.SetAxis("", 1f, "VIPER-1"), "an empty key is refused");
             TestAssert.That(!state.SetAxis(null, 1f, "VIPER-1"), "a null key is refused");
+        }
+
+        private static void TheChestIsPricedFromTheOffensiveCosts()
+        {
+            var state = new InfluenceState();
+            TestAssert.That(state.EscrowCap == 25f + 6f * 45f, "the default cap funds all six waves");
+            TestAssert.That(state.Price(10f, 20f), "new costs reprice an unset chest");
+            TestAssert.That(state.DefaultMaxEscrow == 50f && state.MaxEscrowPerPlan == 50f,
+                "an unset chest follows the overhead plus two waves");
+            TestAssert.That(state.EscrowCap == 130f && state.ReserveCap == 200f,
+                "the caps follow six waves of escrow and ten waves of reserve");
+            TestAssert.That(!state.Price(10f, 20f), "the same costs change nothing");
+            TestAssert.That(state.Price(float.NaN, -5f), "degenerate costs fall back without throwing");
+            TestAssert.That(state.EscrowCap >= 0f && state.ReserveCap == 0f, "a negative wave prices nothing");
+        }
+
+        private static void AVotedChestIsReclampedNotReplaced()
+        {
+            var state = new InfluenceState();
+            TestAssert.That(state.SetChest(200f, 0f, "VOTE"), "a voted chest lands");
+            state.Price(25f, 45f);
+            TestAssert.That(state.MaxEscrowPerPlan == 200f, "repricing keeps a voted chest");
+            state.Price(10f, 5f);
+            TestAssert.That(state.MaxEscrowPerPlan == 40f, "a cheaper war clamps a voted chest to its cap");
+            TestAssert.That(!state.SetChest(9999f, 0f, "VOTE"), "a chest already at its cap reports no change");
+        }
+
+        private static void TheReserveIsBoundedByWaves()
+        {
+            var state = new InfluenceState();
+            state.SetChest(state.MaxEscrowPerPlan, 100000f, "VIPER-1");
+            TestAssert.That(state.ReserveFloor == state.ReserveCap && state.ReserveCap == 450f,
+                "one player cannot freeze the pool: the reserve stops at ten waves");
         }
     }
 }

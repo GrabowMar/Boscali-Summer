@@ -29,20 +29,35 @@ namespace BoscaliSummer.Features.Comms.Domain
         /// <summary>Ping kind, sticker index or pen ink, by <see cref="Kind"/>.</summary>
         public byte Style;
 
-        /// <summary>Stroke width index; unused elsewhere.</summary>
+        /// <summary>Stroke width index; <see cref="CallMark"/> on a ping a brevity call dropped.</summary>
         public byte Size;
 
         /// <summary>Quantised interleaved points: one pair for a point item, 2+ for a stroke.</summary>
         public int[] Points;
 
-        /// <summary>A label's words. Empty for every other kind.</summary>
+        /// <summary>A label's words, or the call that dropped a call ping. Empty for every other kind.</summary>
         public string Text;
 
         public float Created;
         public float Expires;
 
+        /// <summary>
+        /// Altitude (global metres) a cockpit marker sits at: the caller's own for a call ping,
+        /// the ground under it once a peer has looked; NaN until known.
+        /// </summary>
+        public float Height = float.NaN;
+
+        /// <summary><see cref="Size"/> of a ping dropped by a brevity call at the caller's aircraft.</summary>
+        public const byte CallMark = 1;
+
+        public bool IsCall => Kind == CommsItemKind.Ping && Size == CallMark;
+
         public float X => Points != null && Points.Length >= 2 ? StrokeCodec.Restore(Points[0]) : 0f;
         public float Z => Points != null && Points.Length >= 2 ? StrokeCodec.Restore(Points[1]) : 0f;
+
+        /// <summary>Whether two posts reach the same players: the same side's TEAM, or ALL.</summary>
+        public bool SameAudience(CommsItem other) =>
+            other != null && Channel == other.Channel && (Channel == CommsChannel.All || Faction == other.Faction);
     }
 
     /// <summary>
@@ -54,19 +69,23 @@ namespace BoscaliSummer.Features.Comms.Domain
     internal sealed class CommsBoard
     {
         /// <summary>Most items one author may hold, by kind. A new one retires that author's oldest.</summary>
-        public static int AuthorBudget(CommsItemKind kind)
+        public static int AuthorBudget(CommsItemKind kind, bool call = false)
         {
             switch (kind)
             {
-                case CommsItemKind.Ping: return 3;
+                // A call's own marker has its own slot, so SPIKE never retires a SAM mark.
+                case CommsItemKind.Ping: return call ? 1 : 3;
                 case CommsItemKind.Sticker: return 12;
                 case CommsItemKind.Label: return 8;
                 default: return 40;
             }
         }
 
-        /// <summary>Hard ceiling on the whole board, whoever posted.</summary>
-        public const int MaxItems = 320;
+        /// <summary>
+        /// Hard ceiling per audience (one side's TEAM, or ALL), so a crowded side never evicts
+        /// the other side's marks.
+        /// </summary>
+        public const int MaxPerAudience = 240;
 
         private readonly List<CommsItem> items = new List<CommsItem>(64);
 
@@ -85,11 +104,11 @@ namespace BoscaliSummer.Features.Comms.Domain
 
         /// <summary>
         /// Store an item, replacing one with the same id. When <paramref name="enforceBudget"/>
-        /// is set (the host), the author's oldest item of the same kind and then the board's
-        /// oldest item are retired to make room, and their ids are reported so the host can
-        /// tell every peer.
+        /// is set (the host), the author's oldest item of the same kind and then its audience's
+        /// oldest item are retired to make room, and reported so the host can tell whoever
+        /// could see them.
         /// </summary>
-        public void Add(CommsItem item, bool enforceBudget, List<uint> retired)
+        public void Add(CommsItem item, bool enforceBudget, List<CommsItem> retired)
         {
             if (item == null) return;
             int existing = IndexOf(item.Id);
@@ -97,18 +116,17 @@ namespace BoscaliSummer.Features.Comms.Domain
 
             if (enforceBudget)
             {
-                int budget = AuthorBudget(item.Kind);
-                while (CountBy(item.Author, item.Kind) >= budget)
+                int budget = AuthorBudget(item.Kind, item.IsCall);
+                int oldest;
+                while (CountLike(item) >= budget && (oldest = OldestLike(item)) >= 0)
                 {
-                    int oldest = OldestBy(item.Author, item.Kind);
-                    if (oldest < 0) break;
-                    retired?.Add(items[oldest].Id);
+                    retired?.Add(items[oldest]);
                     items.RemoveAt(oldest);
                 }
-                while (items.Count >= MaxItems)
+                while (CountAudience(item) >= MaxPerAudience && (oldest = OldestAudience(item)) >= 0)
                 {
-                    retired?.Add(items[0].Id);
-                    items.RemoveAt(0);
+                    retired?.Add(items[oldest]);
+                    items.RemoveAt(oldest);
                 }
             }
 
@@ -125,14 +143,14 @@ namespace BoscaliSummer.Features.Comms.Domain
             return true;
         }
 
-        /// <summary>Remove every item <paramref name="match"/> accepts; report their ids.</summary>
-        public int RemoveWhere(Func<CommsItem, bool> match, List<uint> removed)
+        /// <summary>Remove every item <paramref name="match"/> accepts; report them.</summary>
+        public int RemoveWhere(Func<CommsItem, bool> match, List<CommsItem> removed)
         {
             int count = 0;
             for (int i = items.Count - 1; i >= 0; i--)
             {
                 if (!match(items[i])) continue;
-                removed?.Add(items[i].Id);
+                removed?.Add(items[i]);
                 items.RemoveAt(i);
                 count++;
             }
@@ -245,10 +263,36 @@ namespace BoscaliSummer.Features.Comms.Domain
             return -1;
         }
 
-        private int OldestBy(ulong author, CommsItemKind kind)
+        private static bool Like(CommsItem a, CommsItem b) =>
+            a.Author == b.Author && a.Kind == b.Kind && a.IsCall == b.IsCall;
+
+        private int CountLike(CommsItem like)
+        {
+            int count = 0;
+            for (int i = 0; i < items.Count; i++)
+                if (Like(items[i], like)) count++;
+            return count;
+        }
+
+        private int OldestLike(CommsItem like)
         {
             for (int i = 0; i < items.Count; i++)
-                if (items[i].Author == author && items[i].Kind == kind) return i;
+                if (Like(items[i], like)) return i;
+            return -1;
+        }
+
+        private int CountAudience(CommsItem like)
+        {
+            int count = 0;
+            for (int i = 0; i < items.Count; i++)
+                if (items[i].SameAudience(like)) count++;
+            return count;
+        }
+
+        private int OldestAudience(CommsItem like)
+        {
+            for (int i = 0; i < items.Count; i++)
+                if (items[i].SameAudience(like)) return i;
             return -1;
         }
     }

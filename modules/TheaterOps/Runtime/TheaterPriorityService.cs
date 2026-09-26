@@ -106,13 +106,12 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
         }
 
         /// <summary>
-        /// The director's hand on the effort. No player intent reaches here: stance, axes and
-        /// hold move this through the review, never directly.
+        /// The director's hand on one faction's effort. No player intent reaches here: stance,
+        /// axes and hold move it through the review, and a passed vote through the director.
         /// </summary>
-        internal bool SetDirective(string key)
+        internal bool SetDirective(FactionHQ hq, string key)
         {
-            if (!authoritative || string.IsNullOrEmpty(key)) return false;
-            if (!GameAccess.TryGetLocalFaction(out FactionHQ hq)) return false;
+            if (!authoritative || string.IsNullOrEmpty(key) || hq == null || hq.faction == null) return false;
             if (!TryResolveObjective(hq, key, out string label, out Vector3 position)) return false;
 
             var directive = new PriorityDirective(key, label, position.x, position.y, position.z);
@@ -124,9 +123,9 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             return true;
         }
 
-        internal bool ClearDirective()
+        internal bool ClearDirective(FactionHQ hq)
         {
-            if (!authoritative || !GameAccess.TryGetLocalFaction(out FactionHQ hq)) return false;
+            if (!authoritative || hq == null || hq.faction == null) return false;
             if (!table.TryClear(hq.faction.factionName)) return false;
 
             network?.BroadcastState(hq.faction.factionName, null);
@@ -158,6 +157,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
 
         // ---- Internals --------------------------------------------------------------------
 
+        /// <summary>The local player's side, for presentation only; host logic names the faction.</summary>
         internal bool TryGetLocalDirective(out PriorityDirective directive)
         {
             directive = default;

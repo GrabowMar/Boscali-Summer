@@ -70,13 +70,13 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
                     }
 
                 case HackKind.Track:
-                    if (!context.Host.TryReserve(SupportPool.Cyber)) return SupportResult.Busy;
+                    if (!context.Host.TryReserve(context.Owner, SupportPool.Cyber)) return SupportResult.Busy;
                     context.Host.Run(TrackRoutine(context.Host, context.Owner, target,
                         CyberCatalog.Radius(kind), CyberCatalog.Duration(kind)));
                     return SupportResult.Accepted;
 
                 case HackKind.Blackout:
-                    if (!context.Host.TryReserve(SupportPool.Cyber)) return SupportResult.Busy;
+                    if (!context.Host.TryReserve(context.Owner, SupportPool.Cyber)) return SupportResult.Busy;
                     context.Host.Run(BlackoutRoutine(context.Host, context.Player, context.Owner, target,
                         CyberCatalog.Radius(kind), CyberCatalog.BlackoutStrength));
                     return SupportResult.Accepted;
@@ -102,7 +102,7 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
                     }
 
                 case HackKind.Hijack:
-                    if (!context.Host.TryReserve(SupportPool.Cyber)) return SupportResult.Busy;
+                    if (!context.Host.TryReserve(context.Owner, SupportPool.Cyber)) return SupportResult.Busy;
                     context.Host.Run(HijackRoutine(context.Host, context.Player, context.Owner, target,
                         CyberCatalog.Radius(kind), CyberCatalog.Duration(kind)));
                     return SupportResult.Accepted;
@@ -141,7 +141,7 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
             }
             finally
             {
-                host.Release(SupportPool.Cyber);
+                host.Release(owner, SupportPool.Cyber);
             }
         }
 
@@ -183,7 +183,7 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
             }
             finally
             {
-                host.Release(SupportPool.Cyber);
+                host.Release(owner, SupportPool.Cyber);
             }
         }
 
@@ -267,7 +267,7 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
                     }
                 }
                 seized.Clear();
-                host.Release(SupportPool.Cyber);
+                host.Release(owner, SupportPool.Cyber);
             }
         }
     }

@@ -11,8 +11,9 @@ using UnityEngine;
 
 namespace BoscaliSummer.Features.Squad.Networking
 {
+    /// <summary>Revision is the last full snapshot the client applied; zero asks for a full one.</summary>
     [NetworkMessage]
-    internal struct SquadQuery { public byte Protocol; public uint Scene, Token; }
+    internal struct SquadQuery { public byte Protocol; public uint Scene, Token, Revision; }
 
     [NetworkMessage]
     internal struct SquadSnapshot
@@ -24,11 +25,16 @@ namespace BoscaliSummer.Features.Squad.Networking
         public int Bonus, Origin, ActiveIndex, HuntId;
         public string Status, Speaker, Chatter;
         public EnemyWingView[] Wings;
+        public uint Revision;
+        /// <summary>The host's board still matches <see cref="Revision"/>; only the header travels.</summary>
+        public bool Unchanged;
     }
 
     internal sealed class SquadNet : MonoBehaviour
     {
-        internal const byte ProtocolVersion = 2;
+        /// <summary>Version 3 adds the content revision and the header-only unchanged reply.</summary>
+        internal const byte ProtocolVersion = 3;
+        private const float FastPoll = 1f, IdlePoll = 5f;
         private SquadManager manager;
         private MessageHandler serverHandler, clientHandler;
         private readonly Dictionary<ulong, float> nextReply = new Dictionary<ulong, float>();
@@ -39,8 +45,10 @@ namespace BoscaliSummer.Features.Squad.Networking
         private FactionHQ requestedHq;
 
         internal void Configure(SquadManager owner) { manager = owner; InstallSerializers(); }
-        internal void ResetScene()
-        { scene++; pending = false; requestedHq = null; nextReply.Clear(); lastQuery = -10f; }
+        internal void ResetScene() { ResetClient(); nextReply.Clear(); }
+
+        // Client correlation only. A listen host changing faction must keep the server's reply limits.
+        private void ResetClient() { scene++; pending = false; requestedHq = null; lastQuery = -10f; }
 
         private void Update()
         {
@@ -62,18 +70,29 @@ namespace BoscaliSummer.Features.Squad.Networking
             foreach (ulong id in expired) nextReply.Remove(id);
         }
 
-        internal void Request()
+        /// <summary>
+        /// Polls once a second while a hunt is on or the board is being read, otherwise every
+        /// five; an unchanged board is answered with a header only.
+        /// </summary>
+        internal void Request(bool fast)
         {
             if (!GameManager.GetLocalPlayer<Player>(out Player player) || player == null || player.HQ == null)
             { manager.ClearLocal("Join a faction to receive squad intelligence."); return; }
-            if (requestedHq != player.HQ) { ResetScene(); requestedHq = player.HQ; manager.ClearLocal("Receiving squad intelligence."); }
-            if (pending || Time.unscaledTime - lastQuery < 1f) return;
+            if (requestedHq != player.HQ) { ResetClient(); requestedHq = player.HQ; manager.ClearLocal("Receiving squad intelligence."); }
+            bool server = GameAccess.IsServer();
+            // The host reads its own board in-process, so it keeps the fast cadence for free.
+            if (pending || Time.unscaledTime - lastQuery < (fast || server ? FastPoll : IdlePoll)) return;
             lastQuery = Time.unscaledTime;
-            if (GameAccess.IsServer()) { manager.Apply(manager.Snapshot(player), PlayerIdentity.Of(player)); return; }
+            if (server)
+            {
+                SquadSnapshot local = manager.Snapshot(player);
+                if (local.Revision != manager.AppliedRevision) manager.Apply(local, PlayerIdentity.Of(player));
+                return;
+            }
             NetworkClient client = NetworkManagerNuclearOption.i?.Client;
             if (client == null || !client.Active) { manager.ClearLocal("Squad host link unavailable."); return; }
             pending = true;
-            client.Send(new SquadQuery { Protocol = ProtocolVersion, Scene = scene, Token = ++token });
+            client.Send(new SquadQuery { Protocol = ProtocolVersion, Scene = scene, Token = ++token, Revision = manager.AppliedRevision });
         }
 
         private void ReceiveQuery(INetworkPlayer sender, SquadQuery query)
@@ -84,6 +103,8 @@ namespace BoscaliSummer.Features.Squad.Networking
             if (nextReply.TryGetValue(id, out float next) ? now < next : nextReply.Count >= 64) return;
             nextReply[id] = now + 0.75f;
             SquadSnapshot snapshot = manager.Snapshot(player);
+            if (query.Revision != 0 && query.Revision == snapshot.Revision)
+                snapshot = new SquadSnapshot { Protocol = ProtocolVersion, Revision = snapshot.Revision, Unchanged = true };
             snapshot.Scene = query.Scene; snapshot.Token = query.Token; sender.Send(snapshot);
         }
 
@@ -91,7 +112,10 @@ namespace BoscaliSummer.Features.Squad.Networking
         {
             if (GameAccess.IsServer() || !pending || snapshot.Protocol != ProtocolVersion || snapshot.Scene != scene ||
                 snapshot.Token != token || !GameManager.GetLocalPlayer<Player>(out Player local) || local == null || local.HQ != requestedHq) return;
-            pending = false; manager.Apply(snapshot, PlayerIdentity.Of(local));
+            pending = false;
+            // An unchanged reply confirms the board already shown; ClearLocal zeroes the revision, so a
+            // cleared board is never "confirmed" and the next query asks for a full snapshot.
+            if (!snapshot.Unchanged) manager.Apply(snapshot, PlayerIdentity.Of(local));
         }
 
         private void OnDestroy()
@@ -100,22 +124,34 @@ namespace BoscaliSummer.Features.Squad.Networking
         private static string Text(string text) => string.IsNullOrEmpty(text) ? "" : text.Substring(0, Math.Min(192, text.Length));
         private static void WriteText(NetworkWriter w, string text) => w.WriteString(Text(text));
         private static string ReadText(NetworkReader r) => Text(r.ReadString());
-        private static int ReadInt(NetworkReader r, int maximum)
+        private static int ReadInt(NetworkReader r, int maximum, ref bool valid)
         {
             int value = r.ReadPackedInt32();
-            if (value < 0 || value > maximum) throw new InvalidOperationException("Squad snapshot outside bounds.");
+            if (value < 0 || value > maximum) valid = false;
             return value;
         }
 
+        /// <summary>
+        /// Readers never throw: a throw inside a Mirage handler can drop the connection. A foreign
+        /// protocol keeps only its header; data outside its bounds reads as protocol 0, which every
+        /// handler ignores.
+        /// </summary>
         private static void InstallSerializers()
         {
             Bind(typeof(Writer<SquadQuery>), "Write", (Action<NetworkWriter, SquadQuery>)((w, v) =>
-            { w.WriteByte(v.Protocol); w.WritePackedUInt32(v.Scene); w.WritePackedUInt32(v.Token); }));
+            { w.WriteByte(v.Protocol); w.WritePackedUInt32(v.Scene); w.WritePackedUInt32(v.Token); w.WriteUInt32(v.Revision); }));
             Bind(typeof(Reader<SquadQuery>), "Read", (Func<NetworkReader, SquadQuery>)(r =>
-                new SquadQuery { Protocol = r.ReadByte(), Scene = r.ReadPackedUInt32(), Token = r.ReadPackedUInt32() }));
+            {
+                byte protocol = r.ReadByte();
+                if (protocol != ProtocolVersion) return new SquadQuery { Protocol = protocol };
+                return new SquadQuery { Protocol = protocol, Scene = r.ReadPackedUInt32(), Token = r.ReadPackedUInt32(), Revision = r.ReadUInt32() };
+            }));
             Bind(typeof(Writer<SquadSnapshot>), "Write", (Action<NetworkWriter, SquadSnapshot>)((w, v) =>
             {
-                w.WriteByte(v.Protocol); w.WritePackedUInt32(v.Scene); w.WritePackedUInt32(v.Token); w.WritePackedUInt32(v.Event);
+                w.WriteByte(v.Protocol); w.WritePackedUInt32(v.Scene); w.WritePackedUInt32(v.Token);
+                w.WriteUInt32(v.Revision); w.WriteByte(v.Unchanged ? (byte)1 : (byte)0);
+                if (v.Unchanged) return;
+                w.WritePackedUInt32(v.Event);
                 WriteText(w, v.Pilot.Name); WriteText(w, v.Pilot.Callsign); WriteText(w, v.Pilot.Status); WriteText(w, v.Pilot.Background);
                 w.WriteByte(v.Pilot.Respawns ? (byte)1 : (byte)0); w.WritePackedInt32(v.Pilot.Deaths); w.WritePackedInt32(v.Pilot.Generation);
                 w.WriteByte(v.Hunt ? (byte)1 : (byte)0); w.WritePackedInt32(v.Bonus); w.WritePackedInt32(v.Origin);
@@ -134,23 +170,32 @@ namespace BoscaliSummer.Features.Squad.Networking
             }));
             Bind(typeof(Reader<SquadSnapshot>), "Read", (Func<NetworkReader, SquadSnapshot>)(r =>
             {
-                var v = new SquadSnapshot { Protocol = r.ReadByte(), Scene = r.ReadPackedUInt32(), Token = r.ReadPackedUInt32(), Event = r.ReadPackedUInt32() };
+                byte protocol = r.ReadByte();
+                if (protocol != ProtocolVersion) return new SquadSnapshot { Protocol = protocol };
+                var v = new SquadSnapshot
+                {
+                    Protocol = protocol, Scene = r.ReadPackedUInt32(), Token = r.ReadPackedUInt32(),
+                    Revision = r.ReadUInt32(), Unchanged = r.ReadByte() == 1,
+                };
+                if (v.Unchanged) return v;
+                bool valid = true;
+                v.Event = r.ReadPackedUInt32();
                 string name = ReadText(r), callsign = ReadText(r), status = ReadText(r), background = ReadText(r);
-                bool respawns = r.ReadByte() == 1; int deaths = ReadInt(r, 10000), generation = ReadInt(r, 10001);
+                bool respawns = r.ReadByte() == 1; int deaths = ReadInt(r, 10000, ref valid), generation = ReadInt(r, 10001, ref valid);
                 v.Pilot = new PilotView(name, callsign, status, respawns, deaths, generation, background);
-                v.Hunt = r.ReadByte() == 1; v.Bonus = ReadInt(r, 20); v.Origin = ReadInt(r, int.MaxValue);
-                v.ActiveIndex = ReadInt(r, 8) - 1; v.HuntId = ReadInt(r, int.MaxValue);
+                v.Hunt = r.ReadByte() == 1; v.Bonus = ReadInt(r, 20, ref valid); v.Origin = ReadInt(r, int.MaxValue, ref valid);
+                v.ActiveIndex = ReadInt(r, 8, ref valid) - 1; v.HuntId = ReadInt(r, int.MaxValue, ref valid);
                 v.Status = ReadText(r); v.Speaker = ReadText(r); v.Chatter = ReadText(r);
                 int count = r.ReadByte();
-                if (count > 8 || v.ActiveIndex >= count) throw new InvalidOperationException("Squad wing snapshot exceeds bounds.");
+                if (!valid || count > 8 || v.ActiveIndex >= count) return default;
                 v.Wings = new EnemyWingView[count];
                 for (int i = 0; i < count; i++)
                 {
-                    string symbol = ReadText(r), wing = ReadText(r), ace = ReadText(r); int tier = ReadInt(r, 5);
-                    string skill = ReadText(r), state = ReadText(r); int alive = ReadInt(r, 4), members = ReadInt(r, 4);
-                    string target = ReadText(r); int returns = ReadInt(r, 2);
-                    if (alive > members) throw new InvalidOperationException("Invalid Squad strength.");
-                    int abilities = ReadInt(r, 15);
+                    string symbol = ReadText(r), wing = ReadText(r), ace = ReadText(r); int tier = ReadInt(r, 5, ref valid);
+                    string skill = ReadText(r), state = ReadText(r); int alive = ReadInt(r, 4, ref valid), members = ReadInt(r, 4, ref valid);
+                    string target = ReadText(r); int returns = ReadInt(r, 3, ref valid);
+                    int abilities = ReadInt(r, 15, ref valid);
+                    if (!valid || alive > members) return default;
                     v.Wings[i] = new EnemyWingView(symbol, wing, ace, tier, skill, state, alive, members, target, returns, abilities);
                 }
                 return v;

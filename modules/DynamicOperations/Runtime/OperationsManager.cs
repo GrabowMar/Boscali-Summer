@@ -408,11 +408,22 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
                 MoraleAwarded?.Invoke(target.OriginalOwner.GetInstanceID(), -3f);
             int credited = 0, failures = 0;
             paidPlayers.Clear();
+            int crew = 0;
             for (int i = 0; i < Math.Min(64, hq.factionPlayers.Count); i++)
             {
                 Player player = hq.factionPlayers[i].Player;
                 if (player == null || player.HQ != hq || !paidPlayers.Add(PlayerIdentity.Of(player))) continue;
-                try { hq.RewardPlayer(player, null, op.Money, op.Xp, FactionHQ.RewardType.None); credited++; }
+                crew++;
+            }
+            paidPlayers.Clear();
+            float teamShare = settings != null ? settings.ContractTeamShare.Value : 0.25f;
+            for (int i = 0; i < Math.Min(64, hq.factionPlayers.Count); i++)
+            {
+                Player player = hq.factionPlayers[i].Player;
+                if (player == null || player.HQ != hq || !paidPlayers.Add(PlayerIdentity.Of(player))) continue;
+                bool completer = op.AcceptorId == 0 || PlayerIdentity.Of(player) == op.AcceptorId;
+                float share = ContractShares.Share(completer, crew, teamShare);
+                try { hq.RewardPlayer(player, null, ContractShares.Scaled(op.Money, share), ContractShares.Scaled(op.Xp, share), FactionHQ.RewardType.None); credited++; }
                 catch (Exception ex) { failures++; logger.LogWarning("[Operations] Award failed: " + ex.Message); }
             }
             string deployment = "";
@@ -427,8 +438,11 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
                 deployment = "Special deployment failed.";
                 logger.LogWarning("[Operations] " + deployment + " " + ex.Message);
             }
+            string split = credited > 1 && op.AcceptorId != 0
+                ? "Completer " + (string.IsNullOrEmpty(op.AcceptedBy) ? "its pilot" : op.AcceptedBy) + " takes the full reward, the rest the team share. "
+                : "";
             target.Outcome = (failures > 0 ? "Payment incomplete; see host log. " :
-                credited == 0 ? "No connected faction players to credit. " : "Faction players credited (money after tax). ") + deployment;
+                credited == 0 ? "No connected faction players to credit. " : "Faction players credited (money after tax). " + split) + deployment;
             target.Outcome = OperationsNet.Text(target.Outcome);
             logger.LogInfo("[Operations] Completed " + op.Kind + " #" + op.Id + ": " + target.Name + ". " + target.Outcome);
             SeedFollowOn(board, op);
@@ -496,6 +510,10 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
                 if (target.Mission.Id != id) continue;
                 if (cancel && target.Mission.IsLive)
                 {
+                    if (!ContractShares.MayCancel(target.Mission.State, PlayerIdentity.Of(player),
+                            target.Mission.AcceptorId, AcceptorPresent(player.HQ, target.Mission.AcceptorId)))
+                        return "Only " + (string.IsNullOrEmpty(target.Mission.AcceptedBy) ? "its pilot" : target.Mission.AcceptedBy) +
+                            " may abort this contract.";
                     bool abortingActive = OperationFailure.DeliberateAbort(target.Mission);
                     target.Mission.Cancel(now);
                     if (abortingActive) MoraleAwarded?.Invoke(player.HQ.GetInstanceID(), OperationFailure.AbortMoralePenalty);
@@ -510,7 +528,7 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
                     target.Mission.Observe(now, 0f, valid, target.Base != null && target.Base.CurrentHQ == player.HQ,
                         target.Life.Neutralized || target.Unit != null && target.Unit.disabled);
                 if (cancel) return "Contract already ended.";
-                if (!board.Rules.TryAccept(id, now, AcceptingPilot(player))) return "Cannot accept: offer ended, target unavailable or two contracts already active.";
+                if (!board.Rules.TryAccept(id, now, AcceptingPilot(player), PlayerIdentity.Of(player))) return "Cannot accept: offer ended, target unavailable or two contracts already active.";
                 target.LastJam = -100f; target.Inserted = false; target.Serviced = false; target.Observer = null;
                 return "Contract accepted for your faction. Objective marked on map.";
             }
@@ -520,6 +538,17 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
         private static string AcceptingPilot(Player player)
         {
             return OperationsNet.PilotText(player?.ToString());
+        }
+
+        private static bool AcceptorPresent(FactionHQ hq, ulong acceptor)
+        {
+            if (hq == null || hq.factionPlayers == null || acceptor == 0) return false;
+            for (int i = 0; i < Math.Min(64, hq.factionPlayers.Count); i++)
+            {
+                Player pilot = hq.factionPlayers[i].Player;
+                if (pilot != null && pilot.HQ == hq && PlayerIdentity.Of(pilot) == acceptor) return true;
+            }
+            return false;
         }
 
         private static bool TryKnownPosition(FactionHQ hq, Unit unit, out Vector3 position)

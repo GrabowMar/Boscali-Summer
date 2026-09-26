@@ -4,6 +4,7 @@ using BoscaliSummer.Features.TheaterOps.Domain;
 using BoscaliSummer.Features.TheaterOps.Runtime;
 using BoscaliSummer.Runtime;
 using HarmonyLib;
+using NOAvionics;
 using UnityEngine;
 
 namespace BoscaliSummer.Features.TheaterOps.Patches
@@ -34,6 +35,25 @@ namespace BoscaliSummer.Features.TheaterOps.Patches
             return service != null && hq != null && hq.faction != null &&
                    service.TryGetDirective(hq.faction.factionName, out directive);
         }
+
+        private static int wingFrame = -1;
+        private static int[] wingIds = Array.Empty<int>();
+
+        /// <summary>
+        /// Whether an aircraft flies in the local player's Wing Command wing. Reads the
+        /// published wing board once per frame and stops there when it is empty, so an AI
+        /// destination query never pays WingLink's reflective fallback.
+        /// </summary>
+        internal static bool IsWingMember(Aircraft aircraft)
+        {
+            int frame = Time.frameCount;
+            if (wingFrame != frame)
+            {
+                wingFrame = frame;
+                wingIds = PresenceBoard.GetInts(PresenceBoard.WingMemberIds);
+            }
+            return wingIds.Length > 0 && PresenceBoard.Contains(wingIds, aircraft.persistentID.GetHashCode());
+        }
     }
 
     [HarmonyPatch]
@@ -51,7 +71,7 @@ namespace BoscaliSummer.Features.TheaterOps.Patches
                 !MissionPositionPriorityQuery.TryGetDirective(service, unit.NetworkHQ, out PriorityDirective directive))
                 return;
             if (unit is Aircraft aircraft &&
-                (aircraft.Player != null || WingLink.IsWingMember(aircraft.persistentID.GetHashCode())))
+                (aircraft.Player != null || MissionPositionPriorityQuery.IsWingMember(aircraft)))
                 return;
             if (unit is GroundVehicle && GroundFrontService.Active?.HasRtsCommander() == true)
                 return;

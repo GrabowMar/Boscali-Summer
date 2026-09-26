@@ -37,7 +37,7 @@ namespace BoscaliSummer.Features.Squad.Runtime
             public Aircraft Target;
             public Aircraft[] Aircraft;
             public PersistentID AceId;
-            public string Name, Callsign, Symbol, Wing;
+            public string Name, Callsign, Symbol, Wing, AceName;
             public int Id, Seed, Tier, Returns, Generation, Alive, SpawnedCount;
             public float Began, Ended;
             public float NextChatter;
@@ -73,12 +73,20 @@ namespace BoscaliSummer.Features.Squad.Runtime
         private string pendingChatterSpeaker, pendingChatterStatus, pendingChatterMessage;
         private int lastChatterHuntId;
         private EnemyWingView[] enemies = Array.Empty<EnemyWingView>();
+        private readonly List<EnemyWingView> rows = new List<EnemyWingView>(8);
+        private PilotView pilot;
+        private string status = "Waiting for mission and Wing Command.";
+        private float lastBoardRead = -10f;
         private static readonly string[] Symbols = { "<>", "[+]", "/\\", "[X]", "><", "||" };
         private static readonly string[] Wings = { "LANCE", "CROWN", "TALON", "WRAITH", "VIPER", "REVENANT" };
 
-        public PilotView Pilot { get; private set; }
+        // Only the SQD pilot and wing pages read Pilot and Status, so a recent read means the
+        // board is on screen and worth the fast poll.
+        public PilotView Pilot { get { lastBoardRead = Time.unscaledTime; return pilot; } }
+        public string Status { get { lastBoardRead = Time.unscaledTime; return status; } }
         public bool HuntActive { get; private set; }
-        public string Status { get; private set; } = "Waiting for mission and Wing Command.";
+        /// <summary>Revision of the snapshot on display; zero after <see cref="ClearLocal"/>.</summary>
+        internal uint AppliedRevision { get; private set; }
         public string LastChatter { get; private set; } = string.Empty;
         public int EnemyWingCount => enemies.Length;
         public int ActiveEnemyWingIndex { get; private set; } = -1;
@@ -87,7 +95,7 @@ namespace BoscaliSummer.Features.Squad.Runtime
         public int GetBonusPoints(ulong id) => GameAccess.IsServer()
             ? careers.TryGetValue(id, out Career c) ? c.Rules.BonusPoints : 0 : id == localIdentity ? localBonus : 0;
         public int GetPilotGeneration(ulong id) => GameAccess.IsServer()
-            ? careers.TryGetValue(id, out Career c) ? c.Rules.Generation : 1 : id == localIdentity ? Math.Max(1, Pilot.Generation) : 1;
+            ? careers.TryGetValue(id, out Career c) ? c.Rules.Generation : 1 : id == localIdentity ? Math.Max(1, pilot.Generation) : 1;
         public int GetScoreOrigin(ulong id) => GameAccess.IsServer()
             ? careers.TryGetValue(id, out Career c) ? c.Rules.ScoreOrigin : 0 : id == localIdentity ? localOrigin : 0;
 
@@ -216,7 +224,7 @@ namespace BoscaliSummer.Features.Squad.Runtime
                 foreach (Career career in careers.Values) TickCareer(career, now);
             }
             // Encounter notices/music must arrive even with every MFD closed.
-            network.Request();
+            network.Request(HuntActive || Time.unscaledTime - lastBoardRead < 2f);
         }
 
         private void GatherPlayers()
@@ -489,7 +497,7 @@ namespace BoscaliSummer.Features.Squad.Runtime
             }
             int emblem = (seed & int.MaxValue) % Wings.Length;
             var hunt = new Hunt { Id = id, Owner = career, EnemyHq = career.ProvokedHq, Target = target,
-                Aircraft = aircraft, AceId = aircraft[0].persistentID, Name = name, Callsign = callsign,
+                Aircraft = aircraft, AceId = aircraft[0].persistentID, Name = name, Callsign = callsign, AceName = name + " / " + callsign,
                 Symbol = chosenRival?.Symbol ?? Symbols[emblem], Wing = chosenRival?.Wing ?? (Wings[emblem] + " " + (sequence % 100).ToString("00")),
                 Seed = seed, Tier = tier, Returns = returns, Returned = chosenRival != null, Generation = career.Rules.Generation,
                 Began = now, NextChatter = now + 35f, Alive = aircraft.Length, SpawnedCount = aircraft.Length, Outcome = HuntOutcome.Hunting,
@@ -611,9 +619,9 @@ namespace BoscaliSummer.Features.Squad.Runtime
         internal SquadSnapshot Snapshot(Player player)
         {
             var result = new SquadSnapshot { Protocol = SquadNet.ProtocolVersion, ActiveIndex = -1,
-                Wings = Array.Empty<EnemyWingView>(), Status = Status };
+                Wings = Array.Empty<EnemyWingView>(), Status = status };
             Career career = GetCareer(player);
-            if (career == null) return result;
+            if (career == null) { result.Revision = Revision(result); return result; }
             Pilot seat = Primary(player.Aircraft);
             result.Pilot = new PilotView(career.Name, career.Callsign,
                 career.Rules.ReplacementPending ? "KIA — successor on next sortie" : seat == null ? "Awaiting aircraft" :
@@ -624,7 +632,7 @@ namespace BoscaliSummer.Features.Squad.Runtime
             result.Status = !WingLink.SquadAvailable ? WingLink.SquadUnavailableReason : !settings.EnemyAceHunts.Value
                 ? "Enemy ace hunts disabled by host." : career.Notice;
             result.Event = career.Event; result.Speaker = career.Speaker; result.Chatter = career.Chatter;
-            var rows = new List<EnemyWingView>(8);
+            rows.Clear();
             // Active local hunt is always first, even when other players fill recent history.
             for (int pass = 0; pass < 2; pass++)
             for (int i = hunts.Count - 1; i >= 0 && rows.Count < 8; i--)
@@ -633,21 +641,45 @@ namespace BoscaliSummer.Features.Squad.Runtime
                 if (!Hostile(h.EnemyHq, player.HQ)) continue;
                 bool localActive = h.Owner == career && h.Outcome == HuntOutcome.Hunting;
                 if ((pass == 0) != localActive) continue;
-                string status = h.Outcome == HuntOutcome.Hunting ? "HUNTING" : h.Outcome == HuntOutcome.Defeated
+                string state = h.Outcome == HuntOutcome.Hunting ? "HUNTING" : h.Outcome == HuntOutcome.Defeated
                     ? h.Returned ? "RETURNED" : h.ReturnCandidate && Survived(h.AceId) ? "ACE MIA — MAY RETURN" : "ACE DEFEATED"
                     : h.Outcome == HuntOutcome.TargetLost ? "NORMAL OPERATIONS" : "DISENGAGED";
                 if (h.Owner == career && h.Outcome == HuntOutcome.Hunting) { result.ActiveIndex = rows.Count; result.HuntId = h.Id; }
-                rows.Add(new EnemyWingView(h.Symbol, h.Wing, h.Name + " / " + h.Callsign, h.Tier,
-                    h.Tier == 1 ? "Veteran" : h.Tier < 4 ? "Elite" : "Ace", status, h.Alive,
+                rows.Add(new EnemyWingView(h.Symbol, h.Wing, h.AceName, h.Tier,
+                    h.Tier == 1 ? "Veteran" : h.Tier < 4 ? "Elite" : "Ace", state, h.Alive,
                     h.SpawnedCount, h.Outcome == HuntOutcome.Hunting ? h.Owner == career ? "YOU" : h.Owner.Callsign : "", h.Returns,
                     h.Aircraft != null && h.Aircraft.Length > 0 ? WingLink.AceAbilityMask(h.Aircraft[0]) : 0));
             }
-            result.Wings = rows.ToArray(); return result;
+            result.Wings = rows.ToArray(); result.Revision = Revision(result); return result;
+        }
+
+        /// <summary>Every field the wire carries, so an "unchanged" reply can never hide an update.</summary>
+        private static uint Revision(SquadSnapshot s)
+        {
+            var revision = new SnapshotRevision();
+            revision.Add(s.Event);
+            revision.Add(s.Pilot.Name); revision.Add(s.Pilot.Callsign); revision.Add(s.Pilot.Status);
+            revision.Add(s.Pilot.Background); revision.Add(s.Pilot.Respawns);
+            revision.Add(s.Pilot.Deaths); revision.Add(s.Pilot.Generation);
+            revision.Add(s.Hunt); revision.Add(s.Bonus); revision.Add(s.Origin);
+            revision.Add(s.ActiveIndex); revision.Add(s.HuntId);
+            revision.Add(s.Status); revision.Add(s.Speaker); revision.Add(s.Chatter);
+            int count = s.Wings?.Length ?? 0;
+            revision.Add(count);
+            for (int i = 0; i < count; i++)
+            {
+                EnemyWingView wing = s.Wings[i];
+                revision.Add(wing.Symbol); revision.Add(wing.WingName); revision.Add(wing.AceName);
+                revision.Add(wing.Tier); revision.Add(wing.Skill); revision.Add(wing.Status);
+                revision.Add(wing.MembersAlive); revision.Add(wing.MemberCount);
+                revision.Add(wing.TargetName); revision.Add(wing.Returns); revision.Add(wing.AbilityMask);
+            }
+            return revision.Value;
         }
 
         internal void Apply(SquadSnapshot snapshot, ulong id)
         {
-            Pilot = snapshot.Pilot; HuntActive = snapshot.Hunt; Status = snapshot.Status;
+            pilot = snapshot.Pilot; HuntActive = snapshot.Hunt; status = snapshot.Status; AppliedRevision = snapshot.Revision;
             localIdentity = id; localBonus = snapshot.Bonus; localOrigin = snapshot.Origin;
             enemies = snapshot.Wings ?? Array.Empty<EnemyWingView>();
             ActiveEnemyWingIndex = snapshot.ActiveIndex;
@@ -680,7 +712,7 @@ namespace BoscaliSummer.Features.Squad.Runtime
         }
 
         internal void ClearLocal(string reason)
-        { Pilot = default; HuntActive = false; ActiveEnemyWingIndex = -1; ActiveHuntId = 0; enemies = Array.Empty<EnemyWingView>(); Status = reason; LastChatter = string.Empty; }
+        { pilot = default; HuntActive = false; ActiveEnemyWingIndex = -1; ActiveHuntId = 0; enemies = Array.Empty<EnemyWingView>(); status = reason; LastChatter = string.Empty; AppliedRevision = 0; }
 
         private static Pilot Primary(Aircraft aircraft) => aircraft != null && aircraft.pilots != null && aircraft.pilots.Length > 0 ? aircraft.pilots[0] : null;
         private static bool Survived(PersistentID id)

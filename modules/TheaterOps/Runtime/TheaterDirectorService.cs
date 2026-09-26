@@ -8,13 +8,14 @@ using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Features;
 using BoscaliSummer.Framework.Lifecycle;
 using BoscaliSummer.Runtime;
+using NuclearOption.Networking;
 using NuclearOption.SavedMission;
 using UnityEngine;
 
 namespace BoscaliSummer.Features.TheaterOps.Runtime
 {
     /// <summary>
-    /// The theater staff: a host-only review loop that fights the local faction's war.
+    /// The theater staff: a host-only review loop that fights each directed faction's war.
     /// Every 30 seconds it senses the theater (objectives, both sides' ground presence,
     /// pool, plans), asks <see cref="DirectorDecision"/> what the judgment is, and spends
     /// from the pool exactly what the judgment ordered — opening offensives, funding waves,
@@ -27,10 +28,11 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
     /// order and every decision lands in the staff log, which replicates with the posture
     /// so all peers read the same war.</para>
     ///
-    /// <para>Only the local faction is ticked: every lever the director pulls (pool, main
-    /// effort, convoy queue) is the host faction's own. Sensing reads vanilla state alone
-    /// — objectives, the unit registry, the tracking database — so no sibling contract
-    /// carries the assessment anywhere.</para>
+    /// <para>Every faction the DirectorFactions setting names is ticked on its own staggered
+    /// review, with that faction's own levers (pool, main effort, convoy queue), so a
+    /// dedicated server fights every side and PvP gives both sides a staff. Sensing reads
+    /// vanilla state alone — objectives, the unit registry, the tracking database — so no
+    /// sibling contract carries the assessment anywhere.</para>
     /// </summary>
     internal sealed class TheaterDirectorService : MonoBehaviour, ISceneService
     {
@@ -38,6 +40,10 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
         private const float ReviewInterval = 30f;
         private const float ThreatInterval = 10f;
         private const float DefenseFundInterval = 60f;
+
+        /// <summary>Faction reviews are spread this far apart so two scans never share a frame.</summary>
+        private const float ReviewStagger = 7.5f;
+        private const int MaximumElectorate = 64;
 
         private const int MaximumObjectives = 12;
         private const int MaximumUnitScan = 4096;
@@ -79,6 +85,9 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
         private readonly int[] hostileFieldworks = new int[MaximumObjectives];
         private readonly int[] friendlyFieldworks = new int[MaximumObjectives];
         private readonly int[] suppressedFieldworks = new int[MaximumObjectives];
+        private readonly List<FactionHQ> directed = new List<FactionHQ>(OffensiveTable.MaximumFactions);
+        private readonly List<FactionDirection> directedStates =
+            new List<FactionDirection>(OffensiveTable.MaximumFactions);
         private IFieldworksReadiness fieldworks;
 
         private TheaterOpsSettings settings;
@@ -108,6 +117,8 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             states.Clear();
             reads.Clear();
             running.Clear();
+            directed.Clear();
+            directedStates.Clear();
             nextAuthority = 0f;
             authoritative = false;
             fieldworks = null;
@@ -120,33 +131,97 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             {
                 nextAuthority = now + AuthorityInterval;
                 authoritative = settings != null && settings.Enabled.Value && GameAccess.IsServer();
+                if (authoritative) RollCall();
+                else
+                {
+                    directed.Clear();
+                    directedStates.Clear();
+                }
             }
-            if (!authoritative || !GameAccess.TryGetLocalFaction(out FactionHQ hq)) return;
+            if (!authoritative) return;
 
-            string faction = hq.faction.factionName;
-            FactionDirection state = StateOf(faction);
-            if (state == null) return;
+            // At most one scan per frame: reviews are staggered per faction, so a busy frame
+            // never pays for two sides at once.
+            for (int i = 0; i < directed.Count; i++)
+            {
+                FactionHQ hq = directed[i];
+                FactionDirection state = directedStates[i];
+                if (hq == null || hq.faction == null || state == null) continue;
+                string faction = hq.faction.factionName;
+                if (now >= state.NextReview)
+                {
+                    state.NextReview = now + ReviewInterval;
+                    state.NextThreatCheck = now + ThreatInterval;
+                    StrategicReview(hq, faction, state, now);
+                    return;
+                }
+                if (now >= state.NextThreatCheck)
+                {
+                    state.NextThreatCheck = now + ThreatInterval;
+                    ThreatCheck(hq, faction, state);
+                    return;
+                }
+            }
+        }
 
-            if (now >= state.NextReview)
+        /// <summary>
+        /// Once a second: which factions the staff fights for. PlayerFactions runs every side
+        /// with a connected player plus the listen host's own; a dedicated server has no
+        /// local side and still runs every manned one.
+        /// </summary>
+        private void RollCall()
+        {
+            directed.Clear();
+            directedStates.Clear();
+            TheaterDirectorFactions mode = settings.DirectorFactions.Value;
+            GameAccess.TryGetLocalFaction(out FactionHQ local);
+            int inspected = 0;
+            foreach (FactionHQ hq in FactionRegistry.GetAllHQs())
             {
-                state.NextReview = now + ReviewInterval;
-                state.NextThreatCheck = now + ThreatInterval;
-                StrategicReview(hq, faction, state, now);
+                if (++inspected > OffensiveTable.MaximumFactions) break;
+                if (hq == null || hq.faction == null || string.IsNullOrEmpty(hq.faction.factionName)) continue;
+                int electorate = CollectElectorate(hq, null);
+                bool host = local != null && ReferenceEquals(hq, local);
+                bool directs = mode == TheaterDirectorFactions.AllFactions ||
+                               (mode == TheaterDirectorFactions.HostFaction ? host : electorate > 0 || host);
+                if (!directs) continue;
+                FactionDirection state = StateOf(hq.faction.factionName);
+                if (state == null) continue;
+                directed.Add(hq);
+                directedStates.Add(state);
             }
-            else if (now >= state.NextThreatCheck)
+        }
+
+        /// <summary>
+        /// The faction's current players: every seated player whose side is still this one.
+        /// Fills <paramref name="into"/> with their identities when given; returns the count.
+        /// </summary>
+        internal static int CollectElectorate(FactionHQ hq, List<ulong> into)
+        {
+            into?.Clear();
+            var players = hq != null ? hq.factionPlayers : null;
+            if (players == null) return 0;
+            int count = 0;
+            int bound = Math.Min(players.Count, MaximumElectorate);
+            for (int i = 0; i < bound; i++)
             {
-                state.NextThreatCheck = now + ThreatInterval;
-                ThreatCheck(hq, faction, state);
+                Player player = players[i].Player;
+                if (player == null || !ReferenceEquals(player.HQ, hq)) continue;
+                count++;
+                into?.Add(PlayerIdentity.Of(player));
             }
+            return count;
         }
 
         // ---- Reviews ---------------------------------------------------------------------
 
         private void StrategicReview(FactionHQ hq, string faction, FactionDirection state, float now)
         {
-            logistics?.Refresh();
-            float funds = logistics != null ? logistics.FactionFunds : float.NaN;
+            float funds = hq.factionFunds;
             if (float.IsNaN(funds) || float.IsInfinity(funds)) funds = 0f;
+            // The chest is priced in waves: a host cost change moves an unset chest with it.
+            bool repriced = operations != null &&
+                            state.Influence.Price(operations.OverheadCost, operations.WaveBudget);
 
             SenseObjectives(hq, state.Fixes);
             ScanPresence(hq, state.Fixes, MaximumUnitScan);
@@ -161,7 +236,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             running.Clear();
             string launchedTarget = null;
             int active = 0;
-            if (operations != null && operations.TryGetFactionPlans(out FactionOffensives plans))
+            if (operations != null && operations.TryGetFactionPlans(faction, out FactionOffensives plans))
             {
                 for (int i = 0; i < plans.Count; i++)
                 {
@@ -173,11 +248,15 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
                         running.Add(plan.TargetKey);
                         if (plan.Launched) launchedTarget = plan.TargetKey;
                     }
+                    // A plan still planning is already promised to its target: a second
+                    // offensive on the same ground would split one push in two.
+                    else if (state.PendingTargets.TryGetValue(plan.Id, out string pending))
+                        running.Add(pending);
                 }
             }
 
             string currentEffort = null;
-            if (priority != null && priority.TryGetLocalDirective(out PriorityDirective directive))
+            if (priority != null && priority.TryGetDirective(faction, out PriorityDirective directive))
                 currentEffort = directive.Key;
 
             var assessment = new DirectorAssessment(
@@ -188,12 +267,12 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             DirectorOrders orders = DirectorDecision.Review(assessment);
 
             string oldDefense = state.DefenseKey;
-            bool changed = ExecuteOrders(hq, faction, state, orders, funds, now);
+            bool changed = ExecuteOrders(hq, faction, state, orders, funds, now) | repriced;
             // A defense that ends without moving the effort still changes the replicated posture.
             if (!string.Equals(oldDefense, state.DefenseKey, StringComparison.Ordinal)) changed = true;
             for (int i = 0; i < orders.Log.Length; i++)
                 if (state.Log.Add(orders.Log[i])) changed = true;
-            changed |= WatchConclusions(state);
+            changed |= WatchConclusions(faction, state);
             if (changed) Broadcast(faction, state);
         }
 
@@ -206,7 +285,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             float maxEscrow = state.Influence.MaxEscrowPerPlan;
             float waveBudget = operations != null ? operations.WaveBudget : 0f;
 
-            if (orders.OpenOffensive && operations != null && operations.PrepareOperation(out int opened))
+            if (orders.OpenOffensive && operations != null && operations.PrepareOperation(hq, out int opened))
             {
                 if (state.PendingTargets.Count < MaximumTrackedPlans)
                     state.PendingTargets[opened] = orders.TargetKey;
@@ -231,7 +310,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
                 state.ReviewsHeld = 0;
             }
 
-            if (operations != null && operations.TryGetFactionPlans(out FactionOffensives plans))
+            if (operations != null && operations.TryGetFactionPlans(faction, out FactionOffensives plans))
             {
                 for (int i = 0; i < plans.Count; i++)
                 {
@@ -240,7 +319,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
 
                     if (plan.CanTarget && state.PendingTargets.TryGetValue(plan.Id, out string pending))
                     {
-                        if (operations.TargetOperation(plan.Id, pending))
+                        if (operations.TargetOperation(hq, plan.Id, pending))
                         {
                             state.PendingTargets.Remove(plan.Id);
                             changed = true;
@@ -248,24 +327,26 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
                         else if (!CanResolve(hq, pending))
                         {
                             state.PendingTargets.Remove(plan.Id);
-                            operations.AbortOperation(plan.Id, "target left the board");
+                            operations.AbortOperation(hq, plan.Id, "target left the board");
                             state.Log.Add("STOOD DOWN " + plan.Name.ToUpperInvariant() + " — TARGET GONE");
                             changed = true;
                         }
                     }
 
                     int desired = state.DesiredWaves.TryGetValue(plan.Id, out int waves) ? waves : 1;
-                    while (plan.WavesPlanned < desired && plan.CanCommit && plan.Committed < maxEscrow &&
+                    // The cap bounds what the plan holds after the wave, not before it.
+                    while (plan.WavesPlanned < desired && plan.CanCommit &&
+                           plan.Committed + waveBudget <= maxEscrow + 0.01f &&
                            waveBudget > 0f && funds - spent - reserve >= waveBudget)
                     {
-                        if (!operations.CommitWave(plan.Id)) break;
+                        if (!operations.CommitWave(hq, plan.Id)) break;
                         spent += waveBudget;
                         changed = true;
                     }
 
                     if (state.Influence.HoldOffense && !plan.Launched)
                     {
-                        operations.AbortOperation(plan.Id, "stood down — holding offense");
+                        operations.AbortOperation(hq, plan.Id, "stood down — holding offense");
                         state.Log.Add("STOOD DOWN " + plan.Name.ToUpperInvariant() + " — HOLDING");
                         changed = true;
                     }
@@ -276,12 +357,12 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             if (!string.IsNullOrEmpty(orders.EffortKey) && priority != null)
             {
                 string current = null;
-                if (priority.TryGetLocalDirective(out PriorityDirective directive)) current = directive.Key;
+                if (priority.TryGetDirective(faction, out PriorityDirective directive)) current = directive.Key;
                 if (!string.Equals(current, orders.EffortKey, StringComparison.Ordinal) &&
-                    priority.SetDirective(orders.EffortKey))
+                    priority.SetDirective(hq, orders.EffortKey))
                     changed = true;
             }
-            else if (orders.ClearEffort && priority != null && priority.ClearDirective())
+            else if (orders.ClearEffort && priority != null && priority.ClearDirective(hq))
             {
                 changed = true;
             }
@@ -296,22 +377,9 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
 
         private bool FundDefenseShield(FactionHQ hq, FactionDirection state, float spendable)
         {
-            if (logistics == null || operations == null) return false;
-            IReadOnlyList<ReinforcementOption> options = logistics.Reinforcements;
-            string cheapest = null;
-            float cheapestCost = float.MaxValue;
-            for (int i = 0; i < options.Count; i++)
-            {
-                ReinforcementOption option = options[i];
-                if (option == null || !option.Ready || option.Cost > spendable) continue;
-                if (option.Cost < cheapestCost)
-                {
-                    cheapestCost = option.Cost;
-                    cheapest = option.Key;
-                }
-            }
-            if (string.IsNullOrEmpty(cheapest)) return false;
-            if (!logistics.RequestReinforcement(cheapest)) return false;
+            if (logistics == null ||
+                !logistics.FundCheapest(hq, spendable, out string cheapest, out float cheapestCost))
+                return false;
             state.LastDefenseFund = Time.unscaledTime;
             state.Log.Add("SHIELD CONVOY → " + (state.DefenseLabel ?? state.DefenseKey).ToUpperInvariant());
             logger?.LogInfo("Director shield convoy " + cheapest + " funded for " +
@@ -319,9 +387,9 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             return true;
         }
 
-        private bool WatchConclusions(FactionDirection state)
+        private bool WatchConclusions(string faction, FactionDirection state)
         {
-            if (operations == null || !operations.TryGetFactionPlans(out FactionOffensives plans))
+            if (operations == null || !operations.TryGetFactionPlans(faction, out FactionOffensives plans))
                 return false;
             bool reported = false;
             for (int i = 0; i < plans.Count; i++)
@@ -376,7 +444,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
 
             state.DefenseKey = worstKey;
             state.DefenseLabel = worstLabel;
-            priority?.SetDirective(worstKey);
+            priority?.SetDirective(hq, worstKey);
             state.Log.Add("FRONT UNDER FIRE — " + (worstLabel ?? worstKey).ToUpperInvariant());
             Broadcast(faction, state);
         }
@@ -449,16 +517,16 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
         // ---- Influence ---------------------------------------------------------------------
 
         /// <summary>
-        /// Applies one standing order on the host. The faction and setter arrive derived,
-        /// never from the wire; an axis key must name a live objective or it is refused.
+        /// Applies one standing order on the host to the sender's own faction. The faction
+        /// and setter arrive derived, never from the wire; a faction the staff does not fight
+        /// for is refused, and an axis key must name a live objective.
         /// </summary>
         internal bool ApplyInfluence(
-            string faction, byte kind, float value, float value2, string key, string setter)
+            FactionHQ hq, byte kind, float value, float value2, string key, string setter)
         {
             if (!authoritative || settings == null || !settings.Enabled.Value) return false;
-            if (!GameAccess.TryGetLocalFaction(out FactionHQ hq) || hq.faction == null) return false;
-            if (!string.Equals(hq.faction.factionName, faction, StringComparison.Ordinal))
-                return false;
+            if (hq == null || hq.faction == null || !Directs(hq)) return false;
+            string faction = hq.faction.factionName;
 
             FactionDirection state = StateOf(faction);
             if (state == null) return false;
@@ -502,7 +570,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
 
             int active = 0;
             bool launched = false;
-            if (operations != null && operations.TryGetFactionPlans(out FactionOffensives plans))
+            if (operations != null && operations.TryGetFactionPlans(faction, out FactionOffensives plans))
             {
                 for (int i = 0; i < plans.Count; i++)
                 {
@@ -514,7 +582,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
 
             bool effortDefense = false;
             if (!string.IsNullOrEmpty(state.DefenseKey) && priority != null &&
-                priority.TryGetLocalDirective(out PriorityDirective directive))
+                priority.TryGetDirective(faction, out PriorityDirective directive))
                 effortDefense = string.Equals(directive.Key, state.DefenseKey, StringComparison.Ordinal);
 
             TheaterDirectorPosture posture = (launched || active > 0) && !state.Influence.HoldOffense
@@ -574,9 +642,18 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             if (string.IsNullOrEmpty(faction)) return null;
             if (states.TryGetValue(faction, out FactionDirection state)) return state;
             if (states.Count >= OffensiveTable.MaximumFactions) return null;
-            state = new FactionDirection();
+            // A new side's first review lands in its own slot of the thirty seconds.
+            float first = Time.unscaledTime + ReviewStagger * (states.Count % 4);
+            state = new FactionDirection { NextReview = first, NextThreatCheck = first };
             states.Add(faction, state);
             return state;
+        }
+
+        private bool Directs(FactionHQ hq)
+        {
+            for (int i = 0; i < directed.Count; i++)
+                if (ReferenceEquals(directed[i], hq)) return true;
+            return false;
         }
 
         private static bool CanResolve(FactionHQ hq, string key) =>
