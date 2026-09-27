@@ -163,6 +163,11 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
             return Math.Max(5, Math.Min(95, value));
         }
 
+        /// <summary>Home-ground setup is reliable until enemy ground units contest the site.</summary>
+        public static int FriendlyChance(int threat) => Math.Max(75, 95 - Math.Min(20, Math.Max(0, threat) * 2));
+
+        public static int FriendlyLoss(int threat) => Math.Min(6, Math.Max(0, threat));
+
         /// <summary>The probability the team is lost, never more than the failure share.</summary>
         public static int LossChance(FieldMission mission, int rank, int threat, int success)
         {

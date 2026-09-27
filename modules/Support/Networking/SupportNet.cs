@@ -61,12 +61,14 @@ namespace BoscaliSummer.Features.Support.Networking
         /// Protocol 20 stamps the four team-gate cooldowns on the ops snapshot.
         /// Protocol 21 stamps a stable id on every incident so verb targets survive compaction.
         /// Protocol 22 replicates the three capstone recharges so clients see the host's cooldowns.
+        /// Protocol 23 carries faction-bound OPS reserve, defender breach alerts and friendly
+        /// SPEC OPS objectives; shared infrastructure no longer spends an individual pilot's allocation.
         /// Command 9 carries the selected sector in Arg. Protocol 17 replaced the programs, reserves, doctrine and infiltration board with the
         /// SPEC OPS detachment (teams, objectives, recharges, notices) in its own state message,
         /// sent before each ops snapshot, and its three orders.
         /// Older peers must not interpret fleet, hack, team or node ids.
         /// </summary>
-        internal const byte ProtocolVersion = 22;
+        internal const byte ProtocolVersion = 23;
 
         private const float QueryInterval = 0.4f;
         private const int MaximumQueries = 64;
@@ -400,6 +402,9 @@ namespace BoscaliSummer.Features.Support.Networking
                 w.WriteByte(v.Protocol);
                 w.WritePackedInt32(v.RequestId);
                 w.WriteByte(v.Result);
+                w.WriteString(v.FactionName ?? string.Empty);
+                w.WriteSingle(v.OpsReserve);
+                w.WriteByte(v.CyberThreatSlot);
                 bool active = v.PlatformActive && OpsStateMessageBuffers.ValidArrays(v);
                 w.WriteByte(active ? (byte)1 : (byte)0);
                 if (active)
@@ -446,6 +451,9 @@ namespace BoscaliSummer.Features.Support.Networking
                 if (protocol != ProtocolVersion) return message;
                 message.RequestId = r.ReadPackedInt32();
                 message.Result = r.ReadByte();
+                message.FactionName = r.ReadString();
+                message.OpsReserve = r.ReadSingle();
+                message.CyberThreatSlot = r.ReadByte();
                 // A flag or count past its bound is a malformed or hostile message: stop reading
                 // rather than consume bytes that belong to later fields.
                 int active = r.ReadByte();
@@ -489,13 +497,18 @@ namespace BoscaliSummer.Features.Support.Networking
             SetWriter<SpecOpsStateMessage>((w, v) =>
             {
                 w.WriteByte(v.Protocol);
-                if (v.Protocol == ProtocolVersion) WriteSpecOps(w, v.State);
+                if (v.Protocol == ProtocolVersion)
+                {
+                    w.WriteString(v.FactionName ?? string.Empty);
+                    WriteSpecOps(w, v.State);
+                }
             });
             SetReader<SpecOpsStateMessage>(r =>
             {
                 byte protocol = r.ReadByte();
                 var message = new SpecOpsStateMessage { Protocol = protocol, State = new SpecOpsSnapshot() };
                 if (protocol != ProtocolVersion) return message;
+                message.FactionName = r.ReadString();
                 if (!ReadSpecOps(r, message.State)) message.Protocol = 0;
                 return message;
             });
@@ -565,6 +578,7 @@ namespace BoscaliSummer.Features.Support.Networking
                 w.WriteByte(s.ObjectiveThreat[i]);
                 w.WriteByte(s.ObjectiveRadars[i]);
                 w.WriteByte(s.ObjectiveHostile[i] ? (byte)1 : (byte)0);
+                w.WriteByte(s.ObjectiveFriendly[i] ? (byte)1 : (byte)0);
                 w.WriteSingle(s.ObjectiveScout[i]);
                 w.WriteString(SpecOpsDetachment.Clip(s.ObjectiveName[i]));
             }
@@ -613,6 +627,7 @@ namespace BoscaliSummer.Features.Support.Networking
                 s.ObjectiveThreat[i] = r.ReadByte();
                 s.ObjectiveRadars[i] = r.ReadByte();
                 s.ObjectiveHostile[i] = r.ReadByte() != 0;
+                s.ObjectiveFriendly[i] = r.ReadByte() != 0;
                 s.ObjectiveScout[i] = r.ReadSingle();
                 s.ObjectiveName[i] = SpecOpsDetachment.Clip(r.ReadString());
             }

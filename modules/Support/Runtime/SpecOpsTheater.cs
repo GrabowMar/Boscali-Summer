@@ -43,6 +43,7 @@ namespace BoscaliSummer.Features.Support.Runtime
             public int Anchor;
             public float X, Z;
             public bool Hostile;
+            public bool Friendly;
             public string Name;
             public int Threat, Radars;
             public float Order;
@@ -298,6 +299,16 @@ namespace BoscaliSummer.Features.Support.Runtime
                 cz /= owned.Count;
             }
 
+            // Home ground is useful: observation and listening posts can be prepared here.
+            for (int i = 0; i < owned.Count && candidates.Count < MaximumCandidates; i++)
+            {
+                Airbase airbase = owned[i];
+                GlobalPosition at = Centre(airbase).ToGlobalPosition();
+                bool runway = airbase.runways != null && airbase.runways.Length > 0;
+                Add(runway ? ObjectiveKind.Airfield : ObjectiveKind.Outpost, airbase.GetInstanceID(), at.x, at.z,
+                    false, AirbaseName(airbase, runway), cx, cz, true);
+            }
+
             if (FactionRegistry.airbaseLookup != null)
                 foreach (Airbase airbase in FactionRegistry.airbaseLookup.Values)
                 {
@@ -313,10 +324,9 @@ namespace BoscaliSummer.Features.Support.Runtime
             {
                 Town town = towns[i];
                 Airbase nearest = NearestAirbase(town.X, town.Z, out float distance);
-                // A town next to one of our own bases is home ground, not an objective.
-                if (nearest != null && distance < TownAirbaseRadius && nearest.CurrentHQ == hq) continue;
+                bool friendly = nearest != null && distance < TownAirbaseRadius && nearest.CurrentHQ == hq;
                 bool hostile = nearest != null && distance < TownAirbaseRadius && nearest.CurrentHQ != null;
-                Add(ObjectiveKind.Town, town.Anchor, town.X, town.Z, hostile, town.Name, cx, cz);
+                Add(ObjectiveKind.Town, town.Anchor, town.X, town.Z, hostile && !friendly, town.Name, cx, cz, friendly);
             }
 
             ClusterAirDefence(hq, cx, cz);
@@ -327,20 +337,27 @@ namespace BoscaliSummer.Features.Support.Runtime
             // An objective a team is on stays listed, so its card and the launch rules keep working.
             for (int i = 0; i < candidates.Count; i++)
                 if (detachment.TeamOn(candidates[i].Anchor) >= 0) Report(detachment, candidates[i]);
+            int friendlyShown = 0;
             for (int i = 0; i < candidates.Count; i++)
-                if (detachment.TeamOn(candidates[i].Anchor) < 0) Report(detachment, candidates[i]);
+                if (detachment.TeamOn(candidates[i].Anchor) < 0 &&
+                    (!candidates[i].Friendly || friendlyShown < 3))
+                {
+                    Report(detachment, candidates[i]);
+                    if (candidates[i].Friendly) friendlyShown++;
+                }
             detachment.EndObjectives();
         }
 
         private static void Report(SpecOpsDetachment detachment, in Candidate c) =>
-            detachment.ReportObjective(c.Kind, c.Anchor, c.X, c.Z, c.Threat, c.Radars, c.Hostile, c.Name);
+            detachment.ReportObjective(c.Kind, c.Anchor, c.X, c.Z, c.Threat, c.Radars, c.Hostile, c.Name, c.Friendly);
 
-        private void Add(ObjectiveKind kind, int anchor, float x, float z, bool hostile, string name, float cx, float cz)
+        private void Add(ObjectiveKind kind, int anchor, float x, float z, bool hostile, string name, float cx, float cz,
+            bool friendly = false)
         {
             if (candidates.Count >= MaximumCandidates) return;
             candidates.Add(new Candidate
             {
-                Kind = kind, Anchor = anchor, X = x, Z = z, Hostile = hostile, Name = name,
+                Kind = kind, Anchor = anchor, X = x, Z = z, Hostile = hostile, Friendly = friendly, Name = name,
                 Order = (x - cx) * (x - cx) + (z - cz) * (z - cz)
             });
         }

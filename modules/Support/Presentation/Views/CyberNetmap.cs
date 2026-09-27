@@ -49,8 +49,10 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         }
 
         public BoardSurface Board { get; private set; }
+        public bool TerrainAvailable => terrain != null && terrain.Available;
 
         private RectTransform layer;
+        private BoardTerrain terrain;
         private readonly Image[] gridX = new Image[GridLines];
         private readonly Image[] gridZ = new Image[GridLines];
         private readonly Image[] edge = new Image[4];
@@ -60,6 +62,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         private readonly Image[] packets = new Image[Packets];
         private RingLine bubble;
         private Image breachA, breachB;
+        private Image routeA, routeB, routeHaloA, routeHaloB;
         private readonly float[] fitX = new float[Slots];
         private readonly float[] fitZ = new float[Slots];
         private readonly Vector2[] anchors = new Vector2[LabelPlacer.Maximum];
@@ -87,6 +90,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             layer = (RectTransform)layerObject.transform;
             layer.SetParent(Board.InputLayer, false);
             AvKit.Place(layer, new Rect(-view.x, -view.y, view.x + view.width, view.height - view.y));
+            terrain = new BoardTerrain(layer, Board);
+            terrain.SetTint(CyberStyle.Surface.WithAlpha(0.64f));
             for (int i = 0; i < GridLines; i++)
             {
                 gridX[i] = Stroke(layer, CyberStyle.Lattice.WithAlpha(0.35f), OpsSprites.Dash);
@@ -96,6 +101,10 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             for (int i = 0; i < Strokes; i++) front[i] = Stroke(layer, CyberStyle.Dim.WithAlpha(0.6f), null);
 
             bubble = new RingLine(layer, 64, CyberStyle.Accent, true);
+            routeHaloA = Stroke(layer, CyberStyle.Surface.WithAlpha(0.92f), null);
+            routeHaloB = Stroke(layer, CyberStyle.Surface.WithAlpha(0.92f), null);
+            routeA = Stroke(layer, CyberStyle.Title, null);
+            routeB = Stroke(layer, CyberStyle.Title, null);
             for (int i = 0; i < Slots; i++) nodes[i] = BuildLinks();
             breachA = Stroke(layer, CyberStyle.Accent, OpsSprites.Dash);
             breachB = Stroke(layer, CyberStyle.Accent, OpsSprites.Dash);
@@ -191,6 +200,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             }
             // A network overview must include every selectable node, including distant command bases.
             Board.Fit(fitX, fitZ, points, MinimumSpan, 0f, 62f);
+            terrain.Refresh();
             PaintGrid();
             if (frontRevision != Board.Revision) PaintFront();
 
@@ -255,8 +265,21 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 float radius = network.Online(selected) ? network.Reach : 0f;
                 if (radius > 0f) bubble.Set(Board.Project(n.X, n.Z), Board.Pixels(radius), 1.5f, CyberStyle.Accent.WithAlpha(0.5f));
                 else bubble.Hide();
+                if (command >= 0 && selected != command && network.Online(selected) && network.Online(command))
+                {
+                    Vector2 target = Board.Project(n.X, n.Z);
+                    Lines.Set(routeHaloA, c2.x, c2.y, target.x, c2.y, 5f);
+                    Lines.Set(routeHaloB, target.x, c2.y, target.x, target.y, 5f);
+                    Lines.Set(routeA, c2.x, c2.y, target.x, c2.y, 2.5f);
+                    Lines.Set(routeB, target.x, c2.y, target.x, target.y, 2.5f);
+                }
+                else routeHaloA.enabled = routeHaloB.enabled = routeA.enabled = routeB.enabled = false;
             }
-            else bubble.Hide();
+            else
+            {
+                bubble.Hide();
+                routeHaloA.enabled = routeHaloB.enabled = routeA.enabled = routeB.enabled = false;
+            }
 
             packetsOn = network != null && breachTarget >= 0 && network.Exists(breachTarget) && command >= 0;
             if (packetsOn)

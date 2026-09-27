@@ -69,6 +69,7 @@ namespace BoscaliSummer.Features.Support.Runtime
             if (!OpsStateMessageBuffers.ValidCyber(state)) return;
 
             GameManager.GetLocalPlayer<Player>(out Player player);
+            if (player == null || player.HQ == null || state.FactionName != FactionKey(player.HQ)) return;
             if (player != null && player.HQ != null)
             {
                 FactionHQ hq = player.HQ;
@@ -101,6 +102,9 @@ namespace BoscaliSummer.Features.Support.Runtime
             if (state.TeamCooldown != null)
                 for (int i = 0; i < TeamGates.Count && i < state.TeamCooldown.Length; i++)
                     teamMirror[i] = Mathf.Max(0f, state.TeamCooldown[i]);
+            if (Finite(state.OpsReserve))
+                reserveMirror = Mathf.Clamp(state.OpsReserve, 0f, FactionOpsReserve.Maximum);
+            threatMirror = state.CyberThreatSlot < CyberNetwork.SlotCount ? state.CyberThreatSlot : byte.MaxValue;
 
             opsReceived = Time.unscaledTime;
         }
@@ -128,13 +132,17 @@ namespace BoscaliSummer.Features.Support.Runtime
         {
             if (state.State == null || GameAccess.IsServer()) return;
             GameManager.GetLocalPlayer<Player>(out Player player);
-            if (player != null && player.HQ != null) Space.MirrorDetachment(player.HQ, state.State, OrbitNow);
+            if (player != null && player.HQ != null && state.FactionName == FactionKey(player.HQ))
+                Space.MirrorDetachment(player.HQ, state.State, OrbitNow);
         }
 
         private readonly PlatformSnapshot mirrorSnapshot = new PlatformSnapshot();
         private readonly PlatformSnapshot exportSnapshot = new PlatformSnapshot();
         private readonly string[] cyberOrigins = new string[OpsStateMessageBuffers.MaximumOriginNames];
         private readonly float[] teamMirror = new float[TeamGates.Count];
+        private float reserveMirror = FactionOpsReserve.Starting;
+        private byte threatMirror = byte.MaxValue;
+        private float nextReserveTick;
 
         private readonly SupportRequestLedger ledger = new SupportRequestLedger();
         private readonly SupportRequestLedger commandLedger = new SupportRequestLedger();
@@ -491,6 +499,9 @@ namespace BoscaliSummer.Features.Support.Runtime
             Field.Clear();
             Array.Clear(cyberOrigins, 0, cyberOrigins.Length);
             Array.Clear(teamMirror, 0, teamMirror.Length);
+            reserveMirror = FactionOpsReserve.Starting;
+            threatMirror = byte.MaxValue;
+            nextReserveTick = 0f;
             opsReceived = -100f;
             nextOpsQuery = 0f;
             pendingCommand = 0;
@@ -540,6 +551,19 @@ namespace BoscaliSummer.Features.Support.Runtime
                 if (spectrum) Spectrum.Apply(Space, orbitNow, Time.unscaledTime, logger);
                 Field.Tick(Space, orbitNow, Time.unscaledTime, settings == null || settings.SpecOpsEnabled.Value,
                     Field.Fortifications != null && Field.Fortifications.Available, logger);
+                if (Time.unscaledTime >= nextReserveTick)
+                {
+                    nextReserveTick = Time.unscaledTime + 2f;
+                    for (int i = 0; i < Space.FactionCount; i++)
+                    {
+                        FactionHQ faction = Space.FactionAt(i);
+                        if (faction == null) continue;
+                        int sites = 0;
+                        foreach (Airbase airbase in faction.GetAirbases())
+                            if (airbase != null && airbase.CurrentHQ == faction && !airbase.AttachedAirbase) sites++;
+                        TeamLedgerFor(faction).Reserve.Tick(Time.unscaledTime, sites);
+                    }
+                }
             }
             else
             {
@@ -699,10 +723,46 @@ namespace BoscaliSummer.Features.Support.Runtime
         {
             CyberNetwork cyber = LocalCyber;
             if (cyber == null || settings == null || !cyber.CanUpgrade(upgrade)) return 0f;
-            GameManager.GetLocalPlayer<Player>(out Player player);
-            return player == null ? 0f
-                : cyber.UpgradeCost(upgrade) * settings.CyberUpgradeCostScale.Value *
-                  Price(player, settings.CostMultiplier.Value);
+            return cyber.UpgradeCost(upgrade) * settings.CyberUpgradeCostScale.Value * settings.CostMultiplier.Value;
+        }
+
+        /// <summary>Faction infrastructure balance; a client reads only the host's snapshot.</summary>
+        public float LocalOpsReserve
+        {
+            get
+            {
+                if (!GameAccess.IsServer()) return reserveMirror;
+                GameManager.GetLocalPlayer<Player>(out Player player);
+                return player != null && player.HQ != null ? TeamLedgerFor(player.HQ).Reserve.Balance : 0f;
+            }
+        }
+
+        public int LocalCyberThreatSlot
+        {
+            get
+            {
+                if (!GameAccess.IsServer()) return threatMirror == byte.MaxValue ? -1 : threatMirror;
+                GameManager.GetLocalPlayer<Player>(out Player player);
+                return player != null ? ThreatenedHome(player.HQ) : -1;
+            }
+        }
+
+        private int ThreatenedHome(FactionHQ defender)
+        {
+            CyberNetwork home = defender != null ? Space.CyberFor(defender) : null;
+            if (home == null) return -1;
+            for (int i = 0; i < Space.FactionCount; i++)
+            {
+                FactionHQ other = Space.FactionAt(i);
+                if (other == null || other == defender) continue;
+                CyberNetwork attacker = Space.CyberFor(other);
+                if (attacker == null || !attacker.BreachActive) continue;
+                int anchor = attacker.Node(attacker.BreachTarget).Anchor;
+                for (int slot = 0; slot < CyberNetwork.TargetBase; slot++)
+                    if (home.Exists(slot) && home.Node(slot).Static && home.Node(slot).Anchor == anchor)
+                        return slot;
+            }
+            return -1;
         }
 
         /// <summary>SPEC OPS prices for the local player, with the same multipliers the host charges.</summary>
@@ -721,16 +781,15 @@ namespace BoscaliSummer.Features.Support.Runtime
         public bool SpecOpsEnabled => settings == null || settings.SpecOpsEnabled.Value;
 
         private float SpecOpsPrice(Player player, float baseCost) =>
-            player == null || settings == null ? 0f
-                : Price(player, baseCost * settings.SpecOpsCostScale.Value * settings.CostMultiplier.Value);
+            settings == null ? 0f : baseCost * settings.SpecOpsCostScale.Value * settings.CostMultiplier.Value;
 
         public bool CyberEnabled => settings == null || settings.EwEnabled.Value;
 
         private float LaunchCost(Player player, ModuleKind kind)
         {
-            if (player == null || settings == null) return 0f;
+            if (settings == null) return 0f;
             return PlatformModules.LaunchPrice(kind) * settings.PlatformCostScale.Value *
-                   Price(player, settings.CostMultiplier.Value);
+                   settings.CostMultiplier.Value;
         }
 
         private float Price(Player player, float baseCost)
@@ -819,55 +878,14 @@ namespace BoscaliSummer.Features.Support.Runtime
         }
 
         /// <summary>
-        /// A module answers to the pilot who paid for it; deorbiting the core needs the largest
-        /// share. Both give way for a faction of one, an unpaid station or a switched-off guard.
+        /// Removing faction infrastructure answers to its founder while that pilot is present.
+        /// A lone pilot or a faction whose founder has left can still recover the station.
         /// </summary>
-        private bool TeamGuardJettison(Player player, OrbitalPlatform platform, int cell)
+        private bool TeamGuardJettison(Player player)
         {
-            bool guard = settings != null && settings.TeamOwnershipGuards.Value;
-            int players = FactionPilots(player.HQ);
-            if (!guard || players <= 1) return true;
-            ulong requester = PlayerIdentity.Of(player);
-            if (cell == OrbitalPlatform.CoreCell)
-            {
-                var payers = new ulong[OrbitalPlatform.CellCount];
-                var paid = new float[OrbitalPlatform.CellCount];
-                for (int i = 0; i < OrbitalPlatform.CellCount; i++)
-                {
-                    payers[i] = platform.Payer(i);
-                    paid[i] = platform.Paid(i);
-                }
-                var owners = new ulong[OrbitalPlatform.CellCount];
-                var amounts = new float[OrbitalPlatform.CellCount];
-                var present = new bool[OrbitalPlatform.CellCount];
-                int shares = TeamRules.Shares(payers, paid, OrbitalPlatform.CellCount, owners, amounts);
-                for (int i = 0; i < shares; i++) present[i] = PilotPresent(player.HQ, owners[i]);
-                return TeamRules.MayDeorbit(requester, owners, amounts, present, shares, players, true);
-            }
-            ulong owner = platform.Payer(cell);
-            return TeamRules.MayTouch(requester, owner, PilotPresent(player.HQ, owner), players, true);
-        }
-
-        /// <summary>
-        /// Pays a jettison refund back to whoever paid: each present payer is credited its share,
-        /// and absent or unknown payers' shares fall to the requester so nothing is destroyed.
-        /// </summary>
-        private void PayRefund(Player requester, ulong[] payers, float[] amounts, int shares, float remainder)
-        {
-            float rate = JettisonRefund;
-            if (rate <= 0f) return;
-            ulong requesterId = PlayerIdentity.Of(requester);
-            for (int i = 0; i < shares; i++)
-            {
-                float refund = rate * amounts[i];
-                if (refund <= 0f) continue;
-                Player payer = PilotByIdentity(requester.HQ, payers[i]);
-                Player recipient = TeamRules.RefundRecipient(requesterId, payers[i], payer != null) == requesterId
-                    ? requester : payer;
-                recipient.SetAllocation(recipient.Allocation + refund);
-            }
-            float rest = rate * remainder;
-            if (rest > 0f) requester.SetAllocation(requester.Allocation + rest);
+            ulong owner = TeamLedgerFor(player.HQ).StationOwner;
+            return TeamRules.MayTouch(PlayerIdentity.Of(player), owner, PilotPresent(player.HQ, owner),
+                FactionPilots(player.HQ), settings != null && settings.TeamOwnershipGuards.Value);
         }
 
         public void Arm(SupportActionId action)
@@ -1257,6 +1275,7 @@ namespace BoscaliSummer.Features.Support.Runtime
                 case SupportResult.OutOfRange: return "target out of range";
                 case SupportResult.NotAirborne: return "you must be in an aircraft";
                 case SupportResult.InsufficientAllocation: return "not enough allocation";
+                case SupportResult.InsufficientOpsReserve: return "faction OPS reserve too low";
                 case SupportResult.NoStock: return "none left";
                 case SupportResult.Cooldown: return "cooling down";
                 case SupportResult.TeamCoolingDown: return "faction team re-tasking";
@@ -1387,11 +1406,12 @@ namespace BoscaliSummer.Features.Support.Runtime
                     SpecOpsDenial denial = detachment.CheckRaise(message.Arg);
                     if (denial != SpecOpsDenial.None) return SpecOpsRefusal(denial);
                     float cost = SpecOpsPrice(player, FieldCatalog.RaiseCost);
-                    if (!bypass && player.Allocation + 0.001f < cost) return SupportResult.InsufficientAllocation;
+                    FactionOpsReserve reserve = TeamLedgerFor(player.HQ).Reserve;
+                    if (!bypass && !reserve.CanSpend(cost)) return SupportResult.InsufficientOpsReserve;
                     if (!detachment.TryRaise(message.Arg)) return SupportResult.Busy;
-                    if (!bypass) player.SetAllocation(Mathf.Max(0f, player.Allocation - cost));
+                    if (!bypass) reserve.Spend(cost);
                     logger.LogInfo("[Support] SPEC OPS " + FieldWords.Callsign(message.Arg) + " raised for " +
-                        Mathf.RoundToInt(cost) + " alloc.");
+                        Mathf.RoundToInt(cost) + " ops reserve.");
                     break;
                 }
                 case OpsCommand.SpecOpsLaunch:
@@ -1404,18 +1424,19 @@ namespace BoscaliSummer.Features.Support.Runtime
                     SpecOpsDenial denial = detachment.CheckLaunch(message.Arg, mission, anchor);
                     if (denial != SpecOpsDenial.None) return SpecOpsRefusal(denial);
                     float cost = SpecOpsPrice(player, FieldCatalog.MissionCost(mission));
-                    if (!bypass && player.Allocation + 0.001f < cost) return SupportResult.InsufficientAllocation;
+                    FactionOpsReserve reserve = TeamLedgerFor(player.HQ).Reserve;
+                    if (!bypass && !reserve.CanSpend(cost)) return SupportResult.InsufficientOpsReserve;
                     FieldObjective objective = detachment.Objective(detachment.SlotOf(anchor));
                     float travel = SpecOpsTheater.TravelMetres(player.HQ, objective.X, objective.Z);
                     denial = detachment.TryLaunch(message.Arg, mission, anchor, travel, OrbitNow);
                     if (denial != SpecOpsDenial.None) return SpecOpsRefusal(denial);
                     if (message.Arg < SpecOpsDetachment.TeamCount)
                         TeamLedgerFor(player.HQ).Launcher[message.Arg] = PlayerIdentity.Of(player);
-                    if (!bypass) player.SetAllocation(Mathf.Max(0f, player.Allocation - cost));
+                    if (!bypass) reserve.Spend(cost);
                     FieldTeam team = detachment.Team(message.Arg);
                     logger.LogInfo("[Support] SPEC OPS " + FieldWords.Callsign(message.Arg) + " " +
                         FieldWords.Mission(mission) + " on " + team.Target + ": " + team.Chance + "% success, " +
-                        team.Loss + "% loss, " + Mathf.RoundToInt(cost) + " alloc.");
+                        team.Loss + "% loss, " + Mathf.RoundToInt(cost) + " ops reserve.");
                     break;
                 }
                 case OpsCommand.SpecOpsRecall:
@@ -1424,14 +1445,10 @@ namespace BoscaliSummer.Features.Support.Runtime
                     if (detachment == null) return SupportResult.CapabilityUnavailable;
                     SpecOpsDenial denial = detachment.CheckRecall(message.Arg);
                     if (denial != SpecOpsDenial.None) return SpecOpsRefusal(denial);
-                    if (message.Arg < SpecOpsDetachment.TeamCount)
-                    {
-                        ulong launcher = TeamLedgerFor(player.HQ).Launcher[message.Arg];
-                        bool guard = settings != null && settings.TeamOwnershipGuards.Value;
-                        if (!TeamRules.MayTouch(PlayerIdentity.Of(player), launcher,
-                                PilotPresent(player.HQ, launcher), FactionPilots(player.HQ), guard))
-                            return SupportResult.TeamDenied;
-                    }
+                    ulong launcher = TeamLedgerFor(player.HQ).Launcher[message.Arg];
+                    if (!TeamRules.MayTouch(PlayerIdentity.Of(player), launcher,
+                        PilotPresent(player.HQ, launcher), FactionPilots(player.HQ),
+                        settings.TeamOwnershipGuards.Value)) return SupportResult.TeamDenied;
                     if (!detachment.TryRecall(message.Arg, OrbitNow)) return SupportResult.Busy;
                     if (message.Arg < SpecOpsDetachment.TeamCount)
                         TeamLedgerFor(player.HQ).Launcher[message.Arg] = 0;
@@ -1450,78 +1467,38 @@ namespace BoscaliSummer.Features.Support.Runtime
                     SupportResult placement = Placement(platform.CheckPlacement(kind, cell, band, orbitNow));
                     if (placement != SupportResult.Accepted) return placement;
                     float cost = LaunchCost(player, kind);
-                    if (!bypass && player.Allocation + 0.001f < cost) return SupportResult.InsufficientAllocation;
+                    FactionOpsReserve reserve = TeamLedgerFor(player.HQ).Reserve;
+                    if (!bypass && !reserve.CanSpend(cost)) return SupportResult.InsufficientOpsReserve;
                     int seed = UnityEngine.Random.Range(1, int.MaxValue);
                     placement = Placement(platform.TryLaunch(kind, cell, band, seed, orbitNow, bypass ? 0f : cost,
                         settings.PlatformInsertionSeconds.Value, settings.PlatformDockingSeconds.Value,
-                        bypass ? 0UL : PlayerIdentity.Of(player)));
+                        0UL));
                     if (placement != SupportResult.Accepted) return placement;
-                    if (!bypass) player.SetAllocation(Mathf.Max(0f, player.Allocation - cost));
+                    if (!bypass) reserve.Spend(cost);
+                    if (core) TeamLedgerFor(player.HQ).StationOwner = PlayerIdentity.Of(player);
                     ModuleInfo info = PlatformModules.Info(kind);
                     logger.LogInfo("[Support] Liftoff: " + info.Name + " on a " + PlatformModules.VehicleFor(info.Mass).Code +
                         " vehicle " + (core ? "to " + OrbitRegimes.Get(band).Name : "for cell " + OrbitalPlatform.CellName(cell)) +
-                        ", " + Mathf.RoundToInt(cost) + " alloc.");
+                        ", " + Mathf.RoundToInt(cost) + " ops reserve.");
                     break;
                 }
                 case OpsCommand.Jettison:
                 {
                     OrbitalPlatform platform = Space.PlatformFor(player.HQ);
                     if (platform == null) return SupportResult.CapabilityUnavailable;
-                    if (!TeamGuardJettison(player, platform, message.Arg)) return SupportResult.TeamDenied;
-                    // TryJettison forgets payers; capture them first so each refund can go back to whoever paid.
-                    var refundPayers = new ulong[OrbitalPlatform.CellCount];
-                    var refundAmounts = new float[OrbitalPlatform.CellCount];
-                    int refundShares;
-                    float refundRemainder;
-                    float pendingValue = 0f;
-                    if (message.Arg == OrbitalPlatform.CoreCell)
-                    {
-                        var cellPayers = new ulong[OrbitalPlatform.CellCount];
-                        var cellPaid = new float[OrbitalPlatform.CellCount];
-                        for (int i = 0; i < OrbitalPlatform.CellCount; i++)
-                        {
-                            cellPayers[i] = platform.Payer(i);
-                            cellPaid[i] = platform.Paid(i);
-                        }
-                        refundShares = TeamRules.Shares(cellPayers, cellPaid, OrbitalPlatform.CellCount,
-                            refundPayers, refundAmounts);
-                        float shared = 0f;
-                        for (int i = 0; i < refundShares; i++) shared += refundAmounts[i];
-                        refundRemainder = platform.TotalPaid - shared;
-                        pendingValue = platform.PendingPaid;
-                        if (pendingValue > 0f)
-                        {
-                            if (platform.PendingPayer != 0 && refundShares < refundPayers.Length)
-                            {
-                                refundPayers[refundShares] = platform.PendingPayer;
-                                refundAmounts[refundShares] = pendingValue;
-                                refundShares++;
-                            }
-                            else refundRemainder += pendingValue;
-                        }
-                    }
-                    else if (platform.Payer(message.Arg) != 0)
-                    {
-                        refundPayers[0] = platform.Payer(message.Arg);
-                        refundAmounts[0] = platform.Paid(message.Arg);
-                        refundShares = 1;
-                        refundRemainder = 0f;
-                    }
-                    else
-                    {
-                        refundShares = 0;
-                        refundRemainder = platform.Paid(message.Arg);
-                    }
+                    if (!TeamGuardJettison(player)) return SupportResult.TeamDenied;
+                    float pendingValue = message.Arg == OrbitalPlatform.CoreCell ? platform.PendingPaid : 0f;
                     SupportResult removal = Placement(platform.TryJettison(message.Arg, out ModuleKind removed,
                         out float paid));
                     if (removal != SupportResult.Accepted) return removal;
                     float refund = JettisonRefund * (paid + pendingValue);
                     if (refund > 0f && !bypass)
-                        PayRefund(player, refundPayers, refundAmounts, refundShares, refundRemainder);
+                        TeamLedgerFor(player.HQ).Reserve.Refund(refund);
+                    if (removed == ModuleKind.Core) TeamLedgerFor(player.HQ).StationOwner = 0;
                     logger.LogInfo("[Support] " + (removed == ModuleKind.Core
                         ? OrbitalPlatform.Callsign + " deorbited"
                         : PlatformModules.Info(removed).Name + " jettisoned from " + OrbitalPlatform.CellName(message.Arg)) +
-                        "; refunded " + Mathf.RoundToInt(refund) + " alloc.");
+                        "; refunded " + Mathf.RoundToInt(refund) + " ops reserve.");
                     break;
                 }
                 case OpsCommand.Rephase:
@@ -1562,14 +1539,15 @@ namespace BoscaliSummer.Features.Support.Runtime
                     if (!platform.Exists) return SupportResult.NoPlatform;
                     if (platform.Pending != ModuleKind.None) return SupportResult.LaunchInFlight;
                     float cost = LaunchCost(player, ModuleKind.Cargo);
-                    if (!bypass && player.Allocation + 0.001f < cost) return SupportResult.InsufficientAllocation;
-                    ulong buyer = bypass ? 0UL : PlayerIdentity.Of(player);
+                    FactionOpsReserve reserve = TeamLedgerFor(player.HQ).Reserve;
+                    if (!bypass && !reserve.CanSpend(cost)) return SupportResult.InsufficientOpsReserve;
+                    ulong buyer = 0UL;
                     SupportResult launch = Placement(platform.TryResupply(OrbitNow, settings.PlatformDockingSeconds.Value,
                         bypass ? 0f : cost, buyer));
                     if (launch != SupportResult.Accepted) return launch;
-                    if (!bypass) player.SetAllocation(Mathf.Max(0f, player.Allocation - cost));
+                    if (!bypass) reserve.Spend(cost);
                     logger.LogInfo("[Support] Cargo resupply launched to " + OrbitalPlatform.Callsign + " for " +
-                        Mathf.RoundToInt(cost) + " alloc.");
+                        Mathf.RoundToInt(cost) + " ops reserve.");
                     break;
                 }
                 case OpsCommand.CyberUpgrade:
@@ -1581,12 +1559,13 @@ namespace BoscaliSummer.Features.Support.Runtime
                     var upgrade = (CyberUpgrade)message.Arg;
                     if (!cyber.CanUpgrade(upgrade)) return SupportResult.NotBuilt;
                     float cost = cyber.UpgradeCost(upgrade) * settings.CyberUpgradeCostScale.Value *
-                                 Price(player, settings.CostMultiplier.Value);
-                    if (!bypass && player.Allocation + 0.001f < cost) return SupportResult.InsufficientAllocation;
+                                 settings.CostMultiplier.Value;
+                    FactionOpsReserve reserve = TeamLedgerFor(player.HQ).Reserve;
+                    if (!bypass && !reserve.CanSpend(cost)) return SupportResult.InsufficientOpsReserve;
                     if (!cyber.TryUpgrade(upgrade)) return SupportResult.NotBuilt;
-                    if (!bypass) player.SetAllocation(Mathf.Max(0f, player.Allocation - cost));
+                    if (!bypass) reserve.Spend(cost);
                     logger.LogInfo("[Support] CYBER " + CyberLocations.UpgradeName(upgrade) + " to level " +
-                        cyber.UpgradeLevel(upgrade) + " for " + Mathf.RoundToInt(cost) + " alloc.");
+                        cyber.UpgradeLevel(upgrade) + " for " + Mathf.RoundToInt(cost) + " ops reserve.");
                     break;
                 }
                 case OpsCommand.CyberBreach:
@@ -1597,14 +1576,6 @@ namespace BoscaliSummer.Features.Support.Runtime
                     var tool = (BreachTool)message.Arg2;
                     BreachDenial denial;
                     TeamLedger teams = TeamLedgerFor(player.HQ);
-                    bool starting = tool == BreachTool.Quiet || tool == BreachTool.Force;
-                    if (!starting)
-                    {
-                        bool guard = settings != null && settings.TeamOwnershipGuards.Value;
-                        if (!TeamRules.MayTouch(PlayerIdentity.Of(player), teams.BreachOwner,
-                                PilotPresent(player.HQ, teams.BreachOwner), FactionPilots(player.HQ), guard))
-                            return SupportResult.TeamDenied;
-                    }
                     switch (tool)
                     {
                         case BreachTool.Quiet:
@@ -1617,17 +1588,28 @@ namespace BoscaliSummer.Features.Support.Runtime
                             break;
                         case BreachTool.RetuneQuiet:
                         case BreachTool.RetuneForce:
+                            if (!TeamRules.MayTouch(PlayerIdentity.Of(player), teams.BreachOwner,
+                                PilotPresent(player.HQ, teams.BreachOwner), FactionPilots(player.HQ),
+                                settings.TeamOwnershipGuards.Value)) return SupportResult.TeamDenied;
                             if (!cyber.TryBreachMode(tool == BreachTool.RetuneQuiet)) return SupportResult.InvalidTarget;
                             denial = BreachDenial.None;
                             break;
                         case BreachTool.Spoof:
+                            if (!TeamRules.MayTouch(PlayerIdentity.Of(player), teams.BreachOwner,
+                                PilotPresent(player.HQ, teams.BreachOwner), FactionPilots(player.HQ),
+                                settings.TeamOwnershipGuards.Value)) return SupportResult.TeamDenied;
                             denial = cyber.TrySpoof(OrbitNow);
                             break;
-                        default:
+                        case BreachTool.Disconnect:
+                            if (!TeamRules.MayTouch(PlayerIdentity.Of(player), teams.BreachOwner,
+                                PilotPresent(player.HQ, teams.BreachOwner), FactionPilots(player.HQ),
+                                settings.TeamOwnershipGuards.Value)) return SupportResult.TeamDenied;
                             if (!cyber.TryDisconnect(OrbitNow)) return SupportResult.InvalidTarget;
                             teams.BreachOwner = 0;
                             denial = BreachDenial.None;
                             break;
+                        default:
+                            return SupportResult.InvalidTarget;
                     }
                     if (denial != BreachDenial.None)
                         return (SupportResult)((byte)SupportResult.CyberRefused + (byte)denial);
@@ -1658,7 +1640,22 @@ namespace BoscaliSummer.Features.Support.Runtime
                     CyberDenial denial = cyber.TryVerb(verb, message.Arg, OrbitNow);
                     if (denial != CyberDenial.None)
                         return (SupportResult)((byte)SupportResult.CyberRefused + (byte)denial);
-                    if (isolating) TeamLedgerFor(player.HQ).Accept(TeamGate.Isolate, now);
+                    if (isolating)
+                    {
+                        TeamLedgerFor(player.HQ).Accept(TeamGate.Isolate, now);
+                        CyberNode defended = cyber.Node(message.Arg);
+                        if (defended.Static)
+                            for (int i = 0; i < Space.FactionCount; i++)
+                            {
+                                FactionHQ other = Space.FactionAt(i);
+                                if (other == null || other == player.HQ) continue;
+                                CyberNetwork attacker = Space.CyberFor(other);
+                                if (attacker == null || !attacker.BreachActive) continue;
+                                CyberNode target = attacker.Node(attacker.BreachTarget);
+                                if (target.Anchor == defended.Anchor)
+                                    attacker.ResistBreach(OrbitNow);
+                            }
+                    }
                     break;
                 }
                 default:
@@ -1854,6 +1851,11 @@ namespace BoscaliSummer.Features.Support.Runtime
             message.Protocol = SupportNet.ProtocolVersion;
             message.RequestId = requestId;
             message.Result = (byte)result;
+            message.FactionName = FactionKey(player != null ? player.HQ : null);
+            message.OpsReserve = player != null && player.HQ != null
+                ? TeamLedgerFor(player.HQ).Reserve.Balance : 0f;
+            int threatened = player != null ? ThreatenedHome(player.HQ) : -1;
+            message.CyberThreatSlot = threatened >= 0 ? (byte)threatened : byte.MaxValue;
             if (platform != null)
             {
                 platform.Export(now, exportSnapshot);
@@ -1881,12 +1883,19 @@ namespace BoscaliSummer.Features.Support.Runtime
 
         internal SpecOpsStateMessage SpecOpsSnapshot(Player player)
         {
-            var message = new SpecOpsStateMessage { Protocol = SupportNet.ProtocolVersion, State = new SpecOpsSnapshot() };
+            var message = new SpecOpsStateMessage { Protocol = SupportNet.ProtocolVersion,
+                FactionName = FactionKey(player != null ? player.HQ : null), State = new SpecOpsSnapshot() };
             SpecOpsDetachment detachment = player != null ? Space.DetachmentFor(player.HQ) : null;
             if (detachment != null) detachment.Export(OrbitNow, message.State);
             return message;
         }
 
         private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
+
+        private static string FactionKey(FactionHQ hq)
+        {
+            string name = CyberDefense.Name(hq);
+            return name.Length <= 24 ? name : name.Substring(0, 24);
+        }
     }
 }

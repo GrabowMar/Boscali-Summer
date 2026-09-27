@@ -45,6 +45,11 @@ namespace BoscaliSummer.Features.Support.Networking
         public byte Protocol;
         public int RequestId;
         public byte Result;
+        public string FactionName;
+        /// <summary>Faction infrastructure budget; pilot call-ins retain individual Allocation.</summary>
+        public float OpsReserve;
+        /// <summary>One own home node under an opposing live breach; 255 means no alert.</summary>
+        public byte CyberThreatSlot;
 
         public bool PlatformActive;
 
@@ -107,6 +112,7 @@ namespace BoscaliSummer.Features.Support.Networking
     internal struct SpecOpsStateMessage
     {
         public byte Protocol;
+        public string FactionName;
         public SpecOpsSnapshot State;
     }
 

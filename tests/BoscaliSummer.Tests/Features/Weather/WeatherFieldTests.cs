@@ -32,7 +32,64 @@ namespace BoscaliSummer.Tests.Features.Weather
             ClassificationAndConditions();
             MetarReadsLikeOne();
             CloudDensityMapsCover();
+            FrontalCoverIsConnectedButLeavesGaps();
+            CellsStayInClusters();
             FlightLevelPrecipitation();
+        }
+
+        private static void FrontalCoverIsConnectedButLeavesGaps()
+        {
+            var field = new WeatherField();
+            WeatherKey key = Key(91u, false, (byte)WeatherRegime.Severe);
+            FrontState front = default;
+            for (float t = 0; t < 4f * 3600f; t += 60f)
+            {
+                field.Build(key, t, HalfX, HalfZ);
+                for (int i = 0; i < field.FrontCount; i++)
+                    if (field.Front(i).Strength > 0.8f && Math.Abs(field.Front(i).Offset) < 12000f)
+                        front = field.Front(i);
+                if (front.Strength > 0f) break;
+            }
+            TestAssert.That(front.Strength > 0f, "severe sky brings a front across the map");
+            float clearestAhead = 1f;
+            for (int i = -2; i <= 2; i++)
+            {
+                float along = i * 8000f;
+                float across = front.OffsetAtAlong(along) - 2000f;
+                float x = front.NormalX * across - front.NormalZ * along;
+                float z = front.NormalZ * across + front.NormalX * along;
+                WeatherPoint under = field.Sample(x, z);
+                TestAssert.That(under.FrontCover > 0.7f && under.Cover > 0.9f,
+                    "front forms a connected cloud band");
+                for (int j = 4; j <= 8; j += 2)
+                    clearestAhead = Math.Min(clearestAhead,
+                        field.Sample(x + front.NormalX * j * 10000f,
+                            z + front.NormalZ * j * 10000f).Cover);
+            }
+            TestAssert.That(clearestAhead < 0.7f,
+                $"severe front leaves at least one clearer flight corridor ahead: {clearestAhead:F2}");
+        }
+
+        private static void CellsStayInClusters()
+        {
+            var field = new WeatherField();
+            WeatherKey key = Key(5u, false, (byte)WeatherRegime.Storms);
+            bool sawPair = false;
+            for (float t = 600f; t < 4f * 3600f; t += 97f)
+            {
+                field.Build(key, t, HalfX, HalfZ);
+                for (int i = 0; i < field.CellCount; i++)
+                for (int j = i + 1; j < field.CellCount; j++)
+                {
+                    StormCell a = field.Cell(i), b = field.Cell(j);
+                    if (a.Cluster != b.Cluster) continue;
+                    sawPair = true;
+                    float dx = a.X - b.X, dz = a.Z - b.Z;
+                    TestAssert.That(dx * dx + dz * dz < 20000f * 20000f,
+                        "cells of one cluster drift together");
+                }
+            }
+            TestAssert.That(sawPair, "storm regime forms multi-cell clusters");
         }
 
         private static void FlightLevelPrecipitation()

@@ -68,9 +68,10 @@ namespace BoscaliSummer.Features.Support.Visuals
             cam.allowHDR = false;
             cam.allowMSAA = false;
             cam.depth = -10f;
-            Camera main = Camera.main;
             int excluded = (1 << PhysicsLayers.UI) | (1 << PhysicsLayers.HUD) | (1 << PhysicsLayers.Cockpit);
-            cam.cullingMask = (main != null ? main.cullingMask : ~0) & ~excluded;
+            // The optional EO view may show terrain and static structures only. Dynamic scene
+            // units are host intel, not camera-only discoveries on a remote client.
+            cam.cullingMask = (int)PhysicsLayers.StaticsMask & ~excluded;
 
             UniversalAdditionalCameraData data = cam.GetUniversalAdditionalCameraData();
             if (data != null)

@@ -537,6 +537,16 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             return true;
         }
 
+        /// <summary>A real opposing faction isolated the airbase under attack. The session stays
+        /// alive so the operator can spoof or change mode; the defender buys a short response window.</summary>
+        public bool ResistBreach(double now)
+        {
+            if (!BreachActive || breachPhaseEnds <= now) return false;
+            breachPhaseEnds += 10.0;
+            breachTrace = Math.Min(0.85f, breachTrace + 0.06f);
+            return true;
+        }
+
         /// <summary>Host: pick the capstone a stage-4 location takes.</summary>
         public bool TryChooseCapstone(Capstone capstone, double now)
         {

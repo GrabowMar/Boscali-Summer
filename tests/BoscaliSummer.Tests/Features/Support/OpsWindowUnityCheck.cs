@@ -605,6 +605,10 @@ public static class OpsWindowUnityCheck
         Shoot(window, "ops-imager-feed", Screens[0]);
 
         Call(view, "Fixture", new object[] { null });
+        Call(view, "Paint", platform, state, now, false, true);
+        RoomChecks(window, view, "imager-no-product", 1920f, 1080f, true);
+        Shoot(window, "ops-imager-no-product", Screens[0]);
+
         Call(view, "Paint", null, Activator.CreateInstance(state.GetType()), now, false, true);
         RoomChecks(window, view, "imager-no-station", 1920f, 1080f, false);
         Shoot(window, "ops-imager-no-station", Screens[0]);
@@ -684,7 +688,7 @@ public static class OpsWindowUnityCheck
             ("AirDefence", 109, 47000f, 4000f, 6, 4, true, "AIR DEFENCE 47/4")
         };
         foreach (var o in fixture)
-            Call(detachment, "ReportObjective", Enum.Parse(kindType, o.Kind), o.Anchor, o.X, o.Z, o.Threat, o.Radars, o.Hostile, o.Name);
+            Call(detachment, "ReportObjective", Enum.Parse(kindType, o.Kind), o.Anchor, o.X, o.Z, o.Threat, o.Radars, o.Hostile, o.Name, false);
         Call(detachment, "EndObjectives");
         now = 30.0;
         return detachment;

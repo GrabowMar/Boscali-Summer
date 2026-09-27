@@ -91,6 +91,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private static int viewRevision;
         private static int hoveredStackCount;
         private static Vector2 fittedViewport;
+        private static float coverageScale;
 
         private static bool Requested => DynamicMap.mapMaximized && MfdRailPatch.IsApplied &&
             Plugin.Settings?.Command?.MapRelief3D?.Value == true &&
@@ -171,6 +172,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             if (view.transform.GetSiblingIndex() != 0) view.transform.SetAsFirstSibling();
 
             FitToViewport(map);
+            FitTerrainCoverage(map);
             HideNativeGrid();
             MfdMapOrbitControls.Tick(map);
             CaptureFieldLayers();
@@ -198,10 +200,38 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             float cover = Mathf.Max((size.x - 20f) / imageRect.rect.width,
                 (size.y - 20f) / imageRect.rect.height) * 1.04f;
             float currentImageScale = map.mapImage.transform.localScale.x;
-            if (cover <= 1.05f || currentImageScale <= 0f ||
-                currentImageScale >= cover - 0.01f) return;
-            float target = Mathf.Clamp(map.GetZoomLevel() * cover / currentImageScale, 1f, 4f);
-            map.SetZoomLevel(target);
+            if (cover > 1.05f && currentImageScale > 0f &&
+                currentImageScale < cover - 0.01f)
+            {
+                float target = Mathf.Clamp(map.GetZoomLevel() * cover / currentImageScale, 1f, 4f);
+                map.SetZoomLevel(target);
+            }
+            coverageScale = map.mapImage.transform.localScale.x;
+        }
+
+        private static void FitTerrainCoverage(DynamicMap map)
+        {
+            if (camera == null || coverageScale <= 0f || map?.mapBackground == null) return;
+            RectTransform imageRect = map.mapImage.GetComponent<RectTransform>();
+            if (imageRect == null || imageRect.rect.width <= 0f || imageRect.rect.height <= 0f) return;
+
+            // A rotated square of terrain otherwise leaves sharp empty wedges inside the
+            // expanded map. Frame the projected ground so its four viewport corners land
+            // on terrain. Keep the initial image scale as the reference so later player
+            // zoom is not cancelled by the relief camera.
+            float visibleX = map.mapBackground.rectTransform.rect.width /
+                (imageRect.rect.width * coverageScale);
+            float visibleY = map.mapBackground.rectTransform.rect.height /
+                (imageRect.rect.height * coverageScale * Mathf.Sin(pitch * Mathf.Deg2Rad));
+            float c = Mathf.Abs(Mathf.Cos(yaw * Mathf.Deg2Rad));
+            float s = Mathf.Abs(Mathf.Sin(yaw * Mathf.Deg2Rad));
+            float span = Mathf.Max(visibleX * c + visibleY * s,
+                visibleX * s + visibleY * c);
+            float size = Mathf.Clamp((ModelWidth * .5f - 12f) / span, 180f, 440f);
+            if (Mathf.Abs(camera.orthographicSize - size) < .25f) return;
+            camera.orthographicSize = size;
+            viewRevision++;
+            nextRender = 0f;
         }
 
         private static bool LoadHeightfield()
@@ -893,6 +923,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             camera = null;
             nextRender = 0f;
             fittedViewport = Vector2.zero;
+            coverageScale = 0f;
         }
 
         internal static void Reset()

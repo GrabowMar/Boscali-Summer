@@ -15,6 +15,8 @@ namespace BoscaliSummer.Tests.Features.Support
             CheckFreshDetachment();
             CheckOdds();
             CheckLaunchRules();
+            CheckFriendlyOperations();
+            CheckOrbitalScouting();
             CheckMissionCycle();
             CheckFailureAndLoss();
             CheckRanksAndReadiness();
@@ -22,6 +24,44 @@ namespace BoscaliSummer.Tests.Features.Support
             CheckStealAndNewAbilities();
             CheckSnapshots();
             CheckWords();
+        }
+
+        private static void CheckFriendlyOperations()
+        {
+            var detachment = new SpecOpsDetachment();
+            detachment.BeginObjectives();
+            detachment.ReportObjective(ObjectiveKind.Airfield, 404, 1000f, 2000f, 0, 0, false,
+                "HOME FIELD", true);
+            detachment.EndObjectives();
+            TestAssert.That(detachment.Objective(0).Friendly &&
+                detachment.CheckLaunch(0, FieldMission.Recon, 404) == SpecOpsDenial.None &&
+                detachment.CheckLaunch(0, FieldMission.Steal, 404) == SpecOpsDenial.None,
+                "friendly nodes support observation and listening posts");
+            TestAssert.That(detachment.ChanceFor(0, FieldMission.Recon, 0, 0.0) == 95 &&
+                detachment.LossFor(0, FieldMission.Recon, 0, 0.0) == 0,
+                "uncontested home-ground setup has low risk without a guaranteed win");
+            TestAssert.That(detachment.CheckLaunch(0, FieldMission.Seize, 404) == SpecOpsDenial.WrongObjective &&
+                detachment.CheckLaunch(0, FieldMission.Sabotage, 404) == SpecOpsDenial.WrongObjective,
+                "a friendly node cannot be seized or sabotaged by its own faction");
+            var snapshot = new SpecOpsSnapshot();
+            detachment.Export(0.0, snapshot);
+            var mirror = new SpecOpsDetachment();
+            mirror.Mirror(snapshot, 0.0);
+            TestAssert.That(mirror.Objective(0).Friendly, "friendly ownership survives the faction snapshot");
+        }
+
+        private static void CheckOrbitalScouting()
+        {
+            SpecOpsDetachment detachment = Listed();
+            TestAssert.That(!detachment.ScoutNear(float.NaN, 0f, 1000f, 10.0) &&
+                !detachment.ScoutNear(10000f, 0f, 0f, 10.0), "invalid scan footprints cannot scout");
+            TestAssert.That(!detachment.ScoutNear(-8000f, 4000f, 500f, 10.0),
+                "scanning only a neutral objective does not mark it as an enemy target");
+            TestAssert.That(detachment.ScoutNear(10000f, 0f, 1000f, 10.0) &&
+                detachment.Scouted(Town, 100.0) && !detachment.Scouted(Sam, 100.0),
+                "an orbital scan scouts the hostile objective within its footprint");
+            TestAssert.That(!detachment.Scouted(Town, 131.0),
+                "the orbital planning advantage expires after two minutes");
         }
 
         private static SpecOpsDetachment Listed()

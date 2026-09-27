@@ -17,6 +17,7 @@
     <Compile Include="..\..\modules\Support\Domain\OpsDomain.cs" Link="Features\Support\OpsDomain.cs" />
     <Compile Include="..\..\modules\Support\Domain\TheaterGrid.cs" Link="Features\Support\TheaterGrid.cs" />
     <Compile Include="..\..\modules\Support\Domain\TeamRules.cs" Link="Features\Support\TeamRules.cs" />
+    <Compile Include="..\..\modules\Support\Domain\FactionOpsReserve.cs" Link="Features\Support\FactionOpsReserve.cs" />
     <Compile Include="..\..\modules\Support\Domain\SpecOps\FieldCatalog.cs" Link="Features\Support\FieldCatalog.cs" />
     <Compile Include="..\..\modules\Support\Domain\SpecOps\SpecOpsDetachment.cs" Link="Features\Support\SpecOpsDetachment.cs" />
     <Compile Include="..\..\modules\Support\Domain\SpecOps\FieldWords.cs" Link="Features\Support\FieldWords.cs" />

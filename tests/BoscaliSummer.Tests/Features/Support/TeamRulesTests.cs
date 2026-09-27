@@ -16,6 +16,25 @@ namespace BoscaliSummer.Tests.Features.Support
             TestRefundRecipient();
             TestDeorbitGuard();
             TestStationPayers();
+            TestFactionReserve();
+        }
+
+        private static void TestFactionReserve()
+        {
+            var blue = new TeamLedger();
+            var red = new TeamLedger();
+            blue.Reserve.Tick(100f, 0);
+            red.Reserve.Tick(100f, 0);
+            TestAssert.That(blue.Reserve.Spend(1000f) && red.Reserve.Balance == FactionOpsReserve.Starting,
+                "a purchase spends only its faction's reserve");
+            blue.Reserve.Tick(110f, 20);
+            TestAssert.That(Near(blue.Reserve.Balance, FactionOpsReserve.Starting - 1000f + 75f),
+                "baseline and owned-site income are capped and independent of pilot count");
+            TestAssert.That(!blue.Reserve.Spend(10000f), "the host refuses unaffordable infrastructure");
+            blue.Reserve.Refund(10000f);
+            TestAssert.That(blue.Reserve.Balance == FactionOpsReserve.Maximum, "refunds cannot exceed the faction cap");
+            blue.Clear();
+            TestAssert.That(blue.Reserve.Balance == FactionOpsReserve.Starting, "scene reset clears the reserve");
         }
 
         private static void TestPriceScale()

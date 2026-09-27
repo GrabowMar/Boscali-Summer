@@ -46,25 +46,32 @@ Shader "Boscali/FlightCloud"
                 float3 p = local * 2.0;
                 float h = local.y + 0.5;
                 float3 g = world + _CloudWorldOffset;
+                float lod = clamp((distance(world, _WorldSpaceCameraPos.xyz) - 12000.0) / 14000.0, 0.0, 2.0);
                 float3 n1 = float3((g.xz - _CloudWindOffset) / 7100.0, g.y / 3500.0);
                 float3 n2 = float3((g.xz - _CloudWindOffset * 1.7) / 1900.0, g.y / 1500.0);
-                float2 broad = tex3Dlod(_CloudNoiseTex, float4(n1, 0)).rg;
-                float2 detail = tex3Dlod(_CloudNoiseTex, float4(n2, 0)).rg;
-                float deckShape = smoothstep(1.0, 0.82,
-                    max(abs(p.x), abs(p.z)) + (0.5 - broad.r) * 0.13) *
-                    smoothstep(0.0, 0.07, h) * (1.0 - smoothstep(0.81, 0.98, h));
-                float core = length(float3(p.x * 1.12, (p.y - 0.04) * 0.95, p.z * 1.12));
-                float left = length(float3((p.x + 0.46) / 0.72,
-                    (p.y + 0.35) / 0.76, (p.z - 0.10) / 0.80));
-                float right = length(float3((p.x - 0.43) / 0.69,
-                    (p.y + 0.27) / 0.77, (p.z + 0.18) / 0.76));
-                float lobe = min(core, min(left, right)) +
-                    (0.5 - broad.r) * 0.27 + (0.5 - detail.r) * 0.08;
+                float2 broad = tex3Dlod(_CloudNoiseTex, float4(n1, lod)).rg;
+                float2 detail = tex3Dlod(_CloudNoiseTex, float4(n2, lod)).rg;
+                float deckBase = 0.05 + (broad.r - 0.5) * 0.14 +
+                    (detail.r - 0.5) * 0.05;
+                float deckTop = 0.86 + (broad.r - 0.5) * 0.23 +
+                    (detail.r - 0.5) * 0.09;
+                float deckShape = smoothstep(1.08, 0.76,
+                    max(abs(p.x), abs(p.z)) + (0.5 - broad.r) * 0.28) *
+                    smoothstep(deckBase, deckBase + 0.08, h) *
+                    (1.0 - smoothstep(deckTop - 0.15, deckTop, h));
+                float lower = length(float3((p.x + 0.12) / 0.82,
+                    (p.y + 0.51) / 0.55, (p.z - 0.10) / 0.77));
+                float middle = length(float3((p.x - 0.06) / 0.73,
+                    (p.y + 0.02) / 0.68, (p.z + 0.08) / 0.70));
+                float upper = length(float3((p.x + 0.10) / 0.62,
+                    (p.y - 0.48) / 0.60, (p.z - 0.10) / 0.60));
+                float lobe = min(lower, min(middle, upper)) +
+                    (0.5 - broad.r) * 0.31 + (0.5 - detail.r) * 0.10;
                 float volumeEdge = max(max(abs(p.x), abs(p.z)), p.y);
-                float cumulusShape = smoothstep(1.10, 0.78, lobe) *
+                float cumulusShape = smoothstep(1.13, 0.72, lobe) *
                     smoothstep(0.0, 0.08, h) * smoothstep(1.0, 0.82, volumeEdge);
                 float shape = broad.r * 0.68 + broad.g * 0.15 + detail.r * 0.17;
-                float erosion = saturate((shape - (_CloudType > 0.5 ? 0.40 : 0.40)) * 5.4);
+                float erosion = saturate((shape - (_CloudType > 0.5 ? 0.34 : 0.39)) * 5.0);
                 erosion *= lerp(0.62, 1.0, detail.g);
                 return (_CloudType > 0.5 ? deckShape : cumulusShape) * erosion * _CloudDensity;
             }
@@ -86,19 +93,19 @@ Shader "Boscali/FlightCloud"
                 float rawDepth = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv);
                 float sceneDistance = LinearEyeDepth(rawDepth) /
                     max(0.025, dot(ray, _CloudCameraForward));
-                finish = min(finish, min(sceneDistance, 18000.0));
+                finish = min(finish, min(sceneDistance, 45000.0));
                 if (finish <= start) discard;
 
                 float span = finish - start;
                 float steps = _CloudSteps;
-                if (start > 17000.0) steps *= 0.58;
+                if (start > 25000.0) steps *= 0.65;
                 float stepLength = span / max(1.0, steps);
                 float t = start + 0.5 * stepLength;
                 float transmittance = 1.0;
                 float3 colour = 0.0;
-                float phase = 0.72 + 0.8 * pow(saturate(dot(ray, _CloudSunDirection)), 10.0);
+                float phase = 0.62 + 1.10 * pow(saturate(dot(ray, _CloudSunDirection)), 8.0);
                 [loop]
-                for (int n = 0; n < 24; n++)
+                for (int n = 0; n < 32; n++)
                 {
                     if (n >= steps || t >= finish || transmittance < 0.025) break;
                     float3 world = origin + ray * t;
@@ -114,7 +121,7 @@ Shader "Boscali/FlightCloud"
                         float3 light = _CloudAmbientColor * lerp(0.23, 0.82, h) +
                             _CloudSunColor * exp(-shadow * 4.0) * phase *
                             lerp(0.25, 0.92, h);
-                        light *= lerp(1.0, 0.65, _CloudStorm);
+                        light *= lerp(1.0, lerp(0.35, 0.92, h), _CloudStorm);
                         light = min(light, 1.0);
                         float fog = saturate((t - 15000.0) / 30000.0);
                         light = lerp(light, _CloudFogColor, fog * 0.65);

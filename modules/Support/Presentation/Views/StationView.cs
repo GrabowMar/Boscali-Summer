@@ -678,8 +678,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         private bool Affordable(ModuleKind kind)
         {
             float cost = support.LaunchCost(kind);
-            if (support.BypassRequirements || support.LocalAllocation + 0.001f >= cost) return true;
-            Note("INSUFFICIENT ALLOCATION · NEEDS " + Figure(cost - support.LocalAllocation) + " MORE", true);
+            if (support.BypassRequirements || support.LocalOpsReserve + 0.001f >= cost) return true;
+            Note("INSUFFICIENT OPS RESERVE · NEEDS " + Figure(cost - support.LocalOpsReserve) + " MORE", true);
             return false;
         }
 
@@ -884,13 +884,13 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             if (!station)
             {
                 float core = support != null ? support.LaunchCost(ModuleKind.Core) : PlatformModules.LaunchPrice(ModuleKind.Core);
-                float available = support != null ? support.LocalAllocation : 0f;
+                float available = support != null ? support.LocalOpsReserve : 0f;
                 bool pending = support != null && support.CommandPending;
                 bool affordable = support == null || support.BypassRequirements || available + 0.001f >= core;
                 Set(emptyTitle, pending ? "CORE INSERTION REQUESTED" : affordable ? "CORE READY FOR INSERTION" : "CORE LAUNCH ON HOLD");
                 Set(emptyCost, pending ? "AWAITING HOST REPLY" : !affordable
                     ? "COST " + Figure(core) + "  ·  AVAILABLE " + Figure(available) + "  ·  NEED " + Figure(core - available) + " MORE"
-                    : core <= 0f ? "NO ALLOCATION REQUIRED  ·  [SPACE] LAUNCH CORE"
+                    : core <= 0f ? "NO OPS RESERVE REQUIRED  ·  [SPACE] LAUNCH CORE"
                     : "COST " + Figure(core) + "  ·  AVAILABLE " + Figure(available) + "  ·  [SPACE] LAUNCH CORE");
                 emptyCost.color = pending || !affordable ? AvTheme.RailCaution : StationStyle.Limb;
                 Set(emptySteps, "1   LAUNCH THE CORE. IT INSERTS INTO " + OrbitRegimes.Get(0).Name + " AND BECOMES " + OrbitalPlatform.Callsign + ".\n" +
@@ -952,7 +952,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             Set(rackTitle, station ? "MODULES · SELECT MODULE, THEN PORT" : "MODULES");
             ModuleKind detail = hover != ModuleKind.None ? hover : plan.Module;
             Set(moduleDetail, !station ? "" : detail != ModuleKind.None
-                ? PlatformModules.Info(detail).Name + " · " + Figure(support != null ? support.LaunchCost(detail) : PlatformModules.LaunchPrice(detail)) + " ALLOCATION\n" + PlatformModules.Info(detail).Summary
+                ? PlatformModules.Info(detail).Name + " · " + Figure(support != null ? support.LaunchCost(detail) : PlatformModules.LaunchPrice(detail)) + " OPS RESERVE\n" + PlatformModules.Info(detail).Summary
                 : "PLAN YOUR NEXT MODULE\nSelect a module to preview its benefit and resource impact before launch.");
             // Before launch the rack is one line, not thirteen rows of NEEDS CORE (P3).
             for (int i = 0; i < rack.Length; i++)
@@ -964,7 +964,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 PlatformMissions.Name(PlatformMission.PrecisionStrike) + " · " + PlatformMissions.Brief(PlatformMission.PrecisionStrike) + "\n\n" +
                 PlatformMissions.Name(PlatformMission.Emp) + " · " + PlatformMissions.Brief(PlatformMission.Emp));
             if (!station) return;
-            float allocation = support != null ? support.LocalAllocation : 0f;
+            float allocation = support != null ? support.LocalOpsReserve : 0f;
             bool bypass = support != null && support.BypassRequirements;
             for (int i = 0; i < rack.Length; i++)
             {
@@ -1031,10 +1031,10 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             if (!station)
             {
                 float cost = support != null ? support.LaunchCost(ModuleKind.Core) : PlatformModules.LaunchPrice(ModuleKind.Core);
-                bool afford = support == null || support.BypassRequirements || support.LocalAllocation + 0.001f >= cost;
+                bool afford = support == null || support.BypassRequirements || support.LocalOpsReserve + 0.001f >= cost;
                 label = "[SPACE]  LAUNCH CORE · " + Figure(cost);
                 enabled = !pending && afford;
-                tip = afford ? "Launch " + OrbitalPlatform.Callsign + "'s core; the host charges on acceptance." : "Needs " + Figure(cost) + " allocation.";
+                tip = afford ? "Launch " + OrbitalPlatform.Callsign + "'s core; the host charges on acceptance." : "Needs " + Figure(cost) + " ops reserve.";
             }
             else if (platform.Pending != ModuleKind.None)
             {
@@ -1056,13 +1056,13 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 {
                     PlacementFailure placement = OrbitalPlatform.InGrid(cell) ? platform.CheckPlacement(next, cell, 0, now) : PlacementFailure.OutsideGrid;
                     float cost = support != null ? support.LaunchCost(next) : PlatformModules.LaunchPrice(next);
-                    bool afford = support == null || support.BypassRequirements || support.LocalAllocation + 0.001f >= cost;
+                    bool afford = support == null || support.BypassRequirements || support.LocalOpsReserve + 0.001f >= cost;
                     label = "[SPACE]  LAUNCH " + PlatformModules.Info(next).Name +
                             (OrbitalPlatform.InGrid(cell) ? " → " + OrbitalPlatform.CellName(cell) : "") + " · " + Figure(cost);
                     enabled = !pending && afford && placement == PlacementFailure.None;
                     tip = placement != PlacementFailure.None ? PlatformWords.Placement(placement)
                         : afford ? "Send this launch; the host validates and charges on acceptance."
-                        : "Needs " + Figure(cost - (support != null ? support.LocalAllocation : 0f)) + " more allocation.";
+                        : "Needs " + Figure(cost - (support != null ? support.LocalOpsReserve : 0f)) + " more ops reserve.";
                 }
             }
             SetButton(primary, label, enabled, tip);

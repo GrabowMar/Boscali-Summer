@@ -18,7 +18,8 @@ namespace BoscaliSummer.Features.Support.Visuals
     /// <summary>
     /// Client-local SAR scene formation. Rays are cast from the sensor direction over the
     /// scene's range × azimuth grid during the collect window — a bounded number per frame —
-    /// against terrain tiles, structures, units and water. Each hit scatters by surface class
+    /// against terrain, structures and water. Contacts come only from host-approved reveals,
+    /// never from a client's local unit registry. Each hit scatters by surface class
     /// and local incidence and is handed to <see cref="SarImageFormer"/>, which lays heights
     /// over, displaces movers, leaves shadow where no ray landed and speckles the result. The
     /// preview re-forms at a low rate so the scene visibly builds azimuth line by azimuth line.
@@ -105,8 +106,7 @@ namespace BoscaliSummer.Features.Support.Visuals
             LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
             float wind = level != null ? level.windSpeed : 5f;
             windRoughness = Mathf.Pow(1f + Mathf.Max(0f, wind) / 6f, 2f);
-            layerMask = (int)PhysicsLayers.StaticsMask | (int)PhysicsLayers.ShipsMask |
-                        (int)PhysicsLayers.DefaultMask | (int)PhysicsLayers.WaterMask;
+            layerMask = (int)PhysicsLayers.StaticsMask | (int)PhysicsLayers.WaterMask;
 
             Clear();
             Phase = SarPhase.Collecting;

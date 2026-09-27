@@ -16,6 +16,7 @@ namespace BoscaliSummer.Tests.Features.Support
             TestUpgradesAndReach();
             TestBaseReach();
             TestBreachPhasesAndLoot();
+            TestRealDefenderResistance();
             TestSpoofAndBacktrace();
             TestCapstone();
             TestCapstoneRechargeCoversEveryCapstone();
@@ -28,6 +29,19 @@ namespace BoscaliSummer.Tests.Features.Support
             TestIncidentMirrorPacksDensely();
             TestIncidentVerbFollowsIdentity();
             TestWords();
+        }
+
+        private static void TestRealDefenderResistance()
+        {
+            CyberNetwork attacker = Fresh(out _, out int city);
+            Tick(attacker, 30.0);
+            TestAssert.That(!attacker.ResistBreach(30.0), "no attacker session means no defender effect");
+            TestAssert.That(attacker.TryStartBreach(city, true, 30.0) == BreachDenial.None,
+                "the attacker's session starts before a defender response");
+            float remaining = attacker.BreachPhaseRemaining(30.0);
+            TestAssert.That(attacker.ResistBreach(30.0) && attacker.BreachActive &&
+                attacker.BreachPhaseRemaining(30.0) >= remaining + 9.9f && attacker.BreachTrace > 0f,
+                "defender isolation delays and exposes a real breach without cancelling it");
         }
 
         private static void Tick(CyberNetwork network, double seconds, double from = 0.0)

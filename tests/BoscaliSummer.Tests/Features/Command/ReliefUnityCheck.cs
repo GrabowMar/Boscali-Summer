@@ -79,6 +79,41 @@ public static class ReliefUnityCheck
             if (!MfdTerrainRelief.TryUnproject(center, ((RectTransform)image.transform).rect,
                     out GlobalPosition click) || Mathf.Abs(click.x) > 500f || Mathf.Abs(click.z) > 500f)
                 throw new Exception("Rendered ground did not invert to the clicked world position.");
+            MfdTerrainRelief.Rotate(45f, 0f);
+            MfdTerrainRelief.Tick();
+            Rect terrainRect = ((RectTransform)image.transform).rect;
+            float halfX = ((RectTransform)background.transform).rect.width /
+                (2f * image.transform.localScale.x);
+            float halfY = ((RectTransform)background.transform).rect.height /
+                (2f * image.transform.localScale.y);
+            foreach (float x in new[] { -halfX, halfX })
+            foreach (float y in new[] { -halfY, halfY })
+                if (!MfdTerrainRelief.TryUnproject(new Vector2(x, y), terrainRect, out _))
+                    throw new Exception("Rotated terrain left an empty corner inside the map viewport.");
+            Canvas.ForceUpdateCanvases();
+            var rotatedTarget = new RenderTexture(1250, side, 24);
+            screen.targetTexture = rotatedTarget;
+            screen.Render();
+            RenderTexture.active = rotatedTarget;
+            var rotatedPreview = new Texture2D(1250, side, TextureFormat.RGB24, false);
+            rotatedPreview.ReadPixels(new Rect(0, 0, 1250, side), 0, 0);
+            rotatedPreview.Apply();
+            File.WriteAllBytes("relief-rotated-preview.png", rotatedPreview.EncodeToPNG());
+            screen.targetTexture = null;
+            RenderTexture.active = null;
+            foreach (float testYaw in new[] { 0f, 45f, 90f, 135f })
+            foreach (float testPitch in new[] { 25f, 40f, 70f })
+            {
+                MfdTerrainRelief.Rotate(testYaw - MfdTerrainRelief.Yaw,
+                    testPitch - MfdTerrainRelief.Pitch);
+                MfdTerrainRelief.Tick();
+                foreach (float x in new[] { -halfX, halfX })
+                foreach (float y in new[] { -halfY, halfY })
+                    if (!MfdTerrainRelief.TryUnproject(new Vector2(x, y), terrainRect, out _))
+                        throw new Exception($"Terrain edge entered the viewport at yaw {testYaw}, pitch {testPitch}.");
+            }
+            MfdTerrainRelief.ResetOrbit();
+            MfdTerrainRelief.Tick();
             UnitMapIcon cachedTrack = Track(image.transform, map, -21000f, 13000f);
             Vector3 oldTrackPosition = cachedTrack.iconImage.transform.localPosition;
             int originalRevision = MfdTerrainRelief.ViewRevision;
@@ -220,7 +255,7 @@ public static class ReliefUnityCheck
             MfdTerrainRelief.Tick();
             if (MfdTerrainRelief.IsDrawing || image.GetComponent<Image>().color.a < .99f)
                 throw new Exception("Invalid terrain data did not leave the native map visible.");
-            File.WriteAllText("result.txt", "PASS: viewport fit, projection, box selection, context lifecycle, native restoration, and invalid-asset fallback.");
+            File.WriteAllText("result.txt", "PASS: viewport and rotated terrain coverage, projection, box selection, context lifecycle, native restoration, and invalid-asset fallback.");
             EditorApplication.Exit(0);
         }
         catch (Exception error)

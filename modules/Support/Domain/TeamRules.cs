@@ -17,11 +17,9 @@ namespace BoscaliSummer.Features.Support.Domain
     }
 
     /// <summary>
-    /// The rules that keep what a faction shares fair once more than one pilot flies for it: a
-    /// consumable ability costs more in a bigger faction, a refund goes back to whoever paid, and a
-    /// shared asset answers to the pilot who paid for or launched it. Every rule gives way for a
-    /// faction of one, so a lone pilot is never slowed by a rule meant for a group. Pure; the host
-    /// decides with it and the OPS pages predict with it.
+    /// A consumable ability costs more in a bigger faction. Destructive changes to shared assets
+    /// answer to the pilot who launched the asset while that pilot is present. These rules give way
+    /// for a faction of one. Pure; the host decides with it and the OPS pages predict with it.
     /// </summary>
     internal static class TeamRules
     {
@@ -110,12 +108,16 @@ namespace BoscaliSummer.Features.Support.Domain
         private readonly float[] accepted = new float[TeamGates.Count];
         private readonly bool[] used = new bool[TeamGates.Count];
         private readonly int[] jobs = new int[Pools];
+        public readonly FactionOpsReserve Reserve = new FactionOpsReserve();
 
         /// <summary>The pilot who sent each SPEC OPS team out; 0 when unknown.</summary>
         public readonly ulong[] Launcher = new ulong[SpecOpsDetachment.TeamCount];
 
         /// <summary>The pilot who started the live breach; 0 when unknown.</summary>
         public ulong BreachOwner;
+
+        /// <summary>The pilot who launched the shared station core; 0 when unknown.</summary>
+        public ulong StationOwner;
 
         /// <summary>Seconds until <paramref name="gate"/> reopens under a cooldown of
         /// <paramref name="cooldown"/>; the setting is read each time, so a change applies at once.</summary>
@@ -149,10 +151,12 @@ namespace BoscaliSummer.Features.Support.Domain
 
         public void Clear()
         {
+            Reserve.Clear();
             System.Array.Clear(used, 0, used.Length);
             System.Array.Clear(jobs, 0, jobs.Length);
             System.Array.Clear(Launcher, 0, Launcher.Length);
             BreachOwner = 0;
+            StationOwner = 0;
         }
     }
 }

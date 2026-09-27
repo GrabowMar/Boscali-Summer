@@ -13,30 +13,30 @@ namespace BoscaliSummer.Features.Weather.Visuals
     internal sealed class FlightCloudDressing
     {
         private const int NoiseSize = 64;
-        private const int GridMetres = 6000;
-        private const int GridRadius = 6;
-        private const int MaxBodies = 30;
+        private const int FrontSegmentMetres = 40000;
+        private const int MaxBodies = 16;
         private static byte[] sharedNoise;
         private static int generatingNoise;
         private static Mesh cube;
 
         private readonly ManualLogSource logger;
-        private readonly List<Body> bodies = new List<Body>(MaxBodies + 1);
-        private readonly List<Candidate> candidates = new List<Candidate>(169);
+        private readonly List<Body> bodies = new List<Body>(MaxBodies);
+        private readonly List<Candidate> candidates = new List<Candidate>(32);
         private Material material;
         private Texture3D noise;
         private bool failed;
         private float nextLayout;
-        private int previousGridX = int.MinValue, previousGridZ = int.MinValue;
         private WeatherKey previousKey;
-        private int previousPhase = -1;
         private int activeCount;
         private bool deckActive;
+        private WeatherField activeField;
+        private float cloudShift;
         private Material skybox;
         private float nativeSkyClouds;
 
         internal int BodyCount => activeCount;
         internal bool Active => activeCount > 0 && material != null && noise != null;
+        internal bool DeckActive => Active && deckActive;
 
         internal FlightCloudDressing(ManualLogSource log) { logger = log; }
 
@@ -58,19 +58,13 @@ namespace BoscaliSummer.Features.Weather.Visuals
                 out float driftX, out float driftZ);
             driftX *= WeatherField.PatchDrift * missionTime;
             driftZ *= WeatherField.PatchDrift * missionTime;
-            int gridX = Mathf.FloorToInt(((float)global.x - driftX) / GridMetres);
-            int gridZ = Mathf.FloorToInt(((float)global.z - driftZ) / GridMetres);
-            int phase = Mathf.Clamp(Mathf.FloorToInt(field.Regime.Blend * 4.001f), 0, 4);
-            if (Time.unscaledTime >= nextLayout || gridX != previousGridX || gridZ != previousGridZ ||
-                previousKey == null || !previousKey.Equals(field.Key) || phase != previousPhase)
+            activeField = field;
+            cloudShift = currentCloudHeight - field.Regional().CloudBase;
+            if (Time.unscaledTime >= nextLayout || previousKey == null || !previousKey.Equals(field.Key))
             {
-                BuildLayout(field, (float)global.x, (float)global.z, gridX, gridZ,
-                    currentCloudHeight - field.Regional().CloudBase, driftX, driftZ);
-                nextLayout = Time.unscaledTime + 0.8f;
-                previousGridX = gridX;
-                previousGridZ = gridZ;
+                BuildLayout(field, (float)global.x, (float)global.z, cloudShift);
+                nextLayout = Time.unscaledTime + 1f;
                 previousKey = field.Key;
-                previousPhase = phase;
             }
 
             material.SetTexture("_CloudNoiseTex", noise);
@@ -83,17 +77,19 @@ namespace BoscaliSummer.Features.Weather.Visuals
             float sunPeak = Mathf.Max(sunColor.r, Mathf.Max(sunColor.g, sunColor.b));
             if (sunPeak > 2f) sunColor *= 2f / sunPeak;
             material.SetColor("_CloudSunColor", sunColor * 0.64f);
-            material.SetColor("_CloudAmbientColor", RenderSettings.ambientLight * 0.45f +
-                RenderSettings.fogColor * 0.10f);
+            material.SetColor("_CloudAmbientColor", RenderSettings.ambientLight * 0.42f +
+                RenderSettings.fogColor * 0.34f +
+                Color.white * (Mathf.Clamp01(sunDirection.y * 1.5f) * 0.20f));
             material.SetColor("_CloudFogColor", RenderSettings.fogColor);
-            material.SetFloat("_CloudStorm", Mathf.Clamp01(
-                (field.Regime.Params.Overcast - 0.45f) * 1.5f));
-            material.SetFloat("_CloudSteps", Mathf.Clamp01(PlayerSettings.graphics.CloudDetail) < 0.5f ? 16f : 24f);
+            material.SetFloat("_CloudStorm", Mathf.Clamp01(Mathf.Max(
+                field.Regime.Params.Severity, field.Regime.Params.Frontal * 0.45f)));
+            material.SetFloat("_CloudSteps", Mathf.Clamp01(PlayerSettings.graphics.CloudDetail) < 0.5f ? 20f : 32f);
 
             for (int i = 0; i < activeCount; i++)
             {
                 Body body = bodies[i];
                 body.Root.transform.position = body.GlobalCenter - offset;
+                body.Root.transform.rotation = Quaternion.Euler(0f, body.Yaw, 0f);
                 body.Root.transform.localScale = body.Size;
                 body.Renderer.enabled = true;
             }
@@ -103,16 +99,10 @@ namespace BoscaliSummer.Features.Weather.Visuals
 
         internal bool InCloud(float x, float y, float z)
         {
-            if (!Active) return false;
-            for (int i = 0; i < activeCount; i++)
-            {
-                Body b = bodies[i];
-                Vector3 d = new Vector3(x, y, z) - b.GlobalCenter;
-                if (Mathf.Abs(d.y) >= b.Size.y * 0.43f) continue;
-                if (b.Deck || (d.x * d.x / (b.Size.x * b.Size.x) +
-                    d.z * d.z / (b.Size.z * b.Size.z)) < 0.11f) return true;
-            }
-            return false;
+            if (!Active || activeField == null) return false;
+            WeatherPoint point = activeField.Sample(x, z);
+            return point.Cover > 0.48f && y > point.CloudBase + cloudShift + 80f &&
+                y < point.CloudTop + cloudShift - 80f;
         }
 
         internal void Restore()
@@ -123,9 +113,8 @@ namespace BoscaliSummer.Features.Weather.Visuals
             candidates.Clear();
             activeCount = 0;
             deckActive = false;
+            activeField = null;
             previousKey = null;
-            previousGridX = previousGridZ = int.MinValue;
-            previousPhase = -1;
             if (material != null) UnityEngine.Object.Destroy(material);
             if (noise != null) UnityEngine.Object.Destroy(noise);
             material = null;
@@ -206,69 +195,100 @@ namespace BoscaliSummer.Features.Weather.Visuals
                 int n = i * 4;
                 pixels[i] = new Color32(ready[n], ready[n + 1], 0, 255);
             }
-            noise = new Texture3D(NoiseSize, NoiseSize, NoiseSize, TextureFormat.RGBA32, false)
+            noise = new Texture3D(NoiseSize, NoiseSize, NoiseSize, TextureFormat.RGBA32, true)
             {
                 name = "Boscali Flight Cloud Density", filterMode = FilterMode.Trilinear,
                 wrapMode = TextureWrapMode.Repeat
             };
             noise.SetPixels32(pixels);
-            noise.Apply(false, true);
+            noise.Apply(true, true);
             return true;
         }
 
-        private void BuildLayout(WeatherField field, float cameraX, float cameraZ,
-            int gridX, int gridZ, float altitudeShift, float driftX, float driftZ)
+        private void BuildLayout(WeatherField field, float cameraX, float cameraZ, float altitudeShift)
         {
             candidates.Clear();
-            for (int dz = -GridRadius; dz <= GridRadius; dz++)
-            for (int dx = -GridRadius; dx <= GridRadius; dx++)
-            {
-                int gx = gridX + dx, gz = gridZ + dz;
-                float jitterX = (Hash01(gx, gz, field.Key.Seed) - 0.5f) * 5000f;
-                float jitterZ = (Hash01(gz, gx, field.Key.Seed ^ 17u) - 0.5f) * 5000f;
-                float x = (gx + 0.5f) * GridMetres + jitterX + driftX;
-                float z = (gz + 0.5f) * GridMetres + jitterZ + driftZ;
-                WeatherPoint point = field.Sample(x, z);
-                float chance = Hash01(gx + 193, gz - 47, field.Key.Seed);
-                if (point.Cover < 0.14f || chance > point.Cover * 0.94f) continue;
-                float distance = (x - cameraX) * (x - cameraX) + (z - cameraZ) * (z - cameraZ);
-                candidates.Add(new Candidate(x, z, point, distance,
-                    Hash01(gx - 17, gz + 71, field.Key.Seed)));
-            }
-            candidates.Sort((a, b) => a.Distance.CompareTo(b.Distance));
-            activeCount = 0;
-            WeatherPoint regional = field.Sample(cameraX, cameraZ);
-            deckActive = regional.FrontCover > 0.5f || field.Regime.Params.Overcast > 0.78f;
+            WeatherPoint local = field.Sample(cameraX, cameraZ);
+            deckActive = local.BackgroundCover > 0.42f;
             if (deckActive)
             {
-                float baseY = regional.CloudBase + altitudeShift;
-                ConfigureBody(activeCount++, new Vector3(cameraX, baseY + 650f, cameraZ),
-                    new Vector3(105000f, 1300f, 105000f), 0.34f * regional.Cover, true);
+                float baseY = field.Regional().CloudBase + altitudeShift;
+                candidates.Add(new Candidate(0f, baseY + 850f, 0f,
+                    110000f, 1700f, 110000f, 0f, 0.24f * local.BackgroundCover,
+                    true, 0f));
             }
-            int limit = deckActive ? 10 : MaxBodies;
-            for (int i = 0; i < candidates.Count && activeCount < limit; i++)
+
+            for (int i = 0; i < field.FrontCount; i++)
             {
-                Candidate c = candidates[i];
-                if (deckActive && c.Point.CoreDepth < 0.18f && c.Shape > 0.11f) continue;
-                float baseY = c.Point.CloudBase + altitudeShift;
-                float height = Mathf.Clamp(c.Point.CloudTop - c.Point.CloudBase,
-                    1100f, 8500f);
-                float width = Mathf.Lerp(2600f, 5200f, c.Shape) + c.Point.CoreDepth * 1700f;
-                ConfigureBody(activeCount++, new Vector3(c.X, baseY + height * 0.5f, c.Z),
-                    new Vector3(width, height, width * Mathf.Lerp(0.8f, 1.2f, c.Shape)),
-                    Mathf.Clamp01(0.38f + 0.27f * c.Point.Cover + 0.18f * c.Point.CoreDepth), false);
+                FrontState front = field.Front(i);
+                if (front.Strength < 0.15f) continue;
+                float cameraAlong = -cameraX * front.NormalZ + cameraZ * front.NormalX;
+                int centreSegment = Mathf.FloorToInt(cameraAlong / FrontSegmentMetres);
+                float behind = front.Kind == FrontKind.Warm ? -32000f : 14000f;
+                float width = front.Kind == FrontKind.Warm ? 100000f : 52000f;
+                float height = front.Kind == FrontKind.Warm ? 2300f : 1800f;
+                float yaw = Mathf.Atan2(-front.NormalZ, front.NormalX) * Mathf.Rad2Deg;
+                for (int segment = centreSegment - 1; segment <= centreSegment + 1; segment++)
+                {
+                    float along = (segment + 0.5f) * FrontSegmentMetres;
+                    float across = front.OffsetAtAlong(along) - behind;
+                    float x = front.NormalX * across - front.NormalZ * along;
+                    float z = front.NormalZ * across + front.NormalX * along;
+                    float nearestAcross = Mathf.Max(0f, Mathf.Abs(front.SignedDistance(cameraX, cameraZ) - behind) - width * 0.5f);
+                    float nearestAlong = Mathf.Max(0f, Mathf.Abs(cameraAlong - along) - FrontSegmentMetres * 0.55f);
+                    float distance = nearestAcross * nearestAcross + nearestAlong * nearestAlong;
+                    if (distance > 50000f * 50000f) continue;
+                    WeatherPoint point = field.Sample(x, z);
+                    candidates.Add(new Candidate(x, point.CloudBase + altitudeShift + height * 0.5f, z,
+                        width, height, FrontSegmentMetres * 1.1f, yaw,
+                        front.Strength * (front.Kind == FrontKind.Warm ? 0.42f : 0.58f), true, distance));
+                }
             }
+
+            for (int i = 0; i < field.CellCount; i++)
+            {
+                StormCell cell = field.Cell(i);
+                float dx = cell.X - cameraX, dz = cell.Z - cameraZ;
+                float distance = dx * dx + dz * dz;
+                if (distance > 55000f * 55000f || cell.CloudLevel < 0.03f) continue;
+                float height = Mathf.Max(1400f, cell.Top - cell.Base);
+                float width = cell.Radius * 3.2f;
+                candidates.Add(new Candidate(cell.X, cell.Base + altitudeShift + height * 0.5f, cell.Z,
+                    width, height, width * 0.85f, 0f,
+                    cell.CloudLevel * (cell.Severe ? 0.82f : 0.70f), false, distance));
+                if (cell.Severe && cell.Age > 0.4f && cell.Age < 0.95f)
+                    candidates.Add(new Candidate(cell.X + cell.VelocityX * 120f,
+                        cell.Top + altitudeShift - 400f, cell.Z + cell.VelocityZ * 120f,
+                        width * 1.8f, 800f, width * 1.5f, 0f,
+                        cell.CloudLevel * 0.48f, true, distance + 1f));
+            }
+
+            for (int i = 0; i < field.CloudClusterCount; i++)
+            {
+                DryCloudCluster cloud = field.CloudCluster(i);
+                float dx = cloud.X - cameraX, dz = cloud.Z - cameraZ;
+                float distance = dx * dx + dz * dz;
+                if (distance > 55000f * 55000f) continue;
+                float height = cloud.Top - cloud.Base;
+                candidates.Add(new Candidate(cloud.X, cloud.Base + altitudeShift + height * 0.5f,
+                    cloud.Z, cloud.Radius * 2.8f, height, cloud.Radius * 2.4f, 0f,
+                    cloud.Strength * 0.8f, false, distance));
+            }
+
+            candidates.Sort((a, b) => a.Distance.CompareTo(b.Distance));
+            activeCount = Mathf.Min(candidates.Count, MaxBodies);
+            for (int i = 0; i < activeCount; i++) ConfigureBody(i, candidates[i]);
         }
 
-        private void ConfigureBody(int index, Vector3 center, Vector3 size, float density, bool deck)
+        private void ConfigureBody(int index, Candidate c)
         {
             while (bodies.Count <= index) bodies.Add(CreateBody());
             Body b = bodies[index];
-            b.GlobalCenter = center;
-            b.Size = size;
-            b.Deck = deck;
-            b.Properties.SetFloat("_CloudDensity", density);
-            b.Properties.SetFloat("_CloudType", deck ? 1f : 0f);
+            b.GlobalCenter = new Vector3(c.X, c.Y, c.Z);
+            b.Size = new Vector3(c.Width, c.Height, c.Length);
+            b.Yaw = c.Yaw;
+            b.Properties.SetFloat("_CloudDensity", c.Density);
+            b.Properties.SetFloat("_CloudType", c.Deck ? 1f : 0f);
             b.Renderer.SetPropertyBlock(b.Properties);
         }
 
@@ -302,28 +322,25 @@ namespace BoscaliSummer.Features.Weather.Visuals
             return m;
         }
 
-        private static float Hash01(int x, int z, uint seed)
-        {
-            uint h = (uint)x * 374761393u + (uint)z * 668265263u + seed * 2246822519u;
-            h = (h ^ (h >> 13)) * 1274126177u;
-            return (h ^ (h >> 16)) / 4294967295f;
-        }
-
         private sealed class Body
         {
             internal GameObject Root;
             internal MeshRenderer Renderer;
             internal MaterialPropertyBlock Properties;
             internal Vector3 GlobalCenter, Size;
-            internal bool Deck;
+            internal float Yaw;
         }
 
         private readonly struct Candidate
         {
-            internal readonly float X, Z, Distance, Shape;
-            internal readonly WeatherPoint Point;
-            internal Candidate(float x, float z, WeatherPoint point, float distance, float shape)
-            { X = x; Z = z; Point = point; Distance = distance; Shape = shape; }
+            internal readonly float X, Y, Z, Width, Height, Length, Yaw, Density, Distance;
+            internal readonly bool Deck;
+            internal Candidate(float x, float y, float z, float width, float height, float length,
+                float yaw, float density, bool deck, float distance)
+            {
+                X = x; Y = y; Z = z; Width = width; Height = height; Length = length;
+                Yaw = yaw; Density = density; Deck = deck; Distance = distance;
+            }
         }
     }
 }

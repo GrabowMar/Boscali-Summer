@@ -17,14 +17,16 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Features.Support.Presentation.Views
 {
     /// <summary>
-    /// SPACE › IMAGER — the sensor operator. No panels: the station's live imager feed (a camera on
-    /// the true line of sight, rendered by <see cref="SatelliteImager"/>) fills
-    /// the room edge to edge and the symbology is drawn straight on it in targeting-pod style (reticle, corner brackets,
+    /// SPACE › IMAGER — the sensor operator. No panels: the latest formed monochrome SAR raster fills
+    /// the room edge to edge by default; a local EO camera view is optional. Symbology is drawn
+    /// straight on the feed in targeting-pod style (reticle, corner brackets,
     /// north arrow, scale bar, slant range, off-nadir, azimuth and elevation, a timestamp and the pass
-    /// clock in the corners, a thin OSD line instead of a header). The radar product is a
+    /// clock in the corners, a thin OSD line instead of a header). In EO mode, the SAR product is a
     /// picture-in-picture; the five tasks and DELIVER ARMED are pod softkeys along the bottom, fed by
-    /// <see cref="AbilityStatus"/>. Drag or WASD slews with gimbal lag, the wheel or Q/E zooms,
-    /// double-click centres, C looks down the ground track, G tags contacts on demand.
+    /// <see cref="AbilityStatus"/>. Monochrome symbology carries status without labeling units
+    /// from the local scene. Drag or WASD slews with gimbal lag, the wheel or Q/E zooms,
+    /// double-click centres, and C looks down the ground track. SAR mode stays centred on its product
+    /// and does not classify or label scene units.
     ///
     /// <para>Everything shown is client-local; a task is an ordinary support request at the aim point
     /// (<c>RequestAt</c>, <c>CallArmedAt</c>, <c>SetUplinkAim</c>). The imager camera exists only while
@@ -39,9 +41,6 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         private const float DoubleClickSeconds = 0.3f;
         private const float ScaleBarPixels = 200f;
         private const float SoftkeyHeight = 58f;
-        private const float TagDwellSeconds = 12f;
-        private const float TagFadeSeconds = 3f;
-        private const int MaxContacts = 16;
         private const int FeedPixelsWide = 640;
         private const float FramesPerSecond = 6f;
         private static readonly double FieldOfRegard = 62.0 * OrbitMath.Deg;
@@ -62,20 +61,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             public TMP_Text Title, Facts;
         }
 
-        private sealed class Contact
-        {
-            public RectTransform Root;
-            public Image[] Box;
-            public Image Leader;
-            public TMP_Text Label;
-            public Unit Unit;
-            public Color Ink;
-            public bool Active;
-        }
-
         private readonly Softkey[] softkeys = new Softkey[Tasks.Length + 2];
         private readonly bool[] taskReady = new bool[Tasks.Length];
-        private readonly Contact[] contacts = new Contact[MaxContacts];
         private readonly Rect[] sections = new Rect[4];
 
         private Rect area;
@@ -83,24 +70,23 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         private RawImage feed, scanlines, pip;
         private Texture2D scanlineTexture;
         private Image veil, reticle, sweep, liveDot;
-        private TMP_Text aimStatus;
+        private TMP_Text aimStatus, modeLabel;
         private Rect cameraControls;
+        private RoomControl zoomOutButton, zoomInButton, recenterButton;
         private TMP_Text osd, cornerTL, cornerTR, cornerBL, cornerBR, slate, scaleLabel, pipCaption;
-        private Image passFill;
-        private RectTransform north, contactLayer, scaleGroup, signalPlate;
+        private Image passFill, pipFrame;
+        private RectTransform north, scaleGroup, signalPlate;
         private Rect feedCrop = new Rect(0f, 0f, 1f, 1f);
         private Rect softkeyStrip, pipRect;
 
         private double aimX, aimZ, commandX, commandZ;
         private float aimHeight, nextHeight, lastTime = -1f;
         private int footprintIndex = 4;
-        private float tagUntil = -1f;
-        private RoomControl tagButton;
-        private TMP_Text tagLabel;
-        private bool gsdLimited, live, dragging, shown, deliverReady;
+        private bool gsdLimited, live, dragging, shown, deliverReady, showOptical;
         private Vector3 lastMouse, lastClickPosition;
         private float lastClickTime = -10f;
         private float entrance = 1f;
+        private int productSerial = -1;
         private Texture fixtureFeed;
         private SatelliteImager imager;
         private int feedPixelsHigh = 600;
@@ -159,12 +145,6 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             scanlines.color = new Color(1f, 1f, 1f, 0.045f);
             veil = AvKit.Panel(host, new Rect(0f, 0f, w, h), ImagerStyle.Pod.WithAlpha(0.72f));
 
-            var layerObject = new GameObject("Contacts", typeof(RectTransform));
-            contactLayer = (RectTransform)layerObject.transform;
-            contactLayer.SetParent(host, false);
-            AvKit.Place(contactLayer, new Rect(0f, 0f, w, h));
-            for (int i = 0; i < MaxContacts; i++) contacts[i] = BuildContact();
-
             BuildSymbology(host, w, h);
             BuildSoftkeys(host, w, h);
             BuildPip(host, w, h);
@@ -195,7 +175,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             // A thin OSD line instead of a header.
             AvKit.Panel(host, new Rect(0f, 0f, w, 30f), ImagerStyle.Halo.WithAlpha(0.90f));
             osd = ImagerStyle.Symbol(host, "", new Rect(18f, -6f, w - 36f - 220f, 18f), ImagerStyle.Osd);
-            liveDot = AvKit.Panel(host, new Rect(w - 236f, -10f, 10f, 10f), AvTheme.RailDanger, OpsSprites.Dot);
+            liveDot = AvKit.Panel(host, new Rect(w - 236f, -10f, 10f, 10f), ImagerStyle.Ink, OpsSprites.Dot);
             liveDot.type = Image.Type.Simple;
 
             AvKit.Panel(host, new Rect(28f, -42f, 650f, 36f), ImagerStyle.Halo.WithAlpha(0.72f));
@@ -252,25 +232,6 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             slate.enableWordWrapping = true;
         }
 
-        private Contact BuildContact()
-        {
-            var go = new GameObject("Contact", typeof(RectTransform));
-            var rect = (RectTransform)go.transform;
-            rect.SetParent(contactLayer, false);
-            rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
-            rect.pivot = new Vector2(0.5f, 0.5f);
-            rect.sizeDelta = new Vector2(32f, 32f);
-            var contact = new Contact
-            {
-                Root = rect,
-                Box = AvKit.Outline(rect, new Rect(0f, 0f, 32f, 32f), ImagerStyle.Ink),
-                Leader = Lines.Make(rect, ImagerStyle.Ink),
-                Label = ImagerStyle.Symbol(rect, "", new Rect(-54f, -36f, 140f, 14f), 10f, TextAlignmentOptions.Center)
-            };
-            go.SetActive(false);
-            return contact;
-        }
-
         private void BuildSoftkeys(RectTransform host, float w, float h)
         {
             float gap = 10f, count = softkeys.Length;
@@ -287,7 +248,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 key.Fill = AvKit.Panel(rect, new Rect(0f, 0f, at.width, at.height), ImagerStyle.Halo.WithAlpha(0.7f));
                 key.Edge = AvKit.Outline(rect, new Rect(0f, 0f, at.width, at.height), ImagerStyle.Ink);
                 key.Title = ImagerStyle.Symbol(rect, "", new Rect(10f, -6f, at.width - 20f, 20f), 13f);
-                key.Facts = ImagerStyle.Symbol(rect, "", new Rect(10f, -28f, at.width - 20f, 26f), 12f, TextAlignmentOptions.TopLeft, true);
+                key.Facts = ImagerStyle.Symbol(rect, "", new Rect(10f, -26f, at.width - 20f, 32f), 12f, TextAlignmentOptions.TopLeft, true);
                 key.Facts.enableWordWrapping = true;
                 key.Control.Changed = _ => PaintKey(key);
                 softkeys[i] = key;
@@ -309,25 +270,31 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         {
             const float pw = 320f, ph = 200f;
             pipRect = new Rect(w - 24f - pw, -(h - SoftkeyHeight - 30f - ph - 40f), pw, ph);
-            AvKit.Panel(host, pipRect, ImagerStyle.Halo.WithAlpha(0.85f));
+            pipFrame = AvKit.Panel(host, pipRect, ImagerStyle.Halo.WithAlpha(0.85f));
             AvKit.Outline(host, pipRect, ImagerStyle.Ink);
             pip = Raw(host, "Product", new Rect(pipRect.x + 6f, pipRect.y - 6f, pw - 12f, ph - 34f));
             // Formed images keep range on the horizontal axis; flip so the product is a rotation, not a mirror.
             pip.uvRect = new Rect(1f, 0f, -1f, 1f);
             pip.enabled = false;
-            pipCaption = ImagerStyle.Symbol(host, "", new Rect(pipRect.x + 8f, pipRect.y - ph + 26f, pw - 16f, 20f), 10f);
+            pipCaption = ImagerStyle.Symbol(host, "", new Rect(pipRect.x + 8f, pipRect.y - ph + 26f, pw - 16f, 20f), 12f);
         }
 
         private void BuildCameraControls(RectTransform host, float w)
         {
             cameraControls = new Rect(40f, -94f, 600f, 76f);
             AvKit.Panel(host, cameraControls, ImagerStyle.Halo.WithAlpha(0.88f));
-            CameraButton(host, new Rect(48f, -102f, 130f, 30f), "− ZOOM [Q]", () => Zoom(-1), out _);
-            CameraButton(host, new Rect(184f, -102f, 130f, 30f), "+ ZOOM [E]", () => Zoom(1), out _);
-            CameraButton(host, new Rect(320f, -102f, 160f, 30f), "RECENTER [C]", Recenter, out _);
-            tagButton = CameraButton(host, new Rect(486f, -102f, 130f, 30f), "TAG [G]", TagSweep, out tagLabel);
-            tagButton.WithTooltip("Tag what the sensor sees right now: up to 16 contacts, tracked for 12 s. Local display only — task a scan to exploit them.");
-            aimStatus = ImagerStyle.Symbol(host, "DRAG / WASD · SLEW   WHEEL · ZOOM", new Rect(50f, -141f, 580f, 18f), 12f);
+            zoomOutButton = CameraButton(host, new Rect(48f, -102f, 130f, 30f), "− ZOOM [Q]", () => Zoom(-1), out _);
+            zoomInButton = CameraButton(host, new Rect(184f, -102f, 130f, 30f), "+ ZOOM [E]", () => Zoom(1), out _);
+            recenterButton = CameraButton(host, new Rect(320f, -102f, 160f, 30f), "RECENTER [C]", Recenter, out _);
+            CameraButton(host, new Rect(486f, -102f, 130f, 30f), "EO VIEW [V]", ToggleFeed, out modeLabel);
+            aimStatus = ImagerStyle.Symbol(host, "DRAG / WASD · SLEW   WHEEL · ZOOM", new Rect(50f, -141f, 580f, 18f), 13f);
+        }
+
+        private void ToggleFeed()
+        {
+            showOptical = !showOptical;
+            if (!showOptical) DestroyImager();
+            lastTime = -1f;
         }
 
         private static RoomControl CameraButton(RectTransform host, Rect at, string title, Action action, out TMP_Text label)
@@ -358,12 +325,12 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             commandX = aimX = start.x;
             commandZ = aimZ = start.z;
             nextHeight = 0f;
-            tagUntil = -1f;
             dragging = false;
             lastTime = -1f;
             Array.Clear(taskReady, 0, taskReady.Length);
             deliverReady = false;
             shown = true;
+            showOptical = false;
         }
 
         public void Hide()
@@ -372,7 +339,6 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             shown = false;
             dragging = false;
             live = false;
-            HideContacts();
             DestroyImager();
             support?.SetUplinkAim(AimPoint());
             AvButton.ClearTooltip();
@@ -407,6 +373,13 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             OrbitalPlatform platform = support.LocalPlatform;
             bool station = platform != null && platform.Exists;
             OrbitState state = station ? platform.State(support.OrbitNow) : default;
+            if (!showOptical && products != null && products.HasProduct && productSerial != support.RadarScanSerial)
+            {
+                productSerial = support.RadarScanSerial;
+                GlobalPosition target = support.RadarScanTarget;
+                commandX = aimX = target.x;
+                commandZ = aimZ = target.z;
+            }
             float constant = station && platform.Stats(support.OrbitNow).Stabilised ? GyroSlewTimeConstant : SlewTimeConstant;
             double k = dt > 0f ? 1.0 - Math.Exp(-dt / constant) : 0.0;
             aimX += (commandX - aimX) * k;
@@ -436,7 +409,10 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             else if (products != null)
             {
                 pip.texture = products.Scan.Image;
-                pip.enabled = station && products.HasProduct;
+                bool showProduct = showOptical && station && products.HasProduct;
+                pip.enabled = showProduct;
+                pipFrame.enabled = showProduct;
+                pipCaption.enabled = showProduct;
             }
             if (textTick) WriteText(platform, state, look, now, slewing);
         }
@@ -444,6 +420,15 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         public bool HandleKeys()
         {
             if (support == null) return false;
+            if (!showOptical)
+            {
+                if (Input.GetKeyDown(KeyCode.V)) ToggleFeed();
+                for (int i = 0; i < Tasks.Length; i++)
+                    if (Input.GetKeyDown(KeyCode.Alpha1 + i) || Input.GetKeyDown(KeyCode.Keypad1 + i)) Task(i);
+                if (Input.GetKeyDown(KeyCode.F)) DeliverArmed();
+                if (Input.GetKeyDown(KeyCode.Tab)) openStation?.Invoke();
+                return true;
+            }
             OrbitalPlatform platform = support.LocalPlatform;
             bool station = platform != null && platform.Exists;
             OrbitState state = station ? platform.State(support.OrbitNow) : default;
@@ -485,8 +470,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 // Keys move the sensor; dragging moves the picture. Opposite signs.
                 Slew(-right * pixels, -up * pixels, state, station);
             }
-            if (Input.GetKeyDown(KeyCode.G)) TagSweep();
             if (Input.GetKeyDown(KeyCode.C)) Recenter();
+            if (Input.GetKeyDown(KeyCode.V)) ToggleFeed();
             for (int i = 0; i < Tasks.Length; i++)
                 if (Input.GetKeyDown(KeyCode.Alpha1 + i) || Input.GetKeyDown(KeyCode.Keypad1 + i)) Task(i);
             if (Input.GetKeyDown(KeyCode.F)) DeliverArmed();
@@ -514,7 +499,6 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             if (message != null)
             {
                 live = false;
-                HideContacts();
                 Set(slate, message);
                 SetSignalState(false);
                 veil.enabled = true;
@@ -536,11 +520,26 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 reticle.enabled = true;
                 Set(slate, "");
                 SetSignalState(true);
-                HideContacts();
                 return;
             }
-            // The live feed is a camera on the station's line of sight; the formed SAR product
-            // from a RADAR SCAN stays in the picture-in-picture.
+            if (!showOptical)
+            {
+                SarCollector scan = products != null ? products.Scan : null;
+                live = platform != null && platform.Exists && scan != null && products.HasProduct;
+                feed.texture = live ? scan.Image : null;
+                feed.uvRect = new Rect(1f, 0f, -1f, 1f);
+                feed.enabled = live;
+                veil.enabled = !live;
+                veil.color = ImagerStyle.Pod.WithAlpha(1f);
+                reticle.enabled = true;
+                Set(slate, live ? "" : "SAR PRODUCT NOT FORMED\nUSE [1] RECON / SAR SWEEP");
+                SetSignalState(live);
+                north.gameObject.SetActive(false);
+                scaleGroup.gameObject.SetActive(false);
+                return;
+            }
+            // EO is an optional local camera view. SAR remains the default main product.
+            feed.uvRect = feedCrop;
             if (imager == null) imager = SatelliteImager.Create(FeedPixelsWide, feedPixelsHigh);
             Vector3 aimLocal = new GlobalPosition((float)aimX, aimHeight, (float)aimZ).ToLocalPosition();
             float cosEl = (float)Math.Cos(look.Elevation);
@@ -555,7 +554,6 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             reticle.enabled = true;
             Set(slate, live ? "" : "ACQUIRING OPTICAL FEED…");
             SetSignalState(live);
-            UpdateTagged();
         }
 
         private void SetSignalState(bool feedReady)
@@ -575,6 +573,32 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
 
         private void WriteText(OrbitalPlatform platform, in OrbitState state, in LookAngles look, double now, bool slewing)
         {
+            if (modeLabel != null) Set(modeLabel, showOptical ? "SAR VIEW [V]" : "EO VIEW [V]");
+            zoomOutButton.SetEnabled(showOptical);
+            zoomInButton.SetEnabled(showOptical);
+            recenterButton.SetEnabled(showOptical);
+            zoomOutButton.WithTooltip(showOptical ? "Decrease EO camera zoom." : "Switch to EO view to change camera zoom.");
+            zoomInButton.WithTooltip(showOptical ? "Increase EO camera zoom." : "Switch to EO view to change camera zoom.");
+            recenterButton.WithTooltip(showOptical ? "Look down the station ground track." : "Switch to EO view to recenter the camera.");
+            if (!showOptical)
+            {
+                SarCollector product = products != null ? products.Scan : null;
+                string phase = fixtureFeed != null ? "PRODUCT READY" : product != null && product.Phase == SarPhase.Collecting
+                    ? "COLLECTING " + Mathf.RoundToInt(product.Progress * 100f) + "%"
+                    : product != null && product.Phase == SarPhase.Processing
+                        ? "PROCESSING " + Mathf.RoundToInt(product.ProcessingProgress * 100f) + "%"
+                        : product != null && products.HasProduct ? "PRODUCT READY" : "NO PRODUCT";
+                Set(osd, OrbitalPlatform.Callsign + " · SAR / FORMED RASTER · " + phase);
+                Set(cornerTL, "SAR / RANGE × AZIMUTH");
+                Set(cornerTR, phase);
+                Set(cornerBL, "MONOCHROME SENSOR PRODUCT");
+                Set(cornerBR, "AIM " + TheaterGrid.Kilometres(aimX, aimZ));
+                Set(scaleLabel, "");
+                Set(aimStatus, slewing ? "SLEWING · RELEASE TO SETTLE" : "SAR PRODUCT · RECON TO FORM · V · EO VIEW");
+                WritePip(product, platform != null && platform.Exists);
+                WriteSoftkeys();
+                return;
+            }
             bool station = platform != null && platform.Exists;
             OrbitRegime orbit = station ? platform.Orbit : OrbitRegimes.Get(OrbitRegimes.Mid);
             float footprint = station && look.Visible ? Footprint(orbit, look) : Footprints[footprintIndex];
@@ -610,15 +634,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 : station ? PlatformWords.Phase(platform, now) : "NO TRACK");
             Set(cornerBR, "GSD " + (look.Visible ? gsd.ToString("0.00", Invariant) + " M" : "—") + "   AIM " + TheaterGrid.Kilometres(aimX, aimZ));
             Set(scaleLabel, live ? Distance(footprint * ScaleBarPixels / Mathf.Max(1f, area.width)) : "");
-            float tagLeft = tagUntil - Time.unscaledTime;
-            Set(aimStatus, (tagLeft > 0f ? "TAG " + Mathf.CeilToInt(tagLeft) + "s" : "") +
-                (slewing ? "SLEWING · RELEASE TO SETTLE" : "DRAG / WASD · SLEW   WHEEL · ZOOM   DOUBLE-CLICK · AIM   G · TAG"));
-            if (tagButton != null)
-            {
-                tagButton.SetEnabled(live);
-                Set(tagLabel, tagLeft > 0f ? "TAG " + Mathf.CeilToInt(tagLeft) + "s" : "TAG [G]");
-                tagLabel.color = live ? ImagerStyle.Ink : ImagerStyle.Dim;
-            }
+            Set(aimStatus, slewing ? "SLEWING · RELEASE TO SETTLE"
+                : "DRAG / WASD · SLEW   WHEEL · ZOOM   DOUBLE-CLICK · AIM");
             WritePip(scan, station);
             WriteSoftkeys();
         }
@@ -626,12 +643,13 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         private void WritePip(SarCollector scan, bool station)
         {
             if (!station) { Set(pipCaption, "POD OFFLINE · STATION REQUIRED"); return; }
+            if (fixtureFeed != null) { Set(pipCaption, "SAR PRODUCT READY · GRAYSCALE"); return; }
             if (scan == null) { Set(pipCaption, "NO PRODUCT"); return; }
             switch (scan.Phase)
             {
                 case SarPhase.Collecting: Set(pipCaption, "PRODUCT · COLLECTING " + Mathf.RoundToInt(scan.Progress * 100f) + "%"); break;
                 case SarPhase.Processing: Set(pipCaption, "PRODUCT · PROCESSING " + Mathf.RoundToInt(scan.ProcessingProgress * 100f) + "%"); break;
-                case SarPhase.Complete: Set(pipCaption, "PRODUCT READY · " + scan.Contacts + " CONTACT(S)"); break;
+                case SarPhase.Complete: Set(pipCaption, "SAR PRODUCT READY · GRAYSCALE"); break;
                 default: Set(pipCaption, "NO PRODUCT · TASK A RADAR SCAN [1]"); break;
             }
         }
@@ -649,10 +667,11 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 AbilityFacts facts = definition != null && support != null
                     ? AbilityStatus.For(support, definition, bypass)
                     : new AbilityFacts(AbilityTone.Locked, "UNAVAILABLE ON THIS SERVER", "—", false, false);
-                bool ready = live && facts.Enabled && facts.Tone == AbilityTone.Ready;
+                bool sensorReady = live || (!showOptical && i == 0);
+                bool ready = sensorReady && facts.Enabled && facts.Tone == AbilityTone.Ready;
                 taskReady[i] = ready;
                 Set(key.Title, "[" + (i + 1) + "] " + name + (ability == PlatformAbility.EmpBurst ? " · FF" : ""));
-                Set(key.Facts, facts.CostText + " · " + PlatformWords.Whole(PlatformAbilities.Info(ability).EnergyKj) + " KJ · " +
+                Set(key.Facts, facts.CostText + " · " + PlatformWords.Whole(PlatformAbilities.Info(ability).EnergyKj) + " KJ\n" +
                                (ready ? "READY AT CROSSHAIR" : !live && facts.Enabled ? "NO LIVE FEED" : facts.Readiness));
                 key.Control.SetEnabled(ready);
                 key.Control.WithTooltip(name + " at the crosshair — " + PlatformAbilities.Info(ability).Summary + " " + facts.Readiness + ".");
@@ -745,7 +764,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         private void Task(int index)
         {
             // Keys and softkeys share one gate: a key must not fire what the softkey would refuse.
-            if (!live || index < 0 || index >= Tasks.Length || !taskReady[index] || support == null || support.RequestPending) return;
+            if ((!live && (showOptical || index != 0)) || index < 0 || index >= Tasks.Length || !taskReady[index] || support == null || support.RequestPending) return;
             SupportActionDefinition definition = Find(Tasks[index]);
             if (definition == null) return;
             support.RequestAt(definition.Id, AimPoint());
@@ -764,136 +783,6 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             for (int i = 0; i < actions.Count; i++)
                 if (actions[i].Id == id) return actions[i];
             return null;
-        }
-
-        // ---- Contacts ----------------------------------------------------------------------------
-
-        private void HideContacts()
-        {
-            tagUntil = -1f;
-            for (int i = 0; i < MaxContacts; i++)
-            {
-                Contact contact = contacts[i];
-                if (contact == null) continue;
-                contact.Unit = null;
-                if (!contact.Active) continue;
-                contact.Active = false;
-                contact.Root.gameObject.SetActive(false);
-            }
-        }
-
-        /// <summary>
-        /// On-demand contact tag: one sweep of the live frame, tracking what is in view until
-        /// the dwell ends. Local display only — a tag reveals nothing to the faction.
-        /// </summary>
-        private void TagSweep()
-        {
-            if (!live || imager == null || imager.Camera == null || support == null) return;
-            Vector3 aimLocal = new GlobalPosition((float)aimX, aimHeight, (float)aimZ).ToLocalPosition();
-            OrbitalPlatform platform = support.LocalPlatform;
-            float footprint = platform != null && platform.Exists
-                ? CurrentFootprint(platform.State(support.OrbitNow))
-                : Footprints[footprintIndex];
-            Camera cam = imager.Camera;
-            var units = UnitRegistry.allUnits;
-            if (units == null || units.Count == 0)
-            {
-                HideContacts();
-                return;
-            }
-            FactionHQ localHq = GameManager.GetLocalPlayer<Player>(out Player localPlayer) && localPlayer != null ? localPlayer.HQ : null;
-            float maxDistSq = footprint * 0.75f * (footprint * 0.75f);
-            int index = 0;
-            for (int i = 0; i < units.Count && index < MaxContacts; i++)
-            {
-                Unit unit = units[i];
-                if (unit == null || unit.disabled) continue;
-                Vector3 position = unit.transform.position;
-                float dx = position.x - aimLocal.x, dz = position.z - aimLocal.z;
-                if (dx * dx + dz * dz > maxDistSq) continue;
-                Vector3 vp = cam.WorldToViewportPoint(position);
-                if (vp.z <= 0f || vp.x < 0.03f || vp.x > 0.97f || vp.y < 0.05f || vp.y > 0.95f) continue;
-                Contact contact = contacts[index++];
-                contact.Unit = unit;
-                bool hostile = localHq != null && unit.NetworkHQ != null && unit.NetworkHQ != localHq;
-                bool friendly = localHq != null && unit.NetworkHQ == localHq;
-                // Pod symbology is monochrome; the status is the word.
-                string name = !string.IsNullOrEmpty(unit.unitName) ? unit.unitName : unit is Aircraft ? "AIR" : "VEH";
-                Set(contact.Label, (hostile ? "TGT " : friendly ? "FRD " : "UNK ") + name.ToUpperInvariant());
-                contact.Ink = hostile ? AvTheme.RailDanger : ImagerStyle.Ink;
-            }
-            for (int i = index; i < MaxContacts; i++)
-            {
-                Contact contact = contacts[i];
-                contact.Unit = null;
-                if (!contact.Active) continue;
-                contact.Active = false;
-                contact.Root.gameObject.SetActive(false);
-            }
-            tagUntil = Time.unscaledTime + TagDwellSeconds;
-            UpdateTagged();
-        }
-
-        /// <summary>Re-project the tagged set each frame until the dwell ends, fading the last seconds.</summary>
-        private void UpdateTagged()
-        {
-            if (tagUntil < 0f) return;
-            if (tagUntil - Time.unscaledTime <= 0f || !live || imager == null || imager.Camera == null)
-            {
-                HideContacts();
-                return;
-            }
-            Camera cam = imager.Camera;
-            float w = area.width, h = area.height;
-            float alpha = Mathf.Clamp01((tagUntil - Time.unscaledTime) / TagFadeSeconds);
-            for (int i = 0; i < MaxContacts; i++)
-            {
-                Contact contact = contacts[i];
-                Unit unit = contact != null ? contact.Unit : null;
-                if (unit == null)
-                {
-                    if (contact != null && contact.Active)
-                    {
-                        contact.Active = false;
-                        contact.Root.gameObject.SetActive(false);
-                    }
-                    continue;
-                }
-                Vector3 position = unit.transform.position;
-                Vector3 vp = cam.WorldToViewportPoint(position);
-                if (vp.z <= 0f || vp.x < 0.03f || vp.x > 0.97f || vp.y < 0.05f || vp.y > 0.95f)
-                {
-                    if (contact.Active)
-                    {
-                        contact.Active = false;
-                        contact.Root.gameObject.SetActive(false);
-                    }
-                    continue;
-                }
-                contact.Root.anchoredPosition = new Vector2((vp.x - 0.5f) * w, (vp.y - 0.5f) * h);
-                Color faded = contact.Ink;
-                faded.a *= alpha;
-                for (int b = 0; b < contact.Box.Length; b++) contact.Box[b].color = faded;
-                contact.Label.color = faded;
-                Vector3 velocity = unit.rb != null ? unit.rb.velocity : unit.transform.forward * unit.speed;
-                float speed = velocity.magnitude;
-                Vector3 ahead = speed > 2f ? cam.WorldToViewportPoint(position + velocity.normalized * 50f) : Vector3.zero;
-                if (speed > 2f && ahead.z > 0f)
-                {
-                    var direction = new Vector2((ahead.x - vp.x) * w, (ahead.y - vp.y) * h);
-                    float length = Mathf.Clamp(speed * 0.35f, 10f, 36f);
-                    Vector2 end = direction.sqrMagnitude > 0.0001f ? direction.normalized * length : Vector2.zero;
-                    Lines.Set(contact.Leader, 16f, -16f, 16f + end.x, -16f + end.y, 1.5f);
-                    contact.Leader.color = faded;
-                    contact.Leader.enabled = true;
-                }
-                else contact.Leader.enabled = false;
-                if (!contact.Active)
-                {
-                    contact.Active = true;
-                    contact.Root.gameObject.SetActive(true);
-                }
-            }
         }
 
         // ---- Formatting --------------------------------------------------------------------------

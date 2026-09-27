@@ -85,6 +85,7 @@ namespace BoscaliSummer.Features.Support.Runtime
 
         /// <summary>The faction's team for this asset is still re-tasking.</summary>
         TeamCoolingDown = 39,
+        InsufficientOpsReserve = 40,
 
         /// <summary>A console verb refused by the network model: <c>CyberRefused + (byte)CyberDenial</c>.</summary>
         CyberRefused = 64,

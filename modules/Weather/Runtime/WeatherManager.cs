@@ -552,6 +552,11 @@ namespace BoscaliSummer.Features.Weather.Runtime
                 { "flightClouds", flightClouds != null && flightClouds.Active ? 1 : 0 },
                 { "nativeCloudsHidden", clouds.NativeHidden ? 1 : 0 },
                 { "cloudBodies", flightClouds?.BodyCount ?? 0 },
+                { "cloudDeck", flightClouds != null && flightClouds.DeckActive ? 1 : 0 },
+                { "fieldCover", localWeather.Cover },
+                { "frontCount", Field?.FrontCount ?? 0 },
+                { "cellCount", Field?.CellCount ?? 0 },
+                { "clusterCount", Field?.CloudClusterCount ?? 0 },
                 { "cloudImmersion", cloudMoisture },
                 { "rainAudioReady", rainSound != null && rainSound.ClipsReady ? 1 : 0 },
                 { "rainAudioRouted", rainSound != null && rainSound.IsRouted ? 1 : 0 },
@@ -562,6 +567,18 @@ namespace BoscaliSummer.Features.Weather.Runtime
         }
 
         internal void LogAutomation(string message) => logger?.LogInfo("[WeatherAutomation] " + message);
+
+        internal void SetFixtureField(uint seed, float modelAge)
+        {
+            if (!GameAccess.IsServer() || !isManualOverride) return;
+            float missionTime = NetworkSceneSingleton<MissionManager>.i?.MissionTime ?? Time.time;
+            missionSeed = unchecked((int)seed);
+            fieldKey = NewFieldKey(missionTime - modelAge, false,
+                RegimeTable.FromConditions(targetConditions));
+            nextFieldUpdate = 0f;
+            lastForecastSampleTime = -999f;
+            BroadcastSync(missionTime);
+        }
 
         private void UpdateLighting(Camera camera)
         {

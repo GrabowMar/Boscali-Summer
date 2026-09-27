@@ -769,7 +769,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             if (refusal != null)
             {
                 DisarmConfirm();
-                Say(FieldWords.Mission(mission) + " · " + refusal, true);
+                Say(MissionLabel(mission, detachment.Objective(slot)) + " · " + refusal, true);
                 return;
             }
             int anchor = detachment.Objective(slot).Anchor;
@@ -777,14 +777,14 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             if (loss >= ConfirmLoss && !ConfirmArmed(selectedTeam, (int)mission, anchor, false))
             {
                 ArmConfirm(selectedTeam, (int)mission, anchor, false);
-                Say(FieldWords.Callsign(selectedTeam) + " · " + FieldWords.Mission(mission) + " RISKS " + loss +
+                Say(FieldWords.Callsign(selectedTeam) + " · " + MissionLabel(mission, detachment.Objective(slot)) + " RISKS " + loss +
                     "% LOSS · CLICK LAUNCH AGAIN TO COMMIT", true);
                 nextPaint = true;
                 return;
             }
             DisarmConfirm();
             support.RequestSpecOpsLaunch(selectedTeam, mission, anchor);
-            Sent(FieldWords.Callsign(selectedTeam) + " · " + FieldWords.Mission(mission) + " → " + detachment.Objective(slot).Name);
+            Sent(FieldWords.Callsign(selectedTeam) + " · " + MissionLabel(mission, detachment.Objective(slot)) + " → " + detachment.Objective(slot).Name);
         }
 
         /// <summary>Two-click guard for consequential orders: armed for one team, mission and
@@ -827,8 +827,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 SpecOpsDenial denial = detachment.CheckRaise(team);
                 float cost = support.SpecOpsRaiseCost();
                 if (denial != SpecOpsDenial.None) Say(FieldWords.Denial(denial), true);
-                else if (!support.BypassRequirements && support.LocalAllocation + 0.001f < cost)
-                    Say("RAISE " + FieldWords.Callsign(team) + " · NEEDS " + Figure(cost) + " ALLOCATION", true);
+                else if (!support.BypassRequirements && support.LocalOpsReserve + 0.001f < cost)
+                    Say("RAISE " + FieldWords.Callsign(team) + " · NEEDS " + Figure(cost) + " OPS RESERVE", true);
                 else
                 {
                     support.RequestSpecOpsRaise(team);
@@ -863,8 +863,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             SpecOpsDenial denial = detachment.CheckLaunch(selectedTeam, mission, detachment.Objective(slot).Anchor);
             if (denial != SpecOpsDenial.None) return FieldWords.Denial(denial);
             float cost = support.SpecOpsMissionCost(mission);
-            if (!support.BypassRequirements && support.LocalAllocation + 0.001f < cost)
-                return "NEEDS " + Figure(cost) + " ALLOCATION";
+            if (!support.BypassRequirements && support.LocalOpsReserve + 0.001f < cost)
+                return "NEEDS " + Figure(cost) + " OPS RESERVE";
             return null;
         }
 
@@ -899,8 +899,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             string month = utc.ToString("MMM", Invariant).ToUpperInvariant();
             string clock = "DTG " + utc.ToString("ddHHmm", Invariant) + "Z " + month + " " + utc.ToString("yy", Invariant);
             if (dtg.text != clock) dtg.text = clock;
-            float allocation = support != null ? support.LocalAllocation : 0f;
-            DeskStyle.Type(alloc, "ALLOCATION " + Figure(allocation));
+            float reserve = support != null ? support.LocalOpsReserve : 0f;
+            DeskStyle.Type(alloc, "OPS RESERVE " + Figure(reserve));
             bool pending = support != null && support.CommandPending;
             bool fresh = support != null && support.OpsStateFresh;
             string linkWord = pending ? "AWAITING" : fresh ? "LINKED" : "SYNCING";
@@ -936,8 +936,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             DeskStyle.Type(planObjective, "01 TARGET  /  " + (target ? detachment.Objective(slot).Name : "AWAITING FIX"));
             DeskStyle.Type(planTeam, "02 TEAM  /  " + (live
                 ? FieldWords.Callsign(selectedTeam) + " " + (team.Formed ? Short(team.State) : "NOT FORMED") : "NO LINK"));
-            DeskStyle.Type(planMission, "03 EFFECT  /  " + (hoverMission >= 0
-                ? FieldWords.Mission((FieldMission)hoverMission) : "PICK A MISSION"));
+            DeskStyle.Type(planMission, "03 PREVIEW  /  " + (hoverMission >= 0
+                ? MissionLabel((FieldMission)hoverMission, target ? detachment.Objective(slot) : default) : "PICK A MISSION"));
             planObjective.color = target ? DeskStyle.Ink : DeskStyle.Khaki;
             planTeam.color = live && team.Formed && team.State == TeamState.Ready ? AvTheme.RailReady
                 : live && team.Formed ? DeskStyle.Ink : DeskStyle.Khaki;
@@ -979,10 +979,10 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             if (!team.Formed)
             {
                 float cost = support != null ? support.SpecOpsRaiseCost() : FieldCatalog.RaiseCost;
-                bool afford = support == null || support.BypassRequirements || support.LocalAllocation + 0.001f >= cost;
+                bool afford = support == null || support.BypassRequirements || support.LocalOpsReserve + 0.001f >= cost;
                 SetStamp(tag.Action, "[R] RAISE · " + Figure(cost), live && !pending && afford, false, afford
-                    ? "Form a new RECRUIT team in this slot for " + Figure(cost) + " allocation."
-                    : "Raising a team costs " + Figure(cost) + " allocation; you have " + Figure(support.LocalAllocation) + ".");
+                    ? "Form a new RECRUIT team in this slot for " + Figure(cost) + " from OPS reserve."
+                    : "Raising a team costs " + Figure(cost) + " OPS reserve; you have " + Figure(support.LocalOpsReserve) + ".");
             }
             else if (team.Deployed)
             {
@@ -1038,9 +1038,9 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
 
             FieldObjective o = detachment.Objective(slot);
             objectiveGlyph.sprite = OpsSprites.Glyph(DeskMap.Glyph(o.Kind));
-            objectiveGlyph.color = o.Hostile ? AvTheme.RailDanger : DeskStyle.Khaki;
+            objectiveGlyph.color = o.Hostile ? AvTheme.RailDanger : o.Friendly ? AvTheme.RailReady : DeskStyle.Khaki;
             if (objectiveName.text != o.Name) objectiveName.text = o.Name;
-            DeskStyle.Type(objectiveLine, (o.Hostile ? "HOSTILE" : "NEUTRAL") + " · " + FieldWords.Kind(o.Kind) + " · " + Distance(o));
+            DeskStyle.Type(objectiveLine, (o.Hostile ? "HOSTILE" : o.Friendly ? "FRIENDLY" : "NEUTRAL") + " · " + FieldWords.Kind(o.Kind) + " · " + Distance(o));
             SetFact(threatFigure, threatWords, o.Threat.ToString(Invariant),
                 FieldWords.Threat(o.Threat) + (o.Threat == 1 ? " · UNIT" : " · UNITS"),
                 o.Threat > 8 ? DeskStyle.Stamp : DeskStyle.Ink);
@@ -1051,6 +1051,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             int on = detachment.TeamOn(o.Anchor);
             DeskStyle.Type(teamOn, on >= 0
                 ? FieldWords.Callsign(on) + " IS " + FieldWords.State(detachment.Team(on).State) + " HERE"
+                : o.Friendly ? "FRIENDLY STAGING SITE · READY FOR A TEAM"
                 : "STRIKE IT FIRST: FEWER DEFENDERS, BETTER ODDS");
 
             for (int i = 0; i < MissionCount; i++) WriteSheet(detachment, (FieldMission)i, slot, now);
@@ -1154,11 +1155,14 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             FieldTeam team = detachment.Team(selectedTeam);
             int rank = team.Rank;
             float cost = support != null ? support.SpecOpsMissionCost(mission) : FieldCatalog.MissionCost(mission);
-            DeskStyle.Type(sheet.Cost, "COST " + Figure(cost));
+            string missionLabel = MissionLabel(mission, o);
+            if (sheet.Title.text != "[" + ((int)mission + 1) + "] " + missionLabel)
+                sheet.Title.text = "[" + ((int)mission + 1) + "] " + missionLabel;
+            DeskStyle.Type(sheet.Cost, "OPS " + Figure(cost));
             DeskStyle.Type(sheet.Effect, sheet.Root.sizeDelta.y < 135f
                 ? EffectText(mission, rank, true) : EffectText(mission, rank, false));
             string refusal = LaunchRefusal(detachment, mission, slot);
-            bool possible = FieldCatalog.Allowed(mission, o.Kind) &&
+            bool possible = MissionAllowedAt(mission, o) &&
                             !(mission == FieldMission.Sabotage && o.Radars == 0) &&
                             !(mission == FieldMission.Seize && !detachment.SeizeAvailable);
             int chance = detachment.ChanceFor(selectedTeam, mission, slot, now);
@@ -1207,7 +1211,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             sheet.Refusal.gameObject.SetActive(!possible);
             if (!possible)
             {
-                string why = !FieldCatalog.Allowed(mission, o.Kind) ? FieldWords.Denial(SpecOpsDenial.WrongObjective)
+                string why = !MissionAllowedAt(mission, o) ? FieldWords.Denial(SpecOpsDenial.WrongObjective)
                     : mission == FieldMission.Sabotage && o.Radars == 0 ? FieldWords.Denial(SpecOpsDenial.NoRadars)
                     : FieldWords.Denial(SpecOpsDenial.SeizeUnavailable);
                 if (sheet.Refusal.text != why) sheet.Refusal.text = why;
@@ -1215,10 +1219,10 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             }
             bool armed = refusal == null && ConfirmArmed(selectedTeam, (int)mission, detachment.Objective(slot).Anchor, false);
             string launchText = armed ? "[" + ((int)mission + 1) + "] CONFIRM · " + loss + "% LOSS"
-                : refusal == null ? "[" + ((int)mission + 1) + "] LAUNCH" : possible ? "[" + ((int)mission + 1) + "] " + Brief(refusal) : "NOT HERE";
+                : refusal == null ? "[" + ((int)mission + 1) + "] COMMIT" : possible ? "[" + ((int)mission + 1) + "] " + Brief(refusal) : "NOT HERE";
             SetStamp(sheet.Launch, launchText, refusal == null, armed, refusal == null
                 ? FieldWords.Callsign(selectedTeam) + " goes to " + o.Name + ": " + chance + "% success, " + loss +
-                  "% the team is lost, " + Figure(cost) + " allocation. " + LaunchTipTail(mission)
+                  "% the team is lost, " + Figure(cost) + " OPS reserve. Click to commit the order; " + LaunchTipTail(mission)
                 : FieldWords.MissionTitle(mission) + " — " + refusal + ".");
             int on = detachment.TeamOn(o.Anchor);
             bool dispatched = on >= 0 && detachment.Team(on).Mission == mission &&
@@ -1240,10 +1244,19 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         private static string LaunchTipTail(FieldMission mission) => "Odds are a live estimate and fix at launch." +
             (mission == FieldMission.Seize ? " Safehouse FORTIFY needs the SQD fortify perk." : "");
 
+        private static bool MissionAllowedAt(FieldMission mission, in FieldObjective objective) =>
+            FieldCatalog.Allowed(mission, objective.Kind) &&
+            (!objective.Friendly || mission == FieldMission.Recon || mission == FieldMission.Steal);
+
+        private static string MissionLabel(FieldMission mission, in FieldObjective objective) =>
+            objective.Friendly && mission == FieldMission.Recon ? "OBSERVE"
+            : objective.Friendly && mission == FieldMission.Steal ? "LISTEN"
+            : FieldWords.Mission(mission);
+
         /// <summary>A short button word for a refusal that the sheet already explains in full.</summary>
         private static string Brief(string refusal)
         {
-            if (refusal.StartsWith("NEEDS", StringComparison.Ordinal)) return "SHORT ON ALLOCATION";
+            if (refusal.StartsWith("NEEDS", StringComparison.Ordinal)) return "SHORT OPS RESERVE";
             if (refusal.StartsWith("TEAM", StringComparison.Ordinal)) return "TEAM NOT READY";
             if (refusal.StartsWith("AWAITING", StringComparison.Ordinal)) return "AWAITING HOST";
             if (refusal.StartsWith("LINK", StringComparison.Ordinal)) return "LINK STALE";
@@ -1261,8 +1274,9 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             FieldObjective o = detachment.Objective(slot);
             var mission = (FieldMission)hoverMission;
             float travel = FieldCatalog.TravelSeconds(TravelMetres(o));
-            map.Preview(true, o.X, o.Z, FieldWords.Mission(mission) + " · " + FieldWords.Clock(travel) + " TRAVEL + " +
-                                        FieldWords.Clock(FieldCatalog.TaskSeconds(mission)) + " TASK");
+            float cost = support != null ? support.SpecOpsMissionCost(mission) : FieldCatalog.MissionCost(mission);
+            map.Preview(true, o.X, o.Z, "PREVIEW · " + MissionLabel(mission, o) + " · OPS " + Figure(cost) + " · " +
+                                        FieldWords.Clock(travel) + " TRAVEL + " + FieldWords.Clock(FieldCatalog.TaskSeconds(mission)) + " TASK · NOT SENT");
         }
 
         private void WriteTimeline(SpecOpsDetachment detachment, double now, bool live)
