@@ -273,6 +273,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         /// <summary>Destroy only the roots this helper owns.</summary>
         public static void Restore()
         {
+            MfdTerrainRelief.Restore();
             DestroyOwned(ref backdrop);
             DestroyOwned(ref tray);
             backdropBaseImage = null;

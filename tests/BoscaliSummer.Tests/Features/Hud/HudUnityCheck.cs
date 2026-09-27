@@ -35,7 +35,7 @@ public static class HudUnityCheck
             AvStyleHost.Configure(Directory.GetCurrentDirectory(), Debug.Log, Debug.LogWarning);
             AvFont.Font = TMP_FontAsset.CreateFontAsset(new Font("C:/Windows/Fonts/consola.ttf"));
             var config = new HudSettings(new ConfigFile(Path.GetFullPath("hud-check-" + Guid.NewGuid().ToString("N") + ".cfg"), false));
-            CheckViews(config); CheckService(config); CheckProjection(); CheckNativeOwnership(); CheckTelemetry(); CheckVisibility(config); CheckMissileOrder();
+            CheckViews(config); CheckService(config); CheckProjection(); CheckNativeOwnership(); CheckTelemetry(); CheckVisibility(config); CheckCamera(config); CheckMissileOrder();
             File.WriteAllText("result.txt", "PASS: production view reflow/identity; fixed geometry on lost video/tracks/marks; passive input; canonical typography; no native art; camera texture ownership; data-only acquisition; stale handles; same-frame camera changes and target labels reproject together; origin-shift reprojection preserves jamming offset and never replays gameplay/input; native visibility restoration; stable missile order; compact status and borderless camera; direct ownship damage sampling; native-style readout ribbons, compact idle stack and duplicate climb-rate suppression. Game adapters are fixtures. In-game acceptance remains required.");
             EditorApplication.Exit(0);
         }
@@ -197,14 +197,14 @@ public static class HudUnityCheck
     {
         var scene = new GameObject("Visibility fixture");
         var own = scene.AddComponent<Aircraft>(); own.cockpit = scene.AddComponent<Cockpit>();
-        var camera = scene.AddComponent<CameraStateManager>(); camera.orbitState = camera.currentState = new object(); camera.followingUnit = own;
+        var camera = scene.AddComponent<CameraStateManager>(); camera.orbitState = camera.currentState = new CameraBaseState(); camera.followingUnit = own;
         var combat = scene.AddComponent<CombatHUD>(); combat.aircraft = own;
         SceneSingleton<CameraStateManager>.i = camera; SceneSingleton<CombatHUD>.i = combat;
         var controller = scene.AddComponent<ThirdPersonHudController>(); controller.Configure(config);
         Require(controller.Active, "Local orbit view enables independent HUD");
         Require(!controller.ModifyVanillaHud && !controller.NativeModificationsActive, "Vanilla modifications default off while independent HUD remains active");
         Require(!(bool)controller.GetType().GetProperty("CorrectProjection",Private).GetValue(controller),"No vanilla adjustment before custom camera has moved");
-        controller.FlightCamera.AppliedFrame = Time.frameCount;
+        controller.FlightCamera.GetType().GetProperty("AppliedFrame").SetValue(controller.FlightCamera, Time.frameCount);
         Require((bool)controller.GetType().GetProperty("CorrectProjection",Private).GetValue(controller) && !controller.NativeModificationsActive,"Custom camera synchronizes markers without opting in to native instrument replacement");
         controller.FlightCamera.Reset();
         controller.ModifyVanillaHud = true;
@@ -217,8 +217,41 @@ public static class HudUnityCheck
         PlayerSettings.cinematicMode = true; Require(!controller.Active, "Cinematic hides overlays"); PlayerSettings.cinematicMode = false;
         camera.followingUnit = null; Require(!controller.Active, "Spectating cannot retain ownship widgets"); camera.followingUnit = own;
         own.disabled = true; Require(!controller.Active, "Destroyed aircraft cannot retain live data"); own.disabled = false;
-        camera.currentState = camera.cockpitState = new object(); Require(!controller.Active, "Cockpit retains its native instruments");
+        camera.currentState = camera.cockpitState = new CameraBaseState(); Require(!controller.Active, "Cockpit retains its native instruments");
         SceneSingleton<CameraStateManager>.i = null; SceneSingleton<CombatHUD>.i = null; Object.DestroyImmediate(scene);
+    }
+    private static void CheckCamera(HudSettings config)
+    {
+        var ownObject = new GameObject("Camera ownship");
+        var own = ownObject.AddComponent<Aircraft>(); own.cockpit = ownObject.AddComponent<Cockpit>();
+        var body = ownObject.AddComponent<Rigidbody>(); body.useGravity = false;
+        var cameraObject = new GameObject("Camera motion");
+        var lens = cameraObject.AddComponent<Camera>();
+        var manager = cameraObject.AddComponent<CameraStateManager>();
+        manager.mainCamera = lens; manager.followingRB = body; manager.followingUnit = own;
+        manager.orbitState = manager.currentState = new CameraBaseState();
+        var combat = ownObject.AddComponent<CombatHUD>(); combat.aircraft = own;
+        SceneSingleton<CameraStateManager>.i = manager; SceneSingleton<CombatHUD>.i = combat;
+        var controller = ownObject.AddComponent<ThirdPersonHudController>(); controller.Configure(config);
+        controller.GetType().GetMethod("Awake", Private).Invoke(controller, null); // Editor fixture is not in Play mode.
+        config.ThirdPersonHudEnabled.Value = config.ThirdPersonFlightCameraEnabled.Value = true;
+        NuclearOption.MissionEditorScripts.InputFieldChecker.InsideInputField = false;
+        Require(controller.FlightCamera.CanDrive(manager), "Configured local orbit accepts optional camera framing");
+        float pan = 0f, tilt = 20f;
+        controller.FlightCamera.Orbit(manager, ref pan, ref tilt, 0f, 0f);
+        Require(controller.FlightCamera.AppliedFrame == Time.frameCount, "Active orbit applies the optional camera pose");
+        controller.FlightCamera.Orbit(manager, ref pan, ref tilt, 0f, 0.5f);
+        Require(controller.FlightCamera.AppliedFrame == -1, "Native look-at transition cancels custom framing");
+        own.transform.rotation = Quaternion.LookRotation(Vector3.up, Vector3.forward);
+        cameraObject.transform.rotation = Quaternion.LookRotation(Vector3.forward, Vector3.right);
+        controller.FlightCamera.Orbit(manager, ref pan, ref tilt, 0f, 0f);
+        Vector3 stableUp = Field<Vector3>(controller.FlightCamera, "stableUp");
+        Require(Vector3.Dot(stableUp, Vector3.right) > 0.9f, "Vertical flight keeps the previous camera roll");
+        controller.enabled = false;
+        controller.FlightCamera.Orbit(manager, ref pan, ref tilt, 0f, 0f);
+        Require(controller.FlightCamera.AppliedFrame == -1, "Disabled controller cannot keep driving the camera");
+        SceneSingleton<CameraStateManager>.i = null; SceneSingleton<CombatHUD>.i = null;
+        Object.DestroyImmediate(cameraObject); Object.DestroyImmediate(ownObject);
     }
     private static void CheckMissileOrder()
     {

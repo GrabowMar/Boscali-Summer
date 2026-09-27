@@ -6,7 +6,7 @@ using NOAvionics;
 
 namespace BoscaliSummer.Tests.Features.Progression
 {
-    internal static class ProgressionPresentationTests
+    internal static class SqdPanelTests
     {
         public static void Run()
         {
@@ -155,7 +155,7 @@ namespace BoscaliSummer.Tests.Features.Progression
         private static void TestDossierStylesheet()
         {
             string text;
-            using (System.IO.Stream stream = typeof(ProgressionPresentationTests).Assembly
+            using (System.IO.Stream stream = typeof(SqdPanelTests).Assembly
                 .GetManifestResourceStream("BoscaliSummer.Tests.avionics.avss"))
             {
                 TestAssert.That(stream != null, "the shipped avionics sheet must be embedded for this check");

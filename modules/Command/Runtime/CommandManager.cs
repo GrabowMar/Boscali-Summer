@@ -75,6 +75,10 @@ namespace BoscaliSummer.Features.Command.Runtime
 
         public void ResetForScene()
         {
+            if (operationOutcomes != null) operationOutcomes.MoraleAwarded -= OnOperationMorale;
+            operationOutcomes = null;
+            if (activeEvents != null) activeEvents.MoraleAwarded -= OnOperationMorale;
+            activeEvents = null;
             TheaterState.Reset();
             Morale.Reset();
             moraleNet?.ResetScene();

@@ -82,8 +82,7 @@ public static class CocUnityCheck
             foreach (float height in new[] { 420f, 596f, 896f })
                 foreach (int page in new[] { 0, 2 })
                 {
-                    GameObject canvas = Build(height, staff, -1, false, page,
-                        page == 2 ? TheaterOperationPhase.Planning : (TheaterOperationPhase?)null);
+                    GameObject canvas = Build(height, staff, -1, false, page);
                     string prefix = (page == 0 ? "situation-" : "operations-") + height;
                     Capture(canvas, height, prefix + ".png");
                     ScrollRect scroll = canvas.GetComponentInChildren<ScrollRect>();
@@ -95,129 +94,53 @@ public static class CocUnityCheck
                     Object.DestroyImmediate(canvas);
                 }
 
-            foreach (var scenario in new[]
-            {
-                new { Phase = TheaterOperationPhase.Planning, Name = "planning" },
-                new { Phase = TheaterOperationPhase.Launching, Name = "launching" },
-                new { Phase = TheaterOperationPhase.Assault, Name = "assault" },
-                new { Phase = TheaterOperationPhase.Concluded, Name = "concluded" },
-            })
-            {
-                GameObject canvas = Build(596f, staff, -1, false, 2, scenario.Phase);
-                Capture(canvas, 596f, "offensive-" + scenario.Name + ".png");
-                Object.DestroyImmediate(canvas);
-            }
-            foreach (var scenario in new[]
-            {
-                new { Phase = TheaterOperationPhase.Planning, Name = "planning" },
-                new { Phase = TheaterOperationPhase.Launching, Name = "launching" },
-                new { Phase = TheaterOperationPhase.Assault, Name = "assault" },
-                new { Phase = TheaterOperationPhase.Concluded, Name = "concluded" },
-            })
-            {
-                StrPlanningWindow window = StrPlanningWindow.Create(new OperationsStub(scenario.Phase),
-                    new PriorityStub(scenario.Phase == TheaterOperationPhase.Concluded ? null
-                        : scenario.Phase >= TheaterOperationPhase.Launching
-                            ? "NORTH RIDGE AIRBASE" : "WEST DEPOT"),
-                    new LogisticsStub(scenario.Phase == TheaterOperationPhase.Assault),
-                    staff, new EventsStub(), new StrikeStub());
-                window.Show(0);
-                Image plotFix = (Image)window.GetType().GetField("plotFix", Private).GetValue(window);
-                Check(plotFix.enabled == (scenario.Phase != TheaterOperationPhase.Planning),
-                    "Plot must mark only a uniquely resolved local objective.");
-                Check(window.transform.Find("StrategySurface/PlanningFrame/StrategyNotch") != null,
-                    "Planning desk must use the shared room notch shell.");
-                CaptureWindow(window, "briefing-" + scenario.Name + ".png");
-                if (scenario.Phase == TheaterOperationPhase.Assault)
-                {
-                    CaptureWindow(window, "briefing-1280x720.png", 1280f, 720f);
-                    CaptureWindow(window, "briefing-2560x1080.png", 2560f, 1080f);
-                    Call(window, "SelectPage", 1);
-                    Check(Array.Exists(window.GetComponentsInChildren<TMP_Text>(true), text =>
-                        text.text == "4 × MBT  ·  2 × IFV"),
-                        "Force page must show the mission convoy's vehicle composition.");
-                    Check(Array.Exists(window.GetComponentsInChildren<TMP_Text>(true), text =>
-                        text.text == "CANDIDATE"),
-                        "Escrow-funded wave must remain a candidate when the faction pool is empty.");
-                    CaptureWindow(window, "briefing-forces.png");
-                    Call(window, "SelectPage", 2);
-                    Check(Array.Exists(window.GetComponentsInChildren<TMP_Text>(true), text =>
-                        text.text.Contains("FLARE BARRAGE INBOUND T-8s")),
-                        "Tactics page must use actual nearby strike telemetry.");
-                    CaptureWindow(window, "briefing-tactics.png");
-                    GameObject mapRoot = new GameObject("MapCheck");
-                    DynamicMap map = mapRoot.AddComponent<DynamicMap>();
-                    map.iconLayer = new GameObject("Icons", typeof(RectTransform));
-                    map.iconLayer.transform.SetParent(mapRoot.transform, false);
-                    map.mapImage = new GameObject("MapImage", typeof(RectTransform), typeof(Image)).GetComponent<Image>();
-                    map.mapImage.transform.SetParent(mapRoot.transform, false);
-                    SceneSingleton<DynamicMap>.i = map;
-                    GlobalPosition.OriginOffset = new Vector3(300f, 0f, 200f);
-                    Call(window, "ViewMap");
-                    Check(!StrPlanningWindow.IsOpen, "Map action must close the briefing.");
-                    Transform marker = map.iconLayer.transform.Find("BoscaliPlanPreviewMarker");
-                    Check(marker != null,
-                        "Known objective must get a temporary map preview marker.");
-                    Check(Mathf.Abs(marker.localPosition.x - 900f) < .01f &&
-                          Mathf.Abs(marker.localPosition.y - 4000f) < .01f,
-                        "Preview marker must follow the floating-origin map coordinates.");
-                    GlobalPosition.OriginOffset = Vector3.zero;
-                    SceneSingleton<DynamicMap>.i = null;
-                    Object.DestroyImmediate(mapRoot);
-                }
-                if (scenario.Phase == TheaterOperationPhase.Planning)
-                {
-                    window.Show(-1);
-                    CaptureWindow(window, "briefing-defense.png");
-                }
-                Object.DestroyImmediate(window.gameObject);
-            }
-            StrPlanningWindow remote = StrPlanningWindow.Create(
-                new OperationsStub(TheaterOperationPhase.Assault), new PriorityStub("NORTH RIDGE AIRBASE"),
-                new LogisticsStub(canCommand: false), staff, new EventsStub(), new StrikeStub());
-            remote.Show(0);
-            Call(remote, "SelectPage", 1);
-            TMP_Text[] remoteCosts = (TMP_Text[])remote.GetType().GetField("forceCosts", Private).GetValue(remote);
-            foreach (TMP_Text cost in remoteCosts)
-                Check(string.IsNullOrEmpty(cost.text), "Remote force costs must stay host-only.");
-            TMP_Text[] remoteStates = (TMP_Text[])remote.GetType().GetField("forceStates", Private).GetValue(remote);
-            foreach (TMP_Text state in remoteStates)
-                Check(state.text != "CANDIDATE", "Remote client cannot claim a candidate wave.");
-            CaptureWindow(remote, "briefing-forces-remote.png");
-            Object.DestroyImmediate(remote.gameObject);
-            GameObject entryCanvas = Build(596f, staff, -1, false, 2, TheaterOperationPhase.Planning);
-            AvButton operationEntry = null;
-            foreach (AvButton button in entryCanvas.GetComponentsInChildren<AvButton>(true))
-                if (button.transform.parent != null && button.transform.parent.name == "OperationCard")
-                { operationEntry = button; break; }
-            Check(operationEntry != null, "STR operation card must offer a briefing entry.");
-            operationEntry.OnPointerClick(new PointerEventData(EventSystem.current)
-                { button = PointerEventData.InputButton.Left });
-            Check(StrPlanningWindow.IsOpen, "Operation entry must open the theater briefing.");
-            StrPlanningWindow opened = Object.FindObjectOfType<StrPlanningWindow>();
-            Check(opened != null, "The briefing window must exist after the MFD entry click.");
-            opened.Close();
-            Check(!StrPlanningWindow.IsOpen, "Closing the briefing must release the input guard.");
-            Object.DestroyImmediate(opened.gameObject);
-            StrMfdPanel entryPanel = entryCanvas.GetComponentInChildren<StrMfdPanel>();
-            object guard = entryPanel.GetType().GetField("cmdGuardLine", Private).GetValue(entryPanel);
-            AvButton guardEntry = (AvButton)guard.GetType().GetField("hit", Private).GetValue(guard);
-            guardEntry.OnPointerClick(new PointerEventData(EventSystem.current)
-                { button = PointerEventData.InputButton.Left });
-            opened = Object.FindObjectOfType<StrPlanningWindow>();
-            Check(opened != null && StrPlanningWindow.IsOpen,
-                "The STR guard line must open the defensive briefing.");
-            bool defenseShown = false;
-            foreach (TMP_Text label in opened.GetComponentsInChildren<TMP_Text>())
-                if (label.text == "DEFENSE / WEST DEPOT") defenseShown = true;
-            Check(defenseShown, "The guard entry must select the current defense.");
-            opened.Close();
-            Object.DestroyImmediate(opened.gameObject);
-            Object.DestroyImmediate(entryCanvas);
+            var war = new WarStub();
+            GameObject operationsCanvas = Build(596f, staff, -1, false, 2, war: war);
+            Capture(operationsCanvas, 596f, "operations-live-596.png");
+            TMP_Text[] names = (TMP_Text[])operationsCanvas.GetComponentInChildren<StrMfdPanel>()
+                .GetType().GetField("proposalNames", Private)
+                .GetValue(operationsCanvas.GetComponentInChildren<StrMfdPanel>());
+            Check(names[0].text.Contains("RIDGE"), "STR must show the staff's current proposal.");
+            Object.DestroyImmediate(operationsCanvas);
+
+            var mapRoot = new GameObject("MapCheck");
+            DynamicMap liveMap = mapRoot.AddComponent<DynamicMap>();
+            liveMap.mapImage = new GameObject("MapImage", typeof(RectTransform), typeof(Image))
+                .GetComponent<Image>();
+            liveMap.mapImage.transform.SetParent(mapRoot.transform, false);
+            var mapTexture = new Texture2D(64, 48, TextureFormat.RGBA32, false);
+            var mapPixels = new Color32[64 * 48];
+            for (int py = 0; py < 48; py++)
+                for (int px = 0; px < 64; px++)
+                    mapPixels[py * 64 + px] = new Color32(
+                        (byte)(18 + px / 3), (byte)(35 + py / 4),
+                        (byte)(48 + (px + py) / 5), 255);
+            mapTexture.SetPixels32(mapPixels);
+            mapTexture.Apply();
+            liveMap.mapImage.sprite = Sprite.Create(mapTexture,
+                new Rect(0f, 0f, 64f, 48f), new Vector2(.5f, .5f));
+            SceneSingleton<DynamicMap>.i = liveMap;
+            StrPlanningWindow room = StrPlanningWindow.Create(war, new ComMapOverlay());
+            room.Show();
+            Check(room.transform.Find("StrategySurface/PlanningFrame/StrategyNotch") != null,
+                "Operations room must retain the shared notch shell.");
+            Check(Array.Exists(room.GetComponentsInChildren<TMP_Text>(true), t =>
+                t.text.Contains("NORTH RIDGE")), "Room must name the active operation.");
+            Image[] frontPins = (Image[])room.GetType().GetField("frontMarkers", Private).GetValue(room);
+            Check(frontPins[0].enabled && !frontPins[1].enabled,
+                "Only observed fronts may receive an exact map marker.");
+            CaptureWindow(room, "war-room-1920.png");
+            CaptureWindow(room, "war-room-1280.png", 1280f, 720f);
+            room.Close();
+            Check(!StrPlanningWindow.IsOpen, "Closing the room must release the input guard.");
+            Object.DestroyImmediate(room.gameObject);
+            SceneSingleton<DynamicMap>.i = null;
+            Object.DestroyImmediate(mapRoot);
+            Object.DestroyImmediate(mapTexture);
 
             var report = new System.Text.StringBuilder();
-            report.AppendLine("PASS: the real STR pages and theater planning briefing rendered offline.");
-            report.AppendLine(captures + " captures: COC roster/file scenarios, SITUATION and OPERATIONS at 420/596/896, and planning/launch/assault/conclusion/defense briefings. Compact scrolling, file focus/back/collapse, filled-gauge sprites, objective plot fixes, remote cost privacy and offensive/defensive MFD entry clicks checked.");
+            report.AppendLine("PASS: the real STR pages and live operations room rendered offline.");
+            report.AppendLine(captures + " captures: COC roster/file scenarios, SITUATION and OPERATIONS at 420/596/896, plus live war room at two screen sizes.");
             report.AppendLine("The stub IHighCommandView records Highlight(id); every scenario asserts the map highlight matches the open file (or -1 when none is open).");
             report.AppendLine("Staff stub: 8 posts - theater cmdr (tier 0), air/ground component cmdrs (tier 1), three base cmdrs (tier 2; one InTransit, one KIA, one Disrupted), one known enemy (IntelAge 41s) and one unconfirmed enemy. Portraits: synthetic sprites of mixed aspect (96x96, 80x120, 128x72, 64x64, 72x128, 100x100) and mixed pivots (centre, zero, one, top-left, bottom-right); the two unconfirmed/KIA posts keep the NO VISUAL fallback.");
             report.AppendLine("Renders (path | bytes | setup):");
@@ -236,6 +159,38 @@ public static class CocUnityCheck
     }
 
     // ------------------------------------------------------------------ scenarios
+
+    private sealed class WarStub : ITheaterWarView
+    {
+        public bool Available => true;
+        public bool CanCommand => true;
+        public TheaterWarPosture Posture => TheaterWarPosture.Steady;
+        public IReadOnlyList<TheaterFrontView> Fronts { get; } =
+            new[] {
+                new TheaterFrontView("ridge", "NORTH RIDGE", 1200f, 1700f,
+                    "IN CONTACT", .75f, .1f, true, 0f),
+                new TheaterFrontView("harbor", "HARBOR RUMOR", float.NaN, float.NaN,
+                    "UNCONFIRMED", .2f, 0f, false, 45f),
+            };
+        public IReadOnlyList<TheaterProposalView> Proposals { get; } =
+            new[] {
+                new TheaterProposalView(1, 3, "EXPLOIT", "NORTH RIDGE", "ridge",
+                    1200f, 1700f, "Pressure is shifting.", "MEDIUM",
+                    "2 ground, 1 air", 38f),
+                new TheaterProposalView(2, 3, "DEFEND", "HARBOR", "harbor",
+                    -1400f, -800f, "Reinforce the approach.", "LOW",
+                    "1 ground, 1 naval", 38f),
+            };
+        public TheaterLiveOperationView ActiveOperation { get; } =
+            new TheaterLiveOperationView(7, 3, "ASSAULT", "ridge", "NORTH RIDGE",
+                1200f, 1700f, "IN CONTACT", "Ground and air groups are pressing.",
+                2, 1, 0);
+        public IReadOnlyList<string> StaffLog { get; } = new[] { "Ridge pressure rose." };
+        public void Refresh() { }
+        public bool RequestPick(int proposalId, int revision) => true;
+        public bool RequestCancel(int operationId, int revision) => true;
+        public bool RequestPosture(TheaterWarPosture posture) => true;
+    }
 
     private static void RenderScenario(
         IHighCommandView staff, float height, int selectedId, bool hostile, string file, string description)
@@ -281,7 +236,7 @@ public static class CocUnityCheck
     }
 
     private static GameObject Build(float height, IHighCommandView staff, int selectedId, bool hostile,
-        int pageIndex = 1, TheaterOperationPhase? operationPhase = null)
+        int pageIndex = 1, WarStub war = null)
     {
         var canvasObject = new GameObject("CocCanvas", typeof(RectTransform), typeof(Canvas));
         Canvas canvas = canvasObject.GetComponent<Canvas>();
@@ -332,12 +287,13 @@ public static class CocUnityCheck
         SetField(panel, "highCommand", staff);
         SetField(panel, "settings", new CommandSettings());
         SetField(panel, "command", new CommandManager());
-        if (operationPhase.HasValue)
-        {
-            SetField(panel, "theaterOperations", new OperationsStub(operationPhase.Value));
-            SetField(panel, "theaterPriority", new PriorityStub());
-        }
+        if (pageIndex == 2) SetField(panel, "theaterWar", war ?? new WarStub());
         Call(panel, pageIndex == 0 ? "BuildSaPage" : pageIndex == 1 ? "BuildCocPage" : "BuildCmdPage", page);
+        if (pageIndex == 1)
+        {
+            SetField(panel, "cocPage", page);
+            SetField(panel, "cocBuilt", true);
+        }
         if (hostile) SetField(panel, "cocShowHostile", true);
         if (selectedId >= 0) SetField(panel, "cocSelectedId", selectedId);
         // Refresh() fills the shared chrome (data bar, metrics, status strip) and routes
@@ -692,6 +648,18 @@ namespace BoscaliSummer.Features.Command.Runtime
     internal sealed class TacticalSectorGrid
     {
         public const int MaximumNodes = 128;
+        public float WorldSizeX => 10000f;
+        public float WorldSizeY => 10000f;
+        public ulong FrontlineHash => 1UL;
+        public int CopyFrontlineTraces(FrontlineTracePoint[] points, int[] lengths, float[] pressure)
+        {
+            points[0] = new FrontlineTracePoint(-3500f, -1400f);
+            points[1] = new FrontlineTracePoint(0f, 100f);
+            points[2] = new FrontlineTracePoint(3300f, 1600f);
+            lengths[0] = 3;
+            pressure[0] = .8f;
+            return 1;
+        }
         public struct TacticalNode
         {
             public bool IsContested;
@@ -717,7 +685,17 @@ namespace BoscaliSummer.Features.Command.Presentation
 {
     public partial class ComMapOverlay
     {
-        internal BoscaliSummer.Features.Command.Runtime.TacticalSectorGrid Grid => null;
+        internal BoscaliSummer.Features.Command.Runtime.TacticalSectorGrid Grid { get; } =
+            new BoscaliSummer.Features.Command.Runtime.TacticalSectorGrid();
+    }
+}
+
+namespace BoscaliSummer.Features.Command.Presentation.MapUi
+{
+    internal sealed class FrontlineGraphic : MaskableGraphic
+    {
+        public void SetSource(BoscaliSummer.Features.Command.Runtime.TacticalSectorGrid source) { }
+        protected override void OnPopulateMesh(VertexHelper mesh) => mesh.Clear();
     }
 }
 #endif

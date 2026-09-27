@@ -15,9 +15,8 @@ using UnityEngine;
 namespace BoscaliSummer.Features.TheaterOps.Runtime
 {
     /// <summary>
-    /// Host-side destinations for depot-spawned AI vehicles of every faction with a main
-    /// effort. Vanilla owns spawning, driving, targeting and player orders; this service only
-    /// answers its uncommanded objective query.
+    /// Host-side destinations for uncommanded mobile AI vehicles. Groups may be assigned to
+    /// separate living-front sectors. Vanilla owns spawning, driving, targeting and player orders.
     /// </summary>
     internal sealed class GroundFrontService : MonoBehaviour, ISceneService
     {
@@ -31,8 +30,12 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
         private const float ContactMeters = 700f;
         private const float ContactHoldSeconds = 25f;
         private const float PincerFlankMeters = 750f;
+        private const int ScanCellsPerUpdate = 128;
+        private const int ScanUnitsPerUpdate = 64;
         private static readonly FieldInfo NavigateObjectives =
             AccessTools.Field(typeof(GroundVehicle), "navigateToObjectives");
+        private static readonly FieldInfo CommandedDestination =
+            AccessTools.Field(typeof(GroundVehicle), "commandedDestination");
 
         private enum Stage { Rally, Line, Assault, Contact, Withdraw }
 
@@ -70,6 +73,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             internal Stage Stage;
             internal Stage BeforeContact;
             internal float Born, StageSince, ContactUntil;
+            internal float NoAssignmentSince;
             internal float CenterX, CenterZ, TangentX, TangentZ, FriendlyX, FriendlyZ;
             internal bool HasFront;
         }
@@ -89,6 +93,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
         private ManualLogSource logger;
         private ITerritoryIngress territory;
         private int nextGroupId = 1;
+        private int nextScanCell;
         private float nextUpdate;
         private bool warnedConflict;
 
@@ -118,33 +123,35 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             traces.Clear();
             territory = null;
             nextGroupId = 1;
+            nextScanCell = 0;
             nextUpdate = 0f;
         }
 
-        /// <summary>Called only after vanilla's depot exit order has been issued.</summary>
+        /// <summary>Called after depot exit, or by the bounded scene-unit scan.</summary>
         internal void Enroll(GroundVehicle vehicle)
         {
-            if (vehicle == null || vehicle.disabled || vehicle.GetHoldPosition() ||
-                vehicle.UnitCommand == null || NavigateObjectives == null ||
-                !(bool)NavigateObjectives.GetValue(vehicle) ||
+            if (!AutoNavigating(vehicle) ||
                 settings == null || !settings.Enabled.Value ||
                 !settings.FrontlineTacticsEnabled.Value || HasRtsCommander() ||
                 !GameAccess.IsServer() || !vehicle.IsServer ||
                 members.ContainsKey(vehicle) || members.Count >= MaximumMembers ||
-                priority == null || !priority.Authoritative)
+                !HasAuthority)
                 return;
             FactionHQ hq = vehicle.NetworkHQ;
-            if (hq == null || hq.faction == null ||
-                !priority.TryGetDirective(hq.faction.factionName, out PriorityDirective directive))
-                return;
+            if (hq == null || hq.faction == null) return;
 
             float now = Time.timeSinceLevelLoad;
+            GlobalPosition here = vehicle.GlobalPosition();
             Group group = null;
+            PriorityDirective directive = default;
+            bool offensive = false;
             for (int i = groups.Count - 1; i >= 0; i--)
             {
                 Group candidate = groups[i];
-                if (candidate.HQ == hq && candidate.Key == directive.Key && !candidate.Sealed &&
-                    candidate.Members.Count < FrontlineTactics.GroupSize && now - candidate.Born < JoinSeconds)
+                if (candidate.HQ == hq && !candidate.Sealed &&
+                    candidate.Members.Count < FrontlineTactics.GroupSize && now - candidate.Born < JoinSeconds &&
+                    TryAssign(hq, candidate.Id, here.x, here.z, out directive, out offensive) &&
+                    candidate.Key == directive.Key)
                 {
                     group = candidate;
                     break;
@@ -153,13 +160,13 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             if (group == null)
             {
                 if (groups.Count >= MaximumGroups) return;
+                if (!TryAssign(hq, nextGroupId, here.x, here.z, out directive, out offensive)) return;
                 group = new Group
                 {
                     Id = nextGroupId++,
                     HQ = hq,
                     Key = directive.Key,
-                    Offensive = operations != null &&
-                                operations.IsLaunchedTarget(hq.faction.factionName, directive.Key),
+                    Offensive = offensive,
                     Born = now,
                     StageSince = now
                 };
@@ -175,19 +182,34 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
 
         /// <summary>Patch-side membership test: only enrolled vehicles follow the effort.</summary>
         internal bool IsEnrolled(GroundVehicle vehicle) =>
-            vehicle != null && priority != null && priority.Authoritative && members.ContainsKey(vehicle);
+            HasAuthority && AutoNavigating(vehicle) && members.ContainsKey(vehicle);
 
-        /// <summary>Patch-side lookup; a failed lookup leaves vanilla's main effort untouched.</summary>
-        internal bool TryGetDestination(GroundVehicle vehicle, PriorityDirective directive,
-            out GlobalPosition destination)
+        /// <summary>Patch-side lookup; failure leaves the vanilla destination untouched.</summary>
+        internal bool TryGetDestination(GroundVehicle vehicle, out GlobalPosition destination)
         {
             destination = default;
-            if (vehicle == null || !priority.Authoritative ||
+            if (!HasAuthority || !AutoNavigating(vehicle) ||
                 !members.TryGetValue(vehicle, out Member member) ||
-                member.Group.Key != directive.Key || !member.HasDestination)
+                !member.HasDestination)
+                return false;
+            if (LivingFrontService.Active?.Authoritative != true &&
+                (priority == null || vehicle.NetworkHQ?.faction == null ||
+                 !priority.TryGetDirective(vehicle.NetworkHQ.faction.factionName,
+                     out PriorityDirective current) || member.Group.Key != current.Key))
                 return false;
             destination = member.Destination;
             return true;
+        }
+
+        internal int CountGroups(string faction, string key)
+        {
+            if (string.IsNullOrEmpty(faction) || string.IsNullOrEmpty(key)) return 0;
+            int count = 0;
+            foreach (Group group in groups)
+                if (group.HQ != null && group.HQ.faction != null &&
+                    group.HQ.faction.factionName == faction && group.Key == key &&
+                    group.Members.Count > 0) count++;
+            return count;
         }
 
         private void Update()
@@ -197,12 +219,13 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             if (settings == null || !settings.Enabled.Value ||
                 !settings.FrontlineTacticsEnabled.Value || HasRtsCommander() ||
                 !GameAccess.IsServer() ||
-                priority == null || !priority.Authoritative)
+                !HasAuthority)
             {
                 if (groups.Count > 0) ResetForScene();
                 nextUpdate = Time.timeSinceLevelLoad + UpdateSeconds;
                 return;
             }
+            ScanInitialUnits();
             if (groups.Count == 0) return;
             if (territory == null) ModServices.TryGet(out territory);
             float now = Time.timeSinceLevelLoad;
@@ -210,16 +233,22 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             {
                 Group group = groups[i];
                 FactionHQ hq = group.HQ;
-                // Each group follows its own side's effort; a side whose effort moved
-                // re-keys its groups, and a side with no effort leaves them to vanilla.
+                // A group keeps its identity while the war changes its sector assignment.
                 PriorityDirective directive = default;
+                bool offensive = false;
+                GlobalPosition groupPosition = group.Members.Count > 0 &&
+                    group.Members[0].Vehicle != null
+                    ? group.Members[0].Vehicle.GlobalPosition()
+                    : default;
                 bool hasDirective = hq != null && hq.faction != null &&
-                            priority.TryGetDirective(hq.faction.factionName, out directive);
+                    TryAssign(hq, group.Id, groupPosition.x, groupPosition.z,
+                        out directive, out offensive);
                 for (int j = group.Members.Count - 1; j >= 0; j--)
                 {
                     Member member = group.Members[j];
                     if (member.Vehicle != null && !member.Vehicle.disabled &&
-                        ReferenceEquals(member.Vehicle.NetworkHQ, hq))
+                        ReferenceEquals(member.Vehicle.NetworkHQ, hq) &&
+                        AutoNavigating(member.Vehicle))
                         continue;
                     members.Remove(member.Vehicle);
                     group.Members.RemoveAt(j);
@@ -236,8 +265,31 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
                 }
                 // A new effort re-keys the group; its vehicles stay together instead of
                 // dissolving back to vanilla's nearest-objective spread.
-                if (!hasDirective) { ClearDestinations(group); continue; }
-                if (group.Key != directive.Key) Rekey(group, directive, now);
+                if (!hasDirective)
+                {
+                    ClearDestinations(group);
+                    if (LivingFrontService.Active?.Authoritative == true)
+                    {
+                        if (group.NoAssignmentSince <= 0f) group.NoAssignmentSince = now;
+                        else if (now - group.NoAssignmentSince >= 30f)
+                        {
+                            foreach (Member member in group.Members) members.Remove(member.Vehicle);
+                            groups.RemoveAt(i);
+                        }
+                    }
+                    continue;
+                }
+                group.NoAssignmentSince = 0f;
+                if (group.Key != directive.Key) Rekey(group, directive, offensive, now);
+                else
+                {
+                    group.Offensive = offensive;
+                    if (!offensive && group.Stage == Stage.Assault)
+                        SetStage(group, Stage.Line, now);
+                    if (!offensive && group.Stage == Stage.Contact &&
+                        group.BeforeContact == Stage.Assault)
+                        group.BeforeContact = Stage.Line;
+                }
                 if (!group.Sealed && now - group.Born >= JoinSeconds) group.Sealed = true;
                 RefreshGroup(group, directive, TraceOf(hq, now), now);
             }
@@ -392,11 +444,10 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             }
         }
 
-        private void Rekey(Group group, PriorityDirective directive, float now)
+        private void Rekey(Group group, PriorityDirective directive, bool offensive, float now)
         {
             group.Key = directive.Key;
-            group.Offensive = operations != null && group.HQ != null && group.HQ.faction != null &&
-                operations.IsLaunchedTarget(group.HQ.faction.factionName, directive.Key);
+            group.Offensive = offensive;
             group.ReportedRally = false;
             ClearDestinations(group);
             SetStage(group, Stage.Rally, now);
@@ -456,6 +507,50 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
         }
 
         private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
+
+        private bool HasAuthority => LivingFrontService.Active?.Authoritative == true ||
+            priority?.Authoritative == true;
+
+        private bool TryAssign(FactionHQ hq, int groupId, float x, float z,
+            out PriorityDirective directive, out bool offensive)
+        {
+            directive = default;
+            offensive = false;
+            LivingFrontService war = LivingFrontService.Active;
+            if (war != null && war.Authoritative)
+                return war.TryGetGroundAssignment(hq, groupId, x, z,
+                    out directive, out offensive) && directive.IsValid;
+            if (priority == null || !priority.Authoritative || hq == null || hq.faction == null ||
+                !priority.TryGetDirective(hq.faction.factionName, out directive)) return false;
+            offensive = operations != null &&
+                operations.IsLaunchedTarget(hq.faction.factionName, directive.Key);
+            return directive.IsValid;
+        }
+
+        private static bool AutoNavigating(GroundVehicle vehicle) =>
+            vehicle != null && !vehicle.disabled && !vehicle.GetHoldPosition() &&
+            vehicle.UnitCommand != null && NavigateObjectives != null &&
+            CommandedDestination != null && (bool)NavigateObjectives.GetValue(vehicle) &&
+            !(bool)CommandedDestination.GetValue(vehicle);
+
+        private void ScanInitialUnits()
+        {
+            if (members.Count >= MaximumMembers || groups.Count >= MaximumGroups) return;
+            GridSquare[] cells = BattlefieldGrid.gridLookup;
+            if (cells == null || cells.Length == 0) return;
+            int checkedUnits = 0;
+            for (int visited = 0; visited < ScanCellsPerUpdate; visited++)
+            {
+                if (nextScanCell >= cells.Length) nextScanCell = 0;
+                GridSquare cell = cells[nextScanCell++];
+                if (cell?.units == null) continue;
+                foreach (Unit unit in cell.units)
+                {
+                    if (++checkedUnits > ScanUnitsPerUpdate) return;
+                    if (unit is GroundVehicle vehicle) Enroll(vehicle);
+                }
+            }
+        }
 
         internal bool HasRtsCommander()
         {

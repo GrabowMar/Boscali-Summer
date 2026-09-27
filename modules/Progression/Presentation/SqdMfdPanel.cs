@@ -278,7 +278,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             BuildPilotPage((RectTransform)shell.CreatePage(TabPilot, "PilotPage").transform, body);
             BuildSkillsPage((RectTransform)shell.CreatePage(TabSkills, "SkillsPage").transform, body);
             BuildWingsPage((RectTransform)shell.CreatePage(TabWings, "WingsPage").transform, body);
-            BuildStudioPage((RectTransform)shell.CreatePage(TabStudio, "StudioPage").transform, body);
+            studioPageRoot = (RectTransform)shell.CreatePage(TabStudio, "StudioPage").transform;
             BuildPlanePage((RectTransform)shell.CreatePage(TabPlane, "PlanePage").transform, body);
 
             MFDScreen result = root.AddComponent<MFDScreen>();
@@ -305,6 +305,11 @@ namespace BoscaliSummer.Features.Progression.Presentation
             nextRefresh = 0f;
             if (page == TabStudio)
             {
+                if (!studioPageBuilt && studioPageRoot != null)
+                {
+                    BuildStudioPage(studioPageRoot, shell.Body);
+                    studioPageBuilt = true;
+                }
                 studioDirty = true;
                 studioArtDirty = true;
             }

@@ -364,7 +364,7 @@ public static class SupportPanelUnityCheck
             object module = step.GetType().GetField("Module", Hidden).GetValue(step);
             var cell = (int)step.GetType().GetField("Cell", Hidden).GetValue(step);
             object failure = Invoke(platform, "TryLaunch", module, cell, (byte)0, 42,
-                now, (float)price.Invoke(null, new[] { module }), insertion, dock);
+                now, (float)price.Invoke(null, new[] { module }), insertion, dock, 0UL);
             Check(failure.ToString() == "None", "The station fixture must launch " + module + ": " + failure);
             now += dock + insertion;
             Call(platform, "Tick", now, 0.01f, true);
@@ -455,7 +455,7 @@ public static class SupportPanelUnityCheck
             ("AirDefence", 109, 47000f, 4000f, 6, 4, true, "AIR DEFENCE 47/4")
         };
         foreach (var o in fixture)
-            Call(detachment, "ReportObjective", Enum.Parse(kindType, o.Kind), o.Anchor, o.X, o.Z, o.Threat, o.Radars, o.Hostile, o.Name);
+            Call(detachment, "ReportObjective", Enum.Parse(kindType, o.Kind), o.Anchor, o.X, o.Z, o.Threat, o.Radars, o.Hostile, o.Name, false);
         Call(detachment, "EndObjectives");
         Func<double> lucky = () => 0.0;
         Check((bool)Invoke(detachment, "TryRaise", 2), "The fixture must raise CHARLIE.");

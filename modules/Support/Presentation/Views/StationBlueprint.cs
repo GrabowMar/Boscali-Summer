@@ -114,7 +114,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             Lines.Set(tile.Port[3], w - m, -m, w - m, -(w - m), 1.5f);
             tile.PortPlus = AvKit.Rule(tile.Root, new Rect(w * 0.5f - 12f, -w * 0.5f + 1f, 24f, 2f), StationStyle.Line);
             tile.PortPlus2 = AvKit.Rule(tile.Root, new Rect(w * 0.5f - 1f, -w * 0.5f + 12f, 2f, 24f), StationStyle.Line);
-            tile.PortName = StationStyle.Text(tile.Root, "", new Rect(0f, -(w - m) - 2f, w, 16f), 10f, StationStyle.Dim,
+            tile.PortName = StationStyle.Text(tile.Root, "", new Rect(0f, -(w - m) - 2f, w, 16f), 11f, StationStyle.Dim,
                 StationStyle.LabelTracking, TextAlignmentOptions.Center);
 
             tile.Shield = AvKit.Panel(tile.Root, new Rect(-6f, 6f, w + 12f, w + 12f), StationStyle.Limb.WithAlpha(0.18f));
@@ -146,7 +146,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             AvKit.Panel(ghost, local, StationStyle.Limb.WithAlpha(0.14f));
             AvKit.Outline(ghost, local, StationStyle.Limb);
             ghostGlyph = AvKit.Panel(ghost, new Rect(cell * 0.5f - 18f, -cell * 0.5f + 26f, 36f, 36f), StationStyle.Limb);
-            ghostText = StationStyle.Text(ghost, "", new Rect(-20f, -cell - 2f, cell + 40f, 16f), 10f, StationStyle.Limb,
+            ghostText = StationStyle.Text(ghost, "", new Rect(-20f, -cell - 2f, cell + 40f, 16f), 12f, StationStyle.Limb,
                 4f, TextAlignmentOptions.Center);
             go.SetActive(false);
         }
@@ -217,8 +217,10 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
 
         // ---- Paint ------------------------------------------------------------------------------
 
-        /// <summary>Repaint from the station. <paramref name="preview"/> ghosts a module on <paramref name="previewCell"/>.</summary>
-        public void Paint(OrbitalPlatform platform, double now, int selected, ModuleKind preview, int previewCell, string previewText)
+        /// <summary>Repaint from the station. <paramref name="preview"/> ghosts a module on <paramref name="previewCell"/>;
+        /// <paramref name="previewBlocked"/> tints the ghost when that placement is refused.</summary>
+        public void Paint(OrbitalPlatform platform, double now, int selected, ModuleKind preview, int previewCell, string previewText,
+            PlacementFailure previewBlocked)
         {
             bool station = platform != null && platform.Exists;
             if (pad.gameObject.activeSelf == station) pad.gameObject.SetActive(!station);
@@ -282,6 +284,9 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 Rect r = CellRect(previewCell);
                 AvKit.Place(ghost, r);
                 ghostGlyph.sprite = OpsSprites.Glyph((int)preview);
+                Color tint = previewBlocked == PlacementFailure.None ? StationStyle.Limb : AvTheme.RailDanger;
+                ghostGlyph.color = tint;
+                ghostText.color = tint;
                 if (ghostText.text != previewText) ghostText.text = previewText ?? "";
             }
             ApplyDraw();

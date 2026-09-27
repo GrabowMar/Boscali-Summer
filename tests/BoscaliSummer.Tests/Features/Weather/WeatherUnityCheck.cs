@@ -3,7 +3,9 @@ using System;
 using System.Collections;
 using System.IO;
 using System.Reflection;
+using BoscaliSummer.Features.Weather.Audio;
 using BoscaliSummer.Features.Weather.Visuals;
+using BoscaliSummer.Framework.Fx;
 using UnityEngine;
 #if UNITY_EDITOR
 using UnityEditor;
@@ -58,39 +60,8 @@ public sealed class WeatherUnityCheck : MonoBehaviour
 
     private static void Run()
     {
-        var clip = (AudioClip)typeof(BoscaliSummer.Features.Weather.Audio.ProceduralRainAudio)
-            .GetMethod("SynthesizeCanopyPatterClip", BindingFlags.NonPublic | BindingFlags.Static)
-            .Invoke(null, new object[] { "RainPreview", 24f, 44100 });
-        var samples = new float[clip.samples * clip.channels];
-        clip.GetData(samples, 0);
-        float peak = 0f;
-        foreach (float sample in samples)
-        {
-            if (float.IsNaN(sample) || float.IsInfinity(sample)) throw new Exception("Invalid rain audio sample");
-            peak = Mathf.Max(peak, Mathf.Abs(sample));
-        }
-        Check(peak > 0.01f && peak < 0.8f, "Rain taps must have headroom without clipping");
-        double energy = 0, sharpness = 0, stereo = 0;
-        for (int i = 2; i < samples.Length; i += 2)
-        {
-            energy += samples[i] * samples[i];
-            sharpness += Math.Pow(samples[i] - samples[i - 2], 2);
-            stereo += Math.Pow(samples[i] - samples[i + 1], 2);
-        }
-        Check(energy > 0.001 && sharpness / energy < 0.15, "Patter must remain softly filtered, not sharp clicks");
-        Check(stereo / energy > 0.02 && stereo / energy < 1, "Patter needs gentle stereo separation");
-        Check(Math.Abs(samples[0] - samples[samples.Length - 2]) < 0.01f &&
-            Math.Abs(samples[1] - samples[samples.Length - 1]) < 0.01f, "Stereo loop seam must not pop");
-        using (var wav = new BinaryWriter(File.Create("rain-patter-preview.wav")))
-        {
-            wav.Write(System.Text.Encoding.ASCII.GetBytes("RIFF")); wav.Write(36 + samples.Length * 2);
-            wav.Write(System.Text.Encoding.ASCII.GetBytes("WAVEfmt ")); wav.Write(16);
-            wav.Write((short)1); wav.Write((short)2); wav.Write(44100); wav.Write(44100*4);
-            wav.Write((short)4); wav.Write((short)16);
-            wav.Write(System.Text.Encoding.ASCII.GetBytes("data")); wav.Write(samples.Length * 2);
-            foreach (float sample in samples) wav.Write((short)(sample * 32767));
-        }
-        UnityEngine.Object.Destroy(clip);
+        CheckCloudDressing();
+        CheckRainSoundscape();
         Shader shader = Resources.Load<Shader>("CanopyRain");
         Check(shader != null && shader.isSupported, "Rain shader unsupported in player");
         var opaque = new Material(Resources.Load<Shader>("Fixture")) { name = "Paint", renderQueue = 2000 };
@@ -221,6 +192,8 @@ public sealed class WeatherUnityCheck : MonoBehaviour
         Check(dressing.Draw(simSurfaces, camera, 1f, 1f), "Fresh sim draws");
         Color32[] simFresh = Capture(camera, texture, "sim-fresh.png");
         PrimeSim(dressing, updateShader, simSurfaces, 85, 1f, 0f, Vector3.down);
+        Check(FxRtPool.UsedBytes > 0 && FxRtPool.UsedBytes <= 4L * 1024 * 1024,
+            "Canopy state stays within its 4 MiB render-target budget: " + FxRtPool.UsedBytes);
         Check(dressing.Draw(simSurfaces, camera, 1f, 1f), "Developed sim draws");
         Color32[] simWet = Capture(camera, texture, "sim-wet.png");
         int freshCount = DiffCount(simBg, simFresh, 6);
@@ -270,6 +243,7 @@ public sealed class WeatherUnityCheck : MonoBehaviour
         camera.targetTexture = texture;
 
         Check(!dressing.Draw(simSurfaces, camera, 0f, 1f), "Dry glass draws nothing and frees the sim");
+        Check(FxRtPool.UsedBytes == 0, "Dry canopy releases every render target");
         Color32[] simDried = Capture(camera, texture, "sim-dried.png");
         Check(Array.TrueForAll(simDried, pixel => pixel.Equals(simDried[0])), "Dry glass must leave no residual filter");
         UnityEngine.Object.Destroy(rigRoot);
@@ -310,6 +284,71 @@ public sealed class WeatherUnityCheck : MonoBehaviour
         var ps = streaks.GetComponent<ParticleSystem>();
         Check(ps.main.simulationSpace == ParticleSystemSimulationSpace.Custom && ps.main.maxParticles == 1000,
             "Relative rain needs translating simulation frame and fixed budget");
+    }
+
+    private static void CheckRainSoundscape()
+    {
+        float[] rush = RainSoundscape.BakeRush(2, out int rushFrames);
+        float[] patter = RainSoundscape.BakePatter(2, out int patterFrames);
+        Check(rushFrames > 40000 && patterFrames > 40000,
+            "Rain clips have a bounded seamless-loop length");
+        float rushPeak = 0f, patterPeak = 0f;
+        for (int i = 0; i < rushFrames * 2; i++) rushPeak = Mathf.Max(rushPeak, Mathf.Abs(rush[i]));
+        for (int i = 0; i < patterFrames * 2; i++) patterPeak = Mathf.Max(patterPeak, Mathf.Abs(patter[i]));
+        Check(rushPeak > 0.02f && rushPeak < 0.8f && patterPeak > 0.01f && patterPeak < 0.8f,
+            "Rain rush and canopy taps are audible without clipping");
+    }
+
+    private static void CheckCloudDressing()
+    {
+        var weather = new GameObject("WeatherFixture").AddComponent<LevelInfo>();
+        var layer = new GameObject("NativeClouds").AddComponent<CloudLayer>();
+        var particles = layer.gameObject.AddComponent<ParticleSystem>();
+        var flyThrough = new GameObject("FlyThrough").AddComponent<ParticleSystem>();
+        flyThrough.transform.SetParent(layer.transform, false);
+        layer.SetCloudSystem(particles);
+        layer.SetFlyThroughSystem(flyThrough);
+        weather.SetCloudLayer(layer);
+        var dressing = new CloudDressing();
+        flyThrough.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        Check(!dressing.InCloud(weather), "Dry native cloud fly-through is ignored");
+        flyThrough.Play();
+        Check(dressing.InCloud(weather), "Native fly-through starts canopy cloud moisture");
+        flyThrough.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        dressing.Apply(weather);
+        Check(dressing.Applied && Mathf.Approximately(layer.SizeMin, 540f) &&
+            Mathf.Approximately(layer.SizeMax, 900f),
+            "Cloud particles become larger");
+        Check(Mathf.Approximately(layer.MapScale, 412.5f) &&
+            Mathf.Approximately(layer.Thickness, 202.5f), "Cloud pattern and deck grow");
+        Check(layer.ParticleLimit == 60 && particles.main.maxParticles == 60,
+            "Larger clouds use fewer particles");
+        dressing.Apply(weather);
+        Check(Mathf.Approximately(layer.SizeMin, 540f), "Repeated apply does not compound size");
+        dressing.Apply(weather, 1f, 1f);
+        Check(layer.SizeMin > 540f && layer.SizeMax > 900f && layer.Thickness > 202.5f,
+            "Fronts and cell cores deepen native cloud shapes");
+        dressing.Restore();
+        Check(!dressing.Applied && layer.SizeMin == 300f && layer.SizeMax == 500f &&
+            layer.MapScale == 250f && layer.Thickness == 150f &&
+            layer.ParticleLimit == 100 && particles.main.maxParticles == 100,
+            "Cloud settings restore on disable");
+        dressing.Apply(weather);
+        var foreignLimit = particles.main;
+        foreignLimit.maxParticles = 7;
+        dressing.Restore();
+        Check(layer.ParticleLimit == 100 && particles.main.maxParticles == 7,
+            "Restore leaves a later particle-system override alone");
+        var renderer = particles.GetComponent<ParticleSystemRenderer>();
+        dressing.SetNativeHidden(weather, true);
+        Check(dressing.NativeHidden && !renderer.enabled,
+            "Volume clouds hide only the native particle renderer");
+        dressing.SetNativeHidden(weather, true);
+        dressing.SetNativeHidden(null, false);
+        Check(!dressing.NativeHidden && renderer.enabled,
+            "Native cloud renderer restores on disable");
+        UnityEngine.Object.Destroy(weather.gameObject);
+        UnityEngine.Object.Destroy(layer.gameObject);
     }
 
     // Steps the dressing sim with an injected update material (the fixture player

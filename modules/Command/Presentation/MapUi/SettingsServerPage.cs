@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Features;
-using BoscaliSummer.Runtime;
 using NOAvionics;
 using NOAvionics.Ui;
 using TMPro;
@@ -12,29 +11,97 @@ using UnityEngine.UI;
 
 namespace BoscaliSummer.Features.Command.Presentation.MapUi
 {
-    /// <summary>
-    /// The SET SERVER page: the host's side of the mod, moved here from the deleted ADM
-    /// bezel. One scrolling page — the faction tasking board plus every host-authoritative
-    /// setting published by an installed feature. A remote client sees the same page
-    /// read-only, because the values that steer the mission should at least be legible to
-    /// the people flying it.
-    /// </summary>
+    /// <summary>Faction tasking and live host controls, read-only for remote clients.</summary>
     internal sealed partial class SettingsMfdPanel
     {
+        private const int ServerPageCount = 2;
         private const int TaskRowCount = 3;
-        /// <summary>The tasking board is host state, not a video: ask again at most this often.</summary>
         private const float TaskingRefreshSeconds = 2f;
-
         private ISecondaryObjectivesView tasking;
         private AvButton taskRequest;
         private TMP_Text taskNote;
         private readonly ListRow[] taskRows = new ListRow[TaskRowCount];
+        private readonly bool[] serverScrolls = new bool[ServerPageCount];
+        private GameObject[] serverPages;
+        private AvButton[] serverTabs;
+        private int serverPage;
         private float nextTaskingRefresh;
 
         private void BuildServerPage(RectTransform parent, Rect body)
         {
+            serverRefresherStart = refreshers.Count;
+            const float barHeight = 26f;
+            const float gap = 6f;
+            AvNode bar = AvBox.Row("server-tabs").Height(barHeight)
+                .Add(AvBox.Cell("tasking").Grow())
+                .Add(AvBox.Cell("settings").Grow());
+            bar.Arrange(new Rect(body.x, body.y, body.width, barHeight));
+            serverTabs = new[]
+            {
+                AvStyled.Button(parent, bar.At("tasking"), "TASKING", "tab",
+                    () => SetServerPage(0), AvButtonStyle.Tab),
+                AvStyled.Button(parent, bar.At("settings"), "HOST SETTINGS", "tab",
+                    () => SetServerPage(1), AvButtonStyle.Tab)
+            };
+            serverPages = new GameObject[ServerPageCount];
+            for (int i = 0; i < ServerPageCount; i++)
+            {
+                var page = new GameObject("ServerPage" + i, typeof(RectTransform));
+                var rect = (RectTransform)page.transform;
+                rect.SetParent(parent, false);
+                AvKit.Stretch(rect);
+                serverPages[i] = page;
+            }
+            var content = new Rect(body.x, body.y - barHeight - gap,
+                body.width, body.height - barHeight - gap);
+            BuildTaskingPage((RectTransform)serverPages[0].transform, content);
+            BuildHostSettingsPage((RectTransform)serverPages[1].transform, content);
+            SetServerPage(0);
+        }
+
+        private void SetServerPage(int page)
+        {
+            serverPage = Mathf.Clamp(page, 0, ServerPageCount - 1);
+            for (int i = 0; i < ServerPageCount; i++)
+            {
+                serverPages?[i]?.SetActive(i == serverPage);
+                serverTabs?[i]?.SetLatched(i == serverPage);
+            }
+            pageScrolls[ServerDisplay] = serverScrolls[serverPage];
+            AvButton.ClearTooltip();
+            if (shell != null && shell.Page == TabServer)
+                shell.DataBar.State.text = serverPage == 0 ? "FACTION TASKING" : "HOST SETTINGS";
+            nextTick = 0f;
+            RefreshPanel();
+        }
+
+        private void BuildTaskingPage(RectTransform parent, Rect body)
+        {
+            const float taskingBlock = 32f + 36f + TaskRowCount * ListRow.Pitch + 10f;
+            parent = Page(ServerDisplay, parent, body, 0, 1, taskingBlock, out Rect area);
+            serverScrolls[0] = pageScrolls[ServerDisplay];
+            refreshers.Add(RefreshTasking);
+            float x = area.x;
+            float width = area.width;
+            Heading(parent, ref area, "01", "FACTION TASKING", "SECONDARY OBJECTIVES");
+            taskRequest = AvStyled.Button(parent, new Rect(x, area.y - 2f, 144f, 28f),
+                "REFRESH BOARD", "btn", () =>
+                {
+                    tasking?.Refresh();
+                    nextTaskingRefresh = Time.unscaledTime + TaskingRefreshSeconds;
+                    nextTick = 0f;
+                });
+            area.y -= 32f;
+            taskNote = AvStyled.Label(parent, new Rect(x, area.y, width, 30f), "", "row-sub");
+            area.y -= 36f;
+            for (int i = 0; i < taskRows.Length; i++)
+                taskRows[i] = new ListRow(parent, x, area.y - i * ListRow.Pitch, width);
+        }
+
+        private void BuildHostSettingsPage(RectTransform parent, Rect body)
+        {
             int settingRows = 0;
-            int sections = 1; // the tasking heading; every view below adds one
+            int sections = 0;
             if (hostSettings != null)
             {
                 for (int i = 0; i < hostSettings.Views.Count; i++)
@@ -44,49 +111,23 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 }
             }
 
-            // The tasking board is fixed-height furniture: the request button, the status
-            // line and the three card rows do not stretch, so Page() spreads the bay's
-            // slack over the host setting rows instead. The tasking heading is one of the
-            // page's sections, so its height is not part of this block.
-            const float taskingBlock = 32f + 36f + TaskRowCount * ListRow.Pitch + 10f;
-            parent = Page(ServerDisplay, parent, body, settingRows, sections,
-                taskingBlock, out Rect area);
-
-            // Providers re-read their config before the row widgets paint: values, bounds and
-            // availability all come from the owning module, never from a copy kept here.
+            parent = Page(ServerDisplay, parent, body, settingRows, Math.Max(1, sections), out Rect area);
+            serverScrolls[1] = pageScrolls[ServerDisplay];
             if (hostSettings != null)
-            {
                 refreshers.Add(() =>
                 {
+                    if (serverPage != 1) return;
                     for (int i = 0; i < hostSettings.Views.Count; i++) hostSettings.Views[i].Refresh();
                 });
+
+            if (hostSettings == null || hostSettings.Views.Count == 0)
+            {
+                Heading(parent, ref area, "01", "HOST SETTINGS", "NO MODULE CONTROLS");
+                AvStyled.Label(parent, TakeRow(ref area), "No host settings are available.", "row-sub");
+                return;
             }
-            refreshers.Add(RefreshTasking);
 
-            float x = area.x;
-            float width = area.width;
-
-            Heading(parent, ref area, "01", "FACTION TASKING", "SECONDARY OBJECTIVES");
-
-            taskRequest = AvStyled.Button(parent, new Rect(x, area.y - 2f, 144f, 28f), "REFRESH BOARD", "btn",
-                () =>
-                {
-                    tasking?.Refresh();
-                    nextTaskingRefresh = Time.unscaledTime + TaskingRefreshSeconds;
-                    nextTick = 0f;
-                });
-            area.y -= 32f;
-
-            taskNote = AvStyled.Label(parent, new Rect(x, area.y, width, 30f), "", "row-sub");
-            area.y -= 36f;
-
-            for (int i = 0; i < taskRows.Length; i++)
-                taskRows[i] = new ListRow(parent, x, area.y - i * ListRow.Pitch, width);
-            area.y -= TaskRowCount * ListRow.Pitch + 10f;
-
-            if (hostSettings == null) return;
-
-            int section = 2;
+            int section = 1;
             for (int v = 0; v < hostSettings.Views.Count; v++)
             {
                 IHostSettingsView view = hostSettings.Views[v];
@@ -97,20 +138,15 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     HostSettingView row = view.Rows[r];
                     Rect rect = TakeRow(ref area);
                     if (row.Kind == HostSettingKind.Toggle)
-                    {
                         Toggle(parent, rect, row.Label, row.Help,
                             () => row.Value, _ => view.Toggle(row.Id),
                             () => RowInteractive(row), () => RowReason(row));
-                    }
                     else
-                    {
                         Stepper(parent, rect, row.Label, () => row.ValueText,
                             d => view.Step(row.Id, d),
                             () => RowInteractive(row) && row.CanDecrease,
                             () => RowInteractive(row) && row.CanIncrease,
-                            row.Help,
-                            () => RowInteractive(row), () => RowReason(row), readOnlyValue: true);
-                    }
+                            row.Help, () => RowInteractive(row), () => RowReason(row), readOnlyValue: true);
                 }
                 section++;
             }
@@ -122,9 +158,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             !HostAuthority()
                 ? "Host only. This is the host's value; only the host can change how the mission plays."
                 : row.Reason ?? row.Help;
-
         private void RefreshTasking()
         {
+            if (shell == null || shell.Page != TabServer || serverPage != 0) return;
             if (tasking == null) ModServices.TryGet(out tasking);
             // The board only paints from the last snapshot, so the SERVER page has to keep
             // asking even when no HUD or map layer is pulling snapshots on its own.

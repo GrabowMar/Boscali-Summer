@@ -75,8 +75,7 @@ namespace BoscaliSummer
                 settings.QoL.Enabled,
                 settings.Campaign.Enabled,
                 settings.Weather.Enabled,
-                settings.Visuals.Enabled,
-                settings.Immersion.Enabled
+                settings.Performance.Enabled,
             };
             string[] names =
             {
@@ -98,8 +97,7 @@ namespace BoscaliSummer
                 "Quality of life",
                 "Campaign mission install",
                 "Dynamic weather and ENV screen",
-                "Visual enhancements and post-processing",
-                "Cockpit feel: head motion, shake, sun glare"
+                "Adaptive cosmetic performance"
             };
 
             var hints = new Dictionary<ConfigEntryBase, ConfigurationManagerAttributes>(ordered.Length);

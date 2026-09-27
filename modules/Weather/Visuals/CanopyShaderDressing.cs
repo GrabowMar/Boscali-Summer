@@ -1,5 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
+using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Framework.Fx;
 using UnityEngine.Rendering;
 
 namespace BoscaliSummer.Features.Weather.Visuals
@@ -9,7 +11,7 @@ namespace BoscaliSummer.Features.Weather.Visuals
     // pane with its projected flow (called in any view so rain stays live), Draw shows
     // the state through the cockpit camera. Dry glass releases the sim: fresh rain
     // starts from a clean sheet instead of resurrecting stale puddles.
-    internal sealed class CanopyShaderDressing
+    internal sealed class CanopyShaderDressing : IClientEffect
     {
         private static readonly int IntensityId = Shader.PropertyToID("_Intensity");
         private static readonly int DropTexId = Shader.PropertyToID("_DropTex");
@@ -22,7 +24,7 @@ namespace BoscaliSummer.Features.Weather.Visuals
         private static readonly int RefractId = Shader.PropertyToID("_Refract");
 
         private const float PatternDensity = 1.5f; // tiles/m, mirrors the shader
-        private const float GravityTiles = 0.25f; // parked creep, tiles/s straight down
+        private const float GravityTiles = 0.08f; // parked beads creep; airflow drives fast runoff
 
         private readonly MaterialPropertyBlock properties = new MaterialPropertyBlock();
         private readonly CanopyDropletSim sim = new CanopyDropletSim();
@@ -33,6 +35,22 @@ namespace BoscaliSummer.Features.Weather.Visuals
         private Color sunColor = Color.black;
         private Color fogColor = new Color(0.55f, 0.6f, 0.68f, 1f);
         private bool refract;
+
+        public string EffectId => "canopy";
+
+        public FxBudget Budget => new FxBudget(4 * 1024 * 1024, CanopyDropletSim.MaxPanes * 2, 0, true);
+
+        public void ReleaseFx()
+        {
+            Detach();
+            sim.Release();
+        }
+
+        public void DescribeFx(IDictionary<string, object> state)
+        {
+            state["fx.canopy.panes"] = sim.PaneCount;
+            state["fx.canopy.materials"] = (material != null ? 1 : 0) + (updateMaterial != null ? 1 : 0);
+        }
 
         /// <summary>
         /// World-space lighting for the glass: sun direction (toward the sun, zero when it
@@ -50,7 +68,7 @@ namespace BoscaliSummer.Features.Weather.Visuals
         internal void UpdateSim(IReadOnlyList<CanopySurface> surfaces, float rain,
             float speedNorm, Vector3 slipWorld, float dt)
         {
-            if (surfaces == null || surfaces.Count == 0 || rain <= 0.001f) return;
+            if (surfaces == null || surfaces.Count == 0 || (rain <= 0.001f && sim.PaneCount == 0)) return;
             if (updateMaterial == null)
             {
                 Shader updateShader = CanopyShaderBundle.GetUpdateShader();
@@ -68,8 +86,11 @@ namespace BoscaliSummer.Features.Weather.Visuals
                 Vector3 flowObj = gravityObj + slipObj;
                 flowsTiles[i] = ProjectFlow(flowObj, MapAxis(surface.Mesh));
             }
-            sim.Update(updateMaterial, surfaces, flowsTiles,
+            using (FxBus.Time("canopy"))
+            {
+                sim.Update(updateMaterial, surfaces, flowsTiles,
                 rain, speedNorm, dt);
+            }
         }
 
         internal bool Draw(IReadOnlyList<CanopySurface> surfaces, Camera camera, float wetness,
@@ -137,5 +158,7 @@ namespace BoscaliSummer.Features.Weather.Visuals
             if (updateMaterial != null) Object.Destroy(updateMaterial);
             updateMaterial = null;
         }
+
+        internal void ClearWater() => sim.Release();
     }
 }

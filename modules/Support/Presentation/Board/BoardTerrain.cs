@@ -39,6 +39,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Board
             AvKit.Place(image.rectTransform, new Rect(a.x, a.y, b.x - a.x, a.y - b.y));
         }
 
+        internal void SetTint(Color tint) => image.color = tint;
+
         // Also used by the offline harness with a local image from the installed game.
         internal void SetSource(Sprite sprite, Vector2 metres)
         {

@@ -22,6 +22,8 @@ namespace BoscaliSummer.Runtime
         private static AccessTools.FieldRef<FactionHQ, List<Radar>> hqRadarsRef;
         private static AccessTools.FieldRef<AIPilotCombatModes, Unit> aiCurrentTargetRef;
         private static AccessTools.FieldRef<Aircraft, Renderer[]> cockpitRenderersRef;
+        private static AccessTools.FieldRef<NightVision, bool> nvSelectedRef;
+        private static AccessTools.FieldRef<NightVision, bool> nvActiveRef;
 
         public static bool MapBuildingHitPointsAvailable { get; private set; }
         public static bool MapBuildingSetBuildingsAvailable { get; private set; }
@@ -30,6 +32,7 @@ namespace BoscaliSummer.Runtime
         public static bool HqSensorsAvailable { get; private set; }
         public static bool AiPilotCombatAvailable { get; private set; }
         public static bool CockpitRenderersAvailable { get; private set; }
+        public static bool NightVisionAvailable { get; private set; }
 
         public static void Initialise()
         {
@@ -117,6 +120,18 @@ namespace BoscaliSummer.Runtime
                 CockpitRenderersAvailable = false;
                 Plugin.Logger?.LogWarning("Cockpit renderer access unavailable: " + e.Message);
             }
+
+            try
+            {
+                nvSelectedRef = FieldRef<NightVision, bool>("nightVisSelected");
+                nvActiveRef = FieldRef<NightVision, bool>("nightVisActive");
+                NightVisionAvailable = true;
+            }
+            catch (Exception e)
+            {
+                NightVisionAvailable = false;
+                Plugin.Logger?.LogWarning("Night vision state access unavailable: " + e.Message);
+            }
         }
 
         public static float GetMapBuildingHitPoints(MapBuilding building)
@@ -166,6 +181,39 @@ namespace BoscaliSummer.Runtime
         /// </summary>
         public static Renderer[] GetCockpitRenderers(Aircraft aircraft) =>
             cockpitRenderersRef == null || aircraft == null ? null : cockpitRenderersRef(aircraft);
+
+        /// <summary>
+        /// Vanilla night-vision state without patching anything: selected is user intent,
+        /// active is the faded-in state. Either means goggles are on (covers transitions).
+        /// False when the seam is unavailable — callers fail closed to vanilla NV.
+        /// </summary>
+        public static bool TryGetNightVisionState(out bool selected, out bool active)
+        {
+            selected = active = false;
+            NightVision nv = NightVision.i;
+            if (nv == null || nvSelectedRef == null || nvActiveRef == null) return false;
+            selected = nvSelectedRef(nv);
+            active = nvActiveRef(nv);
+            return true;
+        }
+
+        public static bool NightVisionOn()
+        {
+            if (!TryGetNightVisionState(out bool selected, out bool active)) return false;
+            return selected || active;
+        }
+
+        /// <summary>
+        /// Automation only: select vanilla night vision directly, bypassing the cursor-gated
+        /// <c>NightVision.Toggle</c> (unattended runs hold UI open). The game's own Update still
+        /// owns the fade and volume swap; production code never calls this.
+        /// </summary>
+        internal static void DebugSelectNightVision(bool selected)
+        {
+            NightVision nv = NightVision.i;
+            if (nv == null || nvSelectedRef == null) return;
+            nvSelectedRef(nv) = selected;
+        }
 
         public static bool IsServer()
         {

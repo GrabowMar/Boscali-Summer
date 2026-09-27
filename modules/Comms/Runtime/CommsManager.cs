@@ -44,7 +44,7 @@ namespace BoscaliSummer.Features.Comms.Runtime
     /// The two quick paths — hold-to-draw and the quick-ping key — are momentary and stand
     /// down whenever another owner holds the map.</para>
     /// </summary>
-    internal sealed class CommsManager : MonoBehaviour, ISceneService
+    internal sealed class CommsManager : MonoBehaviour, ISceneService, IMapBoxInput
     {
         public const string PickerOwner = "boscali.comms";
         private const string HudChannel = "comms";
@@ -65,6 +65,11 @@ namespace BoscaliSummer.Features.Comms.Runtime
         private CommsSettings settings;
         private CommsNet net;
         private ManualLogSource logger;
+
+        bool IMapBoxInput.BlocksBoxSelection => CommsInput.Typing() ||
+            CommsInput.DrawToolArmed || CommsInput.GestureActive ||
+            (settings != null && settings.DrawHoldKey.Value != KeyCode.None &&
+             Input.GetKey(settings.DrawHoldKey.Value));
 
         private readonly CommsAuthority authority = new CommsAuthority(Environment.TickCount);
         private readonly CommsClientState client = new CommsClientState();

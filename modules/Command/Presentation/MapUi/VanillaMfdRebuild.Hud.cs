@@ -276,66 +276,81 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 modeReadoutValues[1].text = activeGates + " OF " + options.listCategories.Count + " GATES";
                 modeReadoutValues[2].text = activeVeh + " VEH · " + activeBld + " BLD";
 
-                modes.SetData(options.listModes.Count,
-                    i => i < 6 ? ((HUDOptions.HUDMode)i).ToString() : LabelFor(options.listModes[i], "MODE"),
-                    i => options.listModes[i] != null && options.listModes[i].status,
-                    SelectMode,
-                    subs: i => i < ModeNotes.Length ? ModeNotes[i] : null);
+                if (selectedPage == 0)
+                {
+                    modes.SetData(options.listModes.Count,
+                        i => i < 6 ? ((HUDOptions.HUDMode)i).ToString() : LabelFor(options.listModes[i], "MODE"),
+                        i => options.listModes[i] != null && options.listModes[i].status,
+                        SelectMode,
+                        subs: i => i < ModeNotes.Length ? ModeNotes[i] : null);
 
-                categories.SetData(options.listCategories.Count,
-                    i => NativeCategoryLabel(options.listCategories[i], i),
-                    i => options.listCategories[i] != null && options.listCategories[i].maximized,
-                    ToggleCategory,
-                    subs: i => i < CategoryNotes.Length ? CategoryNotes[i] : null);
+                    categories.SetData(options.listCategories.Count,
+                        i => NativeCategoryLabel(options.listCategories[i], i),
+                        i => options.listCategories[i] != null && options.listCategories[i].maximized,
+                        ToggleCategory,
+                        subs: i => i < CategoryNotes.Length ? CategoryNotes[i] : null);
+                }
 
-                vehicles.SetData(options.listVehicleTypes.Count,
-                    i => LabelFor(options.listVehicleTypes[i], "VEHICLE"),
-                    i => options.listVehicleTypes[i] != null && options.listVehicleTypes[i].status,
-                    ToggleVehicle,
-                    icons: i => DefinitionIcon(options.listVehicleTypes[i]),
-                    subs: i => i < VehicleNotes.Length ? VehicleNotes[i] : null);
+                if (selectedPage == 1)
+                {
+                    vehicles.SetData(options.listVehicleTypes.Count,
+                        i => LabelFor(options.listVehicleTypes[i], "VEHICLE"),
+                        i => options.listVehicleTypes[i] != null && options.listVehicleTypes[i].status,
+                        ToggleVehicle,
+                        icons: i => DefinitionIcon(options.listVehicleTypes[i]),
+                        subs: i => i < VehicleNotes.Length ? VehicleNotes[i] : null);
+                }
 
-                buildings.SetData(options.listBuildingTypes.Count,
-                    i => LabelFor(options.listBuildingTypes[i], "BUILDING"),
-                    i => options.listBuildingTypes[i] != null && options.listBuildingTypes[i].status,
-                    ToggleBuilding,
-                    icons: i => DefinitionIcon(options.listBuildingTypes[i]),
-                    subs: i => i < BuildingNotes.Length ? BuildingNotes[i] : null);
+                if (selectedPage == 2)
+                {
+                    buildings.SetData(options.listBuildingTypes.Count,
+                        i => LabelFor(options.listBuildingTypes[i], "BUILDING"),
+                        i => options.listBuildingTypes[i] != null && options.listBuildingTypes[i].status,
+                        ToggleBuilding,
+                        icons: i => DefinitionIcon(options.listBuildingTypes[i]),
+                        subs: i => i < BuildingNotes.Length ? BuildingNotes[i] : null);
+                }
 
                 // Update vehicle presets & telemetry
-                int airDefCount = 0;
-                int[] airDefIndices = { 6, 7, 8, 9 };
-                foreach (int idx in airDefIndices)
-                    if (idx < options.listVehicleTypes.Count && options.listVehicleTypes[idx] != null && options.listVehicleTypes[idx].status)
-                        airDefCount++;
+                if (selectedPage == 1)
+                {
+                    int airDefCount = 0;
+                    int[] airDefIndices = { 6, 7, 8, 9 };
+                    foreach (int idx in airDefIndices)
+                        if (idx < options.listVehicleTypes.Count && options.listVehicleTypes[idx] != null && options.listVehicleTypes[idx].status)
+                            airDefCount++;
 
-                int armorCount = 0;
-                int[] armorIndices = { 2, 3, 4 };
-                foreach (int idx in armorIndices)
-                    if (idx < options.listVehicleTypes.Count && options.listVehicleTypes[idx] != null && options.listVehicleTypes[idx].status)
-                        armorCount++;
+                    int armorCount = 0;
+                    int[] armorIndices = { 2, 3, 4 };
+                    foreach (int idx in armorIndices)
+                        if (idx < options.listVehicleTypes.Count && options.listVehicleTypes[idx] != null && options.listVehicleTypes[idx].status)
+                            armorCount++;
 
-                vehAll.SetEnabled(activeVeh < options.listVehicleTypes.Count);
-                vehClear.SetEnabled(activeVeh > 0);
-                vehReadoutValues[0].text = airDefCount + " OF 4 ACTIVE" + (airDefCount == 4 ? " (FULL)" : "");
-                vehReadoutValues[0].color = airDefCount > 0 ? AvTheme.Accent : AvTheme.Dim;
-                vehReadoutValues[1].text = armorCount + " OF 3 ACTIVE";
-                vehReadoutValues[1].color = armorCount > 0 ? AvTheme.Accent : AvTheme.Dim;
+                    vehAll.SetEnabled(activeVeh < options.listVehicleTypes.Count);
+                    vehClear.SetEnabled(activeVeh > 0);
+                    vehReadoutValues[0].text = airDefCount + " OF 4 ACTIVE" + (airDefCount == 4 ? " (FULL)" : "");
+                    vehReadoutValues[0].color = airDefCount > 0 ? AvTheme.Accent : AvTheme.Dim;
+                    vehReadoutValues[1].text = armorCount + " OF 3 ACTIVE";
+                    vehReadoutValues[1].color = armorCount > 0 ? AvTheme.Accent : AvTheme.Dim;
+                }
 
                 // Update building presets & telemetry
-                int strikeCount = 0;
-                int[] strikeIndices = { 2, 3, 4, 6 };
-                foreach (int idx in strikeIndices)
-                    if (idx < options.listBuildingTypes.Count && options.listBuildingTypes[idx] != null && options.listBuildingTypes[idx].status)
-                        strikeCount++;
+                if (selectedPage == 2)
+                {
+                    int strikeCount = 0;
+                    int[] strikeIndices = { 2, 3, 4, 6 };
+                    foreach (int idx in strikeIndices)
+                        if (idx < options.listBuildingTypes.Count && options.listBuildingTypes[idx] != null && options.listBuildingTypes[idx].status)
+                            strikeCount++;
 
-                bool civActive = options.listBuildingTypes.Count > 0 && options.listBuildingTypes[0] != null && options.listBuildingTypes[0].status;
-                bldAll.SetEnabled(activeBld < options.listBuildingTypes.Count);
-                bldClear.SetEnabled(activeBld > 0);
-                bldReadoutValues[0].text = strikeCount + " OF 4 ACTIVE";
-                bldReadoutValues[0].color = strikeCount > 0 ? AvTheme.Accent : AvTheme.Dim;
-                bldReadoutValues[1].text = civActive ? "ACTIVE (COLLATERAL RISK)" : "OFF (PROTECTED)";
-                bldReadoutValues[1].color = civActive ? AvTheme.Warning : AvTheme.Dim;
+                    bool civActive = options.listBuildingTypes.Count > 0 && options.listBuildingTypes[0] != null && options.listBuildingTypes[0].status;
+                    bldAll.SetEnabled(activeBld < options.listBuildingTypes.Count);
+                    bldClear.SetEnabled(activeBld > 0);
+                    bldReadoutValues[0].text = strikeCount + " OF 4 ACTIVE";
+                    bldReadoutValues[0].color = strikeCount > 0 ? AvTheme.Accent : AvTheme.Dim;
+                    bldReadoutValues[1].text = civActive ? "ACTIVE (COLLATERAL RISK)" : "OFF (PROTECTED)";
+                    bldReadoutValues[1].color = civActive ? AvTheme.Warning : AvTheme.Dim;
+                }
             }
 
             protected override string AmbientStatus() =>

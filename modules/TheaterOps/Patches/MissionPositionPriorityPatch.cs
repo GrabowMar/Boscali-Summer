@@ -66,19 +66,23 @@ namespace BoscaliSummer.Features.TheaterOps.Patches
         [HarmonyPostfix]
         private static void Postfix(Unit unit, ref GlobalPosition destination, ref bool __result)
         {
-            // Only vehicles enrolled in a battle group follow the effort. Unenrolled units and
-            // every aircraft keep vanilla's own answer: no more faction-wide pull to one point.
+            // Each enrolled group follows its own sector assignment. Unenrolled units and
+            // every aircraft keep vanilla's own answer.
             if (!(unit is GroundVehicle vehicle)) return;
             if (GroundFrontService.Active?.HasRtsCommander() == true) return;
             GroundFrontService front = GroundFrontService.Active;
-            if (front == null || !front.IsEnrolled(vehicle) ||
-                !MissionPositionPriorityQuery.TryGetDirective(TheaterPriorityService.Active, unit.NetworkHQ,
-                    out PriorityDirective directive))
+            if (front == null || !front.IsEnrolled(vehicle)) return;
+            if (front.TryGetDestination(vehicle, out GlobalPosition frontDestination))
+            {
+                destination = frontDestination;
+                __result = true;
                 return;
-
-            destination = front.TryGetDestination(vehicle, directive, out GlobalPosition frontDestination)
-                ? frontDestination
-                : new GlobalPosition(directive.X, directive.Y, directive.Z);
+            }
+            // A living-front assignment with no safe ground destination yields to vanilla.
+            if (LivingFrontService.Active?.Authoritative == true) return;
+            if (!MissionPositionPriorityQuery.TryGetDirective(TheaterPriorityService.Active,
+                unit.NetworkHQ, out PriorityDirective directive)) return;
+            destination = new GlobalPosition(directive.X, directive.Y, directive.Z);
             __result = true;
         }
 

@@ -37,9 +37,12 @@ namespace BoscaliSummer.Features.Command.Presentation
         private float nextRefresh;
         private bool keyboardTouched, keyboardWas, pauseWas;
         private static int closedFrame = -10;
+        private static MissionContractWindow openWindow;
 
         internal static bool IsOpen { get; private set; }
         internal static bool BlocksMap => IsOpen || Time.frameCount <= closedFrame + 1;
+
+        internal static void CloseOpen() => openWindow?.Close();
 
         internal static MissionContractWindow Create()
         {
@@ -61,6 +64,8 @@ namespace BoscaliSummer.Features.Command.Presentation
 
         internal void Show()
         {
+            if (openWindow != null && openWindow != this) openWindow.Close();
+            openWindow = this;
             FitRoom();
             canvas.enabled = true;
             surface.SetActive(true);
@@ -83,8 +88,13 @@ namespace BoscaliSummer.Features.Command.Presentation
 
         internal void Close()
         {
-            if (!IsOpen) return;
+            if (!IsOpen)
+            {
+                if (openWindow == this) openWindow = null;
+                return;
+            }
             IsOpen = false;
+            if (openWindow == this) openWindow = null;
             closedFrame = Time.frameCount;
             canvas.enabled = false;
             surface.SetActive(false);

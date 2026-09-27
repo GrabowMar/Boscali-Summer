@@ -29,6 +29,7 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
         public byte Threat;
         public byte Radars;
         public bool Hostile;
+        public bool Friendly;
         public string Name;
     }
 
@@ -69,7 +70,7 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
 
     /// <summary>
     /// One faction's special-operations detachment: four team slots, the objectives the host has
-    /// listed, scouting memory, two ability recharges and a notice ring. Missions resolve in the
+    /// listed, scouting memory, five ability recharges and a notice ring. Missions resolve in the
     /// abstract — travel, task, one roll — and the runtime applies what a success does to the
     /// world. The host is the only writer; a client mirrors snapshot bytes and never ticks.
     /// Every value is bounded: four teams, twelve objectives, sixteen scouting marks, eight notices.
@@ -179,6 +180,27 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
 
         public bool Scouted(int anchor, double now) => ScoutRemaining(anchor, now) > 0.0;
 
+        /// <summary>A host-confirmed orbital scan gives the nearest hostile objective a brief
+        /// planning advantage. This does not reveal contacts or change the operation itself.</summary>
+        public bool ScoutNear(float x, float z, float radius, double now)
+        {
+            if (float.IsNaN(x) || float.IsInfinity(x) || float.IsNaN(z) || float.IsInfinity(z) ||
+                float.IsNaN(radius) || float.IsInfinity(radius) || radius <= 0f) return false;
+            int nearest = -1;
+            double best = (double)radius * radius;
+            for (int i = 0; i < objectiveCount; i++)
+            {
+                FieldObjective objective = objectives[i];
+                if (!objective.Hostile) continue;
+                double dx = objective.X - x, dz = objective.Z - z;
+                double range = dx * dx + dz * dz;
+                if (range < best) { best = range; nearest = i; }
+            }
+            if (nearest < 0) return false;
+            MarkScouted(objectives[nearest].Anchor, now, 120f);
+            return true;
+        }
+
         public double ScoutRemaining(int anchor, double now)
         {
             for (int i = 0; i < ScoutSlots; i++)
@@ -192,11 +214,13 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
         {
             if (slot < 0 || slot >= objectiveCount) return 0;
             FieldObjective objective = objectives[slot];
+            if (objective.Friendly) return FieldCatalog.FriendlyChance(objective.Threat);
             return FieldCatalog.SuccessChance(mission, Team(team).Rank, objective.Threat, Scouted(objective.Anchor, now));
         }
 
         public int LossFor(int team, FieldMission mission, int slot, double now) =>
             slot < 0 || slot >= objectiveCount ? 0
+                : objectives[slot].Friendly ? FieldCatalog.FriendlyLoss(objectives[slot].Threat)
                 : FieldCatalog.LossChance(mission, Team(team).Rank, objectives[slot].Threat, ChanceFor(team, mission, slot, now));
 
         // ---- Checks (the host re-runs every one) ------------------------------------------------
@@ -218,12 +242,16 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
             int slot = SlotOf(anchor);
             if (slot < 0) return SpecOpsDenial.StaleObjective;
             FieldObjective objective = objectives[slot];
-            if (!FieldCatalog.Allowed(mission, objective.Kind)) return SpecOpsDenial.WrongObjective;
+            if (!FieldCatalog.Allowed(mission, objective.Kind) ||
+                (objective.Friendly && mission != FieldMission.Recon && mission != FieldMission.Steal))
+                return SpecOpsDenial.WrongObjective;
             if (mission == FieldMission.Sabotage && objective.Radars == 0) return SpecOpsDenial.NoRadars;
             if (mission == FieldMission.Seize && !SeizeAvailable) return SpecOpsDenial.SeizeUnavailable;
             return WorkingOn(anchor) >= 0 ? SpecOpsDenial.ObjectiveTaken : SpecOpsDenial.None;
         }
 
+        /// <summary>Recall is the abort path: it stays available while raise and launch are
+        /// refused, so a team can always be stood down. Decided 2026-09-27 (D-1).</summary>
         public SpecOpsDenial CheckRecall(int team)
         {
             if (team < 0 || team >= TeamCount) return SpecOpsDenial.BadTeam;
@@ -258,7 +286,7 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
             value.Z = objective.Z;
             value.Target = objective.Name ?? "";
             value.Chance = (byte)chance;
-            value.Loss = (byte)FieldCatalog.LossChance(mission, value.Rank, objective.Threat, chance);
+            value.Loss = (byte)LossFor(team, mission, slot, now);
             value.PhaseStart = now;
             value.PhaseEnd = now + FieldCatalog.TravelSeconds(travelMetres);
             value.Last = MissionOutcome.None;
@@ -272,8 +300,18 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
             if (CheckRecall(team) != SpecOpsDenial.None) return false;
             FieldTeam value = teams[team];
             value.Last = MissionOutcome.Recalled;
+            bool holding = value.State == TeamState.Holding;
+            if (holding && value.Wins > 0 && value.Wins < byte.MaxValue)
+            {
+                // Abandoning a held post forfeits its win. Below the cap this exactly undoes
+                // the success; at the cap the win stands either way. Holding out keeps it.
+                value.Wins--;
+                value.Rank = (byte)FieldCatalog.RankFor(value.Wins);
+            }
             Rest(ref value, now, FieldCatalog.RecoverSeconds);
             teams[team] = value;
+            if (holding)
+                Notify(FieldNotice.PostEnded, team, (byte)value.Mission);
             Notify(FieldNotice.Recalled, team, (byte)value.Mission);
             return true;
         }
@@ -343,6 +381,7 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
                 return;
             }
 
+            // D-2: the effect lands at the rank the team fought with; the win below lengthens the post.
             var result = new FieldResult(team.Mission, outcome, team.X, team.Z, team.Rank, team.Anchor);
             bool landed = apply == null || apply(result);
             if (landed)
@@ -370,7 +409,7 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
         public void BeginObjectives() => incomingCount = 0;
 
         public void ReportObjective(ObjectiveKind kind, int anchor, float x, float z, int threat, int radars,
-                                    bool hostile, string name)
+                                    bool hostile, string name, bool friendly = false)
         {
             if (incomingCount >= ObjectiveSlots || kind == ObjectiveKind.None || !Finite(x) || !Finite(z)) return;
             for (int i = 0; i < incomingCount; i++)
@@ -380,7 +419,7 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
                 Kind = kind, Anchor = anchor, X = x, Z = z,
                 Threat = (byte)Math.Max(0, Math.Min(99, threat)),
                 Radars = (byte)Math.Max(0, Math.Min(99, radars)),
-                Hostile = hostile, Name = Clip(name)
+                Hostile = hostile, Friendly = friendly, Name = Clip(name)
             };
         }
 
@@ -424,6 +463,13 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
                 if (best < 0 || team.Rank > teams[best].Rank) best = i;
             }
             return best;
+        }
+
+        /// <summary>Rank of the team whose post would answer at the point, or -1 for none.</summary>
+        public int CoveringRank(FieldMission post, float x, float z)
+        {
+            int team = Covering(post, x, z);
+            return team < 0 ? -1 : teams[team].Rank;
         }
 
         public float AbilityRechargeRemaining(FieldAbility ability, double now)
@@ -500,6 +546,7 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
                 into.ObjectiveThreat[i] = objective.Threat;
                 into.ObjectiveRadars[i] = objective.Radars;
                 into.ObjectiveHostile[i] = objective.Hostile;
+                into.ObjectiveFriendly[i] = objective.Friendly;
                 into.ObjectiveScout[i] = (float)ScoutRemaining(objective.Anchor, now);
                 into.ObjectiveName[i] = Clip(objective.Name);
             }
@@ -565,7 +612,7 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
                     X = from.ObjectiveX[i], Z = from.ObjectiveZ[i],
                     Threat = (byte)Math.Min(99, (int)from.ObjectiveThreat[i]),
                     Radars = (byte)Math.Min(99, (int)from.ObjectiveRadars[i]),
-                    Hostile = from.ObjectiveHostile[i], Name = Clip(from.ObjectiveName[i])
+                    Hostile = from.ObjectiveHostile[i], Friendly = from.ObjectiveFriendly[i], Name = Clip(from.ObjectiveName[i])
                 };
                 float scout = from.ObjectiveScout[i];
                 if (Finite(scout) && scout > 0f && scouts < ScoutSlots)
@@ -618,7 +665,7 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
 
         // ---- Helpers ---------------------------------------------------------------------------------
 
-        private void MarkScouted(int anchor, double now)
+        private void MarkScouted(int anchor, double now, float seconds = FieldCatalog.ScoutSeconds)
         {
             int slot = -1;
             double oldest = double.MaxValue;
@@ -627,8 +674,9 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
                 if (scoutAnchor[i] == anchor) { slot = i; break; }
                 if (scoutUntil[i] < oldest) { oldest = scoutUntil[i]; slot = i; }
             }
+            bool sameObjective = scoutAnchor[slot] == anchor;
             scoutAnchor[slot] = anchor;
-            scoutUntil[slot] = now + FieldCatalog.ScoutSeconds;
+            scoutUntil[slot] = sameObjective ? Math.Max(scoutUntil[slot], now + seconds) : now + seconds;
         }
 
         private static void Rest(ref FieldTeam team, double now, float seconds)
@@ -676,6 +724,7 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
         public readonly byte[] ObjectiveThreat = new byte[SpecOpsDetachment.ObjectiveSlots];
         public readonly byte[] ObjectiveRadars = new byte[SpecOpsDetachment.ObjectiveSlots];
         public readonly bool[] ObjectiveHostile = new bool[SpecOpsDetachment.ObjectiveSlots];
+        public readonly bool[] ObjectiveFriendly = new bool[SpecOpsDetachment.ObjectiveSlots];
         public readonly float[] ObjectiveScout = new float[SpecOpsDetachment.ObjectiveSlots];
         public readonly string[] ObjectiveName = new string[SpecOpsDetachment.ObjectiveSlots];
 
@@ -711,6 +760,7 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
             Array.Clear(ObjectiveThreat, 0, ObjectiveThreat.Length);
             Array.Clear(ObjectiveRadars, 0, ObjectiveRadars.Length);
             Array.Clear(ObjectiveHostile, 0, ObjectiveHostile.Length);
+            Array.Clear(ObjectiveFriendly, 0, ObjectiveFriendly.Length);
             Array.Clear(ObjectiveScout, 0, ObjectiveScout.Length);
             Array.Clear(ObjectiveName, 0, ObjectiveName.Length);
             Array.Clear(AbilityRecharge, 0, AbilityRecharge.Length);

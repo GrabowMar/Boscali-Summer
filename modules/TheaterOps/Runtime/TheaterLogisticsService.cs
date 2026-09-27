@@ -28,6 +28,9 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
         private const int MaximumConvoyRows = 8;
         private const int MaximumDetailParts = 4;
         private const int MaximumDetailLength = 52;
+        private const int MaximumCombatGroups = 32;
+        private const int MaximumGroupUnits = 16;
+        private const float CombatRoleThreshold = 0.25f;
 
         /// <summary>One bounded pass over the rearm network; an exhausted scan is reported as such.</summary>
         private const int MaximumRearmScan = 256;
@@ -36,6 +39,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
         private const float OptionInterval = 1f;
 
         private readonly List<ReinforcementOption> options = new List<ReinforcementOption>(MaximumConvoyRows);
+        private readonly Dictionary<FactionHQ, int> lastCombatGroup = new Dictionary<FactionHQ, int>(8);
 
         private TheaterOpsSettings settings;
         private ManualLogSource logger;
@@ -67,6 +71,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
         public void ResetForScene()
         {
             options.Clear();
+            lastCombatGroup.Clear();
             readiness = default;
             funds = float.NaN;
             nextAuthority = 0f;
@@ -158,6 +163,66 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             name = cheapest.Name;
             cost = cheapestCost;
             return true;
+        }
+
+        /// <summary>Fund one mission-authored combat convoy, rotating through eligible groups.
+        /// Logistics-only groups are left for manual requests and the legacy director.</summary>
+        internal bool FundCombat(FactionHQ hq, float spendable, int operationId,
+            out string name, out float cost)
+        {
+            name = null;
+            cost = 0f;
+            if (!authoritative || hq == null || hq.faction == null || hq.preventDonation ||
+                float.IsNaN(spendable) || spendable <= 0f) return false;
+            List<Faction.ConvoyGroup> groups = hq.faction.GetConvoyGroups();
+            if (groups == null) return false;
+            int count = Mathf.Min(groups.Count, MaximumCombatGroups);
+            if (count == 0) return false;
+            int start = lastCombatGroup.TryGetValue(hq, out int last)
+                ? (last + 1) % count : Mathf.Abs(operationId % count);
+            float available = Mathf.Min(spendable, hq.factionFunds);
+            for (int offset = 0; offset < count; offset++)
+            {
+                int index = (start + offset) % count;
+                Faction.ConvoyGroup group = groups[index];
+                if (group == null || string.IsNullOrEmpty(group.Name) || !CombatGroup(group)) continue;
+                float price = group.GetCost();
+                if (float.IsNaN(price) || float.IsInfinity(price) || price <= 0f) continue;
+                float cooldown = hq.CmdGetDelaySpawnConvoy((byte)index);
+                if (float.IsNaN(cooldown) || float.IsInfinity(cooldown) ||
+                    ReinforcementGatePolicy.Evaluate(true, available, price, cooldown) !=
+                    ReinforcementGate.Ready) continue;
+                Fund(hq, group, price);
+                if (lastCombatGroup.Count < 8 || lastCombatGroup.ContainsKey(hq))
+                    lastCombatGroup[hq] = index;
+                name = group.Name;
+                cost = price;
+                return true;
+            }
+            return false;
+        }
+
+        private static bool CombatGroup(Faction.ConvoyGroup group)
+        {
+            List<Faction.ConvoyUnit> units = group.Constituents;
+            if (units == null || units.Count == 0 || units.Count > MaximumGroupUnits) return false;
+            int total = 0, combat = 0;
+            foreach (Faction.ConvoyUnit unit in units)
+            {
+                if (unit == null || unit.Type == null || unit.Count <= 0 || unit.Count > 64)
+                    return false;
+                total += unit.Count;
+                RoleIdentity role = unit.Type.roleIdentity;
+                // Role weights are 0..1. A token defensive gun should not make a
+                // munitions or logistics truck count as a front-line combat unit.
+                if (unit.Type.captureStrength > 0f ||
+                    role.antiSurface >= CombatRoleThreshold ||
+                    role.antiAir >= CombatRoleThreshold ||
+                    role.antiRadar >= CombatRoleThreshold ||
+                    role.antiMissile >= CombatRoleThreshold)
+                    combat += unit.Count;
+            }
+            return total > 0 && combat * 2 >= total;
         }
 
         private void Fund(FactionHQ hq, Faction.ConvoyGroup group, float cost)

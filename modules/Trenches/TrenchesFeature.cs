@@ -28,14 +28,17 @@ namespace BoscaliSummer.Features.Trenches
             TrenchMapOverlay overlay = context.AddSceneService<TrenchMapOverlay>(61);
             overlay.Configure(context.Settings.Trenches, manager, context.Logger);
 
-            // How much of the theater ends up dug in - the one trench decision with a cost
-            // a host can feel. How fast a position matures is pacing, and stays in the
-            // config file.
+            // These bounded host controls limit future trench creation and growth work.
             context.AddHostSettings(new HostSettingsTable("TRENCHES")
                 .Number(1, context.Settings.Trenches.MaxTrenchPositions, "MAX NETWORKS",
-                    "Maximum concurrent trench positions per theater.", 1));
+                    "Maximum concurrent trench positions per theater. Lower values limit future positions; existing lines remain.", 1)
+                .Number(2, context.Settings.Trenches.GrowthIntervalSeconds, "GROWTH INTERVAL",
+                    "Seconds between trench growth passes. Higher values reduce host work and slow fortification.",
+                    15f, v => v.ToString("0") + "s")
+                .Toggle(3, context.Settings.Trenches.BarrageEnabled, "HARASSING BARRAGE",
+                    "Allow matured opposing trench lines to exchange native shells. Off reduces shell activity."));
 
-            context.Logger.LogInfo("[Trenches] Combat fortifications ready: Command's front traces become owned-side trench curves sited on defensible relief, forest edges and clear of roads, with beachheads dug one band landward. Each position matures from scrape through fire trench, support line and redoubt to forward saps, with up to eight native MG/ATGM/MANPADS/23mm defenders (the ATGM team watches the nearest road) and infantry works. Damage suppresses growth; losses never respawn. The theater director counts observed fieldworks when sizing attacks. Native defenders and works replicate; ditch meshes, wire and map marks remain host-local.");
+            context.Logger.LogInfo("[Trenches] Combat fortifications ready: Command's front traces become owned-side trench curves sited on defensible relief, forest edges, clear of roads and off airfields, with beachheads dug one band landward and opposing mirror pairs facing each other across no-man's-land. Hot sectors dig fast and stand heavy, quiet ones mature slowly behind an MG screen. Each position matures from scrape through fire trench, support line and redoubt to forward saps, with up to eight native MG/ATGM/MANPADS/23mm defenders (the ATGM team watches the nearest road) and infantry works. When enabled, matured pairs trade harassing mortar and artillery fire through vanilla shells. Damage suppresses growth; losses never respawn. The theater director counts observed fieldworks when sizing attacks. Native defenders, works and shells replicate; ditch meshes, wire and map marks remain host-local.");
         }
     }
 }

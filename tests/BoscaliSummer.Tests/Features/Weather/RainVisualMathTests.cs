@@ -58,10 +58,6 @@ namespace BoscaliSummer.Tests.Features.Weather
             TestAssert.That(RainVisualMath.ClampRateToBudget(5000f, 0f, 1000) == 5000f, "Degenerate lifetime skips clamp");
 
             // 5. Cockpit muffle cutoff
-            TestAssert.That(RainAudioMath.MuffleCutoff(false, 0f) == 20000f, "External must stay wide open");
-            TestAssert.That(RainAudioMath.MuffleCutoff(false, 1f) == 20000f, "External stays open at speed");
-            TestAssert.That(RainAudioMath.MuffleCutoff(true, 0f) == 900f, "Slow cockpit must dull to 900 Hz");
-            TestAssert.That(RainAudioMath.MuffleCutoff(true, 1f) == 2600f, "Fast cockpit must open to 2600 Hz");
         }
     }
 }

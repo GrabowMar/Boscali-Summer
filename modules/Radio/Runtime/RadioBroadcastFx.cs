@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Features.Radio.Configuration;
+using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Framework.Fx;
 using UnityEngine;
 
 namespace BoscaliSummer.Features.Radio.Runtime
@@ -10,7 +12,7 @@ namespace BoscaliSummer.Features.Radio.Runtime
     /// click on tune, and a morse ident on lock. Everything is synthesized in memory at
     /// runtime — no audio asset is shipped, and no music metadata passes through here.
     /// </summary>
-    internal sealed class RadioBroadcastFx
+    internal sealed class RadioBroadcastFx : IClientEffect
     {
         private const int SampleRate = 22050;
         private const int StaticSamples = SampleRate * 3 / 2;
@@ -38,6 +40,21 @@ namespace BoscaliSummer.Features.Radio.Runtime
             this.host = host ?? throw new ArgumentNullException(nameof(host));
         }
 
+        public string EffectId => "radio-fx";
+
+        public FxBudget Budget => new FxBudget(0, 0, 2, true);
+
+        public void ReleaseFx()
+        {
+            Dispose();
+        }
+
+        public void DescribeFx(IDictionary<string, object> state)
+        {
+            state["fx.radio-fx.carrier"] = carrierOn;
+            state["fx.radio-fx.idents"] = idents.Count;
+        }
+
         public float Level => level;
 
         /// <summary>Modelled reception of the tuned frequency, 0..1. Drives the hiss bed.</summary>
@@ -54,7 +71,7 @@ namespace BoscaliSummer.Features.Radio.Runtime
             if (!on) return;
             if (!Ensure()) return;
             bed.volume = 0f;
-            if (!bed.isPlaying) bed.Play();
+            if (!bed.isPlaying && FxVoiceBus.TryStartLoop("radio-bed")) bed.Play();
         }
 
         /// <summary>Reception quality and squelch state, applied to the hiss bed every tick.</summary>
@@ -67,7 +84,7 @@ namespace BoscaliSummer.Features.Radio.Runtime
         public void Tune(string code, bool carrierNoise, bool ident)
         {
             if (!Ensure()) return;
-            accent.PlayOneShot(squelchClip, 0.45f * volume);
+            if (FxVoiceBus.TryOneShot(0.2f)) accent.PlayOneShot(squelchClip, 0.45f * volume);
             if (carrierNoise) burstUntil = Time.unscaledTime + 0.35f;
             identAt = ident ? Time.unscaledTime + 0.55f : -1f;
             identCode = ident ? code : null;
@@ -85,12 +102,13 @@ namespace BoscaliSummer.Features.Radio.Runtime
             {
                 if (carrierOn)
                 {
-                    if (!bed.isPlaying) bed.Play();
+                    if (!bed.isPlaying && FxVoiceBus.TryStartLoop("radio-bed")) bed.Play();
                     bed.volume = BedVolume();
                 }
                 else if (bed.isPlaying)
                 {
                     bed.Stop();
+                    FxVoiceBus.EndLoop("radio-bed");
                 }
             }
 
@@ -98,7 +116,7 @@ namespace BoscaliSummer.Features.Radio.Runtime
             {
                 identAt = -1f;
                 AudioClip clip = IdentFor(identCode);
-                if (clip != null) accent.PlayOneShot(clip, 0.3f * volume);
+                if (clip != null && FxVoiceBus.TryOneShot(2f)) accent.PlayOneShot(clip, 0.3f * volume);
             }
         }
 
@@ -133,6 +151,7 @@ namespace BoscaliSummer.Features.Radio.Runtime
         public void Silence()
         {
             carrierOn = false;
+            FxVoiceBus.EndLoop("radio-bed");
             if (bed != null) bed.Stop();
             burstUntil = 0f;
             identAt = -1f;
@@ -141,6 +160,7 @@ namespace BoscaliSummer.Features.Radio.Runtime
 
         public void Dispose()
         {
+            FxBus.Unregister(this);
             Silence();
             Destroy(staticClip);
             Destroy(squelchClip);

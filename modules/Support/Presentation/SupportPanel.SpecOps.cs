@@ -137,7 +137,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             specTeamsNote = SingleLine(AvStyled.Label(hero, new Rect(0f, -2f, w - 128f, 16f), "", "section-title"));
             openDeskButton = AvStyled.Button(hero, new Rect(w - 120f, 0f, 120f, 22f), "OPEN DESK", "btn", OpenDesk,
                 AvButtonStyle.Primary)
-                .WithTooltip("The briefing table: raise teams, pick objectives, launch and recall missions.");
+                .WithTooltip("The briefing table: raise teams, pick objectives, launch and recall missions. " + FieldWords.Legend());
             bool compactGrid = at[0].height < LaneHeader + 26f * SpecOpsDetachment.TeamCount;
             float lane = compactGrid
                 ? (at[0].height - LaneHeader) * 0.5f

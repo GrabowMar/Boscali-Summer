@@ -50,13 +50,15 @@ namespace BoscaliSummer.Features.Weather.Domain
         private readonly RegimeOverride[] overrides;
 
         public WeatherKey(uint seed, float epoch, bool dynamic, byte startRegime, WeatherFlags flags,
-            RegimeOverride[] overrides = null)
+            RegimeOverride[] overrides = null, float holdMinutes = 21f, float blendMinutes = 8f)
         {
             Seed = seed;
             Epoch = epoch;
             Dynamic = dynamic;
             StartRegime = startRegime;
             Flags = flags;
+            HoldMinutes = Math.Max(1f, holdMinutes);
+            BlendMinutes = Math.Max(0.5f, blendMinutes);
             this.overrides = Normalise(overrides);
         }
 
@@ -65,6 +67,8 @@ namespace BoscaliSummer.Features.Weather.Domain
         public bool Dynamic { get; }
         public byte StartRegime { get; }
         public WeatherFlags Flags { get; }
+        public float HoldMinutes { get; }
+        public float BlendMinutes { get; }
         public int OverrideCount => overrides.Length;
 
         public RegimeOverride Override(int index) => overrides[index];
@@ -95,23 +99,24 @@ namespace BoscaliSummer.Features.Weather.Domain
             }
             list[n++] = new RegimeOverride(time, regime);
             Array.Resize(ref list, n);
-            return new WeatherKey(Seed, Epoch, Dynamic, StartRegime, Flags, list);
+            return new WeatherKey(Seed, Epoch, Dynamic, StartRegime, Flags, list, HoldMinutes, BlendMinutes);
         }
 
         public WeatherKey WithFlags(WeatherFlags flags)
-            => new WeatherKey(Seed, Epoch, Dynamic, StartRegime, flags, overrides);
+            => new WeatherKey(Seed, Epoch, Dynamic, StartRegime, flags, overrides, HoldMinutes, BlendMinutes);
 
         public WeatherKey WithSchedule(bool dynamic, byte startRegime)
-            => new WeatherKey(Seed, Epoch, dynamic, startRegime, Flags, overrides);
+            => new WeatherKey(Seed, Epoch, dynamic, startRegime, Flags, overrides, HoldMinutes, BlendMinutes);
 
         public WeatherKey WithoutOverrides()
-            => new WeatherKey(Seed, Epoch, Dynamic, StartRegime, Flags, null);
+            => new WeatherKey(Seed, Epoch, Dynamic, StartRegime, Flags, null, HoldMinutes, BlendMinutes);
 
         public bool Equals(WeatherKey other)
         {
             if (other is null) return false;
             if (Seed != other.Seed || Epoch != other.Epoch || Dynamic != other.Dynamic ||
                 StartRegime != other.StartRegime || Flags != other.Flags ||
+                HoldMinutes != other.HoldMinutes || BlendMinutes != other.BlendMinutes ||
                 overrides.Length != other.overrides.Length)
             {
                 return false;
@@ -134,6 +139,8 @@ namespace BoscaliSummer.Features.Weather.Domain
                 h = h * 31 + (Dynamic ? 1 : 0);
                 h = h * 31 + StartRegime;
                 h = h * 31 + (int)Flags;
+                h = h * 31 + HoldMinutes.GetHashCode();
+                h = h * 31 + BlendMinutes.GetHashCode();
                 for (int i = 0; i < overrides.Length; i++) h = h * 31 + overrides[i].GetHashCode();
                 return h;
             }

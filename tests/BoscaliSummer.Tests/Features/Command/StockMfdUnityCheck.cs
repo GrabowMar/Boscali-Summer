@@ -40,7 +40,7 @@ public static class StockMfdUnityCheck
             AvFont.Font = TMP_FontAsset.CreateFontAsset(new Font("C:/Windows/Fonts/consola.ttf"));
             new GameObject("Events", typeof(EventSystem));
             foreach (float height in new[] { 896f, 596f, 420f })
-                foreach (string name in new[] { "Map", "Hud", "Target", "Mission", "Faction" })
+                foreach (string name in new[] { "Map", "Target", "Faction", "Hud", "Mission" })
                     Render(name, height);
             File.WriteAllText("result.txt", "PASS: " + captures + " stock presenter page renders at 896/596/420. Production built DLL and game metadata; synthetic labels and grids, no game launch or native adapter claim. Compact content is scrollable and every page includes bottom-of-content captures.\n");
             EditorApplication.Exit(0);
@@ -57,7 +57,8 @@ public static class StockMfdUnityCheck
     {
         Assembly assembly = typeof(AvScreen).Assembly;
         Type type = assembly.GetType(Owner + "+" + name + "Presenter", true);
-        object[] args = name == "Mission" ? new object[] { null } : new object[] { null, null };
+        object[] args = new object[] { null, null };
+        if (name == "Mission") args = new object[] { null };
         if (name == "Faction")
         {
             Type id = assembly.GetType("BoscaliSummer.Features.Command.Presentation.MapUi.VanillaMfdPanelId", true);
@@ -117,23 +118,12 @@ public static class StockMfdUnityCheck
     {
         if (name == "Map")
         {
-            var readouts = (TMP_Text[])presenter.GetType().GetField("readoutValues", All).GetValue(presenter);
-            string[] readings = { "1000 m", "LIVE", "12 EMITTERS · 185 km", "SATELLITE ON" };
-            for (int i = 0; i < readouts.Length; i++) readouts[i].text = readings[i];
             Grid(presenter, "layers", new[] { "OBJECTIVES", "TARGET DETAILS", "JAMMING", "GRID LABELS", "PILOTS", "AIRBASES" });
             Grid(presenter, "overlays", new[] { "CONTROL FIELD", "FRONT LINE", "THREAT HEAT" });
             Grid(presenter, "hover", new[] { "OFF", "UNIT INFO", "AMMUNITION", "ORDERS" });
             Grid(presenter, "sizes", new[] { "SMALL", "MEDIUM", "LARGE" });
             Label(presenter, "overlayNote", "Sector control follows ground presence; the front is its zero contour.");
             Label(presenter, "detailSummary", "Choose the information shown when hovering a map contact.");
-        }
-        if (name == "Hud")
-        {
-            Grid(presenter, "modes", new[] { "NAV", "GUN", "A2A", "A2G", "EW", "LOGISTICS" });
-            Grid(presenter, "categories", new[] { "FRIENDLY", "ENEMY", "AIRCRAFT", "MISSILES", "GROUND", "BUILDINGS" });
-            Grid(presenter, "vehicles", new[] { "MAIN BATTLE TANK", "ARMOURED FIGHTING VEHICLE", "IR SAM", "RADAR SAM", "TRUCK", "UGV" });
-            Grid(presenter, "buildings", new[] { "AIRCRAFT FACTORY", "RADAR INSTALLATION", "WAREHOUSE", "CONTROL TOWER" });
-            Label(presenter, "modeBrief", "Air-to-ground profile\n6 vehicle types / 4 building types prioritised.\nON marks an active choice. Priority gates control HUD emphasis.");
         }
         if (name == "Target")
         {
@@ -146,30 +136,6 @@ public static class StockMfdUnityCheck
             Grid(presenter, "selectedGrid", new[] { "DARKREACH 21", "REVETMENT EAST AIRBASE", "TANK COMPANY NORTH" });
             Grid(presenter, "quickGrid", new[] { "AIR DEFENCE", "HOSTILE GROUND", "EMPTY" });
             Grid(presenter, "presetGrid", new[] { "ALL", "AIR DEFENCE", "HOSTILE GROUND", "NAVAL", "AIRCRAFT", "CUSTOM" });
-        }
-        if (name == "Mission")
-        {
-            Label(presenter, "missionName", "Escalation");
-            Label(presenter, "missionDescription", "A high intensity war of attrition with every airbase active.\n\nMore powerful aircraft and weapons unlock as the mission escalates. Destroy the opposing aircraft factories and carrier to secure victory.");
-            presenter.GetType().GetField("briefCardHeight", All).SetValue(presenter, 260f);
-            presenter.GetType().GetMethod("LayoutMissionPage", All).Invoke(presenter, null);
-            Type contract = presenter.GetType().Assembly.GetType("BoscaliSummer.Framework.Contracts.SecondaryObjectiveView", true);
-            Array cards = (Array)presenter.GetType().GetField("secondaryCards", All).GetValue(presenter);
-            for (int i = 0; i < cards.Length; i++)
-            {
-                object sample = Activator.CreateInstance(contract, new object[]
-                {
-                    i + 12, i == 0 ? "Interdict the northern supply route" : "Protect allied infrastructure",
-                    "Engage hostile transports before they reach the northern logistics depot.",
-                    "NORTHERN HIGHWAY CHECKPOINT", "OFFERED", "+10% LOGISTICS READINESS",
-                    .25f, 450f, 35000, 120, false, true, false, true, 0f, 0f, 0f, ""
-                });
-                object card = cards.GetValue(i);
-                card.GetType().GetMethod("Refresh", All).Invoke(card, new[] { sample, (object)true });
-            }
-            ((TMP_Text)presenter.GetType().GetField("secondaryEmpty", All).GetValue(presenter)).gameObject.SetActive(false);
-            Label(presenter, "boardSummary", "2 OFFERS · 0/2 ACTIVE · 0 CLOSED");
-            Label(presenter, "boardStatus", "HOST BOARD READY");
         }
         if (name == "Faction")
         {

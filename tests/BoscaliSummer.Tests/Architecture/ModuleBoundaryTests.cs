@@ -21,11 +21,15 @@ namespace BoscaliSummer.Tests.Architecture
 
             foreach (string featurePath in Directory.GetDirectories(featuresRoot))
             {
+                string[] sourceFiles = Directory.GetFiles(featurePath, "*.cs", SearchOption.AllDirectories);
+                if (sourceFiles.Length == 0) continue;
                 string featureName = Path.GetFileName(featurePath);
                 TestAssert.That(File.Exists(Path.Combine(featurePath, featureName + "Feature.cs")),
                     featureName + " is missing its explicit IModFeature descriptor");
+                TestAssert.That(File.Exists(Path.Combine(featurePath, "AGENTS.md")),
+                    featureName + " is missing its local AGENTS.md invariant doc");
 
-                foreach (string file in Directory.GetFiles(featurePath, "*.cs", SearchOption.AllDirectories))
+                foreach (string file in sourceFiles)
                 {
                     string source = File.ReadAllText(file);
                     foreach (Match match in FeatureImport.Matches(source))

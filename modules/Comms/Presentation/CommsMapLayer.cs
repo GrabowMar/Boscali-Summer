@@ -3,6 +3,8 @@ using BepInEx.Logging;
 using BoscaliSummer.Features.Comms.Configuration;
 using BoscaliSummer.Features.Comms.Domain;
 using BoscaliSummer.Features.Comms.Runtime;
+using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Framework.Features;
 using BoscaliSummer.Framework.Lifecycle;
 using BoscaliSummer.Runtime;
 using NOAvionics.Ui;
@@ -45,6 +47,8 @@ namespace BoscaliSummer.Features.Comms.Presentation
         private int lastBoardRevision = -1;
         private float lastZoom = -1f;
         private float nextTags;
+        private bool lastProjectionActive;
+        private int lastProjectionRevision;
 
         public void Configure(CommsSettings config, CommsManager owner, ManualLogSource log)
         {
@@ -65,6 +69,8 @@ namespace BoscaliSummer.Features.Comms.Presentation
             lastRevision = lastBoardRevision = -1;
             lastZoom = -1f;
             nextTags = 0f;
+            lastProjectionActive = false;
+            lastProjectionRevision = 0;
         }
 
         private void OnDestroy() => ResetForScene();
@@ -88,6 +94,14 @@ namespace BoscaliSummer.Features.Comms.Presentation
             float factor = map.mapDisplayFactor;
             if (!(zoom > 1e-4f) || !(factor > 1e-6f)) return;
             bool zoomed = Mathf.Abs(zoom - lastZoom) > Mathf.Max(0.0005f, lastZoom * 0.01f);
+            bool projected = ModServices.TryGet(out IMapProjection projection) && projection.IsActive;
+            int projectionRevision = projected ? projection.Revision : 0;
+            if (projected != lastProjectionActive || projectionRevision != lastProjectionRevision)
+            {
+                lastProjectionActive = projected;
+                lastProjectionRevision = projectionRevision;
+                zoomed = true;
+            }
 
             CommsClientState state = manager.State;
             if (zoomed || state.Revision != lastRevision || state.Board.Revision != lastBoardRevision)
@@ -96,6 +110,7 @@ namespace BoscaliSummer.Features.Comms.Presentation
                 lastBoardRevision = state.Board.Revision;
                 lastZoom = zoom;
                 ink.SetVerticesDirty();
+                pulse.SetVerticesDirty();
                 nextTags = 0f;
             }
             if (pulse.Animating(Time.unscaledTime)) pulse.SetVerticesDirty();
@@ -167,7 +182,7 @@ namespace BoscaliSummer.Features.Comms.Presentation
             {
                 CommsItem item = items[i];
                 if (state.IsMuted(item.Author)) continue;
-                Vector2 at = new Vector2(item.X * factor, item.Z * factor);
+                Vector2 at = CommsProjection.At(item.X, item.Z, factor);
                 bool enemy = item.Faction != side;
                 if (item.Kind == CommsItemKind.Label)
                 {
@@ -190,19 +205,19 @@ namespace BoscaliSummer.Features.Comms.Presentation
                 HuntView hunt = hunts[i];
                 if (hunt.Revealed)
                 {
-                    Tag(new Vector2(hunt.HiddenX * factor, hunt.HiddenZ * factor), inverse,
+                    Tag(CommsProjection.At(hunt.HiddenX, hunt.HiddenZ, factor), inverse,
                         "HIDDEN BY " + hunt.AuthorName, CommsMesh.Tone(CommsTone.Fun), new Vector2(0f, 22f), 12f, bold: true);
                     for (int g = 0; g < hunt.Placings.Count && usedTags < MaxTags; g++)
                     {
                         HuntPlacingView placing = hunt.Placings[g];
-                        Tag(new Vector2(placing.X * factor, placing.Z * factor), inverse,
+                        Tag(CommsProjection.At(placing.X, placing.Z, factor), inverse,
                             "#" + (g + 1) + " " + placing.Name + " · " + CommsText.Distance(placing.Metres, VanillaHudStyle.Metric),
                             g == 0 ? CommsMesh.Tone(CommsTone.Fun) : CommsMesh.Tone(CommsTone.Info), new Vector2(0f, -16f), 11f, bold: g == 0);
                     }
                 }
                 else if (hunt.HasLocalGuess)
                 {
-                    Tag(new Vector2(hunt.LocalGuessX * factor, hunt.LocalGuessZ * factor), inverse,
+                    Tag(CommsProjection.At(hunt.LocalGuessX, hunt.LocalGuessZ, factor), inverse,
                         hunt.Author == self ? "YOUR HIDDEN TARGET" : "YOUR GUESS", CommsMesh.Tone(CommsTone.Fun),
                         new Vector2(0f, -16f), 11f, bold: false);
                 }
@@ -213,8 +228,8 @@ namespace BoscaliSummer.Features.Comms.Presentation
                 float dx = manager.MeasureBX - manager.MeasureAX, dz = manager.MeasureBZ - manager.MeasureAZ;
                 float metres = Mathf.Sqrt(dx * dx + dz * dz);
                 int bearing = CommsText.Bearing(manager.MeasureAX, manager.MeasureAZ, manager.MeasureBX, manager.MeasureBZ);
-                Vector2 mid = new Vector2((manager.MeasureAX + manager.MeasureBX) * 0.5f * factor,
-                                          (manager.MeasureAZ + manager.MeasureBZ) * 0.5f * factor);
+                Vector2 mid = CommsProjection.At((manager.MeasureAX + manager.MeasureBX) * 0.5f,
+                    (manager.MeasureAZ + manager.MeasureBZ) * 0.5f, factor);
                 Tag(mid, inverse, CommsText.Distance(metres, VanillaHudStyle.Metric) + " · " + bearing.ToString("000") + "°",
                     CommsMesh.Tone(CommsTone.Caution), new Vector2(0f, 14f), 13f, bold: true);
             }
@@ -328,7 +343,7 @@ namespace BoscaliSummer.Features.Comms.Presentation
             {
                 CommsItem item = items[i];
                 if (state.IsMuted(item.Author)) continue;
-                Vector2 at = new Vector2(item.X * factor, item.Z * factor);
+                Vector2 at = CommsProjection.At(item.X, item.Z, factor);
                 if (item.Kind == CommsItemKind.Sticker && CommsCatalog.ValidSticker(item.Style))
                 {
                     StickerKind sticker = CommsCatalog.Stickers[item.Style];
@@ -355,12 +370,12 @@ namespace BoscaliSummer.Features.Comms.Presentation
             {
                 HuntView hunt = hunts[i];
                 if (!hunt.Revealed) continue;
-                Vector2 hidden = new Vector2(hunt.HiddenX * factor, hunt.HiddenZ * factor);
+                Vector2 hidden = CommsProjection.At(hunt.HiddenX, hunt.HiddenZ, factor);
                 Color32 fun = CommsMesh.Tone(CommsTone.Fun);
                 for (int g = 0; g < hunt.Placings.Count; g++)
                 {
                     HuntPlacingView placing = hunt.Placings[g];
-                    Vector2 guess = new Vector2(placing.X * factor, placing.Z * factor);
+                    Vector2 guess = CommsProjection.At(placing.X, placing.Z, factor);
                     Color32 tone = g == 0 ? fun : CommsMesh.Tone(CommsTone.Info, 200);
                     CommsMesh.Dashed(vh, guess, hidden, 0.8f * px, 6f * px, 4f * px, CommsMesh.Fade(tone, 0.7f));
                     CommsMesh.Glyph(vh, "guess", guess, 7f * px, 1.1f * px, tone, under: true);
@@ -382,7 +397,8 @@ namespace BoscaliSummer.Features.Comms.Presentation
         }
 
         private static Vector2 Local(int[] points, int index, float factor) =>
-            new Vector2(StrokeCodec.Restore(points[index]) * factor, StrokeCodec.Restore(points[index + 1]) * factor);
+            CommsProjection.At(StrokeCodec.Restore(points[index]),
+                StrokeCodec.Restore(points[index + 1]), factor);
     }
 
     /// <summary>
@@ -413,7 +429,7 @@ namespace BoscaliSummer.Features.Comms.Presentation
         {
             if (manager == null) return false;
             bool active = manager.PreviewActive || manager.HasMeasure || manager.HighlightUntil > now ||
-                          manager.State.Board.CountOf(CommsItemKind.Ping) > 0 || AnyLocalHunt();
+                          AnimatingPing(now) || AnyLocalHunt();
             bool rebuild = active || drewLastFrame;
             drewLastFrame = active;
             return rebuild;
@@ -424,6 +440,18 @@ namespace BoscaliSummer.Features.Comms.Presentation
             IReadOnlyList<HuntView> hunts = manager.State.Hunts;
             for (int i = 0; i < hunts.Count; i++)
                 if (!hunts[i].Revealed && hunts[i].HasLocalGuess) return true;
+            return false;
+        }
+
+        private bool AnimatingPing(float now)
+        {
+            IReadOnlyList<CommsItem> items = manager.State.Board.Items;
+            for (int i = 0; i < items.Count; i++)
+            {
+                CommsItem item = items[i];
+                if (item.Kind != CommsItemKind.Ping || manager.State.IsMuted(item.Author)) continue;
+                if (now - item.Created < PulseSeconds || item.Expires - now < FadeSeconds) return true;
+            }
             return false;
         }
 
@@ -445,7 +473,7 @@ namespace BoscaliSummer.Features.Comms.Presentation
                 CommsItem item = items[i];
                 if (item.Kind != CommsItemKind.Ping || !CommsCatalog.ValidPing(item.Style) || state.IsMuted(item.Author)) continue;
                 PingKind kind = CommsCatalog.Pings[item.Style];
-                Vector2 at = new Vector2(item.X * factor, item.Z * factor);
+                Vector2 at = CommsProjection.At(item.X, item.Z, factor);
                 float fade = Mathf.Clamp01((item.Expires - now) / FadeSeconds);
                 // The other side's ALL pings wear one colour everywhere: tags, markers and here.
                 CommsTone ink = item.Faction != manager.LocalFaction ? CommsTone.Caution : kind.Tone;
@@ -466,7 +494,7 @@ namespace BoscaliSummer.Features.Comms.Presentation
             {
                 HuntView hunt = hunts[i];
                 if (hunt.Revealed || !hunt.HasLocalGuess) continue;
-                Vector2 at = new Vector2(hunt.LocalGuessX * factor, hunt.LocalGuessZ * factor);
+                Vector2 at = CommsProjection.At(hunt.LocalGuessX, hunt.LocalGuessZ, factor);
                 float breathe = 0.65f + 0.35f * Mathf.Sin(now * 4f);
                 CommsMesh.Glyph(vh, hunt.Author == manager.LocalId ? "hunt" : "guess", at, 10f * px, 1.2f * px,
                     CommsMesh.Fade(CommsMesh.Tone(CommsTone.Fun), breathe), under: true);
@@ -476,8 +504,8 @@ namespace BoscaliSummer.Features.Comms.Presentation
 
             if (manager.HasMeasure)
             {
-                Vector2 a = new Vector2(manager.MeasureAX * factor, manager.MeasureAZ * factor);
-                Vector2 b = new Vector2(manager.MeasureBX * factor, manager.MeasureBZ * factor);
+                Vector2 a = CommsProjection.At(manager.MeasureAX, manager.MeasureAZ, factor);
+                Vector2 b = CommsProjection.At(manager.MeasureBX, manager.MeasureBZ, factor);
                 Color32 caution = CommsMesh.Tone(CommsTone.Caution);
                 CommsMesh.Segment(vh, a, b, 2.2f * px, CommsMesh.Under);
                 CommsMesh.Dashed(vh, a, b, 1.1f * px, 8f * px, 4f * px, caution);
@@ -489,7 +517,7 @@ namespace BoscaliSummer.Features.Comms.Presentation
             {
                 float left = manager.HighlightUntil - now;
                 float phase = (left % 0.9f) / 0.9f;
-                Vector2 at = new Vector2(manager.HighlightX * factor, manager.HighlightZ * factor);
+                Vector2 at = CommsProjection.At(manager.HighlightX, manager.HighlightZ, factor);
                 CommsMesh.Ring(vh, at, Mathf.Lerp(46f, 12f, phase) * px, 1.6f * px,
                     CommsMesh.Tone(CommsTone.Caution, (byte)(255 * phase)), 32);
             }
@@ -499,16 +527,16 @@ namespace BoscaliSummer.Features.Comms.Presentation
         {
             Color32 ink = CommsMesh.Ink(manager.PenInk, 210);
             float half = CommsCatalog.PenWidths[Mathf.Clamp(manager.PenWidth, 0, CommsCatalog.PenWidths.Length - 1)] * px;
-            Vector2 a = new Vector2(manager.PreviewAX * factor, manager.PreviewAZ * factor);
-            Vector2 b = new Vector2(manager.PreviewBX * factor, manager.PreviewBZ * factor);
+            Vector2 a = CommsProjection.At(manager.PreviewAX, manager.PreviewAZ, factor);
+            Vector2 b = CommsProjection.At(manager.PreviewBX, manager.PreviewBZ, factor);
             switch (manager.PreviewTool)
             {
                 case CommsTool.Pen:
                 {
                     IReadOnlyList<float> pen = manager.PreviewPen;
                     for (int i = 2; i + 1 < pen.Count; i += 2)
-                        CommsMesh.Segment(vh, new Vector2(pen[i - 2] * factor, pen[i - 1] * factor),
-                            new Vector2(pen[i] * factor, pen[i + 1] * factor), half, ink);
+                        CommsMesh.Segment(vh, CommsProjection.At(pen[i - 2], pen[i - 1], factor),
+                            CommsProjection.At(pen[i], pen[i + 1], factor), half, ink);
                     break;
                 }
                 case CommsTool.Measure:
@@ -526,12 +554,23 @@ namespace BoscaliSummer.Features.Comms.Presentation
                     {
                         float[] p = strokes[s];
                         for (int i = 2; i + 1 < p.Length; i += 2)
-                            CommsMesh.Segment(vh, new Vector2(p[i - 2] * factor, p[i - 1] * factor),
-                                new Vector2(p[i] * factor, p[i + 1] * factor), half, ink);
+                            CommsMesh.Segment(vh, CommsProjection.At(p[i - 2], p[i - 1], factor),
+                                CommsProjection.At(p[i], p[i + 1], factor), half, ink);
                     }
                     break;
                 }
             }
+        }
+    }
+
+    internal static class CommsProjection
+    {
+        internal static Vector2 At(float worldX, float worldZ, float mapFactor)
+        {
+            if (ModServices.TryGet(out IMapProjection projection) &&
+                projection.TryProject(worldX, worldZ, out float x, out float y))
+                return new Vector2(x, y);
+            return new Vector2(worldX * mapFactor, worldZ * mapFactor);
         }
     }
 }

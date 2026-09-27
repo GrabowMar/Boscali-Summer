@@ -17,7 +17,8 @@ namespace BoscaliSummer.Features.Weather.Runtime
     public static class WeatherAutomation
     {
         /// <summary>Snap the weather to <c>conditions</c> (default 0.92), <c>cloudHeight</c> metres (default 4500)
-        /// and forced <c>rain</c> (default 1). Optionally follows the scenario unit named by <c>follow</c>.</summary>
+        /// and optional forced <c>rain</c>. Without rain, the model controls precipitation.
+        /// Optionally follows the scenario unit named by <c>follow</c>.</summary>
         public static Dictionary<string, object> ForceWeather(Dictionary<string, object> args)
         {
             WeatherManager manager = Find();
@@ -25,10 +26,14 @@ namespace BoscaliSummer.Features.Weather.Runtime
             if (!BoscaliSummer.Runtime.GameAccess.IsServer()) return Fail("ForceWeather", "weather overrides are host-only");
             float conditions = Mathf.Clamp01(Number(args, "conditions", 0.92f));
             float cloud = Mathf.Clamp(Number(args, "cloudHeight", 4500f), 500f, 12000f);
-            float rain = Mathf.Clamp01(Number(args, "rain", 1f));
+            float? rain = args != null && args.ContainsKey("rain")
+                ? Mathf.Clamp01(Number(args, "rain", 1f)) : (float?)null;
             manager.SetManualOverride(conditions, cloud, null, rain, snapImmediate: true);
+            if (args != null && (args.ContainsKey("seed") || args.ContainsKey("modelAge")))
+                manager.SetFixtureField((uint)Mathf.Clamp(Number(args, "seed", 1337f), 1f, 16000000f),
+                    Mathf.Clamp(Number(args, "modelAge", 0f), 0f, 14400f));
             string followed = Follow(args);
-            manager.LogAutomation($"ForceWeather: conditions {conditions:F2}, cloud {cloud:F0} m, rain {rain:F2}, follow {followed ?? "-"}");
+            manager.LogAutomation($"ForceWeather: conditions {conditions:F2}, cloud {cloud:F0} m, rain {(rain.HasValue ? rain.Value.ToString("F2") : "AUTO")}, follow {followed ?? "-"}");
             return Readout(manager);
         }
 

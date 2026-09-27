@@ -18,6 +18,7 @@ namespace BoscaliSummer.Features.Squad
             SquadNet network = context.AddComponent<SquadNet>();
             manager.Configure(context.Settings.Squad, network, context.Logger, context.Services); network.Configure(manager);
             context.AddService<ISquadView>(manager);
+            context.AddService<IAircraftTaskExclusion>(manager);
             context.Logger.LogInfo("[Squad] Wing Command API: " + (WingLink.SquadAvailable ? "ready" : WingLink.SquadUnavailableReason));
 
             // Whether a dead pilot stays dead, and whether aces come looking. What it takes

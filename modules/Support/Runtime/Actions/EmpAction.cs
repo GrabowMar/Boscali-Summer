@@ -51,7 +51,9 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
                                    " at " + ground.y.ToString("F0") + " m AGL-local, burst +" +
                                    SupportEffectPolicy.EmpBurstAltitude.ToString("F0") + " m");
             // The station's online battery banks widen both the jam and its replicated effect.
-            float radius = context.Settings.EmpRadius.Value * platform.EmpScaleAt(context.Host.OrbitNow);
+            // Bound to the ceiling the replicated name can carry, or peers fall back to the default visual.
+            float radius = Mathf.Min(context.Settings.EmpRadius.Value * platform.EmpScaleAt(context.Host.OrbitNow),
+                SupportEffectPolicy.MaxEmpRadius);
             context.Host.Run(Discharge(context.Host, context.Player, context.Owner, definition, ground,
                 radius, SupportEffectPolicy.EmpName(SupportNaming.Unique("Emp", context), radius)));
             return SupportResult.Accepted;

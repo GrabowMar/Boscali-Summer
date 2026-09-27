@@ -4,6 +4,8 @@ using BepInEx.Logging;
 using BoscaliSummer.Features.Trenches.Configuration;
 using BoscaliSummer.Features.Trenches.Domain;
 using BoscaliSummer.Features.Trenches.Runtime;
+using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Framework.Features;
 using BoscaliSummer.Framework.Lifecycle;
 using BoscaliSummer.Runtime;
 using UnityEngine;
@@ -30,6 +32,8 @@ namespace BoscaliSummer.Features.Trenches.Presentation
         private bool isMapMaximized;
         private float lastZoom = -1f;
         private FactionHQ lastHq;
+        private bool lastProjectionActive;
+        private int lastProjectionRevision;
 
         public void Configure(TrenchesSettings config, TrenchManager manager, ManualLogSource log)
         {
@@ -56,6 +60,8 @@ namespace BoscaliSummer.Features.Trenches.Presentation
             isMapMaximized = false;
             lastZoom = -1f;
             lastHq = null;
+            lastProjectionActive = false;
+            lastProjectionRevision = 0;
         }
 
         private void OnDestroy()
@@ -115,6 +121,14 @@ namespace BoscaliSummer.Features.Trenches.Presentation
             {
                 lastHq = dynamicMap.HQ;
                 if (layer != null) layer.SetVerticesDirty();
+            }
+            bool projected = ModServices.TryGet(out IMapProjection projection) && projection.IsActive;
+            int projectionRevision = projected ? projection.Revision : 0;
+            if (projected != lastProjectionActive || projectionRevision != lastProjectionRevision)
+            {
+                lastProjectionActive = projected;
+                lastProjectionRevision = projectionRevision;
+                layer?.SetVerticesDirty();
             }
         }
 
@@ -391,7 +405,12 @@ namespace BoscaliSummer.Features.Trenches.Presentation
         }
 
         private static Vector2 ToLocal(Vector3 world, float factor)
-            => new Vector2(world.x * factor, world.z * factor);
+        {
+            if (ModServices.TryGet(out IMapProjection projection) &&
+                projection.TryProject(world.x, world.z, out float x, out float y))
+                return new Vector2(x, y);
+            return new Vector2(world.x * factor, world.z * factor);
+        }
 
         private static void AddStroke(VertexHelper vh, Vector2 a, Vector2 b, float halfWidth, Color32 ink)
         {

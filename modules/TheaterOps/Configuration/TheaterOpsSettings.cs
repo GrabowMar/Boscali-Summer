@@ -21,7 +21,6 @@ namespace BoscaliSummer.Features.TheaterOps.Configuration
     internal sealed class TheaterOpsSettings
     {
         public ConfigEntry<bool> Enabled { get; }
-        public ConfigEntry<bool> MapMarkerEnabled { get; }
         public ConfigEntry<bool> FrontlineTacticsEnabled { get; }
         public ConfigEntry<TheaterDirectorFactions> DirectorFactions { get; }
 
@@ -60,8 +59,6 @@ namespace BoscaliSummer.Features.TheaterOps.Configuration
             Enabled = config.Bind(section, "Enabled", true,
                 "Run the theater priority: friendly AI reinforcements are delivered nearer the " +
                 "host-chosen objective and battle-group vehicles advance on it.");
-            MapMarkerEnabled = config.Bind(section, "MapMarkerEnabled", true,
-                "Draw the local faction's main effort as a diamond on the vanilla map. Client-local presentation.");
             FrontlineTacticsEnabled = config.Bind(section, "FrontlineTacticsEnabled", true,
                 "Stage newly depot-spawned AI ground vehicles at the front, spread them into a line, " +
                 "and let offensive groups advance after assembling. Vanilla supply and player orders remain authoritative.");

@@ -38,6 +38,18 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
         private TacticalSectorGrid grid;
         private ulong drawnFrontlineHash;
+        private bool reliefWasDrawing;
+        private int reliefRevision;
+
+        private void LateUpdate()
+        {
+            bool drawing = MfdTerrainRelief.IsDrawing;
+            int revision = MfdTerrainRelief.ViewRevision;
+            if (drawing == reliefWasDrawing && revision == reliefRevision) return;
+            reliefWasDrawing = drawing;
+            reliefRevision = revision;
+            SetVerticesDirty();
+        }
 
         /// <summary>Source of the next rebuild; null draws nothing. An unchanged front skips the mesh rebuild.</summary>
         public void SetSource(TacticalSectorGrid source)
@@ -234,6 +246,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         {
             float u = Mathf.Clamp01(point.X / worldSizeX + 0.5f);
             float v = Mathf.Clamp01(point.Z / worldSizeZ + 0.5f);
+            if (MfdTerrainRelief.TryProject(point.X, point.Z, rect, out Vector2 projected))
+                return projected * scale;
             return new Vector2(rect.xMin + u * rect.width, rect.yMin + v * rect.height) * scale;
         }
     }

@@ -337,7 +337,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 bool held = holder >= 0 && detachment.Team(holder).State == TeamState.Holding;
                 token.Glyph.sprite = OpsSprites.Glyph(Glyph(o.Kind));
                 token.Glyph.color = held ? FieldTones.Post(detachment.Team(holder).Mission)
-                    : o.Hostile ? DeskStyle.Stamp : DeskStyle.Khaki;
+                    : o.Hostile ? DeskStyle.Stamp : o.Friendly ? AvTheme.RailReady : DeskStyle.Khaki;
                 float threatDiameter = Mathf.Max(DeskStyle.TokenSize + 12f, Board.Pixels(FieldCatalog.ThreatRadius) * 2f);
                 token.Threat.gameObject.SetActive(o.Hostile && o.Threat > 0);
                 Lines.Centre(token.Threat.rectTransform, p.x, p.y, threatDiameter);
@@ -348,7 +348,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 token.Pin.gameObject.SetActive(isSelected);
                 Lines.Centre(token.Ring.rectTransform, p.x, p.y, DeskStyle.TokenSize * 1.9f);
                 token.Control.WithTooltip(o.Name + " — " + FieldWords.Kind(o.Kind) + ", " +
-                                          (o.Hostile ? "hostile" : "neutral") + ", " + o.Threat + " ground unit(s) within 2 km, " +
+                                          (o.Hostile ? "hostile" : o.Friendly ? "friendly" : "neutral") + ", " + o.Threat + " ground unit(s) within 2 km, " +
                                           o.Radars + " radar(s). Click to brief it.");
             }
 

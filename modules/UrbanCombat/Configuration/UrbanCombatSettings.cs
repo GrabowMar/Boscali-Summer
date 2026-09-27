@@ -10,8 +10,6 @@ namespace BoscaliSummer.Features.UrbanCombat.Configuration
         public readonly ConfigEntry<bool> SiegeEnabled;
         public readonly ConfigEntry<float> SiegeDefenseScale;
         public readonly ConfigEntry<bool> SiegeArmorBonus;
-        public readonly ConfigEntry<bool> AmbienceEnabled;
-        public readonly ConfigEntry<float> AmbienceVolume;
 
         public UrbanCombatSettings(ConfigFile config)
         {
@@ -46,14 +44,6 @@ namespace BoscaliSummer.Features.UrbanCombat.Configuration
                 "Ground vehicles lead urban assaults: their capture strength rises inside towns, cities and metros, " +
                 "so infantry alone takes a city only slowly. Requires urban siege. " +
                 "Host-authoritative: on a server, only the host's value applies.");
-            AmbienceEnabled = config.Bind("Garrisons", "UrbanAmbience", true,
-                "Air-raid siren near cities, heard from the camera like any other positional sound. " +
-                "Client-local: each player's own value applies, and headless servers stay silent.");
-            AmbienceVolume = config.Bind("Garrisons", "UrbanAmbienceVolume", 0.7f,
-                new ConfigDescription(
-                    "Master volume for the urban siren. 0 is silent. " +
-                    "Client-local: each player's own value applies.",
-                    new AcceptableValueRange<float>(0f, 1f)));
         }
     }
 }

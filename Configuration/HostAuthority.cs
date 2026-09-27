@@ -27,6 +27,7 @@ namespace BoscaliSummer
             s.Events.EffectStrength, s.Events.SuperEventsEnabled,
 
             s.FireAndDestruction.FiresEnabled, s.FireAndDestruction.FireIntensity,
+            s.FireAndDestruction.ActiveFireLimit,
             s.FireAndDestruction.DemolishUnoccupiedBuildings,
 
             s.HighCommand.EconomyEnabled, s.HighCommand.StipendIntervalSeconds,
@@ -60,6 +61,7 @@ namespace BoscaliSummer
             s.TheaterOps.OperationHoldSeconds, s.TheaterOps.OperationAssaultSeconds,
 
             s.Trenches.GrowthIntervalSeconds, s.Trenches.MaxTrenchPositions,
+            s.Trenches.BarrageEnabled,
 
             s.UrbanCombat.GarrisonsEnabled, s.UrbanCombat.GarrisonsPerZone,
             s.UrbanCombat.TroopsPerDeploy, s.UrbanCombat.SiegeEnabled,

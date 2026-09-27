@@ -1,8 +1,8 @@
 ﻿namespace BoscaliSummer.Framework.Contracts
 {
     /// <summary>
-    /// The local third-person presentation settings: the external-view HUD and the camera
-    /// framing around it. Owned and applied by Hud; read and written only through this seam.
+    /// The local external-view HUD settings. Owned and applied by Hud; read and written only
+    /// through this seam.
     /// </summary>
     internal interface IThirdPersonHud
     {
@@ -17,7 +17,7 @@
         /// <summary>Show the native target camera feed while contacts are selected.</summary>
         bool CameraFeedEnabled { get; set; }
 
-        /// <summary>Smooth aircraft-relative orbit and rear-chase framing.</summary>
+        /// <summary>Use the stabilized external orbit and chase framing.</summary>
         bool FlightCameraEnabled { get; set; }
 
         bool BoardEnabled { get; set; }

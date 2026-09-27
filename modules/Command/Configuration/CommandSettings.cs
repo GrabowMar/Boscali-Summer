@@ -26,6 +26,7 @@ namespace BoscaliSummer.Features.Command.Configuration
         public ConfigEntry<float> BackgroundImageOpacity { get; }
 
         public ConfigEntry<bool> MapTerrainImage { get; }
+        public ConfigEntry<bool> MapRelief3D { get; }
         public ConfigEntry<float> MapTerrainOpacity { get; }
         public ConfigEntry<float> MapTrayOpacity { get; }
 
@@ -81,7 +82,7 @@ namespace BoscaliSummer.Features.Command.Configuration
                 "Draw the front line trace above the control tint. Only drawn while the control field is on; the MAP bezel's FRONT LINE layer switches it in game.");
 
             ThreatHeat = config.Bind("Command", "ThreatHeat", true,
-                "Heat-map tracked hostile sensor coverage: how strongly each tracked enemy radar would see your aircraft at that spot, with its optical/IR range merged in more quietly. Only the local faction's tracked picture is drawn. The MAP bezel's THREAT HEAT layer switches it in game.");
+                "Tracked hostile sensor coverage as range contours. The local faction's tracked picture and your aircraft's detection envelope drive it. The MAP bezel's SENSOR CONTOURS layer switches it in game.");
 
             OverlayOpacity = config.Bind("Command", "OverlayOpacity", 0.35f,
                 new ConfigDescription(
@@ -137,6 +138,9 @@ namespace BoscaliSummer.Features.Command.Configuration
 
             MapTerrainImage = config.Bind("Command", "MapTerrainImage", true,
                 "Display satellite terrain map image under tactical overlays.");
+
+            MapRelief3D = config.Bind("Command", "MapRelief3D", true,
+                "Show a tilted tactical model from baked game terrain when the expanded map is open. The native map remains available when terrain data is missing or this is off.");
 
             MapTerrainOpacity = config.Bind("Command", "MapTerrainOpacity", 1.0f,
                 new ConfigDescription(

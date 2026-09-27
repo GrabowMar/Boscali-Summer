@@ -401,16 +401,18 @@ namespace BoscaliSummer.Tests.Features.Support
             platform.Consume(PlatformAbility.Rephase, now);
             TestAssert.That(platform.Rods == 2 && platform.Fuel == 75f, "consumption must spend rods and fuel");
 
-            TestAssert.That(platform.TryResupply(now, Dock) == PlacementFailure.None && platform.Pending == ModuleKind.Cargo,
+            TestAssert.That(platform.TryResupply(now, Dock, 350f, 7UL) == PlacementFailure.None && platform.Pending == ModuleKind.Cargo,
                 "a cargo vehicle must launch");
-            TestAssert.That(platform.TryResupply(now, Dock) == PlacementFailure.LaunchInFlight, "one cargo at a time");
+            TestAssert.That(platform.PendingPaid == 350f && platform.PendingPayer == 7UL,
+                "a cargo flight must record what was paid and who paid");
+            TestAssert.That(platform.TryResupply(now, Dock, 350f, 7UL) == PlacementFailure.LaunchInFlight, "one cargo at a time");
             TestAssert.That(platform.CanAttach(5), "cargo must not reserve a cell");
             now += Dock;
             platform.Tick(now, 0.01f, true);
             TestAssert.That(platform.Fuel == 100f && platform.Rods == 3 && platform.Pending == ModuleKind.None,
                 "cargo must refill tanks and magazines");
             TestAssert.That(platform.Cell(OrbitalPlatform.CoreCell) == ModuleKind.Core, "cargo must not replace the core");
-            TestAssert.That(new OrbitalPlatform().TryResupply(0.0, Dock) == PlacementFailure.NoPlatform,
+            TestAssert.That(new OrbitalPlatform().TryResupply(0.0, Dock, 350f, 7UL) == PlacementFailure.NoPlatform,
                 "cargo needs a station");
         }
 

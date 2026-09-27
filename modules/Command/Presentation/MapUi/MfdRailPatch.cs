@@ -171,6 +171,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         /// <see cref="MapUiManager"/> can re-apply when the live canvas size diverges.
         /// </summary>
         public static Vector2 AppliedCanvasSize => appliedCanvasSize;
+        internal static bool IsApplied => applied;
 
         public static void Reconcile()
         {

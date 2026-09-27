@@ -110,12 +110,14 @@ namespace BoscaliSummer.Features.Weather.Domain
         {
             if (index < 0)
             {
-                return Chain(key.Seed, key.Epoch, key.OpeningRegime(), key.Dynamic, time, 0);
+                return Chain(key.Seed, key.Epoch, key.OpeningRegime(), key.Dynamic, time, 0,
+                    key.HoldMinutes / 21f, key.BlendMinutes / 8f);
             }
 
             RegimeOverride keyframe = key.Override(index);
             uint seed = unchecked(key.Seed * 2654435761u ^ (uint)BitConverter.SingleToInt32Bits(keyframe.Time));
-            RegimeState chain = Chain(seed, keyframe.Time, keyframe.Regime, key.Dynamic, time, 100000 * (index + 1));
+            RegimeState chain = Chain(seed, keyframe.Time, keyframe.Regime, key.Dynamic, time,
+                100000 * (index + 1), key.HoldMinutes / 21f, key.BlendMinutes / 8f);
 
             float since = time - keyframe.Time;
             if (since >= OverrideBlendSeconds) return chain;
@@ -141,7 +143,8 @@ namespace BoscaliSummer.Features.Weather.Domain
             return blended;
         }
 
-        private static RegimeState Chain(uint seed, float root, WeatherRegime first, bool dynamic, float time, int idBase)
+        private static RegimeState Chain(uint seed, float root, WeatherRegime first, bool dynamic, float time,
+            int idBase, float holdScale, float blendScale)
         {
             if (!dynamic) return Held(seed, root, first, time, idBase);
 
@@ -150,8 +153,8 @@ namespace BoscaliSummer.Features.Weather.Domain
 
             for (int k = 0; k < MaxSegments; k++)
             {
-                float hold = WeatherMath.HashRange(seed, k, 11, 0, MinHoldSeconds, MaxHoldSeconds);
-                float blend = WeatherMath.HashRange(seed, k, 12, 0, MinBlendSeconds, MaxBlendSeconds);
+                float hold = WeatherMath.HashRange(seed, k, 11, 0, MinHoldSeconds, MaxHoldSeconds) * holdScale;
+                float blend = WeatherMath.HashRange(seed, k, 12, 0, MinBlendSeconds, MaxBlendSeconds) * blendScale;
                 WeatherRegime next = RegimeTable.Next(current, WeatherMath.Hash01(seed, k, 13));
                 float blendStart = start + hold;
                 float end = blendStart + blend;
@@ -175,7 +178,7 @@ namespace BoscaliSummer.Features.Weather.Domain
                     if (blending)
                     {
                         // The next change after this blend is the next segment's own blend.
-                        float nextHold = WeatherMath.HashRange(seed, k + 1, 11, 0, MinHoldSeconds, MaxHoldSeconds);
+                        float nextHold = WeatherMath.HashRange(seed, k + 1, 11, 0, MinHoldSeconds, MaxHoldSeconds) * holdScale;
                         state.NextChangeAt = end + nextHold;
                         state.NextRegime = RegimeTable.Next(next, WeatherMath.Hash01(seed, k + 1, 13));
                     }
@@ -184,7 +187,7 @@ namespace BoscaliSummer.Features.Weather.Domain
                     state.AddFront(Source(seed, idBase + k, current, start + hold * 0.5f, 1f - w));
                     if (blending)
                     {
-                        float nextHold = WeatherMath.HashRange(seed, k + 1, 11, 0, MinHoldSeconds, MaxHoldSeconds);
+                        float nextHold = WeatherMath.HashRange(seed, k + 1, 11, 0, MinHoldSeconds, MaxHoldSeconds) * holdScale;
                         state.AddFront(Source(seed, idBase + k + 1, next, end + nextHold * 0.5f, w));
                     }
                     return state;

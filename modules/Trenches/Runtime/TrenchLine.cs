@@ -25,6 +25,8 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         public bool Suppressed { get; set; }
         public bool Overrun { get; set; }
         public float RetireAt { get; set; }
+        /// <summary>Scene time this position may fire its next harassing mission, when paired.</summary>
+        public float NextBarrageAt { get; set; }
         public int DefenderCount { get; set; }
         /// <summary>Scene time the position was committed; the dig-in grace runs from here.</summary>
         public float DugAt { get; set; }

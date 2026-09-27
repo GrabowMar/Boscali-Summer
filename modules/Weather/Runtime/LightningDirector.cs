@@ -1,37 +1,40 @@
-using System.Collections.Generic;
-using BoscaliSummer.Features.Weather.Audio;
 using BoscaliSummer.Features.Weather.Domain;
+using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Framework.Fx;
 using UnityEngine;
 
 namespace BoscaliSummer.Features.Weather.Runtime
 {
     // Storm lightning: schedules bolts in heavy rain, pulses the vanilla sun with a
     // base-tracked boost (restored when the flash ends, like RainAtmosphere), and fires
-    // delayed thunder through the rain audio. At most MaxPending rumbles queued.
-    internal sealed class LightningDirector
+    // no audio is produced.
+    internal sealed class LightningDirector : IClientEffect
     {
-        private const float MinStrikeM = 200f, MaxStrikeM = 1500f;
         private const float FlashGain = 4f;
         private const float FlashSeconds = 0.8f;
-        private const int MaxPending = 4;
-
-        private struct Rumble
-        {
-            public float At;
-            public float Gain;
-        }
-
-        private readonly List<Rumble> pending = new List<Rumble>(MaxPending);
         private float countdown = -1f;
         private float flashT = -1f;
         private float sunBase = -1f;
         private Light lastSun;
 
+        public string EffectId => "lightning";
+
+        public FxBudget Budget => new FxBudget(0, 0, 0, false);
+
+        public void ReleaseFx()
+        {
+            Reset();
+        }
+
+        public void DescribeFx(System.Collections.Generic.IDictionary<string, object> state)
+        {
+            state["fx.lightning.strikes"] = Strikes;
+        }
+
         internal float FlashNow { get; private set; }
         internal int Strikes { get; private set; }
 
-        internal void Tick(float dt, float rain, LevelInfo level,
-            ProceduralRainAudio audio, float master)
+        internal void Tick(float dt, float rain, LevelInfo level)
         {
             if (rain < LightningMath.MinRain)
             {
@@ -43,7 +46,7 @@ namespace BoscaliSummer.Features.Weather.Runtime
                 countdown -= Mathf.Max(0f, dt);
                 if (countdown <= 0f)
                 {
-                    Strike(audio, master);
+                    Strike();
                     countdown = LightningMath.NextDelay(Random.value, rain);
                 }
             }
@@ -58,22 +61,10 @@ namespace BoscaliSummer.Features.Weather.Runtime
             FlashNow = flash;
             PulseSun(level, flash);
 
-            if (audio != null)
-            {
-                for (int i = pending.Count - 1; i >= 0; i--)
-                {
-                    if (Time.time >= pending[i].At)
-                    {
-                        audio.PlayThunder(pending[i].Gain);
-                        pending.RemoveAt(i);
-                    }
-                }
-            }
         }
 
         internal void Reset()
         {
-            pending.Clear();
             countdown = -1f;
             flashT = -1f;
             FlashNow = 0f;
@@ -84,19 +75,10 @@ namespace BoscaliSummer.Features.Weather.Runtime
             lastSun = null;
         }
 
-        private void Strike(ProceduralRainAudio audio, float master)
+        private void Strike()
         {
             flashT = 0f;
             Strikes++;
-            float distance = Random.Range(MinStrikeM, MaxStrikeM);
-            if (audio != null && pending.Count < MaxPending)
-            {
-                pending.Add(new Rumble
-                {
-                    At = Time.time + LightningMath.ThunderDelay(distance),
-                    Gain = LightningMath.ThunderGain(distance, master)
-                });
-            }
         }
 
         private void PulseSun(LevelInfo level, float flash)

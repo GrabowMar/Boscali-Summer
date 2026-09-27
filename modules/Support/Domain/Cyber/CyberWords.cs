@@ -305,7 +305,7 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
                     target = i;
                     return "ENEMY OPERATION HEARD · TRACE IT [4] WHILE IT LASTS";
                 }
-                if (incident.Kind == IncidentKind.Raid && network.Check(CyberVerb.BurnThrough, i, now) == CyberDenial.None)
+                if (incident.Kind == IncidentKind.Raid && network.Check(CyberVerb.BurnThrough, incident.Id, now) == CyberDenial.None)
                 {
                     verb = CyberVerb.BurnThrough;
                     target = i;

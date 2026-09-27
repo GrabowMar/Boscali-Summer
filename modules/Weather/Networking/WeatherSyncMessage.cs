@@ -18,5 +18,12 @@ namespace BoscaliSummer.Features.Weather.Networking
         public float TransitionProgress;
         public uint MissionTimeSeconds;
         public float ForcedRain; // -1f = auto/unforced, 0f..1f = forced manual rain
+        public uint FieldSeed;
+        public float FieldEpoch;
+        public byte FieldStartRegime;
+        public bool FieldDynamic;
+        public bool FieldManual;
+        public float HoldMinutes;
+        public float BlendMinutes;
     }
 }

@@ -18,33 +18,35 @@ namespace BoscaliSummer.Features.TheaterOps
         {
             typeof(MissionPositionAdvancePriorityPatch),
             typeof(MissionPositionDeliveryPriorityPatch),
-            typeof(GroundFrontDepotPatch)
+            typeof(GroundFrontDepotPatch),
+            typeof(NavalFrontChooseTargetPatch)
         };
 
         public void Install(FeatureContext context)
         {
             TheaterOpsNet network = context.AddComponent<TheaterOpsNet>();
+            LivingFrontNet livingNetwork = context.AddComponent<LivingFrontNet>();
 
             TheaterPriorityService priority = context.AddSceneService<TheaterPriorityService>(50);
             TheaterLogisticsService logistics = context.AddSceneService<TheaterLogisticsService>(50);
-            TheaterOperationsService operations = context.AddSceneService<TheaterOperationsService>(50);
-            TheaterDirectorService director = context.AddSceneService<TheaterDirectorService>(50);
+            NavalFrontService naval = context.AddSceneService<NavalFrontService>(50);
+            LivingFrontService living = context.AddSceneService<LivingFrontService>(50);
             GroundFrontService groundFront = context.AddSceneService<GroundFrontService>(50);
-            TheaterEffortMarker marker = context.AddSceneService<TheaterEffortMarker>(50);
             Presentation.TheaterOpsHudLine hudLine = context.AddSceneService<Presentation.TheaterOpsHudLine>(51);
 
             priority.Configure(context.Settings.TheaterOps, network, context.Logger);
             logistics.Configure(context.Settings.TheaterOps, context.Logger);
-            director.Configure(context.Settings.TheaterOps, priority, logistics, operations, network, context.Logger);
-            operations.Configure(context.Settings.TheaterOps, network, priority, director, context.Logger);
-            groundFront.Configure(context.Settings.TheaterOps, priority, operations, director, context.Logger);
-            marker.Configure(context.Settings.TheaterOps, priority);
-            network.Configure(priority, operations, director);
-            hudLine.Configure(priority, operations);
+            naval.Configure(context.Settings.TheaterOps);
+            living.Configure(context.Settings.TheaterOps, priority, logistics, livingNetwork, naval, context.Logger);
+            livingNetwork.Configure(living);
+            groundFront.Configure(context.Settings.TheaterOps, priority, null, null, context.Logger);
+            network.Configure(priority, null, null);
+            hudLine.Configure(living);
 
             context.AddService<ITheaterPriorityView>(priority);
             context.AddService<ITheaterLogisticsView>(logistics);
-            context.AddService<ITheaterOperationsView>(operations);
+            context.AddService<ITheaterWarView>(living);
+            context.AddService<ITheaterAirStationView>(living);
         }
     }
 }

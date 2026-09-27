@@ -2,7 +2,6 @@ using System;
 using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Features;
 using BoscaliSummer.Garrisons;
-using BoscaliSummer.Features.UrbanCombat.Audio;
 using BoscaliSummer.Features.UrbanCombat.Runtime;
 
 namespace BoscaliSummer.Features.UrbanCombat
@@ -38,7 +37,6 @@ namespace BoscaliSummer.Features.UrbanCombat
             AirAssaultController assault = context.AddSceneService<AirAssaultController>(31);
             context.AddService<IAirAssaultObservation>(assault);
             BaseDefenseAlarmService alarm = context.AddSceneService<BaseDefenseAlarmService>(32);
-            context.AddSceneService<UrbanAmbienceService>(33);
             context.AddSceneService<WarzoneDressingService>(34);
             context.AddService<IBuildingOccupancy>(garrisons);
             context.AddService<IZoneFortificationService>(garrisons);
@@ -49,6 +47,8 @@ namespace BoscaliSummer.Features.UrbanCombat
             context.AddHostSettings(new HostSettingsTable("URBAN COMBAT")
                 .Toggle(1, context.Settings.UrbanCombat.GarrisonsEnabled, "ZONE GARRISONS",
                     "Occupied buildings near owned airbases become defensive positions; the Zone Fortification support action needs this on.")
+                .Number(4, context.Settings.UrbanCombat.GarrisonsPerZone, "NESTS PER ZONE",
+                    "Base rooftop defenders for new zones; urban siege can add up to three, within the hard cap of six. Existing nests remain.", 1)
                 .Toggle(2, context.Settings.UrbanCombat.SiegeEnabled, "URBAN SIEGE",
                     "Cities resist capture with their size and rooftop nests; control holds at the strongpoint floor until the nests fall.")
                 .Number(3, context.Settings.UrbanCombat.SiegeDefenseScale, "SIEGE STRENGTH",

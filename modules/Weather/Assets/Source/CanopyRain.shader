@@ -1,6 +1,6 @@
 // Boscali canopy rain render: a pure heightfield visualizer over the per-pane
 // droplet simulation (Hidden/BoscaliCanopyDroplets). Every pane samples the same
-// metric pattern density (1.5 tiles/m on a per-pane planar frame picked from mesh
+// metric pattern density (3 tiles/m on a per-pane planar frame picked from mesh
 // bounds), so split windscreens agree on drop size by construction. The render
 // holds no time and no flow: all motion lives in the sim, which is what keeps
 // panes from ever disagreeing frame to frame. Beads refract the opaque scene,
@@ -43,8 +43,8 @@ Shader "Boscali/CanopyRain"
             float _Intensity, _LightLevel, _Refract, _Distortion, _MapAxis;
             float4 _Salt, _SunDir, _SunColor, _FogColor, _Tint;
 
-            #define DENSITY 1.5 // pattern tiles per metre, identical on every pane
-            #define TEXEL (1.0 / 512.0)
+            #define DENSITY 3.0 // pattern tiles per metre, identical on every pane
+            #define TEXEL (1.0 / 256.0)
 
             struct Input
             {
@@ -82,12 +82,13 @@ Shader "Boscali/CanopyRain"
             {
                 clip(_Intensity - 0.001);
 
-                float hC = tex2D(_DropTex, i.simUv).r;
+                float4 drop = tex2D(_DropTex, i.simUv);
+                float hC = drop.r;
                 float hx = tex2D(_DropTex, i.simUv + float2(TEXEL, 0.0)).r
                     - tex2D(_DropTex, i.simUv - float2(TEXEL, 0.0)).r;
                 float hy = tex2D(_DropTex, i.simUv + float2(0.0, TEXEL)).r
                     - tex2D(_DropTex, i.simUv - float2(0.0, TEXEL)).r;
-                float trail = tex2D(_DropTex, i.simUv).g;
+                float trail = drop.g;
 
                 // Pane basis in object space, flipped to the authored normal side.
                 float3 exO = _MapAxis < 0.5 ? float3(1, 0, 0) : (_MapAxis < 1.5 ? float3(0, 0, 1) : float3(1, 0, 0));
@@ -98,31 +99,42 @@ Shader "Boscali/CanopyRain"
                 float3 nW = normalize(mul(objToWorld, nO) * side
                     + (mul(objToWorld, exO) * -hx + mul(objToWorld, eyO) * -hy) * 3.5 * side);
 
-                float bead = smoothstep(0.05, 0.45, hC);
-                float rim = saturate(length(float2(hx, hy)) * 2.0);
-                float cover = saturate(bead + trail * 0.35);
+                float bead = smoothstep(0.025, 0.28, hC);
+                float2 slope = float2(hx, hy);
+                float rim = saturate(length(slope) * 3.0);
+                float cover = saturate(bead + trail * 0.25);
                 clip(cover - 0.004);
 
                 float2 suv = i.screen.xy / max(i.screen.w, 0.0001);
                 float2 screenDistortion = float2(hx, hy) * _Distortion
                     * float2(_ScreenParams.y / _ScreenParams.x, 1.0) * 2.0;
-                float3 scene = tex2D(_CameraOpaqueTexture, saturate(suv + screenDistortion)).rgb;
-
                 float3 tint = _FogColor.rgb * _LightLevel;
-                float3 body = lerp(tint, scene, _Refract) * _Tint.rgb;
+                float3 body = tint;
+                if (_Refract > 0.5)
+                    body = tex2D(_CameraOpaqueTexture, saturate(suv + screenDistortion)).rgb;
+                // Keep the refracted scene but avoid bright solid discs in dark storms.
+                body = lerp(body, _FogColor.rgb * _LightLevel, 0.55) * _Tint.rgb;
 
                 float sunLen = length(_SunDir.xyz);
                 float glint = 0.0;
                 if (sunLen > 0.05)
                 {
                     float3 sunDir = _SunDir.xyz / sunLen;
-                    glint = pow(saturate(dot(nW, sunDir)), 28.0);
+                    glint = pow(saturate(dot(nW, sunDir)), 28.0) * rim;
                 }
 
                 float sky = pow(saturate(nW.y), 3.0) * 0.14 * _LightLevel;
-                float3 finalColor = body * (1.0 - rim * 0.18 * bead) + _SunColor.rgb * glint * 0.65 + _FogColor.rgb * (sky + bead * hC * 0.25 * _LightLevel);
+                float edgeLight = saturate(dot(normalize(slope + float2(0.001, 0.001)),
+                    normalize(float2(-0.35, 0.94))));
+                float3 edge = lerp(_FogColor.rgb, float3(1.0, 1.0, 1.0), 0.45) * _LightLevel;
+                float core = bead * (1.0 - rim);
+                float3 finalColor = body * (1.0 - core * 0.35 - rim * 0.12 * bead)
+                    + edge * (rim * edgeLight * bead * 0.27)
+                    + _SunColor.rgb * glint * 0.55
+                    + _FogColor.rgb * (sky + rim * bead * 0.12 * _LightLevel);
 
-                float alpha = saturate(cover * lerp(0.10 + bead * 0.25, 0.25 + bead * 0.55, _Refract)) * _Intensity;
+                float alpha = saturate(cover * lerp(0.15 + bead * 0.32,
+                    0.22 + bead * 0.50, _Refract)) * _Intensity;
                 return float4(finalColor, alpha);
             }
             ENDHLSL

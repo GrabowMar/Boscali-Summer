@@ -12,7 +12,7 @@ namespace BoscaliSummer.Features.Weather.Domain
     }
 
     /// <summary>
-    /// A frontal boundary resolved at one instant: a straight line crossing the map with its
+    /// A frontal boundary resolved at one instant: a gently curved line crossing the map with its
     /// steering wind. <see cref="SignedDistance"/> is <b>negative while the front is still
     /// approaching a point and positive once it has passed</b>; the normal points the way the
     /// front travels. That sign is load-bearing — the rain band, the wind veer and the radar all
@@ -32,12 +32,26 @@ namespace BoscaliSummer.Features.Weather.Domain
         public float Strength;
 
         public int Id;
+        public float MeanderAmplitude;
+        public float MeanderWavelength;
+        public float MeanderPhase;
 
         /// <summary>
         /// How far the line has travelled past a point: the line sits at <see cref="Offset"/>
         /// along the normal, so a point further along the normal is still ahead of it (negative).
         /// </summary>
-        public float SignedDistance(float x, float z) => Offset - (x * NormalX + z * NormalZ);
+        public float SignedDistance(float x, float z)
+        {
+            float along = -x * NormalZ + z * NormalX;
+            return OffsetAtAlong(along) - (x * NormalX + z * NormalZ);
+        }
+
+        public float OffsetAtAlong(float along)
+        {
+            float phase = along * (2f * (float)Math.PI / MeanderWavelength) + MeanderPhase;
+            return Offset + MeanderAmplitude * ((float)Math.Sin(phase) +
+                0.35f * (float)Math.Sin(phase * 2.1f + MeanderPhase));
+        }
 
         /// <summary>Seconds until the line reaches a point (negative once passed).</summary>
         public float SecondsUntil(float x, float z) => Speed > 0.01f ? -SignedDistance(x, z) / Speed : float.PositiveInfinity;
@@ -94,6 +108,10 @@ namespace BoscaliSummer.Features.Weather.Domain
                 Offset = speed * (time - source.Mid),
                 Strength = WeatherMath.Clamp01(source.Strength),
                 Id = source.Id,
+                MeanderAmplitude = WeatherMath.HashRange(source.Seed, source.Id, 33, 0,
+                    kind == FrontKind.Warm ? 1000f : 1800f, kind == FrontKind.Warm ? 2500f : 4200f),
+                MeanderWavelength = WeatherMath.HashRange(source.Seed, source.Id, 34, 0, 42000f, 85000f),
+                MeanderPhase = WeatherMath.HashRange(source.Seed, source.Id, 35, 0, -3.14f, 3.14f),
             };
         }
 

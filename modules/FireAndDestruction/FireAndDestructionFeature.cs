@@ -40,6 +40,8 @@ namespace BoscaliSummer.Features.FireAndDestruction
                 .Number(2, context.Settings.FireAndDestruction.FireIntensity, "FIRE INTENSITY",
                     "Ignition chance, spread and visual intensity. Performance budgets stay bounded at any value.",
                     0.05f, v => v.ToString("P0"))
+                .Number(4, context.Settings.FireAndDestruction.ActiveFireLimit, "MAX FIRE SITES",
+                    "Load limit for new fire sites; current fires expire normally. Lower values reduce fire simulation and effects.", 4)
                 .Toggle(3, context.Settings.FireAndDestruction.DemolishUnoccupiedBuildings, "BURN DOWN SHELLS",
                     "Demolish a civilian building after its fire burns out, unless a faction owns it."));
         }

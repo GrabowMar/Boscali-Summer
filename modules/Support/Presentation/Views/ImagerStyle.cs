@@ -15,9 +15,9 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
     {
         public const float EntranceSeconds = 0.22f;
 
-        public const float Osd = 13f;
-        public const float Corner = 14f;
-        public const float Small = 11f;
+        public const float Osd = 15f;
+        public const float Corner = 16f;
+        public const float Small = 12f;
         public const float Tracking = 2f;
 
         public static Color Ink { get; private set; }

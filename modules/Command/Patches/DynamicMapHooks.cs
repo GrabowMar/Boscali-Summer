@@ -39,12 +39,20 @@ namespace BoscaliSummer.Features.Command.Patches
     [HarmonyPatch(typeof(DynamicMap), "MapControls")]
     internal static class MapControlsPanelGuardPatch
     {
-        private static bool Prefix()
+        private static bool Prefix(DynamicMap __instance)
         {
+            if (MfdMapInteractions.BlockNativeControls(__instance)) return false;
             if (!MapUiPointer.OverControls()) return true;
             if (Input.mouseScrollDelta.y != 0f) return false;
             return !Input.GetMouseButton(0) && !Input.GetMouseButton(1);
         }
+    }
+
+    /// <summary>A completed box gesture must not also click the icon beneath its release.</summary>
+    [HarmonyPatch(typeof(UnitMapIcon), nameof(UnitMapIcon.ClickIcon))]
+    internal static class MapBoxIconClickGuardPatch
+    {
+        private static bool Prefix() => !MfdMapInteractions.BlockIconClick();
     }
 
     /// <summary>

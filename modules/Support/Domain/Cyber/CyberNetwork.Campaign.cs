@@ -89,6 +89,9 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         public IncidentKind Kind;
         public IncidentOutcome Outcome;
 
+        /// <summary>Stable host identity across snapshots; 0 means unassigned. Verb targets use it.</summary>
+        public byte Id;
+
         /// <summary>Node slot the incident sits on (entry or current hop); -1 for none.</summary>
         public int Site;
 
@@ -139,6 +142,7 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         public const float FirstIncidentDelay = 90f;
 
         private readonly CyberIncident[] incidents = new CyberIncident[IncidentSlots];
+        private int nextIncidentId = 1;
         private readonly double[] footholdUntil = new double[MaximumOrigins];
         private readonly CyberNotice[] noticeKind = new CyberNotice[NoticeSlots];
         private readonly int[] noticeSite = new int[NoticeSlots];
@@ -165,6 +169,30 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
 
         public CyberIncident Incident(int index) =>
             index >= 0 && index < IncidentSlots ? incidents[index] : default;
+
+        /// <summary>Slot holding a live incident id, or -1. Verb targets are ids, not slots.</summary>
+        public int IncidentSlot(byte id)
+        {
+            if (id == 0) return -1;
+            for (int i = 0; i < IncidentSlots; i++)
+                if (incidents[i].Kind != IncidentKind.None && incidents[i].Id == id) return i;
+            return -1;
+        }
+
+        /// <summary>Next incident id, skipping 0 and any id a live incident still holds.</summary>
+        private byte NextIncidentId()
+        {
+            for (int i = 0; i < 256; i++)
+            {
+                nextIncidentId++;
+                if (nextIncidentId > 255) nextIncidentId = 1;
+                bool live = false;
+                for (int s = 0; s < IncidentSlots; s++)
+                    if (incidents[s].Kind != IncidentKind.None && incidents[s].Id == nextIncidentId) { live = true; break; }
+                if (!live) return (byte)nextIncidentId;
+            }
+            return 1;
+        }
 
         public bool IncidentActive(int index) =>
             index >= 0 && index < IncidentSlots && incidents[index].Kind != IncidentKind.None &&
@@ -241,6 +269,7 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             if (slot < 0) return false;
             incidents[slot] = new CyberIncident
             {
+                Id = NextIncidentId(),
                 Kind = IncidentKind.HostileOperation,
                 Site = NearestNode(x, z),
                 Origin = origin,
@@ -346,6 +375,7 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
 
             var incident = new CyberIncident
             {
+                Id = NextIncidentId(),
                 Kind = kind,
                 Site = entry,
                 Origin = origin,
@@ -644,6 +674,7 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             {
                 CyberIncident incident = incidents[i];
                 if (incident.Kind == IncidentKind.None) continue;
+                into.IncidentId[count] = incident.Id;
                 into.IncidentKind[count] = (byte)incident.Kind;
                 into.IncidentState[count] = (byte)((byte)incident.Outcome | (incident.Tracing ? 0x80 : 0) |
                                                    (incident.Held ? 0x40 : 0));
@@ -682,6 +713,7 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
 
             Array.Clear(incidents, 0, IncidentSlots);
             int count = Math.Min((int)from.IncidentCount, IncidentSlots);
+            int packed = 0;
             for (int i = 0; i < count; i++)
             {
                 byte kind = from.IncidentKind[i];
@@ -691,8 +723,9 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
                     !Finite(from.IncidentAge[i]) || !Finite(from.IncidentLeft[i]))
                     continue;
                 float left = from.IncidentLeft[i];
-                incidents[i] = new CyberIncident
+                incidents[packed++] = new CyberIncident
                 {
+                    Id = from.IncidentId[i],
                     Kind = (IncidentKind)kind,
                     Outcome = (IncidentOutcome)outcome,
                     Tracing = (from.IncidentState[i] & 0x80) != 0,

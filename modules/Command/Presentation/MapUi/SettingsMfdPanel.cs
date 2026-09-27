@@ -31,6 +31,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private ComMapOverlay overlay;
         private ManualLogSource logger;
         private HostSettingsBoard hostSettings;
+        private ClientSettingsBoard clientSettings;
         private GameObject root;
         private GameObject surface;
         private MFDScreen screen;
@@ -41,6 +42,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private bool failed;
         private float nextTick;
         private readonly List<Action> refreshers = new List<Action>();
+        private int serverRefresherStart;
         private bool dirty = true;
         private bool wasVisible;
         private bool appearancePending;
@@ -54,12 +56,13 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private int clientPage;
 
         public void Configure(CommandSettings config, ManualLogSource log, ComMapOverlay mapOverlay = null,
-            HostSettingsBoard hostSettingsBoard = null)
+            HostSettingsBoard hostSettingsBoard = null, ClientSettingsBoard clientSettingsBoard = null)
         {
             settings = config;
             overlay = mapOverlay;
             logger = log;
             hostSettings = hostSettingsBoard;
+            clientSettings = clientSettingsBoard;
             MfdMapDeck.Configure(config);
             ApplyDisplayEffects();
             if (configFile != null) configFile.SettingChanged -= OnSettingChanged;
@@ -71,19 +74,16 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
         private void OnSettingChanged(object sender, SettingChangedEventArgs args)
         {
-            // Hud is the one section this panel does not own: the common HUD element reads its
-            // own entries live, and this only repaints the rows so the panel is not left showing
-            // a value the config file no longer holds.
+            // Repaint client-owned rows when F1 or session changes their config. The
+            // underlying modules read their entries themselves; SET only reflects them.
             string section = args.ChangedSetting.Definition.Section;
-            if (section != "Command" && section != "Hud" && section != "Avionics" && section != "Visuals") return;
+            if (section != "Command" && section != "Hud" && section != "Avionics" &&
+                section != "Weather" && section != "Garrisons" && section != "Performance") return;
             dirty = true;
             if (section != "Command") return;
             switch (args.ChangedSetting.Definition.Key)
             {
                 case "ExpandedMapUi": layoutPending = true; break;
-                case "FrontlinesOverlay":
-                case "FrontlineTrace":
-                case "OverlayOpacity":
                 case "GridRefreshInterval": overlayPending = true; break;
                 case "NewsTicker": tickerPending = true; break;
                 case "NewsTickerSpeed": break;
@@ -122,8 +122,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             if (visible)
             {
-                // The SERVER page carries live host state (tasking clocks, host values), so it
-                // refreshes on the tick; the CLIENT pages only when something actually changed.
+                // Host values can change independently; client controls update on edits.
                 if (dirty || !wasVisible || shell.Page == TabServer) RefreshPanel();
                 string echo = Time.unscaledTime < actionEchoUntil ? actionEcho : null;
                 shell?.WriteStatus(null, echo ?? MapPicker.Prompt, AmbientStatus());
@@ -140,9 +139,13 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         {
             if (shell != null && shell.Page == TabServer)
                 return HostAuthority()
-                    ? "Host settings apply immediately and are saved to the configuration file."
-                    : "Host only. You are seeing the host's values, which apply to everyone on this server.";
+                    ? (serverPage == 1 && serverScrolls[1]
+                        ? "Host controls are saved automatically. Scroll for more."
+                        : serverPage == 0 ? "Host tasking board. Refreshes while visible."
+                        : "Host controls are saved automatically.")
+                    : "Host only. The host's values apply to this server.";
             if (DisplayIndex == 2) return MfdMapDeck.WallpaperStatus;
+            if (DisplayIndex == 5) return "Changes apply now. No mission or game restart.";
             return pageScrolls[Mathf.Clamp(DisplayIndex, 0, DisplayCount - 1)]
                 ? "Saved automatically. Scroll for more; hover for help."
                 : "Saved automatically. Hover a control for help.";
@@ -206,14 +209,16 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 body, "SET", new[] { "CLIENT", "SERVER" }, null, 2,
                 AvTokens.PanelWidth, height, page =>
                 {
-                    shell.DataBar.State.text = PageName(page == TabServer ? ServerDisplay : clientPage);
+                    shell.DataBar.State.text = page == TabServer
+                        ? (serverPage == 0 ? "FACTION TASKING" : "HOST SETTINGS")
+                        : ClientPageTitle();
                     nextTick = 0f;
                     RefreshPanel();
                 });
             shell.Tabs[TabClient].WithTooltip(
                 "Client-local display settings: the map, console surface, background imagery and cockpit view.");
             shell.Tabs[TabServer].WithTooltip(
-                "Host settings: faction tasking and every installed feature's host-authoritative options.");
+                "Faction tasking and host settings. Remote clients can read the host's values.");
             shell.DataBar.SetChip(0, "SAVED", true);
             shell.Status.richText = false;
 
@@ -249,7 +254,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
         private static readonly string[] PageNames =
         {
-            "TACTICAL DISPLAY", "CONSOLE SURFACE", "BACKGROUND IMAGERY", "COCKPIT VIEW", "HUD OVERLAYS", "VISUAL ENHANCEMENTS",
+            "TACTICAL DISPLAY", "DISPLAY STYLE", "BACKGROUND IMAGERY", "CAMERA & CONTROLS", "HUD OVERLAYS", "PERFORMANCE",
             "SERVER SETTINGS"
         };
 
@@ -258,8 +263,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private static string PageName(int page) =>
             page >= 0 && page < PageNames.Length ? PageNames[page] : PageNames[0];
 
+        private string ClientPageTitle() => PageName(clientPage);
+
         /// <summary>
-        /// The CLIENT main tab: the four client-local pages behind a second, smaller tab
+        /// The CLIENT main tab: six client-local pages behind a second, smaller tab
         /// strip. The main strip names the audience (CLIENT / SERVER); this one names the
         /// console surface, so a player reads the hierarchy in one glance.
         /// </summary>
@@ -267,15 +274,16 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         {
             const float barHeight = 26f;
             const float gap = 6f;
-            string[] names = { "MAP", "STYLE", "IMAGE", "COCKPIT", "HUD", "VISUALS" };
+            string[] names = { "MAP", "DISPLAY", "BACKDROP", "CAMERA", "HUD", "PERF" };
             string[] hints =
             {
-                "Map layout, overlays and terrain.",
+                "Map layout, field refresh and terrain.",
                 "Console surface, backdrop decoration and dispatches.",
                 "Local background imagery and its rescans.",
                 "Third-person flight HUD, camera framing and instrument board.",
                 "Status stack, readable contrast, placement and individual feeds.",
-                "Post-processing, HDR bloom, G-force effects, transonic blur and foliage dynamics."
+                "Client-local work budgets. Each switch applies during this mission. " +
+                "Installing a disabled Weather module requires a game restart."
             };
 
             AvNode bar = AvBox.Row("subtabs").Height(barHeight);
@@ -307,7 +315,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             BuildImagePage((RectTransform)clientPages[2].transform, area);
             BuildViewPage((RectTransform)clientPages[3].transform, area);
             BuildHudPage((RectTransform)clientPages[4].transform, area);
-            BuildVisualsPage((RectTransform)clientPages[5].transform, area);
+            BuildPerformancePage((RectTransform)clientPages[5].transform, area);
 
             SetClientPage(0);
         }
@@ -328,7 +336,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             if (shell == null) return;
 
             AvButton.ClearTooltip();
-            if (shell.Page != TabServer) shell.DataBar.State.text = PageName(clientPage);
+            if (shell.Page != TabServer) shell.DataBar.State.text = ClientPageTitle();
             nextTick = 0f;
             RefreshPanel();
         }
@@ -372,7 +380,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         /// the gaps between sections, so the copy reaches the bottom of Shell.Body rather
         /// than leaving a dead band under the last row; a page taller than its bay scrolls
         /// at the natural pitch instead of compressing. <paramref name="fixedHeight"/> is
-        /// the part of a page whose height does not come from rows — the SERVER tasking
+        /// the part of a page whose height does not come from rows — fixed headers and controls
         /// board — and never stretches.
         /// </summary>
         private RectTransform Page(int display, RectTransform parent, Rect body, int rows, int sections,
@@ -443,33 +451,28 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
         private void BuildMapPage(RectTransform parent, Rect body)
         {
-            parent = Page(0, parent, body, 7, 3, out var area);
+            parent = Page(0, parent, body, 5, 3, out var area);
 
             Heading(parent, ref area, "01", "DISPLAY", "CONSOLE");
             Toggle(parent, TakeRow(ref area), "EXPANDED LAYOUT",
                 "Use the full map console. OFF restores the native layout.",
                 () => settings.ExpandedMapUi.Value, v => settings.ExpandedMapUi.Value = v);
 
-            Heading(parent, ref area, "02", "OVERLAYS", "FRONTLINES");
-            Toggle(parent, TakeRow(ref area), "CONTROL FIELD",
-                "Show faction control and contested sectors.",
-                () => settings.FrontlinesOverlay.Value, v => settings.FrontlinesOverlay.Value = v);
-            Toggle(parent, TakeRow(ref area), "FRONT LINE",
-                "Draw the front line trace above the control field.",
-                () => settings.FrontlineTrace.Value, v => settings.FrontlineTrace.Value = v,
-                () => settings.FrontlinesOverlay.Value, () => "Turn on the control field first.");
-            Percent(parent, TakeRow(ref area), "FRONTLINE STRENGTH", settings.OverlayOpacity, .1f, 1f, .05f,
-                () => settings.FrontlinesOverlay.Value, () => "Turn on the control field first.");
+            Heading(parent, ref area, "02", "SECTOR FIELD", "REFRESH");
             Stepper(parent, TakeRow(ref area), "UPDATE INTERVAL",
                 () => settings.GridRefreshInterval.Value.ToString("0.0") + " s",
                 d => settings.GridRefreshInterval.Value = Mathf.Clamp(
                     Mathf.Round((settings.GridRefreshInterval.Value + d * .1f) * 10f) / 10f, .2f, 2f),
                 () => settings.GridRefreshInterval.Value > .201f,
                 () => settings.GridRefreshInterval.Value < 1.999f,
-                "Longer intervals reduce CPU work. Recommended: 0.5 s.",
-                () => settings.FrontlinesOverlay.Value, () => "Turn on the control field first.");
+                "Longer intervals reduce CPU work. Recommended: 0.5 s.");
 
             Heading(parent, ref area, "03", "TERRAIN", "SATELLITE");
+            Toggle(parent, TakeRow(ref area), "3D RELIEF",
+                "Render baked game terrain as a tilted tactical model. Symbols, front line and clicks follow the same surface.",
+                () => settings.MapRelief3D.Value, v => settings.MapRelief3D.Value = v,
+                () => settings.ExpandedMapUi.Value && settings.MapTerrainImage.Value,
+                () => "Turn on expanded layout and terrain image first.");
             Toggle(parent, TakeRow(ref area), "TERRAIN IMAGE",
                 "Show the satellite terrain beneath map symbols.",
                 () => settings.MapTerrainImage.Value, v => settings.MapTerrainImage.Value = v,
@@ -623,7 +626,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private void BuildViewPage(RectTransform parent, Rect body)
         {
             ModServices.TryGet(out IThirdPersonHud hud);
-            parent = Page(3, parent, body, 20, 4, out var area);
+            parent = Page(3, parent, body, 21, 4, out var area);
 
             Heading(parent, ref area, "01", "HUD", "THIRD PERSON");
             Toggle(parent, TakeRow(ref area), "THIRD-PERSON HUD",
@@ -650,7 +653,6 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 "Smooth aircraft-relative orbit and rear chase framing with a steady horizon.",
                 () => hud != null && hud.FlightCameraEnabled, v => { if (hud != null) hud.FlightCameraEnabled = v; },
                 () => hud != null && hud.IsEnabled, () => "Turn on third-person HUD first.");
-
             Heading(parent, ref area, "03", "TARGETING", "RADIAL");
             Toggle(parent, TakeRow(ref area), "RADIAL PRESETS",
                 "Offer the TGT quick slots as a page in the native cockpit radial menu.",
@@ -707,7 +709,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 on, off);
 
             Toggle(parent, TakeRow(ref area), "NOTICES",
-                "Show transient notices: an ace hunt starting, entering or leaving a contract area.",
+                "Show transient notices, including ace hunt and mission alerts.",
                 () => board != null && board.NoticesEnabled,
                 v => { if (board != null) board.NoticesEnabled = v; },
                 on, off);
@@ -949,7 +951,11 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             AvUiSound.Volume = settings.UiSoundVolume.Value;
             bool host = HostAuthority();
             shell?.DataBar.SetChip(1, host ? "HOST" : "CLIENT", host ? "live" : "inert");
-            foreach (Action refresh in refreshers) refresh();
+            // The server page updates every tick while open. Its host rows do not need
+            // to refresh every hidden client control at the same time.
+            int start = shell != null && shell.Page == TabServer ? serverRefresherStart : 0;
+            int end = shell != null && shell.Page == TabServer ? refreshers.Count : serverRefresherStart;
+            for (int i = start; i < end; i++) refreshers[i]();
             dirty = false;
         }
 
@@ -968,6 +974,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             clientPages = null;
             clientTabs = null;
             clientPage = 0;
+            serverPages = null;
+            serverTabs = null;
+            serverPage = 0;
             tasking = null;
             taskRequest = null;
             taskNote = null;
@@ -993,10 +1002,14 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             shell = null;
             clientPages = null;
             clientTabs = null;
+            serverPages = null;
+            serverTabs = null;
             Array.Clear(taskRows, 0, taskRows.Length);
+            tasking = null;
             taskRequest = null;
             taskNote = null;
             refreshers.Clear();
+            serverRefresherStart = 0;
         }
 
         private void OnDestroy()

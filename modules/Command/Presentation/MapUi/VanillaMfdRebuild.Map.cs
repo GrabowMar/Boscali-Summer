@@ -37,7 +37,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private static readonly string[] LayerSubtitles =
                 { "Mission markers", "Target markers", "Jam indicators", "Grid coordinates", "Pilot icons", "Base icons" };
             private static readonly string[] OverlayNames =
-                { "CONTROL FIELD", "FRONT LINE", "THREAT HEAT", "SATELLITE MAP" };
+                { "CONTROL FIELD", "FRONT LINE", "SENSOR CONTOURS", "SATELLITE MAP" };
             private static readonly string[] OverlayNotes =
             {
                 "Faction sector control tint", "Front line trace over the control field",
@@ -533,7 +533,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private string OverlayUnavailable(int index)
             {
                 if (index < 2) return "Command's theater overlay is not running on this map.";
-                if (index == 2) return "Threat heat waits for the map, a faction and your own aircraft.";
+                if (index == 2) return "Sensor contours wait for the map, a faction and your own aircraft.";
                 return "Satellite map background requires an active tactical map.";
             }
 

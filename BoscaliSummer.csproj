@@ -100,20 +100,21 @@
     </EmbeddedResource>
   </ItemGroup>
 
-  <ItemGroup Label="Weather shader bundle">
-    <!-- Built by tools/build-weather-shaders.ps1 from tools/WeatherShaders (Unity 2022.3.62,
-         URP 14.0.12). Committed so an ordinary build never needs Unity. -->
-    <EmbeddedResource Include="modules\Weather\Assets\boscali_weather.bundle">
-      <LogicalName>BoscaliSummer.Weather.boscali_weather.bundle</LogicalName>
-    </EmbeddedResource>
-  </ItemGroup>
-
   <ItemGroup Label="Radio station assets">
     <EmbeddedResource Include="modules\Radio\Assets\*.png">
       <LogicalName>BoscaliSummer.RadioAssets.%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
     <EmbeddedResource Include="modules\Radio\Assets\stations-readme.txt">
       <LogicalName>BoscaliSummer.RadioAssets.stations-readme.txt</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup Label="Command map display data">
+    <EmbeddedResource Include="modules\Command\Assets\terrain2_map.bmap">
+      <LogicalName>BoscaliSummer.Command.terrain2_map.bmap</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="modules\Command\Assets\terrain2_intel.png">
+      <LogicalName>BoscaliSummer.Command.terrain2_intel.png</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
 

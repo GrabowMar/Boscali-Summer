@@ -1,0 +1,5 @@
+CloudNoise3D.cs adapts VolumetricClouds/Sky/CloudNoise3D.cs from
+https://github.com/anthonytoumaibrahim/VolumetricCloudsCS1
+commit a05e3a88727bfaef19df7b379c7bc958ce7c732c (MIT).
+Only the namespace and class visibility were changed for Boscali Summer.
+The Cities: Skylines light-halo shader exceptions are not included.

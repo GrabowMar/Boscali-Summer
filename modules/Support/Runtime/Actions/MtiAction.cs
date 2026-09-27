@@ -18,7 +18,6 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
 
         public SupportResult Execute(in SupportContext context)
         {
-            if (!VanillaSupportCatalog.ReconAvailable) return SupportResult.CapabilityUnavailable;
             OrbitalPlatform platform = context.PlatformAccess(PlatformAbility.RadarScan, out PlatformDenial denial);
             if (platform == null) return SupportContext.Refusal(denial);
 
@@ -28,6 +27,8 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
                 int contacts = ReconAction.Reveal(context.Owner, context.Target,
                     context.Settings.SarSceneRadius.Value * platform.ScanScale(now), context.Logger, RevealFilter.Ground,
                     minimumSpeed: ReconAction.StationaryThreshold);
+                context.Host.Space.DetachmentFor(context.Owner)?.ScoutNear(context.Target.x, context.Target.z,
+                    context.Settings.SarSceneRadius.Value * platform.ScanScale(now), now);
                 platform.Consume(PlatformAbility.RadarScan, now);
                 context.Host.ReportContacts(context.RequestId, contacts);
                 return SupportResult.Accepted;

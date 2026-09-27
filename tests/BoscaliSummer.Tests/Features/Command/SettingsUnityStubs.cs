@@ -13,7 +13,7 @@ public struct GlobalPosition
     public Vector3 AsVector3() => new Vector3(x, y, z) - OriginOffset;
 }
 public class VirtualMFD : MonoBehaviour { }
-public class FactionHQ { }
+public class FactionHQ { public int GetInstanceID() => GetHashCode(); }
 public static class GameplayUI { public static bool AllowPauseKeybind = true; }
 public static class UnitConverter
 {
@@ -51,6 +51,7 @@ namespace BoscaliSummer.Features.Command.Presentation
     public partial class ComMapOverlay
     {
         public static ComMapOverlay Instance;
+        public bool HasControlData => false;
         public void SyncSettings() { }
     }
 }

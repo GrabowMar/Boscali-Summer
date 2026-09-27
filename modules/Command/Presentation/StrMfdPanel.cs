@@ -18,31 +18,9 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Features.Command.Presentation
 {
     /// <summary>
-    /// "STR" — the strategic console on the maximised map.
-    ///
-    /// <para>This used to be a tab inside OPS, and inside that tab it opened a second tab
-    /// bar of its own. Two rows of tabs at different indents, a title and its note drawn
-    /// into the same rectangle, doctrine names cut to five characters, and the whole theater
-    /// picture in three fixed-height cards — all of it symptoms of one problem, which is
-    /// that the strategic layer was a guest in a panel about the player's own perks.</para>
-    ///
-    /// <para>It is now its own bezel screen with its own bay, and the split follows the
-    /// question each answers. OPS is about you: what you have earned, what you may call in.
-    /// STR is about the battlefield: merged theater SA (air picture plus frontline), chain
-    /// of command, and the theater operations board. Neither needs the other to install.
-    /// Faction tasking lives on the ADM screen; STR has no tasking board and no theater
-    /// account. CMD names the faction's main effort through TheaterOps; it selects no units
-    /// and issues no waypoints.</para>
-    ///
-    /// <para>The pages show what the mod already computed and previously threw away — the
-    /// sortie board, the contested-node list, the frontline's length. Where a figure cannot
-    /// be established, it reads as a dash. A zero is a claim, and this panel does not make
-    /// claims it has not verified.</para>
-    ///
-    /// <para>Every page fills the bay it is given. The fixed blocks are laid out from the
-    /// top, and the page's primary list — contested ground on SA, the objective and
-    /// reinforcement boards on CMD — takes whatever height is left, so a short canvas
-    /// scrolls and a tall one never ends in a dead strip above the status line.</para>
+    /// STR bezel: situation, chain of command, and a short live-war brief. TheaterOps owns
+    /// the war and validates broad player intent; this screen does not select or order units.
+    /// Unknown figures read as unknown, and short bays scroll before hiding content.
     /// </summary>
     internal sealed partial class StrMfdPanel : MonoBehaviour, ISceneService
     {
@@ -101,8 +79,7 @@ namespace BoscaliSummer.Features.Command.Presentation
 
         // ---- Shared row tints ------------------------------------------------------------
 
-        // One hover wash and one dimmed-portrait tint for every page: the SA list rows and
-        // the COC roster/dossier share them, so a tint tweak lands everywhere at once.
+        // The SA list and COC dossier share these row tints.
         private static readonly Color RowHover = new Color(1f, 1f, 1f, 0.06f);
         private static readonly Color PortraitDim = new Color(1f, 1f, 1f, 0.45f);
 
@@ -114,11 +91,7 @@ namespace BoscaliSummer.Features.Command.Presentation
         private ManualLogSource logger;
         private IBaseDefenseAlarmService baseAlarm;
         private IHighCommandView highCommand;
-        private IActiveEventsView activeEvents;
-        private ITheaterStrikePicture strikePicture;
-        private ITheaterPriorityView theaterPriority;
-        private ITheaterLogisticsView theaterLogistics;
-        private ITheaterOperationsView theaterOperations;
+        private ITheaterWarView theaterWar;
         private IThreatPicture threatPicture;
 
         // ---- Screen ----------------------------------------------------------------------
@@ -126,6 +99,8 @@ namespace BoscaliSummer.Features.Command.Presentation
         private MFDScreen screen;
         private GameObject screenRoot;
         private AvScreen shell;
+        private GameObject cocPage;
+        private bool cocBuilt;
 
         private float nextAttempt;
         private float nextRefresh;
@@ -187,9 +162,9 @@ namespace BoscaliSummer.Features.Command.Presentation
             shell = null;
             baseAlarm = null;
             highCommand = null;
-            theaterPriority = null;
-            theaterLogistics = null;
-            theaterOperations = null;
+            cocPage = null;
+            cocBuilt = false;
+            theaterWar = null;
             threatPicture = null;
 
             defconLabel = threatLabel = airCountLabel = sortieNote = null;
@@ -333,11 +308,7 @@ namespace BoscaliSummer.Features.Command.Presentation
 
             ModServices.TryGet(out baseAlarm);
             ModServices.TryGet(out highCommand);
-            ModServices.TryGet(out activeEvents);
-            ModServices.TryGet(out strikePicture);
-            ModServices.TryGet(out theaterPriority);
-            ModServices.TryGet(out theaterLogistics);
-            ModServices.TryGet(out theaterOperations);
+            ModServices.TryGet(out theaterWar);
             ModServices.TryGet(out threatPicture);
 
             shell = AvScreen.Build(
@@ -372,7 +343,7 @@ namespace BoscaliSummer.Features.Command.Presentation
                 if (shell.Metrics[i].Caption != null) shell.Metrics[i].Caption.characterSpacing = 0f;
 
             BuildSaPage(shell.CreatePage(TabSa, "SaPage"));
-            BuildCocPage(shell.CreatePage(TabCoc, "CocPage"));
+            cocPage = shell.CreatePage(TabCoc, "CocPage");
             BuildCmdPage(shell.CreatePage(TabCmd, "CmdPage"));
 
             MFDScreen result = root.AddComponent<MFDScreen>();
@@ -1087,9 +1058,8 @@ namespace BoscaliSummer.Features.Command.Presentation
             if (command == null || shell == null) return;
 
             highCommand?.Refresh();
-            theaterPriority?.Refresh();
-            theaterLogistics?.Refresh();
-            theaterOperations?.Refresh();
+            if (theaterWar == null) ModServices.TryGet(out theaterWar);
+            theaterWar?.Refresh();
 
             DynamicMap map = SceneSingleton<DynamicMap>.i;
             FactionHQ hq = map != null ? map.HQ : null;
@@ -1099,8 +1069,6 @@ namespace BoscaliSummer.Features.Command.Presentation
 
             RefreshChrome(state);
 
-            // The map ring follows the open file, which lives on the COC page: any other page
-            // showing means no file is open, so nothing is ringed.
             if (shell.Page != TabCoc && highCommand != null) highCommand.Highlight(-1);
 
             switch (shell.Page)
@@ -1109,7 +1077,14 @@ namespace BoscaliSummer.Features.Command.Presentation
                     RefreshSa(state);
                     RefreshKnownAirDefence(hq);
                     break;
-                case TabCoc: RefreshCoc(); break;
+                case TabCoc:
+                    if (!cocBuilt)
+                    {
+                        BuildCocPage(cocPage);
+                        cocBuilt = true;
+                    }
+                    RefreshCoc();
+                    break;
                 case TabCmd: RefreshCmd(); break;
             }
 
@@ -1133,8 +1108,8 @@ namespace BoscaliSummer.Features.Command.Presentation
                 state.DefconLevel <= 2 ? "danger" : state.DefconLevel == 3 ? "warn" : "live");
             bool frontline = state.ContestedSectorCount > 0;
             shell.DataBar.SetChip(1, frontline ? "FRONT LIVE" : "FRONT QUIET", frontline);
-            bool grid = settings != null && settings.FrontlinesOverlay.Value;
-            shell.DataBar.SetChip(2, grid ? "GRID ON" : "GRID OFF", grid);
+            bool grid = overlay != null && overlay.HasControlData;
+            shell.DataBar.SetChip(2, grid ? "GRID LIVE" : "GRID —", grid);
 
             bool territoryKnown = !float.IsNaN(state.TerritoryControlRatio);
             // The allied/hostile split rides the unit slot. The caption has room for the pair's
@@ -1157,20 +1132,15 @@ namespace BoscaliSummer.Features.Command.Presentation
                 !airKnown ? AvTheme.RailInert
                     : state.AirSuperiorityRatio >= 0.5f ? AvTheme.RailReady : AvTheme.RailCaution);
 
-            // The third pillar of the theater picture: without a staff, no command effect.
             if (shell.Metrics.Length > 2)
             {
                 bool staff = highCommand != null && highCommand.Available;
                 float cohesion = staff ? Mathf.Clamp01(highCommand.FriendlyCohesion) : 0f;
                 shell.Metrics[2].Set(
                     staff ? TheaterReadout.Percent(cohesion) : "—",
-                    // The caption has room for the active count or for the pair; a staff with no
-                    // losses reads as "6 ACTIVE" rather than spending the cell on a zero.
                     staff
                         ? highCommand.FriendlyActive + " ACTIVE" +
-                          (highCommand.FriendlyKia > 0
-                              ? " · " + highCommand.FriendlyKia + " KIA"
-                              : "")
+                          (highCommand.FriendlyKia > 0 ? " · " + highCommand.FriendlyKia + " KIA" : "")
                         : "NO STAFF",
                     cohesion,
                     !staff ? AvTheme.RailInert
@@ -1191,66 +1161,23 @@ namespace BoscaliSummer.Features.Command.Presentation
             if (highCommand != null && highCommand.Available)
             {
                 text += " · command " + TheaterReadout.Percent(Mathf.Clamp01(highCommand.FriendlyCohesion));
-                // The staff's own signal (a stipend, a commendation, a kill) is the COC page's
-                // feedback line; it rides the pinned status strip instead of costing a row.
                 if (shell != null && shell.Page == TabCoc && !string.IsNullOrEmpty(highCommand.Signal))
                     text += " · " + highCommand.Signal;
             }
             else if (shell != null && shell.Page == TabCoc)
-            {
-                // The page reads "STAFF NOT RUNNING" in one line. The reason is the host's own
-                // status sentence, which only the strip has room for.
                 text += " · " + (highCommand == null
                     ? "chain of command is not running on this host"
                     : highCommand.Status ?? "chain of command is forming");
-            }
 
             if (shell != null && shell.Page == TabCmd)
             {
-                string offensive = OffensiveAmbient();
-                text += " · " + (offensive ?? (theaterPriority == null || !theaterPriority.Available
-                    ? "theater operations not running"
-                    : theaterPriority.HasPriority
-                        ? "main effort " + theaterPriority.PriorityLabel
-                        : "staff holds no main effort"));
+                TheaterLiveOperationView active = theaterWar?.ActiveOperation;
+                text += " · " + (theaterWar == null || !theaterWar.Available
+                    ? "theater staff unavailable"
+                    : active == null ? "staff observing fronts" : active.Label + " / " + active.Phase);
             }
             return text;
         }
 
-        /// <summary>
-        /// The one-line offensive report for the pinned strip, or null when the board has
-        /// nothing of its own to add. The strip is where a running offensive can be watched
-        /// without the page being open, since it ticks on the host whether or not anyone looks.
-        /// </summary>
-        private string OffensiveAmbient()
-        {
-            if (theaterOperations == null || !theaterOperations.Available) return null;
-
-            IReadOnlyList<TheaterOperationView> operations = theaterOperations.Operations;
-            for (int i = 0; i < operations.Count; i++)
-            {
-                TheaterOperationView operation = operations[i];
-                if (operation == null || operation.Phase == TheaterOperationPhase.Concluded) continue;
-
-                string target = string.IsNullOrEmpty(operation.TargetLabel)
-                    ? ""
-                    : " at " + operation.TargetLabel;
-
-                switch (operation.Phase)
-                {
-                    case TheaterOperationPhase.AwaitingTarget:
-                        return operation.Name + " awaits a target";
-                    case TheaterOperationPhase.Holding:
-                        return operation.Name + " is holding for reinforcement" + target;
-                    case TheaterOperationPhase.Launching when operation.IsHeld:
-                        return operation.Name + " is held — " + operation.Holder + " has the effort";
-                    default:
-                        return operation.Name + " " +
-                               TheaterReadout.OffensivePhaseWord(operation.Phase, operation.Outcome)
-                                   .ToLowerInvariant() + target;
-                }
-            }
-            return null;
-        }
     }
 }

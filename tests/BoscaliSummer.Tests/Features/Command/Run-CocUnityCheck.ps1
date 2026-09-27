@@ -29,6 +29,9 @@ Copy-Item -LiteralPath `
     "$repo/Framework/Contracts/IActiveEventsView.cs", `
     "$repo/Framework/Contracts/ITheaterStrikePicture.cs", `
     "$repo/Framework/Contracts/ITheaterOperationsView.cs", `
+    "$repo/Framework/Contracts/ITheaterWarView.cs", `
+    "$repo/Framework/Contracts/ITerritoryIngress.cs", `
+    "$repo/Framework/Contracts/IThreatPicture.cs", `
     "$PSScriptRoot/SettingsUnityStubs.cs", `
     "$PSScriptRoot/CocUnityCheck.cs" `
     -Destination "$PreviewDirectory/Assets/"

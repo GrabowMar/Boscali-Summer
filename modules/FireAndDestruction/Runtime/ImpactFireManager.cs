@@ -553,7 +553,9 @@ namespace BoscaliSummer.Fire
                 if (forest) QueueForestScorch(position, fires[i].ClusterScale);
                 return;
             }
-            if (fires.Count >= Fire.MaxActiveFires) return;
+            // A late join can receive fire snapshots before the host setting handshake.
+            // Accept every site the host can legally own, even if this client's saved cap is lower.
+            if (fires.Count >= FireAndDestructionSettings.MaximumFireSites) return;
             var site = new FireSite
             {
                 Position = position,

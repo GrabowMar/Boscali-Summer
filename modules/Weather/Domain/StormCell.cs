@@ -16,6 +16,7 @@ namespace BoscaliSummer.Features.Weather.Domain
     internal struct StormCell
     {
         public int Slot;
+        public int Cluster;
         public int Generation;
         public uint Seed;
 
@@ -143,15 +144,14 @@ namespace BoscaliSummer.Features.Weather.Domain
     }
 
     /// <summary>
-    /// The deterministic cell population. Twelve slots, each running generations with its own
-    /// seeded period and phase so births stagger; a generation spawns a cell with probability
-    /// equal to the convective weight of the sky at its birth. Cells born while a front is on
-    /// the map mostly sit just behind its line and ride with it (a squall line); the rest spawn
-    /// anywhere on the map and drift with the steering wind.
+    /// Four deterministic clusters of three cells. Members share a birth region and steering
+    /// wind, but grow at staggered times. Frontal clusters form behind the boundary; free
+    /// clusters form in the convective air mass.
     /// </summary>
     internal static class StormCells
     {
         public const int MaxCells = 12;
+        public const int CellsPerCluster = 3;
         public const float MinPeriod = 24f * 60f;
         public const float MaxPeriod = 36f * 60f;
         public const float MinLife = 18f * 60f;
@@ -172,22 +172,29 @@ namespace BoscaliSummer.Features.Weather.Domain
         {
             cell = default;
             uint seed = key.Seed;
-            float period = WeatherMath.HashRange(seed, slot, 21, 0, MinPeriod, MaxPeriod);
-            float phase = WeatherMath.Hash01(seed, slot, 22) * period;
+            int cluster = slot / CellsPerCluster;
+            int member = slot % CellsPerCluster;
+            float period = WeatherMath.HashRange(seed, cluster, 21, 0, MinPeriod, MaxPeriod);
+            float phase = WeatherMath.Hash01(seed, cluster, 22) * period;
             int generation = (int)Math.Floor((time - key.Epoch - phase) / period);
-            float birth = key.Epoch + phase + generation * period;
-            float life = Math.Min(WeatherMath.HashRange(seed, slot, generation, 24, MinLife, MaxLife), period - 60f);
+            float clusterBirth = key.Epoch + phase + generation * period;
+            float stagger = member * 85f + WeatherMath.HashRange(seed, slot, generation, 26, 0f, 65f);
+            float birth = clusterBirth + stagger;
+            float life = Math.Min(WeatherMath.HashRange(seed, slot, generation, 24, MinLife, MaxLife),
+                period - stagger - 60f);
             float age = (time - birth) / life;
             if (age < 0f || age >= 1f) return false;
 
-            RegimeState sky = RegimeSchedule.Evaluate(key, birth);
-            float roll = WeatherMath.Hash01(seed, slot, generation, 23);
+            RegimeState sky = RegimeSchedule.Evaluate(key, clusterBirth);
+            float roll = WeatherMath.Hash01(seed, cluster, generation, 23);
             if (roll >= sky.Params.Convective) return false;
 
+            uint clusterSeed = unchecked((uint)(cluster * 73856093) ^ (uint)(generation * 19349663) ^ seed);
             uint cellSeed = unchecked((uint)(slot * 73856093) ^ (uint)(generation * 19349663) ^ seed);
-            bool severe = WeatherMath.Hash01(cellSeed, 1, 0) < sky.Params.Severity;
+            bool severe = WeatherMath.Hash01(clusterSeed, 1, 0) < sky.Params.Severity;
 
             cell.Slot = slot;
+            cell.Cluster = cluster;
             cell.Generation = generation;
             cell.Seed = cellSeed;
             cell.BirthTime = birth;
@@ -219,13 +226,15 @@ namespace BoscaliSummer.Features.Weather.Domain
             }
 
             float x0, z0, vx, vz;
-            if (best >= 0 && WeatherMath.Hash01(cellSeed, 7, 0) < 0.6f * bestStrength + 0.2f)
+            if (best >= 0 && WeatherMath.Hash01(clusterSeed, 7, 0) < 0.6f * bestStrength + 0.2f)
             {
-                FrontState front = WeatherFronts.Resolve(sky.GetFront(best), seed, birth);
-                float along = WeatherMath.HashRange(cellSeed, 8, 0, 0, -0.45f, 0.45f) * Math.Max(halfX, halfZ) * 2f;
+                FrontState front = WeatherFronts.Resolve(sky.GetFront(best), seed, clusterBirth);
+                float along = ((cluster - 1.5f) * 0.28f +
+                    WeatherMath.HashRange(clusterSeed, 8, 0, 0, -0.07f, 0.07f)) * Math.Max(halfX, halfZ) * 2f;
+                along += WeatherMath.HashRange(cellSeed, 8, 1, 0, -4500f, 4500f);
                 // Just behind the line (the side it has already swept), riding with it.
                 float behind = WeatherMath.HashRange(cellSeed, 9, 0, 0, 500f, 3500f);
-                float lx = front.Offset - behind;
+                float lx = front.OffsetAtAlong(along) - behind;
                 x0 = front.NormalX * lx - front.NormalZ * along;
                 z0 = front.NormalZ * lx + front.NormalX * along;
                 vx = front.NormalX * front.Speed;
@@ -234,8 +243,10 @@ namespace BoscaliSummer.Features.Weather.Domain
             }
             else
             {
-                x0 = WeatherMath.HashRange(cellSeed, 10, 0, 0, -0.45f, 0.45f) * halfX * 2f;
-                z0 = WeatherMath.HashRange(cellSeed, 11, 0, 0, -0.45f, 0.45f) * halfZ * 2f;
+                x0 = WeatherMath.HashRange(clusterSeed, 10, 0, 0, -0.38f, 0.38f) * halfX * 2f +
+                    WeatherMath.HashRange(cellSeed, 10, 1, 0, -5000f, 5000f);
+                z0 = WeatherMath.HashRange(clusterSeed, 11, 0, 0, -0.38f, 0.38f) * halfZ * 2f +
+                    WeatherMath.HashRange(cellSeed, 11, 1, 0, -5000f, 5000f);
                 WeatherField.PrevailingWind(seed, sky.Params.WindSpeed, birth, out float wx, out float wz);
                 vx = 0.8f * wx + WeatherMath.HashRange(cellSeed, 12, 0, 0, -2.5f, 2.5f);
                 vz = 0.8f * wz + WeatherMath.HashRange(cellSeed, 13, 0, 0, -2.5f, 2.5f);

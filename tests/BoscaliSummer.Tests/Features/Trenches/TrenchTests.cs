@@ -28,6 +28,11 @@ namespace BoscaliSummer.Tests.Features.Trenches
             TestHoldFloors();
             TestFieldAbandonment();
             TestBeltLadder();
+            TestMirrorSpacing();
+            TestPressureLife();
+            TestBarrageMath();
+            TestAirfieldClear();
+            TestFactionRotation();
         }
 
         /// <summary>
@@ -629,6 +634,132 @@ namespace BoscaliSummer.Tests.Features.Trenches
                 "A 400m fire curve carries about twenty bays at the base pitch");
             TestAssert.That(2400f / longPitch <= TrenchTraceMath.MaximumNodes - 1,
                 "A 2400m fire curve needs at most the node budget at the widened pitch");
+        }
+
+        /// <summary>
+        /// Mirror pairs across no-man's-land: a position 80m behind the trace and its
+        /// enemy mirror sit ~160m apart — inside the historical 90-275m band — so the
+        /// cross-faction floor must clear them while still refusing true overlaps.
+        /// </summary>
+        private static void TestMirrorSpacing()
+        {
+            TestAssert.That(Near(TrenchTraceMath.SpacingFor(true), TrenchTraceMath.SameOwnerSpacing) &&
+                Near(TrenchTraceMath.SpacingFor(false), TrenchTraceMath.OtherOwnerSpacing),
+                "Same-side lines hold 360m apart, opposing lines 120m");
+            TestAssert.That(2f * TrenchTraceMath.FireDepth > TrenchTraceMath.OtherOwnerSpacing,
+                "A mirror pair dug 80m behind the same trace clears the cross-faction floor");
+            TestAssert.That(!TrenchTraceMath.CentresConflict(160f, false) &&
+                !TrenchTraceMath.CentresConflict(360f, true),
+                "A 160m opposing pair and 360m same-side neighbours both stand");
+            TestAssert.That(TrenchTraceMath.CentresConflict(119f, false) &&
+                TrenchTraceMath.CentresConflict(359f, true) &&
+                TrenchTraceMath.CentresConflict(float.NaN, false),
+                "True overlaps still refuse, and unknown distance fails closed");
+        }
+
+        /// <summary>
+        /// Pressure-driven life: hot sectors dig fast and stand heavy, quiet ones mature
+        /// slowly behind a light MG screen instead of a full free garrison.
+        /// </summary>
+        private static void TestPressureLife()
+        {
+            TestAssert.That(Near(TrenchTraceMath.GrowthInterval(60f, 1f), 30f) &&
+                Near(TrenchTraceMath.GrowthInterval(60f, 0f), 78f),
+                "A hot sector digs twice as fast as base pace, a quiet one 1.3x slow");
+            TestAssert.That(TrenchTraceMath.GrowthInterval(60f, 0.5f) > TrenchTraceMath.GrowthInterval(60f, 1f) &&
+                TrenchTraceMath.GrowthInterval(60f, 0f) > TrenchTraceMath.GrowthInterval(60f, 0.5f),
+                "Growth pacing quickens monotonically with pressure");
+            TestAssert.That(TrenchTraceMath.GrowthInterval(10f, 1f) >= 15f &&
+                TrenchTraceMath.GrowthInterval(0f, 1f) >= 15f,
+                "Growth never runs faster than one stage per 15s");
+            TestAssert.That(Near(TrenchTraceMath.GrowthInterval(60f, float.NaN), TrenchTraceMath.GrowthInterval(60f, 0f)),
+                "Unknown pressure digs at the quiet pace");
+            TestAssert.That(TrenchTraceMath.MaxDefendersForPressure(0f) == 4 &&
+                TrenchTraceMath.MaxDefendersForPressure(0.29f) == 4 &&
+                TrenchTraceMath.MaxDefendersForPressure(0.3f) == 6 &&
+                TrenchTraceMath.MaxDefendersForPressure(0.59f) == 6 &&
+                TrenchTraceMath.MaxDefendersForPressure(0.6f) == 8 &&
+                TrenchTraceMath.MaxDefendersForPressure(1f) == 8 &&
+                TrenchTraceMath.MaxDefendersForPressure(float.NaN) == 4,
+                "Quiet lines hold four MGs, warm lines six, only hot lines the full eight");
+        }
+
+        /// <summary>
+        /// Harassing bombardment: mortars work close pairs with single shells, guns work
+        /// distant pairs with salvos, every round lands on the no-man's-land midpoint
+        /// plus a bounded miss, and hot sectors shoot first and often.
+        /// </summary>
+        private static void TestBarrageMath()
+        {
+            TestAssert.That(TrenchTraceMath.InBarrageRange(160f) && TrenchTraceMath.InBarrageRange(2500f) &&
+                !TrenchTraceMath.InBarrageRange(2501f) && !TrenchTraceMath.InBarrageRange(0f),
+                "Pairs shell each other out to 2500m, never past it or on top of themselves");
+            TestAssert.That(TrenchTraceMath.BarrageRounds(799f) == 1 && TrenchTraceMath.BarrageRounds(800f) == 3,
+                "Close pairs draw single mortar shells, distant pairs three-round salvos");
+            TestAssert.That(Near(TrenchTraceMath.BarrageScatter(799f), 60f) &&
+                Near(TrenchTraceMath.BarrageScatter(800f), 150f),
+                "Mortars miss by 60m, guns by 150m");
+            TrenchTraceMath.BarrageAim(0f, 0f, 200f, 0f, 0f, 0f, 60f, out float x, out float z);
+            TestAssert.That(Near(x, 100f) && Near(z, 0f), "A zero miss lands on the midpoint");
+            TrenchTraceMath.BarrageAim(0f, 0f, 200f, 0f, 1f, -1f, 60f, out x, out z);
+            TestAssert.That(Near(x, 160f) && Near(z, -60f), "A full miss walks the shell 60m off the midpoint");
+            TrenchTraceMath.BarrageAim(0f, 0f, 200f, 0f, 5f, 0f, 60f, out x, out z);
+            TestAssert.That(Near(x, 160f), "The miss is clamped to the scatter box");
+            TrenchTraceMath.BarrageAim(0f, 0f, 200f, 0f, 1f, 1f, 0f, out x, out z);
+            TestAssert.That(Near(x, 100f) && Near(z, 0f), "Zero scatter ignores the miss");
+            TestAssert.That(Near(TrenchTraceMath.BarrageDelay(60f, 240f, 1f, 0f), 30f) &&
+                Near(TrenchTraceMath.BarrageDelay(60f, 240f, 0f, 1f), 312f),
+                "A hot line can re-fire in 30s, a quiet one waits up to 312s");
+            TestAssert.That(TrenchTraceMath.BarrageDelay(60f, 240f, 0f, 0.5f) > TrenchTraceMath.BarrageDelay(60f, 240f, 1f, 0.5f),
+                "Pressure quickens the guns at the same draw");
+            TestAssert.That(TrenchTraceMath.BarrageDelay(240f, 60f, 0f, 0f) >= 5f,
+                "A swapped window still yields a sane delay");
+            TestAssert.That(Near(TrenchTraceMath.BarrageDelay(5f, 5f, 1f, 0f), 5f) &&
+                TrenchTraceMath.BarrageDelay(15f, 30f, 1f, 0f) >= 5f,
+                "Pressure quickening never collapses a mission delay below the 5s floor");
+            TestAssert.That(TrenchTraceMath.BarrageDelay(float.NaN, float.NaN, float.NaN, float.NaN) >= 5f &&
+                !float.IsNaN(TrenchTraceMath.BarrageDelay(float.NaN, float.NaN, float.NaN, float.NaN)) &&
+                Near(TrenchTraceMath.BarrageDelay(-10f, -20f, 1f, 0f), 5f),
+                "Corrupt delay inputs fail closed to the floor instead of a NaN that fires every tick");
+        }
+
+        /// <summary>
+        /// Runways are never dug: ground inside 500m of any airbase centre refuses the
+        /// ditch, while open ground and a missing field list plan as before.
+        /// </summary>
+        private static void TestAirfieldClear()
+        {
+            var ax = new[] { 1000f };
+            var az = new[] { 1000f };
+            TestAssert.That(TrenchTraceMath.NearAirfield(1000f, 1000f, ax, az, 1) &&
+                TrenchTraceMath.NearAirfield(1400f, 1000f, ax, az, 1) &&
+                !TrenchTraceMath.NearAirfield(1501f, 1000f, ax, az, 1),
+                "Ground inside 500m of the tower refuses, ground past it digs");
+            TestAssert.That(!TrenchTraceMath.NearAirfield(1000f, 1000f, ax, az, 0) &&
+                !TrenchTraceMath.NearAirfield(1000f, 1000f, null, null, 1),
+                "An empty or missing field list plans relief-only");
+            var twoX = new[] { 0f, 5000f };
+            var twoZ = new[] { 0f, 0f };
+            TestAssert.That(TrenchTraceMath.NearAirfield(4900f, 0f, twoX, twoZ, 5),
+                "The scan covers every listed field and clamps past the buffer");
+        }
+
+        /// <summary>
+        /// Build rotation: every attempt moves to the next faction's front and wraps
+        /// around, so each side digs in turn instead of the first front taking the
+        /// whole quota; degenerate counts stay on slot zero.
+        /// </summary>
+        private static void TestFactionRotation()
+        {
+            TestAssert.That(TrenchTraceMath.RotateFaction(0, 2) == 1 &&
+                TrenchTraceMath.RotateFaction(1, 2) == 0 &&
+                TrenchTraceMath.RotateFaction(2, 3) == 0 &&
+                TrenchTraceMath.RotateFaction(0, 3) == 1,
+                "The rotation advances one slot and wraps to the first");
+            TestAssert.That(TrenchTraceMath.RotateFaction(0, 1) == 0 &&
+                TrenchTraceMath.RotateFaction(0, 0) == 0 &&
+                TrenchTraceMath.RotateFaction(5, -2) == 0,
+                "One faction, none, or a bad count all stay on slot zero");
         }
 
         private static bool Near(float a, float b) => Math.Abs(a - b) < 0.0001f;

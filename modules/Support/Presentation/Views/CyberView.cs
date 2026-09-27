@@ -25,7 +25,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
     /// where every order echoes as a command and every host reply as its output. Monospaced throughout.
     ///
     /// <para>Orders stay on <c>SupportManager.RequestCyber*</c>; the room pre-checks only what the host
-    /// re-checks (<c>CyberNetwork.Check</c>, <c>CheckBreach</c>, upgrade level and allocation).</para>
+    /// re-checks (<c>CyberNetwork.Check</c>, <c>CheckBreach</c>, upgrade level and ops reserve).</para>
     /// </summary>
     internal sealed class CyberView : IOpsView
     {
@@ -237,7 +237,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             }
             legend = Label(body, new Rect(ColumnWidth + 12f, -bodyH + 20f, netRect.width - ColumnWidth - 24f, 16f), CyberStyle.Micro,
                 CyberStyle.Dim);
-            CyberStyle.Type(legend, "HOME  /  HELD  /  TARGET   ·   dotted: reachable   ·   ring: stage   ·   red: threat");
+            CyberStyle.Type(legend, "HOME / HELD / TARGET · dotted: reach · rings: stage · bright: route · red: threat");
             Row fit = BuildRow(body, new Rect(12f, compact ? -378f : -512f, ColumnWidth - 24f, compact ? 24f : 30f), FitMap);
             CyberStyle.Type(fit.Text, "[H] FIT ALL");
             fit.Control.WithTooltip("Frame every network node. Wheel zooms; drag pans; Q / E selects nodes.");
@@ -615,7 +615,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             CyberNetwork network = support?.LocalCyber;
             if (network == null || index < 0 || index >= Verbs) return;
             var verb = (CyberVerb)index;
-            int target = CyberNetwork.TargetsIncident(verb) ? selectedIncident : selectedSite;
+            int target = CyberNetwork.TargetsIncident(verb) ? network.Incident(selectedIncident).Id : selectedSite;
             if (support.CommandPending)
             {
                 Error("busy · one order at a time, wait for the host");
@@ -715,9 +715,9 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 return;
             }
             float cost = support.CyberUpgradeCost(upgrade);
-            if (!support.BypassRequirements && support.LocalAllocation + 0.001f < cost)
+            if (!support.BypassRequirements && support.LocalOpsReserve + 0.001f < cost)
             {
-                Error("upgrade: needs " + Figure(cost) + " allocation");
+                Error("upgrade: needs " + Figure(cost) + " ops reserve");
                 return;
             }
             support.RequestCyberUpgrade(upgrade);
@@ -764,7 +764,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
 
         private string Target(CyberNetwork network, CyberVerb verb, int target) =>
             CyberNetwork.TargetsIncident(verb)
-                ? CyberWords.Incident(network.Incident(target).Kind) + " · " + Origin(network.Incident(target).Origin)
+                ? CyberWords.Incident(network.Incident(network.IncidentSlot((byte)target)).Kind) + " · " + Origin(network.Incident(network.IncidentSlot((byte)target)).Origin)
                 : CyberWords.Callsign(network, target);
 
         private string Origin(byte origin) => support != null ? support.CyberOriginName(origin) : "ADVERSARY";
@@ -825,7 +825,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                     : "Hold an airbase to establish cyber command.\nThe network comes online when the host confirms control.");
             }
             float mpp = map.Board.MetresPerPixel;
-            CyberStyle.Type(panes[0].Status, Mathf.RoundToInt(map.Board.View.width * mpp / 1000f) + " km across · north up · wheel zoom · drag pan · [h] fit");
+            CyberStyle.Type(panes[0].Status, Mathf.RoundToInt(map.Board.View.width * mpp / 1000f) + " km across · north up · wheel zoom · drag pan · [h] fit" +
+                (map.TerrainAvailable ? "" : " · terrain unavailable"));
             for (int i = 0; i < 5; i++)
             {
                 bool current = built && 5 - i == infocon;
@@ -846,8 +847,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 CyberStyle.Type(intelLine, "intel " + Mathf.FloorToInt(intel) + "/" + Mathf.RoundToInt(intelCap) + "  +" +
                                            network.IntelIncome().ToString("0.#", Invariant) + "/s\n" + CyberStyle.Bar10(intel / Mathf.Max(1f, intelCap)));
             }
-            float allocation = support != null ? support.LocalAllocation : 0f;
-            CyberStyle.Type(upgradeTitle, "upgrades · allocation " + Figure(allocation));
+            float reserve = support != null ? support.LocalOpsReserve : 0f;
+            CyberStyle.Type(upgradeTitle, "upgrades · ops reserve " + Figure(reserve));
             bool pending = support != null && support.CommandPending;
             for (int i = 0; i < upgrades.Length; i++)
             {
@@ -856,14 +857,14 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 int level = network != null ? network.UpgradeLevel(upgrade) : 0;
                 bool can = network != null && network.CanUpgrade(upgrade);
                 float cost = support != null ? support.CyberUpgradeCost(upgrade) : 0f;
-                bool afford = support == null || support.BypassRequirements || allocation + 0.001f >= cost;
+                bool afford = support == null || support.BypassRequirements || reserve + 0.001f >= cost;
                 row.Control.SetEnabled(can && afford && !pending);
                 CyberStyle.Type(row.Text, CyberLocations.UpgradeName(upgrade).ToLowerInvariant() + (compact ? " " + level + "/3" : "\nlv " + level + "/" + CyberLocations.UpgradeLevels + " " + LevelPips(level)));
                 CyberStyle.Type(row.Right, compact ? "" : can ? "[ " + Figure(cost) + " ]" : "[ max ]");
                 row.Right.color = can && !afford ? AvTheme.RailDanger : row.Text.color;
                 row.Control.WithTooltip(CyberLocations.UpgradeName(upgrade) + " — " + CyberLocations.UpgradeEffect(upgrade) +
-                                        " per level. " + (can ? afford ? "Buy the next level for " + Figure(cost) + " allocation."
-                                            : "Needs " + Figure(cost) + " allocation; you have " + Figure(allocation) + "."
+                                        " per level. " + (can ? afford ? "Buy the next level for " + Figure(cost) + " ops reserve."
+                                            : "Needs " + Figure(cost) + " ops reserve; you have " + Figure(reserve) + "."
                                             : "At maximum."));
             }
         }
@@ -910,7 +911,10 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             if (homeGroup.gameObject.activeSelf != (home && !choice)) homeGroup.gameObject.SetActive(home && !choice);
             if (incidentGroup.gameObject.activeSelf != incidentMode) incidentGroup.gameObject.SetActive(incidentMode);
 
-            CyberStyle.Type(panes[1].Status, breaching ? "session open · " + CyberWords.PhaseOf(network.BreachPhase).ToLowerInvariant()
+            int threatenedHome = support != null ? support.LocalCyberThreatSlot : -1;
+            CyberStyle.Type(panes[1].Status, threatenedHome >= 0
+                ? "HOME NODE UNDER BREACH · SELECT " + CyberWords.Callsign(network, threatenedHome) + " · ISOLATE TO DELAY"
+                : breaching ? "session open · " + CyberWords.PhaseOf(network.BreachPhase).ToLowerInvariant()
                 : choice ? "capstone pending" : exists ? "selected · q e step" : "no target · click a node");
             CyberStyle.Type(primer, exists || choice ? "" :
                 "how this terminal works\n\n" +
@@ -1031,7 +1035,9 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
 
         private void WriteHome(CyberNetwork network, int slot, CyberNode node, double now, bool pending)
         {
-            CyberStyle.Type(homeDetail, node.Down ? "anchor building destroyed · the node returns when it is repaired"
+            CyberStyle.Type(homeDetail, support != null && support.LocalCyberThreatSlot == slot
+                ? "HOSTILE BREACH IN PROGRESS · ISOLATE TO DELAY THEIR PHASE · YOUR NODE GOES OFFLINE"
+                : node.Down ? "anchor building destroyed · the node returns when it is repaired"
                 : "home node · online · network reach " + Mathf.RoundToInt(network.Reach / 1000f) + " km from here" +
                   (slot == network.CommandSlot ? " · cyber command: abilities stop if it is breached" : ""));
             WriteVerbRow(isolateRow, network, CyberVerb.Isolate, slot, now, pending);
@@ -1094,7 +1100,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 if (!show) continue;
                 CyberVerb verb = answerVerb[i];
                 int target = answerTarget[i];
-                CyberDenial denial = target >= 0 ? network.Check(verb, target, now) : CyberDenial.NoTarget;
+                CyberDenial denial = target >= 0 ? network.Check(verb, CyberNetwork.TargetsIncident(verb) ? network.Incident(target).Id : target, now) : CyberDenial.NoTarget;
                 string on = target < 0 ? "<none>" : CyberNetwork.TargetsIncident(verb) ? "this incident" : CyberWords.Callsign(network, target).ToLowerInvariant();
                 SetRow(answers[i], (i == 0 ? "recommended  " : "or           ") + "[" + ((int)verb + 1) + "] " + VerbCommand(verb) + " " + on,
                     denial == CyberDenial.None && !pending, i == 0 && denial == CyberDenial.None, CyberWords.Verb(verb) + " — " + CyberWords.VerbHelp(verb));
@@ -1197,7 +1203,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             {
                 var verb = (CyberVerb)i;
                 Row row = verbs[i];
-                int target = CyberNetwork.TargetsIncident(verb) ? selectedIncident : selectedSite;
+                int target = network != null && CyberNetwork.TargetsIncident(verb) ? network.Incident(selectedIncident).Id : selectedSite;
                 CyberDenial denial = network != null ? network.Check(verb, target, now) : CyberDenial.NoCommand;
                 bool rejoin = verb == CyberVerb.Isolate && network != null && network.Exists(target) && network.Node(target).Isolated;
                 float teamLeft = verb == CyberVerb.Isolate && !rejoin && support != null

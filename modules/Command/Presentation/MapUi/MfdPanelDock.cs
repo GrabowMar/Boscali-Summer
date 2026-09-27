@@ -176,9 +176,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             rt.anchoredPosition = Vector2.zero;
             rt.localScale = Vector3.one;
 
-            // Own the presentation surface outright. The native controller remains alive
-            // behind it as the data/action authority, without leaving its prefab layout in
-            // the rendering or input path.
+            // The adapter keeps each native controller alive as the data/action authority.
+            // HUD and MIS defer their owned surfaces until the first time they are shown.
             if (IsStockScreen(screen)) VanillaMfdRebuild.TryApply(screen);
 
             // CloseScreen may have run while the screen still belonged to the vanilla
@@ -356,9 +355,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             AlignToBottom(screen, slot);
 
-            if (IsStockScreen(screen) && !VanillaMfdRebuild.IsHosted(screen))
+            bool attached = IsStockScreen(screen) && !VanillaMfdRebuild.IsHosted(screen) &&
                 VanillaMfdRebuild.TryApply(screen);
-            VanillaMfdRebuild.OnShown(screen);
+            if (!attached) VanillaMfdRebuild.OnShown(screen);
         }
 
         /// <summary>Dock every screen the two mods own, on both vanilla bezel columns.</summary>

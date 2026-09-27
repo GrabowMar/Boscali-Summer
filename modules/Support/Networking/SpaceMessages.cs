@@ -45,6 +45,11 @@ namespace BoscaliSummer.Features.Support.Networking
         public byte Protocol;
         public int RequestId;
         public byte Result;
+        public string FactionName;
+        /// <summary>Faction infrastructure budget; pilot call-ins retain individual Allocation.</summary>
+        public float OpsReserve;
+        /// <summary>One own home node under an opposing live breach; 255 means no alert.</summary>
+        public byte CyberThreatSlot;
 
         public bool PlatformActive;
 
@@ -99,7 +104,7 @@ namespace BoscaliSummer.Features.Support.Networking
     }
 
     /// <summary>
-    /// The faction's SPEC OPS detachment — four teams, up to twelve objectives, two recharges and
+    /// The faction's SPEC OPS detachment — four teams, up to twelve objectives, five ability recharges and
     /// the notice ring — sent immediately before every <see cref="OpsStateMessage"/> on the same
     /// reliable channel, so a command's reply always finds the detachment already mirrored.
     /// </summary>
@@ -107,6 +112,7 @@ namespace BoscaliSummer.Features.Support.Networking
     internal struct SpecOpsStateMessage
     {
         public byte Protocol;
+        public string FactionName;
         public SpecOpsSnapshot State;
     }
 

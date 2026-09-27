@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using BoscaliSummer.Framework.Fx;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.UI;
@@ -31,6 +32,11 @@ namespace BoscaliSummer.Features.Events.Presentation
                 useMipMap = false,
             };
             texture.Create();
+            if (!FxRtPool.Own(texture))
+            {
+                texture.Release();
+                Object.Destroy(texture);
+            }
             output.texture = texture;
 
             var cameraObject = new GameObject("FieldArchivePreviewCamera", typeof(Camera));
@@ -112,6 +118,7 @@ namespace BoscaliSummer.Features.Events.Presentation
 
         private void Render()
         {
+            if (texture == null) return;
             float radius = Mathf.Max(1f, bounds.extents.magnitude);
             Vector3 direction = Quaternion.Euler(0f, yaw, 0f) * new Vector3(0f, .34f, -1f);
             camera.transform.position = bounds.center + direction.normalized * radius * 3.3f;
@@ -134,8 +141,12 @@ namespace BoscaliSummer.Features.Events.Presentation
             ClearModel();
             output.texture = null;
             camera.targetTexture = null;
-            texture.Release();
-            Object.Destroy(texture);
+            FxRtPool.Disown(texture);
+            if (texture != null)
+            {
+                texture.Release();
+                Object.Destroy(texture);
+            }
             Object.Destroy(camera.gameObject);
             Object.Destroy(light.gameObject);
         }
