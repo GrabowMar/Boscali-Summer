@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Features.Support.Domain.Orbital;
+using BoscaliSummer.Framework.Fx;
 using NuclearOption.Networking;
 using UnityEngine;
 
@@ -25,14 +26,12 @@ namespace BoscaliSummer.Features.Support.Visuals
     /// </summary>
     internal sealed class SarCollector
     {
-        // 16:10 like the uplink feed, and deliberately coarse: this image is a sensor
-        // product, not a photo. Halving the vertical sampling removed most of the ray
-        // storm the old 256² grid cost without changing what the image reads as.
-        public const int ImageWidth = 192;
-        public const int ImageHeight = 120;
+        // A bounded, coarse radar product. The accepted scan is independent of gameplay.
+        public const int ImageWidth = 128;
+        public const int ImageHeight = 80;
         public const float CollectSeconds = 6f;
         public const float ProcessingSeconds = 2f;
-        private const int RangeOversample = 192;
+        private const int RangeOversample = 128;
         private const int MaximumRaysPerFrame = 400;
         private const float RayLift = 4000f;
         private const float PreviewInterval = 0.8f;
@@ -59,6 +58,7 @@ namespace BoscaliSummer.Features.Support.Visuals
         private float elapsed;
         private float nextPreview;
         private int layerMask;
+        private int rangeOversample = RangeOversample;
 
         public SarPhase Phase { get; private set; }
         public Texture2D Image { get; private set; }
@@ -92,7 +92,9 @@ namespace BoscaliSummer.Features.Support.Visuals
             var geometry = new SarGeometry(look.Incidence, look.AzimuthX, look.AzimuthZ, look.SlantRange,
                 OrbitMath.Velocity(state.Altitude));
             former = new SarImageFormer(ImageWidth, ImageHeight, sceneHalfSize, geometry, seed);
-            totalRays = former.RayCount(RangeOversample);
+            rangeOversample = Mathf.Max(32, Mathf.RoundToInt(
+                RangeOversample * FxBus.Scales.RenderTargets));
+            totalRays = former.RayCount(rangeOversample);
             nextRay = 0;
             elapsed = 0f;
             nextPreview = 0f;
@@ -119,7 +121,8 @@ namespace BoscaliSummer.Features.Support.Visuals
                 {
                     elapsed += deltaTime;
                     int due = Mathf.Min(totalRays, Mathf.CeilToInt(totalRays * Mathf.Clamp01(elapsed / CollectSeconds)));
-                    int budget = Mathf.Min(MaximumRaysPerFrame, due - nextRay);
+                    int budget = Mathf.Min(Mathf.Max(50, Mathf.RoundToInt(
+                        MaximumRaysPerFrame * FxBus.Scales.RenderTargets)), due - nextRay);
                     for (int i = 0; i < budget; i++) Cast(nextRay++);
                     if (elapsed >= nextPreview)
                     {
@@ -155,7 +158,7 @@ namespace BoscaliSummer.Features.Support.Visuals
 
         private void Cast(int index)
         {
-            former.PlanRay(index, RangeOversample, out double x, out double z);
+            former.PlanRay(index, rangeOversample, out double x, out double z);
             Vector3 ground = centreLocal + new Vector3((float)x, 0f, (float)z);
             Vector3 origin = ground + los * RayLift;
 

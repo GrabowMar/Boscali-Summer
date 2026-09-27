@@ -43,6 +43,8 @@ namespace BoscaliSummer.Features.Progression.Presentation
         private string studioSelectedCallsign;
         private bool studioDirty = true;
         private bool studioArtDirty = true;
+        private RectTransform studioPageRoot;
+        private bool studioPageBuilt;
         private string studioMessage = string.Empty;
         private StudioTone studioMessageTone = StudioTone.Info;
         private float studioMessageUntil;
@@ -88,6 +90,8 @@ namespace BoscaliSummer.Features.Progression.Presentation
             studioSelectedCallsign = null;
             studioDirty = true;
             studioArtDirty = true;
+            studioPageRoot = null;
+            studioPageBuilt = false;
             studioMessage = string.Empty;
             studioMessageTone = StudioTone.Info;
             studioMessageUntil = 0f;

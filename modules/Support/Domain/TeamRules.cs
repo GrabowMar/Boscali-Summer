@@ -43,6 +43,13 @@ namespace BoscaliSummer.Features.Support.Domain
             !guard || players <= 1 || owner == 0 || owner == requester || !ownerPresent;
 
         /// <summary>
+        /// Who a jettison refund goes to: the pilot who paid, while they are still present;
+        /// otherwise the requester, so an absent payer's share is never destroyed.
+        /// </summary>
+        public static ulong RefundRecipient(ulong requester, ulong payer, bool payerPresent) =>
+            payer != 0 && payerPresent ? payer : requester;
+
+        /// <summary>
         /// One total per payer from per-cell payments; an unknown payer (0) holds no share. Returns
         /// how many payers were written; a payer past the buffers is dropped.
         /// </summary>

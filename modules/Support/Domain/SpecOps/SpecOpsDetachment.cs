@@ -69,7 +69,7 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
 
     /// <summary>
     /// One faction's special-operations detachment: four team slots, the objectives the host has
-    /// listed, scouting memory, two ability recharges and a notice ring. Missions resolve in the
+    /// listed, scouting memory, five ability recharges and a notice ring. Missions resolve in the
     /// abstract — travel, task, one roll — and the runtime applies what a success does to the
     /// world. The host is the only writer; a client mirrors snapshot bytes and never ticks.
     /// Every value is bounded: four teams, twelve objectives, sixteen scouting marks, eight notices.
@@ -224,6 +224,8 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
             return WorkingOn(anchor) >= 0 ? SpecOpsDenial.ObjectiveTaken : SpecOpsDenial.None;
         }
 
+        /// <summary>Recall is the abort path: it stays available while raise and launch are
+        /// refused, so a team can always be stood down. Decided 2026-09-27 (D-1).</summary>
         public SpecOpsDenial CheckRecall(int team)
         {
             if (team < 0 || team >= TeamCount) return SpecOpsDenial.BadTeam;
@@ -272,8 +274,18 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
             if (CheckRecall(team) != SpecOpsDenial.None) return false;
             FieldTeam value = teams[team];
             value.Last = MissionOutcome.Recalled;
+            bool holding = value.State == TeamState.Holding;
+            if (holding && value.Wins > 0 && value.Wins < byte.MaxValue)
+            {
+                // Abandoning a held post forfeits its win. Below the cap this exactly undoes
+                // the success; at the cap the win stands either way. Holding out keeps it.
+                value.Wins--;
+                value.Rank = (byte)FieldCatalog.RankFor(value.Wins);
+            }
             Rest(ref value, now, FieldCatalog.RecoverSeconds);
             teams[team] = value;
+            if (holding)
+                Notify(FieldNotice.PostEnded, team, (byte)value.Mission);
             Notify(FieldNotice.Recalled, team, (byte)value.Mission);
             return true;
         }
@@ -343,6 +355,7 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
                 return;
             }
 
+            // D-2: the effect lands at the rank the team fought with; the win below lengthens the post.
             var result = new FieldResult(team.Mission, outcome, team.X, team.Z, team.Rank, team.Anchor);
             bool landed = apply == null || apply(result);
             if (landed)
@@ -424,6 +437,13 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
                 if (best < 0 || team.Rank > teams[best].Rank) best = i;
             }
             return best;
+        }
+
+        /// <summary>Rank of the team whose post would answer at the point, or -1 for none.</summary>
+        public int CoveringRank(FieldMission post, float x, float z)
+        {
+            int team = Covering(post, x, z);
+            return team < 0 ? -1 : teams[team].Rank;
         }
 
         public float AbilityRechargeRemaining(FieldAbility ability, double now)

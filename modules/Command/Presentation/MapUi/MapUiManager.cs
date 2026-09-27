@@ -9,7 +9,14 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private int screenCount = -1;
         private void LateUpdate()
         {
-            if (!DynamicMap.mapMaximized) return;
+            if (!DynamicMap.mapMaximized)
+            {
+                MfdMapInteractions.Restore();
+                MfdTerrainRelief.Restore();
+                return;
+            }
+            MfdTerrainRelief.Tick();
+            MfdMapInteractions.Tick(SceneSingleton<DynamicMap>.i);
             MfdNewsTicker.Tick();
             if (Time.unscaledTime < nextRefresh) return;
             nextRefresh = Time.unscaledTime + 0.1f;
@@ -39,6 +46,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         {
             MapMfdLookup.Reset();
             MfdRailPatch.Reset();
+            MfdTerrainRelief.Reset();
+            MfdMapInteractions.Restore();
             MfdNewsTicker.Reset();
             nextRefresh = 0f;
             screenCount = -1;

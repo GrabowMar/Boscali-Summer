@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using BoscaliSummer.Features.Command.Presentation;
 using NOAvionics;
 using NOAvionics.Ui;
 using TMPro;
@@ -9,7 +10,7 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Features.Command.Presentation.MapUi
 {
     /// <summary>
-    /// Owned presentation hosts for the game's six stock map-MFD pages.
+    /// Owned presentation hosts for the game's controller-backed stock map-MFD pages.
     ///
     /// The game controls an <see cref="MFDScreen"/> by toggling only its
     /// <c>displayPanel</c>. Repainting children in that panel made this feature depend on
@@ -19,10 +20,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
     /// fixed, fully owned avionics surface. Native state and actions therefore remain the
     /// authority, while no native layout participates in the rendered panel.
     ///
-    /// Split by concern across partial files: this file holds the attach/detach lifecycle
-    /// and the shared Presenter/AvScreen harness. Each vanilla screen's presenter lives in
-    /// its own file - see VanillaMfdRebuild.Map.cs, .Hud.cs, .Faction.cs, .Target.cs,
-    /// .Mission.cs - and the shared MfdPagingGrid widget lives in .PagingGrid.cs.
+    /// HUD and mission surfaces attach when first shown, so their card trees cost nothing
+    /// while the player stays on other pages.
     /// </summary>
     internal static partial class VanillaMfdRebuild
     {
@@ -32,8 +31,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             new Dictionary<MFDScreen, Binding>();
 
         /// <summary>
-        /// Attach an owned surface when this is one of the six controller-backed stock
-        /// pages. Unknown and third-party screens are deliberately left untouched.
+        /// Attach an owned surface to a supported stock controller. Unknown and
+        /// third-party screens are left untouched.
         /// </summary>
         public static bool TryApply(MFDScreen screen)
         {
@@ -91,6 +90,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         /// <summary>Restore every native screen exactly before its dock is dismantled.</summary>
         public static void Restore()
         {
+            MissionContractWindow.CloseOpen();
             foreach (Binding binding in bindings.Values) binding.Restore();
             bindings.Clear();
         }
@@ -115,18 +115,16 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             if (map != null) return new MapPresenter(screen, map);
 
             HUDOptions hud = screen.GetComponent<HUDOptions>();
-            if (hud != null) return new HudPresenter(screen, hud);
+            if (hud != null) return screen.isActive ? new HudPresenter(screen, hud) : null;
 
             TargetListSelector target = screen.GetComponent<TargetListSelector>();
             if (target != null) return new TargetPresenter(screen, target);
 
             ObjectiveInfoList mission = screen.GetComponent<ObjectiveInfoList>();
-            if (mission != null) return new MissionPresenter(screen);
+            if (mission != null) return screen.isActive ? new MissionPresenter(screen) : null;
 
-            // A game update may leave the stable bezel label but move the controller. Keep
-            // the problem actionable instead of blanking the screen or mutating unknown UI.
-            VanillaMfdPanelId fallback = VanillaMfdPanelCatalog.FromShortName(screen.shortName);
-            return fallback == VanillaMfdPanelId.Unknown ? null : new UnavailablePresenter(screen, fallback);
+            // An unfamiliar stock controller keeps its native view.
+            return null;
         }
 
         private static RectTransform BuildViewRoot(Transform parent, VanillaMfdPanelId id)

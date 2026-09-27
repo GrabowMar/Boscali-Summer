@@ -163,17 +163,9 @@ namespace BoscaliSummer.Tests.Features.Command
             TestAssert.That(grid.ContestedSectorCount >= 1, "Clash detected at contested contact point");
             TestAssert.That(grid.ActiveClashesCount >= 1, "Clash count reports active battle");
 
-            // 6. Texture baking (control tint). The front line itself is vector geometry now
-            // (`Presentation/MapUi/FrontlineGraphic`), covered by FrontlineTests.
-            var pixels = grid.BakeTexture(128, 128, true, 0.35f);
-            TestAssert.That(pixels != null && pixels.Length == 128 * 128, "BakeTexture generates valid pixel array");
-
-            int drawnPixels = 0;
-            for (int i = 0; i < pixels.Length; i++)
-            {
-                if (pixels[i].a > 0) drawnPixels++;
-            }
-            TestAssert.That(drawnPixels > 50, "Texture baking produces rendered territory pixels");
+            // 6. Front telemetry follows the clash: ordered segments back the counts.
+            TestAssert.That(grid.FrontlineSegmentCount > 0, "Clash produces frontline segments");
+            TestAssert.That(grid.FrontlineLengthMetres > 0f, "Clash produces a measurable frontline");
 
             // 7. Test Neutral Node Non-Expansion & Queue Overflow Immunity
             grid.ResetAll();

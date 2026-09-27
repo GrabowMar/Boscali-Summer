@@ -41,7 +41,7 @@ namespace BoscaliSummer.Features.Weather.Visuals
             return tex;
         }
 
-        internal static Material CreateMaterial(Texture2D tex)
+        internal static Material CreateMaterial(Texture2D tex, bool additive = false)
         {
             Shader shader = Shader.Find("Universal Render Pipeline/Particles/Unlit")
                 ?? Shader.Find("Particles/Standard Unlit")
@@ -57,7 +57,8 @@ namespace BoscaliSummer.Features.Weather.Visuals
             if (mat.HasProperty("_Surface")) mat.SetFloat("_Surface", 1);
             if (mat.HasProperty("_Blend")) mat.SetFloat("_Blend", 0);
             if (mat.HasProperty("_SrcBlend")) mat.SetInt("_SrcBlend", (int)BlendMode.SrcAlpha);
-            if (mat.HasProperty("_DstBlend")) mat.SetInt("_DstBlend", (int)BlendMode.OneMinusSrcAlpha);
+            if (mat.HasProperty("_DstBlend")) mat.SetInt("_DstBlend",
+                (int)(additive ? BlendMode.One : BlendMode.OneMinusSrcAlpha));
             if (mat.HasProperty("_ZWrite")) mat.SetInt("_ZWrite", 0);
             if (mat.HasProperty("_Cull")) mat.SetInt("_Cull", (int)CullMode.Off);
 

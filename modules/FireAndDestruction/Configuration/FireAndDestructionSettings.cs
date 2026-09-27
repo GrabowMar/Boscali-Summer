@@ -9,15 +9,17 @@ namespace BoscaliSummer.Features.FireAndDestruction.Configuration
     /// </summary>
     internal sealed class FireAndDestructionSettings
     {
+        public const int MaximumFireSites = 32;
         public readonly ConfigEntry<bool> FiresEnabled;
         public readonly ConfigEntry<float> FireIntensity;
+        public readonly ConfigEntry<int> ActiveFireLimit;
         public readonly ConfigEntry<bool> DemolishUnoccupiedBuildings;
         public readonly ConfigEntry<bool> ImpactScorchEnabled;
 
         public float BulletIgnitionChance => 0.0025f * (0.65f + 0.35f * FireIntensity.Value);
         public float ExplosiveIgnitionChance => 0.06f * (0.65f + 0.35f * FireIntensity.Value);
         public float VehicleExplosionIgnitionChance => ExplosiveIgnitionChance * 0.72f;
-        public int MaxActiveFires => 32;
+        public int MaxActiveFires => ActiveFireLimit.Value;
         public float FireLifetime => 90f * (0.82f + 0.18f * FireIntensity.Value);
         public float FireMergeRadius => 72f * (0.88f + 0.12f * FireIntensity.Value);
         public float FireCellCooldown => 8f;
@@ -48,6 +50,12 @@ namespace BoscaliSummer.Features.FireAndDestruction.Configuration
                     "bounded at any value, so this cannot turn a long mission into a slideshow. " +
                     "Host-authoritative: on a server, only the host's value applies.",
                     new AcceptableValueRange<float>(0.5f, 1.5f)));
+            ActiveFireLimit = config.Bind("Fires", "ActiveFireLimit", 24,
+                new ConfigDescription(
+                    "Maximum concurrent fire sites. Lower values limit new ignitions and spread " +
+                    "after the current fires expire; existing fires are not removed. Host-owned " +
+                    "and shared with clients during the session.",
+                    new AcceptableValueRange<int>(8, MaximumFireSites)));
             DemolishUnoccupiedBuildings = config.Bind("Fires", "DemolishUnoccupiedBuildings", true,
                 "Demolish a civilian building after its fire burns out, unless it has a faction " +
                 "owner. Host-authoritative: on a server, only the host's value applies.");

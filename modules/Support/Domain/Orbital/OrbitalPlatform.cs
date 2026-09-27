@@ -185,6 +185,10 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
         public ModuleKind Pending { get; private set; }
         public int PendingCell { get; private set; }
         public double DockAt { get; private set; }
+
+        /// <summary>Host only: what the in-flight launch cost and who paid, for refunds when it never docks.</summary>
+        public float PendingPaid => pendingPaid;
+        public ulong PendingPayer => pendingPayer;
         public PlatformNotice Notice { get; private set; }
         public int NoticeCell { get; private set; }
         public byte NoticeSerial => noticeSerial;
@@ -416,15 +420,15 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
         }
 
         /// <summary>A cargo vehicle that refills fuel and rods when it docks at the core.</summary>
-        public PlacementFailure TryResupply(double now, double dockSeconds)
+        public PlacementFailure TryResupply(double now, double dockSeconds, float price, ulong buyer)
         {
             if (!Exists) return PlacementFailure.NoPlatform;
             if (Pending != ModuleKind.None) return PlacementFailure.LaunchInFlight;
             Pending = ModuleKind.Cargo;
             PendingCell = CoreCell;
             DockAt = now + Math.Max(0.0, dockSeconds);
-            pendingPaid = 0f;
-            pendingPayer = 0;
+            pendingPaid = Math.Max(0f, price);
+            pendingPayer = buyer;
             return PlacementFailure.None;
         }
 

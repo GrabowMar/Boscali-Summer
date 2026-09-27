@@ -98,7 +98,7 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
                 }
                 for (int i = 0; i < missiles.Length; i++)
                     if (missiles[i] != null && !missiles[i].disabled)
-                        Object.Destroy(missiles[i].gameObject); // Expiry is not an impact.
+                        spawner.ServerObjectManager.Destroy(missiles[i].gameObject); // Expiry is not an impact.
             }
             finally
             {

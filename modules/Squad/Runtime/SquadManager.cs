@@ -12,7 +12,7 @@ using UnityEngine;
 
 namespace BoscaliSummer.Features.Squad.Runtime
 {
-    internal sealed class SquadManager : MonoBehaviour, ISceneService, ISquadView
+    internal sealed class SquadManager : MonoBehaviour, ISceneService, ISquadView, IAircraftTaskExclusion
     {
         private sealed class Career
         {
@@ -92,6 +92,18 @@ namespace BoscaliSummer.Features.Squad.Runtime
         public int ActiveEnemyWingIndex { get; private set; } = -1;
         public int ActiveHuntId { get; private set; }
         public EnemyWingView GetEnemyWing(int index) => index >= 0 && index < enemies.Length ? enemies[index] : default;
+        public bool IsExcluded(int persistentIdHash)
+        {
+            for (int i = 0; i < hunts.Count; i++)
+            {
+                Aircraft[] wing = hunts[i].Aircraft;
+                if (wing == null) continue;
+                for (int j = 0; j < wing.Length; j++)
+                    if (wing[j] != null && wing[j].persistentID.GetHashCode() == persistentIdHash)
+                        return true;
+            }
+            return false;
+        }
         public int GetBonusPoints(ulong id) => GameAccess.IsServer()
             ? careers.TryGetValue(id, out Career c) ? c.Rules.BonusPoints : 0 : id == localIdentity ? localBonus : 0;
         public int GetPilotGeneration(ulong id) => GameAccess.IsServer()

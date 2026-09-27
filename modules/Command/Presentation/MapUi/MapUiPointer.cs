@@ -19,6 +19,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         {
             if (StrPlanningWindow.BlocksMap || MissionContractWindow.BlocksMap) return true;
             if (MfdPanelDock.ContainsScreenPoint(screenPoint)) return true;
+            if (MfdMapOrbitControls.Contains(screenPoint)) return true;
+            if (MfdMapInteractions.ContainsMenu(screenPoint)) return true;
             return MfdRail.TryGetRail(out RectTransform rail) && Contains(rail, screenPoint);
         }
 

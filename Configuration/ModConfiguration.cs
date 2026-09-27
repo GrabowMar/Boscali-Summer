@@ -10,6 +10,7 @@ using BoscaliSummer.Features.HighCommand.Configuration;
 using BoscaliSummer.Features.Hud.Configuration;
 using BoscaliSummer.Features.Intel.Configuration;
 using BoscaliSummer.Features.Progression.Configuration;
+using BoscaliSummer.Features.Performance.Configuration;
 using BoscaliSummer.Features.QoL.Configuration;
 using BoscaliSummer.Features.Radio.Configuration;
 using BoscaliSummer.Features.Support.Configuration;
@@ -17,8 +18,6 @@ using BoscaliSummer.Features.Squad.Configuration;
 using BoscaliSummer.Features.TheaterOps.Configuration;
 using BoscaliSummer.Features.Trenches.Configuration;
 using BoscaliSummer.Features.UrbanCombat.Configuration;
-using BoscaliSummer.Features.Visuals.Configuration;
-using BoscaliSummer.Features.Immersion.Configuration;
 using BoscaliSummer.Features.Weather.Configuration;
 using BoscaliSummer.Infrastructure.Diagnostics;
 
@@ -50,8 +49,7 @@ namespace BoscaliSummer
         public HudSettings Hud { get; }
         public DiagnosticSettings Diagnostics { get; }
         public WeatherSettings Weather { get; }
-        public VisualsSettings Visuals { get; }
-        public ImmersionSettings Immersion { get; }
+        public PerformanceSettings Performance { get; }
 
         public ModConfiguration(ConfigFile config)
         {
@@ -79,8 +77,7 @@ namespace BoscaliSummer
                 Hud = new HudSettings(config);
                 Diagnostics = new DiagnosticSettings(config);
                 Weather = new WeatherSettings(config);
-                Visuals = new VisualsSettings(config);
-                Immersion = new ImmersionSettings(config);
+                Performance = new PerformanceSettings(config);
                 LegacyConfigMigration.RemoveEntries(config);
                 // Last, so every module's entries are present to be sorted into the
                 // F1 window's plain and advanced halves.

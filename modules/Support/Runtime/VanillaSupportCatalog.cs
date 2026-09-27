@@ -1,15 +1,14 @@
 using System;
+using UnityEngine;
 
 namespace BoscaliSummer.Features.Support.Runtime
 {
     /// <summary>
     /// Resolves vanilla definitions for support actions. Strikes need a non-nuclear missile
-    /// definition from the encyclopedia.
+    /// definition from the encyclopedia whose seeker can fly a blind aimpoint release.
     /// </summary>
     internal sealed class VanillaSupportCatalog
     {
-        public static bool ReconAvailable => true;
-
         public MissileDefinition Artillery(string key)
         {
             if (Encyclopedia.i == null || Encyclopedia.i.missiles == null)
@@ -23,16 +22,25 @@ namespace BoscaliSummer.Features.Support.Runtime
                 MissileDefinition definition = Encyclopedia.i.missiles[i];
                 if (definition == null || definition.unitPrefab == null) continue;
 
-                if (wanted != null && string.Equals(definition.jsonKey, wanted, StringComparison.Ordinal))
-                    return definition;
-
-                if (IsTerrainFollowing(definition)) continue;
+                bool keyed = wanted != null && string.Equals(definition.jsonKey, wanted, StringComparison.Ordinal);
+                if (!IsBallisticShell(definition))
+                {
+                    // An explicitly configured shell that cannot fly the mission fails
+                    // the resolution instead of launching an erratic round.
+                    if (keyed) return null;
+                    continue;
+                }
 
                 Missile missile = definition.unitPrefab.GetComponent<Missile>();
                 float yield = missile != null ? missile.GetYield() : 0f;
                 // Exclude nuclear / apocalyptic warheads for standard orbital kinetic rod
-                if (yield > 200f) continue;
+                if (yield > 200f)
+                {
+                    if (keyed) return null;
+                    continue;
+                }
 
+                if (keyed) return definition;
                 if (fallback == null) fallback = definition;
 
                 string name = definition.jsonKey ?? string.Empty;
@@ -48,17 +56,20 @@ namespace BoscaliSummer.Features.Support.Runtime
         }
 
         /// <summary>
-        /// Cruise / optical-terrain seekers hug the deck the moment they spawn. Using one
-        /// as the EMP or Rod visual is why those strikes appeared on the ground instead of
-        /// at release altitude.
+        /// Only aimpoint ballistic seekers can fly a strike release: a blind release
+        /// gives the missile an aimpoint and nothing else, so lock-on seekers (IR, radar,
+        /// laser) never acquire and cruise seekers hug the deck instead of diving. Using
+        /// one as the EMP or Rod visual is why those strikes appeared on the ground
+        /// instead of at release altitude. Anything outside this list fails closed.
         /// </summary>
-        internal static bool IsTerrainFollowing(MissileDefinition definition)
+        internal static bool IsBallisticShell(MissileDefinition definition)
         {
             if (definition == null || definition.unitPrefab == null) return false;
-            string name = definition.jsonKey ?? string.Empty;
-            if (name.IndexOf("Cruise", StringComparison.OrdinalIgnoreCase) >= 0)
-                return true;
-            return definition.unitPrefab.GetComponentInChildren<OpticalSeekerCruiseMissile>(true) != null;
+            GameObject prefab = definition.unitPrefab;
+            return prefab.GetComponentInChildren<BallisticMissileGuidance>(true) != null
+                || prefab.GetComponentInChildren<InertialSeekerShell>(true) != null
+                || prefab.GetComponentInChildren<OpticalSeekerShell>(true) != null
+                || prefab.GetComponentInChildren<OpticalSeekerBomb>(true) != null;
         }
     }
 }

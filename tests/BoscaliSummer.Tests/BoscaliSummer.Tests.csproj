@@ -6,6 +6,11 @@
     <RootNamespace>BoscaliSummer.Tests</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="..\..\Framework\Contracts\FxBudget.cs" Link="Framework\FxBudget.cs" />
+    <Compile Include="..\..\Framework\Contracts\IClientEffect.cs" Link="Framework\IClientEffect.cs" />
+    <Compile Include="..\..\Framework\Fx\FxRegistry.cs" Link="Framework\FxRegistry.cs" />
+    <Compile Include="..\..\Framework\Fx\FxQualityMapper.cs" Link="Framework\FxQualityMapper.cs" />
+    <Compile Include="..\..\modules\Performance\Domain\FrameBudgetPolicy.cs" Link="Features\Performance\FrameBudgetPolicy.cs" />
     <Compile Include="..\..\modules\Session\Domain\HostValueLedger.cs" Link="Features\Session\HostValueLedger.cs" />
     <Compile Include="..\..\modules\Progression\Domain\PlaneEngineMap.cs" Link="Features\Progression\PlaneEngineMap.cs" />
     <Compile Include="..\..\modules\PlayerSpawnPriority\SpawnPriorityPolicy.cs" Link="Features\PlayerSpawnPriority\SpawnPriorityPolicy.cs" />
@@ -49,7 +54,6 @@
     <Compile Include="..\..\modules\DynamicOperations\Domain\OperationBoard.cs" Link="Features\DynamicOperations\OperationBoard.cs" />
     <Compile Include="..\..\modules\DynamicOperations\Domain\OperationTitles.cs" Link="Features\DynamicOperations\OperationTitles.cs" />
     <Compile Include="..\..\modules\DynamicOperations\Domain\OperationChains.cs" Link="Features\DynamicOperations\OperationChains.cs" />
-    <Compile Include="..\..\modules\Campaign\Domain\MissionInstallPlan.cs" Link="Features\Campaign\MissionInstallPlan.cs" />
     <Compile Include="..\..\modules\DynamicOperations\Domain\OperationTempo.cs" Link="Features\DynamicOperations\OperationTempo.cs" />
     <Compile Include="..\..\modules\DynamicOperations\Domain\OperationFailure.cs" Link="Features\DynamicOperations\OperationFailure.cs" />
     <Compile Include="..\..\modules\DynamicOperations\Domain\ContractShares.cs" Link="Features\DynamicOperations\ContractShares.cs" />
@@ -57,20 +61,20 @@
     <Compile Include="..\..\modules\DynamicOperations\Domain\ContractMarkerMath.cs" Link="Features\DynamicOperations\ContractMarkerMath.cs" />
     <Compile Include="..\..\modules\DynamicOperations\Domain\ContractMarkerLook.cs" Link="Features\DynamicOperations\ContractMarkerLook.cs" />
     <Compile Include="..\..\modules\DynamicOperations\Domain\ContractSelection.cs" Link="Features\DynamicOperations\ContractSelection.cs" />
-    <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdSecondaryObjectives.cs" Link="Features\Command\MfdSecondaryObjectives.cs" />
-    <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdMissionOverview.cs" Link="Features\Command\MfdMissionOverview.cs" />
-    <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdMissionLabels.cs" Link="Features\Command\MfdMissionLabels.cs" />
+    <Compile Include="..\..\modules\Campaign\Domain\MissionInstallPlan.cs" Link="Features\Campaign\MissionInstallPlan.cs" />
     <Compile Include="..\..\Framework\Contracts\IObservationSource.cs" Link="Framework\IObservationSource.cs" />
     <Compile Include="..\..\Framework\Contracts\IHostSettingsView.cs" Link="Framework\IHostSettingsView.cs" />
     <Compile Include="..\..\Framework\Contracts\ISecondaryObjectivesView.cs" Link="Framework\ISecondaryObjectivesView.cs" />
     <Compile Include="..\..\Framework\Contracts\ITerritoryIngress.cs" Link="Framework\ITerritoryIngress.cs" />
-    <Compile Include="..\..\Framework\Contracts\IVisualEnhancements.cs" Link="Framework\IVisualEnhancements.cs" />
     <Compile Include="..\..\modules\QoL\Runtime\ObservationStore.cs" Link="Features\QoL\ObservationStore.cs" />
     <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdTargetPresets.cs" Link="Features\Command\MfdTargetPresets.cs" />
     <Compile Include="..\..\modules\Command\Presentation\MapUi\TargetPresetModel.cs" Link="Features\Command\TargetPresetModel.cs" />
     <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdChartScale.cs" Link="Features\Command\MfdChartScale.cs" />
     <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdRailCatalog.cs" Link="Features\Command\MfdRailCatalog.cs" />
     <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdLogTone.cs" Link="Features\Command\MfdLogTone.cs" />
+    <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdSecondaryObjectives.cs" Link="Features\Command\MfdSecondaryObjectives.cs" />
+    <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdMissionOverview.cs" Link="Features\Command\MfdMissionOverview.cs" />
+    <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdMissionLabels.cs" Link="Features\Command\MfdMissionLabels.cs" />
     <Compile Include="..\..\modules\Hud\Runtime\ThirdPersonCameraPolicy.cs" Link="Features\Hud\ThirdPersonCameraPolicy.cs" />
     <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdLogSpace.cs" Link="Features\Command\MfdLogSpace.cs" />
     <Compile Include="..\..\modules\Command\Presentation\MapUi\GridLabelsMath.cs" Link="Features\Command\GridLabelsMath.cs" />
@@ -106,7 +110,6 @@
     <Compile Include="..\..\modules\UrbanCombat\Runtime\SiegeMath.cs" Link="Features\UrbanCombat\SiegeMath.cs" />
     <Compile Include="..\..\modules\UrbanCombat\Runtime\UrbanRuinMath.cs" Link="Features\UrbanCombat\UrbanRuinMath.cs" />
     <Compile Include="..\..\modules\UrbanCombat\Visuals\WarzoneDressingMath.cs" Link="Features\UrbanCombat\WarzoneDressingMath.cs" />
-    <Compile Include="..\..\modules\UrbanCombat\Audio\UrbanAmbienceMath.cs" Link="Features\UrbanCombat\UrbanAmbienceMath.cs" />
     <Compile Include="..\..\modules\Trenches\Domain\TrenchTraceMath.cs" Link="Features\Trenches\TrenchTraceMath.cs" />
     <Compile Include="..\..\Framework\Features\FeatureMetadata.cs" Link="Framework\FeatureMetadata.cs" />
     <Compile Include="..\..\Framework\Features\FeatureGraph.cs" Link="Framework\FeatureGraph.cs" />
@@ -134,6 +137,10 @@
     <Compile Include="..\..\modules\HighCommand\Domain\CommandTree.cs" Link="Features\HighCommand\CommandTree.cs" />
     <Compile Include="..\..\modules\HighCommand\Domain\SeedStream.cs" Link="Features\HighCommand\SeedStream.cs" />
     <Compile Include="..\..\modules\TheaterOps\Domain\PriorityDirective.cs" Link="Features\TheaterOps\PriorityDirective.cs" />
+    <Compile Include="..\..\Framework\Contracts\ITheaterWarView.cs" Link="Framework\ITheaterWarView.cs" />
+    <Compile Include="..\..\modules\TheaterOps\Domain\LivingWarRules.cs" Link="Features\TheaterOps\LivingWarRules.cs" />
+    <Compile Include="..\..\modules\TheaterOps\Domain\NavalTask.cs" Link="Features\TheaterOps\NavalTask.cs" />
+    <Compile Include="..\..\modules\AirSurvival\Domain\AirStationPolicy.cs" Link="Features\AirSurvival\AirStationPolicy.cs" />
     <Compile Include="..\..\modules\TheaterOps\Domain\ReinforcementGate.cs" Link="Features\TheaterOps\ReinforcementGate.cs" />
     <Compile Include="..\..\modules\TheaterOps\Domain\OffensivePlan.cs" Link="Features\TheaterOps\OffensivePlan.cs" />
     <Compile Include="..\..\modules\TheaterOps\Domain\FrontlineTactics.cs" Link="Features\TheaterOps\FrontlineTactics.cs" />
@@ -165,25 +172,21 @@
     <Compile Include="..\..\modules\TheaterOps\Domain\TheaterOpsHudCopy.cs" Link="Features\TheaterOps\TheaterOpsHudCopy.cs" />
     <Compile Include="..\..\modules\Weather\Domain\WeatherRegime.cs" Link="Features\Weather\WeatherRegime.cs" />
     <Compile Include="..\..\modules\Weather\Domain\WeatherForecast.cs" Link="Features\Weather\WeatherForecast.cs" />
-    <Compile Include="..\..\modules\Weather\Domain\RainAudioMath.cs" Link="Features\Weather\RainAudioMath.cs" />
     <Compile Include="..\..\modules\Weather\Domain\RainVisualMath.cs" Link="Features\Weather\RainVisualMath.cs" />
     <Compile Include="..\..\modules\Weather\Domain\CanopyScoring.cs" Link="Features\Weather\CanopyScoring.cs" />
     <Compile Include="..\..\modules\Weather\Domain\CanopyShaderParams.cs" Link="Features\Weather\CanopyShaderParams.cs" />
     <Compile Include="..\..\modules\Weather\Domain\RainSkyMath.cs" Link="Features\Weather\RainSkyMath.cs" />
     <Compile Include="..\..\modules\Weather\Domain\LightningMath.cs" Link="Features\Weather\LightningMath.cs" />
-    <Compile Include="..\..\modules\Weather\Domain\DropSim.cs" Link="Features\Weather\DropSim.cs" />
-    <Compile Include="..\..\modules\Weather\Domain\Lightning.cs" Link="Features\Weather\Lightning.cs" />
     <Compile Include="..\..\modules\Weather\Domain\RegimeSchedule.cs" Link="Features\Weather\RegimeSchedule.cs" />
     <Compile Include="..\..\modules\Weather\Domain\StormCell.cs" Link="Features\Weather\StormCell.cs" />
     <Compile Include="..\..\modules\Weather\Domain\WeatherField.cs" Link="Features\Weather\WeatherField.cs" />
+    <Compile Include="..\..\modules\Weather\Domain\FlightWeatherAirMass.cs" Link="Features\Weather\FlightWeatherAirMass.cs" />
     <Compile Include="..\..\modules\Weather\Domain\WeatherFront.cs" Link="Features\Weather\WeatherFront.cs" />
     <Compile Include="..\..\modules\Weather\Domain\WeatherKey.cs" Link="Features\Weather\WeatherKey.cs" />
     <Compile Include="..\..\modules\Weather\Domain\WeatherMaps.cs" Link="Features\Weather\WeatherMaps.cs" />
     <Compile Include="..\..\modules\Weather\Domain\WeatherMath.cs" Link="Features\Weather\WeatherMath.cs" />
     <Compile Include="..\..\modules\Weather\Domain\WeatherWords.cs" Link="Features\Weather\WeatherWords.cs" />
-    <Compile Include="..\..\modules\Visuals\Domain\VisualsMath.cs" Link="Features\Visuals\VisualsMath.cs" />
-    <Compile Include="..\..\modules\Visuals\Domain\SinLut.cs" Link="Features\Visuals\SinLut.cs" />
-    <Compile Include="..\..\modules\Immersion\Domain\ImmersionMath.cs" Link="Features\Immersion\ImmersionMath.cs" />
+    <Compile Include="..\..\modules\Weather\Visuals\CloudNoise3D.cs" Link="Features\Weather\CloudNoise3D.cs" />
     <Compile Include="..\..\Infrastructure\GameInterop\MfdSlots.cs" Link="Infrastructure\MfdSlots.cs" />
     <Compile Include="..\..\Infrastructure\GameInterop\WingApiVersions.cs" Link="Infrastructure\WingApiVersions.cs" />
     <Compile Include="..\..\modules\Comms\Domain\*.cs" LinkBase="Features\Comms" />

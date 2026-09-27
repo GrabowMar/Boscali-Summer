@@ -41,6 +41,7 @@ namespace BoscaliSummer.Features.Radio.Runtime
         private RadioProgram receiver;
         private RadioProgram deck;
         private RadioBroadcastFx fx;
+        internal RadioBroadcastFx ClientFx => fx;
         private readonly RadioTransmitterAnchors anchors = new RadioTransmitterAnchors();
         private ServiceRegistry services;
         private ISquadView squad;

@@ -1,11 +1,13 @@
 using System.Collections.Generic;
 using UnityEngine;
+using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Framework.Fx;
 using UnityEngine.Rendering;
 
 namespace BoscaliSummer.Features.Weather.Visuals
 {
     // Map-owned discovery is incremental and finite. Native materials and meshes stay untouched.
-    internal sealed class TerrainRainDressing
+    internal sealed class TerrainRainDressing : IClientEffect
     {
         private struct Surface { public MeshRenderer Renderer; public Mesh Mesh; public int Slot; public uint Indices; }
         private readonly List<Transform> pending = new List<Transform>(1024);
@@ -32,6 +34,21 @@ namespace BoscaliSummer.Features.Weather.Visuals
         private static readonly int FogDensityId = Shader.PropertyToID("_FogDensity");
         private static readonly int RippleTimeId = Shader.PropertyToID("_RippleTime");
         internal int SurfaceCount => surfaces.Count;
+
+        public string EffectId => "terrain-rain";
+
+        public FxBudget Budget => new FxBudget(0, 8, 0, true);
+
+        public void ReleaseFx()
+        {
+            Reset();
+        }
+
+        public void DescribeFx(IDictionary<string, object> state)
+        {
+            state["fx.terrain-rain.surfaces"] = surfaces.Count;
+            state["fx.terrain-rain.wetness"] = wetness;
+        }
         internal float Wetness => wetness;
 
         /// <summary>

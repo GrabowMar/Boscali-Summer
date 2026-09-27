@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using BepInEx.Logging;
 using BoscaliSummer.Framework.Lifecycle;
+using BoscaliSummer.Framework.Fx;
 using HarmonyLib;
 using UnityEngine;
 
@@ -24,6 +25,7 @@ namespace BoscaliSummer.Framework.Features
         private readonly SceneLifecycle sceneLifecycle;
         private readonly ServiceRegistry services = new ServiceRegistry();
         private readonly HostSettingsBoard hostSettings = new HostSettingsBoard();
+        private readonly ClientSettingsBoard clientSettings = new ClientSettingsBoard();
         private readonly List<LoadedFeature> loadedFeatures = new List<LoadedFeature>();
         private bool disposed;
         private bool loadAttempted;
@@ -85,7 +87,8 @@ namespace BoscaliSummer.Framework.Features
                 try
                 {
                     context = new FeatureContext(
-                        featureMetadata.Id, runtimeRoot, sceneLifecycle, logger, settings, services, hostSettings);
+                        featureMetadata.Id, runtimeRoot, sceneLifecycle, logger, settings, services,
+                        hostSettings, clientSettings);
                     feature.Install(context);
                     candidates.Add(new LoadedFeature
                     {
@@ -203,6 +206,8 @@ namespace BoscaliSummer.Framework.Features
             disposed = true;
             for (int i = loadedFeatures.Count - 1; i >= 0; i--)
                 loadedFeatures[i].Harmony.UnpatchSelf();
+            int fxFailures = FxBus.Shutdown();
+            if (fxFailures > 0) logger.LogWarning("Client FX teardown failures: " + fxFailures);
             loadedFeatures.Clear();
             if (sceneLifecycle != null) sceneLifecycle.enabled = false;
             services.Clear();

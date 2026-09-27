@@ -15,7 +15,6 @@ namespace BoscaliSummer.Features.Support.Configuration
         public ConfigEntry<bool> CyberEnabled { get; }
         public ConfigEntry<bool> EwEnabled { get; }
         public ConfigEntry<bool> SpecOpsEnabled { get; }
-        public ConfigEntry<bool> ShowOnTacticalMap { get; }
         public ConfigEntry<bool> ReduceMotion { get; }
 
         public ConfigEntry<float> PlatformCostScale { get; }
@@ -102,9 +101,6 @@ namespace BoscaliSummer.Features.Support.Configuration
                 "Enable OPS SPEC OPS: the detachment's four teams, missions to real map objectives (recon, " +
                 "air-defence sabotage, seizing buildings) and the SPOT and SUPPRESS abilities their posts grant. " +
                 "Host-authoritative.");
-            ShowOnTacticalMap = config.Bind("Support", "ShowOnTacticalMap", true,
-                "Show ability range circles, tactical vector icons, orbital station ground tracks and " +
-                "active strike waypoints on the tactical theater map.");
             ReduceMotion = config.Bind("Support", "ReduceMotion", false,
                 "Client-local. OPS windows and rooms open on their final frame, with no motion. " +
                 "Does not change host rules, prices or what a peer sees.");
@@ -116,8 +112,8 @@ namespace BoscaliSummer.Features.Support.Configuration
                     new AcceptableValueRange<float>(0f, 10f)));
             PlatformJettisonRefund = config.Bind("Support", "PlatformJettisonRefund", 0.4f,
                 new ConfigDescription(
-                    "Fraction of what was paid refunded when a module is jettisoned; jettisoning the core deorbits " +
-                    "the station and refunds this share of everything. Host-authoritative.",
+                    "Fraction of what was paid, refunded to whoever paid for it, when a module is jettisoned; " +
+                    "jettisoning the core deorbits the station and refunds this share of everything. Host-authoritative.",
                     new AcceptableValueRange<float>(0f, 1f)));
             PlatformInsertionSeconds = config.Bind("Support", "PlatformInsertionSeconds", 45f,
                 new ConfigDescription(
@@ -267,14 +263,15 @@ namespace BoscaliSummer.Features.Support.Configuration
 
             SpecOpsCostScale = config.Bind("Support", "SpecOpsCostScale", 1f,
                 new ConfigDescription(
-                    "Scales every SPEC OPS price (raise a team 1000; recon 400, sabotage 700, seize 900; SPOT 250, " +
-                    "SUPPRESS 500), before CostMultiplier. Host-authoritative.",
+                    "Scales every SPEC OPS price (raise a team 1000; recon 400, sabotage 700, seize 900, " +
+                    "steal 600; SPOT 250, SKYWATCH 350, EAVESDROP 300, HUNT 650, SUPPRESS 500), before " +
+                    "CostMultiplier. Host-authoritative.",
                     new AcceptableValueRange<float>(0f, 10f)));
 
             ArtilleryDefinitionKey = config.Bind("Support", "FireMissionDefinitionKey", string.Empty,
                 "Exact jsonKey of the missile used by Rod from God and EMP shock. Empty auto-picks " +
                 "a non-nuclear vanilla missile. Only non-nuclear missiles with a yield of 200 or " +
-                "less are accepted. Check the startup log for the definitions this game build loaded.");
+                "less and a ballistic aimpoint seeker are accepted. Check the startup log for the definitions this game build loaded.");
 
         }
     }

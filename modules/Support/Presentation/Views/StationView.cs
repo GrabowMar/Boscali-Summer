@@ -98,6 +98,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         private int relocationSector = 4;
         private readonly Button[] sectors = new Button[9];
         private int jettisonArmedCell = -1;
+        private ModuleKind jettisonArmedKind = ModuleKind.None;
         private float jettisonArmedUntil;
         private string railNote;
         private bool railBad;
@@ -211,7 +212,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 StationStyle.Ink, 16f, TextAlignmentOptions.MidlineLeft, true);
             subtitle = StationStyle.Text(parent, "", new Rect(26f, -46f, 520f, 18f), StationStyle.Label, StationStyle.Dim,
                 StationStyle.LabelTracking);
-            getLabel = StationStyle.Text(parent, "STATION CONTROL", new Rect(w * 0.5f - 300f, -4f, 600f, 16f), 10f,
+            getLabel = StationStyle.Text(parent, "STATION CONTROL", new Rect(w * 0.5f - 300f, -4f, 600f, 16f), 12f,
                 StationStyle.Dim, 8f, TextAlignmentOptions.Center);
             getClock = StationStyle.Text(parent, "", new Rect(w * 0.5f - 360f, -18f, 720f, 54f), StationStyle.Display,
                 StationStyle.Ink, StationStyle.DisplayTracking, TextAlignmentOptions.Center);
@@ -219,7 +220,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 TextAlignmentOptions.MidlineRight, true);
             passClock = StationStyle.Text(parent, "", new Rect(w - 24f - 560f, -40f, 380f, 20f), 14f, StationStyle.Ink, 6f,
                 TextAlignmentOptions.MidlineRight);
-            passBand = StationStyle.Text(parent, "", new Rect(w - 24f - 560f, -58f, 380f, 16f), 10f, StationStyle.Dim, 5f,
+            passBand = StationStyle.Text(parent, "", new Rect(w - 24f - 560f, -58f, 380f, 16f), 12f, StationStyle.Dim, 5f,
                 TextAlignmentOptions.MidlineRight);
             imagerSwitch = BuildButton(parent, new Rect(w - 24f - 160f, -16f, 160f, 44f), () => openImager?.Invoke(), false, 11f);
             SetButton(imagerSwitch, "SENSOR FEED  [TAB]", true, "Switch to the imager: the station's sensor feed, slewed and tasked at the crosshair.");
@@ -229,10 +230,10 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         {
             AvKit.Panel(parent, new Rect(0f, 0f, w, h), StationStyle.Console.WithAlpha(0.85f));
             AvKit.Rule(parent, new Rect(0f, 0f, 3f, h), StationStyle.Limb);
-            StationStyle.Text(parent, "POSITION / COVERAGE", new Rect(16f, -8f, w * 0.46f, 16f), 11f, StationStyle.Dim, 3f);
+            StationStyle.Text(parent, "POSITION / COVERAGE", new Rect(16f, -8f, w * 0.46f, 16f), 12f, StationStyle.Dim, 3f);
             coverage = StationStyle.Text(parent, "", new Rect(16f, -29f, w * 0.36f, 38f), 16f, StationStyle.Ink, 2f);
             coverage.enableWordWrapping = true;
-            mobility = StationStyle.Text(parent, "", new Rect(w * 0.37f, -12f, w * 0.63f - 530f, 54f), 12f, StationStyle.Ink, 1f);
+            mobility = StationStyle.Text(parent, "", new Rect(w * 0.37f, -12f, w * 0.63f - 530f, 54f), 13f, StationStyle.Ink, 1f);
             mobility.enableWordWrapping = true;
             for (int i = 0; i < sectors.Length; i++)
             {
@@ -257,7 +258,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             var strip = new Strip { X = x, Signed = signed };
             StationStyle.Text(parent, label, new Rect(x, 0f, 56f, 14f), 10f, StationStyle.Dim, 3f,
                 TextAlignmentOptions.Center);
-            strip.Value = StationStyle.Text(parent, "", new Rect(x - 4f, -16f, 64f, 16f), 11f, StationStyle.Ink, 1f,
+            strip.Value = StationStyle.Text(parent, "", new Rect(x - 4f, -16f, 64f, 16f), 12f, StationStyle.Ink, 1f,
                 TextAlignmentOptions.Center);
             strip.Top = -40f;
             strip.Height = h - 50f;
@@ -292,9 +293,9 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 10f, StationStyle.Limb, 6f, TextAlignmentOptions.Center);
             emptyTitle = StationStyle.Text(emptyGroup, "", new Rect(0f, -34f, at.width, 34f), 24f, StationStyle.Ink, 10f,
                 TextAlignmentOptions.Center, true);
-            emptyCost = StationStyle.Text(emptyGroup, "", new Rect(0f, -72f, at.width, 22f), 12f, StationStyle.Limb, 4f,
+            emptyCost = StationStyle.Text(emptyGroup, "", new Rect(0f, -72f, at.width, 22f), 13f, StationStyle.Limb, 4f,
                 TextAlignmentOptions.Center);
-            emptySteps = StationStyle.Text(emptyGroup, "", new Rect(40f, -at.height + 118f, at.width - 80f, 112f), 12f,
+            emptySteps = StationStyle.Text(emptyGroup, "", new Rect(40f, -at.height + 118f, at.width - 80f, 112f), 13f,
                 StationStyle.Ink, 3f, TextAlignmentOptions.TopLeft);
             emptySteps.enableWordWrapping = true;
             emptySteps.fontStyle = FontStyles.Normal;
@@ -304,7 +305,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         {
             AvKit.Panel(parent, new Rect(0f, 0f, w, h), StationStyle.Console.WithAlpha(0.72f));
             AvKit.Outline(parent, new Rect(0f, 0f, w, h), StationStyle.ConsoleEdge);
-            rackTitle = StationStyle.Text(parent, "", new Rect(12f, -8f, w - 24f, 16f), 10f, StationStyle.Dim, 6f);
+            rackTitle = StationStyle.Text(parent, "", new Rect(12f, -8f, w - 24f, 16f), 12f, StationStyle.Dim, 6f);
             float pitch = Mathf.Min(42f, (h - 130f) / rack.Length);
             int r = 0;
             for (int i = 0; i < PlatformModules.Designs.Length && r < rack.Length; i++)
@@ -314,9 +315,9 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 rack[r++] = BuildRackRow(parent, info, new Rect(8f, -32f - (r - 1) * pitch, w - 16f, pitch - 4f));
             }
             AvKit.Rule(parent, new Rect(12f, -h + 86f, w - 24f, 1f), StationStyle.ConsoleEdge);
-            moduleDetail = StationStyle.Text(parent, "", new Rect(14f, -h + 78f, w - 28f, 70f), 12f, StationStyle.Ink, 1f, TextAlignmentOptions.TopLeft);
+            moduleDetail = StationStyle.Text(parent, "", new Rect(14f, -h + 78f, w - 28f, 70f), 13f, StationStyle.Ink, 1f, TextAlignmentOptions.TopLeft);
             moduleDetail.enableWordWrapping = true;
-            rackCollapsed = StationStyle.Text(parent, "", new Rect(14f, -36f, w - 28f, h - 50f), 12f, StationStyle.Ink, 3f,
+            rackCollapsed = StationStyle.Text(parent, "", new Rect(14f, -36f, w - 28f, h - 50f), 13f, StationStyle.Ink, 3f,
                 TextAlignmentOptions.TopLeft);
             rackCollapsed.enableWordWrapping = true;
         }
@@ -332,11 +333,11 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             row.Glyph.sprite = OpsSprites.Glyph((int)info.Kind);
             StationStyle.Text(host, info.Code, new Rect(40f, 0f, 60f, at.height), 13f, StationStyle.Ink, 6f,
                 TextAlignmentOptions.MidlineLeft, true);
-            StationStyle.Text(host, info.Name, new Rect(100f, 1f, 170f, at.height * 0.5f), 10f, StationStyle.Dim, 2f,
+            StationStyle.Text(host, info.Name, new Rect(100f, 1f, 170f, at.height * 0.5f), 12f, StationStyle.Dim, 2f,
                 TextAlignmentOptions.BottomLeft);
-            StationStyle.Text(host, Stat(info), new Rect(100f, -at.height * 0.5f, 170f, at.height * 0.5f), 10f,
+            StationStyle.Text(host, Stat(info), new Rect(100f, -at.height * 0.5f, 170f, at.height * 0.5f), 12f,
                 StationStyle.Ink, 2f, TextAlignmentOptions.TopLeft);
-            row.Price = StationStyle.Text(host, "", new Rect(at.width - 130f, 0f, 122f, at.height), 11f, StationStyle.Ink, 3f,
+            row.Price = StationStyle.Text(host, "", new Rect(at.width - 130f, 0f, 122f, at.height), 13f, StationStyle.Ink, 3f,
                 TextAlignmentOptions.MidlineRight);
             row.Control.WithTooltip(info.Name + " — " + info.Summary + " Hover to see where it would dock; click to queue it.");
             row.Control.Changed = c =>
@@ -361,11 +362,11 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 stageText[i] = StationStyle.Text(parent, StageNames[i], new Rect(x - 60f, -42f, 120f, 14f), 10f, StationStyle.Dim, 4f,
                     TextAlignmentOptions.Center);
             }
-            eta = StationStyle.Text(parent, "", new Rect(0f, -62f, 500f, 16f), 11f, StationStyle.Ink, 3f,
+            eta = StationStyle.Text(parent, "", new Rect(0f, -62f, 500f, 16f), 12f, StationStyle.Ink, 3f,
                 TextAlignmentOptions.MidlineLeft);
             primary = BuildButton(parent, new Rect(500f, -6f, w - 500f, 46f), OnPrimary, true, 13f);
             cargo = BuildButton(parent, new Rect(500f, -58f, (w - 500f) * 0.5f - 6f, 26f), OnCargo, false, 10f);
-            railStatus = StationStyle.Text(parent, "", new Rect(500f + (w - 500f) * 0.5f + 6f, -58f, (w - 500f) * 0.5f - 6f, 26f), 10f,
+            railStatus = StationStyle.Text(parent, "", new Rect(500f + (w - 500f) * 0.5f + 6f, -58f, (w - 500f) * 0.5f - 6f, 26f), 12f,
                 StationStyle.Dim, 2f, TextAlignmentOptions.MidlineLeft);
             railStatus.enableWordWrapping = true;
             railStatus.fontSizeMin = 10f;
@@ -385,13 +386,13 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 card.Edge = AvKit.Outline(host, new Rect(0f, 0f, cw, 64f), StationStyle.ConsoleEdge);
                 card.Ring = new ArcGauge();
                 card.Ring.Build(host, new Rect(6f, -4f, 60f, 74f), StationStyle.Telemetry());
-                card.Name = StationStyle.Text(host, PlatformMissions.Name(mission), new Rect(70f, -8f, cw - 76f, 44f), 11f,
+                card.Name = StationStyle.Text(host, PlatformMissions.Name(mission), new Rect(70f, -8f, cw - 76f, 44f), 12f,
                     StationStyle.Ink, 5f, TextAlignmentOptions.TopLeft, true);
                 card.Name.enableWordWrapping = true;
                 card.Control.WithTooltip(PlatformMissions.Name(mission) + " — " + PlatformMissions.Brief(mission));
                 missions[i] = card;
             }
-            brief = StationStyle.Text(parent, "", new Rect(0f, -86f, w, 16f), 10f, StationStyle.Dim, 2f);
+            brief = StationStyle.Text(parent, "", new Rect(0f, -86f, w, 16f), 12f, StationStyle.Dim, 2f);
         }
 
         private void BuildLoop(RectTransform parent, float w, float h)
@@ -452,6 +453,9 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         {
             OrbitalPlatform platform = support != null ? support.LocalPlatform : null;
             relocationSector = platform != null && platform.Exists ? platform.PositionIndex : StationKeeping.Centre;
+            // Re-entry lifts a fresh cover: an armed jettison must not survive the room.
+            jettisonArmedCell = -1;
+            jettisonArmedKind = ModuleKind.None;
             dirty = true;
         }
 
@@ -519,17 +523,20 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             ModuleKind preview = station ? hover != ModuleKind.None ? hover : plan.Module : ModuleKind.None;
             int previewCell = -1;
             string previewText = null;
+            PlacementFailure previewBlocked = PlacementFailure.None;
             if (preview != ModuleKind.None)
             {
                 previewCell = preview == plan.Module && OrbitalPlatform.InGrid(plan.Cell) &&
                               platform.CheckPlacement(preview, plan.Cell, 0, now) == PlacementFailure.None
                     ? plan.Cell
                     : PlatformMissions.BestCell(platform, preview, now, out _);
-                previewText = OrbitalPlatform.InGrid(previewCell)
-                    ? PlatformModules.Info(preview).Code + " → " + OrbitalPlatform.CellName(previewCell)
-                    : null;
+                if (OrbitalPlatform.InGrid(previewCell))
+                    previewBlocked = platform.CheckPlacement(preview, previewCell, 0, now);
+                previewText = !OrbitalPlatform.InGrid(previewCell) ? null
+                    : previewBlocked != PlacementFailure.None ? PlatformWords.Placement(previewBlocked)
+                    : PlatformModules.Info(preview).Code + " → " + OrbitalPlatform.CellName(previewCell);
             }
-            blueprint.Paint(platform, now, plan.Cell, preview, previewCell, previewText);
+            blueprint.Paint(platform, now, plan.Cell, preview, previewCell, previewText, previewBlocked);
 
             WriteHeader(platform, station, state, now, stats);
             WritePassTrack(platform, station, state, now);
@@ -560,6 +567,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         {
             plan.Module = ModuleKind.None;
             jettisonArmedCell = -1;
+            jettisonArmedKind = ModuleKind.None;
             dirty = true;
         }
 
@@ -600,6 +608,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         {
             plan.Cell = cell;
             jettisonArmedCell = -1;
+            jettisonArmedKind = ModuleKind.None;
             dirty = true;
         }
 
@@ -720,15 +729,18 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 Note("WOULD STRAND MODULES · JETTISON THOSE FIRST", true);
                 return;
             }
-            // A guarded switch: the first press lifts the cover, the second fires.
-            if (jettisonArmedCell != plan.Cell || Time.unscaledTime > jettisonArmedUntil)
+            // A guarded switch: the first press lifts the cover, the second fires. The cover is
+            // bound to the module armed on, not just its cell, so a teammate's change retargets nothing.
+            if (jettisonArmedCell != plan.Cell || jettisonArmedKind != kind || Time.unscaledTime > jettisonArmedUntil)
             {
                 jettisonArmedCell = plan.Cell;
+                jettisonArmedKind = kind;
                 jettisonArmedUntil = Time.unscaledTime + ConfirmSeconds;
                 Note(kind == ModuleKind.Core ? "COVER UP · PRESS AGAIN TO DEORBIT THE STATION" : "COVER UP · PRESS AGAIN TO JETTISON", false);
                 return;
             }
             jettisonArmedCell = -1;
+            jettisonArmedKind = ModuleKind.None;
             support.RequestJettison(plan.Cell);
             Sent(kind == ModuleKind.Core ? "DEORBIT SENT · " + OrbitalPlatform.Callsign + " COMING DOWN"
                 : "JETTISON SENT · " + PlatformModules.Info(kind).Code + " " + OrbitalPlatform.CellName(plan.Cell));
@@ -904,7 +916,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                     !strands && (support == null || !support.CommandPending),
                     strands ? "Other modules dock through this one; jettison them first."
                         : "A guarded switch: press once to lift the cover, again within 3 s to fire. Refunds " +
-                          Mathf.RoundToInt((support != null ? support.JettisonRefund : 0f) * 100f) + "% of what was paid.");
+                          Mathf.RoundToInt((support != null ? support.JettisonRefund : 0f) * 100f) + "% of what was paid, to whoever paid for it.");
             }
             else if (OrbitalPlatform.InGrid(cell) && platform.CanAttach(cell))
                 Set(inspector, OrbitalPlatform.CellName(cell) + " · FREE PORT · " + NeighbourHint(platform, cell));

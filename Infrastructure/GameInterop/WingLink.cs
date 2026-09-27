@@ -295,6 +295,22 @@ namespace BoscaliSummer.Runtime
             return WingApiVersions.IsWingMember(WingMemberIdsThisFrame(), containsCall, persistentIdHash);
         }
 
+        /// <summary>Returns false when Wing Command's membership source is unavailable.</summary>
+        public static bool TryIsWingMember(int persistentIdHash, out bool member)
+        {
+            member = false;
+            if (!membershipResolved) ResolveMembership();
+            // An empty published array is still an authoritative answer from Wing Command 1.x.
+            if (AppDomain.CurrentDomain.GetData(PresenceBoard.WingMemberIds) is int[])
+            {
+                member = PresenceBoard.Contains(WingMemberIdsThisFrame(), persistentIdHash);
+                return true;
+            }
+            if (containsCall == null) return false;
+            try { member = containsCall(persistentIdHash); return containsCall != null; }
+            catch (Exception error) { FailMembership(error); return false; }
+        }
+
         private static int[] WingMemberIdsThisFrame()
         {
             int frame = Time.frameCount;

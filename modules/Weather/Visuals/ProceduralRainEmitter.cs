@@ -1,4 +1,6 @@
 using BoscaliSummer.Features.Weather.Domain;
+using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Framework.Fx;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -9,7 +11,7 @@ namespace BoscaliSummer.Features.Weather.Visuals
     /// Orientates along apparent relative wind velocity and uses stretched billboards.
     /// 100% C# code; requires 0 external asset files.
     /// </summary>
-    internal sealed class ProceduralRainEmitter : MonoBehaviour
+    internal sealed class ProceduralRainEmitter : MonoBehaviour, IClientEffect
     {
         private const float RainTerminalVelocity = 9.0f; // m/s
 
@@ -23,11 +25,27 @@ namespace BoscaliSummer.Features.Weather.Visuals
         private bool positioned;
         private Color fogTint = new Color(0.62f, 0.66f, 0.72f, 1f);
 
+        public string EffectId => "streaks";
+
+        public FxBudget Budget => new FxBudget(0, 1, 0, true);
+
+        public void ReleaseFx()
+        {
+            if (ps != null) Destroy(ps);
+            ps = null;
+        }
+
+        public void DescribeFx(System.Collections.Generic.IDictionary<string, object> state)
+        {
+            state["fx.streaks.alive"] = ps != null ? ps.particleCount : 0;
+        }
+
         public void Initialize(Camera cam)
         {
+            if (!FxBus.Register(this)) return;
             targetCamera = cam;
             streakTexture = RainStreakMaterial.CreateTexture();
-            rainMaterial = RainStreakMaterial.CreateMaterial(streakTexture);
+            rainMaterial = RainStreakMaterial.CreateMaterial(streakTexture, additive: true);
             if (rainMaterial == null) return;
 
             ps = gameObject.AddComponent<ParticleSystem>();
@@ -37,13 +55,13 @@ namespace BoscaliSummer.Features.Weather.Visuals
             // Stretched billboard aligned to relative velocity: thin, and longer with speed.
             psRenderer.renderMode = ParticleSystemRenderMode.Stretch;
             psRenderer.cameraVelocityScale = 0.0f;
-            psRenderer.velocityScale = 0.009f;
-            psRenderer.lengthScale = 1.6f;
+            psRenderer.velocityScale = 0.001f;
+            psRenderer.lengthScale = 0.5f;
             psRenderer.sharedMaterial = rainMaterial;
             psRenderer.shadowCastingMode = ShadowCastingMode.Off;
             psRenderer.receiveShadows = false;
             // Screen-space clamp: drops passing the lens can never balloon into view-filling blobs.
-            psRenderer.maxParticleSize = 0.10f;
+            psRenderer.maxParticleSize = 0.025f;
 
             // Main module
             var main = ps.main;
@@ -58,7 +76,7 @@ namespace BoscaliSummer.Features.Weather.Visuals
             main.simulationSpace = ParticleSystemSimulationSpace.Custom;
             main.customSimulationSpace = simulationFrame;
             main.scalingMode = ParticleSystemScalingMode.Hierarchy;
-            main.startSize = 0.032f;
+            main.startSize = 0.012f;
             main.startColor = new Color(0.72f, 0.80f, 0.92f, 0.30f);
 
             // Emission box shape: upstream plane
@@ -144,17 +162,21 @@ namespace BoscaliSummer.Features.Weather.Visuals
             float alpha = RainVisualMath.StreakAlpha(rainIntensity);
             RainSkyMath.StreakColor(fogTint.r, fogTint.g, fogTint.b, Mathf.Clamp(lightLevel, 0.04f, 1f),
                 out float r, out float g, out float b);
-            main.startColor = new Color(r, g, b, alpha);
+            main.startColor = new Color(Mathf.Max(0.55f, r), Mathf.Max(0.60f, g),
+                Mathf.Max(0.66f, b), alpha * 0.28f);
 
             // Emission rate preserves spatial particle density across speeds, clamped so
             // density and gusts can never overflow the particle budget.
             var emission = ps.emission;
             float rate = RainVisualMath.EmissionRate(apparentSpeed, rainIntensity, density, gust);
-            emission.rateOverTime = RainVisualMath.ClampRateToBudget(rate, lifetime, RainVisualMath.MaxParticles);
+            int budget = Mathf.Max(64, Mathf.RoundToInt(
+                RainVisualMath.MaxParticles * FxBus.Scales.Particles));
+            emission.rateOverTime = RainVisualMath.ClampRateToBudget(rate, lifetime, budget);
         }
 
         private void OnDestroy()
         {
+            FxBus.Unregister(this);
             if (simulationFrame != null) Destroy(simulationFrame.gameObject);
             if (rainMaterial != null) Destroy(rainMaterial);
             if (streakTexture != null) Destroy(streakTexture);

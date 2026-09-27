@@ -767,6 +767,128 @@ namespace BoscaliSummer.Features.Trenches.Domain
                 : stage >= TrenchStage.Scrape ? 2
                 : 0;
 
+        // Spacing is measured on position centres. Same-side positions hold 360m apart
+        // so parallel lines never stack; opposing lines may close to 120m, because a
+        // mirror pair dug 80m behind the same trace sits ~160m apart — inside the
+        // historical 90-275m no-man's-land band — and must not refuse each other. The
+        // old 250m cross-faction floor did exactly that: only one side of any front
+        // ever got a ditch.
+        public const float SameOwnerSpacing = 360f;
+        public const float OtherOwnerSpacing = 120f;
+
+        /// <summary>
+        /// Next faction slot in the build rotation, wrapping around: every attempt digs
+        /// on another side, so no single front can fill the theater's quota alone.
+        /// </summary>
+        public static int RotateFaction(int current, int count)
+            => count <= 1 ? 0 : (current + 1) % count;
+
+        public static float SpacingFor(bool sameOwner)
+            => sameOwner ? SameOwnerSpacing : OtherOwnerSpacing;
+
+        public static bool CentresConflict(float distance, bool sameOwner)
+            => !(distance >= 0f) || distance < SpacingFor(sameOwner);
+
+        /// <summary>
+        /// Growth pacing for one position: a hot sector digs with priority (half the
+        /// base interval at full pressure) while a quiet one still matures, slowly.
+        /// Never faster than one stage per 15s.
+        /// </summary>
+        public static float GrowthInterval(float baseSeconds, float pressure)
+        {
+            float p = float.IsNaN(pressure) ? 0f : Math.Clamp(pressure, 0f, 1f);
+            return Math.Max(15f, Math.Max(0f, baseSeconds) * (1.3f - 0.8f * p));
+        }
+
+        /// <summary>
+        /// Heaviest garrison a sector's pressure pays for: a quiet line holds a light
+        /// MG screen (the first four slots), a warm one adds its road and air watch,
+        /// and only a hot one stands the full eight with both 23mm guns.
+        /// </summary>
+        public static int MaxDefendersForPressure(float pressure)
+        {
+            float p = float.IsNaN(pressure) ? 0f : Math.Clamp(pressure, 0f, 1f);
+            return p < 0.3f ? 4 : p < 0.6f ? 6 : 8;
+        }
+
+        // Harassing bombardment between opposing lines. Mortars work close pairs with
+        // single shells, guns work distant pairs with three-round salvos, and every
+        // round aims at no-man's-land with a radial miss: the wire gets churned, the
+        // ditch only catches the odd short round, and the payoff is suppression — the
+        // historical creeping barrage worked the same way.
+        public const float BarragePairRange = 2500f;
+        public const float MortarPairDistance = 800f;
+        public const float MortarScatter = 60f;
+        public const float ArtilleryScatter = 150f;
+        public const int MortarRounds = 1;
+        public const int ArtilleryRounds = 3;
+        public const int BarrageInflightCeiling = 4;
+
+        public static bool InBarrageRange(float distance)
+            => distance > 1f && distance <= BarragePairRange;
+
+        public static int BarrageRounds(float pairDistance)
+            => pairDistance < MortarPairDistance ? MortarRounds : ArtilleryRounds;
+
+        public static float BarrageScatter(float pairDistance)
+            => pairDistance < MortarPairDistance ? MortarScatter : ArtilleryScatter;
+
+        /// <summary>
+        /// Aim point of one shell: the no-man's-land midpoint of the two centres plus
+        /// a square miss of <paramref name="scatter"/> metres. <paramref name="ux"/> and
+        /// <paramref name="uz"/> are unit offsets (-1..1, clamped); zero scatter lands
+        /// exactly on the midpoint.
+        /// </summary>
+        public static void BarrageAim(float ownX, float ownZ, float enemyX, float enemyZ,
+            float ux, float uz, float scatter, out float x, out float z)
+        {
+            float mx = (ownX + enemyX) * 0.5f;
+            float mz = (ownZ + enemyZ) * 0.5f;
+            if (!(scatter > 0f))
+            {
+                x = mx;
+                z = mz;
+                return;
+            }
+            x = mx + Math.Clamp(ux, -1f, 1f) * scatter;
+            z = mz + Math.Clamp(uz, -1f, 1f) * scatter;
+        }
+
+        /// <summary>
+        /// Seconds until a position's next fire mission: a uniform draw from the
+        /// configured window, quickened by pressure so hot sectors shoot often and
+        /// quiet ones only occasionally. Corrupt inputs fail closed to the 5s floor
+        /// instead of a NaN that would fire every tick.
+        /// </summary>
+        public static float BarrageDelay(float minSeconds, float maxSeconds, float pressure, float unit)
+        {
+            float lo = Math.Max(5f, Math.Min(minSeconds, maxSeconds));
+            float hi = Math.Max(lo, Math.Max(minSeconds, maxSeconds));
+            if (!(lo >= 5f)) lo = 5f;
+            if (!(hi >= lo)) hi = lo;
+            float p = float.IsNaN(pressure) ? 0f : Math.Clamp(pressure, 0f, 1f);
+            float u = float.IsNaN(unit) ? 0.5f : Math.Clamp(unit, 0f, 1f);
+            return Math.Max(5f, (lo + (hi - lo) * u) * (1.3f - 0.8f * p));
+        }
+
+        // Runways are never dug: ground inside the clear radius of any airbase centre
+        // refuses the ditch, so a position sidesteps the field instead of crossing it.
+        public const float AirfieldClearDistance = 500f;
+        public const int MaximumAirfields = 64;
+
+        public static bool NearAirfield(float x, float z, float[] airfieldX, float[] airfieldZ, int count)
+        {
+            if (airfieldX == null || airfieldZ == null || count <= 0) return false;
+            float radiusSq = AirfieldClearDistance * AirfieldClearDistance;
+            int n = Math.Min(count, Math.Min(airfieldX.Length, airfieldZ.Length));
+            for (int i = 0; i < n; i++)
+            {
+                float dx = airfieldX[i] - x, dz = airfieldZ[i] - z;
+                if (dx * dx + dz * dz < radiusSq) return true;
+            }
+            return false;
+        }
+
         public static int WorksBudget(TrenchStage stage)
             => stage >= TrenchStage.Saps ? 10
                 : stage >= TrenchStage.Redoubt ? 8

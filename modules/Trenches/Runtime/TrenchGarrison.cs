@@ -104,7 +104,7 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         internal void Reinforce()
         {
             if (Overrun) return;
-            int desired = TrenchTraceMath.DefenderBudget(line.Stage);
+            int desired = Math.Min(TrenchTraceMath.DefenderBudget(line.Stage), TrenchTraceMath.MaxDefendersForPressure(line.Pressure));
             for (int slot = 0; slot < desired && slot < defenders.Length; slot++)
                 if (!committed[slot] && attempts[slot] < 3) Spawn(slot);
         }

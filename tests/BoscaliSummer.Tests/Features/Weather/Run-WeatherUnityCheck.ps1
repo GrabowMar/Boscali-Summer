@@ -5,9 +5,16 @@ $fixture = Join-Path $env:TEMP ('BoscaliWeatherCheck-' + [guid]::NewGuid().ToStr
 New-Item -ItemType Directory -Force "$fixture/Assets/Resources", "$fixture/Assets/Code", "$fixture/Packages", "$fixture/ProjectSettings" | Out-Null
 Set-Content "$fixture/ProjectSettings/ProjectVersion.txt" 'm_EditorVersion: 2022.3.62f3'
 Set-Content "$fixture/Packages/manifest.json" '{"dependencies":{"com.unity.modules.audio":"1.0.0","com.unity.modules.assetbundle":"1.0.0","com.unity.modules.particlesystem":"1.0.0","com.unity.modules.imageconversion":"1.0.0","com.unity.modules.physics":"1.0.0"}}'
-Copy-Item "$repo/modules/Weather/Visuals/*.cs" "$fixture/Assets/Code/"
-Copy-Item "$repo/modules/Weather/Audio/ProceduralRainAudio.cs" "$fixture/Assets/Code/"
+Get-ChildItem "$repo/modules/Weather/Visuals/*.cs" |
+    Where-Object Name -ne 'FlightCloudDressing.cs' |
+    Copy-Item -Destination "$fixture/Assets/Code/"
+Copy-Item "$repo/modules/Weather/Audio/*.cs" "$fixture/Assets/Code/"
+Copy-Item "$PSScriptRoot/CloudDressingStubs.cs" "$fixture/Assets/Code/"
 Copy-Item "$repo/modules/Weather/Domain/*.cs" "$fixture/Assets/Code/"
+Copy-Item "$repo/Core/Deterministic.cs" "$fixture/Assets/Code/"
+Copy-Item "$repo/Framework/Contracts/FxBudget.cs" "$fixture/Assets/Code/"
+Copy-Item "$repo/Framework/Contracts/IClientEffect.cs" "$fixture/Assets/Code/"
+Copy-Item "$repo/Framework/Fx/*.cs" "$fixture/Assets/Code/"
 Copy-Item "$PSScriptRoot/WeatherUnityCheck.cs" "$fixture/Assets/Code/"
 Copy-Item "$repo/modules/Weather/Assets/Source/*" "$fixture/Assets/Resources/" -Recurse -Force
 Set-Content "$fixture/Assets/Resources/Fixture.shader" @'

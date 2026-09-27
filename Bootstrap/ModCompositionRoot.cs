@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using BepInEx.Logging;
 using BoscaliSummer.Features.Autopilot;
+using BoscaliSummer.Features.AirSurvival;
 using BoscaliSummer.Features.Campaign;
 using BoscaliSummer.Features.Command;
 using BoscaliSummer.Features.Comms;
@@ -12,6 +13,7 @@ using BoscaliSummer.Features.Hud;
 using BoscaliSummer.Features.Intel;
 using BoscaliSummer.Features.Progression;
 using BoscaliSummer.Features.PlayerSpawnPriority;
+using BoscaliSummer.Features.Performance;
 using BoscaliSummer.Features.QoL;
 using BoscaliSummer.Features.Radio;
 using BoscaliSummer.Features.Session;
@@ -20,8 +22,6 @@ using BoscaliSummer.Features.Squad;
 using BoscaliSummer.Features.TheaterOps;
 using BoscaliSummer.Features.Trenches;
 using BoscaliSummer.Features.UrbanCombat;
-using BoscaliSummer.Features.Visuals;
-using BoscaliSummer.Features.Immersion;
 using BoscaliSummer.Features.Weather;
 using BoscaliSummer.Framework.Features;
 using BoscaliSummer.Runtime;
@@ -48,6 +48,9 @@ namespace BoscaliSummer.Bootstrap
                     new PlayerSpawnPriorityFeature(),
                     new RadioFeature()
                 };
+                // The inexpensive monitor is always installed so SET can switch it live.
+                if (!UnityEngine.Application.isBatchMode)
+                    features.Add(new PerformanceFeature());
                 if (settings.QoL.Enabled.Value && !UnityEngine.Application.isBatchMode)
                     features.Add(new QoLFeature());
                 if (settings.Autopilot.Enabled.Value && !UnityEngine.Application.isBatchMode)
@@ -64,16 +67,16 @@ namespace BoscaliSummer.Bootstrap
                 // Intel publishes IThreatPicture ahead of TheaterOps, whose director reads it
                 // late; neither depends on the other.
                 if (settings.Intel.Enabled.Value) features.Add(new IntelFeature());
-                if (settings.TheaterOps.Enabled.Value) features.Add(new TheaterOpsFeature());
+                if (settings.TheaterOps.Enabled.Value)
+                {
+                    features.Add(new TheaterOpsFeature());
+                    features.Add(new AirSurvivalFeature());
+                }
                 if (settings.Trenches.Enabled.Value) features.Add(new TrenchesFeature());
                 if (settings.Events.Enabled.Value) features.Add(new EventsFeature());
                 if (settings.Comms.Enabled.Value) features.Add(new CommsFeature());
                 if (settings.Campaign.Enabled.Value) features.Add(new CampaignFeature());
                 if (settings.Weather.Enabled.Value) features.Add(new WeatherFeature());
-                if (settings.Visuals.Enabled.Value && !UnityEngine.Application.isBatchMode)
-                    features.Add(new VisualsFeature());
-                if (settings.Immersion.Enabled.Value && !UnityEngine.Application.isBatchMode)
-                    features.Add(new ImmersionFeature());
                 host.Load(features.ToArray());
                 CapabilityReport.Log();
                 return host;

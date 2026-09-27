@@ -13,6 +13,7 @@ namespace BoscaliSummer.Tests.Features.Support
             TestJobPools();
             TestGuard();
             TestRefundShares();
+            TestRefundRecipient();
             TestDeorbitGuard();
             TestStationPayers();
         }
@@ -87,6 +88,14 @@ namespace BoscaliSummer.Tests.Features.Support
                 "a full buffer drops further payers rather than overrun");
         }
 
+        private static void TestRefundRecipient()
+        {
+            TestAssert.That(TeamRules.RefundRecipient(2, 7, true) == 7, "a present payer is refunded");
+            TestAssert.That(TeamRules.RefundRecipient(7, 7, true) == 7, "the requester keeps its own refund");
+            TestAssert.That(TeamRules.RefundRecipient(2, 7, false) == 2, "an absent payer's share falls to the requester");
+            TestAssert.That(TeamRules.RefundRecipient(2, 0, false) == 2, "an unknown payer refunds the requester");
+        }
+
         private static void TestDeorbitGuard()
         {
             ulong[] payers = { 7, 9, 11 };
@@ -116,7 +125,7 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(platform.Payer(6) == 0, "a module in flight is not docked yet");
             platform.Tick(now + 20.0, 0.01f, true);
             TestAssert.That(platform.Payer(6) == 9 && platform.Paid(6) == 250f, "a docked module keeps the payer of its launch");
-            platform.TryResupply(now + 21.0, 20.0);
+            platform.TryResupply(now + 21.0, 20.0, 350f, 7UL);
             platform.Tick(now + 41.0, 0.01f, true);
             TestAssert.That(platform.Payer(OrbitalPlatform.CoreCell) == 7, "a cargo docking never changes a payer");
             TestAssert.That(platform.TryJettison(6, out _, out float refund) == PlacementFailure.None && refund == 250f &&

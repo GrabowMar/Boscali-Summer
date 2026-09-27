@@ -28,6 +28,7 @@ namespace BoscaliSummer.Features.Comms
             CommsNet network = context.AddComponent<CommsNet>();
             CommsManager manager = context.AddSceneService<CommsManager>(70);
             manager.Configure(context.Settings.Comms, network, context.Logger);
+            context.AddService<IMapBoxInput>(manager);
             network.Configure(manager);
 
             CommsMapLayer layer = context.AddSceneService<CommsMapLayer>(71);

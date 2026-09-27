@@ -22,22 +22,20 @@ namespace BoscaliSummer.Features.Support.Runtime
         public SupportCatalog(
             SupportSettings settings, IZoneFortificationService fortifications)
         {
-            if (VanillaSupportCatalog.ReconAvailable)
-                actions.Add(new SupportActionDefinition(
-                    SupportActionId.Recon, "RADAR SCAN",
-                    "Station radar images a scene; stationary ground contacts are revealed.",
-                    SupportCapabilities.Recon, settings.ReconEnabled, new ReconAction()));
+            actions.Add(new SupportActionDefinition(
+                SupportActionId.Recon, "RADAR SCAN",
+                "Station radar images a scene; stationary ground contacts are revealed.",
+                SupportCapabilities.Recon, settings.ReconEnabled, new ReconAction()));
 
             actions.Add(new SupportActionDefinition(
                 SupportActionId.ElintSweep, "ELINT SWEEP",
                 "Station SIGINT array locates enemy ground radars that are emitting.",
                 SupportCapabilities.Recon, settings.ElintEnabled, new ElintAction()));
 
-            if (VanillaSupportCatalog.ReconAvailable)
-                actions.Add(new SupportActionDefinition(
-                    SupportActionId.MtiSweep, "MTI SWEEP",
-                    "Station radar tracks moving ground contacts in the imaged scene; stationary targets blend into the ground return.",
-                    SupportCapabilities.Recon, settings.MtiEnabled, new MtiAction()));
+            actions.Add(new SupportActionDefinition(
+                SupportActionId.MtiSweep, "MTI SWEEP",
+                "Station radar tracks moving ground contacts in the imaged scene; stationary targets blend into the ground return.",
+                SupportCapabilities.Recon, settings.MtiEnabled, new MtiAction()));
 
             if (fortifications != null)
                 actions.Add(new SupportActionDefinition(

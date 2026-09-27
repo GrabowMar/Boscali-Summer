@@ -2,7 +2,6 @@ using System;
 using BoscaliSummer.Features.HighCommand.Configuration;
 using BoscaliSummer.Features.HighCommand.Networking;
 using BoscaliSummer.Features.HighCommand.Patches;
-using BoscaliSummer.Features.HighCommand.Presentation;
 using BoscaliSummer.Features.HighCommand.Runtime;
 using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Features;
@@ -29,21 +28,16 @@ namespace BoscaliSummer.Features.HighCommand
             network.Configure(manager);
             context.AddService<IHighCommandView>(manager);
 
-            CommandPostMarkers markers = context.AddSceneService<CommandPostMarkers>(46);
-            markers.Configure(context.Settings.HighCommand, manager);
-
             HighCommandSettings settings = context.Settings.HighCommand;
             // The three things a host decides about high command while a mission runs:
-            // whether it pays, whether commanders travel far enough to be intercepted, and
-            // whether the posts are drawn. Payment sizes and the clocks around a killed
+            // whether it pays and whether commanders travel far enough to be intercepted.
+            // Payment sizes and the clocks around a killed
             // commander are balance, and stay in the config file.
             context.AddHostSettings(new HostSettingsTable("HIGH COMMAND")
                 .Toggle(1, settings.EconomyEnabled, "STIPENDS AND KILL PAY",
                     "Pay the staff's survival income and the cash for killing an enemy commander through the vanilla faction account. Off keeps the page informational.")
                 .Toggle(2, settings.TransfersEnabled, "VIP CONVOYS",
-                    "Commanders occasionally travel between friendly bases in ground convoys. Intercepting the lead vehicle kills them.")
-                .Toggle(3, settings.MapMarkersEnabled, "MAP MARKERS",
-                    "Draw your posts and confirmed enemy posts as diamonds on the map. Off hides the layer only."));
+                    "Commanders occasionally travel between friendly bases in ground convoys. Intercepting the lead vehicle kills them."));
         }
     }
 }

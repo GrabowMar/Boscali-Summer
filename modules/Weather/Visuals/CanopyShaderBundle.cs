@@ -21,7 +21,57 @@ namespace BoscaliSummer.Features.Weather.Visuals
         private static Shader shader;
         private static Shader terrainShader;
         private static Shader updateShader;
+        private static Shader flightCloudShader;
         private static bool attempted;
+        private static bool prewarmed;
+
+        /// <summary>
+        /// Compiles our small bundle shaders on an 8x8 target so first use does not hitch.
+        /// Returns milliseconds spent, or -1 when nothing was warmed. WarmupAllShaders was measured
+        /// at 61 s - never again; this warms only what we own.
+        /// </summary>
+        internal static long Prewarm()
+        {
+            if (prewarmed) return 0;
+            prewarmed = true;
+            GetShader();
+            GetTerrainShader();
+            GetUpdateShader();
+            GetFlightCloudShader();
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            int warmed = 0;
+            warmed += WarmOne(shader) ? 1 : 0;
+            warmed += WarmOne(terrainShader) ? 1 : 0;
+            warmed += WarmOne(updateShader) ? 1 : 0;
+            warmed += WarmOne(flightCloudShader) ? 1 : 0;
+            watch.Stop();
+            return warmed > 0 ? watch.ElapsedMilliseconds : -1;
+        }
+
+        private static bool WarmOne(Shader shader)
+        {
+            if (shader == null || !shader.isSupported) return false;
+            RenderTexture src = null, dst = null;
+            Material material = null;
+            try
+            {
+                src = RenderTexture.GetTemporary(8, 8, 0, RenderTextureFormat.ARGB32);
+                dst = RenderTexture.GetTemporary(8, 8, 0, RenderTextureFormat.ARGB32);
+                material = new Material(shader);
+                Graphics.Blit(src, dst, material);
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+            finally
+            {
+                if (src != null) RenderTexture.ReleaseTemporary(src);
+                if (dst != null) RenderTexture.ReleaseTemporary(dst);
+                if (material != null) UnityEngine.Object.Destroy(material);
+            }
+        }
 
         internal static Shader GetTerrainShader()
         {
@@ -33,6 +83,12 @@ namespace BoscaliSummer.Features.Weather.Visuals
         {
             GetShader();
             return updateShader;
+        }
+
+        internal static Shader GetFlightCloudShader()
+        {
+            GetShader();
+            return flightCloudShader;
         }
 
         internal static Shader GetShader()
@@ -73,9 +129,13 @@ namespace BoscaliSummer.Features.Weather.Visuals
                             terrainShader = shaders[i];
                         if (shaders[i] != null && shaders[i].name == UpdateShaderName && shaders[i].isSupported)
                             updateShader = shaders[i];
+                        if (shaders[i] != null && shaders[i].name == "Boscali/FlightCloud" && shaders[i].isSupported)
+                            flightCloudShader = shaders[i];
                     }
                 }
-                if (shader != null || terrainShader != null) return shader;
+                if (shader != null || terrainShader != null || updateShader != null ||
+                    flightCloudShader != null)
+                    return shader;
                 bundle.Unload(true);
                 bundle = null;
             }

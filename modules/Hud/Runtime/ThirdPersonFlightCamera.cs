@@ -24,7 +24,8 @@ namespace BoscaliSummer.Features.Hud.Runtime
         public bool CanDrive(CameraStateManager cam)
         {
             var controller = ThirdPersonHudController.Instance;
-            bool ready = controller != null && controller.IsEnabled && controller.FlightCameraEnabled &&
+            bool ready = controller != null && controller.isActiveAndEnabled &&
+                controller.IsEnabled && controller.FlightCameraEnabled &&
                 ThirdPersonHudController.IsLocalExternal(cam, out _) && cam.followingRB != null &&
                 !DynamicMap.mapMaximized && !GameplayUI.GameIsPaused && !PlayerSettings.cinematicMode && !InputFieldChecker.InsideInputField &&
                 (SceneSingleton<CameraControlUI>.i == null || !SceneSingleton<CameraControlUI>.i.isOpen);
@@ -93,6 +94,10 @@ namespace BoscaliSummer.Features.Hud.Runtime
             // Preserve a continuous up reference through vertical flight; avoid a LookRotation pole flip.
             Vector3 levelUp = Vector3.ProjectOnPlane(Vector3.up, heading);
             Vector3 previousUp = Vector3.ProjectOnPlane(stableUp, heading);
+            // On a vertical climb the world-up projection can vanish. Keep the
+            // previous camera roll instead of snapping to the aircraft's bank.
+            if (previousUp.sqrMagnitude <= 0.001f)
+                previousUp = Vector3.ProjectOnPlane(rotation * Vector3.up, heading);
             stableUp = previousUp.sqrMagnitude > 0.001f ? previousUp.normalized : ownship.transform.up;
             if (levelUp.sqrMagnitude > 0.08f)
                 stableUp = Vector3.Slerp(stableUp, levelUp.normalized, ThirdPersonCameraPolicy.Response(0.6f, dt));

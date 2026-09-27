@@ -70,30 +70,36 @@ Shader "Hidden/BoscaliCanopyDroplets"
                 if (speed > 1.5) flow *= 1.5 / speed;
 
                 float4 prev = tex2D(_MainTex, i.uv);
-                float2 back = i.uv - flow * dt;
+                // A fixed pane texture has no geometry readback. Tiny, stationary
+                // variations in the glass path keep runners from forming ruler lines.
+                float bend = (hash12(floor(i.uv * 48.0)) - 0.5) * 0.12;
+                float2 back = i.uv - (flow + float2(-flow.y, flow.x) * bend) * dt;
                 float4 traced = tex2D(_MainTex, back);
 
                 // Mobility: big beads run even parked, small ones stick until the
                 // slipstream rips them loose.
-                float mob = smoothstep(0.03, 0.25, prev.r + _SpeedN * 0.15);
+                float mob = smoothstep(0.12, 0.55, prev.r + _SpeedN * 0.25);
                 float water = lerp(prev.r, traced.r, mob);
 
-                // Spawn lottery: some cells gain a fresh drop each tick.
+                // Spawn once per cell per 6 Hz epoch. The prior gate stayed open
+                // for several render frames and painted the same bead repeatedly.
                 float2 grid = i.uv * 24.0;
                 float2 cell = floor(grid);
-                float tick = floor(_SimTime * 6.0 + hash12(cell + 9.2));
+                float clock = _SimTime * 6.0 + hash12(cell + 9.2);
+                float tick = floor(clock);
                 float seed = tick * 17.0;
-                float gate = step(hash12(cell + seed), _Rain * 0.06);
+                float gate = step(frac(clock), dt * 6.0)
+                    * step(hash12(cell + seed), _Rain * 0.12);
                 float2 center = float2(hash12(cell + seed + 3.1), hash12(cell + seed + 7.7)) - 0.5;
                 float d = length(frac(grid) - 0.5 - center * 0.5);
                 float sizeMul = 0.7 + 0.6 * hash12(cell + seed + 13.7);
-                water += gate * smoothstep(0.28 * sizeMul, 0.08 * sizeMul, d) * 0.8;
+                water += gate * smoothstep(0.34 * sizeMul, 0.12 * sizeMul, d) * 0.8;
 
                 // Dry air and slipstream evaporate the film.
                 water *= exp(-dt * (0.10 + 0.8 * (1.0 - _Rain) + 1.5 * _SpeedN));
 
                 // Trails mark where running water has been.
-                float trail = max(traced.g * exp(-dt * 0.8), traced.r * 0.35 * mob);
+                float trail = max(traced.g * exp(-dt * 1.2), traced.r * 0.22 * mob);
 
                 return float4(saturate(water), saturate(trail), 0.0, 1.0);
             }

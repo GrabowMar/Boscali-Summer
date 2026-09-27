@@ -17,6 +17,7 @@ namespace BoscaliSummer.Features.Weather.Domain
     {
         public float RainRate;
         public float Cover;
+        public float FrontCover;
         public float CloudBase;
         public float CloudTop;
         public float VisibilityKm;
@@ -186,10 +187,11 @@ namespace BoscaliSummer.Features.Weather.Domain
             point.RainRate = rain;
             point.ConvectiveShare = rain > 0.01f ? cellRain / (areaRain + frontRain + cellRain) : 0f;
             point.Cover = WeatherMath.Clamp01(1f - (1f - coverBase) * clearFront * clearCells);
+            point.FrontCover = WeatherMath.Clamp01(1f - clearFront);
 
             float cloudBase = p.CloudBase - 300f * WeatherMath.Smoothstep(0f, 15f, rain);
             point.CloudBase = WeatherMath.Clamp(cloudBase, 250f, 3600f);
-            point.CloudTop = Math.Max(point.CloudBase + 900f + 1500f * point.Cover, top);
+            point.CloudTop = Math.Max(point.CloudBase + 1600f + 2200f * point.Cover, top);
 
             float haze = Math.Max(p.HazeKm * HazeScale, 0.5f);
             float extinction = 3.912f / haze + 0.25f * (float)Math.Pow(rain, 0.66);

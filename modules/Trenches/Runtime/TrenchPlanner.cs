@@ -51,7 +51,8 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         public static bool TryPlanWindow(int lineId, string name, FactionHQ owner, float pressure,
             FrontlineTracePoint[] points, int pointOffset, int pointCount, int windowStartStation,
             ITerritoryIngress territory, out TrenchLine line, out int nextStation, out TrenchRefusal refusal,
-            Func<float, float, bool> foliageAt = null, Func<float, float, float> roadDistanceAt = null)
+            Func<float, float, bool> foliageAt = null, Func<float, float, float> roadDistanceAt = null,
+            float[] airfieldX = null, float[] airfieldZ = null, int airfieldCount = 0)
         {
             line = null;
             nextStation = 0;
@@ -120,7 +121,7 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             for (int pass = 0; pass < 2 && !placed; pass++)
             {
                 depthCenter = TrenchTraceMath.FireDepth + pass * TrenchTraceMath.BeachFallbackExtraDepth;
-                if (!SearchOffsets(territory, owner, count, depthCenter, foliageAt, roadDistanceAt,
+                if (!SearchOffsets(territory, owner, count, depthCenter, foliageAt, roadDistanceAt, airfieldX, airfieldZ, airfieldCount,
                     out refusal))
                 {
                     // Only refused ground retries deeper: a missing side never resolves landward.
@@ -186,7 +187,7 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         /// </summary>
         private static bool SearchOffsets(ITerritoryIngress territory, FactionHQ owner, int count,
             float depthCenter, Func<float, float, bool> foliageAt,
-            Func<float, float, float> roadDistanceAt, out TrenchRefusal refusal)
+            Func<float, float, float> roadDistanceAt, float[] airfieldX, float[] airfieldZ, int airfieldCount, out TrenchRefusal refusal)
         {
             float sector = (TrenchTraceMath.DepthSearchLevels - 1) * 0.5f;
             int faction = owner.GetInstanceID();
@@ -223,7 +224,8 @@ namespace BoscaliSummer.Features.Trenches.Runtime
                     float groundZ = stationZ[s] + iz * depth;
                     // The chosen depth must stay on the faction's own side of the front, so a
                     // ragged trace leaves a gap instead of digging into the enemy's ground.
-                    if (!TrenchTerrain.TryGround(groundX, groundZ, out Vector3 ground) ||
+                    if (TrenchTraceMath.NearAirfield(groundX, groundZ, airfieldX, airfieldZ, airfieldCount) ||
+                        !TrenchTerrain.TryGround(groundX, groundZ, out Vector3 ground) ||
                         !Diggable(territory, faction, ground))
                     {
                         height[s, k] = float.NaN;
@@ -314,7 +316,8 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         /// Lays out the ground the next stage adds. Every stage is atomic: an invalid belt
         /// leaves the position untouched and the stage retries on the next growth tick.
         /// </summary>
-        public static bool TryGrowBelt(TrenchLine line, ITerritoryIngress territory)
+        public static bool TryGrowBelt(TrenchLine line, ITerritoryIngress territory,
+            float[] airfieldX = null, float[] airfieldZ = null, int airfieldCount = 0)
         {
             if (line == null || territory == null) return false;
             switch (line.Stage)
@@ -326,7 +329,7 @@ namespace BoscaliSummer.Features.Trenches.Runtime
                 case TrenchStage.FireTrench:
                     if (line.Support == null)
                     {
-                        if (!TryBuildBelt(line, territory, out Vector3[] support)) return false;
+                        if (!TryBuildBelt(line, territory, out Vector3[] support, airfieldX, airfieldZ, airfieldCount)) return false;
                         line.Support = support; // null once the stage advances without it
                     }
                     if (line.Links == null) BuildLinks(line);
@@ -338,7 +341,7 @@ namespace BoscaliSummer.Features.Trenches.Runtime
                 case TrenchStage.Support:
                     if (line.Redoubt == null)
                     {
-                        if (!TryBuildBelt(line, territory, out Vector3[] redoubt)) return false;
+                        if (!TryBuildBelt(line, territory, out Vector3[] redoubt, airfieldX, airfieldZ, airfieldCount)) return false;
                         line.Redoubt = redoubt;
                     }
                     line.RedoubtAnchors = SampleAnchors(line.Redoubt, AnchorSpacing);
@@ -347,7 +350,7 @@ namespace BoscaliSummer.Features.Trenches.Runtime
                     return true;
 
                 case TrenchStage.Redoubt:
-                    if (line.Spurs == null && !TryBuildSaps(line, territory) && !NoteBeltRefusal(line)) return false;
+                    if (line.Spurs == null && !TryBuildSaps(line, territory, airfieldX, airfieldZ, airfieldCount) && !NoteBeltRefusal(line)) return false;
                     line.BeltRefusals = 0;
                     line.Stage = TrenchStage.Saps;
                     return true;
@@ -363,14 +366,15 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         /// closer in. True with a null trace once the stage has refused often enough to
         /// advance without it: the belt never holds the defender budget hostage.
         /// </summary>
-        private static bool TryBuildBelt(TrenchLine line, ITerritoryIngress territory, out Vector3[] trace)
+        private static bool TryBuildBelt(TrenchLine line, ITerritoryIngress territory, out Vector3[] trace,
+            float[] airfieldX = null, float[] airfieldZ = null, int airfieldCount = 0)
         {
             trace = null;
             for (int rung = 0; rung < TrenchTraceMath.BeltLadderLength; rung++)
             {
                 float depth = TrenchTraceMath.BeltDepth(line.Stage, rung);
                 if (float.IsNaN(depth)) break;
-                if (TryBuildBeltTrace(line, territory, depth - TrenchTraceMath.FireDepth, out trace)) return true;
+                if (TryBuildBeltTrace(line, territory, depth - TrenchTraceMath.FireDepth, out trace, airfieldX, airfieldZ, airfieldCount)) return true;
             }
             trace = null;
             return NoteBeltRefusal(line);
@@ -388,7 +392,7 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         /// ground that accepts it. A rear trace may be shorter than the fire line.
         /// </summary>
         private static bool TryBuildBeltTrace(TrenchLine line, ITerritoryIngress territory,
-            float extraDepth, out Vector3[] trace)
+            float extraDepth, out Vector3[] trace, float[] airfieldX = null, float[] airfieldZ = null, int airfieldCount = 0)
         {
             trace = null;
             int faction = line.OwnerHq != null ? line.OwnerHq.GetInstanceID() : 0;
@@ -399,6 +403,7 @@ namespace BoscaliSummer.Features.Trenches.Runtime
                 Vector3 p = line.Base[i] + line.Inward[i] * (line.Offset[i] + extraDepth);
                 if (!TrenchTerrain.TryGround(p, out Vector3 ground)) continue;
                 if (!Diggable(territory, faction, ground)) continue;
+                if (TrenchTraceMath.NearAirfield(ground.x, ground.z, airfieldX, airfieldZ, airfieldCount)) continue;
                 curveX[i] = ground.x;
                 curveZ[i] = ground.z;
                 height[i, 0] = ground.y;
@@ -443,7 +448,8 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         }
 
         /// <summary>Two listening posts pushed out of the fire line toward the enemy.</summary>
-        private static bool TryBuildSaps(TrenchLine line, ITerritoryIngress territory)
+        private static bool TryBuildSaps(TrenchLine line, ITerritoryIngress territory,
+            float[] airfieldX = null, float[] airfieldZ = null, int airfieldCount = 0)
         {
             var spurs = new List<Vector3[]>(MaximumSaps);
             int faction = line.OwnerHq != null ? line.OwnerHq.GetInstanceID() : 0;
@@ -457,6 +463,7 @@ namespace BoscaliSummer.Features.Trenches.Runtime
                 Vector3 end = anchor + forward * TrenchTraceMath.SapDepth;
                 if (!TrenchTerrain.TryGround(end, out Vector3 head)) continue;
                 if (!Diggable(territory, faction, head)) continue;
+                if (TrenchTraceMath.NearAirfield(head.x, head.z, airfieldX, airfieldZ, airfieldCount)) continue;
                 Vector3 mid = anchor + forward * (TrenchTraceMath.SapDepth * 0.5f);
                 Vector3 midGround = TrenchTerrain.TryGround(mid, out Vector3 sampled) ? sampled : mid;
                 spurs.Add(new[] { anchor, midGround, head });

@@ -124,6 +124,14 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         private string noteText = "NO ORDERS SENT YET · 01 PICK OBJECTIVE  /  02 ASSIGN TEAM  /  03 LAUNCH MISSION";
         private bool noteBad;
         private bool awaiting;
+        private bool confirmArmed;
+        private int confirmTeam = -1;
+        private int confirmMission = -1;
+        private int confirmAnchor;
+        private bool confirmRecall;
+        private double confirmUntil;
+        private const int ConfirmLoss = 15;
+        private const float ConfirmSeconds = 8f;
         private float entrance = 1f;
         private int homeCount;
         private float nextHomes;
@@ -700,6 +708,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         private void SelectTeam(int team)
         {
             selectedTeam = Mathf.Clamp(team, 0, TeamCount - 1);
+            DisarmConfirm();
             nextPaint = true;
         }
 
@@ -709,6 +718,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             if (detachment == null || slot < 0 || slot >= detachment.ObjectiveCount) return;
             selectedAnchor = detachment.Objective(slot).Anchor;
             anchorChosen = true;
+            DisarmConfirm();
             nextPaint = true;
         }
 
@@ -751,27 +761,64 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             int slot = SelectedSlot(detachment);
             if (detachment == null || slot < 0)
             {
+                DisarmConfirm();
                 Say("NO OBJECTIVE SELECTED", true);
                 return;
             }
             string refusal = LaunchRefusal(detachment, mission, slot);
             if (refusal != null)
             {
+                DisarmConfirm();
                 Say(FieldWords.Mission(mission) + " · " + refusal, true);
                 return;
             }
-            support.RequestSpecOpsLaunch(selectedTeam, mission, detachment.Objective(slot).Anchor);
+            int anchor = detachment.Objective(slot).Anchor;
+            int loss = detachment.LossFor(selectedTeam, mission, slot, support != null ? support.OrbitNow : 0.0);
+            if (loss >= ConfirmLoss && !ConfirmArmed(selectedTeam, (int)mission, anchor, false))
+            {
+                ArmConfirm(selectedTeam, (int)mission, anchor, false);
+                Say(FieldWords.Callsign(selectedTeam) + " · " + FieldWords.Mission(mission) + " RISKS " + loss +
+                    "% LOSS · CLICK LAUNCH AGAIN TO COMMIT", true);
+                nextPaint = true;
+                return;
+            }
+            DisarmConfirm();
+            support.RequestSpecOpsLaunch(selectedTeam, mission, anchor);
             Sent(FieldWords.Callsign(selectedTeam) + " · " + FieldWords.Mission(mission) + " → " + detachment.Objective(slot).Name);
+        }
+
+        /// <summary>Two-click guard for consequential orders: armed for one team, mission and
+        /// objective (or one recall), and only for a few seconds. The host still re-checks.</summary>
+        private bool ConfirmArmed(int team, int mission, int anchor, bool recall) =>
+            confirmArmed && confirmRecall == recall && confirmTeam == team &&
+            (recall || (confirmMission == mission && confirmAnchor == anchor)) &&
+            (support == null || support.OrbitNow <= confirmUntil);
+
+        private void ArmConfirm(int team, int mission, int anchor, bool recall)
+        {
+            confirmArmed = true;
+            confirmTeam = team;
+            confirmMission = mission;
+            confirmAnchor = anchor;
+            confirmRecall = recall;
+            confirmUntil = (support != null ? support.OrbitNow : 0.0) + ConfirmSeconds;
+        }
+
+        private void DisarmConfirm()
+        {
+            confirmArmed = false;
+            confirmTeam = -1;
         }
 
         private void RaiseOrRecall(int team)
         {
-            SelectTeam(team);
+            if (selectedTeam != team) SelectTeam(team);
             SpecOpsDetachment detachment = support?.LocalDetachment;
             if (detachment == null) return;
             FieldTeam value = detachment.Team(team);
             if (support.CommandPending)
             {
+                DisarmConfirm();
                 Say("AWAITING HOST · ONE ORDER AT A TIME", true);
                 return;
             }
@@ -791,6 +838,15 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             }
             if (value.Deployed)
             {
+                if (value.State == TeamState.Holding && !ConfirmArmed(team, -1, 0, true))
+                {
+                    ArmConfirm(team, -1, 0, true);
+                    Say(FieldWords.Callsign(team) + " HOLDS " + FieldWords.Post(value.Mission) +
+                        " · RECALL ABANDONS THE POST AND ITS WIN · CLICK AGAIN", true);
+                    nextPaint = true;
+                    return;
+                }
+                DisarmConfirm();
                 support.RequestSpecOpsRecall(team);
                 Sent("RECALL " + FieldWords.Callsign(team));
             }
@@ -930,7 +986,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             }
             else if (team.Deployed)
             {
-                SetStamp(tag.Action, "[R] RECALL", live && !pending, true, team.State == TeamState.Holding
+                bool recallArmed = live && ConfirmArmed(index, -1, 0, true);
+                SetStamp(tag.Action, recallArmed ? "[R] CONFIRM RECALL" : "[R] RECALL", live && !pending, true, team.State == TeamState.Holding
                     ? "Leave the " + FieldWords.Post(team.Mission).ToLowerInvariant() + " now; its ability ends with it."
                     : "Abort the mission and bring the team home. Nothing is refunded; no roll is made.");
             }
@@ -1077,6 +1134,19 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             DeskStyle.Type(words, caption);
         }
 
+        /// <summary>Sheet effect line, plus the CYBER intel outlook on a STEAL sheet.</summary>
+        private string EffectText(FieldMission mission, int rank, bool brief)
+        {
+            string effect = brief ? FieldWords.BriefEffect(mission, rank) : FieldWords.Effect(mission, rank);
+            if (mission == FieldMission.Steal && support != null && support.LocalCyber != null)
+            {
+                string outlook = FieldWords.StealOutlook(FieldCatalog.StealIntel(rank),
+                    support.LocalCyber.Intel, support.LocalCyber.IntelCapacity());
+                if (!string.IsNullOrEmpty(outlook)) effect += " " + outlook;
+            }
+            return effect;
+        }
+
         private void WriteSheet(SpecOpsDetachment detachment, FieldMission mission, int slot, double now)
         {
             Sheet sheet = sheets[(int)mission];
@@ -1086,7 +1156,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             float cost = support != null ? support.SpecOpsMissionCost(mission) : FieldCatalog.MissionCost(mission);
             DeskStyle.Type(sheet.Cost, "COST " + Figure(cost));
             DeskStyle.Type(sheet.Effect, sheet.Root.sizeDelta.y < 135f
-                ? FieldWords.BriefEffect(mission, rank) : FieldWords.Effect(mission, rank));
+                ? EffectText(mission, rank, true) : EffectText(mission, rank, false));
             string refusal = LaunchRefusal(detachment, mission, slot);
             bool possible = FieldCatalog.Allowed(mission, o.Kind) &&
                             !(mission == FieldMission.Sabotage && o.Radars == 0) &&
@@ -1143,10 +1213,12 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 if (sheet.Refusal.text != why) sheet.Refusal.text = why;
                 sheet.Refusal.color = DeskStyle.Stamp;
             }
-            string launchText = refusal == null ? "[" + ((int)mission + 1) + "] LAUNCH" : possible ? "[" + ((int)mission + 1) + "] " + Brief(refusal) : "NOT HERE";
-            SetStamp(sheet.Launch, launchText, refusal == null, false, refusal == null
+            bool armed = refusal == null && ConfirmArmed(selectedTeam, (int)mission, detachment.Objective(slot).Anchor, false);
+            string launchText = armed ? "[" + ((int)mission + 1) + "] CONFIRM · " + loss + "% LOSS"
+                : refusal == null ? "[" + ((int)mission + 1) + "] LAUNCH" : possible ? "[" + ((int)mission + 1) + "] " + Brief(refusal) : "NOT HERE";
+            SetStamp(sheet.Launch, launchText, refusal == null, armed, refusal == null
                 ? FieldWords.Callsign(selectedTeam) + " goes to " + o.Name + ": " + chance + "% success, " + loss +
-                  "% the team is lost, " + Figure(cost) + " allocation."
+                  "% the team is lost, " + Figure(cost) + " allocation. " + LaunchTipTail(mission)
                 : FieldWords.MissionTitle(mission) + " — " + refusal + ".");
             int on = detachment.TeamOn(o.Anchor);
             bool dispatched = on >= 0 && detachment.Team(on).Mission == mission &&
@@ -1163,6 +1235,10 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             sheet.MissionRail.color = refusal == null ? AvTheme.RailReady
                 : hoverMission == (int)mission ? AvTheme.RailInfo : DeskStyle.Khaki.WithAlpha(0.55f);
         }
+
+        /// <summary>Launch tooltip tail: odds are estimates until fixed, and SEIZE names its perk gate.</summary>
+        private static string LaunchTipTail(FieldMission mission) => "Odds are a live estimate and fix at launch." +
+            (mission == FieldMission.Seize ? " Safehouse FORTIFY needs the SQD fortify perk." : "");
 
         /// <summary>A short button word for a refusal that the sheet already explains in full.</summary>
         private static string Brief(string refusal)

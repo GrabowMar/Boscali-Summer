@@ -509,6 +509,7 @@ namespace BoscaliSummer.Features.Support.Runtime
             pending = false;
             localCooldownUntil = 0f;
             ArmedAction = null;
+            localPick = null;
             ArmedFrame = 0;
             activeStrikes.Clear();
             mapGesture.Reset();
@@ -804,15 +805,17 @@ namespace BoscaliSummer.Features.Support.Runtime
             return pilots;
         }
 
-        private static bool PilotPresent(FactionHQ hq, ulong identity)
+        private static bool PilotPresent(FactionHQ hq, ulong identity) => PilotByIdentity(hq, identity) != null;
+
+        private static Player PilotByIdentity(FactionHQ hq, ulong identity)
         {
-            if (hq == null || hq.factionPlayers == null || identity == 0) return false;
+            if (hq == null || hq.factionPlayers == null || identity == 0) return null;
             for (int i = 0; i < hq.factionPlayers.Count && i < 64; i++)
             {
                 Player player = hq.factionPlayers[i].Player;
-                if (player != null && player.HQ == hq && PlayerIdentity.Of(player) == identity) return true;
+                if (player != null && player.HQ == hq && PlayerIdentity.Of(player) == identity) return player;
             }
-            return false;
+            return null;
         }
 
         /// <summary>
@@ -843,6 +846,28 @@ namespace BoscaliSummer.Features.Support.Runtime
             }
             ulong owner = platform.Payer(cell);
             return TeamRules.MayTouch(requester, owner, PilotPresent(player.HQ, owner), players, true);
+        }
+
+        /// <summary>
+        /// Pays a jettison refund back to whoever paid: each present payer is credited its share,
+        /// and absent or unknown payers' shares fall to the requester so nothing is destroyed.
+        /// </summary>
+        private void PayRefund(Player requester, ulong[] payers, float[] amounts, int shares, float remainder)
+        {
+            float rate = JettisonRefund;
+            if (rate <= 0f) return;
+            ulong requesterId = PlayerIdentity.Of(requester);
+            for (int i = 0; i < shares; i++)
+            {
+                float refund = rate * amounts[i];
+                if (refund <= 0f) continue;
+                Player payer = PilotByIdentity(requester.HQ, payers[i]);
+                Player recipient = TeamRules.RefundRecipient(requesterId, payers[i], payer != null) == requesterId
+                    ? requester : payer;
+                recipient.SetAllocation(recipient.Allocation + refund);
+            }
+            float rest = rate * remainder;
+            if (rest > 0f) requester.SetAllocation(requester.Allocation + rest);
         }
 
         public void Arm(SupportActionId action)
@@ -942,7 +967,7 @@ namespace BoscaliSummer.Features.Support.Runtime
         public void RequestCyberBreach(int target, BreachTool tool) =>
             SendCommand(OpsCommand.CyberBreach, (byte)Mathf.Clamp(target, 0, 255), (byte)tool, default);
 
-        /// <summary>A console verb on a node slot or, for TRACE and BURN THROUGH, an incident index.</summary>
+        /// <summary>A console verb on a node slot or, for TRACE and BURN THROUGH, a stable incident id.</summary>
         public void RequestCyberVerb(CyberVerb verb, int target) =>
             SendCommand(OpsCommand.CyberVerb, (byte)Mathf.Clamp(target, 0, 255), (byte)verb, default);
 
@@ -1015,7 +1040,7 @@ namespace BoscaliSummer.Features.Support.Runtime
                 {
                     var verb = (CyberVerb)Math.Min(arg2, (byte)(CyberNetwork.VerbCount - 1));
                     return CyberWords.Verb(verb) + (CyberNetwork.TargetsIncident(verb)
-                        ? " " + CyberWords.Incident(LocalCyber?.Incident(arg).Kind ?? IncidentKind.None)
+                        ? " " + CyberWords.Incident(LocalCyber?.Incident(LocalCyber.IncidentSlot(arg)).Kind ?? IncidentKind.None)
                         : " " + CyberWords.Callsign(LocalCyber, arg));
                 }
                 case OpsCommand.SpecOpsRaise: return "RAISE " + FieldWords.Callsign(arg);
@@ -1443,11 +1468,56 @@ namespace BoscaliSummer.Features.Support.Runtime
                     OrbitalPlatform platform = Space.PlatformFor(player.HQ);
                     if (platform == null) return SupportResult.CapabilityUnavailable;
                     if (!TeamGuardJettison(player, platform, message.Arg)) return SupportResult.TeamDenied;
+                    // TryJettison forgets payers; capture them first so each refund can go back to whoever paid.
+                    var refundPayers = new ulong[OrbitalPlatform.CellCount];
+                    var refundAmounts = new float[OrbitalPlatform.CellCount];
+                    int refundShares;
+                    float refundRemainder;
+                    float pendingValue = 0f;
+                    if (message.Arg == OrbitalPlatform.CoreCell)
+                    {
+                        var cellPayers = new ulong[OrbitalPlatform.CellCount];
+                        var cellPaid = new float[OrbitalPlatform.CellCount];
+                        for (int i = 0; i < OrbitalPlatform.CellCount; i++)
+                        {
+                            cellPayers[i] = platform.Payer(i);
+                            cellPaid[i] = platform.Paid(i);
+                        }
+                        refundShares = TeamRules.Shares(cellPayers, cellPaid, OrbitalPlatform.CellCount,
+                            refundPayers, refundAmounts);
+                        float shared = 0f;
+                        for (int i = 0; i < refundShares; i++) shared += refundAmounts[i];
+                        refundRemainder = platform.TotalPaid - shared;
+                        pendingValue = platform.PendingPaid;
+                        if (pendingValue > 0f)
+                        {
+                            if (platform.PendingPayer != 0 && refundShares < refundPayers.Length)
+                            {
+                                refundPayers[refundShares] = platform.PendingPayer;
+                                refundAmounts[refundShares] = pendingValue;
+                                refundShares++;
+                            }
+                            else refundRemainder += pendingValue;
+                        }
+                    }
+                    else if (platform.Payer(message.Arg) != 0)
+                    {
+                        refundPayers[0] = platform.Payer(message.Arg);
+                        refundAmounts[0] = platform.Paid(message.Arg);
+                        refundShares = 1;
+                        refundRemainder = 0f;
+                    }
+                    else
+                    {
+                        refundShares = 0;
+                        refundRemainder = platform.Paid(message.Arg);
+                    }
                     SupportResult removal = Placement(platform.TryJettison(message.Arg, out ModuleKind removed,
                         out float paid));
                     if (removal != SupportResult.Accepted) return removal;
-                    float refund = JettisonRefund * paid;
-                    if (refund > 0f && !bypass) player.SetAllocation(player.Allocation + refund);
+                    float refund = JettisonRefund * (paid + pendingValue);
+                    if (refund > 0f && !bypass)
+                        PayRefund(player, refundPayers, refundAmounts, refundShares, refundRemainder);
                     logger.LogInfo("[Support] " + (removed == ModuleKind.Core
                         ? OrbitalPlatform.Callsign + " deorbited"
                         : PlatformModules.Info(removed).Name + " jettisoned from " + OrbitalPlatform.CellName(message.Arg)) +
@@ -1493,7 +1563,9 @@ namespace BoscaliSummer.Features.Support.Runtime
                     if (platform.Pending != ModuleKind.None) return SupportResult.LaunchInFlight;
                     float cost = LaunchCost(player, ModuleKind.Cargo);
                     if (!bypass && player.Allocation + 0.001f < cost) return SupportResult.InsufficientAllocation;
-                    SupportResult launch = Placement(platform.TryResupply(OrbitNow, settings.PlatformDockingSeconds.Value));
+                    ulong buyer = bypass ? 0UL : PlayerIdentity.Of(player);
+                    SupportResult launch = Placement(platform.TryResupply(OrbitNow, settings.PlatformDockingSeconds.Value,
+                        bypass ? 0f : cost, buyer));
                     if (launch != SupportResult.Accepted) return launch;
                     if (!bypass) player.SetAllocation(Mathf.Max(0f, player.Allocation - cost));
                     logger.LogInfo("[Support] Cargo resupply launched to " + OrbitalPlatform.Callsign + " for " +

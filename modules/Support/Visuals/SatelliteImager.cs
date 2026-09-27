@@ -1,46 +1,35 @@
-using Unity.Collections;
 using UnityEngine;
 using UnityEngine.Rendering;
+using BoscaliSummer.Framework.Fx;
 using UnityEngine.Rendering.Universal;
 
 namespace BoscaliSummer.Features.Support.Visuals
 {
     /// <summary>
-    /// The orbital platform's Synthetic Aperture Radar (SAR) sensor. A dedicated camera renders
+    /// The orbital platform's live optical sensor. A dedicated camera renders
     /// the scene into a target texture, positioned on the station's true line-of-sight vector
     /// but with an adaptive standoff distance dynamically scaled to the framed footprint. This
     /// maintains a stable, natural focal length (10° to 50° FOV) across all zoom levels down to
     /// deep 60 m close-ups, eliminating floating-point depth buffer collapse, shadow clipping
     /// and terrain occlusion.
     ///
-    /// Every rendered frame is processed via an asynchronous SAR microwave imaging pipeline:
-    /// dynamic contrast stretching, specular corner reflector blooming for metallic structures,
-    /// vehicles and antennas, radar shadow / water attenuation, coherent Rayleigh speckle noise,
-    /// and neutral grayscale radar formatting. Microwaves penetrate cloud decks and
-    /// operate 24/7 day and night.
+    /// The camera provides the live optical view. Radar products are formed separately by
+    /// SarCollector when the host accepts a scan; the live view does no GPU readback.
     /// </summary>
     internal sealed class SatelliteImager : MonoBehaviour
     {
         public const float MaxStandoff = 24000f;
         public const float MinStandoff = 250f;
 
-        private int width = 768;
-        private int height = 480;
-        private int sarWidth = 384;
-        private int sarHeight = 240;
-
+        private int width = 640;
+        private int height = 400;
         private Camera cam;
         private RenderTexture colour;
-        private Texture2D sarTexture;
-        private Color32[] sarPixels;
-        private bool readbackPending;
-        private bool hasProcessedFrame;
         private float nextFrame;
         private int enabledFrame = -1;
         private bool fogWas = true;
-        private uint noise = 0x9E3779B9u;
 
-        public Texture Output => sarTexture != null && hasProcessedFrame ? (Texture)sarTexture : colour;
+        public Texture Output => colour;
         public Camera Camera => cam;
         public int FramesRendered { get; private set; }
 
@@ -50,10 +39,11 @@ namespace BoscaliSummer.Features.Support.Visuals
             DontDestroyOnLoad(go);
             go.SetActive(false);
             SatelliteImager imager = go.AddComponent<SatelliteImager>();
-            imager.width = Mathf.Clamp(pixelsWide - pixelsWide % 2, 64, 2048);
-            imager.height = Mathf.Clamp(pixelsHigh - pixelsHigh % 2, 64, 2048);
-            imager.sarWidth = imager.width / 2;
-            imager.sarHeight = imager.height / 2;
+            float scale = FxBus.Scales.RenderTargets;
+            int width = Mathf.RoundToInt(pixelsWide * scale);
+            int height = Mathf.RoundToInt(pixelsHigh * scale);
+            imager.width = Mathf.Clamp(width - width % 2, 64, 2048);
+            imager.height = Mathf.Clamp(height - height % 2, 64, 2048);
             go.SetActive(true);
             return imager;
         }
@@ -62,14 +52,12 @@ namespace BoscaliSummer.Features.Support.Visuals
         {
             colour = new RenderTexture(width, height, 24, RenderTextureFormat.ARGB32) { name = "BoscaliStationEO" };
             colour.Create();
-            sarTexture = new Texture2D(sarWidth, sarHeight, TextureFormat.RGBA32, false)
+            if (!FxRtPool.Own(colour))
             {
-                name = "BoscaliStationSAR",
-                filterMode = FilterMode.Bilinear,
-                wrapMode = TextureWrapMode.Clamp
-            };
-            sarPixels = new Color32[sarWidth * sarHeight];
-
+                colour.Release();
+                Destroy(colour);
+                colour = null;
+            }
             cam = gameObject.AddComponent<Camera>();
             cam.enabled = false;
             cam.targetTexture = colour;
@@ -103,7 +91,7 @@ namespace BoscaliSummer.Features.Support.Visuals
         /// </summary>
         public void Aim(Vector3 aimLocal, Vector3 lineOfSight, Vector3 along, float footprint, bool night, float framesPerSecond)
         {
-            if (cam == null) return;
+            if (cam == null || colour == null) return;
             Vector3 los = lineOfSight.sqrMagnitude > 1e-6f ? lineOfSight.normalized : Vector3.up;
 
             // Adaptive standoff: scale camera distance proportional to footprint
@@ -126,7 +114,7 @@ namespace BoscaliSummer.Features.Support.Visuals
             cam.farClipPlane = standoff * 4.0f;
 
             float interval = 1f / Mathf.Clamp(framesPerSecond, 0.5f, 15f);
-            if (Time.unscaledTime >= nextFrame && !readbackPending)
+            if (Time.unscaledTime >= nextFrame)
             {
                 nextFrame = Time.unscaledTime + interval;
                 cam.enabled = true;
@@ -152,71 +140,7 @@ namespace BoscaliSummer.Features.Support.Visuals
             if (camera != cam) return;
             RenderSettings.fog = fogWas;
             FramesRendered++;
-            if (!readbackPending && SystemInfo.supportsAsyncGPUReadback)
-            {
-                readbackPending = true;
-                AsyncGPUReadback.Request(colour, 0, TextureFormat.RGBA32, OnReadback);
-            }
         }
-
-        private void OnReadback(AsyncGPUReadbackRequest request)
-        {
-            readbackPending = false;
-            if (this == null || sarTexture == null || request.hasError) return;
-            NativeArray<Color32> source = request.GetData<Color32>();
-            if (source.Length < width * height) return;
-            const int step = 2;
-
-            // Sample dynamic range: find min and max luminance for adaptive radar contrast stretch
-            float low = 1f, high = 0f;
-            for (int y = 0; y < height; y += step * 4)
-            {
-                for (int x = 0; x < width; x += step * 4)
-                {
-                    float l = Luminance(source[y * width + x]);
-                    if (l < low) low = l;
-                    if (l > high) high = l;
-                }
-            }
-            float span = Mathf.Max(0.02f, high - low);
-
-            for (int y = 0; y < sarHeight; y++)
-            {
-                for (int x = 0; x < sarWidth; x++)
-                {
-                    float l = (Luminance(source[y * step * width + x * step]) - low) / span;
-                    l = Mathf.Clamp01(l);
-
-                    // Corner reflector blooming: vehicles, buildings and antennas reflect microwaves intensely
-                    if (l > 0.65f)
-                    {
-                        float boost = (l - 0.65f) / 0.35f;
-                        l = 0.65f + boost * 0.45f;
-                    }
-                    // Specular radar shadow / calm water attenuation: forward-scattered microwaves return zero backscatter
-                    else if (l < 0.14f)
-                    {
-                        l *= 0.3f;
-                    }
-
-                    // Coherent radar speckle noise (Rayleigh-distributed multiplicative noise)
-                    noise ^= noise << 13;
-                    noise ^= noise >> 17;
-                    noise ^= noise << 5;
-                    float speckle = ((noise & 0xff) / 255f - 0.5f) * 0.16f;
-                    float finalVal = Mathf.Clamp01(Mathf.Pow(l, 0.82f) + speckle);
-
-                    // Neutral SAR intensity: preserve luminance detail without a night-vision tint.
-                    byte value = (byte)Mathf.Clamp(finalVal * 222f + 18f, 0f, 255f);
-                    sarPixels[y * sarWidth + x] = new Color32(value, value, value, 255);
-                }
-            }
-            sarTexture.SetPixels32(sarPixels);
-            sarTexture.Apply(false);
-            hasProcessedFrame = true;
-        }
-
-        private static float Luminance(Color32 c) => (0.299f * c.r + 0.587f * c.g + 0.114f * c.b) / 255f;
 
         private void OnDestroy()
         {
@@ -228,7 +152,7 @@ namespace BoscaliSummer.Features.Support.Visuals
                 colour.Release();
                 Destroy(colour);
             }
-            if (sarTexture != null) Destroy(sarTexture);
+            FxRtPool.Disown(colour);
         }
     }
 }

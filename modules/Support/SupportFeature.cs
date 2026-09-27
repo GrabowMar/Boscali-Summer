@@ -33,7 +33,6 @@ namespace BoscaliSummer.Features.Support
             SupportManager manager = context.AddSceneService<SupportManager>(50);
             SupportNet network = context.AddComponent<SupportNet>();
             SupportPanel panel = context.AddSceneService<SupportPanel>(55);
-            SupportMapOverlay mapOverlay = context.AddSceneService<SupportMapOverlay>(58);
             Visuals.PlatformSky sky = context.AddSceneService<Visuals.PlatformSky>(59);
             SupportHudLine hudLine = context.AddSceneService<SupportHudLine>(56);
 
@@ -45,7 +44,6 @@ namespace BoscaliSummer.Features.Support
             context.AddService<ITheaterStrikePicture>(manager);
             context.AddService<IGroundForceReadiness>(manager);
             panel.Configure(manager, progression, context.Logger, baseAlarm);
-            mapOverlay.Configure(context.Settings.Support, manager, context.Logger);
             sky.Configure(manager);
             hudLine.Configure(manager);
 

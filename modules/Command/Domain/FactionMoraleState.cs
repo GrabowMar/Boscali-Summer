@@ -8,8 +8,7 @@ namespace BoscaliSummer.Features.Command.Domain
         internal const int MaximumFactions = 8;
         private readonly Dictionary<int, float> values = new Dictionary<int, float>();
 
-        // Contract rewards lock when offered, so later mood changes cannot alter
-        // an accepted payout. Full morale grants 10%; zero morale costs 20%.
+        // Lock contract rewards when offered so later morale changes do not alter payouts.
         internal static float ContractMultiplier(float morale) =>
             morale >= 50f ? 1f + (morale - 50f) * 0.002f : 0.8f + morale * 0.004f;
 

@@ -2,15 +2,15 @@ using System;
 using BoscaliSummer.Features.Weather.Networking;
 using BoscaliSummer.Features.Weather.Presentation;
 using BoscaliSummer.Features.Weather.Runtime;
+using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Features;
 
 namespace BoscaliSummer.Features.Weather
 {
     /// <summary>
     /// Dynamic weather and environment: smooth regime transitions with procedural rain,
-    /// canopy water, terrain wetting and lightning, plus a deterministic synoptic field of
-    /// regimes, fronts and storm cells derived on every peer from the host's weather key.
-    /// The host drives vanilla's synced sky channels; the ENV bezel screen briefs both.
+    /// canopy water, terrain wetting and lightning. The host drives the native sky channels;
+    /// the ENV bezel screen reads the same state.
     /// </summary>
     internal sealed class WeatherFeature : IModFeature
     {
@@ -24,25 +24,34 @@ namespace BoscaliSummer.Features.Weather
         public void Install(FeatureContext context)
         {
             WeatherNet network = context.AddComponent<WeatherNet>();
-            WeatherKeyNet keyNetwork = context.AddComponent<WeatherKeyNet>();
             WeatherManager manager = context.AddSceneService<WeatherManager>(64);
-            SynopticWeather synoptic = context.AddSceneService<SynopticWeather>(66);
-            manager.Configure(context.Settings.Weather, network, synoptic, context.Logger);
-            synoptic.Configure(context.Settings.Weather, keyNetwork, context.Logger);
+            manager.Configure(context.Settings.Weather, network, context.Logger);
+            manager.RegisterClientEffects(context);
             network.Configure(manager);
 
             WeatherMfdPanel panel = context.AddSceneService<WeatherMfdPanel>(65);
-            panel.Configure(context.Settings.Weather, manager, synoptic, context.Logger);
+            panel.Configure(context.Settings.Weather, manager, context.Logger);
 
-            WeatherDebugOverlay debug = context.AddSceneService<WeatherDebugOverlay>(68);
-            debug.Configure(context.Settings.Weather, synoptic);
-
-            WeatherHud hud = context.AddSceneService<WeatherHud>(69);
-            hud.Configure(context.Settings.Weather, synoptic, context.Logger);
-
-            // Everything below only draws or sounds; none of it writes weather state.
-            RainField rain = context.AddSceneService<RainField>(74);
-            rain.Configure(context.Settings.Weather, synoptic, context.Logger);
+            context.AddClientSetting("RAIN VISUALS", "RAIN FX MASTER",
+                "Stop falling-rain particles, canopy effects and rain haze. Terrain wetness has its own switch. " +
+                "Applies now; no mission or game restart.",
+                context.Settings.Weather.RainVisualsEnabled);
+            context.AddClientSetting("RAIN VISUALS", "CANOPY DROPLETS",
+                "Stop canopy droplet simulation, glass draws and fallback particles. " +
+                "Requires RAIN FX MASTER to be on. " +
+                "Applies now; no mission or game restart.",
+                context.Settings.Weather.CanopyRainEnabled);
+            context.AddClientSetting("RAIN VISUALS", "TERRAIN WET PASS",
+                "Stop the extra nearby-terrain draw passes and surface checks. " +
+                "Applies now; no mission or game restart.",
+                context.Settings.Weather.TerrainRainEnabled);
+            context.AddClientSetting("RAIN AUDIO", "RAIN SOUND",
+                "Rain rush and canopy patter through the game's effects volume. Client-local; applies now.",
+                context.Settings.Weather.RainAudioEnabled);
+            context.AddClientSetting("SKY", "CINEMATIC CLOUDS",
+                "World-space clouds follow fronts and storm cells, with a storm deck when needed. " +
+                "Falls back to native clouds if the shader is unavailable. Client-local; applies now.",
+                context.Settings.Weather.CinematicCloudsEnabled);
 
             context.AddHostSettings(new HostSettingsTable("WEATHER & ENVIRONMENT")
                 .Toggle(1, context.Settings.Weather.DynamicWeatherEnabled, "DYNAMIC WEATHER",
@@ -53,24 +62,6 @@ namespace BoscaliSummer.Features.Weather
                 .Number(3, context.Settings.Weather.WindVariability, "WIND VARIABILITY",
                     "How strongly wind shifts direction during weather transitions.",
                     0.1f, v => v.ToString("P0")));
-
-            context.AddHostSettings(new HostSettingsTable("WEATHER")
-                .Toggle(1, context.Settings.Weather.DynamicWeather, "DYNAMIC WEATHER",
-                    "The sky moves through regimes on its own. Off holds the starting regime.")
-                .Number(2, context.Settings.Weather.StartRegime, "STARTING SKY",
-                    "The regime a mission opens with. AUTO reads the mission's own weather.", 1, StartRegimeText)
-                .Toggle(3, context.Settings.Weather.StormTurbulence, "STORM TURBULENCE",
-                    "Updrafts, downdrafts, gust fronts and turbulence near storm cells.")
-                .Toggle(4, context.Settings.Weather.SensorEffects, "WEATHER VS SENSORS",
-                    "Rain and haze limit visual spotting; heavy rain makes IR seekers easier to decoy.")
-                .Toggle(5, context.Settings.Weather.LightningHazard, "LIGHTNING HAZARD",
-                    "Rare strikes on aircraft deep in a mature core: a flash and an instrument flicker, never damage."));
-        }
-
-        private static string StartRegimeText(int value)
-        {
-            if (value <= 0) return "AUTO";
-            return Domain.RegimeTable.Name(Domain.RegimeTable.Clamp(value - 1));
         }
     }
 }

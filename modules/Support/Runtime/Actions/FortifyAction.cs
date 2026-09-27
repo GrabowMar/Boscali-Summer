@@ -9,7 +9,8 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
     /// occupies buildings around the mark in any ground. Crosses into Urban Combat only through
     /// <see cref="IZoneFortificationService"/>, which reports false or zero unless it placed
     /// defenders, so the player is never charged for a fortification that silently did nothing.
-    /// The detachment's best team rank sets how many positions one order occupies.
+    /// Detachment-best rank sizes owned-zone orders; a safehouse order takes its own post
+    /// team's rank, like the SEIZE that placed it. Decided 2026-09-27 (D-3).
     /// </summary>
     internal sealed class FortifyAction : ISupportAction
     {
@@ -39,8 +40,10 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
             GlobalPosition mark = context.Target;
             if (detachment == null || !detachment.Enabled ||
                 detachment.Covering(FieldMission.Seize, mark.x, mark.z) < 0)
-                return SupportResult.InvalidTarget;
-            return fortifications.TrySeize(mark.x, mark.z, FieldCatalog.SeizeRadius, context.Owner, shells) > 0
+                return SupportResult.NoFieldPost;
+            int covering = detachment.Covering(FieldMission.Seize, mark.x, mark.z);
+            int postShells = covering >= 0 ? 1 + detachment.Team(covering).Rank : shells;
+            return fortifications.TrySeize(mark.x, mark.z, FieldCatalog.SeizeRadius, context.Owner, postShells) > 0
                 ? SupportResult.Accepted
                 : SupportResult.SpawnFailed;
         }

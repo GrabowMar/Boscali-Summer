@@ -18,11 +18,15 @@ namespace BoscaliSummer.Tests.Features.Support
             TestBreachPhasesAndLoot();
             TestSpoofAndBacktrace();
             TestCapstone();
+            TestCapstoneRechargeCoversEveryCapstone();
+            TestCapstoneRechargeReplicates();
             TestCapstoneMirrorAndRelisting();
             TestForceProbePayment();
             TestVerbs();
             TestCampaign();
             TestSnapshot();
+            TestIncidentMirrorPacksDensely();
+            TestIncidentVerbFollowsIdentity();
             TestWords();
         }
 
@@ -251,6 +255,23 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(network.CapstoneRechargeRemaining(Capstone.Jammer, now) > 0f, "the recharge is counting");
         }
 
+        private static void TestCapstoneRechargeCoversEveryCapstone()
+        {
+            CyberNetwork network = Fresh(out _, out _);
+            double now = 10.0;
+            foreach (Capstone capstone in new[] { Capstone.Reveal, Capstone.Jammer, Capstone.Sabotage })
+            {
+                TestAssert.That(network.CapstoneRechargeRemaining(capstone, now) == 0f,
+                    capstone + " starts ready");
+                TestAssert.That(network.TryUseCapstone(capstone, now), "the first " + capstone + " use lands");
+                TestAssert.That(!network.TryUseCapstone(capstone, now), "the second " + capstone + " waits");
+                TestAssert.That(network.CapstoneRechargeRemaining(capstone, now) > 0f,
+                    capstone + " is recharging");
+            }
+            TestAssert.That(network.CapstoneRechargeRemaining(Capstone.None, now) == 0f, "None stays ready");
+            TestAssert.That(!network.TryUseCapstone(Capstone.None, now), "None is not usable");
+        }
+
         private static void TestVerbs()
         {
             CyberNetwork network = Fresh(out int command, out int city);
@@ -327,6 +348,51 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(client.NodeCount == 0, "an empty snapshot clears the mirror");
         }
 
+        private static void TestIncidentMirrorPacksDensely()
+        {
+            var snapshot = new CyberSnapshot();
+            snapshot.Clear();
+            snapshot.IncidentCount = 2;
+            snapshot.IncidentKind[0] = 99;
+            snapshot.IncidentKind[1] = (byte)IncidentKind.Intrusion;
+            var client = new CyberNetwork();
+            client.Mirror(snapshot, 10.0);
+            TestAssert.That(client.Incident(0).Kind == IncidentKind.Intrusion,
+                "valid incidents pack densely past an invalid entry");
+            TestAssert.That(client.Incident(1).Kind == IncidentKind.None,
+                "no hole is left behind the packed incidents");
+        }
+
+        private static void TestIncidentVerbFollowsIdentity()
+        {
+            CyberNetwork host = Fresh(out _, out int city);
+            double now = 0.0;
+            TestAssert.That(Breach(host, city, true, now, out now), "take a location for the campaign");
+            double start = now;
+            TestAssert.That(host.Force(IncidentKind.Probe, start) == 0, "the probe opens at slot 0");
+            Tick(host, 25.0, start);
+            TestAssert.That(host.Force(IncidentKind.Raid, start + 25.0) == 1, "the raid opens at slot 1");
+            Tick(host, 86.0, start + 25.0);
+            double at = start + 111.0;
+            TestAssert.That(host.Incident(0).Kind == IncidentKind.None, "the old probe cleared its slot");
+            TestAssert.That(host.IncidentActive(1) && host.Incident(1).Kind == IncidentKind.Raid,
+                "the raid is live at slot 1");
+
+            var snapshot = new CyberSnapshot();
+            host.Export(at, snapshot);
+            var client = new CyberNetwork();
+            client.Mirror(snapshot, at);
+            byte id = host.Incident(1).Id;
+            TestAssert.That(id != 0, "live incidents carry an id");
+            TestAssert.That(client.Incident(0).Id == id, "the mirror keeps the host identity across compaction");
+            TestAssert.That(host.Check(CyberVerb.Trace, id, at) == CyberDenial.NotTraceable,
+                "a verb by id reaches the raid, not the empty slot");
+            TestAssert.That(client.Check(CyberVerb.Trace, id, at) == CyberDenial.NotTraceable,
+                "the mirror predicts the same refusal");
+            byte stale = id == 250 ? (byte)251 : (byte)250;
+            TestAssert.That(host.Check(CyberVerb.Trace, stale, at) == CyberDenial.NoTarget, "an unknown id refuses");
+        }
+
         private static void TestForceProbePayment()
         {
             CyberNetwork network = Fresh(out _, out int city);
@@ -342,6 +408,23 @@ namespace BoscaliSummer.Tests.Features.Support
                 "funded loud probe starts");
             TestAssert.That(System.Math.Abs(before - network.Computing - CyberNetwork.PhaseCost(BreachPhase.Probe, 1, false)) < 0.001f,
                 "accepted loud probe pays its actual force cost");
+        }
+
+        private static void TestCapstoneRechargeReplicates()
+        {
+            CyberNetwork host = Fresh(out _, out _);
+            double now = 10.0;
+            TestAssert.That(host.TryUseCapstone(Capstone.Jammer, now), "the host spends the capstone");
+            var snapshot = new CyberSnapshot();
+            host.Export(now, snapshot);
+            var client = new CyberNetwork();
+            client.Mirror(snapshot, now);
+            TestAssert.That(System.Math.Abs(client.CapstoneRechargeRemaining(Capstone.Jammer, now) -
+                host.CapstoneRechargeRemaining(Capstone.Jammer, now)) < 0.01f,
+                "the mirror carries the spent capstone's recharge");
+            TestAssert.That(client.CapstoneRechargeRemaining(Capstone.Reveal, now) == 0f &&
+                client.CapstoneRechargeRemaining(Capstone.Sabotage, now) == 0f,
+                "unspent capstones stay ready on the mirror");
         }
 
         private static void TestCapstoneMirrorAndRelisting()

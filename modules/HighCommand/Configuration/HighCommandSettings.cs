@@ -22,7 +22,6 @@ namespace BoscaliSummer.Features.HighCommand.Configuration
         public ConfigEntry<int> TransferMaxSeconds { get; }
         public ConfigEntry<int> DisruptionSeconds { get; }
         public ConfigEntry<int> PostRespawnSeconds { get; }
-        public ConfigEntry<bool> MapMarkersEnabled { get; }
 
         public HighCommandSettings(ConfigFile config)
         {
@@ -63,8 +62,6 @@ namespace BoscaliSummer.Features.HighCommand.Configuration
             PostRespawnSeconds = config.Bind(section, "PostRespawnSeconds", 60,
                 new ConfigDescription("Delay before a killed commander's post is re-established.",
                     new AcceptableValueRange<int>(10, 600)));
-            MapMarkersEnabled = config.Bind(section, "MapMarkersEnabled", true,
-                "Draw your posts and confirmed enemy posts as diamonds on the map. Off hides the layer only; the page still lists every post.");
         }
     }
 }

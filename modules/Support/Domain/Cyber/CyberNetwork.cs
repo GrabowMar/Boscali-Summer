@@ -107,7 +107,8 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
 
         private readonly CyberNode[] nodes = new CyberNode[SlotCount];
         private readonly double[] verbReady = new double[VerbCount];
-        private readonly double[] capstoneReady = new double[3];
+        // Slot 0 is the breach-spoof recharge; slots 1..3 are the Capstone enum values.
+        private readonly double[] capstoneReady = new double[4];
         private readonly int[] upgradeLevels = new int[4];
         private readonly bool[] mirrorSeen = new bool[SlotCount];
 
@@ -702,15 +703,16 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         public static bool TargetsIncident(CyberVerb verb) => verb == CyberVerb.Trace || verb == CyberVerb.BurnThrough;
 
         /// <summary>Everything the host re-checks for a verb. <paramref name="target"/> is a slot or,
-        /// for TRACE and BURN THROUGH, an incident index.</summary>
+        /// for TRACE and BURN THROUGH, a stable incident id.</summary>
         public CyberDenial Check(CyberVerb verb, int target, double now)
         {
             if ((byte)verb >= VerbCount) return CyberDenial.NoTarget;
             if (!HasCommand) return CyberDenial.NoCommand;
             if (TargetsIncident(verb))
             {
-                if (!IncidentActive(target)) return CyberDenial.NoTarget;
-                CyberIncident incident = incidents[target];
+                int slot = target < 0 || target > 255 ? -1 : IncidentSlot((byte)target);
+                if (slot < 0 || !IncidentActive(slot)) return CyberDenial.NoTarget;
+                CyberIncident incident = incidents[slot];
                 if (verb == CyberVerb.Trace)
                 {
                     if (!Traceable(incident.Kind)) return CyberDenial.NotTraceable;
@@ -754,6 +756,7 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         {
             CyberDenial denial = Check(verb, target, now);
             if (denial != CyberDenial.None) return denial;
+            int slot = TargetsIncident(verb) ? IncidentSlot((byte)target) : target;
             bool free = verb == CyberVerb.Isolate && nodes[target].Isolated;
             switch (verb)
             {
@@ -769,12 +772,12 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
                     Notify(CyberNotice.Baited, target, 0, now);
                     break;
                 case CyberVerb.Trace:
-                    incidents[target].Tracing = true;
-                    Notify(CyberNotice.TraceStarted, incidents[target].Site, incidents[target].Origin, now);
+                    incidents[slot].Tracing = true;
+                    Notify(CyberNotice.TraceStarted, incidents[slot].Site, incidents[slot].Origin, now);
                     break;
                 case CyberVerb.BurnThrough:
-                    Resolve(target, IncidentOutcome.Broken, now);
-                    Notify(CyberNotice.RaidBroken, -1, incidents[target].Origin, now);
+                    Resolve(slot, IncidentOutcome.Broken, now);
+                    Notify(CyberNotice.RaidBroken, -1, incidents[slot].Origin, now);
                     break;
             }
             if (!free)
@@ -1015,6 +1018,8 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             into.BreachTrace = breachTrace;
             into.BreachIn = BreachAwaitingChoice ? ChoiceRemaining(now) : BreachPhaseRemaining(now);
             into.SpoofIn = SpoofRechargeRemaining(now);
+            for (int i = 0; i < Capstones.All.Length; i++)
+                into.CapstoneIn[i] = CapstoneRechargeRemaining(Capstones.All[i], now);
             for (int v = 0; v < VerbCount; v++) into.Recharge[v] = RechargeRemaining((CyberVerb)v, now);
             ExportCampaign(now, into);
         }
@@ -1069,6 +1074,11 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             choiceTarget = choosing ? sessionTarget : -1;
             choiceDeadline = choosing ? Rebase(choiceDeadline, from.BreachIn, now, CyberLocations.PendingChoiceSeconds) : 0.0;
             capstoneReady[0] = Rebase(capstoneReady[0], from.SpoofIn, now, CyberLocations.SpoofRecharge);
+            for (int i = 0; i < Capstones.All.Length; i++)
+            {
+                int slot = (int)Capstones.All[i];
+                capstoneReady[slot] = Rebase(capstoneReady[slot], from.CapstoneIn[i], now, Capstones.RechargeSeconds);
+            }
             for (int v = 0; v < VerbCount; v++)
                 verbReady[v] = Rebase(verbReady[v], from.Recharge[v], now, 120f);
             MirrorCampaign(from, now);
@@ -1114,6 +1124,8 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         public float BreachTrace;
         public float BreachIn;
         public float SpoofIn;
+        /// <summary>Capstone recharge left, seconds, in <see cref="Capstones.All"/> order.</summary>
+        public readonly float[] CapstoneIn = new float[Capstones.All.Length];
         public readonly float[] Recharge = new float[CyberNetwork.VerbCount];
 
         public byte Heat;
@@ -1131,6 +1143,7 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         public readonly float[] IncidentAge = new float[CyberNetwork.IncidentSlots];
         public readonly float[] IncidentLeft = new float[CyberNetwork.IncidentSlots];
         public readonly byte[] IncidentTrace = new byte[CyberNetwork.IncidentSlots];
+        public readonly byte[] IncidentId = new byte[CyberNetwork.IncidentSlots];
         public readonly byte[] Foothold = new byte[CyberNetwork.MaximumOrigins];
 
         public int NoticeSerial;
@@ -1161,6 +1174,7 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             BreachTrace = 0f;
             BreachIn = 0f;
             SpoofIn = 0f;
+            Array.Clear(CapstoneIn, 0, CapstoneIn.Length);
             Array.Clear(Recharge, 0, Recharge.Length);
             Heat = 0;
             Defended = 0;
@@ -1177,6 +1191,7 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             Array.Clear(IncidentAge, 0, IncidentAge.Length);
             Array.Clear(IncidentLeft, 0, IncidentLeft.Length);
             Array.Clear(IncidentTrace, 0, IncidentTrace.Length);
+            Array.Clear(IncidentId, 0, IncidentId.Length);
             Array.Clear(Foothold, 0, Foothold.Length);
             NoticeSerial = 0;
             NoticeCount = 0;

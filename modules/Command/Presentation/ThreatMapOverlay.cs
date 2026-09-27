@@ -13,11 +13,10 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Features.Command.Presentation
 {
     /// <summary>
-    /// The hostile sensor picture as heat: one soft raster over the theater map whose intensity at
+    /// The hostile sensor picture as contours: one raster over the theater map whose intensity at
     /// a spot is how strongly the best tracked hostile sensor would see the player's own aircraft
-    /// there. A near radar is hotter than a distant one, everything a single emitter covers merges
-    /// into one blob instead of stacking outlines, and overlapping coverage reads as one hotter
-    /// region.
+    /// there. A near radar is hotter than a distant one, and overlapping coverage resolves to
+    /// the strongest tracked emitter. Only the resulting range contours are drawn.
     ///
     /// <para>Client-local presentation only. It reads the faction's own tracking database, so it
     /// shows the picture the player's side actually holds — an untracked emitter contributes no
@@ -42,18 +41,9 @@ namespace BoscaliSummer.Features.Command.Presentation
         private const float RefreshSeconds = 1f;
         private const float MinimumDrawableRadius = 1f;
 
-        /// <summary>Longest side of the heat raster in pixels; the field is smooth, not crisp.</summary>
+        /// <summary>Longest side of the sampled sensor field in pixels.</summary>
         private const int HeatTextureMax = 256;
-
-        /// <summary>
-        /// Peak alpha gain over <c>OverlayOpacity</c>, so heat answers the same slider. The
-        /// per-pixel alpha is the squared heat, not the heat: an envelope here is wider than the
-        /// theater, so the falloff's own curve is not enough to keep the far field quiet.
-        /// </summary>
-        private const float HeatAlphaGain = 1.2f;
-
-        /// <summary>Below this the field is a tint, not information, and stays transparent.</summary>
-        private const float HeatFloor = 0.02f;
+        private static readonly float[] ContourLevels = { 0.25f, 0.55f, 0.82f };
 
         /// <summary>Optical/IR coverage is the quieter threat: same field, half the intensity.</summary>
         private const float OpticalWeight = 0.5f;
@@ -178,7 +168,7 @@ namespace BoscaliSummer.Features.Command.Presentation
             // The layer toggle hides the field; it must never gate readiness. Initialising only
             // while the layer is on makes switching it off a one-way door: the overlay reports
             // unavailable, and the panel cannot offer the click that would bring it back.
-            if (!initialized) TryInitialize();
+            if (!initialized && DynamicMap.mapMaximized) TryInitialize();
 
             if (!initialized || dynamicMap == null || dynamicMap.mapImage == null)
             {
@@ -499,27 +489,31 @@ namespace BoscaliSummer.Features.Command.Presentation
 
         private void Colorize()
         {
-            float alpha = HeatAlphaGain * (settings != null ? settings.OverlayOpacity.Value : 0.35f);
+            float alpha = settings != null ? settings.OverlayOpacity.Value : 0.35f;
             Color cool = AvTheme.RailCaution;
             Color hot = AvTheme.RailDanger;
-            float coolR = cool.r * 255f, coolG = cool.g * 255f, coolB = cool.b * 255f;
-            float hotR = hot.r * 255f, hotG = hot.g * 255f, hotB = hot.b * 255f;
+            int width = fieldTexture.width;
+            int height = fieldTexture.height;
 
-            for (int i = 0; i < field.Length; i++)
+            for (int y = 0; y < height; y++)
+            for (int x = 0; x < width; x++)
             {
+                int i = y * width + x;
                 float heat = field[i];
-                if (heat < HeatFloor)
+                float right = x + 1 < width ? field[i + 1] : heat;
+                float above = y + 1 < height ? field[i + width] : heat;
+                int band = -1;
+                for (int level = 0; level < ContourLevels.Length; level++)
                 {
-                    pixels[i] = ClearPixel;
-                    continue;
+                    float threshold = ContourLevels[level];
+                    if ((heat < threshold && (right >= threshold || above >= threshold)) ||
+                        (heat >= threshold && (right < threshold || above < threshold)))
+                        band = level;
                 }
-
-                if (heat > 1f) heat = 1f;
-                pixels[i] = new Color32(
-                    (byte)(coolR + (hotR - coolR) * heat),
-                    (byte)(coolG + (hotG - coolG) * heat),
-                    (byte)(coolB + (hotB - coolB) * heat),
-                    (byte)(Mathf.Clamp01(heat * heat * alpha) * 255f));
+                if (band < 0) { pixels[i] = ClearPixel; continue; }
+                Color ink = Color.Lerp(cool, hot, band / 2f);
+                pixels[i] = new Color32((byte)(ink.r * 255f), (byte)(ink.g * 255f),
+                    (byte)(ink.b * 255f), (byte)(Mathf.Clamp01(alpha * (0.7f + band * 0.25f)) * 255f));
             }
         }
     }

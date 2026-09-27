@@ -78,15 +78,48 @@ namespace BoscaliSummer
             // Stations hold a fixed sector now, so there are no pass gaps left to scale.
             BindAndRemove(config, "Support", "OrbitGapScale", 1f);
 
-            // The original dynamic weather module was removed wholesale. Purge its
-            // retired presentation and simulation keys so old legacy entries are cleaned.
-            // ForecastSteps, ForecastStepMinutes, RainOnCanopy, RainAudio, Hud and
-            // RadarRangeKm are deliberately not purged: the merged synoptic module owns
-            // those keys again (some with new types), and rebinding a live key here throws.
+            // Purge keys from the retired synoptic weather controller and radar.
             BindAndRemove(config, "Weather", "RainEffects", true);
             BindAndRemove(config, "Weather", "RainEffectDensity", 1f);
-            // RainVolume is deliberately not purged: the current module owns that key again.
-            BindAndRemove(config, "Weather", "CanopyRainEnabled", true);
+            BindAndRemove(config, "Weather", "RainAudio", true);
+            // The SET effect pack was removed; keep obsolete values out of the live config.
+            BindAndRemove(config, "Visuals", "Enabled", true);
+            BindAndRemove(config, "Visuals", "CinematicPostFxEnabled", true);
+            BindAndRemove(config, "Visuals", "BloomBoost", 1.35f);
+            BindAndRemove(config, "Visuals", "SharpenEnabled", true);
+            BindAndRemove(config, "Visuals", "SharpenStrength", 0.5f);
+            BindAndRemove(config, "Visuals", "GForceEffectsEnabled", true);
+            BindAndRemove(config, "Visuals", "FoliageDynamicsEnabled", true);
+            BindAndRemove(config, "Visuals", "FoliageSwayStrength", 1f);
+            BindAndRemove(config, "Visuals", "FxSpikeEnabled", true);
+            BindAndRemove(config, "Visuals", "NvgGogglesEnabled", true);
+            BindAndRemove(config, "Visuals", "NvgGain", 1f);
+            BindAndRemove(config, "Visuals", "NvgTubes", 1);
+            BindAndRemove(config, "Immersion", "Enabled", true);
+            BindAndRemove(config, "Immersion", "HeadMotionEnabled", true);
+            BindAndRemove(config, "Immersion", "HeadMotionStrength", 1f);
+            BindAndRemove(config, "Immersion", "ExtraShakeEnabled", true);
+            BindAndRemove(config, "Immersion", "ShakeStrength", 1f);
+            BindAndRemove(config, "Immersion", "SunGlareEnabled", true);
+            BindAndRemove(config, "Immersion", "MfdGlowEnabled", true);
+            BindAndRemove(config, "Immersion", "AirframeAudioEnabled", true);
+            BindAndRemove(config, "Immersion", "SurfaceImmersionEnabled", true);
+            BindAndRemove(config, "Weather", "RainAudioEnabled", true);
+            BindAndRemove(config, "Weather", "RainVolume", 0.75f);
+            BindAndRemove(config, "Garrisons", "UrbanAmbience", true);
+            BindAndRemove(config, "Garrisons", "UrbanAmbienceVolume", 0.7f);
+            BindAndRemove(config, "Weather", "RainQuality", "High");
+            BindAndRemove(config, "Weather", "RainOnCanopy", true);
+            BindAndRemove(config, "Weather", "Hud", true);
+            BindAndRemove(config, "Weather", "ForecastSteps", 8);
+            BindAndRemove(config, "Weather", "ForecastStepMinutes", 5);
+            BindAndRemove(config, "Weather", "DynamicWeather", true);
+            BindAndRemove(config, "Weather", "StartRegime", 0);
+            BindAndRemove(config, "Weather", "StormTurbulence", true);
+            BindAndRemove(config, "Weather", "SensorEffects", true);
+            BindAndRemove(config, "Weather", "LightningHazard", true);
+            BindAndRemove(config, "Weather", "DebugControls", false);
+            BindAndRemove(config, "Weather", "DebugRainPreview", -1f);
             BindAndRemove(config, "Weather", "Supercells", true);
             BindAndRemove(config, "Weather", "SupercellDetail", 0.6f);
             BindAndRemove(config, "Weather", "ReplaceVanillaClouds", false);

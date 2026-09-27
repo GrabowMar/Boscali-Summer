@@ -123,6 +123,19 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             return true;
         }
 
+        /// <summary>Host-selected frontline sector; its fix comes from the live territory field.</summary>
+        internal bool SetDirectedFix(FactionHQ hq, string key, string label, float x, float z)
+        {
+            if (!authoritative || hq == null || hq.faction == null ||
+                string.IsNullOrEmpty(key) || key.Length > PriorityDirective.MaximumKeyLength ||
+                float.IsNaN(x) || float.IsNaN(z) || float.IsInfinity(x) || float.IsInfinity(z))
+                return false;
+            var directive = new PriorityDirective(key, label, x, 0f, z);
+            if (!table.TrySet(hq.faction.factionName, directive)) return false;
+            network?.BroadcastState(hq.faction.factionName, directive);
+            return true;
+        }
+
         internal bool ClearDirective(FactionHQ hq)
         {
             if (!authoritative || hq == null || hq.faction == null) return false;

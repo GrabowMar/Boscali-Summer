@@ -69,7 +69,12 @@ namespace BoscaliSummer.Features.Command.Runtime
         public uint GridVersion { get; private set; }
 
         /// <summary>What the texture bake draws: display clusters plus contested stripe shares.</summary>
-        public ulong DisplayHash { get; private set; }
+        private ulong displayHash;
+        public ulong DisplayHash
+        {
+            get { EnsureDisplay(); return displayHash; }
+            private set { displayHash = value; }
+        }
 
         /// <summary>What the vector front draws: contour segments, metre endpoints, pressure.</summary>
         public ulong FrontlineHash { get; private set; }
@@ -141,10 +146,11 @@ namespace BoscaliSummer.Features.Command.Runtime
         private readonly int[] pocketStack;
         private readonly int[] pocketRegion;
 
-        // Quadtree clusters of the current field, rebuilt with every evaluation.
+        // Quadtree clusters are only needed when the large map draws its tint.
         private readonly byte[] cellKeys;
         private SectorClusterTree.Cluster[] displayClusters;
         private int displayQuadCount;
+        private bool displayDirty = true;
 
         // Ordered front traces, chained from frontSegments on demand (never per 2 Hz eval).
         private readonly FrontlineTracePoint[] tracePoints = new FrontlineTracePoint[FrontlineTraceLimits.MaximumPoints];
@@ -174,7 +180,7 @@ namespace BoscaliSummer.Features.Command.Runtime
         public int ActiveClashesCount => ContestedSectorCount;
 
         /// <summary>Uniform blocks the last evaluation clustered the cells into.</summary>
-        public int ClusterCount => displayQuadCount;
+        public int ClusterCount { get { EnsureDisplay(); return displayQuadCount; } }
 
         /// <summary>
         /// Cell edges where friendly control meets hostile or contested control — the
@@ -321,6 +327,7 @@ namespace BoscaliSummer.Features.Command.Runtime
             strategicDirty = true;
             displayQuadCount = 0;
             DisplayHash = 0UL;
+            displayDirty = true;
             FrontlineHash = 0UL;
             GridVersion++;
         }
@@ -613,8 +620,7 @@ namespace BoscaliSummer.Features.Command.Runtime
                 }
             }
 
-            ComputeFrontBand();
-            BuildDisplayQuads(cellCount);
+            displayDirty = true;
 
             int segmentCount = SectorContour.Extract(holdStrength, friendlyForce, hostileForce,
                 ResolutionX, ResolutionY, CellSize, OriginX, OriginZ, frontSegments);
@@ -828,6 +834,14 @@ namespace BoscaliSummer.Features.Command.Runtime
             }
             displayQuadCount = SectorClusterTree.Build(cellKeys, ResolutionX, ResolutionY, displayClusters);
             DisplayHash = HashDisplay(displayClusters, displayQuadCount);
+            displayDirty = false;
+        }
+
+        private void EnsureDisplay()
+        {
+            if (!displayDirty) return;
+            ComputeFrontBand();
+            BuildDisplayQuads(ResolutionX * ResolutionY);
         }
 
         /// <summary>
@@ -1052,6 +1066,7 @@ namespace BoscaliSummer.Features.Command.Runtime
             Array.Fill(pixelBuffer, clearColor);
 
             if (!showSectors || globalOpacity <= 0f) return pixelBuffer;
+            EnsureDisplay();
 
             byte fillAlpha = (byte)Math.Clamp((int)(globalOpacity * 255f * 0.45f), 18, 56);
             byte gridLineAlpha = 12;

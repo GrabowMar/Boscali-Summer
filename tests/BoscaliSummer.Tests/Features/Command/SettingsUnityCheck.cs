@@ -43,7 +43,7 @@ public static class SettingsUnityCheck
             CheckLayoutCanvas();
             CheckScreenSpaceSizing();
             foreach (int height in new[] { 596, 420 }) CheckPanel(height);
-            File.WriteAllText("result.txt", "PASS: layout resolves the real UI area past stale canvas rects; SET renders CLIENT MAP/STYLE/IMAGE/COCKPIT/HUD/VISUALS (with COCKPIT FEEL) and SERVER at 596 and 420 units; toggles, background replacement, disabled dependencies, +/- bounds, scrolling and cached page trees checked. Game adapters are stubbed; in-game acceptance remains required.");
+            File.WriteAllText("result.txt", "PASS: SET renders six CLIENT pages including live performance toggles and separate SERVER tasking/host settings at 596 and 420 units; toggles, background replacement, disabled dependencies, +/- bounds, scrolling and cached page trees checked. Game adapters are stubbed; in-game acceptance remains required.");
             EditorApplication.Exit(0);
         }
         catch (Exception ex)
@@ -123,9 +123,6 @@ public static class SettingsUnityCheck
         var external = new ExternalFixture();
         ModServices.Services[typeof(IHudBoard)] = hud;
         ModServices.Services[typeof(IThirdPersonHud)] = external;
-        var visuals = new VisualsFixture();
-        ModServices.Services[typeof(IVisualEnhancements)] = visuals;
-        ModServices.Services[typeof(IImmersionSettings)] = new ImmersionFixture();
         var config = new CommandSettings(new ConfigFile(Path.GetFullPath("settings-" + height + "-" + Guid.NewGuid().ToString("N") + ".cfg"), false));
         // Exercise compatibility with an existing layered configuration.
         config.DeckGrid.Value = true;
@@ -140,7 +137,18 @@ public static class SettingsUnityCheck
         canvas.renderMode = RenderMode.WorldSpace;
         ((RectTransform)canvas.transform).sizeDelta = new Vector2(480, height);
         var panel = canvas.gameObject.AddComponent<SettingsMfdPanel>();
-        panel.Configure(config, null);
+        var hostBoard = new HostSettingsBoard();
+        hostBoard.Add(new HostFixture());
+        var clientBoard = new ClientSettingsBoard();
+        var performance = config.ExpandedMapUi.ConfigFile.Bind("Performance", "Enabled", false, "Live adaptive FX");
+        var rain = config.ExpandedMapUi.ConfigFile.Bind("Weather", "RainVisualsEnabled", true, "Live rain particles");
+        var canopy = config.ExpandedMapUi.ConfigFile.Bind("Weather", "CanopyRainEnabled", true, "Live canopy droplets");
+        var terrain = config.ExpandedMapUi.ConfigFile.Bind("Weather", "TerrainRainEnabled", true, "Live terrain wet pass");
+        clientBoard.Add("FRAME BUDGET", "ADAPTIVE FX", "Live; no restart.", performance);
+        clientBoard.Add("RAIN VISUALS", "RAIN FX MASTER", "Live; no restart.", rain);
+        clientBoard.Add("RAIN VISUALS", "CANOPY DROPLETS", "Live; no restart.", canopy);
+        clientBoard.Add("RAIN VISUALS", "TERRAIN WET PASS", "Live; no restart.", terrain);
+        panel.Configure(config, null, null, hostBoard, clientBoard);
         var shell = AvScreen.Build((RectTransform)canvas.transform, "SET", new[] { "CLIENT", "SERVER" }, null, 2, 480, height, null);
         shell.DataBar.SetChip(0, "SAVED", true);
         shell.DataBar.State.text = "TACTICAL DISPLAY";
@@ -154,18 +162,7 @@ public static class SettingsUnityCheck
             Invoke(panel, "SetClientPage", page);
             Refresh(panel);
             shell.WriteStatus(null, null, "Saved automatically. Hover a control for help.");
-            // 5 is the SERVER render's file name; VISUALS goes to 20.
-            Render(camera, canvas, height, page == 5 ? 20 : page);
-            if (page == 5)
-            {
-                Check(Array.Exists(canvas.GetComponentsInChildren<TMP_Text>(), t => t.text == "TREE & GRASS SWAY")
-                    && Array.Exists(canvas.GetComponentsInChildren<TMP_Text>(), t => t.text == "SHARPEN STRENGTH")
-                    && Array.Exists(canvas.GetComponentsInChildren<TMP_Text>(), t => t.text == "SUN GLARE"),
-                    "VISUALS page must list its rows");
-                Click(Array.Find(canvas.GetComponentsInChildren<AvButton>(),
-                    b => b.GetComponentInChildren<TMP_Text>().text == "-" && b.gameObject.activeInHierarchy));
-                Check(visuals.BloomBoost < 1.35f, "BLOOM BOOST stepper must write through the visuals seam");
-            }
+            Render(camera, canvas, height, page);
             if (page == 1 && height == 596)
             {
                 Image finish = AvDisplayGlass.AttachFullDisplay((RectTransform)canvas.transform);
@@ -190,10 +187,16 @@ public static class SettingsUnityCheck
             }
         }
         shell.SetPage(1);
-        shell.DataBar.State.text = "SERVER SETTINGS";
+        Refresh(panel);
+        Check(Array.Exists(canvas.GetComponentsInChildren<TMP_Text>(), t => t.text == "FACTION TASKING"),
+            "SERVER tasking must have its own populated page");
+        Render(camera, canvas, height, 16);
+        Invoke(panel, "SetServerPage", 1);
+        Check(Array.Exists(canvas.GetComponentsInChildren<TMP_Text>(), t => t.text == "MAX FIRE SITES"),
+            "SERVER host settings must have a dedicated populated page");
         Refresh(panel);
         shell.WriteStatus(null, null, "Host only. These settings are read-only on a remote client.");
-        Render(camera, canvas, height, 5);
+        Render(camera, canvas, height, 17);
         shell.SetPage(0);
         Invoke(panel, "SetClientPage", 0);
         Refresh(panel);
@@ -241,10 +244,23 @@ public static class SettingsUnityCheck
         Check(!external.IsEnabled, "External HUD switch must write through the HUD module seam");
         Click(Find(canvas, "RESET INSTRUMENT LAYOUT"));
         Check(external.Resets == 1, "Instrument reset must be wired on the scrollable cockpit page");
+        Invoke(panel, "SetClientPage", 5); Refresh(panel);
+        Check(Array.Exists(canvas.GetComponentsInChildren<TMP_Text>(), t => t.text == "NO RESTART"),
+            "Performance rows must state their restart requirement");
+        Click(Find(canvas, "OFF"));
+        Check(performance.Value, "Performance toggle must update its owning config entry");
+        var onButtons = Array.FindAll(canvas.GetComponentsInChildren<AvButton>(),
+            b => b.GetComponentInChildren<TMP_Text>().text == "ON");
+        Check(onButtons.Length == 4, "Performance page must expose four live switches");
+        Click(onButtons[1]);
+        Check(!rain.Value, "Weather performance toggle must update its owning config entry");
+        Click(onButtons[2]);
+        Click(onButtons[3]);
+        Check(!canopy.Value && !terrain.Value, "Canopy and terrain switches must update their owning entries");
         for (int i = 0; i < 20; i++)
         {
             shell.SetPage(i % 2);
-            Invoke(panel, "SetClientPage", i % 5);
+            Invoke(panel, "SetClientPage", i % 6);
             Refresh(panel);
         }
         Check(objects == canvas.GetComponentsInChildren<Transform>(true).Length, "Tab changes must reuse the same tree");
@@ -281,29 +297,23 @@ public static class SettingsUnityCheck
         Object.DestroyImmediate(target);
         Object.DestroyImmediate(image);
     }
-    private sealed class VisualsFixture : IVisualEnhancements
+    private sealed class HostFixture : IHostSettingsView
     {
-        public bool IsEnabled => true;
-        public bool CinematicPostFxEnabled { get; set; } = true;
-        public float BloomBoost { get; set; } = 1.35f;
-        public bool SharpenEnabled { get; set; } = true;
-        public float SharpenStrength { get; set; } = 0.5f;
-        public bool GForceEffectsEnabled { get; set; } = true;
-        public bool FoliageDynamicsEnabled { get; set; } = true;
-        public float FoliageSwayStrength { get; set; } = 1f;
-    }
+        private readonly HostSettingView[] rows =
+        {
+            new HostSettingView(1, HostSettingKind.Stepper, "MAX FIRE SITES", "New ignitions only.")
+        };
 
-    private sealed class ImmersionFixture : IImmersionSettings
-    {
-        public bool IsEnabled => true;
-        public bool HeadMotionEnabled { get; set; } = true;
-        public float HeadMotionStrength { get; set; } = 1f;
-        public bool ExtraShakeEnabled { get; set; } = true;
-        public float ShakeStrength { get; set; } = 1f;
-        public bool SunGlareEnabled { get; set; } = true;
-        public bool MfdGlowEnabled { get; set; } = true;
-        public bool AirframeAudioEnabled { get; set; } = true;
-        public bool SurfaceImmersionEnabled { get; set; } = true;
+        public string Section => "FIRE AND DESTRUCTION";
+        public System.Collections.Generic.IReadOnlyList<HostSettingView> Rows => rows;
+        public void Refresh()
+        {
+            rows[0].ValueText = "24";
+            rows[0].CanDecrease = true;
+            rows[0].CanIncrease = true;
+        }
+        public void Toggle(int id) { }
+        public void Step(int id, int direction) { }
     }
 
     private sealed class HudFixture : IHudBoard

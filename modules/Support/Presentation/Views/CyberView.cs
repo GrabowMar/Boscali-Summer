@@ -615,7 +615,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             CyberNetwork network = support?.LocalCyber;
             if (network == null || index < 0 || index >= Verbs) return;
             var verb = (CyberVerb)index;
-            int target = CyberNetwork.TargetsIncident(verb) ? selectedIncident : selectedSite;
+            int target = CyberNetwork.TargetsIncident(verb) ? network.Incident(selectedIncident).Id : selectedSite;
             if (support.CommandPending)
             {
                 Error("busy · one order at a time, wait for the host");
@@ -764,7 +764,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
 
         private string Target(CyberNetwork network, CyberVerb verb, int target) =>
             CyberNetwork.TargetsIncident(verb)
-                ? CyberWords.Incident(network.Incident(target).Kind) + " · " + Origin(network.Incident(target).Origin)
+                ? CyberWords.Incident(network.Incident(network.IncidentSlot((byte)target)).Kind) + " · " + Origin(network.Incident(network.IncidentSlot((byte)target)).Origin)
                 : CyberWords.Callsign(network, target);
 
         private string Origin(byte origin) => support != null ? support.CyberOriginName(origin) : "ADVERSARY";
@@ -1094,7 +1094,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 if (!show) continue;
                 CyberVerb verb = answerVerb[i];
                 int target = answerTarget[i];
-                CyberDenial denial = target >= 0 ? network.Check(verb, target, now) : CyberDenial.NoTarget;
+                CyberDenial denial = target >= 0 ? network.Check(verb, CyberNetwork.TargetsIncident(verb) ? network.Incident(target).Id : target, now) : CyberDenial.NoTarget;
                 string on = target < 0 ? "<none>" : CyberNetwork.TargetsIncident(verb) ? "this incident" : CyberWords.Callsign(network, target).ToLowerInvariant();
                 SetRow(answers[i], (i == 0 ? "recommended  " : "or           ") + "[" + ((int)verb + 1) + "] " + VerbCommand(verb) + " " + on,
                     denial == CyberDenial.None && !pending, i == 0 && denial == CyberDenial.None, CyberWords.Verb(verb) + " — " + CyberWords.VerbHelp(verb));
@@ -1197,7 +1197,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             {
                 var verb = (CyberVerb)i;
                 Row row = verbs[i];
-                int target = CyberNetwork.TargetsIncident(verb) ? selectedIncident : selectedSite;
+                int target = network != null && CyberNetwork.TargetsIncident(verb) ? network.Incident(selectedIncident).Id : selectedSite;
                 CyberDenial denial = network != null ? network.Check(verb, target, now) : CyberDenial.NoCommand;
                 bool rejoin = verb == CyberVerb.Isolate && network != null && network.Exists(target) && network.Node(target).Isolated;
                 float teamLeft = verb == CyberVerb.Isolate && !rejoin && support != null

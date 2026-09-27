@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using BoscaliSummer.Features.DynamicOperations.Domain;
 using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Framework.Features;
 using BoscaliSummer.Framework.Lifecycle;
 using BoscaliSummer.Runtime;
 using NuclearOption.Networking;
@@ -135,7 +136,11 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
                     continue;
                 }
                 shown[i] = true;
-                positions[i] = new Vector2(cards[i].X * factor, cards[i].Z * factor);
+                if (ModServices.TryGet(out IMapProjection projection) &&
+                    projection.TryProject(cards[i].X, cards[i].Z, out float x, out float y))
+                    positions[i] = new Vector2(x, y);
+                else
+                    positions[i] = new Vector2(cards[i].X * factor, cards[i].Z * factor);
             }
 
             float inverse = 1f / zoom;

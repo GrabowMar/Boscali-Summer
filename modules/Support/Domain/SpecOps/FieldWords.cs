@@ -97,6 +97,18 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
             }
         }
 
+        /// <summary>STEAL sheet outlook: what the network holds and whether the grant overfills it.</summary>
+        public static string StealOutlook(float grant, float held, float capacity)
+        {
+            if (grant <= 0f || capacity <= 0f || float.IsNaN(grant) || float.IsNaN(held) || float.IsNaN(capacity) ||
+                float.IsInfinity(grant) || float.IsInfinity(held) || float.IsInfinity(capacity)) return null;
+            int room = (int)Math.Max(0f, capacity - held);
+            int waste = (int)Math.Max(0f, grant - room);
+            string fact = "Network holds " + (int)Math.Max(0f, held) + "/" + (int)capacity + " intel.";
+            if (waste <= 0) return fact;
+            return fact + " " + waste + " would overfill" + (waste * 2 > grant ? " — spend intel first." : ".");
+        }
+
         public static string Post(FieldMission post)
         {
             switch (post)
@@ -167,6 +179,10 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
             ability == FieldAbility.Skywatch ? "SKYWATCH" : ability == FieldAbility.Eavesdrop ? "EAVESDROP" :
             ability == FieldAbility.Hunt ? "HUNT" : "SUPPRESS";
 
+        /// <summary>The in-UI key for post and phase codes, shared by every tooltip that needs it.</summary>
+        public static string Legend() => "OP observation post · CELL saboteur cell · LISTEN listening post · " +
+            "SAFE safehouse · OUT en route · TASK on task · HOLD holding · REST recovering";
+
         public static string AbilityCode(FieldAbility ability) => ability == FieldAbility.Spot ? "SPT" :
             ability == FieldAbility.Skywatch ? "SKY" : ability == FieldAbility.Eavesdrop ? "EAV" :
             ability == FieldAbility.Hunt ? "HNT" : "SUP";
@@ -205,6 +221,11 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
             }
         }
 
+        /// <summary>Why a successful roll built nothing: SEIZE found no building, SABOTAGE
+        /// found every jammer busy (its only host-side failure), anything else is unaccounted.</summary>
+        private static string NoEffectWord(FieldMission mission) => mission == FieldMission.Seize ? " FOUND NO BUILDING TO HOLD · RETURNING"
+            : mission == FieldMission.Sabotage ? " FOUND EVERY JAMMER BUSY · RETURNING" : " EFFECT UNAVAILABLE · RETURNING";
+
         /// <summary>One event-log line; null for nothing worth saying.</summary>
         public static string Notice(FieldNotice notice, int team, FieldMission mission, string target)
         {
@@ -221,8 +242,8 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
                 case FieldNotice.Recalled: return who + " RECALLED · RETURNING";
                 case FieldNotice.PostEnded: return who + " LEFT THE " + Post(mission) + " · RETURNING";
                 case FieldNotice.Ready: return who + " READY";
-                case FieldNotice.NoBuildings: return who + (mission == FieldMission.Seize
-                    ? " FOUND NO BUILDING TO HOLD · RETURNING" : " EFFECT UNAVAILABLE · RETURNING");
+                case FieldNotice.NoBuildings: return who + NoEffectWord(mission);
+
                 default: return null;
             }
         }
@@ -268,7 +289,7 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
             {
                 case MissionOutcome.Failed: return "FAILED · ";
                 case MissionOutcome.Recalled: return "RECALLED · ";
-                case MissionOutcome.NoBuildings: return mission == FieldMission.Seize ? "NO BUILDING · " : "NO EFFECT · ";
+                case MissionOutcome.NoBuildings: return mission == FieldMission.Seize ? "NO BUILDING · " : mission == FieldMission.Sabotage ? "JAMMERS BUSY · " : "NO EFFECT · ";
                 default: return "";
             }
         }

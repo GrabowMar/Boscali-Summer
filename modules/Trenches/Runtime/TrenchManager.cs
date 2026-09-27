@@ -22,13 +22,14 @@ namespace BoscaliSummer.Features.Trenches.Runtime
     /// </summary>
     internal sealed class TrenchManager : MonoBehaviour, ISceneService, IFieldworksReadiness
     {
-        public const int MaximumActiveLines = 16;
+        public const int MaximumActiveLines = 8;
         private const float TraceRefreshSeconds = 5f;
         private const float BuildAttemptSeconds = 2f;
         private const float SimulationSeconds = 0.75f;
         private const float RetireSeconds = 300f;
-        private const float SameOwnerSpacing = 360f;
-        private const float OtherOwnerSpacing = 250f;
+        // Position spacing lives in TrenchTraceMath (SpacingFor): same-side lines hold
+        // 360m apart while opposing mirror pairs may close to 120m.
+        // (see the note above; the old 250m cross-faction floor is gone on purpose)
         private const int MaximumFactions = 8;
         private const int RefusalReportAttempts = 15;
         private const float RefusalReportSeconds = 60f;
@@ -53,7 +54,19 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         private int traceCount;
         private int traceIndex;
         private int windowStart;
-        private int lastOrderedTrace;
+        // One scan cursor per faction slot: every build attempt rotates to the next live
+        // front, so a long first front can never fill the theater quota before the other
+        // side digs once. factionIds re-seeds a slot whose HQ changed under the index.
+        private readonly int[] factionTrace = new int[MaximumFactions];
+        private readonly int[] factionWindow = new int[MaximumFactions];
+        private readonly int[] factionLastOrdered = new int[MaximumFactions];
+        private readonly int[] factionIds = new int[MaximumFactions];
+        private readonly float[] airfieldX = new float[TrenchTraceMath.MaximumAirfields];
+        private readonly float[] airfieldZ = new float[TrenchTraceMath.MaximumAirfields];
+        private int airfieldCount;
+        private readonly TrenchBarrage barrage = new TrenchBarrage();
+        private float nextShellResolve;
+        private float nextBarrageLog;
 
         private int nextLineId = 1;
         private float nextTraceRefresh;
@@ -127,12 +140,20 @@ namespace BoscaliSummer.Features.Trenches.Runtime
 
             TrenchMaterialResolver.ResetForScene();
             TrenchRoadIndex.ResetForScene();
+            TrenchBarrageCatalog.ResetForScene();
+            barrage.Reset();
+            airfieldCount = 0;
+            nextShellResolve = 0f;
+            nextBarrageLog = 0f;
 
             nextLineId = 1;
             factionCount = 0;
             factionIndex = 0;
             traceCount = traceIndex = windowStart = 0;
-            lastOrderedTrace = -1;
+            Array.Clear(factionTrace, 0, factionTrace.Length);
+            Array.Clear(factionWindow, 0, factionWindow.Length);
+            Array.Clear(factionIds, 0, factionIds.Length);
+            Array.Fill(factionLastOrdered, -1);
             nextTraceRefresh = 0f;
             nextBuildAttempt = 0f;
             nextSimulationTick = 0f;
@@ -151,7 +172,13 @@ namespace BoscaliSummer.Features.Trenches.Runtime
 
         private void Update()
         {
-            if (settings == null || !settings.Enabled.Value || !GameAccess.IsServer() || Datum.origin == null) return;
+            if (settings == null || !GameAccess.IsServer()) return;
+            if (!settings.Enabled.Value)
+            {
+                if (lines.Count > 0) ResetForScene();
+                return;
+            }
+            if (Datum.origin == null) return;
             if (Time.unscaledTime < nextSeedDelay) return;
 
             if (Time.unscaledTime >= nextTraceRefresh)
@@ -159,6 +186,7 @@ namespace BoscaliSummer.Features.Trenches.Runtime
                 nextTraceRefresh = Time.unscaledTime + TraceRefreshSeconds;
                 RebuildFactionList();
                 RefreshTraces();
+                RefreshAirfields();
             }
             int maximum = Math.Min(MaximumActiveLines, settings.MaxTrenchPositions.Value);
             if (lines.Count < maximum && Time.unscaledTime >= nextBuildAttempt)
@@ -179,6 +207,7 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         /// Rebuilds the faction list without restarting the scan. Resetting the index here
         /// (the first shape of this loop) meant only the first faction's first windows were
         /// ever planned: every refresh sent the scan back to the start of the same front.
+        /// A slot whose HQ changed under the index gets a fresh cursor.
         /// </summary>
         private void RebuildFactionList()
         {
@@ -188,26 +217,88 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             {
                 if (owner == null) continue;
                 if (factionCount >= MaximumFactions) break;
-                factions[factionCount++] = owner;
+                int slot = factionCount;
+                factions[slot] = owner;
+                int id = owner.GetInstanceID();
+                if (factionIds[slot] != id)
+                {
+                    factionIds[slot] = id;
+                    factionTrace[slot] = 0;
+                    factionWindow[slot] = 0;
+                    factionLastOrdered[slot] = -1;
+                }
+                factionCount++;
             }
             factionIndex = factionCount > 0 ? previousIndex % factionCount : 0;
         }
 
-        private void AdvanceFaction()
+        /// <summary>
+        /// Saves the live cursor and rotates to the next faction whose front currently has
+        /// traces, restoring its cursor. Traceless factions are skipped without burning an
+        /// attempt; when no front has traces the scan idles on an empty one.
+        /// </summary>
+        private void RotateFaction()
         {
             if (factionCount <= 0)
             {
                 traceCount = traceIndex = windowStart = 0;
                 return;
             }
-            factionIndex = (factionIndex + 1) % factionCount;
-            CopyTraces();
+            SaveCursor();
+            for (int step = 0; step < factionCount; step++)
+            {
+                factionIndex = TrenchTraceMath.RotateFaction(factionIndex, factionCount);
+                CopyTraces();
+                if (traceCount > 0)
+                {
+                    RestoreCursor();
+                    return;
+                }
+            }
+            traceIndex = windowStart = 0;
+        }
+
+        private void SaveCursor()
+        {
+            if (factionIndex < 0 || factionIndex >= factionCount) return;
+            factionTrace[factionIndex] = traceIndex;
+            factionWindow[factionIndex] = windowStart;
         }
 
         /// <summary>
-        /// Re-reads the current front on the trace refresh timer while keeping the scan
-        /// cursor, so a long front is walked window by window. The cursor only resets when
-        /// its faction has no traces or a trace is exhausted, which rotates the faction.
+        /// Restores this faction's cursor onto freshly copied traces. The saved window only
+        /// survives on the same ordered trace, or a position would be fitted to the wrong
+        /// ground after a pressure reorder; an exhausted front stays exhausted until the
+        /// front grows new traces.
+        /// </summary>
+        private void RestoreCursor()
+        {
+            if (factionIndex < 0 || factionIndex >= factionCount || traceCount <= 0)
+            {
+                traceIndex = windowStart = 0;
+                return;
+            }
+            int savedTrace = factionTrace[factionIndex];
+            if (savedTrace >= traceCount)
+            {
+                traceIndex = traceCount;
+                windowStart = 0;
+                return;
+            }
+            traceIndex = Math.Max(0, savedTrace);
+            // The scan walks the traces hottest first, so the cursor can land on a different
+            // stretch of front after a refresh: the saved window only survives when it is
+            // still on the same trace, or a position would be fitted to the wrong ground.
+            int ordered = traceOrder[traceIndex];
+            windowStart = ordered == factionLastOrdered[factionIndex] ? Math.Max(0, factionWindow[factionIndex]) : 0;
+            factionLastOrdered[factionIndex] = ordered;
+        }
+
+        /// <summary>
+        /// Re-reads the current front on the trace refresh timer while keeping every
+        /// faction's own scan cursor, so each long front is walked window by window and
+        /// the build rotation keeps alternating sides. A faction whose front vanished
+        /// yields to the next live one.
         /// </summary>
         private void RefreshTraces()
         {
@@ -216,28 +307,23 @@ namespace BoscaliSummer.Features.Trenches.Runtime
                 traceCount = traceIndex = windowStart = 0;
                 return;
             }
-            int previousTrace = traceIndex;
-            int previousWindow = windowStart;
+            SaveCursor();
             CopyTraces();
             if (traceCount <= 0)
             {
-                AdvanceFaction();
+                RotateFaction();
                 return;
             }
-            traceIndex = Math.Min(previousTrace, traceCount - 1);
-            // The scan walks the traces hottest first, so the cursor can land on a different
-            // stretch of front after a refresh: the saved window only survives when it is
-            // still on the same trace, or a position would be fitted to the wrong ground.
-            int ordered = traceOrder[traceIndex];
-            windowStart = ordered == lastOrderedTrace ? Math.Max(0, previousWindow) : 0;
-            lastOrderedTrace = ordered;
+            RestoreCursor();
         }
 
         private void CopyTraces()
         {
-            traceIndex = 0;
-            windowStart = 0;
-            traceCount = territory.CopyFrontlineTraces(factions[factionIndex].GetInstanceID(),
+            traceCount = 0;
+            if (factionIndex < 0 || factionIndex >= factionCount) return;
+            FactionHQ faction = factions[factionIndex];
+            if (faction == null) return;
+            traceCount = territory.CopyFrontlineTraces(faction.GetInstanceID(),
                 tracePoints, traceLengths, tracePressure);
             TrenchTraceMath.OrderByPressure(tracePressure, traceCount, traceOrder);
             int offset = 0;
@@ -257,14 +343,17 @@ namespace BoscaliSummer.Features.Trenches.Runtime
                 $"{traceCount} trace(s), {stations} stations.");
         }
 
-        /// <summary>One planning attempt per call; the scan walks the hottest traces first so
-        /// positions dig where the fighting is before the quiet stretches.</summary>
+        /// <summary>
+        /// One planning attempt on the current faction's front, then the scan rotates to
+        /// the next live front: positions dig where the fighting is on every side, never
+        /// one faction's whole frontier first.
+        /// </summary>
         private void TryBuildOne(int maximum)
         {
             if (traceCount <= 0 || traceIndex >= traceCount)
             {
-                AdvanceFaction();
-                return;
+                RotateFaction();
+                if (traceCount <= 0 || traceIndex >= traceCount) return;
             }
             FactionHQ owner = factions[factionIndex];
             int trace = traceOrder[traceIndex];
@@ -273,6 +362,7 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             if (length < 2 || owner == null || lines.Count >= maximum)
             {
                 NextTrace();
+                RotateFaction();
                 return;
             }
 
@@ -287,11 +377,12 @@ namespace BoscaliSummer.Features.Trenches.Runtime
                     out float ditch) ? ditch : float.NaN;
             bool planned = TrenchPlanner.TryPlanWindow(nextLineId, owner.name + "_Front_" + nextLineId, owner,
                 tracePressure[trace], tracePoints, offset, length, windowStart, territory,
-                out TrenchLine line, out int next, out TrenchRefusal refusal, foliageAt, roadAt);
+                out TrenchLine line, out int next, out TrenchRefusal refusal, foliageAt, roadAt, airfieldX, airfieldZ, airfieldCount);
             if (!planned)
             {
                 NotePlanRefusal(refusal);
                 AdvanceWindow(next);
+                RotateFaction();
                 return;
             }
             nextLineId++;
@@ -299,11 +390,13 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             {
                 NotePlanRefusal(TrenchRefusal.TooClose);
                 AdvanceWindow(next);
+                RotateFaction();
                 return;
             }
             planRefusals = 0;
             Commit(line, maximum);
             AdvanceWindow(next);
+            RotateFaction();
         }
 
         /// <summary>
@@ -325,13 +418,14 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         {
             if (next <= 0 || next <= windowStart) NextTrace();
             else windowStart = next;
+            SaveCursor();
         }
 
         private void NextTrace()
         {
             traceIndex++;
             windowStart = 0;
-            if (traceIndex >= traceCount) AdvanceFaction();
+            SaveCursor();
         }
 
         private bool SpacingOk(TrenchLine candidate)
@@ -339,7 +433,7 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             for (int i = 0; i < lines.Count; i++)
             {
                 TrenchLine existing = lines[i];
-                float spacing = existing.OwnerHq == candidate.OwnerHq ? SameOwnerSpacing : OtherOwnerSpacing;
+                float spacing = TrenchTraceMath.SpacingFor(existing.OwnerHq == candidate.OwnerHq);
                 float dx = existing.Center.x - candidate.Center.x;
                 float dz = existing.Center.z - candidate.Center.z;
                 if (dx * dx + dz * dz < spacing * spacing) return false;
@@ -389,7 +483,8 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             line.DefenderCount = garrison.Alive;
             line.DugAt = Time.time;
             line.HostileSince = -1f;
-            line.NextGrowthAt = Time.time + Math.Max(15f, settings.GrowthIntervalSeconds.Value);
+            line.NextGrowthAt = Time.time + TrenchTraceMath.GrowthInterval(settings.GrowthIntervalSeconds.Value, line.Pressure);
+            line.NextBarrageAt = Time.time + TrenchTraceMath.BarrageDelay(settings.BarrageMinDelaySeconds.Value, settings.BarrageMaxDelaySeconds.Value, line.Pressure, UnityEngine.Random.value);
             logger?.LogInfo($"[TRENCHES] '{line.Name}' dug at global {line.Center}: {line.Curve.Length} curve stations, {line.Anchors.Length} anchors, pressure {line.Pressure:0.00}.");
             OnLinesChanged?.Invoke();
             return true;
@@ -467,9 +562,9 @@ namespace BoscaliSummer.Features.Trenches.Runtime
                 if (!advancedOne && TrenchTraceMath.CanAdvance(line.Overrun, now, garrison.SuppressedUntil, line.NextGrowthAt))
                 {
                     advancedOne = true;
-                    line.NextGrowthAt = now + Math.Max(15f, settings.GrowthIntervalSeconds.Value);
+                    line.NextGrowthAt = now + TrenchTraceMath.GrowthInterval(settings.GrowthIntervalSeconds.Value, line.Pressure);
                     TrenchStage before = line.Stage;
-                    if (TrenchPlanner.TryGrowBelt(line, territory))
+                    if (TrenchPlanner.TryGrowBelt(line, territory, airfieldX, airfieldZ, airfieldCount))
                     {
                         changed = true;
                         string missing = MissingBeltTrace(line, before);
@@ -494,6 +589,8 @@ namespace BoscaliSummer.Features.Trenches.Runtime
                 }
             }
 
+            TickBarrage(now);
+
             if (anyChanged) OnLinesChanged?.Invoke();
         }
 
@@ -505,6 +602,90 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             if (line.Stage == TrenchStage.Redoubt && line.Redoubt == null) return "redoubt trace";
             if (line.Stage == TrenchStage.Saps && line.Spurs == null) return "saps";
             return null;
+        }
+
+        /// <summary>
+        /// Caches every airbase centre once per trace refresh, so the planner keeps the
+        /// ditch off runways. Fields never move, but the lookup can appear late.
+        /// </summary>
+        private void RefreshAirfields()
+        {
+            airfieldCount = 0;
+            if (FactionRegistry.airbaseLookup == null) return;
+            foreach (Airbase airbase in FactionRegistry.airbaseLookup.Values)
+            {
+                if (airfieldCount >= airfieldX.Length) break;
+                if (airbase == null || airbase.AttachedAirbase) continue;
+                Vector3 centre = airbase.center != null ? airbase.center.position : airbase.transform.position;
+                GlobalPosition at = centre.ToGlobalPosition();
+                airfieldX[airfieldCount] = at.x;
+                airfieldZ[airfieldCount] = at.z;
+                airfieldCount++;
+            }
+        }
+
+        /// <summary>
+        /// One harassing fire mission per tick between paired lines: the due position
+        /// shells no-man's-land with vanilla missiles, which replicate, scorch and
+        /// suppress through the game's own impact path.
+        /// </summary>
+        private void TickBarrage(float now)
+        {
+            if (settings == null || !settings.BarrageEnabled.Value) return;
+            if (barrage.Inflight >= TrenchTraceMath.BarrageInflightCeiling) return;
+            TrenchLine shooter = null;
+            TrenchLine target = null;
+            float pairDistance = 0f;
+            for (int i = 0; i < lines.Count; i++)
+            {
+                TrenchLine line = lines[i];
+                if (line == null || line.Overrun || line.Stage < TrenchStage.FireTrench ||
+                    line.DefenderCount <= 0 || now < line.NextBarrageAt) continue;
+                if (!FindBarrageTarget(line, out TrenchLine enemy, out float distance)) continue;
+                shooter = line;
+                target = enemy;
+                pairDistance = distance;
+                break;
+            }
+            if (shooter == null) return;
+            if (Time.unscaledTime < nextShellResolve) return;
+            MissileDefinition shell = TrenchBarrageCatalog.Resolve();
+            if (shell == null)
+            {
+                nextShellResolve = Time.unscaledTime + 5f;
+                return;
+            }
+            int fired = barrage.Fire(shooter, target, pairDistance, shell, now);
+            // A dry tube waits the same window as a fired one: retrying in seconds
+            // turned a full sky into a spawn loop.
+            shooter.NextBarrageAt = now + TrenchTraceMath.BarrageDelay(
+                settings.BarrageMinDelaySeconds.Value, settings.BarrageMaxDelaySeconds.Value,
+                shooter.Pressure, UnityEngine.Random.value);
+            if (fired > 0 && Time.unscaledTime >= nextBarrageLog)
+            {
+                nextBarrageLog = Time.unscaledTime + 60f;
+                logger?.LogInfo($"[TRENCHES] '{shooter.Name}' fired {fired} harassing round(s) into '{target.Name}' no-man's-land ({pairDistance:0}m).");
+            }
+        }
+
+        /// <summary>Nearest live enemy position inside harassing range, by centre distance.</summary>
+        private bool FindBarrageTarget(TrenchLine shooter, out TrenchLine enemy, out float distance)
+        {
+            enemy = null;
+            distance = float.MaxValue;
+            for (int i = 0; i < lines.Count; i++)
+            {
+                TrenchLine candidate = lines[i];
+                if (candidate == null || candidate.Overrun || candidate.DefenderCount <= 0) continue;
+                if (candidate.OwnerHq == null || shooter.OwnerHq == null || candidate.OwnerHq == shooter.OwnerHq) continue;
+                float dx = candidate.Center.x - shooter.Center.x;
+                float dz = candidate.Center.z - shooter.Center.z;
+                float d = Mathf.Sqrt(dx * dx + dz * dz);
+                if (!TrenchTraceMath.InBarrageRange(d) || d >= distance) continue;
+                distance = d;
+                enemy = candidate;
+            }
+            return enemy != null;
         }
 
         private bool StillOwned(TrenchLine line)

@@ -21,11 +21,19 @@ namespace BoscaliSummer.Features.Command
         {
             typeof(FactionMfdMergePatch),
             typeof(MfdRailPatch),
+            typeof(MfdReliefMapCursorPatch),
+            typeof(MfdReliefMapBoundsPatch),
+            typeof(MfdReliefGridLabelsPatch),
+            typeof(MfdReliefUnitIconPatch),
+            typeof(MfdReliefAirbaseIconPatch),
+            typeof(MfdReliefObjectivePatch),
+            typeof(MfdReliefSelectedInfoPatch),
             typeof(MfdScreenChromePatch),
             typeof(MfdSinglePanelPatch),
             typeof(DynamicMapMaximizePatch),
             typeof(DynamicMapMinimizePatch),
             typeof(MapControlsPanelGuardPatch),
+            typeof(MapBoxIconClickGuardPatch),
             typeof(MapCursorPanelGuardPatch),
             typeof(GridLabelsPatch)
         };
@@ -39,19 +47,20 @@ namespace BoscaliSummer.Features.Command
 
             MissionMapCompatibilityEngine compat = context.AddSceneService<MissionMapCompatibilityEngine>(51);
             CommandManager manager = context.AddSceneService<CommandManager>(52);
+            context.AddService<IFactionMoraleView>(manager);
             FactionMoraleNet moraleNet = context.AddComponent<FactionMoraleNet>();
             moraleNet.Configure(manager);
-            context.AddService<IFactionMoraleView>(manager);
             ComMapOverlay overlay = context.AddSceneService<ComMapOverlay>(53);
-            // The MAP bezel resolves this late to switch the overlay's own layers; it never
-            // reaches for the overlay by searching the scene.
+            // STR and the MAP bezel resolve this late; neither searches the scene.
             context.AddService<ComMapOverlay>(overlay);
+            context.AddService<IMapProjection>(new MfdMapProjection());
             ThreatMapOverlay threats = context.AddSceneService<ThreatMapOverlay>(54);
             context.AddService<ThreatMapOverlay>(threats);
             StrMfdPanel strategic = context.AddSceneService<StrMfdPanel>(56);
             context.AddSceneService<MapUiManager>(57);
             context.AddSceneService<SettingsMfdPanel>(58)
-                .Configure(context.Settings.Command, context.Logger, overlay, context.HostSettings);
+                .Configure(context.Settings.Command, context.Logger, overlay,
+                    context.HostSettings, context.ClientSettings);
             context.AddSceneService<FactionResourceRecorder>(59);
 
             TerritoryControlView territory = context.AddSceneService<TerritoryControlView>(52);

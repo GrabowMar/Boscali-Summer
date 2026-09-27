@@ -121,10 +121,9 @@ namespace BoscaliSummer.Features.Command.Presentation
                 overlayTexture = null;
             }
 
-            if (sectorGrid != null)
-            {
-                sectorGrid.ResetAll();
-            }
+            // A territory view may share this grid with another reader. Drop our reference
+            // instead of clearing a field owned by that service.
+            sectorGrid = FreshGrid();
 
             dynamicMap = null;
             initialized = false;
@@ -179,14 +178,13 @@ namespace BoscaliSummer.Features.Command.Presentation
                 return;
             }
 
-            if (!initialized)
-            {
-                TryInitialize();
-                return;
-            }
-
+            if (dynamicMap == null) dynamicMap = SceneSingleton<DynamicMap>.i;
             if (dynamicMap == null) return;
             isMapMaximized = DynamicMap.mapMaximized;
+
+            // Build the raster and vector map surfaces only when the large map opens.
+            // STR still reads sector telemetry while flying with the map closed.
+            if (isMapMaximized && !initialized) TryInitialize();
 
             // Strict visibility control: Overlay is strictly for the Maximized Theater Map!
             // When minimized (cockpit flight HUD), overlay MUST stay disabled so it never pollutes the cockpit MFD.
@@ -195,10 +193,8 @@ namespace BoscaliSummer.Features.Command.Presentation
                 SetOverlayVisible(isMapMaximized);
             }
 
-            if (!isMapMaximized) return;
-
             // Ensure overlay stays parented to mapImage with stretch anchors
-            if (overlayObj != null && dynamicMap.mapImage != null && overlayObj.transform.parent != dynamicMap.mapImage.transform)
+            if (isMapMaximized && overlayObj != null && dynamicMap.mapImage != null && overlayObj.transform.parent != dynamicMap.mapImage.transform)
             {
                 overlayObj.transform.SetParent(dynamicMap.mapImage.transform, false);
                 RectTransform overlayRect = overlayObj.GetComponent<RectTransform>();
@@ -215,7 +211,7 @@ namespace BoscaliSummer.Features.Command.Presentation
             if (now >= nextGridUpdate)
             {
                 nextGridUpdate = now + Math.Max(0.2f, settings.GridRefreshInterval.Value);
-                UpdateSectorGrid();
+                UpdateSectorGrid(isMapMaximized && initialized);
             }
         }
 
@@ -257,11 +253,6 @@ namespace BoscaliSummer.Features.Command.Presentation
             Vector2 mapSize = (compatibilityEngine != null)
                 ? compatibilityEngine.ResolveTheaterDimensions(dynamicMap)
                 : TheaterFrame.Resolve(dynamicMap);
-            sectorGrid.SetWorldSize(mapSize.x, mapSize.y);
-
-            GetTextureSize(out int texW, out int texH);
-            EnsureTexture(texW, texH);
-
             overlayObj = new GameObject("ComSectorGridOverlay", typeof(RectTransform), typeof(RawImage));
             overlayObj.transform.SetParent(dynamicMap.mapImage.transform, false);
 
@@ -275,7 +266,7 @@ namespace BoscaliSummer.Features.Command.Presentation
             overlayRect.localPosition = Vector3.zero;
 
             overlayImage = overlayObj.GetComponent<RawImage>();
-            overlayImage.texture = overlayTexture;
+            overlayImage.enabled = false;
             overlayImage.raycastTarget = false;
             EnsureFrontlineGraphic(mapImageRect);
             SetOverlayVisible(DynamicMap.mapMaximized);
@@ -285,6 +276,7 @@ namespace BoscaliSummer.Features.Command.Presentation
             overlayObj.transform.SetAsFirstSibling();
 
             initialized = true;
+            nextGridUpdate = 0f;
             logger?.LogInfo("[COM] Dynamic frontline overlay initialized (" + sectorGrid.ResolutionX + "x" +
                 sectorGrid.ResolutionY + " sectors of " + sectorGrid.CellSize + "m, " +
                 mapSize.x + "x" + mapSize.y + "m theater).");
@@ -319,7 +311,7 @@ namespace BoscaliSummer.Features.Command.Presentation
             height = Math.Clamp((int)Math.Round(BaseTextureWidth * sectorGrid.WorldSizeY / longest), 1, BaseTextureWidth);
         }
 
-        private void UpdateSectorGrid()
+        private void UpdateSectorGrid(bool paintMap = true)
         {
             if (dynamicMap == null) return;
 
@@ -347,9 +339,10 @@ namespace BoscaliSummer.Features.Command.Presentation
                     return;
                 }
                 sectorGrid = current;
+                command?.SyncSectorTelemetry(sectorGrid);
+                if (!paintMap) return;
                 GetTextureSize(out int texW, out int texH);
                 EnsureTexture(texW, texH);
-                command?.SyncSectorTelemetry(sectorGrid);
                 bool showSectors = ControlFieldVisible;
                 bool showFrontlines = FrontLineVisible;
                 float overlayAlpha = settings != null ? settings.OverlayOpacity.Value : 0.35f;
@@ -400,6 +393,12 @@ namespace BoscaliSummer.Features.Command.Presentation
             {
                 logger?.LogWarning("[COM] Error updating tactical sector grid: " + ex.Message);
             }
+        }
+
+        private TacticalSectorGrid FreshGrid()
+        {
+            float cell = settings != null ? settings.GridCellSizeMetres.Value : 0f;
+            return new TacticalSectorGrid(cell > 0f ? cell : TacticalSectorGrid.DefaultCellSize, 100000f);
         }
     }
 }

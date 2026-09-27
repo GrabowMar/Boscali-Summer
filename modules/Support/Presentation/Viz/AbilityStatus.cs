@@ -132,6 +132,12 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
                     return false;
                 }
             }
+            if (action.Id == SupportActionId.Fortify)
+            {
+                SpecOpsDetachment detachment = support.LocalDetachment;
+                int posts = detachment != null && detachment.Enabled ? detachment.Posts(FieldMission.Seize) : 0;
+                reason = posts > 0 ? "OWNED GROUND OR SAFEHOUSE REACH" : "OWNED GROUND ONLY";
+            }
             PlatformAbility? ability = SupportManager.OrbitalAbility(action.Id);
             if (!ability.HasValue) return true;
             PlatformDenial denial = support.PlatformCheck(ability.Value);
@@ -174,6 +180,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
             if (action.IsHack) return "LOCKED · BREACH A LOCATION TO STAGE " + CyberCatalog.RequiredStage(action.Hack.Value);
             if (action.IsCapstone) return "LOCKED · MASTER A LOCATION (STAGE 4)";
             if (action.Id == SupportActionId.FlareMissile) return "LOCKED · SHARES RADAR SCAN PERK";
+            if (action.Id == SupportActionId.Fortify) return "LOCKED · UNLOCK FORTIFY IN SQD ABILITIES";
             return "LOCKED · UNLOCK IN SQD ABILITIES";
         }
 

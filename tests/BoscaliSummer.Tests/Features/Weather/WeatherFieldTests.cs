@@ -20,6 +20,7 @@ namespace BoscaliSummer.Tests.Features.Weather
             KeyNormalisesOverrides();
             ScheduleIsContinuousAndBounded();
             ChainRespectsTransitions();
+            CadenceFollowsHostSettings();
             HeldSkyNeverChanges();
             OverrideBlendsInWithoutAJump();
             FieldIsDeterministic();
@@ -31,12 +32,36 @@ namespace BoscaliSummer.Tests.Features.Weather
             ClassificationAndConditions();
             MetarReadsLikeOne();
             CloudDensityMapsCover();
-            LightningIsDeterministicAndMature();
-            BoltConnectsItsEnds();
+            FlightLevelPrecipitation();
+        }
+
+        private static void FlightLevelPrecipitation()
+        {
+            var point = new WeatherPoint { RainRate = 20f, CloudBase = 1000f, CloudTop = 3000f };
+            TestAssert.That(FlightWeatherAirMass.Evaluate(point, 500f, false, null).Rain == 1f,
+                "rain reaches aircraft below the cloud base");
+            TestAssert.That(FlightWeatherAirMass.Evaluate(point, 3000f, false, null).Rain == 0f,
+                "aircraft above the cloud top is dry");
+            var inside = FlightWeatherAirMass.Evaluate(point, 1500f, true, null);
+            TestAssert.That(inside.Rain > 0f && inside.CloudMoisture > 0f,
+                "cloud entry carries rain and condensation together");
+            TestAssert.That(FlightWeatherAirMass.Evaluate(point, 5000f, false, 0.8f).Rain == 0.8f,
+                "manual rain override remains useful for flight checks");
         }
 
         private static WeatherKey Key(uint seed = 20260918u, bool dynamic = true, byte start = WeatherKey.AutoRegime)
             => new WeatherKey(seed, 0f, dynamic, start, WeatherFlags.All);
+
+        private static void CadenceFollowsHostSettings()
+        {
+            var quick = new WeatherKey(17u, 0f, true, (byte)WeatherRegime.Fair,
+                WeatherFlags.None, null, 1f, 0.5f);
+            var slow = new WeatherKey(17u, 0f, true, (byte)WeatherRegime.Fair,
+                WeatherFlags.None, null, 30f, 10f);
+            TestAssert.That(RegimeSchedule.Evaluate(quick, 0f).NextChangeAt <
+                RegimeSchedule.Evaluate(slow, 0f).NextChangeAt,
+                "host cadence setting changes the next regional shift");
+        }
 
         private static void DomainStaysFreeOfUnity()
         {
@@ -193,6 +218,7 @@ namespace BoscaliSummer.Tests.Features.Weather
                         cover[k] = p.Cover;
                         wind[k] = p.WindSpeed;
                         TestAssert.That(p.RainRate >= 0f && p.RainRate <= WeatherField.MaxRainRate, "rain in range");
+                        TestAssert.That(p.FrontCover >= 0f && p.FrontCover <= 1f, "front cloud cover in range");
                         TestAssert.That(p.VisibilityKm >= 0.3f && p.VisibilityKm <= 50f, "visibility in range");
                     }
                 }
@@ -337,53 +363,6 @@ namespace BoscaliSummer.Tests.Features.Weather
                 TestAssert.That(d >= last - 1e-5f, "density grows with cover");
                 last = d;
             }
-        }
-
-        private static void LightningIsDeterministicAndMature()
-        {
-            WeatherKey key = Key(5u, dynamic: false, start: (byte)WeatherRegime.Severe);
-            var field = new WeatherField();
-            var buffer = new Strike[256];
-            int total = 0, ground = 0;
-            for (float t = 600f; t < 3f * 3600f; t += 30f)
-            {
-                field.Build(key, t, HalfX, HalfZ);
-                int n = LightningSchedule.Collect(field, t - 30f, t, buffer);
-                var again = new Strike[256];
-                int m = LightningSchedule.Collect(field, t - 30f, t, again);
-                TestAssert.That(n == m, "strike schedule is deterministic");
-                for (int i = 0; i < n; i++)
-                {
-                    TestAssert.That(buffer[i].Time > t - 30f && buffer[i].Time <= t + 1f, "strike inside the window");
-                    TestAssert.That(buffer[i].X == again[i].X && buffer[i].Seed == again[i].Seed, "same strike on every peer");
-                    total++;
-                    if (buffer[i].Kind == StrikeKind.Ground) ground++;
-                }
-            }
-            TestAssert.That(total > 50, "a SEVERE sky should flash a lot, saw " + total);
-            float share = (float)ground / total;
-            TestAssert.That(share > 0.1f && share < 0.3f, "about one strike in five reaches the ground, saw " + share);
-
-            // A towering cell has not started flashing.
-            var cell = new StormCell { Seed = 9u, BirthTime = 0f, Life = 1200f, Age = 0.1f, Radius = 3000f, LightningPeak = 6f, Base = 800f, TopMax = 9000f };
-            for (long s = 1; s < 300; s++)
-                TestAssert.That(!LightningSchedule.TryStrike(cell, s, out _), "towering cells do not flash");
-        }
-
-        private static void BoltConnectsItsEnds()
-        {
-            var buffer = new BoltSegment[BoltGenerator.MaxSegments];
-            int n = BoltGenerator.Generate(77u, 0f, 1500f, 0f, 300f, 0f, -200f, buffer);
-            TestAssert.That(n > 32 && n <= BoltGenerator.MaxSegments, "bolt has a bounded number of segments: " + n);
-            TestAssert.That(buffer[0].AX == 0f && buffer[0].AY == 1500f, "bolt starts at the cloud");
-            bool reachesGround = false;
-            for (int i = 0; i < n; i++)
-            {
-                if (buffer[i].BX == 300f && buffer[i].BY == 0f && buffer[i].BZ == -200f) reachesGround = true;
-            }
-            TestAssert.That(reachesGround, "the trunk ends at the ground point");
-            int again = BoltGenerator.Generate(77u, 0f, 1500f, 0f, 300f, 0f, -200f, new BoltSegment[BoltGenerator.MaxSegments]);
-            TestAssert.That(again == n, "bolt is deterministic");
         }
 
         private static string FindRepoRoot()

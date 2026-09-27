@@ -18,7 +18,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
 {
     /// <summary>
     /// SPACE › IMAGER — the sensor operator. No panels: the station's live imager feed (a camera on
-    /// the true line of sight, processed to grayscale SAR by <see cref="SatelliteImager"/>) fills
+    /// the true line of sight, rendered by <see cref="SatelliteImager"/>) fills
     /// the room edge to edge and the symbology is drawn straight on it in targeting-pod style (reticle, corner brackets,
     /// north arrow, scale bar, slant range, off-nadir, azimuth and elevation, a timestamp and the pass
     /// clock in the corners, a thin OSD line instead of a header). The radar product is a
@@ -42,8 +42,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         private const float TagDwellSeconds = 12f;
         private const float TagFadeSeconds = 3f;
         private const int MaxContacts = 16;
-        private const int FeedPixelsWide = 960;
-        private const float FramesPerSecond = 8f;
+        private const int FeedPixelsWide = 640;
+        private const float FramesPerSecond = 6f;
         private static readonly double FieldOfRegard = 62.0 * OrbitMath.Deg;
         private static readonly CultureInfo Invariant = CultureInfo.InvariantCulture;
         private static readonly float[] Footprints = { 32000f, 16000f, 8000f, 4000f, 2000f, 1000f, 500f };
@@ -287,7 +287,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 key.Fill = AvKit.Panel(rect, new Rect(0f, 0f, at.width, at.height), ImagerStyle.Halo.WithAlpha(0.7f));
                 key.Edge = AvKit.Outline(rect, new Rect(0f, 0f, at.width, at.height), ImagerStyle.Ink);
                 key.Title = ImagerStyle.Symbol(rect, "", new Rect(10f, -6f, at.width - 20f, 20f), 13f);
-                key.Facts = ImagerStyle.Symbol(rect, "", new Rect(10f, -28f, at.width - 20f, 26f), 10f, TextAlignmentOptions.TopLeft, true);
+                key.Facts = ImagerStyle.Symbol(rect, "", new Rect(10f, -28f, at.width - 20f, 26f), 12f, TextAlignmentOptions.TopLeft, true);
                 key.Facts.enableWordWrapping = true;
                 key.Control.Changed = _ => PaintKey(key);
                 softkeys[i] = key;
@@ -327,7 +327,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             CameraButton(host, new Rect(320f, -102f, 160f, 30f), "RECENTER [C]", Recenter, out _);
             tagButton = CameraButton(host, new Rect(486f, -102f, 130f, 30f), "TAG [G]", TagSweep, out tagLabel);
             tagButton.WithTooltip("Tag what the sensor sees right now: up to 16 contacts, tracked for 12 s. Local display only — task a scan to exploit them.");
-            aimStatus = ImagerStyle.Symbol(host, "DRAG / WASD · SLEW   WHEEL · ZOOM", new Rect(50f, -141f, 580f, 18f), 11f);
+            aimStatus = ImagerStyle.Symbol(host, "DRAG / WASD · SLEW   WHEEL · ZOOM", new Rect(50f, -141f, 580f, 18f), 12f);
         }
 
         private static RoomControl CameraButton(RectTransform host, Rect at, string title, Action action, out TMP_Text label)
@@ -335,7 +335,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             RoomControl control = RoomControl.Create(host, at, action, "CameraControl");
             Image fill = AvKit.Panel(control.Rect, new Rect(0f, 0f, at.width, at.height), ImagerStyle.Pod.WithAlpha(1f));
             AvKit.Outline(control.Rect, new Rect(0f, 0f, at.width, at.height), ImagerStyle.Dim);
-            label = ImagerStyle.Symbol(control.Rect, title, new Rect(6f, 0f, at.width - 12f, at.height), 11f, TextAlignmentOptions.Center);
+            label = ImagerStyle.Symbol(control.Rect, title, new Rect(6f, 0f, at.width - 12f, at.height), 12f, TextAlignmentOptions.Center);
             control.Changed = c => fill.color = !c.Enabled ? ImagerStyle.Pod.WithAlpha(0.6f)
                 : c.Hovered ? ImagerStyle.Ink.WithAlpha(0.25f) : ImagerStyle.Pod.WithAlpha(1f);
             return control;
@@ -553,7 +553,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             feed.enabled = live;
             veil.enabled = !live;
             reticle.enabled = true;
-            Set(slate, live ? "" : "ACQUIRING SAR FEED…");
+            Set(slate, live ? "" : "ACQUIRING OPTICAL FEED…");
             SetSignalState(live);
             UpdateTagged();
         }
@@ -585,14 +585,14 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 : scan.Phase == SarPhase.Collecting ? "IMG " + Mathf.RoundToInt(scan.Progress * 100f) + "%"
                 : scan.Phase == SarPhase.Processing ? "PRC " + Mathf.RoundToInt(scan.ProcessingProgress * 100f) + "%" : "IMG ---";
             PlatformStats stats = station ? platform.Stats(now) : default;
-            Set(osd, OrbitalPlatform.Callsign + " SAR-X · " + (station ? orbit.Code + " " + TheaterGrid.Km(orbit.Altitude) + " KM" : "NO STATION") +
+            Set(osd, OrbitalPlatform.Callsign + " EO / SAR · " + (station ? orbit.Code + " " + TheaterGrid.Km(orbit.Altitude) + " KM" : "NO STATION") +
                      " · ZOOM " + (footprintIndex + 1) + "/" + Footprints.Length + (gsdLimited ? " DIGITAL" : "") + " · FOV " +
                      TheaterGrid.Km(footprint) + " KM · " + frameWord +
                      (station ? " · PWR " + PlatformWords.Whole(platform.Energy) + " KJ" + (platform.Brownout ? " BROWNOUT" : "") : "") +
                      (live ? " · LIVE" : " · NO FEED") + "   |   [TAB] STATION WALL");
             LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
             string gmt = level != null ? TheaterGrid.Clock(((level.timeOfDay % 24f) + 24f) % 24f * 3600.0) : "--:--";
-            Set(cornerTL, "SAR / MONO   FRAME " + (imager != null ? imager.FramesRendered.ToString("D6", Invariant) : "------") +
+            Set(cornerTL, "EO / LIVE   FRAME " + (imager != null ? imager.FramesRendered.ToString("D6", Invariant) : "------") +
                 "   GMT " + gmt + "   GET " + (station ? TheaterGrid.Elapsed(platform.Elapsed(now)) : "--:--:--"));
             if (station && state.InPass)
             {

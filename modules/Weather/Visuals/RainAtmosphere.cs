@@ -1,4 +1,7 @@
+using System.Collections.Generic;
 using BoscaliSummer.Features.Weather.Domain;
+using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Framework.Fx;
 using UnityEngine;
 
 namespace BoscaliSummer.Features.Weather.Visuals
@@ -9,7 +12,7 @@ namespace BoscaliSummer.Features.Weather.Visuals
     /// write itself as the new vanilla base, and re-applies the local rain modifiers on top.
     /// Underwater and foreign dense fog are left alone. Restore puts the base back.
     /// </summary>
-    internal sealed class RainAtmosphere
+    internal sealed class RainAtmosphere : IClientEffect
     {
         private struct Slot
         {
@@ -33,6 +36,21 @@ namespace BoscaliSummer.Features.Weather.Visuals
         private Slot fog, ambient;
         private ColorSlot fogColor, skyColor, equatorColor, groundColor;
 
+        public string EffectId => "rain-haze";
+
+        public FxBudget Budget => new FxBudget(0, 0, 0, false);
+
+        public void ReleaseFx()
+        {
+            Restore();
+        }
+
+        public void DescribeFx(IDictionary<string, object> state)
+        {
+            state["fx.rain-haze.applied"] = applied;
+            state["fx.rain-haze.fog"] = LastFogMultiplier;
+        }
+
         internal bool Applied => applied;
         internal float LastFogMultiplier { get; private set; } = 1f;
 
@@ -53,7 +71,9 @@ namespace BoscaliSummer.Features.Weather.Visuals
 
             LastFogMultiplier = RainSkyMath.FogMultiplier(rain);
             float dim = RainSkyMath.AmbientMultiplier(rain);
-            fog.Written = fog.Base * LastFogMultiplier;
+            // Vanilla's near-opaque storm fog erases the cloud bodies and terrain a pilot
+            // must still be able to navigate by. Heavy rain keeps several km of contrast.
+            fog.Written = Mathf.Min(fog.Base * LastFogMultiplier, 0.00055f);
             ambient.Written = ambient.Base * dim;
             fogColor.Written = Tint(fogColor.Base, rain);
             skyColor.Written = Dim(skyColor.Base, dim);

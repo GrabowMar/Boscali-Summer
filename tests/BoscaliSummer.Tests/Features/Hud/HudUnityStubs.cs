@@ -60,7 +60,6 @@ public class HUDUnitMarker
 public class PilotOwner { public bool IsLocalPlayer = true; }
 public static class Datum { public static Vector3 originPosition; }
 namespace NuclearOption.MissionEditorScripts { public static class InputFieldChecker { public static bool InsideInputField; } }
-namespace BoscaliSummer.Features.Hud.Runtime { internal class ThirdPersonFlightCamera { public int AppliedFrame { get; set; } = -1; public void Reset() { AppliedFrame = -1; } } }
 
 public class MFDScreen : MonoBehaviour { public TMP_Text label; }
 public class Unit : MonoBehaviour { public string unitName; public int persistentID; }
@@ -77,6 +76,8 @@ public class AircraftParameters { public GameObject StatusDisplay; }
 public class Aircraft : Unit
 {
     public bool disabled;
+    public float maxRadius = 10f;
+    public AircraftDefinition definition = new AircraftDefinition();
     public PilotOwner Player = new PilotOwner();
     public Cockpit cockpit;
     public float speed = 260, radarAlt = 1400;
@@ -96,9 +97,14 @@ public class Aircraft : Unit
 public class TargetCam : MonoBehaviour { public enum CamMode { landingMode, targetRear, targetFront } public Camera cam; }
 public class DynamicMap : MonoBehaviour { public static bool mapMaximized; public static void EnableCanvas(bool value) { } }
 public class GameplayUI { public static bool GameIsPaused; }
-public class PlayerSettings { public static bool cinematicMode; }
-public class CameraStateManager : MonoBehaviour { public Camera mainCamera; public object currentState, cockpitState, orbitState, chaseState; public Unit followingUnit; }
-public static class GameManager { public static Aircraft aircraft; public static bool GetLocalAircraft(out Aircraft a) { a = aircraft; return a != null; } }
+public class PlayerSettings { public static bool cinematicMode; public static float viewSensitivity = 1f; public static bool viewInvertPitch; }
+public class CameraBaseState { }
+public class CameraStateManager : MonoBehaviour { public Camera mainCamera; public CameraBaseState currentState, cockpitState, orbitState, chaseState; public Unit followingUnit; public Rigidbody followingRB; }
+public class CameraControlUI { public bool isOpen; }
+public class AircraftDefinition { public float length = 20f, width = 14f; }
+public static class PhysicsLayers { public const int StaticsMask = 1; }
+public class HudInput { public bool GetButton(string name) => false; public float GetAxis(string name) => 0f; }
+public static class GameManager { public static Aircraft aircraft; public static bool flightControlsEnabled = true; public static HudInput playerInput = new HudInput(); public static bool GetLocalAircraft(out Aircraft a) { a = aircraft; return a != null; } }
 public static class UnitConverter { public static string ClimbRateReading(float v) => v.ToString("+0.0;-0.0;0.0") + " m/s"; public static string SpeedReading(float v) => (v * 3.6f).ToString("0") + " km/h"; public static string AltitudeReading(float v) => v.ToString("0") + " m"; public static string DistanceReading(float value) => (value / 1000f).ToString("0.0") + " km"; }
 public struct OnReportDamage { public string failureMessage; }
 public interface IReportDamage { event Action<OnReportDamage> onReportDamage; }

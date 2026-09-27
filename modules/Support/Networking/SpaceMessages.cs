@@ -99,7 +99,7 @@ namespace BoscaliSummer.Features.Support.Networking
     }
 
     /// <summary>
-    /// The faction's SPEC OPS detachment — four teams, up to twelve objectives, two recharges and
+    /// The faction's SPEC OPS detachment — four teams, up to twelve objectives, five ability recharges and
     /// the notice ring — sent immediately before every <see cref="OpsStateMessage"/> on the same
     /// reliable channel, so a command's reply always finds the detachment already mirrored.
     /// </summary>

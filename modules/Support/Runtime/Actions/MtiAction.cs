@@ -18,7 +18,6 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
 
         public SupportResult Execute(in SupportContext context)
         {
-            if (!VanillaSupportCatalog.ReconAvailable) return SupportResult.CapabilityUnavailable;
             OrbitalPlatform platform = context.PlatformAccess(PlatformAbility.RadarScan, out PlatformDenial denial);
             if (platform == null) return SupportContext.Refusal(denial);
 
