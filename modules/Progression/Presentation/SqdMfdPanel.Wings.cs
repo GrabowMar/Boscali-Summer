@@ -105,6 +105,11 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 : AvNum.Thousands(first + 1) + "–" + AvNum.Thousands(last) + " OF " + AvNum.Thousands(count) + " WINGS");
             previousWings.Interactable = wingPage > 0;
             nextWings.Interactable = first + WingRowsPerPage < count;
+            previousWings.Help = wingPage > 0
+                ? "Show the previous two hostile wings." : "Already on the first page.";
+            nextWings.Help = first + WingRowsPerPage < count
+                ? "Show the next two hostile wings, including previous encounters."
+                : "Already on the last page.";
 
             for (int i = 0; i < wingRows.Count; i++)
             {

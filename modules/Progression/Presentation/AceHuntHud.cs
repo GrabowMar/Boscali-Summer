@@ -15,7 +15,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
     /// Passive local threat display; all encounter state comes from the squad host. This is a
     /// screen-space overlay outside any MFD bezel, so it keeps its own absolute layout (kit v2's
     /// <c>AvFlow</c> is a page-body concept); only the chrome primitives moved to kit v2
-    /// (AvFrame/AvText/AvIcons instead of the v1 AvKit calls), geometry unchanged.
+    /// (AvFrame/AvText/AvIcons instead of the retired v1 kit calls), geometry unchanged.
     /// </summary>
     internal sealed class AceHuntHud : MonoBehaviour, ISceneService
     {

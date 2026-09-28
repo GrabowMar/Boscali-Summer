@@ -81,6 +81,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             AvButtons buttons = p.Buttons(new AvControl.Spec("UNLOCK SELECTED", CommitSelected, AvButtonStyle.Primary, AvIcon.CircleCheck));
             skillConfirmButton = buttons.Controls[0];
             skillConfirmButton.Interactable = false;
+            skillConfirmButton.Help = "Commit the selected grade. One pick, no undo.";
         }
 
         /// <summary>The budget as the board's own note: how many picks are unspent, and the wait.</summary>
@@ -272,6 +273,11 @@ namespace BoscaliSummer.Features.Progression.Presentation
             // Cells are ~95 px wide: AvRow's 88 px value column would leave the name no room, so the state word rides the sub-line.
             row.Row.Set(CellName(perk, definition), word, null, state);
             row.Row.Armed = armed;
+            // A shut cell answers "why not" on hover instead of only after a click.
+            bool live = perk.Unlocked || perk.Affordable || armed;
+            row.Row.Help = live
+                ? perk.Name + " — " + perk.Description
+                : perk.Name + " — " + BlockReason(perk);
         }
 
         private static void PaintLane(SkillBranchRow lane, PerkView[] perks)

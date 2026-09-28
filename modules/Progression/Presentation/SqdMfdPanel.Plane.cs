@@ -104,6 +104,8 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 }, AvButtonStyle.Quiet, AvIcon.ChevronRight));
             planePreviousStores = storePager.Controls[0];
             planeNextStores = storePager.Controls[1];
+            planePreviousStores.Help = "Show earlier weapon stations.";
+            planeNextStores.Help = "Show later weapon stations.";
             planeStoreOverflow = p.Add(new AvTextBlock(p.Content, AvTextRole.Label));
             planeStoreOverflow.Set("NO STATIONS");
             for (int i = 0; i < PlaneStoreRows; i++) planeStores[i] = p.Add(new AvRow(p.Content));

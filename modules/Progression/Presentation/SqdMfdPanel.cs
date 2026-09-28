@@ -211,10 +211,10 @@ namespace BoscaliSummer.Features.Progression.Presentation
             rootRect.pivot = templateRect.pivot;
             rootRect.localScale = templateRect.localScale;
 
-            float height = SqdScreenMount.ResolveHeight(
+            float height = AvLay.ResolveHeight(
                 templateRect.parent as RectTransform, PanelHeight, AvTokens.PanelHeightMax);
             rootRect.sizeDelta = new Vector2(Width, height);
-            SqdScreenMount.ClampIntoCanvas(rootRect);
+            AvLay.ClampIntoCanvas(rootRect);
 
             // A transparent blocker so map clicks behind the panel never bleed through; the
             // console's own frame is a non-interactive AvFrame.
@@ -236,12 +236,13 @@ namespace BoscaliSummer.Features.Progression.Presentation
             console.PageChanged += OnTabChanged;
             chips = console.Chips(3);
             metrics = console.Metrics("PILOT SCORE", "QUAL PICKS");
-            console.Tabs(
+            AvTabBar tabBar = console.Tabs(
                 (AvIcon.User, "PILOT"),
                 (AvIcon.Star, "SKILLS"),
                 (AvIcon.Skull, "ACES"),
                 (AvIcon.Pencil, "STUDIO"),
                 (AvIcon.Plane, "PLANE"));
+            AttachTabHelp(tabBar);
 
             BuildPilotPage(console.Page(TabPilot));
             BuildSkillsPage(console.Page(TabSkills));
@@ -265,6 +266,21 @@ namespace BoscaliSummer.Features.Progression.Presentation
 
             screenRoot = root;
             return result;
+        }
+
+        /// <summary>Every tab carries the hover sentence the pre-kit-v2 console gave it.</summary>
+        private static void AttachTabHelp(AvTabBar bar)
+        {
+            string[] hints =
+            {
+                "Pilot status, current sortie, service background and career totals.",
+                "Compare qualification grades and spend an available pick.",
+                "Review known hostile aces; friendly-wing management stays in Wing Command.",
+                "Manage local pilot profiles and squadron identity.",
+                "Inspect the aircraft you are piloting: flight, systems, stores and damage.",
+            };
+            AvControl[] tabs = bar.Rect.GetComponentsInChildren<AvControl>(true);
+            for (int i = 0; i < tabs.Length && i < hints.Length; i++) tabs[i].Help = hints[i];
         }
 
         private void OnTabChanged(int page)

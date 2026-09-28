@@ -111,12 +111,17 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 new AvControl.Spec("CLONE", CloneStudioDraft, AvButtonStyle.Quiet),
                 new AvControl.Spec("DELETE", DeleteStudioDraft, AvButtonStyle.Danger, AvIcon.X),
                 new AvControl.Spec("IMPORT ALL", ImportAllCustomPilots, AvButtonStyle.Quiet));
+            actions.Controls[0].Help = "Start a new custom pilot draft.";
+            actions.Controls[1].Help = "Copy the selected pilot into a new draft.";
             studioDeleteButton = actions.Controls[2];
+            studioDeleteButton.Help = "Delete the selected custom pilot file. Press twice to confirm.";
+            actions.Controls[3].Help = "Recruit every custom pilot not already in the Wing Command squadron.";
 
             for (int i = 0; i < StudioRowsPerPage; i++)
             {
                 int index = i;
                 studioRows[i] = p.Add(new AvRow(p.Content, () => SelectStudio(index)));
+                studioRows[i].Help = "Open this custom pilot in the editor. Saving is local-only.";
             }
 
             AvButtons pager = p.Buttons(
@@ -145,24 +150,33 @@ namespace BoscaliSummer.Features.Progression.Presentation
 
             studioCallsignField = p.Add(new AvField(p.Content, "CALLSIGN", PilotDraft.MaxCallsign,
                 value => { studioDraft.Callsign = value; studioDraft.Normalize(); }));
-            p.Buttons(new AvControl.Spec("RANDOM CALLSIGN", RandomizeCallsign, AvButtonStyle.Quiet, AvIcon.Refresh));
+            FieldHelp(studioCallsignField, "Pilot callsign, up to 14 characters.");
+            p.Buttons(new AvControl.Spec("RANDOM CALLSIGN", RandomizeCallsign, AvButtonStyle.Quiet, AvIcon.Refresh))
+                .Controls[0].Help = "Generate a new random callsign.";
             studioNameField = p.Add(new AvField(p.Content, "NAME", PilotDraft.MaxName,
                 value => { studioDraft.Name = value; studioDraft.Normalize(); }));
-            p.Buttons(new AvControl.Spec("RANDOM NAME", RandomizeName, AvButtonStyle.Quiet, AvIcon.Refresh));
+            FieldHelp(studioNameField, "Pilot name, up to 24 characters.");
+            p.Buttons(new AvControl.Spec("RANDOM NAME", RandomizeName, AvButtonStyle.Quiet, AvIcon.Refresh))
+                .Controls[0].Help = "Generate a new random name.";
             studioStyle = p.Add(new AvStepper(p.Content, "STYLE", () => WingLink.PersonaLabel(studioDraft.Persona).ToUpperInvariant(),
                 () => CycleDraft(d => d.CyclePersona(-1)), () => CycleDraft(d => d.CyclePersona(1))));
 
             p.Section(AvIcon.Message2, "BACKGROUND / LORE", null);
             studioBioField = p.Add(new AvField(p.Content, "Service background…", PilotDraft.MaxBackground,
                 value => { studioDraft.Background = value; studioDraft.Normalize(); }));
-            p.Buttons(new AvControl.Spec("GENERATE", GenerateBio, AvButtonStyle.Quiet, AvIcon.Refresh));
+            FieldHelp(studioBioField, "Free-form service record shown on the pilot status page.");
+            p.Buttons(new AvControl.Spec("GENERATE", GenerateBio, AvButtonStyle.Quiet, AvIcon.Refresh))
+                .Controls[0].Help = "Generate a service background from the radio style.";
 
             AvButtons saveRow = p.Buttons(
                 new AvControl.Spec("SAVE PILOT", SaveStudioDraft, AvButtonStyle.Primary, AvIcon.CircleCheck),
                 new AvControl.Spec("SET AS PROFILE", SetAsLocalProfile),
                 new AvControl.Spec("RECRUIT", ToggleRecruit));
+            saveRow.Controls[0].Help = "Write this pilot to the Wing Command custom pilots folder.";
             studioProfileButton = saveRow.Controls[1];
+            studioProfileButton.Help = "Use this pilot's name, callsign, background and portrait as your local pilot profile.";
             studioRecruitButton = saveRow.Controls[2];
+            studioRecruitButton.Help = "Add or remove this pilot from the Wing Command squadron.";
 
             p.Section(AvIcon.Flag, "SQUADRON IDENTITY", "LOCAL COSMETIC");
             studioEmblem = p.Add(new AvPortrait(p.Content, "Emblem", "NO ART"));
@@ -173,21 +187,27 @@ namespace BoscaliSummer.Features.Progression.Presentation
             studioPalette = p.Add(new AvStepper(p.Content, "PALETTE",
                 () => "PALETTE " + AvNum.Thousands(emblem.Palette + 1) + "/" + AvNum.Thousands(EmblemDesign.PaletteCount),
                 () => CycleEmblem(0, 0, -1), () => CycleEmblem(0, 0, 1)));
-            p.Buttons(new AvControl.Spec("RANDOMIZE EMBLEM", RandomizeEmblem, AvButtonStyle.Quiet, AvIcon.Refresh));
+            p.Buttons(new AvControl.Spec("RANDOMIZE EMBLEM", RandomizeEmblem, AvButtonStyle.Quiet, AvIcon.Refresh))
+                .Controls[0].Help = "Roll a new local emblem.";
 
             studioSquadronField = p.Add(new AvField(p.Content, "SQUADRON NAME", 24,
                 value => settings.SquadronName.Value = value ?? string.Empty));
             studioSquadronField.Text = squadronName;
+            FieldHelp(studioSquadronField, "Local squadron name shown on the pilot status page.");
             studioArt = p.Add(new AvStepper(p.Content, "ART",
                 () => emblemFileIndex >= 0 && emblemFileIndex < emblemFiles.Length
                     ? System.IO.Path.GetFileNameWithoutExtension(emblemFiles[emblemFileIndex])
                     : "NONE · PROCEDURAL",
                 () => CycleArtFile(-1), () => CycleArtFile(1)));
-            p.Buttons(new AvControl.Spec("NO ART", ClearArtFile, AvButtonStyle.Quiet));
+            p.Buttons(new AvControl.Spec("NO ART", ClearArtFile, AvButtonStyle.Quiet))
+                .Controls[0].Help = "Use the procedural emblem instead of a PNG.";
 
             studioMessageText = p.Add(new AvTextBlock(p.Content, AvTextRole.ProseSmall));
             studioMessageText.Set("Custom pilots are local files read by Wing Command; nothing is uploaded.");
         }
+
+        /// <summary>Kit v2's <see cref="AvField"/> has no help setter; the field root receives hover from its frame.</summary>
+        private static void FieldHelp(AvField field, string text) => AvHelpTip.Attach(field.Rect.gameObject, text);
 
         // ---- STUDIO refresh ------------------------------------------------------------------
 
@@ -216,6 +236,10 @@ namespace BoscaliSummer.Features.Progression.Presentation
             studioPage = Mathf.Clamp(studioPage, 0, pageCount - 1);
             studioPagerPrev.Interactable = studioPage > 0;
             studioPagerNext.Interactable = studioPage < pageCount - 1;
+            studioPagerPrev.Help = studioPage > 0
+                ? "Previous page of custom pilots." : "Already on the first page.";
+            studioPagerNext.Help = studioPage < pageCount - 1
+                ? "Next page of custom pilots." : "Already on the last page.";
             int first = studioPage * StudioRowsPerPage;
             studioPagerLabel.Set(studioPilots.Count == 0 ? "NO PILOTS — PRESS NEW OR IMPORT ALL"
                 : AvNum.Thousands(first + 1) + "–" + AvNum.Thousands(Math.Min(first + StudioRowsPerPage, studioPilots.Count)) +
