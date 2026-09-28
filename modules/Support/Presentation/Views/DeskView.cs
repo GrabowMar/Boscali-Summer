@@ -168,7 +168,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             focus = new Rect(g, -mapTop, folderX - g * 2f, timelineTop - 8f - mapTop);
             folderRect = new Rect(folderX, -folderTop, folderW, timelineTop - 8f - folderTop);
 
-            AvKit.Panel(room, new Rect(0f, 0f, w, h), DeskStyle.Map);
+            Chrome.Panel(room, new Rect(0f, 0f, w, h), DeskStyle.Map);
             map.Build(room, focus, focus, SelectSlot);
             map.Board.Clicked = (local, button) =>
             {
@@ -201,7 +201,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             var go = new GameObject(name, typeof(RectTransform), typeof(CanvasGroup));
             var rect = (RectTransform)go.transform;
             rect.SetParent(parent, false);
-            AvKit.Place(rect, at);
+            Chrome.Place(rect, at);
             fade = go.GetComponent<CanvasGroup>();
             return rect;
         }
@@ -209,14 +209,14 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         private void BuildHeader(RectTransform room, float w)
         {
             headerGroup = Group(room, "Header", new Rect(0f, 0f, w, DeskStyle.BannerHeight + DeskStyle.HeaderHeight), out headerFade);
-            AvKit.Panel(headerGroup, new Rect(0f, 0f, w, DeskStyle.BannerHeight), DeskStyle.Banner);
-            TMP_Text banner = AvKit.Label(headerGroup, "SPECIAL OPERATIONS  /  MISSION CONTROL",
+            Chrome.Panel(headerGroup, new Rect(0f, 0f, w, DeskStyle.BannerHeight), DeskStyle.Banner);
+            TMP_Text banner = Chrome.Label(headerGroup, "SPECIAL OPERATIONS  /  MISSION CONTROL",
                 new Rect(0f, 0f, w, DeskStyle.BannerHeight), DeskStyle.BannerInk, 11f, FontStyles.Bold, TextAlignmentOptions.Center);
             banner.characterSpacing = 10f;
 
             float g = DeskStyle.Gutter;
-            AvKit.Panel(headerGroup, new Rect(g, -DeskStyle.BannerHeight, 700f, DeskStyle.HeaderHeight), DeskStyle.Paper);
-            Image glyph = AvKit.Panel(headerGroup, new Rect(g + 12f, -DeskStyle.BannerHeight - 8f, 32f, 32f), DeskStyle.Stamp);
+            Chrome.Panel(headerGroup, new Rect(g, -DeskStyle.BannerHeight, 700f, DeskStyle.HeaderHeight), DeskStyle.Paper);
+            Image glyph = Chrome.Panel(headerGroup, new Rect(g + 12f, -DeskStyle.BannerHeight - 8f, 32f, 32f), DeskStyle.Stamp);
             glyph.sprite = OpsSprites.Glyph(OpsSprites.G.SpecOps);
             DeskStyle.Title(headerGroup, FieldWords.Title, new Rect(g + 52f, -DeskStyle.BannerHeight - 3f, 330f, 24f),
                 DeskStyle.Stencil, DeskStyle.Ink);
@@ -224,16 +224,16 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 DeskStyle.TypewriterSmall, DeskStyle.Khaki);
 
             float tagW = 420f;
-            Image clock = AvKit.Panel(headerGroup, new Rect(w - g - tagW, -DeskStyle.BannerHeight, tagW, DeskStyle.HeaderHeight),
+            Image clock = Chrome.Panel(headerGroup, new Rect(w - g - tagW, -DeskStyle.BannerHeight, tagW, DeskStyle.HeaderHeight),
                 DeskStyle.Paper);
             clock.rectTransform.localEulerAngles = Vector3.zero;
             dtg = DeskStyle.Title(clock.rectTransform, "", new Rect(14f, -4f, 250f, 22f), DeskStyle.StencilSmall, DeskStyle.Ink);
             dtg.characterSpacing = 4f;
             alloc = DeskStyle.Body(clock.rectTransform, new Rect(14f, -26f, 250f, 18f), DeskStyle.TypewriterSmall, DeskStyle.Khaki);
-            link = AvKit.Label(clock.rectTransform, "", new Rect(tagW - 150f, -12f, 136f, 24f), DeskStyle.Stamp, 11f,
+            link = Chrome.Label(clock.rectTransform, "", new Rect(tagW - 150f, -12f, 136f, 24f), DeskStyle.Stamp, 11f,
                 FontStyles.Bold, TextAlignmentOptions.Center);
             link.characterSpacing = 6f;
-            Image linkFrame = AvKit.Panel(clock.rectTransform, new Rect(tagW - 150f, -12f, 136f, 24f), DeskStyle.Stamp, OpsSprites.Stamp);
+            Image linkFrame = Chrome.Panel(clock.rectTransform, new Rect(tagW - 150f, -12f, 136f, 24f), DeskStyle.Stamp, OpsSprites.Stamp);
             linkFrame.rectTransform.SetSiblingIndex(link.rectTransform.GetSiblingIndex());
         }
 
@@ -257,9 +257,9 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             float w = at.width, h = at.height;
             tag.Select = RoomControl.Create(tag.Root, new Rect(0f, 0f, w, h), () => SelectTeam(team), "SelectTeam");
             tag.Select.WithTooltip(FieldWords.Callsign(team) + " — select this team for the next mission (Tab cycles).");
-            tag.Body = AvKit.Panel(tag.Root, new Rect(0f, 0f, w, h), DeskStyle.Paper);
+            tag.Body = Chrome.Panel(tag.Root, new Rect(0f, 0f, w, h), DeskStyle.Paper);
             tag.Outline = OutlineThick(tag.Root, new Rect(-3f, 3f, w + 6f, h + 6f), DeskStyle.Ink, 2f);
-            tag.SelectedRail = AvKit.Rule(tag.Root, new Rect(0f, 0f, w, 3f), AvTheme.RailInfo);
+            tag.SelectedRail = Chrome.Rule(tag.Root, new Rect(0f, 0f, w, 3f), AvTheme.RailInfo);
             tag.Letter = DeskStyle.Title(tag.Root, FieldWords.Callsign(team).Substring(0, 1), new Rect(8f, -6f, 26f, 27f), 25f,
                 DeskStyle.Ink, TextAlignmentOptions.Center);
             tag.Letter.characterSpacing = 0f;
@@ -268,24 +268,24 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             tag.Chevrons = new Image[FieldCatalog.MaxRank];
             for (int i = 0; i < tag.Chevrons.Length; i++)
             {
-                tag.Chevrons[i] = AvKit.Panel(tag.Root, new Rect(8f + i * 11f, -29f, 9f, 9f), DeskStyle.Ink);
+                tag.Chevrons[i] = Chrome.Panel(tag.Root, new Rect(8f + i * 11f, -29f, 9f, 9f), DeskStyle.Ink);
                 tag.Chevrons[i].sprite = OpsSprites.Glyph(OpsSprites.G.Team);
             }
             tag.Rank = DeskStyle.Body(tag.Root, new Rect(58f, -24f, w - 66f, 17f), 11f, DeskStyle.Khaki);
-            tag.StateFrame = AvKit.Panel(tag.Root, new Rect(8f, -42f, 104f, 18f), DeskStyle.Ink, OpsSprites.Stamp);
-            tag.State = AvKit.Label(tag.Root, "", new Rect(8f, -42f, 104f, 18f), DeskStyle.Ink, 11f, FontStyles.Bold,
+            tag.StateFrame = Chrome.Panel(tag.Root, new Rect(8f, -42f, 104f, 18f), DeskStyle.Ink, OpsSprites.Stamp);
+            tag.State = Chrome.Label(tag.Root, "", new Rect(8f, -42f, 104f, 18f), DeskStyle.Ink, 11f, FontStyles.Bold,
                 TextAlignmentOptions.Center);
             tag.State.characterSpacing = 1f;
             tag.Clock = DeskStyle.Body(tag.Root, new Rect(116f, -42f, w - 124f, 18f), 12f, DeskStyle.Ink, TextAlignmentOptions.MidlineRight);
             tag.Detail = DeskStyle.Body(tag.Root, new Rect(0f, 0f, 1f, 1f), DeskStyle.TypewriterSmall, DeskStyle.Ink);
             tag.Detail.gameObject.SetActive(false);
-            tag.BarTrack = AvKit.Panel(tag.Root, new Rect(8f, -h + 31f, w - 16f, 3f), DeskStyle.Khaki.WithAlpha(0.3f));
-            tag.Bar = AvKit.Panel(tag.Root, new Rect(8f, -h + 31f, 0f, 3f), DeskStyle.Ink);
+            tag.BarTrack = Chrome.Panel(tag.Root, new Rect(8f, -h + 31f, w - 16f, 3f), DeskStyle.Khaki.WithAlpha(0.3f));
+            tag.Bar = Chrome.Panel(tag.Root, new Rect(8f, -h + 31f, 0f, 3f), DeskStyle.Ink);
             tag.Action = BuildStamp(tag.Root, new Rect(8f, -h + 26f, w - 16f, 23f), () => PrimaryTeamAction(team), 10f);
             tag.Secondary = BuildStamp(tag.Root, new Rect(8f + (w - 24f) * 0.5f + 8f, -h + 26f,
                 (w - 24f) * 0.5f, 23f), () => Directive(team, SpecOpsDirective.Extract), 10f);
             tag.Secondary.Control.Rect.gameObject.SetActive(false);
-            tag.LostFrame = AvKit.Panel(tag.Root, new Rect(w * 0.5f - 56f, -h * 0.5f + 16f, 112f, 30f), AvTheme.RailDanger, OpsSprites.Stamp);
+            tag.LostFrame = Chrome.Panel(tag.Root, new Rect(w * 0.5f - 56f, -h * 0.5f + 16f, 112f, 30f), AvTheme.RailDanger, OpsSprites.Stamp);
             DeskStyle.Title(tag.LostFrame.rectTransform, "LOST", new Rect(0f, 0f, 112f, 30f), 18f, AvTheme.RailDanger,
                 TextAlignmentOptions.Center);
             tag.LostFrame.rectTransform.pivot = new Vector2(0.5f, 0.5f);
@@ -299,10 +299,10 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         {
             var edges = new[]
             {
-                AvKit.Rule(parent, new Rect(at.x, at.y, at.width, thickness), color),
-                AvKit.Rule(parent, new Rect(at.x, at.y - at.height + thickness, at.width, thickness), color),
-                AvKit.Rule(parent, new Rect(at.x, at.y, thickness, at.height), color),
-                AvKit.Rule(parent, new Rect(at.x + at.width - thickness, at.y, thickness, at.height), color)
+                Chrome.Rule(parent, new Rect(at.x, at.y, at.width, thickness), color),
+                Chrome.Rule(parent, new Rect(at.x, at.y - at.height + thickness, at.width, thickness), color),
+                Chrome.Rule(parent, new Rect(at.x, at.y, thickness, at.height), color),
+                Chrome.Rule(parent, new Rect(at.x + at.width - thickness, at.y, thickness, at.height), color)
             };
             return edges;
         }
@@ -312,9 +312,9 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             var stamp = new Stamp();
             stamp.Control = RoomControl.Create(parent, at, click, "Stamp");
             RectTransform host = stamp.Control.Rect;
-            stamp.Fill = AvKit.Panel(host, new Rect(0f, 0f, at.width, at.height), DeskStyle.Tape.WithAlpha(0f));
-            stamp.Frame = AvKit.Panel(host, new Rect(0f, 0f, at.width, at.height), DeskStyle.Ink, OpsSprites.Stamp);
-            stamp.Text = AvKit.Label(host, "", new Rect(4f, 0f, at.width - 8f, at.height), DeskStyle.Ink, size,
+            stamp.Fill = Chrome.Panel(host, new Rect(0f, 0f, at.width, at.height), DeskStyle.Tape.WithAlpha(0f));
+            stamp.Frame = Chrome.Panel(host, new Rect(0f, 0f, at.width, at.height), DeskStyle.Ink, OpsSprites.Stamp);
+            stamp.Text = Chrome.Label(host, "", new Rect(4f, 0f, at.width - 8f, at.height), DeskStyle.Ink, size,
                 FontStyles.Bold, TextAlignmentOptions.Center);
             stamp.Text.characterSpacing = 1f;
             stamp.Control.Changed = _ => PaintStamp(stamp);
@@ -346,20 +346,20 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
 
         private static void PlaceStamp(Stamp stamp, Rect at)
         {
-            AvKit.Place(stamp.Control.Rect, at);
-            AvKit.Place(stamp.Fill.rectTransform, new Rect(0f, 0f, at.width, at.height));
-            AvKit.Place(stamp.Frame.rectTransform, new Rect(0f, 0f, at.width, at.height));
-            AvKit.Place(stamp.Text.rectTransform, new Rect(4f, 0f, at.width - 8f, at.height));
+            Chrome.Place(stamp.Control.Rect, at);
+            Chrome.Place(stamp.Fill.rectTransform, new Rect(0f, 0f, at.width, at.height));
+            Chrome.Place(stamp.Frame.rectTransform, new Rect(0f, 0f, at.width, at.height));
+            Chrome.Place(stamp.Text.rectTransform, new Rect(4f, 0f, at.width - 8f, at.height));
         }
 
         private void BuildFolder(RectTransform room)
         {
             folderGroup = Group(room, "Folder", folderRect, out folderFade);
             float w = folderRect.width, h = folderRect.height;
-            AvKit.Panel(folderGroup, new Rect(0f, 0f, w, h), DeskStyle.Khaki.WithAlpha(0.3f));
-            AvKit.Panel(folderGroup, new Rect(0f, 0f, w, h), DeskStyle.Paper);
-            AvKit.Rule(folderGroup, new Rect(0f, 0f, w, 2f), AvTheme.RailInfo);
-            AvKit.Rule(folderGroup, new Rect(0f, 0f, 3f, h), AvTheme.RailInfo.WithAlpha(0.7f));
+            Chrome.Panel(folderGroup, new Rect(0f, 0f, w, h), DeskStyle.Khaki.WithAlpha(0.3f));
+            Chrome.Panel(folderGroup, new Rect(0f, 0f, w, h), DeskStyle.Paper);
+            Chrome.Rule(folderGroup, new Rect(0f, 0f, w, 2f), AvTheme.RailInfo);
+            Chrome.Rule(folderGroup, new Rect(0f, 0f, 3f, h), AvTheme.RailInfo.WithAlpha(0.7f));
             DeskStyle.Title(folderGroup, "01 / OBJECTIVE", new Rect(18f, -5f, 160f, 20f), 12f, DeskStyle.Ink);
             Stamp previous = BuildStamp(folderGroup, new Rect(180f, -4f, 40f, 24f), () => StepObjective(lastDetachment, -1), 11f);
             SetStamp(previous, "< Q", true, false, "Previous objective");
@@ -371,16 +371,16 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             // Keep the briefing and its four mission decisions at a readable height. The
             // command rail scrolls on a small viewport; the terrain map never shrinks for it.
             const float briefHeight = 840f;
-            RectTransform content = AvScreen.Scroll(folderGroup, new Rect(0f, -32f, w, h - 32f), briefHeight, out Rect contentArea);
+            RectTransform content = Chrome.Scroll(folderGroup, new Rect(0f, -32f, w, h - 32f), briefHeight, out Rect contentArea);
             float bodyW = contentArea.width;
             var bodyObject = new GameObject("Brief", typeof(RectTransform));
             folderBody = (RectTransform)bodyObject.transform;
             folderBody.SetParent(content, false);
-            AvKit.Place(folderBody, content == folderGroup
+            Chrome.Place(folderBody, content == folderGroup
                 ? new Rect(0f, -32f, bodyW, briefHeight)
                 : new Rect(0f, 0f, bodyW, briefHeight));
 
-            objectiveGlyph = AvKit.Panel(folderBody, new Rect(18f, -32f, 36f, 36f), DeskStyle.Stamp);
+            objectiveGlyph = Chrome.Panel(folderBody, new Rect(18f, -32f, 36f, 36f), DeskStyle.Stamp);
             objectiveName = DeskStyle.Title(folderBody, "", new Rect(66f, -32f, bodyW - 84f, 38f), 20f, DeskStyle.Ink,
                 TextAlignmentOptions.TopLeft);
             objectiveName.characterSpacing = 4f;
@@ -404,7 +404,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             const float sheetTop = 266f;
             DeskStyle.Title(folderBody, "03 / CHOOSE MISSION · COMMIT", new Rect(18f, -242f, bodyW - 36f, 18f),
                 12f, DeskStyle.Ink);
-            AvKit.Rule(folderBody, new Rect(18f, -262f, bodyW - 36f, 1f), DeskStyle.Khaki.WithAlpha(0.45f));
+            Chrome.Rule(folderBody, new Rect(18f, -262f, bodyW - 36f, 1f), DeskStyle.Khaki.WithAlpha(0.45f));
             float sheetH = (briefHeight - sheetTop - 14f - (MissionCount - 1) * 8f) / MissionCount;
             for (int i = 0; i < MissionCount; i++)
                 sheets[i] = BuildSheet((FieldMission)i, new Rect(14f, -(sheetTop + i * (sheetH + 8f)), bodyW - 28f, sheetH));
@@ -415,8 +415,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
 
         private static void BuildFact(RectTransform parent, string title, Rect at, out TMP_Text figure, out TMP_Text words)
         {
-            AvKit.Outline(parent, at, DeskStyle.Khaki);
-            TMP_Text heading = AvKit.Label(parent, title, new Rect(at.x + 8f, at.y - 3f, at.width - 16f, 13f), DeskStyle.Khaki, 10f,
+            Chrome.Outline(parent, at, DeskStyle.Khaki);
+            TMP_Text heading = Chrome.Label(parent, title, new Rect(at.x + 8f, at.y - 3f, at.width - 16f, 13f), DeskStyle.Khaki, 10f,
                 FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
             heading.characterSpacing = 3f;
             figure = DeskStyle.Title(parent, "", new Rect(at.x + 8f, at.y - 15f, at.width - 16f, 30f), 26f, DeskStyle.Ink);
@@ -429,9 +429,9 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             var chip = new Chip();
             chip.Control = RoomControl.Create(folderBody, at, () => SelectTeam(team), "TeamChip");
             RectTransform host = chip.Control.Rect;
-            chip.Fill = AvKit.Panel(host, new Rect(0f, 0f, at.width, at.height), DeskStyle.Ink.WithAlpha(0f));
-            chip.Outline = AvKit.Outline(host, new Rect(0f, 0f, at.width, at.height), DeskStyle.Khaki);
-            chip.Text = AvKit.Label(host, "", new Rect(4f, 0f, at.width - 8f, at.height), DeskStyle.Ink, 11f, FontStyles.Bold,
+            chip.Fill = Chrome.Panel(host, new Rect(0f, 0f, at.width, at.height), DeskStyle.Ink.WithAlpha(0f));
+            chip.Outline = Chrome.Outline(host, new Rect(0f, 0f, at.width, at.height), DeskStyle.Khaki);
+            chip.Text = Chrome.Label(host, "", new Rect(4f, 0f, at.width - 8f, at.height), DeskStyle.Ink, 11f, FontStyles.Bold,
                 TextAlignmentOptions.Center);
             chip.Control.Changed = _ => nextPaint = true;
             return chip;
@@ -446,7 +446,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             var go = new GameObject("Sheet" + index, typeof(RectTransform));
             sheet.Root = (RectTransform)go.transform;
             sheet.Root.SetParent(folderBody, false);
-            AvKit.Place(sheet.Root, at);
+            Chrome.Place(sheet.Root, at);
             float w = at.width, h = at.height;
             sheet.Hover = RoomControl.Create(sheet.Root, new Rect(0f, 0f, w, h), null, "SheetHover");
             sheet.Hover.Changed = c =>
@@ -455,14 +455,14 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 else if (hoverMission == index) hoverMission = -1;
                 nextPaint = true;
             };
-            sheet.Paper = AvKit.Panel(sheet.Root, new Rect(0f, 0f, w, h), DeskStyle.Map);
-            AvKit.Rule(sheet.Root, new Rect(3f, 0f, w - 3f, 1f), DeskStyle.Khaki.WithAlpha(0.6f));
-            AvKit.Rule(sheet.Root, new Rect(10f, -h + 1f, w - 20f, 1f), DeskStyle.Khaki.WithAlpha(0.45f));
-            sheet.MissionRail = AvKit.Rule(sheet.Root, new Rect(0f, 0f, 3f, h), AvTheme.RailInfo);
+            sheet.Paper = Chrome.Panel(sheet.Root, new Rect(0f, 0f, w, h), DeskStyle.Map);
+            Chrome.Rule(sheet.Root, new Rect(3f, 0f, w - 3f, 1f), DeskStyle.Khaki.WithAlpha(0.6f));
+            Chrome.Rule(sheet.Root, new Rect(10f, -h + 1f, w - 20f, 1f), DeskStyle.Khaki.WithAlpha(0.45f));
+            sheet.MissionRail = Chrome.Rule(sheet.Root, new Rect(0f, 0f, 3f, h), AvTheme.RailInfo);
             int symbol = mission == FieldMission.Recon ? OpsSprites.G.Spot
                 : mission == FieldMission.Sabotage ? OpsSprites.G.Suppress
                 : mission == FieldMission.Steal ? OpsSprites.G.SpecOps : OpsSprites.G.Fortify;
-            Image missionIcon = AvKit.Panel(sheet.Root, new Rect(12f, -7f, 22f, 22f), AvTheme.RailInfo,
+            Image missionIcon = Chrome.Panel(sheet.Root, new Rect(12f, -7f, 22f, 22f), AvTheme.RailInfo,
                 OpsSprites.Glyph(symbol));
             missionIcon.raycastTarget = false;
             sheet.Title = DeskStyle.Title(sheet.Root, "[" + (index + 1) + "] " + FieldWords.Mission(mission),
@@ -477,7 +477,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             Color[] odds = { AvTheme.RailReady, AvTheme.RailCaution, AvTheme.RailDanger };
             for (int i = 0; i < 3; i++)
             {
-                sheet.Odds[i] = AvKit.Panel(sheet.Root, new Rect(12f, -60f, 10f, 10f), odds[i]);
+                sheet.Odds[i] = Chrome.Panel(sheet.Root, new Rect(12f, -60f, 10f, 10f), odds[i]);
                 if (i == 1) { sheet.Odds[i].sprite = OpsSprites.Guard; sheet.Odds[i].type = Image.Type.Tiled; }
                 if (i == 2) { sheet.Odds[i].sprite = OpsSprites.Dash; sheet.Odds[i].type = Image.Type.Tiled; }
             }
@@ -486,12 +486,12 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             Color[] time = { AvTheme.RailInfo, AvTheme.RailCaution, AvTheme.RailDanger, AvTheme.RailReady };
             for (int i = 0; i < sheet.Time.Length; i++)
             {
-                sheet.Time[i] = AvKit.Panel(sheet.Root, new Rect(12f, -90f, 10f, 6f), time[i]);
+                sheet.Time[i] = Chrome.Panel(sheet.Root, new Rect(12f, -90f, 10f, 6f), time[i]);
                 if (i == 2) { sheet.Time[i].sprite = OpsSprites.Guard; sheet.Time[i].type = Image.Type.Tiled; }
             }
             sheet.TimeText = DeskStyle.Body(sheet.Root, new Rect(12f, -98f, barW, 14f), DeskStyle.TypewriterSmall, DeskStyle.Ink);
             sheet.Post = DeskStyle.Body(sheet.Root, new Rect(12f, -h + 17f, w - 24f, 14f), DeskStyle.TypewriterSmall, DeskStyle.Khaki);
-            sheet.Refusal = AvKit.Label(sheet.Root, "", new Rect(12f, -66f, barW, 48f), DeskStyle.Stamp, 12f, FontStyles.Bold,
+            sheet.Refusal = Chrome.Label(sheet.Root, "", new Rect(12f, -66f, barW, 48f), DeskStyle.Stamp, 12f, FontStyles.Bold,
                 TextAlignmentOptions.MidlineLeft, true);
             sheet.Refusal.characterSpacing = 2f;
             sheet.Launch = BuildStamp(sheet.Root, new Rect(w - 12f - 120f, -62f, 120f, 50f), () => Launch(mission), 14f);
@@ -501,7 +501,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             sheet.Launch.Text.fontSizeMin = 10f;
             sheet.Launch.Text.fontSizeMax = 14f;
             sheet.Launch.Text.enableWordWrapping = true;
-            sheet.DispatchedFrame = AvKit.Panel(sheet.Root, new Rect(0f, 0f, 220f, 44f), DeskStyle.Stamp, OpsSprites.Stamp);
+            sheet.DispatchedFrame = Chrome.Panel(sheet.Root, new Rect(0f, 0f, 220f, 44f), DeskStyle.Stamp, OpsSprites.Stamp);
             sheet.DispatchedFrame.rectTransform.pivot = new Vector2(0.5f, 0.5f);
             sheet.DispatchedFrame.rectTransform.anchoredPosition = new Vector2(w * 0.5f, -h * 0.5f);
             sheet.DispatchedFrame.rectTransform.localEulerAngles = Vector3.zero;
@@ -526,9 +526,9 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         {
             timelineGroup = Group(room, "OperationsStrip", at, out timelineFade);
             float w = at.width, h = at.height;
-            AvKit.Panel(timelineGroup, new Rect(0f, 0f, w, h), DeskStyle.Paper);
-            AvKit.Rule(timelineGroup, new Rect(0f, 0f, w, 2f), AvTheme.RailInfo);
-            AvKit.Rule(timelineGroup, new Rect(0f, 0f, 3f, h), AvTheme.RailInfo.WithAlpha(0.7f));
+            Chrome.Panel(timelineGroup, new Rect(0f, 0f, w, h), DeskStyle.Paper);
+            Chrome.Rule(timelineGroup, new Rect(0f, 0f, w, 2f), AvTheme.RailInfo);
+            Chrome.Rule(timelineGroup, new Rect(0f, 0f, 3f, h), AvTheme.RailInfo.WithAlpha(0.7f));
 
             float logX = w * 0.62f;
             DeskStyle.Title(timelineGroup, "OPERATIONS / NEXT 10 MIN", new Rect(16f, -4f, 340f, 18f), DeskStyle.StencilSmall,
@@ -546,19 +546,19 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                     Words = new TMP_Text[LaneSegments]
                 };
                 DeskStyle.Type(lane.Name, FieldWords.Callsign(t));
-                AvKit.Rule(timelineGroup, new Rect(laneX0, y - 15f, laneWidth, 1f), DeskStyle.Khaki.WithAlpha(0.4f));
+                Chrome.Rule(timelineGroup, new Rect(laneX0, y - 15f, laneWidth, 1f), DeskStyle.Khaki.WithAlpha(0.4f));
                 for (int s = 0; s < LaneSegments; s++)
                 {
-                    lane.Segments[s] = AvKit.Panel(timelineGroup, new Rect(laneX0, y - 1f, 10f, 13f), AvTheme.RailInfo);
-                    lane.Words[s] = AvKit.Label(timelineGroup, "", new Rect(laneX0, y - 1f, 10f, 13f), DeskStyle.Ink, 10f,
+                    lane.Segments[s] = Chrome.Panel(timelineGroup, new Rect(laneX0, y - 1f, 10f, 13f), AvTheme.RailInfo);
+                    lane.Words[s] = Chrome.Label(timelineGroup, "", new Rect(laneX0, y - 1f, 10f, 13f), DeskStyle.Ink, 10f,
                         FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
                     lane.Segments[s].enabled = false;
                 }
                 lanes[t] = lane;
             }
-            AvKit.Rule(timelineGroup, new Rect(laneX0, -22f, 2f, 70f), DeskStyle.Stamp);
+            Chrome.Rule(timelineGroup, new Rect(laneX0, -22f, 2f, 70f), DeskStyle.Stamp);
 
-            AvKit.Rule(timelineGroup, new Rect(logX - 12f, -8f, 1f, h - 16f), DeskStyle.Khaki.WithAlpha(0.5f));
+            Chrome.Rule(timelineGroup, new Rect(logX - 12f, -8f, 1f, h - 16f), DeskStyle.Khaki.WithAlpha(0.5f));
             DeskStyle.Title(timelineGroup, "HOST ACTIVITY", new Rect(logX, -4f, 200f, 18f), DeskStyle.StencilSmall, DeskStyle.Ink);
             for (int i = 0; i < LogLines; i++)
                 logLines[i] = DeskStyle.Body(timelineGroup, new Rect(logX, -24f - i * 16f, w - logX - 16f, 15f), DeskStyle.TypewriterSmall,
@@ -568,16 +568,16 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         private void BuildNote(RectTransform room, Rect at)
         {
             noteGroup = Group(room, "Note", at, out noteFade);
-            AvKit.Panel(noteGroup, new Rect(0f, 0f, at.width, at.height), DeskStyle.Paper);
+            Chrome.Panel(noteGroup, new Rect(0f, 0f, at.width, at.height), DeskStyle.Paper);
             float step = at.width / 3f;
-            AvKit.Rule(noteGroup, new Rect(0f, 0f, at.width, 1f), AvTheme.RailInfo);
-            AvKit.Rule(noteGroup, new Rect(step, -3f, 1f, 19f), DeskStyle.Khaki.WithAlpha(0.45f));
-            AvKit.Rule(noteGroup, new Rect(step * 2f, -3f, 1f, 19f), DeskStyle.Khaki.WithAlpha(0.45f));
+            Chrome.Rule(noteGroup, new Rect(0f, 0f, at.width, 1f), AvTheme.RailInfo);
+            Chrome.Rule(noteGroup, new Rect(step, -3f, 1f, 19f), DeskStyle.Khaki.WithAlpha(0.45f));
+            Chrome.Rule(noteGroup, new Rect(step * 2f, -3f, 1f, 19f), DeskStyle.Khaki.WithAlpha(0.45f));
             planObjective = PlanLabel(noteGroup, 4f, step - 8f);
             planTeam = PlanLabel(noteGroup, step + 5f, step - 10f);
             planMission = PlanLabel(noteGroup, step * 2f + 5f, step - 10f);
-            AvKit.Rule(noteGroup, new Rect(0f, -22f, at.width, 1f), DeskStyle.Khaki.WithAlpha(0.5f));
-            AvKit.Rule(noteGroup, new Rect(0f, -23f, 3f, at.height - 23f), AvTheme.RailInfo);
+            Chrome.Rule(noteGroup, new Rect(0f, -22f, at.width, 1f), DeskStyle.Khaki.WithAlpha(0.5f));
+            Chrome.Rule(noteGroup, new Rect(0f, -23f, 3f, at.height - 23f), AvTheme.RailInfo);
             note = DeskStyle.Body(noteGroup, new Rect(12f, -25f, at.width - 24f, 15f), DeskStyle.TypewriterSmall,
                 DeskStyle.Ink, TextAlignmentOptions.MidlineLeft);
         }
@@ -596,8 +596,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         {
             var at = new Rect(focus.x + focus.width * 0.5f - 280f, focus.y - focus.height * 0.5f + 70f, 560f, 140f);
             emptyNote = Group(room, "Empty", at, out _);
-            AvKit.Panel(emptyNote, new Rect(4f, -5f, at.width, at.height), DeskStyle.Ink.WithAlpha(0.3f));
-            AvKit.Panel(emptyNote, new Rect(0f, 0f, at.width, at.height), DeskStyle.Paper);
+            Chrome.Panel(emptyNote, new Rect(4f, -5f, at.width, at.height), DeskStyle.Ink.WithAlpha(0.3f));
+            Chrome.Panel(emptyNote, new Rect(0f, 0f, at.width, at.height), DeskStyle.Paper);
             emptyTitle = DeskStyle.Title(emptyNote, "", new Rect(20f, -16f, at.width - 40f, 26f), DeskStyle.Stencil, DeskStyle.Ink);
             emptyBody = DeskStyle.Body(emptyNote, new Rect(20f, -50f, at.width - 40f, 80f), DeskStyle.Typewriter, DeskStyle.Ink,
                 TextAlignmentOptions.TopLeft, true);
@@ -617,7 +617,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         public void Hide()
         {
             hoverMission = -1;
-            AvButton.ClearTooltip();
+            Chrome.ClearTooltip();
         }
 
         public void Entrance(float progress)

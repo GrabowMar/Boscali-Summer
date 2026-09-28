@@ -49,7 +49,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         public static TMP_Text Text(RectTransform parent, string text, Rect area, float size, Color color,
             float tracking = BodyTracking, TextAlignmentOptions align = TextAlignmentOptions.MidlineLeft, bool bold = false)
         {
-            TMP_Text label = AvKit.Label(parent, text, area, color, size,
+            TMP_Text label = Chrome.Label(parent, text, area, color, size,
                 (bold ? FontStyles.Bold : FontStyles.Normal) | FontStyles.UpperCase, align);
             label.characterSpacing = tracking;
             return label;

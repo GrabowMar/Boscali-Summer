@@ -59,7 +59,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         public static TMP_Text Title(RectTransform parent, string text, Rect area, float size, Color color,
             TextAlignmentOptions align = TextAlignmentOptions.MidlineLeft)
         {
-            TMP_Text label = AvKit.Label(parent, text, area, color, size, FontStyles.Bold | FontStyles.UpperCase, align);
+            TMP_Text label = Chrome.Label(parent, text, area, color, size, FontStyles.Bold | FontStyles.UpperCase, align);
             label.characterSpacing = StencilTracking;
             return label;
         }
@@ -68,7 +68,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         public static TMP_Text Body(RectTransform parent, Rect area, float size, Color color,
             TextAlignmentOptions align = TextAlignmentOptions.MidlineLeft, bool wrap = false)
         {
-            TMP_Text label = AvKit.Label(parent, "", area, color, size, FontStyles.Normal, align, wrap);
+            TMP_Text label = Chrome.Label(parent, "", area, color, size, FontStyles.Normal, align, wrap);
             label.richText = true;
             return label;
         }

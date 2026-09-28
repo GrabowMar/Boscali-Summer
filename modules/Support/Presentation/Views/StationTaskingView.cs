@@ -107,7 +107,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             sections[2] = new Rect(railX, bodyTop, railW, bodyH);
             sections[3] = new Rect(0f, footerTop, w, h - footerTop);
 
-            AvKit.Panel(room, new Rect(0f, 0f, w, h), StationStyle.Surface);
+            Chrome.Panel(room, new Rect(0f, 0f, w, h), StationStyle.Surface);
             contentFade = room.gameObject.GetComponent<CanvasGroup>();
             if (contentFade == null) contentFade = room.gameObject.AddComponent<CanvasGroup>();
             BuildHeader(room, w);
@@ -120,7 +120,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
 
         private void BuildHeader(RectTransform room, float w)
         {
-            AvKit.Rule(room, new Rect(22f, -79f, w - 44f, 1f), StationStyle.Line.WithAlpha(0.6f));
+            Chrome.Rule(room, new Rect(22f, -79f, w - 44f, 1f), StationStyle.Line.WithAlpha(0.6f));
             StationStyle.Text(room, "BASTION / TASKING", new Rect(24f, -12f, w * 0.45f, 34f), 26f,
                 StationStyle.Ink, 4f, bold: true);
             subtitle = StationStyle.Text(room, "", new Rect(26f, -49f, w * 0.56f, 18f), 11f, StationStyle.Dim, 2f);
@@ -132,7 +132,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
 
         private void BuildMap(RectTransform room, Rect map)
         {
-            AvKit.Panel(room, new Rect(map.x, -map.y, map.width, map.height), StationStyle.Console);
+            Chrome.Panel(room, new Rect(map.x, -map.y, map.width, map.height), StationStyle.Console);
             board = new BoardSurface(room, new Rect(map.x, -map.y, map.width, map.height),
                 new Rect(map.x + 28f, -map.y - 28f, map.width - 56f, map.height - 56f), true, true);
             board.Clicked = (at, button) =>
@@ -155,14 +155,14 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             var layerObject = new GameObject("TaskMapPieces", typeof(RectTransform));
             mapLayer = (RectTransform)layerObject.transform;
             mapLayer.SetParent(board.InputLayer, false);
-            AvKit.Place(mapLayer, new Rect(-map.x, map.y, map.x + map.width, map.height + map.y));
+            Chrome.Place(mapLayer, new Rect(-map.x, map.y, map.x + map.width, map.height + map.y));
             terrain = new BoardTerrain(mapLayer, board);
             terrain.SetTint(Color.white.WithAlpha(0.70f));
-            Image veil = AvKit.Panel(mapLayer, new Rect(map.x, -map.y, map.width, map.height),
+            Image veil = Chrome.Panel(mapLayer, new Rect(map.x, -map.y, map.width, map.height),
                 StationStyle.Surface.WithAlpha(0.22f));
             veil.raycastTarget = false;
             coverageRing = new RingLine(mapLayer, 64, StationStyle.Limb.WithAlpha(0.8f), true);
-            stationDot = AvKit.Panel(mapLayer, new Rect(0f, 0f, 14f, 14f),
+            stationDot = Chrome.Panel(mapLayer, new Rect(0f, 0f, 14f, 14f),
                 AvTheme.RailReady, OpsSprites.Dot);
             stationDot.type = Image.Type.Simple;
             stationDot.enabled = false;
@@ -174,7 +174,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                     () => { destination = sector; dirty = true; }, "Select " + StationKeeping.Name(i) + " as the station destination.");
             }
             stationDot.rectTransform.SetAsLastSibling();
-            AvKit.Panel(room, new Rect(map.x + 8f, -map.y - 8f, Mathf.Min(map.width - 16f, 300f), 27f),
+            Chrome.Panel(room, new Rect(map.x + 8f, -map.y - 8f, Mathf.Min(map.width - 16f, 300f), 27f),
                 StationStyle.Console.WithAlpha(0.92f));
             mapStatus = StationStyle.Text(room, "THEATRE / STATION SECTORS", new Rect(map.x + 17f, -map.y - 13f,
                 Mathf.Min(map.width - 34f, 284f), 17f), 11f, StationStyle.Ink, 2f);
@@ -183,7 +183,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 "Fit station sectors and any live target solution into the map.");
             mapFooter = StationStyle.Text(room, "", new Rect(map.x + 16f, -map.y - map.height + 27f,
                 map.width - 32f, 18f), 11f, StationStyle.Ink, 1f);
-            AvKit.Outline(room, new Rect(map.x, -map.y, map.width, map.height), StationStyle.ConsoleEdge);
+            Chrome.Outline(room, new Rect(map.x, -map.y, map.width, map.height), StationStyle.ConsoleEdge);
         }
 
         private void BuildRail(RectTransform room, float x, float top, float w, float h)
@@ -193,8 +193,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             bool compact = h < 568f;
             float focusStep = compact ? 50f : 54f;
             float focusHeight = compact ? 48f : 50f;
-            AvKit.Panel(room, new Rect(x, -top, w, h), StationStyle.Console.WithAlpha(0.94f));
-            AvKit.Outline(room, new Rect(x, -top, w, h), StationStyle.ConsoleEdge);
+            Chrome.Panel(room, new Rect(x, -top, w, h), StationStyle.Console.WithAlpha(0.94f));
+            Chrome.Outline(room, new Rect(x, -top, w, h), StationStyle.ConsoleEdge);
             StationStyle.Text(room, "POWER ROUTING / FACTION SHARED", new Rect(x + 15f, -top - 11f, w - 30f, 17f),
                 12f, StationStyle.Limb, 2f);
             float focusTop = top + 34f;
@@ -206,8 +206,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                     FocusNames[i] + " changes the shared station focus after a 12 second retask.");
             }
             float solutionTop = focusTop + (compact ? 157f : 169f);
-            AvKit.Panel(room, new Rect(x + 14f, -solutionTop, w - 28f, 80f), StationStyle.Surface);
-            AvKit.Rule(room, new Rect(x + 14f, -solutionTop, 3f, 80f), StationStyle.Limb);
+            Chrome.Panel(room, new Rect(x + 14f, -solutionTop, w - 28f, 80f), StationStyle.Surface);
+            Chrome.Rule(room, new Rect(x + 14f, -solutionTop, 3f, 80f), StationStyle.Limb);
             solutionTitle = StationStyle.Text(room, "", new Rect(x + 27f, -solutionTop - 9f, w - 54f, 18f),
                 13f, StationStyle.Ink, 2f);
             solutionDetail = StationStyle.Text(room, "", new Rect(x + 27f, -solutionTop - 35f, w - 54f, 42f),
@@ -225,8 +225,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 actions[i] = MakeButton(room, new Rect(x + 14f + col * (cellW + 7f), -actionTop - 22f - row * 48f,
                         cellW, 47f), ActionNames[i], "", () => Arm(action),
                     ActionNames[i] + " — leave this room and right-click a point on the game map.");
-                AvKit.Place(actions[i].Title.rectTransform, new Rect(11f, -2f, cellW - 20f, 18f));
-                AvKit.Place(actions[i].Detail.rectTransform, new Rect(11f, -20f, cellW - 20f, 25f));
+                Chrome.Place(actions[i].Title.rectTransform, new Rect(11f, -2f, cellW - 20f, 18f));
+                Chrome.Place(actions[i].Detail.rectTransform, new Rect(11f, -20f, cellW - 20f, 25f));
                 actions[i].Detail.enableWordWrapping = true;
             }
             float bottomTop = top + h - 85f;
@@ -234,8 +234,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             if (bottomTop - noteTop > 82f)
             {
                 float noteH = bottomTop - noteTop - 10f;
-                AvKit.Panel(room, new Rect(x + 14f, -noteTop, w - 28f, noteH), StationStyle.Surface.WithAlpha(0.75f));
-                AvKit.Rule(room, new Rect(x + 14f, -noteTop, 3f, noteH), StationStyle.Line.WithAlpha(0.75f));
+                Chrome.Panel(room, new Rect(x + 14f, -noteTop, w - 28f, noteH), StationStyle.Surface.WithAlpha(0.75f));
+                Chrome.Rule(room, new Rect(x + 14f, -noteTop, 3f, noteH), StationStyle.Line.WithAlpha(0.75f));
                 StationStyle.Text(room, "TACTICAL CYCLE", new Rect(x + 27f, -noteTop - 10f, w - 54f, 18f),
                     11f, StationStyle.Limb, 2f);
                 guidance = StationStyle.Text(room, "", new Rect(x + 27f, -noteTop - 37f, w - 54f, noteH - 49f),
@@ -250,7 +250,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
 
         private void BuildFooter(RectTransform room, float w, float top)
         {
-            AvKit.Rule(room, new Rect(22f, -top, w - 44f, 1f), StationStyle.Line.WithAlpha(0.6f));
+            Chrome.Rule(room, new Rect(22f, -top, w - 44f, 1f), StationStyle.Line.WithAlpha(0.6f));
             sensor = MakeButton(room, new Rect(22f, -top - 13f, 190f, 43f), "SENSOR FEED", "SAR / OPTIONAL EO",
                 () => openImager?.Invoke(null), "Open the steerable satellite sensor feed.");
             engineering = MakeButton(room, new Rect(220f, -top - 13f, 194f, 43f), "ENGINEERING", "BUILD / RESUPPLY",
@@ -265,8 +265,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         {
             var button = new TaskButton { Control = RoomControl.Create(parent, at, click, "TaskButton") };
             RectTransform host = button.Control.Rect;
-            button.Fill = AvKit.Panel(host, new Rect(0f, 0f, at.width, at.height), StationStyle.Surface);
-            button.Rail = AvKit.Rule(host, new Rect(0f, 0f, 3f, at.height), StationStyle.Line);
+            button.Fill = Chrome.Panel(host, new Rect(0f, 0f, at.width, at.height), StationStyle.Surface);
+            button.Rail = Chrome.Rule(host, new Rect(0f, 0f, 3f, at.height), StationStyle.Line);
             button.Title = StationStyle.Text(host, title, new Rect(11f, -4f, at.width - 20f, 22f), 13f,
                 StationStyle.Ink, 1f, TextAlignmentOptions.MidlineLeft, true);
             button.Detail = StationStyle.Text(host, detail, new Rect(11f, -27f, at.width - 20f, at.height - 28f),
@@ -296,7 +296,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             dirty = true;
         }
 
-        public void Hide() => AvButton.ClearTooltip();
+        public void Hide() => Chrome.ClearTooltip();
         public void Entrance(float progress) { if (contentFade != null) contentFade.alpha = Mathf.Clamp01(progress); }
 
         public void Refresh(double now, float time, bool textTick)
@@ -355,7 +355,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             if (exists && coverage > 0f) coverageRing.Set(stationAt, board.Pixels(coverage), 2f,
                 StationStyle.Limb.WithAlpha(0.8f));
             else coverageRing.Hide();
-            if (stationDot.enabled) AvKit.Place(stationDot.rectTransform,
+            if (stationDot.enabled) Chrome.Place(stationDot.rectTransform,
                 new Rect(stationAt.x - 7f, stationAt.y + 7f, 14f, 14f));
             Set(mapStatus, (terrain.Available ? "LIVE THEATRE" : "SECTOR GRID") + " / REACH " +
                 Mathf.RoundToInt(coverage / 1000f) + " KM");
@@ -365,7 +365,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             for (int i = 0; i < sectors.Length; i++)
             {
                 Vector2 at = board.Project(sectorX[i], sectorZ[i]);
-                AvKit.Place(sectors[i].Control.Rect, new Rect(at.x - 48f, at.y + 21f, 96f, 42f));
+                Chrome.Place(sectors[i].Control.Rect, new Rect(at.x - 48f, at.y + 21f, 96f, 42f));
                 sectors[i].Control.SetEnabled(exists);
                 Set(sectors[i].Title, SectorCodes[i] + (i == current ? "  ◉" : ""));
                 Set(sectors[i].Detail, i == current && moving ? "TRANSIT" : i == destination ? "SELECTED" :

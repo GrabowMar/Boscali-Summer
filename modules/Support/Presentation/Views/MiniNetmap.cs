@@ -38,11 +38,11 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         {
             onNode = clickNode;
             OpsSprites.Ensure();
-            AvKit.Panel(parent, view, AvTheme.Ground);
-            Image lattice = AvKit.Panel(parent, view, AvTheme.RailInfo.WithAlpha(0.09f), OpsSprites.Lattice);
+            Chrome.Panel(parent, view, AvTheme.Ground);
+            Image lattice = Chrome.Panel(parent, view, AvTheme.RailInfo.WithAlpha(0.09f), OpsSprites.Lattice);
             lattice.type = Image.Type.Tiled;
             lattice.raycastTarget = false;
-            AvKit.Outline(parent, view, AvTheme.Hairline);
+            Chrome.Outline(parent, view, AvTheme.Hairline);
             var map = new Rect(view.x, view.y, view.width, view.height - 18f);
             board = new BoardSurface(parent, map, map, true, true);
             board.Clicked = (local, button) =>
@@ -53,7 +53,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             var go = new GameObject("MiniWire", typeof(RectTransform));
             layer = (RectTransform)go.transform;
             layer.SetParent(board.InputLayer, false);
-            AvKit.Place(layer, new Rect(-map.x, -map.y, map.x + map.width, map.height - map.y));
+            Chrome.Place(layer, new Rect(-map.x, -map.y, map.x + map.width, map.height - map.y));
             for (int i = 0; i < Slots; i++)
             {
                 links[i] = Lines.Make(layer, AvTheme.Hairline);
@@ -61,30 +61,30 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             }
             for (int i = 0; i < Slots; i++)
             {
-                rings[i] = AvKit.Panel(layer, new Rect(0f, 0f, 22f, 22f), AvTheme.RailInfo, OpsSprites.DottedRing);
+                rings[i] = Chrome.Panel(layer, new Rect(0f, 0f, 22f, 22f), AvTheme.RailInfo, OpsSprites.DottedRing);
                 rings[i].type = Image.Type.Simple;
                 rings[i].enabled = false;
-                hexes[i] = AvKit.Panel(layer, new Rect(0f, 0f, Hex, Hex), AvTheme.Dim, OpsSprites.HexFill);
+                hexes[i] = Chrome.Panel(layer, new Rect(0f, 0f, Hex, Hex), AvTheme.Dim, OpsSprites.HexFill);
                 hexes[i].type = Image.Type.Simple;
                 hexes[i].enabled = false;
             }
-            selection = AvKit.Panel(layer, new Rect(0f, 0f, 24f, 24f), AvTheme.TextPrimary, OpsSprites.HexLine);
+            selection = Chrome.Panel(layer, new Rect(0f, 0f, 24f, 24f), AvTheme.TextPrimary, OpsSprites.HexLine);
             selection.type = Image.Type.Simple;
             selection.enabled = false;
             for (int i = 0; i < Incidents; i++)
             {
-                threats[i] = AvKit.Panel(layer, new Rect(0f, 0f, 12f, 12f), AvTheme.RailDanger);
+                threats[i] = Chrome.Panel(layer, new Rect(0f, 0f, 12f, 12f), AvTheme.RailDanger);
                 threats[i].sprite = OpsSprites.Glyph(OpsSprites.G.Alert);
                 threats[i].enabled = false;
             }
-            AvKit.Label(parent, "CLICK A NODE TO OPEN IT IN THE CONSOLE", new Rect(view.x + 6f, view.y - view.height + 17f,
+            Chrome.Label(parent, "CLICK A NODE TO OPEN IT IN THE CONSOLE", new Rect(view.x + 6f, view.y - view.height + 17f,
                 view.width - 12f, 16f), AvTheme.Dim, AvTokens.FontMicro, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
-            Image osd = AvKit.Panel(parent, new Rect(view.x + 1f, view.y - 1f, view.width - 2f, 16f),
+            Image osd = Chrome.Panel(parent, new Rect(view.x + 1f, view.y - 1f, view.width - 2f, 16f),
                 AvTheme.SurfaceInert.WithAlpha(0.88f));
             osd.raycastTarget = false;
-            AvKit.Label(parent, "AEGIS NET / NODE MESH", new Rect(view.x + 8f, view.y - 3f,
+            Chrome.Label(parent, "AEGIS NET / NODE MESH", new Rect(view.x + 8f, view.y - 3f,
                 view.width - 16f, 14f), AvTheme.RailInfo, AvTokens.FontMicro, FontStyles.Bold);
-            empty = AvKit.Label(parent, "", new Rect(view.x + 8f, view.y - (view.height - 18f) * 0.5f + 8f, view.width - 16f, 16f),
+            empty = Chrome.Label(parent, "", new Rect(view.x + 8f, view.y - (view.height - 18f) * 0.5f + 8f, view.width - 16f, 16f),
                 AvTheme.Dim, AvTokens.FontSmall, FontStyles.Bold, TextAlignmentOptions.Center);
         }
 
