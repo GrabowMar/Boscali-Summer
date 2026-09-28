@@ -73,6 +73,7 @@ namespace BoscaliSummer.Tests.Architecture
         {
             "modules/Command/Presentation", "modules/Support/Presentation", "modules/Comms/Presentation",
             "modules/Radio/Presentation", "modules/Events/Presentation", "modules/Weather/Presentation",
+            "modules/Progression/Presentation",
         };
 
         /// <summary>Data-visualisation files inside migrated folders that legitimately draw raw colours.</summary>
@@ -86,6 +87,7 @@ namespace BoscaliSummer.Tests.Architecture
             "modules/Command/Presentation/MapUi/MfdRailPatch.cs",       // map-ground tint
             "modules/Command/Presentation/MapUi/MfdChromeLay.cs",       // restores a captured vanilla TMP size
             "modules/Events/Presentation/EventAircraftPreview.cs",      // 3D preview camera background + light
+            "modules/Progression/Presentation/PlaneNativeDamageView.cs", // native damage-state tint (data)
         };
 
         private static readonly Regex KitReachesMod = new Regex(
