@@ -116,11 +116,11 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
                 page.Section(AvIcon.Target, "ENGAGEMENT MODE", "SELECT ONE");
                 modes = new MfdPagingGrid(page.Content, 2, 3, pager: false);
-                page.Add(modes);
+                AddGrid(page, modes);
 
                 page.Section(AvIcon.Filter, "PRIORITY GATES", "MAXIMISE TRACKS");
                 categories = new MfdPagingGrid(page.Content, 2, 3, pager: false);
-                page.Add(categories);
+                AddGrid(page, categories);
             }
 
             // ------------------------------------------------------------- vehicles page
@@ -129,7 +129,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             {
                 page.Section(AvIcon.Filter, "VEHICLE PRIORITY", "FILTER MATRIX · MULTI-SELECT");
                 vehicles = new MfdPagingGrid(page.Content, 2, 5, pager: false);
-                page.Add(vehicles);
+                AddGrid(page, vehicles);
 
                 AvButtons row = page.Buttons(
                     new AvControl.Spec("ALL ON", () => SetAllVehicles(true)),
@@ -138,6 +138,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     new AvControl.Spec("CLEAR", () => SetAllVehicles(false)));
                 vehAll = row.Controls[0];
                 vehClear = row.Controls[3];
+                vehAll.Help = "Highlight all 10 vehicle types on HUD.";
+                row.Controls[1].Help = "Filter for air defense threats only: AAA, IR SAM, R SAM, RDR.";
+                row.Controls[2].Help = "Filter for armored targets: MBT, AFV, LCV.";
+                vehClear.Help = "Deselect all vehicle priority filters.";
 
                 page.Section(AvIcon.Target, "SURFACE THREAT SUMMARY", null);
                 airDefRow = page.Add(new AvRow(page.Content));
@@ -150,7 +154,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             {
                 page.Section(AvIcon.BuildingBank, "BUILDING PRIORITY", "FILTER MATRIX · MULTI-SELECT");
                 buildings = new MfdPagingGrid(page.Content, 2, 4, pager: false);
-                page.Add(buildings);
+                AddGrid(page, buildings);
 
                 AvButtons row = page.Buttons(
                     new AvControl.Spec("ALL ON", () => SetAllBuildings(true)),
@@ -159,6 +163,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     new AvControl.Spec("CLEAR", () => SetAllBuildings(false)));
                 bldAll = row.Controls[0];
                 bldClear = row.Controls[3];
+                bldAll.Help = "Highlight all 7 building types on HUD.";
+                row.Controls[1].Help = "Filter for strategic strike targets: RDR, DEP, HGR, AMMO.";
+                row.Controls[2].Help = "Prioritise all military installations; exclude civilian.";
+                bldClear.Help = "Deselect all building priority filters.";
 
                 page.Section(AvIcon.Target, "STRUCTURE TARGET SUMMARY", null);
                 strikeRow = page.Add(new AvRow(page.Content));

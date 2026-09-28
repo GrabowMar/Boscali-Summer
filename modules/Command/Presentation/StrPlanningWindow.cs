@@ -106,7 +106,8 @@ namespace BoscaliSummer.Features.Command.Presentation
 
             body.Section(AvIcon.Flag, "PRIMARY OPERATION", "STAFF DIRECTED");
             operationRow = body.Add(new AvRow(body.Content));
-            body.Buttons(new AvControl.Spec("CALL OFF / REPLAN", CancelOperation, AvButtonStyle.Danger, AvIcon.X));
+            body.Buttons(new AvControl.Spec("CALL OFF / REPLAN", CancelOperation, AvButtonStyle.Danger, AvIcon.X))
+                .Controls[0].Help = "Call off this operation and request fresh staff choices.";
 
             body.Section(AvIcon.ListDetails, "STAFF PROPOSALS", "CHOOSE OR STAFF DECIDES");
             proposals = body.Add(new AvRowStack(body.Content, MaxProposals, Pick));
@@ -118,6 +119,8 @@ namespace BoscaliSummer.Features.Command.Presentation
             postureControl = body.Add(new AvSegmented(body.Content, "POSTURE",
                 new[] { "CAUTIOUS", "STEADY", "BOLD" }, () => (int)selectedPosture, i => SetPosture((TheaterWarPosture)i)));
 
+            AvControl closeButton = window.Root.GetComponentInChildren<AvControl>(true);
+            if (closeButton != null) closeButton.Help = "Close operations room (Esc).";
             window.Footer.Set("Staff log · awaiting report.");
         }
 
@@ -147,6 +150,7 @@ namespace BoscaliSummer.Features.Command.Presentation
                     proposal.Brief + "  ·  " + proposal.Forces + "  ·  RISK " + proposal.Risk,
                     Mathf.CeilToInt(Mathf.Max(0f, proposal.SecondsRemaining)) + "S", AvState.Ready);
                 row.Interactable = war.CanCommand;
+                row.Help = "Choose this staff proposal; the host validates the current offer.";
             }
 
             TheaterLiveOperationView active = ready ? war.ActiveOperation : null;

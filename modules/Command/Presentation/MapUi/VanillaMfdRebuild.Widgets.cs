@@ -62,6 +62,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 Refresh();
             }
 
+            /// <summary>The <paramref name="index"/>th choice button (for hover help).</summary>
+            public AvControl this[int index] => controls[index];
+
             public void Refresh()
             {
                 int selected = get();
@@ -91,6 +94,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private AvFx fx;
 
             public Action OnRightClick;
+
+            /// <summary>Hover help shown in the console footer (null/empty clears it).</summary>
+            public string Help { set => AvHelpTip.Attach(frame.gameObject, value); }
 
             public static MfdIconCell Toggle(RectTransform parent, Func<bool> get, Action<bool> set,
                 string onWord = "ON", string offWord = "OFF")

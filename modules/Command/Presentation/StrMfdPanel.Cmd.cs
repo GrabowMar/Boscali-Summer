@@ -48,6 +48,8 @@ namespace BoscaliSummer.Features.Command.Presentation
                 new AvControl.Spec("REPLAN", CancelCmdOperation, AvButtonStyle.Danger, AvIcon.X));
             openRoomButton = ops.Controls[0];
             replanButton = ops.Controls[1];
+            openRoomButton.Help = "Open the operations room and live theater map.";
+            replanButton.Help = "Call off this operation and ask staff for new choices.";
 
             proposalSection = p.Section(AvIcon.ListDetails, "STAFF PROPOSALS", "CHOOSE OR STAFF DECIDES");
             proposals = p.Add(new AvRowStack(p.Content, ProposalSlots, PickCmdProposal));
@@ -106,6 +108,7 @@ namespace BoscaliSummer.Features.Command.Presentation
                     proposal.Brief + "  ·  " + proposal.Forces + "  ·  RISK " + proposal.Risk,
                     Mathf.CeilToInt(Mathf.Max(0f, proposal.SecondsRemaining)) + "S", AvState.Ready);
                 row.Interactable = war.CanCommand;
+                row.Help = "Choose this staff proposal; the host validates the current offer.";
             }
 
             IReadOnlyList<TheaterFrontView> frontList = ready ? war.Fronts : null;

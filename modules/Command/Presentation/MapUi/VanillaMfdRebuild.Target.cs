@@ -164,6 +164,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
                 int tracked = SelectedCount();
                 clearTargets.Interactable = tracked > 0;
+                clearTargets.Help = tracked > 0
+                    ? "Drop every tracked contact from the target list."
+                    : "No tracked contacts to clear.";
 
                 followHud.Label = selector.toggleFollowHUD.status ? "HUD ON" : "HUD OFF";
                 followHud.Latched = selector.toggleFollowHUD.status;
@@ -242,17 +245,20 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 clearTargets = actionRow.Controls[1];
                 followHud = actionRow.Controls[2];
                 laser = actionRow.Controls[3];
+                resetFilters.Help = "Restore the ALL profile: every faction and unit class, laser off.";
+                followHud.Help = "Follow the HUD: the target list tracks whatever the HUD is following.";
+                laser.Help = "Laser only: the target list keeps lased targets.";
 
                 page.Section(AvIcon.Shield, "FACTION", "FRIEND / FOE");
-                factionGrid = page.Add(new MfdPagingGrid(page.Content, 2, 1, pager: false, rowHeight: 44f));
+                factionGrid = AddGrid(page, new MfdPagingGrid(page.Content, 2, 1, pager: false, rowHeight: 44f));
                 AddRightClickActions(factionGrid, 2, OnlyFaction);
 
                 page.Section(AvIcon.LayersSubtract, "UNIT CLASS", "AIR / LAND / SEA");
-                unitGrid = page.Add(new MfdPagingGrid(page.Content, 2, 3, pager: false, rowHeight: 44f));
+                unitGrid = AddGrid(page, new MfdPagingGrid(page.Content, 2, 3, pager: false, rowHeight: 44f));
                 AddRightClickActions(unitGrid, 6, OnlyUnitType);
 
                 page.Section(AvIcon.Stack2, "PLATFORM TYPE", "TYPE MASK");
-                vehicleGrid = page.Add(new MfdPagingGrid(page.Content, 2, 5, pager: false, rowHeight: 44f));
+                vehicleGrid = AddGrid(page, new MfdPagingGrid(page.Content, 2, 5, pager: false, rowHeight: 44f));
                 AddRightClickActions(vehicleGrid, 10, OnlyVehicleType);
             }
 
@@ -277,9 +283,13 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     new AvControl.Spec("RANGE ALL", () => ToggleAcquirePreference(3), AvButtonStyle.Toggle));
                 airPreference = prefRow2.Controls[0];
                 rangePreference = prefRow2.Controls[1];
+                missilePreference.Help = "Include tracked missiles in this browser. Native TGT filters remain independent.";
+                weaponPreference.Help = "Only list contacts the selected weapon can engage.";
+                airPreference.Help = "Only list aircraft. Press again to show all allowed classes.";
+                rangePreference.Help = "Cycle maximum distance: all, 10, 25, 50 and 100 km.";
 
                 contactsSection = page.Section(AvIcon.Eye, "CONTACTS", "0 KNOWN");
-                candidateGrid = page.Add(new MfdPagingGrid(page.Content, 1, 5, rowHeight: 42f));
+                candidateGrid = AddGrid(page, new MfdPagingGrid(page.Content, 1, 5, rowHeight: 42f));
                 candidateGrid.SetEmptyMessage("NO CONTACTS MATCH THESE PREFERENCES");
                 AvButtons candidateRow = page.Buttons(
                     new AvControl.Spec("NEXT", NextCandidate),
@@ -288,6 +298,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 nextCandidate = candidateRow.Controls[0];
                 incomingCandidate = candidateRow.Controls[1];
                 designateCandidate = candidateRow.Controls[2];
+                nextCandidate.Help = "Preview the next known contact without selecting it.";
+                incomingCandidate.Help = "Highlight the nearest tracked missile targeting your aircraft. Does not select it.";
+                designateCandidate.Help = "Add the previewed contact to the native target list.";
             }
 
             private void ToggleAcquirePreference(int which)
@@ -446,11 +459,11 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     KeyLabel(TargetPresetRuntime.Key(2)),
                 };
                 page.Section(AvIcon.Star, "QUICK SWITCH", "RADIAL · " + string.Join(" ", keys));
-                quickGrid = page.Add(new MfdPagingGrid(page.Content, 1, 3, pager: false, rowHeight: 44f));
+                quickGrid = AddGrid(page, new MfdPagingGrid(page.Content, 1, 3, pager: false, rowHeight: 44f));
                 AddSlotActions();
 
                 presetSection = page.Section(AvIcon.Bookmark, "PRESET LIBRARY", SavedNote());
-                presetGrid = page.Add(new MfdPagingGrid(page.Content, 2, 4, rowHeight: 42f));
+                presetGrid = AddGrid(page, new MfdPagingGrid(page.Content, 2, 4, rowHeight: 42f));
                 AddPresetActions();
 
                 presetReadout = page.Add(new AvReadout(page.Content));
@@ -623,6 +636,14 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     slot => TargetPresetRuntime.QuickSlotName(slot).Length > 0 &&
                             TargetPresetRuntime.QuickSlotName(slot) == activePreset,
                     ApplyQuickSlot,
+                    details: slot =>
+                    {
+                        string name = TargetPresetRuntime.QuickSlotName(slot);
+                        return name.Length == 0
+                            ? "Quick slot " + (slot + 1) + " is empty. Right-click a preset below to assign it."
+                            : "Apply " + name + " (quick slot " + (slot + 1) + ", key " +
+                              KeyLabel(TargetPresetRuntime.Key(slot)) + "). Right-click to clear.";
+                    },
                     subs: slot => "SLOT " + (slot + 1) + " · " + KeyLabel(TargetPresetRuntime.Key(slot)));
             }
 
@@ -640,7 +661,17 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     LibraryLabel,
                     index => catalog[index] != null && catalog[index].Name == activePreset,
                     ApplyCatalog,
-                    icons: index => null);
+                    icons: index => null,
+                    details: index =>
+                    {
+                        TargetPresetSnapshot preset = catalog[index];
+                        if (preset == null) return null;
+                        return preset.Name + PresetSlotBadge(preset.Name) + " — " +
+                            (TargetPresetRuntime.IsBuiltIn(index)
+                                ? MfdTargetPresets.Descriptions[index]
+                                : TargetPresetRules.Summary(preset)) +
+                            "  ·  Left click applies, right click assigns a quick slot.";
+                    });
             }
 
             private string LibraryLabel(int index)
@@ -897,10 +928,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             {
                 selectedSection = page.Section(AvIcon.Target, "SELECTED TARGETS", "0 TRACKED");
 
-                groupGrid = page.Add(new MfdPagingGrid(page.Content, 3, 1, pager: false, rowHeight: 44f));
+                groupGrid = AddGrid(page, new MfdPagingGrid(page.Content, 3, 1, pager: false, rowHeight: 44f));
                 AddGroupActions();
 
-                selectedGrid = page.Add(new MfdPagingGrid(page.Content, 1, SelectedVisible, readOnly: true, rowHeight: 48f));
+                selectedGrid = AddGrid(page, new MfdPagingGrid(page.Content, 1, SelectedVisible, readOnly: true, rowHeight: 48f));
                 selectedGrid.SetEmptyMessage("NO TARGETS TRACKED\nDESIGNATE CONTACTS ON MAP OR ENGAGE HUD LINK");
                 AddRightClickActions(selectedGrid, SelectedVisible, DeselectSelected);
             }
@@ -985,6 +1016,11 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     if (cameraCapture != null) cameraCapture.Interactable = false;
                     if (cameraCall != null) cameraCall.Interactable = false;
                     if (cameraClear != null) cameraClear.Interactable = false;
+                    const string cameraOffline =
+                        "Camera marking is unavailable: the support module or its observation source is not installed.";
+                    if (cameraCapture != null) cameraCapture.Help = cameraOffline;
+                    if (cameraCall != null) cameraCall.Help = cameraOffline;
+                    if (cameraClear != null) cameraClear.Help = cameraOffline;
                     SetCameraTelemetry("—", "—", "—", "—", "—");
                     cameraReticleRow?.Set("SENSOR ALIGNMENT", "SENSOR INTERFACE OFFLINE", "", AvState.Inert);
                     return;
@@ -1021,6 +1057,15 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     cameraCall.Label = armed ? "CALL AT MARK" : "SELECT IN OPS";
                 }
                 if (cameraClear != null) cameraClear.Interactable = marked;
+                if (cameraCapture != null)
+                    cameraCapture.Help = service.CanCapture
+                        ? "Record the surface point under the native camera."
+                        : "Requires an active native camera view on your aircraft.";
+                if (cameraCall != null)
+                    cameraCall.Help = !marked ? "Capture a mark first."
+                        : !armed ? "Arm an operation on OPS / SUPPORT first."
+                        : "Deliver the armed operation onto this mark.";
+                if (cameraClear != null) cameraClear.Help = marked ? "Clear the active mark." : "No mark to clear.";
             }
 
             private void SetCameraTelemetry(string position, string elevation, string range, string age, string armed)
@@ -1105,6 +1150,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     i => "GROUP " + (i + 1),
                     i => targetGroups[i].Count > 0,
                     RecallGroup,
+                    details: i => "Left click recalls this mission group. Right click stores up to 32 selected targets.",
                     subs: i => targetGroups[i].Count + " STORED");
             }
 
@@ -1150,6 +1196,11 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     editorMode = EditMode.None;
                     editorPart?.Hide();
                     confirmDelete = null;
+                    const string waiting = "Waiting for target filters.";
+                    if (clearTargets != null) clearTargets.Help = waiting;
+                    if (updatePreset != null) updatePreset.Help = waiting;
+                    if (renamePreset != null) renamePreset.Help = waiting;
+                    if (deletePreset != null) deletePreset.Help = waiting;
                 }
                 else
                 {
@@ -1159,6 +1210,14 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     if (updatePreset != null) updatePreset.Interactable = custom;
                     if (renamePreset != null) renamePreset.Interactable = custom;
                     if (deletePreset != null) deletePreset.Interactable = custom;
+                    const string selectFirst = "Select a saved preset first.";
+                    if (updatePreset != null)
+                        updatePreset.Help = custom ? "Overwrite the selected saved preset with the current filters." : selectFirst;
+                    if (renamePreset != null)
+                        renamePreset.Help = custom ? "Rename the selected saved preset." : selectFirst;
+                    if (deletePreset != null)
+                        deletePreset.Help = custom
+                            ? "Delete the selected saved preset. Deletion asks for a second press." : selectFirst;
                 }
             }
 

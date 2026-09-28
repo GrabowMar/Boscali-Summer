@@ -178,9 +178,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             rect.anchorMax = source.anchorMax;
             rect.pivot = source.pivot;
             rect.localScale = source.localScale;
-            float height = ResolvePanelHeight(source.parent as RectTransform, AvTokens.PanelHeight, AvTokens.PanelHeightMax);
+            float height = AvLay.ResolveHeight(source.parent as RectTransform, AvTokens.PanelHeight, AvTokens.PanelHeightMax);
             rect.sizeDelta = new Vector2(AvTokens.PanelWidth, height);
-            ClampPanelIntoCanvas(rect);
+            AvLay.ClampIntoCanvas(rect);
 
             // The dock naming convention ("Content" marks a mod-built panel, vs. a stock
             // screen's "DisplayPanel") predates kit v2 and is enforced elsewhere
@@ -200,7 +200,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             roleChip = chips[1];
             savedChip.Set("SAVED", AvState.Ready);
 
-            con.Tabs(
+            AvTabBar tabBar = con.Tabs(
                 (AvIcon.Map2, "MAP"),
                 (AvIcon.Typography, "DISPLAY"),
                 (AvIcon.Stack2, "BACKDROP"),
@@ -210,6 +210,18 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 (AvIcon.ListDetails, "TASKING"),
                 (AvIcon.Settings, "HOST"),
                 (AvIcon.CloudRain, "EFFECTS"));
+            // Hover help per tab (the v1 sub-tab hints; CAMERA had none that still matches).
+            ApplyTabHelp(tabBar,
+                "Map layout, field refresh and terrain.",
+                "Console surface, backdrop decoration and dispatches.",
+                "Local background imagery and its rescans.",
+                null,
+                "Status stack, readable contrast, placement and individual feeds.",
+                "Client-local work budgets. Each switch applies during this mission. " +
+                "Installing a disabled Weather module requires a game restart.",
+                "Faction tasking and host settings. Remote clients can read the host's values.",
+                "Faction tasking and host settings. Remote clients can read the host's values.",
+                null);
 
             BuildMapPage(con.Page(PageMap), PageMap);
             BuildDisplayPage(con.Page(PageDisplay), PageDisplay);
@@ -245,6 +257,13 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             logger?.LogInfo("SET MFD installed on " + (left ? "left" : "right") + " bezel slot " + (slot + 1) + ".");
         }
 
+        private static void ApplyTabHelp(AvTabBar bar, params string[] hints)
+        {
+            AvControl[] tabs = bar.Rect.GetComponentsInChildren<AvControl>(true);
+            for (int i = 0; i < tabs.Length && i < hints.Length; i++)
+                if (hints[i] != null) tabs[i].Help = hints[i];
+        }
+
         private void RefreshChrome()
         {
             AvUiSound.Volume = settings.UiSoundVolume.Value;
@@ -252,60 +271,6 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             roleChip.Set(host ? "HOST" : "CLIENT", host ? AvState.Ready : AvState.Inert);
             string echo = Time.unscaledTime < actionEchoUntil ? actionEcho : null;
             con.Footer.Set(echo ?? AmbientStatus(), echo != null ? AvState.Info : AvState.Inert);
-        }
-
-        /// <summary>The height this panel should take, given the bay it was parented into (mirrors the
-        /// v1 screen-height measurement so the panel occupies the same footprint).</summary>
-        private static float ResolvePanelHeight(RectTransform parent, float min, float max)
-        {
-            if (max < min) max = min;
-            if (parent == null) return min;
-
-            float available = parent.rect.height;
-            RectTransform cursor = parent;
-            for (int i = 0; i < 4 && available <= 1f && cursor != null; i++)
-            {
-                cursor = cursor.parent as RectTransform;
-                if (cursor != null) available = cursor.rect.height;
-            }
-
-            if (available <= 1f) return min;
-            return Mathf.Clamp(Mathf.Floor(available), min, max);
-        }
-
-        /// <summary>Keeps a panel taller than its bezel bay fully on-screen (mirrors the v1 canvas-clamp helper).</summary>
-        private static void ClampPanelIntoCanvas(RectTransform panel, float margin = 8f)
-        {
-            if (panel == null) return;
-            Canvas canvas = panel.GetComponentInParent<Canvas>();
-            if (canvas == null) return;
-            var canvasRt = canvas.rootCanvas.transform as RectTransform;
-            if (canvasRt == null || panel.parent == null) return;
-
-            var corners = new Vector3[4];
-            panel.GetWorldCorners(corners);
-            float minX = float.MaxValue, maxX = float.MinValue, minY = float.MaxValue, maxY = float.MinValue;
-            for (int i = 0; i < 4; i++)
-            {
-                Vector3 local = canvasRt.InverseTransformPoint(corners[i]);
-                if (local.x < minX) minX = local.x;
-                if (local.x > maxX) maxX = local.x;
-                if (local.y < minY) minY = local.y;
-                if (local.y > maxY) maxY = local.y;
-            }
-
-            Rect bounds = canvasRt.rect;
-            float dx = 0f;
-            if (minX < bounds.xMin + margin) dx = bounds.xMin + margin - minX;
-            else if (maxX > bounds.xMax - margin) dx = bounds.xMax - margin - maxX;
-            float dy = 0f;
-            if (maxY > bounds.yMax - margin) dy = bounds.yMax - margin - maxY;
-            else if (minY < bounds.yMin + margin) dy = bounds.yMin + margin - minY;
-            if (Mathf.Approximately(dx, 0f) && Mathf.Approximately(dy, 0f)) return;
-
-            Vector3 world = canvasRt.TransformVector(new Vector3(dx, dy, 0f));
-            Vector3 local2 = panel.parent.InverseTransformVector(world);
-            panel.anchoredPosition += new Vector2(local2.x, local2.y);
         }
 
         private static Image FindHighlight(Button button)
@@ -416,7 +381,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 minus.Interactable = avail && decrease();
                 plus.Interactable = avail && increase();
                 string text = avail || readOnlyValue ? get() : "--";
-                row.Set(title, avail ? help : (reason != null ? reason() : help), text, AvState.Info);
+                string why = avail ? help : (reason != null ? reason() : help);
+                minus.Help = avail ? help + " Previous / decrease. " + text : why;
+                plus.Help = avail ? help + " Next / increase. " + text : why;
+                row.Set(title, why, text, AvState.Info);
             }
             flow.Add(row);
             Refresh();
@@ -508,7 +476,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 EffectsEnabled, EffectsDisabled);
             Percent(flow, page, "TINT STRENGTH", settings.DisplayTintStrength, 0f, 1f, .1f,
                 () => EffectsEnabled() && settings.DisplayTint.Value != 0, () => "Enable effects and choose a color tint first.");
-            flow.Buttons(new AvControl.Spec("RESET DISPLAY FILTER", () =>
+            AvControl resetDisplay = flow.Buttons(new AvControl.Spec("RESET DISPLAY FILTER", () =>
             {
                 settings.DisplayEffects.Value = true;
                 settings.DisplayGlass.Value = .6f;
@@ -519,7 +487,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 settings.DisplayTintStrength.Value = .25f;
                 Echo("Display filter reset.");
                 Changed();
-            }));
+            })).Controls[0];
+            resetDisplay.Help = "Restore the default glass finish and remove CRT, edge shading and tint.";
 
             flow.Section(AvIcon.Settings, "PANEL THEME", "AVIONICS");
             var themeSeg = flow.Add(new AvSegmented(flow.Content, "THEME", new[] { "STEEL", "ACE", "PHOSPHOR" },
@@ -586,9 +555,11 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 bool ready = CustomEnabled();
                 openButton.Rect.gameObject.SetActive(!ready);
                 openButton.Label = settings.ExpandedMapUi.Value ? "OPEN STYLE" : "OPEN MAP";
-                cue.Set(ready ? "ADD PNG/JPEG FILES, THEN RESCAN"
+                string cueText = ready ? "ADD PNG/JPEG FILES, THEN RESCAN"
                     : settings.ExpandedMapUi.Value ? "SELECT CUSTOM BACKGROUND ON DISPLAY"
-                    : "TURN ON EXPANDED LAYOUT ON MAP");
+                    : "TURN ON EXPANDED LAYOUT ON MAP";
+                cue.Set(cueText);
+                openButton.Help = cueText;
             });
 
             Percent(flow, page, "IMAGE STRENGTH", settings.BackgroundImageOpacity, .05f, 1f, .05f,
@@ -611,7 +582,14 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 Echo("RESCAN — " + MfdMapDeck.WallpaperStatus);
                 Changed();
             }, AvButtonStyle.Primary)).Controls[0];
-            flow.Ticker.Add(page, AvTickRate.Slow, () => scan.Interactable = CustomEnabled());
+            flow.Ticker.Add(page, AvTickRate.Slow, () =>
+            {
+                bool custom = CustomEnabled();
+                scan.Interactable = custom;
+                scan.Help = custom
+                    ? "Scan up to 512 entries. PNG/JPEG: 16 MB and 4096 pixels per side."
+                    : "Choose CUSTOM on DISPLAY first.";
+            });
         }
 
         private void BuildCameraPage(AvFlow flow, int page)

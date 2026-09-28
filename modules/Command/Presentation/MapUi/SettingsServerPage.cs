@@ -64,7 +64,16 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             }
 
             bool host = HostAuthority();
-            if (taskRequest != null) taskRequest.Interactable = host && tasking != null;
+            if (taskRequest != null)
+            {
+                taskRequest.Interactable = host && tasking != null;
+                taskRequest.Help = !host
+                    ? "Host only. The host issues faction tasking."
+                    : tasking == null
+                        ? "Dynamic operations are not running on this host."
+                        : "Ask the host for the current faction objective board. The board is " +
+                          "issued by the host; this does not create work.";
+            }
 
             if (tasking == null)
             {

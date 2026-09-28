@@ -263,6 +263,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                         resourceSeries = selected;
                         RequestRefresh();
                     });
+                for (int i = 0; i < ResourceLabels.Length; i++)
+                    resourceTabs[i].Help = "Plot " + ResourceLabels[i].ToLowerInvariant() + " over the observed window.";
                 resourceSummary = page.Add(new ProseNote(page.Content, "WAITING FOR SAMPLES"));
                 resourceChart = page.Add(new AvLineChart(page.Content, 170f));
                 Note(page, "A sample is taken every " + AvNum.Seconds(MfdResourceHistory.Interval, 0) +
@@ -394,7 +396,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
                 page.Section(AvIcon.ListDetails, "UNIT READOUT", "CURRENT / LOST");
                 definitionGrid = new MfdPagingGrid(page.Content, 2, 6, readOnly: true, rowHeight: 46f);
-                page.Add(definitionGrid);
+                AddGrid(page, definitionGrid);
             }
 
             private void SetForceTotals(MissionStatsTracker tracker)
@@ -681,7 +683,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 infoTabs = page.Add(new AvSegmented(page.Content, "SHOW", new[] { "AIRBASES", "PLAYERS" },
                     () => infoMode == InfoMode.Airbases ? 0 : 1, SelectInfo));
                 infoGrid = new MfdPagingGrid(page.Content, 1, 8, readOnly: true, rowHeight: 44f);
-                page.Add(infoGrid);
+                AddGrid(page, infoGrid);
             }
 
             private void SelectInfo(int selected)

@@ -131,7 +131,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             rt.SetParent(parent, worldPositionStays: false);
             rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0f, 1f);
             rt.anchoredPosition = Vector2.zero;
-            float height = ResolvePanelHeight(
+            float height = AvLay.ResolveHeight(
                 parent.parent as RectTransform, AvTokens.PanelHeight, AvTokens.PanelHeightMax);
             rt.sizeDelta = new Vector2(AvTokens.PanelWidth, height);
             rt.localScale = Vector3.one;
@@ -139,28 +139,6 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             // AvConsole draws its own frame/ground fill; the view root itself stays a bare
             // layout anchor so kit v2 chrome is the only thing that paints.
             return rt;
-        }
-
-        /// <summary>
-        /// The tallest a panel may grow when its column has the room (kit v2 local
-        /// replacement for the retired v1 <c>AvScreen.ResolveHeight</c>). Walks up to the
-        /// first laid-out ancestor when the immediate parent is a zero-height anchor.
-        /// </summary>
-        private static float ResolvePanelHeight(RectTransform parent, float min, float max)
-        {
-            if (max < min) max = min;
-            if (parent == null) return min;
-
-            float available = parent.rect.height;
-            RectTransform cursor = parent;
-            for (int i = 0; i < 4 && available <= 1f && cursor != null; i++)
-            {
-                cursor = cursor.parent as RectTransform;
-                if (cursor != null) available = cursor.rect.height;
-            }
-
-            if (available <= 1f) return min;
-            return Mathf.Clamp(Mathf.Floor(available), min, max);
         }
 
         // ---------------------------------------------------------------- lifecycle
@@ -414,7 +392,14 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 int pageCount = Mathf.Max(1, tabs.Length);
                 Console = AvConsole.Build(root, VanillaMfdPanelCatalog.Label(Id), Title, pageCount,
                     root.rect.width, root.rect.height);
-                if (tabs.Length > 1) Console.Tabs(tabs);
+                if (tabs.Length > 1)
+                {
+                    AvTabBar tabBar = Console.Tabs(tabs);
+                    var hints = new string[tabs.Length];
+                    for (int i = 0; i < hints.Length; i++)
+                        hints[i] = "Open the " + tabs[i].Label.ToLowerInvariant() + " page.";
+                    TabHelp.Apply(tabBar, hints);
+                }
                 Console.PageChanged += OnPageChanged;
                 BuildContent();
                 Console.Finish();
