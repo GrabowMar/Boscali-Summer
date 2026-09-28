@@ -168,6 +168,27 @@ namespace NOAvionics
         public const float FontSmall = 11f;
         public const float FontMicro = 10f;
 
+        // ----------------------------------------------------------------------- HUD
+        public const float HudValue = 20f;
+        public const float HudLabel = 15f;
+        public const float HudFloor = 12f;
+
+        public const float AlphaGrid = 0.12f;
+        public const float AlphaHairline = 0.78f;
+        public const float AlphaFrame = 0.90f;
+        public const float AlphaGlow = 0.14f;
+
+        /// <summary>Device-pixel stroke width for one logical HUD unit at this screen height.</summary>
+        public static float StrokeUnit(float screenHeight) =>
+            Math.Max(1f, (float)Math.Round(screenHeight / 1080f));
+
+        public static readonly Rgba WingA = new Rgba(0.22f, 1f, 0.40f);
+        public static readonly Rgba WingB = new Rgba(0.30f, 0.85f, 1f);
+        public static readonly Rgba WingC = new Rgba(1f, 0.75f, 0.25f);
+        public static readonly Rgba WingD = new Rgba(1f, 0.45f, 0.85f);
+        public static readonly Rgba WingTarget = new Rgba(1f, 0.69f, 0.13f);
+        public static readonly Rgba WingDowned = new Rgba(1f, 0.22f, 0.18f);
+
         // --------------------------------------------------------------------- layout
         public const float PanelWidth = 480f;
         public const float PanelInnerWidth = 452f; // 480 - 2 * Pad

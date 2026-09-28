@@ -21,6 +21,15 @@ namespace NOAvionics
 
         Warning,
         Alert,
+
+        /// <summary>The theme's hostile-symbology colour.</summary>
+        Hostile,
+
+        /// <summary>The theme's neutral-symbology colour.</summary>
+        Neutral,
+
+        /// <summary>The theme's selected-unit colour.</summary>
+        Selected,
     }
 
     /// <summary>
@@ -111,6 +120,18 @@ namespace NOAvionics
         public float GrowWeight;
         public bool HasGrow;
 
+        public float Opacity;
+        public bool HasOpacity;
+
+        public float StrokeWidth;
+        public bool HasStroke;
+
+        public float DashOn, DashOff;
+        public bool HasDash;
+
+        public float Glow;
+        public bool HasGlow;
+
         /// <summary>Overlay <paramref name="over"/> onto this style; declared properties win.</summary>
         public AvStyle Merge(AvStyle over)
         {
@@ -135,6 +156,10 @@ namespace NOAvionics
             if (over.HasHeight) { r.Height = over.Height; r.HasHeight = true; }
             if (over.HasWidth) { r.Width = over.Width; r.HasWidth = true; }
             if (over.HasGrow) { r.GrowWeight = over.GrowWeight; r.HasGrow = true; }
+            if (over.HasOpacity) { r.Opacity = over.Opacity; r.HasOpacity = true; }
+            if (over.HasStroke) { r.StrokeWidth = over.StrokeWidth; r.HasStroke = true; }
+            if (over.HasDash) { r.DashOn = over.DashOn; r.DashOff = over.DashOff; r.HasDash = true; }
+            if (over.HasGlow) { r.Glow = over.Glow; r.HasGlow = true; }
             return r;
         }
     }
@@ -412,6 +437,39 @@ namespace NOAvionics
                         style.HasGrow = true;
                         break;
 
+                    case "opacity":
+                        if (TryNumber(parts[0], out float op))
+                        {
+                            style.Opacity = Clamp01(op);
+                            style.HasOpacity = true;
+                        }
+                        else Errors.Add("line " + line + ": opacity '" + parts[0] + "' is not a number");
+                        break;
+
+                    case "stroke":
+                        if (TryNumber(parts[0], out float sw)) { style.StrokeWidth = sw; style.HasStroke = true; }
+                        else Errors.Add("line " + line + ": stroke '" + parts[0] + "' is not a number");
+                        break;
+
+                    case "dash":
+                        if (parts.Length >= 2 && TryNumber(parts[0], out float dOn) && TryNumber(parts[1], out float dOff))
+                        {
+                            style.DashOn = dOn;
+                            style.DashOff = dOff;
+                            style.HasDash = true;
+                        }
+                        else Errors.Add("line " + line + ": dash '" + decl.Value + "' is not two numbers");
+                        break;
+
+                    case "glow":
+                        if (TryNumber(parts[0], out float gl))
+                        {
+                            style.Glow = Clamp01(gl);
+                            style.HasGlow = true;
+                        }
+                        else Errors.Add("line " + line + ": glow '" + parts[0] + "' is not a number");
+                        break;
+
                     default:
                         Errors.Add("line " + line + ": unknown property '" + prop + "'");
                         break;
@@ -501,6 +559,9 @@ namespace NOAvionics
                 case "friendly": return AvColorRef.Friendly;
                 case "warning": return AvColorRef.Warning;
                 case "alert": return AvColorRef.Alert;
+                case "hostile": return AvColorRef.Hostile;
+                case "neutral": return AvColorRef.Neutral;
+                case "selected": return AvColorRef.Selected;
                 default: return AvColorRef.None;
             }
         }
@@ -543,6 +604,8 @@ namespace NOAvionics
             }
             return false;
         }
+
+        private static float Clamp01(float v) => v < 0f ? 0f : v > 1f ? 1f : v;
 
         private static bool TryNumber(string token, out float value) =>
             float.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out value);

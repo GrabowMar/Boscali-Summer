@@ -177,6 +177,9 @@ namespace NOAvionics.Ui
                 case AvColorRef.Friendly: return WithAlpha(AvTheme.Friendly, paint.Alpha);
                 case AvColorRef.Warning: return WithAlpha(AvTheme.Warning, paint.Alpha);
                 case AvColorRef.Alert: return WithAlpha(AvTheme.Alert, paint.Alpha);
+                case AvColorRef.Hostile: return WithAlpha(AvTheme.Hostile, paint.Alpha);
+                case AvColorRef.Neutral: return WithAlpha(AvTheme.Neutral, paint.Alpha);
+                case AvColorRef.Selected: return WithAlpha(AvTheme.Selected, paint.Alpha);
 
                 default:
                     return fallback;
