@@ -37,6 +37,8 @@ namespace BoscaliSummer.Features.Events.Presentation
 
         private static readonly Dictionary<string, Entry> Entries =
             new Dictionary<string, Entry>(StringComparer.OrdinalIgnoreCase);
+        private static readonly Dictionary<string, Texture2D> Thumbs =
+            new Dictionary<string, Texture2D>(StringComparer.OrdinalIgnoreCase);
         private static Sprite[] tiles;
         private static bool atlasAttempted;
 
@@ -58,8 +60,55 @@ namespace BoscaliSummer.Features.Events.Presentation
             return sprite != null ? sprite : Load("default");
         }
 
+        /// <summary>
+        /// A small square, centre-cropped copy of the poster for <see cref="Get"/>, for row badges
+        /// (a tile of the shared atlas cannot be shown by texture alone). Null when there is no art
+        /// or the GPU copy is unavailable; bounded and cleared with the rest of the cache.
+        /// </summary>
+        public static Texture Thumb(string artKey, string fallbackKey)
+        {
+            string id = artKey + "|" + fallbackKey;
+            if (Thumbs.TryGetValue(id, out Texture2D cached)) return cached;
+            if (Thumbs.Count >= MaximumEntries) return null;
+
+            Texture2D thumb = null;
+            try
+            {
+                Sprite sprite = Get(artKey, fallbackKey);
+                Texture2D source = sprite != null ? sprite.texture : null;
+                if (source != null && source.format == TextureFormat.RGBA32 &&
+                    (SystemInfo.copyTextureSupport & UnityEngine.Rendering.CopyTextureSupport.Basic) != 0)
+                {
+                    Rect area = sprite.textureRect;
+                    int side = Mathf.FloorToInt(Mathf.Min(area.width, area.height));
+                    if (side > 0)
+                    {
+                        int x = Mathf.RoundToInt(area.x + (area.width - side) * 0.5f);
+                        int y = Mathf.RoundToInt(area.y + (area.height - side) * 0.5f);
+                        thumb = new Texture2D(side, side, TextureFormat.RGBA32, false, false)
+                        {
+                            name = "BoscaliEvents.Thumb",
+                            filterMode = FilterMode.Bilinear,
+                            wrapMode = TextureWrapMode.Clamp
+                        };
+                        Graphics.CopyTexture(source, 0, 0, x, y, side, side, thumb, 0, 0, 0, 0);
+                    }
+                }
+            }
+            catch
+            {
+                if (thumb != null) UnityEngine.Object.Destroy(thumb);
+                thumb = null;
+            }
+            Thumbs[id] = thumb;
+            return thumb;
+        }
+
         public static void Clear()
         {
+            foreach (Texture2D thumb in Thumbs.Values)
+                if (thumb != null) UnityEngine.Object.Destroy(thumb);
+            Thumbs.Clear();
             if (tiles != null)
             {
                 for (int i = 0; i < tiles.Length; i++)

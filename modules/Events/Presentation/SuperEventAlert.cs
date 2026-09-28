@@ -356,6 +356,7 @@ namespace BoscaliSummer.Features.Events.Presentation
             clock.color = dim;
             AvLay.Place(clock.rectTransform, width - 291f, 181f, 130f, 24f);
             AvControl dismiss = AvControl.Make(expandedPanel, new AvControl.Spec("DISMISS", Dismiss, AvButtonStyle.Default, AvIcon.X));
+            dismiss.Help = "Hide this dispatch. The event continues on the battlefield.";
             AvLay.Place(dismiss.Rect, width - 145f, 178f, 131f, 31f);
         }
 

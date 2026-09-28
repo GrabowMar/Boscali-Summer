@@ -143,6 +143,11 @@ namespace BoscaliSummer.Features.Events.Presentation
 
                     AvState state = chosen ? AvState.Ready : enabled ? AvState.Info : AvState.Inert;
                     rows[i].Set(name, reason, detail, state);
+                    rows[i].Help = chosen ? "This response is in force for the rest of the event." :
+                        !priced ? "This dispatch has no price effect for your side." :
+                        quote.Available ? quote.Label + " costs " + payment +
+                            " and changes this side's support price to x" +
+                            AvNum.Fixed(quote.EffectiveMultiplier, 2) + "." : quote.Reason;
                 }
             }
         }
