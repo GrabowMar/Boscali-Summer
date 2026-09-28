@@ -338,7 +338,7 @@ public static class AvKitGalleryUnityCheck
         UnityEngine.Object.DestroyImmediate(hostGo);
     }
 
-    // AvPopup (kit v2 replacement for v1 AvKit.Popup): 9 entries page as 6 + MORE; a click picks and closes.
+    // AvPopup: 9 entries page as 6 + MORE; a click picks and closes.
     private static void CheckPopup()
     {
         var hostGo = new GameObject("popup", typeof(RectTransform), typeof(Canvas));

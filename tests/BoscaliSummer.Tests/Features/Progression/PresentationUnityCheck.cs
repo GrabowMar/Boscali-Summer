@@ -19,7 +19,7 @@ public static class PresentationUnityCheck
 {
     private const BindingFlags All = BindingFlags.Instance | BindingFlags.Static |
         BindingFlags.Public | BindingFlags.NonPublic;
-    private static readonly Assembly Mod = typeof(AvScreen).Assembly;
+    private static readonly Assembly Mod = typeof(AvConsole).Assembly;
     private static int assertions;
     private static int captures;
 
@@ -51,19 +51,13 @@ public static class PresentationUnityCheck
                 pathArguments[i] = pathParameters[i].HasDefaultValue ? pathParameters[i].DefaultValue : null;
             setPaths.Invoke(null, pathArguments);
             AvStyleHost.Configure(Directory.GetCurrentDirectory(), Debug.Log, Debug.LogWarning);
-            AvFont.Font = TMP_FontAsset.CreateFontAsset(new Font("C:/Windows/Fonts/consola.ttf"));
             new GameObject("Events", typeof(EventSystem));
             if (!eventAlertOnly)
             {
                 foreach (float height in new[] { 420f, 596f, 896f })
                 {
                     RenderSqd(height);
-                    if (!sqdOnly)
-                    {
-                        RenderRadio(height);
-                        RenderEvents(height);
-                        RenderWeather(height);
-                    }
+                    if (!sqdOnly && height >= 896f) RenderArchive();
                 }
             }
             if (!sqdOnly) RenderEventAlert();
@@ -121,6 +115,9 @@ public static class PresentationUnityCheck
         string[] names = { "pilot", "skills", "wings", "studio", "plane" };
         for (int i = 0; i < methods.Length; i++) Call(panel, methods[i], console.Page(i));
         console.Finish();
+        // Hover help survives the kit v2 conversion: plane pager (2), skills confirm (1), studio buttons, rows and fields (18).
+        int helpTips = root.GetComponentsInChildren<AvHelpTip>(true).Length;
+        Check(helpTips >= 21, "SQD pages must carry their hover help, found " + helpTips);
         SeedSqd(panel);
         ValidateSkillRows(panel);
 
@@ -266,186 +263,6 @@ public static class PresentationUnityCheck
         Capture(canvas, 480f, height, prefix + "-bottom.png");
     }
 
-    private static void RenderRadio(float height)
-    {
-        GameObject canvasObject = MakeCanvas("RadioPreview", height, out RectTransform root);
-        AvScreen shell = AvScreen.Build(root, "RAD", new[] { "RECEIVER", "MUSIC" }, null,
-            3, 480f, height, _ => { });
-        SeedShell(shell, "SIGNAL MONITOR");
-        Type radio = TypeOf("BoscaliSummer.Features.Radio.Presentation.RadioPanel");
-        float receiverHeight = Convert.ToSingle(radio.GetField("RadioContentHeight", All).GetRawConstantValue());
-        float deckHeight = Convert.ToSingle(radio.GetField("DeckNaturalHeight", All).GetRawConstantValue());
-        RectTransform receiver = AvScreen.Scroll((RectTransform)shell.CreatePage(0, "Receiver").transform,
-            shell.Body, receiverHeight, out Rect receiverArea);
-        SetStatic(radio, "radioPage", receiver);
-        CallStatic(radio, "BuildReceiver", receiver, receiverArea);
-        RectTransform music = AvScreen.Scroll((RectTransform)shell.CreatePage(1, "Music").transform,
-            shell.Body, Mathf.Max(deckHeight, shell.Body.height), out Rect musicArea);
-        CallStatic(radio, "BuildDeck", music, musicArea);
-        SeedRadio(radio);
-
-        for (int page = 0; page < 2; page++)
-        {
-            shell.SetPage(page);
-            shell.DataBar.State.text = page == 0 ? "RECEIVER / ON AIR" : "MUSIC / PLAYING";
-            ValidateReadable(root, "RAD " + page);
-            CaptureScrolled(canvasObject, height, "rad-" + (page == 0 ? "receiver" : "music") + "-" + height);
-        }
-        object waterfall = GetStatic(radio, "waterfall");
-        if (waterfall is IDisposable disposable) disposable.Dispose();
-        (GetStatic(radio, "dialMarkers") as IList)?.Clear();
-        SetStatic(radio, "waterfall", null); SetStatic(radio, "dialRoot", null);
-        SetStatic(radio, "rx", null); SetStatic(radio, "deck", null); SetStatic(radio, "radioPage", null);
-        Object.DestroyImmediate(canvasObject);
-    }
-
-    private static void SeedRadio(Type radio)
-    {
-        object rx = GetStatic(radio, "rx");
-        Text(rx, "Frequency", "101.7"); Text(rx, "Unit", "MHz");
-        Text(rx, "ModeLine", "FM STEREO · 100 kHz"); Text(rx, "Station", "BOSCALI FM");
-        Text(rx, "Program", "FIELD OPERATIONS"); Text(rx, "OnAir", "ON AIR · NIGHT DRIVE");
-        Text(rx, "Time", "02:14 / 04:32"); Text(rx, "ScopeNote", "87.5–108.0 MHz · FM BROADCAST");
-        Text(rx, "StationsNote", "8 FOUND"); Text(rx, "PageValue", "1–5 OF 8");
-        int i = 0;
-        foreach (object row in (IEnumerable)Get(rx, "Rows"))
-        {
-            Text(row, "Preset", (i + 1).ToString()); Text(row, "Badge", "B" + (i + 1));
-            Text(row, "Name", new[] { "BOSCALI FM", "FRONTLINE RADIO", "AIR CONTROL", "NIGHT SIGNAL", "RESERVE NET" }[i]);
-            Text(row, "Frequency", (101.7f + i * .6f).ToString("0.0")); Text(row, "Unit", "MHz");
-            Text(row, "Status", i == 0 ? "STRONG" : i < 3 ? "FAIR" : "WEAK");
-            i++;
-        }
-
-        object deck = GetStatic(radio, "deck");
-        Text(deck, "FolderLabel", "LOCAL MUSIC · SORTIE MIX"); Text(deck, "Position", "TRACK 2 / 18");
-        Text(deck, "TrackLabel", "NIGHT DRIVE"); Text(deck, "Elapsed", "02:14"); Text(deck, "Duration", "/ 04:32");
-        Text(deck, "LibraryNote", "18 TRACKS"); Text(deck, "FolderValue", "1 / 3 · 18 TRK");
-        Text(deck, "PageValue", "1–12 OF 18");
-        GameObject list = Get(deck, "ListRoot") as GameObject; if (list != null) list.SetActive(true);
-        GameObject empty = Get(deck, "EmptyRoot") as GameObject; if (empty != null) empty.SetActive(false);
-        i = 0;
-        foreach (object row in (IEnumerable)Get(deck, "Rows"))
-        {
-            GameObject rowRoot = Get(row, "Root") as GameObject; if (rowRoot != null) rowRoot.SetActive(true);
-            Text(row, "Number", i == 1 ? ">" : (i + 1).ToString("00"));
-            Text(row, "Title", new[] { "WHEELS UP", "NIGHT DRIVE", "LOW ALTITUDE", "RADAR SHADOW",
-                "COAST RUN", "DARK APPROACH", "FUEL STATE", "HOME VECTOR", "RESERVE", "AFTERBURNER",
-                "FINAL TURN", "TOUCHDOWN" }[i]);
-            if (i == 1)
-            {
-                (Get(row, "Ground") as Image).color = AvTheme.RailInfo.WithAlpha(.1f);
-                (Get(row, "Rule") as Image).color = AvTheme.RailInfo;
-                (Get(row, "Title") as TMP_Text).color = AvTheme.RailInfo;
-            }
-            i++;
-        }
-    }
-
-    private static void RenderWeather(float height)
-    {
-        GameObject canvasObject = MakeCanvas("WeatherPreview", height, out RectTransform root);
-        AvScreen shell = AvScreen.Build(root, "ENV", new[] { "WEATHER", "SKY & AIR" },
-            new[] { new[] { "COVER", "CLOUD COVER" }, new[] { "BASE", "CLOUD BASE" },
-                    new[] { "WIND", "WIND FROM" }, new[] { "DENSITY", "CAMERA ALT" } },
-            2, 480f, height, _ => { });
-        SeedShell(shell, "METOC / BATTLEFIELD");
-        shell.Metrics[0].Set("35%", "BROKEN", .35f, AvTheme.RailInfo);
-        shell.Metrics[1].Set("1,800", "METRES", .60f, AvTheme.RailInfo);
-        shell.Metrics[2].Set("12", "KNOTS", .40f, AvTheme.RailReady);
-        shell.Metrics[3].Set("92%", "SEA LEVEL", .92f, AvTheme.RailInfo);
-
-        var panelObject = new GameObject("WeatherMfdPanel");
-        object panel = panelObject.AddComponent(TypeOf("BoscaliSummer.Features.Weather.Presentation.WeatherMfdPanel"));
-        ((Behaviour)panel).enabled = false;
-        Set(panel, "shell", shell);
-        Call(panel, "BuildForecastPage", shell.CreatePage(0, "Forecast"));
-        Call(panel, "BuildEnvironmentPage", shell.CreatePage(1, "Environment"));
-        SeedWeather(panel);
-        for (int page = 0; page < 2; page++)
-        {
-            shell.SetPage(page);
-            ValidateReadable(root, "ENV page " + page);
-            CaptureScrolled(canvasObject, height, "env-" + (page == 0 ? "weather-" : "sky-") + height);
-        }
-        Object.DestroyImmediate(panelObject);
-        Object.DestroyImmediate(canvasObject);
-    }
-
-    private static void SeedWeather(object panel)
-    {
-        Type regimeType = TypeOf("BoscaliSummer.Features.Weather.Domain.WeatherRegimeType");
-        object liveGlyph = Get(panel, "liveGlyph");
-        Call(liveGlyph, "SetKind", Enum.Parse(regimeType, "Broken"));
-        ((Graphic)liveGlyph).color = AvTheme.Warning;
-        Text(panel, "liveRegimeTitle", "BROKEN DECK");
-        Text(panel, "liveRegimeBadge", "BKN");
-        Text(panel, "liveCoverLabel", "52% COVER");
-        Text(panel, "liveQuickMetrics", "DECK 2200 M   /   WIND 18 KT   /   RAIN 8%");
-        Text(panel, "liveTacticalBrief", "VARIABLE CEILING // WATCH CLOUD BREAKS ON INGRESS");
-        string[] types = { "Clear", "Fair", "Scattered", "Broken", "RainSquall", "Storm" };
-        string[] codes = { "CLR", "FEW", "SCT", "BKN", "RA+", "TS" };
-        int rowIndex = 0;
-        foreach (object row in (IEnumerable)Get(panel, "timelineRows"))
-        {
-            object glyph = Get(row, "Glyph");
-            Call(glyph, "SetKind", Enum.Parse(regimeType, types[rowIndex]));
-            ((Graphic)glyph).color = rowIndex >= 4 ? AvTheme.Warning : AvTheme.RailInfo;
-            (Get(row, "RegimeBadgeText") as TMP_Text).text = codes[rowIndex];
-            (Get(row, "ConditionsLabel") as TMP_Text).text = (5 + rowIndex * 17) + "%";
-            (Get(row, "DeckLabel") as TMP_Text).text = (3200 - rowIndex * 380) + " M";
-            (Get(row, "RainText") as TMP_Text).text = rowIndex >= 4 ?
-                (rowIndex * 15) + "% RAIN" : "— DRY —";
-            rowIndex++;
-        }
-        Text(panel, "advisoryLight", "TWILIGHT");
-        Text(panel, "advisoryDeck", "BASE 2200 M");
-        Text(panel, "advisoryWind", "18 KT");
-    }
-
-    private static void RenderEvents(float height)
-    {
-        GameObject canvasObject = MakeCanvas("EventsPreview", height, out RectTransform root);
-        AvScreen shell = AvScreen.Build(root, "EVN", new[] { "DISPATCH", "DESK" },
-            new[] { new[] { "SUPPORT COST", "YOUR SIDE" }, new[] { "SUPPORT RESET", "TEMPO" } },
-            3, 480f, height, _ => { });
-        SeedShell(shell, "EVENT ACTIVE");
-        shell.Metrics[0].Set("+35%", "SUPPORT COST", .35f, AvTheme.RailCaution);
-        shell.Metrics[1].Set("x1.20", "LONGER COOLDOWN", .20f, AvTheme.RailCaution);
-
-        var panelObject = new GameObject("EventsMfdPanel");
-        object panel = panelObject.AddComponent(TypeOf("BoscaliSummer.Features.Events.Presentation.EventsMfdPanel"));
-        ((Behaviour)panel).enabled = false;
-        object settings = NewSettings("BoscaliSummer.Features.Events.Configuration.EventsSettings",
-            "events-fixture.cfg");
-        SetEntry(settings, "HistoryLength", 4);
-        Set(panel, "settings", settings); Set(panel, "shell", shell);
-        Call(panel, "BuildEventsPage", shell.CreatePage(0, "Events"));
-        GameObject docs = shell.CreatePage(1, "Docs");
-        Call(panel, "BuildDocsPage", docs);
-        foreach (TMP_Text copy in docs.GetComponentsInChildren<TMP_Text>(true))
-        {
-            if (copy.text.Length < 65) continue;
-            RectTransform rect = (RectTransform)copy.transform;
-            Check(copy.GetPreferredValues(copy.text, rect.rect.width, 0f).y <= rect.rect.height + 1f,
-                "EVN docs copy must fit its reading area: " + copy.text.Substring(0, 24));
-        }
-        SeedEvents(panel);
-        shell.SetPage(0);
-        ValidateReadable(root, "EVN dispatch");
-        CaptureScrolled(canvasObject, height, "evn-events-" + height);
-        Call(Get(panel, "activeCard"), "BindPlaceholder", "The theater is quiet. The director is watching for a story worth telling.");
-        Call(Get(panel, "decisionBoard"), "SetStandby");
-        Call(panel, "LayoutHistory", 3);
-        CaptureScrolled(canvasObject, height, "evn-calm-" + height);
-        shell.SetPage(1);
-        ValidateReadable(root, "EVN docs");
-        CaptureScrolled(canvasObject, height, "evn-docs-" + height);
-        Object.DestroyImmediate(canvasObject);
-        Object.DestroyImmediate(panelObject);
-        if (height >= 896f) RenderArchive();
-    }
-
     private static void RenderArchive()
     {
         object archive = CallStatic(TypeOf("BoscaliSummer.Features.Events.Presentation.EventDeskArchive"), "Create");
@@ -478,58 +295,6 @@ public static class PresentationUnityCheck
         Object.DestroyImmediate(archiveObject);
         Object.DestroyImmediate(prefab);
         Object.DestroyImmediate(aircraftDefinition);
-    }
-
-    private static void SeedEvents(object panel)
-    {
-        Text(panel, "directorLine", "DIRECTOR ARMED · TRAILING SIDE ELIGIBLE · SUPERS 1/3");
-        object current = Event("supply_shock", "SUPPLY SHOCK", "A logistics corridor is under sustained pressure. Allocation costs rise until the theater stabilizes.",
-            "ECONOMIC", "MEDIUM", "YOUR SIDE", false, "+35% SUPPORT COST", 120f, 520f);
-        object active = Get(panel, "activeCard");
-        Call(active, "Bind", current, "+35% SUPPORT COST", AvTheme.RailCaution,
-            "Your side pays more for support while the corridor remains disrupted.");
-        Call(active, "SetClock", "ENDS 04:18", false, false);
-        Call(active, "SetProgress", .64f, AvTheme.RailCaution);
-
-        object desk = Get(panel, "decisionBoard");
-        ((RectTransform)Get(desk, "root")).gameObject.SetActive(true);
-        Text(desk, "subheading", "CHOOSE ONE RESPONSE");
-        var choices = (AvButton[])Get(desk, "actions");
-        var details = (TMP_Text[])Get(desk, "details");
-        var reasons = (TMP_Text[])Get(desk, "reasons");
-        string[] names = { "CONTAIN", "TREASURY DIRECTIVE", "CONTRACT INTELLIGENCE", "PILOT CHANNEL" };
-        string[] requirements = { "PERSONAL ALLOCATION", "FACTION FUNDS", "HOST CHECKS FACTION CONTRACT", "RECON QUALIFICATION REQUIRED" };
-        for (int choice = 0; choice < choices.Length; choice++)
-        {
-            choices[choice].SetText(names[choice]);
-            details[choice].text = "HOST COST QUOTE";
-            reasons[choice].text = requirements[choice];
-        }
-
-        Call(panel, "LayoutHistory", 3);
-        int i = 0;
-        foreach (object card in (IEnumerable)Get(panel, "historyCards"))
-        {
-            if (i >= 3) break;
-            object view = Event("history_" + i, new[] { "AIRLIFT SURGE", "RADAR BLACKOUT", "FUEL PRIORITY" }[i],
-                "Completed theater event.", i == 1 ? "HAZARD" : "POLITICAL", i == 0 ? "MEDIUM" : "MINOR",
-                "ALL THEATER", false, i == 1 ? "NO EFFECT" : "-15% SUPPORT COST", 0f, 1f);
-            Call(card, "Bind", view, AvTheme.TextPrimary, i == 1 ? AvTheme.RailDanger : AvTheme.RailInfo,
-                i == 1 ? AvTheme.RailDanger : AvTheme.RailReady);
-            Call(card, "SetClock", (i + 2) + " MIN AGO");
-            i++;
-        }
-    }
-
-    private static object Event(string id, string title, string flavor, string category, string tier,
-        string target, bool isSuper, string effect, float start, float end)
-    {
-        Type step = TypeOf("BoscaliSummer.Framework.Contracts.ActiveEventStep");
-        Type view = TypeOf("BoscaliSummer.Framework.Contracts.ActiveEventView");
-        Array steps = Array.CreateInstance(step, 0);
-        string art = category == "HAZARD" ? "fuel_depot_fire" : "industrial_surge";
-        return Activator.CreateInstance(view, new object[] { id, title, flavor, category, tier, target,
-            isSuper, art, effect, steps, start, end, true, "+20% SUPPORT RESET" });
     }
 
     private static void RenderEventAlert()
@@ -651,7 +416,7 @@ public static class PresentationUnityCheck
         Canvas canvas = canvasObject.GetComponent<Canvas>();
         PrepareWorldCanvas(canvas, 480f, height);
         root = (RectTransform)canvasObject.transform;
-        AvKit.Panel(root, new Rect(0f, 0f, 480f, height), AvTheme.SurfaceInert);
+        AvLay.Fill(AvLay.Solid(root, "Ground", AvTheme.SurfaceInert).rectTransform);
         return canvasObject;
     }
 
@@ -664,30 +429,6 @@ public static class PresentationUnityCheck
         root.anchoredPosition3D = Vector3.zero;
         root.localScale = Vector3.one;
         root.sizeDelta = new Vector2(width, height);
-    }
-
-    private static void SeedShell(AvScreen shell, string state)
-    {
-        shell.DataBar.State.text = state;
-        shell.DataBar.SetChip(0, "OFFLINE QA", "info");
-        shell.DataBar.SetChip(1, "FIXTURE DATA", "inert");
-        shell.DataBar.SetChip(2, "NO ORDERS", "inert");
-        shell.WriteStatus(null, null, "Offline layout check · production builder · no live game state.");
-    }
-
-    private static void CaptureScrolled(GameObject canvas, float height, string prefix)
-    {
-        foreach (ScrollRect scroll in canvas.GetComponentsInChildren<ScrollRect>(true))
-        {
-            if (!scroll.gameObject.activeInHierarchy) continue;
-            Check(scroll.content.rect.height + .5f >= scroll.viewport.rect.height,
-                prefix + " scroll content must cover its viewport.");
-            scroll.verticalNormalizedPosition = 1f;
-        }
-        Capture(canvas, 480f, height, prefix + "-top.png");
-        foreach (ScrollRect scroll in canvas.GetComponentsInChildren<ScrollRect>(true))
-            if (scroll.gameObject.activeInHierarchy) scroll.verticalNormalizedPosition = 0f;
-        Capture(canvas, 480f, height, prefix + "-bottom.png");
     }
 
     private static void ValidateReadable(RectTransform root, string name)

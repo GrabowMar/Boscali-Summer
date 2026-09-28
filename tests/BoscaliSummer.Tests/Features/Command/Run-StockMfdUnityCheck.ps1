@@ -15,7 +15,6 @@ Get-ChildItem -LiteralPath 'C:/Program Files (x86)/Steam/steamapps/common/Nuclea
 Copy-Item -LiteralPath "$repo/bin/Release/netstandard2.1/BoscaliSummer.dll" -Destination "$PreviewDirectory/Assets/"
 Copy-Item -LiteralPath "$PSScriptRoot/StockMfdUnityCheck.cs", "$PSScriptRoot/BoscaliStockPreview.asmdef" -Destination "$PreviewDirectory/Assets/Harness/"
 # The harness runs the built DLL, which embeds the kit v2 sources' sheets, fonts and bundle; only the v1 override sheet is copied.
-Copy-Item -LiteralPath "$repo/AvionicsUi/avionics.avss" -Destination "$PreviewDirectory/NOAvionics/"
 $arguments = @('-batchmode', '-disable-assembly-updater', '-projectPath', ('"' + $PreviewDirectory + '"'), '-executeMethod', 'StockMfdUnityCheck.Run', '-logFile', ('"' + "$PreviewDirectory/check.log" + '"'))
 $process = Start-Process -FilePath $Unity -ArgumentList $arguments -WorkingDirectory $PreviewDirectory -WindowStyle Hidden -PassThru
 $process.WaitForExit()

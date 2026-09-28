@@ -74,6 +74,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         public static void Refresh(DynamicMap map) { }
         public static void Reconcile() { }
     }
+    // MfdRail only asks which screen the faction merge patch owns; the patch itself (Harmony, InfoPanel_Faction) is not part of this harness.
+    internal static class FactionMfdMergePatch { public static MFDScreen Screen => null; }
     internal static class MfdNewsTicker { public static void Ensure(Canvas c, MfdLayout.Columns columns, object settings) { } }
 }
 namespace NuclearOption.UIStyleSystem

@@ -37,10 +37,7 @@ public static class SettingsUnityCheck
             for (int i = 1; i < arguments.Length; i++) arguments[i] = parameters[i].HasDefaultValue ? parameters[i].DefaultValue : null;
             setPaths.Invoke(null, arguments);
             AvStyleHost.Configure(Directory.GetCurrentDirectory(), Debug.Log, Debug.LogWarning);
-            // The shared v1 kit check below still measures text against this face; kit v2 (AvType) does not read it.
-            AvFont.Font = TMP_FontAsset.CreateFontAsset(new Font("C:/Windows/Fonts/consola.ttf"));
             new GameObject("Events", typeof(EventSystem));
-            AvionicsUnityCheck.Check();
             CheckMfdLookup();
             CheckLayoutCanvas();
             CheckScreenSpaceSizing();
@@ -157,7 +154,7 @@ public static class SettingsUnityCheck
 
         // Install() needs a real bezel claim (stubbed to always fail offline), so the console is built
         // directly here the same way Install() builds it, then wired into the panel's private field --
-        // mirroring how the v1 harness hand-built AvScreen and injected it as the private "shell" field.
+        // mirroring how the retired v1 harness hand-built a shell and injected it as the private "shell" field.
         AvConsole con = AvConsole.Build((RectTransform)canvas.transform, "SET", "TACTICAL DISPLAY", 9, 480, height);
         con.Chips(2)[0].Set("SAVED", AvState.Ready);
         typeof(SettingsMfdPanel).GetField("con", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(panel, con);

@@ -14,7 +14,6 @@ Set-Content -LiteralPath "$PreviewDirectory/Packages/manifest.json" -Value '{"de
 # -Recurse also picks up AvionicsUi/Fui/*.cs (kit v2: AvLay, AvText, AvFrame's siblings, ...) that
 # MfdRail.cs and MfdChromeLay.cs now depend on since the rail moved onto kit v2 primitives.
 Get-ChildItem -LiteralPath "$repo/Avionics", "$repo/AvionicsUi" -Filter '*.cs' -Recurse | Where-Object { $_.Name -notlike '*Tests.cs' } | Copy-Item -Destination "$PreviewDirectory/Assets/"
-Copy-Item -LiteralPath "$repo/AvionicsUi/avionics.avss" -Destination "$PreviewDirectory/NOAvionics/"
 Copy-Item -LiteralPath "$repo/modules/Command/Presentation/MapUi/MfdLayout.cs", "$repo/modules/Command/Presentation/MapUi/MfdRail.cs", "$repo/modules/Command/Presentation/MapUi/MfdRailCatalog.cs", "$repo/modules/Command/Presentation/MapUi/MfdChromeLay.cs", "$repo/modules/Command/Presentation/MapUi/MfdGlyph.cs", "$repo/modules/Command/Presentation/MapUi/MfdScreenFinish.cs", "$PSScriptRoot/SettingsUnityStubs.cs", "$PSScriptRoot/RailUnityCheck.cs" -Destination "$PreviewDirectory/Assets/"
 Get-ChildItem -LiteralPath 'C:/Program Files (x86)/Steam/steamapps/common/Nuclear Option/BepInEx/core' -Filter '*.dll' | Where-Object { $_.Name -match '^(BepInEx|Mono|0Harmony)' } | Copy-Item -Destination "$PreviewDirectory/Assets/"
 if (Test-Path -LiteralPath "$PreviewDirectory/result.txt") { Remove-Item -LiteralPath "$PreviewDirectory/result.txt" }

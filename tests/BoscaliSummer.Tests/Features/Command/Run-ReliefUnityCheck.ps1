@@ -22,9 +22,8 @@ New-Item -ItemType Directory -Force -Path "$PreviewDirectory/Assets", "$PreviewD
 Set-Content -LiteralPath "$PreviewDirectory/ProjectSettings/ProjectVersion.txt" -Value "m_EditorVersion: 2022.3.62f3"
 Set-Content -LiteralPath "$PreviewDirectory/Packages/manifest.json" -Value '{"dependencies":{"com.unity.ugui":"1.0.0","com.unity.textmeshpro":"3.0.6","com.unity.modules.physics":"1.0.0","com.unity.modules.imageconversion":"1.0.0","com.unity.modules.audio":"1.0.0","com.unity.modules.uielements":"1.0.0","com.unity.modules.assetbundle":"1.0.0","com.unity.modules.imgui":"1.0.0"}}'
 # The relief view and the context menu draw on kit v2 (AvFrame, AvText, AvControl, AvStyleHost ...), so the harness compiles the real kit sources
-# instead of the old AvKit/AvTheme stubs, like Run-RailUnityCheck.ps1 does.
+# instead of the old v1 kit/AvTheme stubs, like Run-RailUnityCheck.ps1 does.
 Get-ChildItem -LiteralPath "$repo/Avionics", "$repo/AvionicsUi" -Filter '*.cs' -Recurse | Where-Object { $_.Name -notlike '*Tests.cs' } | Copy-Item -Destination "$PreviewDirectory/Assets/"
-Copy-Item -LiteralPath "$repo/AvionicsUi/avionics.avss" -Destination "$PreviewDirectory/NOAvionics/"
 Copy-Item -LiteralPath "$repo/modules/Command/Presentation/MapUi/MfdTerrainRelief.cs", "$repo/modules/Command/Presentation/MapUi/MfdMapInteractions.cs", "$repo/modules/Command/Presentation/MapUi/MfdChromeLay.cs", "$repo/modules/Command/Presentation/MapUi/MfdMapOrbitControls.cs", "$repo/modules/Command/Domain/ReliefRig.cs", "$repo/modules/Command/Domain/ReliefHoles.cs", "$PSScriptRoot/ReliefUnityStubs.cs", "$PSScriptRoot/ReliefUnityCheck.cs" -Destination "$PreviewDirectory/Assets/"
 Copy-Item -LiteralPath "$repo/Framework/Contracts/IMapProjection.cs", "$repo/Framework/Contracts/IMapBoxInput.cs" -Destination "$PreviewDirectory/Assets/"
 $arguments = @('-batchmode', '-projectPath', ('"' + $PreviewDirectory + '"'), '-executeMethod', 'ReliefUnityCheck.Run', '-logFile', ('"' + "$PreviewDirectory/check.log" + '"'))

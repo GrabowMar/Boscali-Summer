@@ -40,9 +40,8 @@ public static class StockMfdUnityCheck
             for (int i = 1; i < args.Length; i++) args[i] = parameters[i].HasDefaultValue ? parameters[i].DefaultValue : null;
             paths.Invoke(null, args);
             AvStyleHost.Configure(Directory.GetCurrentDirectory(), Debug.Log, Debug.LogWarning);
-            // Legacy AvFont still labels a few v1 primitives; kit v2 parts resolve AvType, which with no
-            // avionics-ui.bundle in this harness falls back to TMP_Settings' default face.
-            AvFont.Font = TMP_FontAsset.CreateFontAsset(new Font("C:/Windows/Fonts/consola.ttf"));
+            // Kit v2 parts resolve AvType, which with no avionics-ui.bundle in this harness falls back to
+            // TMP_Settings' default face.
             new GameObject("Events", typeof(EventSystem));
             foreach (float height in new[] { 896f, 596f, 420f })
                 foreach (string name in new[] { "Map", "Target", "Faction", "Hud", "Mission" })

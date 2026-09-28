@@ -47,8 +47,6 @@ public static class SupportPanelUnityCheck
             for (int i = 1; i < arguments.Length; i++) arguments[i] = parameters[i].HasDefaultValue ? parameters[i].DefaultValue : null;
             setPaths.Invoke(null, arguments);
             AvStyleHost.Configure(Directory.GetCurrentDirectory(), Debug.Log, Debug.LogWarning);
-            // The OPS-window harness backdrop still labels through the v1 AvFont; the rooms and primitives use kit v2 AvType.
-            AvFont.Font = TMP_FontAsset.CreateFontAsset(new Font("C:/Windows/Fonts/consola.ttf"));
             // No avionics-ui.bundle in this harness: AvType.VanillaFallback resolves TMP_Settings'
             // default face (populated by the TMP essential-resources import above).
             foreach (float height in new[] { 420f, 596f, 896f })
