@@ -15,6 +15,7 @@ namespace NOAvionics.Tests
             TestComposeLetsPaletteWin(assert);
             TestNumbers(assert);
             TestTypeScale(assert);
+            TestIcons(assert);
         }
 
         // Live-theme references resolve to AvTheme's fallbacks in an engine-free test.
@@ -131,6 +132,24 @@ namespace NOAvionics.Tests
             assert(!AvTypeScale.Of(AvTextRole.Prose).Upper, "prose keeps authored case");
             assert(AvTypeScale.Of(AvTextRole.Data).Face == AvFace.Mono && AvTypeScale.Of(AvTextRole.Display).Face == AvFace.MonoStrong, "numbers are mono");
             assert(AvTypeScale.AssetName(AvFace.Icons) == "NOA Icons SDF", "icon asset name matches the bundle");
+        }
+
+        private static void TestIcons(Action<bool, string> assert)
+        {
+            var seen = new System.Collections.Generic.HashSet<char>();
+            string manifest = null;
+            try { manifest = Sheet("avionics-ui.manifest.json"); } catch (InvalidOperationException) { }
+            for (int i = 1; i <= AvIconTable.Count; i++)
+            {
+                var icon = (AvIcon)i;
+                char c = AvIconTable.Char(icon);
+                assert(c >= '', icon + " is an icon-font codepoint (BMP, U+E000 and up)");
+                assert(seen.Add(c), icon + " codepoint is unique");
+                if (manifest != null)
+                    assert(manifest.Contains("\"" + AvIconTable.TablerName(icon) + "\": \"" + ((int)c).ToString("x4") + "\""),
+                        icon + " matches the baked manifest");
+            }
+            assert(AvIconTable.Char(AvIcon.None) == '\0', "None has no glyph");
         }
     }
 }
