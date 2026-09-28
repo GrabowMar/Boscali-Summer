@@ -34,54 +34,14 @@ namespace BoscaliSummer.Features.Command.Presentation
         private const int TabCoc = 1;
         private const int TabCmd = 2;
 
-        private const int ChipCount = 3;
-
-        /// <summary>Contested nodes the SA window can rank; the visible slice is sized to the bay.</summary>
-        private const int NodeRowCount = 8;
-
-        /// <summary>The fewest contested rows a page shows before it would rather scroll.</summary>
-        private const int NodeRowMinimum = 3;
-
-        /// <summary>A taller bay spreads rows to this pitch at most, never into a dead band.</summary>
-        private const float NodePitchMax = 52f;
-        private const float ListPitch = 44f;
-
-        // ---- Shared page geometry --------------------------------------------------------
-
-        /// <summary>What one <see cref="SectionHeader"/> consumes, title, note and rule.</summary>
-        private const float HeaderStep = 24f;
-
-        /// <summary>The pitch of one SORTIE BOARD row; the board is a fixed five-role table.</summary>
-        private const float SortiePitch = 26f;
-
-        /// <summary>The pitch of one SECTOR CONTROL legend row.</summary>
-        private const float LegendPitch = 22f;
-
-        /// <summary>The pitch of a label/figure pair on one line.</summary>
-        private const float KvPitch = 22f;
-
-        /// <summary>
-        /// Everything the SA page holds above the contested list, in the order the build
-        /// lays it out. Written as the sum of the same steps the layout uses, so the list
-        /// can be sized against the bay without measuring text at build time.
-        /// </summary>
-        private const float SaFixedHeight =
-            HeaderStep + 18f + 20f + 16f + 14f +                            // AIR PICTURE
-            HeaderStep + 16f + 5f * SortiePitch + 6f +                       // SORTIE BOARD
-            HeaderStep + 4f * KvPitch + 4f +                                 // SURFACE & INFRASTRUCTURE
-            HeaderStep + 12f + 4f * LegendPitch + 6f + 2f * KvPitch + 4f +   // SECTOR CONTROL
-            HeaderStep + 16f + 2f;                                           // CONTESTED GROUND
+        /// <summary>Contested nodes the SITUATION list can rank; a hard ceiling, not a page size.</summary>
+        private const int NodeRankCap = 32;
+        private const int NodeListPageSize = 6;
 
         private static readonly SortieRole[] Roles =
         {
             SortieRole.Cap, SortieRole.Sead, SortieRole.Cas, SortieRole.Strike, SortieRole.Transit,
         };
-
-        // ---- Shared row tints ------------------------------------------------------------
-
-        // The SA list and COC dossier share these row tints.
-        private static readonly Color RowHover = new Color(1f, 1f, 1f, 0.06f);
-        private static readonly Color PortraitDim = new Color(1f, 1f, 1f, 0.45f);
 
         // ---- Dependencies ----------------------------------------------------------------
 
@@ -98,47 +58,31 @@ namespace BoscaliSummer.Features.Command.Presentation
 
         private MFDScreen screen;
         private GameObject screenRoot;
-        private AvScreen shell;
-        private GameObject cocPage;
+        private AvConsole console;
+        private AvChip[] chips;
+        private AvMetric[] metrics;
+        private AvFlow cocPage;
         private bool cocBuilt;
 
         private float nextAttempt;
         private float nextRefresh;
         private bool failed;
 
-        // ---- SA page ---------------------------------------------------------------------
+        // ---- SITUATION page ----------------------------------------------------------------
 
-        private TMP_Text defconLabel;
-        private TMP_Text threatLabel;
-        private TMP_Text airCountLabel;
-        private GameObject airBarRoot;
-        private Image airFill;
-        private Image saAlertRail;
-        private TMP_Text sortieNote;
-        private readonly SortieRow[] sortieRows = new SortieRow[5];
-        private TMP_Text groundValue;
-        private TMP_Text airbaseValue;
-        private TMP_Text radarValue;
-        private TMP_Text knownAdValue;
+        private AvRow airRow;
+        private AvSection sortieSection;
+        private readonly AvRow[] sortieRows = new AvRow[5];
+        private AvRow groundRow, airbaseRow, radarRow, knownAdRow;
         private float nextKnownAdRefresh;
         private readonly AirDefenceRing[] knownAdRings = new AirDefenceRing[ThreatPictureLimits.MaximumRings];
 
-        // ---- FRONT page ------------------------------------------------------------------
-
-        private RectTransform frontRoot;
-        private Rect controlBarRect;
-        private readonly Image[] controlBarFill = new Image[3];
-        private readonly SectorLegend[] sectorLegend = new SectorLegend[4];
-        private TMP_Text frontlineValue;
-        private TMP_Text nodeValue;
-        private readonly ListRow[] nodeRows = new ListRow[NodeRowCount];
-        private int nodeRowsBuilt;
-        private float nodeRowPitch = AvTokens.RowPitch;
-
-        /// <summary>The worst contested nodes, ranked into a reused window each refresh.</summary>
+        private AvRow alliedRow, contestedRow, hostileRow, unclaimedRow, frontlineRow, nodesRow;
+        private AvSection contestedSection;
+        private AvList nodeList;
         private readonly TacticalSectorGrid.TacticalNode[] ranked =
-            new TacticalSectorGrid.TacticalNode[NodeRowCount];
-        private TMP_Text nodeNote;
+            new TacticalSectorGrid.TacticalNode[NodeRankCap];
+        private int rankedCount;
 
         // ==================================================================================
 
@@ -159,7 +103,9 @@ namespace BoscaliSummer.Features.Command.Presentation
 
             screenRoot = null;
             screen = null;
-            shell = null;
+            console = null;
+            chips = null;
+            metrics = null;
             baseAlarm = null;
             highCommand = null;
             cocPage = null;
@@ -167,21 +113,16 @@ namespace BoscaliSummer.Features.Command.Presentation
             theaterWar = null;
             threatPicture = null;
 
-            defconLabel = threatLabel = airCountLabel = sortieNote = null;
-            airBarRoot = null;
-            airFill = null;
-            saAlertRail = null;
+            airRow = null;
+            sortieSection = null;
             Array.Clear(sortieRows, 0, sortieRows.Length);
-            groundValue = airbaseValue = radarValue = knownAdValue = null;
+            groundRow = airbaseRow = radarRow = knownAdRow = null;
             nextKnownAdRefresh = 0f;
 
-            frontRoot = null;
-            Array.Clear(controlBarFill, 0, controlBarFill.Length);
-            Array.Clear(sectorLegend, 0, sectorLegend.Length);
-            frontlineValue = nodeValue = nodeNote = null;
-            nodeRowsBuilt = 0;
-            nodeRowPitch = AvTokens.RowPitch;
-            Array.Clear(nodeRows, 0, nodeRows.Length);
+            alliedRow = contestedRow = hostileRow = unclaimedRow = frontlineRow = nodesRow = null;
+            contestedSection = null;
+            nodeList = null;
+            rankedCount = 0;
 
             ResetCoc();
             ResetCmd();
@@ -273,11 +214,7 @@ namespace BoscaliSummer.Features.Command.Presentation
 
         private MFDScreen Build(MFDScreen template, Button bezel)
         {
-            TMP_Text sourceText = template.GetComponentInChildren<TMP_Text>(true);
-            TMP_FontAsset font = sourceText != null ? sourceText.font : null;
-            if (font != null) AvFont.Font = font;
-
-            var root = new GameObject("BoscaliStrategic.Screen", typeof(RectTransform), typeof(Image));
+            var root = new GameObject("BoscaliStrategic.Screen", typeof(RectTransform));
             var rootRect = root.GetComponent<RectTransform>();
             rootRect.SetParent(template.transform.parent, false);
 
@@ -290,65 +227,33 @@ namespace BoscaliSummer.Features.Command.Presentation
             // Position is deliberately not copied; see the same note on the OPS screen.
             // VirtualMFD.showPos is zero and MFDScreen.ShowScreen assigns it straight to
             // localPosition, so a screen is placed by its parent and anchors.
-            float height = AvScreen.ResolveHeight(
+            float height = ResolveHeight(
                 templateRect.parent as RectTransform, AvTokens.PanelHeight, AvTokens.PanelHeightMax);
             rootRect.sizeDelta = new Vector2(Width, height);
-            AvKit.ClampIntoCanvas(rootRect);
-
-            Image background = root.GetComponent<Image>();
-            background.sprite = AvSprites.Panel;
-            background.type = Image.Type.Sliced;
-            background.color = Color.white;
-            background.raycastTarget = true;
-
-            var contentObject = new GameObject("Content", typeof(RectTransform));
-            var content = contentObject.GetComponent<RectTransform>();
-            content.SetParent(rootRect, false);
-            AvKit.Stretch(content);
+            ClampPanelIntoCanvas(rootRect);
 
             ModServices.TryGet(out baseAlarm);
             ModServices.TryGet(out highCommand);
             ModServices.TryGet(out theaterWar);
             ModServices.TryGet(out threatPicture);
 
-            shell = AvScreen.Build(
-                content, "STR",
-                new[] { "SITUATION", "COMMAND", "OPERATIONS" },
-                new[]
-                {
-                    new[] { "THEATER CONTROL", "HELD" },
-                    new[] { "AIR DOMINANCE", "ALLIED" },
-                    new[] { "COMMAND", "STAFF" },
-                },
-                ChipCount, Width, height, _ => nextRefresh = 0f);
+            console = AvConsole.Build(rootRect, "STR", "STRATEGY", 3, Width, height);
+            console.Tabs(
+                (AvIcon.Radar2, "SITUATION"),
+                (AvIcon.UsersGroup, "COMMAND"),
+                (AvIcon.Flag, "OPERATIONS"));
+            chips = console.Chips(3);
+            metrics = console.Metrics("THEATER CONTROL", "AIR DOMINANCE", "COMMAND");
+            console.PageChanged += _ => nextRefresh = 0f;
 
-            // The panel's primary navigation is also a control, and every control explains
-            // itself on the status strip.
-            if (shell.Tabs.Length > 0)
-                shell.Tabs[0].WithTooltip("Air picture, sortie board and sector control.");
-            if (shell.Tabs.Length > 1)
-                shell.Tabs[1].WithTooltip("Chain of command: posts, personnel files and the staff log.");
-            if (shell.Tabs.Length > 2)
-                shell.Tabs[2].WithTooltip("Theater operations: offensives, main effort and reinforcement calls.");
-            string[] tabGlyphs = { "theater", "person", "flag" };
-            for (int i = 0; i < shell.Tabs.Length && i < tabGlyphs.Length; i++)
-                DecorateStrTab(shell.Tabs[i], tabGlyphs[i]);
-
-            // A caption that gets ellipsised is a reading the panel did not give. The sheet
-            // tracks captions for the display type, and the counts they carry ("3264/3188",
-            // "6 ACTIVE · 2 KIA") are long enough that the tracking closes the last glyph
-            // off. The row drops tracking on the captions only, so the three cells keep one
-            // key, value, unit and caption baseline.
-            for (int i = 0; i < shell.Metrics.Length; i++)
-                if (shell.Metrics[i].Caption != null) shell.Metrics[i].Caption.characterSpacing = 0f;
-
-            BuildSaPage(shell.CreatePage(TabSa, "SaPage"));
-            cocPage = shell.CreatePage(TabCoc, "CocPage");
-            BuildCmdPage(shell.CreatePage(TabCmd, "CmdPage"));
+            BuildSaPage(console.Page(TabSa));
+            cocPage = console.Page(TabCoc);
+            BuildCmdPage(console.Page(TabCmd));
+            console.Finish();
 
             MFDScreen result = root.AddComponent<MFDScreen>();
             result.shortName = "STR";
-            result.displayPanel = contentObject;
+            result.displayPanel = console.Root.gameObject;
             result.aircraftOnly = false;
             result.label = bezel != null ? bezel.GetComponentInChildren<TextMeshProUGUI>(true) : null;
             result.highlight = FindHighlight(bezel);
@@ -359,7 +264,7 @@ namespace BoscaliSummer.Features.Command.Presentation
             }
 
             screenRoot = root;
-            shell.SetPage(TabSa);
+            console.SetPage(TabSa);
             return result;
         }
 
@@ -374,615 +279,235 @@ namespace BoscaliSummer.Features.Command.Presentation
             return button.GetComponent<Image>();
         }
 
-        // ---- Page scaffolding ------------------------------------------------------------
-
-        private static void DecorateStrTab(AvButton tab, string kind)
+        /// <summary>Same clamp the v1 kit's canvas-clamp helper performed, kept local: a bezel near a screen edge must not overhang it.</summary>
+        private static void ClampPanelIntoCanvas(RectTransform panel, float margin = 8f)
         {
-            if (tab == null) return;
-            var root = (RectTransform)tab.transform;
-            // The shell's layout has not necessarily reached the Canvas pass yet.
-            float width = root.sizeDelta.x > 1f ? root.sizeDelta.x : root.rect.width;
-            float height = root.sizeDelta.y > 1f ? root.sizeDelta.y : root.rect.height;
-            if (width <= 1f) width = Width / 3f;
-            if (height <= 1f) height = AvTokens.TabBarHeight;
-            var icon = new GameObject("TabIcon", typeof(RectTransform), typeof(MfdGlyph));
-            var rect = (RectTransform)icon.transform;
-            rect.SetParent(root, false);
-            AvKit.Place(rect, new Rect(8f, -(height - 14f) * .5f, 14f, 14f));
-            var glyph = icon.GetComponent<MfdGlyph>();
-            glyph.raycastTarget = false;
-            glyph.SetKind(kind, AvTheme.RailInfo);
-            TMP_Text label = tab.GetComponentInChildren<TMP_Text>();
-            if (label == null) return;
-            AvKit.Place(label.rectTransform, new Rect(26f, 0f, width - 30f, height));
-            label.alignment = TextAlignmentOptions.MidlineLeft;
-        }
+            if (panel == null) return;
+            Canvas canvas = panel.GetComponentInParent<Canvas>();
+            if (canvas == null) return;
+            var canvasRt = canvas.rootCanvas.transform as RectTransform;
+            if (canvasRt == null || panel.parent == null) return;
 
-        private static string SectionGlyph(string title)
-        {
-            if (title.Contains("AIR") || title.Contains("SORTIE")) return "air";
-            if (title.Contains("SECTOR") || title.Contains("GROUND")) return "control";
-            if (title.Contains("COMMAND") || title.Contains("STAFF")) return "person";
-            if (title.Contains("OPERATIONS") || title.Contains("AXES")) return "flag";
-            if (title.Contains("REINFORCE") || title.Contains("READINESS")) return "convoy";
-            return "theater";
-        }
-
-        private static void SectionIcon(RectTransform parent, float x, float y, string title)
-        {
-            var icon = new GameObject("SectionIcon", typeof(RectTransform), typeof(MfdGlyph));
-            var rect = (RectTransform)icon.transform;
-            rect.SetParent(parent, false);
-            AvKit.Place(rect, new Rect(x, y - 1f, 13f, 13f));
-            var glyph = icon.GetComponent<MfdGlyph>();
-            glyph.raycastTarget = false;
-            glyph.SetKind(SectionGlyph(title), AvTheme.RailInfo);
-        }
-
-        /// <summary>
-        /// The one section header every page wears: a spine tick, the title, the live note
-        /// on the right of the same line, and a hairline rule under both. The title and the
-        /// note get their own halves of the line — drawing both across the full width is
-        /// what made the old header overprint itself — and every section on every page is
-        /// aligned to the same left column.
-        /// </summary>
-        private static float SectionHeader(
-            RectTransform parent, float x, float y, float width, string title, string note,
-            bool band, out TMP_Text noteLabel)
-        {
-            // Every section uses one quiet rule; bands looked like another navigation row.
-            AvStyled.SpineTick(parent, x - AvScreen.SpineInset + 3f, y - 7f);
-
-            float titleWidth = width * 0.56f;
-            SectionIcon(parent, x, y, title);
-            AvStyled.Label(parent, new Rect(x + 19f, y, titleWidth - 19f, 14f), title, "section-title");
-            // The slot exists on every header, even one with nothing to say yet: a live
-            // count then has somewhere to land without a second layout pass.
-            noteLabel = AvStyled.Label(parent, new Rect(x + titleWidth, y, width - titleWidth, 14f),
-                                       note ?? "", "section-title-note",
-                                       align: TextAlignmentOptions.MidlineRight);
-            Divider(parent, x, y - 17f, width);
-            return y - HeaderStep;
-        }
-
-        private static float SectionHeader(
-            RectTransform parent, float x, float y, float width, string title, string note, bool band) =>
-            SectionHeader(parent, x, y, width, title, note, band, out _);
-
-        /// <summary>A label/figure pair on one line, the figure right-aligned against the gutter.</summary>
-        private static TMP_Text KeyValue(
-            RectTransform parent, float x, float y, float width, string key, string initial = "—")
-        {
-            AvStyled.Label(parent, new Rect(x, y, width * 0.6f, 16f), key, "kv-key");
-            return AvStyled.Label(parent, new Rect(x + width * 0.6f, y, width * 0.4f, 16f),
-                                  initial, "kv-value", align: TextAlignmentOptions.MidlineRight);
-        }
-
-        private static void Divider(RectTransform parent, float x, float y, float width) =>
-            AvKit.Rule(parent, new Rect(x, y, width, 1f),
-                       AvTheme.Unity(AvTokens.Hairline.WithAlpha(0.35f)));
-
-        /// <summary>
-        /// One row of the sortie board: the role on the left, its count right-aligned, and a
-        /// short track under the figure for the role's share of the AI aircraft that were
-        /// actually observed. There is no rule drawn from the name to the number: that long
-        /// fill read as a data bar while carrying no figure of its own.
-        /// </summary>
-        private sealed class SortieRow
-        {
-            private const float ValueWidth = 64f;
-
-            private readonly TMP_Text name;
-            private readonly TMP_Text value;
-            private readonly Image track;
-            private readonly Image fill;
-
-            public SortieRow(RectTransform parent, float x, float y, float width)
+            var corners = new Vector3[4];
+            panel.GetWorldCorners(corners);
+            float minX = float.MaxValue, maxX = float.MinValue, minY = float.MaxValue, maxY = float.MinValue;
+            for (int i = 0; i < 4; i++)
             {
-                var root = new GameObject("SortieRow", typeof(RectTransform));
-                var rect = (RectTransform)root.transform;
-                rect.SetParent(parent, false);
-                AvKit.Place(rect, new Rect(x, y, width, SortiePitch));
-
-                name = AvStyled.Label(rect, new Rect(0f, 0f, width - ValueWidth - AvTokens.Space2, 14f),
-                                      "", "row-name");
-                value = AvStyled.Label(rect, new Rect(width - ValueWidth, 0f, ValueWidth, 14f),
-                                       "—", "row-value", align: TextAlignmentOptions.MidlineRight);
-                track = AvKit.Panel(rect, new Rect(width - ValueWidth, -15f, ValueWidth, 3f),
-                                    AvTheme.SurfaceInert);
-                fill = AvKit.Panel(rect, new Rect(width - ValueWidth + 1f, -16f, ValueWidth - 2f, 1f),
-                                   AvTheme.RailInfo);
-                fill.sprite = AvSprites.White;
-                fill.type = Image.Type.Filled;
-                fill.fillMethod = Image.FillMethod.Horizontal;
-                fill.fillOrigin = 0;
-
-                Divider(rect, 0f, -(SortiePitch - 1f), width);
+                Vector3 local = canvasRt.InverseTransformPoint(corners[i]);
+                if (local.x < minX) minX = local.x;
+                if (local.x > maxX) maxX = local.x;
+                if (local.y < minY) minY = local.y;
+                if (local.y > maxY) maxY = local.y;
             }
 
-            /// <summary>
-            /// Bind the row. <paramref name="known"/> false hides the track entirely: a bar
-            /// beside a dash is the panel making a claim it could not verify.
-            /// </summary>
-            public void Bind(string role, string figure, bool known, float share, Color colour)
+            Rect bounds = canvasRt.rect;
+            float dx = 0f;
+            if (minX < bounds.xMin + margin) dx = bounds.xMin + margin - minX;
+            else if (maxX > bounds.xMax - margin) dx = bounds.xMax - margin - maxX;
+            float dy = 0f;
+            if (maxY > bounds.yMax - margin) dy = bounds.yMax - margin - maxY;
+            else if (minY < bounds.yMin + margin) dy = bounds.yMin + margin - minY;
+            if (Mathf.Approximately(dx, 0f) && Mathf.Approximately(dy, 0f)) return;
+
+            Vector3 world = canvasRt.TransformVector(new Vector3(dx, dy, 0f));
+            Vector3 local2 = panel.parent.InverseTransformVector(world);
+            panel.anchoredPosition += new Vector2(local2.x, local2.y);
+        }
+
+        /// <summary>Same bounded resolution the v1 kit's screen-height resolver performed, kept local.</summary>
+        internal static float ResolveHeight(RectTransform parent, float min, float max)
+        {
+            if (max < min) max = min;
+            if (parent == null) return min;
+            float available = parent.rect.height;
+            RectTransform cursor = parent;
+            for (int i = 0; i < 4 && available <= 1f && cursor != null; i++)
             {
-                name.text = role;
-                value.text = figure;
-                value.color = known ? AvTheme.TextPrimary : AvTheme.Disabled;
+                cursor = cursor.parent as RectTransform;
+                if (cursor != null) available = cursor.rect.height;
+            }
+            if (available <= 1f) return min;
+            return Mathf.Clamp(Mathf.Floor(available), min, max);
+        }
 
-                if (track.gameObject.activeSelf != known) track.gameObject.SetActive(known);
-                if (fill.gameObject.activeSelf != known) fill.gameObject.SetActive(known);
-                if (!known) return;
+        // ---- Shared state mapping ----------------------------------------------------------
 
-                fill.color = colour;
-                fill.fillAmount = Mathf.Clamp01(share);
+        /// <summary>Maps the domain's rail-category strings (TheaterReadout) onto kit v2 <see cref="AvState"/>.</summary>
+        internal static AvState RailState(string rail)
+        {
+            switch (rail)
+            {
+                case "danger": return AvState.Danger;
+                case "warn":
+                case "caution":
+                case "contested": return AvState.Caution;
+                case "ready": return AvState.Ready;
+                case "live":
+                case "info": return AvState.Info;
+                default: return AvState.Inert;
             }
         }
 
-        /// <summary>
-        /// One row of the sector-control legend: a colour mark, the side it belongs to, the
-        /// sector count and the share, on one column grid so every figure starts and ends on
-        /// the same edge as the figure above it.
-        /// </summary>
-        private sealed class SectorLegend
+        /// <summary>Prepends the state glyph (R1: status is never colour alone) to a value AvRow will show.</summary>
+        internal static string Glyphed(string text, AvState state) => AvStates.Glyph(state) + (text ?? "");
+
+        // ---- SITUATION page ------------------------------------------------------------------
+
+        private void BuildSaPage(AvFlow p)
         {
-            private const float CountWidth = 56f;
-            private const float ShareWidth = 52f;
+            p.Section(AvIcon.Radar2, "AIR PICTURE", "C4ISR");
+            airRow = p.Add(new AvRow(p.Content));
 
-            private readonly Image mark;
-            private readonly TMP_Text key;
-            private readonly TMP_Text count;
-            private readonly TMP_Text share;
-
-            public SectorLegend(RectTransform parent, float x, float y, float width)
-            {
-                var root = new GameObject("SectorLegend", typeof(RectTransform));
-                var rect = (RectTransform)root.transform;
-                rect.SetParent(parent, false);
-                AvKit.Place(rect, new Rect(x, y, width, LegendPitch));
-
-                // A mark, not a rail: the rail language means state everywhere else, and
-                // this one's only job is to key the share bar's colours.
-                mark = AvKit.Rule(rect, new Rect(0f, -6f, 10f, 6f), AvTheme.RailInert);
-                float keyWidth = width - CountWidth - ShareWidth - 16f;
-                key = AvStyled.Label(rect, new Rect(14f, 0f, keyWidth, 14f), "", "kv-key");
-                count = AvStyled.Label(rect, new Rect(width - CountWidth - ShareWidth, 0f, CountWidth, 14f),
-                                       "—", "row-value", align: TextAlignmentOptions.MidlineRight);
-                share = AvStyled.Label(rect, new Rect(width - ShareWidth, 0f, ShareWidth, 14f),
-                                       "—", "row-value-unit", align: TextAlignmentOptions.MidlineRight);
-            }
-
-            public void Bind(string label, string countText, string shareText, Color colour, Color countColour)
-            {
-                key.text = label;
-                count.text = countText;
-                count.color = countColour;
-                share.text = shareText;
-                mark.color = colour;
-            }
-        }
-
-        /// <summary>
-        /// One pooled list row: a state rail, a name, a state line, a trailing figure, and an
-        /// optional track under it.
-        ///
-        /// <para>The track is shown only where the caller has a fraction that means
-        /// something; a row with no figure reads as a dash and its state line, never as a
-        /// bare bar. Rows keep a fixed pitch so a refresh reuses them instead of rebuilding
-        /// the list four times a second.</para>
-        /// </summary>
-        private sealed class ListRow
-        {
-            private readonly GameObject root;
-            private readonly Image background;
-            private readonly Image rail;
-            private readonly TMP_Text name;
-            private readonly TMP_Text detail;
-            private readonly TMP_Text value;
-            private readonly Image track;
-            private readonly Image fill;
-            private readonly Image divider;
-            private readonly AvButton hit;
-            private readonly float width;
-            private float height;
-
-            public ListRow(RectTransform parent, float x, float y, float width, float pitch)
-            {
-                this.width = width;
-                height = pitch - 2f;
-
-                root = new GameObject("ListRow", typeof(RectTransform));
-                var rect = root.GetComponent<RectTransform>();
-                rect.SetParent(parent, false);
-                AvKit.Place(rect, new Rect(x, y, width, height));
-
-                const float trail = 64f;
-                float textWidth = width - trail - AvTokens.Space3;
-
-                background = AvKit.Panel(rect, new Rect(0f, 0f, width, height), Color.clear);
-                rail = AvStyled.Rail(rect, new Rect(0f, -2f, 3f, Mathf.Max(8f, height - 6f)), "locked");
-                // The name and its state line are one row tall, so a clipped tail must be an
-                // ellipsis on that row rather than a second line printed over the next one.
-                name = AvStyled.Label(rect, new Rect(12f, -3f, textWidth, 16f), "", "row-name");
-                detail = AvStyled.Label(rect, new Rect(12f, -21f, textWidth, 16f), "", "row-sub");
-                detail.enableWordWrapping = false;
-                detail.overflowMode = TextOverflowModes.Ellipsis;
-                value = AvStyled.Label(rect, new Rect(width - trail, 0f, trail, 14f), "",
-                                       "row-value", align: TextAlignmentOptions.MidlineRight);
-                track = AvKit.Panel(rect, new Rect(width - trail, -17f, trail, 3f), AvTheme.SurfaceInert);
-                fill = AvKit.Panel(rect, new Rect(width - trail + 1f, -18f, trail - 2f, 1f),
-                                   AvTheme.RailInert);
-                fill.sprite = AvSprites.White;
-                fill.type = Image.Type.Filled;
-                fill.fillMethod = Image.FillMethod.Horizontal;
-                fill.fillOrigin = 0;
-
-                divider = AvKit.Rule(rect, new Rect(0f, -(height - 2f), width, 1f),
-                                     AvTheme.Unity(AvTokens.Hairline.WithAlpha(0.35f)));
-                hit = AvKit.HitButton(rect, new Rect(0f, 0f, width, height), null);
-                hit.SetEnabled(false);
-                root.SetActive(false);
-            }
-
-            /// <summary>
-            /// Moves the row to a new line of the page. The page re-flows its lists when the
-            /// data changes length, so a row has to be placeable more than once; only the
-            /// pitch changes, which is the rail's height and the closing hairline.
-            /// </summary>
-            public void Place(float x, float y, float pitch)
-            {
-                height = pitch - 2f;
-                var rect = (RectTransform)root.transform;
-                AvKit.Place(rect, new Rect(x, y, width, height));
-                AvKit.Place(background.rectTransform, new Rect(0f, 0f, width, height));
-                AvKit.Place(rail.rectTransform, new Rect(0f, -2f, 3f, Mathf.Max(8f, height - 6f)));
-                AvKit.Place(divider.rectTransform, new Rect(0f, -(height - 2f), width, 1f));
-                AvKit.Place((RectTransform)hit.transform, new Rect(0f, 0f, width, height));
-            }
-
-            public void Bind(string railState, string title, string sub, string figure,
-                             bool showTrack, float fraction, Color figureColor, Color trackColor,
-                             Action onClick = null, string tooltip = null)
-            {
-                rail.color = AvStyleHost.Resolve(
-                    AvStyleHost.Style("rail " + railState).Background, AvTheme.RailInert);
-
-                name.text = title ?? "";
-                detail.text = sub ?? "";
-                value.text = figure ?? "";
-                value.color = figureColor;
-
-                if (track.gameObject.activeSelf != showTrack) track.gameObject.SetActive(showTrack);
-                if (fill.gameObject.activeSelf != showTrack) fill.gameObject.SetActive(showTrack);
-                if (showTrack)
-                {
-                    fill.color = trackColor;
-                    fill.fillAmount = Mathf.Clamp01(fraction);
-                }
-
-                bool clickable = onClick != null;
-                hit.SetAction(onClick);
-                hit.SetEnabled(clickable);
-                // A row that cannot be clicked still explains itself on hover: the reason
-                // belongs on the status strip, not in a missing cursor.
-                hit.WithTooltip(string.IsNullOrEmpty(tooltip) ? null : tooltip);
-                hit.SetRowHighlight(background, Color.clear, clickable ? RowHover : Color.clear);
-
-                if (!root.activeSelf) root.SetActive(true);
-            }
-
-            public void Hide()
-            {
-                hit.SetAction(null);
-                hit.SetEnabled(false);
-                if (root.activeSelf) root.SetActive(false);
-            }
-        }
-
-        // ---- SA page ---------------------------------------------------------------------
-
-        private void BuildSaPage(GameObject page)
-        {
-            Rect view = shell.Body;
-
-            // The page fills the bay. When the fixed blocks leave room for the contested
-            // list, the list takes what fits and its pitch spreads to meet the status line
-            // rather than ending in a dead strip; when the bay is short the full window is
-            // built and the page scrolls instead of silently showing fewer nodes than the
-            // list is allowed to name.
-            float space = view.height - SaFixedHeight;
-            bool fits = space >= NodeRowMinimum * ListPitch;
-            nodeRowsBuilt = fits
-                ? Mathf.Clamp(Mathf.FloorToInt(space / ListPitch), NodeRowMinimum, NodeRowCount)
-                : NodeRowCount;
-            nodeRowPitch = fits
-                ? Mathf.Clamp(space / nodeRowsBuilt, ListPitch, NodePitchMax)
-                : ListPitch;
-
-            float contentHeight = Mathf.Max(view.height, SaFixedHeight + nodeRowsBuilt * nodeRowPitch);
-            Rect body;
-            frontRoot = AvScreen.Scroll((RectTransform)page.transform, view, contentHeight, out body);
-
-            AvStyled.Spine(frontRoot, new Rect(body.x, body.y, 3f, body.height));
-
-            float y = BuildSaBody(frontRoot, body, body.y);
-            BuildFrontBody(frontRoot, body, y);
-        }
-
-        private float BuildSaBody(RectTransform parent, Rect body, float y)
-        {
-            float x = body.x + AvScreen.SpineInset;
-            float width = body.width - AvScreen.SpineInset;
-
-            y = SectionHeader(parent, x, y, width, "AIR PICTURE", "C4ISR", band: false);
-
-            // The alert is a single instrument: classification, warning and air balance.
-            // Draw it before the text so its frame stays below the readings.
-            AvKit.Panel(parent, new Rect(x, y + 3f, width, 67f), AvTheme.Surface);
-            saAlertRail = AvKit.Rule(parent, new Rect(x, y + 3f, 3f, 67f), AvTheme.RailInert);
-
-            defconLabel = AvStyled.Label(parent, new Rect(x + 10f, y, width - 20f, 16f),
-                                         "DEFCON —", "row-name");
-            y -= 18f;
-            threatLabel = AvStyled.Label(parent, new Rect(x + 10f, y, width - 20f, 18f), "", "row-main");
-            y -= 20f;
-
-            airCountLabel = AvStyled.Label(parent, new Rect(x + 10f, y, width - 20f, 14f), "", "kv-key");
-            y -= 16f;
-            airBarRoot = BuildAirTrack(parent, x + 10f, y, width - 20f);
-            y -= 14f;
-
-            y = SectionHeader(parent, x, y, width, "SORTIE BOARD", "FRIENDLY AI", band: true);
-
-            sortieNote = AvStyled.Label(parent, new Rect(x, y, width, 14f), "", "row-sub");
-            y -= 16f;
-
+            sortieSection = p.Section(AvIcon.Plane, "SORTIE BOARD", "FRIENDLY AI");
             for (int i = 0; i < Roles.Length; i++)
-            {
-                sortieRows[i] = new SortieRow(parent, x, y - i * SortiePitch, width);
-            }
-            y -= Roles.Length * SortiePitch + 6f;
+                sortieRows[i] = p.Add(new AvRow(p.Content));
 
-            y = SectionHeader(parent, x, y, width, "SURFACE & INFRASTRUCTURE", "ALLIED / HOSTILE",
-                              band: false);
+            p.Section(AvIcon.Shield, "SURFACE & INFRASTRUCTURE", "ALLIED / HOSTILE");
+            groundRow = p.Add(new AvRow(p.Content));
+            airbaseRow = p.Add(new AvRow(p.Content));
+            radarRow = p.Add(new AvRow(p.Content));
+            knownAdRow = p.Add(new AvRow(p.Content));
 
-            groundValue = KeyValue(parent, x, y, width, "GROUND FORCES");
-            y -= KvPitch;
-            airbaseValue = KeyValue(parent, x, y, width, "AIRBASES  ALLIED / HOSTILE / NEUTRAL");
-            y -= KvPitch;
+            p.Section(AvIcon.Map2, "SECTOR CONTROL", "LIVE FIELD");
+            alliedRow = p.Add(new AvRow(p.Content));
+            contestedRow = p.Add(new AvRow(p.Content));
+            hostileRow = p.Add(new AvRow(p.Content));
+            unclaimedRow = p.Add(new AvRow(p.Content));
+            frontlineRow = p.Add(new AvRow(p.Content));
+            nodesRow = p.Add(new AvRow(p.Content));
 
-            // "SAMS" was this number's old label. It is the friendly radar list, so it says so.
-            radarValue = KeyValue(parent, x, y, width, "FRIENDLY RADARS ON NET");
-            y -= KvPitch;
-
-            // Fog of war, not truth: only sites this faction has tracked, been shot at from, or
-            // was given as pre-war intel. The figure is long, so the key takes the narrower share
-            // and the figure shrinks to fit rather than ellipsising a reading.
-            AvStyled.Label(parent, new Rect(x, y, width * 0.3f, 16f), "KNOWN ENEMY AD", "kv-key");
-            knownAdValue = AvStyled.Label(parent, new Rect(x + width * 0.3f, y, width * 0.7f, 16f), "—",
-                                          "kv-value", align: TextAlignmentOptions.MidlineRight);
-            knownAdValue.enableWordWrapping = false;
-            knownAdValue.fontSizeMax = knownAdValue.fontSize;
-            knownAdValue.fontSizeMin = 9f;
-            knownAdValue.enableAutoSizing = true;
-            return y - KvPitch - 4f;
+            contestedSection = p.Section(AvIcon.AlertTriangle, "CONTESTED GROUND", "BY PRESSURE");
+            nodeList = p.Add(new AvList(p.Content, console.Ticker, NodeListPageSize, BindNodeRow));
         }
 
-        /// <summary>
-        /// The air-dominance track. It is its own object so the whole track can be hidden
-        /// when the ratio is unknown: an empty track under a dash would read as a measured
-        /// zero, which is exactly what the dash is there to refuse.
-        /// </summary>
-        private GameObject BuildAirTrack(RectTransform parent, float x, float y, float width)
+        private void BindNodeRow(int index, AvRow row)
         {
-            var root = new GameObject("AirTrack", typeof(RectTransform));
-            var rect = (RectTransform)root.transform;
-            rect.SetParent(parent, false);
-            AvKit.Place(rect, new Rect(x, y, width, 4f));
-
-            AvKit.Panel(rect, new Rect(0f, 0f, width, 4f), AvTheme.SurfaceInert);
-            airFill = AvKit.Panel(rect, new Rect(1f, -1f, width - 2f, 2f), AvTheme.RailCaution);
-            airFill.sprite = AvSprites.White;
-            airFill.type = Image.Type.Filled;
-            airFill.fillMethod = Image.FillMethod.Horizontal;
-            airFill.fillOrigin = 0;
-            return root;
+            if (index < 0 || index >= rankedCount) { row.Set("—", "", "", AvState.Inert); return; }
+            TacticalSectorGrid.TacticalNode node = ranked[index];
+            bool friendly = node.Faction == SectorControl.Friendly;
+            // Pressure on ground we hold is bad news; pressure on ground they hold is progress.
+            AvState state = friendly ? AvState.Caution : AvState.Ready;
+            bool pressing = node.CaptureProgress >= 0.05f;
+            string name = string.IsNullOrEmpty(node.Name) ? "UNNAMED NODE" : node.Name.ToUpperInvariant();
+            string pressureState = TheaterReadout.PressureState(node.CaptureProgress);
+            string figure = pressing ? Glyphed(TheaterReadout.Percent(node.CaptureProgress), state) : "—";
+            row.Set(name,
+                (node.IsAirbase ? "AIRBASE" : "STRONGPOINT") + " · " +
+                (friendly ? "ALLIED HELD" : "HOSTILE HELD") + " · " + pressureState,
+                figure,
+                RailState(TheaterReadout.NodeRail(friendly, node.IsContested)));
         }
 
         private void RefreshSa(TacticalTheaterState state)
         {
-            RefreshSaBody(state);
-            RefreshFrontBody(state);
-        }
+            if (airRow == null) return;
 
-        private void RefreshSaBody(TacticalTheaterState state)
-        {
-            if (defconLabel == null) return;
-
-            defconLabel.text = "DEFCON " + state.DefconLevel + " · " + state.PrimaryThreatDescription;
-            defconLabel.color = AvStyleHost.Resolve(
-                AvStyleHost.Style("rail " + TheaterReadout.DefconRail(state.DefconLevel)).Background,
-                AvTheme.TextPrimary);
-            if (saAlertRail != null) saAlertRail.color = defconLabel.color;
-
-            // The alert line carries the state in words and the ink follows the same scale,
-            // so the warning is never a colour with nothing said.
-            threatLabel.text = state.ActiveThreatWarning;
-            threatLabel.color = state.DefconLevel <= 2 ? AvTheme.Alert
-                              : state.DefconLevel == 3 ? AvTheme.Warning
-                              : AvTheme.Dim;
+            AvState defconState = state.DefconLevel <= 2 ? AvState.Danger
+                : state.DefconLevel == 3 ? AvState.Caution : AvState.Ready;
 
             bool airKnown = !float.IsNaN(state.AirSuperiorityRatio);
-            airCountLabel.text = "ALLIED " + state.FriendlyAircraftCount +
-                                 "   ·   HOSTILE " + state.HostileAircraftCount +
-                                 "   ·   " + TheaterReadout.Percent(state.AirSuperiorityRatio) + " DOMINANCE";
-            if (airBarRoot != null && airBarRoot.activeSelf != airKnown) airBarRoot.SetActive(airKnown);
-            if (airKnown)
-            {
-                airFill.fillAmount = Mathf.Clamp01(state.AirSuperiorityRatio);
-                airFill.color = state.AirSuperiorityRatio >= 0.5f ? AvTheme.RailReady : AvTheme.RailCaution;
-            }
+            AvState airState = !airKnown ? AvState.Inert
+                : state.AirSuperiorityRatio >= 0.5f ? AvState.Ready : AvState.Caution;
+            airRow.Set("DEFCON " + state.DefconLevel,
+                state.PrimaryThreatDescription +
+                (string.IsNullOrEmpty(state.ActiveThreatWarning) ? "" : " — " + state.ActiveThreatWarning) +
+                " · ALLIED " + state.FriendlyAircraftCount + " / HOSTILE " + state.HostileAircraftCount,
+                airKnown ? Glyphed(TheaterReadout.Percent(state.AirSuperiorityRatio), airState) : "—",
+                defconState);
 
             SortieTally tally = state.Sorties;
             bool known = tally.Observed > 0;
+            sortieSection.SetCaption(known
+                ? tally.Observed + " OBSERVED · " + tally.Tasked + " TASKED"
+                : "NO AI DATA");
 
-            sortieNote.text = known
-                ? tally.Observed + " AI AIRCRAFT OBSERVED · " + tally.Tasked + " TASKED"
-                : "NO AI PILOT STATE AVAILABLE — SORTIE ROLES UNKNOWN";
-            sortieNote.color = known ? AvTheme.Dim : AvTheme.RailCaution;
-
-            // The track under each count is the role's share of the aircraft the scan
-            // actually saw, so every bar has a figure above it and a denominator the note
-            // states.
             int observed = Mathf.Max(1, tally.Observed);
             for (int i = 0; i < Roles.Length; i++)
             {
                 int count = tally.Of(Roles[i]);
-                sortieRows[i].Bind(
+                sortieRows[i].Set(
                     SortieClassifier.Code(Roles[i]) + " · " + SortieClassifier.Name(Roles[i]),
-                    known ? count.ToString() : "—",
-                    known,
-                    count / (float)observed,
-                    Roles[i] == SortieRole.Transit ? AvTheme.RailInert : AvTheme.RailInfo);
+                    known ? "SHARE " + TheaterReadout.Percent(count / (float)observed) : "",
+                    known ? count.ToString(System.Globalization.CultureInfo.InvariantCulture) : "—",
+                    known ? AvState.Info : AvState.Inert);
             }
 
-            groundValue.text = state.FriendlyGroundUnitsCount + " / " + state.HostileGroundUnitsCount;
+            groundRow.Set("GROUND FORCES", null,
+                state.FriendlyGroundUnitsCount + " / " + state.HostileGroundUnitsCount, AvState.Info);
 
-            airbaseValue.text = state.FriendlyAirbaseCount + " / " + state.HostileAirbaseCount +
-                                " / " + state.NeutralAirbaseCount +
-                                (state.ContestedAirbaseCount > 0
-                                    ? "   (" + state.ContestedAirbaseCount + " CONTESTED)"
-                                    : "");
-            airbaseValue.color = state.ContestedAirbaseCount > 0
-                ? AvTheme.RailCaution
-                : AvTheme.TextPrimary;
+            bool contestedBases = state.ContestedAirbaseCount > 0;
+            airbaseRow.Set("AIRBASES", "ALLIED / HOSTILE / NEUTRAL",
+                Glyphed(state.FriendlyAirbaseCount + " / " + state.HostileAirbaseCount + " / " +
+                    state.NeutralAirbaseCount +
+                    (contestedBases ? "  (" + state.ContestedAirbaseCount + " CONTESTED)" : ""),
+                    contestedBases ? AvState.Caution : AvState.Info),
+                contestedBases ? AvState.Caution : AvState.Info);
 
-            radarValue.text = GameAccess.HqSensorsAvailable ? state.FriendlyRadarCount.ToString() : "—";
+            radarRow.Set("FRIENDLY RADARS ON NET", null,
+                GameAccess.HqSensorsAvailable ? state.FriendlyRadarCount.ToString(System.Globalization.CultureInfo.InvariantCulture) : "—",
+                AvState.Info);
+
+            RefreshFront(state);
         }
 
-        /// <summary>
-        /// The one SA line that reads Intel: this faction's known enemy air defence, at 1 Hz and
-        /// only while the SA page shows. Asking is what makes a client build its own picture.
-        /// </summary>
+        /// <summary>The one SA line that reads Intel: this faction's known enemy air defence, at 1 Hz and
+        /// only while the SITUATION page shows. Asking is what makes a client build its own picture.</summary>
         private void RefreshKnownAirDefence(FactionHQ hq)
         {
-            if (knownAdValue == null || Time.unscaledTime < nextKnownAdRefresh) return;
+            if (knownAdRow == null || Time.unscaledTime < nextKnownAdRefresh) return;
             nextKnownAdRefresh = Time.unscaledTime + KnownAdInterval;
             if (threatPicture == null) ModServices.TryGet(out threatPicture);
             int observer = hq != null ? hq.GetInstanceID() : 0;
             bool ready = hq != null && threatPicture != null && threatPicture.IsReady(observer);
             int count = ready ? threatPicture.CopyAirDefence(observer, knownAdRings) : 0;
-            knownAdValue.text = TheaterReadout.KnownAirDefence(ready, knownAdRings, count);
-            knownAdValue.color = ready ? AvTheme.TextPrimary : AvTheme.Disabled;
+            knownAdRow.Set("KNOWN ENEMY AD", null,
+                TheaterReadout.KnownAirDefence(ready, knownAdRings, count),
+                ready ? AvState.Info : AvState.Inert);
         }
 
-        // ---- Frontline (merged into SA) --------------------------------------------------
-
-        private void BuildFrontBody(RectTransform parent, Rect body, float y)
+        private void RefreshFront(TacticalTheaterState state)
         {
-            float x = body.x + AvScreen.SpineInset;
-            float width = body.width - AvScreen.SpineInset;
-
-            y = SectionHeader(parent, x, y, width, "SECTOR CONTROL", "LIVE FIELD", band: false);
-
-            controlBarRect = new Rect(x, y, width, 8f);
-            AvStyled.Box(parent, controlBarRect, "bar");
-            for (int i = 0; i < controlBarFill.Length; i++)
-            {
-                controlBarFill[i] = AvKit.Panel(parent, new Rect(x, y, 0f, 8f), Color.clear);
-            }
-            y -= 12f;
-
-            for (int i = 0; i < sectorLegend.Length; i++)
-            {
-                sectorLegend[i] = new SectorLegend(parent, x, y - i * LegendPitch, width);
-            }
-            y -= sectorLegend.Length * LegendPitch + 6f;
-
-            frontlineValue = KeyValue(parent, x, y, width, "FRONTLINE LENGTH");
-            y -= KvPitch;
-            nodeValue = KeyValue(parent, x, y, width, "TRACKED NODES");
-            y -= KvPitch + 4f;
-
-            y = SectionHeader(parent, x, y, width, "CONTESTED GROUND", "BY PRESSURE", band: true);
-
-            nodeNote = AvStyled.Label(parent, new Rect(x, y, width, 14f), "", "row-sub");
-            y -= 16f + 2f;
-
-            for (int i = 0; i < nodeRowsBuilt; i++)
-            {
-                nodeRows[i] = new ListRow(parent, x, y - i * nodeRowPitch, width, nodeRowPitch);
-            }
-        }
-
-        private void RefreshFrontBody(TacticalTheaterState state)
-        {
-            if (frontlineValue == null) return;
-
             TheaterReadout.Shares(
                 state.FriendlySectorCount, state.ContestedSectorCount,
                 state.HostileSectorCount, state.NeutralSectorCount,
                 out float friendly, out float contested, out float hostile);
-
-            float[] shares = { friendly, contested, hostile };
-            Color[] colours = {
-                AvStyleHost.Resolve(AvStyleHost.Style("bar-friendly").Background, AvTheme.Accent),
-                AvStyleHost.Resolve(AvStyleHost.Style("bar-contested").Background, AvTheme.RailCaution),
-                AvStyleHost.Resolve(AvStyleHost.Style("bar-hostile").Background, AvTheme.RailDanger)
-            };
-
-            float cursor = controlBarRect.x;
-            for (int i = 0; i < controlBarFill.Length; i++)
-            {
-                float w = Mathf.Max(0f, controlBarRect.width * shares[i]);
-                AvKit.Place(controlBarFill[i].rectTransform,
-                            new Rect(cursor, controlBarRect.y, w, controlBarRect.height));
-                controlBarFill[i].color = w > 0.5f ? colours[i] : Color.clear;
-                cursor += w;
-            }
-
-            // The bar shows the split; the legend rows put the same split into figures on
-            // one column grid, so the counts and shares line up instead of riding the end
-            // of a sentence.
             float unclaimed = Mathf.Clamp01(1f - friendly - contested - hostile);
-            sectorLegend[0].Bind("ALLIED", state.FriendlySectorCount.ToString(),
-                                 TheaterReadout.Percent(friendly), colours[0], AvTheme.TextPrimary);
-            sectorLegend[1].Bind("CONTESTED", state.ContestedSectorCount.ToString(),
-                                 TheaterReadout.Percent(contested), colours[1],
-                                 state.ContestedSectorCount > 0 ? AvTheme.RailCaution : AvTheme.TextPrimary);
-            sectorLegend[2].Bind("HOSTILE", state.HostileSectorCount.ToString(),
-                                 TheaterReadout.Percent(hostile), colours[2], AvTheme.TextPrimary);
-            sectorLegend[3].Bind("UNCLAIMED", state.NeutralSectorCount.ToString(),
-                                 TheaterReadout.Percent(unclaimed), AvTheme.RailInert, AvTheme.Dim);
 
-            frontlineValue.text = state.FrontlineSegmentCount > 0
-                ? TheaterReadout.Kilometres(state.FrontlineLengthMetres)
-                : "NO CONTACT";
-            nodeValue.text = state.TotalNodesCount + " / " + TacticalSectorGrid.MaximumNodes;
+            alliedRow.Set("ALLIED", TheaterReadout.Percent(friendly), state.FriendlySectorCount.ToString(
+                System.Globalization.CultureInfo.InvariantCulture), AvState.Ready);
+            contestedRow.Set("CONTESTED", TheaterReadout.Percent(contested), state.ContestedSectorCount.ToString(
+                System.Globalization.CultureInfo.InvariantCulture),
+                state.ContestedSectorCount > 0 ? AvState.Caution : AvState.Inert);
+            hostileRow.Set("HOSTILE", TheaterReadout.Percent(hostile), state.HostileSectorCount.ToString(
+                System.Globalization.CultureInfo.InvariantCulture), AvState.Danger);
+            unclaimedRow.Set("UNCLAIMED", TheaterReadout.Percent(unclaimed), state.NeutralSectorCount.ToString(
+                System.Globalization.CultureInfo.InvariantCulture), AvState.Inert);
 
-            RefreshNodeRows();
+            frontlineRow.Set("FRONTLINE LENGTH", null,
+                state.FrontlineSegmentCount > 0 ? TheaterReadout.Kilometres(state.FrontlineLengthMetres) : "NO CONTACT",
+                AvState.Info);
+            nodesRow.Set("TRACKED NODES", null,
+                state.TotalNodesCount + " / " + TacticalSectorGrid.MaximumNodes, AvState.Info);
+
+            RefreshNodeList();
         }
 
-        private void RefreshNodeRows()
+        private void RefreshNodeList()
         {
             TacticalSectorGrid grid = overlay != null ? overlay.Grid : null;
             if (grid == null)
             {
-                nodeNote.text = "SECTOR FIELD NOT RUNNING.";
-                nodeNote.color = AvTheme.Dim;
-                for (int i = 0; i < nodeRowsBuilt; i++) nodeRows[i].Hide();
+                rankedCount = 0;
+                nodeList.SetCount(0);
+                contestedSection.SetCaption("SECTOR FIELD NOT RUNNING");
                 return;
             }
 
             IReadOnlyList<TacticalSectorGrid.TacticalNode> nodes = grid.GetNodes();
 
-            // Keep the worst few by insertion into a fixed window. The catalogue is capped
-            // at 128 nodes and the window at 8, so this is a bounded pass with no allocation
-            // and no full sort of a list that is mostly not contested.
-            int contestedTotal = 0;
-            int pressingTotal = 0;
-            int shown = 0;
-
+            // Keep the worst NodeRankCap by insertion into a fixed window: bounded, no allocation,
+            // no full sort of a list that is mostly not contested.
+            int contestedTotal = 0, pressingTotal = 0, shown = 0;
             for (int i = 0; i < nodes.Count; i++)
             {
                 if (!nodes[i].IsContested) continue;
@@ -990,72 +515,26 @@ namespace BoscaliSummer.Features.Command.Presentation
                 if (nodes[i].CaptureProgress >= 0.05f) pressingTotal++;
 
                 float pressure = nodes[i].CaptureProgress;
-
                 int slot = shown;
                 while (slot > 0 && ranked[slot - 1].CaptureProgress < pressure) slot--;
-                if (slot >= nodeRowsBuilt) continue;
-
-                for (int j = Mathf.Min(shown, nodeRowsBuilt - 1); j > slot; j--)
-                {
-                    ranked[j] = ranked[j - 1];
-                }
-
+                if (slot >= NodeRankCap) continue;
+                for (int j = Mathf.Min(shown, NodeRankCap - 1); j > slot; j--) ranked[j] = ranked[j - 1];
                 ranked[slot] = nodes[i];
-                if (shown < nodeRowsBuilt) shown++;
+                if (shown < NodeRankCap) shown++;
             }
+            rankedCount = shown;
+            nodeList.SetCount(shown);
 
-            for (int i = 0; i < shown; i++)
-            {
-                TacticalSectorGrid.TacticalNode node = ranked[i];
-                bool friendly = node.Faction == SectorControl.Friendly;
-
-                // Pressure on ground we hold is bad news; pressure on ground they hold is
-                // progress. Same number, opposite meaning, so the rail cannot be the only
-                // thing that says which.
-                Color tint = friendly ? AvTheme.RailCaution : AvTheme.RailReady;
-
-                bool pressing = node.CaptureProgress >= 0.05f;
-                string name = string.IsNullOrEmpty(node.Name) ? "UNNAMED NODE" : node.Name.ToUpperInvariant();
-                string state = TheaterReadout.PressureState(node.CaptureProgress);
-                string figure = pressing ? TheaterReadout.Percent(node.CaptureProgress) : "—";
-
-                // A row that carries no percentage says why in words beside the dash, and
-                // the track stays off: no bare bar is drawn for a reading that is not there.
-                nodeRows[i].Bind(
-                    TheaterReadout.NodeRail(friendly, node.IsContested),
-                    name,
-                    (node.IsAirbase ? "AIRBASE" : "STRONGPOINT") + " · " +
-                    (friendly ? "ALLIED HELD" : "HOSTILE HELD") + " · " + state,
-                    figure,
-                    pressing,
-                    pressing ? node.CaptureProgress : 0f,
-                    tint, tint,
-                    null,
-                    name + " — " + (friendly ? "allied held" : "hostile held") + ", " + state.ToLowerInvariant() + ".");
-            }
-
-            for (int i = shown; i < nodeRowsBuilt; i++) nodeRows[i].Hide();
-
-            if (contestedTotal == 0)
-            {
-                nodeNote.text = "NO CONTESTED GROUND. THE LINE IS QUIET.";
-                nodeNote.color = AvTheme.Dim;
-            }
-            else
-            {
-                nodeNote.text = contestedTotal + " NODE" + (contestedTotal == 1 ? "" : "S") +
-                                " IN CONTACT" +
-                                (pressingTotal > 0 ? " · " + pressingTotal + " UNDER PRESSURE" : "") +
-                                (contestedTotal > shown ? " · SHOWING TOP " + shown : "");
-                nodeNote.color = AvTheme.RailCaution;
-            }
+            contestedSection.SetCaption(contestedTotal == 0
+                ? "NO CONTACT"
+                : contestedTotal + " IN CONTACT" + (pressingTotal > 0 ? " · " + pressingTotal + " PRESSING" : ""));
         }
 
-        // ---- Refresh ---------------------------------------------------------------------
+        // ---- Refresh -----------------------------------------------------------------------
 
         private void Refresh()
         {
-            if (command == null || shell == null) return;
+            if (command == null || console == null) return;
 
             highCommand?.Refresh();
             if (theaterWar == null) ModServices.TryGet(out theaterWar);
@@ -1069,9 +548,9 @@ namespace BoscaliSummer.Features.Command.Presentation
 
             RefreshChrome(state);
 
-            if (shell.Page != TabCoc && highCommand != null) highCommand.Highlight(-1);
+            if (console.CurrentPage != TabCoc && highCommand != null) highCommand.Highlight(-1);
 
-            switch (shell.Page)
+            switch (console.CurrentPage)
             {
                 case TabSa:
                     RefreshSa(state);
@@ -1088,65 +567,62 @@ namespace BoscaliSummer.Features.Command.Presentation
                 case TabCmd: RefreshCmd(); break;
             }
 
-            shell.WriteStatus(
-                baseAlarm != null ? baseAlarm.ActiveAlertTicker : null,
-                MapPicker.Prompt,
-                Ambient(state));
+            string alarm = baseAlarm != null ? baseAlarm.ActiveAlertTicker : null;
+            string prompt = MapPicker.Prompt;
+            string status = !string.IsNullOrEmpty(alarm) ? alarm
+                : !string.IsNullOrEmpty(prompt) ? prompt : Ambient(state);
+            AvState footerState = state.DefconLevel <= 2 ? AvState.Danger
+                : state.DefconLevel == 3 ? AvState.Caution : AvState.Inert;
+            console.Footer.Set(status, footerState);
+
+            // Row counts, wrapped copy and hidden rows change what each part measures; the flow
+            // only re-measures when asked, so ask once per refresh (4 Hz) for the page in view.
+            console.Page(console.CurrentPage).Relayout();
         }
 
         private void RefreshChrome(TacticalTheaterState state)
         {
-            shell.DataBar.State.text = state.PrimaryThreatDescription == "ACTIVE GROUND BATTLE"
-                ? "GROUND BATTLE" : state.PrimaryThreatDescription;
-            shell.DataBar.State.color = state.DefconLevel <= 2 ? AvTheme.Alert
-                                      : state.DefconLevel == 3 ? AvTheme.Warning
-                                      : AvTheme.Dim;
+            AvState alertState = state.DefconLevel <= 2 ? AvState.Danger
+                : state.DefconLevel == 3 ? AvState.Caution : AvState.Ready;
+            chips[0].Set("DEFCON " + state.DefconLevel, alertState);
 
-            shell.DataBar.SetChip(
-                0,
-                "DEFCON " + state.DefconLevel,
-                state.DefconLevel <= 2 ? "danger" : state.DefconLevel == 3 ? "warn" : "live");
             bool frontline = state.ContestedSectorCount > 0;
-            shell.DataBar.SetChip(1, frontline ? "FRONT LIVE" : "FRONT QUIET", frontline);
+            chips[1].Set(frontline ? "FRONT LIVE" : "FRONT QUIET", frontline ? AvState.Caution : AvState.Ready);
+
             bool grid = overlay != null && overlay.HasControlData;
-            shell.DataBar.SetChip(2, grid ? "GRID LIVE" : "GRID —", grid);
+            chips[2].Set(grid ? "GRID LIVE" : "GRID —", grid ? AvState.Info : AvState.Inert);
 
             bool territoryKnown = !float.IsNaN(state.TerritoryControlRatio);
-            // The allied/hostile split rides the unit slot. The caption has room for the pair's
-            // labels or for both counts, not for both — and a reading that gets ellipsised is
-            // a reading the panel did not give.
-            shell.Metrics[0].Unit.text = state.FriendlySectorCount + "/" + state.HostileSectorCount;
-            shell.Metrics[0].Set(
-                TheaterReadout.Percent(state.TerritoryControlRatio),
-                "ALLIED / HOSTILE",
+            metrics[0].Set(
+                territoryKnown ? TheaterReadout.Percent(state.TerritoryControlRatio) : "—",
+                state.FriendlySectorCount + "/" + state.HostileSectorCount,
                 territoryKnown ? state.TerritoryControlRatio : 0f,
-                !territoryKnown ? AvTheme.RailInert
-                    : state.TerritoryControlRatio >= 0.5f ? AvTheme.RailReady : AvTheme.RailCaution);
+                !territoryKnown ? AvState.Inert
+                    : state.TerritoryControlRatio >= 0.5f ? AvState.Ready : AvState.Caution);
 
             bool airKnown = !float.IsNaN(state.AirSuperiorityRatio);
-            shell.Metrics[1].Unit.text = state.FriendlyAircraftCount + "/" + state.HostileAircraftCount;
-            shell.Metrics[1].Set(
-                TheaterReadout.Percent(state.AirSuperiorityRatio),
-                "ALLIED / HOSTILE",
+            metrics[1].Set(
+                airKnown ? TheaterReadout.Percent(state.AirSuperiorityRatio) : "—",
+                state.FriendlyAircraftCount + "/" + state.HostileAircraftCount,
                 airKnown ? state.AirSuperiorityRatio : 0f,
-                !airKnown ? AvTheme.RailInert
-                    : state.AirSuperiorityRatio >= 0.5f ? AvTheme.RailReady : AvTheme.RailCaution);
+                !airKnown ? AvState.Inert
+                    : state.AirSuperiorityRatio >= 0.5f ? AvState.Ready : AvState.Caution);
 
-            if (shell.Metrics.Length > 2)
+            if (metrics.Length > 2)
             {
                 bool staff = highCommand != null && highCommand.Available;
                 float cohesion = staff ? Mathf.Clamp01(highCommand.FriendlyCohesion) : 0f;
-                shell.Metrics[2].Set(
+                metrics[2].Set(
                     staff ? TheaterReadout.Percent(cohesion) : "—",
                     staff
                         ? highCommand.FriendlyActive + " ACTIVE" +
                           (highCommand.FriendlyKia > 0 ? " · " + highCommand.FriendlyKia + " KIA" : "")
                         : "NO STAFF",
                     cohesion,
-                    !staff ? AvTheme.RailInert
-                    : cohesion >= 0.6f ? AvTheme.RailReady
-                    : cohesion >= 0.3f ? AvTheme.RailCaution
-                    : AvTheme.RailDanger);
+                    !staff ? AvState.Inert
+                    : cohesion >= 0.6f ? AvState.Ready
+                    : cohesion >= 0.3f ? AvState.Caution
+                    : AvState.Danger);
             }
         }
 
@@ -1161,15 +637,15 @@ namespace BoscaliSummer.Features.Command.Presentation
             if (highCommand != null && highCommand.Available)
             {
                 text += " · command " + TheaterReadout.Percent(Mathf.Clamp01(highCommand.FriendlyCohesion));
-                if (shell != null && shell.Page == TabCoc && !string.IsNullOrEmpty(highCommand.Signal))
+                if (console != null && console.CurrentPage == TabCoc && !string.IsNullOrEmpty(highCommand.Signal))
                     text += " · " + highCommand.Signal;
             }
-            else if (shell != null && shell.Page == TabCoc)
+            else if (console != null && console.CurrentPage == TabCoc)
                 text += " · " + (highCommand == null
                     ? "chain of command is not running on this host"
                     : highCommand.Status ?? "chain of command is forming");
 
-            if (shell != null && shell.Page == TabCmd)
+            if (console != null && console.CurrentPage == TabCmd)
             {
                 TheaterLiveOperationView active = theaterWar?.ActiveOperation;
                 text += " · " + (theaterWar == null || !theaterWar.Available
@@ -1178,6 +654,5 @@ namespace BoscaliSummer.Features.Command.Presentation
             }
             return text;
         }
-
     }
 }

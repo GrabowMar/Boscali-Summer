@@ -15,6 +15,7 @@ Get-ChildItem -LiteralPath 'C:/Program Files (x86)/Steam/steamapps/common/Nuclea
 Copy-Item -LiteralPath "$repo/bin/Release/netstandard2.1/BoscaliSummer.dll" -Destination "$PreviewDirectory/Assets/"
 Copy-Item -LiteralPath "$PSScriptRoot/MissionDeskUnityCheck.cs", "$PSScriptRoot/BoscaliStockPreview.asmdef" -Destination "$PreviewDirectory/Assets/Harness/"
 Copy-Item -LiteralPath "$repo/AvionicsUi/avionics.avss" -Destination "$PreviewDirectory/NOAvionics/"
+Get-ChildItem -LiteralPath "$repo/AvionicsUi" -Filter 'avionics.*.avss' | Copy-Item -Destination "$PreviewDirectory/NOAvionics/"
 $arguments = @('-batchmode', '-disable-assembly-updater', '-projectPath', ('"' + $PreviewDirectory + '"'), '-executeMethod', 'MissionDeskUnityCheck.Run', '-logFile', ('"' + "$PreviewDirectory/check.log" + '"'))
 $process = Start-Process -FilePath $Unity -ArgumentList $arguments -WorkingDirectory $PreviewDirectory -WindowStyle Hidden -PassThru
 $process.WaitForExit()
