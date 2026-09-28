@@ -3,6 +3,7 @@ using System;
 using System.Collections;
 using System.IO;
 using System.Reflection;
+using NOAvionics;
 using NOAvionics.Ui;
 using TMPro;
 using UnityEditor;
@@ -11,8 +12,11 @@ using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
 
-// Renders the production MIS contract desk with synthetic host reports. This checks
-// geometry and copy only; authority, replication and live interaction need game tests.
+// Renders the production MIS contract desk (kit v2: AvWindow / AvSection / AvClickList / AvRow)
+// with synthetic host reports. This checks geometry and copy only; authority, replication and
+// live interaction need game tests. Unlike CocUnityCheck, this runs against the already-built
+// BoscaliSummer.dll (see Run-MissionDeskUnityCheck.ps1), so it reaches the real class only
+// through reflection.
 public static class MissionDeskUnityCheck
 {
     private const BindingFlags All = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
@@ -38,10 +42,10 @@ public static class MissionDeskUnityCheck
                 args[i] = parameters[i].HasDefaultValue ? parameters[i].DefaultValue : null;
             paths.Invoke(null, args);
             AvStyleHost.Configure(Directory.GetCurrentDirectory(), Debug.Log, Debug.LogWarning);
-            AvFont.Font = TMP_FontAsset.CreateFontAsset(new Font("C:/Windows/Fonts/consola.ttf"));
+            AvStyleHost.SetTheme(AvThemeId.Steel);
             new GameObject("Events", typeof(EventSystem));
 
-            Assembly assembly = typeof(AvScreen).Assembly;
+            Assembly assembly = typeof(AvConsole).Assembly;
             Type type = assembly.GetType(
                 "BoscaliSummer.Features.Command.Presentation.MissionContractWindow", true);
             Type cardType = assembly.GetType(
@@ -74,20 +78,27 @@ public static class MissionDeskUnityCheck
                 };
                 roster.Add(Activator.CreateInstance(cardType, All, null, values, null));
             }
-            ((TMP_Text)type.GetField("boardState", All).GetValue(desk)).text =
-                "HOST LINK / SYNTHETIC TASKING";
             type.GetField("selectedId", All).SetValue(desk, 26);
-            type.GetMethod("Render", All).Invoke(desk, null);
+            // Render() is the pure view step (Refresh() would re-fetch from ModServices, which
+            // has no registered host feed offline, and wipe the roster we just seeded).
+            type.GetMethod("Render", All).Invoke(desk, new object[] { "HOST LINK / SYNTHETIC TASKING" });
             Capture(view, type, "mission-desk-1920x1080.png", 1920f, 1080f);
             Capture(view, type, "mission-desk-1280x720.png", 1280f, 720f);
-            type.GetField("page", All).SetValue(desk, 1);
+
+            // Second page: click the paged roster list's own NEXT control, the same way a
+            // player would, rather than reaching past the kit's own pager state.
+            object list = type.GetField("list", All).GetValue(desk);
+            AvControl next = (AvControl)list.GetType().GetField("next", All).GetValue(list);
+            next.GetComponentInChildren<AvHit>(true).OnPointerClick(
+                new PointerEventData(EventSystem.current) { button = PointerEventData.InputButton.Left });
             type.GetField("selectedId", All).SetValue(desk, 34);
-            type.GetMethod("Render", All).Invoke(desk, null);
+            type.GetMethod("Render", All).Invoke(desk, new object[] { "HOST LINK / SYNTHETIC TASKING" });
             Capture(view, type, "mission-desk-page2-1920x1080.png", 1920f, 1080f);
             Object.DestroyImmediate(view.gameObject);
 
             File.WriteAllText("result.txt",
-                "PASS: mission contract desk rendered at 1920x1080 and 1280x720, including empty and second-page states. Synthetic reports only; no live game or multiplayer claim.\n");
+                "PASS: mission contract desk (kit v2 AvWindow) rendered at 1920x1080 and 1280x720, including empty and second-page states. Synthetic reports only; no live game or multiplayer claim.\n" +
+                "Reflection used: Create()/Show(), fields roster/selectedId/list, method Render(string) (the pure view step; Refresh() re-fetches from ModServices and would wipe a seeded roster).\n");
             EditorApplication.Exit(0);
         }
         catch (Exception error)
@@ -105,16 +116,13 @@ public static class MissionDeskUnityCheck
         canvas.renderMode = RenderMode.WorldSpace;
         canvas.GetComponent<CanvasScaler>().enabled = false;
         ((RectTransform)canvas.transform).sizeDelta = new Vector2(width, height);
-        type.GetMethod("FitRoom", All).Invoke(view, null);
         Canvas.ForceUpdateCanvases();
         foreach (TMP_Text label in view.GetComponentsInChildren<TMP_Text>(true))
         {
             label.ForceMeshUpdate();
             if (!label.gameObject.activeInHierarchy) continue;
-            if (label.text.Length > 0 && label.isTextOverflowing &&
-                (label == (TMP_Text)type.GetField("detailTitle", All).GetValue(view) ||
-                 label == (TMP_Text)type.GetField("detailAccepted", All).GetValue(view)))
-                throw new Exception(file + ": priority text clips: " + label.text);
+            if (label.text.Length > 0 && label.isTextOverflowing)
+                throw new Exception(file + ": text clips: " + label.text);
         }
 
         var cameraObject = new GameObject("MissionDeskCamera", typeof(Camera));
