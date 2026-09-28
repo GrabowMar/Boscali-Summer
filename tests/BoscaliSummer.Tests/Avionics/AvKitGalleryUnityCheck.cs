@@ -60,6 +60,7 @@ public static class AvKitGalleryUnityCheck
             }
             CheckLiveThemeSwitch();
             CheckHoverHelp();
+            CheckPopup();
         }
         catch (Exception e) { Failures.Add("exception: " + e); }
         File.WriteAllText("result.txt", Failures.Count == 0
@@ -334,6 +335,28 @@ public static class AvKitGalleryUnityCheck
         if (!footer.text.Contains("Accept the contract")) Failures.Add("hover help did not reach the footer: '" + footer.text + "'");
         foreach (var h in accept.GetComponentsInChildren<UnityEngine.EventSystems.IPointerExitHandler>(true)) h.OnPointerExit(null);
         if (footer.text != before) Failures.Add("footer not restored after hover: '" + footer.text + "'");
+        UnityEngine.Object.DestroyImmediate(hostGo);
+    }
+
+    // AvPopup (kit v2 replacement for v1 AvKit.Popup): 9 entries page as 6 + MORE; a click picks and closes.
+    private static void CheckPopup()
+    {
+        var hostGo = new GameObject("popup", typeof(RectTransform), typeof(Canvas));
+        var host = (RectTransform)hostGo.transform;
+        host.sizeDelta = new Vector2(480f, 596f);
+        var popup = new AvPopup(host, 480f);
+        var entries = new List<AvPopupEntry>();
+        for (int i = 0; i < 9; i++) entries.Add(new AvPopupEntry("OPTION " + (i + 1), "detail", i == 2, i != 4));
+        int picked = -1;
+        popup.Show(new Rect(20f, -40f, 300f, 0f), entries, i => picked = i);
+        var shown = new List<TMP_Text>();
+        foreach (TMP_Text t in hostGo.GetComponentsInChildren<TMP_Text>(false)) if (t.name == "Text") shown.Add(t);
+        if (shown.Count != AvPopup.MaxRows) Failures.Add("popup shows " + shown.Count + " rows, expected " + AvPopup.MaxRows);
+        else if (!shown[AvPopup.MaxRows - 1].text.StartsWith("MORE")) Failures.Add("popup last row is not MORE: " + shown[AvPopup.MaxRows - 1].text);
+        AvHit row1 = hostGo.transform.Find("AvPopup/PopupList/PopupRow1/Frame").GetComponent<AvHit>();
+        row1.OnPointerClick(null);
+        if (picked != 1) Failures.Add("popup click picked " + picked + ", expected 1");
+        if (popup.IsOpen) Failures.Add("popup did not close after a pick");
         UnityEngine.Object.DestroyImmediate(hostGo);
     }
 
