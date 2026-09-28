@@ -67,7 +67,9 @@ public static class AvKitGalleryUnityCheck
         UnityEditor.EditorApplication.Exit(Failures.Count == 0 ? 0 : 1);
     }
 
-    public static AvConsole BuildSpecimen(RectTransform host)
+    public static AvConsole BuildSpecimen(RectTransform host) => BuildSpecimen(host, null);
+
+    public static AvConsole BuildSpecimen(RectTransform host, List<AvMetric> metricSink)
     {
         AvConsole con = AvConsole.Build(host, "FAC", "BOSCALI / ECONOMY", 2);
         AvChip[] chips = con.Chips(3);
@@ -75,6 +77,7 @@ public static class AvKitGalleryUnityCheck
         chips[1].Set(AvNum.Money(6.08e9), AvState.Info);
         chips[2].Set("COST UP", AvState.Caution);
         AvMetric[] m = con.Metrics("FUNDS", "WARHEADS", "MORALE");
+        metricSink?.AddRange(m);
         m[0].Set(AvNum.Money(6.08e9), "AVAILABLE", 0.62f);
         m[1].Set("20", "STOCKPILE", 0.4f);
         m[2].Set("50", "OF 100", 0.5f, AvState.Caution);
@@ -225,6 +228,93 @@ public static class AvKitGalleryUnityCheck
                 return new Color(img.color.r, img.color.g, img.color.b);
         }
         return ground;
+    }
+
+    /// <summary>
+    /// Offline performance smoke (spec §8): three specimen consoles, 600 pumped frames ~16 ms apart, every
+    /// metric updated at 10 Hz from pre-built strings (so the harness allocates nothing), one theme switch at
+    /// frame 300 (excluded from the GC window). Reports GC bytes and per-frame CPU (ticks + canvas rebuild).
+    /// </summary>
+    public static void RunPerf()
+    {
+        if (Shader.Find("TextMeshPro/Distance Field") == null)
+        {
+            var package = UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(TMP_Text).Assembly);
+            UnityEditor.AssetDatabase.importPackageCompleted += _ => UnityEditor.EditorApplication.delayCall += RunPerf;
+            UnityEditor.AssetDatabase.ImportPackage(Path.Combine(package.resolvedPath, "Package Resources/TMP Essential Resources.unitypackage"), false);
+            return;
+        }
+        string result;
+        try
+        {
+            AvBundle.ResetForTests();
+            if (File.Exists("avionics-ui.bundle")) AvBundle.LoadFromBytes(File.ReadAllBytes("avionics-ui.bundle"), Debug.Log);
+            AvFxDriver.Configure(AvFxTier.Full, false);
+            AvStyleHost.SetTheme(AvThemeId.Steel);
+            Shader.SetGlobalFloat("_NOA_Now", 1e6f);
+
+            var canvasGo = new GameObject("perf-canvas", typeof(Canvas));
+            canvasGo.GetComponent<Canvas>().renderMode = RenderMode.ScreenSpaceOverlay;
+            var metrics = new List<AvMetric>();
+            var consoles = new List<AvConsole>();
+            for (int i = 0; i < 3; i++)
+            {
+                var host = (RectTransform)new GameObject("host" + i, typeof(RectTransform)).transform;
+                host.SetParent(canvasGo.transform, false);
+                host.anchorMin = host.anchorMax = host.pivot = new Vector2(0f, 1f);
+                host.anchoredPosition = new Vector2(20f + i * 500f, -20f);
+                host.sizeDelta = new Vector2(AvTokens.PanelWidth, AvTokens.PanelHeight);
+                consoles.Add(BuildSpecimen(host, metrics));
+            }
+
+            string[] values = new string[64];
+            for (int i = 0; i < values.Length; i++) values[i] = AvNum.Money(1e9 + i * 1.3e7);
+            int ticks = 0;
+            // Time does not advance inside one Editor call, so AvTicker would never reach its 10 Hz slot;
+            // drive the same workload a 10 Hz tick performs every 6th pumped frame instead.
+            Action tick = () =>
+            {
+                ticks++;
+                for (int k = 0; k < metrics.Count; k++)
+                    metrics[k].Set(values[(ticks + k) & 63], "AVAILABLE", ((ticks + k) & 63) / 64f);
+            };
+
+            var update = typeof(AvTicker).GetMethod("Update", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            var pumps = new List<Action>();
+            foreach (AvConsole con in consoles) pumps.Add((Action)Delegate.CreateDelegate(typeof(Action), con.Ticker, update));
+            var watch = new System.Diagnostics.Stopwatch();
+            long gcBytes = 0, gcFrames = 0;
+            double worstMs = 0;
+            double tickMs = 0, idleMs = 0; int tickN = 0, idleN = 0;
+            double pumpMs = 0;
+            for (int frame = 0; frame < 600; frame++)
+            {
+                System.Threading.Thread.Sleep(16);
+                if (frame == 300) AvStyleHost.SetTheme(AvThemeId.Ace);
+                long before = GC.GetAllocatedBytesForCurrentThread();
+                long t0 = watch.ElapsedTicks;
+                watch.Start();
+                long p0 = System.Diagnostics.Stopwatch.GetTimestamp();
+                for (int c = 0; c < pumps.Count; c++) pumps[c]();
+                if (frame % 6 == 0) tick();
+                long p1 = System.Diagnostics.Stopwatch.GetTimestamp();
+                Canvas.ForceUpdateCanvases();
+                if (frame >= 100 && frame != 300) pumpMs += (p1 - p0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+                watch.Stop();
+                double ms = (watch.ElapsedTicks - t0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+                if (frame >= 100) worstMs = Math.Max(worstMs, ms);
+                if (frame >= 100 && frame != 300) { if (frame % 6 == 0) { tickMs += ms; tickN++; } else { idleMs += ms; idleN++; } }
+                long delta = GC.GetAllocatedBytesForCurrentThread() - before;
+                if (frame >= 100 && frame != 300 && frame != 301) { gcBytes += delta; gcFrames++; }
+            }
+            double avgMs = watch.Elapsed.TotalMilliseconds / 600.0;
+            result = "PERF: frames=600 ticks=" + ticks + " avgCpuMs=" + avgMs.ToString("0.000") + " worstMs(100+)=" + worstMs.ToString("0.000") +
+                     " tickFrameMs=" + (tickMs / Math.Max(1, tickN)).ToString("0.000") + " idleFrameMs=" + (idleMs / Math.Max(1, idleN)).ToString("0.000") + " ourCodeMs=" + (pumpMs / 499.0).ToString("0.000") + " gcBytesSteady=" + gcBytes + " over " + gcFrames + " frames (" + (gcFrames > 0 ? gcBytes / gcFrames : 0) + " B/frame)";
+            UnityEngine.Object.DestroyImmediate(canvasGo);
+        }
+        catch (Exception e) { result = "FAIL: " + e; }
+        File.WriteAllText("result.txt", result);
+        UnityEditor.EditorApplication.Exit(result.StartsWith("PERF") ? 0 : 1);
     }
 
     private static void CheckLiveThemeSwitch()

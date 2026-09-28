@@ -1,4 +1,4 @@
-param([string]$Unity = 'C:/Program Files/Unity/Hub/Editor/2022.3.62f3/Editor/Unity.exe')
+param([string]$Unity = 'C:/Program Files/Unity/Hub/Editor/2022.3.62f3/Editor/Unity.exe', [string]$Method = 'AvKitGalleryUnityCheck.Run')
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '../../..')).Path
 $game = 'C:/Program Files (x86)/Steam/steamapps/common/Nuclear Option'
@@ -11,7 +11,7 @@ Copy-Item "$PSScriptRoot/AvKitGalleryUnityCheck.cs", "$PSScriptRoot/NOAvionicsKi
 Copy-Item "$repo/AvionicsUi/Assets/avionics-ui.bundle" "$proj/"
 Get-ChildItem "$game/NuclearOption_Data/Managed" -Filter '*.dll' | Where-Object { $_.Name -notmatch '^(System|Mono\.|UnityEngine|UnityEditor|mscorlib|netstandard|Unity\.TextMeshPro|Unity\.Timeline|Unity\.VisualScripting)' } | Copy-Item -Destination "$proj/Assets/"
 Get-ChildItem "$game/BepInEx/core" -Filter '*.dll' | Where-Object { $_.Name -match '^(BepInEx.dll$|Mono|0Harmony.dll$|HarmonyXInterop)' } | Copy-Item -Destination "$proj/Assets/"
-$p = Start-Process -FilePath $Unity -ArgumentList @('-batchmode', '-disable-assembly-updater', '-projectPath', "`"$proj`"", '-executeMethod', 'AvKitGalleryUnityCheck.Run', '-logFile', "`"$proj/check.log`"") -WorkingDirectory $proj -WindowStyle Hidden -PassThru
+$p = Start-Process -FilePath $Unity -ArgumentList @('-batchmode', '-disable-assembly-updater', '-projectPath', "`"$proj`"", '-executeMethod', $Method, '-logFile', "`"$proj/check.log`"") -WorkingDirectory $proj -WindowStyle Hidden -PassThru
 $p.WaitForExit()
 if (Test-Path "$proj/result.txt") { Get-Content "$proj/result.txt" } else { Get-Content "$proj/check.log" -Tail 80 }
 Write-Output "Gallery: $proj/gallery"
