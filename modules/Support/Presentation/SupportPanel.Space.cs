@@ -24,6 +24,8 @@ namespace BoscaliSummer.Features.Support.Presentation
     internal sealed partial class SupportPanel
     {
         private const int LoopLines = 6;
+        private const string StationStatusHelp = "The station at a glance: fixed position, modules, health and the voice loop.";
+        private const string StationActionsHelp = "The station's abilities and their module requirements.";
 
         private OpsSubPage spacePage;
 
@@ -70,7 +72,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             {
                 nextRefresh = 0f;
                 shell.Page(TabSpace).RequestRelayout();
-            }));
+            }, StationStatusHelp, StationActionsHelp));
             BuildStationPage(spacePage.Status);
             BuildSpaceOpsPage(spacePage.Actions);
             Log("CONSOLE ONLINE · FLIGHT HAS THE ROOM");

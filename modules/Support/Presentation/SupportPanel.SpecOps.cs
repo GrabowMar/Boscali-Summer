@@ -19,6 +19,9 @@ namespace BoscaliSummer.Features.Support.Presentation
     /// </summary>
     internal sealed partial class SupportPanel
     {
+        private const string SpecStatusHelp = "Watch floor: the teams, their clocks, the posts they hold and the event log.";
+        private const string SpecActionsHelp = "The map abilities your held posts grant, plus zone fortification.";
+
         private static readonly string[] SpecTileKeys = { "READY", "IN FIELD", "POSTS", "READINESS" };
 
         /// <summary>Hosts the other agent's <see cref="Views.MiniTheatre"/> board inside a kit v2
@@ -94,7 +97,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             {
                 nextRefresh = 0f;
                 shell.Page(TabSpecOps).RequestRelayout();
-            }));
+            }, SpecStatusHelp, SpecActionsHelp));
             BuildSpecStatusPage(specPage.Status);
             BuildSpecActionsPage(specPage.Actions);
             SpecLog("DETACHMENT ON THE NET · ALPHA AND BRAVO STANDING BY");
@@ -105,6 +108,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             specSection = status.Section(AvIcon.UsersGroup, FieldWords.Title, "");
             AvButtons deskButtons = status.Buttons(new AvControl.Spec("OPEN DESK", OpenDesk, AvButtonStyle.Primary, AvIcon.ListDetails));
             openDeskButton = deskButtons.Controls[0];
+            openDeskButton.Help = "The briefing table: raise teams, pick objectives, launch and recall missions. " + FieldWords.Legend();
 
             for (int i = 0; i < specTeamRows.Length; i++)
             {
@@ -114,6 +118,8 @@ namespace BoscaliSummer.Features.Support.Presentation
                     () => RequestSpecOpsDirective(team, SpecOpsDirective.Execute), AvButtonStyle.Primary));
                 specExtract[i] = specTeamRows[i].AddTrailing(new AvControl.Spec("EXTRACT",
                     () => RequestSpecOpsDirective(team, SpecOpsDirective.Extract), AvButtonStyle.Danger));
+                specExecute[i].Help = "Execute at the site using the latest host threat forecast.";
+                specExtract[i].Help = "Extract safely now; no task roll. A held post ends but earned rank stays.";
             }
 
             specSummary = status.Add(new HintLine(status.Content));

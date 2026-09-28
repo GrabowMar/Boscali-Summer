@@ -48,6 +48,7 @@ namespace BoscaliSummer.Features.Support.Presentation
                 support.ArmLocalPick("UPLINK AIM", point => OpenUplink(point));
                 nextRefresh = 0f;
             }, AvButtonStyle.Quiet));
+            spaceUplinkAim.Help = "Right-click the map where the sensor should look, then the feed opens there.";
             spaceUplinkOpen = spaceUplinkRow.AddTrailing(new AvControl.Spec("OPEN", () => OpenUplink(null)));
 
             var strikes = new List<SupportActionDefinition>(4);
@@ -97,6 +98,8 @@ namespace BoscaliSummer.Features.Support.Presentation
             spaceUplinkRow.Set("SENSOR UPLINK", uplinkWord, "2.0 KW", uplinkState);
             spaceUplinkOpen.Interactable = fitted;
             spaceUplinkAim.Interactable = fitted;
+            SetRowHelp(spaceUplinkRow, spaceUplinkOpen,
+                "Open the sensor feed: drag or WASD to slew, wheel to zoom, 1-5 to task at the crosshair. " + uplinkWord + ".");
 
             foreach (SpaceStrikeRow row in spaceStrikeRows) PaintSpaceStrikeRow(row, bypass);
 
@@ -104,6 +107,9 @@ namespace BoscaliSummer.Features.Support.Presentation
                 : platform.FittedOnline(ModuleKind.Propulsion, now) ? "CHOOSE DESTINATION ON THE TASK MAP"
                 : "OPEN STATION CONTROL · FIT PROPULSION TO MOVE";
             spaceRephaseRow.Set("RELOCATE", rword, "", AvState.Info);
+            SetRowHelp(spaceRephaseRow, spaceRephaseOpen,
+                "Open station control to choose a destination sector or fit propulsion. Relocation uses " +
+                PlatformWords.Whole(PlatformAbilities.Info(PlatformAbility.Rephase).Fuel) + " fuel. " + rword + ".");
         }
 
         private void PaintSpaceStrikeRow(SpaceStrikeRow row, bool bypass)
@@ -114,6 +120,8 @@ namespace BoscaliSummer.Features.Support.Presentation
             row.Button.Interactable = facts.Enabled;
             row.Button.Latched = facts.Armed;
             row.Button.Label = facts.Armed ? "ABORT" : "ARM";
+            SetRowHelp(row.Row, row.Button, row.Action.Name + " — " + row.Action.Description +
+                " Arm, then right-click the map or fire from the feed's crosshair. " + facts.Readiness + ".");
         }
     }
 }

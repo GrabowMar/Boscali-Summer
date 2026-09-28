@@ -177,7 +177,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             Color ink = ImagerStyle.Ink;
             Chrome.Panel(host, new Rect(0f, 0f, w, HeaderHeight), ImagerStyle.Halo.WithAlpha(0.96f));
             Chrome.Rule(host, new Rect(0f, -HeaderHeight + 2f, w, 2f), ink.WithAlpha(0.5f));
-            ImagerStyle.Symbol(host, "BASTION / SENSOR TASKING", new Rect(22f, -12f, w * 0.45f, 28f), 22f);
+            Chrome.Lead(ImagerStyle.Symbol(host, "BASTION / SENSOR TASKING", new Rect(22f, -12f, w * 0.45f, 28f), 22f), AvIcon.Camera, 22f);
             osd = ImagerStyle.Symbol(host, "", new Rect(22f, -45f, w - 390f, 20f), 14f);
             liveDot = Chrome.Panel(host, new Rect(w - 357f, -22f, 11f, 11f), ink, OpsSprites.Dot);
             liveDot.type = Image.Type.Simple;
@@ -229,8 +229,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             plate.raycastTarget = false;
             Chrome.Outline(signalPlate, new Rect(0f, 0f, plateW, plateH), ink.WithAlpha(0.75f));
             Chrome.Rule(signalPlate, new Rect(20f, -38f, plateW - 40f, 1f), ink.WithAlpha(0.5f));
-            ImagerStyle.Symbol(signalPlate, "SENSOR PRODUCT / SIGNAL STATE", new Rect(24f, -10f, plateW - 48f, 20f),
-                13f, TextAlignmentOptions.Center);
+            Chrome.Lead(ImagerStyle.Symbol(signalPlate, "SENSOR PRODUCT / SIGNAL STATE", new Rect(24f, -10f, plateW - 48f, 20f),
+                13f, TextAlignmentOptions.Center), AvIcon.Radar2);
             slate = ImagerStyle.Symbol(signalPlate, "", new Rect(24f, -49f, plateW - 48f, 86f), 22f, TextAlignmentOptions.Center);
             slate.enableWordWrapping = true;
 
@@ -246,8 +246,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         {
             Chrome.Panel(host, railRect, ImagerStyle.Halo.WithAlpha(0.94f));
             Chrome.Outline(host, railRect, ImagerStyle.Ink.WithAlpha(0.5f));
-            ImagerStyle.Symbol(host, "TASKING / HOST-VALIDATED", new Rect(railRect.x + 16f,
-                railRect.y - 12f, railRect.width - 32f, 24f), 17f);
+            Chrome.Lead(ImagerStyle.Symbol(host, "TASKING / HOST-VALIDATED", new Rect(railRect.x + 16f,
+                railRect.y - 12f, railRect.width - 32f, 24f), 17f), AvIcon.Target);
             ImagerStyle.Symbol(host, "SELECT A SENSOR OR EFFECT AT THE AIM POINT", new Rect(railRect.x + 16f,
                 railRect.y - 39f, railRect.width - 32f, 18f), 12f, dim: true);
             float gap = 6f;
@@ -365,7 +365,6 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             live = false;
             DestroyImager();
             support?.SetUplinkAim(AimPoint());
-            Chrome.ClearTooltip();
         }
 
         private void DestroyImager()

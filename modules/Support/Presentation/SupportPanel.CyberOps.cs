@@ -63,6 +63,8 @@ namespace BoscaliSummer.Features.Support.Presentation
                     support.Arm(id);
                     nextRefresh = 0f;
                 }));
+                SetRowHelp(row.Row, row.Button, action.Name + " — " + (action.Description ?? "") +
+                    " The host accepts it only when an online location's radius covers the point.");
                 cyberAbilityRows.Add(row);
             }
         }

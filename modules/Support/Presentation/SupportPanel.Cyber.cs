@@ -15,6 +15,9 @@ namespace BoscaliSummer.Features.Support.Presentation
     /// </summary>
     internal sealed partial class SupportPanel
     {
+        private const string CyberStatusHelp = "Watch floor: INFOCON, resources, the node mesh and the voice loop.";
+        private const string CyberActionsHelp = "The map abilities the network has earned.";
+
         private static readonly string[] CyberTileKeys =
             { "COMPUTING", "INTEL", "NODES", "ACCESS", "INTRUSION", "JAMMING", "TRACE LEAD", "ADVERSARY" };
 
@@ -93,7 +96,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             {
                 nextRefresh = 0f;
                 shell.Page(TabCyber).RequestRelayout();
-            }));
+            }, CyberStatusHelp, CyberActionsHelp));
             BuildCyberStatusPage(cyberPage.Status);
             BuildCyberOpsPage(cyberPage.Actions);
             alarm = new CyberAlarm(screenRoot != null ? screenRoot.transform : transform);
@@ -113,6 +116,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             cyberHint = status.Add(new HintLine(status.Content));
             AvButtons buttons = status.Buttons(new AvControl.Spec("OPEN CONSOLE", OpenConsole, AvButtonStyle.Primary, AvIcon.Typography));
             openConsoleButton = buttons.Controls[0];
+            openConsoleButton.Help = "The network-ops terminal: breach locations, answer incidents, buy network upgrades.";
             cyberAdvice = status.Add(new NoteText(status.Content));
 
             status.Section(AvIcon.Gauge, "INFOCON · RESOURCES");

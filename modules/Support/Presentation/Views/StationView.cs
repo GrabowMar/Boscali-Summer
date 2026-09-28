@@ -7,6 +7,7 @@ using BoscaliSummer.Features.Support.Domain.Orbital;
 using BoscaliSummer.Features.Support.Presentation.Viz;
 using BoscaliSummer.Features.Support.Presentation.Window;
 using BoscaliSummer.Features.Support.Runtime;
+using NOAvionics;
 using NOAvionics.Ui;
 using TMPro;
 using UnityEngine;
@@ -153,8 +154,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             BuildPassTrack(passGroup, w - g * 2f, passH);
             leftGroup = Group(room, "PowerBalance", new Rect(g, -midTop, stripW, midH), out leftFade);
             rightGroup = Group(room, "PlatformReserves", new Rect(rightX, -midTop, stripW, midH), out rightFade);
-            StationStyle.Text(leftGroup, "POWER / STORAGE", new Rect(0f, -6f, stripW, 16f), 10f, StationStyle.Dim, 4f);
-            StationStyle.Text(rightGroup, "SUPPLIES / MASS", new Rect(0f, -6f, stripW, 16f), 10f, StationStyle.Dim, 4f);
+            Chrome.Lead(StationStyle.Text(leftGroup, "POWER / STORAGE", new Rect(0f, -6f, stripW, 16f), 10f, StationStyle.Dim, 4f), AvIcon.Bolt);
+            Chrome.Lead(StationStyle.Text(rightGroup, "SUPPLIES / MASS", new Rect(0f, -6f, stripW, 16f), 10f, StationStyle.Dim, 4f), AvIcon.Database);
             string[] names = { "ENERGY", "SUN", "DARK", "FUEL", "RODS", "MASS" };
             for (int i = 0; i < 6; i++)
             {
@@ -220,12 +221,12 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         private void BuildHeader(RectTransform parent, float w, float h)
         {
             Chrome.Rule(parent, new Rect(24f, -h + 1f, w - 48f, 1f), StationStyle.Line.WithAlpha(0.5f));
-            StationStyle.Text(parent, OrbitalPlatform.Callsign, new Rect(24f, -8f, 420f, 32f), StationStyle.Callsign,
-                StationStyle.Ink, 16f, TextAlignmentOptions.MidlineLeft, true);
+            Chrome.Lead(StationStyle.Text(parent, OrbitalPlatform.Callsign, new Rect(24f, -8f, 420f, 32f), StationStyle.Callsign,
+                StationStyle.Ink, 16f, TextAlignmentOptions.MidlineLeft, true), AvIcon.Satellite, 24f);
             subtitle = StationStyle.Text(parent, "", new Rect(26f, -42f, 390f, 18f), StationStyle.Label, StationStyle.Dim,
                 StationStyle.LabelTracking);
-            getLabel = StationStyle.Text(parent, "STATION COMMAND", new Rect(w * 0.5f - 150f, -10f, 300f, 14f), 10f,
-                StationStyle.Dim, 5f, TextAlignmentOptions.Center);
+            getLabel = Chrome.Lead(StationStyle.Text(parent, "STATION COMMAND", new Rect(w * 0.5f - 150f, -10f, 300f, 14f), 10f,
+                StationStyle.Dim, 5f, TextAlignmentOptions.Center), AvIcon.Satellite);
             getClock = StationStyle.Text(parent, "", new Rect(w * 0.5f - 150f, -28f, 300f, 30f), 16f,
                 StationStyle.Ink, 1f, TextAlignmentOptions.Center);
             passWord = StationStyle.Text(parent, "", new Rect(w - 480f, -5f, 300f, 26f), 18f, StationStyle.Ink, 4f,
@@ -242,7 +243,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         {
             Chrome.Panel(parent, new Rect(0f, 0f, w, h), StationStyle.Console.WithAlpha(0.85f));
             Chrome.Rule(parent, new Rect(0f, 0f, 3f, h), StationStyle.Limb);
-            StationStyle.Text(parent, "POSITION / COVERAGE", new Rect(16f, -8f, w * 0.46f, 16f), 12f, StationStyle.Dim, 3f);
+            Chrome.Lead(StationStyle.Text(parent, "POSITION / COVERAGE", new Rect(16f, -8f, w * 0.46f, 16f), 12f, StationStyle.Dim, 3f), AvIcon.CurrentLocation);
             coverage = StationStyle.Text(parent, "", new Rect(16f, -29f, w * 0.36f, 38f), 16f, StationStyle.Ink, 2f);
             coverage.enableWordWrapping = true;
             mobility = StationStyle.Text(parent, "", new Rect(w * 0.37f, -12f, w * 0.63f - 530f, 54f), 13f, StationStyle.Ink, 1f);
@@ -301,8 +302,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             emptyGroup = (RectTransform)new GameObject("Empty", typeof(RectTransform)).transform;
             emptyGroup.SetParent(parent, false);
             Chrome.Place(emptyGroup, new Rect(at.x, at.y, at.width, at.height));
-            StationStyle.Text(emptyGroup, "PRELAUNCH / ORBITAL CONTROL", new Rect(0f, -8f, at.width, 16f),
-                10f, StationStyle.Limb, 6f, TextAlignmentOptions.Center);
+            Chrome.Lead(StationStyle.Text(emptyGroup, "PRELAUNCH / ORBITAL CONTROL", new Rect(0f, -8f, at.width, 16f),
+                10f, StationStyle.Limb, 6f, TextAlignmentOptions.Center), AvIcon.Satellite);
             emptyTitle = StationStyle.Text(emptyGroup, "", new Rect(0f, -34f, at.width, 34f), 24f, StationStyle.Ink, 10f,
                 TextAlignmentOptions.Center, true);
             emptyCost = StationStyle.Text(emptyGroup, "", new Rect(0f, -72f, at.width, 22f), 13f, StationStyle.Limb, 4f,
@@ -317,7 +318,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         {
             Chrome.Panel(parent, new Rect(0f, 0f, w, h), StationStyle.Console.WithAlpha(0.72f));
             Chrome.Outline(parent, new Rect(0f, 0f, w, h), StationStyle.ConsoleEdge);
-            rackTitle = StationStyle.Text(parent, "", new Rect(12f, -8f, w - 24f, 16f), 12f, StationStyle.Dim, 6f);
+            rackTitle = Chrome.Lead(StationStyle.Text(parent, "", new Rect(12f, -8f, w - 24f, 16f), 12f, StationStyle.Dim, 6f), AvIcon.Stack2);
             float pitch = Mathf.Min(42f, (h - 130f) / rack.Length);
             int r = 0;
             for (int i = 0; i < PlatformModules.Designs.Length && r < rack.Length; i++)
@@ -367,7 +368,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         {
             Chrome.Panel(parent, new Rect(0f, 0f, w, h), StationStyle.Console.WithAlpha(0.76f));
             Chrome.Outline(parent, new Rect(0f, 0f, w, h), StationStyle.ConsoleEdge);
-            StationStyle.Text(parent, "NEXT AUTHORIZED ORDER", new Rect(0f, 0f, 300f, 14f), 10f, StationStyle.Dim, 5f);
+            Chrome.Lead(StationStyle.Text(parent, "NEXT AUTHORIZED ORDER", new Rect(0f, 0f, 300f, 14f), 10f, StationStyle.Dim, 5f), AvIcon.ArrowRight);
             float left = 20f, right = 470f;
             Chrome.Rule(parent, new Rect(left, -30f, right - left, 2f), StationStyle.Line.WithAlpha(0.6f));
             for (int i = 0; i < 4; i++)
@@ -398,7 +399,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         private void BuildLoadout(RectTransform parent, float w, float h)
         {
             Chrome.Panel(parent, new Rect(0f, 0f, w, h), StationStyle.Console.WithAlpha(0.52f));
-            StationStyle.Text(parent, "MISSION PACKAGE · SELECT TO PREVIEW", new Rect(0f, 0f, 360f, 14f), 10f, StationStyle.Dim, 5f);
+            Chrome.Lead(StationStyle.Text(parent, "MISSION PACKAGE · SELECT TO PREVIEW", new Rect(0f, 0f, 360f, 14f), 10f, StationStyle.Dim, 5f), AvIcon.Bookmark);
             float cw = (w - 16f) / missions.Length;
             for (int i = 0; i < missions.Length; i++)
             {
@@ -420,7 +421,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
 
         private void BuildLoop(RectTransform parent, float w, float h)
         {
-            StationStyle.Text(parent, "OPS LOOP", new Rect(0f, 0f, 200f, 14f), 10f, StationStyle.Dim, 5f);
+            Chrome.Lead(StationStyle.Text(parent, "OPS LOOP", new Rect(0f, 0f, 200f, 14f), 10f, StationStyle.Dim, 5f), AvIcon.Radio);
             float pitch = Mathf.Min(18f, (h - 16f) / LoopShown);
             for (int i = 0; i < LoopShown; i++)
             {
@@ -485,7 +486,6 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         public void Hide()
         {
             hover = ModuleKind.None;
-            Chrome.ClearTooltip();
         }
 
         public void Entrance(float progress)

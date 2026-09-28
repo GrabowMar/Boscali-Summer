@@ -6,6 +6,7 @@ using BoscaliSummer.Features.Support.Presentation.Board;
 using BoscaliSummer.Features.Support.Presentation.Viz;
 using BoscaliSummer.Features.Support.Presentation.Window;
 using BoscaliSummer.Features.Support.Runtime;
+using NOAvionics;
 using NOAvionics.Ui;
 using TMPro;
 using UnityEngine;
@@ -121,8 +122,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         private void BuildHeader(RectTransform room, float w)
         {
             Chrome.Rule(room, new Rect(22f, -79f, w - 44f, 1f), StationStyle.Line.WithAlpha(0.6f));
-            StationStyle.Text(room, "BASTION / TASKING", new Rect(24f, -12f, w * 0.45f, 34f), 26f,
-                StationStyle.Ink, 4f, bold: true);
+            Chrome.Lead(StationStyle.Text(room, "BASTION / TASKING", new Rect(24f, -12f, w * 0.45f, 34f), 26f,
+                StationStyle.Ink, 4f, bold: true), AvIcon.Map2, 24f);
             subtitle = StationStyle.Text(room, "", new Rect(26f, -49f, w * 0.56f, 18f), 11f, StationStyle.Dim, 2f);
             position = StationStyle.Text(room, "", new Rect(w - 465f, -18f, 440f, 24f), 16f,
                 StationStyle.Limb, 3f, TextAlignmentOptions.MidlineRight);
@@ -176,8 +177,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             stationDot.rectTransform.SetAsLastSibling();
             Chrome.Panel(room, new Rect(map.x + 8f, -map.y - 8f, Mathf.Min(map.width - 16f, 300f), 27f),
                 StationStyle.Console.WithAlpha(0.92f));
-            mapStatus = StationStyle.Text(room, "THEATRE / STATION SECTORS", new Rect(map.x + 17f, -map.y - 13f,
-                Mathf.Min(map.width - 34f, 284f), 17f), 11f, StationStyle.Ink, 2f);
+            mapStatus = Chrome.Lead(StationStyle.Text(room, "THEATRE / STATION SECTORS", new Rect(map.x + 17f, -map.y - 13f,
+                Mathf.Min(map.width - 34f, 284f), 17f), 11f, StationStyle.Ink, 2f), AvIcon.Radar2);
             fitMap = MakeButton(room, new Rect(map.x + map.width - 99f, -map.y - 8f, 90f, 34f),
                 "FIT / F", "", () => { board.ResetFraming(); dirty = true; },
                 "Fit station sectors and any live target solution into the map.");
@@ -195,8 +196,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             float focusHeight = compact ? 48f : 50f;
             Chrome.Panel(room, new Rect(x, -top, w, h), StationStyle.Console.WithAlpha(0.94f));
             Chrome.Outline(room, new Rect(x, -top, w, h), StationStyle.ConsoleEdge);
-            StationStyle.Text(room, "POWER ROUTING / FACTION SHARED", new Rect(x + 15f, -top - 11f, w - 30f, 17f),
-                12f, StationStyle.Limb, 2f);
+            Chrome.Lead(StationStyle.Text(room, "POWER ROUTING / FACTION SHARED", new Rect(x + 15f, -top - 11f, w - 30f, 17f),
+                12f, StationStyle.Limb, 2f), AvIcon.Bolt);
             float focusTop = top + 34f;
             for (int i = 0; i < focuses.Length; i++)
             {
@@ -215,8 +216,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             solutionDetail.enableWordWrapping = true;
 
             float actionTop = solutionTop + (compact ? 90f : 95f);
-            StationStyle.Text(room, "MAP OPERATIONS / ARM, THEN RIGHT-CLICK THEATRE", new Rect(x + 15f, -actionTop,
-                w - 30f, 17f), 11f, StationStyle.Limb, 1f);
+            Chrome.Lead(StationStyle.Text(room, "MAP OPERATIONS / ARM, THEN RIGHT-CLICK THEATRE", new Rect(x + 15f, -actionTop,
+                w - 30f, 17f), 11f, StationStyle.Limb, 1f), AvIcon.Target);
             float cellW = (w - 35f) * 0.5f;
             for (int i = 0; i < actions.Length; i++)
             {
@@ -236,8 +237,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 float noteH = bottomTop - noteTop - 10f;
                 Chrome.Panel(room, new Rect(x + 14f, -noteTop, w - 28f, noteH), StationStyle.Surface.WithAlpha(0.75f));
                 Chrome.Rule(room, new Rect(x + 14f, -noteTop, 3f, noteH), StationStyle.Line.WithAlpha(0.75f));
-                StationStyle.Text(room, "TACTICAL CYCLE", new Rect(x + 27f, -noteTop - 10f, w - 54f, 18f),
-                    11f, StationStyle.Limb, 2f);
+                Chrome.Lead(StationStyle.Text(room, "TACTICAL CYCLE", new Rect(x + 27f, -noteTop - 10f, w - 54f, 18f),
+                    11f, StationStyle.Limb, 2f), AvIcon.Clock);
                 guidance = StationStyle.Text(room, "", new Rect(x + 27f, -noteTop - 37f, w - 54f, noteH - 49f),
                     12f, StationStyle.Ink, 1f, TextAlignmentOptions.TopLeft);
                 guidance.enableWordWrapping = true;
@@ -296,7 +297,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             dirty = true;
         }
 
-        public void Hide() => Chrome.ClearTooltip();
+        public void Hide() { }
         public void Entrance(float progress) { if (contentFade != null) contentFade.alpha = Mathf.Clamp01(progress); }
 
         public void Refresh(double now, float time, bool textTick)
