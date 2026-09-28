@@ -16,7 +16,7 @@ namespace NOAvionics.Ui
             size = diameter;
             Rect = AvLay.Child(parent, "Gauge " + keyText);
             key = AvText.Make(Rect, "Key", AvTextRole.Micro, keyText, TextAlignmentOptions.Center);
-            var go = new GameObject("Dial", typeof(RectTransform));
+            var go = new GameObject("Dial", typeof(RectTransform), typeof(CanvasRenderer));
             go.transform.SetParent(Rect, false);
             dial = go.AddComponent<AvGaugeGraphic>();
             dial.Shape = shape; dial.Thickness = 6f; dial.Segments = 12; dial.raycastTarget = false;

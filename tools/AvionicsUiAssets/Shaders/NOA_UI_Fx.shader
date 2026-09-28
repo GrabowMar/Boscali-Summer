@@ -87,7 +87,7 @@ Shader "NOA/UI/Fx"
                         float thr = saturate(t / 0.35);
                         float n = tex2D(_NoiseTex, uv * max(i.fx.w, 1.0)).r;
                         color.a *= step(n, thr);
-                        color.rgb += smoothstep(thr - 0.08, thr, n) * step(n, thr) * k;
+                        color.rgb += smoothstep(thr - 0.08, thr, n) * step(n, thr) * k * (thr < 0.999); // no edge once fully in
                     }
                     else if (id == 4 && _NOA_FxTier > 1.5) // scan wipe, 250 ms, top-down
                     {

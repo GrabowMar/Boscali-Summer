@@ -20,7 +20,7 @@ namespace NOAvionics.Ui
 
         public static AvFrame Add(RectTransform parent, string name, AvChamfer chamfer)
         {
-            var go = new GameObject(name, typeof(RectTransform));
+            var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer));
             go.transform.SetParent(parent, false);
             var f = go.AddComponent<AvFrame>();
             f.Chamfer = chamfer;

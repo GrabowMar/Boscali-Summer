@@ -47,7 +47,7 @@ namespace NOAvionics.Ui
 
         public void Space(float h) { lines.Add(new AvPart[] { new AvSpacer(h) }); lineColumns.Add(1); RequestRelayout(); }
 
-        public AvGrid Grid(int columns) => new AvGrid(this, Math.Max(1, columns));
+        public AvCellGrid Grid(int columns) => new AvCellGrid(this, Math.Max(1, columns));
 
         public AvSection Section(AvIcon icon, string title, string caption = null) => Add(new AvSection(Content, icon, title, caption));
 
@@ -109,11 +109,11 @@ namespace NOAvionics.Ui
     }
 
     /// <summary>Fills lines of N equal cells. Cells can be mixed with other parts in the same grid.</summary>
-    public sealed class AvGrid
+    public sealed class AvCellGrid
     {
         private readonly AvFlow flow;
         private readonly int columns;
-        internal AvGrid(AvFlow flow, int columns) { this.flow = flow; this.columns = columns; }
+        internal AvCellGrid(AvFlow flow, int columns) { this.flow = flow; this.columns = columns; }
 
         public AvCell Toggle(string title, string sub, Func<bool> get, Action<bool> set)
         {

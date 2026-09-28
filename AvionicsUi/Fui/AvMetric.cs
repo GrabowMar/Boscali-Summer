@@ -21,7 +21,7 @@ namespace NOAvionics.Ui
             key = AvText.Make(Rect, "Key", AvTextRole.Micro, keyText);
             value = AvText.Make(Rect, "Value", AvTextRole.Display);
             unit = AvText.Make(Rect, "Unit", AvTextRole.Micro, "", TextAlignmentOptions.MidlineRight);
-            var go = new GameObject("Gauge", typeof(RectTransform));
+            var go = new GameObject("Gauge", typeof(RectTransform), typeof(CanvasRenderer));
             go.transform.SetParent(Rect, false);
             gauge = go.AddComponent<AvGaugeGraphic>();
             gauge.Shape = shape; gauge.raycastTarget = false;

@@ -20,7 +20,7 @@ namespace NOAvionics.Ui
             get = get01; set = set01; text = valueText;
             label = AvText.Make(Rect, "Label", AvTextRole.Label, labelText, TextAlignmentOptions.MidlineLeft, true);
             value = AvText.Make(Rect, "Value", AvTextRole.Data, "", TextAlignmentOptions.MidlineRight);
-            var go = new GameObject("Track", typeof(RectTransform));
+            var go = new GameObject("Track", typeof(RectTransform), typeof(CanvasRenderer));
             go.transform.SetParent(Rect, false);
             track = go.AddComponent<AvGaugeGraphic>();
             track.Shape = AvGaugeShape.Segments; track.Segments = 20; track.SegmentGap = 2f;

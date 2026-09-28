@@ -9,7 +9,7 @@ namespace NOAvionics.Ui
         public static TextMeshProUGUI Make(RectTransform parent, string name, AvTextRole role, string text = "",
             TextAlignmentOptions align = TextAlignmentOptions.MidlineLeft, bool wrap = false)
         {
-            var go = new GameObject(name, typeof(RectTransform));
+            var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer));
             go.transform.SetParent(parent, false);
             var t = go.AddComponent<TextMeshProUGUI>();
             AvType.Apply(t, role);

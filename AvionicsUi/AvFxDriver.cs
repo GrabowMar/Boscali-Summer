@@ -35,6 +35,7 @@ namespace NOAvionics.Ui
             get
             {
                 if (Tier == AvFxTier.Off) return null;
+                if (fx != null && fx.shader == null) fx = null; // bundle unloaded (tests); never happens in game
                 if (fx == null)
                 {
                     Shader s = AvBundle.Shader("NOA/UI/Fx");
@@ -50,6 +51,7 @@ namespace NOAvionics.Ui
         {
             get
             {
+                if (glass != null && glass.shader == null) glass = null;
                 if (glass == null)
                 {
                     Shader s = AvBundle.Shader("NOA/UI/Glass");
@@ -65,7 +67,7 @@ namespace NOAvionics.Ui
         {
             if (updater != null) return;
             var go = new GameObject("NOA Fx Driver") { hideFlags = HideFlags.HideAndDontSave };
-            UnityEngine.Object.DontDestroyOnLoad(go);
+            if (Application.isPlaying) UnityEngine.Object.DontDestroyOnLoad(go); // throws outside play mode (offline checks)
             updater = go.AddComponent<Updater>();
             Shader.SetGlobalFloat(TierId, (float)Tier);
         }

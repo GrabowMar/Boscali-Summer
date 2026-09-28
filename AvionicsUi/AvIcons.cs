@@ -16,7 +16,7 @@ namespace NOAvionics.Ui
 
         public static TMP_Text Make(RectTransform parent, AvIcon icon, float size, Color color)
         {
-            var go = new GameObject("Icon " + icon, typeof(RectTransform));
+            var go = new GameObject("Icon " + icon, typeof(RectTransform), typeof(CanvasRenderer));
             go.transform.SetParent(parent, false);
             var t = go.AddComponent<TextMeshProUGUI>();
             t.alignment = TextAlignmentOptions.Center;

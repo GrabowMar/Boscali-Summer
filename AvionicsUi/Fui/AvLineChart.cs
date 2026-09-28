@@ -21,7 +21,7 @@ namespace NOAvionics.Ui
             height = sparkline ? 28f : h; spark = sparkline;
             Rect = AvLay.Child(parent, sparkline ? "Spark" : "Chart");
             grid0 = AvLay.Solid(Rect, "Grid0", Color.clear); grid1 = AvLay.Solid(Rect, "Grid1", Color.clear);
-            var go = new GameObject("Line", typeof(RectTransform));
+            var go = new GameObject("Line", typeof(RectTransform), typeof(CanvasRenderer));
             go.transform.SetParent(Rect, false);
             line = go.AddComponent<AvLineGraphic>(); line.raycastTarget = false; line.FillUnder = !sparkline;
             cursor = AvLay.Solid(Rect, "Cursor", Color.clear);

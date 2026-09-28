@@ -42,7 +42,7 @@ namespace NOAvionics.Ui
             Root.sizeDelta = new Vector2(w, h);
             Ticker = go.AddComponent<AvTicker>();
 
-            blur = new GameObject("Blur", typeof(RectTransform)).AddComponent<RawImage>();
+            blur = new GameObject("Blur", typeof(RectTransform), typeof(CanvasRenderer)).AddComponent<RawImage>();
             blur.transform.SetParent(Root, false); AvLay.Fill(blur.rectTransform); blur.raycastTarget = false; blur.enabled = false;
             frost = AvLay.Solid(Root, "Frost", Color.white); AvLay.Fill(frost.rectTransform);
             Shader glass = AvBundle.Shader("NOA/UI/Glass");

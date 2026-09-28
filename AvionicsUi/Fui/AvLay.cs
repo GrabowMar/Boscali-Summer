@@ -48,7 +48,7 @@ namespace NOAvionics.Ui
 
         public static Image Solid(RectTransform parent, string name, Color c)
         {
-            var go = new GameObject(name, typeof(RectTransform));
+            var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer));
             go.transform.SetParent(parent, false);
             var img = go.AddComponent<Image>();
             img.color = c;
