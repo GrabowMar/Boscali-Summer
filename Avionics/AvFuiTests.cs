@@ -16,6 +16,7 @@ namespace NOAvionics.Tests
             TestNumbers(assert);
             TestTypeScale(assert);
             TestIcons(assert);
+            TestFlow(assert);
         }
 
         // Live-theme references resolve to AvTheme's fallbacks in an engine-free test.
@@ -150,6 +151,22 @@ namespace NOAvionics.Tests
                         icon + " matches the baked manifest");
             }
             assert(AvIconTable.Char(AvIcon.None) == '\0', "None has no glyph");
+        }
+
+        private static void TestFlow(Action<bool, string> assert)
+        {
+            var f = new AvFlowMath(480f);
+            assert(Math.Abs(f.Inner - 444f) < 0.01f, "inner = 480 - 2*14 - 8 gutter");
+            AvSlot a = f.Take(30f);
+            assert(a.X == 14f && a.Y == 14f && a.W == 444f && a.H == 30f, "first slot at pad, full inner width");
+            AvSlot[] cols = f.TakeColumns(2, 40f);
+            assert(cols.Length == 2 && Math.Abs(cols[0].W - 218f) < 0.01f && Math.Abs(cols[1].X - (14f + 218f + 8f)) < 0.01f, "two columns split with gap");
+            assert(cols[0].Y == 14f + 30f + 8f, "columns start after previous slot + gap");
+            assert(cols[1].X + cols[1].W <= 480f - 8f - 14f + 0.01f, "rightmost column stops before the gutter");
+            assert(Math.Abs(f.ContentHeight - (14f + 30f + 8f + 40f + 14f)) < 0.01f, "content height = pads + slots + gaps");
+            f.Reset();
+            assert(f.ContentHeight == 0f && f.Y == 14f, "reset empties the flow");
+            assert(AvFlowMath.ColumnWidth(444f, 3, 8f) > 0f && AvFlowMath.ColumnWidth(10f, 5, 8f) == 0f, "impossible columns clamp to 0");
         }
     }
 }
