@@ -64,6 +64,10 @@ namespace NOAvionics.Ui
         public bool Interactable { get => interactable; set { interactable = value; frame.GetComponent<AvHit>().Interactable = value; Restyle(); } }
         public string Label { get => text.text; set => text.text = value ?? ""; }
 
+        /// <summary>Hover help shown in the console footer (null/empty = none).</summary>
+        public string Help { get => tip != null ? tip.Text : null; set => tip = AvHelpTip.Attach(frame.gameObject, value); }
+        private AvHelpTip tip;
+
         /// <summary>Height the label needs at this width when it wraps at full size (the row grows rather than spill).</summary>
         public float PreferredHeight(float width) =>
             AvText.Height(text, Mathf.Max(1f, width - (glyph != null ? 24f : 0f) - 8f)) + 10f;

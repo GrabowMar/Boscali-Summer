@@ -59,6 +59,7 @@ public static class AvKitGalleryUnityCheck
                 }
             }
             CheckLiveThemeSwitch();
+            CheckHoverHelp();
         }
         catch (Exception e) { Failures.Add("exception: " + e); }
         File.WriteAllText("result.txt", Failures.Count == 0
@@ -317,6 +318,23 @@ public static class AvKitGalleryUnityCheck
         catch (Exception e) { result = "FAIL: " + e; }
         File.WriteAllText("result.txt", result);
         UnityEditor.EditorApplication.Exit(result.StartsWith("PERF") ? 0 : 1);
+    }
+
+    // Hover help (COM slice gap): a control's Help text shows in its console footer while hovered.
+    private static void CheckHoverHelp()
+    {
+        var hostGo = new GameObject("hover-help", typeof(RectTransform), typeof(Canvas));
+        AvConsole con = BuildSpecimen((RectTransform)hostGo.transform);
+        AvControl accept = null;
+        foreach (AvControl c in con.Root.GetComponentsInChildren<AvControl>(true)) if (c.Label == "ACCEPT") accept = c;
+        accept.Help = "Accept the contract and add it to your ledger.";
+        TMP_Text footer = con.Root.Find("Footer").GetComponentInChildren<TMP_Text>();
+        string before = footer.text;
+        foreach (var h in accept.GetComponentsInChildren<UnityEngine.EventSystems.IPointerEnterHandler>(true)) h.OnPointerEnter(null);
+        if (!footer.text.Contains("Accept the contract")) Failures.Add("hover help did not reach the footer: '" + footer.text + "'");
+        foreach (var h in accept.GetComponentsInChildren<UnityEngine.EventSystems.IPointerExitHandler>(true)) h.OnPointerExit(null);
+        if (footer.text != before) Failures.Add("footer not restored after hover: '" + footer.text + "'");
+        UnityEngine.Object.DestroyImmediate(hostGo);
     }
 
     private static void CheckLiveThemeSwitch()

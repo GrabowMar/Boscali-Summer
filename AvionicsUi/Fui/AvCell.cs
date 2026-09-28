@@ -25,6 +25,9 @@ namespace NOAvionics.Ui
 
         public Action OnRightClick;
 
+        /// <summary>Hover help shown in the console footer.</summary>
+        public string Help { set => AvHelpTip.Attach(frame.gameObject, value); }
+
         public static AvCell Toggle(RectTransform parent, string titleText, string subText, Func<bool> get, Action<bool> set,
             string onWord = "ON", string offWord = "OFF")
         {

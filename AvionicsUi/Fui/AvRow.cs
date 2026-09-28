@@ -35,6 +35,9 @@ namespace NOAvionics.Ui
             Restyle();
         }
 
+        /// <summary>Hover help shown in the console footer.</summary>
+        public string Help { set { frame.raycastTarget = true; AvHelpTip.Attach(frame.gameObject, value); } }
+
         public bool Armed { get => armed; set { armed = value; Restyle(); } }
         public bool Interactable { get => interactable; set { interactable = value; Restyle(); } }
 

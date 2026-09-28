@@ -74,6 +74,7 @@ namespace NOAvionics.Ui
             scroll.viewport = viewport; scroll.content = content;
             Body = new AvFlow(content, Ticker, w);
             Footer = new AvFooter(Root);
+            Root.gameObject.AddComponent<AvHelpScope>().Footer = Footer;
             Ticker.Register(Footer);
             float footerH = AvGridTokens.Footer;
             AvLay.Place(body, 0f, TitleH, w, h - TitleH - footerH);

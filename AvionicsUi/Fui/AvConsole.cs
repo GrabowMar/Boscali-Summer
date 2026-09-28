@@ -81,6 +81,7 @@ namespace NOAvionics.Ui
             scanCover.enabled = false;
 
             Footer = new AvFooter(Root);
+            Root.gameObject.AddComponent<AvHelpScope>().Footer = Footer;
             Ticker.Register(Footer);
             Ticker.Add(-1, AvTickRate.Fast, EndScan);
             Restyle();

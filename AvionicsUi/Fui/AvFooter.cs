@@ -11,6 +11,7 @@ namespace NOAvionics.Ui
         private readonly Image back;
         private readonly TMP_Text text;
         private AvState state;
+        private string baseText = "", hint;
 
         public AvFooter(RectTransform parent)
         {
@@ -25,8 +26,17 @@ namespace NOAvionics.Ui
         public void Set(string value, AvState s = AvState.Inert)
         {
             string composed = AvStates.Glyph(s) + (value ?? "");
-            if (text.text == composed && state == s) return;
-            text.text = composed; state = s; Restyle();
+            if (baseText == composed && state == s) return;
+            baseText = composed; state = s;
+            if (hint == null) text.text = composed;
+            Restyle();
+        }
+
+        /// <summary>Hover help: temporarily show <paramref name="value"/>; null restores the status line.</summary>
+        public void SetHint(string value)
+        {
+            hint = string.IsNullOrEmpty(value) ? null : value;
+            text.text = hint ?? baseText;
         }
 
         public override float Measure(float width) =>
