@@ -65,13 +65,15 @@ namespace BoscaliSummer.Features.Comms.Presentation
         {
             callSection = p.Section(AvIcon.Message2, "BREVITY CALLS", "");
             var callSpecs = new AvControl.Spec[CommsCatalog.Calls.Length];
+            var callHelps = new string[callSpecs.Length];
             for (int i = 0; i < callSpecs.Length; i++)
             {
                 int call = i;
                 BrevityCall brevity = CommsCatalog.Calls[i];
-                callSpecs[i] = new AvControl.Spec(brevity.Code, () => comms.Call(call), AvButtonStyle.Default, CallIcons[i]);
+                callSpecs[i] = new AvControl.Spec(brevity.Code, () => comms.Call(call), ToneStyle(brevity.Tone), CallIcons[i]);
+                callHelps[i] = brevity.Meaning + (brevity.MarksPosition ? " Also drops a ping at your aircraft." : "");
             }
-            ButtonGrid(p, callSpecs, 2);
+            ButtonGrid(p, callSpecs, 2, callHelps);
 
             p.Section(AvIcon.ListDetails, "RECENT CALLS", "NEWEST FIRST");
             recentRows = new AvRow[RecentCalls];
@@ -114,12 +116,15 @@ namespace BoscaliSummer.Features.Comms.Presentation
                 new AvControl.Spec("NEXT", () => pollStep++, AvButtonStyle.Quiet, AvIcon.ChevronRight));
             pollPrev = pager.Controls[0];
             pollNext = pager.Controls[1];
+            pollPrev.Help = "Previous poll.";
+            pollNext.Help = "Next poll.";
 
             pollRow = p.Add(new AvRow(p.Content));
             pollClose = pollRow.AddTrailing(new AvControl.Spec("CLOSE", () =>
             {
                 if (shownPoll != 0) comms.ClosePoll(shownPoll);
             }, AvButtonStyle.Danger, AvIcon.X));
+            pollClose.Help = "Close your poll now and announce the result.";
 
             pollEmpty = p.Add(new AvNote(p.Content,
                 "No poll is open. Ask one below: everyone who can see it gets a HUD notice and one click to vote."));
@@ -131,7 +136,7 @@ namespace BoscaliSummer.Features.Comms.Presentation
                 optionRows[i] = p.Add(new PollOptionRow(p.Content, () =>
                 {
                     if (shownPoll != 0) comms.Vote(shownPoll, option);
-                }));
+                }, "Vote for this option. You can change your mind until the poll closes."));
             }
 
             askSection = p.Section(AvIcon.QuestionMark, "ASK", "");
@@ -139,20 +144,25 @@ namespace BoscaliSummer.Features.Comms.Presentation
                 () => CommsCatalog.PollTemplates[Wrap(templateIndex, CommsCatalog.PollTemplates.Length)].Question,
                 () => templateIndex = Wrap(templateIndex - 1, CommsCatalog.PollTemplates.Length),
                 () => templateIndex = Wrap(templateIndex + 1, CommsCatalog.PollTemplates.Length)));
+            Tip(templateStepper, "Ready-made questions, so a vote mid-flight costs one click.");
             p.Buttons(new AvControl.Spec("ASK SELECTED TEMPLATE", () =>
             {
                 PollTemplate template = CommsCatalog.PollTemplates[Wrap(templateIndex, CommsCatalog.PollTemplates.Length)];
                 comms.CreatePoll(template.Question, template.Options);
-            }, AvButtonStyle.Primary, AvIcon.QuestionMark));
+            }, AvButtonStyle.Primary, AvIcon.QuestionMark)).Controls[0].Help = "Ask the selected question.";
             durationStepper = p.Add(new AvStepper(p.Content, "DURATION",
                 () => "OPEN FOR " + CommsText.Countdown(CommsCatalog.PollDuration(comms.PollDurationIndex)),
                 () => comms.PollDurationIndex = Wrap(comms.PollDurationIndex - 1, CommsCatalog.PollDurations.Length),
                 () => comms.PollDurationIndex = Wrap(comms.PollDurationIndex + 1, CommsCatalog.PollDurations.Length)));
+            Tip(durationStepper, "How long the poll stays open.");
 
             p.Section(AvIcon.Typography, "CUSTOM POLL", "2-4 OPTIONS, SEPARATED BY COMMAS");
             questionField = p.Add(new AvField(p.Content, "QUESTION…", CommsText.MaxQuestion, _ => AskCustom()));
+            Tip(questionField, "Up to " + CommsText.MaxQuestion + " characters.");
             optionsField = p.Add(new AvField(p.Content, "YES, NO, MAYBE", 80, _ => AskCustom()));
-            p.Buttons(new AvControl.Spec("ASK", AskCustom, AvButtonStyle.Primary, AvIcon.QuestionMark));
+            Tip(optionsField, "Two to four options, separated by commas.");
+            p.Buttons(new AvControl.Spec("ASK", AskCustom, AvButtonStyle.Primary, AvIcon.QuestionMark)).Controls[0].Help =
+                "Ask your own question.";
         }
 
         private void AskCustom()
@@ -232,10 +242,11 @@ namespace BoscaliSummer.Features.Comms.Presentation
             private readonly AvGaugeGraphic track;
             private readonly TMP_Text count;
 
-            public PollOptionRow(RectTransform parent, Action onVote)
+            public PollOptionRow(RectTransform parent, Action onVote, string voteHelp)
             {
                 Rect = AvLay.Child(parent, "Poll Option");
                 vote = AvControl.Make(Rect, new AvControl.Spec("", onVote));
+                vote.Help = voteHelp;
                 var go = new GameObject("Track", typeof(RectTransform), typeof(CanvasRenderer));
                 go.transform.SetParent(Rect, false);
                 track = go.AddComponent<AvGaugeGraphic>();

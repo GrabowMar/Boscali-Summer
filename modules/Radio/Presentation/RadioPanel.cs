@@ -34,6 +34,30 @@ namespace BoscaliSummer.Features.Radio.Presentation
         private const int PresetRows = 5;
         private const int TrackRows = 12;
 
+        // Tooltips are swapped while a control is disabled, so a greyed key always says why.
+        private const string MonitorTip = "Monitor or pause the tuned station's programme.";
+        private const string MonitorOffTip = "No programme on this station.";
+        private const string ScanTip = "Hold each station in the band for a few seconds as it seeks.";
+        private const string ScanOffTip = "Only one station in range.";
+        private const string BandFmTip = "FM broadcast, 87.5 \u2013 108 MHz in 100 kHz channels. Keeps its last frequency.";
+        private const string BandAirTip = "VHF air band, 118 \u2013 137 MHz in 25 kHz channels, AM. Keeps its last frequency.";
+        private const string BandMwTip = "Medium wave, 530 \u2013 1700 kHz in 10 kHz channels, AM. Keeps its last frequency.";
+        private const string BandOffTip = "No stations in the library.";
+        private const string StationPreviousTip = "Previous page of stations.";
+        private const string StationNextTip = "Next page of stations.";
+        private const string FirstPageTip = "Already on the first page.";
+        private const string LastPageTip = "Already on the last page.";
+        private const string PlayTip = "Play or pause the selected track.";
+        private const string PlayNoLibraryTip = "No music found. Add OGG or WAV files and press RESCAN.";
+        private const string PlayNoTracksTip = "This folder has no tracks.";
+        private const string FolderPreviousTip = "Browse the previous music folder.";
+        private const string FolderNextTip = "Browse the next music folder.";
+        private const string FirstFolderTip = "Already on the first folder.";
+        private const string LastFolderTip = "Already on the last folder.";
+        private const string TrackPreviousTip = "Previous page of tracks.";
+        private const string TrackNextTip = "Next page of tracks.";
+        private const string OpenFolderTip = "Open the local music folder. OGG and WAV files only.";
+
         private static MFDScreen screen;
         private static GameObject screenRoot;
         private static AvConsole console;
@@ -68,6 +92,12 @@ namespace BoscaliSummer.Features.Radio.Presentation
         private static AvAlert emptyAlert;
         private static AvButtons utilityButtons;
         private static bool deckHadFolders = true;
+
+        // Per-row hover-help and badge caches, so a row only touches its widgets when its content changes.
+        private static readonly string[] stationTipName = new string[PresetRows];
+        private static readonly bool[] stationHasBadge = new bool[PresetRows];
+        private static readonly string[] trackTipName = new string[TrackRows];
+        private static int iconRevision = -1;
 
         private static int stationPage;
         private static int trackPage;
@@ -141,6 +171,11 @@ namespace BoscaliSummer.Features.Radio.Presentation
             emptyAlert = null;
             utilityButtons = null;
             deckHadFolders = true;
+
+            Array.Clear(stationTipName, 0, stationTipName.Length);
+            Array.Clear(stationHasBadge, 0, stationHasBadge.Length);
+            Array.Clear(trackTipName, 0, trackTipName.Length);
+            iconRevision = -1;
 
             stationPage = 0;
             trackPage = 0;
@@ -234,7 +269,8 @@ namespace BoscaliSummer.Features.Radio.Presentation
             scopePart = p.Add(new BandScopePart(p.Content));
             scopePart.NoteChanged = scopeSection.SetCaption;
 
-            p.Buttons(new AvControl.Spec("RESCAN", () => manager?.Rescan(), AvButtonStyle.Quiet, AvIcon.Refresh));
+            p.Buttons(new AvControl.Spec("RESCAN", () => manager?.Rescan(), AvButtonStyle.Quiet, AvIcon.Refresh))
+                .Controls[0].Help = "Sign off, rescan the local music library and rebuild the dial.";
 
             presetsSection = p.Section(AvIcon.ListDetails, "STATION PRESETS", "0 FOUND");
             for (int i = 0; i < PresetRows; i++)
@@ -247,29 +283,46 @@ namespace BoscaliSummer.Features.Radio.Presentation
                 PreviousStationPage, NextStationPage));
 
             bandSeg = p.Add(new AvSegmented(p.Content, "BAND", new[] { "FM", "AIR", "MW" }, GetBandIndex, SetBandIndex));
+            bandSeg.Options[0].Help = BandFmTip;
+            bandSeg.Options[1].Help = BandAirTip;
+            bandSeg.Options[2].Help = BandMwTip;
 
             tuningButtons = p.Buttons(
                 new AvControl.Spec("SEEK", () => manager?.SeekStation(-1), AvButtonStyle.Quiet, AvIcon.ChevronLeft),
                 new AvControl.Spec("SEEK", () => manager?.SeekStation(1), AvButtonStyle.Quiet, AvIcon.ChevronRight),
                 new AvControl.Spec("TUNE", () => manager?.StepDial(-1), AvButtonStyle.Quiet, AvIcon.ArrowLeft),
                 new AvControl.Spec("TUNE", () => manager?.StepDial(1), AvButtonStyle.Quiet, AvIcon.ArrowRight));
+            tuningButtons.Controls[0].Help = "Seek the previous station down the band.";
+            tuningButtons.Controls[1].Help = "Seek the next station up the band.";
+            tuningButtons.Controls[2].Help = "Tune one step down. Between channels is dead air.";
+            tuningButtons.Controls[3].Help = "Tune one step up. Between channels is dead air.";
 
             playbackButtons = p.Buttons(
                 new AvControl.Spec("MONITOR", () => manager?.TogglePlayback(), AvButtonStyle.Primary, AvIcon.PlayerPlay),
                 new AvControl.Spec("SCAN", () => manager?.ToggleScan(), AvButtonStyle.Toggle, AvIcon.Radar2),
                 new AvControl.Spec("STOP", () => manager?.Stop(), AvButtonStyle.Danger, AvIcon.PlayerStop));
+            playbackButtons.Controls[0].Help = MonitorTip;
+            playbackButtons.Controls[1].Help = ScanTip;
+            playbackButtons.Controls[2].Help = "Sign off and hand the soundtrack bus back to the game.";
 
             setupButtons = p.Buttons(
                 new AvControl.Spec("MODE", () => manager?.CycleMode(), AvButtonStyle.Toggle),
                 new AvControl.Spec("BANDWIDTH", () => manager?.ToggleBandwidth(), AvButtonStyle.Toggle),
                 new AvControl.Spec("STEP", () => manager?.ToggleFineTuning(), AvButtonStyle.Toggle));
+            setupButtons.Controls[0].Help = "Cycle AUTO, FM and AM. A forced mode on the wrong station garbles it.";
+            setupButtons.Controls[1].Help = "Wide or narrow passband. Narrow trades audio quality for less noise.";
+            setupButtons.Controls[2].Help = "Channel step, or a five-times finer tuning step.";
 
             volumeStepper = p.Add(new AvStepper(p.Content, "VOLUME",
                 () => manager == null ? "--" : AvNum.Percent(manager.VolumeLevel),
                 () => manager?.NudgeVolume(-0.1f), () => manager?.NudgeVolume(0.1f)));
+            volumeStepper.Minus.Help = "Turn the receiver volume down.";
+            volumeStepper.Plus.Help = "Turn the receiver volume up.";
             squelchStepper = p.Add(new AvStepper(p.Content, "SQUELCH",
                 () => manager == null ? "--" : AvNum.Percent(manager.Squelch),
                 () => manager?.NudgeSquelch(-0.05f), () => manager?.NudgeSquelch(0.05f)));
+            squelchStepper.Minus.Help = "Lower the squelch: a weaker station can open the audio.";
+            squelchStepper.Plus.Help = "Raise the squelch: only a stronger station opens the audio.";
 
             p.Ticker.Add(TabReceiver, AvTickRate.Fast, RefreshReceiver);
             p.Ticker.Add(TabReceiver, AvTickRate.Fast, scopePart.Animate);
@@ -322,6 +375,9 @@ namespace BoscaliSummer.Features.Radio.Presentation
             volumeStepper.Refresh();
             squelchStepper.Refresh();
             bandSeg.Refresh();
+            Gate(bandSeg.Options[0], hasChannels, BandFmTip, BandOffTip);
+            Gate(bandSeg.Options[1], hasChannels, BandAirTip, BandOffTip);
+            Gate(bandSeg.Options[2], hasChannels, BandMwTip, BandOffTip);
 
             bool tuneEnabled = hasChannels;
             tuningButtons.Controls[0].Interactable = tuneEnabled;
@@ -334,11 +390,11 @@ namespace BoscaliSummer.Features.Radio.Presentation
             AvControl monitor = playbackButtons.Controls[0];
             monitor.Label = manager.IsPaused ? "RESUME" : manager.IsEngaged ? "PAUSE" : "MONITOR";
             monitor.Latched = manager.IsEngaged && !manager.IsPaused;
-            monitor.Interactable = monitorEnabled;
+            Gate(monitor, monitorEnabled, MonitorTip, MonitorOffTip);
 
             AvControl scan = playbackButtons.Controls[1];
             scan.Latched = manager.IsScanning;
-            scan.Interactable = manager.ChannelCount > 1;
+            Gate(scan, manager.ChannelCount > 1, ScanTip, ScanOffTip);
 
             AvControl mode = setupButtons.Controls[0];
             mode.Label = "MODE · " + ModeText();
@@ -358,7 +414,19 @@ namespace BoscaliSummer.Features.Radio.Presentation
             int pages = Math.Max(1, (manager.ChannelCount + PresetRows - 1) / PresetRows);
             stationPage = Mathf.Clamp(stationPage, 0, pages - 1);
             stationPager.Refresh();
+            bool previousStation = stationPage > 0;
+            Gate(stationPager.Minus, previousStation, StationPreviousTip, FirstPageTip);
+            bool nextStation = stationPage + 1 < pages;
+            Gate(stationPager.Plus, nextStation, StationNextTip, LastPageTip);
 
+            // A rescan can replace the station art on disk; drop the cached sprites before the rows re-read them.
+            if (iconRevision != manager.StationRevision)
+            {
+                RadioStationIconCache.Clear();
+                iconRevision = manager.StationRevision;
+            }
+
+            bool badgesChanged = false;
             for (int i = 0; i < PresetRows; i++)
             {
                 AvRow row = stationRows[i];
@@ -368,12 +436,21 @@ namespace BoscaliSummer.Features.Radio.Presentation
                     row.Set("EMPTY PRESET", string.Empty, string.Empty, AvState.Inert);
                     row.Armed = false;
                     row.Interactable = false;
+                    badgesChanged |= ApplyStationBadge(row, i, null);
+                    if (stationTipName[i] != null) { stationTipName[i] = null; row.Help = null; }
                     continue;
                 }
 
                 row.Interactable = true;
                 RadioDial rowDial = manager.GetChannelDial(index);
-                string rowName = AvNum.Fixed(index + 1, 0) + ". " + manager.GetChannelName(index);
+                string channelName = manager.GetChannelName(index);
+                string rowName = AvNum.Fixed(index + 1, 0) + ". " + channelName;
+                if (stationTipName[i] != channelName)
+                {
+                    stationTipName[i] = channelName;
+                    row.Help = "Tune " + channelName + ". Its programme plays here; tracks are picked on the music tab.";
+                }
+                badgesChanged |= ApplyStationBadge(row, i, RadioStationIconCache.Get(manager.GetChannelIconPath(index)));
                 string status;
                 AvState state;
                 if (manager.GetChannelOffAir(index)) { status = "OFF AIR"; state = AvState.Danger; }
@@ -392,6 +469,8 @@ namespace BoscaliSummer.Features.Radio.Presentation
                 row.Set(rowName, rowDial.FrequencyText + " " + rowDial.UnitText, status, state);
                 row.Armed = index == manager.SelectedChannel && !offStation;
             }
+            // A badge changes the row's text width and slot, so the page has to lay the rows out again.
+            if (badgesChanged) console.Page(TabReceiver).RequestRelayout();
 
             string alert = !hasChannels
                 ? "NO STATIONS · ADD OGG/WAV FOLDERS, THEN PRESS RESCAN"
@@ -478,6 +557,24 @@ namespace BoscaliSummer.Features.Radio.Presentation
             if (console != null && console.CurrentPage == TabReceiver) chips[2].Set(token, state);
         }
 
+        /// <summary>Enable a control and swap its hover help with it, so a greyed key always says why.</summary>
+        private static void Gate(AvControl control, bool enabled, string onHelp, string offHelp)
+        {
+            if (control.Interactable != enabled) control.Interactable = enabled;
+            string help = enabled ? onHelp : offHelp;
+            if (control.Help != help) control.Help = help;
+        }
+
+        /// <summary>Shows the station's logo on its preset row (no-op when unchanged); true when the badge appeared or vanished.</summary>
+        private static bool ApplyStationBadge(AvRow row, int slot, Sprite icon)
+        {
+            bool has = icon != null;
+            row.SetBadge(has ? icon.texture : null);
+            if (stationHasBadge[slot] == has) return false;
+            stationHasBadge[slot] = has;
+            return true;
+        }
+
         private static void OnStationRowClick(int slot)
         {
             int index = stationPage * PresetRows + slot;
@@ -516,12 +613,19 @@ namespace BoscaliSummer.Features.Radio.Presentation
                 new AvControl.Spec("PLAY", () => manager?.DeckTogglePlayback(), AvButtonStyle.Primary, AvIcon.PlayerPlay),
                 new AvControl.Spec("NEXT", () => manager?.DeckNext(), AvButtonStyle.Quiet, AvIcon.ChevronRight),
                 new AvControl.Spec("STOP", () => manager?.DeckStop(), AvButtonStyle.Danger, AvIcon.PlayerStop));
+            deckTransport.Controls[0].Help = "Previous track in this folder.";
+            deckTransport.Controls[1].Help = PlayTip;
+            deckTransport.Controls[2].Help = "Next track in this folder.";
+            deckTransport.Controls[3].Help = "Stop the deck. The receiver keeps the soundtrack bus if it is on air.";
 
             librarySection = p.Section(AvIcon.ListDetails, "MUSIC LIBRARY", "0 TRACKS");
-            p.Buttons(new AvControl.Spec("RESCAN", () => manager?.Rescan(), AvButtonStyle.Quiet, AvIcon.Refresh));
+            p.Buttons(new AvControl.Spec("RESCAN", () => manager?.Rescan(), AvButtonStyle.Quiet, AvIcon.Refresh))
+                .Controls[0].Help = "Rescan the local music library for new folders and tracks.";
 
             folderStepper = p.Add(new AvStepper(p.Content, "FOLDER", FolderRangeText,
                 () => NudgeFolder(-1), () => NudgeFolder(1)));
+            folderStepper.Minus.Help = FolderPreviousTip;
+            folderStepper.Plus.Help = FolderNextTip;
 
             for (int i = 0; i < TrackRows; i++)
             {
@@ -531,6 +635,8 @@ namespace BoscaliSummer.Features.Radio.Presentation
             trackPager = p.Add(new AvStepper(p.Content, "TRACK PAGE",
                 () => RangeText(trackPage, TrackRows, manager == null ? 0 : manager.DeckTrackCount, "NO TRACKS"),
                 PreviousTrackPage, NextTrackPage));
+            trackPager.Minus.Help = TrackPreviousTip;
+            trackPager.Plus.Help = TrackNextTip;
 
             emptyAlert = p.Add(new AvAlert(p.Content));
 
@@ -539,6 +645,10 @@ namespace BoscaliSummer.Features.Radio.Presentation
                 new AvControl.Spec("REPEAT", () => manager?.DeckToggleRepeat(), AvButtonStyle.Toggle),
                 new AvControl.Spec("OPEN FOLDER", () => manager?.OpenLibraryFolder(), AvButtonStyle.Quiet, AvIcon.Focus2),
                 new AvControl.Spec("STOP ALL", () => manager?.StopAll(), AvButtonStyle.Danger));
+            utilityButtons.Controls[0].Help = "Random track order, for the music page and the radio programme.";
+            utilityButtons.Controls[1].Help = "Repeat the current track instead of advancing.";
+            utilityButtons.Controls[2].Help = OpenFolderTip;
+            utilityButtons.Controls[3].Help = "Stop the deck and the receiver, and hand the soundtrack bus back to the game.";
 
             p.Ticker.Add(TabDeck, AvTickRate.Fast, RefreshDeck);
         }
@@ -569,7 +679,7 @@ namespace BoscaliSummer.Features.Radio.Presentation
             deckTransport.Controls[0].Interactable = playEnabled;
             AvControl play = deckTransport.Controls[1];
             play.Label = manager.DeckPaused ? "RESUME" : manager.DeckPlaying ? "PAUSE" : hasFolders ? "PLAY" : "NO LIB";
-            play.Interactable = playEnabled;
+            Gate(play, playEnabled, PlayTip, hasFolders ? PlayNoTracksTip : PlayNoLibraryTip);
             play.Latched = manager.DeckPlaying && !manager.DeckPaused;
             deckTransport.Controls[2].Interactable = playEnabled;
 
@@ -583,10 +693,18 @@ namespace BoscaliSummer.Features.Radio.Presentation
             repeat.Latched = manager.RepeatTrack;
 
             folderStepper.Refresh();
+            bool previousFolder = hasFolders && folder > 0;
+            Gate(folderStepper.Minus, previousFolder, FolderPreviousTip, hasFolders ? FirstFolderTip : PlayNoTracksTip);
+            bool nextFolder = hasFolders && folder + 1 < folders;
+            Gate(folderStepper.Plus, nextFolder, FolderNextTip, hasFolders ? LastFolderTip : PlayNoTracksTip);
 
             int pages = Math.Max(1, (trackCount + TrackRows - 1) / TrackRows);
             trackPage = Mathf.Clamp(trackPage, 0, pages - 1);
             trackPager.Refresh();
+            bool previousPage = trackPage > 0;
+            Gate(trackPager.Minus, previousPage, TrackPreviousTip, trackCount > 0 ? FirstPageTip : PlayNoTracksTip);
+            bool nextPage = trackPage + 1 < pages;
+            Gate(trackPager.Plus, nextPage, TrackNextTip, trackCount > 0 ? LastPageTip : PlayNoTracksTip);
 
             int current = manager.DeckTrackIndex;
             for (int i = 0; i < TrackRows; i++)
@@ -598,12 +716,18 @@ namespace BoscaliSummer.Features.Radio.Presentation
                     row.Set(string.Empty, string.Empty, string.Empty, AvState.Inert);
                     row.Armed = false;
                     row.Interactable = false;
+                    if (trackTipName[i] != null) { trackTipName[i] = null; row.Help = null; }
                     continue;
                 }
 
                 row.Interactable = true;
                 bool active = index == current && playing;
                 string title = manager.DeckTrackTitle(index);
+                if (trackTipName[i] != title)
+                {
+                    trackTipName[i] = title;
+                    row.Help = "Play " + title + ".";
+                }
                 string number = active ? "▶" : AvNum.Fixed(index + 1, 0);
                 string value = active ? AvNum.Percent(manager.DeckProgress) : string.Empty;
                 row.Set(number + " " + title, string.Empty, value, active ? AvState.Ready : AvState.Info);

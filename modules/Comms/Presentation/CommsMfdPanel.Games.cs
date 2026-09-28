@@ -89,19 +89,24 @@ namespace BoscaliSummer.Features.Comms.Presentation
                 if (liveHunt != 0) comms.ArmHuntGuess(liveHunt);
                 else console.SetPage(TabPoll);
             }, AvButtonStyle.Default, AvIcon.ArrowUpRight));
+            liveAction.Help = "Join the current hunt or poll.";
 
             diceSection = p.Section(AvIcon.Gauge, "DICE", "");
             var diceSpecs = new AvControl.Spec[CommsCatalog.DiceSides.Length];
+            var diceHelps = new string[diceSpecs.Length];
             for (int i = 0; i < diceSpecs.Length; i++)
             {
                 int die = i;
                 diceSpecs[i] = new AvControl.Spec(CommsCatalog.DiceNames[i], () => comms.Roll(die));
+                diceHelps[i] = i == 0 ? "Flip a coin. The host flips it, so nobody can load it."
+                    : "Roll a " + CommsCatalog.DiceNames[i] + ". The host rolls it, so nobody can load it.";
             }
-            ButtonGrid(p, diceSpecs, diceSpecs.Length);
+            ButtonGrid(p, diceSpecs, diceSpecs.Length, diceHelps);
             lastRoll = p.Add(new AvNote(p.Content));
 
             duelSection = p.Section(AvIcon.Scale, "ROCK · PAPER · SCISSORS", "PICK A THROW TO CHALLENGE");
             var throwSpecs = new AvControl.Spec[CommsCatalog.Throws.Length];
+            var throwHelps = new string[throwSpecs.Length];
             for (int i = 0; i < throwSpecs.Length; i++)
             {
                 int throwIndex = i;
@@ -111,8 +116,10 @@ namespace BoscaliSummer.Features.Comms.Presentation
                     rematchTarget = 0;
                     rematchName = null;
                 });
+                throwHelps[i] = "Challenge with " + CommsCatalog.Throws[i] +
+                    ". Your throw stays secret on the host until someone answers.";
             }
-            ButtonGrid(p, throwSpecs, throwSpecs.Length);
+            ButtonGrid(p, throwSpecs, throwSpecs.Length, throwHelps);
 
             duelRows = new AvRow[DuelRows];
             duelAnswers = new AvControl[DuelRows][];
@@ -131,11 +138,13 @@ namespace BoscaliSummer.Features.Comms.Presentation
                     {
                         if (duelIds[row] != 0) comms.AcceptDuel(duelIds[row], throwIndex);
                     }));
+                    duelAnswers[r][t].Help = "Answer with " + CommsCatalog.Throws[t] + ".";
                 }
                 duelWithdraw[r] = p.Buttons(new AvControl.Spec("WITHDRAW", () =>
                 {
                     if (duelIds[row] != 0) comms.CancelDuel(duelIds[row]);
                 }, AvButtonStyle.Quiet, AvIcon.ArrowBackUp)).Controls[0];
+                duelWithdraw[r].Help = "Take your challenge back.";
             }
 
             p.Section(AvIcon.Target, "MAP HUNT", "HIDE A POINT · CLOSEST GUESS SCORES");
@@ -143,7 +152,9 @@ namespace BoscaliSummer.Features.Comms.Presentation
                 () => CommsText.Countdown(CommsCatalog.HuntDuration(comms.HuntDurationIndex)),
                 () => comms.HuntDurationIndex = Wrap(comms.HuntDurationIndex - 1, CommsCatalog.HuntDurations.Length),
                 () => comms.HuntDurationIndex = Wrap(comms.HuntDurationIndex + 1, CommsCatalog.HuntDurations.Length)));
-            p.Buttons(new AvControl.Spec("HIDE TARGET", () => comms.SetTool(CommsTool.HuntHide), AvButtonStyle.Default, AvIcon.Target));
+            Tip(huntDuration, "How long everyone has to guess.");
+            p.Buttons(new AvControl.Spec("HIDE TARGET", () => comms.SetTool(CommsTool.HuntHide), AvButtonStyle.Default, AvIcon.Target))
+                .Controls[0].Help = "Click the map to hide a target. Everyone else gets one click to find it; closest three score, a bullseye scores extra.";
 
             huntEmpty = p.Add(new AvNote(p.Content, "No hunt running. Hide a target and see who reads the map best."));
             huntRows = new AvRow[HuntRows];
@@ -157,6 +168,7 @@ namespace BoscaliSummer.Features.Comms.Presentation
                 {
                     if (huntIds[row] != 0) comms.ArmHuntGuess(huntIds[row]);
                 }, AvButtonStyle.Default, AvIcon.Target));
+                huntGuess[r].Help = "Arm your one guess, then click the map.";
             }
 
             p.Section(AvIcon.Crown, "RIVALRY", "SINCE YOU JOINED");
@@ -170,6 +182,7 @@ namespace BoscaliSummer.Features.Comms.Presentation
                 for (int i = 0; i < CommsCatalog.Calls.Length; i++)
                     if (CommsCatalog.Calls[i].Code == "GG") { comms.Call(i); nextGg = Time.unscaledTime + 8f; break; }
             }, AvButtonStyle.Default, AvIcon.Flag));
+            ggButton.Help = "Send a quiet GG to your team for the latest game result.";
 
             p.Section(AvIcon.Crown, "LEADERBOARD", "FUN POINTS · THIS MISSION");
             scoreEmpty = p.Add(new AvNote(p.Content, "Win a duel or a hunt to get on the board."));

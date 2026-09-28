@@ -59,6 +59,7 @@ namespace BoscaliSummer.Features.Comms.Presentation
                 {
                     if (playerIds[row] != 0) comms.State.ToggleMute(playerIds[row]);
                 }));
+                playerMutes[i].Help = "Hide this player's marks, calls, polls and games on your screen only. They are not told.";
             }
         }
 
@@ -78,6 +79,8 @@ namespace BoscaliSummer.Features.Comms.Presentation
                 string text = channel + (line.RematchPlayer != 0 ? "REMATCH › " : "") +
                     Who(line.Author, line.AuthorName) + " · " + line.Text;
                 logRows[shown].Set(text, null, Ago(now - line.Time), ToneState(line.Tone));
+                logRows[shown].Help = line.RematchPlayer != 0 ? "Choose a throw on CREW to challenge this pilot again." :
+                    line.HasPosition ? "Flash this position on the map." : null;
                 Show(logRows[shown], true);
                 shown++;
             }
