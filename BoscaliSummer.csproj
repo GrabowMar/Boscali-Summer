@@ -98,6 +98,11 @@
     <EmbeddedResource Include="AvionicsUi\avionics.avss">
       <LogicalName>NOAvionics.avionics.avss</LogicalName>
     </EmbeddedResource>
+    <!-- Kit v2: a base sheet of colour roles plus three palette sheets (AvStyleHost.SetTheme). -->
+    <EmbeddedResource Include="AvionicsUi\avionics.fui.avss"><LogicalName>NOAvionics.avionics.fui.avss</LogicalName></EmbeddedResource>
+    <EmbeddedResource Include="AvionicsUi\avionics.steel.avss"><LogicalName>NOAvionics.avionics.steel.avss</LogicalName></EmbeddedResource>
+    <EmbeddedResource Include="AvionicsUi\avionics.ace.avss"><LogicalName>NOAvionics.avionics.ace.avss</LogicalName></EmbeddedResource>
+    <EmbeddedResource Include="AvionicsUi\avionics.phosphor.avss"><LogicalName>NOAvionics.avionics.phosphor.avss</LogicalName></EmbeddedResource>
   </ItemGroup>
 
   <ItemGroup Label="Avionics UI bundle">

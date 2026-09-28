@@ -17,7 +17,7 @@ namespace NOAvionics.Ui
     /// all resolve to "keep what we had and log why", because the caller is a panel build
     /// path and its failure mode is a player staring at an empty bezel.
     /// </summary>
-    public static class AvStyleHost
+    public static partial class AvStyleHost
     {
         /// <summary>The name the embedded default is registered under in both plugins.</summary>
         public const string ResourceName = "NOAvionics.avionics.avss";

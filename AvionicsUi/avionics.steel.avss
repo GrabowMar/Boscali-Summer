@@ -1,0 +1,22 @@
+/* Theme A · Steel cyan. Operational colours follow the player's live game theme. */
+:root {
+  ground:          #050A0F fb;
+  surface:         #0A141C fa;
+  surface-raised:  #0E1B23 fa;
+  surface-inert:   #081218 f5;
+  surface-sunken:  #070E14 f8;
+  hairline:        #36606D c7;
+  frame:           #5A9EAF e6;
+  ink:             #EDF8FA;
+  ink-dim:         #BCD8DE;
+  ink-muted:       #8FAAB4;
+  key:             #80C2D9;
+  select:          accent;
+  ready:           accent;
+  caution:         warning;
+  danger:          alert;
+  info:            #80C2D9;
+  inert:           #3D5660 a6;
+  friendly:        friendly;
+  hostile:         hostile;
+}

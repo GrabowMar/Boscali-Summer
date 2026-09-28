@@ -197,5 +197,9 @@
   <ItemGroup>
     <!-- The shipped stylesheet is parsed here: a typo in it only warns at runtime. -->
     <EmbeddedResource Include="..\..\AvionicsUi\avionics.avss" LogicalName="BoscaliSummer.Tests.avionics.avss" />
+    <EmbeddedResource Include="..\..\AvionicsUi\avionics.fui.avss" LogicalName="BoscaliSummer.Tests.avionics.fui.avss" />
+    <EmbeddedResource Include="..\..\AvionicsUi\avionics.steel.avss" LogicalName="BoscaliSummer.Tests.avionics.steel.avss" />
+    <EmbeddedResource Include="..\..\AvionicsUi\avionics.ace.avss" LogicalName="BoscaliSummer.Tests.avionics.ace.avss" />
+    <EmbeddedResource Include="..\..\AvionicsUi\avionics.phosphor.avss" LogicalName="BoscaliSummer.Tests.avionics.phosphor.avss" />
   </ItemGroup>
 </Project>

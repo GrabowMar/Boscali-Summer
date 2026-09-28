@@ -1,0 +1,22 @@
+/* Theme C · F-35 phosphor green + magenta. Fixed palette; friendly/hostile still follow the game. */
+:root {
+  ground:          #030805 fb;
+  surface:         #07120B fa;
+  surface-raised:  #0E2216 fa;
+  surface-inert:   #081409 f5;
+  surface-sunken:  #050D07 f8;
+  hairline:        #24583A c7;
+  frame:           #3FAF62 e6;
+  ink:             #F0FFF4;
+  ink-dim:         #BFE6CB;
+  ink-muted:       #8DB89A;
+  key:             #7BEA96;
+  select:          #FF4FD8;
+  ready:           #52E07A;
+  caution:         #FFC252;
+  danger:          #FF6166;
+  info:            #9FE8B4;
+  inert:           #2E5A3E a6;
+  friendly:        friendly;
+  hostile:         hostile;
+}

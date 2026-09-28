@@ -19,6 +19,7 @@ namespace BoscaliSummer.Tests
         {
             FrameworkTests.Run();
             Avionics.AvBundleManifestTests.Run();
+            NOAvionics.Tests.AvFuiTests.Run(TestAssert.That);
             Features.Session.SessionTests.Run();
             WingApiVersionTests.Run();
             FxBusTests.Run();
