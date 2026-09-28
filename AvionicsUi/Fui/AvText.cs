@@ -21,6 +21,19 @@ namespace NOAvionics.Ui
             return t;
         }
 
+        /// <summary>
+        /// Fixed-size chrome (button/tab labels, chips, titles, metric fields): shrink toward the 11 px floor
+        /// instead of spilling out of the box, optionally wrapping to a second line first. Call after Make.
+        /// </summary>
+        public static void Fit(TMP_Text t, bool wrap)
+        {
+            if (t == null) return;
+            t.fontSizeMax = t.fontSize;
+            t.fontSizeMin = AvTypeScale.Floor;
+            t.enableAutoSizing = true;
+            t.enableWordWrapping = wrap;
+        }
+
         public static float Height(TMP_Text t, float width) =>
             t == null ? 0f : Mathf.Ceil(t.GetPreferredValues(t.text, Mathf.Max(1f, width), 0f).y);
 

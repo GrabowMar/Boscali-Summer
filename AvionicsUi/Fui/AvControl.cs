@@ -46,6 +46,7 @@ namespace NOAvionics.Ui
                 g.sizeDelta = new Vector2(16f, 16f); g.anchoredPosition = new Vector2(8f, 0f);
             }
             c.text = AvText.Make(root, "Label", AvTextRole.Head, spec.Label, TextAlignmentOptions.Center);
+            AvText.Fit(c.text, true); // long labels shrink, then wrap, never spill into a neighbour
             AvLay.Fill(c.text.rectTransform);
             if (c.glyph != null) c.text.rectTransform.offsetMin = new Vector2(24f, 0f);
             if (spec.OnClick != null) c.Clicked += spec.OnClick;
@@ -62,6 +63,10 @@ namespace NOAvionics.Ui
         public bool Armed { get => armed; set { if (armed == value) return; armed = value; fx?.Set(value ? AvFxKind.Glow : AvFxKind.None, 0.5f, 10f); Restyle(); } }
         public bool Interactable { get => interactable; set { interactable = value; frame.GetComponent<AvHit>().Interactable = value; Restyle(); } }
         public string Label { get => text.text; set => text.text = value ?? ""; }
+
+        /// <summary>Height the label needs at this width when it wraps at full size (the row grows rather than spill).</summary>
+        public float PreferredHeight(float width) =>
+            AvText.Height(text, Mathf.Max(1f, width - (glyph != null ? 24f : 0f) - 8f)) + 10f;
 
         public void Restyle()
         {

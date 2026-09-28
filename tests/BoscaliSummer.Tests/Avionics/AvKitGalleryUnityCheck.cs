@@ -81,7 +81,7 @@ public static class AvKitGalleryUnityCheck
         m[0].Set(AvNum.Money(6.08e9), "AVAILABLE", 0.62f);
         m[1].Set("20", "STOCKPILE", 0.4f);
         m[2].Set("50", "OF 100", 0.5f, AvState.Caution);
-        con.Tabs((AvIcon.Coins, "ECONOMY"), (AvIcon.Shield, "FORCES"));
+        con.Tabs((AvIcon.Coins, "ECONOMY"), (AvIcon.Shield, "FORCES AND FIELD LOGISTICS"));
         AvFlow p = con.Page(0);
         p.Section(AvIcon.LayersSubtract, "GAME SYMBOLOGY", "6 NATIVE LAYERS · SECTOR LOGIC OVERRIDES ACTIVE");
         bool a = true, b = false, c = true;
@@ -102,7 +102,7 @@ public static class AvKitGalleryUnityCheck
         p.Row(new AvGauge(p.Content, "COVER", AvGaugeShape.Arc), new AvGauge(p.Content, "CHARGE", AvGaugeShape.Segments));
         p.Add(new AvField(p.Content, "Farp here, cap east…", 18, s => { }));
         p.Buttons(new AvControl.Spec("ACCEPT", () => { }, AvButtonStyle.Primary, AvIcon.CircleCheck),
-                  new AvControl.Spec("DETAILS", () => { }),
+                  new AvControl.Spec("CONTRACT INTELLIGENCE BRIEFING", () => { }),
                   new AvControl.Spec("DECLINE", () => { }, AvButtonStyle.Danger, AvIcon.X));
         var list = p.Add(new AvList(p.Content, con.Ticker, 3, (i, r) => r.Set("TRACK " + (i + 1), null, AvNum.Fixed(12.5 + i, 1) + " km", AvState.Info)));
         list.SetCount(7);
@@ -169,11 +169,13 @@ public static class AvKitGalleryUnityCheck
             bool icon = t.name.StartsWith("Icon");
             if (!icon)
             {
-                Vector2 pref = t.GetPreferredValues(t.text, r.width, 0f);
-                if (!t.enableWordWrapping && pref.x > r.width + 1.5f)
-                    Failures.Add(where + ": overflows width (" + pref.x.ToString("0") + " > " + r.width.ToString("0") + ") '" + t.text + "'");
-                if (t.enableWordWrapping && pref.y > r.height + 1.5f)
-                    Failures.Add(where + ": overflows height (" + pref.y.ToString("0") + " > " + r.height.ToString("0") + ") '" + t.text + "'");
+                Bounds b = t.textBounds; // what TMP actually laid out, after wrapping and auto-size
+                if (b.size.x > r.width + 1.5f)
+                    Failures.Add(where + ": overflows width (" + b.size.x.ToString("0") + " > " + r.width.ToString("0") + ") '" + t.text + "'");
+                if (b.size.y > r.height + 1.5f)
+                    Failures.Add(where + ": overflows height (" + b.size.y.ToString("0") + " > " + r.height.ToString("0") + ") '" + t.text + "'");
+                if (t.fontSize < AvTypeScale.Floor - 0.01f)
+                    Failures.Add(where + ": below the 11 px floor (" + t.fontSize.ToString("0.0") + ") '" + t.text + "'");
             }
             if (t.GetComponentInParent<ScrollRect>() != null)
             {

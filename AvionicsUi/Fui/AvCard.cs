@@ -20,6 +20,7 @@ namespace NOAvionics.Ui
             frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(8f)); AvLay.Fill(frame.rectTransform);
             frame.Bracket = brackets ? 8f : 0f;
             if (!string.IsNullOrEmpty(titleText)) title = AvText.Make(Rect, "Title", AvTextRole.Head, titleText);
+            if (title != null) AvText.Fit(title, false);
             body = AvLay.Child(Rect, "Body");
             // The nested flow uses the card's inner width; it keeps its own pad = Inset and no gutter.
             Flow = new AvFlow(body, ticker, width, 0f);

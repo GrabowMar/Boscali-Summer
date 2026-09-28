@@ -21,6 +21,7 @@ namespace NOAvionics.Ui
             key = AvText.Make(Rect, "Key", AvTextRole.Micro, keyText);
             value = AvText.Make(Rect, "Value", AvTextRole.Display);
             unit = AvText.Make(Rect, "Unit", AvTextRole.Micro, "", TextAlignmentOptions.MidlineRight);
+            AvText.Fit(key, false); AvText.Fit(value, false); AvText.Fit(unit, false);
             var go = new GameObject("Gauge", typeof(RectTransform), typeof(CanvasRenderer));
             go.transform.SetParent(Rect, false);
             gauge = go.AddComponent<AvGaugeGraphic>();
@@ -33,10 +34,11 @@ namespace NOAvionics.Ui
         public override void Place(AvSlot s)
         {
             base.Place(s);
-            AvLay.Place(key.rectTransform, 8f, 4f, s.W - 16f, 14f);
-            AvLay.Place(value.rectTransform, 8f, 18f, s.W - 16f, 28f);
-            AvLay.Place(unit.rectTransform, 8f, 44f, s.W - 16f, 12f);
-            AvLay.Place((RectTransform)gauge.transform, 8f, s.H - 6f, s.W - 16f, 3f);
+            // Boxes match each role's rendered line height (Display 24 -> 32, Micro 11 -> 15).
+            AvLay.Place(key.rectTransform, 8f, 1f, s.W - 16f, 15f);
+            AvLay.Place(value.rectTransform, 8f, 13f, s.W - 16f, 32f);
+            AvLay.Place(unit.rectTransform, 8f, 44f, s.W - 16f, 15f);
+            AvLay.Place((RectTransform)gauge.transform, 8f, s.H - 4f, s.W - 16f, 3f);
         }
 
         public void Set(string v, string u, float fill01, AvState st = AvState.Ready)

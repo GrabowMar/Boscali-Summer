@@ -25,15 +25,15 @@ namespace NOAvionics.Ui
             if (caption.text != (c ?? "")) caption.text = c ?? "";
         }
 
-        public override float Measure(float width) => caption.text.Length > 0 ? 46f : 30f;
+        public override float Measure(float width) => caption.text.Length > 0 ? 48f : 32f;
 
         public override void Place(AvSlot slot)
         {
             base.Place(slot);
             float vw = AvText.Width(value);
-            AvLay.Place(value.rectTransform, 0f, 0f, vw + 2f, 30f);
-            AvLay.Place(unit.rectTransform, vw + 6f, 8f, slot.W - vw - 6f, 20f);
-            AvLay.Place(caption.rectTransform, 0f, 30f, slot.W, 16f);
+            AvLay.Place(value.rectTransform, 0f, 0f, vw + 2f, 32f);
+            AvLay.Place(unit.rectTransform, vw + 6f, 9f, slot.W - vw - 6f, 20f);
+            AvLay.Place(caption.rectTransform, 0f, 32f, slot.W, 16f);
         }
 
         public override void Restyle()

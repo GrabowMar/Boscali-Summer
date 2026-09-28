@@ -20,6 +20,7 @@ namespace NOAvionics.Ui
             rail = AvLay.Solid(Rect, "Rail", Color.clear);
             AvLay.Place(rail.rectTransform, 0f, 0f, 2f, AvGridTokens.ChipStrip);
             text = AvText.Make(Rect, "Text", AvTextRole.Micro);
+            AvText.Fit(text, false);
             AvLay.Fill(text.rectTransform); text.rectTransform.offsetMin = new Vector2(8f, 0f);
             Restyle();
         }

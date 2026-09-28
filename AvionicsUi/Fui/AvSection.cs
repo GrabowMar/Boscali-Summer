@@ -18,6 +18,7 @@ namespace NOAvionics.Ui
             Rect = AvLay.Child(parent, "Section " + titleText);
             icon = AvIcons.Make(Rect, glyph, AvGridTokens.IconHead, Color.white);
             title = AvText.Make(Rect, "Title", AvTextRole.Head, titleText);
+            AvText.Fit(title, false);
             caption = AvText.Make(Rect, "Caption", AvTextRole.Micro, captionText ?? "", TextAlignmentOptions.MidlineRight);
             rule = AvLay.Solid(Rect, "Rule", Color.clear);
             Restyle();

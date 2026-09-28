@@ -60,6 +60,7 @@ namespace NOAvionics.Ui
             titleBack = AvLay.Solid(Root, "TitleBar", Color.clear);
             AvLay.Place(titleBack.rectTransform, 0f, 0f, w, TitleH);
             titleText = AvText.Make(Root, "Title", AvTextRole.Head, title);
+            AvText.Fit(titleText, false);
             AvLay.Place(titleText.rectTransform, AvGridTokens.Pad, 0f, w - 2f * AvGridTokens.Pad - 36f, TitleH);
             AvControl close = AvControl.Make(Root, new AvControl.Spec("", Hide, AvButtonStyle.Quiet, AvIcon.X));
             AvLay.Place(close.Rect, w - 34f, 3f, 30f, 24f);

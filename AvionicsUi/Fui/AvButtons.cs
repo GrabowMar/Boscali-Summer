@@ -15,7 +15,12 @@ namespace NOAvionics.Ui
             for (int i = 0; i < specs.Length; i++) Controls[i] = AvControl.Make(Rect, specs[i]);
         }
 
-        public override float Measure(float width) => AvGridTokens.Row;
+        public override float Measure(float width)
+        {
+            float w = AvFlowMath.ColumnWidth(width, Controls.Length, AvGridTokens.Gap), h = AvGridTokens.Row;
+            foreach (AvControl c in Controls) h = Mathf.Max(h, c.PreferredHeight(w));
+            return Mathf.Ceil(h);
+        }
 
         public override void Place(AvSlot slot)
         {
