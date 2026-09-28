@@ -1,13 +1,11 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using BepInEx.Logging;
 using BoscaliSummer.Features.Support.Domain;
 using BoscaliSummer.Features.Support.Domain.Cyber;
 using BoscaliSummer.Features.Support.Domain.Orbital;
 using BoscaliSummer.Features.Support.Domain.SpecOps;
 using BoscaliSummer.Features.Support.Presentation.Viz;
-using BoscaliSummer.Features.Support.Presentation.Window;
 using BoscaliSummer.Features.Support.Runtime;
 using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Lifecycle;
@@ -21,15 +19,16 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Features.Support.Presentation
 {
     /// <summary>
-    /// "OPS" — the multi-domain operations MFD: SPACE, CYBER and SPEC OPS.
+    /// "OPS" — the multi-domain operations MFD: SPACE, CYBER and SPEC OPS, on kit v2's
+    /// <see cref="AvConsole"/> chrome (spec §9.2, §10 OPS slice).
     ///
     /// <para>The panel owns no policy. Every figure it shows comes from
     /// <see cref="SupportManager"/> (host snapshot or the same pricing the host charges) and
     /// every control is a request the host validates. A row that cannot act says why, in
-    /// words on the row and in the status strip, never by colour alone.</para>
+    /// words on the row and in the footer, never by colour alone.</para>
     ///
-    /// <para>This file is the shell: bezel install, header, refresh cadence and the shared
-    /// row components. Each domain page lives in its own partial.</para>
+    /// <para>This file is the shell: bezel install, header/chip/metric wiring, refresh cadence
+    /// and the shared support-action row builder. Each domain page lives in its own partial.</para>
     /// </summary>
     internal sealed partial class SupportPanel : MonoBehaviour, ISceneService
     {
@@ -38,13 +37,12 @@ namespace BoscaliSummer.Features.Support.Presentation
         private const float RefreshInterval = 0.15f;
 
         private const int ChipCount = 3;
+        private const int DomainCount = 3;
         private const float SectionGap = 16f;
 
         private const int TabSpace = (int)OpsDomain.Space;
         private const int TabCyber = (int)OpsDomain.Cyber;
         private const int TabSpecOps = (int)OpsDomain.SpecialOperations;
-
-        private static readonly CultureInfo Invariant = CultureInfo.InvariantCulture;
 
         private SupportManager support;
         private IProgressionView progression;
@@ -52,12 +50,10 @@ namespace BoscaliSummer.Features.Support.Presentation
 
         private MFDScreen screen;
         private GameObject screenRoot;
-        private AvScreen shell;
+        private AvConsole shell;
 
-        private AvStyled.Metric allocationMetric;
-        private AvStyled.Metric orbitMetric;
-        private AvStyled.Metric stationMetric;
-        private AvStyled.Metric reserveMetric;
+        private AvChip chipNet, chipLink, chipMap;
+        private AvMetric allocationMetric, orbitMetric, stationMetric, reserveMetric;
 
         /// <summary>Support-action rows on every page, refreshed by the page that owns them.</summary>
         private readonly List<ActionRow> actionRows = new List<ActionRow>(12);
@@ -86,6 +82,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             screenRoot = null;
             screen = null;
             shell = null;
+            chipNet = chipLink = chipMap = null;
             allocationMetric = orbitMetric = stationMetric = reserveMetric = null;
             actionRows.Clear();
             ResetOpsWindow();
@@ -203,11 +200,7 @@ namespace BoscaliSummer.Features.Support.Presentation
 
         private MFDScreen Build(MFDScreen template, Button bezel)
         {
-            TMP_Text sourceText = template.GetComponentInChildren<TMP_Text>(true);
-            TMP_FontAsset font = sourceText != null ? sourceText.font : null;
-            if (font != null) AvFont.Font = font;
-
-            var root = new GameObject("BoscaliOperations.Screen", typeof(RectTransform), typeof(Image));
+            var root = new GameObject("BoscaliOperations.Screen", typeof(RectTransform));
             screenRoot = root;
             RectTransform rootRect = root.GetComponent<RectTransform>();
             rootRect.SetParent(template.transform.parent, false);
@@ -218,52 +211,34 @@ namespace BoscaliSummer.Features.Support.Presentation
             rootRect.pivot = templateRect.pivot;
             rootRect.localScale = templateRect.localScale;
 
-            float height = AvScreen.ResolveHeight(
-                templateRect.parent as RectTransform, PanelHeight, AvTokens.PanelHeightMax);
+            float height = ResolveConsoleHeight(templateRect.parent as RectTransform, PanelHeight, AvTokens.PanelHeightMax);
             rootRect.sizeDelta = new Vector2(Width, height);
-            AvKit.ClampIntoCanvas(rootRect);
+            ClampConsoleIntoCanvas(rootRect);
 
-            Image background = root.GetComponent<Image>();
-            background.sprite = AvSprites.Panel;
-            background.type = Image.Type.Sliced;
-            background.color = Color.white;
-            background.raycastTarget = true;
+            shell = AvConsole.Build(rootRect, "OPS", "OPERATIONS", DomainCount, Width, height);
+            shell.PageChanged += _ => nextRefresh = 0f;
 
-            var contentObject = new GameObject("Content", typeof(RectTransform));
-            RectTransform content = contentObject.GetComponent<RectTransform>();
-            content.SetParent(rootRect, false);
-            AvKit.Stretch(content);
+            AvChip[] chips = shell.Chips(ChipCount);
+            chipNet = chips[0];
+            chipLink = chips[1];
+            chipMap = chips[2];
 
-            shell = AvScreen.Build(
-                content, "OPS",
-                OpsDomains.TabLabels(),
-                new[]
-                {
-                    new[] { "ALLOCATION", "" },
-                    new[] { "ORBIT", "MOD" },
-                    new[] { "CYBER", "NET" },
-                    new[] { "SPEC OPS", "RDY" }
-                },
-                ChipCount, Width, height, _ =>
-                {
-                    AvButton.ClearTooltip();
-                    nextRefresh = 0f;
-                });
+            AvMetric[] metrics = shell.Metrics("ALLOCATION", "ORBIT", "CYBER", "SPEC OPS");
+            allocationMetric = metrics[0];
+            orbitMetric = metrics[1];
+            stationMetric = metrics[2];
+            reserveMetric = metrics[3];
 
-            DecorateDomainTabs();
+            shell.Tabs((AvIcon.Satellite, "SPACE"), (AvIcon.ShieldLock, "CYBER"), (AvIcon.UsersGroup, "SPEC OPS"));
 
-            allocationMetric = FitMetric(shell.Metrics[0]);
-            orbitMetric = FitMetric(shell.Metrics[1]);
-            stationMetric = FitMetric(shell.Metrics[2]);
-            reserveMetric = FitMetric(shell.Metrics[3]);
-
-            BuildSpacePage();
-            BuildCyberPage();
-            BuildSpecOpsPage();
+            BuildSpacePage(shell.Page(TabSpace));
+            BuildCyberPage(shell.Page(TabCyber));
+            BuildSpecOpsPage(shell.Page(TabSpecOps));
+            shell.Finish();
 
             MFDScreen result = root.AddComponent<MFDScreen>();
             result.shortName = MfdSlots.Ops;
-            result.displayPanel = contentObject;
+            result.displayPanel = shell.Root.gameObject;
             result.aircraftOnly = false;
             result.label = bezel != null ? bezel.GetComponentInChildren<TextMeshProUGUI>(true) : null;
             result.highlight = FindHighlight(bezel);
@@ -275,57 +250,67 @@ namespace BoscaliSummer.Features.Support.Presentation
                 return null;
             }
 
-            shell.SetPage(TabSpace);
             return result;
         }
 
         /// <summary>
-        /// Four metrics share the bezel, so a wide allocation figure or caption would otherwise
-        /// ellipsize. Shrink-to-fit keeps the sheet's size as the ceiling and never drops below
-        /// the 10px floor; values align right so "0/15" fractions share one edge.
+        /// The height this panel should take, given the slot it was parented into. Kit v2's
+        /// <see cref="AvConsole"/> does not resolve this itself (a kit gap) — pure geometry, so
+        /// copied locally rather than calling the v1 screen shell.
         /// </summary>
-        private static AvStyled.Metric FitMetric(AvStyled.Metric metric)
+        private static float ResolveConsoleHeight(RectTransform parent, float min, float max)
         {
-            if (metric?.Value == null) return metric;
-            metric.Value.enableAutoSizing = true;
-            metric.Value.fontSizeMax = metric.Value.fontSize;
-            metric.Value.fontSizeMin = AvTokens.FontMicro;
-            metric.Value.alignment = TextAlignmentOptions.MidlineRight;
-            if (metric.Caption != null)
+            if (max < min) max = min;
+            if (parent == null) return min;
+
+            float available = parent.rect.height;
+            RectTransform cursor = parent;
+            for (int i = 0; i < 4 && available <= 1f && cursor != null; i++)
             {
-                metric.Caption.enableAutoSizing = true;
-                metric.Caption.fontSizeMax = metric.Caption.fontSize;
-                metric.Caption.fontSizeMin = AvTokens.FontMicro;
+                cursor = cursor.parent as RectTransform;
+                if (cursor != null) available = cursor.rect.height;
             }
-            if (metric.Unit != null)
-            {
-                metric.Unit.enableAutoSizing = true;
-                metric.Unit.fontSizeMax = metric.Unit.fontSize;
-                metric.Unit.fontSizeMin = AvTokens.FontMicro;
-            }
-            return metric;
+            if (available <= 1f) return min;
+            return Mathf.Clamp(Mathf.Floor(available), min, max);
         }
 
-        private void DecorateDomainTabs()
+        /// <summary>
+        /// Nudge the built console until it lies wholly inside its canvas — the same pure geometry
+        /// the v1 kit clamp performed (kit v2 AvWindow still reaches
+        /// into v1 AvKit for this internally; copied locally here so this slice makes no v1 call).
+        /// </summary>
+        private static void ClampConsoleIntoCanvas(RectTransform panel, float margin = 8f)
         {
-            OpsSprites.Ensure();
-            int[] marks = { OpsSprites.G.Space, OpsSprites.G.Cyber, OpsSprites.G.SpecOps };
-            for (int i = 0; i < shell.Tabs.Length && i < marks.Length; i++)
+            if (panel == null) return;
+            Canvas canvas = panel.GetComponentInParent<Canvas>();
+            if (canvas == null) return;
+            var canvasRt = canvas.rootCanvas.transform as RectTransform;
+            if (canvasRt == null || panel.parent == null) return;
+
+            var corners = new Vector3[4];
+            panel.GetWorldCorners(corners);
+            float minX = float.MaxValue, maxX = float.MinValue, minY = float.MaxValue, maxY = float.MinValue;
+            for (int i = 0; i < 4; i++)
             {
-                RectTransform root = (RectTransform)shell.Tabs[i].transform;
-                float width = root.sizeDelta.x > 1f ? root.sizeDelta.x : Width / marks.Length;
-                float height = root.sizeDelta.y > 1f ? root.sizeDelta.y : AvTokens.TabBarHeight;
-                Image glyph = AvKit.Panel(root, new Rect(10f, -(height - 17f) * 0.5f, 17f, 17f),
-                    AvTheme.RailInfo, OpsSprites.Glyph(marks[i]));
-                glyph.raycastTarget = false;
-                TMP_Text label = shell.Tabs[i].GetComponentInChildren<TMP_Text>();
-                if (label == null) continue;
-                AvKit.Place(label.rectTransform, new Rect(34f, 0f, width - 40f, height));
-                label.alignment = TextAlignmentOptions.MidlineLeft;
-                label.enableAutoSizing = true;
-                label.fontSizeMin = AvTokens.FontMicro;
-                label.fontSizeMax = label.fontSize;
+                Vector3 local = canvasRt.InverseTransformPoint(corners[i]);
+                if (local.x < minX) minX = local.x;
+                if (local.x > maxX) maxX = local.x;
+                if (local.y < minY) minY = local.y;
+                if (local.y > maxY) maxY = local.y;
             }
+
+            Rect bounds = canvasRt.rect;
+            float dx = 0f;
+            if (minX < bounds.xMin + margin) dx = bounds.xMin + margin - minX;
+            else if (maxX > bounds.xMax - margin) dx = bounds.xMax - margin - maxX;
+            float dy = 0f;
+            if (maxY > bounds.yMax - margin) dy = bounds.yMax - margin - maxY;
+            else if (minY < bounds.yMin + margin) dy = bounds.yMin + margin - minY;
+            if (Mathf.Approximately(dx, 0f) && Mathf.Approximately(dy, 0f)) return;
+
+            Vector3 world = canvasRt.TransformVector(new Vector3(dx, dy, 0f));
+            Vector3 local2 = panel.parent.InverseTransformVector(world);
+            panel.anchoredPosition += new Vector2(local2.x, local2.y);
         }
 
         private static Image FindHighlight(Button button)
@@ -339,189 +324,19 @@ namespace BoscaliSummer.Features.Support.Presentation
             return button.GetComponent<Image>();
         }
 
-        // ---- Rows ------------------------------------------------------------------------
+        // ---- Tone mapping ------------------------------------------------------------------
 
-        private enum Tone : byte
-        {
-            Locked,
-            Ready,
-            Armed,
-            Pending,
-            Danger
-        }
-
-        /// <summary>
-        /// The one row shape every page uses: name and value, a full-width readiness line,
-        /// then explanation and labelled controls. Fixed heights keep refreshes stable;
-        /// compact rows omit the explanation but retain a two-line readiness lane.
-        /// </summary>
-        private sealed class OpsRow
-        {
-            public Image Background;
-            public Image Rail;
-            public TMP_Text Status;
-            public TMP_Text Detail;
-            public TMP_Text Value;
-            public AvButton Primary;
-            public string LastStatus;
-            public Tone LastTone = (Tone)255;
-        }
-
-        private const float RowHeight = 100f;
-        private const float CompactRowHeight = 68f;
-        /// <summary>Value and action columns: a cost figure is never crowded by its button.</summary>
-        private const float RowValueWidth = 100f;
-        private const float RowActionWidth = 96f;
-        private const float RowColumnGap = 8f;
-
-        private static OpsRow Row(
-            RectTransform parent, float x, float y, float width, bool compact,
-            string code, string name, string detail,
-            string primaryText, Action onPrimary,
-            string secondaryText = null, Action onSecondary = null,
-            AvButtonStyle primaryStyle = AvButtonStyle.Default, Action onSelect = null,
-            float height = 0f, string selectTooltip = null, int glyph = OpsSprites.G.SpecOps)
-        {
-            float baseHeight = compact ? CompactRowHeight : RowHeight;
-            float slot = height > baseHeight ? height : baseHeight;
-            var row = new OpsRow();
-
-            row.Background = AvKit.Panel(parent, new Rect(x - 4f, y, width + 4f, slot), AvTheme.SurfaceInert);
-            AvKit.Rule(parent, new Rect(x, y, width, 1f), AvTheme.RailInfo.WithAlpha(0.65f));
-            AvKit.Rule(parent, new Rect(x + 12f, y - slot + 1f, width - 24f, 1f), AvTheme.Hairline);
-            AvKit.Rule(parent, new Rect(x + 62f, y - 10f, 1f, 46f), AvTheme.RailInfo.WithAlpha(0.32f));
-
-            bool trail = primaryText != null;
-            float actionWidth = secondaryText != null ? 152f : RowActionWidth;
-            float actionX = x + width - actionWidth - 8f;
-            float textRight = x + width - 8f;
-
-            AvButton select = null;
-            if (onSelect != null)
-                select = AvKit.HitButton(parent, new Rect(x, y, trail ? actionX - x - RowColumnGap : width, slot), onSelect);
-            if (select != null && selectTooltip != null) select.WithTooltip(selectTooltip);
-
-            row.Rail = AvKit.Rule(parent, new Rect(x - 4f, y, 3f, slot), AvTheme.RailInert);
-            Image symbol = AvKit.Panel(parent, new Rect(x + 14f, y - 13f, 32f, 32f), AvTheme.RailInfo,
-                OpsSprites.Glyph(glyph));
-            symbol.raycastTarget = false;
-            AvKit.Label(parent, code, new Rect(x + 10f, y - 51f, 42f, 16f),
-                AvTheme.Dim, AvTokens.FontMicro, FontStyles.Bold, TextAlignmentOptions.Center);
-
-            float textX = x + 74f;
-            float textWidth = textRight - textX - (trail ? RowValueWidth + RowColumnGap : 0f);
-
-            AvStyled.Label(parent, new Rect(textX, y - 12f, textWidth, 20f), name, "row-name");
-            row.Status = Wrapped(AvStyled.Label(parent,
-                new Rect(textX, y - 40f, compact && trail ? actionX - textX - 8f : width - 86f, 30f), "", "row-sub"));
-            if (!compact)
-            {
-                if (slot > 120f)
-                    AvKit.Label(parent, "EFFECT / MAP DELIVERY", new Rect(x + 12f, y - 75f, width - 24f, 12f),
-                        AvTheme.RailInfo, AvTokens.FontMicro, FontStyles.Bold);
-                row.Detail = Wrapped(AvStyled.Label(parent,
-                    new Rect(x + 12f, y - Mathf.Max(66f, slot * 0.58f), trail ? actionX - x - 20f : width - 24f, 34f),
-                    detail ?? "", "row-sub"));
-                row.Detail.color = AvTheme.Dim;
-                row.Detail.enableAutoSizing = true;
-                row.Detail.fontSizeMin = AvTokens.FontMicro;
-                row.Detail.fontSizeMax = 11f;
-            }
-
-            if (trail)
-            {
-                row.Value = AvStyled.Label(parent, new Rect(textRight - RowValueWidth, y - 12f, RowValueWidth, 18f),
-                                           "", "row-value", align: TextAlignmentOptions.MidlineRight);
-                float buttonY = y - slot + 36f;
-                if (secondaryText != null)
-                {
-                    float half = (actionWidth - 8f) * 0.5f;
-                    AvStyled.Button(parent, new Rect(actionX, buttonY, half, 28f),
-                                    secondaryText, "btn", onSecondary, AvButtonStyle.Danger);
-                    row.Primary = AvStyled.Button(parent, new Rect(actionX + half + 8f, buttonY, half, 28f),
-                                                  primaryText, "btn", onPrimary, primaryStyle);
-                }
-                else
-                {
-                    row.Primary = AvStyled.Button(parent, new Rect(actionX, buttonY, RowActionWidth, 28f),
-                                                  primaryText, "btn", onPrimary, primaryStyle);
-                }
-                if (selectTooltip != null) row.Primary.WithTooltip(selectTooltip);
-            }
-
-            return row;
-        }
-
-        private static TMP_Text Wrapped(TMP_Text label)
-        {
-            label.enableWordWrapping = true;
-            label.maxVisibleLines = 2;
-            label.fontSize = 11f;
-            label.characterSpacing = 0f;
-            label.overflowMode = TextOverflowModes.Ellipsis;
-            label.alignment = TextAlignmentOptions.TopLeft;
-            return label;
-        }
-
-        private static TMP_Text SingleLine(TMP_Text label)
-        {
-            label.enableWordWrapping = false;
-            label.overflowMode = TextOverflowModes.Ellipsis;
-            label.alignment = TextAlignmentOptions.MidlineLeft;
-            return label;
-        }
-
-        /// <summary>Write a row's state. Text carries the meaning; the rail and colour repeat it.</summary>
-        private static bool Paint(OpsRow row, Tone tone, string status)
-        {
-            if (row.LastTone == tone && row.LastStatus == status) return false;
-            row.LastTone = tone;
-            row.LastStatus = status;
-            row.Rail.color = RailColor(tone);
-            row.Status.text = status;
-            row.Status.color = StatusColor(tone);
-            if (row.Background != null)
-            {
-                switch (tone)
-                {
-                    case Tone.Armed:
-                        row.Background.color = AvTheme.RailCaution.WithAlpha(0.07f);
-                        break;
-                    case Tone.Ready:
-                        row.Background.color = AvTheme.Unity(AvTokens.Surface);
-                        break;
-                    case Tone.Danger:
-                        row.Background.color = AvTheme.RailDanger.WithAlpha(0.08f);
-                        break;
-                    default:
-                        row.Background.color = AvTheme.Unity(AvTokens.Surface.WithAlpha(0.85f));
-                        break;
-                }
-            }
-            return true;
-        }
-
-        private static Color RailColor(Tone tone)
+        /// <summary>The one place an <see cref="AbilityTone"/> becomes an <see cref="AvState"/>
+        /// (R1: status is always a word or glyph too, never colour alone).</summary>
+        private static AvState ToState(AbilityTone tone)
         {
             switch (tone)
             {
-                case Tone.Ready: return AvTheme.RailReady;
-                case Tone.Armed: return AvTheme.RailCaution;
-                case Tone.Pending: return AvTheme.RailInfo;
-                case Tone.Danger: return AvTheme.RailDanger;
-                default: return AvTheme.RailInert;
-            }
-        }
-
-        private static Color StatusColor(Tone tone)
-        {
-            switch (tone)
-            {
-                case Tone.Ready: return AvTheme.RailReady;
-                case Tone.Armed: return AvTheme.RailCaution;
-                case Tone.Pending: return AvTheme.RailInfo;
-                case Tone.Danger: return AvTheme.RailDanger;
-                default: return AvTheme.Dim;
+                case AbilityTone.Ready: return AvState.Ready;
+                case AbilityTone.Armed: return AvState.Caution;
+                case AbilityTone.Pending: return AvState.Info;
+                case AbilityTone.Danger: return AvState.Danger;
+                default: return AvState.Inert;
             }
         }
 
@@ -530,7 +345,8 @@ namespace BoscaliSummer.Features.Support.Presentation
         private sealed class ActionRow
         {
             public SupportActionDefinition Definition;
-            public OpsRow View;
+            public AvRow View;
+            public AvControl Trailing;
             public int Tab;
             public string Verb;
         }
@@ -552,12 +368,10 @@ namespace BoscaliSummer.Features.Support.Presentation
             return count;
         }
 
-        /// <summary>Build every action row this tab hosts, post-gated SPEC OPS abilities first;
-        /// returns the new y.</summary>
-        private float BuildActionRows(RectTransform parent, int tab, float x, float y, float width, string verb,
-                                      float rowHeight = 0f)
+        /// <summary>Build every action row this tab hosts into <paramref name="flow"/>, post-gated
+        /// SPEC OPS abilities first.</summary>
+        private void BuildActionRows(AvFlow flow, int tab, string verb)
         {
-            float step = rowHeight > RowHeight ? rowHeight : RowHeight;
             for (int pass = 0; pass < 2; pass++)
             foreach (SupportActionDefinition action in support.Actions)
             {
@@ -566,28 +380,17 @@ namespace BoscaliSummer.Features.Support.Presentation
                 string code = action.IsHack ? CyberCatalog.Code(action.Hack.Value)
                     : action.IsCapstone ? Capstones.Code(action.Cap.Value)
                     : action.IsField ? FieldWords.AbilityCode(action.Field.Value) : ActionCode(id);
-                string detail = action.IsHack ? CyberCatalog.Description(action.Hack.Value)
-                    : action.IsCapstone ? Capstones.Summary(action.Cap.Value) : action.Description;
-                var row = new ActionRow
+
+                AvRow view = flow.Add(new AvRow(flow.Content));
+                view.Set(code + "  " + action.Name, "", "", AvState.Inert);
+                AvControl trailing = view.AddTrailing(new AvControl.Spec(verb, () =>
                 {
-                    Definition = action,
-                    Tab = tab,
-                    Verb = verb,
-                    View = Row(parent, x, y, width, false, code, action.Name, detail, verb,
-                               () =>
-                               {
-                                   support.Arm(id);
-                                   nextRefresh = 0f;
-                               }, height: rowHeight,
-                               glyph: action.Field == FieldAbility.Spot || action.Field == FieldAbility.Skywatch
-                                   ? OpsSprites.G.Spot : action.Field == FieldAbility.Eavesdrop
-                                   ? OpsSprites.G.SpecOps : action.Field == FieldAbility.Suppress || action.Field == FieldAbility.Hunt
-                                   ? OpsSprites.G.Suppress : OpsSprites.G.Fortify)
-                };
-                actionRows.Add(row);
-                y -= step;
+                    if (support.ArmedAction.HasValue && support.ArmedAction.Value == id) support.Disarm();
+                    else support.Arm(id);
+                    nextRefresh = 0f;
+                }));
+                actionRows.Add(new ActionRow { Definition = action, View = view, Trailing = trailing, Tab = tab, Verb = verb });
             }
-            return y;
         }
 
         private static string ActionCode(SupportActionId id)
@@ -612,113 +415,70 @@ namespace BoscaliSummer.Features.Support.Presentation
                 if (row.Tab != tab) continue;
 
                 SupportActionDefinition action = row.Definition;
-                bool cyber = action.IsCyber;
-                float cost = cyber ? 0f : support.Cost(action);
-                float intel = AbilityStatus.Intel(action);
                 bool armed = support.ArmedAction.HasValue && support.ArmedAction.Value == action.Id;
                 AbilityFacts facts = AbilityStatus.For(support, action, bypass);
-                row.View.Value.text = facts.CostText;
+                string sub = facts.Readiness;
                 if (action.Id == SupportActionId.Fortify)
                 {
                     SpecOpsDetachment detachment = support.LocalDetachment;
                     if (detachment != null)
                     {
                         int shells = detachment.GroundReadiness;
-                        row.View.Detail.text = "Owned zones, or near a SPEC OPS safehouse. Each order occupies " + shells +
-                                              (shells == 1 ? " position" : " positions") + " (best team " +
-                                              FieldWords.Rank(detachment.BestRank) + ").";
+                        sub += " · " + shells + (shells == 1 ? " POSITION" : " POSITIONS") +
+                               " · BEST " + FieldWords.Rank(detachment.BestRank);
                     }
                 }
-
-                Tone tone = facts.Tone == AbilityTone.Ready ? Tone.Ready
-                    : facts.Tone == AbilityTone.Armed ? Tone.Armed
-                    : facts.Tone == AbilityTone.Pending ? Tone.Pending
-                    : facts.Tone == AbilityTone.Danger ? Tone.Danger
-                    : Tone.Locked;
-                string status = facts.Readiness;
-                bool enabled = facts.Enabled;
-
-                row.View.Primary.SetEnabled(enabled);
-                row.View.Primary.SetLatched(armed);
-                row.View.Primary.SetText(armed ? "ABORT" : row.Verb);
-                // Armed/ready read from the shared accent wash; no solid plate at rest.
-                row.View.Primary.ClearCustomColors();
-                if (Paint(row.View, tone, status))
-                {
-                    row.View.Primary.WithTooltip(action.Name + " — " +
-                        (cyber ? Figure(intel) + " INTEL. " : cost > 0f ? Figure(cost) + " ALLOC. " : "") +
-                        action.Description + " " + status + ".");
-                }
+                row.View.Set(action.Name, sub, facts.CostText, ToState(facts.Tone));
+                row.Trailing.Interactable = facts.Enabled;
+                row.Trailing.Latched = armed;
+                row.Trailing.Label = armed ? "ABORT" : row.Verb;
             }
         }
 
         // ---- Refresh ---------------------------------------------------------------------
+
+        private bool opsSnapshotSeen;
 
         private void Refresh()
         {
             if (shell == null || allocationMetric == null) return;
             bool bypass = support.BypassRequirements;
 
-            RefreshDataBar(bypass);
+            RefreshChips(bypass);
             RefreshMetrics(bypass);
 
-            switch (shell.Page)
+            int page = shell.CurrentPage;
+            switch (page)
             {
                 case TabSpace: RefreshSpace(bypass); break;
                 case TabCyber: RefreshCyber(bypass); break;
                 case TabSpecOps: RefreshSpecOps(bypass); break;
             }
-            RefreshActionRows(shell.Page, bypass);
+            RefreshActionRows(page, bypass);
 
             bool armed = support.ArmedAction.HasValue || support.LocalPickArmed;
             string alert = opsSnapshotSeen && !support.OpsStateFresh
                 ? "HOST SNAPSHOT STALE · FIGURES MAY BE OUT OF DATE"
                 : null;
-            shell.WriteStatus(alert, armed ? support.Status : null,
-                              support.Status ?? OpsDomains.Mission((OpsDomain)Mathf.Max(0, shell.Page)));
+            string status = alert ?? (armed ? support.Status : null) ?? support.Status ??
+                             OpsDomains.Mission((OpsDomain)Mathf.Max(0, page));
+            shell.Footer.Set(status, alert != null ? AvState.Danger : armed ? AvState.Caution : AvState.Inert);
         }
 
-        private bool opsSnapshotSeen;
-
-        private void RefreshDataBar(bool bypass)
+        private void RefreshChips(bool bypass)
         {
-            AvStyled.DataBar bar = shell.DataBar;
-            string domain = shell.Page == TabSpace ? "SPACE" : shell.Page == TabCyber ? "CYBER" : "SPEC OPS";
-            int sub = shell.Page == TabSpace ? spaceSub : shell.Page == TabCyber ? cyberSub : specSub;
-            string location = domain + " / " + (sub == 0 ? "STATUS" : "ACTIONS");
             bool pending = support.RequestPending || support.CommandPending;
             bool armed = support.ArmedAction.HasValue || support.LocalPickArmed;
             float cooldown = support.LocalCooldownRemaining;
             bool fresh = support.OpsStateFresh;
             opsSnapshotSeen |= fresh;
 
-            if (pending)
-            {
-                bar.State.text = location + " · HOST ACK";
-                bar.State.color = AvTheme.Warning;
-            }
-            else if (armed)
-            {
-                bar.State.text = location + " · R-CLICK MAP";
-                bar.State.color = AvTheme.RailCaution;
-            }
-            else if (bypass)
-            {
-                bar.State.text = location + " · DEBUG BYPASS";
-                bar.State.color = AvTheme.Warning;
-            }
-            else
-            {
-                bar.State.text = location;
-                bar.State.color = AvTheme.Dim;
-            }
-
-            bar.SetChip(0, pending ? "PENDING" : cooldown > 0.5f ? "NET COOL" : "NET READY",
-                        pending || cooldown > 0.5f ? "warn" : "live");
-            bar.SetChip(1, fresh ? "LINKED" : opsSnapshotSeen ? "LINK STALE" : "SYNCING",
-                        fresh ? "live" : opsSnapshotSeen ? "danger" : "info");
-            bar.SetChip(2, armed ? "MAP ARMED" : WingLink.WingMapGestureArmed ? "WING MAP" : "MAP IDLE",
-                        armed ? "warn" : WingLink.WingMapGestureArmed ? "info" : "inert");
+            chipNet.Set(pending ? "PENDING" : cooldown > 0.5f ? "NET COOL" : bypass ? "BYPASS" : "NET READY",
+                        pending || cooldown > 0.5f ? AvState.Caution : bypass ? AvState.Caution : AvState.Ready);
+            chipLink.Set(fresh ? "LINKED" : opsSnapshotSeen ? "LINK STALE" : "SYNCING",
+                        fresh ? AvState.Ready : opsSnapshotSeen ? AvState.Danger : AvState.Info);
+            chipMap.Set(armed ? "MAP ARMED" : WingLink.WingMapGestureArmed ? "WING MAP" : "MAP IDLE",
+                        armed ? AvState.Caution : WingLink.WingMapGestureArmed ? AvState.Info : AvState.Inert);
         }
 
         private void RefreshMetrics(bool bypass)
@@ -728,19 +488,19 @@ namespace BoscaliSummer.Features.Support.Presentation
             float cooldownTotal = support.LocalCooldownTotal;
 
             if (support.RequestPending || support.CommandPending)
-                allocationMetric.Set(Compact(allocation), "AWAITING HOST", 1f, AvTheme.RailInfo);
+                allocationMetric.Set(AvNum.Compact(allocation), "AWAITING HOST", 1f, AvState.Info);
             else if (cooldown > 0.5f && cooldownTotal > 0f)
-                allocationMetric.Set(Compact(allocation), "NET T-" + Mathf.CeilToInt(cooldown) + "s",
-                                     1f - cooldown / cooldownTotal, AvTheme.RailCaution);
+                allocationMetric.Set(AvNum.Compact(allocation), "NET T-" + Mathf.CeilToInt(cooldown) + "s",
+                                     1f - cooldown / cooldownTotal, AvState.Caution);
             else
-                allocationMetric.Set(Compact(allocation), bypass ? "BYPASS" : "NET READY", 1f,
-                                     bypass ? AvTheme.Warning : AvTheme.RailReady);
+                allocationMetric.Set(AvNum.Compact(allocation), bypass ? "BYPASS" : "NET READY", 1f,
+                                     bypass ? AvState.Caution : AvState.Ready);
 
             OrbitalPlatform platform = support.LocalPlatform;
             double now = support.OrbitNow;
             if (platform == null || !platform.Exists)
             {
-                orbitMetric.Set("0/" + OrbitalPlatform.CellCount, "NO STATION", 0f, AvTheme.RailInert);
+                orbitMetric.Set("0/" + OrbitalPlatform.CellCount, "NO STATION", 0f, AvState.Inert);
             }
             else
             {
@@ -748,33 +508,31 @@ namespace BoscaliSummer.Features.Support.Presentation
                 OrbitState state = platform.State(now);
                 bool holding = platform.HoldAt(now) != PlatformHold.None;
                 orbitMetric.Set(stats.Modules + "/" + OrbitalPlatform.CellCount,
-                                holding ? PlatformWords.Hold(platform.HoldAt(now))
-                                : "ON STATION",
+                                holding ? PlatformWords.Hold(platform.HoldAt(now)) : "ON STATION",
                                 stats.Mass / OrbitalPlatform.MassLimit,
-                                platform.Brownout ? AvTheme.RailDanger
-                                : holding ? AvTheme.RailInfo
-                                : state.InPass ? AvTheme.RailReady : AvTheme.RailCaution);
+                                platform.Brownout ? AvState.Danger
+                                : holding ? AvState.Info
+                                : state.InPass ? AvState.Ready : AvState.Caution);
             }
 
             CyberNetwork cyber = support.LocalCyber;
             if (cyber == null || !cyber.HasCommand)
             {
-                stationMetric.Set("0/0", "NO AIRBASE", 0f, AvTheme.RailInert);
+                stationMetric.Set("0/0", "NO AIRBASE", 0f, AvState.Inert);
             }
             else
             {
                 int infocon = cyber.Infocon;
                 CyberStats stats = cyber.Stats();
-                // Hacked locations over nodes held: airbase infrastructure plus taken locations.
                 float computing = cyber.ComputingCapacity() > 0f ? cyber.Computing / cyber.ComputingCapacity() : 0f;
                 stationMetric.Set(stats.Hacked + "/" + stats.Nodes, CyberWords.Infocon(infocon), computing,
-                                  infocon >= 5 ? AvTheme.RailReady : infocon >= 3 ? AvTheme.RailCaution : AvTheme.RailDanger);
+                                  infocon >= 5 ? AvState.Ready : infocon >= 3 ? AvState.Caution : AvState.Danger);
             }
 
             SpecOpsDetachment detachment = support.LocalDetachment;
             if (detachment == null || !detachment.Enabled || !support.SpecOpsEnabled)
             {
-                reserveMetric.Set("—", detachment == null ? "NO DATA" : "OFF", 0f, AvTheme.RailInert);
+                reserveMetric.Set("—", detachment == null ? "NO DATA" : "OFF", 0f, AvState.Inert);
             }
             else
             {
@@ -786,19 +544,8 @@ namespace BoscaliSummer.Features.Support.Presentation
                                   posts > 0 ? posts + (posts == 1 ? " POST" : " POSTS")
                                   : field > 0 ? field + " OUT" : "STANDBY",
                                   ready / (float)SpecOpsDetachment.TeamCount,
-                                  posts > 0 ? AvTheme.RailReady : field > 0 ? AvTheme.RailInfo : AvTheme.RailInert);
+                                  posts > 0 ? AvState.Ready : field > 0 ? AvState.Info : AvState.Inert);
             }
-        }
-
-        // ---- Formatting ------------------------------------------------------------------
-
-        private static string Figure(float value) => Mathf.Round(value).ToString("N0", Invariant);
-
-        private static string Compact(float value)
-        {
-            if (value >= 100000f) return (value / 1000f).ToString("0", Invariant) + "K";
-            if (value >= 10000f) return (value / 1000f).ToString("0.0", Invariant) + "K";
-            return Figure(value);
         }
     }
 }
