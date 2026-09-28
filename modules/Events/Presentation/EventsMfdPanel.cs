@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using BepInEx.Logging;
 using BoscaliSummer.Features.Events.Configuration;
 using BoscaliSummer.Features.Events.Domain;
@@ -18,22 +17,16 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Features.Events.Presentation
 {
     /// <summary>
-    /// "EVN" — active dispatch, response desk, archive and field documentation.
+    /// "EVN" — active dispatch, response desk, archive and field documentation. Kit v2 console: chrome
+    /// (chips/metrics/tabs/footer) from <see cref="AvConsole"/>, page content from <see cref="AvFlow"/>
+    /// sections, rows and the module's own <see cref="EventActiveCardPart"/> / <see cref="DecisionBoardPart"/>
+    /// / <see cref="EventCaseFilePart"/> parts.
     /// </summary>
     internal sealed partial class EventsMfdPanel : MonoBehaviour, ISceneService
     {
-        private const float Width = AvTokens.PanelWidth;
         private const float RefreshInterval = 0.25f;
-
-        private const int ChipCount = 3;
-        private const int TabEvents = 0;
+        private const int TabDispatch = 0;
         private const int TabDesk = 1;
-
-        private const float DirectorLineHeight = 18f;
-        private const float CardGap = 6f;
-        private const float HistoryCardHeight = 64f;
-        private const float HistoryHeaderHeight = 22f;
-        private const float HistoryPad = 12f;
 
         /// <summary>
         /// The scripted-beat rows the active card and the full-screen broadcast both reserve.
@@ -41,12 +34,7 @@ namespace BoscaliSummer.Features.Events.Presentation
         /// </summary>
         internal const int MaximumEventSteps = 4;
 
-        /// <summary>
-        /// The empty feed must clear its own help block: the copy sits 48px down and runs 30px.
-        /// </summary>
-        private const float EmptyHistoryCardHeight = 90f;
-
-        /// <summary>The clock starts saying ENDING this many seconds out, and pulsing.</summary>
+        /// <summary>The clock starts saying ENDING this many seconds out.</summary>
         private const float EndingSeconds = 60f;
 
         /// <summary>Below this the clock and its rail go danger, not caution.</summary>
@@ -58,33 +46,20 @@ namespace BoscaliSummer.Features.Events.Presentation
 
         private MFDScreen screen;
         private GameObject screenRoot;
-        private AvScreen shell;
+        private AvConsole console;
+        private AvChip[] chips;
+        private AvMetric[] metrics;
 
-        private ActiveEventCard activeCard;
-        private DecisionBoard decisionBoard;
+        private AvRow directorRow;
+        private EventActiveCardPart activeCard;
+        private DecisionBoardPart decisionBoard;
+        private AvSection historySection;
+        private AvList historyList;
+        private int historyCapacity;
+
+        private EventCaseFilePart deskCase;
+        private AvSection archiveSection;
         private EventDeskArchive archive;
-        private PlateUi deskPlate;
-        private TMP_Text deskCaseTitle, deskCaseMeta, deskCaseBody, deskCount;
-        private readonly List<HistoryCard> historyCards = new List<HistoryCard>(16);
-        private RectTransform scrollContent;
-        private bool hasViewport;
-        private float contentTop;
-        private float contentX;
-        private float contentWidth;
-        private float viewportHeight;
-        private float historyBaseY;
-        private float decisionBaseY;
-        private float baseCardHeight;
-        private float lastCardHeight;
-        private int lastRows = -1;
-
-        private Image spine;
-        private Image directorRail;
-        private TMP_Text directorLine;
-        private Image historyBand;
-        private TMP_Text historyTitle;
-        private Image historyTick;
-        private TMP_Text historyNote;
 
         private string boundId;
         private float boundStart;
@@ -106,26 +81,19 @@ namespace BoscaliSummer.Features.Events.Presentation
 
             screenRoot = null;
             screen = null;
-            shell = null;
+            console = null;
+            chips = null;
+            metrics = null;
+            directorRow = null;
             activeCard = null;
             decisionBoard = null;
+            historySection = null;
+            historyList = null;
+            historyCapacity = 0;
+            deskCase = null;
+            archiveSection = null;
             archive?.Close();
             archive = null;
-            deskPlate = null;
-            deskCaseTitle = deskCaseMeta = deskCaseBody = deskCount = null;
-            historyCards.Clear();
-            scrollContent = null;
-            hasViewport = false;
-            contentTop = contentX = contentWidth = viewportHeight = historyBaseY = decisionBaseY = baseCardHeight = 0f;
-            lastCardHeight = 0f;
-            lastRows = -1;
-            spine = null;
-            directorRail = null;
-            directorLine = null;
-            historyBand = null;
-            historyTitle = null;
-            historyTick = null;
-            historyNote = null;
             boundId = null;
             boundStart = 0f;
             nextAttempt = 0f;
@@ -158,15 +126,13 @@ namespace BoscaliSummer.Features.Events.Presentation
 
             bool visible = screen.isActive &&
                 SceneSingleton<DynamicMap>.i?.maximizedMapCanvas?.isActiveAndEnabled == true;
-            if (archive != null && (!archive.IsOpen || !visible || shell.Page != TabDesk))
+            if (archive != null && (!archive.IsOpen || !visible || console.CurrentPage != TabDesk))
             {
                 archive.Close();
                 archive = null;
             }
             if (!visible) return;
 
-            // The countdown breathes between the four-hertz refreshes; nothing else runs.
-            if (activeCard != null && events.Current != null) activeCard.TickPulse();
             if (Time.unscaledTime >= nextRefresh)
             {
                 nextRefresh = Time.unscaledTime + RefreshInterval;
@@ -229,11 +195,7 @@ namespace BoscaliSummer.Features.Events.Presentation
 
         private MFDScreen Build(MFDScreen template, Button bezel)
         {
-            TMP_Text sourceText = template.GetComponentInChildren<TMP_Text>(true);
-            TMP_FontAsset font = sourceText != null ? sourceText.font : null;
-            if (font != null) AvFont.Font = font;
-
-            var root = new GameObject("BoscaliEvents.Screen", typeof(RectTransform), typeof(Image));
+            var root = new GameObject("BoscaliEvents.Screen", typeof(RectTransform));
             screenRoot = root;
             var rootRect = root.GetComponent<RectTransform>();
             rootRect.SetParent(template.transform.parent, false);
@@ -244,38 +206,26 @@ namespace BoscaliSummer.Features.Events.Presentation
             rootRect.pivot = templateRect.pivot;
             rootRect.localScale = templateRect.localScale;
 
-            float height = AvScreen.ResolveHeight(
-                templateRect.parent as RectTransform, AvTokens.PanelHeight, AvTokens.PanelHeightMax);
-            rootRect.sizeDelta = new Vector2(Width, height);
-            AvKit.ClampIntoCanvas(rootRect);
+            // Kit gap: the v1 panel-height resolver is not part of the v2 API; the same pure
+            // height-resolution logic is replicated locally (see ResolveHostHeight below).
+            float height = ResolveHostHeight(templateRect.parent as RectTransform, AvTokens.PanelHeight, AvTokens.PanelHeightMax);
+            rootRect.sizeDelta = new Vector2(AvTokens.PanelWidth, height);
 
-            Image background = root.GetComponent<Image>();
-            background.sprite = AvSprites.Panel;
-            background.type = Image.Type.Sliced;
-            background.color = Color.white;
-            background.raycastTarget = true;
+            console = AvConsole.Build(rootRect, MfdSlots.Events, "EVENT DIRECTORATE", 2, AvTokens.PanelWidth, height);
+            ClampIntoCanvas(console.Root);
 
-            var contentObject = new GameObject("Content", typeof(RectTransform));
-            var content = contentObject.GetComponent<RectTransform>();
-            content.SetParent(rootRect, false);
-            AvKit.Stretch(content);
+            chips = console.Chips(3);
+            metrics = console.Metrics("SUPPORT COST", "SUPPORT RESET");
+            console.Tabs((AvIcon.AlertTriangle, "DISPATCH"), (AvIcon.Bookmark, "DESK"));
 
-            shell = AvScreen.Build(
-                content, MfdSlots.Events,
-                new[] { "DISPATCH", "DESK" },
-                new[]
-                {
-                    new[] { "SUPPORT COST", "SIDE" },
-                    new[] { "SUPPORT RESET", "TEMPO" },
-                },
-                ChipCount, Width, height, _ => nextRefresh = 0f);
-
-            BuildEventsPage(shell.CreatePage(TabEvents, "EventsPage"));
-            BuildDocsPage(shell.CreatePage(TabDesk, "DeskPage"));
+            historyCapacity = Mathf.Max(1, settings.HistoryLength.Value);
+            BuildDispatchPage(console.Page(TabDispatch));
+            BuildDeskPage(console.Page(TabDesk));
+            console.Finish();
 
             MFDScreen result = root.AddComponent<MFDScreen>();
             result.shortName = MfdSlots.Events;
-            result.displayPanel = contentObject;
+            result.displayPanel = console.Root.gameObject;
             result.aircraftOnly = false;
             result.label = bezel != null ? bezel.GetComponentInChildren<TextMeshProUGUI>(true) : null;
             result.highlight = FindHighlight(bezel);
@@ -285,8 +235,6 @@ namespace BoscaliSummer.Features.Events.Presentation
                 return null;
             }
 
-            screenRoot = root;
-            shell.SetPage(TabEvents);
             return result;
         }
 
@@ -301,133 +249,47 @@ namespace BoscaliSummer.Features.Events.Presentation
             return button.GetComponent<Image>();
         }
 
-        // ---- Page ------------------------------------------------------------------------
+        // ---- Pages -------------------------------------------------------------------------
 
-        private void BuildEventsPage(GameObject page)
+        private void BuildDispatchPage(AvFlow p)
         {
-            int capacity = Mathf.Max(1, settings.HistoryLength.Value);
-            // Sized for the scripted card so the viewport exists whenever a superevent can
-            // grow the page past the body; a short one still fits without paying for a mask.
-            float buildHeight = DirectorLineHeight + CardGap +
-                                ActiveEventCard.ScriptedHeight + CardGap +
-                                DecisionBoard.Height + CardGap +
-                                HistoryHeaderHeight + capacity * (HistoryCardHeight + CardGap) + HistoryPad;
+            p.Section(AvIcon.Radar2, "DIRECTOR");
+            directorRow = p.Add(new AvRow(p.Content));
+            directorRow.Set("DIRECTOR · WAITING FOR GROUND CUSTODY DATA", "", "", AvState.Inert);
 
-            Rect body = shell.Body;
-            viewportHeight = body.height;
+            p.Section(AvIcon.AlertTriangle, "ACTIVE DISPATCH");
+            activeCard = p.Add(new EventActiveCardPart(p.Content));
+            activeCard.BindCalm("Waiting for the director.");
 
-            var pageRect = (RectTransform)page.transform;
-            RectTransform parent = AvScreen.Scroll(pageRect, body, buildHeight, out body);
-            hasViewport = parent != pageRect;
-            scrollContent = parent;
-            contentTop = body.y;
-            contentX = body.x + AvScreen.SpineInset;
-            contentWidth = body.width - AvScreen.SpineInset;
+            p.Section(AvIcon.Scale, "RESPONSE DESK");
+            decisionBoard = p.Add(new DecisionBoardPart(p.Content, events.RequestResponse));
 
-            float x = contentX;
-            float width = contentWidth;
-            float y = body.y;
-
-            spine = AvStyled.Spine(parent, new Rect(body.x, body.y, 3f, viewportHeight));
-
-            // The director's posture gets a rail as well as words: armed is a state, not a
-            // colour the player has to decode.
-            directorRail = AvKit.Panel(parent, new Rect(x, y + 3f, 3f, 12f), AvTheme.RailInert);
-            directorRail.raycastTarget = false;
-            directorLine = AvStyled.Label(parent, new Rect(x + 10f, y, width - 10f, DirectorLineHeight),
-                "", "row-sub");
-            y -= DirectorLineHeight + CardGap;
-
-            activeCard = new ActiveEventCard(parent, x, y, width);
-            baseCardHeight = activeCard.Height;
-            lastCardHeight = baseCardHeight;
-            y -= activeCard.Height + CardGap;
-
-            decisionBaseY = y;
-            decisionBoard = new DecisionBoard(parent, x, y, width);
-            y -= DecisionBoard.Height + CardGap;
-
-            historyBand = AvKit.Panel(parent, new Rect(x, y + 4f, width, HistoryHeaderHeight), Color.clear);
-            historyBand.raycastTarget = false;
-            historyTick = AvKit.Panel(parent, new Rect(x, y - 1f, 3f, 14f), AvTheme.Accent);
-            historyTick.raycastTarget = false;
-            historyTitle = AvStyled.Label(parent, new Rect(x + 10f, y, width * 0.5f - 10f, 14f),
-                "EVENT LOG", "section-title");
-            historyNote = AvStyled.Label(parent, new Rect(x + width * 0.5f, y, width * 0.5f, 14f),
-                "MOST RECENT FIRST", "section-title-note", align: TextAlignmentOptions.MidlineRight);
-            historyBaseY = y - HistoryHeaderHeight;
-
-            historyCards.Clear();
-            for (int i = 0; i < capacity; i++)
-            {
-                var card = new HistoryCard(parent);
-                card.Hide();
-                historyCards.Add(card);
-            }
-            LayoutHistory(0);
+            historySection = p.Section(AvIcon.ListDetails, "EVENT LOG", "0 LOGGED");
+            historyList = p.Add(new AvList(p.Content, console.Ticker, historyCapacity, BindHistoryRow));
         }
 
-        private void BuildDocsPage(GameObject page)
+        private void BuildDeskPage(AvFlow p)
         {
-            Rect body = shell.Body;
-            const float fullHeight = 594f;
-            RectTransform pageRect = (RectTransform)page.transform;
-            RectTransform parent = AvScreen.Scroll(pageRect, body, fullHeight, out body);
-            float x = body.x + AvScreen.SpineInset;
-            float width = body.width - AvScreen.SpineInset;
-            float y = body.y;
-            AvStyled.Spine(parent, new Rect(body.x, body.y, 3f, fullHeight));
+            p.Section(AvIcon.Bookmark, "FIELD DESK", "LOCAL READING ROOM · NO SIGNAL LEAVES THIS COCKPIT");
+            p.Buttons(new AvControl.Spec("OPEN FIELD ARCHIVE", () => OpenArchive(0), AvButtonStyle.Primary, AvIcon.Bookmark));
 
-            AvStyled.Box(parent, new Rect(x, y, width, 142f), "card");
-            AvKit.Panel(parent, new Rect(x, y, 3f, 142f), AvTheme.RailInfo).raycastTarget = false;
-            AvStyled.Label(parent, new Rect(x + 14f, y - 12f, width - 28f, 13f),
-                "EVENT DIRECTORATE / LOCAL DESK", "section-title-note");
-            AvStyled.Label(parent, new Rect(x + 14f, y - 33f, width - 28f, 26f),
-                "THE FIELD DESK", "page-title");
-            AvStyled.Label(parent, new Rect(x + 14f, y - 65f, width - 28f, 28f),
-                "Case files, aircraft and the life behind the wire.", "row-sub");
-            AvStyled.Button(parent, new Rect(x + 14f, y - 102f, width - 28f, 29f),
-                "OPEN DOCUMENTS  /  FIELD ARCHIVE  ›", "btn", () => OpenArchive(0),
-                AvButtonStyle.Primary).WithTooltip("Open the client-local field archive.");
-            y -= 150f;
+            p.Section(AvIcon.ListDetails, "CASE FILE", "THEATER WIRE");
+            deskCase = p.Add(new EventCaseFilePart(p.Content));
+            deskCase.Bind("AWAITING FIRST REPORT", "NO CASE FILED THIS MISSION",
+                "The archive is available while the theater is quiet.", AvIcon.Radar2, null, AvState.Inert);
 
-            AvStyled.Box(parent, new Rect(x, y, width, 154f), "card");
-            AvKit.Panel(parent, new Rect(x, y, 3f, 154f), AvTheme.RailInfo).raycastTarget = false;
-            AvStyled.Label(parent, new Rect(x + 13f, y - 10f, width - 26f, 14f),
-                "CASE FILE / THEATER WIRE", "section-title");
-            deskPlate = PlateUi.Build(parent, x + 13f, y - 35f, 110f, 62f, 20f);
-            deskPlate.Bind(null, 0, AvTheme.Dim);
-            deskCaseTitle = AvStyled.Label(parent, new Rect(x + 134f, y - 36f, width - 148f, 25f),
-                "AWAITING REPORT", "row-main");
-            deskCaseTitle.enableAutoSizing = true;
-            deskCaseTitle.fontSizeMin = AvTokens.FontSmall;
-            deskCaseMeta = AvStyled.Label(parent, new Rect(x + 134f, y - 65f, width - 148f, 21f),
-                "DIRECTOR MONITORING", "section-title-note");
-            deskCaseBody = AvStyled.Label(parent, new Rect(x + 13f, y - 108f, width - 26f, 38f),
-                "The next report will appear here.", "row-sub");
-            y -= 162f;
-
-            deskCount = AvStyled.Label(parent, new Rect(x + 11f, y, width - 22f, 16f),
-                "FIELD ARCHIVE / LOCAL INDEX", "section-title-note");
-            y -= 26f;
+            archiveSection = p.Section(AvIcon.Database, "FIELD ARCHIVE", "");
             string[] labels = { "AIRFRAME REGISTRY", "EVENT DOSSIERS", "WORLD FILES", "FIELD MANUAL" };
-            string[] notes = { "NATIVE AIRCRAFT / MODEL VIEWER", "AUTHORED THEATER SCENARIOS",
-                "LIFE BEHIND THE FRONT", "READ THE SIGNAL / ISSUE ORDERS" };
+            string[] notes =
+            {
+                "NATIVE AIRCRAFT / MODEL VIEWER", "AUTHORED THEATER SCENARIOS",
+                "LIFE BEHIND THE FRONT", "READ THE SIGNAL / ISSUE ORDERS",
+            };
             for (int i = 0; i < labels.Length; i++)
             {
                 int section = i;
-                float rowY = y - i * 63f;
-                AvStyled.Box(parent, new Rect(x, rowY, width, 56f), "card");
-                AvKit.Panel(parent, new Rect(x, rowY, 3f, 56f),
-                    i == 0 ? AvTheme.RailReady : AvTheme.RailInfo).raycastTarget = false;
-                AvStyled.Label(parent, new Rect(x + 14f, rowY - 8f, width - 42f, 18f),
-                    labels[i], "row-main");
-                AvStyled.Label(parent, new Rect(x + 14f, rowY - 31f, width - 42f, 13f),
-                    notes[i], "section-title-note");
-                AvStyled.Label(parent, new Rect(x + width - 28f, rowY - 14f, 18f, 24f),
-                    "›", "row-value");
-                AvKit.HitButton(parent, new Rect(x, rowY, width, 56f), () => OpenArchive(section))
-                    .WithTooltip("Open " + labels[i].ToLowerInvariant() + " in the field archive.");
+                AvRow row = p.Add(new AvRow(p.Content, () => OpenArchive(section)));
+                row.Set(labels[i], notes[i], "OPEN", AvState.Info);
             }
         }
 
@@ -437,64 +299,74 @@ namespace BoscaliSummer.Features.Events.Presentation
             archive.Show(section);
         }
 
+        private void BindHistoryRow(int index, AvRow row)
+        {
+            IReadOnlyList<ActiveEventView> history = events.History;
+            int i = history.Count - 1 - index;
+            if (i < 0 || i >= history.Count)
+            {
+                row.Set("", "", "", AvState.Inert);
+                return;
+            }
+            ActiveEventView view = history[i];
+            string effect = IsNeutral(view.EffectSummary) && !string.IsNullOrEmpty(view.TempoSummary)
+                ? view.TempoSummary : view.EffectSummary;
+            row.Set(view.Title.ToUpperInvariant(),
+                TierShort(view.Tier) + " · " + ShortTarget(view.Target) + " · " +
+                    Duration(MissionTime() - view.EndsAtMissionTime) + " AGO",
+                effect, TierState(view.Tier));
+        }
+
         // ---- Refresh ---------------------------------------------------------------------
 
         private void Refresh()
         {
-            if (shell == null || events == null) return;
+            if (console == null || events == null) return;
 
             ActiveEventView current = events.Current;
             IReadOnlyList<ActiveEventView> history = events.History;
-            int capacity = historyCards.Count;
             float now = MissionTime();
 
             float multiplier = current != null ? events.SupportCostMultiplier : 1f;
             float cooldown = current != null ? events.LocalSupportCooldownMultiplier : 1f;
             string summary = current != null ? EventSelector.EffectSummary(multiplier) : null;
             bool aimedAtLocal = current != null && (events.LocalTargeted || current.Target == "ALL THEATER");
-            bool penalty = current != null && EffectColor(summary, aimedAtLocal) == AvTheme.RailDanger;
 
             RefreshDirector();
 
-            shell.DataBar.State.text = current != null
-                ? "EVENT ACTIVE"
-                : events.Available ? "THEATER CALM" : "NO RUNNING MISSION";
-            shell.DataBar.State.color = current != null ? TierInk(current.Tier) : AvTheme.Dim;
-            shell.DataBar.SetChip(0, current != null ? TierShort(current.Tier) : "STANDBY",
-                                  TierChipState(current));
+            chips[0].Set(current != null ? TierShort(current.Tier) : "STANDBY", TierChipState(current));
+
             bool tempoOnly = current != null && aimedAtLocal &&
                 Mathf.Abs(multiplier - 1f) < 0.001f && Mathf.Abs(cooldown - 1f) >= 0.001f;
-            shell.DataBar.SetChip(1,
-                tempoOnly ? cooldown > 1f ? "RESET SLOW" : "RESET FAST" :
+            chips[1].Set(
+                tempoOnly ? (cooldown > 1f ? "RESET SLOW" : "RESET FAST") :
                     current != null ? DirectionLabel(multiplier, aimedAtLocal) : "NO EVENT",
-                tempoOnly ? cooldown > 1f ? "warn" : "live" :
+                tempoOnly ? (cooldown > 1f ? AvState.Caution : AvState.Ready) :
                     DirectionState(multiplier, aimedAtLocal, current != null));
+
             bool historyOff = settings.HistoryLength.Value <= 0;
-            shell.DataBar.SetChip(2,
-                                  historyOff ? "HISTORY OFF" : history.Count + "/" + capacity + " LOGGED",
-                                  !historyOff && history.Count > 0 ? "live" : "inert");
+            chips[2].Set(historyOff ? "HISTORY OFF" : AvNum.Fixed(history.Count, 0) + "/" + AvNum.Fixed(historyCapacity, 0) + " LOGGED",
+                !historyOff && history.Count > 0 ? AvState.Ready : AvState.Inert);
 
-            // The caption is the effect in the player's own terms; it is kept inside the
-            // cell's measured width so it can never be ellipsised into ambiguity.
-            shell.Metrics[0].Unit.text = current == null ? "" : aimedAtLocal ? "YOUR SIDE" : "OTHER SIDE";
-            shell.Metrics[0].Set(
+            string sideNote = current == null ? "" : aimedAtLocal ? "YOUR SIDE" : "OTHER SIDE";
+            string costCaption = current == null ? "NO ACTIVE EVENT" : EffectText(current, summary, aimedAtLocal);
+            metrics[0].Set(
                 current != null ? MultiplierLabel(multiplier) : "—",
-                current == null ? "NO ACTIVE EVENT"
-                    : aimedAtLocal ? summary : "NO EFFECT ON YOU",
+                current == null ? costCaption : sideNote + " · " + costCaption,
                 current != null && aimedAtLocal ? Mathf.Clamp01(Mathf.Abs(multiplier - 1f)) : 0f,
-                EffectColor(summary, aimedAtLocal));
+                EffectState(summary, aimedAtLocal));
 
-            shell.Metrics[1].Unit.text = current != null ? "REQUEST CLOCK" : "";
-            shell.Metrics[1].Set(
+            string resetCaption = current == null ? "NO ACTIVE EVENT" :
+                !aimedAtLocal ? "NO EFFECT ON YOU" :
+                cooldown > 1.001f ? "LONGER COOLDOWN" :
+                cooldown < 0.999f ? "SHORTER COOLDOWN" : "NORMAL RESET";
+            AvState resetState = !aimedAtLocal ? AvState.Inert :
+                cooldown > 1.001f ? AvState.Caution : cooldown < 0.999f ? AvState.Ready : AvState.Inert;
+            metrics[1].Set(
                 current != null ? MultiplierLabel(cooldown) : "—",
-                current == null ? "NO ACTIVE EVENT" :
-                    !aimedAtLocal ? "NO EFFECT ON YOU" :
-                    cooldown > 1.001f ? "LONGER COOLDOWN" :
-                    cooldown < 0.999f ? "SHORTER COOLDOWN" : "NORMAL RESET",
+                current == null ? "NO ACTIVE EVENT" : "REQUEST CLOCK · " + resetCaption,
                 current != null && aimedAtLocal ? Mathf.Clamp01(Mathf.Abs(cooldown - 1f)) : 0f,
-                !aimedAtLocal ? AvTheme.RailInert :
-                    cooldown > 1.001f ? AvTheme.RailCaution :
-                    cooldown < 0.999f ? AvTheme.RailReady : AvTheme.RailInert);
+                resetState);
 
             string id = current != null ? current.Id : "";
             float started = current != null ? current.StartedAtMissionTime : 0f;
@@ -503,18 +375,13 @@ namespace BoscaliSummer.Features.Events.Presentation
                 boundId = id;
                 boundStart = started;
                 if (current != null)
-                    activeCard.Bind(current, EffectText(current, summary, aimedAtLocal),
-                        LiveEffectColor(current, summary, aimedAtLocal), Consequence(current, aimedAtLocal));
+                    activeCard.BindActive(current, TierState(current.Tier),
+                        EffectText(current, summary, aimedAtLocal), EffectState(summary, aimedAtLocal),
+                        Consequence(current, aimedAtLocal));
                 else
-                    activeCard.BindPlaceholder(events.Available
+                    activeCard.BindCalm(events.Available
                         ? "The theater is quiet. The director is watching for a story worth telling."
                         : "No mission is running on this host.");
-
-                if (activeCard.Height != lastCardHeight)
-                {
-                    lastCardHeight = activeCard.Height;
-                    LayoutHistory(history.Count);
-                }
             }
 
             if (current != null)
@@ -522,155 +389,78 @@ namespace BoscaliSummer.Features.Events.Presentation
                 float span = Mathf.Max(1f, current.EndsAtMissionTime - current.StartedAtMissionTime);
                 float remaining = Mathf.Clamp01((current.EndsAtMissionTime - now) / span);
                 float secondsLeft = current.EndsAtMissionTime - now;
-                activeCard.SetProgress(remaining, LiveEffectColor(current, summary, aimedAtLocal));
                 bool ending = secondsLeft <= EndingSeconds;
-                activeCard.SetClock("ENDS " + Clock(secondsLeft), ending, secondsLeft <= CriticalSeconds);
-                activeCard.SetScript(current, current.StartedAtMissionTime, now, TierRail(current.Tier));
-                // Only a penalty aimed at this player's side raises the alarm; a discount
-                // expiring is not a threat.
-                activeCard.SetUrgency(penalty ? Mathf.Clamp01((90f - secondsLeft) / 90f) : 0f);
-                activeCard.TickPulse();
-                bool wasVisible = decisionBoard != null && decisionBoard.Visible;
-                RefreshResponse(aimedAtLocal);
-                if (!wasVisible) LayoutHistory(history.Count);
+                bool critical = secondsLeft <= CriticalSeconds;
+                activeCard.SetClock("ENDS " + AvNum.Clock(secondsLeft), ending, critical);
+                activeCard.SetScript(current, current.StartedAtMissionTime, now);
+                bool penalty = EffectState(summary, aimedAtLocal) == AvState.Danger;
+                AvState progressState = critical ? AvState.Danger : ending || penalty ? AvState.Caution : TierState(current.Tier);
+                activeCard.SetProgress(remaining, progressState);
+                decisionBoard.Refresh(events, aimedAtLocal);
             }
-            else if (decisionBoard != null)
+            else
             {
-                bool wasVisible = decisionBoard.Visible;
                 decisionBoard.SetStandby();
-                if (wasVisible) LayoutHistory(history.Count);
             }
 
-            if (history.Count != lastRows) LayoutHistory(history.Count);
-            for (int i = 0; i < capacity; i++)
-            {
-                if (i < history.Count)
-                {
-                    ActiveEventView view = history[history.Count - 1 - i];
-                    historyCards[i].Bind(view, TierInk(view.Tier), TierRail(view.Tier),
-                        LiveEffectColor(view, view.EffectSummary, true));
-                    historyCards[i].SetClock(Duration(now - view.EndsAtMissionTime) + " AGO");
-                }
-                else if (i == 0)
-                {
-                    historyCards[i].BindEmpty();
-                }
-                else
-                {
-                    historyCards[i].Hide();
-                }
-            }
+            historyList.SetCount(history.Count);
+            historySection.SetCaption(historyOff ? "LOGGING DISABLED" :
+                AvNum.Fixed(history.Count, 0) + "/" + AvNum.Fixed(historyCapacity, 0) + " LOGGED · MOST RECENT FIRST");
+
+            RefreshDesk(current, history, now);
 
             string ambient = current != null
                 ? "WORLD EVENT: " + current.Title
                 : events.Available ? "No active world event." : "No running mission.";
-            RefreshDesk(current, history, now);
-            shell.WriteStatus(events.Signal, MapPicker.Prompt, ambient);
+            string status = !string.IsNullOrEmpty(events.Signal) ? events.Signal
+                : !string.IsNullOrEmpty(MapPicker.Prompt) ? MapPicker.Prompt
+                : ambient;
+            AvState footerState = !string.IsNullOrEmpty(events.Signal) ? AvState.Info
+                : !string.IsNullOrEmpty(MapPicker.Prompt) ? AvState.Caution
+                : AvState.Inert;
+            console.Footer.Set(status, footerState);
         }
 
-        private void RefreshDesk(ActiveEventView current, IReadOnlyList<ActiveEventView> history,
-            float now)
+        private void RefreshDesk(ActiveEventView current, IReadOnlyList<ActiveEventView> history, float now)
         {
-            if (deskCaseTitle == null) return;
+            if (deskCase == null) return;
             ActiveEventView file = current ?? (history.Count > 0 ? history[history.Count - 1] : null);
             int aircraft = Encyclopedia.i?.aircraft?.Count ?? 0;
-            deskCount.text = "LOCAL INDEX  /  " + aircraft + " AIRFRAMES  ·  " +
-                EventCatalog.All.Length + " EVENTS  ·  " + EventDocs.World.Length + " WORLD FILES";
+            archiveSection.SetCaption("LOCAL INDEX · " + AvNum.Fixed(aircraft, 0) + " AIRFRAMES · " +
+                AvNum.Fixed(EventCatalog.All.Length, 0) + " EVENTS · " + AvNum.Fixed(EventDocs.World.Length, 0) + " WORLD FILES");
             if (file == null)
             {
-                deskCaseTitle.text = "AWAITING FIRST REPORT";
-                deskCaseMeta.text = "NO CASE FILED THIS MISSION";
-                deskCaseBody.text = "The archive is available while the theater is quiet.";
-                deskPlate.Bind(null, 0, AvTheme.Dim);
+                deskCase.Bind("AWAITING FIRST REPORT", "NO CASE FILED THIS MISSION",
+                    "The archive is available while the theater is quiet.", AvIcon.Radar2, null, AvState.Inert);
                 return;
             }
-            deskCaseTitle.text = file.Title.ToUpperInvariant();
-            deskCaseMeta.text = current != null ? file.Tier + " / LIVE · " + file.Target
+            string meta = current != null ? file.Tier + " / LIVE · " + file.Target
                 : file.Tier + " / LAST FILED · " + file.Target;
-            deskCaseBody.text = current != null
+            string body = current != null
                 ? file.EffectSummary +
                     (string.IsNullOrEmpty(file.TempoSummary) ? "" : " · " + file.TempoSummary) +
-                    " · ENDS " + Clock(file.EndsAtMissionTime - now)
+                    " · ENDS " + AvNum.Clock(file.EndsAtMissionTime - now)
                 : "This dispatch has closed. Its full dossier remains in the archive.";
-            deskPlate.Bind(EventArtCache.Get(file.IconKey, file.IsSuper ? "tier_super" : "tier_medium"),
-                CategoryOf(file.Category), TierInk(file.Tier));
+            deskCase.Bind(file.Title.ToUpperInvariant(), meta, body, CategoryIcon(file.Category),
+                EventArtCache.Get(file.IconKey, file.IsSuper ? "tier_super" : "tier_medium"), TierState(file.Tier));
         }
 
-        /// <summary>
-        /// Places the feed rows and sizes the scroll content. With no rows the empty card is
-        /// stretched to the bottom of the body so the section fills its space; with rows the
-        /// content is only as tall as the events it holds.
-        /// </summary>
-        private void LayoutHistory(int rows)
-        {
-            if (historyCards.Count == 0) return;
-            lastRows = rows;
-
-            float shift = activeCard != null ? activeCard.Height - baseCardHeight : 0f;
-            float top = historyBaseY - shift +
-                (decisionBoard != null && !decisionBoard.Visible ? DecisionBoard.Height + CardGap : 0f);
-
-            decisionBoard?.Place(contentX, decisionBaseY - shift, contentWidth);
-
-            if (historyBand != null) AvKit.Place(historyBand.rectTransform, new Rect(contentX, top + 26f, contentWidth, HistoryHeaderHeight));
-            if (historyTick != null) AvKit.Place(historyTick.rectTransform, new Rect(contentX, top + 21f, 3f, 14f));
-            if (historyTitle != null) AvKit.Place(historyTitle.rectTransform, new Rect(contentX + 10f, top + 22f, contentWidth * 0.5f - 10f, 14f));
-            if (historyNote != null) AvKit.Place(historyNote.rectTransform, new Rect(contentX + contentWidth * 0.5f, top + 22f, contentWidth * 0.5f, 14f));
-
-            float emptyHeight = Mathf.Max(EmptyHistoryCardHeight,
-                viewportHeight - (contentTop - top) - HistoryPad);
-            for (int i = 0; i < historyCards.Count; i++)
-            {
-                bool empty = rows == 0 && i == 0;
-                historyCards[i].Place(contentX, top - i * (HistoryCardHeight + CardGap), contentWidth,
-                    empty ? emptyHeight : HistoryCardHeight);
-            }
-            SetContentHeight(rows, top, emptyHeight);
-        }
-
-        /// <summary>
-        /// Sizes the scroll content to what the page actually holds. The empty card is a real
-        /// card: when a scripted superevent pushes the feed down, the content reaches its bottom
-        /// so the help copy is never clipped by the viewport.
-        /// </summary>
-        private void SetContentHeight(int rows, float top, float emptyHeight)
-        {
-            if (!hasViewport || scrollContent == null) return;
-            float needed = (contentTop - top) + HistoryPad +
-                           (rows == 0 ? emptyHeight : rows * (HistoryCardHeight + CardGap));
-            float height = Mathf.Max(viewportHeight, needed);
-            if (Mathf.Abs(scrollContent.sizeDelta.y - height) > 0.5f)
-                scrollContent.sizeDelta = new Vector2(scrollContent.sizeDelta.x, height);
-            if (spine != null)
-                AvKit.Place(spine.rectTransform, new Rect(spine.rectTransform.anchoredPosition.x,
-                    spine.rectTransform.anchoredPosition.y, 3f, height));
-        }
-
-        /// <summary>The director's posture, once: custody is on the metric, this is the voice.</summary>
+        /// <summary>The director's posture: custody sits on the row, ARMED/MONITORING is the word.</summary>
         private void RefreshDirector()
         {
             TheaterBalance balance = events.Balance;
-            string supers = "SUPERS " + events.SupersFired + "/" + EventDirector.MaximumSupers;
+            string supers = "SUPERS " + AvNum.Fixed(events.SupersFired, 0) + "/" + AvNum.Fixed(EventDirector.MaximumSupers, 0);
 
             if (!balance.Known)
             {
-                directorLine.text = "DIRECTOR  ·  WAITING FOR GROUND CUSTODY DATA";
-                directorLine.color = AvTheme.Dim;
-                directorRail.color = AvTheme.RailInert;
+                directorRow.Set("DIRECTOR · WAITING FOR GROUND CUSTODY DATA", "", "", AvState.Inert);
                 return;
             }
 
             bool armed = balance.Contested && balance.Deficit >= EventDirector.AidDeficitThreshold;
-            directorLine.text = armed
-                ? "DIRECTOR ARMED  ·  BASES " + balance.LeaderBases + ":" + balance.LoserBases + "  ·  " + supers
-                : "DIRECTOR MONITORING  ·  BASES " + balance.LeaderBases + ":" + balance.LoserBases + "  ·  " + supers;
-            directorLine.color = armed ? AvTheme.RailCaution : AvTheme.Dim;
-            directorRail.color = armed ? AvTheme.RailCaution : AvTheme.RailInert;
-        }
-
-        private void RefreshResponse(bool aimedAtLocal)
-        {
-            decisionBoard?.Refresh(events, aimedAtLocal);
+            string bases = "BASES " + AvNum.Fixed(balance.LeaderBases, 0) + ":" + AvNum.Fixed(balance.LoserBases, 0);
+            directorRow.Set(armed ? "DIRECTOR ARMED" : "DIRECTOR MONITORING", bases + " · " + supers, "",
+                armed ? AvState.Caution : AvState.Info);
         }
 
         /// <summary>The card's effect line, from this player's point of view.</summary>
@@ -680,13 +470,6 @@ namespace BoscaliSummer.Features.Events.Presentation
             return IsNeutral(summary)
                 ? string.IsNullOrEmpty(view?.TempoSummary) ? "NO PRICE EFFECT" : view.TempoSummary
                 : summary;
-        }
-
-        private static Color LiveEffectColor(ActiveEventView view, string summary, bool aimedAtLocal)
-        {
-            if (!aimedAtLocal || view == null || string.IsNullOrEmpty(view.TempoSummary) ||
-                !IsNeutral(summary)) return EffectColor(summary, aimedAtLocal);
-            return view.TempoSummary.Contains("+") ? AvTheme.RailCaution : AvTheme.RailReady;
         }
 
         /// <summary>Plain words for what the live effect means to the player reading it.</summary>
@@ -714,8 +497,7 @@ namespace BoscaliSummer.Features.Events.Presentation
         private static float MissionTime() =>
             NetworkSceneSingleton<MissionManager>.i?.MissionTime ?? 0f;
 
-        private static string MultiplierLabel(float multiplier) =>
-            "x" + multiplier.ToString("0.00", CultureInfo.InvariantCulture);
+        private static string MultiplierLabel(float multiplier) => "x" + AvNum.Fixed(multiplier, 2);
 
         private static string DirectionLabel(float multiplier, bool active)
         {
@@ -725,12 +507,12 @@ namespace BoscaliSummer.Features.Events.Presentation
             return "FLAT";
         }
 
-        private static string DirectionState(float multiplier, bool active, bool hasEvent)
+        private static AvState DirectionState(float multiplier, bool active, bool hasEvent)
         {
-            if (!hasEvent || !active) return "inert";
-            if (multiplier > 1f) return "warn";
-            if (multiplier < 1f) return "live";
-            return "inert";
+            if (!hasEvent || !active) return AvState.Inert;
+            if (multiplier > 1f) return AvState.Caution;
+            if (multiplier < 1f) return AvState.Ready;
+            return AvState.Inert;
         }
 
         private static string TierShort(string tier)
@@ -738,13 +520,6 @@ namespace BoscaliSummer.Features.Events.Presentation
             if (tier == "SUPEREVENT") return "SUPER";
             if (tier == "MEDIUM") return "MEDIUM";
             return "MINOR";
-        }
-
-        private static int CategoryOf(string category)
-        {
-            if (category == "POLITICAL") return 1;
-            if (category == "HAZARD") return 2;
-            return 0;
         }
 
         /// <summary>The narrow column form of the target label, for the history rows.</summary>
@@ -755,54 +530,95 @@ namespace BoscaliSummer.Features.Events.Presentation
             return target;
         }
 
-        private static string TierChipState(ActiveEventView view) =>
-            view == null ? "inert"
-            : view.Tier == "SUPEREVENT" ? "danger"
-            : view.Tier == "MEDIUM" ? "warn"
-            : "inert";
+        private static AvState TierChipState(ActiveEventView view) =>
+            view == null ? AvState.Inert
+            : view.Tier == "SUPEREVENT" ? AvState.Danger
+            : view.Tier == "MEDIUM" ? AvState.Caution
+            : AvState.Inert;
 
-        /// <summary>Colour a tier's ink: weather recedes, a medium warns, a super is an alert.</summary>
-        private static Color TierInk(string tier) =>
-            tier == "SUPEREVENT" ? AvTheme.RailDanger
-            : tier == "MEDIUM" ? AvTheme.RailCaution
-            : AvTheme.Dim;
-
-        /// <summary>The rail is a state light; a minor event never claims one.</summary>
-        private static Color TierRail(string tier) =>
-            tier == "SUPEREVENT" ? AvTheme.RailDanger
-            : tier == "MEDIUM" ? AvTheme.RailCaution
-            : AvTheme.RailInert;
-
-        private static string GlyphKind(int category) =>
-            category == 1 ? EventGlyph.Political
-            : category == 2 ? EventGlyph.Hazard
-            : EventGlyph.Economic;
+        /// <summary>Colour a tier's rail: weather recedes, a medium warns, a super is an alert.</summary>
+        private static AvState TierState(string tier) =>
+            tier == "SUPEREVENT" ? AvState.Danger
+            : tier == "MEDIUM" ? AvState.Caution
+            : AvState.Inert;
 
         private static bool IsNeutral(string summary) =>
             string.IsNullOrEmpty(summary) || summary == "NO EFFECT";
 
-        /// <summary>The badge colour, and never the only signal: the words say the same.</summary>
-        private static Color EffectColor(string summary, bool aimedAtLocal)
+        /// <summary>The state a live effect carries; the word always says the same (R1).</summary>
+        private static AvState EffectState(string summary, bool aimedAtLocal)
         {
-            if (!aimedAtLocal || IsNeutral(summary)) return AvTheme.Dim;
-            return summary[0] == '+' ? AvTheme.RailDanger : AvTheme.RailReady;
-        }
-
-        /// <summary>Millimetre-instrument clock: minutes and seconds, zero padded.</summary>
-        private static string Clock(float seconds)
-        {
-            int total = Mathf.Max(0, Mathf.CeilToInt(seconds));
-            return (total / 60) + ":" + (total % 60).ToString("00");
+            if (!aimedAtLocal || IsNeutral(summary)) return AvState.Inert;
+            return summary[0] == '+' ? AvState.Danger : AvState.Ready;
         }
 
         /// <summary>Compact age/duration; event windows are minutes, not hours, at this scale.</summary>
         private static string Duration(float seconds)
         {
-            int total = Mathf.Max(0, Mathf.CeilToInt(seconds));
-            int minutes = total / 60;
-            if (minutes >= 60) return (minutes / 60) + "h " + (minutes % 60) + "m";
-            if (minutes > 0) return minutes + "m " + (total % 60) + "s";
-            return total + "s";
+            double total = Math.Max(0, Math.Ceiling(seconds));
+            double minutes = Math.Floor(total / 60.0);
+            if (minutes >= 60)
+                return AvNum.Fixed(Math.Floor(minutes / 60.0), 0) + "h " + AvNum.Fixed(minutes % 60, 0) + "m";
+            if (minutes > 0) return AvNum.Fixed(minutes, 0) + "m " + AvNum.Fixed(total % 60, 0) + "s";
+            return AvNum.Fixed(total, 0) + "s";
+        }
+
+        /// <summary>
+        /// Kit gap: v1's panel-height resolver has no v2 counterpart, so the same pure
+        /// "walk up to the first laid-out ancestor" logic is kept local to this console.
+        /// </summary>
+        private static float ResolveHostHeight(RectTransform parent, float min, float max)
+        {
+            if (max < min) max = min;
+            if (parent == null) return min;
+
+            float available = parent.rect.height;
+            RectTransform cursor = parent;
+            for (int i = 0; i < 4 && available <= 1f && cursor != null; i++)
+            {
+                cursor = cursor.parent as RectTransform;
+                if (cursor != null) available = cursor.rect.height;
+            }
+            if (available <= 1f) return min;
+            return Mathf.Clamp(Mathf.Floor(available), min, max);
+        }
+
+        /// <summary>
+        /// Kit gap: v1's canvas-clamp helper has no v2 counterpart; the same nudge-into-bounds
+        /// logic is kept local (a hosted MFD screen inherits a position sized for the stock panel).
+        /// </summary>
+        private static void ClampIntoCanvas(RectTransform panel, float margin = 8f)
+        {
+            if (panel == null) return;
+            Canvas canvas = panel.GetComponentInParent<Canvas>();
+            if (canvas == null) return;
+            var canvasRt = canvas.rootCanvas.transform as RectTransform;
+            if (canvasRt == null || panel.parent == null) return;
+
+            var corners = new Vector3[4];
+            panel.GetWorldCorners(corners);
+            float minX = float.MaxValue, maxX = float.MinValue, minY = float.MaxValue, maxY = float.MinValue;
+            for (int i = 0; i < 4; i++)
+            {
+                Vector3 local = canvasRt.InverseTransformPoint(corners[i]);
+                if (local.x < minX) minX = local.x;
+                if (local.x > maxX) maxX = local.x;
+                if (local.y < minY) minY = local.y;
+                if (local.y > maxY) maxY = local.y;
+            }
+
+            Rect bounds = canvasRt.rect;
+            float dx = 0f;
+            if (minX < bounds.xMin + margin) dx = bounds.xMin + margin - minX;
+            else if (maxX > bounds.xMax - margin) dx = bounds.xMax - margin - maxX;
+            float dy = 0f;
+            if (maxY > bounds.yMax - margin) dy = bounds.yMax - margin - maxY;
+            else if (minY < bounds.yMin + margin) dy = bounds.yMin + margin - minY;
+            if (Mathf.Approximately(dx, 0f) && Mathf.Approximately(dy, 0f)) return;
+
+            Vector3 world = canvasRt.TransformVector(new Vector3(dx, dy, 0f));
+            Vector3 local2 = panel.parent.InverseTransformVector(world);
+            panel.anchoredPosition += new Vector2(local2.x, local2.y);
         }
     }
 }

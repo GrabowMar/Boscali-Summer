@@ -11,84 +11,104 @@ namespace BoscaliSummer.Features.Events.Presentation
 {
     internal sealed partial class EventsMfdPanel
     {
-        /// <summary>Four bounded response routes; quotes are read-only and the host validates every order.</summary>
-        private sealed class DecisionBoard
+        /// <summary>
+        /// The response desk: four bounded routes (allocation / treasury / contract / pilot channel).
+        /// Quotes are read-only; the host validates every order. The whole block collapses to nothing
+        /// while no dispatch prices this player's side, the way <c>AvAlert</c> collapses when hidden.
+        /// </summary>
+        private sealed class DecisionBoardPart : AvPart
         {
-            public const float Height = 210f;
-            private const float RowPitch = 43f;
-            private readonly RectTransform root;
-            private readonly TMP_Text heading;
-            private readonly TMP_Text subheading;
-            private readonly AvButton[] actions = new AvButton[4];
-            private readonly Image[] rails = new Image[4];
-            private readonly TMP_Text[] details = new TMP_Text[4];
-            private readonly TMP_Text[] reasons = new TMP_Text[4];
-            public bool Visible => root.gameObject.activeSelf;
+            private const int Count = 4;
+            private static readonly string[] StandbyLabel = { "ALLOCATION", "TREASURY", "CONTRACT", "PILOT CHANNEL" };
+            private static readonly string[] StandbyNote =
+                { "PERSONAL ALLOCATION", "FACTION FUNDS", "COMPLETED SECONDARY", "RECON QUALIFICATION" };
 
-            public DecisionBoard(RectTransform parent, float x, float y, float width)
+            private readonly AvFrame frame;
+            private readonly TMP_Text heading, subheading;
+            private readonly Image hairline;
+            private readonly AvRow[] rows;
+            private readonly EventResponseKind[] routes = new EventResponseKind[Count];
+            private readonly Action<EventResponseKind> request;
+
+            public DecisionBoardPart(RectTransform parent, Action<EventResponseKind> onRequest)
             {
-                var obj = new GameObject("DecisionBoard", typeof(RectTransform));
-                root = (RectTransform)obj.transform;
-                root.SetParent(parent, false);
-                AvKit.Place(root, new Rect(x, y, width, Height));
-                AvStyled.Box(root, new Rect(0f, 0f, width, Height), "card");
-                AvKit.Panel(root, new Rect(0f, 0f, 3f, Height), AvTheme.RailInfo).raycastTarget = false;
-                heading = AvStyled.Label(root, new Rect(12f, -9f, width * 0.5f, 15f),
-                    "RESPONSE DESK", "section-title");
-                subheading = AvStyled.Label(root, new Rect(width * 0.5f, -9f, width * 0.5f - 12f, 15f),
-                    "CHOOSE ONE · HOST VERIFIED", "section-title-note",
-                    align: TextAlignmentOptions.MidlineRight);
-                AvKit.Rule(root, new Rect(11f, -30f, width - 22f, 1f), AvTheme.Hairline);
-
-                for (int i = 0; i < actions.Length; i++)
+                request = onRequest;
+                Rect = AvLay.Child(parent, "DecisionBoard");
+                frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(8f));
+                AvLay.Fill(frame.rectTransform);
+                heading = AvText.Make(Rect, "Heading", AvTextRole.Head, "RESPONSE DESK");
+                subheading = AvText.Make(Rect, "Subheading", AvTextRole.Micro, "", TextAlignmentOptions.MidlineRight);
+                hairline = AvLay.Solid(Rect, "Rule", Color.clear);
+                rows = new AvRow[Count];
+                for (int i = 0; i < Count; i++)
                 {
-                    float top = -34f - i * RowPitch;
-                    AvKit.Panel(root, new Rect(10f, top, width - 20f, 40f), AvTheme.SurfaceInert)
-                        .raycastTarget = false;
-                    rails[i] = AvKit.Panel(root, new Rect(10f, top, 3f, 40f), AvTheme.RailInert);
-                    rails[i].raycastTarget = false;
-                    actions[i] = AvStyled.Button(root, new Rect(19f, top - 5f, 174f, 30f),
-                        "", "btn", null, AvButtonStyle.Default);
-                    details[i] = AvStyled.Label(root,
-                        new Rect(201f, top - 4f, width - 215f, 14f), "", "row-value");
-                    reasons[i] = AvStyled.Label(root,
-                        new Rect(201f, top - 21f, width - 215f, 14f), "", "row-sub");
+                    int index = i;
+                    rows[i] = new AvRow(Rect, () =>
+                    {
+                        if (routes[index] != EventResponseKind.None) request?.Invoke(routes[index]);
+                    });
                 }
                 SetStandby();
             }
 
-            public void Place(float x, float y, float width) =>
-                AvKit.Place(root, new Rect(x, y, width, Height));
+            public bool Visible => Rect.gameObject.activeSelf;
+
+            public override float Measure(float width) => !Visible ? 0f : ComputeHeight(width);
+
+            private float ComputeHeight(float width)
+            {
+                float rowW = width - 24f, h = 32f;
+                for (int i = 0; i < rows.Length; i++) h += rows[i].Measure(rowW) + 4f;
+                return h + 8f;
+            }
+
+            public override void Place(AvSlot s)
+            {
+                base.Place(s);
+                if (!Visible) return;
+                AvLay.Place(heading.rectTransform, 12f, 8f, s.W * 0.5f - 12f, 16f);
+                AvLay.Place(subheading.rectTransform, s.W * 0.5f, 8f, s.W * 0.5f - 12f, 16f);
+                AvLay.Place(hairline.rectTransform, 12f, 28f, s.W - 24f, 1f);
+                float y = 32f, rowW = s.W - 24f;
+                for (int i = 0; i < rows.Length; i++)
+                {
+                    float h = rows[i].Measure(rowW);
+                    rows[i].Place(new AvSlot(12f, y, rowW, h));
+                    y += h + 4f;
+                }
+            }
+
+            public override void Restyle()
+            {
+                AvStyle c = AvStyleHost.FuiStyle("card");
+                frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.Surface), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
+                heading.color = AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
+                subheading.color = AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
+                hairline.color = AvStyleHost.FuiColor("hairline", AvTheme.Hairline);
+                foreach (AvRow row in rows) row.Restyle();
+            }
 
             public void SetStandby()
             {
-                root.gameObject.SetActive(false);
+                Rect.gameObject.SetActive(false);
                 heading.text = "RESPONSE DESK";
                 subheading.text = "AWAITING DISPATCH";
-                string[] labels = { "ALLOCATION", "TREASURY", "CONTRACT", "PILOT CHANNEL" };
-                string[] notes = {
-                    "PERSONAL ALLOCATION", "FACTION FUNDS", "COMPLETED SECONDARY", "RECON QUALIFICATION"
-                };
-                for (int i = 0; i < actions.Length; i++)
+                for (int i = 0; i < Count; i++)
                 {
-                    actions[i].SetText(labels[i]);
-                    actions[i].SetEnabled(false);
-                    actions[i].SetAction(null);
-                    rails[i].color = AvTheme.RailInert;
-                    details[i].text = "STANDBY";
-                    details[i].color = AvTheme.Dim;
-                    reasons[i].text = notes[i];
-                    reasons[i].color = AvTheme.Dim;
+                    routes[i] = EventResponseKind.None;
+                    rows[i].Set(StandbyLabel[i], StandbyNote[i], "STANDBY", AvState.Inert);
+                    rows[i].Interactable = false;
                 }
             }
 
             public void Refresh(EventsManager events, bool aimedAtLocal)
             {
-                root.gameObject.SetActive(true);
+                Rect.gameObject.SetActive(true);
                 EventResponseKind selected = events.LocalResponse;
                 EventResponseKind faction = events.LocalFactionResponse;
                 EventResponseKind allocation = EventSelector.ResponseKind(events.LocalBaseMultiplier);
                 bool priced = aimedAtLocal && allocation != EventResponseKind.None;
+
                 heading.text = selected == EventResponseKind.None ? "RESPONSE DESK" : "DIRECTIVE IN FORCE";
                 subheading.text = selected == EventResponseKind.None
                     ? priced ? "CHOOSE ONE RESPONSE" : "NO PRICE DIRECTIVE"
@@ -96,41 +116,33 @@ namespace BoscaliSummer.Features.Events.Presentation
                         ? "PILOT + FACTION DIRECTIVES"
                         : EventsManager.ResponseLabel(selected) + " · COMMITTED";
 
-                EventResponseKind[] kinds = { allocation, EventResponseKind.Treasury,
-                    EventResponseKind.Contract, EventResponseKind.Perk };
+                EventResponseKind[] kinds =
+                    { allocation, EventResponseKind.Treasury, EventResponseKind.Contract, EventResponseKind.Perk };
                 for (int i = 0; i < kinds.Length; i++)
                 {
                     EventResponseKind kind = kinds[i];
-                    EventDecisionQuote quote = kind == EventResponseKind.None
-                        ? default : events.Quote(kind);
-                    bool chosen = priced && kind != EventResponseKind.None &&
-                        (selected == kind || faction == kind);
+                    EventDecisionQuote quote = kind == EventResponseKind.None ? default : events.Quote(kind);
+                    bool chosen = priced && kind != EventResponseKind.None && (selected == kind || faction == kind);
                     bool enabled = priced && selected == EventResponseKind.None && quote.Available;
-                    string name = i == 0 && kind == EventResponseKind.None
-                        ? "ALLOCATION" : quote.Label;
-                    actions[i].SetText(name);
-                    actions[i].SetEnabled(enabled);
-                    EventResponseKind route = kind;
-                    actions[i].SetAction(enabled ? (Action)(() => events.RequestResponse(route)) : null);
-                    string payment = kind == EventResponseKind.None ? "—" :
-                        quote.Cost > 0 ? quote.Cost + " " + quote.Unit : quote.Unit;
-                    string impact = kind == EventResponseKind.None ? "" :
-                        " → x" + quote.EffectiveMultiplier.ToString("0.00");
-                    details[i].text = chosen ? "ACTIVE" : priced ? payment + impact : "UNAVAILABLE";
-                    details[i].color = chosen ? AvTheme.RailReady : enabled ? AvTheme.TextPrimary : AvTheme.Dim;
-                    reasons[i].text = chosen ? (faction == kind ? "FACTION-WIDE · UNTIL EVENT ENDS" :
-                        "PILOT · UNTIL EVENT ENDS") :
-                        !priced ? "NO PRICE EFFECT ON YOUR SIDE" :
-                        quote.Reason == "HOST CHECKS FACTION CONTRACT" ? quote.Reason :
-                        quote.Available ? quote.Shared ? "FACTION-WIDE DIRECTIVE" : "PERSONAL DIRECTIVE" :
-                        quote.Reason;
-                    reasons[i].color = enabled || chosen ? AvTheme.Dim : AvTheme.RailCaution;
-                    rails[i].color = chosen ? AvTheme.RailReady : enabled ? AvTheme.RailInfo : AvTheme.RailInert;
-                    actions[i].WithTooltip(chosen ? "This response is in force for the rest of the event." :
-                        !priced ? "This dispatch has no price effect for your side." :
-                        quote.Available ? quote.Label + " costs " + payment +
-                            " and changes this side's support price to x" +
-                            quote.EffectiveMultiplier.ToString("0.00") + "." : quote.Reason);
+                    string name = i == 0 && kind == EventResponseKind.None ? "ALLOCATION" : quote.Label;
+
+                    routes[i] = enabled ? kind : EventResponseKind.None;
+                    rows[i].Interactable = enabled;
+
+                    string payment = kind == EventResponseKind.None ? "—"
+                        : quote.Cost > 0 ? AvNum.Fixed(quote.Cost, 0) + " " + quote.Unit : quote.Unit;
+                    string impact = kind == EventResponseKind.None ? ""
+                        : " → x" + AvNum.Fixed(quote.EffectiveMultiplier, 2);
+                    string detail = chosen ? "ACTIVE" : priced ? payment + impact : "UNAVAILABLE";
+                    string reason = chosen
+                        ? faction == kind ? "FACTION-WIDE · UNTIL EVENT ENDS" : "PILOT · UNTIL EVENT ENDS"
+                        : !priced ? "NO PRICE EFFECT ON YOUR SIDE"
+                        : quote.Reason == "HOST CHECKS FACTION CONTRACT" ? quote.Reason
+                        : quote.Available ? quote.Shared ? "FACTION-WIDE DIRECTIVE" : "PERSONAL DIRECTIVE"
+                        : quote.Reason;
+
+                    AvState state = chosen ? AvState.Ready : enabled ? AvState.Info : AvState.Inert;
+                    rows[i].Set(name, reason, detail, state);
                 }
             }
         }

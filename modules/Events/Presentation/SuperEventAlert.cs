@@ -18,6 +18,12 @@ namespace BoscaliSummer.Features.Events.Presentation
     /// the separate plane HUD branch is reserved for the later HUD overhaul. The footer
     /// names only the next authored order, leaving the full script on EVN. Only dismiss
     /// takes map input. The dispatch folds into a shorter illustrated status strip.
+    ///
+    /// <para>Chrome is kit v2 (<c>AvFrame</c>/<c>AvText</c>/<c>AvControl</c>, the
+    /// <see cref="EventsMfdPanel.EventPlateArt"/> poster plate) with an <c>AvFx</c> dissolve-in on
+    /// first show. Kit gap: this overlay is driven by its own <c>Update()</c>, not an
+    /// <c>AvTicker</c>, so — like v1 — its palette is fixed at build time rather than
+    /// repainting on a live theme switch while a dispatch happens to be on screen.</para>
     /// </summary>
     internal sealed class SuperEventAlert : MonoBehaviour, ISceneService
     {
@@ -31,13 +37,6 @@ namespace BoscaliSummer.Features.Events.Presentation
         private const float CollapseSeconds = 0.32f;
         private const float ExpandSeconds = 8f;
 
-        private static readonly Color Ink = new Color32(11, 15, 19, 252);
-        private static readonly Color FooterInk = new Color32(22, 28, 33, 255);
-        private static readonly Color Paper = new Color32(239, 242, 241, 255);
-        private static readonly Color Muted = new Color32(180, 194, 199, 255);
-        private static readonly Color Signal = new Color32(244, 83, 70, 255);
-        private static readonly Color Relief = new Color32(111, 219, 191, 255);
-
         private EventsSettings settings;
         private EventsManager events;
         private ManualLogSource logger;
@@ -50,12 +49,9 @@ namespace BoscaliSummer.Features.Events.Presentation
         private RectTransform compactPanel;
         private CanvasGroup expandedGroup;
         private CanvasGroup compactGroup;
-        private Image art;
-        private Image stripes;
-        private Image compactArt;
-        private Image compactStripes;
-        private EventGlyph glyph;
-        private EventGlyph compactGlyph;
+        private AvFx expandedFx;
+        private EventsMfdPanel.EventPlateArt plate;
+        private EventsMfdPanel.EventPlateArt compactPlate;
         private TMP_Text stamp;
         private TMP_Text target;
         private TMP_Text eyebrow;
@@ -97,8 +93,8 @@ namespace BoscaliSummer.Features.Events.Presentation
             activeView = null;
             expandedPanel = compactPanel = null;
             expandedGroup = compactGroup = null;
-            art = stripes = compactArt = compactStripes = null;
-            glyph = compactGlyph = null;
+            expandedFx = null;
+            plate = compactPlate = null;
             stamp = target = eyebrow = title = scope = impact = flavor = nextOrder = clock = null;
             compactTitle = compactImpact = compactClock = null;
             shownSerial = 0;
@@ -160,39 +156,31 @@ namespace BoscaliSummer.Features.Events.Presentation
             targetAlpha = 1f;
             lastOrderSecond = -1;
 
-            stamp.text = "SUPEREVENT  /  " + view.Category;
+            AvState state = view.EffectSummary.StartsWith("-", StringComparison.Ordinal) ? AvState.Ready : AvState.Danger;
+            Color ink = AvStyleHost.FuiColor(AvStates.Class(state), AvTheme.RailDanger);
+
+            stamp.text = "SUPEREVENT / " + view.Category;
             target.text = view.Target;
-            eyebrow.text = "THEATER DISPATCH  /  LIVE";
+            eyebrow.text = "THEATER DISPATCH / LIVE";
             title.text = view.Title.ToUpperInvariant();
-            scope.text = "DIRECTED TO  /  " + view.Target.ToUpperInvariant();
+            scope.text = "DIRECTED TO / " + view.Target.ToUpperInvariant();
             impact.text = view.EffectSummary;
+            impact.color = ink;
             flavor.text = view.FlavorText;
             compactTitle.text = view.Title.ToUpperInvariant();
             compactImpact.text = view.EffectSummary;
-
-            Color consequence = view.EffectSummary.StartsWith("-", StringComparison.Ordinal)
-                ? Relief : Signal;
-            impact.color = consequence;
-            compactImpact.color = consequence;
-
-            string kind = view.Category == "POLITICAL" ? EventGlyph.Political
-                : view.Category == "HAZARD" ? EventGlyph.Hazard
-                : EventGlyph.Economic;
-            glyph.SetKind(kind);
-            compactGlyph.SetKind(kind);
+            compactImpact.color = ink;
 
             Sprite poster = EventArtCache.Get(view.IconKey, "tier_super");
-            art.sprite = compactArt.sprite = poster;
-            art.enabled = compactArt.enabled = poster != null;
-            stripes.gameObject.SetActive(poster == null);
-            compactStripes.gameObject.SetActive(poster == null);
-            glyph.gameObject.SetActive(poster == null);
-            compactGlyph.gameObject.SetActive(poster == null);
+            AvIcon categoryIcon = EventsMfdPanel.CategoryIcon(view.Category);
+            plate.Bind(poster, categoryIcon, ink);
+            compactPlate.Bind(poster, categoryIcon, ink);
 
             expandedPanel.gameObject.SetActive(true);
             compactPanel.gameObject.SetActive(false);
             expandedGroup.alpha = 1f;
             compactGroup.alpha = 0f;
+            expandedFx?.Play(AvFxKind.Dissolve, 0.8f, 6f);
             UpdateNextOrder(MissionTime());
             tone?.Play();
             logger?.LogInfo("[Events] Superevent dispatch shown: " + view.Title + ".");
@@ -218,8 +206,8 @@ namespace BoscaliSummer.Features.Events.Presentation
             }
 
             float remaining = Mathf.Max(0f, closeAt - now);
-            clock.text = "ON AIR  " + Mmss(Mathf.CeilToInt(remaining));
-            compactClock.text = Mmss(Mathf.CeilToInt(remaining));
+            clock.text = "ON AIR " + AvNum.Clock(remaining);
+            compactClock.text = AvNum.Clock(remaining);
             UpdateNextOrder(MissionTime());
 
             float t = Mathf.SmoothStep(0f, 1f,
@@ -242,7 +230,7 @@ namespace BoscaliSummer.Features.Events.Presentation
             {
                 ActiveEventStep step = activeView.Steps[i];
                 if (step.AtSeconds <= elapsed) continue;
-                nextOrder.text = "T-" + Mmss(step.AtSeconds - elapsed) + "   " + step.Label;
+                nextOrder.text = "T-" + AvNum.Clock(step.AtSeconds - elapsed) + "   " + step.Label;
                 return;
             }
             nextOrder.text = "NO FURTHER FIELD ORDERS";
@@ -268,11 +256,6 @@ namespace BoscaliSummer.Features.Events.Presentation
         private void Build()
         {
             if (Application.isBatchMode) throw new InvalidOperationException("headless");
-            if (AvFont.Font == null)
-            {
-                TMP_Text probe = UnityEngine.Object.FindObjectOfType<TMP_Text>(true);
-                if (probe != null) AvFont.Font = probe.font;
-            }
 
             var host = new GameObject("BoscaliEvents.Dispatch",
                 typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster), typeof(CanvasGroup));
@@ -311,92 +294,98 @@ namespace BoscaliSummer.Features.Events.Presentation
             float effectX = textX + centreWidth + 18f;
             float effectWidth = width - effectX - 18f;
 
+            Color ground = AvStyleHost.FuiColor("ground", AvTheme.Ground).WithAlpha(0.99f);
+            Color raised = AvStyleHost.FuiColor("surface-raised", AvTheme.SurfaceRaised);
+            Color ink = AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
+            Color dim = AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
+            Color danger = AvStyleHost.FuiColor("danger", AvTheme.RailDanger);
+
             expandedPanel = Panel("MfdDispatch", screen, Top, width, Height, out expandedGroup);
             expandedPanel.anchoredPosition = new Vector2(layoutOffset, -Top);
-            AvKit.Panel(expandedPanel, new Rect(0f, 0f, width, Height), Ink);
-            AvKit.Rule(expandedPanel, new Rect(0f, 0f, width, 2f), Signal.WithAlpha(.65f));
+            AvFrame frame = AvFrame.Add(expandedPanel, "Frame", AvChamfer.Diagonal(6f));
+            AvLay.Fill(frame.rectTransform);
+            frame.Paint(ground, danger.WithAlpha(0.65f));
+            expandedFx = AvFx.On(frame);
 
-            BuildArt(expandedPanel, new Rect(0f, 0f, artWidth, 174f),
-                out art, out stripes, out glyph);
-            AvKit.Panel(expandedPanel, new Rect(0f, -130f, artWidth, 44f),
-                new Color(0.02f, 0.04f, 0.06f, 0.9f));
-            stamp = Label(expandedPanel, new Rect(14f, -134f, artWidth - 28f, 17f), "", 10f, Signal, 2f);
-            target = Label(expandedPanel, new Rect(14f, -153f, artWidth - 28f, 17f), "", 13f, Paper, 1f);
+            plate = new EventsMfdPanel.EventPlateArt(expandedPanel, 34f);
+            AvLay.Place(plate.Root, 0f, 0f, artWidth, 174f);
+            plate.Layout(artWidth, 174f);
 
-            eyebrow = Label(expandedPanel, new Rect(textX, -13f, centreWidth, 19f), "", 10f, Signal, 2f);
-            title = Label(expandedPanel, new Rect(textX, -39f, centreWidth, 55f), "", 29f, Paper, 1f);
-            title.enableAutoSizing = true;
-            title.fontSizeMin = 20f;
-            title.fontSizeMax = 29f;
-            AvKit.Rule(expandedPanel, new Rect(textX, -116f, centreWidth - 22f, 1f),
-                Muted.WithAlpha(.25f));
-            scope = Label(expandedPanel, new Rect(textX, -128f, centreWidth - 22f, 21f),
-                "", 11f, Muted, 1f);
-            AvKit.Rule(expandedPanel, new Rect(effectX - 10f, -13f, 1f, 148f),
-                Muted.WithAlpha(.25f));
-            Label(expandedPanel, new Rect(effectX, -13f, effectWidth, 17f),
-                "BATTLEFIELD EFFECT", 10f, Muted, 2f);
-            impact = Label(expandedPanel, new Rect(effectX, -39f, effectWidth, 33f), "", 23f, Signal, 1f);
-            flavor = Label(expandedPanel, new Rect(effectX, -82f, effectWidth, 84f), "", 13f, Muted,
-                wrap: true);
+            Image stampBack = AvLay.Solid(expandedPanel, "StampBack", raised.WithAlpha(0.9f));
+            AvLay.Place(stampBack.rectTransform, 0f, 130f, artWidth, 44f);
+            stamp = AvText.Make(expandedPanel, "Stamp", AvTextRole.Micro, "", TextAlignmentOptions.TopLeft);
+            stamp.color = danger;
+            AvLay.Place(stamp.rectTransform, 14f, 134f, artWidth - 28f, 17f);
+            target = AvText.Make(expandedPanel, "Target", AvTextRole.Micro, "", TextAlignmentOptions.TopLeft);
+            target.color = ink;
+            AvLay.Place(target.rectTransform, 14f, 153f, artWidth - 28f, 17f);
 
-            AvKit.Panel(expandedPanel, new Rect(0f, -174f, width, 40f), FooterInk);
-            Label(expandedPanel, new Rect(14f, -180f, 150f, 14f),
-                "NEXT ORDER", 10f, Signal, 2f);
-            nextOrder = Label(expandedPanel, new Rect(170f, -180f, width - 475f, 24f), "", 13f, Paper, 1f);
-            clock = Label(expandedPanel, new Rect(width - 291f, -181f, 130f, 24f), "", 12f, Muted, 1f);
-            AvStyled.Button(expandedPanel, new Rect(width - 145f, -178f, 131f, 31f), "DISMISS", "btn",
-                Dismiss, AvButtonStyle.Default)
-                .WithTooltip("Hide this dispatch. The event continues on the battlefield.");
+            eyebrow = AvText.Make(expandedPanel, "Eyebrow", AvTextRole.Micro, "", TextAlignmentOptions.TopLeft);
+            eyebrow.color = danger;
+            AvLay.Place(eyebrow.rectTransform, textX, 13f, centreWidth, 19f);
+            title = AvText.Make(expandedPanel, "Title", AvTextRole.Title, "", TextAlignmentOptions.TopLeft, true);
+            AvText.Fit(title, true);
+            title.color = ink;
+            AvLay.Place(title.rectTransform, textX, 39f, centreWidth, 55f);
+            Image rule = AvLay.Solid(expandedPanel, "Rule", dim.WithAlpha(.25f));
+            AvLay.Place(rule.rectTransform, textX, 116f, centreWidth - 22f, 1f);
+            scope = AvText.Make(expandedPanel, "Scope", AvTextRole.Micro, "", TextAlignmentOptions.TopLeft);
+            scope.color = dim;
+            AvLay.Place(scope.rectTransform, textX, 128f, centreWidth - 22f, 21f);
+
+            Image divider = AvLay.Solid(expandedPanel, "Divider", dim.WithAlpha(.25f));
+            AvLay.Place(divider.rectTransform, effectX - 10f, 13f, 1f, 148f);
+            TMP_Text effectLabel = AvText.Make(expandedPanel, "EffectLabel", AvTextRole.Micro, "BATTLEFIELD EFFECT", TextAlignmentOptions.TopLeft);
+            effectLabel.color = dim;
+            AvLay.Place(effectLabel.rectTransform, effectX, 13f, effectWidth, 17f);
+            impact = AvText.Make(expandedPanel, "Impact", AvTextRole.Head, "", TextAlignmentOptions.TopLeft, true);
+            AvLay.Place(impact.rectTransform, effectX, 39f, effectWidth, 33f);
+            flavor = AvText.Make(expandedPanel, "Flavor", AvTextRole.Prose, "", TextAlignmentOptions.TopLeft, true);
+            flavor.color = dim;
+            AvLay.Place(flavor.rectTransform, effectX, 82f, effectWidth, 84f);
+
+            Image footer = AvLay.Solid(expandedPanel, "Footer", raised.WithAlpha(0.96f));
+            AvLay.Place(footer.rectTransform, 0f, 174f, width, 40f);
+            TMP_Text nextLabel = AvText.Make(expandedPanel, "NextLabel", AvTextRole.Micro, "NEXT ORDER", TextAlignmentOptions.TopLeft);
+            nextLabel.color = danger;
+            AvLay.Place(nextLabel.rectTransform, 14f, 180f, 150f, 14f);
+            nextOrder = AvText.Make(expandedPanel, "NextOrder", AvTextRole.Data, "", TextAlignmentOptions.TopLeft);
+            nextOrder.color = ink;
+            AvLay.Place(nextOrder.rectTransform, 170f, 180f, width - 475f, 24f);
+            clock = AvText.Make(expandedPanel, "Clock", AvTextRole.DataSmall, "", TextAlignmentOptions.TopLeft);
+            clock.color = dim;
+            AvLay.Place(clock.rectTransform, width - 291f, 181f, 130f, 24f);
+            AvControl dismiss = AvControl.Make(expandedPanel, new AvControl.Spec("DISMISS", Dismiss, AvButtonStyle.Default, AvIcon.X));
+            AvLay.Place(dismiss.Rect, width - 145f, 178f, 131f, 31f);
         }
 
         private void BuildCompact(RectTransform screen)
         {
             float width = Mathf.Min(900f, layoutWidth);
-            compactPanel = Panel("MfdDispatchBrief", screen, Top,
-                width, CompactHeight, out compactGroup);
+            Color ground = AvStyleHost.FuiColor("ground", AvTheme.Ground).WithAlpha(0.99f);
+            Color ink = AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
+            Color dim = AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
+            Color danger = AvStyleHost.FuiColor("danger", AvTheme.RailDanger);
+
+            compactPanel = Panel("MfdDispatchBrief", screen, Top, width, CompactHeight, out compactGroup);
             compactPanel.anchoredPosition = new Vector2(layoutOffset - (layoutWidth - width) * .5f, -Top);
-            AvKit.Panel(compactPanel, new Rect(0f, 0f, width, CompactHeight), Ink);
-            AvKit.Rule(compactPanel, new Rect(0f, 0f, width, 2f), Signal.WithAlpha(.65f));
-            BuildArt(compactPanel, new Rect(0f, 0f, 90f, CompactHeight),
-                out compactArt, out compactStripes, out compactGlyph);
-            compactTitle = Label(compactPanel, new Rect(106f, -6f, width - 244f, 21f), "", 16f, Paper, 1f);
-            compactImpact = Label(compactPanel, new Rect(106f, -28f, width - 244f, 18f), "", 12f, Signal, 1f);
-            compactClock = Label(compactPanel, new Rect(width - 130f, -12f, 112f, 27f), "", 14f,
-                Muted, 1f, align: TextAlignmentOptions.MidlineRight);
+            AvFrame frame = AvFrame.Add(compactPanel, "Frame", AvChamfer.Diagonal(4f));
+            AvLay.Fill(frame.rectTransform);
+            frame.Paint(ground, danger.WithAlpha(0.65f));
+
+            compactPlate = new EventsMfdPanel.EventPlateArt(compactPanel, 20f);
+            AvLay.Place(compactPlate.Root, 0f, 0f, 90f, CompactHeight);
+            compactPlate.Layout(90f, CompactHeight);
+
+            compactTitle = AvText.Make(compactPanel, "CompactTitle", AvTextRole.Head, "", TextAlignmentOptions.TopLeft);
+            compactTitle.color = ink;
+            AvLay.Place(compactTitle.rectTransform, 106f, 6f, width - 244f, 21f);
+            compactImpact = AvText.Make(compactPanel, "CompactImpact", AvTextRole.DataSmall, "", TextAlignmentOptions.TopLeft);
+            AvLay.Place(compactImpact.rectTransform, 106f, 28f, width - 244f, 18f);
+            compactClock = AvText.Make(compactPanel, "CompactClock", AvTextRole.DataStrong, "", TextAlignmentOptions.MidlineRight);
+            compactClock.color = dim;
+            AvLay.Place(compactClock.rectTransform, width - 130f, 12f, 112f, 27f);
             compactPanel.gameObject.SetActive(false);
-        }
-
-        private static void BuildArt(RectTransform parent, Rect area,
-            out Image poster, out Image pattern, out EventGlyph mark)
-        {
-            AvKit.Panel(parent, area, FooterInk);
-            pattern = MakeImage(parent, area, "FallbackPattern");
-            pattern.sprite = EventPlate.Stripes();
-            pattern.type = UnityEngine.UI.Image.Type.Tiled;
-            pattern.color = Signal.WithAlpha(0.12f);
-            poster = MakeImage(parent, area, "Poster");
-            poster.color = Color.white;
-
-            var glyphObject = new GameObject("CategoryMark", typeof(RectTransform),
-                typeof(CanvasRenderer), typeof(EventGlyph));
-            glyphObject.transform.SetParent(parent, false);
-            mark = glyphObject.GetComponent<EventGlyph>();
-            mark.color = Signal.WithAlpha(0.8f);
-            float size = Mathf.Min(area.width, area.height) * 0.3f;
-            AvKit.Place((RectTransform)glyphObject.transform,
-                new Rect(area.x + (area.width - size) * 0.5f,
-                    area.y - (area.height - size) * 0.5f, size, size));
-        }
-
-        private static Image MakeImage(RectTransform parent, Rect area, string name)
-        {
-            var go = new GameObject(name, typeof(RectTransform), typeof(Image));
-            go.transform.SetParent(parent, false);
-            AvKit.Place((RectTransform)go.transform, area);
-            Image image = go.GetComponent<Image>();
-            image.raycastTarget = false;
-            return image;
         }
 
         private static RectTransform Panel(string name, RectTransform screen, float top,
@@ -411,22 +400,6 @@ namespace BoscaliSummer.Features.Events.Presentation
             rect.sizeDelta = new Vector2(width, height);
             canvasGroup = go.GetComponent<CanvasGroup>();
             return rect;
-        }
-
-        private static TMP_Text Label(RectTransform parent, Rect area, string text, float size,
-            Color color, float tracking = 0f, bool wrap = false,
-            TextAlignmentOptions align = TextAlignmentOptions.MidlineLeft)
-        {
-            TMP_Text label = AvKit.Label(parent, text, area, color, size, FontStyles.Bold, align, wrap);
-            label.richText = false;
-            label.characterSpacing = tracking;
-            return label;
-        }
-
-        private static string Mmss(int seconds)
-        {
-            int total = Mathf.Max(0, seconds);
-            return (total / 60) + ":" + (total % 60).ToString("00");
         }
 
         private static float MissionTime() =>
