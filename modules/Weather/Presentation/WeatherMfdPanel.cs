@@ -177,10 +177,10 @@ namespace BoscaliSummer.Features.Weather.Presentation
             rootRect.pivot = templateRect.pivot;
             rootRect.localScale = templateRect.localScale;
 
-            float height = ResolvePanelHeight(
+            float height = AvLay.ResolveHeight(
                 templateRect.parent as RectTransform, AvTokens.PanelHeight, AvTokens.PanelHeightMax);
             rootRect.sizeDelta = new Vector2(Width, height);
-            ClampPanelIntoCanvas(rootRect);
+            AvLay.ClampIntoCanvas(rootRect);
 
             console = AvConsole.Build(rootRect, MfdSlots.Weather, "BATTLEFIELD ENVIRONMENT", 2, Width, height);
             chips = console.Chips(ChipCount);
@@ -218,62 +218,6 @@ namespace BoscaliSummer.Features.Weather.Presentation
                 if (images[i].gameObject != button.gameObject) return images[i];
             }
             return button.GetComponent<Image>();
-        }
-
-        // Equivalent of the v1 kit's screen height resolver: the bezel bay measures taller than
-        // the panel's own floor, so the height is read from the slot rather than hard-coded.
-        private static float ResolvePanelHeight(RectTransform parent, float min, float max)
-        {
-            if (max < min) max = min;
-            if (parent == null) return min;
-
-            float available = parent.rect.height;
-            RectTransform cursor = parent;
-            for (int i = 0; i < 4 && available <= 1f && cursor != null; i++)
-            {
-                cursor = cursor.parent as RectTransform;
-                if (cursor != null) available = cursor.rect.height;
-            }
-            if (available <= 1f) return min;
-            return Mathf.Clamp(Mathf.Floor(available), min, max);
-        }
-
-        // Equivalent of the v1 kit's canvas-clamp helper: nudges a panel wholly inside its
-        // canvas once its size is final, so a wide bezel screen never clips off-edge.
-        private static void ClampPanelIntoCanvas(RectTransform panel, float margin = 8f)
-        {
-            if (panel == null) return;
-            Canvas canvas = panel.GetComponentInParent<Canvas>();
-            if (canvas == null) return;
-            var canvasRt = canvas.rootCanvas.transform as RectTransform;
-            if (canvasRt == null || panel.parent == null) return;
-
-            var corners = new Vector3[4];
-            panel.GetWorldCorners(corners);
-
-            float minX = float.MaxValue, maxX = float.MinValue;
-            float minY = float.MaxValue, maxY = float.MinValue;
-            for (int i = 0; i < 4; i++)
-            {
-                Vector3 local = canvasRt.InverseTransformPoint(corners[i]);
-                if (local.x < minX) minX = local.x;
-                if (local.x > maxX) maxX = local.x;
-                if (local.y < minY) minY = local.y;
-                if (local.y > maxY) maxY = local.y;
-            }
-
-            Rect bounds = canvasRt.rect;
-            float dx = 0f;
-            if (minX < bounds.xMin + margin) dx = bounds.xMin + margin - minX;
-            else if (maxX > bounds.xMax - margin) dx = bounds.xMax - margin - maxX;
-            float dy = 0f;
-            if (maxY > bounds.yMax - margin) dy = bounds.yMax - margin - maxY;
-            else if (minY < bounds.yMin + margin) dy = bounds.yMin + margin - minY;
-            if (Mathf.Approximately(dx, 0f) && Mathf.Approximately(dy, 0f)) return;
-
-            Vector3 world = canvasRt.TransformVector(new Vector3(dx, dy, 0f));
-            Vector3 local2 = panel.parent.InverseTransformVector(world);
-            panel.anchoredPosition += new Vector2(local2.x, local2.y);
         }
 
         // ---- Page Builders ---------------------------------------------------------------

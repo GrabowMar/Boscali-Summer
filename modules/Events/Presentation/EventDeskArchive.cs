@@ -11,23 +11,21 @@ namespace BoscaliSummer.Features.Events.Presentation
 {
     /// <summary>
     /// A local reading room, floating over the map on kit v2's <see cref="AvWindow"/> chrome. Four
-    /// sections (aircraft / events / world / manual) share one stepper and one detail part; native
+    /// sections (aircraft / events / world / manual) share one clickable paged index, one record
+    /// stepper (so a reader can move on without scrolling back up) and one detail part; native
     /// encyclopedia data is read only while open.
-    ///
-    /// <para>Kit gap: v2 has no clickable virtualised list (<c>AvList</c>'s pooled rows take no click
-    /// handler), so browsing a section's records uses an <c>AvStepper</c> (record N of M) instead of
-    /// v1's paged, click-to-select index column. Kit gap: <c>AvWindow</c> has no auto-fit-to-viewport
-    /// scaling, so this window uses a fixed size instead of v1's shrink-to-fit.</para>
     /// </summary>
     internal sealed class EventDeskArchive : MonoBehaviour
     {
         private const float Width = 860f;
         private const float Height = 700f;
+        private const int IndexRows = 6;
 
         private AvWindow window;
         private readonly List<AircraftDefinition> aircraft = new List<AircraftDefinition>(128);
         private AvControl[] tabs;
         private AvSection indexSection;
+        private AvList index;
         private AvStepper stepper;
         private EventDetailPart detail;
         private EventAircraftPreview preview;
@@ -99,16 +97,8 @@ namespace BoscaliSummer.Features.Events.Presentation
 
         private void Build()
         {
-            Canvas canvas = gameObject.AddComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvas.sortingOrder = 30003;
-            CanvasScaler scaler = gameObject.AddComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1920f, 1080f);
-            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
-            gameObject.AddComponent<GraphicRaycaster>();
-
-            window = AvWindow.Build(transform, "field-archive", "DIRECTORATE / FIELD ARCHIVE", Width, Height, 200);
+            // AvWindow adds its own scaled overlay canvas when its root is not under a UI canvas.
+            window = AvWindow.Build(transform, "field-archive", "DIRECTORATE / FIELD ARCHIVE", Width, Height, 30003);
             window.Closed += Close;
             AvFlow p = window.Body;
 
@@ -122,6 +112,8 @@ namespace BoscaliSummer.Features.Events.Presentation
             tabs = p.Buttons(specs).Controls;
 
             indexSection = p.Section(AvIcon.ListDetails, "INDEX", "0 RECORDS");
+            index = p.Add(new AvList(p.Content, window.Ticker, IndexRows, BindIndexRow));
+            index.RowClicked = Select;
             stepper = p.Add(new AvStepper(p.Content, "RECORD", RecordLabel, () => Step(-1), () => Step(1)));
 
             p.Section(AvIcon.Database, "DETAIL");
@@ -136,8 +128,26 @@ namespace BoscaliSummer.Features.Events.Presentation
         private void Step(int delta)
         {
             if (Count == 0) return;
-            selected = ((selected + delta) % Count + Count) % Count;
+            Select(((selected + delta) % Count + Count) % Count);
+        }
+
+        private void Select(int item)
+        {
+            if (item < 0 || item >= Count) return;
+            selected = item;
             Populate();
+        }
+
+        private string RowTitle(int item) => section == 0 ? aircraft[item].unitName :
+            section == 1 ? EventCatalog.All[item].Title :
+            section == 2 ? EventDocs.World[item].Title : EventDocs.Guide[item].Title;
+
+        private void BindIndexRow(int item, AvRow row)
+        {
+            bool chosen = item == selected;
+            row.Set(AvNum.Fixed(item + 1, 0).PadLeft(2, '0') + "  " + RowTitle(item).ToUpperInvariant(),
+                "", "", chosen ? AvState.Ready : AvState.Inert);
+            row.Armed = chosen;
         }
 
         private int Count => section == 0 ? aircraft.Count : section == 1 ? EventCatalog.All.Length :
@@ -157,6 +167,7 @@ namespace BoscaliSummer.Features.Events.Presentation
             preview = null;
             indexSection.SetCaption(AvNum.Fixed(Count, 0) + " RECORDS");
             stepper.Refresh();
+            index.SetCount(Count);
             if (Count == 0)
             {
                 detail.ShowEmpty(section == 0 ? "AIRCRAFT INDEX UNAVAILABLE" : "NO RECORDS",
@@ -165,6 +176,7 @@ namespace BoscaliSummer.Features.Events.Presentation
                 return;
             }
             selected = Mathf.Clamp(selected, 0, Count - 1);
+            index.Reveal(selected);
             if (section == 0) AircraftDetail(aircraft[selected]);
             else if (section == 1) EventDetail(EventCatalog.All[selected]);
             else DocDetail(section == 2 ? EventDocs.World[selected] : EventDocs.Guide[selected]);

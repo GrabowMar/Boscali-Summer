@@ -206,13 +206,11 @@ namespace BoscaliSummer.Features.Events.Presentation
             rootRect.pivot = templateRect.pivot;
             rootRect.localScale = templateRect.localScale;
 
-            // Kit gap: the v1 panel-height resolver is not part of the v2 API; the same pure
-            // height-resolution logic is replicated locally (see ResolveHostHeight below).
-            float height = ResolveHostHeight(templateRect.parent as RectTransform, AvTokens.PanelHeight, AvTokens.PanelHeightMax);
+            float height = AvLay.ResolveHeight(templateRect.parent as RectTransform, AvTokens.PanelHeight, AvTokens.PanelHeightMax);
             rootRect.sizeDelta = new Vector2(AvTokens.PanelWidth, height);
 
             console = AvConsole.Build(rootRect, MfdSlots.Events, "EVENT DIRECTORATE", 2, AvTokens.PanelWidth, height);
-            ClampIntoCanvas(console.Root);
+            AvLay.ClampIntoCanvas(console.Root);
 
             chips = console.Chips(3);
             metrics = console.Metrics("SUPPORT COST", "SUPPORT RESET");
@@ -271,7 +269,8 @@ namespace BoscaliSummer.Features.Events.Presentation
         private void BuildDeskPage(AvFlow p)
         {
             p.Section(AvIcon.Bookmark, "FIELD DESK", "LOCAL READING ROOM · NO SIGNAL LEAVES THIS COCKPIT");
-            p.Buttons(new AvControl.Spec("OPEN FIELD ARCHIVE", () => OpenArchive(0), AvButtonStyle.Primary, AvIcon.Bookmark));
+            p.Buttons(new AvControl.Spec("OPEN FIELD ARCHIVE", () => OpenArchive(0), AvButtonStyle.Primary, AvIcon.Bookmark))
+                .Controls[0].Help = "Open the client-local field archive.";
 
             p.Section(AvIcon.ListDetails, "CASE FILE", "THEATER WIRE");
             deskCase = p.Add(new EventCaseFilePart(p.Content));
@@ -290,6 +289,7 @@ namespace BoscaliSummer.Features.Events.Presentation
                 int section = i;
                 AvRow row = p.Add(new AvRow(p.Content, () => OpenArchive(section)));
                 row.Set(labels[i], notes[i], "OPEN", AvState.Info);
+                row.Help = "Open " + labels[i].ToLowerInvariant() + " in the field archive.";
             }
         }
 
@@ -306,6 +306,7 @@ namespace BoscaliSummer.Features.Events.Presentation
             if (i < 0 || i >= history.Count)
             {
                 row.Set("", "", "", AvState.Inert);
+                row.SetBadge(null);
                 return;
             }
             ActiveEventView view = history[i];
@@ -315,6 +316,7 @@ namespace BoscaliSummer.Features.Events.Presentation
                 TierShort(view.Tier) + " · " + ShortTarget(view.Target) + " · " +
                     Duration(MissionTime() - view.EndsAtMissionTime) + " AGO",
                 effect, TierState(view.Tier));
+            row.SetBadge(EventArtCache.Thumb(view.IconKey, view.IsSuper ? "tier_super" : "tier_medium"));
         }
 
         // ---- Refresh ---------------------------------------------------------------------
@@ -561,64 +563,6 @@ namespace BoscaliSummer.Features.Events.Presentation
                 return AvNum.Fixed(Math.Floor(minutes / 60.0), 0) + "h " + AvNum.Fixed(minutes % 60, 0) + "m";
             if (minutes > 0) return AvNum.Fixed(minutes, 0) + "m " + AvNum.Fixed(total % 60, 0) + "s";
             return AvNum.Fixed(total, 0) + "s";
-        }
-
-        /// <summary>
-        /// Kit gap: v1's panel-height resolver has no v2 counterpart, so the same pure
-        /// "walk up to the first laid-out ancestor" logic is kept local to this console.
-        /// </summary>
-        private static float ResolveHostHeight(RectTransform parent, float min, float max)
-        {
-            if (max < min) max = min;
-            if (parent == null) return min;
-
-            float available = parent.rect.height;
-            RectTransform cursor = parent;
-            for (int i = 0; i < 4 && available <= 1f && cursor != null; i++)
-            {
-                cursor = cursor.parent as RectTransform;
-                if (cursor != null) available = cursor.rect.height;
-            }
-            if (available <= 1f) return min;
-            return Mathf.Clamp(Mathf.Floor(available), min, max);
-        }
-
-        /// <summary>
-        /// Kit gap: v1's canvas-clamp helper has no v2 counterpart; the same nudge-into-bounds
-        /// logic is kept local (a hosted MFD screen inherits a position sized for the stock panel).
-        /// </summary>
-        private static void ClampIntoCanvas(RectTransform panel, float margin = 8f)
-        {
-            if (panel == null) return;
-            Canvas canvas = panel.GetComponentInParent<Canvas>();
-            if (canvas == null) return;
-            var canvasRt = canvas.rootCanvas.transform as RectTransform;
-            if (canvasRt == null || panel.parent == null) return;
-
-            var corners = new Vector3[4];
-            panel.GetWorldCorners(corners);
-            float minX = float.MaxValue, maxX = float.MinValue, minY = float.MaxValue, maxY = float.MinValue;
-            for (int i = 0; i < 4; i++)
-            {
-                Vector3 local = canvasRt.InverseTransformPoint(corners[i]);
-                if (local.x < minX) minX = local.x;
-                if (local.x > maxX) maxX = local.x;
-                if (local.y < minY) minY = local.y;
-                if (local.y > maxY) maxY = local.y;
-            }
-
-            Rect bounds = canvasRt.rect;
-            float dx = 0f;
-            if (minX < bounds.xMin + margin) dx = bounds.xMin + margin - minX;
-            else if (maxX > bounds.xMax - margin) dx = bounds.xMax - margin - maxX;
-            float dy = 0f;
-            if (maxY > bounds.yMax - margin) dy = bounds.yMax - margin - maxY;
-            else if (minY < bounds.yMin + margin) dy = bounds.yMin + margin - minY;
-            if (Mathf.Approximately(dx, 0f) && Mathf.Approximately(dy, 0f)) return;
-
-            Vector3 world = canvasRt.TransformVector(new Vector3(dx, dy, 0f));
-            Vector3 local2 = panel.parent.InverseTransformVector(world);
-            panel.anchoredPosition += new Vector2(local2.x, local2.y);
         }
     }
 }
