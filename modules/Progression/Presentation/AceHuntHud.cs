@@ -2,6 +2,7 @@ using BoscaliSummer.Features.Progression.Runtime;
 using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Lifecycle;
 using BoscaliSummer.Runtime;
+using NOAvionics;
 using NOAvionics.Ui;
 using NuclearOption.Networking;
 using TMPro;
@@ -10,7 +11,12 @@ using UnityEngine.UI;
 
 namespace BoscaliSummer.Features.Progression.Presentation
 {
-    /// <summary>Passive local threat display; all encounter state comes from the squad host.</summary>
+    /// <summary>
+    /// Passive local threat display; all encounter state comes from the squad host. This is a
+    /// screen-space overlay outside any MFD bezel, so it keeps its own absolute layout (kit v2's
+    /// <c>AvFlow</c> is a page-body concept); only the chrome primitives moved to kit v2
+    /// (AvFrame/AvText/AvIcons instead of the v1 AvKit calls), geometry unchanged.
+    /// </summary>
     internal sealed class AceHuntHud : MonoBehaviour, ISceneService
     {
         private static readonly Color Caution = new Color32(246, 194, 66, 255);
@@ -22,7 +28,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
         private Image portrait, crest, compactCrest;
         private TMP_Text portraitFallback;
         private string crestKey;
-        private readonly Image[] tierPips = new Image[5];
+        private readonly AvFrame[] tierPips = new AvFrame[5];
         private readonly GameObject[] abilitySlots = new GameObject[4];
         private TMP_Text noAbilities;
         private string portraitIdentity;
@@ -73,7 +79,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 abilitySlots[i].SetActive((wing.AbilityMask & (1 << i)) != 0);
             noAbilities.gameObject.SetActive(wing.AbilityMask == 0);
             for (int i = 0; i < tierPips.Length; i++)
-                tierPips[i].color = i < wing.Tier ? Caution : new Color32(50, 55, 60, 255);
+                tierPips[i].Paint(i < wing.Tier ? Caution : new Color32(50, 55, 60, 255), Color.clear);
             string crestIdentity = (wing.Symbol ?? string.Empty) + "|" + (wing.WingName ?? string.Empty);
             if (crestKey != crestIdentity)
             {
@@ -106,91 +112,83 @@ namespace BoscaliSummer.Features.Progression.Presentation
             scaler.referenceResolution = new Vector2(1920f, 1080f);
             scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
 
-            RectTransform panel = AvKit.Panel((RectTransform)root.transform,
-                new Rect(0, -48, 704, 184), Ink).rectTransform;
+            RectTransform panel = Panel((RectTransform)root.transform, new Rect(0, -48, 704, 184), Ink);
             panel.name = "Ace Threat Panel";
             panel.anchorMin = panel.anchorMax = new Vector2(0.5f, 1f);
             panel.pivot = new Vector2(0.5f, 1f);
             expandedPanel = panel;
             expandedGroup = panel.gameObject.AddComponent<CanvasGroup>();
             expandedGroup.blocksRaycasts = false;
-            AvKit.Outline(panel, new Rect(0, 0, 704, 184), Caution.WithAlpha(0.55f));
-            AvKit.Panel(panel, new Rect(0, 0, 704, 4), Caution);
-            AvKit.Panel(panel, new Rect(2, -8, 700, 28), new Color32(20, 24, 28, 255));
-            Label(panel, new Rect(14, -10, 360, 24), "HOSTILE ACE DETECTED", 14, Caution, true);
-            Label(panel, new Rect(420, -10, 266, 24), "AIR DEFENSE ALERT", 11, Secondary, true)
-                .alignment = TextAlignmentOptions.MidlineRight;
+            Outline(panel, new Rect(0, 0, 704, 184), Caution.WithAlpha(0.55f));
+            Panel(panel, new Rect(0, 0, 704, 4), Caution);
+            Panel(panel, new Rect(2, -8, 700, 28), new Color32(20, 24, 28, 255));
+            Label(panel, new Rect(14, -10, 360, 24), "HOSTILE ACE DETECTED", AvTextRole.Title, Caution);
+            Label(panel, new Rect(420, -10, 266, 24), "AIR DEFENSE ALERT", AvTextRole.Label, Secondary,
+                TextAlignmentOptions.MidlineRight);
 
-            // Pilot Portrait Box
-            AvKit.Panel(panel, new Rect(16, -44, 98, 114), AvTheme.SurfaceInert);
-            portraitFallback = Label(panel, new Rect(20, -70, 90, 50), "NO\nVISUAL", 14, Secondary);
-            portrait = AvKit.Panel(panel, new Rect(18, -46, 94, 110), Color.white);
-            portrait.type = Image.Type.Simple;
-            portrait.preserveAspect = true;
+            // Pilot portrait box
+            Panel(panel, new Rect(16, -44, 98, 114), AvTheme.SurfaceInert);
+            portraitFallback = Label(panel, new Rect(20, -70, 90, 50), "NO VISUAL", AvTextRole.Micro, Secondary,
+                TextAlignmentOptions.Center);
+            portrait = ImageBox(panel, new Rect(18, -46, 94, 110));
             portrait.rectTransform.pivot = new Vector2(0.5f, 0.5f);
             portrait.rectTransform.anchoredPosition = new Vector2(65f, -101f);
-            AvKit.Panel(panel, new Rect(16, -162, 98, 16), new Color32(24, 28, 32, 255));
-            TMP_Text leaderLabel = Label(panel, new Rect(16, -162, 98, 16), "ACE LEADER", 10, Caution, true);
-            leaderLabel.alignment = TextAlignmentOptions.Center;
+            Panel(panel, new Rect(16, -162, 98, 16), new Color32(24, 28, 32, 255));
+            TMP_Text leaderLabel = Label(panel, new Rect(16, -162, 98, 16), "ACE LEADER", AvTextRole.Micro, Caution,
+                TextAlignmentOptions.Center);
 
-            // Callsign, Rank Badge & Wing Identity
-            AvKit.Panel(panel, new Rect(126, -43, 224, 16), new Color32(28, 32, 36, 255));
-            returning = Label(panel, new Rect(130, -43, 218, 16), "", 10, Caution, true);
-            callsign = Label(panel, new Rect(124, -58, 230, 32), "", 26, Color.white, true);
-            callsign.characterSpacing = 1.2f;
-            identity = Label(panel, new Rect(126, -88, 228, 16), "", 11, Secondary);
+            // Callsign, rank badge & wing identity
+            Panel(panel, new Rect(126, -43, 224, 16), new Color32(28, 32, 36, 255));
+            returning = Label(panel, new Rect(130, -43, 218, 16), "", AvTextRole.Micro, Caution);
+            callsign = Label(panel, new Rect(124, -58, 230, 32), "", AvTextRole.Display, Color.white);
+            identity = Label(panel, new Rect(126, -88, 228, 16), "", AvTextRole.ProseSmall, Secondary);
 
-            // Ability Badges
-            noAbilities = Label(panel, new Rect(362, -54, 260, 20), "NO ACTIVE THREAT ABILITIES", 10, Secondary);
+            // Ability badges
+            noAbilities = Label(panel, new Rect(362, -54, 260, 20), "NO ACTIVE THREAT ABILITIES", AvTextRole.Micro, Secondary);
             string[] names = { "TOUGH", "CM", "NOTCH", "GHOST" };
             for (int i = 0; i < abilitySlots.Length; i++)
             {
-                RectTransform slot = AvKit.Panel(panel, new Rect(362 + i * 66, -43, 62, 35),
-                    new Color32(22, 26, 30, 255)).rectTransform;
+                RectTransform slot = Panel(panel, new Rect(362 + i * 66, -43, 62, 35), new Color32(22, 26, 30, 255));
                 abilitySlots[i] = slot.gameObject;
-                AvKit.Outline(slot, new Rect(0, 0, 62, 35), Caution.WithAlpha(0.35f));
+                Outline(slot, new Rect(0, 0, 62, 35), Caution.WithAlpha(0.35f));
                 Glyph(slot, new Rect(21, -2, 20, 20), (HuntMark)((int)HuntMark.Toughness + i));
-                TMP_Text caption = Label(slot, new Rect(0, -22, 62, 12), names[i], 10, Caution, true);
-                caption.alignment = TextAlignmentOptions.Center;
+                TMP_Text badgeCaption = Label(slot, new Rect(0, -22, 62, 12), names[i], AvTextRole.Micro, Caution,
+                    TextAlignmentOptions.Center);
             }
 
-            // Generated Squadron Crest
+            // Generated squadron crest
             Rect crestFrame = new Rect(634, -43, 60, 60);
-            AvKit.Panel(panel, crestFrame, AvTheme.SurfaceInert);
-            crest = AvKit.Panel(panel, new Rect(crestFrame.x + 2, crestFrame.y - 2, 56, 56), Color.white);
-            crest.type = Image.Type.Simple;
-            crest.preserveAspect = true;
+            Panel(panel, crestFrame, AvTheme.SurfaceInert);
+            crest = ImageBox(panel, new Rect(crestFrame.x + 2, crestFrame.y - 2, 56, 56));
             crest.enabled = false;
-            AvKit.Outline(panel, crestFrame, Caution.WithAlpha(0.35f));
-            crestCaption = Label(panel, new Rect(634, -105, 60, 14), "", 10, Secondary);
-            crestCaption.alignment = TextAlignmentOptions.Center;
+            Outline(panel, crestFrame, Caution.WithAlpha(0.35f));
+            crestCaption = Label(panel, new Rect(634, -105, 60, 14), "", AvTextRole.Micro, Secondary,
+                TextAlignmentOptions.Center);
 
-            // 3 Telemetry Cards
+            // Three telemetry cards
             proficiency = SkillCard(panel, 126, 158, HuntMark.Skill, "COMBAT SKILL");
             SkillCard(panel, 290, 158, HuntMark.Target, "PURSUIT").text = "HUNTER";
             formation = SkillCard(panel, 454, 170, HuntMark.Formation, "WING LEADER");
 
-            // Divider and Footer Status Bar
-            AvKit.Panel(panel, new Rect(126, -149, 562, 1), Caution.WithAlpha(0.3f));
+            // Divider and footer status bar
+            Panel(panel, new Rect(126, -149, 562, 1), Caution.WithAlpha(0.3f));
             for (int i = 0; i < tierPips.Length; i++)
-                tierPips[i] = AvKit.Panel(panel, new Rect(126 + i * 14, -161, 10, 5), Caution);
-            status = Label(panel, new Rect(206, -156, 482, 16), "", 10.5f, Caution, true);
+                tierPips[i] = PanelFrame(panel, new Rect(126 + i * 14, -161, 10, 5), Caution);
+            status = Label(panel, new Rect(206, -156, 482, 16), "", AvTextRole.Micro, Caution);
 
-            // Minimized Compact Panel
-            compactPanel = AvKit.Panel((RectTransform)root.transform, new Rect(0, -8, 420, 36), Ink).rectTransform;
+            // Minimized compact panel
+            compactPanel = Panel((RectTransform)root.transform, new Rect(0, -8, 420, 36), Ink);
             compactPanel.name = "Minimized Ace Hunt";
             compactPanel.anchorMin = compactPanel.anchorMax = new Vector2(0.5f, 1f);
             compactPanel.pivot = new Vector2(0.5f, 1f);
             compactGroup = compactPanel.gameObject.AddComponent<CanvasGroup>();
             compactGroup.blocksRaycasts = false;
-            AvKit.Outline(compactPanel, new Rect(0, 0, 420, 36), Caution.WithAlpha(0.55f));
-            AvKit.Panel(compactPanel, new Rect(0, 0, 420, 3), Caution);
+            Outline(compactPanel, new Rect(0, 0, 420, 36), Caution.WithAlpha(0.55f));
+            Panel(compactPanel, new Rect(0, 0, 420, 3), Caution);
             Glyph(compactPanel, new Rect(12, -10, 16, 16), HuntMark.Target);
-            compactCrest = AvKit.Panel(compactPanel, new Rect(34, -9, 18, 18), Color.white);
-            compactCrest.type = Image.Type.Simple;
-            compactCrest.preserveAspect = true;
+            compactCrest = ImageBox(compactPanel, new Rect(34, -9, 18, 18));
             compactCrest.enabled = false;
-            compactStatus = Label(compactPanel, new Rect(58, -6, 350, 24), "", 12, Caution, true);
+            compactStatus = Label(compactPanel, new Rect(58, -6, 350, 24), "", AvTextRole.Label, Caution);
 
             foreach (Graphic graphic in root.GetComponentsInChildren<Graphic>(true))
                 graphic.raycastTarget = false;
@@ -210,17 +208,66 @@ namespace BoscaliSummer.Features.Progression.Presentation
 
         private static TMP_Text SkillCard(RectTransform panel, float x, float width, HuntMark mark, string caption)
         {
-            RectTransform card = AvKit.Panel(panel, new Rect(x, -109, width, 35), new Color32(22, 26, 30, 255)).rectTransform;
-            AvKit.Outline(card, new Rect(0, 0, width, 35), Caution.WithAlpha(0.25f));
+            RectTransform card = Panel(panel, new Rect(x, -109, width, 35), new Color32(22, 26, 30, 255));
+            Outline(card, new Rect(0, 0, width, 35), Caution.WithAlpha(0.25f));
             Glyph(panel, new Rect(x + 6, -115, 22, 22), mark);
-            Label(panel, new Rect(x + 32, -111, width - 36, 12), caption, 10, Secondary);
-            return Label(panel, new Rect(x + 32, -123, width - 36, 18), "", 12.5f, Caution, true);
+            Label(panel, new Rect(x + 32, -111, width - 36, 12), caption, AvTextRole.Micro, Secondary);
+            return Label(panel, new Rect(x + 32, -123, width - 36, 18), "", AvTextRole.DataStrong, Caution);
         }
 
-        private static TMP_Text Label(RectTransform parent, Rect area, string text, float size, Color color, bool bold = false)
+        // ---- Kit v2 chrome primitives (absolute layout; this HUD lives outside any AvFlow page) ----
+
+        /// <summary>Anchored top-left placement, y measured downward from the panel's own origin
+        /// exactly as this widget's Rect literals already assume (matches the retired v1 Place helper
+        /// convention, kept locally so none of the geometry below has to be re-derived).</summary>
+        private static void Place(RectTransform t, Rect area)
         {
-            TMP_Text label = AvKit.Label(parent, text, area, color, size,
-                bold ? FontStyles.Bold : FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
+            t.anchorMin = t.anchorMax = new Vector2(0f, 1f);
+            t.pivot = new Vector2(0f, 1f);
+            t.anchoredPosition = new Vector2(area.x, area.y);
+            t.sizeDelta = new Vector2(area.width, area.height);
+            t.localScale = Vector3.one;
+        }
+
+        private static RectTransform Panel(RectTransform parent, Rect area, Color fill) =>
+            PanelFrame(parent, area, fill).rectTransform;
+
+        private static AvFrame PanelFrame(RectTransform parent, Rect area, Color fill)
+        {
+            AvFrame frame = AvFrame.Add(parent, "Panel", default(AvChamfer));
+            frame.Paint(fill, Color.clear);
+            frame.raycastTarget = false;
+            Place(frame.rectTransform, area);
+            return frame;
+        }
+
+        private static void Outline(RectTransform parent, Rect area, Color stroke)
+        {
+            AvFrame frame = AvFrame.Add(parent, "Outline", default(AvChamfer));
+            frame.Fill = false;
+            frame.Paint(Color.clear, stroke);
+            frame.raycastTarget = false;
+            Place(frame.rectTransform, area);
+        }
+
+        private static Image ImageBox(RectTransform parent, Rect area)
+        {
+            var go = new GameObject("Image", typeof(RectTransform), typeof(CanvasRenderer));
+            go.transform.SetParent(parent, false);
+            var image = go.AddComponent<Image>();
+            image.type = Image.Type.Simple;
+            image.preserveAspect = true;
+            image.raycastTarget = false;
+            Place((RectTransform)go.transform, area);
+            return image;
+        }
+
+        private static TMP_Text Label(RectTransform parent, Rect area, string text, AvTextRole role, Color color,
+            TextAlignmentOptions align = TextAlignmentOptions.MidlineLeft)
+        {
+            TMP_Text label = AvText.Make(parent, "Label", role, text ?? "", align);
+            Place(label.rectTransform, area);
+            label.color = color;
             label.richText = false;
             return label;
         }
@@ -229,7 +276,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
         {
             var go = new GameObject(mark.ToString(), typeof(RectTransform), typeof(CanvasRenderer), typeof(HuntGlyph));
             go.transform.SetParent(parent, false);
-            AvKit.Place((RectTransform)go.transform, area);
+            Place((RectTransform)go.transform, area);
             HuntGlyph glyph = go.GetComponent<HuntGlyph>();
             glyph.Mark = mark;
             glyph.color = Caution;
@@ -262,7 +309,12 @@ namespace BoscaliSummer.Features.Progression.Presentation
 
     internal enum HuntMark { Stripes, Skill, Target, Formation, Toughness, Countermeasures, Notch, Ghost }
 
-    /// <summary>Small vector marks: no font-symbol dependency, texture allocation, or asset lifetime.</summary>
+    /// <summary>
+    /// Small vector marks for the ace-hunt HUD's ability badges: no font-symbol dependency,
+    /// texture allocation, or asset lifetime. Kept as a local data glyph (spec §5.4 exempts
+    /// per-module glyphs that draw domain-specific iconography the bundled Tabler set has no
+    /// equivalent for, e.g. "jammed", "countermeasures dispensed", "notched").
+    /// </summary>
     internal sealed class HuntGlyph : MaskableGraphic
     {
         public HuntMark Mark;

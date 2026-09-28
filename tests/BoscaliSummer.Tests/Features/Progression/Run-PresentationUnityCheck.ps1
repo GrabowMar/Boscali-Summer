@@ -22,7 +22,10 @@ Copy-Item -LiteralPath "$repo/AvionicsUi/avionics.avss" -Destination "$PreviewDi
 # SuperEventAlert deliberately refuses Application.isBatchMode. Keep the Editor window hidden,
 # but run a normal Editor process so the production overlay builder and camera path are exercised.
 $method = if ($SqdOnly) { 'PresentationUnityCheck.RunSqdOnly' } elseif ($EventAlertOnly) { 'PresentationUnityCheck.RunEventAlertOnly' } else { 'PresentationUnityCheck.Run' }
-$arguments = @('-disable-assembly-updater', '-projectPath', ('"' + $PreviewDirectory + '"'), '-executeMethod', $method, '-logFile', ('"' + "$PreviewDirectory/check.log" + '"'))
+# The SQD-only check never builds the event alert, so it can and must run headless (a windowed Editor that
+# fails to Exit would hang forever); the full run keeps the windowed Editor for SuperEventAlert.
+$headless = if ($SqdOnly) { @('-batchmode') } else { @() }
+$arguments = $headless + @('-disable-assembly-updater', '-projectPath', ('"' + $PreviewDirectory + '"'), '-executeMethod', $method, '-logFile', ('"' + "$PreviewDirectory/check.log" + '"'))
 $process = Start-Process -FilePath $Unity -ArgumentList $arguments -WorkingDirectory $PreviewDirectory -WindowStyle Hidden -PassThru
 $process.WaitForExit()
 Write-Output "Results and renders: $PreviewDirectory"
