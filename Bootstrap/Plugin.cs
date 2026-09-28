@@ -29,6 +29,7 @@ namespace BoscaliSummer
             // drop their own avionics.avss beside it and retune every panel in both mods
             // without a rebuild. Wing Command configures the same path on purpose.
             AvStyleHost.Configure(Paths.ConfigPath, Logger.LogInfo, Logger.LogWarning);
+            AvBundle.Load(Logger.LogInfo);
 
             featureHost = ModCompositionRoot.Start(Logger, Settings);
             Logger.LogInfo($"Effective fire tuning: bullet ignition={Settings.FireAndDestruction.BulletIgnitionChance:0.####}, " +

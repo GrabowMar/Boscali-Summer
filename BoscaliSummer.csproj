@@ -100,6 +100,15 @@
     </EmbeddedResource>
   </ItemGroup>
 
+  <ItemGroup Label="Avionics UI bundle">
+    <!-- FUI fonts, icon font and UI shaders, built by tools/Compile-AvionicsUiAssets.ps1
+         (Unity 2022.3.62f3). Optional at build time: without it the kit uses vanilla fonts
+         and no effects. Wing Command embeds its own copy under the same name. -->
+    <EmbeddedResource Include="AvionicsUi\Assets\avionics-ui.bundle" Condition="Exists('AvionicsUi\Assets\avionics-ui.bundle')">
+      <LogicalName>NOAvionics.avionics-ui.bundle</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
   <ItemGroup Label="Radio station assets">
     <EmbeddedResource Include="modules\Radio\Assets\*.png">
       <LogicalName>BoscaliSummer.RadioAssets.%(Filename)%(Extension)</LogicalName>
