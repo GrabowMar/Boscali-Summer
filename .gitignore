@@ -54,6 +54,7 @@ Thumbs.db
 /design/
 /docs/superpowers/
 /archive/
+/screenshots/
 
 # CI workflows are maintained outside the repo
 .github/workflows/
