@@ -18,6 +18,7 @@ namespace NOAvionics.Tests
             TestIcons(assert);
             TestFlow(assert);
             TestMesh(assert);
+            TestFxPacking(assert);
         }
 
         // Live-theme references resolve to AvTheme's fallbacks in an engine-free test.
@@ -182,6 +183,19 @@ namespace NOAvionics.Tests
             assert(AvMeshMath.ArcSteps(240f) == 40 && AvMeshMath.ArcSteps(0.5f) == 1, "arc tessellation");
             AvV2 q = AvMeshMath.ArcPoint(0f, 0f, 10f, 90f);
             assert(Math.Abs(q.X) < 0.001f && Math.Abs(q.Y - 10f) < 0.001f, "90 degrees is straight up");
+        }
+
+        private static void TestFxPacking(Action<bool, string> assert)
+        {
+            assert(AvFxPacking.Resolve(AvFxKind.Shine, AvFxTier.Full, false) == AvFxKind.Shine, "full tier plays shine");
+            assert(AvFxPacking.Resolve(AvFxKind.Shine, AvFxTier.Full, true) == AvFxKind.None, "reduced motion drops timed shine");
+            assert(AvFxPacking.Resolve(AvFxKind.Scan, AvFxTier.Lite, false) == AvFxKind.None, "lite drops timed scan");
+            assert(AvFxPacking.Resolve(AvFxKind.Glow, AvFxTier.Lite, true) == AvFxKind.Glow, "static glow survives lite + reduced motion");
+            assert(AvFxPacking.Resolve(AvFxKind.Pulse, AvFxTier.Full, true) == AvFxKind.None, "reduced motion stops pulsing");
+            assert(AvFxPacking.Resolve(AvFxKind.Glow, AvFxTier.Off, false) == AvFxKind.None, "off means no effects at all");
+            assert(Math.Abs(AvFxPacking.DurationOf(AvFxKind.Shine) - 0.4f) < 1e-5f && AvFxPacking.DurationOf(AvFxKind.Glow) == 0f, "durations");
+            assert(AvFxPacking.Aspect(100f, 0f) == 1f && Math.Abs(AvFxPacking.Aspect(200f, 50f) - 4f) < 1e-5f, "aspect safe");
+            assert(AvFxPacking.U(5f, 0f, 0f) == 0f && Math.Abs(AvFxPacking.V(25f, 0f, 100f) - 0.25f) < 1e-5f, "rect uv safe");
         }
     }
 }
