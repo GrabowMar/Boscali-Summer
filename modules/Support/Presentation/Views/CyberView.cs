@@ -17,12 +17,9 @@ using LayoutMotion = BoscaliSummer.Features.Support.Domain.Layout.Motion;
 namespace BoscaliSummer.Features.Support.Presentation.Views
 {
     /// <summary>
-    /// CYBER › CONSOLE — the network-ops terminal. The room is tiled into terminal panes separated by
-    /// 1 px gutters: a one-line system status bar with INFOCON as a large block glyph, the netmap (the
-    /// hero; its left column holds the INFOCON ladder, the heat trace, the resource meters and the four
-    /// upgrades), the breach pane (the selected location as a process view: probe, exploit, extract,
-    /// the trace, quiet or loud, spoof, disconnect, the capstones), the incident table and the shell,
-    /// where every order echoes as a command and every host reply as its output. Monospaced throughout.
+    /// CYBER › CONSOLE — a terrain-first spectrum defence workspace. The netmap carries selected
+    /// target, reach and route context; the adjacent work pane shows breach progress or defender
+    /// reaction; the lower command rail contains incidents, orders and host replies.
     ///
     /// <para>Orders stay on <c>SupportManager.RequestCyber*</c>; the room pre-checks only what the host
     /// re-checks (<c>CyberNetwork.Check</c>, <c>CheckBreach</c>, upgrade level and ops reserve).</para>
@@ -33,11 +30,13 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         private const int Incidents = CyberNetwork.IncidentSlots;
         private const int Verbs = CyberNetwork.VerbCount;
         private const int ShellLines = 3;
-        private const float StatusHeight = 64f;
-        private float ColumnWidth = 280f;
+        private const float StatusHeight = 68f;
+        private float ColumnWidth = 240f;
         private bool compact;
         private static readonly CultureInfo Invariant = CultureInfo.InvariantCulture;
         private static readonly KeyCode[] VerbKeys = { KeyCode.Alpha1, KeyCode.Alpha2, KeyCode.Alpha3, KeyCode.Alpha4, KeyCode.Alpha5 };
+        private static readonly SupportActionId[] QuickLeaseActions =
+            { SupportActionId.HackScan, SupportActionId.HackTrack, SupportActionId.HackBlackout };
         private static readonly string[] Rungs = { "5  NORMAL", "4  VIGILANT", "3  ENHANCED", "2  GREATER", "1  MAXIMUM" };
         private static readonly BreachPhase[] PhaseOrder = { BreachPhase.Probe, BreachPhase.Exploit, BreachPhase.Extract };
 
@@ -67,6 +66,9 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         private readonly Row[] verbs = new Row[Verbs];
         private readonly Row[] incidents = new Row[Incidents];
         private readonly Row[] capstones = new Row[3];
+        private readonly Row[] quickLeaseRows = new Row[3];
+        private readonly SupportActionDefinition[] quickLeaseDefinitions = new SupportActionDefinition[3];
+        private readonly Action[] quickLeaseCallbacks = new Action[3];
         private readonly TMP_Text[] rungs = new TMP_Text[5];
         private readonly Image[] rungFills = new Image[5];
         private readonly TMP_Text[] phases = new TMP_Text[3];
@@ -115,6 +117,13 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         {
             this.support = support;
             this.log = log;
+            quickLeaseCallbacks[0] = SendQuickScan;
+            quickLeaseCallbacks[1] = SendQuickTrack;
+            quickLeaseCallbacks[2] = SendQuickBlackout;
+            if (support != null)
+                for (int i = 0; i < QuickLeaseActions.Length; i++)
+                    foreach (SupportActionDefinition action in support.Actions)
+                        if (action.Id == QuickLeaseActions[i]) { quickLeaseDefinitions[i] = action; break; }
             for (int i = 0; i < ShellLines; i++) shellText[i] = "";
         }
 
@@ -131,28 +140,25 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             OpsSprites.Ensure();
             float w = area.width, h = area.height;
             compact = h < 800f || w < 1500f;
-            ColumnWidth = compact ? 226f : 280f;
+            ColumnWidth = compact ? 196f : 240f;
             Image surface = AvKit.Panel(room, new Rect(0f, 0f, w, h), CyberStyle.Surface.WithAlpha(1f));
-            Image lattice = AvKit.Panel(room, new Rect(0f, 0f, w, h), CyberStyle.Lattice.WithAlpha(0.18f));
-            lattice.sprite = OpsSprites.Lattice;
-            lattice.type = Image.Type.Tiled;
             surface.raycastTarget = true;
 
             float top = StatusHeight + CyberStyle.Gutter;
-            float bottomH = compact ? 168f : Mathf.Round(h * 0.275f);
+            float bottomH = compact ? 210f : Mathf.Round(h * 0.275f);
             float midH = h - top - bottomH - CyberStyle.Gutter;
-            float mapW = Mathf.Round(w * 0.64f);
-            float incW = Mathf.Round(w * 0.47f);
+            float mapW = Mathf.Round(w * 0.68f);
+            float incW = Mathf.Round(w * 0.55f);
             var netRect = new Rect(0f, -top, mapW, midH);
             var breachRect = new Rect(mapW + CyberStyle.Gutter, -top, w - mapW - CyberStyle.Gutter, midH);
             var incRect = new Rect(0f, -(top + midH + CyberStyle.Gutter), incW, bottomH);
             var shellRect = new Rect(incW + CyberStyle.Gutter, -(top + midH + CyberStyle.Gutter), w - incW - CyberStyle.Gutter, bottomH);
 
             BuildStatus(room, new Rect(0f, 0f, w, StatusHeight));
-            panes[0] = BuildPane(room, "NETWORK CONTROL", netRect, "> mount /net/aegis\nok  nodes indexed\n> render topology");
-            panes[1] = BuildPane(room, "BREACH WORKSPACE", breachRect, "> attach breach\nok  session table\n> await target");
-            panes[2] = BuildPane(room, "THREAT WATCH", incRect, "> tail -f incidents\nok  watch floor\n> sort by impact");
-            panes[3] = BuildPane(room, "COUNTERMEASURES", shellRect, "> login watch-officer\nok  host link\n> ready");
+            panes[0] = BuildPane(room, "THEATER NETWORK", netRect, "NETWORK PICTURE\nHost mirrored · terrain reference\nSelect a node to inspect reach and route.");
+            panes[1] = BuildPane(room, "TARGET / RESPONSE", breachRect, "TARGET WORKSPACE\nBreach phase and defender response\nOrders await host confirmation.");
+            panes[2] = BuildPane(room, "ACTIVE INCIDENTS", incRect, "THREAT QUEUE\nHost reported events\nSelect an incident for a response.");
+            panes[3] = BuildPane(room, "COMMAND RAIL", shellRect, "COMMAND LINK\nOne order at a time\nHost acknowledgement appears here.");
 
             BuildNetmap(netRect, w, h);
             BuildBreach(panes[1].Body, breachRect.width, breachRect.height - CyberStyle.TitleBar);
@@ -179,11 +185,11 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 FontStyles.Bold, TextAlignmentOptions.Center);
             status1 = CyberStyle.Line(room, new Rect(122f, -10f, at.width - 122f - 250f, 20f), 14f, CyberStyle.Ink);
             status2 = CyberStyle.Line(room, new Rect(122f, -36f, at.width - 122f - 250f, 18f), CyberStyle.Small, CyberStyle.Dim);
-            link = CyberStyle.Line(room, new Rect(at.width - 240f, -10f, 224f, 20f), CyberStyle.Body, CyberStyle.Title,
+            link = CyberStyle.Line(room, new Rect(at.width - 250f, -10f, 234f, 20f), CyberStyle.Body, CyberStyle.Title,
                 TextAlignmentOptions.MidlineRight);
-            keys = CyberStyle.Line(room, new Rect(at.width - 240f, -36f, 224f, 18f), CyberStyle.Micro, CyberStyle.Dim,
+            keys = CyberStyle.Line(room, new Rect(at.width - 250f, -38f, 234f, 18f), CyberStyle.Micro, CyberStyle.Dim,
                 TextAlignmentOptions.MidlineRight);
-            CyberStyle.Type(keys, "ctrl+1..3 room · esc close");
+            CyberStyle.Type(keys, "OPS RESERVE · HOST CONFIRMED");
         }
 
         private Pane BuildPane(RectTransform room, string title, Rect at, string boot)
@@ -196,10 +202,11 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             AvKit.Panel(pane.Root, new Rect(0f, 0f, at.width, at.height), CyberStyle.Pane);
             AvKit.Outline(pane.Root, new Rect(0f, 0f, at.width, at.height), CyberStyle.PaneEdge);
             AvKit.Panel(pane.Root, new Rect(1f, -1f, at.width - 2f, CyberStyle.TitleBar), CyberStyle.Bar);
-            pane.Title = CyberStyle.Line(pane.Root, new Rect(10f, -1f, 220f, CyberStyle.TitleBar), CyberStyle.Small, CyberStyle.Title);
+            AvKit.Panel(pane.Root, new Rect(1f, -1f, 3f, CyberStyle.TitleBar), CyberStyle.Accent);
+            pane.Title = CyberStyle.Line(pane.Root, new Rect(14f, -1f, Mathf.Max(0f, Mathf.Min(280f, at.width * 0.52f) - 14f), CyberStyle.TitleBar), CyberStyle.Small, CyberStyle.Title);
             pane.Title.fontStyle = FontStyles.Bold;
             CyberStyle.Type(pane.Title, title);
-            pane.Status = CyberStyle.Line(pane.Root, new Rect(230f, -1f, at.width - 240f, CyberStyle.TitleBar), CyberStyle.Micro,
+            pane.Status = CyberStyle.Line(pane.Root, new Rect(Mathf.Min(300f, at.width * 0.58f), -1f, Mathf.Max(0f, at.width - Mathf.Min(312f, at.width * 0.60f)), CyberStyle.TitleBar), CyberStyle.Micro,
                 CyberStyle.Dim, TextAlignmentOptions.MidlineRight);
             var body = new GameObject("Body", typeof(RectTransform), typeof(CanvasGroup));
             pane.Body = (RectTransform)body.transform;
@@ -225,19 +232,13 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 rungs[i] = Label(body, new Rect(20f, -28f - i * (compact ? 16f : 20f), ColumnWidth - 40f, compact ? 16f : 18f), CyberStyle.Body, CyberStyle.Dim);
                 CyberStyle.Type(rungs[i], Rungs[i]);
             }
-            heat.Build(body, new Rect(14f, compact ? -112f : -138f, ColumnWidth - 28f, compact ? 36f : 64f), CyberStyle.Terminal());
+            heat.Build(body, new Rect(14f, compact ? -126f : -152f, ColumnWidth - 28f, compact ? 36f : 64f), CyberStyle.Terminal());
             CyberStyle.Type(Label(body, new Rect(14f, compact ? -112f : -138f, 120f, 14f), CyberStyle.Micro, CyberStyle.Title), "heat · 60 s");
-            compLine = Label(body, new Rect(14f, compact ? -156f : -214f, ColumnWidth - 28f, 34f), CyberStyle.Small, CyberStyle.Ink, true);
-            intelLine = Label(body, new Rect(14f, compact ? -194f : -252f, ColumnWidth - 28f, 34f), CyberStyle.Small, CyberStyle.Ink, true);
-            upgradeTitle = Label(body, new Rect(14f, compact ? -232f : -296f, ColumnWidth - 28f, 16f), CyberStyle.Micro, CyberStyle.Title);
-            for (int i = 0; i < upgrades.Length; i++)
-            {
-                var upgrade = (CyberUpgrade)i;
-                upgrades[i] = BuildRow(body, new Rect(12f, -(compact ? 254f : 316f) - i * (compact ? 30f : 46f), ColumnWidth - 24f, compact ? 28f : 42f), () => Buy(upgrade), true);
-            }
+            compLine = Label(body, new Rect(14f, compact ? -170f : -228f, ColumnWidth - 28f, 34f), CyberStyle.Small, CyberStyle.Ink, true);
+            intelLine = Label(body, new Rect(14f, compact ? -208f : -266f, ColumnWidth - 28f, 34f), CyberStyle.Small, CyberStyle.Ink, true);
             legend = Label(body, new Rect(ColumnWidth + 12f, -bodyH + 20f, netRect.width - ColumnWidth - 24f, 16f), CyberStyle.Micro,
                 CyberStyle.Dim);
-            CyberStyle.Type(legend, "HOME / HELD / TARGET · dotted: reach · rings: stage · bright: route · red: threat");
+            CyberStyle.Type(legend, "SELECT SITE · REACH · ROUTE · LIVE ACCESS · HOSTILE ACTIVITY");
             Row fit = BuildRow(body, new Rect(12f, compact ? -378f : -512f, ColumnWidth - 24f, compact ? 24f : 30f), FitMap);
             CyberStyle.Type(fit.Text, "[H] FIT ALL");
             fit.Control.WithTooltip("Frame every network node. Wheel zooms; drag pans; Q / E selects nodes.");
@@ -340,10 +341,13 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             loud = BuildRow(locationGroup, new Rect(20f + bw, compact ? -136f : -172f, bw, compact ? 44f : 54f), () => Breach(BreachTool.RetuneForce), true);
             spoof = BuildRow(locationGroup, new Rect(12f, compact ? -188f : -234f, bw, 30f), () => Breach(BreachTool.Spoof));
             disconnect = BuildRow(locationGroup, new Rect(20f + bw, compact ? -188f : -234f, bw, 30f), () => Breach(BreachTool.Disconnect));
+            quickLeaseRows[0] = quiet;
+            quickLeaseRows[1] = loud;
+            quickLeaseRows[2] = spoof;
             breachHint = Label(locationGroup, new Rect(14f, compact ? -226f : -280f, w - 28f, 40f), CyberStyle.Small, CyberStyle.Ink, true);
             stageTitle = Label(locationGroup, new Rect(14f, -330f, w - 28f, 18f), CyberStyle.Micro, CyberStyle.Title);
             stageTitle.gameObject.SetActive(!compact);
-            CyberStyle.Type(stageTitle, "ACCESS LADDER  ·  each completed breach advances one stage");
+            CyberStyle.Type(stageTitle, "LIVE ACCESS  ·  ONE EFFECT USE");
             for (int i = 0; i < stages.Length; i++)
                 stages[i] = Label(locationGroup, new Rect(14f, compact ? -264f : -356f - i * 22f, w - 28f, compact ? 26f : 20f), CyberStyle.Small, CyberStyle.Dim);
 
@@ -407,17 +411,31 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
 
         private void BuildShell(RectTransform body, float w, float h)
         {
+            float columnGap = 12f;
+            float columnWidth = (w - 24f - columnGap) * 0.5f;
             for (int i = 0; i < ShellLines; i++)
             {
                 shell[i] = Label(body, new Rect(12f, -6f - (compact ? 0 : i) * CyberStyle.LinePitch, w - 24f, CyberStyle.LinePitch), CyberStyle.Small, CyberStyle.Ink);
                 shell[i].gameObject.SetActive(!compact || i == ShellLines - 1);
             }
-            float top = compact ? 26f : 6f + ShellLines * CyberStyle.LinePitch + 4f;
+            float top = compact ? 27f : 6f + ShellLines * CyberStyle.LinePitch + 4f;
             AvKit.Rule(body, new Rect(8f, -top, w - 16f, 1f), CyberStyle.PaneEdge);
+            upgradeTitle = Label(body, new Rect(12f, -(top + 4f), columnWidth, 16f), CyberStyle.Micro, CyberStyle.Title);
+            CyberStyle.Type(upgradeTitle, "NETWORK UPGRADES · OPS RESERVE");
+            TMP_Text verbTitle = Label(body, new Rect(12f + columnWidth + columnGap, -(top + 4f), columnWidth, 16f), CyberStyle.Micro, CyberStyle.Title);
+            CyberStyle.Type(verbTitle, "DEFENDER ORDERS · 1–5");
+            float rowHeight = compact ? 20f : 28f;
+            float rowStep = compact ? 22f : 31f;
+            for (int i = 0; i < upgrades.Length; i++)
+            {
+                var upgrade = (CyberUpgrade)i;
+                upgrades[i] = BuildRow(body, new Rect(8f, -(top + 22f) - i * rowStep, columnWidth + 8f, rowHeight), () => Buy(upgrade), true);
+            }
             for (int i = 0; i < Verbs; i++)
             {
                 int index = i;
-                verbs[i] = BuildRow(body, new Rect(8f, -(top + 6f) - i * (compact ? 21f : 30f), w - 16f, compact ? 20f : 28f), () => Verb(index));
+                verbs[i] = BuildRow(body, new Rect(16f + columnWidth + columnGap, -(top + 22f) - i * rowStep, columnWidth, rowHeight), () => Verb(index));
+                verbs[i].Text.fontSize = CyberStyle.Body;
             }
         }
 
@@ -796,15 +814,18 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 CyberStats stats = network.Stats();
                 int home = network.Count(NodeKind.Command) + network.Count(NodeKind.Base);
                 int active = network.ActiveIncidents(IncidentKind.None);
-                CyberStyle.Type(status2, enabled ?? (CyberWords.Phase(network.Phase).ToLowerInvariant() + " · " + home + " home · " +
-                                                     stats.Hacked + " held · " + stats.StageTotal + " stages · " + active +
+                string reserve = support != null ? "OPS RESERVE " + Figure(support.LocalOpsReserve) : "OPS RESERVE —";
+                float lease = network.AccessRemaining(now);
+                string leaseText = lease > 0f ? " · ACCESS " + CyberWords.Callsign(network, network.AccessSlot) + " " + CyberWords.Seconds(lease) + " · ONE EFFECT"
+                    : " · NO LIVE ACCESS";
+                CyberStyle.Type(status2, enabled ?? (reserve + " · " + CyberWords.Phase(network.Phase).ToLowerInvariant() + " · " + home + " home" + leaseText + " · " + active +
                                                      (active == 1 ? " incident" : " incidents") + " · " +
                                                      (network.NextIncident > now ? "next move ~" + TheaterGrid.Clock(network.NextIncident - now) : "adversary idle") +
                                                      (network.ExposedUntil > now ? " · EXPOSED " + CyberWords.Seconds(network.ExposedUntil - now) : "")));
             }
             bool pending = support != null && support.CommandPending;
             bool fresh = support != null && support.OpsStateFresh;
-            CyberStyle.Type(link, pending ? "[ awaiting host ]" : fresh ? "[ linked ]" : "[ syncing ]");
+            CyberStyle.Type(link, pending ? "[ ORDER PENDING · HOST ]" : fresh ? "[ HOST LINK CONFIRMED ]" : "[ SYNCING · ORDERS WAIT ]");
             link.color = pending ? AvTheme.RailCaution : fresh ? CyberStyle.Title : AvTheme.RailDanger;
 
             WriteNetmap(network, built, infocon, tone);
@@ -859,24 +880,14 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 float cost = support != null ? support.CyberUpgradeCost(upgrade) : 0f;
                 bool afford = support == null || support.BypassRequirements || reserve + 0.001f >= cost;
                 row.Control.SetEnabled(can && afford && !pending);
-                CyberStyle.Type(row.Text, CyberLocations.UpgradeName(upgrade).ToLowerInvariant() + (compact ? " " + level + "/3" : "\nlv " + level + "/" + CyberLocations.UpgradeLevels + " " + LevelPips(level)));
-                CyberStyle.Type(row.Right, compact ? "" : can ? "[ " + Figure(cost) + " ]" : "[ max ]");
+                CyberStyle.Type(row.Text, CyberLocations.UpgradeName(upgrade).ToLowerInvariant() + "  " + level + "/" + CyberLocations.UpgradeLevels);
+                CyberStyle.Type(row.Right, can ? "[ " + Figure(cost) + " ]" : "[ max ]");
+                row.Text.rectTransform.sizeDelta = new Vector2(row.Control.Rect.sizeDelta.x * 0.68f - 16f, row.Control.Rect.sizeDelta.y);
                 row.Right.color = can && !afford ? AvTheme.RailDanger : row.Text.color;
                 row.Control.WithTooltip(CyberLocations.UpgradeName(upgrade) + " — " + CyberLocations.UpgradeEffect(upgrade) +
                                         " per level. " + (can ? afford ? "Buy the next level for " + Figure(cost) + " ops reserve."
                                             : "Needs " + Figure(cost) + " ops reserve; you have " + Figure(reserve) + "."
                                             : "At maximum."));
-            }
-        }
-
-        private static string LevelPips(int level)
-        {
-            switch (level)
-            {
-                case 0: return "[---]";
-                case 1: return "[#--]";
-                case 2: return "[##-]";
-                default: return "[###]";
             }
         }
 
@@ -918,9 +929,9 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 : choice ? "capstone pending" : exists ? "selected · q e step" : "no target · click a node");
             CyberStyle.Type(primer, exists || choice ? "" :
                 "how this terminal works\n\n" +
-                "1  take a location: select a city or airfield in reach (dashed ring), then [g] breach quiet or [f] loud.\n" +
-                "2  every breach lifts it a stage. stages 2 and 3 unlock map abilities; stage 4 picks a capstone.\n" +
-                "3  answer incidents with the five verbs in [ shell ]. the advice line above always names the next move.");
+                "1  choose a real city or airfield in reach. QUIET takes ~21 s; LOUD takes ~12 s and raises trace faster.\n" +
+                "2  a completed breach opens one 75 s lease. Choose one supported map effect; host acceptance consumes the lease.\n" +
+                "3  defend from your home ear: isolate to delay, patch compromised nodes, or bait intrusions. Host confirms every order.");
             if (!exists)
             {
                 CyberStyle.Type(targetName, "no target");
@@ -933,7 +944,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 string kind = node.Static || node.Hacked ? CyberLocations.NodeName(node.Kind)
                     : CyberWords.Kind(CyberLocations.LocationOf(node.Kind)) + " · not yours";
                 CyberStyle.Type(targetKind, kind.ToLowerInvariant() +
-                                            (node.Hacked ? " · stage " + node.Stage + " " + CyberWords.Stage(node.Stage).ToLowerInvariant() : "") +
+                                            (node.Hacked ? " · ACCESS " + CyberWords.Seconds(network.AccessRemaining(now)) + " · ONE EFFECT" : "") +
                                             " · " + TheaterGrid.Kilometres(node.X, node.Z).ToLowerInvariant());
                 string state = CyberWords.NodeState(network, slot, now);
                 bool session = network.BreachActive && network.BreachTarget == slot;
@@ -982,6 +993,15 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 phaseFills[i].color = running ? CyberStyle.Title.WithAlpha(0.12f) : CyberStyle.Bar;
                 phaseProgress[i].rectTransform.sizeDelta = new Vector2(phaseWidth * Mathf.Clamp01(fill), 4f);
             }
+            bool liveLeaseHere = network.AccessRemaining(now) > 0f && network.AccessSlot == slot;
+            if (liveLeaseHere && !mine)
+            {
+                string lease = CyberWords.Seconds(network.AccessRemaining(now));
+                CyberStyle.Type(phases[0], "ACCESS\nLIVE\n" + lease);
+                CyberStyle.Type(phases[1], "ONE\nEFFECT\nLEFT");
+                CyberStyle.Type(phases[2], "CENTER\n" + CyberWords.Callsign(network, slot) + "\nHOST CONFIRMS");
+                for (int i = 0; i < phases.Length; i++) phases[i].color = CyberStyle.Title;
+            }
             float trace = mine ? network.BreachTrace : 0f;
             CyberStyle.Type(traceLine, "TRACE  " + Mathf.RoundToInt(trace * 100f) + "%" +
                                        (trace >= 0.7f ? "  /  HIGH TRACE" : mine ? "  /  " + (network.BreachQuiet ? "QUIET" : "LOUD") : "  /  NOT CONNECTED"));
@@ -989,9 +1009,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             traceFill.color = traceLine.color;
             traceFill.rectTransform.sizeDelta = new Vector2(traceWidth * Mathf.Clamp01(trace), 8f);
 
-            bool maxed = node.Hacked && node.Stage >= CyberLocations.StageCount;
             BreachDenial denial = network.CheckBreach(slot, now);
-            bool canStart = !breaching && !maxed && denial == BreachDenial.None && !pending;
+            bool canStart = !breaching && denial == BreachDenial.None && !pending;
             SetRow(quiet, "[G] QUIET / LOW TRACE" + ModePreview(stage + 1, true), mine ? !pending : canStart, mine && network.BreachQuiet,
                 mine ? "Run the next phase quiet: slower, but the trace barely moves." : "Open a breach here, quiet: slow and low trace.");
             SetRow(loud, "[F] LOUD / HIGH TRACE" + ModePreview(stage + 1, false), mine ? !pending : canStart &&
@@ -1003,24 +1022,93 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             SetRow(disconnect, "[c] disconnect", mine && !pending, false, "Leave the session safely. Nothing is taken, nothing is traced.");
             CyberStyle.Type(breachHint, mine
                 ? "Mode changes trace now; next phase uses its time / cost. 100% trace locks you out. Spoof lowers trace; disconnect ends this attempt."
-                : maxed ? "mastered · this location is already at stage 4."
                 : breaching ? "another breach is running · one session at a time."
-                : denial == BreachDenial.None ? "in reach · each breach lifts the location one stage."
+                : denial == BreachDenial.None ? "in reach · complete one breach to open a 75 s, one-effect access lease."
                 : "cannot breach · " + CyberWords.Refusal(denial).ToLowerInvariant());
             breachHint.color = mine || denial == BreachDenial.None ? CyberStyle.Dim : AvTheme.RailCaution;
+            bool showQuick = liveLeaseHere && !mine;
+            stageTitle.gameObject.SetActive(!compact || showQuick);
+            CyberStyle.Type(stageTitle, showQuick ? "QUICK SEND · CENTERED ON LEASE SITE" : "ACCESS MODEL");
             for (int i = 0; i < stages.Length; i++)
             {
-                int s = i + 1;
-                string unlocks = s == 1 ? "income and a foothold on the map"
-                    : s == 2 ? "ping sweep · trace ear over it"
-                    : s == 3 ? "track · blackout · ghost · spoof"
-                    : "one capstone: reveal, jammer or sabotage";
-                bool reached = node.Hacked && node.Stage >= s;
-                stages[i].gameObject.SetActive(!compact || s == Mathf.Min(CyberLocations.StageCount, stage + 1));
-                CyberStyle.Type(stages[i], (reached ? "DONE  " : s == stage + 1 ? "NEXT  " : "LOCK  ") + s + "  " + unlocks);
-                stages[i].color = reached ? CyberStyle.Accent : s == stage + 1 ? CyberStyle.Ink : CyberStyle.Dim;
+                bool show = i == 0;
+                if (stages[i].gameObject.activeSelf != show) stages[i].gameObject.SetActive(show);
+                CyberStyle.Type(stages[i], showQuick
+                    ? "75S LEASE · FIRST HOST-ACCEPTED EFFECT CONSUMES IT"
+                    : "NO PERSISTENT CAPTURE · CHOOSE QUIET OR LOUD FOR ONE SORTIE WINDOW");
+                stages[i].color = showQuick ? CyberStyle.Accent : CyberStyle.Dim;
             }
+            if (showQuick) WriteQuickLeaseRows(network, slot, now);
+            else RestoreBreachRows();
         }
+
+        private void WriteQuickLeaseRows(CyberNetwork network, int slot, double now)
+        {
+            float width = locationGroup.rect.width - 24f;
+            float top = compact ? -136f : -172f;
+            float step = compact ? 34f : 38f;
+            for (int i = 0; i < quickLeaseRows.Length; i++)
+            {
+                Row row = quickLeaseRows[i];
+                AvKit.Place(row.Control.Rect, new Rect(12f, top - i * step, width, compact ? 30f : 34f));
+                SupportActionDefinition action = quickLeaseDefinitions[i];
+                if (action == null)
+                {
+                    SetRow(row, "[" + (i + 1) + "] UNAVAILABLE", false, false, "This server does not provide this effect.");
+                    row.Right.text = "—";
+                    continue;
+                }
+                AbilityFacts facts = AbilityStatus.For(support, action, support.BypassRequirements);
+                row.Control.SetAction(quickLeaseCallbacks[i]);
+                row.Control.SetEnabled(facts.Enabled && support.OpsStateFresh && !support.CommandPending);
+                row.Control.SetLatched(false);
+                CyberStyle.Type(row.Text, "[" + (i + 1) + "] " + action.Name);
+                row.Text.rectTransform.sizeDelta = new Vector2(width * 0.68f, row.Control.Rect.sizeDelta.y);
+                CyberStyle.Type(row.Right, facts.Enabled ? facts.CostText + " · 1 USE" : "WAIT · " + facts.CostText);
+                row.Control.WithTooltip(action.Name + " at " + CyberWords.Callsign(network, slot) +
+                    " — " + action.Description + " Cost " + facts.CostText + ". " + facts.Readiness +
+                    ". First accepted effect closes the " +
+                    CyberWords.Seconds(network.AccessRemaining(now)) + " access window.");
+                PaintRow(row);
+            }
+            if (disconnect.Control.gameObject.activeSelf) disconnect.Control.gameObject.SetActive(false);
+        }
+
+        private void RestoreBreachRows()
+        {
+            float bw = (locationGroup.rect.width - 32f) / 2f;
+            AvKit.Place(quiet.Control.Rect, new Rect(12f, compact ? -136f : -172f, bw, compact ? 44f : 54f));
+            AvKit.Place(loud.Control.Rect, new Rect(20f + bw, compact ? -136f : -172f, bw, compact ? 44f : 54f));
+            AvKit.Place(spoof.Control.Rect, new Rect(12f, compact ? -188f : -234f, bw, 30f));
+            AvKit.Place(disconnect.Control.Rect, new Rect(20f + bw, compact ? -188f : -234f, bw, 30f));
+            quiet.Control.SetAction(() => Breach(BreachTool.RetuneQuiet));
+            loud.Control.SetAction(() => Breach(BreachTool.RetuneForce));
+            spoof.Control.SetAction(() => Breach(BreachTool.Spoof));
+            disconnect.Control.SetAction(() => Breach(BreachTool.Disconnect));
+            quiet.Text.rectTransform.sizeDelta = new Vector2(bw - 16f, quiet.Control.Rect.sizeDelta.y);
+            loud.Text.rectTransform.sizeDelta = new Vector2(bw - 16f, loud.Control.Rect.sizeDelta.y);
+            spoof.Text.rectTransform.sizeDelta = new Vector2(bw - 16f, spoof.Control.Rect.sizeDelta.y);
+            quiet.Right.text = loud.Right.text = spoof.Right.text = disconnect.Right.text = "";
+            if (!disconnect.Control.gameObject.activeSelf) disconnect.Control.gameObject.SetActive(true);
+        }
+
+        private void SendQuickLease(int index)
+        {
+            if (support == null || index < 0 || index >= quickLeaseDefinitions.Length) return;
+            SupportActionDefinition action = quickLeaseDefinitions[index];
+            CyberNetwork network = support.LocalCyber;
+            int slot = network != null ? network.AccessSlot : -1;
+            if (action == null || network == null || slot < CyberNetwork.TargetBase) return;
+            CyberNode node = network.Node(slot);
+            if (support.ArmedAction.HasValue) support.Arm(support.ArmedAction.Value);
+            support.RequestAt(action.Id, new GlobalPosition(node.X, 0f, node.Z));
+            Sent("> " + action.Name + " @ " + CyberWords.Callsign(network, slot));
+            layoutDue = true;
+        }
+
+        private void SendQuickScan() => SendQuickLease(0);
+        private void SendQuickTrack() => SendQuickLease(1);
+        private void SendQuickBlackout() => SendQuickLease(2);
 
         private static string ModePreview(int stage, bool quietMode)
         {
@@ -1078,11 +1166,11 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                     count = Offer(count, CyberVerb.Isolate, site);
                     count = Offer(count, CyberVerb.Trace, index);
                     count = Offer(count, CyberVerb.Honeypot, site);
-                    CyberStyle.Type(incidentDetail, "an intrusion hops the network toward cyber command. isolate the node it sits on to stall and contain it; trace it home for a foothold.");
+                    CyberStyle.Type(incidentDetail, "an intrusion hops the network toward cyber command. isolate its current node to stall and contain it; trace the source.");
                     break;
                 case IncidentKind.HostileOperation:
                     count = Offer(count, CyberVerb.Trace, index);
-                    CyberStyle.Type(incidentDetail, "an enemy operation was heard. trace it home: a finished trace opens a foothold (operations cost less, one intel token).");
+                    CyberStyle.Type(incidentDetail, "an enemy operation was heard. trace it to identify and track its source for a short window.");
                     break;
                 case IncidentKind.Raid:
                     count = Offer(count, CyberVerb.BurnThrough, index);
@@ -1118,7 +1206,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
 
         private void WriteCapstones(CyberNetwork network, double now, bool pending)
         {
-            CyberStyle.Type(capTitle, "mastered · choose one capstone for this location (auto reveal in " +
+            CyberStyle.Type(capTitle, "temporary access · choose one optional payload (auto reveal in " +
                                       CyberWords.Seconds(network.ChoiceRemaining(now)).ToLowerInvariant() + ")");
             for (int i = 0; i < capstones.Length; i++)
             {
@@ -1142,6 +1230,9 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         private void WriteIncidents(CyberNetwork network, double now)
         {
             int active = 0;
+            float rowHeight = compact ? 18f : 30f;
+            float rowStep = Mathf.Min(compact ? 18f : 34f,
+                (panes[2].Body.sizeDelta.y - 28f - rowHeight) / Mathf.Max(1, Incidents - 1));
             for (int i = 0; i < Incidents; i++)
             {
                 Row row = incidents[i];
@@ -1149,11 +1240,11 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 if (row.Control.gameObject.activeSelf != live) row.Control.gameObject.SetActive(live);
                 if (!live) continue;
                 Vector2 at = row.Control.Rect.anchoredPosition;
-                row.Control.Rect.anchoredPosition = new Vector2(at.x, -28f - active * (compact ? 18f : 34f));
-                row.Control.Rect.sizeDelta = new Vector2(row.Control.Rect.sizeDelta.x, compact ? 18f : 30f);
+                row.Control.Rect.anchoredPosition = new Vector2(at.x, -28f - active * rowStep);
+                row.Control.Rect.sizeDelta = new Vector2(row.Control.Rect.sizeDelta.x, rowHeight);
                 row.Fill.rectTransform.sizeDelta = row.Control.Rect.sizeDelta;
-                row.Text.rectTransform.sizeDelta = new Vector2(row.Control.Rect.sizeDelta.x * 0.58f - 16f, compact ? 18f : 30f);
-                row.Right.rectTransform.sizeDelta = new Vector2(row.Control.Rect.sizeDelta.x - 16f, compact ? 18f : 30f);
+                row.Text.rectTransform.sizeDelta = new Vector2(row.Control.Rect.sizeDelta.x * 0.58f - 16f, rowHeight);
+                row.Right.rectTransform.sizeDelta = new Vector2(row.Control.Rect.sizeDelta.x - 16f, rowHeight);
                 active++;
                 CyberIncident incident = network.Incident(i);
                 string where = network.Exists(incident.Site) ? CyberWords.Callsign(network, incident.Site) : "SECTOR";
@@ -1173,7 +1264,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             if (incidentQuietMarker.enabled != (active == 0)) incidentQuietMarker.enabled = active == 0;
             incidentQuietMarker.color = built ? AvTheme.RailReady : CyberStyle.Dim;
             CyberStyle.Type(incidentEmpty, active > 0 ? "" : built
-                ? "WATCH FLOOR QUIET  /  0 ACTIVE\nBreach a location to raise income; the adversary notices."
+                ? "WATCH FLOOR QUIET  /  0 ACTIVE\nBreach a real site for one short access window; defenders can counter it."
                 : network == null ? "WATCH FLOOR WAITING  /  HOST LINK PENDING" : "WATCH FLOOR OFFLINE  /  NO CYBER COMMAND");
         }
 
@@ -1208,12 +1299,9 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 bool rejoin = verb == CyberVerb.Isolate && network != null && network.Exists(target) && network.Node(target).Isolated;
                 float teamLeft = verb == CyberVerb.Isolate && !rejoin && support != null
                     ? support.TeamCooldownRemaining(TeamGate.Isolate) : 0f;
-                float recharge = network != null ? network.RechargeRemaining(verb, now) : 0f;
-                float total = CyberNetwork.VerbRecharge(verb);
-                string on = network != null && denial == CyberDenial.None ? Target(network, verb, target).ToLowerInvariant()
-                    : CyberNetwork.TargetsIncident(verb) ? "<incident>" : "<node>";
-                CyberStyle.Type(row.Text, "[" + (i + 1) + "] " + VerbCommand(verb).ToUpperInvariant() + "  " +
-                                          (recharge > 0f ? CyberWords.Seconds(recharge) : Clip(on, compact ? 10 : 24)));
+                // The active target is already named in the response pane; keep the action rail legible
+                // at 1280px by avoiding a second, potentially long callsign in each narrow row.
+                CyberStyle.Type(row.Text, "[" + (i + 1) + "] " + VerbCommand(verb).ToUpperInvariant());
                 CyberStyle.Type(row.Right, Mathf.RoundToInt(CyberNetwork.VerbCost(verb)) + " comp · " +
                     (teamLeft > 0.5f ? "team t-" + Mathf.CeilToInt(teamLeft) + "s" : CyberWords.Denial(denial).ToLowerInvariant()));
                 row.Text.rectTransform.sizeDelta = new Vector2(row.Control.Rect.sizeDelta.x * 0.51f - 16f, row.Control.Rect.sizeDelta.y);
@@ -1228,8 +1316,6 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 if (shellText[i].Length > 0) return false;
             return true;
         }
-
-        private static string Clip(string text, int max) => text.Length <= max ? text : text.Substring(0, Math.Max(1, max - 1)) + "…";
 
         /// <summary>The shared advice names the console; inside the console that becomes "here" (C6).</summary>
         private static string Here(string advice)

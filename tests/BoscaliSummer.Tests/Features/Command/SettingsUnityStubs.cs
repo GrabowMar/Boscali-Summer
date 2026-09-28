@@ -83,7 +83,7 @@ namespace NuclearOption.UIStyleSystem
     public class TacticalScreenTheme { public List<TacticalTextStyle> TextStyles; }
     public class TacticalTextStyle { public TacticalStyle Style; }
     public class TacticalStyle { public TMP_FontAsset Font; }
-    public class Palette { public Color AllClear, MapIconFriendly, HudUnitFriendly, Warning, Alert; }
+    public class Palette { public Color AllClear, MapIconFriendly, HudUnitFriendly, HudUnitNeutral, HudUnitHostile, HudUnitSelected, Warning, Alert; }
 }
 namespace Rewired
 {

@@ -41,19 +41,7 @@ Assembly pluginAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(plugi
     ("ControlsFilter", "GetAim"),
     ("NightVision", "NightVis_OnSwitchCam"),
     ("Hangar", "TrySpawnAircraft"),
-    ("CameraStateManager", "SwitchState"),
-    ("CameraStateManager", "SetFollowingUnit"),
-    ("CameraOrbitState", "UpdateState"),
-    ("CameraChaseState", "UpdateState"),
-    ("GameplayUI", "PauseGame"),
-    ("GameplayUI", "ResumeGame"),
-    ("FlightHud", "EnableCanvas"),
-    ("FlightHud", "Update"),
-    ("CombatHUD", "ShowTargetInfo"),
-    ("HUDUnitMarker", "UpdatePosition"),
-    ("HUDUnitMarker", "JammingDistortion"),
     ("Pilot", "GetAccel"),
-    ("DynamicMap", "EnableCanvas"),
     ("WeaponManager", "GetTargetList"),
     ("Airbase", "CaptureFaction"),
     ("Airbase", "ICapturable.get_CaptureDefense"),
@@ -121,7 +109,8 @@ Assembly pluginAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(plugi
     ("NuclearOption.Jobs.DetectorManager", "RequestLoSCheck"),
     ("CameraCockpitState", "UpdateState"),
     ("CameraCockpitState", "LeaveState"),
-    ("Gun", "SpawnBullet")
+    ("Gun", "SpawnBullet"),
+    ("CameraOrbitState", "UpdateState")
 };
 
 foreach ((string typeName, string fieldName) in new[]
@@ -220,7 +209,10 @@ foreach ((string typeName, string methodName) in targets)
     ("Weapon", "attachedUnit"),
     ("Weapon", "info"),
     ("WeaponInfo", "massPerRound"),
-    ("WeaponInfo", "muzzleVelocity")
+    ("WeaponInfo", "muzzleVelocity"),
+    ("CombatHUD", "iconLayer"),
+    ("CombatHUD", "topRightPanel"),
+    ("CombatHUD", "weaponStatus")
 };
 
 foreach ((string typeName, string fieldName) in fields)
@@ -243,26 +235,13 @@ foreach ((string typeName, string fieldName) in fields)
     ("ControlsFilter", "aimAssist", "ControlsFilter+AimAssist"),
     ("Hangar", "spawnedObject", "UnityEngine.GameObject"),
     ("Hangar", "clearDistance", "System.Single"),
-    ("FlightHud", "canvas", "UnityEngine.Canvas"),
-    ("CombatHUD", "targetInfo", "TMPro.TextMeshProUGUI"),
-    ("StatusDisplay", "aircraft", "Aircraft"),
-    ("StatusDisplay", "failureIndicatorsLookup", "System.Collections.Generic.Dictionary`2<System.String,UnityEngine.GameObject>"),
-    ("FlightHud", "pitchCompassCenter", "UnityEngine.GameObject"),
-    ("FlightHud", "compass", "UnityEngine.UI.RawImage"),
-    ("SpeedGauge", "airspeedDisplay", "TMPro.TextMeshProUGUI"),
-    ("SpeedGauge", "border", "UnityEngine.UI.Image"),
-    ("AoADisplay", "AoAText", "TMPro.TextMeshProUGUI"),
     ("TargetCam", "cam", "UnityEngine.Camera"),
     ("TargetCam", "currentMode", "TargetCam+CamMode"),
     ("TrackingInfo", "lastSpottedTime", "System.Single"),
     ("UnitPart", "hitPoints", "System.Single"),
     ("Unit", "disabled", "System.Boolean"),
-    ("CameraOrbitState", "panView", "System.Single"),
-    ("CameraOrbitState", "tiltView", "System.Single"),
-    ("CameraOrbitState", "viewDistAdjust", "System.Single"),
-    ("CameraOrbitState", "lookAtTargetLerp", "System.Single"),
-    ("CameraChaseState", "viewDistAdjust", "System.Single"),
-    ("CameraChaseState", "currentPos", "CameraChaseState+ChasePos"),
+    ("WeaponStatus", "nameText", "TMPro.TextMeshProUGUI"),
+    ("FlightHud", "canvas", "UnityEngine.Canvas"),
     ("RadialMenuMain", "actionsMain", "RadialMenuAction[]"),
     ("RadialMenuMain", "aircraft", "Aircraft"),
     ("RadialMenuAction", "actionType", "RadialMenuAction+ActionType"),
@@ -272,7 +251,28 @@ foreach ((string typeName, string fieldName) in fields)
     ("RadialMenuAction", "backgroundColorActive", "UnityEngine.Color"),
     ("Aircraft", "cockpitRenderers", "UnityEngine.Renderer[]"),
     ("NightVision", "nightVisSelected", "System.Boolean"),
-    ("NightVision", "nightVisActive", "System.Boolean")
+    ("NightVision", "nightVisActive", "System.Boolean"),
+    ("NavLights", "isOn", "System.Boolean"),
+    ("WeaponManager", "gunsLinked", "System.Boolean"),
+
+    // Wingview camera: Harmony field injection on CameraOrbitState.UpdateState (WingviewCameraPatch).
+    ("CameraOrbitState", "panView", "System.Single"),
+    ("CameraOrbitState", "tiltView", "System.Single"),
+    ("CameraOrbitState", "viewDistAdjust", "System.Single"),
+    ("CameraOrbitState", "lookAtTargetLerp", "System.Single"),
+
+    // Third-person HUD: FlightHud.HUDCenter re-projection/levelling (ThirdPersonHudCenter) and
+    // native flight-number hiding (NativeFlightNumberHider), all reflected via AccessTools.Field.
+    ("FlightHud", "HUDCenter", "UnityEngine.Transform"),
+    ("FlightHud", "compass", "UnityEngine.UI.RawImage"),
+    ("FlightHud", "pitchCompassCenter", "UnityEngine.GameObject"),
+    ("SpeedGauge", "airspeedDisplay", "TMPro.TextMeshProUGUI"),
+    ("SpeedGauge", "border", "UnityEngine.UI.Image"),
+    ("AoADisplay", "AoAText", "TMPro.TextMeshProUGUI"),
+    ("HeadMountedDisplay", "speed", "HUDApp"),
+    ("HeadMountedDisplay", "altitude", "HUDApp"),
+    ("HeadMountedDisplay", "bearing", "HUDApp"),
+    ("HeadMountedDisplay", "horizon", "HUDApp")
 };
 foreach (var seam in cameraFields)
 {
@@ -289,17 +289,6 @@ foreach (var seam in cameraFields)
 Type nativeAimAssist = gameAssembly.GetType("ControlsFilter+AimAssist", true)!;
 if (nativeAimAssist.GetField("Enabled", AllMembers)?.FieldType != typeof(bool))
     throw new MissingFieldException("ControlsFilter+AimAssist.Enabled");
-Type chasePosition = gameAssembly.GetType("CameraChaseState+ChasePos", true)!;
-if (Convert.ToInt32(Enum.Parse(chasePosition, "Back")) != 0)
-    throw new InvalidOperationException("Native rear chase preset changed value");
-foreach (string cameraState in new[] { "CameraOrbitState", "CameraChaseState" })
-{
-    MethodInfo update = gameAssembly.GetType(cameraState, true)!.GetMethod("UpdateState", AllMembers)!;
-    var parameters = update.GetParameters();
-    if (update.ReturnType != typeof(void) || parameters.Length != 1 ||
-        parameters[0].ParameterType.FullName != "CameraStateManager" || parameters[0].Name != "cam")
-        throw new InvalidOperationException(cameraState + ".UpdateState camera binding changed");
-}
 
 // Harmony binds patch parameters by name, so a rename in a game update throws at patch
 // time rather than degrading. Neither probe checked these names before.
@@ -368,6 +357,9 @@ Type terrainSettings = gameAssembly.GetType("MapSettings", true)!;
 if (terrainSettings.GetField("MapImage", AllMembers)?.FieldType.FullName != "UnityEngine.Sprite" ||
     terrainSettings.GetField("MapSize", AllMembers)?.FieldType.FullName != "UnityEngine.Vector2")
     throw new MissingMemberException("MapSettings.MapImage/MapSize terrain projection contract");
+if (gameAssembly.GetType("MapIcon", true)!.GetField("globalPosition", AllMembers)?
+        .FieldType.FullName != "UnityEngine.Vector3")
+    throw new MissingMemberException("MapIcon.globalPosition faction-visible altitude contract");
 
 // Contract markers are drawn by the mod, so the game side of that is only read: the map's
 // objective layer toggle and the map's own world-to-map scale, and the style source every
@@ -438,9 +430,6 @@ string[] patchTypes =
     "BoscaliSummer.Features.Support.Patches.SupportMissileDescentPatch",
     "BoscaliSummer.Features.Support.Patches.UplinkMapControlsGuardPatch",
     "BoscaliSummer.Features.Support.Patches.UplinkMapCursorGuardPatch",
-    "BoscaliSummer.Features.Hud.Patches.ThirdPersonHudPatches",
-    "BoscaliSummer.Features.Hud.Patches.ThirdPersonOrbitPatch",
-    "BoscaliSummer.Features.Hud.Patches.ThirdPersonChasePatch",
     "BoscaliSummer.Features.QoL.Patches.NightVisionChoicePatch",
     "BoscaliSummer.Features.QoL.Patches.WeaponAimAssistPatch",
     "BoscaliSummer.Features.PlayerSpawnPriority.PlayerSpawnPriorityPatch",
@@ -467,6 +456,7 @@ string[] patchTypes =
     ,"BoscaliSummer.Features.Trenches.Visuals.TrenchNestServerPatch"
     ,"BoscaliSummer.Features.Comms.Patches.CommsMapControlsPatch"
     ,"BoscaliSummer.Features.Trenches.Runtime.TrenchWorksDetectionPatch"
+    ,"BoscaliSummer.Features.Hud.Patches.WingviewCameraPatch"
 };
 
 foreach (string patchType in patchTypes)
@@ -786,6 +776,7 @@ foreach (var seam in operationFields)
     ("TrackingInfo", "TryGetUnit", "System.Boolean(Unit&)"),
     ("UnitRegistry", "TryGetUnit", "System.Boolean(System.Nullable`1<PersistentID>,Unit&)"),
     ("Unit", "HasRadarEmission", "System.Boolean()"),
+    ("Radar", "IsJammed", "System.Boolean()"),
     ("Unit", "get_NetworkHQ", "FactionHQ()"),
     ("Unit", "get_SavedUnit", "NuclearOption.SavedMission.SavedUnit()"),
     ("Missile", "GetWeaponInfo", "WeaponInfo()"),
@@ -848,7 +839,8 @@ foreach (string type in new[] {
     "BoscaliSummer.Framework.Contracts.IHudChannel",
     "BoscaliSummer.Framework.Contracts.IHudLine",
     "BoscaliSummer.Framework.Contracts.HudLayout",
-    "BoscaliSummer.Features.Hud.Presentation.HudBoard" })
+    "BoscaliSummer.Features.Hud.Presentation.HudBoard",
+    "BoscaliSummer.Features.Hud.Presentation.StatusPanel" })
     if (pluginAssembly.GetType(type, false) == null) throw new TypeLoadException(type);
 foreach (string type in new[] {
     "BoscaliSummer.Features.HighCommand.Runtime.HighCommandManager",
@@ -893,7 +885,7 @@ Type highCommandNet = pluginAssembly.GetType("BoscaliSummer.Features.HighCommand
     if ((byte)highCommandNet.GetField("ProtocolVersion", AllMembers)!.GetRawConstantValue()! != 4)
     throw new InvalidOperationException("High command protocol changed without updating its probe");
 Type weatherNet = pluginAssembly.GetType("BoscaliSummer.Features.Weather.Networking.WeatherNet", true)!;
-if ((byte)weatherNet.GetField("ProtocolVersion", AllMembers)!.GetRawConstantValue()! != 4)
+if ((byte)weatherNet.GetField("ProtocolVersion", AllMembers)!.GetRawConstantValue()! != 6)
     throw new InvalidOperationException("Weather protocol changed without updating its probe");
 foreach (var contract in new[] {
     ("BoscaliSummer.Features.DynamicOperations.Networking.OperationsQuery", new[] { "Protocol:System.Byte", "Scene:System.UInt32", "Token:System.UInt32", "OperationId:System.Int32", "Action:System.Byte" }),
@@ -916,7 +908,7 @@ foreach (var contract in new[] {
     ("BoscaliSummer.Features.TheaterOps.Networking.LivingFrontSnapshot", new[] { "Protocol:System.Byte", "Posture:System.Byte", "Faction:System.String", "Fronts:BoscaliSummer.Framework.Contracts.TheaterFrontView[]", "Proposals:BoscaliSummer.Framework.Contracts.TheaterProposalView[]", "Operation:BoscaliSummer.Framework.Contracts.TheaterLiveOperationView", "Log:System.String[]" }),
     ("BoscaliSummer.Features.Comms.Networking.CommsUpMessage", new[] { "Protocol:System.Byte", "Op:System.Byte", "Channel:System.Byte", "Kind:System.Byte", "Style:System.Byte", "Size:System.Byte", "Target:System.UInt32", "Points:System.Int32[]", "Text:System.String", "Items:System.String[]" }),
     ("BoscaliSummer.Features.Comms.Networking.CommsDownMessage", new[] { "Protocol:System.Byte", "Event:System.Byte", "Id:System.UInt32", "Author:System.UInt64", "AuthorName:System.String", "Faction:System.Int32", "Channel:System.Byte", "Kind:System.Byte", "Style:System.Byte", "Size:System.Byte", "Flags:System.Byte", "Ttl:System.Single", "Points:System.Int32[]", "Text:System.String", "Items:System.String[]", "Values:System.Int32[]", "Players:System.UInt64[]", "Ids:System.UInt32[]" }),
-    ("BoscaliSummer.Features.Weather.Networking.WeatherSyncMessage", new[] { "Protocol:System.Byte", "TargetConditions:System.Single", "TargetCloudHeight:System.Single", "TargetWindX:System.Single", "TargetWindZ:System.Single", "TargetTurbulence:System.Single", "TransitionProgress:System.Single", "MissionTimeSeconds:System.UInt32", "ForcedRain:System.Single", "FieldSeed:System.UInt32", "FieldEpoch:System.Single", "FieldStartRegime:System.Byte", "FieldDynamic:System.Boolean", "FieldManual:System.Boolean", "HoldMinutes:System.Single", "BlendMinutes:System.Single" }),
+    ("BoscaliSummer.Features.Weather.Networking.WeatherSyncMessage", new[] { "Protocol:System.Byte", "TargetConditions:System.Single", "TargetCloudHeight:System.Single", "TargetWindX:System.Single", "TargetWindZ:System.Single", "TargetTurbulence:System.Single", "TransitionProgress:System.Single", "MissionTimeSeconds:System.UInt32", "ForcedRain:System.Single", "FieldSeed:System.UInt32", "FieldEpoch:System.Single", "FieldStartRegime:System.Byte", "FieldDynamic:System.Boolean", "FieldManual:System.Boolean", "HoldMinutes:System.Single", "BlendMinutes:System.Single", "FieldSets:System.Byte", "FieldSalt:System.Byte", "FieldHasAnchor:System.Boolean", "FieldAnchorX:System.Single", "FieldAnchorZ:System.Single", "FieldFrontTurn:System.Byte" }),
     ("BoscaliSummer.Features.TheaterOps.Networking.TheaterPriorityState", new[] { "Protocol:System.Byte", "Active:System.Byte", "Faction:System.String", "Key:System.String", "Label:System.String", "X:System.Single", "Y:System.Single", "Z:System.Single" }),
     ("BoscaliSummer.Features.TheaterOps.Networking.TheaterOperationState", new[] { "Protocol:System.Byte", "Count:System.Byte", "Index:System.Byte", "Faction:System.String", "Phase:System.Byte", "Outcome:System.Byte", "Name:System.String", "Target:System.String", "Progress:System.Single", "Budget:System.Single", "Committed:System.Single", "Spent:System.Single", "Duration:System.Single", "Countdown:System.Single", "WavesPlanned:System.Int32", "WavesLaunched:System.Int32", "Holder:System.String" }) })
 {
@@ -1241,7 +1233,7 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
 {
     const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance;
     Type net = plugin.GetType("BoscaliSummer.Features.Support.Networking.SupportNet", true)!;
-    if ((byte)net.GetField("ProtocolVersion", flags)!.GetRawConstantValue()! != 23)
+    if ((byte)net.GetField("ProtocolVersion", flags)!.GetRawConstantValue()! != 24)
         throw new InvalidOperationException("Support protocol differs from the operations contract");
     net.GetMethod("InstallSerializers", flags)!.Invoke(null, null);
 
@@ -1292,13 +1284,13 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
 
     Type requestType = plugin.GetType("BoscaliSummer.Features.Support.Networking.SupportRequestMessage", true)!;
     object request = Activator.CreateInstance(requestType)!;
-    Set(request, "Protocol", (byte)23); Set(request, "RequestId", 7123); Set(request, "Action", (byte)6);
+    Set(request, "Protocol", (byte)24); Set(request, "RequestId", 7123); Set(request, "Action", (byte)6);
     Set(request, "X", 1234.5f); Set(request, "Y", 2345.5f); Set(request, "Z", -3456.5f);
     Roundtrip(requestType, request, "request");
 
     Type resultType = plugin.GetType("BoscaliSummer.Features.Support.Networking.SupportResultMessage", true)!;
     object resultMessage = Activator.CreateInstance(resultType)!;
-    Set(resultMessage, "Protocol", (byte)23); Set(resultMessage, "RequestId", 7123);
+    Set(resultMessage, "Protocol", (byte)24); Set(resultMessage, "RequestId", 7123);
     Set(resultMessage, "Action", (byte)4); Set(resultMessage, "Result", (byte)1);
     Set(resultMessage, "CooldownSeconds", 30f); Set(resultMessage, "Radius", 6000f);
     Set(resultMessage, "Duration", 10f); Set(resultMessage, "Contacts", 48);
@@ -1309,12 +1301,12 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
 
     Type queryType = plugin.GetType("BoscaliSummer.Features.Support.Networking.OpsQueryMessage", true)!;
     object query = Activator.CreateInstance(queryType)!;
-    Set(query, "Protocol", (byte)23);
+    Set(query, "Protocol", (byte)24);
     Roundtrip(queryType, query, "ops query");
 
     Type commandType = plugin.GetType("BoscaliSummer.Features.Support.Networking.OpsCommandMessage", true)!;
     object command = Activator.CreateInstance(commandType)!;
-    Set(command, "Protocol", (byte)23); Set(command, "RequestId", 91); Set(command, "Command", (byte)0);
+    Set(command, "Protocol", (byte)24); Set(command, "RequestId", 91); Set(command, "Command", (byte)0);
     Set(command, "Arg", (byte)14); Set(command, "Arg2", (byte)9); Set(command, "X", 1234.5f); Set(command, "Z", -3456.5f);
     Roundtrip(commandType, command, "ops module launch command");
     Set(command, "Command", (byte)2); Set(command, "Arg", (byte)7); Set(command, "Arg2", (byte)0);
@@ -1345,12 +1337,16 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
         throw new InvalidOperationException("Support launch lost the objective's negative anchor id");
     Set(command, "Command", (byte)22); Set(command, "Arg", (byte)0); Set(command, "Arg2", (byte)0); Set(command, "Revision", 0u);
     Roundtrip(commandType, command, "ops spec ops recall command");
+    Set(command, "Command", (byte)23); Set(command, "Arg", (byte)2);
+    Roundtrip(commandType, command, "ops station power focus command");
+    Set(command, "Command", (byte)24); Set(command, "Arg", (byte)3); Set(command, "Arg2", (byte)1);
+    Roundtrip(commandType, command, "ops field team execute/extract command");
     if ((byte)Get(Decode(commandType, new byte[] { 16 }), "Protocol") != 16)
         throw new InvalidOperationException("Support read a protocol-16 order as a current order");
 
     Type stateType = plugin.GetType("BoscaliSummer.Features.Support.Networking.OpsStateMessage", true)!;
     object state = Activator.CreateInstance(stateType)!;
-    Set(state, "Protocol", (byte)23); Set(state, "RequestId", 91); Set(state, "Result", (byte)1);
+    Set(state, "Protocol", (byte)24); Set(state, "RequestId", 91); Set(state, "Result", (byte)1);
     Set(state, "FactionName", "BOSCALI"); Set(state, "OpsReserve", 1234.5f);
     Set(state, "CyberThreatSlot", (byte)2);
     Set(state, "PlatformActive", true);
@@ -1372,6 +1368,9 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
     Set(state, "PlatformNotice", (byte)1);
     Set(state, "PlatformNoticeCell", (byte)6);
     Set(state, "PlatformNoticeSerial", (byte)201);
+    Set(state, "PlatformFocus", (byte)2); Set(state, "PlatformRetaskIn", 9.5f);
+    Set(state, "PlatformSolutionX", 12500f); Set(state, "PlatformSolutionZ", -4500f);
+    Set(state, "PlatformSolutionRadius", 3200f); Set(state, "PlatformSolutionIn", 42f);
     Set(state, "ForeignCount", (byte)1);
     Set(state, "ForeignRegimes", new byte[] { 0, 0, 0, 0 });
     Set(state, "ForeignSeeds", new[] { 8, 0, 0, 0 });
@@ -1394,6 +1393,8 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
     Set(network, "BreachTarget", (byte)11); Set(network, "BreachPhase", (byte)2);
     Set(network, "BreachFlags", (byte)1); Set(network, "BreachTrace", 0.625f);
     Set(network, "BreachIn", 3.5f); Set(network, "SpoofIn", 12f);
+    Set(network, "AccessSlot", (byte)7); Set(network, "AccessIn", 63.5f);
+    Set(network, "AccessRecoveryIn", 12.5f);
     Set(network, "Defended", 4); Set(network, "Breached", 2);
     ((float[])Get(network, "Recharge"))[3] = 18.5f;
     ((float[])Get(network, "CapstoneIn"))[1] = 44.5f;
@@ -1454,6 +1455,14 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
     if (worstBytes > 900)
         throw new InvalidOperationException("Support ops state snapshot worst case is " + worstBytes +
             " bytes; keep it under 900 so a poll stays in one datagram");
+    for (int i = 0; i < longNames.Length; i++)
+        longNames[i] = i % 2 == 0 ? new string('\u754c', 40) : new string('A', 19) + "\U0001f681";
+    byte[] unicodeOps = Encode(stateType, state);
+    if (unicodeOps.Length > 900)
+        throw new InvalidOperationException("Localized CYBER origins exceed the datagram budget");
+    foreach (string label in (string[])Get(Decode(stateType, unicodeOps), "CyberOrigins"))
+        if (label != null && (System.Text.Encoding.UTF8.GetByteCount(label) > 20 || label.Contains('\ufffd')))
+            throw new InvalidOperationException("CYBER origin byte clipping split a Unicode character or exceeded its budget");
     Set(state, "Cyber", network);
     Set(state, "CyberOrigins", new[] { "BOSCALI", "PRIMEVA", null, null, null, null, null, null });
     Set(state, "CyberOriginCount", (byte)2);
@@ -1473,6 +1482,12 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
         (byte)Get(stateBack, "PlatformPending") != 15 ||
         Math.Abs(((float[])Get(stateBack, "PlatformRecharge"))[4] - 359.5f) > 0.001f ||
         (byte)Get(stateBack, "PlatformNoticeSerial") != 201 ||
+        (byte)Get(stateBack, "PlatformFocus") != 2 ||
+        (float)Get(stateBack, "PlatformRetaskIn") != 9.5f ||
+        (float)Get(stateBack, "PlatformSolutionX") != 12500f ||
+        (float)Get(stateBack, "PlatformSolutionZ") != -4500f ||
+        (float)Get(stateBack, "PlatformSolutionRadius") != 3200f ||
+        (float)Get(stateBack, "PlatformSolutionIn") != 42f ||
         ((int[])Get(stateBack, "ForeignSeeds"))[0] != 8 ||
         ((int[])Get(stateBack, "ForeignLayouts"))[0] != 0x41c0 ||
         Math.Abs(((float[])Get(stateBack, "ForeignClocks"))[0] - 300.5f) > 0.001f)
@@ -1491,6 +1506,9 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
         Math.Abs((float)Get(networkBack, "Computing") - 88.5f) > 0.001f ||
         Math.Abs((float)Get(networkBack, "Intel") - 41.25f) > 0.001f ||
         ((byte[])Get(networkBack, "Upgrade"))[1] != 2 ||
+        (byte)Get(networkBack, "AccessSlot") != 7 ||
+        (float)Get(networkBack, "AccessIn") != 63.5f ||
+        (float)Get(networkBack, "AccessRecoveryIn") != 12.5f ||
         (byte)Get(networkBack, "BreachTarget") != 11 ||
         (byte)Get(networkBack, "BreachPhase") != 2 ||
         (byte)Get(networkBack, "BreachFlags") != 1 ||
@@ -1544,7 +1562,7 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
 
     Type cyberType = plugin.GetType("BoscaliSummer.Features.Support.Networking.CyberEffectMessage", true)!;
     object cyber = Activator.CreateInstance(cyberType)!;
-    Set(cyber, "Protocol", (byte)23); Set(cyber, "Kind", (byte)3);
+    Set(cyber, "Protocol", (byte)24); Set(cyber, "Kind", (byte)3);
     Set(cyber, "FactionName", "Vulture");
     Set(cyber, "X", 1234.5f); Set(cyber, "Z", -3456.5f); Set(cyber, "Duration", 15f);
     object cyberBack = Roundtrip(cyberType, cyber, "cyber effect");
@@ -1553,7 +1571,7 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
 
     ProbeSpecOpsState(plugin, Encode, Decode, Set, Get);
 
-    Console.WriteLine("  Support protocol-23 serializers: support/station/CYBER-network/SPEC OPS roundtrips; raise/launch/recall orders with anchor ids; malformed CYBER-node/objective/array bounds and old-header rejection");
+    Console.WriteLine("  Support protocol-24 serializers: support/station/CYBER-network/SPEC OPS roundtrips; raise/launch/recall orders with anchor ids; malformed CYBER-node/objective/array bounds and old-header rejection");
 }
 
 /// <summary>
@@ -1564,56 +1582,95 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
 static void ProbeSpecOpsState(Assembly plugin, Func<Type, object, byte[]> Encode, Func<Type, byte[], object> Decode,
     Action<object, string, object> Set, Func<object, string, object> Get)
 {
-    const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance;
-    Type detachmentType = plugin.GetType("BoscaliSummer.Features.Support.Domain.SpecOps.SpecOpsDetachment", true)!;
     Type snapshotType = plugin.GetType("BoscaliSummer.Features.Support.Domain.SpecOps.SpecOpsSnapshot", true)!;
-    Type kindType = plugin.GetType("BoscaliSummer.Features.Support.Domain.SpecOps.ObjectiveKind", true)!;
-    Type missionType = plugin.GetType("BoscaliSummer.Features.Support.Domain.SpecOps.FieldMission", true)!;
     Type messageType = plugin.GetType("BoscaliSummer.Features.Support.Networking.SpecOpsStateMessage", true)!;
-    object detachment = Activator.CreateInstance(detachmentType)!;
-    detachmentType.GetMethod("BeginObjectives", flags)!.Invoke(detachment, null);
-    MethodInfo report = detachmentType.GetMethod("ReportObjective", flags)!;
-    for (int i = 0; i < 12; i++)
-        report.Invoke(detachment, new object[] { Enum.ToObject(kindType, 1 + i % 4), -100000 - i, 123456.5f + i, -123456.5f,
-            i, i % 3, i % 2 == 0, new string('N', 40), i % 3 == 2 });
-    detachmentType.GetMethod("EndObjectives", flags)!.Invoke(detachment, null);
-    MethodInfo launch = detachmentType.GetMethod("TryLaunch", flags)!;
-    MethodInfo tick = detachmentType.GetMethod("Tick", flags)!;
-    launch.Invoke(detachment, new object[] { 0, Enum.ToObject(missionType, 0), -100000, 5000f, 0.0 });
-    launch.Invoke(detachment, new object[] { 1, Enum.ToObject(missionType, 1), -100001, 5000f, 0.0 });
-    tick.Invoke(detachment, new object[] { 60.0, (Func<double>)(() => 0.0), null! });
-    tick.Invoke(detachment, new object[] { 95.0, (Func<double>)(() => 0.0), null! });
     object snapshot = Activator.CreateInstance(snapshotType)!;
-    detachmentType.GetMethod("Export", flags)!.Invoke(detachment, new object[] { 95.0, snapshot });
-    ((byte[])Get(snapshot, "TeamMission"))[2] = 3; // STEAL remains a wire-stable mission.
-    ((float[])Get(snapshot, "AbilityRecharge"))[4] = 37.5f; // HUNT uses the expanded recharge array.
+    Set(snapshot, "Flags", (byte)1);
+    for (int i = 0; i < 4; i++)
+    {
+        ((byte[])Get(snapshot, "TeamState"))[i] = (byte)(i == 0 ? 6 : i + 1);
+        ((byte[])Get(snapshot, "TeamRank"))[i] = (byte)i;
+        ((byte[])Get(snapshot, "TeamWins"))[i] = (byte)(2 * i);
+        ((byte[])Get(snapshot, "TeamMission"))[i] = (byte)i;
+        ((byte[])Get(snapshot, "TeamChance"))[i] = (byte)(65 + i);
+        ((byte[])Get(snapshot, "TeamLoss"))[i] = (byte)(10 - i);
+        ((byte[])Get(snapshot, "TeamThreat"))[i] = (byte)(5 + i);
+        ((byte[])Get(snapshot, "TeamRadars"))[i] = (byte)(2 + i);
+        ((int[])Get(snapshot, "TeamAnchor"))[i] = int.MinValue + i;
+        ((float[])Get(snapshot, "TeamX"))[i] = 123456.5f + i;
+        ((float[])Get(snapshot, "TeamZ"))[i] = -123456.5f;
+        ((float[])Get(snapshot, "TeamRemaining"))[i] = 25.5f + i;
+        ((float[])Get(snapshot, "TeamDuration"))[i] = 30 + i;
+        ((float[])Get(snapshot, "TeamOriginX"))[i] = 97531.5f + i;
+        ((float[])Get(snapshot, "TeamOriginZ"))[i] = -86420.5f;
+        ((string[])Get(snapshot, "TeamTarget"))[i] = new string('T', 40);
+        ((string[])Get(snapshot, "TeamOrigin"))[i] = new string('H', 40);
+    }
+    Set(snapshot, "ObjectiveCount", (byte)12);
+    for (int i = 0; i < 12; i++)
+    {
+        ((byte[])Get(snapshot, "ObjectiveKind"))[i] = (byte)(1 + i % 4);
+        ((int[])Get(snapshot, "ObjectiveAnchor"))[i] = int.MinValue + i;
+        ((float[])Get(snapshot, "ObjectiveX"))[i] = 123456.5f + i;
+        ((float[])Get(snapshot, "ObjectiveZ"))[i] = -123456.5f;
+        ((byte[])Get(snapshot, "ObjectiveThreat"))[i] = (byte)i;
+        ((byte[])Get(snapshot, "ObjectiveRadars"))[i] = (byte)(i % 3);
+        ((bool[])Get(snapshot, "ObjectiveHostile"))[i] = i % 2 == 0;
+        ((bool[])Get(snapshot, "ObjectiveFriendly"))[i] = i % 3 == 2;
+        ((float[])Get(snapshot, "ObjectiveScout"))[i] = 123f;
+        ((string[])Get(snapshot, "ObjectiveName"))[i] = new string('N', 40);
+    }
+    ((float[])Get(snapshot, "AbilityRecharge"))[4] = 37.5f;
+    Set(snapshot, "NoticeSerial", int.MaxValue);
+    Set(snapshot, "NoticeCount", (byte)8);
 
     object message = Activator.CreateInstance(messageType)!;
-    Set(message, "Protocol", (byte)23);
-    Set(message, "FactionName", "BOSCALI");
+    Set(message, "Protocol", (byte)24);
+    Set(message, "FactionName", "BOSCALI INDEPENDENTS");
     Set(message, "State", snapshot);
     byte[] bytes = Encode(messageType, message);
     if (bytes.Length > 900)
         throw new InvalidOperationException("SPEC OPS snapshot worst case is " + bytes.Length +
             " bytes; keep it under 900 so it stays in one datagram");
     object back = Get(Decode(messageType, bytes), "State");
-    if ((byte)Get(Decode(messageType, bytes), "Protocol") != 23 ||
-        (string)Get(Decode(messageType, bytes), "FactionName") != "BOSCALI" ||
+    if ((byte)Get(Decode(messageType, bytes), "Protocol") != 24 ||
+        (string)Get(Decode(messageType, bytes), "FactionName") != "BOSCALI INDEPENDENTS" ||
         (byte)Get(back, "ObjectiveCount") != 12 ||
-        ((int[])Get(back, "ObjectiveAnchor"))[11] != -100011 ||
+        ((int[])Get(back, "ObjectiveAnchor"))[11] != int.MinValue + 11 ||
         ((string[])Get(back, "ObjectiveName"))[0].Length != 20 ||
         !((bool[])Get(back, "ObjectiveFriendly"))[2] ||
-        ((byte[])Get(back, "TeamState"))[0] != 4 ||
-        ((byte[])Get(back, "TeamState"))[1] != 3 ||
-        ((byte[])Get(back, "TeamState"))[2] != 0 ||
-        ((byte[])Get(back, "TeamMission"))[2] != 3 ||
-        ((int[])Get(back, "TeamAnchor"))[1] != -100001 ||
-        Math.Abs(((float[])Get(back, "AbilityRecharge"))[4] - 37.5f) > 0.01f ||
-        Math.Abs(((float[])Get(back, "TeamRemaining"))[0] - 300f) > 0.01f ||
-        ((float[])Get(back, "ObjectiveScout"))[0] <= 0f ||
+        ((byte[])Get(back, "TeamState"))[0] != 6 ||
+        ((byte[])Get(back, "TeamState"))[1] != 2 ||
+        ((byte[])Get(back, "TeamThreat"))[3] != 8 ||
+        ((byte[])Get(back, "TeamRadars"))[3] != 5 ||
+        ((byte[])Get(back, "TeamMission"))[3] != 3 ||
+        ((int[])Get(back, "TeamAnchor"))[1] != int.MinValue + 1 ||
+        ((float[])Get(back, "TeamOriginX"))[1] != 97532.5f ||
+        ((float[])Get(back, "TeamOriginZ"))[1] != -86420.5f ||
+        ((string[])Get(back, "TeamOrigin"))[1] != new string('H', 20) ||
+        ((float[])Get(back, "AbilityRecharge"))[4] != 37.5f ||
+        ((float[])Get(back, "TeamRemaining"))[0] != 25.5f ||
+        ((float[])Get(back, "ObjectiveScout"))[0] != 123f ||
         (int)Get(back, "NoticeSerial") != (int)Get(snapshot, "NoticeSerial") ||
         (byte)Get(back, "NoticeCount") != (byte)Get(snapshot, "NoticeCount"))
         throw new InvalidOperationException("SPEC OPS snapshot roundtrip failed");
+
+    for (int i = 0; i < 4; i++)
+    {
+        ((string[])Get(snapshot, "TeamTarget"))[i] = new string('\u00e9', 40);
+        ((string[])Get(snapshot, "TeamOrigin"))[i] = new string('A', 19) + "\U0001f681";
+    }
+    for (int i = 0; i < 12; i++)
+        ((string[])Get(snapshot, "ObjectiveName"))[i] = i % 2 == 0 ? new string('\u754c', 40)
+            : string.Concat(Enumerable.Repeat("\U0001f681", 20));
+    byte[] unicodeBytes = Encode(messageType, message);
+    if (unicodeBytes.Length > 900)
+        throw new InvalidOperationException("Localized SPEC OPS names exceed the datagram budget");
+    object unicodeBack = Get(Decode(messageType, unicodeBytes), "State");
+    foreach (string field in new[] { "TeamTarget", "TeamOrigin", "ObjectiveName" })
+        foreach (string label in (string[])Get(unicodeBack, field))
+            if (label != null && (System.Text.Encoding.UTF8.GetByteCount(label) > 20 || label.Contains('\ufffd')))
+                throw new InvalidOperationException("SPEC OPS label byte clipping split a Unicode character or exceeded its budget");
 
     // Thirteen objectives cannot come from a real host: the reader must stop there.
     object empty = Activator.CreateInstance(snapshotType)!;

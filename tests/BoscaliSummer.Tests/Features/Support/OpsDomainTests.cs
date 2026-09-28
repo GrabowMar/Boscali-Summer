@@ -48,6 +48,7 @@ namespace BoscaliSummer.Tests.Features.Support
                 "a breach needs Cyber Command");
 
             cyber.PlaceStatic(1, NodeKind.Command, 0f, 0f);
+            int home = cyber.PlaceStatic(2, NodeKind.Base, 5000f, 0f);
             cyber.BeginLocations();
             int city = cyber.ReportLocation(100, LocationKind.City, 8000f, 0f, 0.0);
             cyber.EndLocations(0.0);
@@ -57,10 +58,12 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(cyber.TryStartBreach(city, true, 0.0) == BreachDenial.LowComputing,
                 "the start re-checks the computing");
 
-            // Bank computing, take the city to stage 2, and the basic tier opens on its radius.
+            TestAssert.That(cyber.EarCovers(8000f, 0f, 0.0) && !cyber.EarCovers(60000f, 0f, 0.0),
+                "friendly home infrastructure provides bounded defender warning coverage before any attack");
+            // Bank only the resources needed for one operation.
             double now = 0.0;
             double bank = 0.0;
-            while (cyber.Computing < 140f && bank < 400.0)
+            while (cyber.Computing < 42f && bank < 400.0)
             {
                 cyber.Tick(bank, 0.25f, 0f);
                 bank += 0.25;
@@ -72,34 +75,19 @@ namespace BoscaliSummer.Tests.Features.Support
                 cyber.Tick(now, 0.25f, 0f);
                 now += 0.25;
             }
-            TestAssert.That(cyber.Stage(city) == 1, "the city is at stage 1");
-            TestAssert.That(!cyber.AnyTier(1), "stage 1 unlocks nothing");
-            double bank2 = now;
-            while (cyber.Computing < 140f && bank2 < now + 400.0)
-            {
-                cyber.Tick(bank2, 0.25f, 0f);
-                bank2 += 0.25;
-            }
-            now = bank2;
-            TestAssert.That(cyber.TryStartBreach(city, true, now) == BreachDenial.None, "the second breach opens");
-            while (cyber.BreachActive && now < bank2 + 200.0)
-            {
-                cyber.Tick(now, 0.25f, 0f);
-                now += 0.25;
-            }
-            TestAssert.That(cyber.Stage(city) == 2 && cyber.AnyTier(1), "stage 2 opens the basic tier");
-            TestAssert.That(cyber.AbilityCovers(1, 8000f, 0f, now), "the city's radius covers itself");
-            TestAssert.That(!cyber.AbilityCovers(1, 60000f, 0f, now), "the radius does not reach across the map");
-            TestAssert.That(!cyber.AnyTier(2), "the mid tier still needs stage 3");
-
-            // The ear a trace needs: a stage-2 location's radius over the incident.
-            TestAssert.That(cyber.EarCovers(8000f, 0f, now), "a stage-2 location is an ear");
-            TestAssert.That(!cyber.EarCovers(60000f, 0f, now), "the ear ends at the radius");
-
-            // A compromised location goes dark until patched.
-            TestAssert.That(cyber.TryVerb(CyberVerb.Honeypot, city, now) == CyberDenial.None, "the bait applies");
-            cyber.Tick(now + CyberLocations.HoneypotSeconds + 1.0, 0.25f, 0f);
-            TestAssert.That(cyber.Node(city).HoneypotUntil == 0.0, "the bait lapses");
+            TestAssert.That(cyber.Stage(city) == 3 && cyber.AccessRemaining(now) > 70f,
+                "one breach opens a 75-second stage-3 compatibility lease");
+            TestAssert.That(cyber.AnyTier(1, now) && cyber.AnyTier(2, now) && !cyber.AnyTier(3, now),
+                "the live lease authorizes basic and mid actions, never capstones");
+            TestAssert.That(cyber.AbilityCovers(1, 8000f, 0f, now) && cyber.AbilityCovers(2, 8000f, 0f, now),
+                "the lease carries both action tiers at its actual site");
+            TestAssert.That(!cyber.AbilityCovers(1, 60000f, 0f, now), "the site's radius does not reach across the map");
+            TestAssert.That(cyber.TryVerb(CyberVerb.Honeypot, home, now) == CyberDenial.None,
+                "defender orders work on friendly infrastructure without a breach");
+            TestAssert.That(cyber.ConsumeAccess(8000f, 0f, now), "an accepted effect consumes access at its target");
+            TestAssert.That(!cyber.AnyTier(1, now) && !cyber.AbilityCovers(1, 8000f, 0f, now),
+                "consumption closes offensive authorization immediately");
+            TestAssert.That(cyber.EarCovers(8000f, 0f, now), "the home ear remains after lease consumption");
         }
     }
 }

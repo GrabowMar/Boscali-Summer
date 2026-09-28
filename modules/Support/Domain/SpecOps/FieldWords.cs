@@ -34,6 +34,7 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
                 case TeamState.Unformed: return "UNFORMED";
                 case TeamState.Ready: return "READY";
                 case TeamState.EnRoute: return "EN ROUTE";
+                case TeamState.Deciding: return "DECISION WINDOW";
                 case TeamState.OnTask: return "ON TASK";
                 case TeamState.Holding: return "HOLDING";
                 default: return "RECOVERING";
@@ -181,7 +182,7 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
 
         /// <summary>The in-UI key for post and phase codes, shared by every tooltip that needs it.</summary>
         public static string Legend() => "OP observation post · CELL saboteur cell · LISTEN listening post · " +
-            "SAFE safehouse · OUT en route · TASK on task · HOLD holding · REST recovering";
+            "SAFE safehouse · OUT en route · DECIDE at site · TASK on task · HOLD temporary post · REST recovering";
 
         public static string AbilityCode(FieldAbility ability) => ability == FieldAbility.Spot ? "SPT" :
             ability == FieldAbility.Skywatch ? "SKY" : ability == FieldAbility.Eavesdrop ? "EAV" :
@@ -217,6 +218,8 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
                 case SpecOpsDenial.SeizeUnavailable: return "URBAN COMBAT GARRISONS ARE OFF";
                 case SpecOpsDenial.ObjectiveTaken: return "ANOTHER TEAM IS ON THIS OBJECTIVE";
                 case SpecOpsDenial.BadMission: return "UNKNOWN MISSION";
+                case SpecOpsDenial.BadDirective: return "UNKNOWN FIELD ORDER";
+                case SpecOpsDenial.NotAtDecision: return "EXECUTE WINDOW CLOSED · EXTRACT INSTEAD";
                 default: return "REFUSED";
             }
         }
@@ -236,6 +239,10 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
                 case FieldNotice.Raised: return who + " FORMED · RECRUIT, READY";
                 case FieldNotice.Launched: return who + " MOVING OUT · " + Mission(mission) + where;
                 case FieldNotice.OnTask: return who + " ON TASK · " + Mission(mission) + where;
+                case FieldNotice.Arrived: return who + " AT SITE · EXECUTE OR EXTRACT · 30 s" + where;
+                case FieldNotice.Executed: return who + " EXECUTING · LIVE PRESSURE" + where;
+                case FieldNotice.Extracted: return who + " EXTRACTING · SAFE RETURN" + where;
+                case FieldNotice.PostLimit: return who + " SUCCESS · POST CAP REACHED · EXTRACTING" + where;
                 case FieldNotice.Success: return who + " SUCCESS · " + Post(mission) + " HELD" + where;
                 case FieldNotice.Failed: return who + " FAILED · RETURNING" + where;
                 case FieldNotice.Lost: return who + " LOST" + where + " · SLOT OPEN";
@@ -261,9 +268,14 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
                 case TeamState.Ready:
                     return "READY · " + Rank(team.Rank);
                 case TeamState.EnRoute:
-                    return "EN ROUTE · " + Mission(team.Mission) + " · " + Target(team) + " · " + Clock(remaining);
+                    return "EN ROUTE · " + Mission(team.Mission) + " · " + Origin(team) + " → " + Target(team) +
+                        " · " + team.CurrentThreat + "U / " + team.CurrentRadars + "R · " + team.Chance + "% / " + team.Loss + "% · " + Clock(remaining);
+                case TeamState.Deciding:
+                    return "AT SITE · EXECUTE OR EXTRACT · " + Clock(remaining) + " · " + team.CurrentThreat + "U / " +
+                        team.CurrentRadars + "R · " + team.Chance + "% SUCCESS / " + team.Loss + "% LOSS";
                 case TeamState.OnTask:
-                    return "ON TASK · " + Mission(team.Mission) + " · " + team.Chance + "% · " + Clock(remaining);
+                    return "EXECUTING · " + Mission(team.Mission) + " · " + team.CurrentThreat + "U / " + team.CurrentRadars +
+                        "R · " + team.Chance + "% SUCCESS / " + team.Loss + "% LOSS · " + Clock(remaining);
                 case TeamState.Holding:
                     return "HOLDING " + PostCode(team.Mission) + " · " + Target(team) + " · " + Clock(remaining);
                 default:
@@ -289,12 +301,14 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
             {
                 case MissionOutcome.Failed: return "FAILED · ";
                 case MissionOutcome.Recalled: return "RECALLED · ";
+                case MissionOutcome.Extracted: return "EXTRACTED · ";
                 case MissionOutcome.NoBuildings: return mission == FieldMission.Seize ? "NO BUILDING · " : mission == FieldMission.Sabotage ? "JAMMERS BUSY · " : "NO EFFECT · ";
                 default: return "";
             }
         }
 
         private static string Target(in FieldTeam team) => string.IsNullOrEmpty(team.Target) ? "OBJECTIVE" : team.Target;
+        public static string Origin(in FieldTeam team) => string.IsNullOrEmpty(team.Origin) ? "FRIENDLY BASE" : team.Origin;
 
         public static string Km(float metres) =>
             (metres / 1000f).ToString(metres % 1000f == 0f ? "0" : "0.0", CultureInfo.InvariantCulture) + " km";
@@ -315,6 +329,9 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
             if (detachment == null) return "AWAITING THEATER DATA";
             if (!detachment.Enabled) return "SPEC OPS IS OFF ON THIS SERVER";
             if (detachment.Formed == 0) return "NO TEAMS · RAISE ONE IN THE DESK";
+            for (int i = 0; i < SpecOpsDetachment.TeamCount; i++)
+                if (detachment.Team(i).State == TeamState.Deciding)
+                    return Callsign(i) + " AT SITE · EXECUTE OR EXTRACT · " + Clock(detachment.Remaining(i, now));
             if (detachment.Posts(FieldMission.Recon) > 0) return "OBSERVATION POST HELD · SPOT / SKYWATCH LIVE IN ACTIONS";
             if (detachment.Posts(FieldMission.Sabotage) > 0) return "SABOTEUR CELL HELD · SUPPRESS / HUNT LIVE IN ACTIONS";
             if (detachment.Posts(FieldMission.Steal) > 0) return "LISTENING POST HELD · EAVESDROP LIVE IN ACTIONS";
@@ -339,7 +356,7 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
         {
             if (detachment == null) return "AWAITING THEATER DATA";
             string text = "";
-            for (int s = (int)TeamState.Ready; s <= (int)TeamState.Recovering; s++)
+            for (int s = (int)TeamState.Ready; s <= (int)TeamState.Deciding; s++)
             {
                 int count = detachment.Count((TeamState)s);
                 if (count == 0) continue;

@@ -203,16 +203,17 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             AvKit.Panel(menu, new Rect(0f, 0f, MenuWidth, height),
                 new Color(.025f, .055f, .068f, .97f));
             string title = contact != null ? FirstLine(contact.GetInfoText()) : "TERRAIN FIX";
-            AvKit.Label(menu, title, new Rect(9f, 6f, MenuWidth - 18f, 16f),
+            // AvKit.Place anchors top-left with Unity's y up: rows go down with negative y.
+            AvKit.Label(menu, title, new Rect(9f, -6f, MenuWidth - 18f, 16f),
                 AvTheme.TextPrimary, AvTokens.FontSmall);
             AvKit.Label(menu, $"X {ground.x / 1000f:0.0}  Z {ground.z / 1000f:0.0} KM  /  " +
                 $"{map.selectedIcons?.Count ?? 0} SELECTED",
-                new Rect(9f, 23f, MenuWidth - 18f, 16f), AvTheme.RailInfo, AvTokens.FontMicro);
+                new Rect(9f, -23f, MenuWidth - 18f, 16f), AvTheme.RailInfo, AvTokens.FontMicro);
             for (int i = 0; i < actions.Count; i++)
             {
                 MenuAction action = actions[i];
                 AvKit.Button(menu, action.Label,
-                    new Rect(8f, 45f + i * 44f, MenuWidth - 16f, 40f), action.Invoke,
+                    new Rect(8f, -(45f + i * 44f), MenuWidth - 16f, 40f), action.Invoke,
                     AvTokens.FontBody);
             }
             menu.SetAsLastSibling();

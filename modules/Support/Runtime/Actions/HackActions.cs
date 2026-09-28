@@ -9,8 +9,8 @@ using UnityEngine;
 namespace BoscaliSummer.Features.Support.Runtime.Actions
 {
     /// <summary>
-    /// One map ability, carried by a hacked location of the right stage whose radius covers the
-    /// target (or by a foothold, which is a backdoor). Intel is checked and spent by the manager;
+    /// One map ability, carried by a fresh access window whose radius covers the
+    /// target. Intel and the single-use window are spent by the manager on acceptance;
     /// this class only re-checks coverage and touches the game. The effect families share a file
     /// because they differ only in what they touch: native reveals, native jamming, the
     /// track-deception layer, or seized ground vehicles.
@@ -22,7 +22,6 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
         private const float HijackStrength = 800f;
         private const int HijackMaximum = 8;
         private const int OverloadMaximum = 4;
-        public const float FootholdDiscount = 0.75f;
 
         private readonly HackKind kind;
 
@@ -47,11 +46,10 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
             target = ground.ToGlobalPosition();
             if (cyber.CommandCompromised) return SupportResult.CommandCompromised;
 
-            // The ability reaches through a location of the right stage whose radius covers the
-            // target; a foothold from a completed trace is a backdoor that carries it anywhere.
+            // A trace identifies the adversary; it never grants map-wide attack authority.
             double now = context.Host.OrbitNow;
             bool covered = cyber.TryCovering(CyberCatalog.RequiredStage(kind) - 1, target.x, target.z, now, out _);
-            if (!covered && !cyber.AnyFoothold(now)) return SupportResult.NoEwAsset;
+            if (!covered) return SupportResult.NoEwAsset;
 
             switch (kind)
             {

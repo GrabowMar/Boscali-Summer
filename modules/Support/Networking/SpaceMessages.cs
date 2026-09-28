@@ -84,6 +84,8 @@ namespace BoscaliSummer.Features.Support.Networking
         public byte PlatformNotice;
         public byte PlatformNoticeCell;
         public byte PlatformNoticeSerial;
+        public byte PlatformFocus;
+        public float PlatformRetaskIn, PlatformSolutionX, PlatformSolutionZ, PlatformSolutionRadius, PlatformSolutionIn;
 
         /// <summary>Other factions' stations: orbit and occupied-cell mask only.</summary>
         public byte ForeignCount;
@@ -177,6 +179,12 @@ namespace BoscaliSummer.Features.Support.Networking
             into.PlatformNotice = from.Notice;
             into.PlatformNoticeCell = from.NoticeCell;
             into.PlatformNoticeSerial = from.NoticeSerial;
+            into.PlatformFocus = from.Focus;
+            into.PlatformRetaskIn = from.RetaskIn;
+            into.PlatformSolutionX = from.SolutionX;
+            into.PlatformSolutionZ = from.SolutionZ;
+            into.PlatformSolutionRadius = from.SolutionRadius;
+            into.PlatformSolutionIn = from.SolutionIn;
         }
 
         public static void Read(in OpsStateMessage from, PlatformSnapshot into)
@@ -201,6 +209,12 @@ namespace BoscaliSummer.Features.Support.Networking
             into.Notice = from.PlatformNotice;
             into.NoticeCell = from.PlatformNoticeCell;
             into.NoticeSerial = from.PlatformNoticeSerial;
+            into.Focus = from.PlatformFocus;
+            into.RetaskIn = from.PlatformRetaskIn;
+            into.SolutionX = from.PlatformSolutionX;
+            into.SolutionZ = from.PlatformSolutionZ;
+            into.SolutionRadius = from.PlatformSolutionRadius;
+            into.SolutionIn = from.PlatformSolutionIn;
         }
     }
 

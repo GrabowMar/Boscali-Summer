@@ -57,7 +57,10 @@ namespace BoscaliSummer.Features.Support.Runtime
         SpecOpsLaunch = 21,
 
         /// <summary>Bring a deployed team home. Arg = team.</summary>
-        SpecOpsRecall = 22
+        SpecOpsRecall = 22,
+        /// <summary>Route station power; Arg is PlatformFocus. The host owns the retask timer.</summary>
+        PlatformFocus = 23,
+        SpecOpsDirective = 24
     }
 
     /// <summary>

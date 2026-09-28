@@ -13,12 +13,8 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Features.Support.Presentation
 {
     /// <summary>
-    /// CYBER › ACTIONS — the map abilities the network has earned, grouped by the stage that
-    /// unlocks them: the stage-2 basic, the stage-3 mid tier, the stage-4 capstones, then the
-    /// base support row. Each row says what the ability does, what it costs in intel and where
-    /// it can be used (how many locations provide it and their best radius), so "can I use this,
-    /// and from where" is answered on the page. They cost intel, not allocation, and the host
-    /// accepts one only when an online, uncompromised location's radius covers the point.
+    /// CYBER › ACTIONS — live map effects, grouped by one-use access lease. A completed breach
+    /// opens a 75-second window at one site; the first accepted effect consumes it.
     /// ARM, then right-click the map.
     /// </summary>
     internal sealed partial class SupportPanel
@@ -114,8 +110,11 @@ namespace BoscaliSummer.Features.Support.Presentation
                 tone = AvTheme.RailDanger;
             }
             else
+            {
+                float access = network.AccessRemaining(now);
                 hint = "INTEL " + Mathf.FloorToInt(network.Intel) + "/" + Mathf.RoundToInt(network.IntelCapacity()) +
-                       (network.AnyFoothold(now) ? " · FOOTHOLD -25%" : "") + " · ARM, RIGHT-CLICK INSIDE A RADIUS";
+                       (access > 0f ? " · ACCESS " + CyberWords.Seconds(access) + " · ONE USE" : " · NO ACCESS") + " · ARM MAP";
+            }
             PaintArmedBanner(cyberBanner, TabCyber, hint, tone, network != null && network.HasCommand && support.CyberEnabled);
             foreach (AbilityRow row in abilityRows) PaintAbilityRow(row, network, now, bypass);
         }
@@ -176,15 +175,18 @@ namespace BoscaliSummer.Features.Support.Presentation
         private string Coverage(SupportActionDefinition action, CyberNetwork network, double now)
         {
             if (network == null || !network.HasCommand) return "NO NETWORK YET · IT COMES UP ON YOUR CENTRAL AIRBASE";
+            if (!action.Hack.HasValue && !action.Cap.HasValue) return "ANYWHERE ON THE MAP · PAID IN ALLOCATION";
+            float lease = network.AccessRemaining(now);
+            if (lease <= 0f) return action.IsCapstone
+                ? "NO LIVE PAYLOAD · BREACH A SITE, THEN SELECT A PAYLOAD"
+                : "NO LIVE ACCESS · BREACH A REAL SITE TO OPEN ONE 75S EFFECT WINDOW";
             if (action.Cap.HasValue)
             {
                 int armed = network.CapstoneCount(action.Cap.Value);
                 return armed > 0
-                    ? "ARMED AT " + armed + (armed == 1 ? " LOCATION" : " LOCATIONS") + " · " +
-                      (int)Capstones.RechargeSeconds / 60 + " MIN RECHARGE"
-                    : "NO LOCATION IS MASTERED WITH THIS CAPSTONE YET";
+                    ? "PAYLOAD SELECTED · " + CyberWords.Seconds(lease) + " LEFT · ONE USE"
+                    : "PICK THIS PAYLOAD IN THE CONSOLE · ACCESS " + CyberWords.Seconds(lease);
             }
-            if (!action.Hack.HasValue) return "ANYWHERE ON THE MAP · PAID IN ALLOCATION";
             int tier = CyberLocations.Tier(CyberCatalog.RequiredStage(action.Hack.Value));
             int count = 0;
             float best = 0f;
@@ -195,8 +197,8 @@ namespace BoscaliSummer.Features.Support.Presentation
                 best = Mathf.Max(best, network.RadiusOf(i, now));
             }
             return count == 0
-                ? "NO STAGE-" + CyberCatalog.RequiredStage(action.Hack.Value) + " LOCATION YET · BREACH ONE IN THE CONSOLE"
-                : "USABLE FROM " + count + (count == 1 ? " LOCATION" : " LOCATIONS") + " · RADIUS UP TO " +
+                ? "SITE OFFLINE · ACCESS EXPIRED OR DEFENDER ISOLATED IT"
+                : "LEASE " + CyberWords.Seconds(lease) + " · ONE USE · RADIUS " +
                   Mathf.RoundToInt(best / 1000f) + " KM";
         }
 
@@ -224,17 +226,16 @@ namespace BoscaliSummer.Features.Support.Presentation
 
         /// <summary>Stage that unlocks the row; support rows sort last.</summary>
         private static int AbilityTier(SupportActionDefinition action) =>
-            action.Hack.HasValue ? CyberCatalog.RequiredStage(action.Hack.Value)
-            : action.Cap.HasValue ? CyberLocations.StageCount
-            : CyberLocations.StageCount + 1;
+            action.Hack.HasValue ? 2
+            : action.Cap.HasValue ? 3
+            : 4;
 
         private static string AbilityGroup(int tier)
         {
             switch (tier)
             {
-                case 2: return "STAGE 2 · BASIC";
-                case 3: return "STAGE 3 · MID";
-                case 4: return "STAGE 4 · CAPSTONE · ONE PER LOCATION";
+                case 2: return "LIVE LEASE · BASIC EFFECTS · ONE USE";
+                case 3: return "OPTIONAL PAYLOAD · ONE USE";
                 default: return "BASE SUPPORT · PAID IN ALLOCATION";
             }
         }

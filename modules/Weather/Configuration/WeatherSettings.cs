@@ -20,6 +20,7 @@ namespace BoscaliSummer.Features.Weather.Configuration
         public ConfigEntry<bool> RainVisualsEnabled { get; }
         public ConfigEntry<bool> RainAudioEnabled { get; }
         public ConfigEntry<bool> CinematicCloudsEnabled { get; }
+        public ConfigEntry<bool> CloudHalfResolution { get; }
         public ConfigEntry<float> RainDensity { get; }
         public ConfigEntry<bool> CanopyRainEnabled { get; }
         public ConfigEntry<bool> CanopyShaderEnabled { get; }
@@ -27,9 +28,8 @@ namespace BoscaliSummer.Features.Weather.Configuration
         public ConfigEntry<bool> RainAtmosphereEnabled { get; }
         public ConfigEntry<bool> LightningEnabled { get; }
 
-        public ConfigEntry<bool> DebugControlsEnabled { get; }
-        public ConfigEntry<KeyCode> DebugKey { get; }
-        public ConfigEntry<bool> DebugKeyRequiresCtrl { get; }
+        public ConfigEntry<KeyCode> ConsoleKey { get; }
+        public ConfigEntry<bool> ConsoleKeyRequiresCtrl { get; }
 
         public WeatherSettings(ConfigFile config)
         {
@@ -87,6 +87,10 @@ namespace BoscaliSummer.Features.Weather.Configuration
                 "Render fly-through volumetric clouds for the current weather state. " +
                 "Falls back to native clouds when the shader is unavailable; applies now.");
 
+            CloudHalfResolution = config.Bind(section, "CloudHalfResolution", true,
+                "March the volumetric clouds at half resolution and upsample them along scene depth " +
+                "(about four times cheaper on the GPU). Off draws every pixel at full resolution. Applies now.");
+
             RainDensity = config.Bind(section, "RainDensity", 1.0f,
                 new ConfigDescription(
                     "Density multiplier for falling rain streaks. The 1000-particle budget stays fixed.",
@@ -113,14 +117,12 @@ namespace BoscaliSummer.Features.Weather.Configuration
                 "Thicken and grey the haze and dim ambient light under local rain. Layered on the " +
                 "game's own sky each frame and restored when the rain stops.");
 
-            DebugControlsEnabled = config.Bind(section, "DebugControlsEnabled", true,
-                "Enable in-game debug weather shortcuts. The ENV panel remains read-only.");
+            ConsoleKey = config.Bind(section, "ConsoleKey", KeyCode.O,
+                "Opens the weather console (host: set and hold states, force storm set-pieces, " +
+                "re-roll the cloud layout; clients: read-only). Set to None to disable.");
 
-            DebugKey = config.Bind(section, "DebugKey", KeyCode.F11,
-                "Keyboard hotkey to cycle weather regimes (Shift + key cycles rain mode). Set to None to disable.");
-
-            DebugKeyRequiresCtrl = config.Bind(section, "DebugKeyRequiresCtrl", false,
-                "Require holding Ctrl when pressing the debug weather hotkey.");
+            ConsoleKeyRequiresCtrl = config.Bind(section, "ConsoleKeyRequiresCtrl", true,
+                "Require holding Ctrl with the weather console key (Ctrl+O by default).");
 
         }
     }

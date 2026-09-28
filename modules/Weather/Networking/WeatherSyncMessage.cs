@@ -25,5 +25,15 @@ namespace BoscaliSummer.Features.Weather.Networking
         public bool FieldManual;
         public float HoldMinutes;
         public float BlendMinutes;
+        /// <summary>Console-forced set-piece storms (Superstructures bits).</summary>
+        public byte FieldSets;
+        /// <summary>Console layout re-roll.</summary>
+        public byte FieldSalt;
+        /// <summary>Console placement of the storm eye and lenticulars.</summary>
+        public bool FieldHasAnchor;
+        public float FieldAnchorX;
+        public float FieldAnchorZ;
+        /// <summary>Frontal boundary turned by 45 degree steps.</summary>
+        public byte FieldFrontTurn;
     }
 }

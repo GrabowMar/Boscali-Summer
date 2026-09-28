@@ -279,14 +279,14 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 y -= preview + AvTokens.Space2;
 
                 y = MapHeading(page, y, width, "CONTACT HOVER", "CHOOSE ONE", "eye");
-                hover = new MfdPagingGrid(page, y, width, 2, 2, pager: false, rowHeight: cell, exclusive: true);
+                hover = new MfdPagingGrid(page, y, width, 2, 2, pager: false, rowHeight: cell);
                 y -= 2f * cell + AvTokens.Space2;
 
                 detailSummary = Hint(page, new Rect(AvTokens.Space3, y, width - AvTokens.Space3, 26f), "");
                 y -= 30f;
 
                 y = MapHeading(page, y, width, "SYMBOL SIZE", "CHOOSE ONE", "hud");
-                sizes = new MfdPagingGrid(page, y, width, 3, 1, pager: false, rowHeight: cell, exclusive: true);
+                sizes = new MfdPagingGrid(page, y, width, 3, 1, pager: false, rowHeight: cell);
                 y -= cell + AvTokens.Space2;
 
                 y = MapHeading(page, y, width, "MAP LEGEND", "BOSCALI OVERLAYS", "map");

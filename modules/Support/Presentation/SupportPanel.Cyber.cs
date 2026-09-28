@@ -30,7 +30,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             "The map abilities the network has earned."
         };
         private static readonly string[] CyberTileKeys =
-            { "COMPUTING", "INTEL", "NODES", "STAGES", "INTRUSION", "JAMMING", "FOOTHOLD", "ADVERSARY" };
+            { "COMPUTING", "INTEL", "NODES", "ACCESS", "INTRUSION", "JAMMING", "TRACE LEAD", "ADVERSARY" };
 
         private readonly GameObject[] cyberSubPages = new GameObject[2];
         private readonly string[] cyberLoop = new string[LoopLines];
@@ -301,8 +301,10 @@ namespace BoscaliSummer.Features.Support.Presentation
             if (network != null && network.BreachActive)
                 breach = " · BREACH " + CyberWords.PhaseOf(network.BreachPhase) + " " +
                          Mathf.RoundToInt(network.BreachTrace * 100f) + "%";
+            else if (network != null && network.AccessRemaining(now) > 0f)
+                breach = " · ACCESS " + CyberWords.Seconds(network.AccessRemaining(now)) + " · ONE EFFECT";
             else if (network != null && network.BreachAwaitingChoice)
-                breach = " · CAPSTONE PENDING";
+                breach = " · PAYLOAD SELECT";
             cyberBandText.text = "COMP " + Mathf.FloorToInt(computing) + "/" + Mathf.RoundToInt(computingCap) +
                                  " +" + (network != null ? network.ComputingIncome() : 0f).ToString("0.#", Invariant) + "/S" +
                                  " · INTEL " + Mathf.FloorToInt(intel) + "/" + Mathf.RoundToInt(intelCap) +
@@ -331,16 +333,17 @@ namespace BoscaliSummer.Features.Support.Presentation
             PaintTile(cyberTiles[1], Mathf.FloorToInt(network.Intel) + " BANKED",
                 intel < 0.2f ? Tone.Pending : Tone.Ready);
             int home = network.Count(NodeKind.Command) + network.Count(NodeKind.Base);
-            PaintTile(cyberTiles[2], stats.Hacked + " LOC · " + home + " HOME",
+            PaintTile(cyberTiles[2], stats.Hacked + " LIVE / " + home + " HOME",
                 stats.Hacked > 0 ? Tone.Ready : Tone.Locked);
-            PaintTile(cyberTiles[3], stats.StageTotal > 0 ? "STAGE " + stats.StageTotal : "NONE",
-                stats.StageTotal >= 8 ? Tone.Ready : stats.StageTotal > 0 ? Tone.Pending : Tone.Locked);
+            float accessLeft = network.AccessRemaining(now);
+            PaintTile(cyberTiles[3], accessLeft > 0f ? CyberWords.Seconds(accessLeft) : "NO LEASE",
+                accessLeft > 0f ? Tone.Pending : Tone.Locked);
             int intrusions = network.ActiveIncidents(IncidentKind.Intrusion);
             PaintTile(cyberTiles[4], network.CommandCompromised ? "C2 BREACH" : intrusions > 0 ? intrusions + " ACTIVE" : "CLEAR",
                 network.CommandCompromised || intrusions > 0 ? Tone.Danger : Tone.Ready);
             int raids = network.ActiveIncidents(IncidentKind.Raid);
             PaintTile(cyberTiles[5], raids > 0 ? "RAID" : "CLEAR", raids > 0 ? Tone.Armed : Tone.Ready);
-            PaintTile(cyberTiles[6], network.AnyFoothold(now) ? "ESTABLISHED" : "NONE",
+            PaintTile(cyberTiles[6], network.AnyFoothold(now) ? "TRACEABLE" : "NONE",
                 network.AnyFoothold(now) ? Tone.Ready : Tone.Locked);
             PaintTile(cyberTiles[7], CyberWords.Phase(network.Phase),
                 network.Phase == CampaignPhase.Offensive ? Tone.Danger

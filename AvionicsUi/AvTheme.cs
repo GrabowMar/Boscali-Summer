@@ -55,6 +55,33 @@ namespace NOAvionics.Ui
             }
         }
 
+        public static Color Hostile
+        {
+            get
+            {
+                try { return ThemeManager.Active.ColorTheme.HudUnitHostile; }
+                catch { return new Color(1.00f, 0.08f, 0.04f, 1f); }
+            }
+        }
+
+        public static Color Neutral
+        {
+            get
+            {
+                try { return ThemeManager.Active.ColorTheme.HudUnitNeutral; }
+                catch { return new Color(0.50f, 0.50f, 0.50f, 1f); }
+            }
+        }
+
+        public static Color Selected
+        {
+            get
+            {
+                try { return ThemeManager.Active.ColorTheme.HudUnitSelected; }
+                catch { return new Color(0.30f, 1.00f, 0.35f, 1f); }
+            }
+        }
+
         public static Color TextPrimary => Unity(AvTokens.TextPrimary);
         public static Color Dim => Unity(AvTokens.TextDim);
         public static Color Disabled => Unity(AvTokens.TextMuted);

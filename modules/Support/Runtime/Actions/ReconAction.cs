@@ -48,6 +48,8 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
                 context.Host.Space.DetachmentFor(context.Owner)?.ScoutNear(context.Target.x, context.Target.z,
                     context.Settings.SarSceneRadius.Value * platform.ScanScale(now), now);
                 platform.Consume(PlatformAbility.RadarScan, now);
+                platform.RecordSolution(context.Target.x, context.Target.z,
+                    context.Settings.SarSceneRadius.Value * platform.ScanScale(now), now);
                 context.Host.ReportContacts(context.RequestId, contacts);
                 return SupportResult.Accepted;
             }

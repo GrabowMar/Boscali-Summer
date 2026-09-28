@@ -198,9 +198,10 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(detachment.Team(0).State == TeamState.EnRoute && Math.Abs(detachment.Progress(0, 15.0) - 0.5f) < 0.01f,
                 "travel runs its clock and reports progress");
             detachment.Tick(1000.0, lucky, apply);
-            TestAssert.That(detachment.Team(0).State == TeamState.OnTask && detachment.NoticeKind(0) == FieldNotice.OnTask &&
-                applied == 0 && Math.Abs(detachment.Remaining(0, 1000.0) - FieldCatalog.TaskSeconds(FieldMission.Recon)) < 0.001,
-                "a late tick starts the task clock and never skips the roll");
+            TestAssert.That(detachment.Team(0).State == TeamState.Deciding && detachment.NoticeKind(0) == FieldNotice.Arrived &&
+                applied == 0 && Math.Abs(detachment.Remaining(0, 1000.0) - FieldCatalog.DecisionSeconds) < 0.001,
+                "a late tick opens the arrival decision and never skips it");
+            detachment.TryDirective(0, SpecOpsDirective.Execute, 1000.0);
             double done = 1000.0 + FieldCatalog.TaskSeconds(FieldMission.Recon);
             detachment.Tick(done, lucky, apply);
             FieldTeam alpha = detachment.Team(0);
@@ -230,6 +231,7 @@ namespace BoscaliSummer.Tests.Features.Support
             // SEIZE with nothing to hold: the roll succeeded, the world said no.
             detachment.TryLaunch(1, FieldMission.Seize, Town, 0f, 2000.0);
             detachment.Tick(2030.0, lucky, r => false);
+            detachment.TryDirective(1, SpecOpsDirective.Execute, 2030.0);
             detachment.Tick(2090.0, lucky, r => false);
             TestAssert.That(detachment.Team(1).State == TeamState.Recovering && detachment.Team(1).Last == MissionOutcome.NoBuildings &&
                 detachment.NoticeKind(0) == FieldNotice.NoBuildings && detachment.Posts(FieldMission.Seize) == 0,
@@ -252,6 +254,8 @@ namespace BoscaliSummer.Tests.Features.Support
             detachment.TryLaunch(1, FieldMission.Sabotage, Sam, 0f, 0.0);
             int applied = 0;
             detachment.Tick(30.0, () => 0.0, r => { applied++; return true; });
+            detachment.TryDirective(0, SpecOpsDirective.Execute, 30.0);
+            detachment.TryDirective(1, SpecOpsDirective.Execute, 30.0);
             double[] rolls = { 0.7, 0.999 };
             int next = 0;
             detachment.Tick(200.0, () => rolls[next++], r => { applied++; return true; });
@@ -277,6 +281,7 @@ namespace BoscaliSummer.Tests.Features.Support
                 TestAssert.That(detachment.TryLaunch(0, FieldMission.Recon, Town, 0f, now) == SpecOpsDenial.None,
                     "mission " + mission + " launches");
                 now += 30.0; detachment.Tick(now, () => 0.0, r => true);
+                detachment.TryDirective(0, SpecOpsDirective.Execute, now);
                 now += 30.0; detachment.Tick(now, () => 0.0, r => true);
                 now += FieldCatalog.HoldSeconds(detachment.Team(0).Rank);
                 detachment.Tick(now, () => 0.0, r => true);
@@ -290,8 +295,8 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(detachment.ChanceFor(0, FieldMission.Recon, detachment.SlotOf(Sam), now) ==
                 FieldCatalog.SuccessChance(FieldMission.Recon, 3, 3, false), "odds follow the chosen team's rank");
             TestAssert.That(FieldCatalog.ReconRadius(3) == 4500f && FieldCatalog.SeizeBuildings(3) == 4 &&
-                FieldCatalog.HoldSeconds(3) == 480f && FieldCatalog.SuppressSeconds(9) == 60f,
-                "rank widens effects and lengthens posts, clamped at ELITE");
+                FieldCatalog.HoldSeconds(3) == 120f && FieldCatalog.SuppressSeconds(9) == 60f,
+                "rank widens effects while every post has the same bounded lifetime");
         }
 
         private static void CheckPostsAndAbilities()
@@ -302,6 +307,8 @@ namespace BoscaliSummer.Tests.Features.Support
             detachment.TryLaunch(0, FieldMission.Recon, Town, 0f, 0.0);
             detachment.TryLaunch(1, FieldMission.Sabotage, Sam, 0f, 0.0);
             detachment.Tick(30.0, () => 0.0, r => true);
+            detachment.TryDirective(0, SpecOpsDirective.Execute, 30.0);
+            detachment.TryDirective(1, SpecOpsDirective.Execute, 30.0);
             detachment.Tick(100.0, () => 0.0, r => true);
             TestAssert.That(detachment.Posts() == 2 && detachment.Posts(FieldMission.Recon) == 1 &&
                 detachment.Posts(FieldMission.Sabotage) == 1, "each success holds its own kind of post");
@@ -327,9 +334,11 @@ namespace BoscaliSummer.Tests.Features.Support
         {
             SpecOpsDetachment host = Listed();
             host.TryRaise(2);
-            host.TryLaunch(0, FieldMission.Recon, Town, 10000f, 0.0);
+            host.TryLaunch(0, FieldMission.Recon, Town, 10000f, 0.0, 97531.5f, -86420.5f, "HOME BASE");
             host.TryLaunch(1, FieldMission.Sabotage, Sam, 0f, 0.0);
             host.Tick(30.0, () => 0.0, r => true);
+            host.TryDirective(0, SpecOpsDirective.Execute, 30.0);
+            host.TryDirective(1, SpecOpsDirective.Execute, 30.0);
             host.Tick(80.0, () => 0.0, r => true);
             host.TryUseAbility(FieldAbility.Suppress, 80.0);
             host.SeizeAvailable = false;
@@ -342,7 +351,9 @@ namespace BoscaliSummer.Tests.Features.Support
             {
                 FieldTeam a = host.Team(i), b = client.Team(i);
                 TestAssert.That(a.State == b.State && a.Rank == b.Rank && a.Wins == b.Wins && a.Mission == b.Mission &&
-                    a.Anchor == b.Anchor && a.Chance == b.Chance && a.Loss == b.Loss && a.Target == b.Target,
+                    a.Anchor == b.Anchor && a.Chance == b.Chance && a.Loss == b.Loss && a.Target == b.Target &&
+                    a.CurrentThreat == b.CurrentThreat && a.CurrentRadars == b.CurrentRadars &&
+                    a.OriginX == b.OriginX && a.OriginZ == b.OriginZ && (a.Origin ?? "") == (b.Origin ?? ""),
                     "team " + i + " mirrors");
                 TestAssert.That(Math.Abs(host.Remaining(i, 80.0) - client.Remaining(i, 500.0)) < 0.01 &&
                     Math.Abs(host.Progress(i, 80.0) - client.Progress(i, 500.0)) < 0.01f,
@@ -401,6 +412,7 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(detachment.TryLaunch(0, FieldMission.Steal, Town, 0f, 0.0) == SpecOpsDenial.None,
                 "STEAL launches against a listed objective");
             detachment.Tick(30.0, () => 0.0, _ => true);
+            detachment.TryDirective(0, SpecOpsDirective.Execute, 30.0);
             detachment.Tick(75.0, () => 0.0, _ => true);
             TestAssert.That(detachment.Posts(FieldMission.Steal) == 1 &&
                 detachment.Covering(FieldMission.Steal, 10000f, 0f) == 0 &&
@@ -412,6 +424,7 @@ namespace BoscaliSummer.Tests.Features.Support
             var failed = Listed();
             failed.TryLaunch(0, FieldMission.Steal, Town, 0f, 0.0);
             failed.Tick(30.0, () => 0.0, _ => false);
+            failed.TryDirective(0, SpecOpsDirective.Execute, 30.0);
             failed.Tick(75.0, () => 0.0, _ => false);
             TestAssert.That(failed.Team(0).Wins == 0 && failed.Posts(FieldMission.Steal) == 0,
                 "an effect that cannot land does not promote a team or create a post");
@@ -424,9 +437,12 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(FieldWords.Advice(detachment, 0.0).StartsWith("ALPHA READY"), "the advice names the next step");
             detachment.TryLaunch(0, FieldMission.Recon, Town, 0f, 0.0);
             detachment.Tick(30.0, () => 0.0, r => true);
+            TestAssert.That(FieldWords.Advice(detachment, 30.0).Contains("EXECUTE OR EXTRACT"),
+                "an arrival gets an actionable alert");
+            detachment.TryDirective(0, SpecOpsDirective.Execute, 30.0);
             detachment.Tick(60.0, () => 0.0, r => true);
             TestAssert.That(FieldWords.Advice(detachment, 60.0).Contains("SPOT"), "a held OP points at SPOT");
-            TestAssert.That(FieldWords.TeamLine(detachment.Team(0), 300.0) == "HOLDING OP · KERSEY · 05:00",
+            TestAssert.That(FieldWords.TeamLine(detachment.Team(0), 120.0) == "HOLDING OP · KERSEY · 02:00",
                 "the roster line says what, where and how long");
             TestAssert.That(FieldWords.Km(2500f) == "2.5 km" && FieldWords.Km(6000f) == "6 km" &&
                 FieldWords.Seconds(120f) == "2 min" && FieldWords.Seconds(45f) == "45 s", "units read naturally");
@@ -434,7 +450,7 @@ namespace BoscaliSummer.Tests.Features.Support
                 TestAssert.That(FieldWords.Callsign(i).Length <= 7, "callsigns fit the roster");
             for (byte d = 0; d <= (byte)SpecOpsDenial.BadMission; d++)
                 TestAssert.That(FieldWords.Denial((SpecOpsDenial)d) != "REFUSED", "denial " + d + " has words");
-            for (byte n = 1; n <= (byte)FieldNotice.NoBuildings; n++)
+            for (byte n = 1; n <= (byte)FieldNotice.PostLimit; n++)
                 TestAssert.That(FieldWords.Notice((FieldNotice)n, 0, FieldMission.Seize, "KERSEY") != null,
                     "notice " + n + " has words");
             TestAssert.That(FieldWords.Notice(FieldNotice.NoBuildings, 0, FieldMission.Sabotage, "KERSEY").Contains("JAMMER") &&
@@ -458,8 +474,8 @@ namespace BoscaliSummer.Tests.Features.Support
             string legend = FieldWords.Legend();
             TestAssert.That(legend.Contains("OP observation post") && legend.Contains("CELL saboteur cell") &&
                 legend.Contains("LISTEN listening post") && legend.Contains("SAFE safehouse") &&
-                legend.Contains("OUT en route") && legend.Contains("TASK on task") &&
-                legend.Contains("HOLD holding") && legend.Contains("REST recovering"),
+                legend.Contains("OUT en route") && legend.Contains("DECIDE at site") && legend.Contains("TASK on task") &&
+                legend.Contains("HOLD temporary post") && legend.Contains("REST recovering"),
                 "the legend decodes every post and phase code");
         }
     }

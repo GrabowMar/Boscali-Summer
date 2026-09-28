@@ -14,7 +14,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
     /// <summary>
     /// The CYBER netmap, drawn in the terminal's own language on a <see cref="BoardSurface"/>: a dotted
     /// grid and the map edge, the frontline as a thin trace, nodes as hex glyphs by kind with a
-    /// four-segment stage ring, links as orthogonal circuit traces from Cyber Command, in-reach
+    /// short access timer ring, links as orthogonal circuit traces from Cyber Command, in-reach
     /// targets with dashed pulsing outlines, the selected node's reach bubble, a packet stream on the
     /// breach link and incidents walking toward their targets. Pooled at build; repositioned only when
     /// the frame or the network changes; packets, pulses and incidents move every frame.
@@ -77,6 +77,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         private Vector2 packetFrom, packetTo;
         private bool packetsOn;
         private Action<int> select;
+        private float nextAnimation;
 
         internal Rect[] PlacedRects { get; } = new Rect[LabelPlacer.Maximum];
         internal int PlacedCount { get; private set; }
@@ -91,7 +92,9 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             layer.SetParent(Board.InputLayer, false);
             AvKit.Place(layer, new Rect(-view.x, -view.y, view.x + view.width, view.height - view.y));
             terrain = new BoardTerrain(layer, Board);
-            terrain.SetTint(CyberStyle.Surface.WithAlpha(0.64f));
+            // Terrain is the navigation substrate; keep the room tint light enough that
+            // roads, coastlines and objective texture remain legible beneath the network.
+            terrain.SetTint(CyberStyle.Surface.WithAlpha(0.18f));
             for (int i = 0; i < GridLines; i++)
             {
                 gridX[i] = Stroke(layer, CyberStyle.Lattice.WithAlpha(0.35f), OpsSprites.Dash);
@@ -231,15 +234,16 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 node.Glyph.color = ink;
                 node.Glyph.sprite = OpsSprites.Glyph(Glyph(n.Kind));
                 node.Fill.color = mine ? CyberStyle.Pane : CyberStyle.Surface;
-                int stage = network.Stage(i);
+                float lease = network.AccessSlot == i ? network.AccessRemaining(now) : 0f;
                 for (int s = 0; s < 4; s++)
                 {
-                    node.Ring[s].enabled = !home;
-                    node.Ring[s].color = s < stage ? CyberStyle.Accent : CyberStyle.Lattice;
+                    node.Ring[s].enabled = !home && s == 0 && lease > 0f;
+                    node.Ring[s].color = CyberStyle.Accent;
+                    if (s == 0) node.Ring[s].fillAmount = 0.92f * Mathf.Clamp01(lease / CyberLocations.AccessSeconds);
                 }
                 node.Select.enabled = i == selected;
                 // Reach is geography, not affordability or whether another session occupies the console.
-                inReach[i] = !home && stage < CyberLocations.StageCount && network.ReachCovers(n.X, n.Z);
+                inReach[i] = !home && !n.Hacked && network.ReachCovers(n.X, n.Z);
                 bool reach = inReach[i];
                 if (node.Reach.gameObject.activeSelf != reach) node.Reach.gameObject.SetActive(reach);
                 if (reach) Lines.Centre(node.Reach.rectTransform, p.x, p.y, Hex + 26f);
@@ -408,12 +412,12 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
 
         // ---- Motion -----------------------------------------------------------------------------
 
-        /// <summary>Pulses, packets and incidents; every frame, transforms only.</summary>
+        /// <summary>Updates the active packet and incident overlays at a bounded cadence.</summary>
         public void Animate(CyberNetwork network, double now, float time)
         {
-            float pulse = 0.45f + 0.55f * Mathf.PingPong(time * 1.6f, 1f);
-            for (int i = 0; i < Slots; i++)
-                if (inReach[i]) nodes[i].Reach.color = CyberStyle.Title.WithAlpha(pulse);
+            // Moving packets and incident geometry are decoration; ten updates per second is enough.
+            if (time < nextAnimation) return;
+            nextAnimation = time + 0.1f;
             for (int i = 0; i < Packets; i++)
             {
                 if (!packetsOn) { packets[i].enabled = false; continue; }
@@ -442,7 +446,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 Vector2 at = Board.Project(incident.X, incident.Z);
                 // Beside the node it sits on, so both stay readable.
                 Lines.Centre(threat.Mark.rectTransform, at.x + 16f, at.y + 16f, 20f);
-                threat.Mark.color = AvTheme.RailDanger.WithAlpha(0.75f + 0.25f * pulse);
+                threat.Mark.color = AvTheme.RailDanger.WithAlpha(0.88f);
                 int command = network.CommandSlot;
                 if (incident.Kind == IncidentKind.Intrusion && command >= 0 && incident.Site != command)
                 {

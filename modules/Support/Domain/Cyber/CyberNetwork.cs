@@ -45,7 +45,7 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
     {
         public NodeKind Kind;
 
-        /// <summary>1..4 for a hacked location; 0 for home nodes and unhacked targets.</summary>
+        /// <summary>Compatibility view: a live access lease is stage 3; stages never persist.</summary>
         public byte Stage;
 
         public float X, Z;
@@ -56,13 +56,13 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         /// <summary>A home node whose anchor building on the airbase is destroyed.</summary>
         public bool Down;
 
-        /// <summary>This faction has breached the location.</summary>
+        /// <summary>This faction currently holds the one temporary access lease here.</summary>
         public bool Hacked;
 
         public bool Compromised;
         public bool Isolated;
 
-        /// <summary>The stage-4 capstone the location took.</summary>
+        /// <summary>Optional payload choice for the current access lease.</summary>
         public Capstone Capstone;
 
         public double PatchDone;
@@ -92,11 +92,11 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
     }
 
     /// <summary>
-    /// One faction's cyber network: the home nodes the host raises on owned airbases (Cyber
-    /// Command plus a relay node on every other base) and the map locations the faction has
-    /// breached, each with a stage. Computing fuels breaches and console verbs, intel fuels the
-    /// map abilities, and money buys reach, radius, yield and trace resistance — never an
-    /// ability. The adversary campaign runs in <c>CyberNetwork.Campaign.cs</c>. Pure: the host
+    /// One faction's cyber network: home nodes plus real hackable map locations. A completed
+    /// breach grants one expiring access lease; the next accepted cyber effect consumes it.
+    /// Computing fuels breaches and console verbs, intel fuels map abilities, and money buys
+    /// reach, radius, yield and trace resistance. The host owns every mutation; the campaign
+    /// runs in <c>CyberNetwork.Campaign.cs</c>. Pure: the host
     /// owns every mutation; a client rebuilds from <see cref="CyberSnapshot"/>s.
     /// </summary>
     internal sealed partial class CyberNetwork
@@ -111,6 +111,9 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         private readonly double[] capstoneReady = new double[4];
         private readonly int[] upgradeLevels = new int[4];
         private readonly bool[] mirrorSeen = new bool[SlotCount];
+        private int accessSlot = -1;
+        private double accessUntil;
+        private double accessRecoveryUntil;
 
         public float Computing { get; private set; }
         public float Intel { get; private set; }
@@ -128,7 +131,7 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         public bool Exists(int slot) => slot >= 0 && slot < SlotCount && nodes[slot].Kind != NodeKind.None;
 
         /// <summary>A target slot this faction has taken.</summary>
-        public bool IsHacked(int slot) => Exists(slot) && nodes[slot].Hacked;
+        public bool IsHacked(int slot) => Exists(slot) && nodes[slot].Hacked && slot == accessSlot;
 
         /// <summary>Exists, alive and, for home nodes, with the anchor building standing.</summary>
         public bool Online(int slot) =>
@@ -196,10 +199,7 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         {
             get
             {
-                int count = 0;
-                for (int i = 0; i < SlotCount; i++)
-                    if (nodes[i].Hacked) count++;
-                return count;
+                return accessSlot >= 0 && nodes[accessSlot].Hacked ? 1 : 0;
             }
         }
 
@@ -208,11 +208,14 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             if (capstone == Capstone.None) return 0;
             int count = 0;
             for (int i = 0; i < SlotCount; i++)
-                if (nodes[i].Hacked && nodes[i].Capstone == capstone) count++;
+                if (IsHacked(i) && nodes[i].Capstone == capstone) count++;
             return count;
         }
 
-        public bool AnyCapstone(Capstone capstone) => CapstoneCount(capstone) > 0;
+        public bool AnyCapstone(Capstone capstone) => AnyCapstone(capstone, lastTick);
+
+        public bool AnyCapstone(Capstone capstone, double now) =>
+            capstone != Capstone.None && AccessRemaining(now) > 0f && Working(accessSlot) && nodes[accessSlot].Capstone == capstone;
 
         public CyberStats Stats()
         {
@@ -220,9 +223,9 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             for (int i = 0; i < SlotCount; i++)
             {
                 if (nodes[i].Kind == NodeKind.None) continue;
-                if (!nodes[i].Static && !nodes[i].Hacked) continue;
+                if (!nodes[i].Static && !IsHacked(i)) continue;
                 count++;
-                if (nodes[i].Hacked)
+                if (IsHacked(i))
                 {
                     hacked++;
                     stages += nodes[i].Stage;
@@ -244,32 +247,21 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             {
                 if (!Online(i) || i == command) continue;
                 if (nodes[i].Static) income += CyberLocations.BaseComputing;
-                else if (nodes[i].Hacked) income += CyberLocations.Stage(CyberLocations.LocationOf(nodes[i].Kind), nodes[i].Stage).Computing;
+                // A 75-second access is tactical, not a passive income farm.
             }
             return income * IncomeScale;
         }
 
         public float IntelIncome()
         {
-            float income = 0f;
-            for (int i = 0; i < SlotCount; i++)
-            {
-                if (!Online(i) || !nodes[i].Hacked) continue;
-                income += CyberLocations.Stage(CyberLocations.LocationOf(nodes[i].Kind), nodes[i].Stage).Intel;
-            }
-            return income * IncomeScale;
+            // Intel is earned through accepted support and trace outcomes, never passive leases.
+            return 0f;
         }
 
         public float ComputingCapacity() =>
-            CyberLocations.ComputingBaseCapacity + CyberLocations.ComputingCapacityPerNode * NodeCount;
+            CyberLocations.ComputingBaseCapacity + CyberLocations.ComputingCapacityPerNode * (NodeCount - HackedCount);
 
-        public float IntelCapacity()
-        {
-            int stages = 0;
-            for (int i = 0; i < SlotCount; i++)
-                if (nodes[i].Hacked) stages += nodes[i].Stage;
-            return CyberLocations.IntelBaseCapacity + CyberLocations.IntelCapacityPerStage * stages;
-        }
+        public float IntelCapacity() => CyberLocations.IntelBaseCapacity;
 
         public bool SpendComputing(float amount)
         {
@@ -328,6 +320,7 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             for (int i = 0; i < SlotCount; i++)
             {
                 if (!Working(i) || Tier(i) < tier) continue;
+                if (i == accessSlot && AccessRemaining(now) <= 0f) continue;
                 float radius = RadiusOf(i, now);
                 float dx = nodes[i].X - x, dz = nodes[i].Z - z;
                 if (dx * dx + dz * dz <= radius * radius) return true;
@@ -338,10 +331,11 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         /// <summary>Any working location of at least this tier, wherever it is; the panel's readiness hint.</summary>
         public bool AnyTier(int tier)
         {
-            for (int i = 0; i < SlotCount; i++)
-                if (Working(i) && Tier(i) >= tier) return true;
-            return false;
+            return AnyTier(tier, lastTick);
         }
+
+        public bool AnyTier(int tier, double now) =>
+            tier > 0 && AccessRemaining(now) > 0f && Working(accessSlot) && Tier(accessSlot) >= tier;
 
         /// <summary>The working location of at least this tier whose radius covers the point, best first.</summary>
         public bool TryCovering(int tier, float x, float z, double now, out int slot)
@@ -352,6 +346,7 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             for (int i = 0; i < SlotCount; i++)
             {
                 if (!Working(i) || Tier(i) < tier || Tier(i) <= bestTier) continue;
+                if (i == accessSlot && AccessRemaining(now) <= 0f) continue;
                 float radius = RadiusOf(i, now);
                 float dx = nodes[i].X - x, dz = nodes[i].Z - z;
                 if (dx * dx + dz * dz > radius * radius) continue;
@@ -369,6 +364,7 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             for (int i = 0; i < SlotCount; i++)
             {
                 if (!Working(i) || nodes[i].Capstone != capstone) continue;
+                if (i == accessSlot && AccessRemaining(now) <= 0f) continue;
                 float radius = RadiusOf(i, now);
                 float dx = nodes[i].X - x, dz = nodes[i].Z - z;
                 if (dx * dx + dz * dz > radius * radius) continue;
@@ -385,20 +381,33 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         /// <summary>Host: spend a capstone use. The caller has already checked coverage.</summary>
         public bool TryUseCapstone(Capstone capstone, double now)
         {
-            if (capstone == Capstone.None || CapstoneRechargeRemaining(capstone, now) > 0f) return false;
+            if (capstone == Capstone.None || !AnyCapstone(capstone, now) || CapstoneRechargeRemaining(capstone, now) > 0f) return false;
             capstoneReady[(int)capstone] = now + Capstones.RechargeSeconds;
             return true;
         }
 
         /// <summary>A working location's ear: stage 2 or better covering the point.</summary>
-        public bool EarCovers(float x, float z, double now) => AbilityCovers(1, x, z, now);
+        public bool EarCovers(float x, float z, double now)
+        {
+            // Home infrastructure is the defender's passive warning net. It must be usable
+            // without first breaching an enemy site; tactical leases add a forward ear.
+            const float homeEarRadius = 12000f;
+            float radiusSquared = homeEarRadius * homeEarRadius;
+            for (int i = 0; i < CyberLocations.HomeSlots; i++)
+            {
+                if (!Working(i)) continue;
+                float dx = nodes[i].X - x, dz = nodes[i].Z - z;
+                if (dx * dx + dz * dz <= radiusSquared) return true;
+            }
+            return AbilityCovers(1, x, z, now);
+        }
 
         /// <summary>Any working hacked location covering the point, whatever its stage.</summary>
         public bool HackedCovers(float x, float z, double now)
         {
             for (int i = 0; i < SlotCount; i++)
             {
-                if (!Working(i) || !nodes[i].Hacked) continue;
+                if (!Working(i) || !IsHacked(i) || (i == accessSlot && AccessRemaining(now) <= 0f)) continue;
                 float radius = RadiusOf(i, now);
                 float dx = nodes[i].X - x, dz = nodes[i].Z - z;
                 if (dx * dx + dz * dz <= radius * radius) return true;
@@ -435,6 +444,28 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         public float BreachTrace => breachTrace;
         public bool BreachAwaitingChoice => choiceTarget >= 0;
         public int ChoiceTarget => choiceTarget;
+        public int AccessSlot => AccessRemaining(lastTick) > 0f ? accessSlot : -1;
+
+        /// <summary>Remaining lifetime of the faction's single temporary operation lease.</summary>
+        public float AccessRemaining(double now) =>
+            accessSlot >= TargetBase && accessUntil > now && Exists(accessSlot) && nodes[accessSlot].Hacked
+                ? (float)(accessUntil - now) : 0f;
+
+        public float AccessRecoveryRemaining(double now) =>
+            accessRecoveryUntil > now ? (float)(accessRecoveryUntil - now) : 0f;
+
+        /// <summary>Consume the lease only when a validated Cyber effect lands inside its site coverage.</summary>
+        public bool ConsumeAccess(float x, float z, double now)
+        {
+            int slot = accessSlot;
+            if (AccessRemaining(now) <= 0f || !Working(slot) || !Finite(x) || !Finite(z)) return false;
+            float radius = RadiusOf(slot, now);
+            float dx = nodes[slot].X - x, dz = nodes[slot].Z - z;
+            if (dx * dx + dz * dz > radius * radius) return false;
+            EndAccess(now, CyberNotice.AccessConsumed);
+            accessRecoveryUntil = now + CyberLocations.AccessRecoverySeconds;
+            return true;
+        }
 
         /// <summary>Seconds left to pick the capstone before the model picks REVEAL itself.</summary>
         public float ChoiceRemaining(double now) =>
@@ -481,9 +512,8 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             if (!HasCommand || !CommandOnline) return BreachDenial.NoCommand;
             if (!Exists(slot) || slot < TargetBase) return BreachDenial.NoTarget;
             if (!CyberLocations.Hackable(CyberLocations.LocationOf(nodes[slot].Kind))) return BreachDenial.NotHackable;
-            // Re-breaching a location you hold is how it climbs a stage; a mastered one is done.
-            if (nodes[slot].Hacked && nodes[slot].Stage >= CyberLocations.StageCount) return BreachDenial.AlreadyMine;
-            if (nodes[slot].Hacked && !Working(slot)) return BreachDenial.NotHackable;
+            if (AccessRemaining(now) > 0f) return BreachDenial.AccessActive;
+            if (AccessRecoveryRemaining(now) > 0f) return BreachDenial.Recharging;
             if (BreachActive) return BreachDenial.Running;
             if (BreachAwaitingChoice) return BreachDenial.AwaitingChoice;
             if (LockoutRemaining(slot, now) > 0f) return BreachDenial.Locked;
@@ -547,11 +577,12 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             return true;
         }
 
-        /// <summary>Host: pick the capstone a stage-4 location takes.</summary>
+        /// <summary>Host: pick an optional payload for the active access lease.</summary>
         public bool TryChooseCapstone(Capstone capstone, double now)
         {
-            if (!BreachAwaitingChoice || !IsHacked(choiceTarget) || nodes[choiceTarget].Stage != CyberLocations.StageCount ||
-                nodes[choiceTarget].Capstone != Capstone.None || capstone == Capstone.None || !Capstones.Known((byte)capstone)) return false;
+            if (!BreachAwaitingChoice || choiceTarget != accessSlot || AccessRemaining(now) <= 0f ||
+                !IsHacked(choiceTarget) || nodes[choiceTarget].Capstone != Capstone.None ||
+                capstone == Capstone.None || !Capstones.Known((byte)capstone)) return false;
             int slot = choiceTarget;
             nodes[slot].Capstone = capstone;
             choiceTarget = -1;
@@ -646,19 +677,36 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         private void Complete(double now)
         {
             int slot = breachTarget;
-            int stage = Math.Min(CyberLocations.StageCount, (int)nodes[slot].Stage + 1);
-            nodes[slot].Stage = (byte)stage;
+            if (accessSlot >= 0) EndAccess(now, CyberNotice.AccessExpired);
+            nodes[slot].Stage = 3; // compatibility stage: unlocks ordinary support effects only.
             nodes[slot].Hacked = true;
-            float loot = 10f + 10f * stage;
-            if (CyberLocations.LocationOf(nodes[slot].Kind) == LocationKind.City) loot *= 1.5f;
-            GrantIntel(loot);
+            nodes[slot].Capstone = Capstone.None;
+            accessSlot = slot;
+            accessUntil = now + CyberLocations.AccessSeconds;
+            GrantIntel(CyberLocations.AccessIntel);
             EndBreach();
-            Notify(CyberNotice.StageUp, slot, (byte)stage, now);
-            if (stage >= CyberLocations.StageCount)
+            choiceTarget = slot;
+            choiceDeadline = now + CyberLocations.PendingChoiceSeconds;
+            Notify(CyberNotice.AccessOpened, slot, 0, now);
+        }
+
+        private void EndAccess(double now, CyberNotice notice)
+        {
+            int slot = accessSlot;
+            if (slot < TargetBase || slot >= SlotCount) return;
+            if (Exists(slot))
             {
-                choiceTarget = slot;
-                choiceDeadline = now + CyberLocations.PendingChoiceSeconds;
-                Notify(CyberNotice.CapstoneReady, slot, 0, now);
+                nodes[slot].Hacked = false;
+                nodes[slot].Stage = 0;
+                nodes[slot].Capstone = Capstone.None;
+                Notify(notice, slot, 0, now);
+            }
+            accessSlot = -1;
+            accessUntil = 0.0;
+            if (choiceTarget == slot)
+            {
+                choiceTarget = -1;
+                choiceDeadline = 0.0;
             }
         }
 
@@ -807,6 +855,8 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         {
             lastTick = now;
             float dt = Math.Max(0f, Math.Min(deltaTime, 5f));
+            if (accessSlot >= 0 && AccessRemaining(now) <= 0f)
+                EndAccess(now, CyberNotice.AccessExpired);
             for (int i = 0; i < SlotCount; i++)
             {
                 if (nodes[i].Kind == NodeKind.None) continue;
@@ -965,7 +1015,7 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             for (int i = TargetBase; i < SlotCount; i++)
             {
                 if (nodes[i].Kind == NodeKind.None || targetSeen[i]) continue;
-                if (nodes[i].Hacked) Notify(CyberNotice.LocationLost, i, 0, now);
+                if (accessSlot == i) EndAccess(now, CyberNotice.LocationLost);
                 if (breachTarget == i) EndBreach();
                 if (choiceTarget == i)
                 {
@@ -1017,6 +1067,9 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
                 count++;
             }
             into.NodeCount = (byte)count;
+            into.AccessSlot = AccessRemaining(now) > 0f ? (byte)accessSlot : (byte)255;
+            into.AccessIn = AccessRemaining(now);
+            into.AccessRecoveryIn = AccessRecoveryRemaining(now);
             into.Computing = Computing;
             into.Intel = Intel;
             for (int u = 0; u < 4; u++) into.Upgrade[u] = (byte)upgradeLevels[u];
@@ -1038,6 +1091,9 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         public void Mirror(CyberSnapshot from, double now)
         {
             if (from == null) return;
+            accessSlot = -1;
+            accessUntil = 0.0;
+            accessRecoveryUntil = Rebase(accessRecoveryUntil, from.AccessRecoveryIn, now, CyberLocations.AccessRecoverySeconds);
             bool[] seen = mirrorSeen;
             Array.Clear(seen, 0, SlotCount);
             int count = Math.Min((int)from.NodeCount, SlotCount);
@@ -1067,13 +1123,30 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             for (int i = 0; i < SlotCount; i++)
                 if (!seen[i]) nodes[i] = default;
 
+            int incomingAccess = from.AccessSlot < SlotCount ? from.AccessSlot : -1;
+            float incomingAccessIn = Finite(from.AccessIn)
+                ? Math.Max(0f, Math.Min(CyberLocations.AccessSeconds, from.AccessIn)) : 0f;
+            if (incomingAccess >= TargetBase && incomingAccessIn > 0f && Exists(incomingAccess) &&
+                nodes[incomingAccess].Hacked && nodes[incomingAccess].Stage == 3)
+            {
+                accessSlot = incomingAccess;
+                accessUntil = now + incomingAccessIn;
+            }
+            for (int i = TargetBase; i < SlotCount; i++)
+            {
+                bool activeAccess = i == accessSlot;
+                nodes[i].Hacked = activeAccess;
+                nodes[i].Stage = activeAccess ? (byte)3 : (byte)0;
+                if (!activeAccess) nodes[i].Capstone = Capstone.None;
+            }
+
             Computing = Finite(from.Computing) ? Math.Max(0f, Math.Min(from.Computing, 100000f)) : 0f;
             Intel = Finite(from.Intel) ? Math.Max(0f, Math.Min(from.Intel, 100000f)) : 0f;
             for (int u = 0; u < 4; u++) upgradeLevels[u] = Math.Max(0, Math.Min(CyberLocations.UpgradeLevels, (int)from.Upgrade[u]));
 
             int sessionTarget = from.BreachTarget < SlotCount && Exists(from.BreachTarget) ? from.BreachTarget : -1;
-            bool choosing = (from.BreachFlags & 2) != 0 && sessionTarget >= TargetBase && IsHacked(sessionTarget) &&
-                            nodes[sessionTarget].Stage == CyberLocations.StageCount && nodes[sessionTarget].Capstone == Capstone.None &&
+            bool choosing = (from.BreachFlags & 2) != 0 && sessionTarget >= TargetBase && sessionTarget == accessSlot && IsHacked(sessionTarget) &&
+                            nodes[sessionTarget].Capstone == Capstone.None &&
                             from.BreachPhase == (byte)BreachPhase.None;
             breachTarget = choosing ? -1 : sessionTarget;
             breachPhase = from.BreachPhase <= (byte)BreachPhase.Extract ? (BreachPhase)from.BreachPhase : BreachPhase.None;
@@ -1124,6 +1197,9 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         public readonly byte[] PatchIn = new byte[CyberNetwork.SlotCount];
         public readonly byte[] BaitIn = new byte[CyberNetwork.SlotCount];
         public readonly byte[] LockIn = new byte[CyberNetwork.SlotCount];
+        public byte AccessSlot = 255;
+        public float AccessIn;
+        public float AccessRecoveryIn;
         public float Computing;
         public float Intel;
         public readonly byte[] Upgrade = new byte[4];
@@ -1175,6 +1251,9 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             Array.Clear(PatchIn, 0, PatchIn.Length);
             Array.Clear(BaitIn, 0, BaitIn.Length);
             Array.Clear(LockIn, 0, LockIn.Length);
+            AccessSlot = 255;
+            AccessIn = 0f;
+            AccessRecoveryIn = 0f;
             Computing = 0f;
             Intel = 0f;
             Array.Clear(Upgrade, 0, Upgrade.Length);

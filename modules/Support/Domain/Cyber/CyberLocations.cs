@@ -94,7 +94,8 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         NoSession,
         LowComputing,
         Recharging,
-        AwaitingChoice
+        AwaitingChoice,
+        AccessActive
     }
 
     internal readonly struct StageInfo
@@ -138,8 +139,7 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
 
         public const float ComputingBaseCapacity = 100f;
         public const float ComputingCapacityPerNode = 25f;
-        public const float IntelBaseCapacity = 60f;
-        public const float IntelCapacityPerStage = 15f;
+        public const float IntelBaseCapacity = 150f;
 
         public const float CommandComputing = 1f;
         public const float BaseComputing = 0.3f;
@@ -147,6 +147,10 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         public const float ProbeSeconds = 5f;
         public const float ExploitSeconds = 9f;
         public const float ExtractSeconds = 7f;
+        public const float AccessSeconds = 75f;
+        /// <summary>One bounded basic-effect budget per completed operation.</summary>
+        public const float AccessIntel = 35f;
+        public const float AccessRecoverySeconds = 30f;
         public const float ForceDurationScale = 0.55f;
         public const float ForceCostScale = 1.6f;
         public const float ForceTraceScale = 1.6f;
@@ -164,8 +168,8 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         public const float SpoofTrace = 0.25f;
         public const float SpoofCost = 15f;
         public const float SpoofRecharge = 30f;
-        public const float LockoutSeconds = 300f;
-        public const float PendingChoiceSeconds = 120f;
+        public const float LockoutSeconds = 60f;
+        public const float PendingChoiceSeconds = 12f;
 
         public const float PatchSeconds = 8f;
         public const float HoneypotSeconds = 60f;

@@ -61,7 +61,6 @@ namespace BoscaliSummer.Framework.Contracts
         /// <summary>Draw the element at all. Off keeps every consumer running, silently.</summary>
         bool Enabled { get; set; }
 
-        HudAnchor Anchor { get; set; }
         int ScaleStep { get; set; }
         int OpacityStep { get; set; }
         int MaxRows { get; set; }
@@ -72,6 +71,13 @@ namespace BoscaliSummer.Framework.Contracts
         int OffsetX { get; set; }
         int OffsetY { get; set; }
         void ResetLayout();
+
+        /// <summary>
+        /// Show the native target camera feed inset on the status panel while a target is
+        /// selected in the native target camera and its mode is not landing. Persisted under
+        /// the pre-existing key <c>Avionics.ThirdPersonCameraEnabled</c>.
+        /// </summary>
+        bool CameraFeedEnabled { get; set; }
 
         /// <summary>Every declared feed, in declaration order, for the settings page to list.</summary>
         IReadOnlyList<IHudChannel> Channels { get; }

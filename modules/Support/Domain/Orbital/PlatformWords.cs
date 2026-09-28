@@ -56,6 +56,11 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
                 case PlatformDenial.Expended: return "NO RODS · SEND CARGO";
                 case PlatformDenial.NoFuel: return "NO FUEL · SEND CARGO";
                 case PlatformDenial.SameOrbit: return "SELECT ANOTHER POSITION";
+                case PlatformDenial.WrongFocus: return ability == PlatformAbility.RodStrike
+                    ? "ROUTE POWER TO STRIKE" : "ROUTE POWER TO SCREEN";
+                case PlatformDenial.Retasking: return "RETASKING · " + Clock(platform != null ? platform.RetaskUntil - now : 0.0);
+                case PlatformDenial.NoSolution: return "NEEDS FRESH SAR / ELINT / FIELD RECON";
+                case PlatformDenial.OutsideSector: return "OUTSIDE REACH · RELOCATE / FIT RELAY";
                 default: return denial.ToString().ToUpperInvariant();
             }
         }
@@ -84,6 +89,9 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
             (kw >= 0f ? "+" : "−") + Math.Abs(kw).ToString("0.0", CultureInfo.InvariantCulture) + " KW";
 
         public static string Tonnes(float t) => t.ToString("0.0", CultureInfo.InvariantCulture) + " T";
+
+        public static string Focus(PlatformFocus focus) => focus == PlatformFocus.Strike ? "STRIKE"
+            : focus == PlatformFocus.Screen ? "SCREEN" : "SURVEY";
 
         public static string Whole(float value) =>
             Math.Round(value).ToString("N0", CultureInfo.InvariantCulture);

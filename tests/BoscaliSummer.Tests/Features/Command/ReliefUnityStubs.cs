@@ -60,6 +60,12 @@ namespace BoscaliSummer.Framework.Features
 namespace BoscaliSummer.Features.Command.Presentation.MapUi
 {
     internal static class MfdRailPatch { internal static bool IsApplied => true; }
+    internal static class ReliefNavigator
+    {
+        internal static void Tick(BoscaliSummer.Features.Command.Domain.ReliefRig rig) { }
+        internal static void Release() { }
+        internal static void Reset() { }
+    }
     internal static class MfdMapOrbitControls
     {
         internal static void Tick(DynamicMap map) { }
@@ -77,6 +83,8 @@ public sealed class DynamicMap : MonoBehaviour
     public static bool mapMaximized = true;
     public GameObject mapImage;
     public UnityEngine.UI.Image mapBackground;
+    public Transform mapScaleCenter;
+    public Transform mapScaleProxy;
     public Canvas maximizedMapCanvas;
     public GridLabels gridLabels;
     public System.Collections.Generic.List<MapIcon> selectedIcons = new System.Collections.Generic.List<MapIcon>();
@@ -87,7 +95,16 @@ public sealed class DynamicMap : MonoBehaviour
     public float GetZoomLevel() => zoom;
     public void SetZoomLevel(float value)
     {
-        mapImage.transform.localScale *= value / zoom;
+        // Match the game's proxy/reparent zoom path. A direct image-scale stub hid
+        // the cropped terrain seen in the expanded live map.
+        mapScaleCenter.position = mapBackground.transform.position;
+        mapScaleProxy.localScale = mapScaleCenter.localScale;
+        mapScaleProxy.position = mapImage.transform.position;
+        mapScaleProxy.SetParent(mapScaleCenter);
+        mapScaleCenter.localScale = Vector3.one * value;
+        mapScaleProxy.SetParent(mapBackground.transform);
+        mapImage.transform.localScale = mapScaleProxy.localScale;
+        mapImage.transform.position = mapScaleProxy.position;
         zoom = value;
     }
     public GlobalPosition GetCursorCoordinates() => default;
@@ -108,7 +125,11 @@ public sealed class DynamicMap : MonoBehaviour
 public sealed class GridLabels : MonoBehaviour { }
 
 public sealed class MapSettings : MonoBehaviour { public Vector2 MapSize = new Vector2(81920f, 81920f); }
-public class MapIcon : MonoBehaviour { public UnityEngine.UI.Image iconImage; }
+public class MapIcon : MonoBehaviour
+{
+    public UnityEngine.UI.Image iconImage;
+    protected Vector3 globalPosition;
+}
 public enum FactionMode { Friendly, Enemy }
 public sealed class FactionHQ { public bool Friendly; }
 public sealed class TargetListSelector { public bool CheckExclusions(Unit unit) => false; }
@@ -119,6 +140,7 @@ public class Unit
     public FactionHQ NetworkHQ;
 }
 public sealed class Aircraft : Unit { }
+public sealed class Missile : Unit { }
 public static class GameManager
 {
     public static Aircraft LocalAircraft;

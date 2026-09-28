@@ -10,32 +10,60 @@ namespace BoscaliSummer.Features.Weather.Visuals
 {
     /// <summary>One world-anchored volume. Small 2D maps from WeatherField control the
     /// front, cell and cumulus density: a 256-square near map over the flight domain and a
-    /// coarse 128-square far map (the level of detail beyond the mission area) out to the
-    /// horizon. The sky is static between weather steps: each step builds one map pair for
-    /// its settled state and crossfades into it on the mission clock.</summary>
+    /// coarse far map (the level of detail beyond the mission area) out to the horizon. The
+    /// sky is static between weather steps: each step builds one map pair for its settled
+    /// state and crossfades into it on the mission clock.
+    ///
+    /// <para>Normally the sky is marched at half resolution by <see cref="WeatherCloudPass"/>
+    /// and the camera-following cube only composites it; when that pass is unavailable the
+    /// cube marches every pixel itself.</para></summary>
     internal sealed class WeatherVolumeDressing
     {
-        private const int MapSize = 256;
-        private const int FarMapSize = 128;
-        private const int NoiseSize = 64;
-        private const float VolumeTop = 16000f;
+        internal const int NoiseSize = 64;
+        internal const int NoiseTexels = NoiseSize * NoiseSize * NoiseSize;
         private const float FarSpanScale = 3f;
         private const float MinFarHalf = 240000f;
+        private static readonly int MapTexId = Shader.PropertyToID("_WeatherMapTex");
+        private static readonly int ProfileTexId = Shader.PropertyToID("_WeatherProfileTex");
+        private static readonly int FarMapTexId = Shader.PropertyToID("_WeatherFarMapTex");
+        private static readonly int FarProfileTexId = Shader.PropertyToID("_WeatherFarProfileTex");
+        private static readonly int EnvelopeTexId = Shader.PropertyToID("_WeatherEnvelopeTex");
+        private static readonly int EnvelopeOnId = Shader.PropertyToID("_WeatherEnvelopeOn");
+        private static readonly int MapBlendId = Shader.PropertyToID("_WeatherMapBlend");
+        private static readonly int MapTargetId = Shader.PropertyToID("_CloudMapTarget");
+        private static readonly int CameraPosId = Shader.PropertyToID("_CloudCameraPos");
         private static byte[] sharedNoise;
         private static int generatingNoise;
         private static Mesh cube;
 
         private readonly ManualLogSource logger;
+        private readonly CloudVolumeUniforms uniforms = new CloudVolumeUniforms();
+        private readonly WeatherCloudPass pass = new WeatherCloudPass();
+        private readonly Action<Camera> onRender;
         private int mapStep = -1;
         private float fadeStart, fadeLength;
-        private Material material;
+        private Material material, compositeMaterial;
         private Texture3D noise;
-        private readonly MapPair near = new MapPair("Weather", MapSize);
-        private readonly MapPair far = new MapPair("Weather Far", FarMapSize);
+        private readonly MapPair near = new MapPair("Weather", CloudMaps.NearSize);
+        private readonly MapPair far = new MapPair("Weather Far", CloudMaps.FarSize);
+        // Empty space: the union of the fading and the arriving state's envelopes while a
+        // fade runs, the arriving one alone once it has landed.
+        private Texture2D envelope;
+        private byte[] envelopeShown, envelopeTo;
+        private bool envelopeUnionDue, envelopeFinalDue;
         private float nextBlend;
+        private float blendedAt = -1f;
         private bool blendUnavailable;
         private WeatherKey mapKey;
-        private float volumeBottom, volumeTop = VolumeTop;
+        private float volumeBottom, volumeTop = CloudMaps.VolumeTop;
+        private float horizonCover, previousHorizonCover;
+        private float cameraInCloud;
+        private float densityHere;
+        private int densityFrame = -1;
+        private bool halfResolution;
+
+        /// <summary>0..1 how deep the camera is inside cloud, smoothed; read by the atmosphere.</summary>
+        internal float CameraInCloud => cameraInCloud;
         private float previousBottom, previousTop;
         private int mapUpdates;
         private GameObject root;
@@ -45,7 +73,7 @@ namespace BoscaliSummer.Features.Weather.Visuals
         private float mapHalf, farHalf;
         private int mapGenerating;
         private int mapRevision;
-        private MapResult readyMap;
+        private CloudMaps readyMap;
         private bool failed;
         private Material skybox;
         private float nativeSkyClouds;
@@ -61,13 +89,23 @@ namespace BoscaliSummer.Features.Weather.Visuals
         internal bool Active => renderer != null && renderer.enabled && near.Current != null && noise != null;
         internal bool DeckActive => Active && activeField.Params.Overcast > 0.75f &&
             activeField.Params.Convective < 0.25f;
+        /// <summary>True while the reduced-resolution pass draws the sky.</summary>
+        internal bool HalfResolution => Active && halfResolution;
 
         /// <summary>False once the shader or noise is known to be unavailable: the caller
         /// keeps native clouds. True before the first frame, so native clouds never pop in
         /// while the volume preloads.</summary>
         internal bool Usable => !failed;
 
-        internal WeatherVolumeDressing(ManualLogSource log) { logger = log; shadows = new WeatherCloudShadows(); }
+        internal WeatherVolumeDressing(ManualLogSource log)
+        {
+            logger = log;
+            shadows = new WeatherCloudShadows();
+            onRender = RenderTimeCamera;
+        }
+
+        /// <summary>The shared detail-noise bytes (RGBA per texel), or null until generated.</summary>
+        internal static byte[] NoiseData => Volatile.Read(ref sharedNoise);
 
         internal static void WarmNoise()
         {
@@ -84,7 +122,7 @@ namespace BoscaliSummer.Features.Weather.Visuals
         }
 
         internal void Update(LevelInfo level, WeatherField field, Camera camera,
-            float currentCloudHeight, float missionTime)
+            float currentCloudHeight, float missionTime, bool wantHalfResolution)
         {
             if (Application.isBatchMode || level == null || field == null || !field.IsBuilt || camera == null)
             {
@@ -120,8 +158,9 @@ namespace BoscaliSummer.Features.Weather.Visuals
                     // Preload: the first map is built on this frame, so the mission opens on
                     // its own sky instead of native clouds swapping out a moment later.
                     var watch = System.Diagnostics.Stopwatch.StartNew();
-                    Accept(BuildMap(field.Key, settledAt, field.HalfX, field.HalfZ, field.HourOfDay,
+                    Accept(CloudMaps.Build(field.Key, settledAt, field.HalfX, field.HalfZ, field.HourOfDay,
                         mapHalf, farHalf), missionTime);
+                    uniforms.Settle(field);
                     logger?.LogInfo("[Weather] Cloud maps preloaded in " + watch.ElapsedMilliseconds +
                         " ms (near " + Mathf.RoundToInt(mapHalf / 1000f) + " km, far LOD " +
                         Mathf.RoundToInt(farHalf / 1000f) + " km half-span).");
@@ -129,7 +168,7 @@ namespace BoscaliSummer.Features.Weather.Visuals
                 else QueueMap(field, settledAt);
             }
 
-            MapResult ready = Interlocked.Exchange(ref readyMap, null);
+            CloudMaps ready = Interlocked.Exchange(ref readyMap, null);
             if (ready != null && ready.Revision == Volatile.Read(ref mapRevision)) Accept(ready, missionTime);
 
             GlobalPosition global = camera.transform.GlobalPosition();
@@ -140,82 +179,143 @@ namespace BoscaliSummer.Features.Weather.Visuals
             // inside the camera clip plane; the shader intersects the world-anchored volume.
             root.transform.position = camera.transform.position;
             root.transform.localScale = Vector3.one * 1000f;
-            material.SetTexture("_CloudNoiseTex", noise);
             float mapBlend = FadeWeight(missionTime);
             BlendMaps(mapBlend);
             bool blended = !blendUnavailable && near.BlendReady && far.BlendReady;
-            material.SetTexture("_WeatherMapTex", blended ? (Texture)near.BlendedStructure : near.Current);
-            material.SetTexture("_WeatherProfileTex", blended ? (Texture)near.BlendedProfiles : near.CurrentProfiles);
-            material.SetTexture("_WeatherFarMapTex", blended ? (Texture)far.BlendedStructure : far.Current);
-            material.SetTexture("_WeatherFarProfileTex", blended ? (Texture)far.BlendedProfiles : far.CurrentProfiles);
-            material.SetFloat("_WeatherMapSpan", mapHalf * 2f);
-            material.SetFloat("_WeatherFarSpan", farHalf * 2f);
-            material.SetFloat("_CloudBase", field.Params.CloudBase + cloudShift);
-            material.SetFloat("_CloudHeightShift", cloudShift);
-            material.SetVector("_CloudWorldOffset", offset);
-            material.SetVector("_CloudCameraForward", camera.transform.forward);
-            material.SetVector("_CloudAltitudeBounds", new Vector2(
-                (mapBlend < 1f ? Mathf.Min(volumeBottom, previousBottom) : volumeBottom) + cloudShift,
-                (mapBlend < 1f ? Mathf.Max(volumeTop, previousTop) : volumeTop) + cloudShift));
-            // Static weather: the detail texture does not crawl either.
-            material.SetVector("_CloudWindOffset", Vector2.zero);
+            material.SetTexture(MapTexId, blended ? (Texture)near.BlendedStructure : near.Current);
+            material.SetTexture(ProfileTexId, blended ? (Texture)near.BlendedProfiles : near.CurrentProfiles);
+            material.SetTexture(FarMapTexId, blended ? (Texture)far.BlendedStructure : far.Current);
+            material.SetTexture(FarProfileTexId, blended ? (Texture)far.BlendedProfiles : far.CurrentProfiles);
+            CloudVolumeUniforms.ApplySpans(material, mapHalf, farHalf);
+            UpdateEnvelope(mapBlend);
+            material.SetTexture(EnvelopeTexId, envelope);
+            material.SetFloat(EnvelopeOnId, envelope != null ? 1f : 0f);
+
+            // Inside cloud: near-field density and wisps, eased so crossing an edge never pops.
+            float depthHere = DensityHere((float)global.x, (float)global.y, (float)global.z);
+            cameraInCloud = Mathf.MoveTowards(cameraInCloud, Mathf.Clamp01((depthHere - 0.02f) * 5f), Time.deltaTime * 1.5f);
+
+            // Half resolution once the pass has proved it runs on this camera; the full march
+            // stays on screen until then, and returns if the pass stops executing.
+            bool passAvailable = wantHalfResolution && compositeMaterial != null;
+            bool passRunning = pass.ExecutedFrame >= Time.frameCount - 2;
+            halfResolution = passAvailable && passRunning;
+            pass.Bind(camera, renderer, material, compositeMaterial, passAvailable, onRender);
+            renderer.sharedMaterial = halfResolution ? compositeMaterial : material;
+
             Vector3 sunDirection = level.sun != null ? -level.sun.transform.forward : Vector3.up;
             Color sunColor = level.sun != null ? level.sun.color * level.sun.intensity : Color.white;
             float peak = Mathf.Max(sunColor.r, Mathf.Max(sunColor.g, sunColor.b));
             if (peak > 2f) sunColor *= 2f / peak;
-            material.SetVector("_CloudSunDirection", sunDirection.normalized);
-            material.SetColor("_CloudSunColor", sunColor * 0.75f);
-            material.SetColor("_CloudAmbientColor", RenderSettings.ambientSkyColor * RenderSettings.ambientIntensity * 0.45f +
-                RenderSettings.fogColor * 0.30f + sunColor * (Mathf.Clamp01(sunDirection.y) * 0.09f));
-            material.SetColor("_CloudGroundColor", RenderSettings.ambientGroundColor * 0.25f +
-                RenderSettings.fogColor * 0.10f);
-            material.SetColor("_CloudFogColor", RenderSettings.fogColor);
-            // Use the same haze as opaque terrain. Ground-level model visibility
-            // cannot be applied again to distant clouds: that would turn a clear
-            // mountain view into a uniformly pale cloud wall. RainAtmosphere has
-            // already applied the local precipitation response this frame.
-            float extinction = RenderSettings.fog ? Mathf.Clamp(RenderSettings.fogDensity, 0.000008f, 0.00055f) : 0.000008f;
-            material.SetFloat("_CloudAirExtinction", extinction);
-            material.SetFloat("_CloudStorm", field.Params.Severity);
-            bool lowDetail = Mathf.Clamp01(PlayerSettings.graphics.CloudDetail) < 0.5f;
-            material.SetFloat("_CloudSteps", lowDetail ? 64f : 96f);
-            material.SetFloat("_CloudFarSteps", lowDetail ? 12f : 20f);
+            var frame = new CloudFrame
+            {
+                WorldOffset = offset,
+                CameraPosition = camera.transform.position,
+                CameraForward = camera.transform.forward,
+                FieldOfView = camera.fieldOfView,
+                PixelHeight = halfResolution && pass.Height > 0 ? pass.Height : camera.pixelHeight,
+                CloudShift = cloudShift,
+                Bottom = mapBlend < 1f ? Mathf.Min(volumeBottom, previousBottom) : volumeBottom,
+                Top = mapBlend < 1f ? Mathf.Max(volumeTop, previousTop) : volumeTop,
+                HorizonCover = Mathf.Lerp(previousHorizonCover, horizonCover, mapBlend),
+                SunDirection = sunDirection,
+                SunColor = sunColor,
+                Ambient = RenderSettings.ambientSkyColor * RenderSettings.ambientIntensity * 0.45f +
+                    RenderSettings.fogColor * 0.30f + sunColor * (Mathf.Clamp01(sunDirection.y) * 0.09f),
+                Ground = RenderSettings.ambientGroundColor * 0.25f + RenderSettings.fogColor * 0.10f,
+                Fog = RenderSettings.fogColor,
+                // Use the same haze as opaque terrain. Ground-level model visibility
+                // cannot be applied again to distant clouds: that would turn a clear
+                // mountain view into a uniformly pale cloud wall. RainAtmosphere has
+                // already applied the local precipitation response this frame.
+                Extinction = RenderSettings.fog ? Mathf.Clamp(RenderSettings.fogDensity, 0.000008f, 0.00055f) : 0.000008f,
+                LowDetail = Mathf.Clamp01(PlayerSettings.graphics.CloudDetail) < 0.5f,
+                CameraInCloud = cameraInCloud,
+                DeltaTime = Time.deltaTime,
+            };
+            uniforms.Apply(material, field, frame, noise);
             renderer.enabled = true;
             HideReason = null;
             ReplaceSkyClouds(level);
-            shadows.Update(level, field, currentCloudHeight);
+            shadows.Update(level, field, currentCloudHeight, camera);
         }
 
-        internal bool InCloud(float x, float y, float z)
+        private void UpdateEnvelope(float mapBlend)
         {
-            if (!Active || activeField == null) return false;
-            WeatherPoint point = activeField.Sample(x, z);
-            float height = y - cloudShift;
-            if (point.FrontCover > 0.48f && height > point.FrontBase + 80f && height < point.FrontTop - 80f)
-                return true;
-            if (height < point.CloudBase + 80f || height > point.CloudTop - 80f) return false;
-            float h = Mathf.Clamp01((height - point.CloudBase) / Mathf.Max(1f, point.CloudTop - point.CloudBase));
-            return (point.BackgroundCover > 0.34f && height < point.CloudBase + 1400f) ||
-                (point.CellShape > 0.25f + 0.43f * h * h && h < 0.94f);
+            if (envelopeTo == null) return;
+            byte[] upload = null;
+            if (envelopeUnionDue)
+            {
+                upload = envelopeShown == null ? envelopeTo : new byte[envelopeTo.Length];
+                if (envelopeShown != null) CloudMaps.Union(envelopeShown, envelopeTo, upload);
+                envelopeUnionDue = false;
+                envelopeFinalDue = envelopeShown != null;
+            }
+            else if (envelopeFinalDue && mapBlend >= 1f)
+            {
+                upload = envelopeTo;
+                envelopeFinalDue = false;
+            }
+            if (upload == null) return;
+            if (envelope == null)
+            {
+                envelope = new Texture2D(CloudMaps.EnvelopeSize, CloudMaps.EnvelopeSize, TextureFormat.RGBA32, false, true)
+                { name = "Boscali Weather Envelope", filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp };
+            }
+            envelope.LoadRawTextureData(upload);
+            envelope.Apply(false, false);
+            envelopeShown = upload;
+        }
+
+        /// <summary>At render time, with the camera's final pose: the reduced-resolution march
+        /// rebuilds its rays from the corners of this exact view.</summary>
+        private void RenderTimeCamera(Camera camera)
+        {
+            if (material == null || camera == null) return;
+            material.SetVector(CameraPosId, camera.transform.position);
+            uniforms.ApplyFrustum(material, camera);
+        }
+
+        internal bool InCloud(float x, float y, float z) => Active && DensityHere(x, y, z) > 0.08f;
+
+        /// <summary>The same bodies the shader draws, at the camera: the gaps of a broken deck
+        /// are clear air. Evaluated once per frame; both callers ask about the camera.</summary>
+        private float DensityHere(float x, float y, float z)
+        {
+            if (densityFrame == Time.frameCount) return densityHere;
+            densityFrame = Time.frameCount;
+            densityHere = 0f;
+            if (activeField == null) return 0f;
+            byte[] data = NoiseData;
+            if (data == null || data.Length != NoiseTexels * 4) return 0f;
+            densityHere = new CloudBodies(data, NoiseSize, activeField.Params, activeField.PrevailingHeading,
+                activeField.Split, uniforms.FogShown).Density(activeField.Sample(x, z), x, y, z, cloudShift);
+            return densityHere;
         }
 
         internal void Restore()
         {
             Invalidate();
+            pass.Dispose();
             if (root != null) UnityEngine.Object.Destroy(root);
             if (material != null) UnityEngine.Object.Destroy(material);
+            if (compositeMaterial != null) UnityEngine.Object.Destroy(compositeMaterial);
             if (noise != null) UnityEngine.Object.Destroy(noise);
             ReleaseMaps();
             mapStep = -1;
             shadows.Restore();
+            uniforms.Reset();
             root = null;
             renderer = null;
             material = null;
+            compositeMaterial = null;
             noise = null;
             mapKey = null;
             mapHalf = farHalf = 0f;
             mapUpdates = 0;
             activeField = null;
+            densityFrame = -1;
+            halfResolution = false;
             failed = false;
             RestoreSkyClouds();
         }
@@ -224,6 +324,8 @@ namespace BoscaliSummer.Features.Weather.Visuals
         {
             HideReason = reason;
             if (renderer != null) renderer.enabled = false;
+            pass.Dispose();
+            halfResolution = false;
             shadows.Restore();
             RestoreSkyClouds();
         }
@@ -235,18 +337,24 @@ namespace BoscaliSummer.Features.Weather.Visuals
         }
 
         /// <summary>Crossfades from the sky on screen into a new map pair.</summary>
-        private void Accept(MapResult result, float missionTime)
+        private void Accept(CloudMaps result, float missionTime)
         {
             bool first = near.Current == null;
             // Whichever map dominates the screen now becomes the fade's starting point.
             bool shift = !first && FadeWeight(missionTime) >= 0.5f;
-            near.Accept(result.Pixels, result.Profiles, first, shift);
-            far.Accept(result.FarPixels, result.FarProfiles, first, shift);
+            // The union covers the sky on screen now and the one arriving.
+            if (first) envelopeShown = null;
+            envelopeTo = result.Envelope;
+            envelopeUnionDue = true;
+            near.Accept(result.Near, result.NearProfiles, first, shift);
+            far.Accept(result.Far, result.FarProfiles, first, shift);
             if (first || shift)
             {
                 previousBottom = first ? result.Bottom : volumeBottom;
                 previousTop = first ? result.Top : volumeTop;
+                previousHorizonCover = first ? result.HorizonCover : horizonCover;
             }
+            horizonCover = result.HorizonCover;
             volumeBottom = result.Bottom;
             volumeTop = result.Top;
             fadeStart = missionTime;
@@ -254,6 +362,7 @@ namespace BoscaliSummer.Features.Weather.Visuals
             fadeLength = first ? 0f : Mathf.Max(mapKey != null ? mapKey.FadeSeconds * 0.5f : 5f,
                 result.SettledAt - missionTime);
             nextBlend = 0f;
+            blendedAt = -1f;
             mapUpdates++;
         }
 
@@ -280,7 +389,7 @@ namespace BoscaliSummer.Features.Weather.Visuals
             {
                 try
                 {
-                    MapResult result = BuildMap(key, settledAt, halfX, halfZ, hour, nearHalf, outerHalf);
+                    CloudMaps result = CloudMaps.Build(key, settledAt, halfX, halfZ, hour, nearHalf, outerHalf);
                     if (revision == Volatile.Read(ref mapRevision))
                     {
                         result.Revision = revision;
@@ -292,56 +401,24 @@ namespace BoscaliSummer.Features.Weather.Visuals
             });
         }
 
-        /// <summary>Samples both maps of one settled state. Pure: runs on the worker, or on the
-        /// main thread once for the preload.</summary>
-        private static MapResult BuildMap(WeatherKey key, float settledAt, float halfX, float halfZ, float hour,
-            float nearHalf, float outerHalf)
-        {
-            var snapshot = new WeatherField();
-            snapshot.Build(key, settledAt, halfX, halfZ, hour);
-            var result = new MapResult(settledAt, MapSize, FarMapSize);
-            float bottom = VolumeTop, top = 0f;
-            Fill(snapshot, nearHalf, MapSize, result.Pixels, result.Profiles, ref bottom, ref top);
-            Fill(snapshot, outerHalf, FarMapSize, result.FarPixels, result.FarProfiles, ref bottom, ref top);
-            result.Bottom = Math.Max(0f, bottom - 500f);
-            result.Top = Math.Min(VolumeTop, Math.Max(bottom + 2000f, top + 1600f));
-            return result;
-        }
-
-        private static void Fill(WeatherField snapshot, float half, int size, Color32[] pixels, Color32[] profiles,
-            ref float bottom, ref float top)
-        {
-            for (int z = 0; z < size; z++)
-            for (int x = 0; x < size; x++)
-            {
-                float worldX = ((x + 0.5f) / size * 2f - 1f) * half;
-                float worldZ = ((z + 0.5f) / size * 2f - 1f) * half;
-                WeatherPoint p = snapshot.Sample(worldX, worldZ);
-                pixels[z * size + x] = new Color32(Byte(p.BackgroundCover), Byte(p.FrontCover),
-                    Byte(p.CellShape), Byte(p.CloudTop / VolumeTop));
-                profiles[z * size + x] = new Color32(Byte(p.FrontBase / VolumeTop),
-                    Byte(p.FrontTop / VolumeTop), Byte(p.CloudBase / VolumeTop), Byte(p.RainRate / 100f));
-                if (p.Cover > 0.02f)
-                {
-                    bottom = Math.Min(bottom, p.FrontCover > 0.02f ? Math.Min(p.CloudBase, p.FrontBase) : p.CloudBase);
-                    top = Math.Max(top, Math.Max(p.CloudTop, p.FrontTop));
-                }
-            }
-        }
-
-        private static byte Byte(float v) => (byte)(Math.Max(0f, Math.Min(1f, v)) * 255f + 0.5f);
-
         private void ReleaseMaps()
         {
             near.Release();
             far.Release();
+            if (envelope != null) UnityEngine.Object.Destroy(envelope);
+            envelope = null;
+            envelopeShown = envelopeTo = null;
+            envelopeUnionDue = envelopeFinalDue = false;
             blendUnavailable = false;
             nextBlend = 0f;
+            blendedAt = -1f;
         }
 
         private void BlendMaps(float blend)
         {
-            if (blendUnavailable || Time.unscaledTime < nextBlend) return;
+            // The sky is static between steps: once the fade has landed, the blended maps
+            // already hold the final state and need no more blits.
+            if (blendUnavailable || Time.unscaledTime < nextBlend || blendedAt >= 1f) return;
             nextBlend = Time.unscaledTime + 0.25f;
             if (!near.EnsureBlendTargets() || !far.EnsureBlendTargets())
             {
@@ -352,10 +429,11 @@ namespace BoscaliSummer.Features.Weather.Visuals
             // Interpolate the small maps once, instead of repeating four texture
             // fetches in every view and sunlight ray sample at screen resolution.
             RenderTexture saved = RenderTexture.active;
-            material.SetFloat("_WeatherMapBlend", blend);
+            material.SetFloat(MapBlendId, blend);
             near.Blit(material);
             far.Blit(material);
             RenderTexture.active = saved;
+            blendedAt = blend;
         }
 
         private bool Prepare()
@@ -370,7 +448,13 @@ namespace BoscaliSummer.Features.Weather.Visuals
                     failed = true;
                     return false;
                 }
-                material = new Material(shader) { name = "Boscali Weather Volume", renderQueue = 3000 };
+                // Before vanilla smoke (2998-3001): a missile trail in front of a cloud draws over
+                // it instead of vanishing behind the volume. Vanilla cloud puffs sat at 2996-2997.
+                material = new Material(shader) { name = "Boscali Weather Volume", renderQueue = 2997 };
+                Shader compositeShader = CanopyShaderBundle.GetFlightCloudCompositeShader();
+                if (compositeShader != null && compositeShader.isSupported)
+                    compositeMaterial = new Material(compositeShader) { name = "Boscali Weather Composite", renderQueue = 2997 };
+                else logger?.LogWarning("[Weather] Cloud composite shader unavailable; clouds march at full resolution.");
             }
             if (noise == null)
             {
@@ -474,7 +558,7 @@ namespace BoscaliSummer.Features.Weather.Visuals
 
             /// <summary>The newer slot always receives the snapshot. <paramref name="shift"/>
             /// first moves the newer texture into the older slot; a first keyframe fills both.</summary>
-            internal void Accept(Color32[] pixels, Color32[] profiles, bool first, bool shift)
+            internal void Accept(byte[] pixels, byte[] profiles, bool first, bool shift)
             {
                 if (shift && !first)
                 {
@@ -501,9 +585,9 @@ namespace BoscaliSummer.Features.Weather.Visuals
             internal void Blit(Material material)
             {
                 if (Current == null) return;
-                material.SetTexture("_CloudMapTarget", Current);
+                material.SetTexture(MapTargetId, Current);
                 Graphics.Blit(previous != null ? previous : Current, BlendedStructure, material, 1);
-                material.SetTexture("_CloudMapTarget", CurrentProfiles);
+                material.SetTexture(MapTargetId, CurrentProfiles);
                 Graphics.Blit(previousProfiles != null ? previousProfiles : CurrentProfiles, BlendedProfiles, material, 1);
             }
 
@@ -516,13 +600,13 @@ namespace BoscaliSummer.Features.Weather.Visuals
                 BlendedStructure = BlendedProfiles = null;
             }
 
-            private Texture2D Upload(Texture2D texture, Color32[] pixels, string name)
+            private Texture2D Upload(Texture2D texture, byte[] pixels, string name)
             {
                 if (texture == null) texture = new Texture2D(size, size, TextureFormat.RGBA32, false, true)
                 {
                     name = "Boscali " + name, filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp
                 };
-                texture.SetPixels32(pixels);
+                texture.LoadRawTextureData(pixels);
                 texture.Apply(false, false);
                 return texture;
             }
@@ -534,23 +618,6 @@ namespace BoscaliSummer.Features.Weather.Visuals
             private static void Destroy(Texture2D texture)
             {
                 if (texture != null) UnityEngine.Object.Destroy(texture);
-            }
-        }
-
-        private sealed class MapResult
-        {
-            internal int Revision;
-            internal readonly float SettledAt;
-            internal readonly Color32[] Pixels, Profiles, FarPixels, FarProfiles;
-            internal float Bottom, Top;
-
-            internal MapResult(float settledAt, int size, int farSize)
-            {
-                SettledAt = settledAt;
-                Pixels = new Color32[size * size];
-                Profiles = new Color32[size * size];
-                FarPixels = new Color32[farSize * farSize];
-                FarProfiles = new Color32[farSize * farSize];
             }
         }
     }

@@ -46,13 +46,17 @@ namespace BoscaliSummer.Features.Command.Patches
             if (Input.mouseScrollDelta.y != 0f) return false;
             return !Input.GetMouseButton(0) && !Input.GetMouseButton(1);
         }
+
+        /// <summary>Runs even when a prefix skipped the method: the relief keeps the native sheet still.</summary>
+        private static void Postfix(DynamicMap __instance) => MfdTerrainRelief.PinNative(__instance);
     }
 
-    /// <summary>A completed box gesture must not also click the icon beneath its release.</summary>
+    /// <summary>A completed box or relief grab drag must not also click the icon beneath its release.</summary>
     [HarmonyPatch(typeof(UnitMapIcon), nameof(UnitMapIcon.ClickIcon))]
     internal static class MapBoxIconClickGuardPatch
     {
-        private static bool Prefix() => !MfdMapInteractions.BlockIconClick();
+        private static bool Prefix() =>
+            !MfdMapInteractions.BlockIconClick() && !ReliefNavigator.BlockIconClick();
     }
 
     /// <summary>

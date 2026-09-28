@@ -48,6 +48,13 @@ namespace BoscaliSummer.Features.Autopilot.Runtime
             if (callback != null) callback(candidate);
         }
 
+        /// <summary>Overrides just the icon glyph, leaving the wedge background/colour/layout native.</summary>
+        public void SetIcon(Sprite icon)
+        {
+            if (IconSpriteField == null) return;
+            IconSpriteField.SetValue(this, icon);
+        }
+
         public void CopyAppearanceFrom(RadialMenuAction template)
         {
             if (template == null || template is BoscaliMenuAction) return;

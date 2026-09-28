@@ -17,7 +17,7 @@ namespace BoscaliSummer.Features.Support.Presentation
     /// it, and one button to the full-screen console. ACTIONS is the flying half — the map
     /// abilities the station has earned, armed in one click. Everything that <em>grows</em> the
     /// station (mission loadouts, the truss, the catalogue, launches, jettisons) lives in
-    /// the station wall (<see cref="Views.StationView"/>), because that is the demanding half of the loop and it has
+    /// the task map (<see cref="Views.StationTaskingView"/>), with the station wall one step deeper because it has
     /// no business competing for attention with the aircraft.</para>
     ///
     /// <para>This file is the shell: sub-tabs, the work that must keep running with the page
@@ -122,12 +122,12 @@ namespace BoscaliSummer.Features.Support.Presentation
 
         // ---- Full-screen instruments ---------------------------------------------------------
 
-        /// <summary>The station wall: mission loadouts, the blueprint and every launch.</summary>
+        /// <summary>Open the station task map; engineering remains one step deeper.</summary>
         private void OpenStationConsole()
         {
             if (FullscreenInput.AnyOpen && !Window.OpsWindow.IsOpen) return;
-            OpenRoom(StationRoom(), null, consoleButton);
-            Log("FLIGHT · " + OrbitalPlatform.Callsign + " ON THE BIG BOARD");
+            OpenRoom(TaskingRoom(), null, consoleButton);
+            Log("FLIGHT · " + OrbitalPlatform.Callsign + " TASKING MAP OPEN");
         }
 
         private void OpenUplink(GlobalPosition? aim)

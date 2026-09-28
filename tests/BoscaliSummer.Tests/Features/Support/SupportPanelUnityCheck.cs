@@ -87,7 +87,9 @@ public static class SupportPanelUnityCheck
         shell.Metrics[1].Set("8/15", "STATION", .53f, AvTheme.RailInfo);
         shell.Metrics[2].Set("6/8", "INFOCON 3", .75f, AvTheme.RailCaution);
         shell.Metrics[3].Set("1/3", "1 POST", .25f, AvTheme.RailReady);
-        shell.WriteStatus(null, null, "Offline layout check · no live game state or orders.");
+        shell.WriteStatus(null, null, page == "CyberOps"
+            ? "Fixture has no local player/HQ; Cyber authorization readiness is not representative."
+            : "Offline layout check · no live game state or orders.");
 
         var panelObject = new GameObject("SupportPanel");
         object panel = panelObject.AddComponent(Mod.GetType("BoscaliSummer.Features.Support.Presentation.SupportPanel", true));
@@ -135,8 +137,11 @@ public static class SupportPanelUnityCheck
                 var lineCorners = new Vector3[4];
                 name.rectTransform.GetWorldCorners(nameCorners);
                 line.rectTransform.GetWorldCorners(lineCorners);
-                Check(nameCorners[2].x + 1f <= lineCorners[0].x,
-                    "Compact team callsign and status must have separate columns.");
+                bool separate = nameCorners[2].x + 1f <= lineCorners[0].x ||
+                    lineCorners[2].x + 1f <= nameCorners[0].x ||
+                    nameCorners[0].y >= lineCorners[2].y + 1f ||
+                    lineCorners[0].y >= nameCorners[2].y + 1f;
+                Check(separate, "Compact team callsign and status must not overlap.");
             }
         CheckFacts(panel, page);
         if (height >= 896f)
@@ -209,9 +214,8 @@ public static class SupportPanelUnityCheck
                 Call(panel, "CyberLog", "WATCH FLOOR ONLINE · AEGIS NET STANDING BY");
                 Call(panel, "CyberLog", "C2 UP · CENTRAL AIRBASE");
                 Call(panel, "CyberLog", "BREACH OPEN · CITY 11");
-                Call(panel, "CyberLog", "STAGE 1 · CITY 11 · FOOTHOLD");
-                Call(panel, "CyberLog", "STAGE 2 · CITY 11 · RADIUS 8 KM");
-                Call(panel, "CyberLog", "BREACH OPEN · AIRFIELD 12 · TRACE 18%");
+            Call(panel, "CyberLog", "ACCESS OPEN · CTY-ALPHA · 75S · ONE EFFECT");
+            Call(panel, "CyberLog", "ORIGIN TRACKED · HOSTILE SORTIE");
                 Call(panel, "RefreshStatusPage", network, now);
                 break;
             }
@@ -398,7 +402,7 @@ public static class SupportPanelUnityCheck
     }
 
     /// <summary>A real CyberNetwork fixture — the home backbone, cities in and out of reach, one
-    /// location breached to stage 2 and a live breach — driven through the production host tick
+    /// real location with one live access lease — driven through the production model
     /// and console painter, so the offline render shows the board the player actually sees.</summary>
     private static object CyberFixture(out int held, out double clock)
     {
@@ -417,17 +421,18 @@ public static class SupportPanelUnityCheck
         Invoke(network, "ReportLocation", 13, city, 52000f, 38000f, clock);
         Check(held >= 0 && reachable >= 0, "The CYBER fixture must place its hackable locations.");
 
-        // Host time: accrue resources, breach the near city twice (stage 2 gives it a radius and
-        // intel), then open a quiet breach on the airfield so the strip and the board are live.
+        // Host time: accrue resources, complete one quiet city operation, and choose its optional
+        // payload so the fixture exercises the live 75-second, one-effect lease.
         for (int i = 0; i < 1200; i++) Call(network, "Tick", clock += 0.25, 0.25f, 1f);
-        for (int pass = 0; pass < 2; pass++)
-        {
-            Invoke(network, "TryStartBreach", held, true, clock);
-            for (int i = 0; i < 600 && (bool)Property(network, "BreachActive"); i++)
-                Call(network, "Tick", clock += 0.25, 0.25f, 1f);
-        }
-        Check((int)Invoke(network, "Stage", held) >= 2, "The fixture breach must lift the city to stage 2.");
-        Invoke(network, "TryStartBreach", reachable, true, clock);
+        Check(Convert.ToInt32(Invoke(network, "TryStartBreach", held, true, clock)) == 0,
+            "The fixture must start a first real-site operation.");
+        for (int i = 0; i < 600 && (bool)Property(network, "BreachActive"); i++)
+            Call(network, "Tick", clock += 0.25, 0.25f, 1f);
+        Check((int)Invoke(network, "Stage", held) == 3 && (float)Invoke(network, "AccessRemaining", clock) > 70f,
+            "One completed operation must leave one live lease.");
+        Type capstoneType = Mod.GetType("BoscaliSummer.Features.Support.Domain.Cyber.Capstone", true);
+        Invoke(network, "TryChooseCapstone", Enum.Parse(capstoneType, "Reveal"), clock);
+        Check((int)Property(network, "AccessSlot") == held, "The lease site should remain the active target.");
         return network;
     }
 
@@ -456,17 +461,27 @@ public static class SupportPanelUnityCheck
         };
         foreach (var o in fixture)
             Call(detachment, "ReportObjective", Enum.Parse(kindType, o.Kind), o.Anchor, o.X, o.Z, o.Threat, o.Radars, o.Hostile, o.Name, false);
-        Call(detachment, "EndObjectives");
+        Call(detachment, "EndObjectives", 0.0);
         Func<double> lucky = () => 0.0;
         Check((bool)Invoke(detachment, "TryRaise", 2), "The fixture must raise CHARLIE.");
-        Invoke(detachment, "TryLaunch", 0, Enum.Parse(missionType, "Recon"), 101, 12000f, 0.0);
+        Invoke(detachment, "TryLaunch", 0, Enum.Parse(missionType, "Recon"), 101, 12000f, 0.0,
+            0f, 0f, "MARIS AIRPORT");
         Call(detachment, "Tick", 50.0, lucky, null);
+        Type directiveType = Mod.GetType("BoscaliSummer.Features.Support.Domain.SpecOps.SpecOpsDirective", true);
+        Check((bool)Invoke(detachment, "TryDirective", 0, Enum.Parse(directiveType, "Execute"), 50.0),
+            "ALPHA must execute from its arrival decision window.");
         Call(detachment, "Tick", 90.0, lucky, null);
-        Invoke(detachment, "TryLaunch", 1, Enum.Parse(missionType, "Sabotage"), 102, 60000f, 90.0);
-        Invoke(detachment, "TryLaunch", 2, Enum.Parse(missionType, "Seize"), 103, 8000f, 90.0);
+        Invoke(detachment, "TryLaunch", 1, Enum.Parse(missionType, "Sabotage"), 102, 60000f, 90.0,
+            0f, 0f, "MARIS AIRPORT");
+        Invoke(detachment, "TryLaunch", 2, Enum.Parse(missionType, "Seize"), 103, 8000f, 90.0,
+            0f, 0f, "MARIS AIRPORT");
         now = 140.0;
         Call(detachment, "Tick", now, lucky, null);
         Check(Property(detachment, "Formed").Equals(3), "The fixture must field three teams.");
+        object charlie = Invoke(detachment, "Team", 2);
+        Check(Convert.ToInt32(Get(charlie, "State")) == Convert.ToInt32(Enum.Parse(
+            Mod.GetType("BoscaliSummer.Features.Support.Domain.SpecOps.TeamState", true), "Deciding")),
+            "CHARLIE remains visible at the arrival decision stage.");
         return detachment;
     }
 

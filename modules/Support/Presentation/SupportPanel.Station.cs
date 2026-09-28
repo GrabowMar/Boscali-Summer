@@ -128,7 +128,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             // At 420 retain status, sector and altitude; notes wait for a taller panel.
             bannerNote.gameObject.SetActive(!compact);
             bannerMission.gameObject.SetActive(!compact);
-            consoleButton = AvStyled.Button(parent, new Rect(x0, -h + (compact ? 32f : 36f), cw, 26f), "OPEN STATION WALL", "btn",
+            consoleButton = AvStyled.Button(parent, new Rect(x0, -h + (compact ? 32f : 36f), cw, 26f), "OPEN TASKING", "btn",
                 OpenStationConsole, AvButtonStyle.Primary)
                 .WithTooltip("The flight-control wall: loadouts, the blueprint, the module rack and every launch.");
         }
@@ -145,12 +145,12 @@ namespace BoscaliSummer.Features.Support.Presentation
             bool roomy = h >= 150f;
             if (roomy)
                 Wrapped(AvStyled.Label(parent, new Rect(14f, -42f, w - 28f, 44f),
-                    "Launch " + OrbitalPlatform.Callsign + "'s core from the station wall; every other module docks to it, " +
+                    "Launch " + OrbitalPlatform.Callsign + "'s core from Engineering in the task map; every other module docks to it, " +
                     "providing persistent coverage from a fixed position.", "row-sub"));
             // The launch is the next decision; keep its control above the optional loadout briefing.
             AvStyled.Button(parent, new Rect(14f, roomy ? -94f : -h + 38f, w - 28f, 30f),
-                "OPEN STATION WALL · LAUNCH THE CORE", "btn", OpenStationConsole, AvButtonStyle.Primary)
-                .WithTooltip("Opens the station wall with the core launch as the next step.");
+                "OPEN TASKING", "btn", OpenStationConsole, AvButtonStyle.Primary)
+                .WithTooltip("Open the task map, then Engineering to launch the core.");
             float y = -136f;
             for (int i = 0; i < PlatformMissions.Count && y - 54f > -h + 16f; i++)
             {
@@ -292,7 +292,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             bannerWord.color = tone;
             bannerClock.text = StationKeeping.Name(platform.PositionIndex) + (ready ? " · FIXED" : " · " + PlatformWords.Clock(platform.CycleStart - now));
             bannerClock.color = tone;
-            bannerNote.text = platform.FittedOnline(ModuleKind.Propulsion, now) ? "PROPULSION FITTED · RELOCATE FROM STATION WALL" : "PERSISTENT COVERAGE · FIT PROPULSION TO MOVE";
+            bannerNote.text = platform.FittedOnline(ModuleKind.Propulsion, now) ? "PROPULSION FITTED · RELOCATE FROM TASK MAP" : "PERSISTENT COVERAGE · FIT PROPULSION TO MOVE";
             for (int i = 0; i < stationSectors.Length; i++)
                 stationSectors[i].color = i == platform.PositionIndex ? tone.WithAlpha(0.3f) : AvTheme.SurfaceInert;
         }

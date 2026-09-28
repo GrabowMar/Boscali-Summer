@@ -6,6 +6,7 @@ using BoscaliSummer.Features.Weather.Audio;
 using BoscaliSummer.Features.Weather.Configuration;
 using BoscaliSummer.Features.Weather.Domain;
 using BoscaliSummer.Features.Weather.Networking;
+using BoscaliSummer.Features.Weather.Presentation;
 using BoscaliSummer.Features.Weather.Visuals;
 using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Features;
@@ -23,6 +24,10 @@ namespace BoscaliSummer.Features.Weather.Runtime
     /// Coordinates dynamic weather progression, native environment modulation,
     /// multiplayer synchronization, procedural rain subsystems, and data queries for the ENV bezel panel.
     /// </summary>
+    // After CameraStateManager (order 2): its LateUpdate moves the camera and shifts the
+    // floating origin. Positioning clouds, shadows and rain before that drew them against
+    // the old origin for one frame on every shift: a ~1 km flash while flying.
+    [DefaultExecutionOrder(100)]
     internal sealed class WeatherManager : MonoBehaviour, ISceneService
     {
         private WeatherSettings settings;
@@ -78,6 +83,7 @@ namespace BoscaliSummer.Features.Weather.Runtime
         private IReadOnlyList<CanopySurface> canopySurfaces;
         private float canopyWetness;
         private float cloudMoisture;
+        private float cloudShade;
         private int canopyAircraftId;
         private readonly TerrainRainDressing terrainRain = new TerrainRainDressing();
         private readonly RainAtmosphere atmosphere = new RainAtmosphere();
@@ -94,8 +100,11 @@ namespace BoscaliSummer.Features.Weather.Runtime
         private float rainExposure = 1f;
         private bool sheltered;
 
-        // Manual debug override state
+        // Held weather (console or automation). Explicit targets are the automation's fixed
+        // conditions; a console hold still derives fog, light and wind from the cloud field.
         private bool isManualOverride;
+        private bool explicitTargets;
+        private WeatherConsoleWindow console;
         private float? forcedRainIntensity;
 
         /// <summary>The installed manager, for the automation hook; null outside a mod session.</summary>
@@ -137,6 +146,7 @@ namespace BoscaliSummer.Features.Weather.Runtime
 
         public void ResetForScene()
         {
+            CloseConsole();
             network?.ResetScene();
             RestoreNativeWeather();
             TeardownRainSystems();
@@ -147,6 +157,7 @@ namespace BoscaliSummer.Features.Weather.Runtime
 
             baselineCaptured = false;
             isManualOverride = false;
+            explicitTargets = false;
             forcedRainIntensity = null;
             CanopyGlassResolver.ResetForScene();
             canopySurfaces = null;
@@ -176,6 +187,7 @@ namespace BoscaliSummer.Features.Weather.Runtime
 
         private void OnDestroy()
         {
+            CloseConsole();
             if (Live == this) Live = null;
             RestoreNativeWeather();
             TeardownRainSystems();
@@ -315,13 +327,8 @@ namespace BoscaliSummer.Features.Weather.Runtime
             if (!TryMissionTime(out float missionTime)) return;
             UpdateField(missionTime);
 
-            // Host only: on a client the keys would change its own wind and visibility until
-            // the next sync, and the change never reaches anyone else.
-            if (settings != null && settings.DebugControlsEnabled.Value && GameAccess.IsServer() &&
-                !InputFieldChecker.InsideInputField && !GameplayUI.GameIsPaused)
-            {
-                CheckDebugHotkeys();
-            }
+            if (settings != null && !InputFieldChecker.InsideInputField && ConsoleKeyPressed())
+                ToggleConsole();
 
             bool drive = fieldKey != null && (fieldKey.Dynamic || isManualOverride);
             if (drive)
@@ -420,6 +427,12 @@ namespace BoscaliSummer.Features.Weather.Runtime
                 airPoint.CloudTop = currentCloudHeight + 1500f;
             }
             float cloudShift = Field != null ? currentCloudHeight - field.Regional().CloudBase : 0f;
+            // Under a deck the air goes dim and grey; above it, the light is back.
+            bool belowDeck = (float)cloudPosition.y < localWeather.CloudTop + cloudShift;
+            float shadeTarget = Field != null && belowDeck ? Mathf.Clamp01((localWeather.Cover - 0.2f) / 0.8f) : 0f;
+            cloudShade = Mathf.MoveTowards(cloudShade, shadeTarget, Time.deltaTime * 0.1f);
+            bool underwaterView = currentCam.transform.position.y < Datum.LocalSeaY;
+            bool hazeEnabled = settings == null || settings.RainAtmosphereEnabled.Value;
             airPoint.CloudBase += cloudShift;
             airPoint.CloudTop += cloudShift;
             FlightWeatherAirMass airMass = FlightWeatherAirMass.Evaluate(airPoint,
@@ -435,7 +448,13 @@ namespace BoscaliSummer.Features.Weather.Runtime
                 (settings != null && settings.RainAudioEnabled.Value && rainIntensity > 0.02f);
             if (rainRoot == null)
             {
-                if (!wantSystems) { atmosphere.Restore(); UpdateLighting(currentCam); return; }
+                if (!wantSystems)
+                {
+                    if (hazeEnabled) atmosphere.Apply(0f, underwaterView, cloudShade, flightClouds?.CameraInCloud ?? 0f);
+                    else atmosphere.Restore();
+                    UpdateLighting(currentCam);
+                    return;
+                }
                 EnsureRainSystems();
             }
 
@@ -479,10 +498,10 @@ namespace BoscaliSummer.Features.Weather.Runtime
             float glassMoisture = Mathf.Max(rainIntensity, isCockpit ? cloudMoisture : 0f) * rainExposure;
 
             // Haze first: everything below reads the fog colour it produces.
-            bool underwater = currentCam.transform.position.y < Datum.LocalSeaY;
-            if (settings == null || settings.RainAtmosphereEnabled.Value)
+            if (hazeEnabled)
                 atmosphere.Apply(settings != null && settings.RainVisualsEnabled.Value
-                    ? Mathf.Max(rainIntensity, cloudMoisture * 0.7f) : 0f, underwater);
+                    ? Mathf.Max(rainIntensity, cloudMoisture * 0.7f) : 0f, underwaterView, cloudShade,
+                    flightClouds?.CameraInCloud ?? 0f);
             else atmosphere.Restore();
             UpdateLighting(currentCam);
 
@@ -671,7 +690,9 @@ namespace BoscaliSummer.Features.Weather.Runtime
         private WeatherKey NewFieldKey(float epoch, bool dynamic, WeatherRegimeType start)
         {
             return new WeatherKey(unchecked((uint)missionSeed), epoch, dynamic, (byte)start,
-                settings.StateIntervalMinutes.Value, settings.StateFadeSeconds.Value);
+                settings.StateIntervalMinutes.Value, settings.StateFadeSeconds.Value,
+                fieldKey?.Sets ?? 0, fieldKey?.LayoutSalt ?? 0, fieldKey != null && fieldKey.HasAnchor,
+                fieldKey?.AnchorX ?? 0f, fieldKey?.AnchorZ ?? 0f, fieldKey?.FrontTurn ?? 0);
         }
 
         // One cached field serves native weather targets, local rain, clouds and the ENV screen.
@@ -712,7 +733,7 @@ namespace BoscaliSummer.Features.Weather.Runtime
 
         private void UpdateHostProgression(float missionTime)
         {
-            if (isManualOverride || !field.IsBuilt)
+            if (explicitTargets || !field.IsBuilt)
             {
                 if (Time.unscaledTime - lastBroadcastTime > 8f) BroadcastSync(missionTime);
                 return;
@@ -759,6 +780,12 @@ namespace BoscaliSummer.Features.Weather.Runtime
                     FieldStartRegime = fieldKey != null ? fieldKey.StartState : (byte)0,
                     FieldDynamic = fieldKey != null && fieldKey.Dynamic,
                     FieldManual = isManualOverride,
+                    FieldSets = fieldKey != null ? fieldKey.Sets : (byte)0,
+                    FieldSalt = fieldKey != null ? fieldKey.LayoutSalt : (byte)0,
+                    FieldHasAnchor = fieldKey != null && fieldKey.HasAnchor,
+                    FieldAnchorX = fieldKey != null ? fieldKey.AnchorX : 0f,
+                    FieldAnchorZ = fieldKey != null ? fieldKey.AnchorZ : 0f,
+                    FieldFrontTurn = fieldKey != null ? fieldKey.FrontTurn : (byte)0,
                     HoldMinutes = fieldKey != null ? fieldKey.IntervalMinutes : settings.StateIntervalMinutes.Value,
                     BlendMinutes = (fieldKey != null ? fieldKey.FadeSeconds : settings.StateFadeSeconds.Value) / 60f
                 });
@@ -779,7 +806,8 @@ namespace BoscaliSummer.Features.Weather.Runtime
             missionSeed = unchecked((int)message.FieldSeed);
             var key = new WeatherKey(message.FieldSeed, message.FieldEpoch, message.FieldDynamic,
                 (byte)Mathf.Clamp(message.FieldStartRegime, 0, StateTable.Count - 1),
-                Mathf.Clamp(message.HoldMinutes, 1f, 30f), fadeSeconds);
+                Mathf.Clamp(message.HoldMinutes, 1f, 30f), fadeSeconds, message.FieldSets, message.FieldSalt,
+                message.FieldHasAnchor, message.FieldAnchorX, message.FieldAnchorZ, message.FieldFrontTurn);
             // Keep the same instance while nothing changed, so consumers see one stable key.
             if (!key.Equals(fieldKey)) fieldKey = key;
             fieldReady = true;
@@ -968,28 +996,10 @@ namespace BoscaliSummer.Features.Weather.Runtime
             return WeatherForecast.ComputeLunarData(phase);
         }
 
-        private void CheckDebugHotkeys()
-        {
-            KeyCode key = settings.DebugKey.Value;
-            if (key == KeyCode.None || !Input.GetKeyDown(key)) return;
-
-            bool ctrlOk = !settings.DebugKeyRequiresCtrl.Value ||
-                          Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
-            if (!ctrlOk) return;
-
-            if (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift))
-            {
-                CycleRainDebug();
-            }
-            else
-            {
-                CycleWeatherDebug();
-            }
-        }
-
         public void SetManualOverride(float conditions, float cloudHeight, Vector3? wind = null, float? forcedRain = null, bool snapImmediate = true)
         {
             isManualOverride = true;
+            explicitTargets = true;
             targetConditions = Mathf.Clamp01(conditions);
             targetCloudHeight = Mathf.Max(500f, cloudHeight);
             if (wind.HasValue) targetWind = wind.Value;
@@ -1023,15 +1033,6 @@ namespace BoscaliSummer.Features.Weather.Runtime
             NotifyPlayer(reg.Name, forcedRain);
         }
 
-        public void SetRegimeOverride(WeatherRegimeType regime, float? forcedRain = null, bool snapImmediate = true)
-        {
-            RegimeSnapshot r = RegimeSnapshot.FromType(regime);
-            // Changing the visual weather does not double mission wind or invent wind in calm missions.
-            Vector3 targetW = baselineWindVelocity;
-
-            SetManualOverride(r.TargetConditions, r.TargetCloudHeight, targetW, forcedRain, snapImmediate);
-        }
-
         public void SetForcedRain(float? rainIntensity)
         {
             forcedRainIntensity = rainIntensity;
@@ -1048,6 +1049,7 @@ namespace BoscaliSummer.Features.Weather.Runtime
         public void ClearManualOverride()
         {
             isManualOverride = false;
+            explicitTargets = false;
             forcedRainIntensity = null;
             transitionProgress = 0f;
 
@@ -1061,68 +1063,171 @@ namespace BoscaliSummer.Features.Weather.Runtime
             NotifyPlayer("CHANGING WEATHER RESUMED", null);
         }
 
-        public void CycleWeatherDebug()
+        // ---- Weather console (Ctrl+O) -----------------------------------------------------
+
+        /// <summary>The state on screen now.</summary>
+        internal WeatherRegimeType ShownState =>
+            Field != null ? Field.Timeline.Dominant : RegimeSnapshot.FromConditions(currentConditions).Type;
+
+        internal byte ForcedSets => fieldKey?.Sets ?? 0;
+        internal bool CanCommand => GameAccess.IsServer();
+
+        /// <summary>Seconds to the next weather step, or -1 when the weather is held.</summary>
+        internal float NextChangeIn()
         {
-            if (!isManualOverride)
-            {
-                SetRegimeOverride(WeatherRegimeType.Clear);
-            }
-            else
-            {
-                RegimeSnapshot current = CurrentRegime;
-                switch (current.Type)
-                {
-                    case WeatherRegimeType.Clear:
-                    case WeatherRegimeType.Fair:
-                        SetRegimeOverride(WeatherRegimeType.Scattered);
-                        break;
-                    case WeatherRegimeType.Scattered:
-                        SetRegimeOverride(WeatherRegimeType.Broken);
-                        break;
-                    case WeatherRegimeType.Broken:
-                        SetRegimeOverride(WeatherRegimeType.Overcast);
-                        break;
-                    case WeatherRegimeType.Overcast:
-                        SetRegimeOverride(WeatherRegimeType.RainSquall);
-                        break;
-                    case WeatherRegimeType.RainSquall:
-                        SetRegimeOverride(WeatherRegimeType.Storm);
-                        break;
-                    case WeatherRegimeType.Storm:
-                    default:
-                        ClearManualOverride();
-                        break;
-                }
-            }
+            if (Field == null || !Field.Key.Dynamic || !TryMissionTime(out float now)) return -1f;
+            return Mathf.Max(0f, Field.Timeline.NextChangeAt - now);
         }
 
-        public void CycleRainDebug()
+        /// <summary>Holds a state. The sky fades into it; fog, light and wind follow the field.</summary>
+        internal void HoldState(WeatherRegimeType state)
         {
-            if (!forcedRainIntensity.HasValue)
+            if (!CanCommand || !TryMissionTime(out float now)) return;
+            isManualOverride = true;
+            explicitTargets = false;
+            fieldKey = NewFieldKey(now, false, state);
+            RekeyAndSync(now);
+            NotifyPlayer("HOLD " + RegimeSnapshot.FromType(state).Name, forcedRainIntensity);
+        }
+
+        /// <summary>Back to changing weather, starting from the state on screen.</summary>
+        internal void ResumeChanging()
+        {
+            if (!CanCommand) return;
+            ClearManualOverride();
+        }
+
+        internal void SetForcedSets(byte sets)
+        {
+            if (!CanCommand || fieldKey == null || !TryMissionTime(out float now)) return;
+            fieldKey = fieldKey.WithSets(sets);
+            RekeyAndSync(now);
+        }
+
+        internal bool HasAnchor => fieldKey != null && fieldKey.HasAnchor;
+        internal int FrontTurn => fieldKey?.FrontTurn ?? 0;
+
+        /// <summary>Stands the storm eye and lenticulars <paramref name="ahead"/> metres in front of
+        /// the camera, along its level heading (0 puts them right here).</summary>
+        internal void PlaceAhead(float ahead)
+        {
+            if (!CanCommand || fieldKey == null || !TryMissionTime(out float now)) return;
+            Camera camera = SceneSingleton<CameraStateManager>.i?.mainCamera;
+            if (camera == null) return;
+            GlobalPosition here = camera.transform.GlobalPosition();
+            Vector3 forward = camera.transform.forward;
+            forward.y = 0f;
+            if (forward.sqrMagnitude < 0.001f) forward = Vector3.forward;
+            forward.Normalize();
+            fieldKey = fieldKey.WithAnchor((float)here.x + forward.x * ahead, (float)here.z + forward.z * ahead);
+            RekeyAndSync(now);
+        }
+
+        internal void ClearPlacement()
+        {
+            if (!CanCommand || fieldKey == null || !TryMissionTime(out float now)) return;
+            fieldKey = fieldKey.WithoutAnchor();
+            RekeyAndSync(now);
+        }
+
+        /// <summary>Turns the frontal boundary by 45 degree steps.</summary>
+        internal void TurnFront(int steps)
+        {
+            if (!CanCommand || fieldKey == null || !TryMissionTime(out float now)) return;
+            fieldKey = fieldKey.WithFrontTurn(fieldKey.FrontTurn + steps);
+            RekeyAndSync(now);
+        }
+
+        internal enum Scenario { HurricaneEye, SquallAssault, MountainWave, SeaFog, FrontalPassage, ResetAll }
+
+        /// <summary>One click: a held state with its set-pieces and placement, sent as one key.</summary>
+        internal void ApplyScenario(Scenario scenario)
+        {
+            if (!CanCommand || !TryMissionTime(out float now)) return;
+            if (scenario == Scenario.ResetAll)
             {
-                SetForcedRain(1.0f); // Heavy Storm
+                if (fieldKey != null) fieldKey = fieldKey.WithSets(0).WithoutAnchor().WithFrontTurn(0);
+                forcedRainIntensity = null;
+                ClearManualOverride();
+                return;
             }
-            else if (forcedRainIntensity.Value > 0.6f)
+            WeatherRegimeType state; byte sets; float ahead = -1f;
+            switch (scenario)
             {
-                SetForcedRain(0.4f); // Light Rain
+                case Scenario.HurricaneEye: state = WeatherRegimeType.Storm; sets = Superstructures.StormEyeSet; ahead = 0f; break;
+                case Scenario.SquallAssault:
+                    state = WeatherRegimeType.RainSquall; sets = Superstructures.SquallLineSet | Superstructures.SupercellSet; break;
+                case Scenario.MountainWave: state = WeatherRegimeType.Fair; sets = Superstructures.LenticularSet; ahead = 25000f; break;
+                case Scenario.SeaFog: state = WeatherRegimeType.Clear; sets = Superstructures.FogBankSet; break;
+                default: state = WeatherRegimeType.Overcast; sets = 0; break;
             }
-            else if (forcedRainIntensity.Value > 0.1f)
+            isManualOverride = true;
+            explicitTargets = false;
+            fieldKey = NewFieldKey(now, false, state).WithSets(sets);
+            if (ahead >= 0f)
             {
-                SetForcedRain(0.0f); // Force Dry
+                Camera camera = SceneSingleton<CameraStateManager>.i?.mainCamera;
+                if (camera != null)
+                {
+                    GlobalPosition here = camera.transform.GlobalPosition();
+                    Vector3 forward = camera.transform.forward;
+                    forward.y = 0f;
+                    forward = forward.sqrMagnitude < 0.001f ? Vector3.forward : forward.normalized;
+                    fieldKey = fieldKey.WithAnchor((float)here.x + forward.x * ahead, (float)here.z + forward.z * ahead);
+                }
             }
-            else
-            {
-                SetForcedRain(null); // Return to Auto
-            }
+            RekeyAndSync(now);
+            NotifyPlayer("SCENARIO " + scenario.ToString().ToUpperInvariant(), forcedRainIntensity);
+        }
+
+        /// <summary>New sites for the clouds and set-piece storms, same weather.</summary>
+        internal void RerollLayout()
+        {
+            if (!CanCommand || fieldKey == null || !TryMissionTime(out float now)) return;
+            fieldKey = fieldKey.WithLayoutSalt(unchecked((byte)(fieldKey.LayoutSalt + 1)));
+            RekeyAndSync(now);
+            NotifyPlayer("NEW CLOUD LAYOUT", forcedRainIntensity);
+        }
+
+        private void RekeyAndSync(float now)
+        {
+            fieldReady = true;
+            nextFieldUpdate = 0f;
+            lastForecastSampleTime = -999f;
+            BroadcastSync(now);
+        }
+
+        private bool ConsoleKeyPressed()
+        {
+            KeyCode key = settings.ConsoleKey.Value;
+            if (key == KeyCode.None || !Input.GetKeyDown(key)) return false;
+            return !settings.ConsoleKeyRequiresCtrl.Value ||
+                   Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+        }
+
+        private void ToggleConsole()
+        {
+            if (console != null && console.IsOpen) { console.Close(); return; }
+            if (LevelInfo.i == null) return;
+            if (console == null) console = WeatherConsoleWindow.Create(this, transform);
+            console.Show();
+        }
+
+        private void CloseConsole()
+        {
+            if (console == null) return;
+            console.Close();
+            Destroy(console.gameObject);
+            console = null;
         }
 
         private void NotifyPlayer(string title, float? forcedRain)
         {
             string detail = forcedRain.HasValue
                 ? $"RAIN: {Mathf.RoundToInt(forcedRain.Value * 100f)}%"
-                : (isManualOverride ? "MANUAL OVERRIDE" : "NATURAL PROGRESSION");
+                : (isManualOverride ? "HELD BY WEATHER CONSOLE" : "CHANGING WEATHER");
 
-            logger?.LogInfo($"[WeatherDebug] {title} ({detail})");
+            logger?.LogInfo($"[WeatherConsole] {title} ({detail})");
 
             if (ModServices.TryGet(out IHudBoard hud) && hud != null)
             {

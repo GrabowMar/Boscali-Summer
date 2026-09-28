@@ -58,7 +58,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             public TMP_Text Letter, Callsign, Rank, State, Clock, Detail;
             public Image StateFrame, Bar, BarTrack, LostFrame, SelectedRail;
             public Image[] Chevrons;
-            public Stamp Action;
+            public Stamp Action, Secondary;
         }
 
         private sealed class Sheet
@@ -121,7 +121,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         private int selectedAnchor;
         private bool anchorChosen;
         private int hoverMission = -1;
-        private string noteText = "NO ORDERS SENT YET · 01 PICK OBJECTIVE  /  02 ASSIGN TEAM  /  03 LAUNCH MISSION";
+        private string noteText = "DESK · SELECT AN OBJECTIVE, ASSIGN A TEAM, THEN PREVIEW AN ORDER";
         private bool noteBad;
         private bool awaiting;
         private bool confirmArmed;
@@ -130,7 +130,6 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         private int confirmAnchor;
         private bool confirmRecall;
         private double confirmUntil;
-        private const int ConfirmLoss = 15;
         private const float ConfirmSeconds = 8f;
         private float entrance = 1f;
         private int homeCount;
@@ -158,14 +157,16 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             DeskStyle.ForgetTyped();
             OpsSprites.Ensure();
             float w = area.width, h = area.height, g = DeskStyle.Gutter;
-            float top = DeskStyle.BannerHeight + DeskStyle.HeaderHeight + 14f;
+            float top = DeskStyle.BannerHeight + DeskStyle.HeaderHeight + 8f;
             float timelineTop = h - g - DeskStyle.TimelineHeight;
-            float folderW = Mathf.Clamp(w * 0.30f, DeskStyle.FolderWidth, 560f);
+            float folderW = Mathf.Clamp(w * 0.34f, DeskStyle.FolderWidth, 600f);
             float folderX = w - g - folderW;
-            float focusX = g;
-            float noteTop = top + 154f;
-            focus = new Rect(focusX, -(noteTop + 42f), folderX - g - focusX, timelineTop - 12f - (noteTop + 42f));
-            folderRect = new Rect(folderX, -top, folderW, timelineTop - 12f - top);
+            float noteTop = top;
+            float mapTop = noteTop + 50f;
+            float rosterHeight = 216f;
+            float folderTop = top + rosterHeight + 8f;
+            focus = new Rect(g, -mapTop, folderX - g * 2f, timelineTop - 8f - mapTop);
+            folderRect = new Rect(folderX, -folderTop, folderW, timelineTop - 8f - folderTop);
 
             AvKit.Panel(room, new Rect(0f, 0f, w, h), DeskStyle.Map);
             map.Build(room, focus, focus, SelectSlot);
@@ -177,7 +178,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             };
 
             BuildHeader(room, w);
-            BuildRoster(room, new Rect(g, -top, focus.width, 142f));
+            BuildRoster(room, new Rect(folderX, -top, folderW, rosterHeight));
             BuildFolder(room);
             BuildTimeline(room, new Rect(g, -timelineTop, w - g * 2f, DeskStyle.TimelineHeight));
             BuildNote(room, new Rect(focus.x, -noteTop, focus.width, 42f));
@@ -185,7 +186,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             map.SetObstacles(new Rect(focus.x, focus.y - focus.height + 42f, focus.width, 42f));
 
             sections[0] = new Rect(0f, 0f, w, DeskStyle.BannerHeight + DeskStyle.HeaderHeight);
-            sections[1] = ToTopDown(new Rect(g, -top, focus.width, 142f));
+            sections[1] = ToTopDown(new Rect(folderX, -top, folderW, rosterHeight));
             sections[2] = ToTopDown(focus);
             sections[3] = ToTopDown(new Rect(focus.x, -noteTop, focus.width, 42f));
             sections[4] = ToTopDown(folderRect);
@@ -239,8 +240,13 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         private void BuildRoster(RectTransform room, Rect at)
         {
             rosterGroup = Group(room, "Roster", at, out _);
-            float pitch = (at.width - DeskStyle.TagGap * (TeamCount - 1)) / TeamCount;
-            for (int i = 0; i < TeamCount; i++) tags[i] = BuildTag(i, new Rect(i * (pitch + DeskStyle.TagGap), 0f, pitch, at.height));
+            DeskStyle.Title(rosterGroup, "TEAM STAGING / SELECT OR RAISE", new Rect(2f, 0f, at.width - 4f, 17f),
+                12f, DeskStyle.Ink);
+            float pitch = (at.width - DeskStyle.TagGap) * 0.5f;
+            float cardHeight = (at.height - 25f - DeskStyle.TagGap) * 0.5f;
+            for (int i = 0; i < TeamCount; i++)
+                tags[i] = BuildTag(i, new Rect((i % 2) * (pitch + DeskStyle.TagGap),
+                    -25f - (i / 2) * (cardHeight + DeskStyle.TagGap), pitch, cardHeight));
         }
 
         private DogTag BuildTag(int team, Rect at)
@@ -254,34 +260,37 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             tag.Body = AvKit.Panel(tag.Root, new Rect(0f, 0f, w, h), DeskStyle.Paper);
             tag.Outline = OutlineThick(tag.Root, new Rect(-3f, 3f, w + 6f, h + 6f), DeskStyle.Ink, 2f);
             tag.SelectedRail = AvKit.Rule(tag.Root, new Rect(0f, 0f, w, 3f), AvTheme.RailInfo);
-            tag.Letter = DeskStyle.Title(tag.Root, FieldWords.Callsign(team).Substring(0, 1), new Rect(12f, -8f, 28f, 30f), 26f,
+            tag.Letter = DeskStyle.Title(tag.Root, FieldWords.Callsign(team).Substring(0, 1), new Rect(8f, -6f, 26f, 27f), 25f,
                 DeskStyle.Ink, TextAlignmentOptions.Center);
             tag.Letter.characterSpacing = 0f;
-            tag.Callsign = DeskStyle.Title(tag.Root, FieldWords.Callsign(team), new Rect(46f, -8f, w - 58f, 24f), DeskStyle.Stencil,
+            tag.Callsign = DeskStyle.Title(tag.Root, FieldWords.Callsign(team), new Rect(40f, -5f, w - 48f, 21f), 15f,
                 DeskStyle.Ink);
             tag.Chevrons = new Image[FieldCatalog.MaxRank];
             for (int i = 0; i < tag.Chevrons.Length; i++)
             {
-                tag.Chevrons[i] = AvKit.Panel(tag.Root, new Rect(12f + i * 12f, -39f, 10f, 10f), DeskStyle.Ink);
+                tag.Chevrons[i] = AvKit.Panel(tag.Root, new Rect(8f + i * 11f, -29f, 9f, 9f), DeskStyle.Ink);
                 tag.Chevrons[i].sprite = OpsSprites.Glyph(OpsSprites.G.Team);
             }
-            tag.Rank = DeskStyle.Body(tag.Root, new Rect(54f, -34f, w - 66f, 18f), DeskStyle.TypewriterSmall, DeskStyle.Khaki);
-            tag.StateFrame = AvKit.Panel(tag.Root, new Rect(12f, -56f, 126f, 22f), DeskStyle.Ink, OpsSprites.Stamp);
-            tag.State = AvKit.Label(tag.Root, "", new Rect(12f, -56f, 126f, 22f), DeskStyle.Ink, 12f, FontStyles.Bold,
+            tag.Rank = DeskStyle.Body(tag.Root, new Rect(58f, -24f, w - 66f, 17f), 11f, DeskStyle.Khaki);
+            tag.StateFrame = AvKit.Panel(tag.Root, new Rect(8f, -42f, 104f, 18f), DeskStyle.Ink, OpsSprites.Stamp);
+            tag.State = AvKit.Label(tag.Root, "", new Rect(8f, -42f, 104f, 18f), DeskStyle.Ink, 11f, FontStyles.Bold,
                 TextAlignmentOptions.Center);
             tag.State.characterSpacing = 1f;
-            tag.Clock = DeskStyle.Body(tag.Root, new Rect(144f, -56f, w - 156f, 22f), 16f, DeskStyle.Ink, TextAlignmentOptions.MidlineRight);
-            tag.Detail = DeskStyle.Body(tag.Root, new Rect(12f, -80f, w - 24f, 28f), DeskStyle.TypewriterSmall, DeskStyle.Ink,
-                TextAlignmentOptions.TopLeft, true);
-            tag.BarTrack = AvKit.Panel(tag.Root, new Rect(12f, -h + 33f, w - 24f, 3f), DeskStyle.Khaki.WithAlpha(0.3f));
-            tag.Bar = AvKit.Panel(tag.Root, new Rect(12f, -h + 33f, 0f, 3f), DeskStyle.Ink);
-            tag.Action = BuildStamp(tag.Root, new Rect(12f, -h + 27f, w - 24f, 23f), () => RaiseOrRecall(team), 11f);
-            tag.LostFrame = AvKit.Panel(tag.Root, new Rect(w * 0.5f - 70f, -h * 0.5f + 26f, 140f, 44f), AvTheme.RailDanger, OpsSprites.Stamp);
-            DeskStyle.Title(tag.LostFrame.rectTransform, "LOST", new Rect(0f, 0f, 140f, 44f), 24f, AvTheme.RailDanger,
+            tag.Clock = DeskStyle.Body(tag.Root, new Rect(116f, -42f, w - 124f, 18f), 12f, DeskStyle.Ink, TextAlignmentOptions.MidlineRight);
+            tag.Detail = DeskStyle.Body(tag.Root, new Rect(0f, 0f, 1f, 1f), DeskStyle.TypewriterSmall, DeskStyle.Ink);
+            tag.Detail.gameObject.SetActive(false);
+            tag.BarTrack = AvKit.Panel(tag.Root, new Rect(8f, -h + 31f, w - 16f, 3f), DeskStyle.Khaki.WithAlpha(0.3f));
+            tag.Bar = AvKit.Panel(tag.Root, new Rect(8f, -h + 31f, 0f, 3f), DeskStyle.Ink);
+            tag.Action = BuildStamp(tag.Root, new Rect(8f, -h + 26f, w - 16f, 23f), () => PrimaryTeamAction(team), 10f);
+            tag.Secondary = BuildStamp(tag.Root, new Rect(8f + (w - 24f) * 0.5f + 8f, -h + 26f,
+                (w - 24f) * 0.5f, 23f), () => Directive(team, SpecOpsDirective.Extract), 10f);
+            tag.Secondary.Control.Rect.gameObject.SetActive(false);
+            tag.LostFrame = AvKit.Panel(tag.Root, new Rect(w * 0.5f - 56f, -h * 0.5f + 16f, 112f, 30f), AvTheme.RailDanger, OpsSprites.Stamp);
+            DeskStyle.Title(tag.LostFrame.rectTransform, "LOST", new Rect(0f, 0f, 112f, 30f), 18f, AvTheme.RailDanger,
                 TextAlignmentOptions.Center);
             tag.LostFrame.rectTransform.pivot = new Vector2(0.5f, 0.5f);
             tag.LostFrame.rectTransform.anchoredPosition = new Vector2(w * 0.5f, -h * 0.5f + 4f);
-            tag.LostFrame.rectTransform.localEulerAngles = new Vector3(0f, 0f, 12f);
+            tag.LostFrame.rectTransform.localEulerAngles = Vector3.zero;
             tag.LostFrame.gameObject.SetActive(false);
             return tag;
         }
@@ -335,6 +344,14 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             if (repaint) PaintStamp(stamp);
         }
 
+        private static void PlaceStamp(Stamp stamp, Rect at)
+        {
+            AvKit.Place(stamp.Control.Rect, at);
+            AvKit.Place(stamp.Fill.rectTransform, new Rect(0f, 0f, at.width, at.height));
+            AvKit.Place(stamp.Frame.rectTransform, new Rect(0f, 0f, at.width, at.height));
+            AvKit.Place(stamp.Text.rectTransform, new Rect(4f, 0f, at.width - 8f, at.height));
+        }
+
         private void BuildFolder(RectTransform room)
         {
             folderGroup = Group(room, "Folder", folderRect, out folderFade);
@@ -351,13 +368,20 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             folderIndex = DeskStyle.Body(folderGroup, new Rect(w - 200f, -8f, 184f, 16f), DeskStyle.TypewriterSmall, DeskStyle.Khaki,
                 TextAlignmentOptions.MidlineRight);
 
+            // Keep the briefing and its four mission decisions at a readable height. The
+            // command rail scrolls on a small viewport; the terrain map never shrinks for it.
+            const float briefHeight = 840f;
+            RectTransform content = AvScreen.Scroll(folderGroup, new Rect(0f, -32f, w, h - 32f), briefHeight, out Rect contentArea);
+            float bodyW = contentArea.width;
             var bodyObject = new GameObject("Brief", typeof(RectTransform));
             folderBody = (RectTransform)bodyObject.transform;
-            folderBody.SetParent(folderGroup, false);
-            AvKit.Place(folderBody, new Rect(0f, 0f, w, h));
+            folderBody.SetParent(content, false);
+            AvKit.Place(folderBody, content == folderGroup
+                ? new Rect(0f, -32f, bodyW, briefHeight)
+                : new Rect(0f, 0f, bodyW, briefHeight));
 
             objectiveGlyph = AvKit.Panel(folderBody, new Rect(18f, -32f, 36f, 36f), DeskStyle.Stamp);
-            objectiveName = DeskStyle.Title(folderBody, "", new Rect(66f, -32f, w - 84f, 38f), 20f, DeskStyle.Ink,
+            objectiveName = DeskStyle.Title(folderBody, "", new Rect(66f, -32f, bodyW - 84f, 38f), 20f, DeskStyle.Ink,
                 TextAlignmentOptions.TopLeft);
             objectiveName.characterSpacing = 4f;
             objectiveName.enableWordWrapping = true;
@@ -365,29 +389,25 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             objectiveName.enableAutoSizing = true;
             objectiveName.fontSizeMin = 13f;
             objectiveName.fontSizeMax = 20f;
-            objectiveLine = DeskStyle.Body(folderBody, new Rect(66f, -74f, w - 84f, 16f), DeskStyle.TypewriterSmall, DeskStyle.Khaki);
+            objectiveLine = DeskStyle.Body(folderBody, new Rect(66f, -74f, bodyW - 84f, 16f), DeskStyle.TypewriterSmall, DeskStyle.Khaki);
 
-            float factW = (w - 36f - 16f) / 3f;
+            float factW = (bodyW - 36f - 16f) / 3f;
             BuildFact(folderBody, "THREAT · 2 KM", new Rect(18f, -96f, factW, 62f), out threatFigure, out threatWords);
             BuildFact(folderBody, "RADARS", new Rect(18f + factW + 8f, -96f, factW, 62f), out radarFigure, out radarWords);
             BuildFact(folderBody, "SCOUTING", new Rect(18f + (factW + 8f) * 2f, -96f, factW, 62f), out scoutFigure, out scoutWords);
-            teamOn = DeskStyle.Body(folderBody, new Rect(18f, -162f, w - 36f, 16f), DeskStyle.TypewriterSmall, DeskStyle.Ink);
+            teamOn = DeskStyle.Body(folderBody, new Rect(18f, -162f, bodyW - 36f, 16f), DeskStyle.TypewriterSmall, DeskStyle.Ink);
 
             DeskStyle.Title(folderBody, "02 / ASSIGN TEAM · TAB", new Rect(18f, -184f, 210f, 18f), 12f, DeskStyle.Ink);
-            float chipW = (w - 36f - 3f * 6f) / TeamCount;
+            float chipW = (bodyW - 36f - 3f * 6f) / TeamCount;
             for (int i = 0; i < TeamCount; i++) chips[i] = BuildChip(i, new Rect(18f + i * (chipW + 6f), -204f, chipW, 30f));
 
-            bool fullBrief = h > 550f;
-            float sheetTop = fullBrief ? 266f : 246f;
-            if (fullBrief)
-            {
-                DeskStyle.Title(folderBody, "03 / CHOOSE MISSION · LAUNCH", new Rect(18f, -242f, w - 36f, 18f),
-                    12f, DeskStyle.Ink);
-                AvKit.Rule(folderBody, new Rect(18f, -262f, w - 36f, 1f), DeskStyle.Khaki.WithAlpha(0.45f));
-            }
-            float sheetH = (h - sheetTop - 14f - (MissionCount - 1) * 8f) / MissionCount;
+            const float sheetTop = 266f;
+            DeskStyle.Title(folderBody, "03 / CHOOSE MISSION · COMMIT", new Rect(18f, -242f, bodyW - 36f, 18f),
+                12f, DeskStyle.Ink);
+            AvKit.Rule(folderBody, new Rect(18f, -262f, bodyW - 36f, 1f), DeskStyle.Khaki.WithAlpha(0.45f));
+            float sheetH = (briefHeight - sheetTop - 14f - (MissionCount - 1) * 8f) / MissionCount;
             for (int i = 0; i < MissionCount; i++)
-                sheets[i] = BuildSheet((FieldMission)i, new Rect(14f, -(sheetTop + i * (sheetH + 8f)), w - 28f, sheetH));
+                sheets[i] = BuildSheet((FieldMission)i, new Rect(14f, -(sheetTop + i * (sheetH + 8f)), bodyW - 28f, sheetH));
 
             folderEmpty = DeskStyle.Body(folderGroup, new Rect(24f, -40f, w - 48f, 120f), DeskStyle.Typewriter, DeskStyle.Ink,
                 TextAlignmentOptions.TopLeft, true);
@@ -462,9 +482,9 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 if (i == 2) { sheet.Odds[i].sprite = OpsSprites.Dash; sheet.Odds[i].type = Image.Type.Tiled; }
             }
             sheet.OddsText = DeskStyle.Body(sheet.Root, new Rect(12f, -72f, barW, 14f), DeskStyle.TypewriterSmall, DeskStyle.Ink);
-            sheet.Time = new Image[3];
-            Color[] time = { AvTheme.RailInfo, AvTheme.RailCaution, AvTheme.RailReady };
-            for (int i = 0; i < 3; i++)
+            sheet.Time = new Image[4];
+            Color[] time = { AvTheme.RailInfo, AvTheme.RailCaution, AvTheme.RailDanger, AvTheme.RailReady };
+            for (int i = 0; i < sheet.Time.Length; i++)
             {
                 sheet.Time[i] = AvKit.Panel(sheet.Root, new Rect(12f, -90f, 10f, 6f), time[i]);
                 if (i == 2) { sheet.Time[i].sprite = OpsSprites.Guard; sheet.Time[i].type = Image.Type.Tiled; }
@@ -504,55 +524,45 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
 
         private void BuildTimeline(RectTransform room, Rect at)
         {
-            timelineGroup = Group(room, "Clipboard", at, out timelineFade);
+            timelineGroup = Group(room, "OperationsStrip", at, out timelineFade);
             float w = at.width, h = at.height;
             AvKit.Panel(timelineGroup, new Rect(0f, 0f, w, h), DeskStyle.Paper);
             AvKit.Rule(timelineGroup, new Rect(0f, 0f, w, 2f), AvTheme.RailInfo);
             AvKit.Rule(timelineGroup, new Rect(0f, 0f, 3f, h), AvTheme.RailInfo.WithAlpha(0.7f));
 
             float logX = w * 0.62f;
-            DeskStyle.Title(timelineGroup, "OPERATIONS · NEXT 10 MIN", new Rect(22f, -12f, 360f, 18f), DeskStyle.StencilSmall,
+            DeskStyle.Title(timelineGroup, "OPERATIONS / NEXT 10 MIN", new Rect(16f, -4f, 340f, 18f), DeskStyle.StencilSmall,
                 DeskStyle.Ink);
-            laneX0 = 130f;
-            laneWidth = logX - 30f - laneX0;
+            laneX0 = 108f;
+            laneWidth = logX - 22f - laneX0;
             for (int t = 0; t < TeamCount; t++)
             {
-                float y = -36f - t * 20f;
+                float y = -24f - t * 17f;
                 var lane = new Lane
                 {
-                    Name = DeskStyle.Body(timelineGroup, new Rect(22f, y, 100f, 18f), DeskStyle.TypewriterSmall, DeskStyle.Ink),
-                    Empty = DeskStyle.Body(timelineGroup, new Rect(laneX0 + 8f, y, laneWidth - 16f, 18f), 10f, DeskStyle.Khaki),
+                    Name = DeskStyle.Body(timelineGroup, new Rect(16f, y, 84f, 15f), DeskStyle.TypewriterSmall, DeskStyle.Ink),
+                    Empty = DeskStyle.Body(timelineGroup, new Rect(laneX0 + 8f, y, laneWidth - 16f, 15f), 10f, DeskStyle.Khaki),
                     Segments = new Image[LaneSegments],
                     Words = new TMP_Text[LaneSegments]
                 };
                 DeskStyle.Type(lane.Name, FieldWords.Callsign(t));
-                AvKit.Rule(timelineGroup, new Rect(laneX0, y - 17f, laneWidth, 1f), DeskStyle.Khaki.WithAlpha(0.4f));
+                AvKit.Rule(timelineGroup, new Rect(laneX0, y - 15f, laneWidth, 1f), DeskStyle.Khaki.WithAlpha(0.4f));
                 for (int s = 0; s < LaneSegments; s++)
                 {
-                    lane.Segments[s] = AvKit.Panel(timelineGroup, new Rect(laneX0, y - 2f, 10f, 14f), AvTheme.RailInfo);
-                    lane.Words[s] = AvKit.Label(timelineGroup, "", new Rect(laneX0, y - 2f, 10f, 14f), DeskStyle.Ink, 10f,
+                    lane.Segments[s] = AvKit.Panel(timelineGroup, new Rect(laneX0, y - 1f, 10f, 13f), AvTheme.RailInfo);
+                    lane.Words[s] = AvKit.Label(timelineGroup, "", new Rect(laneX0, y - 1f, 10f, 13f), DeskStyle.Ink, 10f,
                         FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
                     lane.Segments[s].enabled = false;
                 }
                 lanes[t] = lane;
             }
-            for (int m = 0; m <= 10; m += 2)
-            {
-                float x = laneX0 + laneWidth * (m * 60f / TimelineWindow);
-                AvKit.Rule(timelineGroup, new Rect(x, -34f, 1f, 82f), DeskStyle.Khaki.WithAlpha(0.35f));
-                TMP_Text label = DeskStyle.Body(timelineGroup, new Rect(x - 30f, -116f, 60f, 14f), 10f, DeskStyle.Khaki,
-                    TextAlignmentOptions.Center);
-                DeskStyle.Type(label, m == 0 ? "NOW" : "+" + m + " MIN");
-            }
-            AvKit.Rule(timelineGroup, new Rect(laneX0, -30f, 2f, 86f), DeskStyle.Stamp);
+            AvKit.Rule(timelineGroup, new Rect(laneX0, -22f, 2f, 70f), DeskStyle.Stamp);
 
-            AvKit.Rule(timelineGroup, new Rect(logX - 12f, -14f, 1f, h - 30f), DeskStyle.Khaki.WithAlpha(0.5f));
-            DeskStyle.Title(timelineGroup, "EVENT LOG", new Rect(logX, -12f, 200f, 18f), DeskStyle.StencilSmall, DeskStyle.Ink);
+            AvKit.Rule(timelineGroup, new Rect(logX - 12f, -8f, 1f, h - 16f), DeskStyle.Khaki.WithAlpha(0.5f));
+            DeskStyle.Title(timelineGroup, "HOST ACTIVITY", new Rect(logX, -4f, 200f, 18f), DeskStyle.StencilSmall, DeskStyle.Ink);
             for (int i = 0; i < LogLines; i++)
-                logLines[i] = DeskStyle.Body(timelineGroup, new Rect(logX, -34f - i * 18f, w - logX - 22f, 16f), DeskStyle.TypewriterSmall,
+                logLines[i] = DeskStyle.Body(timelineGroup, new Rect(logX, -24f - i * 16f, w - logX - 16f, 15f), DeskStyle.TypewriterSmall,
                     i == 0 ? DeskStyle.Ink : DeskStyle.Khaki);
-            TMP_Text keys = DeskStyle.Body(timelineGroup, new Rect(logX, -h + 30f, w - logX - 22f, 16f), 10f, DeskStyle.Khaki);
-            DeskStyle.Type(keys, "Q E OBJECTIVE · TAB TEAM · 1 2 3 4 LAUNCH · R RAISE/RECALL · F FIT · WHEEL ZOOM · DRAG PAN");
         }
 
         private void BuildNote(RectTransform room, Rect at)
@@ -665,9 +675,10 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             if (awaiting && support != null && !support.CommandPending)
             {
                 awaiting = false;
-                noteText = support.Status ?? "";
-                noteBad = noteText.IndexOf("denied", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                          noteText.IndexOf("no response", StringComparison.OrdinalIgnoreCase) >= 0;
+                string reply = support.Status ?? "NO RESPONSE";
+                noteBad = reply.IndexOf("denied", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                          reply.IndexOf("no response", StringComparison.OrdinalIgnoreCase) >= 0;
+                noteText = "HOST · " + reply;
                 textTick = true;
             }
             if (textTick || nextPaint || layoutDue || map.FrameChanged)
@@ -690,6 +701,12 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             if (Input.GetKeyDown(KeyCode.Q)) { StepObjective(detachment, -1); return true; }
             if (Input.GetKeyDown(KeyCode.E)) { StepObjective(detachment, 1); return true; }
             if (Input.GetKeyDown(KeyCode.R)) { RaiseOrRecall(selectedTeam); return true; }
+            if (detachment != null && detachment.Team(selectedTeam).State == TeamState.Deciding)
+            {
+                if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.Space))
+                { Directive(selectedTeam, SpecOpsDirective.Execute); return true; }
+                if (Input.GetKeyDown(KeyCode.X)) { Directive(selectedTeam, SpecOpsDirective.Extract); return true; }
+            }
             if (Input.GetKeyDown(KeyCode.F)) { FitMap(); return true; }
             return false;
         }
@@ -774,11 +791,13 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             }
             int anchor = detachment.Objective(slot).Anchor;
             int loss = detachment.LossFor(selectedTeam, mission, slot, support != null ? support.OrbitNow : 0.0);
-            if (loss >= ConfirmLoss && !ConfirmArmed(selectedTeam, (int)mission, anchor, false))
+            if (!ConfirmArmed(selectedTeam, (int)mission, anchor, false))
             {
                 ArmConfirm(selectedTeam, (int)mission, anchor, false);
-                Say(FieldWords.Callsign(selectedTeam) + " · " + MissionLabel(mission, detachment.Objective(slot)) + " RISKS " + loss +
-                    "% LOSS · CLICK LAUNCH AGAIN TO COMMIT", true);
+                float cost = support.SpecOpsMissionCost(mission);
+                Say("PREVIEW · " + FieldWords.Callsign(selectedTeam) + " " + MissionLabel(mission, detachment.Objective(slot)) +
+                    " → " + PlaceNames.Shorten(detachment.Objective(slot).Name, 16) + " · OPS " + Figure(cost) +
+                    " · LOSS " + loss + "% · CLICK AGAIN TO COMMIT", loss > 0);
                 nextPaint = true;
                 return;
             }
@@ -787,8 +806,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             Sent(FieldWords.Callsign(selectedTeam) + " · " + MissionLabel(mission, detachment.Objective(slot)) + " → " + detachment.Objective(slot).Name);
         }
 
-        /// <summary>Two-click guard for consequential orders: armed for one team, mission and
-        /// objective (or one recall), and only for a few seconds. The host still re-checks.</summary>
+        /// <summary>Preview and commit are bound to one team, mission and objective for a few
+        /// seconds. The host still validates the final request.</summary>
         private bool ConfirmArmed(int team, int mission, int anchor, bool recall) =>
             confirmArmed && confirmRecall == recall && confirmTeam == team &&
             (recall || (confirmMission == mission && confirmAnchor == anchor)) &&
@@ -808,6 +827,17 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         {
             confirmArmed = false;
             confirmTeam = -1;
+        }
+
+        private void PrimaryTeamAction(int team)
+        {
+            SpecOpsDetachment detachment = support?.LocalDetachment;
+            if (detachment != null && detachment.Team(team).State == TeamState.Deciding)
+            {
+                if (selectedTeam != team) SelectTeam(team);
+                Directive(team, SpecOpsDirective.Execute);
+            }
+            else RaiseOrRecall(team);
         }
 
         private void RaiseOrRecall(int team)
@@ -838,19 +868,34 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             }
             if (value.Deployed)
             {
-                if (value.State == TeamState.Holding && !ConfirmArmed(team, -1, 0, true))
-                {
-                    ArmConfirm(team, -1, 0, true);
-                    Say(FieldWords.Callsign(team) + " HOLDS " + FieldWords.Post(value.Mission) +
-                        " · RECALL ABANDONS THE POST AND ITS WIN · CLICK AGAIN", true);
-                    nextPaint = true;
-                    return;
-                }
-                DisarmConfirm();
-                support.RequestSpecOpsRecall(team);
-                Sent("RECALL " + FieldWords.Callsign(team));
+                Directive(team, SpecOpsDirective.Extract);
             }
             else Say(FieldWords.Callsign(team) + " IS " + FieldWords.State(value.State) + " · PICK A MISSION", false);
+        }
+
+        private void Directive(int team, SpecOpsDirective directive)
+        {
+            SpecOpsDetachment detachment = support?.LocalDetachment;
+            if (detachment == null || support == null) return;
+            if (support.CommandPending)
+            {
+                Say("AWAITING HOST · ONE ORDER AT A TIME", true);
+                return;
+            }
+            if (!support.OpsStateFresh)
+            {
+                Say("LINK STALE · WAITING FOR THE HOST", true);
+                return;
+            }
+            SpecOpsDenial denial = detachment.CheckDirective(team, directive);
+            if (directive == SpecOpsDirective.Execute && !support.SpecOpsEnabled) denial = SpecOpsDenial.Disabled;
+            if (denial != SpecOpsDenial.None)
+            {
+                Say(FieldWords.Denial(denial), true);
+                return;
+            }
+            support.RequestSpecOpsDirective(team, directive);
+            Sent(FieldWords.Callsign(team) + (directive == SpecOpsDirective.Execute ? " · EXECUTE" : " · EXTRACT"));
         }
 
         /// <summary>What the host would refuse, in words; null when the launch can go.</summary>
@@ -870,7 +915,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
 
         private void Say(string line, bool bad)
         {
-            noteText = line;
+            noteText = "LOCAL · " + line;
             noteBad = bad;
             awaiting = false;
             nextPaint = true;
@@ -878,7 +923,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
 
         private void Sent(string order)
         {
-            noteText = order + " · SENT · AWAITING HOST";
+            noteText = "PENDING · " + order + " · AWAITING HOST";
             noteBad = false;
             awaiting = true;
             nextPaint = true;
@@ -913,7 +958,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             for (int i = 0; i < LogLines; i++) DeskStyle.Type(logLines[i], log != null && i < log.Length ? log[i] : "");
 
             WritePlan(detachment, slot, live);
-            DeskStyle.Type(note, (awaiting ? "" : "HOST · ") + noteText);
+            DeskStyle.Type(note, noteText);
             note.color = noteBad ? AvTheme.RailDanger : DeskStyle.Ink;
 
             bool empty = !live || slot < 0;
@@ -933,15 +978,17 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         {
             bool target = live && slot >= 0;
             FieldTeam team = live ? detachment.Team(selectedTeam) : default;
+            int preview = target && ConfirmArmed(selectedTeam, confirmMission, detachment.Objective(slot).Anchor, false)
+                ? confirmMission : hoverMission;
             DeskStyle.Type(planObjective, "01 TARGET  /  " + (target ? detachment.Objective(slot).Name : "AWAITING FIX"));
             DeskStyle.Type(planTeam, "02 TEAM  /  " + (live
                 ? FieldWords.Callsign(selectedTeam) + " " + (team.Formed ? Short(team.State) : "NOT FORMED") : "NO LINK"));
-            DeskStyle.Type(planMission, "03 PREVIEW  /  " + (hoverMission >= 0
-                ? MissionLabel((FieldMission)hoverMission, target ? detachment.Objective(slot) : default) : "PICK A MISSION"));
+            DeskStyle.Type(planMission, "03 ORDER  /  " + (preview >= 0
+                ? MissionLabel((FieldMission)preview, target ? detachment.Objective(slot) : default) : "PICK A MISSION"));
             planObjective.color = target ? DeskStyle.Ink : DeskStyle.Khaki;
             planTeam.color = live && team.Formed && team.State == TeamState.Ready ? AvTheme.RailReady
                 : live && team.Formed ? DeskStyle.Ink : DeskStyle.Khaki;
-            planMission.color = hoverMission >= 0 ? AvTheme.RailInfo : DeskStyle.Khaki;
+            planMission.color = preview >= 0 ? AvTheme.RailInfo : DeskStyle.Khaki;
         }
 
         private void WriteTag(SpecOpsDetachment detachment, int index, double now, bool live)
@@ -968,7 +1015,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             tag.State.color = formed ? DeskStyle.Ink : DeskStyle.Khaki;
             tag.StateFrame.color = formed ? tone : DeskStyle.Khaki;
             DeskStyle.Type(tag.Clock, formed && remaining > 0.0 ? FieldWords.Clock(remaining) : "");
-            DeskStyle.Type(tag.Detail, Detail(team, formed, lost));
+            DeskStyle.Type(tag.Detail, Detail(team, formed, lost, remaining));
             float progress = detachment != null ? detachment.Progress(index, now) : 0f;
             float fill = team.State == TeamState.Holding ? 1f - progress : progress;
             tag.Bar.rectTransform.sizeDelta = new Vector2(tag.BarTrack.rectTransform.sizeDelta.x * (formed ? fill : 0f), 5f);
@@ -976,31 +1023,48 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             if (tag.LostFrame.gameObject.activeSelf != lost) tag.LostFrame.gameObject.SetActive(lost);
 
             bool pending = support != null && support.CommandPending;
-            if (!team.Formed)
+            bool deciding = team.Formed && team.State == TeamState.Deciding;
+            bool canExtract = detachment != null && support != null && !pending && support.OpsStateFresh &&
+                detachment.CheckDirective(index, SpecOpsDirective.Extract) == SpecOpsDenial.None;
+            tag.Secondary.Control.Rect.gameObject.SetActive(deciding);
+            if (deciding)
             {
+                float half = (tag.Root.sizeDelta.x - 24f) * 0.5f;
+                PlaceStamp(tag.Action, new Rect(8f, -tag.Root.sizeDelta.y + 26f, half, 23f));
+                PlaceStamp(tag.Secondary, new Rect(16f + half, -tag.Root.sizeDelta.y + 26f, half, 23f));
+                SetStamp(tag.Action, "EXECUTE · ENTER", live && !pending, false,
+                    "Commit to the operation now. The forecast uses the latest host threat scan.");
+                SetStamp(tag.Secondary, "EXTRACT · X", canExtract, true,
+                    "Abort safely before the task begins. The team returns without a mission roll.");
+            }
+            else if (!team.Formed)
+            {
+                PlaceStamp(tag.Action, new Rect(8f, -tag.Root.sizeDelta.y + 26f, tag.Root.sizeDelta.x - 16f, 23f));
                 float cost = support != null ? support.SpecOpsRaiseCost() : FieldCatalog.RaiseCost;
                 bool afford = support == null || support.BypassRequirements || support.LocalOpsReserve + 0.001f >= cost;
-                SetStamp(tag.Action, "[R] RAISE · " + Figure(cost), live && !pending && afford, false, afford
+                SetStamp(tag.Action, "RAISE · " + Figure(cost), live && !pending && afford, false, afford
                     ? "Form a new RECRUIT team in this slot for " + Figure(cost) + " from OPS reserve."
                     : "Raising a team costs " + Figure(cost) + " OPS reserve; you have " + Figure(support.LocalOpsReserve) + ".");
             }
             else if (team.Deployed)
             {
-                bool recallArmed = live && ConfirmArmed(index, -1, 0, true);
-                SetStamp(tag.Action, recallArmed ? "[R] CONFIRM RECALL" : "[R] RECALL", live && !pending, true, team.State == TeamState.Holding
-                    ? "Leave the " + FieldWords.Post(team.Mission).ToLowerInvariant() + " now; its ability ends with it."
-                    : "Abort the mission and bring the team home. Nothing is refunded; no roll is made.");
+                PlaceStamp(tag.Action, new Rect(8f, -tag.Root.sizeDelta.y + 26f, tag.Root.sizeDelta.x - 16f, 23f));
+                SetStamp(tag.Action, team.State == TeamState.Holding ? "EXTRACT POST" : "EXTRACT", canExtract, true,
+                    team.State == TeamState.Holding
+                        ? "End the temporary " + FieldWords.Post(team.Mission).ToLowerInvariant() + " now. Earned rank stays; its field ability ends."
+                        : "Abort safely and return the team. No mission roll is made.");
             }
             else
             {
-                SetStamp(tag.Action, team.State == TeamState.Ready ? (selected ? "SELECTED · PICK A MISSION" : "READY") : "RESTING",
+                PlaceStamp(tag.Action, new Rect(8f, -tag.Root.sizeDelta.y + 26f, tag.Root.sizeDelta.x - 16f, 23f));
+                SetStamp(tag.Action, team.State == TeamState.Ready ? (selected ? "SELECTED" : "SELECT TEAM") : "RESTING",
                     false, false, team.State == TeamState.Ready
                         ? "Ready. Pick an objective on the map, then choose a mission on the right."
                         : "Recovering; ready again when the clock runs out.");
             }
         }
 
-        private static string Detail(in FieldTeam team, bool formed, bool lost)
+        private static string Detail(in FieldTeam team, bool formed, bool lost, double remaining)
         {
             if (!formed) return lost
                 ? "Lost on " + (string.IsNullOrEmpty(team.Target) ? "a mission" : team.Target) + ". Raise a new team to fill the slot."
@@ -1008,10 +1072,16 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             switch (team.State)
             {
                 case TeamState.EnRoute:
+                    return FieldWords.Mission(team.Mission) + " · " + FieldWords.Origin(team) + " → " + team.Target;
+                case TeamState.Deciding:
+                    return "AT SITE · " + team.CurrentThreat + " UNITS / " + team.CurrentRadars + " RADARS · " +
+                        team.Chance + "% SUCCESS · " + team.Loss + "% LOSS · DECIDE IN " + FieldWords.Clock(remaining);
                 case TeamState.OnTask:
-                    return FieldWords.Mission(team.Mission) + " · " + team.Target + " · " + team.Chance + "% SUCCESS · " + team.Loss + "% LOSS";
+                    return "LIVE PRESSURE " + team.CurrentThreat + " UNITS / " + team.CurrentRadars + " RADARS · " +
+                        team.Chance + "% SUCCESS · " + team.Loss + "% LOSS";
                 case TeamState.Holding:
-                    return FieldWords.Post(team.Mission) + " · " + FieldWords.PostGrant(team.Mission);
+                    return FieldWords.Post(team.Mission) + " · EXPIRES IN " + FieldWords.Clock(remaining) +
+                        " · " + FieldWords.PostGrant(team.Mission);
                 case TeamState.Recovering:
                     return team.Last == MissionOutcome.Failed ? "Last mission failed; resting longer."
                         : team.Last == MissionOutcome.NoBuildings ? team.Mission == FieldMission.Seize
@@ -1082,8 +1152,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 for (int k = 0; k < 3; k++)
                 {
                     sheet.Odds[k].gameObject.SetActive(false);
-                    sheet.Time[k].gameObject.SetActive(false);
                 }
+                for (int k = 0; k < sheet.Time.Length; k++) sheet.Time[k].gameObject.SetActive(false);
                 sheet.OddsText.gameObject.SetActive(false);
                 sheet.TimeText.gameObject.SetActive(false);
                 sheet.Refusal.gameObject.SetActive(true);
@@ -1188,24 +1258,28 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 }
                 DeskStyle.Type(sheet.OddsText, "SUCCESS " + chance + "% · FAIL " + fail + "% · LOSS " + loss + "%");
                 float travel = FieldCatalog.TravelSeconds(TravelMetres(o));
+                float decision = FieldCatalog.DecisionSeconds;
                 float task = FieldCatalog.TaskSeconds(mission);
                 float hold = FieldCatalog.HoldSeconds(rank);
-                float total = travel + task + hold;
+                float total = travel + decision + task + hold;
                 x = 12f;
-                for (int i = 0; i < 3; i++)
+                for (int i = 0; i < sheet.Time.Length; i++)
                 {
-                    float width = barW * (i == 0 ? travel : i == 1 ? task : hold) / total;
+                    float span = i == 0 ? travel : i == 1 ? decision : i == 2 ? task : hold;
+                    float width = barW * span / total;
                     RectTransform r = sheet.Time[i].rectTransform;
                     r.anchoredPosition = new Vector2(x, r.anchoredPosition.y);
                     r.sizeDelta = new Vector2(Mathf.Max(0f, width - 2f), 6f);
                     x += width;
                 }
-                DeskStyle.Type(sheet.TimeText, FieldWords.Clock(travel) + " TRAVEL · " + FieldWords.Clock(task) + " TASK · " +
-                                               FieldWords.Clock(hold) + " HOLD");
+                DeskStyle.Type(sheet.TimeText, FieldWords.Clock(travel) + " OUT · " + FieldWords.Clock(decision) +
+                    " DECIDE · " + FieldWords.Clock(task) + " TASK · " + FieldWords.Clock(hold) + " TEMP POST");
             }
             // One refusal line: why the mission cannot happen here, else why it cannot go now.
             bool refused = refusal != null && possible;
-            DeskStyle.Type(sheet.Post, refused ? refusal : "HOLDS A " + FieldWords.Post(mission) + " · ARMS " + FieldWords.PostGrant(mission));
+            DeskStyle.Type(sheet.Post, refused ? refusal : "SUCCESS HOLDS A " + FieldWords.Post(mission) + " UP TO " +
+                FieldWords.Clock(FieldCatalog.PostSeconds) + " · " + FieldCatalog.MaximumHeldPosts + " POSTS MAX · " +
+                FieldWords.PostGrant(mission));
             sheet.Post.color = refused ? DeskStyle.Stamp : DeskStyle.Khaki;
             sheet.Post.gameObject.SetActive(fullSheet);
             sheet.Refusal.gameObject.SetActive(!possible);
@@ -1218,15 +1292,16 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 sheet.Refusal.color = DeskStyle.Stamp;
             }
             bool armed = refusal == null && ConfirmArmed(selectedTeam, (int)mission, detachment.Objective(slot).Anchor, false);
-            string launchText = armed ? "[" + ((int)mission + 1) + "] CONFIRM · " + loss + "% LOSS"
-                : refusal == null ? "[" + ((int)mission + 1) + "] COMMIT" : possible ? "[" + ((int)mission + 1) + "] " + Brief(refusal) : "NOT HERE";
+            string launchText = armed ? "[" + ((int)mission + 1) + "] COMMIT"
+                : refusal == null ? "[" + ((int)mission + 1) + "] PREVIEW" : possible ? "[" + ((int)mission + 1) + "] " + Brief(refusal) : "NOT HERE";
             SetStamp(sheet.Launch, launchText, refusal == null, armed, refusal == null
                 ? FieldWords.Callsign(selectedTeam) + " goes to " + o.Name + ": " + chance + "% success, " + loss +
-                  "% the team is lost, " + Figure(cost) + " OPS reserve. Click to commit the order; " + LaunchTipTail(mission)
+                  "% the team is lost, " + Figure(cost) + " OPS reserve. Preview, then click again to commit; " + LaunchTipTail(mission)
                 : FieldWords.MissionTitle(mission) + " — " + refusal + ".");
             int on = detachment.TeamOn(o.Anchor);
             bool dispatched = on >= 0 && detachment.Team(on).Mission == mission &&
-                              (detachment.Team(on).State == TeamState.EnRoute || detachment.Team(on).State == TeamState.OnTask);
+                              (detachment.Team(on).State == TeamState.EnRoute || detachment.Team(on).State == TeamState.Deciding ||
+                               detachment.Team(on).State == TeamState.OnTask);
             if (sheet.DispatchedFrame.gameObject.activeSelf != dispatched) sheet.DispatchedFrame.gameObject.SetActive(dispatched);
             if (dispatched)
             {
@@ -1240,8 +1315,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 : hoverMission == (int)mission ? AvTheme.RailInfo : DeskStyle.Khaki.WithAlpha(0.55f);
         }
 
-        /// <summary>Launch tooltip tail: odds are estimates until fixed, and SEIZE names its perk gate.</summary>
-        private static string LaunchTipTail(FieldMission mission) => "Odds are a live estimate and fix at launch." +
+        /// <summary>Launch tooltip tail: forecast changes with the host's real threat scan.</summary>
+        private static string LaunchTipTail(FieldMission mission) => "Forecast updates from live host threat while travelling and before execution. At arrival, execute or extract." +
             (mission == FieldMission.Seize ? " Safehouse FORTIFY needs the SQD fortify perk." : "");
 
         private static bool MissionAllowedAt(FieldMission mission, in FieldObjective objective) =>
@@ -1265,18 +1340,22 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
 
         private void PreviewHover(SpecOpsDetachment detachment, int slot)
         {
-            bool show = hoverMission >= 0 && Live(detachment) && slot >= 0;
+            bool committedPreview = Live(detachment) && slot >= 0 && confirmMission >= 0 &&
+                ConfirmArmed(selectedTeam, confirmMission, detachment.Objective(slot).Anchor, false);
+            int preview = committedPreview ? confirmMission : hoverMission;
+            bool show = preview >= 0 && Live(detachment) && slot >= 0;
             if (!show)
             {
                 map.Preview(false, 0f, 0f, null);
                 return;
             }
             FieldObjective o = detachment.Objective(slot);
-            var mission = (FieldMission)hoverMission;
+            var mission = (FieldMission)preview;
             float travel = FieldCatalog.TravelSeconds(TravelMetres(o));
             float cost = support != null ? support.SpecOpsMissionCost(mission) : FieldCatalog.MissionCost(mission);
             map.Preview(true, o.X, o.Z, "PREVIEW · " + MissionLabel(mission, o) + " · OPS " + Figure(cost) + " · " +
-                                        FieldWords.Clock(travel) + " TRAVEL + " + FieldWords.Clock(FieldCatalog.TaskSeconds(mission)) + " TASK · NOT SENT");
+                FieldWords.Clock(travel) + " OUT + 30 s ARRIVAL DECISION + " + FieldWords.Clock(FieldCatalog.TaskSeconds(mission)) +
+                " TASK · TEMP POST UP TO 120 s · NOT SENT");
         }
 
         private void WriteTimeline(SpecOpsDetachment detachment, double now, bool live)
@@ -1311,7 +1390,9 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                     bar.sprite = segment.Projected ? OpsSprites.Guard : null;
                     bar.type = segment.Projected ? Image.Type.Tiled : Image.Type.Simple;
                     // The longest wording that fits: projected phases say they depend on a success.
-                    string full = LaneWord(segment.Kind) + (segment.Projected ? " IF IT WORKS" : "");
+                    string full = LaneWord(segment.Kind) + (segment.Projected
+                        ? segment.Kind == LaneKind.OnTask ? " IF EXECUTED"
+                        : segment.Kind == LaneKind.Holding ? " IF SUCCESSFUL" : "" : "");
                     string text = width > full.Length * 7.2f + 8f ? full
                         : width > LaneWord(segment.Kind).Length * 7.2f + 8f ? LaneWord(segment.Kind)
                         : width > LaneCode(segment.Kind).Length * 7.2f + 8f ? LaneCode(segment.Kind) : "";
@@ -1320,7 +1401,9 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                     words.rectTransform.sizeDelta = new Vector2(width - 6f, 14f);
                     words.color = DeskStyle.Ink;
                 }
-                DeskStyle.Type(lane.Empty, any ? "" : !live ? "" : team.Formed ? "READY · NO MISSION" : team.Last == MissionOutcome.Lost ? "LOST · SLOT OPEN" : "NOT FORMED");
+                DeskStyle.Type(lane.Empty, any ? "" : !live ? "" : team.State == TeamState.Deciding
+                    ? "AT SITE · EXECUTE OR EXTRACT IN THE ROSTER" : team.Formed ? "READY · NO MISSION"
+                    : team.Last == MissionOutcome.Lost ? "LOST · SLOT OPEN" : "NOT FORMED");
                 lane.Name.color = team.Formed ? DeskStyle.Ink : DeskStyle.Khaki;
             }
         }
@@ -1330,6 +1413,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             switch (kind)
             {
                 case LaneKind.EnRoute: return AvTheme.RailInfo;
+                case LaneKind.Deciding: return AvTheme.RailCaution;
                 case LaneKind.OnTask: return AvTheme.RailCaution;
                 case LaneKind.Holding: return FieldTones.Post(mission);
                 default: return DeskStyle.Khaki;
@@ -1341,6 +1425,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             switch (kind)
             {
                 case LaneKind.EnRoute: return "EN ROUTE";
+                case LaneKind.Deciding: return "DECISION";
                 case LaneKind.OnTask: return "ON TASK";
                 case LaneKind.Holding: return "HOLDING";
                 case LaneKind.Recovering: return "RESTING";
@@ -1353,6 +1438,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             switch (kind)
             {
                 case LaneKind.EnRoute: return "OUT";
+                case LaneKind.Deciding: return "DEC";
                 case LaneKind.OnTask: return "TASK";
                 case LaneKind.Holding: return "HOLD";
                 case LaneKind.Recovering: return "REST";

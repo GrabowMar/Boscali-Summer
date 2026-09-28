@@ -25,7 +25,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Window
     internal sealed class OpsWindow : MonoBehaviour
     {
         private const float TextInterval = 0.1f;
-        private const int Slots = 4;
+        private const int Slots = 5;
         private const float BackdropAlpha = 0.62f;
         private const float VignetteAlpha = 0.35f;
         private const float OpenScale = 0.965f;
@@ -110,7 +110,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Window
             return window;
         }
 
-        /// <summary>Make a room reachable from its notch. Up to four rooms (SPACE has two).</summary>
+        /// <summary>Make a room reachable from its notch. SPACE has tasking, engineering and sensors.</summary>
         public void Register(IOpsView room)
         {
             if (room == null || Slot(room) >= 0) return;
@@ -336,7 +336,9 @@ namespace BoscaliSummer.Features.Support.Presentation.Window
             }
             room.Show(context);
             int domain = DomainIndex(room.Domain);
-            if (domain >= 0) lastByDomain[domain] = room;
+            // SPACE always returns to its task map. Engineering and the sensor feed are
+            // deeper views reached from there, even after switching to another OPS domain.
+            if (domain >= 0 && (domain > 0 || lastByDomain[domain] == null)) lastByDomain[domain] = room;
             float progress = LayoutMotion.Progress(entranceElapsed, room.EntranceSeconds, reduce);
             room.Entrance(progress);
             entranceDone = progress >= 1f;

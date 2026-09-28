@@ -397,7 +397,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     new Rect(width * 0.65f, noteY, width * 0.35f, 14f), "0 KNOWN",
                     "section-title-note", align: TMPro.TextAlignmentOptions.MidlineRight);
                 int rows = Mathf.Clamp(Mathf.FloorToInt((PageHeight - 380f) / 42f), 3, 7);
-                candidateGrid = new MfdPagingGrid(page, y, width, 1, rows, rowHeight: 42f, exclusive: true);
+                candidateGrid = new MfdPagingGrid(page, y, width, 1, rows, rowHeight: 42f);
                 candidateGrid.SetEmptyMessage("NO CONTACTS MATCH THESE PREFERENCES");
                 y -= rows * 42f + AvTokens.RowHeight + AvTokens.Space2;
                 float third = (width - AvTokens.Space3 - AvTokens.Gap * 2f) / 3f;
@@ -575,7 +575,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
                 // Three columns: quick slots 1-3 fill a single balanced row, eliminating
                 // the dead 4th slot and reclaiming 46px vertically.
-                quickGrid = new MfdPagingGrid(page, y, width, 3, 1, pager: false, rowHeight: 44f, exclusive: true);
+                quickGrid = new MfdPagingGrid(page, y, width, 3, 1, pager: false, rowHeight: 44f);
                 AddSlotActions();
                 y -= 44f + AvTokens.Space3;
 
@@ -590,7 +590,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 const int libraryRows = 4;
                 const float libraryCell = 42f;
                 presetVisible = 2 * libraryRows;
-                presetGrid = new MfdPagingGrid(page, y, width, 2, libraryRows, rowHeight: libraryCell, exclusive: true);
+                presetGrid = new MfdPagingGrid(page, y, width, 2, libraryRows, rowHeight: libraryCell);
                 AddPresetActions();
                 y -= libraryRows * libraryCell + AvTokens.Space1 + AvTokens.RowHeight;
 

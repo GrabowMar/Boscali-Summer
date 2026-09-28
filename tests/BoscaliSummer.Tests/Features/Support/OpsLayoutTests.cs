@@ -195,17 +195,35 @@ namespace BoscaliSummer.Tests.Features.Support
         {
             var lanes = new LaneSegment[8];
             int count = TimelineMath.Team(TeamState.EnRoute, 40f, FieldMission.Seize, 0, 600f, lanes);
-            TestAssert.That(count == 4, "en route, task, hold, recover");
+            TestAssert.That(count == 5, "en route, arrival decision, task, hold, recover");
             Near(lanes[0].Start, 0f, "en route start");
             Near(lanes[0].End, 40f / 600f, "en route end");
             TestAssert.That(lanes[0].Kind == LaneKind.EnRoute && !lanes[0].Projected, "en route is current");
-            Near(lanes[1].Start, 40f / 600f, "task start");
-            Near(lanes[1].End, 100f / 600f, "task end");
-            TestAssert.That(lanes[1].Kind == LaneKind.OnTask && !lanes[1].Projected, "the task is the committed phase");
-            Near(lanes[2].End, 400f / 600f, "hold end");
-            TestAssert.That(lanes[2].Kind == LaneKind.Holding && lanes[2].Projected, "holding is projected");
-            Near(lanes[3].End, 460f / 600f, "recover end");
-            TestAssert.That(lanes[3].Kind == LaneKind.Recovering && lanes[3].Projected, "recovery is projected");
+            Near(lanes[1].Start, 40f / 600f, "decision start");
+            Near(lanes[1].End, 70f / 600f, "decision end");
+            TestAssert.That(lanes[1].Kind == LaneKind.Deciding && lanes[1].Projected, "arrival decision is projected");
+            Near(lanes[2].End, 130f / 600f, "task end");
+            TestAssert.That(lanes[2].Kind == LaneKind.OnTask && lanes[2].Projected, "task awaits the execute order");
+            Near(lanes[3].End, 250f / 600f, "temporary post end");
+            TestAssert.That(lanes[3].Kind == LaneKind.Holding && lanes[3].Projected, "holding awaits success");
+            Near(lanes[4].End, 310f / 600f, "recover end");
+            TestAssert.That(lanes[4].Kind == LaneKind.Recovering && lanes[4].Projected, "recovery is projected");
+
+            int arrived = TimelineMath.Team(TeamState.Deciding, 20f, FieldMission.Seize, 0, 600f, lanes);
+            TestAssert.That(arrived == 4 && lanes[0].Kind == LaneKind.Deciding && !lanes[0].Projected,
+                "arrival decision is current and task still needs a command");
+            Near(lanes[0].End, 20f / 600f, "current decision end");
+            TestAssert.That(lanes[1].Kind == LaneKind.OnTask && lanes[1].Projected, "uncommitted task is projected");
+
+            int executing = TimelineMath.Team(TeamState.OnTask, 20f, FieldMission.Seize, 0, 600f, lanes);
+            TestAssert.That(executing == 3 && lanes[0].Kind == LaneKind.OnTask && !lanes[0].Projected,
+                "executing task is current");
+            int post = TimelineMath.Team(TeamState.Holding, 20f, FieldMission.Seize, 0, 600f, lanes);
+            TestAssert.That(post == 2 && lanes[0].Kind == LaneKind.Holding && !lanes[0].Projected,
+                "earned post is current");
+            int resting = TimelineMath.Team(TeamState.Recovering, 20f, FieldMission.Seize, 0, 600f, lanes);
+            TestAssert.That(resting == 1 && lanes[0].Kind == LaneKind.Recovering && !lanes[0].Projected,
+                "recovery is current");
 
             int ready = TimelineMath.Team(TeamState.Ready, 0f, FieldMission.Recon, 0, 600f, lanes);
             TestAssert.That(ready == 1 && lanes[0].Kind == LaneKind.Empty, "ready is one empty lane");
