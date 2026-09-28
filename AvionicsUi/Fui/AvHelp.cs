@@ -17,8 +17,16 @@ namespace NOAvionics.Ui
     /// <summary>Attach to any raycast target; shows <see cref="Text"/> in the nearest <see cref="AvHelpScope"/>.</summary>
     public sealed class AvHelpTip : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
     {
-        public string Text;
+        private string text;
+        private bool hovered;
         private AvHelpScope scope;
+
+        /// <summary>Help sentence; changing it while hovered updates the footer at once.</summary>
+        public string Text
+        {
+            get => text;
+            set { text = value; if (hovered && scope != null) { if (string.IsNullOrEmpty(value)) scope.Clear(); else scope.Show(value); } }
+        }
 
         public static AvHelpTip Attach(GameObject target, string text)
         {
@@ -31,18 +39,21 @@ namespace NOAvionics.Ui
 
         public void OnPointerEnter(PointerEventData e)
         {
-            if (string.IsNullOrEmpty(Text)) return;
+            hovered = true;
             if (scope == null) scope = GetComponentInParent<AvHelpScope>();
-            if (scope != null) scope.Show(Text);
+            if (string.IsNullOrEmpty(text)) return;
+            if (scope != null) scope.Show(text);
         }
 
         public void OnPointerExit(PointerEventData e)
         {
+            hovered = false;
             if (scope != null) scope.Clear();
         }
 
         private void OnDisable()
         {
+            hovered = false;
             if (scope != null) scope.Clear();
         }
     }
