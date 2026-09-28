@@ -19,6 +19,7 @@ namespace NOAvionics.Tests
             TestFlow(assert);
             TestMesh(assert);
             TestFxPacking(assert);
+            TestStates(assert);
         }
 
         // Live-theme references resolve to AvTheme's fallbacks in an engine-free test.
@@ -196,6 +197,13 @@ namespace NOAvionics.Tests
             assert(Math.Abs(AvFxPacking.DurationOf(AvFxKind.Shine) - 0.4f) < 1e-5f && AvFxPacking.DurationOf(AvFxKind.Glow) == 0f, "durations");
             assert(AvFxPacking.Aspect(100f, 0f) == 1f && Math.Abs(AvFxPacking.Aspect(200f, 50f) - 4f) < 1e-5f, "aspect safe");
             assert(AvFxPacking.U(5f, 0f, 0f) == 0f && Math.Abs(AvFxPacking.V(25f, 0f, 100f) - 0.25f) < 1e-5f, "rect uv safe");
+        }
+
+        private static void TestStates(Action<bool, string> assert)
+        {
+            assert(AvStates.Glyph(AvState.Caution) == "\u25B2 " && AvStates.Glyph(AvState.Danger) == "\u2715 ", "R1: caution and danger carry a glyph");
+            assert(AvStates.Glyph(AvState.Ready) == "" && AvStates.Glyph(AvState.Info) == "", "calm states carry none");
+            assert(AvStates.Class(AvState.Caution) == "caution" && AvStates.Class(AvState.Inert) == "inert", "state classes match the sheet");
         }
     }
 }

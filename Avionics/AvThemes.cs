@@ -35,4 +35,24 @@ namespace NOAvionics
             }
         }
     }
+
+    /// <summary>Operational state of a chip, row, metric or alert. Colour always travels with a word or glyph (R1).</summary>
+    public enum AvState { Inert, Ready, Caution, Danger, Info }
+
+    public static class AvStates
+    {
+        public static string Class(AvState s)
+        {
+            switch (s)
+            {
+                case AvState.Ready: return "ready";
+                case AvState.Caution: return "caution";
+                case AvState.Danger: return "danger";
+                case AvState.Info: return "info";
+                default: return "inert";
+            }
+        }
+
+        public static string Glyph(AvState s) => s == AvState.Caution ? "\u25B2 " : s == AvState.Danger ? "\u2715 " : "";
+    }
 }
