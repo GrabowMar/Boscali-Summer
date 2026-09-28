@@ -90,7 +90,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             var layerObject = new GameObject("Wire", typeof(RectTransform), typeof(Canvas), typeof(GraphicRaycaster));
             layer = (RectTransform)layerObject.transform;
             layer.SetParent(Board.InputLayer, false);
-            AvKit.Place(layer, new Rect(-view.x, -view.y, view.x + view.width, view.height - view.y));
+            Chrome.Place(layer, new Rect(-view.x, -view.y, view.x + view.width, view.height - view.y));
             terrain = new BoardTerrain(layer, Board);
             // Terrain is the navigation substrate; keep the room tint light enough that
             // roads, coastlines and objective texture remain legible beneath the network.
@@ -113,7 +113,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             breachB = Stroke(layer, CyberStyle.Accent, OpsSprites.Dash);
             for (int i = 0; i < Packets; i++)
             {
-                packets[i] = AvKit.Panel(layer, new Rect(0f, 0f, 7f, 7f), CyberStyle.Accent, OpsSprites.Dot);
+                packets[i] = Chrome.Panel(layer, new Rect(0f, 0f, 7f, 7f), CyberStyle.Accent, OpsSprites.Dot);
                 packets[i].type = Image.Type.Simple;
                 packets[i].enabled = false;
             }
@@ -123,7 +123,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 var threat = new Threat
                 {
                     Line = Lines.Make(layer, AvTheme.RailDanger.WithAlpha(0.8f), null, "IncidentPath"),
-                    Mark = AvKit.Panel(layer, new Rect(0f, 0f, 20f, 20f), AvTheme.RailDanger)
+                    Mark = Chrome.Panel(layer, new Rect(0f, 0f, 20f, 20f), AvTheme.RailDanger)
                 };
                 threat.Mark.sprite = OpsSprites.Glyph(OpsSprites.G.Alert);
                 threat.Sector = new RingLine(layer, 48, AvTheme.RailDanger, true);
@@ -149,16 +149,16 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
 
         private void BuildNode(Node node, int slot)
         {
-            node.Reach = AvKit.Panel(layer, new Rect(0f, 0f, 10f, 10f), CyberStyle.Title, OpsSprites.DottedRing);
+            node.Reach = Chrome.Panel(layer, new Rect(0f, 0f, 10f, 10f), CyberStyle.Title, OpsSprites.DottedRing);
             node.Reach.type = Image.Type.Simple;
             node.Control = RoomControl.Create(layer, new Rect(0f, 0f, Hex + 12f, Hex + 12f), () => select?.Invoke(slot), "Node");
             RectTransform host = node.Control.Rect;
-            node.Select = AvKit.Panel(host, new Rect(-6f, 6f, Hex + 24f, Hex + 24f), CyberStyle.Accent, OpsSprites.HexLine);
+            node.Select = Chrome.Panel(host, new Rect(-6f, 6f, Hex + 24f, Hex + 24f), CyberStyle.Accent, OpsSprites.HexLine);
             node.Select.type = Image.Type.Simple;
             node.Ring = new Image[4];
             for (int i = 0; i < 4; i++)
             {
-                Image ring = AvKit.Panel(host, new Rect(0f, 0f, Hex + 12f, Hex + 12f), CyberStyle.Lattice, OpsSprites.Arc);
+                Image ring = Chrome.Panel(host, new Rect(0f, 0f, Hex + 12f, Hex + 12f), CyberStyle.Lattice, OpsSprites.Arc);
                 ring.type = Image.Type.Filled;
                 ring.fillMethod = Image.FillMethod.Radial360;
                 ring.fillOrigin = (int)Image.Origin360.Top;
@@ -167,11 +167,11 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 ring.rectTransform.localEulerAngles = new Vector3(0f, 0f, -90f * i - 4f);
                 node.Ring[i] = ring;
             }
-            node.Fill = AvKit.Panel(host, new Rect(6f, -6f, Hex, Hex), CyberStyle.Pane, OpsSprites.HexFill);
+            node.Fill = Chrome.Panel(host, new Rect(6f, -6f, Hex, Hex), CyberStyle.Pane, OpsSprites.HexFill);
             node.Fill.type = Image.Type.Simple;
-            node.Line = AvKit.Panel(host, new Rect(6f, -6f, Hex, Hex), CyberStyle.Ink, OpsSprites.HexLine);
+            node.Line = Chrome.Panel(host, new Rect(6f, -6f, Hex, Hex), CyberStyle.Ink, OpsSprites.HexLine);
             node.Line.type = Image.Type.Simple;
-            node.Glyph = AvKit.Panel(host, new Rect(10f, -10f, Hex - 8f, Hex - 8f), CyberStyle.Ink);
+            node.Glyph = Chrome.Panel(host, new Rect(10f, -10f, Hex - 8f, Hex - 8f), CyberStyle.Ink);
             node.Control.Changed = c => node.Line.rectTransform.localScale = c.Hovered ? new Vector3(1.15f, 1.15f, 1f) : Vector3.one;
             node.Control.gameObject.SetActive(false);
             node.Reach.gameObject.SetActive(false);
@@ -179,7 +179,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
 
         private void BuildTag(Node node)
         {
-            node.Tag = AvKit.Panel(layer, new Rect(0f, 0f, 80f, 16f), CyberStyle.Surface.WithAlpha(0.92f));
+            node.Tag = Chrome.Panel(layer, new Rect(0f, 0f, 80f, 16f), CyberStyle.Surface.WithAlpha(0.92f));
             node.Name = CyberStyle.Line(node.Tag.rectTransform, new Rect(4f, 0f, 76f, 16f), CyberStyle.Micro, CyberStyle.Ink);
             node.Tag.gameObject.SetActive(false);
         }
@@ -333,7 +333,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                     if (show)
                     {
                         var rect = new Rect(placed[k].X, placed[k].Y, placed[k].Width, placed[k].Height);
-                        AvKit.Place(node.Tag.rectTransform, rect);
+                        Chrome.Place(node.Tag.rectTransform, rect);
                         PlacedRects[PlacedCount++] = rect;
                         node.Name.color = i == selected ? CyberStyle.Accent : CyberStyle.Ink;
                     }

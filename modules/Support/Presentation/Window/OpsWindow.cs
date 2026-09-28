@@ -34,10 +34,10 @@ namespace BoscaliSummer.Features.Support.Presentation.Window
         private sealed class Notch
         {
             public RoomControl Control;
-            public AvRoomFrame.NotchChrome Chrome;
+            public Chrome.NotchChrome Chrome;
             public Image Fill;
-            public Image Left, Top, Right, ActiveBar, Icon;
-            public TMP_Text Label, Key;
+            public Image Left, Top, Right, ActiveBar;
+            public TMP_Text Icon, Label, Key;
             public bool Active;
         }
 
@@ -130,7 +130,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Window
         {
             if (!Present(room, context, from)) return;
             input.Hold();
-            AvButton.ClearTooltip();
+            Chrome.ClearTooltip();
         }
 
         /// <summary>Everything <see cref="Show"/> does except taking input (the offline harness uses this).</summary>
@@ -168,7 +168,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Window
             visible = false;
             closing = true;
             closedFrame = Time.frameCount;
-            AvButton.ClearTooltip();
+            Chrome.ClearTooltip();
             bool reduce = reduceMotion();
             backdropTween.Retarget(0f, LayoutMotion.WindowOut, reduce);
             windowTween.Retarget(0f, LayoutMotion.WindowOut, reduce);
@@ -193,18 +193,18 @@ namespace BoscaliSummer.Features.Support.Presentation.Window
             content = contentObject;
             var root = (RectTransform)contentObject.transform;
             root.SetParent(transform, false);
-            AvKit.Stretch(root);
+            Chrome.Stretch(root);
 
-            backdrop = AvRoomFrame.CreateBackdrop(root, BackdropAlpha);
+            backdrop = Chrome.CreateBackdrop(root, BackdropAlpha);
             backdrop.gameObject.AddComponent<BackdropClick>().Window = this;
-            vignette = AvKit.Panel(root, new Rect(0f, 0f, 10f, 10f), Color.black.WithAlpha(VignetteAlpha));
+            vignette = Chrome.Panel(root, new Rect(0f, 0f, 10f, 10f), Color.black.WithAlpha(VignetteAlpha));
             vignette.sprite = OpsSprites.Vignette;
             vignette.type = Image.Type.Simple;
-            AvKit.Stretch(vignette.rectTransform);
+            Chrome.Stretch(vignette.rectTransform);
 
-            frame = AvRoomFrame.CreateFrame(root, "Frame", out frameGroup);
+            frame = Chrome.CreateFrame(root, "Frame", out frameGroup);
 
-            shadow = AvKit.Panel(frame, new Rect(0f, 0f, 10f, 10f), Color.black.WithAlpha(OpsWindowStyle.ShadowAlpha),
+            shadow = Chrome.Panel(frame, new Rect(0f, 0f, 10f, 10f), Color.black.WithAlpha(OpsWindowStyle.ShadowAlpha),
                 OpsSprites.Shadow);
             shadow.fillCenter = false;
 
@@ -215,31 +215,30 @@ namespace BoscaliSummer.Features.Support.Presentation.Window
             layerObject.AddComponent<RoomClick>().Window = this;
 
             Color edge = AvTheme.Frame;
-            topLeft = AvRoomFrame.CreateEdge(frame, new Rect(0f, 0f, 1f, 1f), edge);
-            topRight = AvRoomFrame.CreateEdge(frame, new Rect(0f, 0f, 1f, 1f), edge);
-            bottom = AvRoomFrame.CreateEdge(frame, new Rect(0f, 0f, 1f, 1f), edge);
-            left = AvRoomFrame.CreateEdge(frame, new Rect(0f, 0f, 1f, 1f), edge);
-            right = AvRoomFrame.CreateEdge(frame, new Rect(0f, 0f, 1f, 1f), edge);
+            topLeft = Chrome.CreateEdge(frame, new Rect(0f, 0f, 1f, 1f), edge);
+            topRight = Chrome.CreateEdge(frame, new Rect(0f, 0f, 1f, 1f), edge);
+            bottom = Chrome.CreateEdge(frame, new Rect(0f, 0f, 1f, 1f), edge);
+            left = Chrome.CreateEdge(frame, new Rect(0f, 0f, 1f, 1f), edge);
+            right = Chrome.CreateEdge(frame, new Rect(0f, 0f, 1f, 1f), edge);
 
             for (int i = 0; i < notches.Length; i++)
             {
                 int domain = i;
-                int icon = i == 0 ? OpsSprites.G.Space : i == 1 ? OpsSprites.G.Cyber : OpsSprites.G.SpecOps;
+                AvIcon icon = i == 0 ? AvIcon.Satellite : i == 1 ? AvIcon.ShieldLock : AvIcon.UsersGroup;
                 notches[i] = BuildNotch(OpsDomains.Tab(OpsDomains.All[i]), "CTRL " + (i + 1),
                     () => SwitchDomain(domain), "Switch the OPS window to " + OpsDomains.Tab(OpsDomains.All[i]) +
                                                 " (Ctrl+" + (i + 1) + ", Ctrl+Tab cycles).", icon);
             }
-            closeNotch = BuildNotch("× CLOSE", "ESC", Close, "Close the OPS window and return to the map (Esc, or right-click outside the window).");
+            closeNotch = BuildNotch("× CLOSE", "ESC", Close, "Close the OPS window and return to the map (Esc, or right-click outside the window).", AvIcon.X);
             Layout(OpsWindowStyle.ReferenceWidth, OpsWindowStyle.ReferenceHeight);
         }
 
-        private Notch BuildNotch(string text, string key, Action click, string tip, int glyph = -1)
+        private Notch BuildNotch(string text, string key, Action click, string tip, AvIcon icon = AvIcon.None)
         {
             var notch = new Notch();
             notch.Control = RoomControl.Create(frame, new Rect(0f, 0f, 10f, OpsWindowStyle.NotchHeight), click, "Notch");
             RectTransform host = notch.Control.Rect;
-            notch.Chrome = AvRoomFrame.CreateNotchChrome(host, text, key, OpsSprites.Notch,
-                glyph >= 0 ? OpsSprites.Glyph(glyph) : null);
+            notch.Chrome = Chrome.CreateNotchChrome(host, text, key, icon);
             notch.Fill = notch.Chrome.Fill;
             notch.Left = notch.Chrome.Left;
             notch.Top = notch.Chrome.Top;
@@ -262,21 +261,21 @@ namespace BoscaliSummer.Features.Support.Presentation.Window
             float w = target.Width, h = target.Height;
             frame.sizeDelta = new Vector2(w, h);
             float fall = OpsWindowStyle.ShadowFalloff;
-            AvKit.Place(shadow.rectTransform, new Rect(-fall, fall + OpsWindowStyle.ShadowOffsetY, w + fall * 2f, h + fall * 2f));
-            AvKit.Place(roomLayer, new Rect(0f, 0f, w, h));
-            AvKit.Place(bottom.rectTransform, new Rect(0f, -h + 1f, w, 1f));
-            AvKit.Place(left.rectTransform, new Rect(0f, 0f, 1f, h));
-            AvKit.Place(right.rectTransform, new Rect(w - 1f, 0f, 1f, h));
+            Chrome.Place(shadow.rectTransform, new Rect(-fall, fall + OpsWindowStyle.ShadowOffsetY, w + fall * 2f, h + fall * 2f));
+            Chrome.Place(roomLayer, new Rect(0f, 0f, w, h));
+            Chrome.Place(bottom.rectTransform, new Rect(0f, -h + 1f, w, 1f));
+            Chrome.Place(left.rectTransform, new Rect(0f, 0f, 1f, h));
+            Chrome.Place(right.rectTransform, new Rect(w - 1f, 0f, 1f, h));
 
             float notchY = OpsWindowStyle.NotchHeight;
             float x = OpsWindowStyle.NotchInset;
             for (int i = 0; i < notches.Length; i++)
             {
-                AvKit.Place(notches[i].Control.Rect, new Rect(x, notchY, OpsWindowStyle.NotchWidth, OpsWindowStyle.NotchHeight));
+                Chrome.Place(notches[i].Control.Rect, new Rect(x, notchY, OpsWindowStyle.NotchWidth, OpsWindowStyle.NotchHeight));
                 SizeNotch(notches[i], OpsWindowStyle.NotchWidth);
                 x += OpsWindowStyle.NotchWidth + OpsWindowStyle.NotchGap;
             }
-            AvKit.Place(closeNotch.Control.Rect, new Rect(w - OpsWindowStyle.NotchInset - OpsWindowStyle.CloseWidth, notchY,
+            Chrome.Place(closeNotch.Control.Rect, new Rect(w - OpsWindowStyle.NotchInset - OpsWindowStyle.CloseWidth, notchY,
                 OpsWindowStyle.CloseWidth, OpsWindowStyle.NotchHeight));
             SizeNotch(closeNotch, OpsWindowStyle.CloseWidth);
 
@@ -289,7 +288,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Window
 
         private static void SizeNotch(Notch notch, float width)
         {
-            AvRoomFrame.LayoutNotch(notch.Chrome, width, OpsWindowStyle.NotchCut);
+            Chrome.LayoutNotch(notch.Chrome, width, OpsWindowStyle.NotchCut);
         }
 
         // ---- Rooms ------------------------------------------------------------------------------
@@ -359,7 +358,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Window
             var go = new GameObject("Room" + slot, typeof(RectTransform), typeof(CanvasGroup));
             hosts[slot] = (RectTransform)go.transform;
             hosts[slot].SetParent(roomLayer, false);
-            AvKit.Stretch(hosts[slot]);
+            Chrome.Stretch(hosts[slot]);
             hostGroups[slot] = go.GetComponent<CanvasGroup>();
             return hosts[slot];
         }
@@ -516,9 +515,9 @@ namespace BoscaliSummer.Features.Support.Presentation.Window
                 gapEnd = gapStart + OpsWindowStyle.NotchWidth - 2f;
             }
             if (topLeft == null) return;
-            AvKit.Place(topLeft.rectTransform, new Rect(0f, 0f, Mathf.Min(gapStart, w), 1f));
+            Chrome.Place(topLeft.rectTransform, new Rect(0f, 0f, Mathf.Min(gapStart, w), 1f));
             topRight.enabled = gapEnd < w;
-            if (topRight.enabled) AvKit.Place(topRight.rectTransform, new Rect(gapEnd, 0f, w - gapEnd, 1f));
+            if (topRight.enabled) Chrome.Place(topRight.rectTransform, new Rect(gapEnd, 0f, w - gapEnd, 1f));
         }
 
         private static void PaintNotch(Notch notch)

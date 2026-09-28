@@ -53,7 +53,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         public static TMP_Text Line(RectTransform parent, Rect area, float size, Color color,
             TextAlignmentOptions align = TextAlignmentOptions.MidlineLeft, bool wrap = false)
         {
-            TMP_Text label = AvKit.Label(parent, "", area, color, size, FontStyles.Normal, align, wrap);
+            TMP_Text label = Chrome.Label(parent, "", area, color, size, FontStyles.Normal, align, wrap);
             label.richText = true;
             return label;
         }

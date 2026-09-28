@@ -36,7 +36,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         public static TMP_Text Symbol(RectTransform parent, string text, Rect area, float size,
             TextAlignmentOptions align = TextAlignmentOptions.MidlineLeft, bool dim = false)
         {
-            TMP_Text label = AvKit.Label(parent, text, area, dim ? Dim : Ink, size, FontStyles.Bold, align);
+            TMP_Text label = Chrome.Label(parent, text, area, dim ? Dim : Ink, size, FontStyles.Bold, align);
             label.characterSpacing = Tracking;
             label.outlineWidth = 0.18f;
             label.outlineColor = (Color32)Halo.WithAlpha(1f);

@@ -141,7 +141,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             float w = area.width, h = area.height;
             compact = h < 800f || w < 1500f;
             ColumnWidth = compact ? 196f : 240f;
-            Image surface = AvKit.Panel(room, new Rect(0f, 0f, w, h), CyberStyle.Surface.WithAlpha(1f));
+            Image surface = Chrome.Panel(room, new Rect(0f, 0f, w, h), CyberStyle.Surface.WithAlpha(1f));
             surface.raycastTarget = true;
 
             float top = StatusHeight + CyberStyle.Gutter;
@@ -176,12 +176,12 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
 
         private void BuildStatus(RectTransform room, Rect at)
         {
-            AvKit.Panel(room, at, CyberStyle.Bar);
-            block = AvKit.Panel(room, new Rect(0f, 0f, 104f, at.height), AvTheme.RailReady);
+            Chrome.Panel(room, at, CyberStyle.Bar);
+            block = Chrome.Panel(room, new Rect(0f, 0f, 104f, at.height), AvTheme.RailReady);
             blockLabel = CyberStyle.Line(block.rectTransform, new Rect(0f, -3f, 104f, 14f), CyberStyle.Micro, CyberStyle.Surface,
                 TextAlignmentOptions.Center);
             CyberStyle.Type(blockLabel, "INFOCON");
-            blockDigit = AvKit.Label(block.rectTransform, "5", new Rect(0f, -12f, 104f, 52f), CyberStyle.Surface, 44f,
+            blockDigit = Chrome.Label(block.rectTransform, "5", new Rect(0f, -12f, 104f, 52f), CyberStyle.Surface, 44f,
                 FontStyles.Bold, TextAlignmentOptions.Center);
             status1 = CyberStyle.Line(room, new Rect(122f, -10f, at.width - 122f - 250f, 20f), 14f, CyberStyle.Ink);
             status2 = CyberStyle.Line(room, new Rect(122f, -36f, at.width - 122f - 250f, 18f), CyberStyle.Small, CyberStyle.Dim);
@@ -198,11 +198,11 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             var go = new GameObject(title.Trim('[', ']', ' '), typeof(RectTransform));
             pane.Root = (RectTransform)go.transform;
             pane.Root.SetParent(room, false);
-            AvKit.Place(pane.Root, at);
-            AvKit.Panel(pane.Root, new Rect(0f, 0f, at.width, at.height), CyberStyle.Pane);
-            AvKit.Outline(pane.Root, new Rect(0f, 0f, at.width, at.height), CyberStyle.PaneEdge);
-            AvKit.Panel(pane.Root, new Rect(1f, -1f, at.width - 2f, CyberStyle.TitleBar), CyberStyle.Bar);
-            AvKit.Panel(pane.Root, new Rect(1f, -1f, 3f, CyberStyle.TitleBar), CyberStyle.Accent);
+            Chrome.Place(pane.Root, at);
+            Chrome.Panel(pane.Root, new Rect(0f, 0f, at.width, at.height), CyberStyle.Pane);
+            Chrome.Outline(pane.Root, new Rect(0f, 0f, at.width, at.height), CyberStyle.PaneEdge);
+            Chrome.Panel(pane.Root, new Rect(1f, -1f, at.width - 2f, CyberStyle.TitleBar), CyberStyle.Bar);
+            Chrome.Panel(pane.Root, new Rect(1f, -1f, 3f, CyberStyle.TitleBar), CyberStyle.Accent);
             pane.Title = CyberStyle.Line(pane.Root, new Rect(14f, -1f, Mathf.Max(0f, Mathf.Min(280f, at.width * 0.52f) - 14f), CyberStyle.TitleBar), CyberStyle.Small, CyberStyle.Title);
             pane.Title.fontStyle = FontStyles.Bold;
             CyberStyle.Type(pane.Title, title);
@@ -211,7 +211,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             var body = new GameObject("Body", typeof(RectTransform), typeof(CanvasGroup));
             pane.Body = (RectTransform)body.transform;
             pane.Body.SetParent(pane.Root, false);
-            AvKit.Place(pane.Body, new Rect(0f, -CyberStyle.TitleBar - 1f, at.width, at.height - CyberStyle.TitleBar - 1f));
+            Chrome.Place(pane.Body, new Rect(0f, -CyberStyle.TitleBar - 1f, at.width, at.height - CyberStyle.TitleBar - 1f));
             pane.Content = body.GetComponent<CanvasGroup>();
             pane.Boot = CyberStyle.Line(pane.Root, new Rect(12f, -CyberStyle.TitleBar - 8f, at.width - 24f, 54f), CyberStyle.Small,
                 CyberStyle.Title, TextAlignmentOptions.TopLeft, true);
@@ -224,11 +224,11 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         {
             RectTransform body = panes[0].Body;
             float bodyH = netRect.height - CyberStyle.TitleBar - 1f;
-            AvKit.Rule(body, new Rect(ColumnWidth, 0f, 1f, bodyH), CyberStyle.PaneEdge);
+            Chrome.Rule(body, new Rect(ColumnWidth, 0f, 1f, bodyH), CyberStyle.PaneEdge);
             CyberStyle.Type(Label(body, new Rect(14f, -8f, ColumnWidth - 28f, 16f), CyberStyle.Micro, CyberStyle.Title), "infocon ladder");
             for (int i = 0; i < 5; i++)
             {
-                rungFills[i] = AvKit.Panel(body, new Rect(12f, -28f - i * (compact ? 16f : 20f), ColumnWidth - 24f, compact ? 16f : 18f), CyberStyle.Pane);
+                rungFills[i] = Chrome.Panel(body, new Rect(12f, -28f - i * (compact ? 16f : 20f), ColumnWidth - 24f, compact ? 16f : 18f), CyberStyle.Pane);
                 rungs[i] = Label(body, new Rect(20f, -28f - i * (compact ? 16f : 20f), ColumnWidth - 40f, compact ? 16f : 18f), CyberStyle.Body, CyberStyle.Dim);
                 CyberStyle.Type(rungs[i], Rungs[i]);
             }
@@ -250,7 +250,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             var hostObject = new GameObject("NetmapHost", typeof(RectTransform), typeof(CanvasGroup));
             var host = (RectTransform)hostObject.transform;
             host.SetParent(room, false);
-            AvKit.Place(host, new Rect(0f, 0f, roomW, roomH));
+            Chrome.Place(host, new Rect(0f, 0f, roomW, roomH));
             mapFade = hostObject.GetComponent<CanvasGroup>();
             map.Build(host, view, Select);
             map.Board.Clicked = (local, button) =>
@@ -263,13 +263,13 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             // The empty topology is a real network state, not an unlabelled dead map.
             float plateW = Mathf.Min(520f, view.width - 48f);
             const float plateH = 154f;
-            var plate = AvKit.Panel(room, new Rect(view.x + (view.width - plateW) * 0.5f,
+            var plate = Chrome.Panel(room, new Rect(view.x + (view.width - plateW) * 0.5f,
                 view.y - (view.height - plateH) * 0.5f, plateW, plateH), CyberStyle.Pane.WithAlpha(0.96f));
             dormantMap = plate.rectTransform;
             dormantFade = plate.gameObject.AddComponent<CanvasGroup>();
             plate.raycastTarget = false;
-            AvKit.Outline(dormantMap, new Rect(0f, 0f, plateW, plateH), CyberStyle.Title.WithAlpha(0.7f));
-            AvKit.Rule(dormantMap, new Rect(16f, -28f, plateW - 32f, 1f), CyberStyle.Title.WithAlpha(0.45f));
+            Chrome.Outline(dormantMap, new Rect(0f, 0f, plateW, plateH), CyberStyle.Title.WithAlpha(0.7f));
+            Chrome.Rule(dormantMap, new Rect(16f, -28f, plateW - 32f, 1f), CyberStyle.Title.WithAlpha(0.45f));
             CyberStyle.Type(Label(dormantMap, new Rect(18f, -7f, plateW - 36f, 18f), CyberStyle.Micro, CyberStyle.Title),
                 "NETWORK TOPOLOGY / CONTROL LINK");
             dormantTitle = Label(dormantMap, new Rect(18f, -42f, plateW - 36f, 38f), 25f, CyberStyle.Ink);
@@ -286,8 +286,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             var row = new Row();
             row.Control = RoomControl.Create(parent, at, click, "Row");
             RectTransform host = row.Control.Rect;
-            row.Fill = AvKit.Panel(host, new Rect(0f, 0f, at.width, at.height), CyberStyle.Bar);
-            AvKit.Outline(host, new Rect(0f, 0f, at.width, at.height), CyberStyle.PaneEdge);
+            row.Fill = Chrome.Panel(host, new Rect(0f, 0f, at.width, at.height), CyberStyle.Bar);
+            Chrome.Outline(host, new Rect(0f, 0f, at.width, at.height), CyberStyle.PaneEdge);
             row.Text = CyberStyle.Line(host, new Rect(8f, 0f, at.width - 16f, at.height), CyberStyle.Small, CyberStyle.Ink,
                 twoLines ? TextAlignmentOptions.MidlineLeft : TextAlignmentOptions.MidlineLeft, twoLines);
             row.Right = CyberStyle.Line(host, new Rect(8f, 0f, at.width - 16f, at.height), CyberStyle.Small, CyberStyle.Ink,
@@ -320,22 +320,22 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             var locationObject = new GameObject("Location", typeof(RectTransform));
             locationGroup = (RectTransform)locationObject.transform;
             locationGroup.SetParent(body, false);
-            AvKit.Place(locationGroup, new Rect(0f, compact ? -112f : -132f, w, h - (compact ? 112f : 132f)));
+            Chrome.Place(locationGroup, new Rect(0f, compact ? -112f : -132f, w, h - (compact ? 112f : 132f)));
             CyberStyle.Type(Label(locationGroup, new Rect(14f, 0f, w - 28f, 16f), CyberStyle.Micro, CyberStyle.Title), "process · probe > exploit > extract");
             phaseWidth = (w - 40f) / 3f;
             for (int i = 0; i < 3; i++)
             {
                 float x = 12f + i * (phaseWidth + 8f);
-                phaseFills[i] = AvKit.Panel(locationGroup, new Rect(x, -20f, phaseWidth, compact ? 62f : 80f), CyberStyle.Bar);
+                phaseFills[i] = Chrome.Panel(locationGroup, new Rect(x, -20f, phaseWidth, compact ? 62f : 80f), CyberStyle.Bar);
                 phases[i] = Label(locationGroup, new Rect(x + 8f, -24f, phaseWidth - 16f, 58f), CyberStyle.Small, CyberStyle.Ink, true);
-                AvKit.Panel(locationGroup, new Rect(x, compact ? -78f : -96f, phaseWidth, 4f), CyberStyle.Lattice);
-                phaseProgress[i] = AvKit.Panel(locationGroup, new Rect(x, compact ? -78f : -96f, 0f, 4f), CyberStyle.Accent);
+                Chrome.Panel(locationGroup, new Rect(x, compact ? -78f : -96f, phaseWidth, 4f), CyberStyle.Lattice);
+                phaseProgress[i] = Chrome.Panel(locationGroup, new Rect(x, compact ? -78f : -96f, 0f, 4f), CyberStyle.Accent);
             }
             traceLine = CyberStyle.Line(locationGroup, new Rect(14f, compact ? -88f : -112f, w - 28f, 28f), 18f, CyberStyle.Ink);
             traceWidth = w - 28f;
-            AvKit.Panel(locationGroup, new Rect(14f, compact ? -118f : -146f, traceWidth, 8f), CyberStyle.Lattice);
-            traceFill = AvKit.Panel(locationGroup, new Rect(14f, compact ? -118f : -146f, 0f, 8f), CyberStyle.Accent);
-            AvKit.Panel(locationGroup, new Rect(14f + traceWidth * 0.7f, compact ? -114f : -142f, 2f, 16f), AvTheme.RailCaution);
+            Chrome.Panel(locationGroup, new Rect(14f, compact ? -118f : -146f, traceWidth, 8f), CyberStyle.Lattice);
+            traceFill = Chrome.Panel(locationGroup, new Rect(14f, compact ? -118f : -146f, 0f, 8f), CyberStyle.Accent);
+            Chrome.Panel(locationGroup, new Rect(14f + traceWidth * 0.7f, compact ? -114f : -142f, 2f, 16f), AvTheme.RailCaution);
             float bw = (w - 32f) / 2f;
             quiet = BuildRow(locationGroup, new Rect(12f, compact ? -136f : -172f, bw, compact ? 44f : 54f), () => Breach(BreachTool.RetuneQuiet), true);
             loud = BuildRow(locationGroup, new Rect(20f + bw, compact ? -136f : -172f, bw, compact ? 44f : 54f), () => Breach(BreachTool.RetuneForce), true);
@@ -354,7 +354,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             var capObject = new GameObject("Capstone", typeof(RectTransform));
             capstoneGroup = (RectTransform)capObject.transform;
             capstoneGroup.SetParent(body, false);
-            AvKit.Place(capstoneGroup, new Rect(0f, compact ? -112f : -132f, w, h - (compact ? 112f : 132f)));
+            Chrome.Place(capstoneGroup, new Rect(0f, compact ? -112f : -132f, w, h - (compact ? 112f : 132f)));
             capTitle = Label(capstoneGroup, new Rect(14f, 0f, w - 28f, 34f), CyberStyle.Small, CyberStyle.Title, true);
             for (int i = 0; i < capstones.Length; i++)
             {
@@ -365,7 +365,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             var homeObject = new GameObject("Home", typeof(RectTransform));
             homeGroup = (RectTransform)homeObject.transform;
             homeGroup.SetParent(body, false);
-            AvKit.Place(homeGroup, new Rect(0f, compact ? -112f : -132f, w, h - (compact ? 112f : 132f)));
+            Chrome.Place(homeGroup, new Rect(0f, compact ? -112f : -132f, w, h - (compact ? 112f : 132f)));
             homeDetail = Label(homeGroup, new Rect(14f, 0f, w - 28f, 48f), CyberStyle.Small, CyberStyle.Ink, true);
             isolateRow = BuildRow(homeGroup, new Rect(12f, -56f, w - 24f, 34f), () => Verb((int)CyberVerb.Isolate));
             patchRow = BuildRow(homeGroup, new Rect(12f, -96f, w - 24f, 34f), () => Verb((int)CyberVerb.Patch));
@@ -374,7 +374,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             var incidentObject = new GameObject("Incident", typeof(RectTransform));
             incidentGroup = (RectTransform)incidentObject.transform;
             incidentGroup.SetParent(body, false);
-            AvKit.Place(incidentGroup, new Rect(0f, compact ? -112f : -132f, w, h - (compact ? 112f : 132f)));
+            Chrome.Place(incidentGroup, new Rect(0f, compact ? -112f : -132f, w, h - (compact ? 112f : 132f)));
             incidentDetail = Label(incidentGroup, new Rect(14f, 0f, w - 28f, 48f), CyberStyle.Small, CyberStyle.Ink, true);
             for (int i = 0; i < answers.Length; i++)
             {
@@ -404,7 +404,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 incidents[i].Control.gameObject.SetActive(false);
             }
             incidentEmpty = Label(body, new Rect(12f, -34f, w - 24f, 60f), CyberStyle.Body, CyberStyle.Dim, true);
-            incidentQuietMarker = AvKit.Panel(body, new Rect(12f, -36f, 3f, 52f), CyberStyle.Accent);
+            incidentQuietMarker = Chrome.Panel(body, new Rect(12f, -36f, 3f, 52f), CyberStyle.Accent);
             incidentEmpty.rectTransform.anchoredPosition = new Vector2(26f, -34f);
             incidentEmpty.rectTransform.sizeDelta = new Vector2(w - 38f, 60f);
         }
@@ -419,7 +419,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 shell[i].gameObject.SetActive(!compact || i == ShellLines - 1);
             }
             float top = compact ? 27f : 6f + ShellLines * CyberStyle.LinePitch + 4f;
-            AvKit.Rule(body, new Rect(8f, -top, w - 16f, 1f), CyberStyle.PaneEdge);
+            Chrome.Rule(body, new Rect(8f, -top, w - 16f, 1f), CyberStyle.PaneEdge);
             upgradeTitle = Label(body, new Rect(12f, -(top + 4f), columnWidth, 16f), CyberStyle.Micro, CyberStyle.Title);
             CyberStyle.Type(upgradeTitle, "NETWORK UPGRADES · OPS RESERVE");
             TMP_Text verbTitle = Label(body, new Rect(12f + columnWidth + columnGap, -(top + 4f), columnWidth, 16f), CyberStyle.Micro, CyberStyle.Title);
@@ -435,7 +435,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             {
                 int index = i;
                 verbs[i] = BuildRow(body, new Rect(16f + columnWidth + columnGap, -(top + 22f) - i * rowStep, columnWidth, rowHeight), () => Verb(index));
-                verbs[i].Text.fontSize = CyberStyle.Body;
+                Chrome.SetSize(verbs[i].Text, CyberStyle.Body);
             }
         }
 
@@ -447,7 +447,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             layoutDue = true;
         }
 
-        public void Hide() => AvButton.ClearTooltip();
+        public void Hide() => Chrome.ClearTooltip();
 
         public void Entrance(float progress)
         {
@@ -1050,7 +1050,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             for (int i = 0; i < quickLeaseRows.Length; i++)
             {
                 Row row = quickLeaseRows[i];
-                AvKit.Place(row.Control.Rect, new Rect(12f, top - i * step, width, compact ? 30f : 34f));
+                Chrome.Place(row.Control.Rect, new Rect(12f, top - i * step, width, compact ? 30f : 34f));
                 SupportActionDefinition action = quickLeaseDefinitions[i];
                 if (action == null)
                 {
@@ -1077,10 +1077,10 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         private void RestoreBreachRows()
         {
             float bw = (locationGroup.rect.width - 32f) / 2f;
-            AvKit.Place(quiet.Control.Rect, new Rect(12f, compact ? -136f : -172f, bw, compact ? 44f : 54f));
-            AvKit.Place(loud.Control.Rect, new Rect(20f + bw, compact ? -136f : -172f, bw, compact ? 44f : 54f));
-            AvKit.Place(spoof.Control.Rect, new Rect(12f, compact ? -188f : -234f, bw, 30f));
-            AvKit.Place(disconnect.Control.Rect, new Rect(20f + bw, compact ? -188f : -234f, bw, 30f));
+            Chrome.Place(quiet.Control.Rect, new Rect(12f, compact ? -136f : -172f, bw, compact ? 44f : 54f));
+            Chrome.Place(loud.Control.Rect, new Rect(20f + bw, compact ? -136f : -172f, bw, compact ? 44f : 54f));
+            Chrome.Place(spoof.Control.Rect, new Rect(12f, compact ? -188f : -234f, bw, 30f));
+            Chrome.Place(disconnect.Control.Rect, new Rect(20f + bw, compact ? -188f : -234f, bw, 30f));
             quiet.Control.SetAction(() => Breach(BreachTool.RetuneQuiet));
             loud.Control.SetAction(() => Breach(BreachTool.RetuneForce));
             spoof.Control.SetAction(() => Breach(BreachTool.Spoof));
