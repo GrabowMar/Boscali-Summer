@@ -17,6 +17,13 @@ namespace NOAvionics.Ui
             new Color(.25f, .75f, 1f), new Color(1f, .38f, .57f) };
         private int appliedRevision = -1;
         private RawImage scanlines, vignette, tint;
+        private bool shaderMode;
+        private static readonly int ReflectionId = Shader.PropertyToID("_Reflection");
+        private static readonly int ScanId = Shader.PropertyToID("_Scan");
+        private static readonly int EdgeId = Shader.PropertyToID("_Edge");
+        private static readonly int TintColorId = Shader.PropertyToID("_TintColor");
+        private static readonly int TintStrengthId = Shader.PropertyToID("_TintStrength");
+        private static readonly int LightId = Shader.PropertyToID("_Light");
 
         // Presentation values only: the owning feature binds and persists its settings.
         public static void Configure(bool enabled, float glass, bool adaptToLight,
@@ -43,10 +50,22 @@ namespace NOAvionics.Ui
             Image glass = Attach(content, "DisplayScreenFinish", AvSprites.DisplayScreen, 0f);
             if (glass == null) return null;
             var driver = glass.GetComponent<AvDisplayGlass>();
-            EnsureTextures();
-            driver.tint = Layer(glass.rectTransform, "ColorTint", Texture2D.whiteTexture);
-            driver.scanlines = Layer(glass.rectTransform, "CrtScanlines", scanTexture);
-            driver.vignette = Layer(glass.rectTransform, "EdgeShading", edgeTexture);
+            Material glassMat = AvFxDriver.GlassMaterial;
+            if (glassMat != null)
+            {
+                // One procedural quad replaces the tint/scanline/vignette layers (kit v2, spec §7.2).
+                glass.sprite = null;
+                glass.material = glassMat;
+                driver.shaderMode = true;
+                AvFxDriver.EnsureRunning();
+            }
+            else
+            {
+                EnsureTextures();
+                driver.tint = Layer(glass.rectTransform, "ColorTint", Texture2D.whiteTexture);
+                driver.scanlines = Layer(glass.rectTransform, "CrtScanlines", scanTexture);
+                driver.vignette = Layer(glass.rectTransform, "EdgeShading", edgeTexture);
+            }
             driver.appliedRevision = -1;
             driver.Update();
             return glass;
@@ -91,6 +110,20 @@ namespace NOAvionics.Ui
                 : 0f;
             float level = autoLight
                 ? 0.45f + 0.55f * Mathf.Clamp01(ambient * 0.55f + daylight * 0.45f) : 1f;
+            if (shaderMode)
+            {
+                Material m = image.material;
+                m.SetFloat(ReflectionId, reflection);
+                m.SetFloat(ScanId, scanStrength);
+                m.SetFloat(EdgeId, edgeStrength);
+                m.SetColor(TintColorId, Tints[tintIndex]);
+                m.SetFloat(TintStrengthId, tintIndex > 0 ? tintStrength : 0f);
+                m.SetFloat(LightId, level);
+                image.color = Color.white;
+                // Stays on while effects are on: the EMP/jam glitch draws through this quad too.
+                image.enabled = effects;
+                return;
+            }
             image.color = new Color(1f, 1f, 1f, effects ? reflection * level : 0f);
             // Disable only the Graphic: this driver must stay awake so OFF can be reversed.
             image.enabled = effects && reflection > 0f;
