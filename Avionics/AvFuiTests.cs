@@ -17,6 +17,7 @@ namespace NOAvionics.Tests
             TestTypeScale(assert);
             TestIcons(assert);
             TestFlow(assert);
+            TestMesh(assert);
         }
 
         // Live-theme references resolve to AvTheme's fallbacks in an engine-free test.
@@ -167,6 +168,20 @@ namespace NOAvionics.Tests
             f.Reset();
             assert(f.ContentHeight == 0f && f.Y == 14f, "reset empties the flow");
             assert(AvFlowMath.ColumnWidth(444f, 3, 8f) > 0f && AvFlowMath.ColumnWidth(10f, 5, 8f) == 0f, "impossible columns clamp to 0");
+        }
+
+        private static void TestMesh(Action<bool, string> assert)
+        {
+            AvV2[] p = AvMeshMath.ChamferPolygon(0f, 0f, 100f, 50f, AvChamfer.Diagonal(10f));
+            assert(p.Length == 8, "chamfer polygon always has 8 points");
+            assert(p[2].X == 90f && p[2].Y == 50f && p[3].X == 100f && p[3].Y == 40f, "top-right corner is cut by 10");
+            assert(p[0].X == 0f && p[0].Y == 50f && p[1].X == 0f && p[1].Y == 50f, "zero chamfer repeats the corner point");
+            AvChamfer inner = AvMeshMath.Inset(AvChamfer.Diagonal(10f), 2f);
+            assert(Math.Abs(inner.TR - (10f - 2f * 0.4142f)) < 0.001f && inner.TL == 0f, "inset keeps the stroke width along the cut");
+            assert(AvMeshMath.SegmentsLit(10, 0.46f) == 4 && AvMeshMath.SegmentsLit(10, 1.2f) == 10 && AvMeshMath.SegmentsLit(10, -1f) == 0, "segments clamp");
+            assert(AvMeshMath.ArcSteps(240f) == 40 && AvMeshMath.ArcSteps(0.5f) == 1, "arc tessellation");
+            AvV2 q = AvMeshMath.ArcPoint(0f, 0f, 10f, 90f);
+            assert(Math.Abs(q.X) < 0.001f && Math.Abs(q.Y - 10f) < 0.001f, "90 degrees is straight up");
         }
     }
 }
