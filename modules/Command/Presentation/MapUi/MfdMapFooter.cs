@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using NOAvionics;
 using NOAvionics.Ui;
 using UnityEngine;
 using UnityEngine.UI;
@@ -293,17 +294,24 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             if (footer == null)
             {
-                var go = new GameObject(FooterName, typeof(RectTransform), typeof(Image));
+                var go = new GameObject(FooterName, typeof(RectTransform));
                 footer = go.GetComponent<RectTransform>();
                 footer.SetParent(canvas.transform, worldPositionStays: false);
             }
 
-            Image background = footer.GetComponent<Image>();
-            if (background == null) background = footer.gameObject.AddComponent<Image>();
-            background.sprite = AvSprites.Panel;
-            background.type = Image.Type.Sliced;
-            background.color = Color.white;
+            Image legacy = footer.GetComponent<Image>();
+            if (legacy != null) Object.DestroyImmediate(legacy);
+            AvFrame background = footer.GetComponent<AvFrame>();
+            if (background == null)
+            {
+                if (footer.GetComponent<CanvasRenderer>() == null) footer.gameObject.AddComponent<CanvasRenderer>();
+                background = footer.gameObject.AddComponent<AvFrame>();
+            }
+            background.Chamfer = AvChamfer.All(0f);
+            background.Fill = true;
+            background.Stroke = 0f;
             background.raycastTarget = false;
+            background.Paint(AvStyleHost.FuiColor("surface-sunken", AvTheme.SurfaceInert), Color.clear);
 
             chrome = FindOrCreateLayer(footer, ChromeName);
             instrumentsSlot = FindOrCreateLayer(footer, InstrumentsSlotName);
@@ -335,28 +343,30 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             chromeSize = size;
             var area = new Rect(0f, 0f, size.x, size.y);
-            AvKit.Outline(chrome, area, AvTheme.Hairline);
-            AvKit.Rule(chrome, new Rect(1f, 0f, size.x - 2f, 2f), AvTheme.Accent.WithAlpha(0.30f));
+            Color select = AvStyleHost.FuiColor("select", AvTheme.Accent);
+            Color frame = AvStyleHost.FuiColor("frame", AvTheme.Frame);
+            MfdChromeLay.Outline(chrome, "FooterOutline", area, AvStyleHost.FuiColor("hairline", AvTheme.Hairline), AvChamfer.All(0f));
+            MfdChromeLay.Rule(chrome, "FooterRule", new Rect(1f, 0f, size.x - 2f, 2f), select.WithAlpha(0.30f));
             // A small segmented uplink trace ties the footer to the wire and index rail.
             if (size.x >= 300f)
                 for (int i = 0; i < 7; i++)
-                    AvKit.Rule(chrome, new Rect(size.x - 59f + i * 7f, -1f, 4f, 2f),
-                        i >= 5 ? AvTheme.Accent.WithAlpha(.8f) : AvTheme.Frame.WithAlpha(.75f));
+                    MfdChromeLay.Rule(chrome, "Uplink " + i, new Rect(size.x - 59f + i * 7f, -1f, 4f, 2f),
+                        i >= 5 ? select.WithAlpha(.8f) : frame.WithAlpha(.75f));
 
             if (size.y < 90f)
             {
                 float dividerX = FooterInset + (size.x - FooterInset * 2f - RowGap) * 0.50f + RowGap * 0.5f;
-                AvKit.Rule(chrome, new Rect(dividerX, -FooterInset, 1f, size.y - FooterInset * 2f),
-                    AvTheme.Frame.WithAlpha(0.55f));
+                MfdChromeLay.Rule(chrome, "Divider", new Rect(dividerX, -FooterInset, 1f, size.y - FooterInset * 2f),
+                    frame.WithAlpha(0.55f));
             }
             else
             {
                 float innerHeight = Mathf.Max(0f, size.y - FooterInset * 2f);
                 float contextHeight = Mathf.Min(48f, innerHeight * 0.52f);
                 float dividerY = -(FooterInset + Mathf.Max(0f, innerHeight - contextHeight) + RowGap * 0.5f);
-                AvKit.Rule(chrome,
+                MfdChromeLay.Rule(chrome, "Divider",
                     new Rect(FooterInset, dividerY, Mathf.Max(0f, size.x - FooterInset * 2f), 1f),
-                    AvTheme.Frame.WithAlpha(0.55f));
+                    frame.WithAlpha(0.55f));
             }
         }
 
@@ -367,9 +377,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             if (size.y < 90f)
             {
                 float instrumentsWidth = (innerWidth - RowGap) * 0.50f;
-                AvKit.Place(instrumentsSlot,
+                MfdChromeLay.Place(instrumentsSlot,
                     new Rect(FooterInset, -FooterInset, instrumentsWidth, innerHeight));
-                AvKit.Place(contextSlot,
+                MfdChromeLay.Place(contextSlot,
                     new Rect(FooterInset + instrumentsWidth + RowGap, -FooterInset,
                         innerWidth - instrumentsWidth - RowGap, innerHeight));
             }
@@ -377,9 +387,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             {
                 float contextHeight = Mathf.Min(48f, innerHeight * 0.52f);
                 float instrumentsHeight = Mathf.Max(0f, innerHeight - contextHeight - RowGap);
-                AvKit.Place(instrumentsSlot,
+                MfdChromeLay.Place(instrumentsSlot,
                     new Rect(FooterInset, -FooterInset, innerWidth, instrumentsHeight));
-                AvKit.Place(contextSlot,
+                MfdChromeLay.Place(contextSlot,
                     new Rect(FooterInset, -(FooterInset + instrumentsHeight + RowGap), innerWidth, contextHeight));
             }
 
@@ -458,7 +468,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 layer.SetParent(parent, worldPositionStays: false);
             }
 
-            AvKit.Stretch(layer);
+            AvLay.Fill(layer);
             return layer;
         }
 

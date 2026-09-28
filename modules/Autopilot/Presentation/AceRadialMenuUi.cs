@@ -611,6 +611,27 @@ namespace BoscaliSummer.Features.Autopilot.Presentation
             return new NodeWidget { Root = root, Label = label, Status = status, Side = int.MinValue };
         }
 
+        private static readonly Dictionary<TMP_FontAsset, Material> outlinedMaterials =
+            new Dictionary<TMP_FontAsset, Material>(2);
+
+        /// <summary>One shared outlined material per font (fonts outlive the scene; nobody owns or destroys it). Only opts in when the shader exposes an outline.</summary>
+        private static Material OutlinedMaterial(TMP_FontAsset font)
+        {
+            if (outlinedMaterials.TryGetValue(font, out Material existing) && existing != null) return existing;
+            Material source = font.material;
+            if (source == null) return null;
+            Material material = source;
+            if (source.HasProperty("_OutlineWidth") && source.HasProperty("_OutlineColor"))
+            {
+                material = new Material(source);
+                material.EnableKeyword("OUTLINE_ON");
+                material.SetFloat("_OutlineWidth", 0.18f);
+                material.SetColor("_OutlineColor", Color.black.WithAlpha(0.6f));
+            }
+            outlinedMaterials[font] = material;
+            return material;
+        }
+
         private static TMP_Text HudLabel(string name, Transform parent, float size, TextAlignmentOptions align)
         {
             var go = new GameObject(name, typeof(RectTransform), typeof(TextMeshProUGUI));
@@ -618,11 +639,12 @@ namespace BoscaliSummer.Features.Autopilot.Presentation
             label.transform.SetParent(parent, false);
             ((RectTransform)label.transform).sizeDelta = new Vector2(220f, 24f);
 
-            TMP_FontAsset font = AvFont.Font;
+            TMP_FontAsset font = AvType.Face(AvFace.Cond);
             if (font != null)
             {
                 label.font = font;
-                label.fontSharedMaterial = AvFont.Outlined(font);
+                Material outlined = OutlinedMaterial(font);
+                if (outlined != null) label.fontSharedMaterial = outlined;
             }
             else
             {

@@ -403,8 +403,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             rt.localScale = Vector3.one;
 
             var area = new Rect(0f, 0f, columns.Map.width, columns.Map.height);
-            AvKit.Outline(rt, area, AvTheme.Hairline);
-            AvKit.CornerTicks(rt, area, AvTheme.Hairline);
+            Color hairline = AvStyleHost.FuiColor("hairline", AvTheme.Hairline);
+            AvFrame viewportFrame = MfdChromeLay.Outline(rt, "ViewportFrame", area, hairline, AvChamfer.All(0f));
+            viewportFrame.Bracket = 6f;
+            viewportFrame.BracketColor = hairline;
 
             rt.SetAsLastSibling();
         }

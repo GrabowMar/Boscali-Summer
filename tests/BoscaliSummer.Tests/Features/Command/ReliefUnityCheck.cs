@@ -4,6 +4,8 @@ using System.IO;
 using System.Reflection;
 using BepInEx;
 using BoscaliSummer.Features.Command.Presentation.MapUi;
+using NOAvionics.Ui;
+using TMPro;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UI;
@@ -14,6 +16,15 @@ public static class ReliefUnityCheck
     {
         try
         {
+            // Kit v2 text needs the TMP essentials (default font + shaders); import them once and re-enter.
+            if (Shader.Find("TextMeshPro/Distance Field") == null)
+            {
+                var package = UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(TMP_Text).Assembly);
+                AssetDatabase.importPackageCompleted += _ => EditorApplication.delayCall += Run;
+                AssetDatabase.ImportPackage(Path.Combine(package.resolvedPath, "Package Resources/TMP Essential Resources.unitypackage"), false);
+                return;
+            }
+            AvStyleHost.Configure(Directory.GetCurrentDirectory(), Debug.Log, Debug.LogWarning);
             const int side = 900;
             string assetName = Environment.GetEnvironmentVariable("BOSCALI_ASSET_NAME") ?? "terrain2_map";
             float mapWidth = float.Parse(Environment.GetEnvironmentVariable("BOSCALI_MAP_WIDTH") ?? "81920",
@@ -80,6 +91,10 @@ public static class ReliefUnityCheck
             Canvas.ForceUpdateCanvases();
             MfdTerrainRelief.Tick();
             if (!MfdTerrainRelief.IsDrawing) throw new Exception("Terrain model did not mount.");
+            Transform orbit = map.mapBackground.transform.Find("NOAvionics.MapOrbit");
+            if (orbit == null || orbit.GetComponentsInChildren<AvControl>(true).Length != 7 ||
+                orbit.Find("Footer") == null || orbit.GetComponent<AvHelpScope>() == null)
+                throw new Exception("Orbit controls (7 kit buttons and the cursor line) did not mount on the map viewport.");
             AssertViewportTerrain(map, "initial open");
             float fittedZoom = map.GetZoomLevel();
             map.SetZoomLevel(1f);
