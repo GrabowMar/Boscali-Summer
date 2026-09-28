@@ -69,7 +69,11 @@ namespace BoscaliSummer.Tests.Architecture
         // ------------------------------------------------------------------ kit v2 (FUI program)
 
         /// <summary>Console folders rebuilt on kit v2 (P2 slices append here). They may not use v1 kit APIs or literals.</summary>
-        internal static readonly string[] MigratedConsoleFolders = { };
+        internal static readonly string[] MigratedConsoleFolders =
+        {
+            "modules/Command/Presentation", "modules/Support/Presentation", "modules/Comms/Presentation",
+            "modules/Radio/Presentation", "modules/Events/Presentation", "modules/Weather/Presentation",
+        };
 
         /// <summary>Data-visualisation files inside migrated folders that legitimately draw raw colours.</summary>
         private static readonly string[] DataVizAllowlist =
@@ -79,6 +83,9 @@ namespace BoscaliSummer.Tests.Architecture
             "modules/Support/Presentation/SupportTacticalIcons.cs",
             "modules/Progression/Presentation/EmblemRenderer.cs",
             "modules/Radio/Presentation/RadioWaterfall.cs",
+            "modules/Command/Presentation/MapUi/MfdRailPatch.cs",       // map-ground tint
+            "modules/Command/Presentation/MapUi/MfdChromeLay.cs",       // restores a captured vanilla TMP size
+            "modules/Events/Presentation/EventAircraftPreview.cs",      // 3D preview camera background + light
         };
 
         private static readonly Regex KitReachesMod = new Regex(
