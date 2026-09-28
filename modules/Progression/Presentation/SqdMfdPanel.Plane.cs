@@ -60,7 +60,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
         {
             p.Section(AvIcon.Plane, "AIRCRAFT DOSSIER", "OWN AIRCRAFT · LIVE");
             planeIdentity = p.Add(new AvRow(p.Content));
-            planeIdentity.Set("NO AIRCRAFT", null, "PILOT NOT IN AIRCRAFT", AvState.Inert);
+            planeIdentity.Set("NO AIRCRAFT", "Pilot not in an aircraft.", null, AvState.Inert);
 
             p.Section(AvIcon.Gauge, "AIRFRAME STATUS", "NATIVE HUD DAMAGE MODEL");
             planeDamage = new PlaneDamagePart(p.Content);
@@ -123,7 +123,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 aircraft = local.Aircraft;
             if (aircraft == null)
             {
-                planeIdentity.Set("NO AIRCRAFT", null, "PILOT NOT IN AIRCRAFT", AvState.Inert);
+                planeIdentity.Set("NO AIRCRAFT", "Pilot not in an aircraft.", null, AvState.Inert);
                 planeStatus = "Assign or enter an aircraft to see its live dossier.";
                 for (int i = 0; i < planeFlight.Length; i++) planeFlight[i].Set(null);
                 for (int i = 0; i < planeSystems.Length; i++) planeSystems[i].Set(null);

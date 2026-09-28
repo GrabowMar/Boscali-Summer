@@ -28,6 +28,7 @@ namespace NOAvionics.Ui
             name = AvText.Make(Rect, "Name", AvTextRole.Label, "", TextAlignmentOptions.TopLeft, true);
             sub = AvText.Make(Rect, "Sub", AvTextRole.ProseSmall, "", TextAlignmentOptions.TopLeft, true);
             value = AvText.Make(Rect, "Value", AvTextRole.DataStrong, "", TextAlignmentOptions.TopRight);
+            AvText.Fit(value, false); // the value column is fixed: long words shrink, never spill
             if (onClick != null)
             {
                 AvHit hit = AvHit.On(frame);

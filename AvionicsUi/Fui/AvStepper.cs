@@ -19,6 +19,7 @@ namespace NOAvionics.Ui
             read = valueText;
             label = AvText.Make(Rect, "Label", AvTextRole.Label, labelText, TextAlignmentOptions.MidlineLeft, true);
             value = AvText.Make(Rect, "Value", AvTextRole.Data, "", TextAlignmentOptions.Center);
+            AvText.Fit(value, true); // long values shrink, then wrap to two lines within the row
             minus = AvControl.Make(Rect, new AvControl.Spec("", () => { onMinus?.Invoke(); Refresh(); }, AvButtonStyle.Quiet, AvIcon.Minus));
             plus = AvControl.Make(Rect, new AvControl.Spec("", () => { onPlus?.Invoke(); Refresh(); }, AvButtonStyle.Quiet, AvIcon.Plus));
             Refresh();
@@ -34,7 +35,7 @@ namespace NOAvionics.Ui
             float y = (s.H - 26f) * 0.5f;
             AvLay.Place(label.rectTransform, 0f, 0f, s.W - 170f, s.H);
             AvLay.Place(minus.Rect, s.W - 162f, y, 30f, 26f);
-            AvLay.Place(value.rectTransform, s.W - 128f, y, 90f, 26f);
+            AvLay.Place(value.rectTransform, s.W - 128f, 0f, 90f, s.H);
             AvLay.Place(plus.Rect, s.W - 34f, y, 30f, 26f);
         }
 
