@@ -6,7 +6,9 @@ using BepInEx;
 using HarmonyLib;
 using BoscaliSummer.Features.Command.Domain;
 using BoscaliSummer.Framework.Contracts;
+using NOAvionics;
 using NOAvionics.Ui;
+using TMPro;
 using UnityEngine;
 using UnityEngine.Sprites;
 using UnityEngine.UI;
@@ -83,7 +85,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             internal readonly List<Image> Members = new List<Image>(8);
             internal Vector2 Screen;
         }
-        private sealed class CountMark { internal RectTransform Root; internal Text Text; }
+        private sealed class CountMark { internal RectTransform Root; internal TMP_Text Text; }
         private static readonly Dictionary<(int, int, int), int> clusterIndex =
             new Dictionary<(int, int, int), int>();
         private static readonly List<ClusterMark> clusters = new List<ClusterMark>(MaximumClusters);
@@ -236,7 +238,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 var ui = new GameObject("NOAvionics.IntelligenceTerrain", typeof(RectTransform), typeof(RawImage));
                 ui.transform.SetParent(map.mapBackground.transform, false);
                 view = ui.GetComponent<RawImage>();
-                AvKit.Stretch(view.rectTransform);
+                AvLay.Fill(view.rectTransform);
                 view.raycastTarget = false;
                 view.texture = texture;
                 view.transform.SetAsFirstSibling();
@@ -247,7 +249,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             imageColor.a = 0f;
             image.color = imageColor;
             image.enabled = true;
-            view.color = new Color(1f, 1f, 1f,
+            view.color = Color.white.WithAlpha(
                 Mathf.Clamp01(Plugin.Settings.Command.MapTerrainOpacity.Value));
             if (view.transform.GetSiblingIndex() != 0) view.transform.SetAsFirstSibling();
 
@@ -429,8 +431,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 groundMaterial.SetFloat("_Cull", 0f);
                 groundMaterial.renderQueue = 2000;
             }
-            controlMaterial = new Material(shader) { color = new Color(1f, 1f, 1f, 0.22f) };
-            threatMaterial = new Material(shader) { color = new Color(1f, 1f, 1f, 0.35f) };
+            controlMaterial = new Material(shader) { color = Color.white.WithAlpha(0.22f) };
+            threatMaterial = new Material(shader) { color = Color.white.WithAlpha(0.35f) };
             gridMaterial = new Material(shader) { mainTexture = Texture2D.whiteTexture,
                 color = new Color(0.21f, 0.54f, 0.6f, 0.24f) };
 
@@ -815,8 +817,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             foot.localPosition = ground;
             foot.sizeDelta = Vector2.one * (3.5f / scale);
             Color tone = icon.iconImage.color;
-            mark.Line.color = new Color(tone.r, tone.g, tone.b, .72f);
-            mark.Foot.color = new Color(tone.r, tone.g, tone.b, .95f);
+            mark.Line.color = tone.WithAlpha(.72f);
+            mark.Foot.color = tone.WithAlpha(.95f);
         }
 
         private static Image MakeStemPart(Transform parent, string name, int sibling)
@@ -957,8 +959,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                         cluster.Screen, uiCamera, out Vector2 local)) continue;
                 CountMark mark = Badge(viewport, badges++);
                 mark.Root.anchoredPosition = local + new Vector2(14f, 10f);
-                mark.Text.text = total > 99 ? "99+" : total.ToString();
-                mark.Text.color = hovered ? AvTheme.Accent : AvTheme.TextPrimary;
+                mark.Text.text = total > 99 ? "99+" : AvNum.Fixed(total, 0);
+                mark.Text.color = hovered ? AvStyleHost.FuiColor("select", AvTheme.Accent)
+                    : AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
                 mark.Root.gameObject.SetActive(true);
             }
         }
@@ -966,23 +969,19 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private static CountMark Badge(RectTransform viewport, int index)
         {
             if (index < counts.Count) return counts[index];
-            var go = new GameObject("NOAvionics.ContactCount", typeof(RectTransform), typeof(Image));
+            var go = new GameObject("NOAvionics.ContactCount", typeof(RectTransform), typeof(CanvasRenderer));
             RectTransform rect = go.GetComponent<RectTransform>();
             rect.SetParent(viewport, false);
             rect.sizeDelta = new Vector2(24f, 17f);
-            Image fill = go.GetComponent<Image>();
-            fill.color = new Color(.025f, .075f, .095f, .95f);
+            AvFrame fill = go.AddComponent<AvFrame>();
+            fill.Chamfer = AvChamfer.Diagonal(3f);
             fill.raycastTarget = false;
-            var labelObject = new GameObject("Count", typeof(RectTransform), typeof(Text));
-            RectTransform labelRect = labelObject.GetComponent<RectTransform>();
-            labelRect.SetParent(rect, false);
-            AvKit.Stretch(labelRect);
-            Text label = labelObject.GetComponent<Text>();
-            label.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            label.fontSize = 11;
-            label.alignment = TextAnchor.MiddleCenter;
-            label.color = AvTheme.TextPrimary;
-            label.raycastTarget = false;
+            fill.Paint(AvStyleHost.FuiColor("ground", AvTheme.Ground).WithAlpha(.95f),
+                AvStyleHost.FuiColor("frame", AvTheme.Frame));
+            TMP_Text label = AvText.Make(rect, "Count", AvTextRole.DataStrong, "", TextAlignmentOptions.Center);
+            AvLay.Fill(label.rectTransform);
+            label.color = AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
+            AvText.Fit(label, false);
             var mark = new CountMark { Root = rect, Text = label };
             counts.Add(mark);
             return mark;

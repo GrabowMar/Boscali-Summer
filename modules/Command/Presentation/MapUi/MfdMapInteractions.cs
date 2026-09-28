@@ -177,7 +177,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             }
             actions.Add(new MenuAction { Label = "COPY GROUND FIX", Invoke = () =>
             {
-                GUIUtility.systemCopyBuffer = $"X {ground.x:0}  Z {ground.z:0}";
+                GUIUtility.systemCopyBuffer = "X " + AvNum.Fixed(ground.x, 0) + "  Z " + AvNum.Fixed(ground.z, 0);
                 HideMenu();
                 Echo("GROUND FIX COPIED");
             }});
@@ -200,21 +200,26 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 menu.anchoredPosition = new Vector2(Mathf.Clamp(at.x + 10f, 6f,
                     parent.rect.width - MenuWidth - 6f),
                     Mathf.Clamp(at.y - 10f, height + 6f, parent.rect.height - 6f));
-            AvKit.Panel(menu, new Rect(0f, 0f, MenuWidth, height),
-                new Color(.025f, .055f, .068f, .97f));
+            MfdChromeLay.Panel(menu, "Back", new Rect(0f, 0f, MenuWidth, height),
+                AvStyleHost.FuiColor("ground", AvTheme.Ground).WithAlpha(0.97f),
+                AvStyleHost.FuiColor("frame", AvTheme.Frame), AvChamfer.Diagonal(6f));
             string title = contact != null ? FirstLine(contact.GetInfoText()) : "TERRAIN FIX";
-            // AvKit.Place anchors top-left with Unity's y up: rows go down with negative y.
-            AvKit.Label(menu, title, new Rect(9f, -6f, MenuWidth - 18f, 16f),
-                AvTheme.TextPrimary, AvTokens.FontSmall);
-            AvKit.Label(menu, $"X {ground.x / 1000f:0.0}  Z {ground.z / 1000f:0.0} KM  /  " +
-                $"{map.selectedIcons?.Count ?? 0} SELECTED",
-                new Rect(9f, -23f, MenuWidth - 18f, 16f), AvTheme.RailInfo, AvTokens.FontMicro);
+            // Rects are top-anchored with y already assigned directly: rows go down with negative y.
+            TMP_Text titleText = AvText.Make(menu, "Title", AvTextRole.Head, title, TextAlignmentOptions.MidlineLeft);
+            MfdChromeLay.Place(titleText.rectTransform, new Rect(9f, -4f, MenuWidth - 18f, 18f));
+            titleText.color = AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
+            AvText.Fit(titleText, false);
+            TMP_Text fixText = AvText.Make(menu, "Fix",  AvTextRole.Micro,
+                "X " + AvNum.Fixed(ground.x / 1000f, 1) + "  Z " + AvNum.Fixed(ground.z / 1000f, 1) + " KM  /  " +
+                AvNum.Fixed(map.selectedIcons?.Count ?? 0, 0) + " SELECTED", TextAlignmentOptions.MidlineLeft);
+            MfdChromeLay.Place(fixText.rectTransform, new Rect(9f, -22f, MenuWidth - 18f, 18f));
+            fixText.color = AvStyleHost.FuiColor("key", AvTheme.RailInfo);
+            AvText.Fit(fixText, false);
             for (int i = 0; i < actions.Count; i++)
             {
                 MenuAction action = actions[i];
-                AvKit.Button(menu, action.Label,
-                    new Rect(8f, -(45f + i * 44f), MenuWidth - 16f, 40f), action.Invoke,
-                    AvTokens.FontBody);
+                AvControl button = AvControl.Make(menu, new AvControl.Spec(action.Label, action.Invoke));
+                MfdChromeLay.Place(button.Rect, new Rect(8f, -(45f + i * 44f), MenuWidth - 16f, 40f));
             }
             menu.SetAsLastSibling();
         }
@@ -293,16 +298,16 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 !ToCanvas(parent, end, out Vector2 b)) return;
             if (box == null)
             {
-                var go = new GameObject("NOAvionics.SelectionBox", typeof(RectTransform), typeof(Image));
+                var go = new GameObject("NOAvionics.SelectionBox", typeof(RectTransform), typeof(CanvasRenderer));
                 box = go.GetComponent<RectTransform>();
                 box.SetParent(parent, false);
                 box.anchorMin = box.anchorMax = box.pivot = Vector2.zero;
-                Image image = go.GetComponent<Image>();
-                image.color = new Color(.12f, .84f, .92f, .13f);
-                image.raycastTarget = false;
-                Outline outline = go.AddComponent<Outline>();
-                outline.effectColor = AvTheme.Accent;
-                outline.effectDistance = new Vector2(1.5f, -1.5f);
+                AvFrame frame = go.AddComponent<AvFrame>();
+                frame.Chamfer = AvChamfer.All(0f);
+                frame.Stroke = 1.5f;
+                frame.raycastTarget = false;
+                frame.Paint(AvStyleHost.FuiColor("info", AvTheme.RailInfo).WithAlpha(.13f),
+                    AvStyleHost.FuiColor("select", AvTheme.Accent));
             }
             box.anchoredPosition = Vector2.Min(a, b);
             box.sizeDelta = new Vector2(Mathf.Abs(a.x - b.x), Mathf.Abs(a.y - b.y));

@@ -103,7 +103,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             if (backdropBaseImage != null)
             {
-                backdropBaseImage.color = AvTheme.Ground.WithAlpha(opacity);
+                backdropBaseImage.color = AvStyleHost.FuiColor("ground", AvTheme.Ground).WithAlpha(opacity);
             }
 
             if (backdropUserImage != null)
@@ -118,7 +118,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                         RectTransform imgRt = backdropUserImage.rectTransform;
                         if (isTiled)
                         {
-                            AvKit.Stretch(imgRt);
+                            AvLay.Fill(imgRt);
                             backdropUserImage.type = Image.Type.Tiled;
                             backdropUserImage.preserveAspect = false;
                         }
@@ -132,16 +132,16 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                             }
                             else if (fitMode == 1) // Fit (Aspect Fit)
                             {
-                                AvKit.Stretch(imgRt);
+                                AvLay.Fill(imgRt);
                                 backdropUserImage.preserveAspect = true;
                             }
                             else // Stretch
                             {
-                                AvKit.Stretch(imgRt);
+                                AvLay.Fill(imgRt);
                                 backdropUserImage.preserveAspect = false;
                             }
                         }
-                        backdropUserImage.color = new Color(1f, 1f, 1f, wallpaperOpacity);
+                        backdropUserImage.color = Color.white.WithAlpha(wallpaperOpacity);
                     }
                     else
                     {
@@ -159,7 +159,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 if (showChecker && checkerOpacity > 0.001f)
                 {
                     backdropCheckerImage.gameObject.SetActive(true);
-                    backdropCheckerImage.color = AvTheme.Frame.WithAlpha(checkerOpacity);
+                    backdropCheckerImage.color = AvStyleHost.FuiColor("frame", AvTheme.Frame).WithAlpha(checkerOpacity);
                     float uvW = backdropCanvasSize.x > 0f ? backdropCanvasSize.x / GridCell : 30f;
                     float uvH = backdropCanvasSize.y > 0f ? backdropCanvasSize.y / GridCell : 18f;
                     backdropCheckerImage.uvRect = new Rect(0f, 0f, uvW, uvH);
@@ -172,7 +172,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             if (backdropGradientImage != null)
             {
-                backdropGradientImage.color = new Color(1f, 1f, 1f, Mathf.Clamp01(opacity * 0.75f));
+                backdropGradientImage.color = Color.white.WithAlpha(Mathf.Clamp01(opacity * 0.75f));
             }
 
             if (backdropGridTransform != null)
@@ -183,13 +183,13 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             if (trayBaseImage != null)
             {
                 float trayAlpha = mapTrayOpacity;
-                trayBaseImage.color = AvTheme.Ground.WithAlpha(trayAlpha);
+                trayBaseImage.color = AvStyleHost.FuiColor("ground", AvTheme.Ground).WithAlpha(trayAlpha);
             }
 
             if (trayGradientImage != null)
             {
                 float gradAlpha = 0.35f * mapTrayOpacity;
-                trayGradientImage.color = new Color(1f, 1f, 1f, gradAlpha);
+                trayGradientImage.color = Color.white.WithAlpha(gradAlpha);
             }
 
             // Sync DynamicMap terrain image. Map darkening is the tray behind the viewport;
@@ -217,7 +217,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     }
                 }
                 if (dynamicMap.mapBackground != null)
-                    dynamicMap.mapBackground.color = new Color(1f, 1f, 1f, 0.68f);
+                    dynamicMap.mapBackground.color = Color.white.WithAlpha(0.68f);
             }
         }
 
@@ -422,7 +422,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
         private static void ConfigureBackdrop(RectTransform root, Vector2 canvasSize)
         {
-            AvKit.Stretch(root);
+            AvLay.Fill(root);
 
             backdropBaseImage = root.GetComponent<Image>();
             if (backdropBaseImage == null) backdropBaseImage = root.gameObject.AddComponent<Image>();
@@ -443,7 +443,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             backdropUserImage = CreateUserImageLayer(root, "UserImageLayer");
             backdropCheckerImage = CreateCheckerLayer(root, "CheckerboardOverlay");
-            backdropGradientImage = CreateGradient(root, "ScreenGradient", new Color(1f, 1f, 1f, 0.38f));
+            backdropGradientImage = CreateGradient(root, "ScreenGradient", Color.white.WithAlpha(0.38f));
             backdropGridTransform = CreateLayer(root, "DatumGrid");
             BuildDatumGrid(backdropGridTransform, canvasSize);
 
@@ -469,7 +469,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             trayBaseImage.enabled = true;
 
             if (root.childCount == 0)
-                trayGradientImage = CreateGradient(root, "MapTrayGradient", new Color(1f, 1f, 1f, 0.50f));
+                trayGradientImage = CreateGradient(root, "MapTrayGradient", Color.white.WithAlpha(0.50f));
 
             ApplyAppearance();
         }
@@ -478,27 +478,28 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         {
             float width = Mathf.Ceil(size.x);
             float height = Mathf.Ceil(size.y);
-            Color minor = AvTheme.Hairline.WithAlpha(0.09f);
-            Color major = AvTheme.Frame.WithAlpha(0.20f);
+            Color minor = AvStyleHost.FuiColor("hairline", AvTheme.Hairline).WithAlpha(0.09f);
+            Color major = AvStyleHost.FuiColor("frame", AvTheme.Frame).WithAlpha(0.20f);
 
             for (int x = 0; x <= Mathf.CeilToInt(width); x += (int)GridCell)
             {
                 int index = x / (int)GridCell;
-                AvKit.Rule(grid, new Rect(x, 0f, 1f, height),
+                MfdChromeLay.Rule(grid, "GridX", new Rect(x, 0f, 1f, height),
                     index % MajorGridStride == 0 ? major : minor);
             }
 
             for (int y = 0; y <= Mathf.CeilToInt(height); y += (int)GridCell)
             {
                 int index = y / (int)GridCell;
-                AvKit.Rule(grid, new Rect(0f, -y, width, 1f),
+                MfdChromeLay.Rule(grid, "GridY", new Rect(0f, -y, width, 1f),
                     index % MajorGridStride == 0 ? major : minor);
             }
 
             // One restrained screen boundary makes the surrounding native controls feel
             // intentionally seated on the deck, without competing with MapFrame's bezel.
             var inset = new Rect(8f, -8f, Mathf.Max(0f, width - 16f), Mathf.Max(0f, height - 16f));
-            AvKit.Outline(grid, inset, AvTheme.Frame.WithAlpha(0.30f));
+            MfdChromeLay.Outline(grid, "DeckBoundary", inset,
+                AvStyleHost.FuiColor("frame", AvTheme.Frame).WithAlpha(0.30f), AvChamfer.All(0f));
         }
 
         private static Image CreateGradient(RectTransform parent, string name, Color color)
@@ -506,7 +507,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             var go = new GameObject(name, typeof(RectTransform), typeof(Image));
             RectTransform rt = go.GetComponent<RectTransform>();
             rt.SetParent(parent, worldPositionStays: false);
-            AvKit.Stretch(rt);
+            AvLay.Fill(rt);
 
             Image image = go.GetComponent<Image>();
             image.sprite = AvSprites.GroundGradient;
@@ -521,7 +522,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             var go = new GameObject(name, typeof(RectTransform), typeof(Image));
             RectTransform rt = go.GetComponent<RectTransform>();
             rt.SetParent(parent, worldPositionStays: false);
-            AvKit.Stretch(rt);
+            AvLay.Fill(rt);
 
             Image image = go.GetComponent<Image>();
             image.type = Image.Type.Simple;
@@ -536,7 +537,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             var go = new GameObject(name, typeof(RectTransform), typeof(RawImage));
             RectTransform rt = go.GetComponent<RectTransform>();
             rt.SetParent(parent, worldPositionStays: false);
-            AvKit.Stretch(rt);
+            AvLay.Fill(rt);
 
             RawImage raw = go.GetComponent<RawImage>();
             raw.texture = GetCheckerTexture();
@@ -555,8 +556,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 name = "Avionics_Checkerboard",
                 hideFlags = HideFlags.HideAndDontSave
             };
-            Color light = new Color(1f, 1f, 1f, 1f);
-            Color dark = new Color(0f, 0f, 0f, 0f);
+            Color light = Color.white;
+            Color dark = Color.clear;
             checkerTexture.SetPixel(0, 0, light);
             checkerTexture.SetPixel(1, 0, dark);
             checkerTexture.SetPixel(0, 1, dark);
@@ -594,7 +595,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 hideFlags = HideFlags.HideAndDontSave
             };
 
-            Color clear = new Color(0f, 0f, 0f, 0f);
+            Color clear = Color.clear;
             for (int y = 0; y < size; y++)
             {
                 for (int x = 0; x < size; x++)
@@ -868,7 +869,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             var go = new GameObject(name, typeof(RectTransform));
             RectTransform rt = go.GetComponent<RectTransform>();
             rt.SetParent(parent, worldPositionStays: false);
-            AvKit.Stretch(rt);
+            AvLay.Fill(rt);
             return rt;
         }
 
