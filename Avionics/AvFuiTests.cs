@@ -13,6 +13,7 @@ namespace NOAvionics.Tests
             TestPalettesDefineEveryRole(assert);
             TestPaletteContrast(assert);
             TestComposeLetsPaletteWin(assert);
+            TestNumbers(assert);
         }
 
         // Live-theme references resolve to AvTheme's fallbacks in an engine-free test.
@@ -85,6 +86,40 @@ namespace NOAvionics.Tests
         {
             AvStyleSheet s = AvStyleSheet.Parse(AvThemes.Compose(":root { ink: #FF0000; }", ".t { color: ink; }"));
             assert(Math.Abs(s.Resolve("t").Color.Value.R - 1f) < 0.001f, "palette role feeds base rule");
+        }
+
+        private static void TestNumbers(Action<bool, string> assert)
+        {
+            var saved = System.Threading.Thread.CurrentThread.CurrentCulture;
+            foreach (string culture in new[] { "pl-PL", "de-DE", "en-US" })
+            {
+                System.Threading.Thread.CurrentThread.CurrentCulture = new System.Globalization.CultureInfo(culture);
+                try
+                {
+                    void Eq(string got, string want) => assert(got == want, culture + ": expected '" + want + "' got '" + got + "'");
+                    Eq(AvNum.Fixed(0.5, 1), "0.5");
+                    Eq(AvNum.Fixed(-12.249, 2), "-12.25");
+                    Eq(AvNum.Thousands(8369), "8,369");
+                    Eq(AvNum.Thousands(-1204500.4), "-1,204,500");
+                    Eq(AvNum.Compact(950), "950");
+                    Eq(AvNum.Compact(4802), "4,802");
+                    Eq(AvNum.Compact(12345), "12.3K");
+                    Eq(AvNum.Compact(6.08e9), "6.08B");
+                    Eq(AvNum.Compact(2.5e6), "2.50M");
+                    Eq(AvNum.Money(6.08e9), "$6.08B");
+                    Eq(AvNum.Money(-120000), "-$120K");
+                    Eq(AvNum.Percent(0.52), "52%");
+                    Eq(AvNum.Percent(1.224, 1), "122.4%");
+                    Eq(AvNum.Signed(3.07, 2), "+3.07");
+                    Eq(AvNum.Signed(0, 1), "0.0");
+                    Eq(AvNum.Clock(59), "0:59");
+                    Eq(AvNum.Clock(208), "3:28");
+                    Eq(AvNum.Clock(3605), "1:00:05");
+                    Eq(AvNum.Clock(double.NaN), "--:--");
+                    Eq(AvNum.Seconds(0.5), "0.5 s");
+                }
+                finally { System.Threading.Thread.CurrentThread.CurrentCulture = saved; }
+            }
         }
     }
 }
