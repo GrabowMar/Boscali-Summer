@@ -497,7 +497,7 @@ namespace NOAvionics.Ui
         /// <summary>Force-release Rewired keyboard after a screen reset or hide.</summary>
         public static void ReleaseKeyboardGuard() => KeyboardGuard.Reset();
 
-        private static class KeyboardGuard
+        internal static class KeyboardGuard
         {
             private static int holds;
             private static bool previous = true;
