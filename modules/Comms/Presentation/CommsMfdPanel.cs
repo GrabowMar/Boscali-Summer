@@ -193,10 +193,7 @@ namespace BoscaliSummer.Features.Comms.Presentation
             rootRect.pivot = templateRect.pivot;
             rootRect.localScale = templateRect.localScale;
 
-            // Kit gap: v1's screen-height resolver measured the live bezel bay; the kit v2
-            // console has no equivalent, so the same formula is kept locally (see ResolveHeight
-            // below) rather than reaching into the v1 kit.
-            float height = ResolveHeight(templateRect.parent as RectTransform, AvTokens.PanelHeight, AvTokens.PanelHeightMax);
+            float height = AvLay.ResolveHeight(templateRect.parent as RectTransform, AvTokens.PanelHeight, AvTokens.PanelHeightMax);
             rootRect.sizeDelta = new Vector2(Width, height);
 
             var contentObject = new GameObject("Content", typeof(RectTransform));
@@ -234,29 +231,6 @@ namespace BoscaliSummer.Features.Comms.Presentation
             screenRoot = root;
             console.SetPage(TabMap);
             return result;
-        }
-
-        /// <summary>
-        /// The height this panel should take, given the slot it was parented into (mirrors
-        /// v1's screen-height resolver — a kit gap, see the report). A screen inherits its bay
-        /// from the stock template it was cloned beside; measuring it beats a hard-coded
-        /// constant that would be wrong at the next resolution.
-        /// </summary>
-        private static float ResolveHeight(RectTransform parent, float min, float max)
-        {
-            if (max < min) max = min;
-            if (parent == null) return min;
-
-            float available = parent.rect.height;
-            RectTransform cursor = parent;
-            for (int i = 0; i < 4 && available <= 1f && cursor != null; i++)
-            {
-                cursor = cursor.parent as RectTransform;
-                if (cursor != null) available = cursor.rect.height;
-            }
-
-            if (available <= 1f) return min;
-            return Mathf.Clamp(Mathf.Floor(available), min, max);
         }
 
         private static Image FindHighlight(Button button)
@@ -361,8 +335,9 @@ namespace BoscaliSummer.Features.Comms.Presentation
         /// Lays <paramref name="specs"/> out as full rows of <paramref name="columns"/> equal
         /// icon buttons (a short last row stays left-aligned rather than stretching). Returns
         /// the built controls in the same order as <paramref name="specs"/>, for latching.
+        /// <paramref name="helps"/> (optional, same order) becomes each button's hover help.
         /// </summary>
-        private static AvControl[] ButtonGrid(AvFlow page, AvControl.Spec[] specs, int columns)
+        private static AvControl[] ButtonGrid(AvFlow page, AvControl.Spec[] specs, int columns, string[] helps = null)
         {
             var built = new AvControl[specs.Length];
             for (int row = 0; row * columns < specs.Length; row++)
@@ -371,7 +346,12 @@ namespace BoscaliSummer.Features.Comms.Presentation
                 var rowSpecs = new AvControl.Spec[count];
                 Array.Copy(specs, row * columns, rowSpecs, 0, count);
                 AvButtons line = page.Buttons(rowSpecs);
-                for (int c = 0; c < count; c++) built[row * columns + c] = line.Controls[c];
+                for (int c = 0; c < count; c++)
+                {
+                    int index = row * columns + c;
+                    built[index] = line.Controls[c];
+                    if (helps != null && index < helps.Length) built[index].Help = helps[index];
+                }
             }
             return built;
         }
@@ -398,6 +378,17 @@ namespace BoscaliSummer.Features.Comms.Presentation
             public override void Place(AvSlot s) { base.Place(s); AvLay.Fill(text.rectTransform); }
             public override void Restyle() => text.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
         }
+
+        /// <summary>Hover help on a stepper (its buttons and, by bubbling, its whole line).</summary>
+        private static void Tip(AvStepper stepper, string help)
+        {
+            AvHelpTip.Attach(stepper.Rect.gameObject, help);
+            stepper.Minus.Help = help;
+            stepper.Plus.Help = help;
+        }
+
+        /// <summary>Hover help on a text field (the field frame raycasts; the tip bubbles up from it).</summary>
+        private static void Tip(AvField field, string help) => AvHelpTip.Attach(field.Rect.gameObject, help);
 
         private static void Show(AvPart part, bool visible)
         {

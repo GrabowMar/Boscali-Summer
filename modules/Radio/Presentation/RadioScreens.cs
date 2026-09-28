@@ -45,10 +45,10 @@ namespace BoscaliSummer.Features.Radio.Presentation
             // MFDScreen.ShowScreen assigns it straight to localPosition, so a screen has no
             // remembered home — it is placed by its parent and anchors, and an
             // anchoredPosition written here is overwritten whenever the panel is opened.
-            float height = ResolvePanelHeight(
+            float height = AvLay.ResolveHeight(
                 templateRect.parent as RectTransform, AvTokens.PanelHeight, AvTokens.PanelHeightMax);
             rootRect.sizeDelta = new Vector2(AvTokens.PanelWidth, height);
-            ClampPanelIntoCanvas(rootRect);
+            AvLay.ClampIntoCanvas(rootRect);
 
             // The vanilla MFDScreen toggles displayPanel's GameObject when the bezel button
             // cycles to a different screen on this slot; the whole kit v2 console mounts inside
@@ -94,75 +94,6 @@ namespace BoscaliSummer.Features.Radio.Presentation
             for (int i = 0; i < images.Length; i++)
                 if (images[i].gameObject != button.gameObject) return images[i];
             return button.GetComponent<Image>();
-        }
-
-        /// <summary>
-        /// The height this panel should take, given the slot it was parented into. A screen
-        /// inherits its bay from the stock template it was cloned beside, and that bay is
-        /// taller than the panels used to be; measuring it beats a second hard-coded constant
-        /// that would be wrong at the next resolution. Kept as a local copy of the same
-        /// arithmetic the frozen v1 kit's screen-height resolver used, so this slice never calls
-        /// into that v1 API.
-        /// </summary>
-        private static float ResolvePanelHeight(RectTransform parent, float min, float max)
-        {
-            if (max < min) max = min;
-            if (parent == null) return min;
-
-            float available = parent.rect.height;
-            RectTransform cursor = parent;
-            for (int i = 0; i < 4 && available <= 1f && cursor != null; i++)
-            {
-                cursor = cursor.parent as RectTransform;
-                if (cursor != null) available = cursor.rect.height;
-            }
-
-            if (available <= 1f) return min;
-            return Mathf.Clamp(Mathf.Floor(available), min, max);
-        }
-
-        /// <summary>
-        /// Pulls the panel back inside the root canvas when its anchored position would push it
-        /// off-screen. A local copy of the same arithmetic the frozen v1 kit's canvas-clamp
-        /// helper used, so this slice never calls into that v1 API.
-        /// </summary>
-        private static void ClampPanelIntoCanvas(RectTransform panel, float margin = 8f)
-        {
-            if (panel == null) return;
-            Canvas canvas = panel.GetComponentInParent<Canvas>();
-            if (canvas == null) return;
-            var canvasRt = canvas.rootCanvas.transform as RectTransform;
-            if (canvasRt == null || panel.parent == null) return;
-
-            var corners = new Vector3[4];
-            panel.GetWorldCorners(corners);
-
-            float minX = float.MaxValue, maxX = float.MinValue;
-            float minY = float.MaxValue, maxY = float.MinValue;
-            for (int i = 0; i < 4; i++)
-            {
-                Vector3 local = canvasRt.InverseTransformPoint(corners[i]);
-                if (local.x < minX) minX = local.x;
-                if (local.x > maxX) maxX = local.x;
-                if (local.y < minY) minY = local.y;
-                if (local.y > maxY) maxY = local.y;
-            }
-
-            Rect bounds = canvasRt.rect;
-
-            float dx = 0f;
-            if (minX < bounds.xMin + margin) dx = bounds.xMin + margin - minX;
-            else if (maxX > bounds.xMax - margin) dx = bounds.xMax - margin - maxX;
-
-            float dy = 0f;
-            if (maxY > bounds.yMax - margin) dy = bounds.yMax - margin - maxY;
-            else if (minY < bounds.yMin + margin) dy = bounds.yMin + margin - minY;
-
-            if (Mathf.Approximately(dx, 0f) && Mathf.Approximately(dy, 0f)) return;
-
-            Vector3 world = canvasRt.TransformVector(new Vector3(dx, dy, 0f));
-            Vector3 local2 = panel.parent.InverseTransformVector(world);
-            panel.anchoredPosition += new Vector2(local2.x, local2.y);
         }
     }
 }
