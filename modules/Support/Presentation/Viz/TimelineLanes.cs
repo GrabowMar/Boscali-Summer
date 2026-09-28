@@ -23,13 +23,13 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
             this.skin = skin;
             x0 = area.x;
             width = area.width;
-            AvKit.Panel(parent, new Rect(area.x, area.y, area.width, 12f), skin.Track);
+            Chrome.Panel(parent, new Rect(area.x, area.y, area.width, 12f), skin.Track);
             for (int i = 0; i < Segments; i++)
             {
-                bars[i] = AvKit.Panel(parent, new Rect(area.x, area.y, 0f, 12f), skin.Fill);
+                bars[i] = Chrome.Panel(parent, new Rect(area.x, area.y, 0f, 12f), skin.Fill);
                 bars[i].enabled = false;
             }
-            AvKit.Panel(parent, new Rect(area.x, area.y + 3f, 2f, 18f), skin.Mark);
+            Chrome.Panel(parent, new Rect(area.x, area.y + 3f, 2f, 18f), skin.Mark);
             caption = PrimitiveText.Label(parent, new Rect(area.x, area.y - 15f, area.width, 14f), skin, TextAlignmentOptions.MidlineLeft);
         }
 

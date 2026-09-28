@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Features.Support.Presentation.Window;
 using NOAvionics.Ui;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -31,7 +32,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
             var go = new GameObject(name, typeof(RectTransform), typeof(Image));
             var rect = (RectTransform)go.transform;
             rect.SetParent(parent, false);
-            AvKit.Place(rect, area);
+            Chrome.Place(rect, area);
             Image hit = go.GetComponent<Image>();
             hit.color = Color.clear;
             hit.raycastTarget = true;
@@ -43,13 +44,14 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
 
         public RectTransform Rect => (RectTransform)transform;
 
+        /// <summary>Hover help shown in the window's footer strip. A change while the pointer is over
+        /// the control replaces what the footer currently shows.</summary>
         public RoomControl WithTooltip(string text)
         {
             if (tooltip == text) return this;
-            string previous = tooltip;
             tooltip = text;
-            if (Hovered && AvButton.HoveredTooltip == previous)
-                AvButton.PublishExternal(string.IsNullOrEmpty(text) ? previous : text, !string.IsNullOrEmpty(text));
+            AvHelpTip.Attach(gameObject, text);
+            if (Hovered) GetComponentInParent<AvHelpScope>()?.Show(text);
             return this;
         }
 
@@ -88,7 +90,6 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
         public void OnPointerEnter(PointerEventData eventData)
         {
             Hovered = true;
-            AvButton.PublishExternal(tooltip, true);
             Changed?.Invoke(this);
         }
 
@@ -96,7 +97,6 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
         {
             Hovered = false;
             Pressed = false;
-            AvButton.PublishExternal(tooltip, false);
             Changed?.Invoke(this);
         }
 
@@ -117,7 +117,6 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
         private void OnDisable()
         {
             if (!Hovered && !Pressed) return;
-            if (Hovered) AvButton.PublishExternal(tooltip, false);
             Hovered = false;
             Pressed = false;
         }

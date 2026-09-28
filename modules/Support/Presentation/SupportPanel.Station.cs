@@ -47,6 +47,7 @@ namespace BoscaliSummer.Features.Support.Presentation
 
             AvButtons buttons = status.Buttons(new AvControl.Spec("OPEN TASKING", OpenStationConsole, AvButtonStyle.Primary, AvIcon.Map2));
             stationConsoleButton = buttons.Controls[0];
+            stationConsoleButton.Help = "The flight-control wall: loadouts, the blueprint, the module rack and every launch.";
 
             status.Section(AvIcon.Activity, "HEALTH · RESOURCES");
             stationTiles = BuildChipRow(status, TileKeys);
@@ -57,7 +58,8 @@ namespace BoscaliSummer.Features.Support.Presentation
             stationEmptyCard.Flow.Add(new NoteText(stationEmptyCard.Flow.Content)).Set(
                 "Launch " + OrbitalPlatform.Callsign + "'s core from Engineering in the task map; every other module " +
                 "docks to it, providing persistent coverage from a fixed position.");
-            stationEmptyCard.Flow.Buttons(new AvControl.Spec("OPEN TASKING", OpenStationConsole, AvButtonStyle.Primary, AvIcon.Map2));
+            stationEmptyCard.Flow.Buttons(new AvControl.Spec("OPEN TASKING", OpenStationConsole, AvButtonStyle.Primary, AvIcon.Map2))
+                .Controls[0].Help = "Open the task map, then Engineering to launch the core.";
 
             status.Section(AvIcon.ListDetails, "VOICE LOOP · FLIGHT");
             stationLog = status.Add(new LogLines(status.Content, LoopLines));

@@ -25,6 +25,8 @@ public static class SupportPanelUnityCheck
     private static readonly Assembly Mod = typeof(AvConsole).Assembly;
     private static readonly string[] Pages = { "Station", "SpaceOps", "Status", "CyberOps", "SpecStatus", "SpecActions" };
     private static int assertions;
+    // Every ability name shown by an ACTIONS page, by page name: CheckActionForms proves each ability has exactly one home.
+    private static readonly Dictionary<string, HashSet<string>> ActionNamesByPage = new Dictionary<string, HashSet<string>>();
     private static object overlaySupport;
 
     public static void Run()
@@ -45,7 +47,7 @@ public static class SupportPanelUnityCheck
             for (int i = 1; i < arguments.Length; i++) arguments[i] = parameters[i].HasDefaultValue ? parameters[i].DefaultValue : null;
             setPaths.Invoke(null, arguments);
             AvStyleHost.Configure(Directory.GetCurrentDirectory(), Debug.Log, Debug.LogWarning);
-            // The Viz primitives and the window rooms still label through the v1 AvFont; kit v2 parts use AvType.
+            // The OPS-window harness backdrop still labels through the v1 AvFont; the rooms and primitives use kit v2 AvType.
             AvFont.Font = TMP_FontAsset.CreateFontAsset(new Font("C:/Windows/Fonts/consola.ttf"));
             // No avionics-ui.bundle in this harness: AvType.VanillaFallback resolves TMP_Settings'
             // default face (populated by the TMP essential-resources import above).
@@ -155,6 +157,7 @@ public static class SupportPanelUnityCheck
             Check(text.fontSize >= 9.99f, page + " " + height + ": text under the 10 px floor: " + text.text);
         }
         CheckFacts(panel, page);
+        CheckActionRows(panel, page);
 
         bool scrolled = false;
         foreach (ScrollRect scroll in root.GetComponentsInChildren<ScrollRect>(true))
@@ -306,10 +309,70 @@ public static class SupportPanelUnityCheck
         return set;
     }
 
+    /// <summary>
+    /// The ACTIONS pages are one shared row vocabulary (spec 6.2), so their forms are not compared: what
+    /// must differ, and be right, is the content. For each ACTIONS page: every row names its ability, the
+    /// trailing control's enabled/armed state and label follow <c>AbilityStatus</c>, and the row carries
+    /// hover help that leads with the ability's name (the footer line the player reads on hover). The
+    /// domain sub-page's STATUS / ACTIONS tabs carry their help too.
+    /// </summary>
+    private static void CheckActionRows(object panel, string page)
+    {
+        if (page != "SpaceOps" && page != "CyberOps" && page != "SpecActions") return;
+        Type status = Mod.GetType("BoscaliSummer.Features.Support.Presentation.Viz.AbilityStatus", true);
+        MethodInfo facts = status.GetMethod("For", BindingFlags.Static | BindingFlags.Public);
+        object support = Get(panel, "support");
+        PageInfo(page, out _, out _, out _, out string subField);
+        object subPage = Get(panel, subField);
+        foreach (string tab in new[] { "statusTab", "actionsTab" })
+            Check(!string.IsNullOrEmpty((string)Property(Field(subPage, tab), "Help")), page + ": the " + tab + " must carry hover help.");
+
+        var rows = new List<(object action, object row, object button, bool orbital)>();
+        if (page == "SpaceOps")
+            foreach (object r in (IEnumerable)Get(panel, "spaceStrikeRows")) rows.Add((Get(r, "Action"), Get(r, "Row"), Get(r, "Button"), true));
+        else if (page == "CyberOps")
+            foreach (object r in (IEnumerable)Get(panel, "cyberAbilityRows")) rows.Add((Get(r, "Action"), Get(r, "Row"), Get(r, "Button"), false));
+        else
+            foreach (object r in (IEnumerable)Get(panel, "actionRows"))
+                if ((int)Get(r, "Tab") == 2) rows.Add((Get(r, "Definition"), Get(r, "View"), Get(r, "Trailing"), false));
+        Check(rows.Count > 0, page + ": the ACTIONS page must list abilities.");
+
+        var names = new HashSet<string>();
+        foreach ((object action, object avRow, object button, bool orbital) in rows)
+        {
+            string name = (string)Field(action, "Name");
+            string shown = ((TMP_Text)Field(avRow, "name")).text;
+            Check(orbital ? shown.StartsWith(name, StringComparison.Ordinal) : shown == name, page + ": row must name '" + name + "', shows '" + shown + "'");
+            Check(names.Add(name), page + ": ability '" + name + "' is listed twice.");
+            object f = facts.Invoke(null, new[] { support, action, (object)false });
+            Check((bool)Property(button, "Interactable") == (bool)Field(f, "Enabled"), page + ": '" + name + "' enabled state must follow AbilityStatus.");
+            bool armed = (bool)Field(f, "Armed");
+            Check((string)Property(button, "Label") == (armed ? "ABORT" : "ARM"), page + ": '" + name + "' verb must be ARM, or ABORT while armed.");
+            string help = (string)Property(button, "Help");
+            Check(!string.IsNullOrEmpty(help) && help.StartsWith(name, StringComparison.Ordinal), page + ": '" + name + "' must carry hover help that leads with its name: " + help);
+            var tip = ((Component)Field(avRow, "frame")).GetComponent<AvHelpTip>();
+            Check(tip != null && tip.Text == help, page + ": '" + name + "' row body must share the control's hover help.");
+        }
+        if (page == "SpaceOps")
+        {
+            Check(((string)Property(Get(panel, "spaceUplinkOpen"), "Help") ?? "").Contains("sensor feed"), "The uplink OPEN control must carry its help.");
+            Check(((string)Property(Get(panel, "spaceUplinkAim"), "Help") ?? "").Contains("Right-click the map"), "The uplink AIM control must carry its help.");
+            Check(((string)Property(Get(panel, "spaceRephaseOpen"), "Help") ?? "").Contains("Relocation uses"), "The relocation OPEN control must carry its help.");
+        }
+        ActionNamesByPage[page] = names;
+    }
+
+    /// <summary>Across the three ACTIONS pages: every catalogue ability has exactly one home page.</summary>
     private static void CheckActionForms()
     {
-        // Kept for completeness; the ACTIONS pages now share the same AvRow vocabulary by design
-        // (spec §6.2), so this is informational rather than a hard gate.
+        Check(ActionNamesByPage.Count == 3, "All three ACTIONS pages must have been checked.");
+        var seen = new HashSet<string>();
+        foreach (KeyValuePair<string, HashSet<string>> page in ActionNamesByPage)
+            foreach (string name in page.Value)
+                Check(seen.Add(name), "Ability '" + name + "' is listed on more than one ACTIONS page.");
+        int catalogued = 0;
+        foreach (object action in (IEnumerable)Property(overlaySupport, "Actions")) catalogued++;
+        Check(seen.Count == catalogued, "Every catalogue ability needs a home ACTIONS page: " + seen.Count + " of " + catalogued);
     }
 
     /// <summary>A real station fitted through the production model: the RECON loadout launched

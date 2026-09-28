@@ -240,8 +240,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         private void BuildRoster(RectTransform room, Rect at)
         {
             rosterGroup = Group(room, "Roster", at, out _);
-            DeskStyle.Title(rosterGroup, "TEAM STAGING / SELECT OR RAISE", new Rect(2f, 0f, at.width - 4f, 17f),
-                12f, DeskStyle.Ink);
+            Chrome.Lead(DeskStyle.Title(rosterGroup, "TEAM STAGING / SELECT OR RAISE", new Rect(2f, 0f, at.width - 4f, 17f),
+                12f, DeskStyle.Ink), AvIcon.UsersGroup);
             float pitch = (at.width - DeskStyle.TagGap) * 0.5f;
             float cardHeight = (at.height - 25f - DeskStyle.TagGap) * 0.5f;
             for (int i = 0; i < TeamCount; i++)
@@ -360,7 +360,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             Chrome.Panel(folderGroup, new Rect(0f, 0f, w, h), DeskStyle.Paper);
             Chrome.Rule(folderGroup, new Rect(0f, 0f, w, 2f), AvTheme.RailInfo);
             Chrome.Rule(folderGroup, new Rect(0f, 0f, 3f, h), AvTheme.RailInfo.WithAlpha(0.7f));
-            DeskStyle.Title(folderGroup, "01 / OBJECTIVE", new Rect(18f, -5f, 160f, 20f), 12f, DeskStyle.Ink);
+            Chrome.Lead(DeskStyle.Title(folderGroup, "01 / OBJECTIVE", new Rect(18f, -5f, 160f, 20f), 12f, DeskStyle.Ink), AvIcon.MapPin);
             Stamp previous = BuildStamp(folderGroup, new Rect(180f, -4f, 40f, 24f), () => StepObjective(lastDetachment, -1), 11f);
             SetStamp(previous, "< Q", true, false, "Previous objective");
             Stamp next = BuildStamp(folderGroup, new Rect(226f, -4f, 40f, 24f), () => StepObjective(lastDetachment, 1), 11f);
@@ -397,13 +397,13 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             BuildFact(folderBody, "SCOUTING", new Rect(18f + (factW + 8f) * 2f, -96f, factW, 62f), out scoutFigure, out scoutWords);
             teamOn = DeskStyle.Body(folderBody, new Rect(18f, -162f, bodyW - 36f, 16f), DeskStyle.TypewriterSmall, DeskStyle.Ink);
 
-            DeskStyle.Title(folderBody, "02 / ASSIGN TEAM · TAB", new Rect(18f, -184f, 210f, 18f), 12f, DeskStyle.Ink);
+            Chrome.Lead(DeskStyle.Title(folderBody, "02 / ASSIGN TEAM · TAB", new Rect(18f, -184f, 210f, 18f), 12f, DeskStyle.Ink), AvIcon.User);
             float chipW = (bodyW - 36f - 3f * 6f) / TeamCount;
             for (int i = 0; i < TeamCount; i++) chips[i] = BuildChip(i, new Rect(18f + i * (chipW + 6f), -204f, chipW, 30f));
 
             const float sheetTop = 266f;
-            DeskStyle.Title(folderBody, "03 / CHOOSE MISSION · COMMIT", new Rect(18f, -242f, bodyW - 36f, 18f),
-                12f, DeskStyle.Ink);
+            Chrome.Lead(DeskStyle.Title(folderBody, "03 / CHOOSE MISSION · COMMIT", new Rect(18f, -242f, bodyW - 36f, 18f),
+                12f, DeskStyle.Ink), AvIcon.Flag);
             Chrome.Rule(folderBody, new Rect(18f, -262f, bodyW - 36f, 1f), DeskStyle.Khaki.WithAlpha(0.45f));
             float sheetH = (briefHeight - sheetTop - 14f - (MissionCount - 1) * 8f) / MissionCount;
             for (int i = 0; i < MissionCount; i++)
@@ -531,8 +531,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             Chrome.Rule(timelineGroup, new Rect(0f, 0f, 3f, h), AvTheme.RailInfo.WithAlpha(0.7f));
 
             float logX = w * 0.62f;
-            DeskStyle.Title(timelineGroup, "OPERATIONS / NEXT 10 MIN", new Rect(16f, -4f, 340f, 18f), DeskStyle.StencilSmall,
-                DeskStyle.Ink);
+            Chrome.Lead(DeskStyle.Title(timelineGroup, "OPERATIONS / NEXT 10 MIN", new Rect(16f, -4f, 340f, 18f), DeskStyle.StencilSmall,
+                DeskStyle.Ink), AvIcon.Clock);
             laneX0 = 108f;
             laneWidth = logX - 22f - laneX0;
             for (int t = 0; t < TeamCount; t++)
@@ -559,7 +559,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             Chrome.Rule(timelineGroup, new Rect(laneX0, -22f, 2f, 70f), DeskStyle.Stamp);
 
             Chrome.Rule(timelineGroup, new Rect(logX - 12f, -8f, 1f, h - 16f), DeskStyle.Khaki.WithAlpha(0.5f));
-            DeskStyle.Title(timelineGroup, "HOST ACTIVITY", new Rect(logX, -4f, 200f, 18f), DeskStyle.StencilSmall, DeskStyle.Ink);
+            Chrome.Lead(DeskStyle.Title(timelineGroup, "HOST ACTIVITY", new Rect(logX, -4f, 200f, 18f), DeskStyle.StencilSmall, DeskStyle.Ink), AvIcon.Activity);
             for (int i = 0; i < LogLines; i++)
                 logLines[i] = DeskStyle.Body(timelineGroup, new Rect(logX, -24f - i * 16f, w - logX - 16f, 15f), DeskStyle.TypewriterSmall,
                     i == 0 ? DeskStyle.Ink : DeskStyle.Khaki);
@@ -617,7 +617,6 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         public void Hide()
         {
             hoverMission = -1;
-            Chrome.ClearTooltip();
         }
 
         public void Entrance(float progress)

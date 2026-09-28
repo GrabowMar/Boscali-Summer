@@ -211,9 +211,9 @@ namespace BoscaliSummer.Features.Support.Presentation
             rootRect.pivot = templateRect.pivot;
             rootRect.localScale = templateRect.localScale;
 
-            float height = ResolveConsoleHeight(templateRect.parent as RectTransform, PanelHeight, AvTokens.PanelHeightMax);
+            float height = AvLay.ResolveHeight(templateRect.parent as RectTransform, PanelHeight, AvTokens.PanelHeightMax);
             rootRect.sizeDelta = new Vector2(Width, height);
-            ClampConsoleIntoCanvas(rootRect);
+            AvLay.ClampIntoCanvas(rootRect);
 
             shell = AvConsole.Build(rootRect, "OPS", "OPERATIONS", DomainCount, Width, height);
             shell.PageChanged += _ => nextRefresh = 0f;
@@ -251,66 +251,6 @@ namespace BoscaliSummer.Features.Support.Presentation
             }
 
             return result;
-        }
-
-        /// <summary>
-        /// The height this panel should take, given the slot it was parented into. Kit v2's
-        /// <see cref="AvConsole"/> does not resolve this itself (a kit gap) — pure geometry, so
-        /// copied locally rather than calling the v1 screen shell.
-        /// </summary>
-        private static float ResolveConsoleHeight(RectTransform parent, float min, float max)
-        {
-            if (max < min) max = min;
-            if (parent == null) return min;
-
-            float available = parent.rect.height;
-            RectTransform cursor = parent;
-            for (int i = 0; i < 4 && available <= 1f && cursor != null; i++)
-            {
-                cursor = cursor.parent as RectTransform;
-                if (cursor != null) available = cursor.rect.height;
-            }
-            if (available <= 1f) return min;
-            return Mathf.Clamp(Mathf.Floor(available), min, max);
-        }
-
-        /// <summary>
-        /// Nudge the built console until it lies wholly inside its canvas — the same pure geometry
-        /// the v1 kit clamp performed (kit v2 AvWindow still reaches
-        /// into v1 AvKit for this internally; copied locally here so this slice makes no v1 call).
-        /// </summary>
-        private static void ClampConsoleIntoCanvas(RectTransform panel, float margin = 8f)
-        {
-            if (panel == null) return;
-            Canvas canvas = panel.GetComponentInParent<Canvas>();
-            if (canvas == null) return;
-            var canvasRt = canvas.rootCanvas.transform as RectTransform;
-            if (canvasRt == null || panel.parent == null) return;
-
-            var corners = new Vector3[4];
-            panel.GetWorldCorners(corners);
-            float minX = float.MaxValue, maxX = float.MinValue, minY = float.MaxValue, maxY = float.MinValue;
-            for (int i = 0; i < 4; i++)
-            {
-                Vector3 local = canvasRt.InverseTransformPoint(corners[i]);
-                if (local.x < minX) minX = local.x;
-                if (local.x > maxX) maxX = local.x;
-                if (local.y < minY) minY = local.y;
-                if (local.y > maxY) maxY = local.y;
-            }
-
-            Rect bounds = canvasRt.rect;
-            float dx = 0f;
-            if (minX < bounds.xMin + margin) dx = bounds.xMin + margin - minX;
-            else if (maxX > bounds.xMax - margin) dx = bounds.xMax - margin - maxX;
-            float dy = 0f;
-            if (maxY > bounds.yMax - margin) dy = bounds.yMax - margin - maxY;
-            else if (minY < bounds.yMin + margin) dy = bounds.yMin + margin - minY;
-            if (Mathf.Approximately(dx, 0f) && Mathf.Approximately(dy, 0f)) return;
-
-            Vector3 world = canvasRt.TransformVector(new Vector3(dx, dy, 0f));
-            Vector3 local2 = panel.parent.InverseTransformVector(world);
-            panel.anchoredPosition += new Vector2(local2.x, local2.y);
         }
 
         private static Image FindHighlight(Button button)
@@ -432,6 +372,12 @@ namespace BoscaliSummer.Features.Support.Presentation
                 row.Trailing.Interactable = facts.Enabled;
                 row.Trailing.Latched = armed;
                 row.Trailing.Label = armed ? "ABORT" : row.Verb;
+                bool cyber = action.IsCyber;
+                float cost = cyber ? 0f : support.Cost(action);
+                float intel = AbilityStatus.Intel(action);
+                SetRowHelp(row.View, row.Trailing, action.Name + " — " +
+                    (cyber ? AvNum.Thousands(Mathf.Round(intel)) + " INTEL. " : cost > 0f ? AvNum.Thousands(Mathf.Round(cost)) + " ALLOC. " : "") +
+                    action.Description + " " + facts.Readiness + ".");
             }
         }
 

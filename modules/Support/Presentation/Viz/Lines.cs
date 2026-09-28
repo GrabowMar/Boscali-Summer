@@ -6,7 +6,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
 {
     /// <summary>
     /// A straight stroke as one rotated image, so traces, links and routes can be pooled and moved
-    /// without rebuilding meshes. Coordinates are <see cref="AvKit"/> coordinates: top-left origin,
+    /// without rebuilding meshes. Coordinates are <c>Chrome</c> coordinates: top-left origin,
     /// Y negative downward. The stroke's look (colour, sprite, dashes) is the caller's.
     /// </summary>
     internal static class Lines

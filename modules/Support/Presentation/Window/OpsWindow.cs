@@ -51,6 +51,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Window
         private Image shadow;
         private Image topLeft, topRight, bottom, left, right;
         private RectTransform roomLayer;
+        private AvFooter helpFooter;
+        private CanvasGroup helpGroup;
         private readonly Notch[] notches = new Notch[3];
         private Notch closeNotch;
         private readonly IOpsView[] rooms = new IOpsView[Slots];
@@ -130,7 +132,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Window
         {
             if (!Present(room, context, from)) return;
             input.Hold();
-            Chrome.ClearTooltip();
+            helpFooter?.SetHint(null);
         }
 
         /// <summary>Everything <see cref="Show"/> does except taking input (the offline harness uses this).</summary>
@@ -168,7 +170,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Window
             visible = false;
             closing = true;
             closedFrame = Time.frameCount;
-            Chrome.ClearTooltip();
+            helpFooter?.SetHint(null);
             bool reduce = reduceMotion();
             backdropTween.Retarget(0f, LayoutMotion.WindowOut, reduce);
             windowTween.Retarget(0f, LayoutMotion.WindowOut, reduce);
@@ -230,6 +232,14 @@ namespace BoscaliSummer.Features.Support.Presentation.Window
                                                 " (Ctrl+" + (i + 1) + ", Ctrl+Tab cycles).", icon);
             }
             closeNotch = BuildNotch("× CLOSE", "ESC", Close, "Close the OPS window and return to the map (Esc, or right-click outside the window).", AvIcon.X);
+
+            // Hover help: one footer strip under the outline (in the bottom margin, so it never covers a
+            // room), fed by every RoomControl / AvHelpTip in the window through the scope on the root.
+            helpFooter = new AvFooter(root);
+            helpFooter.Set("Hover a control for help · Esc closes the window");
+            helpGroup = helpFooter.Rect.gameObject.AddComponent<CanvasGroup>();
+            helpGroup.blocksRaycasts = false;
+            contentObject.AddComponent<AvHelpScope>().Footer = helpFooter;
             Layout(OpsWindowStyle.ReferenceWidth, OpsWindowStyle.ReferenceHeight);
         }
 
@@ -278,6 +288,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Window
             Chrome.Place(closeNotch.Control.Rect, new Rect(w - OpsWindowStyle.NotchInset - OpsWindowStyle.CloseWidth, notchY,
                 OpsWindowStyle.CloseWidth, OpsWindowStyle.NotchHeight));
             SizeNotch(closeNotch, OpsWindowStyle.CloseWidth);
+            AvLay.Place(helpFooter.Rect, target.X, target.Y + target.Height + 6f, w, helpFooter.Measure(w));
 
             if (resized)
                 for (int i = 0; i < hosts.Length; i++)
@@ -460,6 +471,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Window
                 -(target.Y + target.Height * 0.5f) + offset.y);
             frame.localScale = new Vector3(scale, scale, 1f);
             frameGroup.alpha = w;
+            if (helpGroup != null) helpGroup.alpha = fade;
         }
 
         private void FinishClose()
@@ -473,7 +485,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Window
             content.SetActive(false);
         }
 
-        /// <summary>The opening control's centre relative to the window's, in canvas units (AvKit Y).</summary>
+        /// <summary>The opening control's centre relative to the window's, in canvas units (Chrome Y: down is negative).</summary>
         private Vector2 Origin(RectTransform from)
         {
             if (from == null || canvas == null) return Vector2.zero;

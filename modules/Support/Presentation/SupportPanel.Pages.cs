@@ -34,7 +34,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             public AvFlow Actions { get; }
 
             public OpsSubPage(RectTransform parent, AvTicker ticker, float width, AvIcon domainIcon, string titleText,
-                System.Action<int> onSelect)
+                System.Action<int> onSelect, string statusHelp = null, string actionsHelp = null)
             {
                 Rect = AvLay.Child(parent, "SubPage " + titleText);
                 icon = AvIcons.Make(Rect, domainIcon, AvGridTokens.IconHead, Color.white);
@@ -42,6 +42,8 @@ namespace BoscaliSummer.Features.Support.Presentation
                 AvText.Fit(title, false);
                 statusTab = AvControl.Make(Rect, new AvControl.Spec("STATUS", () => Select(0, onSelect), AvButtonStyle.Default, AvIcon.InfoCircle), "tab");
                 actionsTab = AvControl.Make(Rect, new AvControl.Spec("ACTIONS", () => Select(1, onSelect), AvButtonStyle.Default, AvIcon.Bolt), "tab");
+                statusTab.Help = statusHelp;
+                actionsTab.Help = actionsHelp;
                 statusHost = AvLay.Child(Rect, "Status"); Status = new AvFlow(statusHost, ticker, width, 0f);
                 actionsHost = AvLay.Child(Rect, "Actions"); Actions = new AvFlow(actionsHost, ticker, width, 0f);
                 Select(0, null);
@@ -171,6 +173,18 @@ namespace BoscaliSummer.Features.Support.Presentation
                         ? AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-name").Color, AvTheme.TextPrimary)
                         : AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
             }
+        }
+
+        /// <summary>Hover help for an ability row: on the trailing control and the row body, re-set only
+        /// when the sentence changes (the help follows state, e.g. the readiness word).</summary>
+        private static void SetRowHelp(AvRow row, AvControl button, string text)
+        {
+            if (button != null)
+            {
+                if (button.Help == text) return;
+                button.Help = text;
+            }
+            row.Help = text;
         }
 
         /// <summary>Monospaced text for the terminal-flavoured CYBER shell log.</summary>

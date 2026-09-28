@@ -7,6 +7,7 @@ using BoscaliSummer.Features.Support.Domain.Layout;
 using BoscaliSummer.Features.Support.Presentation.Viz;
 using BoscaliSummer.Features.Support.Presentation.Window;
 using BoscaliSummer.Features.Support.Runtime;
+using NOAvionics;
 using NOAvionics.Ui;
 using NuclearOption.Networking;
 using TMPro;
@@ -155,10 +156,10 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             var shellRect = new Rect(incW + CyberStyle.Gutter, -(top + midH + CyberStyle.Gutter), w - incW - CyberStyle.Gutter, bottomH);
 
             BuildStatus(room, new Rect(0f, 0f, w, StatusHeight));
-            panes[0] = BuildPane(room, "THEATER NETWORK", netRect, "NETWORK PICTURE\nHost mirrored · terrain reference\nSelect a node to inspect reach and route.");
-            panes[1] = BuildPane(room, "TARGET / RESPONSE", breachRect, "TARGET WORKSPACE\nBreach phase and defender response\nOrders await host confirmation.");
-            panes[2] = BuildPane(room, "ACTIVE INCIDENTS", incRect, "THREAT QUEUE\nHost reported events\nSelect an incident for a response.");
-            panes[3] = BuildPane(room, "COMMAND RAIL", shellRect, "COMMAND LINK\nOne order at a time\nHost acknowledgement appears here.");
+            panes[0] = BuildPane(room, "THEATER NETWORK", AvIcon.Map2, netRect, "NETWORK PICTURE\nHost mirrored · terrain reference\nSelect a node to inspect reach and route.");
+            panes[1] = BuildPane(room, "TARGET / RESPONSE", AvIcon.Target, breachRect, "TARGET WORKSPACE\nBreach phase and defender response\nOrders await host confirmation.");
+            panes[2] = BuildPane(room, "ACTIVE INCIDENTS", AvIcon.AlertTriangle, incRect, "THREAT QUEUE\nHost reported events\nSelect an incident for a response.");
+            panes[3] = BuildPane(room, "COMMAND RAIL", AvIcon.Antenna, shellRect, "COMMAND LINK\nOne order at a time\nHost acknowledgement appears here.");
 
             BuildNetmap(netRect, w, h);
             BuildBreach(panes[1].Body, breachRect.width, breachRect.height - CyberStyle.TitleBar);
@@ -192,7 +193,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             CyberStyle.Type(keys, "OPS RESERVE · HOST CONFIRMED");
         }
 
-        private Pane BuildPane(RectTransform room, string title, Rect at, string boot)
+        private Pane BuildPane(RectTransform room, string title, AvIcon icon, Rect at, string boot)
         {
             var pane = new Pane { BootText = boot };
             var go = new GameObject(title.Trim('[', ']', ' '), typeof(RectTransform));
@@ -205,6 +206,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             Chrome.Panel(pane.Root, new Rect(1f, -1f, 3f, CyberStyle.TitleBar), CyberStyle.Accent);
             pane.Title = CyberStyle.Line(pane.Root, new Rect(14f, -1f, Mathf.Max(0f, Mathf.Min(280f, at.width * 0.52f) - 14f), CyberStyle.TitleBar), CyberStyle.Small, CyberStyle.Title);
             pane.Title.fontStyle = FontStyles.Bold;
+            Chrome.Lead(pane.Title, icon);
             CyberStyle.Type(pane.Title, title);
             pane.Status = CyberStyle.Line(pane.Root, new Rect(Mathf.Min(300f, at.width * 0.58f), -1f, Mathf.Max(0f, at.width - Mathf.Min(312f, at.width * 0.60f)), CyberStyle.TitleBar), CyberStyle.Micro,
                 CyberStyle.Dim, TextAlignmentOptions.MidlineRight);
@@ -225,7 +227,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             RectTransform body = panes[0].Body;
             float bodyH = netRect.height - CyberStyle.TitleBar - 1f;
             Chrome.Rule(body, new Rect(ColumnWidth, 0f, 1f, bodyH), CyberStyle.PaneEdge);
-            CyberStyle.Type(Label(body, new Rect(14f, -8f, ColumnWidth - 28f, 16f), CyberStyle.Micro, CyberStyle.Title), "infocon ladder");
+            CyberStyle.Type(Chrome.Lead(Label(body, new Rect(14f, -8f, ColumnWidth - 28f, 16f), CyberStyle.Micro, CyberStyle.Title), AvIcon.Gauge), "infocon ladder");
             for (int i = 0; i < 5; i++)
             {
                 rungFills[i] = Chrome.Panel(body, new Rect(12f, -28f - i * (compact ? 16f : 20f), ColumnWidth - 24f, compact ? 16f : 18f), CyberStyle.Pane);
@@ -233,7 +235,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 CyberStyle.Type(rungs[i], Rungs[i]);
             }
             heat.Build(body, new Rect(14f, compact ? -126f : -152f, ColumnWidth - 28f, compact ? 36f : 64f), CyberStyle.Terminal());
-            CyberStyle.Type(Label(body, new Rect(14f, compact ? -112f : -138f, 120f, 14f), CyberStyle.Micro, CyberStyle.Title), "heat · 60 s");
+            CyberStyle.Type(Chrome.Lead(Label(body, new Rect(14f, compact ? -112f : -138f, 120f, 14f), CyberStyle.Micro, CyberStyle.Title), AvIcon.Flame), "heat · 60 s");
             compLine = Label(body, new Rect(14f, compact ? -170f : -228f, ColumnWidth - 28f, 34f), CyberStyle.Small, CyberStyle.Ink, true);
             intelLine = Label(body, new Rect(14f, compact ? -208f : -266f, ColumnWidth - 28f, 34f), CyberStyle.Small, CyberStyle.Ink, true);
             legend = Label(body, new Rect(ColumnWidth + 12f, -bodyH + 20f, netRect.width - ColumnWidth - 24f, 16f), CyberStyle.Micro,
@@ -270,7 +272,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             plate.raycastTarget = false;
             Chrome.Outline(dormantMap, new Rect(0f, 0f, plateW, plateH), CyberStyle.Title.WithAlpha(0.7f));
             Chrome.Rule(dormantMap, new Rect(16f, -28f, plateW - 32f, 1f), CyberStyle.Title.WithAlpha(0.45f));
-            CyberStyle.Type(Label(dormantMap, new Rect(18f, -7f, plateW - 36f, 18f), CyberStyle.Micro, CyberStyle.Title),
+            CyberStyle.Type(Chrome.Lead(Label(dormantMap, new Rect(18f, -7f, plateW - 36f, 18f), CyberStyle.Micro, CyberStyle.Title), AvIcon.Map2),
                 "NETWORK TOPOLOGY / CONTROL LINK");
             dormantTitle = Label(dormantMap, new Rect(18f, -42f, plateW - 36f, 38f), 25f, CyberStyle.Ink);
             dormantTitle.fontStyle = FontStyles.Bold;
@@ -321,7 +323,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             locationGroup = (RectTransform)locationObject.transform;
             locationGroup.SetParent(body, false);
             Chrome.Place(locationGroup, new Rect(0f, compact ? -112f : -132f, w, h - (compact ? 112f : 132f)));
-            CyberStyle.Type(Label(locationGroup, new Rect(14f, 0f, w - 28f, 16f), CyberStyle.Micro, CyberStyle.Title), "process · probe > exploit > extract");
+            CyberStyle.Type(Chrome.Lead(Label(locationGroup, new Rect(14f, 0f, w - 28f, 16f), CyberStyle.Micro, CyberStyle.Title), AvIcon.Activity), "process · probe > exploit > extract");
             phaseWidth = (w - 40f) / 3f;
             for (int i = 0; i < 3; i++)
             {
@@ -345,7 +347,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             quickLeaseRows[1] = loud;
             quickLeaseRows[2] = spoof;
             breachHint = Label(locationGroup, new Rect(14f, compact ? -226f : -280f, w - 28f, 40f), CyberStyle.Small, CyberStyle.Ink, true);
-            stageTitle = Label(locationGroup, new Rect(14f, -330f, w - 28f, 18f), CyberStyle.Micro, CyberStyle.Title);
+            stageTitle = Chrome.Lead(Label(locationGroup, new Rect(14f, -330f, w - 28f, 18f), CyberStyle.Micro, CyberStyle.Title), AvIcon.Link);
             stageTitle.gameObject.SetActive(!compact);
             CyberStyle.Type(stageTitle, "LIVE ACCESS  ·  ONE EFFECT USE");
             for (int i = 0; i < stages.Length; i++)
@@ -355,7 +357,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             capstoneGroup = (RectTransform)capObject.transform;
             capstoneGroup.SetParent(body, false);
             Chrome.Place(capstoneGroup, new Rect(0f, compact ? -112f : -132f, w, h - (compact ? 112f : 132f)));
-            capTitle = Label(capstoneGroup, new Rect(14f, 0f, w - 28f, 34f), CyberStyle.Small, CyberStyle.Title, true);
+            capTitle = Chrome.Lead(Label(capstoneGroup, new Rect(14f, 0f, w - 28f, 34f), CyberStyle.Small, CyberStyle.Title, true), AvIcon.Bolt);
             for (int i = 0; i < capstones.Length; i++)
             {
                 Capstone capstone = Capstones.All[i];
@@ -420,9 +422,9 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             }
             float top = compact ? 27f : 6f + ShellLines * CyberStyle.LinePitch + 4f;
             Chrome.Rule(body, new Rect(8f, -top, w - 16f, 1f), CyberStyle.PaneEdge);
-            upgradeTitle = Label(body, new Rect(12f, -(top + 4f), columnWidth, 16f), CyberStyle.Micro, CyberStyle.Title);
+            upgradeTitle = Chrome.Lead(Label(body, new Rect(12f, -(top + 4f), columnWidth, 16f), CyberStyle.Micro, CyberStyle.Title), AvIcon.Coins);
             CyberStyle.Type(upgradeTitle, "NETWORK UPGRADES · OPS RESERVE");
-            TMP_Text verbTitle = Label(body, new Rect(12f + columnWidth + columnGap, -(top + 4f), columnWidth, 16f), CyberStyle.Micro, CyberStyle.Title);
+            TMP_Text verbTitle = Chrome.Lead(Label(body, new Rect(12f + columnWidth + columnGap, -(top + 4f), columnWidth, 16f), CyberStyle.Micro, CyberStyle.Title), AvIcon.ShieldLock);
             CyberStyle.Type(verbTitle, "DEFENDER ORDERS · 1–5");
             float rowHeight = compact ? 20f : 28f;
             float rowStep = compact ? 22f : 31f;
@@ -447,7 +449,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             layoutDue = true;
         }
 
-        public void Hide() => Chrome.ClearTooltip();
+        // Hover help clears itself when the room's host deactivates (AvHelpTip.OnDisable).
+        public void Hide() { }
 
         public void Entrance(float progress)
         {

@@ -72,6 +72,9 @@ public static class OpsWindowUnityCheck
         Func<bool> reduce = () => true;
         var window = (Component)type.GetMethod("Create", Static).Invoke(null, new object[] { reduce });
         ((Behaviour)window).enabled = false;
+        var helpScope = window.GetComponentInChildren<AvHelpScope>(true);
+        Check(helpScope != null && helpScope.GetType().GetField("Footer", Hidden).GetValue(helpScope) != null,
+            "The OPS window must host a hover-help footer scope for its controls.");
         var canvas = window.GetComponent<Canvas>();
         canvas.GetComponent<CanvasScaler>().enabled = false;
         canvas.renderMode = RenderMode.WorldSpace;
@@ -328,6 +331,9 @@ public static class OpsWindowUnityCheck
         Component roomControl = child.AddComponent(control);
         int clicks = 0;
         Call(roomControl, "SetAction", (Action)(() => clicks++));
+        Call(roomControl, "WithTooltip", "Hover help text");
+        Check(roomControl.GetComponent<AvHelpTip>() != null && roomControl.GetComponent<AvHelpTip>().Text == "Hover help text",
+            "A room control's tooltip must reach the footer through AvHelpTip.");
         Call(roomControl, "OnPointerClick", pointer);
         Check(clicks == 0, "Dragging across a map marker must not select it.");
         Object.DestroyImmediate(go);

@@ -1,23 +1,20 @@
-using System.Reflection;
 using NOAvionics;
 using NOAvionics.Ui;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
-using AvButtonBridge = NOAvionics.Ui.AvButton;
 
 namespace BoscaliSummer.Features.Support.Presentation.Window
 {
     /// <summary>
     /// Local kit v2 primitives for the OPS window and its rooms, built from
     /// <see cref="AvType"/>/<see cref="AvLay"/>/<see cref="AvIcons"/> — a v1-free replacement for the
-    /// legacy <c>AvKit</c>/<c>AvScreen</c>/<c>AvRoomFrame</c> helpers used by this bespoke full-screen
+    /// legacy v1 kit helpers used by this bespoke full-screen
     /// surface (the room content does not fit the paged <c>AvConsole</c> shape, so it keeps its own
     /// top-left, Y-grows-downward placement convention; see root <c>AGENTS.md</c>). Every method here
     /// is a grep-clean, kit-v2-backed stand-in for the v1 call it replaces, kept 1:1 in geometry and
-    /// behaviour so the rooms did not need to be redesigned in rush mode. Kit gap: kit v2 has no
-    /// tooltip widget yet, so <see cref="ClearTooltip"/> still bridges to the v1 static tooltip
-    /// clear that the shared <c>RoomControl</c> (Viz/, owned by the console slice) already reads.
+    /// behaviour so the rooms did not need to be redesigned in rush mode. Hover help goes through
+    /// <see cref="AvHelpTip"/> (<c>RoomControl.WithTooltip</c>) into the window's footer strip.
     /// </summary>
     internal static class Chrome
     {
@@ -47,21 +44,25 @@ namespace BoscaliSummer.Features.Support.Presentation.Window
             Place(rt, area);
 
             var label = go.GetComponent<TextMeshProUGUI>();
-            // Kit v2 faces: bold text uses the semi-bold face instead of TMP's synthetic bold
-            // (which widens glyphs past pixel-tight boxes such as the roster's team letters).
+            // Kit v2 face and metrics (Prose: condensed, sentence case, no tracking); bold text uses
+            // the semi-bold face instead of TMP's synthetic bold (which widens glyphs past pixel-tight
+            // boxes such as the roster's team letters).
+            AvType.Apply(label, AvTextRole.Prose);
             bool bold = (style & FontStyles.Bold) != 0;
-            TMP_FontAsset font = AvType.Face(bold ? AvFace.CondStrong : AvFace.Cond);
-            if (bold) style &= ~FontStyles.Bold;
-            if (font != null) label.font = font;
+            if (bold)
+            {
+                style &= ~FontStyles.Bold;
+                TMP_FontAsset strong = AvType.Face(AvFace.CondStrong);
+                if (strong != null) label.font = strong;
+            }
 
             label.text = text;
             label.color = color;
-            SetSize(label, size);
             label.fontStyle = style;
             label.alignment = alignment;
             label.enableWordWrapping = wrap;
             label.overflowMode = wrap ? TextOverflowModes.Truncate : TextOverflowModes.Ellipsis;
-            label.raycastTarget = false;
+            SetSize(label, size);
             return label;
         }
 
@@ -97,20 +98,51 @@ namespace BoscaliSummer.Features.Support.Presentation.Window
             };
         }
 
-        private static readonly PropertyInfo FontSizeProperty =
-            typeof(TMP_Text).GetProperty("fontSize", BindingFlags.Instance | BindingFlags.Public);
-
         /// <summary>Sizes an already-built label: the given pixel size is the ceiling, and the text
         /// shrinks toward the 10 px floor before it would ellipsize or clip (kit v2 faces have taller
         /// line metrics than the v1 face, so pixel-tight boxes must shrink rather than truncate).
-        /// The literal setter is avoided: this slice is grep-guarded against it.</summary>
+        /// <see cref="AvText.Fit"/> switches auto-sizing on; the ceiling is then this room's own size.</summary>
         public static void SetSize(TMP_Text label, float size)
         {
             if (label == null) return;
-            FontSizeProperty.SetValue(label, size);
+            AvText.Fit(label, label.enableWordWrapping);
             label.fontSizeMax = size;
             label.fontSizeMin = Mathf.Min(size, AvTokens.FontMicro);
-            label.enableAutoSizing = true;
+        }
+
+        /// <summary>
+        /// Puts an <see cref="AvIcon"/> in front of a section header (spec: every tab and section header
+        /// carries an icon). The icon is a child of the label and the text is inset with the label's own
+        /// margin, so the label's rectangle, its fades and its visibility are all unchanged. A centred
+        /// label keeps icon + text centred as one block (static text only). Returns the label.
+        /// </summary>
+        public static TMP_Text Lead(TMP_Text label, AvIcon icon, float size = 16f)
+        {
+            if (label == null) return null;
+            RectTransform rt = label.rectTransform;
+            float inset = size + 6f;
+            float x = 0f;
+            if (((int)label.alignment & 0x2) != 0)
+            {
+                float text = Mathf.Min(rt.sizeDelta.x, AvText.Width(label));
+                x = Mathf.Max(0f, (rt.sizeDelta.x - inset - text) * 0.5f);
+            }
+            label.margin = new Vector4(inset, 0f, 0f, 0f);
+            TMP_Text glyph = AvIcons.Make(rt, icon, size, label.color);
+            Place(glyph.rectTransform, new Rect(x, -(rt.sizeDelta.y - size) * 0.5f, size, size));
+            return label;
+        }
+
+        /// <summary>A mesh graphic (gauge, line) placed like every other Chrome primitive.</summary>
+        public static T Graphic<T>(RectTransform parent, Rect area, string name) where T : MaskableGraphic
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer));
+            var rt = (RectTransform)go.transform;
+            rt.SetParent(parent, worldPositionStays: false);
+            Place(rt, area);
+            T graphic = go.AddComponent<T>();
+            graphic.raycastTarget = false;
+            return graphic;
         }
 
         // ---------------------------------------------------------------- Scroll (replaces the v1 scroll helper)
@@ -164,10 +196,6 @@ namespace BoscaliSummer.Features.Support.Presentation.Window
             scroll.verticalNormalizedPosition = 1f;
             return scrolled;
         }
-
-        // ---------------------------------------------------------------- Tooltip (kit gap: no v2 tooltip yet)
-        /// <summary>Clears the shared hover tooltip that <c>RoomControl.WithTooltip</c> (Viz/) still writes to.</summary>
-        public static void ClearTooltip() => AvButtonBridge.ClearTooltip();
 
         // ---------------------------------------------------------------- Window shell (replaces AvRoomFrame)
         public const float NotchHeight = 32f;
