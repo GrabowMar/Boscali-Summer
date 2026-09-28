@@ -4,25 +4,45 @@ using UnityEngine;
 public sealed class LevelInfo : MonoBehaviour
 {
     private CloudLayer cloudLayer;
+    public float cloudHeight = 1800f;
     public void SetCloudLayer(CloudLayer value) => cloudLayer = value;
 }
+
+public static class Datum { public static float LocalSeaY; }
 
 public sealed class CloudLayer : MonoBehaviour
 {
     private ParticleSystem cloudSystem;
+    private ParticleSystem distantCloudSystem;
     private ParticleSystem flyThroughSystem;
+    private MeshRenderer cloudRenderer;
+    private Lightning lightning;
     private float cloudSizeMin = 300f;
     private float cloudSizeMax = 500f;
     private float densityMapScale = 250f;
     private float layerThickness = 150f;
     private int maxParticles = 100;
     public void SetCloudSystem(ParticleSystem value) => cloudSystem = value;
+    public void SetDistantSystem(ParticleSystem value) => distantCloudSystem = value;
     public void SetFlyThroughSystem(ParticleSystem value) => flyThroughSystem = value;
+    public void SetCloudRenderer(MeshRenderer value) => cloudRenderer = value;
+    public void SetLightning(Lightning value) => lightning = value;
     public float SizeMin => cloudSizeMin;
     public float SizeMax => cloudSizeMax;
     public float MapScale => densityMapScale;
     public float Thickness => layerThickness;
     public int ParticleLimit => maxParticles;
+}
+
+public sealed class Lightning : MonoBehaviour
+{
+    private ParticleSystem lightningSystem;
+    private Light flashLight;
+    public void SetEffects(ParticleSystem particles, Light flash)
+    {
+        lightningSystem = particles;
+        flashLight = flash;
+    }
 }
 
 public static class PlayerSettings

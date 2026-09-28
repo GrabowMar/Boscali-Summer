@@ -67,8 +67,8 @@ namespace BoscaliSummer
             s.UrbanCombat.TroopsPerDeploy, s.UrbanCombat.SiegeEnabled,
             s.UrbanCombat.SiegeDefenseScale, s.UrbanCombat.SiegeArmorBonus,
 
-            s.Weather.DynamicWeatherEnabled, s.Weather.TransitionIntervalMinutes,
-            s.Weather.TransitionDurationMinutes, s.Weather.MinConditions, s.Weather.MaxConditions,
+            s.Weather.DynamicWeatherEnabled, s.Weather.StateIntervalMinutes,
+            s.Weather.StateFadeSeconds, s.Weather.MinConditions, s.Weather.MaxConditions,
             s.Weather.WindVariability, s.Weather.TurbulenceMultiplier,
 
             // The host's bypasses decide what it accepts, so a client must predict with them.

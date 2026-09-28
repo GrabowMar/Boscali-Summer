@@ -893,7 +893,7 @@ Type highCommandNet = pluginAssembly.GetType("BoscaliSummer.Features.HighCommand
     if ((byte)highCommandNet.GetField("ProtocolVersion", AllMembers)!.GetRawConstantValue()! != 4)
     throw new InvalidOperationException("High command protocol changed without updating its probe");
 Type weatherNet = pluginAssembly.GetType("BoscaliSummer.Features.Weather.Networking.WeatherNet", true)!;
-if ((byte)weatherNet.GetField("ProtocolVersion", AllMembers)!.GetRawConstantValue()! != 3)
+if ((byte)weatherNet.GetField("ProtocolVersion", AllMembers)!.GetRawConstantValue()! != 4)
     throw new InvalidOperationException("Weather protocol changed without updating its probe");
 foreach (var contract in new[] {
     ("BoscaliSummer.Features.DynamicOperations.Networking.OperationsQuery", new[] { "Protocol:System.Byte", "Scene:System.UInt32", "Token:System.UInt32", "OperationId:System.Int32", "Action:System.Byte" }),

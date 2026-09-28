@@ -19,7 +19,12 @@ namespace BoscaliSummer.Features.Weather.Domain
         public float Cover;
         public float BackgroundCover;
         public float ClusterCover;
+        public float CellCover;
+        public float CellShape;
         public float FrontCover;
+        /// <summary>Local frontal shield bounds in metres; both zero without front cover.</summary>
+        public float FrontBase;
+        public float FrontTop;
         public float CloudBase;
         public float CloudTop;
         public float VisibilityKm;
@@ -56,23 +61,28 @@ namespace BoscaliSummer.Features.Weather.Domain
     }
 
     /// <summary>
-    /// The weather field at one instant: the regime, up to three fronts and up to twelve cells,
-    /// resolved once by <see cref="Build"/> and then sampled anywhere by <see cref="Sample"/>.
-    /// A frame owns its buffers and is reused, so building one allocates nothing.
+    /// The weather at one instant: the timeline's state and a static cloud layout (up to two
+    /// front bands, twelve storm-cell sites and eight cumulus groups), resolved once by
+    /// <see cref="Build"/> and sampled anywhere by <see cref="Sample"/>. Nothing in the layout
+    /// moves; a state change only grows or shrinks what is there. A field owns its buffers and is
+    /// reused, so building one allocates nothing.
     ///
     /// <para>Everything is a pure function of (key, time, map extent, hour of day): the host,
-    /// every client, the radar, the forecast and the tests all see the same sky.</para>
+    /// every client, the forecast and the tests all see the same sky.</para>
     /// </summary>
     internal sealed class WeatherField
     {
         public const float MaxRainRate = 150f;
 
-        /// <summary>Rain patches drift at a fixed velocity so they never jump when the wind changes.</summary>
+        /// <summary>Scale of the static patch field that breaks up the sheet and area rain.</summary>
         public const float PatchScale = 14000f;
-        public const float PatchDrift = 6f;
+
+        /// <summary>Mean surface wind the state's wind factor scales, m/s. Display and local
+        /// effects only; native wind keeps the mission's own speed.</summary>
+        public const float BaseWindSpeed = 7f;
 
         private readonly StormCell[] cells = new StormCell[StormCells.MaxCells];
-        private readonly FrontState[] fronts = new FrontState[RegimeState.MaxFronts];
+        private readonly FrontState[] fronts = new FrontState[WeatherFronts.MaxFronts];
         private readonly DryCloudCluster[] cloudClusters = new DryCloudCluster[DryCloudCluster.MaxCount];
 
         public WeatherKey Key { get; private set; }
@@ -80,7 +90,8 @@ namespace BoscaliSummer.Features.Weather.Domain
         public float HalfX { get; private set; }
         public float HalfZ { get; private set; }
         public float HourOfDay { get; private set; }
-        public RegimeState Regime { get; private set; }
+        public TimelineState Timeline { get; private set; }
+        public StateParams Params { get; private set; }
         public int CellCount { get; private set; }
         public int FrontCount { get; private set; }
         public int CloudClusterCount { get; private set; }
@@ -88,7 +99,8 @@ namespace BoscaliSummer.Features.Weather.Domain
         /// <summary>Multiplier on haze visibility (1 = clear air; smoke from fires lowers it).</summary>
         public float HazeScale { get; private set; } = 1f;
 
-        public float PrevailingHeadingNow { get; private set; }
+        /// <summary>Downwind heading of the layout's prevailing wind; fixed for the key.</summary>
+        public float PrevailingHeading { get; private set; }
         public bool IsBuilt => Key != null;
 
         public StormCell Cell(int index) => cells[index];
@@ -104,62 +116,61 @@ namespace BoscaliSummer.Features.Weather.Domain
             HourOfDay = hourOfDay;
             HazeScale = WeatherMath.Clamp(hazeScale, 0.05f, 1f);
 
-            RegimeState regime = RegimeSchedule.Evaluate(key, time);
-            Regime = regime;
-            PrevailingHeadingNow = PrevailingHeading(key.Seed, time);
+            TimelineState timeline = WeatherTimeline.Evaluate(key, time);
+            Timeline = timeline;
+            StateParams sky = StateTable.At(timeline.Level);
+            Params = sky;
+            PrevailingHeading = WeatherMath.Hash01(key.Seed, 41) * 360f;
+            WeatherMath.HeadingToVector(PrevailingHeading, out float driftX, out float driftZ);
 
-            FrontCount = 0;
-            for (int i = 0; i < regime.FrontCount; i++)
-            {
-                fronts[FrontCount++] = WeatherFronts.Resolve(regime.GetFront(i), key.Seed, time);
-            }
-
-            CellCount = StormCells.Fill(cells, key, time, HalfX, HalfZ);
+            FrontCount = WeatherFronts.Fill(fronts, timeline.Layout, sky, HalfX, HalfZ, PrevailingHeading);
+            StateParams convection = StateTable.At(timeline.GrowthLevel);
+            CellCount = StormCells.Fill(cells, timeline.Layout, convection, HalfX, HalfZ, driftX, driftZ);
             CloudClusterCount = 0;
             for (int i = 0; i < cloudClusters.Length; i++)
-                if (DryCloudCluster.TryResolve(key, i, time, HalfX, HalfZ, out DryCloudCluster cloud))
+                if (DryCloudCluster.TryResolve(timeline.Layout, i, convection, HalfX, HalfZ, out DryCloudCluster cloud))
                     cloudClusters[CloudClusterCount++] = cloud;
         }
 
         public WeatherPoint Sample(float x, float z)
         {
-            RegimeParams p = Regime.Params;
+            StateParams p = Params;
             var point = new WeatherPoint();
 
-            // Area (stratiform) rain and base cover, broken up by a drifting patch field.
+            // Area (stratiform) rain and the sheet, broken up by the static patch field so a
+            // thinning deck opens in patches instead of fading uniformly.
             float patch = Patch(x, z);
             float areaRain = p.AreaRain * 2.2f * WeatherMath.Smoothstep(0.45f, 0.8f, patch);
-            // The broad veil is distinct from the front and cloud clusters. In a convective
-            // regime the gaps stay visibly open even though the active cells are severe.
-            float coverBase = WeatherMath.Clamp01((float)Math.Pow(p.Overcast, 4f) + (patch - 0.5f) * 0.10f);
+            float sheet = p.Overcast;
+            float coverBase = WeatherMath.Clamp01(sheet + (patch - 0.5f) * (0.10f + 0.55f * sheet));
             point.BackgroundCover = coverBase;
 
-            // Mean wind.
-            PrevailingWind(Key.Seed, p.WindSpeed, Time, out float windX, out float windZ);
-            float windSpeed = p.WindSpeed;
+            float windSpeed = BaseWindSpeed * p.WindFactor;
             float turbulence = p.Turbulence;
 
             float frontRain = 0f;
             float clearFront = 1f;
             float veer = 0f;
+            float frontWeight = 0f, frontBaseSum = 0f, frontTopSum = 0f;
             for (int i = 0; i < FrontCount; i++)
             {
                 FrontState front = fronts[i];
                 FrontEffect effect = WeatherFronts.Profile(front.Kind, front.SignedDistance(x, z));
                 frontRain += effect.Rain * front.Strength;
-                clearFront *= 1f - effect.Cover * front.Strength;
+                float cover = effect.Cover * front.Strength;
+                clearFront *= 1f - cover;
+                float underside = WeatherMath.Clamp(p.CloudBase + effect.BaseOffset, 250f, 8500f);
+                frontWeight += cover;
+                frontBaseSum += underside * cover;
+                frontTopSum += (underside + effect.Depth) * cover;
                 veer += effect.VeerDegrees * front.Strength;
                 windSpeed += effect.WindBoost * front.Strength;
                 turbulence += effect.Turbulence * front.Strength;
             }
 
-            if (veer != 0f || windSpeed != p.WindSpeed)
-            {
-                float heading = WeatherMath.VectorToHeading(windX, windZ) + veer;
-                WeatherMath.HeadingToVector(heading, out float hx, out float hz);
-                windX = hx * windSpeed;
-                windZ = hz * windSpeed;
-            }
+            WeatherMath.HeadingToVector(PrevailingHeading + veer, out float windX, out float windZ);
+            windX *= windSpeed;
+            windZ *= windSpeed;
 
             float cellRain = 0f;
             float clearCells = 1f;
@@ -173,14 +184,14 @@ namespace BoscaliSummer.Features.Weather.Domain
             {
                 StormCell cell = cells[i];
                 float dx = x - cell.X, dz = z - cell.Z;
-                // Every term is negligible by 8 radii; a shorter cut would drop the trailing
-                // halo abruptly and make rain pop at the cut.
                 float reach = cell.Radius * 8f;
                 if (dx * dx + dz * dz > reach * reach) continue;
 
                 cellRain += cell.RainAt(x, z);
                 float cover = cell.CoverAt(x, z);
                 clearCells *= 1f - cover;
+                float shape = cell.ShapeAt(x, z);
+                if (shape > point.CellShape) point.CellShape = shape;
                 cell.WindAt(x, z, out float ox, out float oz, out float w, out float t);
                 outX += ox;
                 outZ += oz;
@@ -193,7 +204,8 @@ namespace BoscaliSummer.Features.Weather.Domain
                 float depth = cell.CoreAt(x, z);
                 if (depth > core) core = depth;
                 if (cell.Hail && depth > 0.5f) hail = true;
-                if (cover > 0.3f && cell.Top > top) top = cell.Top;
+                float crown = cell.Base + (cell.Top - cell.Base) * (float)Math.Pow(shape, 0.65f);
+                if (crown > top) top = crown;
             }
 
             for (int i = 0; i < CloudClusterCount; i++)
@@ -201,7 +213,9 @@ namespace BoscaliSummer.Features.Weather.Domain
                 DryCloudCluster cloud = cloudClusters[i];
                 float cover = cloud.CoverAt(x, z);
                 clearClusters *= 1f - cover;
-                if (cover > 0.3f && cloud.Top > top) top = cloud.Top;
+                if (cover > point.CellShape) point.CellShape = cover;
+                float crown = cloud.Base + (cloud.Top - cloud.Base) * (float)Math.Pow(cover, 0.65f);
+                if (crown > top) top = crown;
             }
 
             float rain = Math.Min(areaRain + frontRain + cellRain, MaxRainRate);
@@ -210,10 +224,23 @@ namespace BoscaliSummer.Features.Weather.Domain
             point.Cover = WeatherMath.Clamp01(1f - (1f - coverBase) * clearFront * clearCells * clearClusters);
             point.FrontCover = WeatherMath.Clamp01(1f - clearFront);
             point.ClusterCover = WeatherMath.Clamp01(1f - clearClusters);
+            point.CellCover = WeatherMath.Clamp01(1f - clearCells);
+
+            if (frontWeight > 0f)
+            {
+                point.FrontBase = frontBaseSum / frontWeight;
+                point.FrontTop = frontTopSum / frontWeight;
+            }
 
             float cloudBase = p.CloudBase - 300f * WeatherMath.Smoothstep(0f, 15f, rain);
+            // A front may lower the rain-bearing ceiling, but a high leading shield must not
+            // lift low cloud; the shield renders through FrontBase/FrontTop.
+            cloudBase = WeatherMath.Lerp(cloudBase, Math.Min(cloudBase, point.FrontBase), point.FrontCover);
             point.CloudBase = WeatherMath.Clamp(cloudBase, 250f, 3600f);
-            point.CloudTop = Math.Max(point.CloudBase + 1600f + 2200f * point.Cover, top);
+            float stratiformCover = WeatherMath.Clamp01(1f - (1f - coverBase) * clearClusters);
+            point.CloudTop = Math.Max(point.CloudBase + 1600f + 2200f * stratiformCover, top);
+            point.CloudTop = Math.Max(point.CloudTop,
+                WeatherMath.Lerp(point.CloudBase, point.FrontTop, point.FrontCover));
 
             float haze = Math.Max(p.HazeKm * HazeScale, 0.5f);
             float extinction = 3.912f / haze + 0.25f * (float)Math.Pow(rain, 0.66);
@@ -247,28 +274,6 @@ namespace BoscaliSummer.Features.Weather.Domain
         /// <summary>The regional sky at the map centre.</summary>
         public WeatherPoint Regional() => Sample(0f, 0f);
 
-        /// <summary>
-        /// The map's mean wind: prevailing wind veered and strengthened by the fronts at the map
-        /// centre, without any cell's outflow. This is what vanilla's single global wind should
-        /// say; cells act locally through the owner of each aircraft instead.
-        /// </summary>
-        public void MeanWind(out float speed, out float heading, out float turbulence)
-        {
-            RegimeParams p = Regime.Params;
-            speed = p.WindSpeed;
-            heading = PrevailingHeadingNow;
-            turbulence = p.Turbulence;
-            for (int i = 0; i < FrontCount; i++)
-            {
-                FrontEffect effect = WeatherFronts.Profile(fronts[i].Kind, fronts[i].SignedDistance(0f, 0f));
-                heading += effect.VeerDegrees * fronts[i].Strength;
-                speed += effect.WindBoost * fronts[i].Strength;
-                turbulence += effect.Turbulence * fronts[i].Strength;
-            }
-            heading = WeatherMath.WrapHeading(heading);
-            turbulence = WeatherMath.Clamp01(turbulence);
-        }
-
         /// <summary>Mean of cover over a coarse grid; what vanilla's global <c>conditions</c> should say.</summary>
         public float MeanCover(int steps = 5)
         {
@@ -287,14 +292,9 @@ namespace BoscaliSummer.Features.Weather.Domain
             return n > 0 ? sum / n : 0f;
         }
 
-        /// <summary>The drifting patch field in [0, 1] that breaks up area rain and cover.</summary>
+        /// <summary>The static patch field in [0, 1] that breaks up area rain and cover.</summary>
         public float Patch(float x, float z)
-        {
-            WeatherMath.HeadingToVector(PatchHeading(Key.Seed), out float dx, out float dz);
-            float px = (x - dx * PatchDrift * Time) / PatchScale;
-            float pz = (z - dz * PatchDrift * Time) / PatchScale;
-            return WeatherMath.Fbm(Key.Seed ^ 0x5eedu, px, pz);
-        }
+            => WeatherMath.Fbm(Key.Seed ^ 0x5eedu, x / PatchScale, z / PatchScale);
 
         public static PrecipitationKind Classify(float rain)
         {
@@ -312,66 +312,57 @@ namespace BoscaliSummer.Features.Weather.Domain
             if (rain < 0.05f) return 0f;
             return 10f * (float)Math.Log10(200.0 * Math.Pow(rain, 1.6));
         }
-
-        /// <summary>
-        /// Downwind heading of the prevailing wind: a seeded direction swinging ±35° over two
-        /// hours. Continuous in time; fronts and cells read it at their own birth instants.
-        /// </summary>
-        public static float PrevailingHeading(uint seed, float time)
-        {
-            float baseHeading = WeatherMath.Hash01(seed, 41) * 360f;
-            float phase = WeatherMath.Hash01(seed, 42) * 6.2831853f;
-            return WeatherMath.WrapHeading(baseHeading + 35f * (float)Math.Sin(time / 7200f * 6.2831853f + phase));
-        }
-
-        public static void PrevailingWind(uint seed, float speed, float time, out float x, out float z)
-        {
-            WeatherMath.HeadingToVector(PrevailingHeading(seed, time), out x, out z);
-            x *= speed;
-            z *= speed;
-        }
-
-        private static float PatchHeading(uint seed) => WeatherMath.Hash01(seed, 41) * 360f;
     }
 
-    /// <summary>A coherent, rain-free cumulus group. Its seeded birth and drift are shared by
-    /// the forecast, radar field, and visible cloud placement.</summary>
+    /// <summary>A rain-free cumulus group at a fixed site of the layout. The state's cumulus
+    /// level decides how many groups are out (by rank) and how strongly each one builds.</summary>
     internal struct DryCloudCluster
     {
         public const int MaxCount = 8;
         public int Slot;
-        public float X, Z, Radius, Base, Top, Strength;
+        public float X, Z, Radius, Base, Top, Strength, AxisX, AxisZ;
 
         public float CoverAt(float x, float z)
         {
             float dx = x - X, dz = z - Z;
-            float distance = (float)Math.Sqrt(dx * dx + dz * dz);
-            return Strength * (1f - WeatherMath.Smoothstep(Radius * 0.5f, Radius * 1.7f, distance));
+            if (dx * dx + dz * dz > Radius * Radius * 1.7f) return 0f;
+            float along = dx * AxisX + dz * AxisZ;
+            float across = -dx * AxisZ + dz * AxisX;
+            float r = Radius;
+            float shape = Math.Max(Blob(along, across, r * 0.50f),
+                Math.Max(Blob(along - r * 0.48f, across - r * 0.18f, r * 0.38f),
+                Math.Max(Blob(along + r * 0.49f, across + r * 0.08f, r * 0.38f),
+                Math.Max(Blob(along - r * 0.10f, across - r * 0.52f, r * 0.35f),
+                         Blob(along + r * 0.16f, across + r * 0.51f, r * 0.35f)))));
+            return shape * Math.Min(1f, Strength * 2.5f);
         }
 
-        public static bool TryResolve(WeatherKey key, int slot, float time, float halfX, float halfZ,
+        private static float Blob(float x, float z, float radius)
+        {
+            float q = 1f - (x * x + z * z) / (radius * radius);
+            return q > 0f ? q * q : 0f;
+        }
+
+        public static bool TryResolve(uint layout, int slot, StateParams sky, float halfX, float halfZ,
             out DryCloudCluster cloud)
         {
             cloud = default;
-            float period = WeatherMath.HashRange(key.Seed, slot, 71, 0, 4800f, 7200f);
-            float phase = WeatherMath.Hash01(key.Seed, slot, 72) * period;
-            int generation = (int)Math.Floor((time - key.Epoch - phase) / period);
-            float birth = key.Epoch + phase + generation * period;
-            float age = (time - birth) / (period - 180f);
-            if (age < 0f || age >= 1f) return false;
-            RegimeParams sky = RegimeSchedule.Evaluate(key, birth).Params;
-            float level = WeatherMath.Envelope(age, 0f, 0.12f, 0.78f, 1f);
-            float strength = level * WeatherMath.Clamp01(sky.Overcast * 1.35f - sky.Severity * 0.35f);
-            if (strength < 0.02f) return false;
-            uint seed = unchecked(key.Seed ^ (uint)(slot * 73856093) ^ (uint)(generation * 19349663));
-            WeatherField.PrevailingWind(key.Seed, sky.WindSpeed, birth, out float vx, out float vz);
+            uint seed = unchecked(layout ^ (uint)(slot * 73856093) ^ 0x7c15u);
+            float rank = (slot + WeatherMath.Hash01(seed, 70)) / MaxCount;
+            float strength = WeatherMath.Smoothstep(rank * 0.7f, rank * 0.7f + 0.35f, sky.Cumulus) *
+                WeatherMath.Clamp01(0.4f + 0.6f * sky.Cumulus);
+            // Keep the tail until zero: CoverAt magnifies strength.
+            if (strength <= 0f) return false;
             cloud.Slot = slot;
-            cloud.X = WeatherMath.HashRange(seed, 73, 0, 0, -halfX * 0.85f, halfX * 0.85f) + vx * 0.7f * (time - birth);
-            cloud.Z = WeatherMath.HashRange(seed, 74, 0, 0, -halfZ * 0.85f, halfZ * 0.85f) + vz * 0.7f * (time - birth);
+            cloud.X = WeatherMath.HashRange(seed, 73, 0, 0, -halfX * 0.85f, halfX * 0.85f);
+            cloud.Z = WeatherMath.HashRange(seed, 74, 0, 0, -halfZ * 0.85f, halfZ * 0.85f);
             cloud.Radius = WeatherMath.HashRange(seed, 75, 0, 0, 5000f, 9500f);
             cloud.Base = sky.CloudBase;
-            cloud.Top = cloud.Base + WeatherMath.HashRange(seed, 76, 0, 0, 1400f, 3200f);
+            cloud.Top = cloud.Base + WeatherMath.HashRange(seed, 76, 0, 0, 1400f, 3200f) * (0.6f + 0.4f * sky.Cumulus);
             cloud.Strength = strength;
+            float angle = WeatherMath.Hash01(seed, 77) * 2f * (float)Math.PI;
+            cloud.AxisX = (float)Math.Cos(angle);
+            cloud.AxisZ = (float)Math.Sin(angle);
             return true;
         }
     }
