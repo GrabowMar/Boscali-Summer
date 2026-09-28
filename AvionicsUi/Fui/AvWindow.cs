@@ -117,7 +117,7 @@ namespace NOAvionics.Ui
             if (!visible) return;
             visible = false;
             AvBlurSource.Release();
-            AvKit.ReleaseKeyboardGuard();
+            AvInput.ReleaseKeyboardGuard();
             Root.gameObject.SetActive(false);
             Closed?.Invoke();
         }
@@ -155,7 +155,7 @@ namespace NOAvionics.Ui
         private sealed class DragHandle : MonoBehaviour, IDragHandler
         {
             public RectTransform Target;
-            public void OnDrag(PointerEventData e) { Target.anchoredPosition += e.delta / (Target.lossyScale.x > 0f ? Target.lossyScale.x : 1f); AvKit.ClampIntoCanvas(Target); }
+            public void OnDrag(PointerEventData e) { Target.anchoredPosition += e.delta / (Target.lossyScale.x > 0f ? Target.lossyScale.x : 1f); AvLay.ClampIntoCanvas(Target); }
         }
     }
 }

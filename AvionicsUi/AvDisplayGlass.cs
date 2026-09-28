@@ -78,7 +78,7 @@ namespace NOAvionics.Ui
             var go = new GameObject(name, typeof(RectTransform), typeof(Image));
             var rect = (RectTransform)go.transform;
             rect.SetParent(content, false);
-            AvKit.Stretch(rect);
+            AvLay.Fill(rect);
             // Panel glass stays inside its bezel; the display finish spans every column.
             rect.offsetMin = new Vector2(inset, inset);
             rect.offsetMax = new Vector2(-inset, -inset);
@@ -143,7 +143,7 @@ namespace NOAvionics.Ui
         {
             var go = new GameObject(name, typeof(RectTransform), typeof(RawImage));
             go.transform.SetParent(parent, false);
-            AvKit.Stretch((RectTransform)go.transform);
+            AvLay.Fill((RectTransform)go.transform);
             var graphic = go.GetComponent<RawImage>();
             graphic.texture = texture;
             graphic.raycastTarget = false;

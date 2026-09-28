@@ -42,7 +42,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             Limb = RoomPaint.Ink("room-space-limb", AvTheme.RailInfo);
             LimbSky = RoomPaint.Fill("room-space-limb", AvTheme.Surface);
             Console = RoomPaint.Fill("room-space-console", AvTheme.Surface);
-            ConsoleEdge = AvStyleHost.Resolve(AvStyleHost.Style("room-space-console").Border, AvTheme.Hairline);
+            ConsoleEdge = RoomPaint.Edge("room-space-console", AvTheme.Hairline);
         }
 
         /// <summary>Tracked caps in the wall's thin voice.</summary>

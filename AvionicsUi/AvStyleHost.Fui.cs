@@ -4,11 +4,10 @@ using UnityEngine;
 
 namespace NOAvionics.Ui
 {
-    /// <summary>Kit v2's sheet: a palette layered over avionics.fui.avss. Independent of the v1 sheet.</summary>
+    /// <summary>The kit's sheet: a palette layered over avionics.fui.avss.</summary>
     public static partial class AvStyleHost
     {
         private static AvStyleSheet fui;
-        private static string configDir;
 
         public static AvThemeId Theme { get; private set; } = AvThemeId.Steel;
         public static int FuiGeneration { get; private set; }
@@ -27,8 +26,6 @@ namespace NOAvionics.Ui
         {
             try
             {
-                if (configDir == null && overridePath != null)
-                    configDir = Path.GetDirectoryName(Path.GetDirectoryName(overridePath));
                 string palette = ReadFile(AvThemes.OverrideFile(id)) ?? ReadResource(AvThemes.PaletteResource(id));
                 string baseSheet = ReadFile(AvThemes.BaseOverrideFile) ?? ReadResource(AvThemes.BaseResource);
                 AvStyleSheet parsed = AvStyleSheet.Parse(AvThemes.Compose(palette, baseSheet));

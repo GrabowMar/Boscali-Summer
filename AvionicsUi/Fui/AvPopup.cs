@@ -25,7 +25,7 @@ namespace NOAvionics.Ui
     }
 
     /// <summary>
-    /// Kit v2 pick list (replaces v1 <c>AvKit.Popup</c>, same call shape). A full-page click-catcher closes it; at most
+    /// Kit v2 pick list (the pick list every console uses). A full-page click-catcher closes it; at most
     /// <see cref="MaxRows"/> rows show, longer lists page with a "MORE…" row. Only one popup is open at a time.
     /// <c>area</c> is in the page root's top-left space with y already negative downward (as v1 took it).
     /// </summary>

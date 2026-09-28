@@ -197,7 +197,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Window
             return scrolled;
         }
 
-        // ---------------------------------------------------------------- Window shell (replaces AvRoomFrame)
+        // ---------------------------------------------------------------- Window shell (replaced the v1 room frame)
         public const float NotchHeight = 32f;
         public const float NotchInset = 24f;
 

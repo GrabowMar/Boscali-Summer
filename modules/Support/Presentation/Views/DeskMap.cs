@@ -91,7 +91,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         private int shownRevision = -1;
         private Action<int> select;
 
-        /// <summary>Placed label rects (AvKit), for the harness overlap check.</summary>
+        /// <summary>Placed label rects (top-left, negative-down), for the harness overlap check.</summary>
         internal Rect[] PlacedRects { get; } = new Rect[Labels];
         internal int PlacedCount { get; private set; }
 
@@ -262,7 +262,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             }
         }
 
-        /// <summary>Panels lying over the map (AvKit rects); labels keep off them. At most eight.</summary>
+        /// <summary>Panels lying over the map (top-left, negative-down rects); labels keep off them. At most eight.</summary>
         public void SetObstacles(params Rect[] rects)
         {
             obstacleCount = Math.Min(rects.Length, obstacleRects.Length - 1);

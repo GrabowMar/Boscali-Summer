@@ -94,7 +94,7 @@ namespace BoscaliSummer.Tests.Architecture
             @"^\s*using\s+BoscaliSummer\b|\bBoscaliSummer\.[A-Z]", RegexOptions.CultureInvariant | RegexOptions.Multiline);
 
         private static readonly Regex V1KitOrLiteral = new Regex(
-            @"\bAvKit\.|\bAvStyled\.|\bAvScreen\.|\bnew AvButton\b|\bAvButton\.|\bnew Color\(|\bfontSize\s*=|\bAvFont\.Font\s*=",
+            @"\bAvKit\.|\bAvStyled\.|\bAvScreen\.|\bnew\s+AvButton\b|\bAvButton\.|\bnew Color\(|\bfontSize\s*=|\bAvFont\.Font\s*=",
             RegexOptions.CultureInvariant);
 
         /// <summary>The shared kit is compiled into Wing Command too: it must never reach into Boscali.</summary>

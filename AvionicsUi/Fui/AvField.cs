@@ -28,7 +28,7 @@ namespace NOAvionics.Ui
             input.targetGraphic = frame; input.characterLimit = Mathf.Clamp(maxChars, 1, 256);
             input.lineType = TMP_InputField.LineType.SingleLine;
             AvInput.StripNavigation(input);
-            input.onSelect.AddListener(_ => { focused = true; if (!guarded) { guarded = true; AvKit.KeyboardGuard.Acquire(); } Restyle(); });
+            input.onSelect.AddListener(_ => { focused = true; if (!guarded) { guarded = true; AvInput.KeyboardGuard.Acquire(); } Restyle(); });
             input.onDeselect.AddListener(_ => { focused = false; Release(); Restyle(); });
             input.onSubmit.AddListener(v => { submit?.Invoke(v); Release(); AvInput.Deselect(input.gameObject); });
             Rect.gameObject.AddComponent<ReleaseOnDisable>().Owner = this;
@@ -38,7 +38,7 @@ namespace NOAvionics.Ui
         public string Text { get => input.text; set => input.text = value ?? ""; }
         public bool Invalid { get => invalid; set { invalid = value; Restyle(); } }
 
-        private void Release() { if (guarded) { guarded = false; AvKit.KeyboardGuard.Release(); } }
+        private void Release() { if (guarded) { guarded = false; AvInput.KeyboardGuard.Release(); } }
 
         public override float Measure(float width) => AvGridTokens.Row;
 

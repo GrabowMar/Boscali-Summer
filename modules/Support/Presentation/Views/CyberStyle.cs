@@ -38,7 +38,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         {
             Surface = RoomPaint.Fill("room-cyber-surface", AvTheme.Ground);
             Pane = RoomPaint.Fill("room-cyber-pane", AvTheme.Surface);
-            PaneEdge = AvStyleHost.Resolve(AvStyleHost.Style("room-cyber-pane").Border, AvTheme.Hairline);
+            PaneEdge = RoomPaint.Edge("room-cyber-pane", AvTheme.Hairline);
             Bar = RoomPaint.Fill("room-cyber-bar", AvTheme.SurfaceRaised);
             Title = RoomPaint.Ink("room-cyber-title", AvTheme.Accent);
             Ink = RoomPaint.Ink("room-cyber-ink", AvTheme.TextPrimary);

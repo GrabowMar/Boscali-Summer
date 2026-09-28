@@ -323,7 +323,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         // ------------------------------------------------------------------ row helpers
         //
         // Every SET row used to be one of two shapes: a latched ON/OFF, or a "- value +"
-        // stepper, both built from v1's AvBox/AvKit/AvStyled primitives with hand-measured
+        // stepper, both built from the retired v1 kit's primitives with hand-measured
         // geometry (Page/Heading/TakeRow/rowPitch). Kit v2's AvFlow measures and places every
         // part itself, so that geometry is gone; these two helpers now build one AvRow per
         // setting (state rail, name, always-visible help/reason line, and either the ON/OFF
