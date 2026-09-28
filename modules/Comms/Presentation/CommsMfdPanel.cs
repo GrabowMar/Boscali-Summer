@@ -17,32 +17,35 @@ namespace BoscaliSummer.Features.Comms.Presentation
     /// <summary>
     /// "COM" — the multiplayer comms screen. Five pages, one job each: MAP arms the pen, the
     /// shapes, pings, stickers and labels; CALL sends brevity calls; POLL asks and answers
-    /// questions; GAME holds the dice, rock-paper-scissors and the map hunt with its
+    /// questions; CREW holds the dice, rock-paper-scissors and the map hunt with its
     /// leaderboard; LOG is the record of all of it plus the mute list.
     ///
-    /// <para>The data bar always says which audience a post will reach (TEAM or ALL), what
-    /// the left mouse button will do on the map right now, and how much is on the board; the
-    /// status strip gives the armed tool's instructions or the host's latest refusal. Nothing
-    /// here decides anything: every verb goes through <see cref="CommsManager"/>, and the host
-    /// has the last word.</para>
+    /// <para>The chip rail always says the connection state, which audience a post will reach
+    /// (TEAM or ALL) and what the left mouse button will do on the map right now; the footer
+    /// gives the armed tool's instructions or the host's latest refusal. Nothing here decides
+    /// anything: every verb goes through <see cref="CommsManager"/>, and the host has the last
+    /// word.</para>
     /// </summary>
     internal sealed partial class CommsMfdPanel : MonoBehaviour, ISceneService
     {
         private const float Width = AvTokens.PanelWidth;
         private const float RefreshInterval = 0.2f;
         private const float NoticeSeconds = 6f;
-        private const int ChipCount = 3;
 
         private const int TabMap = 0;
         private const int TabCall = 1;
         private const int TabPoll = 2;
         private const int TabGame = 3;
         private const int TabLog = 4;
-        private static readonly string[] TabNames = { "MAP", "CALL", "POLL", "CREW", "LOG" };
 
-        private const float HeadingHeight = 22f;
-        private const float Gap = 4f;
-        private const float SectionGap = 8f;
+        private static readonly (AvIcon Icon, string Label)[] TabSpecs =
+        {
+            (AvIcon.Map2, "MAP"),
+            (AvIcon.Message2, "CALL"),
+            (AvIcon.QuestionMark, "POLL"),
+            (AvIcon.UsersGroup, "CREW"),
+            (AvIcon.ListDetails, "LOG"),
+        };
 
         private CommsSettings settings;
         private CommsManager comms;
@@ -50,7 +53,8 @@ namespace BoscaliSummer.Features.Comms.Presentation
 
         private MFDScreen screen;
         private GameObject screenRoot;
-        private AvScreen shell;
+        private AvConsole console;
+        private AvChip[] chips;
 
         private float nextAttempt;
         private float nextRefresh;
@@ -70,8 +74,9 @@ namespace BoscaliSummer.Features.Comms.Presentation
             if (screenRoot != null) Destroy(screenRoot);
             screenRoot = null;
             screen = null;
-            shell = null;
-            if (viewOpen) AvKit.ReleaseKeyboardGuard();
+            console = null;
+            chips = null;
+            if (viewOpen) AvInput.Deselect();
             viewOpen = false;
             nextAttempt = 0f;
             nextRefresh = 0f;
@@ -118,8 +123,9 @@ namespace BoscaliSummer.Features.Comms.Presentation
         {
             if (viewOpen == open) return;
             viewOpen = open;
-            // A text field that loses its screen must hand the keyboard back to the flight controls.
-            if (!open) AvKit.ReleaseKeyboardGuard();
+            // A text field that loses its screen must hand the keyboard back to the flight
+            // controls: deselecting it fires its own onDeselect, which releases the guard.
+            if (!open) AvInput.Deselect();
         }
 
         // ---- Installation ----------------------------------------------------------------
@@ -176,10 +182,7 @@ namespace BoscaliSummer.Features.Comms.Presentation
 
         private MFDScreen Build(MFDScreen template, Button bezel)
         {
-            TMP_Text sourceText = template.GetComponentInChildren<TMP_Text>(true);
-            if (sourceText != null && sourceText.font != null) AvFont.Font = sourceText.font;
-
-            var root = new GameObject("BoscaliComms.Screen", typeof(RectTransform), typeof(Image));
+            var root = new GameObject("BoscaliComms.Screen", typeof(RectTransform));
             screenRoot = root;
             var rootRect = root.GetComponent<RectTransform>();
             rootRect.SetParent(template.transform.parent, false);
@@ -190,28 +193,31 @@ namespace BoscaliSummer.Features.Comms.Presentation
             rootRect.pivot = templateRect.pivot;
             rootRect.localScale = templateRect.localScale;
 
-            float height = AvScreen.ResolveHeight(templateRect.parent as RectTransform, AvTokens.PanelHeight, AvTokens.PanelHeightMax);
+            // Kit gap: v1's screen-height resolver measured the live bezel bay; the kit v2
+            // console has no equivalent, so the same formula is kept locally (see ResolveHeight
+            // below) rather than reaching into the v1 kit.
+            float height = ResolveHeight(templateRect.parent as RectTransform, AvTokens.PanelHeight, AvTokens.PanelHeightMax);
             rootRect.sizeDelta = new Vector2(Width, height);
-            AvKit.ClampIntoCanvas(rootRect);
-
-            Image background = root.GetComponent<Image>();
-            background.sprite = AvSprites.Panel;
-            background.type = Image.Type.Sliced;
-            background.color = Color.white;
-            background.raycastTarget = true;
 
             var contentObject = new GameObject("Content", typeof(RectTransform));
             var content = contentObject.GetComponent<RectTransform>();
             content.SetParent(rootRect, false);
-            AvKit.Stretch(content);
+            content.anchorMin = Vector2.zero;
+            content.anchorMax = Vector2.one;
+            content.offsetMin = Vector2.zero;
+            content.offsetMax = Vector2.zero;
 
-            shell = AvScreen.Build(content, MfdSlots.Comms, TabNames, null, ChipCount, Width, height, _ => nextRefresh = 0f);
+            console = AvConsole.Build(content, "COM", "MULTIPLAYER COMMS", TabSpecs.Length, Width, height);
+            chips = console.Chips(3);
+            console.Tabs(TabSpecs);
+            console.PageChanged += _ => nextRefresh = 0f;
 
-            BuildMapPage(shell.CreatePage(TabMap, "MapPage"));
-            BuildCallPage(shell.CreatePage(TabCall, "CallPage"));
-            BuildPollPage(shell.CreatePage(TabPoll, "PollPage"));
-            BuildGamePage(shell.CreatePage(TabGame, "GamePage"));
-            BuildLogPage(shell.CreatePage(TabLog, "LogPage"));
+            BuildMapPage(console.Page(TabMap));
+            BuildCallPage(console.Page(TabCall));
+            BuildPollPage(console.Page(TabPoll));
+            BuildGamePage(console.Page(TabGame));
+            BuildLogPage(console.Page(TabLog));
+            console.Finish();
 
             MFDScreen result = root.AddComponent<MFDScreen>();
             result.shortName = MfdSlots.Comms;
@@ -226,8 +232,31 @@ namespace BoscaliSummer.Features.Comms.Presentation
             }
 
             screenRoot = root;
-            shell.SetPage(TabMap);
+            console.SetPage(TabMap);
             return result;
+        }
+
+        /// <summary>
+        /// The height this panel should take, given the slot it was parented into (mirrors
+        /// v1's screen-height resolver — a kit gap, see the report). A screen inherits its bay
+        /// from the stock template it was cloned beside; measuring it beats a hard-coded
+        /// constant that would be wrong at the next resolution.
+        /// </summary>
+        private static float ResolveHeight(RectTransform parent, float min, float max)
+        {
+            if (max < min) max = min;
+            if (parent == null) return min;
+
+            float available = parent.rect.height;
+            RectTransform cursor = parent;
+            for (int i = 0; i < 4 && available <= 1f && cursor != null; i++)
+            {
+                cursor = cursor.parent as RectTransform;
+                if (cursor != null) available = cursor.rect.height;
+            }
+
+            if (available <= 1f) return min;
+            return Mathf.Clamp(Mathf.Floor(available), min, max);
         }
 
         private static Image FindHighlight(Button button)
@@ -243,23 +272,20 @@ namespace BoscaliSummer.Features.Comms.Presentation
 
         private void Refresh()
         {
-            if (shell == null) return;
+            if (console == null) return;
             CommsClientState state = comms.State;
             float now = Time.unscaledTime;
 
             bool online = comms.Online;
-            shell.DataBar.State.text = !online ? "NOT CONNECTED"
+            string connText = !online ? "NOT CONNECTED"
                 : comms.HostSilent ? "HOST NOT ANSWERING"
                 : comms.IsHost ? "HOSTING COMMS" : "ONLINE";
-            shell.DataBar.State.color = !online || comms.HostSilent ? AvTheme.Warning : AvTheme.Dim;
+            chips[0].Set(connText, !online || comms.HostSilent ? AvState.Caution : AvState.Info);
+            chips[1].Set(comms.Channel == CommsChannel.Team ? "TO TEAM" : "TO ALL",
+                comms.Channel == CommsChannel.Team ? AvState.Ready : AvState.Caution);
+            chips[2].Set(ToolName(comms.Tool), comms.Tool == CommsTool.None ? AvState.Inert : AvState.Info);
 
-            shell.DataBar.SetChip(0, comms.Channel == CommsChannel.Team ? "TO TEAM" : "TO ALL",
-                comms.Channel == CommsChannel.Team ? "live" : "warn");
-            shell.DataBar.SetChip(1, ToolName(comms.Tool), comms.Tool == CommsTool.None ? "inert" : "info");
-            int marks = state.Board.Count;
-            shell.DataBar.SetChip(2, marks + (marks == 1 ? " MARK" : " MARKS"), marks > 0 ? "live" : "inert");
-
-            switch (shell.Page)
+            switch (console.CurrentPage)
             {
                 case TabMap: RefreshMap(); break;
                 case TabCall: RefreshCalls(now); break;
@@ -275,15 +301,17 @@ namespace BoscaliSummer.Features.Comms.Presentation
             string ambient = state.Notice != null && !state.NoticeIsError && now - state.NoticeAt < NoticeSeconds
                 ? state.Notice
                 : Ambient(state);
-            shell.WriteStatus(alert, prompt, ambient);
+            if (alert != null) console.Footer.Set(alert, AvState.Caution);
+            else if (prompt != null) console.Footer.Set(prompt, AvState.Info);
+            else console.Footer.Set(ambient, AvState.Inert);
         }
 
         private string Ambient(CommsClientState state)
         {
             int open = 0;
             for (int i = 0; i < state.Polls.Count; i++) if (!state.Polls[i].Closed) open++;
-            string line = state.Board.CountOf(CommsItemKind.Ping) + " PINGS · " + open + " POLLS OPEN · " +
-                          state.Duels.Count + " CHALLENGES";
+            string line = AvNum.Fixed(state.Board.CountOf(CommsItemKind.Ping), 0) + " PINGS · " +
+                          AvNum.Fixed(open, 0) + " POLLS OPEN · " + AvNum.Fixed(state.Duels.Count, 0) + " CHALLENGES";
             KeyCode hold = settings.DrawHoldKey.Value;
             return hold != KeyCode.None ? line + " · HOLD " + KeyName(hold) + " + DRAG TO DRAW" : line;
         }
@@ -315,103 +343,71 @@ namespace BoscaliSummer.Features.Comms.Presentation
             }
         }
 
-        // ---- Shared layout -----------------------------------------------------------------
+        // ---- Shared helpers ------------------------------------------------------------------
 
-        /// <summary>A page body inside a scroll viewport when it is taller than the space it has.</summary>
-        private RectTransform PageBody(GameObject page, float buildHeight, out float x, out float y, out float width)
+        /// <summary>The kit's fixed state vocabulary a comms tone maps onto (R1: colour always carries a word too).</summary>
+        private static AvState ToneState(CommsTone tone)
         {
-            Rect body = shell.Body;
-            float viewport = body.height;
-            RectTransform parent = AvScreen.Scroll((RectTransform)page.transform, body, buildHeight, out body);
-            AvStyled.Spine(parent, new Rect(body.x, body.y, 3f, Mathf.Max(viewport, body.height)));
-            x = body.x + AvScreen.SpineInset;
-            y = body.y;
-            width = body.width - AvScreen.SpineInset;
-            return parent;
-        }
-
-        /// <summary>A section heading: accent tick, title, and a note on the right. Returns the note.</summary>
-        private static TMP_Text Heading(RectTransform parent, float x, ref float y, float width, string title, string note = null)
-        {
-            AvKit.Panel(parent, new Rect(x, y - 1f, 3f, 14f), AvTheme.Accent).raycastTarget = false;
-            AvStyled.Label(parent, new Rect(x + 10f, y, width * 0.5f, 14f), title, "section-title");
-            TMP_Text noteLabel = AvStyled.Label(parent, new Rect(x + width * 0.35f, y, width * 0.65f, 14f), note ?? "",
-                "section-title-note", align: TextAlignmentOptions.MidlineRight);
-            y -= HeadingHeight;
-            return noteLabel;
-        }
-
-        /// <summary>Evenly split a row into <paramref name="count"/> cells with <see cref="Gap"/> between them.</summary>
-        private static Rect Cell(float x, float y, float width, float height, int count, int index)
-        {
-            float cell = (width - Gap * (count - 1)) / count;
-            return new Rect(x + index * (cell + Gap), y, cell, height);
-        }
-
-        private static AvButton Button(RectTransform parent, Rect area, string text, Action action, string tooltip,
-            AvButtonStyle style = AvButtonStyle.Default)
-        {
-            AvButton button = AvStyled.Button(parent, area, text, "btn", action, style);
-            if (!string.IsNullOrEmpty(tooltip)) button.WithTooltip(tooltip);
-            return button;
+            switch (tone)
+            {
+                case CommsTone.Friendly: return AvState.Ready;
+                case CommsTone.Caution: return AvState.Caution;
+                case CommsTone.Danger: return AvState.Danger;
+                default: return AvState.Info;
+            }
         }
 
         /// <summary>
-        /// A button with a vector glyph. Tall buttons stack the glyph over a small caption (the
-        /// palettes); short ones put the glyph beside the words (lists and calls).
+        /// Lays <paramref name="specs"/> out as full rows of <paramref name="columns"/> equal
+        /// icon buttons (a short last row stays left-aligned rather than stretching). Returns
+        /// the built controls in the same order as <paramref name="specs"/>, for latching.
         /// </summary>
-        private static AvButton IconButton(RectTransform parent, Rect area, string glyph, string text, Color tint,
-            Action action, string tooltip, out CommsGlyphGraphic icon)
+        private static AvControl[] ButtonGrid(AvFlow page, AvControl.Spec[] specs, int columns)
         {
-            AvButton button = Button(parent, area, text, action, tooltip);
-            var rect = (RectTransform)button.transform;
-            TMP_Text label = button.GetComponentInChildren<TMP_Text>();
-
-            var go = new GameObject("Glyph", typeof(RectTransform), typeof(CanvasRenderer), typeof(CommsGlyphGraphic));
-            go.transform.SetParent(rect, false);
-            icon = go.GetComponent<CommsGlyphGraphic>();
-            icon.raycastTarget = false;
-
-            if (area.height >= 36f)
+            var built = new AvControl[specs.Length];
+            for (int row = 0; row * columns < specs.Length; row++)
             {
-                AvKit.Place(icon.rectTransform, new Rect((area.width - 20f) * 0.5f, -4f, 20f, 20f));
-                if (label != null)
-                {
-                    AvKit.Place(label.rectTransform, new Rect(0f, -(area.height - 16f), area.width, 14f));
-                    label.fontSizeMax = AvTokens.FontMicro;
-                    label.fontSize = AvTokens.FontMicro;
-                    label.alignment = TextAlignmentOptions.Center;
-                }
+                int count = Mathf.Min(columns, specs.Length - row * columns);
+                var rowSpecs = new AvControl.Spec[count];
+                Array.Copy(specs, row * columns, rowSpecs, 0, count);
+                AvButtons line = page.Buttons(rowSpecs);
+                for (int c = 0; c < count; c++) built[row * columns + c] = line.Controls[c];
             }
-            else
-            {
-                AvKit.Place(icon.rectTransform, new Rect(6f, -(area.height - 16f) * 0.5f, 16f, 16f));
-                if (label != null)
-                {
-                    AvKit.Place(label.rectTransform, new Rect(24f, 0f, area.width - 28f, area.height));
-                    label.alignment = TextAlignmentOptions.MidlineLeft;
-                }
-            }
-            icon.Set(glyph, tint, 1.1f);
-            return button;
+            return built;
         }
 
-        /// <summary>An empty transform at a rect, so a list row can be shown and hidden as one.</summary>
-        private static RectTransform Container(RectTransform parent, Rect area, string name)
+        /// <summary>A wrapped, resizing line of secondary prose (replaces the v1 "hint"/"row-sub" labels).</summary>
+        private sealed class AvNote : AvPart
         {
-            var go = new GameObject(name, typeof(RectTransform));
-            var rect = (RectTransform)go.transform;
-            rect.SetParent(parent, false);
-            AvKit.Place(rect, area);
-            return rect;
+            private readonly TMP_Text text;
+
+            public AvNote(RectTransform parent, string initial = "")
+            {
+                Rect = AvLay.Child(parent, "Note");
+                text = AvText.Make(Rect, "Text", AvTextRole.ProseSmall, initial ?? "", TextAlignmentOptions.TopLeft, true);
+                Restyle();
+            }
+
+            public string Text
+            {
+                get => text.text;
+                set { if (text.text != (value ?? "")) text.text = value ?? ""; }
+            }
+
+            public override float Measure(float width) => Mathf.Max(AvGridTokens.RowDense, AvText.Height(text, width));
+            public override void Place(AvSlot s) { base.Place(s); AvLay.Fill(text.rectTransform); }
+            public override void Restyle() => text.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
+        }
+
+        private static void Show(AvPart part, bool visible)
+        {
+            if (part?.Rect != null && part.Rect.gameObject.activeSelf != visible) part.Rect.gameObject.SetActive(visible);
         }
 
         private static void Show(Component component, bool visible)
         {
             if (component != null && component.gameObject.activeSelf != visible) component.gameObject.SetActive(visible);
         }
-
-        private static Color ToneColour(CommsTone tone) => CommsMesh.Tone(tone);
 
         private static string Ago(float seconds)
         {
