@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using System.Text;
+using NOAvionics;
 using NOAvionics.Ui;
 using TMPro;
 using UnityEngine;
@@ -23,7 +24,7 @@ public static class OpsWindowUnityCheck
 {
     private const BindingFlags Hidden = BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public;
     private const BindingFlags Static = BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public;
-    private static readonly Assembly Mod = typeof(AvScreen).Assembly;
+    private static readonly Assembly Mod = typeof(AvConsole).Assembly;
     private static readonly float[] LegacyRails = { 24f, 320f, 1616f };
 
     private static readonly (string Name, int PixelW, int PixelH, float CanvasW, float CanvasH)[] Screens =
@@ -72,6 +73,9 @@ public static class OpsWindowUnityCheck
         Func<bool> reduce = () => true;
         var window = (Component)type.GetMethod("Create", Static).Invoke(null, new object[] { reduce });
         ((Behaviour)window).enabled = false;
+        var helpScope = window.GetComponentInChildren<AvHelpScope>(true);
+        Check(helpScope != null && helpScope.GetType().GetField("Footer", Hidden).GetValue(helpScope) != null,
+            "The OPS window must host a hover-help footer scope for its controls.");
         var canvas = window.GetComponent<Canvas>();
         canvas.GetComponent<CanvasScaler>().enabled = false;
         canvas.renderMode = RenderMode.WorldSpace;
@@ -102,10 +106,22 @@ public static class OpsWindowUnityCheck
         rect.position = new Vector3(0f, 0f, 5f);
         var image = new GameObject("Terrain", typeof(RectTransform), typeof(RawImage));
         image.transform.SetParent(rect, false);
-        AvKit.Stretch((RectTransform)image.transform);
+        AvLay.Fill((RectTransform)image.transform);
         image.GetComponent<RawImage>().texture = BusyTexture(480, 270);
-        AvKit.Label(rect, "THEATRE WIRE · BRAVO HOLDS NORTH RIDGE · SAM SITE DESTROYED AT 26/-4 · INTERCEPT VECTOR 045",
-            new Rect(0f, 0f, w, 36f), Color.white, 14f, FontStyles.Bold, TextAlignmentOptions.Center);
+        Label(rect, "THEATRE WIRE · BRAVO HOLDS NORTH RIDGE · SAM SITE DESTROYED AT 26/-4 · INTERCEPT VECTOR 045",
+            new Rect(0f, 0f, w, 36f), Color.white, AvTextRole.Head, TextAlignmentOptions.Center);
+    }
+
+    /// <summary>A filled rect placed from its top-left (y is a downward offset), the harness's stand-in for the retired v1 panel call.</summary>
+    private static void Panel(RectTransform parent, Rect area, Color color) =>
+        AvLay.Place(AvLay.Solid(parent, "Panel", color).rectTransform, area.x, -area.y, area.width, area.height);
+
+    private static void Label(RectTransform parent, string text, Rect area, Color color, AvTextRole role,
+        TextAlignmentOptions align = TextAlignmentOptions.MidlineLeft)
+    {
+        TMP_Text label = AvText.Make(parent, "Label", role, text, align);
+        label.color = color;
+        AvLay.Place(label.rectTransform, area.x, -area.y, area.width, area.height);
     }
 
     private static Texture2D busy;
@@ -170,11 +186,11 @@ public static class OpsWindowUnityCheck
             object skin = style.GetMethod(rooms[r].Skin, Static).Invoke(null, null);
             var surface = (Color)style.GetProperty(rooms[r].Surface, Static).GetValue(null);
             float x = r * columnW;
-            AvKit.Panel(root, new Rect(x, 0f, columnW, sheetH), surface.WithAlpha(1f));
+            Panel(root, new Rect(x, 0f, columnW, sheetH), surface.WithAlpha(1f));
             inks.Add((Color)skin.GetType().GetField("Ink").GetValue(skin));
             glyphs.Add((Sprite)skin.GetType().GetField("Glyph").GetValue(skin));
-            AvKit.Label(root, rooms[r].Style.Replace("Style", "").ToUpperInvariant() + " SKIN", new Rect(x + 16f, -10f, columnW - 32f, 18f),
-                inks[r], 12f, FontStyles.Bold);
+            Label(root, rooms[r].Style.Replace("Style", "").ToUpperInvariant() + " SKIN", new Rect(x + 16f, 10f, columnW - 32f, 18f),
+                inks[r], AvTextRole.Label);
             Primitive("ArcGauge", root, new Rect(x + 16f, -40f, 110f, 126f), skin, g => Call(g, "Set", 0.62f, "62%", "FITTED"));
             Primitive("PipTrack", root, new Rect(x + 150f, -48f, columnW - 170f, 40f), skin, g => Call(g, "Set", 3, 2, "3 OF 6 · 2 PLANNED"),
                 6);
@@ -328,6 +344,9 @@ public static class OpsWindowUnityCheck
         Component roomControl = child.AddComponent(control);
         int clicks = 0;
         Call(roomControl, "SetAction", (Action)(() => clicks++));
+        Call(roomControl, "WithTooltip", "Hover help text");
+        Check(roomControl.GetComponent<AvHelpTip>() != null && roomControl.GetComponent<AvHelpTip>().Text == "Hover help text",
+            "A room control's tooltip must reach the footer through AvHelpTip.");
         Call(roomControl, "OnPointerClick", pointer);
         Check(clicks == 0, "Dragging across a map marker must not select it.");
         Object.DestroyImmediate(go);

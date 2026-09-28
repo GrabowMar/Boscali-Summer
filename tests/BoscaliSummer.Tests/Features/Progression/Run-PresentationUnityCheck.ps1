@@ -18,11 +18,13 @@ Get-ChildItem -LiteralPath 'C:/Program Files (x86)/Steam/steamapps/common/Nuclea
 } | Copy-Item -Destination "$PreviewDirectory/Assets/"
 Copy-Item -LiteralPath "$repo/bin/Release/netstandard2.1/BoscaliSummer.dll" -Destination "$PreviewDirectory/Assets/"
 Copy-Item -LiteralPath "$PSScriptRoot/PresentationUnityCheck.cs", "$PSScriptRoot/BoscaliPresentationPreview.asmdef" -Destination "$PreviewDirectory/Assets/Harness/"
-Copy-Item -LiteralPath "$repo/AvionicsUi/avionics.avss" -Destination "$PreviewDirectory/NOAvionics/"
 # SuperEventAlert deliberately refuses Application.isBatchMode. Keep the Editor window hidden,
 # but run a normal Editor process so the production overlay builder and camera path are exercised.
 $method = if ($SqdOnly) { 'PresentationUnityCheck.RunSqdOnly' } elseif ($EventAlertOnly) { 'PresentationUnityCheck.RunEventAlertOnly' } else { 'PresentationUnityCheck.Run' }
-$arguments = @('-disable-assembly-updater', '-projectPath', ('"' + $PreviewDirectory + '"'), '-executeMethod', $method, '-logFile', ('"' + "$PreviewDirectory/check.log" + '"'))
+# The SQD-only check never builds the event alert, so it can and must run headless (a windowed Editor that
+# fails to Exit would hang forever); the full run keeps the windowed Editor for SuperEventAlert.
+$headless = @(if ($SqdOnly) { '-batchmode' })
+$arguments = $headless + @('-disable-assembly-updater', '-projectPath', ('"' + $PreviewDirectory + '"'), '-executeMethod', $method, '-logFile', ('"' + "$PreviewDirectory/check.log" + '"'))
 $process = Start-Process -FilePath $Unity -ArgumentList $arguments -WorkingDirectory $PreviewDirectory -WindowStyle Hidden -PassThru
 $process.WaitForExit()
 Write-Output "Results and renders: $PreviewDirectory"

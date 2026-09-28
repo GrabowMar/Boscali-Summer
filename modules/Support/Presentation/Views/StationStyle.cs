@@ -42,14 +42,14 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             Limb = RoomPaint.Ink("room-space-limb", AvTheme.RailInfo);
             LimbSky = RoomPaint.Fill("room-space-limb", AvTheme.Surface);
             Console = RoomPaint.Fill("room-space-console", AvTheme.Surface);
-            ConsoleEdge = AvStyleHost.Resolve(AvStyleHost.Style("room-space-console").Border, AvTheme.Hairline);
+            ConsoleEdge = RoomPaint.Edge("room-space-console", AvTheme.Hairline);
         }
 
         /// <summary>Tracked caps in the wall's thin voice.</summary>
         public static TMP_Text Text(RectTransform parent, string text, Rect area, float size, Color color,
             float tracking = BodyTracking, TextAlignmentOptions align = TextAlignmentOptions.MidlineLeft, bool bold = false)
         {
-            TMP_Text label = AvKit.Label(parent, text, area, color, size,
+            TMP_Text label = Chrome.Label(parent, text, area, color, size,
                 (bold ? FontStyles.Bold : FontStyles.Normal) | FontStyles.UpperCase, align);
             label.characterSpacing = tracking;
             return label;

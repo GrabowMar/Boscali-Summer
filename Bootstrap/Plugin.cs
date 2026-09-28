@@ -24,11 +24,12 @@ namespace BoscaliSummer
             Logger = base.Logger;
             Settings = new ModConfiguration(Config);
 
-            // The panels' look lives in a stylesheet, not in literals. The embedded copy is
+            // The panels' look lives in stylesheets, not in literals. The embedded sheets are
             // always valid; pointing the host at the config directory is what lets a player
-            // drop their own avionics.avss beside it and retune every panel in both mods
-            // without a rebuild. Wing Command configures the same path on purpose.
+            // drop their own palette sheets under NOAvionics/ and retune every panel in both
+            // mods without a rebuild. Wing Command configures the same path on purpose.
             AvStyleHost.Configure(Paths.ConfigPath, Logger.LogInfo, Logger.LogWarning);
+            AvBundle.Load(Logger.LogInfo);
 
             featureHost = ModCompositionRoot.Start(Logger, Settings);
             Logger.LogInfo($"Effective fire tuning: bullet ignition={Settings.FireAndDestruction.BulletIgnitionChance:0.####}, " +

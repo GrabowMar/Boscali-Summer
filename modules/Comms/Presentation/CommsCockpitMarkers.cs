@@ -4,6 +4,7 @@ using BoscaliSummer.Features.Comms.Domain;
 using BoscaliSummer.Features.Comms.Runtime;
 using BoscaliSummer.Framework.Lifecycle;
 using BoscaliSummer.Runtime;
+using NOAvionics;
 using NOAvionics.Ui;
 using TMPro;
 using UnityEngine;
@@ -214,7 +215,7 @@ namespace BoscaliSummer.Features.Comms.Presentation
             group.interactable = false;
 
             canvasRect = (RectTransform)root.transform;
-            TMP_FontAsset font = VanillaHudStyle.TryCockpit(out VanillaHudStyle.CockpitStyle style) ? style.Font : AvFont.Font;
+            TMP_FontAsset font = VanillaHudStyle.TryCockpit(out VanillaHudStyle.CockpitStyle style) ? style.Font : AvType.VanillaFallback;
             markers = new Marker[MaxMarkers];
             for (int i = 0; i < markers.Length; i++) markers[i] = new Marker(canvasRect, font);
         }
@@ -248,8 +249,8 @@ namespace BoscaliSummer.Features.Comms.Presentation
                 labelRect.sizeDelta = new Vector2(320f, 20f);
                 labelRect.anchoredPosition = new Vector2(0f, -15f);
                 label = labelGo.GetComponent<TextMeshProUGUI>();
+                AvType.Apply(label, AvTextRole.Data);
                 if (font != null) label.font = font;
-                label.fontSize = 14f;
                 label.alignment = TextAlignmentOptions.Top;
                 label.enableWordWrapping = false;
                 label.richText = false;

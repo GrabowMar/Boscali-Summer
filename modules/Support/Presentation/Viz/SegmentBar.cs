@@ -28,7 +28,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
             Color[] colours = { success, fail, loss };
             for (int i = 0; i < 3; i++)
             {
-                segments[i] = AvKit.Panel(parent, new Rect(area.x, area.y, 0f, 10f), colours[i]);
+                segments[i] = Chrome.Panel(parent, new Rect(area.x, area.y, 0f, 10f), colours[i]);
                 Sprite pattern = i == 1 ? skin.Pattern ?? OpsSprites.Guard : i == 2 ? OpsSprites.Dash : null;
                 if (pattern == null) continue;
                 segments[i].sprite = pattern;

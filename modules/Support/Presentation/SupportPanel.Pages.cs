@@ -1,239 +1,249 @@
 using System;
-using BoscaliSummer.Features.Support.Domain.Layout;
-using BoscaliSummer.Features.Support.Domain;
-using BoscaliSummer.Features.Support.Presentation.Viz;
-using BoscaliSummer.Features.Support.Presentation.Window;
-using BoscaliSummer.Features.Support.Runtime;
 using NOAvionics;
 using NOAvionics.Ui;
 using TMPro;
 using UnityEngine;
-using UnityEngine.UI;
 
 namespace BoscaliSummer.Features.Support.Presentation
 {
     /// <summary>
-    /// What every OPS page shares inside the MFD shell: one title row carrying a compact
-    /// STATUS / ACTIONS toggle (it replaces the second full-width tab row, M1), the pinned ARMED
-    /// banner with ABORT, a guarded switch, and the adaptive stack that fits a page to the panel
-    /// height (420 / 596 / 896) by priority tier instead of scrolling a fixed column (M2). The pages
-    /// themselves stay unique per domain.
+    /// What every OPS page shares inside the MFD shell, on kit v2 (spec §9.2): a compact
+    /// STATUS / ACTIONS toggle beside the domain icon and title instead of a second full-width
+    /// tab row, one always-visible hint/armed line (status is a word, never colour alone), and a
+    /// small newest-first log bound to the caller-owned ring buffer (SPACE/CYBER/SPEC OPS loops,
+    /// which the OPS window rooms also take by reference — the array identity must not change).
     /// </summary>
     internal sealed partial class SupportPanel
     {
-        private const float PageRowHeight = 28f;
-        private const float ToggleWidth = 168f;
-        private const float BannerRowHeight = 30f;
-
-        /// <summary>The title row with the STATUS / ACTIONS toggle; returns the rect under it.</summary>
-        private static Rect PageFrame(RectTransform root, Rect body, OpsDomain domain, string title, int sub, Action<int> select,
-            string[] tips, out TMP_Text caption)
+        /// <summary>
+        /// Per-domain STATUS / ACTIONS switch. Kit v2 has no "page inside a page" component for
+        /// this (a console's own <see cref="AvTabBar"/> would be a second full-width tab row,
+        /// which spec §9.2 forbids), so this hosts two independent nested <see cref="AvFlow"/>s —
+        /// built once, toggled by GameObject activity — behind a compact two-segment header. Noted
+        /// as a kit gap in the slice report.
+        /// </summary>
+        private sealed class OpsSubPage : AvPart
         {
-            OpsSprites.Ensure();
-            AvKit.Rule(root, new Rect(body.x, body.y - 3f, 3f, PageRowHeight - 3f), AvTheme.RailInfo);
-            int mark = domain == OpsDomain.Space ? OpsSprites.G.Space
-                : domain == OpsDomain.Cyber ? OpsSprites.G.Cyber : OpsSprites.G.SpecOps;
-            Image glyph = AvKit.Panel(root, new Rect(body.x + 10f, body.y - 6f, 16f, 16f),
-                AvTheme.RailInfo, OpsSprites.Glyph(mark));
-            glyph.raycastTarget = false;
-            caption = AvKit.Label(root, title, new Rect(body.x + 32f, body.y - 2f,
-                body.width - ToggleWidth - 40f, PageRowHeight - 2f),
-                AvTheme.TextPrimary, AvTokens.FontLead, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
-            caption.characterSpacing = 1f;
-            caption.enableAutoSizing = true;
-            caption.fontSizeMin = AvTokens.FontMicro;
-            caption.fontSizeMax = AvTokens.FontLead;
-            float half = ToggleWidth * 0.5f;
-            for (int i = 0; i < SubLabels.Length; i++)
+            private const float HeaderH = 26f, ToggleW = 176f;
+            private readonly TMP_Text icon, title;
+            private readonly AvControl statusTab, actionsTab;
+            private readonly RectTransform statusHost, actionsHost;
+            private int sub;
+
+            public AvFlow Status { get; }
+            public AvFlow Actions { get; }
+
+            public OpsSubPage(RectTransform parent, AvTicker ticker, float width, AvIcon domainIcon, string titleText,
+                System.Action<int> onSelect, string statusHelp = null, string actionsHelp = null)
             {
-                int index = i;
-                AvButton segment = AvStyled.Button(root,
-                    new Rect(body.x + body.width - ToggleWidth + i * half,
-                        body.y, half - (i == 0 ? 2f : 0f), PageRowHeight),
-                    SubLabels[i], "tab", () => select(index), AvButtonStyle.Tab);
-                if (tips != null && i < tips.Length) segment.WithTooltip(tips[i]);
-                segment.SetLatched(i == sub);
+                Rect = AvLay.Child(parent, "SubPage " + titleText);
+                icon = AvIcons.Make(Rect, domainIcon, AvGridTokens.IconHead, Color.white);
+                title = AvText.Make(Rect, "Title", AvTextRole.Head, titleText);
+                AvText.Fit(title, false);
+                statusTab = AvControl.Make(Rect, new AvControl.Spec("STATUS", () => Select(0, onSelect), AvButtonStyle.Default, AvIcon.InfoCircle), "tab");
+                actionsTab = AvControl.Make(Rect, new AvControl.Spec("ACTIONS", () => Select(1, onSelect), AvButtonStyle.Default, AvIcon.Bolt), "tab");
+                statusTab.Help = statusHelp;
+                actionsTab.Help = actionsHelp;
+                statusHost = AvLay.Child(Rect, "Status"); Status = new AvFlow(statusHost, ticker, width, 0f);
+                actionsHost = AvLay.Child(Rect, "Actions"); Actions = new AvFlow(actionsHost, ticker, width, 0f);
+                Select(0, null);
+                Restyle();
             }
-            AvKit.Rule(root, new Rect(body.x, body.y - PageRowHeight - 3f, body.width, 1f), AvTheme.RailInfo.WithAlpha(0.7f));
-            AvKit.Rule(root, new Rect(body.x, body.y - PageRowHeight - 3f, 42f, 2f), AvTheme.RailInfo);
-            return new Rect(body.x + 4f, body.y - PageRowHeight - 8f,
-                body.width - 8f, body.height - PageRowHeight - 8f);
-        }
 
-        /// <summary>A black-glass instrument with a semantic left rail and calibrated frame ticks.</summary>
-        private static Image InstrumentPlate(RectTransform parent, Rect at, Color tone)
-        {
-            AvKit.Panel(parent, at, AvTheme.SurfaceInert);
-            AvKit.Rule(parent, new Rect(at.x, at.y, at.width, 1f), AvTheme.RailInfo.WithAlpha(0.65f));
-            AvKit.Rule(parent, new Rect(at.x + at.width - 1f, at.y - 10f, 1f, 10f), AvTheme.RailInfo.WithAlpha(0.65f));
-            AvKit.Rule(parent, new Rect(at.x + 12f, at.y - at.height + 1f, at.width - 24f, 1f), AvTheme.Hairline);
-            return AvKit.Rule(parent, new Rect(at.x, at.y, 3f, at.height), tone);
-        }
+            public int Sub => sub;
 
-        /// <summary>A section container placed at a stack height; hidden when the stack gave it none.</summary>
-        private static RectTransform Section(RectTransform root, string name, Rect at)
-        {
-            var go = new GameObject(name, typeof(RectTransform));
-            var rect = (RectTransform)go.transform;
-            rect.SetParent(root, false);
-            AvKit.Place(rect, at);
-            go.SetActive(at.height > 0.5f);
-            return rect;
+            private void Select(int index, System.Action<int> onSelect)
+            {
+                sub = Mathf.Clamp(index, 0, 1);
+                statusTab.Latched = sub == 0;
+                actionsTab.Latched = sub == 1;
+                statusHost.gameObject.SetActive(sub == 0);
+                actionsHost.gameObject.SetActive(sub == 1);
+                onSelect?.Invoke(sub);
+            }
+
+            public override float Measure(float width)
+            {
+                AvFlow active = sub == 0 ? Status : Actions;
+                active.Relayout();
+                return HeaderH + active.ContentHeight;
+            }
+
+            public override void Place(AvSlot s)
+            {
+                base.Place(s);
+                AvLay.Place(icon.rectTransform, 0f, 5f, 16f, 16f);
+                AvLay.Place(title.rectTransform, 22f, 0f, Mathf.Max(0f, s.W - 22f - ToggleW), HeaderH);
+                float half = (ToggleW - 2f) * 0.5f;
+                AvLay.Place(statusTab.Rect, s.W - ToggleW, 0f, half, HeaderH);
+                AvLay.Place(actionsTab.Rect, s.W - ToggleW + half + 2f, 0f, half, HeaderH);
+                float bodyY = HeaderH + 4f, bodyH = Mathf.Max(0f, s.H - bodyY);
+                AvLay.Place(statusHost, 0f, bodyY, s.W, bodyH);
+                AvLay.Place(actionsHost, 0f, bodyY, s.W, bodyH);
+            }
+
+            public override void Restyle()
+            {
+                title.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("section-title").Color, AvTheme.RailInfo);
+                icon.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("section-icon").Color, AvTheme.RailInfo);
+                statusTab.Restyle();
+                actionsTab.Restyle();
+            }
         }
 
         /// <summary>
-        /// Stack the pieces into <paramref name="content"/> top to bottom in index order. Every piece
-        /// after the first carries its gap, so a piece the height cannot afford leaves no hole; the
-        /// fill piece (last tier) takes what is left down to the bottom edge.
+        /// One always-visible status/hint line: the page's normal hint, or (when an ability of
+        /// this domain is armed) "ARMED · name · right-click the map". Fixed height regardless of
+        /// text so switching between the two never reflows the page around it (rows stay put).
         /// </summary>
-        private static Rect[] Stack(Rect content, StackPiece[] pieces, float gap)
+        private sealed class HintLine : AvPart
         {
-            var padded = new StackPiece[pieces.Length];
-            for (int i = 0; i < pieces.Length; i++)
+            private readonly TMP_Text text;
+            private AvState state = AvState.Info;
+
+            public HintLine(RectTransform parent)
             {
-                float g = i == 0 ? 0f : gap;
-                padded[i] = new StackPiece(pieces[i].Tier, pieces[i].Preferred + g, pieces[i].Minimum + g, pieces[i].Fill);
+                Rect = AvLay.Child(parent, "Hint");
+                text = AvText.Make(Rect, "Text", AvTextRole.Label, "", TextAlignmentOptions.MidlineLeft, true);
+                Restyle();
             }
-            var heights = new float[pieces.Length];
-            AdaptiveStack.Fit(padded, padded.Length, content.height, heights);
-            var rects = new Rect[pieces.Length];
-            float y = content.y;
-            bool placed = false;
-            float bottom = content.y - content.height;
-            for (int i = 0; i < pieces.Length; i++)
+
+            public void Set(string value, AvState s)
             {
-                if (heights[i] <= 0f)
+                string composed = AvStates.Glyph(s) + (value ?? "");
+                if (text.text == composed && state == s) return;
+                text.text = composed;
+                state = s;
+                Restyle();
+            }
+
+            public override float Measure(float width) => Mathf.Max(20f, AvText.Height(text, width));
+            public override void Place(AvSlot s) { base.Place(s); AvLay.Fill(text.rectTransform); }
+
+            public override void Restyle() =>
+                text.color = state == AvState.Inert
+                    ? AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim)
+                    : AvStyleHost.Resolve(AvStyleHost.FuiStyle("chip " + AvStates.Class(state)).Color, AvTheme.Dim);
+        }
+
+        /// <summary>
+        /// A small fixed-height newest-first log bound to a caller-owned ring buffer (the
+        /// SPACE/CYBER/SPEC OPS loops the OPS window rooms take by array reference); written only
+        /// when a line actually changes.
+        /// </summary>
+        private sealed class LogLines : AvPart
+        {
+            private readonly TMP_Text[] lines;
+            private readonly string[] shown;
+
+            public LogLines(RectTransform parent, int count)
+            {
+                Rect = AvLay.Child(parent, "Log");
+                lines = new TMP_Text[count];
+                shown = new string[count];
+                for (int i = 0; i < count; i++)
+                    lines[i] = AvText.Make(Rect, "Line" + i, AvTextRole.ProseSmall, "", TextAlignmentOptions.TopLeft, true);
+                Restyle();
+            }
+
+            public void Write(string[] source)
+            {
+                for (int i = 0; i < lines.Length; i++)
                 {
-                    rects[i] = new Rect(content.x, y, content.width, 0f);
-                    continue;
+                    string v = source != null && i < source.Length ? source[i] : null;
+                    if (shown[i] == v) continue;
+                    shown[i] = v;
+                    lines[i].text = v ?? "";
                 }
-                float g = i == 0 ? 0f : gap;
-                if (placed) y -= g;
-                float h = pieces[i].Fill ? y - bottom : heights[i] - g;
-                rects[i] = new Rect(content.x, y, content.width, Mathf.Max(0f, h));
-                y -= rects[i].height;
-                placed = true;
             }
-            return rects;
-        }
 
-        // ---- ARMED banner -------------------------------------------------------------------------
+            public override float Measure(float width) => lines.Length * 17f;
 
-        /// <summary>A strip that either says what the page is for, or pins the armed ability with ABORT.</summary>
-        private sealed class ArmedBanner
-        {
-            public Image Fill, Rail;
-            public TMP_Text Text;
-            public AvButton Abort, Next;
-        }
-
-        private ArmedBanner BuildArmedBanner(RectTransform parent, Rect at, string nextLabel, Action nextAction, string nextTip)
-        {
-            var banner = new ArmedBanner
+            public override void Place(AvSlot s)
             {
-                Fill = AvKit.Panel(parent, at, AvTheme.SurfaceInert),
-                Rail = AvKit.Rule(parent, new Rect(at.x, at.y, 3f, at.height), AvTheme.RailInfo)
-            };
-            AvKit.Rule(parent, new Rect(at.x + 3f, at.y - at.height + 1f, at.width - 3f, 1f), AvTheme.RailInfo.WithAlpha(0.6f));
-            banner.Text = SingleLine(AvKit.Label(parent, "", new Rect(at.x + 10f, at.y, at.width - 124f, at.height), AvTheme.Dim,
-                AvTokens.FontSmall, FontStyles.Bold, TextAlignmentOptions.MidlineLeft));
-            // Hints vary in length with live figures; shrink toward the 10 px floor before any ellipsis.
-            banner.Text.enableAutoSizing = true;
-            banner.Text.fontSizeMin = AvTokens.FontMicro;
-            banner.Text.fontSizeMax = AvTokens.FontSmall;
-            banner.Abort = AvStyled.Button(parent, new Rect(at.x + at.width - 88f, at.y - 2f, 84f, at.height - 4f), "ABORT", "btn",
-                () =>
-                {
-                    support.Disarm();
-                    nextRefresh = 0f;
-                }, AvButtonStyle.Danger).WithTooltip("Disarm the pending order; nothing is spent.");
-            banner.Abort.gameObject.SetActive(false);
-            banner.Next = AvStyled.Button(parent, new Rect(at.x + at.width - 106f, at.y - 2f, 102f, at.height - 4f),
-                nextLabel, "btn", nextAction, AvButtonStyle.Primary).WithTooltip(nextTip);
-            banner.Next.gameObject.SetActive(false);
-            return banner;
+                base.Place(s);
+                for (int i = 0; i < lines.Length; i++)
+                    AvLay.Place(lines[i].rectTransform, 0f, i * 17f, s.W, 17f);
+            }
+
+            public override void Restyle()
+            {
+                for (int i = 0; i < lines.Length; i++)
+                    lines[i].color = i == 0
+                        ? AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-name").Color, AvTheme.TextPrimary)
+                        : AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
+            }
         }
 
-        /// <summary>Pins the ability of this tab that is armed, else shows the page's hint.</summary>
-        private void PaintArmedBanner(ArmedBanner banner, int tab, string hint, Color hintTone, bool showNext = true)
+        /// <summary>Hover help for an ability row: on the trailing control and the row body, re-set only
+        /// when the sentence changes (the help follows state, e.g. the readiness word).</summary>
+        private static void SetRowHelp(AvRow row, AvControl button, string text)
         {
-            SupportActionDefinition armed = null;
-            if (support.ArmedAction.HasValue)
-                foreach (SupportActionDefinition action in support.Actions)
-                    if (action.Id == support.ArmedAction.Value && HomeTab(action) == tab) armed = action;
-            bool on = armed != null;
-            if (banner.Abort.gameObject.activeSelf != on) banner.Abort.gameObject.SetActive(on);
-            bool next = showNext && !on && !support.ArmedAction.HasValue && !support.LocalPickArmed;
-            if (banner.Next.gameObject.activeSelf != next) banner.Next.gameObject.SetActive(next);
-            string text = on ? "ARMED · " + armed.Name + " · RIGHT-CLICK THE MAP" : hint ?? "";
-            if (banner.Text.text != text) banner.Text.text = text;
-            banner.Text.color = on ? AvTheme.RailCaution : hintTone;
-            banner.Rail.color = on ? AvTheme.RailCaution : hintTone == AvTheme.Dim ? AvTheme.RailInert : hintTone;
-            banner.Fill.color = on ? AvTheme.RailCaution.WithAlpha(0.1f) : AvTheme.SurfaceInert;
+            if (button != null)
+            {
+                if (button.Help == text) return;
+                button.Help = text;
+            }
+            row.Help = text;
         }
 
-        // ---- Guarded switch ---------------------------------------------------------------------
+        /// <summary>Monospaced text for the terminal-flavoured CYBER shell log.</summary>
+        private static string Mono(string text) => string.IsNullOrEmpty(text) ? "" : "<mspace=0.6em>" + text;
+
+        /// <summary>A wrapped paragraph (briefing copy, advice text) that grows the flow rather than
+        /// clipping. Sentence case is the caller's, per spec §5.2 (prose keeps its authored case).</summary>
+        private sealed class NoteText : AvPart
+        {
+            private readonly TMP_Text text;
+            private AvState state = AvState.Inert;
+
+            public NoteText(RectTransform parent, AvTextRole role = AvTextRole.Prose)
+            {
+                Rect = AvLay.Child(parent, "Note");
+                text = AvText.Make(Rect, "Text", role, "", TextAlignmentOptions.TopLeft, true);
+                Restyle();
+            }
+
+            public void Set(string value, AvState s = AvState.Inert)
+            {
+                string v = value ?? "";
+                if (text.text == v && state == s) return;
+                text.text = v;
+                state = s;
+                Restyle();
+            }
+
+            public override float Measure(float width) => text.text.Length == 0 ? 0f : AvText.Height(text, width);
+            public override void Place(AvSlot s) { base.Place(s); AvLay.Fill(text.rectTransform); }
+
+            public override void Restyle() =>
+                text.color = state == AvState.Inert
+                    ? AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim)
+                    : AvStyleHost.Resolve(AvStyleHost.FuiStyle("chip " + AvStates.Class(state)).Color, AvTheme.Dim);
+        }
 
         /// <summary>
-        /// A switch under a hinged cover: the cover (hatched) is down while the order cannot go, lifted
-        /// when it can; latched when the order is armed. One press arms, as before; the cover is how
-        /// readiness reads at a glance.
+        /// A small bank of read-only annunciators (health, resources, holdings), reusing kit v2's
+        /// own <see cref="AvChip"/> (rail + word, R1 glyph) in rows of up to four rather than a
+        /// bespoke tile widget.
         /// </summary>
-        private sealed class GuardedSwitch
+        private static AvChip[] BuildChipRow(AvFlow flow, string[] keys)
         {
-            public RoomControl Control;
-            public Image Body, Cover, Hinge;
-            public Image[] Edge;
-            public TMP_Text Label;
-            public float Height;
+            var chips = new AvChip[keys.Length];
+            for (int i = 0; i < chips.Length; i++) chips[i] = new AvChip(flow.Content);
+            int at = 0;
+            while (at < chips.Length)
+            {
+                int n = Mathf.Min(4, chips.Length - at);
+                var line = new AvPart[n];
+                for (int k = 0; k < n; k++) line[k] = chips[at + k];
+                flow.Row(line);
+                at += n;
+            }
+            return chips;
         }
 
-        private static GuardedSwitch BuildGuardedSwitch(RectTransform parent, Rect at, Action click)
-        {
-            var sw = new GuardedSwitch { Height = at.height };
-            sw.Control = RoomControl.Create(parent, at, click, "GuardedSwitch");
-            RectTransform host = sw.Control.Rect;
-            sw.Body = AvKit.Panel(host, new Rect(0f, 0f, at.width, at.height), AvTheme.SurfaceInert, AvSprites.Control);
-            sw.Edge = AvKit.Outline(host, new Rect(0f, 0f, at.width, at.height), AvTheme.Frame);
-            sw.Label = AvKit.Label(host, "", new Rect(0f, 0f, at.width, at.height), AvTheme.TextPrimary, AvTokens.FontSmall,
-                FontStyles.Bold, TextAlignmentOptions.Center);
-            OpsSprites.Ensure();
-            sw.Cover = AvKit.Panel(host, new Rect(0f, 0f, at.width, at.height), AvTheme.RailInert.WithAlpha(0.45f));
-            sw.Cover.sprite = OpsSprites.Guard;
-            sw.Cover.type = Image.Type.Tiled;
-            sw.Hinge = AvKit.Rule(host, new Rect(0f, 0f, at.width, 3f), AvTheme.RailInfo);
-            sw.Control.Changed = _ => PaintSwitch(sw);
-            return sw;
-        }
-
-        private static void SetSwitch(GuardedSwitch sw, string text, bool enabled, bool latched, string tip)
-        {
-            if (sw.Label.text != text) sw.Label.text = text;
-            sw.Control.SetEnabled(enabled);
-            sw.Control.SetLatched(latched);
-            sw.Control.WithTooltip(tip);
-            PaintSwitch(sw);
-        }
-
-        private static void PaintSwitch(GuardedSwitch sw)
-        {
-            RoomControl c = sw.Control;
-            bool open = c.Enabled || c.Latched;
-            // Closed: the hatched cover sits over the switch. Open: it is lifted to a strip at the hinge.
-            RectTransform cover = sw.Cover.rectTransform;
-            cover.sizeDelta = new Vector2(cover.sizeDelta.x, open ? 6f : sw.Height);
-            Color coverTone = c.Latched ? AvTheme.RailCaution : c.Enabled ? AvTheme.RailInfo : AvTheme.RailInert;
-            sw.Cover.color = coverTone.WithAlpha(open ? 0.85f : 0.4f);
-            sw.Hinge.color = coverTone;
-            sw.Body.color = c.Latched ? AvTheme.RailCaution.WithAlpha(0.35f)
-                : !c.Enabled ? AvTheme.SurfaceInert
-                : c.Pressed ? AvTheme.Accent.WithAlpha(0.45f) : c.Hovered ? AvTheme.Accent.WithAlpha(0.25f) : AvTheme.SurfaceRaised;
-            Color edge = c.Latched ? AvTheme.RailCaution : c.Enabled ? AvTheme.Accent : AvTheme.Hairline;
-            for (int i = 0; i < sw.Edge.Length; i++) sw.Edge[i].color = edge;
-            sw.Label.color = c.Enabled || c.Latched ? AvTheme.TextPrimary : AvTheme.Disabled;
-        }
-
-        /// <summary>Monospaced text for the terminal-flavoured CYBER pages.</summary>
-        private static string Mono(string text) => string.IsNullOrEmpty(text) ? "" : "<mspace=0.6em>" + text;
+        private static void SetChip(AvChip chip, string key, string word, AvState state) =>
+            chip.Set(key + " " + word, state);
     }
 }

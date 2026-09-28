@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using BoscaliSummer.Features.Command.Domain;
 using BoscaliSummer.Framework.Contracts;
 using NOAvionics;
 using NOAvionics.Ui;
@@ -12,32 +13,21 @@ namespace BoscaliSummer.Features.Command.Presentation
     /// <summary>A live theater map with staff proposals and the operation's actual state.</summary>
     internal sealed class StrPlanningWindow : MonoBehaviour
     {
-        private const float Width = 1824f;
-        private const float Height = 968f;
+        private const float Width = 900f;
+        private const float Height = 860f;
         private const int SortOrder = 30001;
         private const int MaxProposals = 3;
         private const int MaxFronts = 6;
-        private readonly TMP_Text[] proposalNames = new TMP_Text[MaxProposals];
-        private readonly TMP_Text[] proposalBriefs = new TMP_Text[MaxProposals];
-        private readonly AvButton[] proposalButtons = new AvButton[MaxProposals];
-        private readonly GameObject[] proposalCards = new GameObject[MaxProposals];
-        private readonly TMP_Text[] frontRows = new TMP_Text[MaxFronts];
-        private readonly Image[] frontMarkers = new Image[MaxFronts];
-        private readonly Image[] proposalMarkers = new Image[MaxProposals];
-        private Image activeMarker;
-        private TMP_Text activeName, activePhase, activeSummary, activeForces, staffLine, mapStatus;
-        private AvButton cancelButton;
-        private readonly AvButton[] postureButtons = new AvButton[3];
-        private Image terrainImage;
-        private RawImage controlImage;
-        private RoomFrontlineGraphic frontGraphic;
-        private RectTransform mapRect;
+
+        private AvWindow window;
+        private AvRow operationRow;
+        private AvRowStack proposals;
+        private AvList fronts;
+        private AvSegmented postureControl;
+        private TheaterMapPart map;
         private ITheaterWarView war;
         private ComMapOverlay overlay;
-        private Canvas canvas;
-        private GameObject surface;
-        private RectTransform planningFrame;
-        private Vector2 fittedCanvasSize;
+        private TheaterWarPosture selectedPosture;
         private float nextRefresh;
         private bool keyboardTouched, keyboardWas, pauseWas;
         private static int closedFrame = -10;
@@ -47,29 +37,24 @@ namespace BoscaliSummer.Features.Command.Presentation
 
         internal static StrPlanningWindow Create(ITheaterWarView war, ComMapOverlay overlay)
         {
-            var go = new GameObject("BoscaliStrategyWindow", typeof(RectTransform), typeof(Canvas),
-                typeof(CanvasScaler), typeof(GraphicRaycaster));
+            var go = new GameObject("BoscaliStrategyWindow", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler));
             var view = go.AddComponent<StrPlanningWindow>();
             view.war = war;
             view.overlay = overlay;
-            view.canvas = go.GetComponent<Canvas>();
-            view.canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            view.canvas.sortingOrder = SortOrder;
-            var scaler = go.GetComponent<CanvasScaler>();
+            Canvas canvas = go.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            canvas.sortingOrder = SortOrder;
+            CanvasScaler scaler = go.GetComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1920f, 1080f);
             scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
             view.Build();
-            view.canvas.enabled = false;
-            view.surface.SetActive(false);
             return view;
         }
 
-        internal void Show(int selection = 0)
+        internal void Show()
         {
-            FitRoom();
-            canvas.enabled = true;
-            surface.SetActive(true);
+            window.Show();
             if (!IsOpen)
             {
                 pauseWas = GameplayUI.AllowPauseKeybind;
@@ -83,7 +68,6 @@ namespace BoscaliSummer.Features.Command.Presentation
                 }
             }
             IsOpen = true;
-            AvButton.ClearTooltip();
             Refresh();
         }
 
@@ -92,14 +76,12 @@ namespace BoscaliSummer.Features.Command.Presentation
             if (!IsOpen) return;
             IsOpen = false;
             closedFrame = Time.frameCount;
-            canvas.enabled = false;
-            surface.SetActive(false);
+            window.Hide();
             GameplayUI.AllowPauseKeybind = pauseWas;
             if (keyboardTouched && Rewired.ReInput.isReady && Rewired.ReInput.controllers != null &&
                 Rewired.ReInput.controllers.Keyboard != null)
                 Rewired.ReInput.controllers.Keyboard.enabled = keyboardWas;
             keyboardTouched = false;
-            AvButton.ClearTooltip();
         }
 
         private void OnDestroy() => Close();
@@ -107,7 +89,6 @@ namespace BoscaliSummer.Features.Command.Presentation
         private void Update()
         {
             if (!IsOpen) return;
-            FitRoom();
             if (Input.GetKeyDown(KeyCode.Escape)) { Close(); return; }
             if (Time.unscaledTime < nextRefresh) return;
             nextRefresh = Time.unscaledTime + .25f;
@@ -115,304 +96,88 @@ namespace BoscaliSummer.Features.Command.Presentation
             Refresh();
         }
 
-        private void FitRoom()
-        {
-            if (planningFrame == null) return;
-            Rect canvasArea = ((RectTransform)transform).rect;
-            float canvasW = canvasArea.width > 0f ? canvasArea.width : 1920f;
-            float canvasH = canvasArea.height > 0f ? canvasArea.height : 1080f;
-            if (Mathf.Abs(fittedCanvasSize.x - canvasW) < .5f &&
-                Mathf.Abs(fittedCanvasSize.y - canvasH) < .5f) return;
-            fittedCanvasSize = new Vector2(canvasW, canvasH);
-            Rect fit = AvRoomFrame.WindowRect(canvasW, canvasH);
-            float scale = Mathf.Min(1f, Mathf.Min(fit.width / Width, fit.height / Height));
-            float shownW = Width * scale, shownH = Height * scale;
-            float x = fit.x + (fit.width - shownW) * .5f;
-            float y = Mathf.Max(fit.y, AvRoomFrame.NotchHeight * scale + 8f);
-            if (y + shownH > canvasH - 8f)
-                y = Mathf.Max(AvRoomFrame.NotchHeight * scale, canvasH - shownH - 8f);
-            planningFrame.localScale = new Vector3(scale, scale, 1f);
-            planningFrame.anchoredPosition = new Vector2(x + shownW * .5f, -(y + shownH * .5f));
-        }
-
         private void Build()
         {
-            var root = (RectTransform)transform;
-            surface = new GameObject("StrategySurface", typeof(RectTransform));
-            var full = (RectTransform)surface.transform;
-            full.SetParent(root, false);
-            AvKit.Stretch(full);
-            Image shade = AvRoomFrame.CreateBackdrop(full, .72f);
-            shade.gameObject.AddComponent<Button>().onClick.AddListener(Close);
-            CanvasGroup group;
-            var frame = AvRoomFrame.CreateFrame(full, "PlanningFrame", out group);
-            planningFrame = frame;
-            group.alpha = 1f;
-            frame.sizeDelta = new Vector2(Width, Height);
-            FitRoom();
-            AvKit.Panel(frame, new Rect(0f, 0f, Width, Height), AvTheme.Ground, AvSprites.Panel)
-                .raycastTarget = true;
-            AvRoomFrame.CreateEdge(frame, new Rect(0f, 0f, 1f, Height), AvTheme.Frame);
-            AvRoomFrame.CreateEdge(frame, new Rect(Width - 1f, 0f, 1f, Height), AvTheme.Frame);
-            AvRoomFrame.CreateEdge(frame, new Rect(0f, -Height + 1f, Width, 1f), AvTheme.Frame);
-            AvRoomFrame.CreateEdge(frame, new Rect(0f, 0f, Width, 1f), AvTheme.Frame);
+            window = AvWindow.Build(transform, "operations-room", "THEATER / OPERATIONS ROOM", Width, Height, SortOrder);
 
-            var notch = new GameObject("StrategyNotch", typeof(RectTransform));
-            var notchRect = (RectTransform)notch.transform;
-            notchRect.SetParent(frame, false);
-            AvKit.Place(notchRect, new Rect(24f, 32f, 164f, AvRoomFrame.NotchHeight));
-            AvRoomFrame.NotchChrome chrome = AvRoomFrame.CreateNotchChrome(notchRect, "STRATEGY", "");
-            AvRoomFrame.LayoutNotch(chrome, 164f);
-            chrome.Fill.color = AvTheme.Surface;
-            chrome.ActiveBar.color = AvTheme.RailReady;
-            chrome.Label.color = AvTheme.TextPrimary;
-            AvButton close = AvKit.HitButton(frame,
-                new Rect(Width - 156f, 32f, 132f, AvRoomFrame.NotchHeight), Close);
-            AvRoomFrame.NotchChrome closeChrome = AvRoomFrame.CreateNotchChrome(
-                (RectTransform)close.transform, "× CLOSE", "ESC");
-            AvRoomFrame.LayoutNotch(closeChrome, 132f);
-            close.WithTooltip("Close operations room (Esc).");
+            AvFlow body = window.Body;
+            body.Section(AvIcon.Map2, "LIVE THEATER MAP", "FRONT / CONTROL / STAFF INTENT");
+            map = body.Add(new TheaterMapPart(body.Content, overlay));
 
-            Label(frame, "THEATER / OPERATIONS ROOM", 28f, -20f, 800f, 30f, 23f,
-                AvTheme.TextPrimary, true);
-            Label(frame, "LIVE WAR PICTURE  /  CHOOSE INTENT, THEN FLY", 30f, -54f,
-                970f, 18f, 12f, AvTheme.Dim);
-            AvKit.Rule(frame, new Rect(28f, -82f, Width - 56f, 2f), AvTheme.RailInfo);
+            body.Section(AvIcon.Flag, "PRIMARY OPERATION", "STAFF DIRECTED");
+            operationRow = body.Add(new AvRow(body.Content));
+            body.Buttons(new AvControl.Spec("CALL OFF / REPLAN", CancelOperation, AvButtonStyle.Danger, AvIcon.X))
+                .Controls[0].Help = "Call off this operation and request fresh staff choices.";
 
-            BuildProposalColumn(frame);
-            BuildMap(frame);
-            BuildReportColumn(frame);
-            AvKit.Rule(frame, new Rect(28f, -929f, Width - 56f, 1f), AvTheme.Hairline);
-            staffLine = Label(frame, "STAFF LOG / AWAITING REPORT", 30f, -939f,
-                Width - 60f, 18f, 12f, AvTheme.Dim);
+            body.Section(AvIcon.ListDetails, "STAFF PROPOSALS", "CHOOSE OR STAFF DECIDES");
+            proposals = body.Add(new AvRowStack(body.Content, MaxProposals, Pick));
+
+            body.Section(AvIcon.MapPin, "FRONTS", "FIELD REPORTS");
+            fronts = body.Add(new AvList(body.Content, window.Ticker, MaxFronts, BindFront));
+
+            body.Section(AvIcon.AdjustmentsHorizontal, "STAFF POSTURE", "BROAD INTENT");
+            postureControl = body.Add(new AvSegmented(body.Content, "POSTURE",
+                new[] { "CAUTIOUS", "STEADY", "BOLD" }, () => (int)selectedPosture, i => SetPosture((TheaterWarPosture)i)));
+
+            AvControl closeButton = window.Root.GetComponentInChildren<AvControl>(true);
+            if (closeButton != null) closeButton.Help = "Close operations room (Esc).";
+            window.Footer.Set("Staff log · awaiting report.");
         }
 
-        private void BuildProposalColumn(RectTransform frame)
+        private void BindFront(int index, AvRow row)
         {
-            const float x = 24f, w = 342f;
-            AvKit.Panel(frame, new Rect(x, -100f, w, 812f), AvTheme.SurfaceInert);
-            Label(frame, "STAFF PROPOSALS", x + 18f, -116f, w - 36f, 25f, 17f,
-                AvTheme.TextPrimary, true);
-            Label(frame, "An opening creates a short choice.", x + 18f, -144f,
-                w - 36f, 35f, 12f, AvTheme.Dim);
-            for (int i = 0; i < MaxProposals; i++)
-            {
-                int slot = i;
-                float y = -196f - i * 154f;
-                proposalCards[i] = new GameObject("StaffProposal" + i, typeof(RectTransform));
-                var card = (RectTransform)proposalCards[i].transform;
-                card.SetParent(frame, false);
-                AvKit.Place(card, new Rect(x + 18f, y, w - 36f, 142f));
-                AvKit.Panel(card, new Rect(0f, 0f, w - 36f, 142f), AvTheme.Surface);
-                AvKit.Outline(card, new Rect(0f, 0f, w - 36f, 142f), AvTheme.Hairline);
-                AvKit.Rule(card, new Rect(0f, 0f, 3f, 142f), AvTheme.RailReady);
-                proposalNames[i] = Label(card, "—", 13f, -12f, w - 62f, 22f, 14f,
-                    AvTheme.TextPrimary, true);
-                proposalBriefs[i] = Label(card, "", 13f, -43f, w - 62f, 72f, 12f, AvTheme.Dim);
-                proposalBriefs[i].enableWordWrapping = true;
-                proposalButtons[i] = AvKit.Button(card, "CHOOSE THIS PLAN",
-                    new Rect(13f, -109f, w - 62f, 26f), () => Pick(slot), 12f,
-                    AvButtonStyle.Primary);
-            }
-            Label(frame, "STAFF POSTURE", x + 18f, -674f, w - 36f, 19f, 14f,
-                AvTheme.TextPrimary, true);
-            string[] names = { "CAUTIOUS", "STEADY", "BOLD" };
-            for (int i = 0; i < names.Length; i++)
-            {
-                TheaterWarPosture posture = (TheaterWarPosture)i;
-                postureButtons[i] = AvKit.Button(frame, names[i],
-                    new Rect(x + 18f + i * 103f, -704f, 98f, 28f),
-                    () => { if (war != null && war.RequestPosture(posture)) Refresh(); },
-                    11f);
-            }
-            Label(frame, "Staff spends from the faction pool.", x + 18f, -752f,
-                w - 36f, 30f, 12f, AvTheme.Dim);
-            Label(frame, "No unit orders are issued here.", x + 18f, -786f,
-                w - 36f, 28f, 12f, AvTheme.Dim);
-        }
-
-        private void BuildMap(RectTransform frame)
-        {
-            const float x = 384f, y = -100f, w = 1002f, h = 812f;
-            AvKit.Panel(frame, new Rect(x, y, w, h), AvTheme.SurfaceInert);
-            Label(frame, "LIVE THEATER MAP", x + 20f, y - 15f, 460f, 23f, 17f,
-                AvTheme.TextPrimary, true);
-            Label(frame, "FRONT / CONTROL / STAFF INTENT", x + 520f, y - 18f,
-                460f, 18f, 12f, AvTheme.Dim);
-            mapRect = new GameObject("TheaterMap", typeof(RectTransform))
-                .GetComponent<RectTransform>();
-            mapRect.SetParent(frame, false);
-            AvKit.Place(mapRect, new Rect(x + 20f, y - 52f, w - 40f, 702f));
-            AvKit.Panel(mapRect, new Rect(0f, 0f, mapRect.sizeDelta.x, mapRect.sizeDelta.y),
-                AvTheme.Ground);
-            terrainImage = AvKit.Panel(mapRect,
-                new Rect(0f, 0f, 962f, 702f), Color.white);
-            terrainImage.raycastTarget = false;
-            var controlObj = new GameObject("ControlField", typeof(RectTransform), typeof(RawImage));
-            controlImage = controlObj.GetComponent<RawImage>();
-            controlObj.transform.SetParent(mapRect, false);
-            AvKit.Place((RectTransform)controlObj.transform, new Rect(0f, 0f, 962f, 702f));
-            controlImage.raycastTarget = false;
-            controlImage.color = Color.white;
-            var frontObj = new GameObject("LiveFront", typeof(RectTransform), typeof(CanvasRenderer),
-                typeof(RoomFrontlineGraphic));
-            frontGraphic = frontObj.GetComponent<RoomFrontlineGraphic>();
-            frontObj.transform.SetParent(mapRect, false);
-            AvKit.Place((RectTransform)frontObj.transform, new Rect(0f, 0f, 962f, 702f));
-            frontGraphic.raycastTarget = false;
-            for (int i = 0; i < MaxFronts; i++)
-                frontMarkers[i] = Marker(mapRect, AvTheme.RailCaution);
-            for (int i = 0; i < MaxProposals; i++)
-                proposalMarkers[i] = Marker(mapRect, AvTheme.RailReady);
-            activeMarker = Marker(mapRect, AvTheme.RailInfo);
-            AvKit.Outline(mapRect, new Rect(0f, 0f, 962f, 702f), AvTheme.Hairline);
-            mapStatus = Label(frame, "MAP DATA UNAVAILABLE", x + 20f, y - 766f,
-                w - 40f, 22f, 12f, AvTheme.Dim);
-        }
-
-        private void BuildReportColumn(RectTransform frame)
-        {
-            const float x = 1402f, w = 398f;
-            AvKit.Panel(frame, new Rect(x, -100f, w, 812f), AvTheme.SurfaceInert);
-            Label(frame, "PRIMARY OPERATION", x + 20f, -118f, w - 40f, 23f,
-                16f, AvTheme.TextPrimary, true);
-            activeName = Label(frame, "STAFF ASSESSING", x + 20f, -158f,
-                w - 40f, 56f, 20f, AvTheme.TextPrimary, true);
-            activeName.enableWordWrapping = true;
-            activePhase = Label(frame, "", x + 20f, -230f, w - 40f, 20f,
-                14f, AvTheme.RailInfo, true);
-            activeSummary = Label(frame, "", x + 20f, -265f, w - 40f, 92f,
-                13f, AvTheme.Dim);
-            activeSummary.enableWordWrapping = true;
-            activeForces = Label(frame, "", x + 20f, -364f, w - 40f, 22f,
-                12f, AvTheme.TextPrimary);
-            cancelButton = AvKit.Button(frame, "CALL OFF / REPLAN",
-                new Rect(x + 20f, -402f, w - 40f, 34f), CancelOperation,
-                13f, AvButtonStyle.Danger);
-            cancelButton.WithTooltip("Call off this operation and request fresh staff choices.");
-            AvKit.Rule(frame, new Rect(x + 20f, -459f, w - 40f, 1f), AvTheme.Hairline);
-            Label(frame, "FRONTS / FIELD REPORTS", x + 20f, -476f, w - 40f, 22f,
-                15f, AvTheme.TextPrimary, true);
-            for (int i = 0; i < MaxFronts; i++)
-                frontRows[i] = Label(frame, "", x + 20f, -513f - i * 54f,
-                    w - 40f, 46f, 12f, AvTheme.Dim);
+            IReadOnlyList<TheaterFrontView> list = war?.Available == true ? war.Fronts : null;
+            TheaterFrontView front = list != null && index < list.Count ? list[index] : null;
+            if (front == null) { row.Set("—", "", "", AvState.Inert); return; }
+            row.Set(front.Label, front.Observed
+                    ? front.Status + " · " + TheaterReadout.Percent(Mathf.Clamp01(front.Pressure)) + " PRESSURE"
+                    : "RUMOR / UNCONFIRMED",
+                "", front.Observed ? AvState.Caution : AvState.Inert);
         }
 
         private void Refresh()
         {
             bool ready = war != null && war.Available;
-            IReadOnlyList<TheaterProposalView> proposals = ready ? war.Proposals : null;
-            int proposalCount = proposals != null ? Mathf.Min(proposals.Count, MaxProposals) : 0;
+            IReadOnlyList<TheaterProposalView> proposalList = ready ? war.Proposals : null;
+            int count = proposalList != null ? Mathf.Min(proposalList.Count, MaxProposals) : 0;
             for (int i = 0; i < MaxProposals; i++)
             {
-                bool visible = i < proposalCount;
-                proposalCards[i].SetActive(visible);
-                if (!visible) continue;
-                TheaterProposalView proposal = proposals[i];
-                proposalNames[i].text = proposal.Kind + " / " + proposal.Label;
-                proposalBriefs[i].text = proposal.Brief + "\n" + proposal.Forces +
-                    "  ·  RISK " + proposal.Risk + "  ·  " +
-                    Mathf.CeilToInt(Mathf.Max(0f, proposal.SecondsRemaining)) + "S";
-                proposalButtons[i].SetEnabled(war.CanCommand);
+                if (i >= count) { proposals.Hide(i); continue; }
+                TheaterProposalView proposal = proposalList[i];
+                proposals.Show(i);
+                AvRow row = proposals.Row(i);
+                row.Set(proposal.Kind + " / " + proposal.Label,
+                    proposal.Brief + "  ·  " + proposal.Forces + "  ·  RISK " + proposal.Risk,
+                    Mathf.CeilToInt(Mathf.Max(0f, proposal.SecondsRemaining)) + "S", AvState.Ready);
+                row.Interactable = war.CanCommand;
+                row.Help = "Choose this staff proposal; the host validates the current offer.";
             }
+
             TheaterLiveOperationView active = ready ? war.ActiveOperation : null;
-            activeName.text = active == null ? "NO PRIMARY OPERATION" : active.Label;
-            activePhase.text = active == null ? "LOCAL FIGHTS CONTINUE" : active.Kind + " / " + active.Phase;
-            activeSummary.text = active == null
-                ? "The staff is monitoring several fronts for an opening." : active.Summary;
-            activeForces.text = active == null ? "" :
-                active.GroundGroups + " GROUND  /  " + active.AirGroups + " AIR  /  " +
-                active.NavalGroups + " NAVAL GROUPS";
-            cancelButton.SetEnabled(ready && war.CanCommand && active != null);
-            for (int i = 0; i < postureButtons.Length; i++)
-            {
-                postureButtons[i].SetEnabled(ready && war.CanCommand);
-                postureButtons[i].SetLatched(ready && (int)war.Posture == i);
-            }
-            IReadOnlyList<TheaterFrontView> fronts = ready ? war.Fronts : null;
-            int frontCount = fronts != null ? Mathf.Min(fronts.Count, MaxFronts) : 0;
-            for (int i = 0; i < MaxFronts; i++)
-            {
-                TheaterFrontView front = i < frontCount ? fronts[i] : null;
-                frontRows[i].text = front == null ? "" : front.Observed
-                    ? front.Label + "\n" + front.Status + " · " +
-                      Mathf.RoundToInt(Mathf.Clamp01(front.Pressure) * 100f) + "% PRESSURE"
-                    : front.Label + "\nRUMOR / UNCONFIRMED";
-            }
+            operationRow.Set(active == null ? "NO PRIMARY OPERATION" : active.Label,
+                active == null ? "The staff is monitoring several fronts for an opening."
+                    : active.Kind + " / " + active.Phase + " · " + active.Summary + "  ·  " +
+                      active.GroundGroups + " GROUND / " + active.AirGroups + " AIR / " + active.NavalGroups + " NAVAL",
+                "", AvState.Info);
+
+            IReadOnlyList<TheaterFrontView> frontList = ready ? war.Fronts : null;
+            fronts.SetCount(frontList?.Count ?? 0);
+
+            selectedPosture = ready ? war.Posture : TheaterWarPosture.Steady;
+            postureControl.Refresh();
+
             IReadOnlyList<string> log = ready ? war.StaffLog : null;
-            staffLine.text = log != null && log.Count > 0 ? "STAFF LOG  ·  " + log[0]
-                : "STAFF LOG  ·  NO RECENT REPORT";
-            RefreshMap(active, proposals, fronts);
-        }
+            window.Footer.Set(log != null && log.Count > 0 ? "Staff log · " + log[0] : "Staff log · no recent report.");
 
-        private void RefreshMap(TheaterLiveOperationView active,
-            IReadOnlyList<TheaterProposalView> proposals, IReadOnlyList<TheaterFrontView> fronts)
-        {
-            DynamicMap map = SceneSingleton<DynamicMap>.i;
-            Image source = map?.mapImage?.GetComponent<Image>();
-            terrainImage.sprite = source != null ? source.sprite : null;
-            terrainImage.enabled = terrainImage.sprite != null;
-            Transform control = map?.mapImage?.transform.Find("ComSectorGridOverlay");
-            RawImage sourceControl = control != null ? control.GetComponent<RawImage>() : null;
-            controlImage.texture = sourceControl != null ? sourceControl.texture : null;
-            controlImage.enabled = controlImage.texture != null;
-            var grid = overlay?.Grid;
-            frontGraphic.SetSource(grid);
-            mapStatus.text = terrainImage.enabled
-                ? "LIVE TERRAIN  ·  WHITE TRACE: FRONT  ·  GREEN: OFFER  ·  CYAN: ACTIVE  ·  AMBER: CONTACT"
-                : "NATIVE MAP IMAGE UNAVAILABLE";
-            for (int i = 0; i < MaxFronts; i++)
-            {
-                TheaterFrontView front = fronts != null && i < fronts.Count ? fronts[i] : null;
-                PlaceMarker(frontMarkers[i], front != null && front.Observed, front?.X ?? float.NaN,
-                    front?.Z ?? float.NaN, grid);
-            }
-            for (int i = 0; i < MaxProposals; i++)
-            {
-                TheaterProposalView proposal = proposals != null && i < proposals.Count ? proposals[i] : null;
-                PlaceMarker(proposalMarkers[i], proposal != null, proposal?.X ?? float.NaN,
-                    proposal?.Z ?? float.NaN, grid);
-            }
-            PlaceMarker(activeMarker, active != null, active?.X ?? float.NaN,
-                active?.Z ?? float.NaN, grid);
-        }
-
-        private static Image Marker(RectTransform parent, Color color)
-        {
-            Image marker = AvKit.Panel(parent, new Rect(0f, 0f, 12f, 12f),
-                color, AvSprites.White);
-            marker.rectTransform.localRotation = Quaternion.Euler(0f, 0f, 45f);
-            marker.raycastTarget = false;
-            marker.enabled = false;
-            return marker;
-        }
-
-        private static void PlaceMarker(Image marker, bool known, float x, float z,
-            BoscaliSummer.Features.Command.Runtime.TacticalSectorGrid grid)
-        {
-            if (!known || grid == null || !(grid.WorldSizeX > 0f) || !(grid.WorldSizeY > 0f) ||
-                float.IsNaN(x) || float.IsInfinity(x) || float.IsNaN(z) || float.IsInfinity(z))
-            {
-                marker.enabled = false;
-                return;
-            }
-            float u = x / grid.WorldSizeX + .5f;
-            float v = z / grid.WorldSizeY + .5f;
-            if (u < 0f || u > 1f || v < 0f || v > 1f)
-            {
-                marker.enabled = false;
-                return;
-            }
-            AvKit.Place(marker.rectTransform,
-                new Rect(u * 962f - 6f, -(1f - v) * 702f + 6f, 12f, 12f));
-            marker.enabled = true;
+            window.Body.Relayout();
+            map.Refresh(active, proposalList, frontList);
         }
 
         private void Pick(int slot)
         {
-            IReadOnlyList<TheaterProposalView> proposals = war?.Proposals;
-            if (proposals == null || slot < 0 || slot >= proposals.Count) return;
-            TheaterProposalView proposal = proposals[slot];
+            IReadOnlyList<TheaterProposalView> proposalList = war?.Proposals;
+            if (proposalList == null || slot < 0 || slot >= proposalList.Count) return;
+            TheaterProposalView proposal = proposalList[slot];
             if (war.RequestPick(proposal.Id, proposal.Revision)) Refresh();
         }
 
@@ -422,20 +187,143 @@ namespace BoscaliSummer.Features.Command.Presentation
             if (active != null && war.RequestCancel(active.Id, active.Revision)) Refresh();
         }
 
-        private void ViewMap() => Close();
-
-        private static TMP_Text Label(RectTransform parent, string value,
-            float x, float y, float width, float height, float size, Color color, bool bold = false)
+        private void SetPosture(TheaterWarPosture posture)
         {
-            TMP_Text label = AvKit.Label(parent, value, new Rect(x, y, width, height), color,
-                size, bold ? FontStyles.Bold : FontStyles.Normal,
-                TextAlignmentOptions.MidlineLeft);
-            label.enableWordWrapping = false;
-            label.overflowMode = TextOverflowModes.Ellipsis;
-            return label;
+            if (war != null && war.RequestPosture(posture)) Refresh();
         }
 
-        /// <summary>World-space front traces projected over the room's flat native map sprite.</summary>
+        /// <summary>
+        /// The live theater map: terrain sprite, control-field overlay and front trace are genuinely
+        /// data (spec §9.2 data-viz exception), so they stay as-is here — hosted inside a kit v2
+        /// <see cref="AvPart"/> rather than the room's own bespoke frame.
+        /// </summary>
+        private sealed class TheaterMapPart : AvPart
+        {
+            private readonly ComMapOverlay overlay;
+            private readonly Image terrain;
+            private readonly RawImage control;
+            private readonly RoomFrontlineGraphic frontGraphic;
+            private readonly Image[] frontMarkers = new Image[MaxFronts];
+            private readonly Image[] proposalMarkers = new Image[MaxProposals];
+            private readonly Image activeMarker;
+            private readonly TMP_Text status;
+
+            public TheaterMapPart(RectTransform parent, ComMapOverlay mapOverlay)
+            {
+                overlay = mapOverlay;
+                Rect = AvLay.Child(parent, "TheaterMap");
+                AvFrame frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(6f));
+                AvLay.Fill(frame.rectTransform);
+                frame.Paint(AvStyleHost.Resolve(AvStyleHost.FuiStyle("card").Background, AvTheme.SurfaceInert),
+                            AvStyleHost.Resolve(AvStyleHost.FuiStyle("card").Border, AvTheme.Hairline));
+
+                terrain = Image("Terrain");
+                control = RawImg();
+                var frontGo = new GameObject("Front", typeof(RectTransform), typeof(CanvasRenderer));
+                frontGo.transform.SetParent(Rect, false);
+                frontGraphic = frontGo.AddComponent<RoomFrontlineGraphic>();
+                frontGraphic.raycastTarget = false;
+                AvLay.Fill(frontGraphic.rectTransform, 2f);
+
+                Color caution = AvStyleHost.FuiColor("caution", AvTheme.Warning);
+                Color ready = AvStyleHost.FuiColor("ready", AvTheme.Accent);
+                Color info = AvStyleHost.FuiColor("info", AvTheme.RailInfo);
+                for (int i = 0; i < frontMarkers.Length; i++) frontMarkers[i] = Marker(caution);
+                for (int i = 0; i < proposalMarkers.Length; i++) proposalMarkers[i] = Marker(ready);
+                activeMarker = Marker(info);
+
+                status = AvText.Make(Rect, "Status", AvTextRole.Micro, "", TextAlignmentOptions.BottomLeft);
+            }
+
+            private Image Image(string name)
+            {
+                var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer));
+                go.transform.SetParent(Rect, false);
+                var img = go.AddComponent<Image>();
+                img.raycastTarget = false;
+                AvLay.Fill(img.rectTransform, 2f);
+                return img;
+            }
+
+            private RawImage RawImg()
+            {
+                var go = new GameObject("Control", typeof(RectTransform), typeof(CanvasRenderer));
+                go.transform.SetParent(Rect, false);
+                var img = go.AddComponent<RawImage>();
+                img.raycastTarget = false;
+                AvLay.Fill(img.rectTransform, 2f);
+                return img;
+            }
+
+            private Image Marker(Color color)
+            {
+                var go = new GameObject("Marker", typeof(RectTransform), typeof(CanvasRenderer));
+                go.transform.SetParent(Rect, false);
+                var img = go.AddComponent<Image>();
+                img.raycastTarget = false;
+                img.enabled = false;
+                img.color = color;
+                img.rectTransform.localRotation = Quaternion.Euler(0f, 0f, 45f);
+                return img;
+            }
+
+            public override float Measure(float width) => Mathf.Round(width * 0.5f) + 16f;
+
+            public override void Place(AvSlot s)
+            {
+                base.Place(s);
+                AvLay.Place(status.rectTransform, 4f, s.H - 14f, s.W - 8f, 14f);
+            }
+
+            public void Refresh(TheaterLiveOperationView active, IReadOnlyList<TheaterProposalView> proposalList,
+                IReadOnlyList<TheaterFrontView> frontList)
+            {
+                DynamicMap dynMap = SceneSingleton<DynamicMap>.i;
+                Image source = dynMap?.mapImage?.GetComponent<Image>();
+                terrain.sprite = source != null ? source.sprite : null;
+                terrain.enabled = terrain.sprite != null;
+                Transform controlXform = dynMap?.mapImage?.transform.Find("ComSectorGridOverlay");
+                RawImage sourceControl = controlXform != null ? controlXform.GetComponent<RawImage>() : null;
+                control.texture = sourceControl != null ? sourceControl.texture : null;
+                control.enabled = control.texture != null;
+                var grid = overlay?.Grid;
+                frontGraphic.SetSource(grid);
+                status.text = terrain.enabled
+                    ? "LIVE TERRAIN · AMBER: FRONT · GREEN: OFFER · CYAN: ACTIVE"
+                    : "NATIVE MAP IMAGE UNAVAILABLE";
+
+                for (int i = 0; i < frontMarkers.Length; i++)
+                {
+                    TheaterFrontView front = frontList != null && i < frontList.Count ? frontList[i] : null;
+                    PlaceMarker(frontMarkers[i], front != null && front.Observed, front?.X ?? float.NaN, front?.Z ?? float.NaN, grid);
+                }
+                for (int i = 0; i < proposalMarkers.Length; i++)
+                {
+                    TheaterProposalView proposal = proposalList != null && i < proposalList.Count ? proposalList[i] : null;
+                    PlaceMarker(proposalMarkers[i], proposal != null, proposal?.X ?? float.NaN, proposal?.Z ?? float.NaN, grid);
+                }
+                PlaceMarker(activeMarker, active != null, active?.X ?? float.NaN, active?.Z ?? float.NaN, grid);
+            }
+
+            private void PlaceMarker(Image marker, bool known, float x, float z,
+                BoscaliSummer.Features.Command.Runtime.TacticalSectorGrid grid)
+            {
+                if (!known || grid == null || !(grid.WorldSizeX > 0f) || !(grid.WorldSizeY > 0f) ||
+                    float.IsNaN(x) || float.IsInfinity(x) || float.IsNaN(z) || float.IsInfinity(z))
+                {
+                    marker.enabled = false;
+                    return;
+                }
+                float u = x / grid.WorldSizeX + .5f;
+                float v = z / grid.WorldSizeY + .5f;
+                if (u < 0f || u > 1f || v < 0f || v > 1f) { marker.enabled = false; return; }
+                Rect r = Rect.rect;
+                AvLay.Place(marker.rectTransform, u * r.width - 6f, (1f - v) * r.height - 6f, 12f, 12f);
+                marker.enabled = true;
+            }
+        }
+
+        /// <summary>World-space front traces projected over the room's flat native map sprite. Data-viz: kept.</summary>
         private sealed class RoomFrontlineGraphic : MaskableGraphic
         {
             private const int SegmentBudget = 1024;

@@ -77,7 +77,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 cooling[i].enabled = boosts[i].enabled = false;
             }
             for (int i = 0; i < Cells; i++) tiles[i] = BuildTile(parent, i);
-            select = AvKit.Panel(parent, new Rect(0f, 0f, cell + 20f, cell + 20f), StationStyle.Ink, OpsSprites.Brackets);
+            select = Chrome.Panel(parent, new Rect(0f, 0f, cell + 20f, cell + 20f), StationStyle.Ink, OpsSprites.Brackets);
             select.enabled = false;
             BuildGhost(parent);
             BuildPad(parent);
@@ -112,21 +112,21 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             Lines.Set(tile.Port[1], m, -(w - m), w - m, -(w - m), 1.5f);
             Lines.Set(tile.Port[2], m, -m, m, -(w - m), 1.5f);
             Lines.Set(tile.Port[3], w - m, -m, w - m, -(w - m), 1.5f);
-            tile.PortPlus = AvKit.Rule(tile.Root, new Rect(w * 0.5f - 12f, -w * 0.5f + 1f, 24f, 2f), StationStyle.Line);
-            tile.PortPlus2 = AvKit.Rule(tile.Root, new Rect(w * 0.5f - 1f, -w * 0.5f + 12f, 2f, 24f), StationStyle.Line);
+            tile.PortPlus = Chrome.Rule(tile.Root, new Rect(w * 0.5f - 12f, -w * 0.5f + 1f, 24f, 2f), StationStyle.Line);
+            tile.PortPlus2 = Chrome.Rule(tile.Root, new Rect(w * 0.5f - 1f, -w * 0.5f + 12f, 2f, 24f), StationStyle.Line);
             tile.PortName = StationStyle.Text(tile.Root, "", new Rect(0f, -(w - m) - 2f, w, 16f), 11f, StationStyle.Dim,
                 StationStyle.LabelTracking, TextAlignmentOptions.Center);
 
-            tile.Shield = AvKit.Panel(tile.Root, new Rect(-6f, 6f, w + 12f, w + 12f), StationStyle.Limb.WithAlpha(0.18f));
-            tile.Fill = AvKit.Panel(tile.Root, local, StationStyle.Console);
-            tile.Pattern = AvKit.Panel(tile.Root, local, StationStyle.Line.WithAlpha(0.35f));
+            tile.Shield = Chrome.Panel(tile.Root, new Rect(-6f, 6f, w + 12f, w + 12f), StationStyle.Limb.WithAlpha(0.18f));
+            tile.Fill = Chrome.Panel(tile.Root, local, StationStyle.Console);
+            tile.Pattern = Chrome.Panel(tile.Root, local, StationStyle.Line.WithAlpha(0.35f));
             tile.Pattern.sprite = OpsSprites.Blueprint;
             tile.Pattern.type = Image.Type.Tiled;
-            tile.Edge = AvKit.Outline(tile.Root, local, StationStyle.Line);
+            tile.Edge = Chrome.Outline(tile.Root, local, StationStyle.Line);
             tile.Fins = new Image[5];
             for (int f = 0; f < tile.Fins.Length; f++)
-                tile.Fins[f] = AvKit.Rule(tile.Root, new Rect(0f, 0f, 6f, 10f), StationStyle.Line);
-            tile.Glyph = AvKit.Panel(tile.Root, new Rect(w * 0.5f - 18f, -w * 0.5f + 26f, 36f, 36f), StationStyle.Ink);
+                tile.Fins[f] = Chrome.Rule(tile.Root, new Rect(0f, 0f, 6f, 10f), StationStyle.Line);
+            tile.Glyph = Chrome.Panel(tile.Root, new Rect(w * 0.5f - 18f, -w * 0.5f + 26f, 36f, 36f), StationStyle.Ink);
             tile.Code = StationStyle.Text(tile.Root, "", new Rect(0f, -w * 0.5f - 12f, w, 18f), 12f, StationStyle.Ink,
                 StationStyle.LabelTracking, TextAlignmentOptions.Center, true);
             tile.State = StationStyle.Text(tile.Root, "", new Rect(0f, -w + 20f, w, 14f), 10f, StationStyle.Dim,
@@ -141,11 +141,11 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             var go = new GameObject("Ghost", typeof(RectTransform));
             ghost = (RectTransform)go.transform;
             ghost.SetParent(parent, false);
-            AvKit.Place(ghost, new Rect(0f, 0f, cell, cell));
+            Chrome.Place(ghost, new Rect(0f, 0f, cell, cell));
             var local = new Rect(0f, 0f, cell, cell);
-            AvKit.Panel(ghost, local, StationStyle.Limb.WithAlpha(0.14f));
-            AvKit.Outline(ghost, local, StationStyle.Limb);
-            ghostGlyph = AvKit.Panel(ghost, new Rect(cell * 0.5f - 18f, -cell * 0.5f + 26f, 36f, 36f), StationStyle.Limb);
+            Chrome.Panel(ghost, local, StationStyle.Limb.WithAlpha(0.14f));
+            Chrome.Outline(ghost, local, StationStyle.Limb);
+            ghostGlyph = Chrome.Panel(ghost, new Rect(cell * 0.5f - 18f, -cell * 0.5f + 26f, 36f, 36f), StationStyle.Limb);
             ghostText = StationStyle.Text(ghost, "", new Rect(-20f, -cell - 2f, cell + 40f, 16f), 12f, StationStyle.Limb,
                 4f, TextAlignmentOptions.Center);
             go.SetActive(false);
@@ -160,28 +160,28 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             Rect core = CellRect(OrbitalPlatform.CoreCell);
             float cx = core.x + core.width * 0.5f;
             float baseY = core.y - core.height - Gap;
-            AvKit.Place(pad, new Rect(0f, 0f, 1f, 1f));
+            Chrome.Place(pad, new Rect(0f, 0f, 1f, 1f));
             Color line = StationStyle.Line, ink = StationStyle.Ink;
-            AvKit.Rule(pad, new Rect(cx - 150f, baseY, 300f, 2f), ink);
-            for (int i = 0; i < 7; i++) AvKit.Rule(pad, new Rect(cx - 150f + i * 50f, baseY - 2f, 1f, 8f), line.WithAlpha(0.65f));
+            Chrome.Rule(pad, new Rect(cx - 150f, baseY, 300f, 2f), ink);
+            for (int i = 0; i < 7; i++) Chrome.Rule(pad, new Rect(cx - 150f + i * 50f, baseY - 2f, 1f, 8f), line.WithAlpha(0.65f));
             float towerX = cx + 68f, towerTop = core.y + 70f;
             float towerH = towerTop - baseY;
-            AvKit.Rule(pad, new Rect(towerX, towerTop, 2f, towerH), line);
-            AvKit.Rule(pad, new Rect(towerX + 25f, towerTop, 2f, towerH), line);
+            Chrome.Rule(pad, new Rect(towerX, towerTop, 2f, towerH), line);
+            Chrome.Rule(pad, new Rect(towerX + 25f, towerTop, 2f, towerH), line);
             for (int i = 0; i < 8; i++)
             {
                 float y0 = towerTop - i * towerH / 8f, y1 = towerTop - (i + 1) * towerH / 8f;
                 Image brace = Lines.Make(pad, line.WithAlpha(0.7f));
                 Lines.Set(brace, towerX + 1f, y0, towerX + 26f, y1, 1f);
             }
-            AvKit.Rule(pad, new Rect(cx + 24f, towerTop - 50f, towerX - cx - 22f, 2f), line);
-            AvKit.Rule(pad, new Rect(cx + 24f, baseY + 64f, towerX - cx - 22f, 2f), line);
+            Chrome.Rule(pad, new Rect(cx + 24f, towerTop - 50f, towerX - cx - 22f, 2f), line);
+            Chrome.Rule(pad, new Rect(cx + 24f, baseY + 64f, towerX - cx - 22f, 2f), line);
             float rocketTop = towerTop + 10f, bodyTop = rocketTop - 42f;
             float bodyH = bodyTop - baseY - 8f;
             var bodyRect = new Rect(cx - 24f, bodyTop, 48f, bodyH);
-            AvKit.Panel(pad, bodyRect, StationStyle.Console);
-            AvKit.Outline(pad, bodyRect, ink);
-            Image nose = AvKit.Panel(pad, new Rect(cx - 24f, rocketTop, 48f, 42f), ink);
+            Chrome.Panel(pad, bodyRect, StationStyle.Console);
+            Chrome.Outline(pad, bodyRect, ink);
+            Image nose = Chrome.Panel(pad, new Rect(cx - 24f, rocketTop, 48f, 42f), ink);
             nose.sprite = OpsSprites.Triangle;
             // Rotate about the nose's centre, not its corner, so it sits on the body.
             Lines.Centre(nose.rectTransform, cx, rocketTop - 21f, 48f, 42f);
@@ -189,27 +189,27 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             for (int i = 0; i < 3; i++)
             {
                 float y = bodyTop - 47f - i * Mathf.Max(20f, (bodyH - 88f) / 2f);
-                AvKit.Rule(pad, new Rect(cx - 24f, y, 48f, 3f), ink.WithAlpha(0.85f));
-                AvKit.Rule(pad, new Rect(cx - 16f, y - 10f, 32f, 1f), line.WithAlpha(0.65f));
+                Chrome.Rule(pad, new Rect(cx - 24f, y, 48f, 3f), ink.WithAlpha(0.85f));
+                Chrome.Rule(pad, new Rect(cx - 16f, y - 10f, 32f, 1f), line.WithAlpha(0.65f));
             }
-            AvKit.Rule(pad, new Rect(cx, bodyTop - 8f, 1f, 26f), line.WithAlpha(0.7f));
-            Image core2 = AvKit.Panel(pad, new Rect(cx - 13f, bodyTop - 37f, 26f, 26f), ink);
+            Chrome.Rule(pad, new Rect(cx, bodyTop - 8f, 1f, 26f), line.WithAlpha(0.7f));
+            Image core2 = Chrome.Panel(pad, new Rect(cx - 13f, bodyTop - 37f, 26f, 26f), ink);
             core2.sprite = OpsSprites.Glyph((int)ModuleKind.Core);
             for (int side = -1; side <= 1; side += 2)
             {
                 float bx = cx + side * 42f - 10f;
                 float boosterTop = baseY + Mathf.Min(132f, bodyH * 0.66f);
                 var booster = new Rect(bx, boosterTop, 20f, boosterTop - baseY - 8f);
-                AvKit.Panel(pad, booster, StationStyle.Console);
-                AvKit.Outline(pad, booster, line);
-                Image cap = AvKit.Panel(pad, new Rect(bx, boosterTop + 18f, 20f, 18f), line);
+                Chrome.Panel(pad, booster, StationStyle.Console);
+                Chrome.Outline(pad, booster, line);
+                Image cap = Chrome.Panel(pad, new Rect(bx, boosterTop + 18f, 20f, 18f), line);
                 cap.sprite = OpsSprites.Triangle;
                 Lines.Centre(cap.rectTransform, bx + 10f, boosterTop + 9f, 20f, 18f);
                 cap.rectTransform.localEulerAngles = new Vector3(0f, 0f, 180f);
-                AvKit.Rule(pad, new Rect(side < 0 ? bx + 20f : cx + 24f, baseY + 56f, 8f, 2f), ink);
+                Chrome.Rule(pad, new Rect(side < 0 ? bx + 20f : cx + 24f, baseY + 56f, 8f, 2f), ink);
             }
             for (int i = -1; i <= 1; i++)
-                AvKit.Outline(pad, new Rect(cx + i * 15f - 5f, baseY + 4f, 10f, 12f), line);
+                Chrome.Outline(pad, new Rect(cx + i * 15f - 5f, baseY + 4f, 10f, 12f), line);
             StationStyle.Text(pad, "LV-01  /  BASTION CORE", new Rect(cx - 145f, baseY - 20f, 290f, 14f),
                 10f, StationStyle.Limb, 3f, TextAlignmentOptions.Center);
             go.SetActive(false);
@@ -273,7 +273,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             if (hasSelection)
             {
                 Rect r = CellRect(selected);
-                AvKit.Place(select.rectTransform, new Rect(r.x - 10f, r.y + 10f, r.width + 20f, r.height + 20f));
+                Chrome.Place(select.rectTransform, new Rect(r.x - 10f, r.y + 10f, r.width + 20f, r.height + 20f));
             }
 
             bool showGhost = station && preview != ModuleKind.None && OrbitalPlatform.InGrid(previewCell) &&
@@ -282,7 +282,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             if (showGhost)
             {
                 Rect r = CellRect(previewCell);
-                AvKit.Place(ghost, r);
+                Chrome.Place(ghost, r);
                 ghostGlyph.sprite = OpsSprites.Glyph((int)preview);
                 Color tint = previewBlocked == PlacementFailure.None ? StationStyle.Limb : AvTheme.RailDanger;
                 ghostGlyph.color = tint;
@@ -327,15 +327,15 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             }
             bool fins = kind == ModuleKind.Radiator;
             if (fins) body = new Rect(w * 0.1f, -w * 0.06f, w * 0.8f, w * 0.88f);
-            AvKit.Place(tile.Fill.rectTransform, body);
-            AvKit.Place(tile.Edge[0].rectTransform, new Rect(body.x, body.y, body.width, 1.5f));
-            AvKit.Place(tile.Edge[1].rectTransform, new Rect(body.x, body.y - body.height + 1.5f, body.width, 1.5f));
-            AvKit.Place(tile.Edge[2].rectTransform, new Rect(body.x, body.y, 1.5f, body.height));
-            AvKit.Place(tile.Edge[3].rectTransform, new Rect(body.x + body.width - 1.5f, body.y, 1.5f, body.height));
+            Chrome.Place(tile.Fill.rectTransform, body);
+            Chrome.Place(tile.Edge[0].rectTransform, new Rect(body.x, body.y, body.width, 1.5f));
+            Chrome.Place(tile.Edge[1].rectTransform, new Rect(body.x, body.y - body.height + 1.5f, body.width, 1.5f));
+            Chrome.Place(tile.Edge[2].rectTransform, new Rect(body.x, body.y, 1.5f, body.height));
+            Chrome.Place(tile.Edge[3].rectTransform, new Rect(body.x + body.width - 1.5f, body.y, 1.5f, body.height));
             if (info.Category == ModuleCategory.Power || info.Category == ModuleCategory.Weapon)
             {
                 tile.Pattern.enabled = true;
-                AvKit.Place(tile.Pattern.rectTransform, body);
+                Chrome.Place(tile.Pattern.rectTransform, body);
                 tile.Pattern.sprite = info.Category == ModuleCategory.Power ? OpsSprites.Blueprint : OpsSprites.Guard;
             }
             if (fins)
@@ -345,7 +345,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 for (int f = 0; f < tile.Fins.Length; f++)
                 {
                     tile.Fins[f].enabled = true;
-                    AvKit.Place(tile.Fins[f].rectTransform, new Rect(body.x + f * (body.width - 6f) / 4f, body.y, 6f, body.height));
+                    Chrome.Place(tile.Fins[f].rectTransform, new Rect(body.x + f * (body.width - 6f) / 4f, body.y, 6f, body.height));
                 }
             }
             tile.Glyph.sprite = OpsSprites.Glyph((int)kind);

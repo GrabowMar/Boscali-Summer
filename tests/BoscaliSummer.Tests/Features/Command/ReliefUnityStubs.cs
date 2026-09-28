@@ -13,38 +13,26 @@ namespace HarmonyLib
     public sealed class HarmonyPostfix : System.Attribute { }
 }
 
-namespace NOAvionics.Ui
+namespace NuclearOption.UIStyleSystem
 {
-    public static class AvTheme
+    public static class ThemeManager { public static Theme Active => throw new System.InvalidOperationException(); }
+    public class Theme { public Palette ColorTheme; public TacticalScreenTheme TacScreenTheme; }
+    public class TacticalScreenTheme { public System.Collections.Generic.List<TacticalTextStyle> TextStyles; }
+    public class TacticalTextStyle { public TacticalStyle Style; }
+    public class TacticalStyle { public TMPro.TMP_FontAsset Font; }
+    public class Palette { public Color AllClear, MapIconFriendly, HudUnitFriendly, HudUnitNeutral, HudUnitHostile, HudUnitSelected, Warning, Alert; }
+}
+namespace Rewired
+{
+    public sealed class Keyboard { public bool enabled; }
+    public sealed class Controllers { public Keyboard Keyboard => null; }
+    public static class ReInput
     {
-        public static Color TextPrimary => Color.white;
-        public static Color Accent => Color.cyan;
-        public static Color RailInfo => Color.cyan;
-    }
-    public static class AvKit
-    {
-        public static void Panel(RectTransform parent, Rect rect, Color color) { }
-        public static void Label(RectTransform parent, string text, Rect rect, Color color, float size) { }
-        public static void Button(RectTransform parent, string text, Rect rect, System.Action action, float size) { }
-        public static void Stretch(RectTransform rt)
-        {
-            rt.anchorMin = Vector2.zero;
-            rt.anchorMax = Vector2.one;
-            rt.offsetMin = Vector2.zero;
-            rt.offsetMax = Vector2.zero;
-        }
+        public static bool isReady => false;
+        public static Controllers controllers => null;
     }
 }
-namespace NOAvionics
-{
-    public static class AvTokens
-    {
-        public const float FontMicro = 10f;
-        public const float FontSmall = 11f;
-        public const float FontBody = 12f;
-    }
-    public static class MapPicker { public static bool IsBusy; }
-}
+public class MFDScreen : MonoBehaviour { public TMPro.TextMeshProUGUI label; }
 namespace BoscaliSummer.Framework.Features
 {
     internal static class ModServices
@@ -65,11 +53,12 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         internal static void Tick(BoscaliSummer.Features.Command.Domain.ReliefRig rig) { }
         internal static void Release() { }
         internal static void Reset() { }
-    }
-    internal static class MfdMapOrbitControls
-    {
-        internal static void Tick(DynamicMap map) { }
-        internal static void Restore() { }
+        internal static bool Following => false;
+        internal static void Turn(float degrees) { }
+        internal static void Tilt(float degrees) { }
+        internal static void North() { }
+        internal static void Fit() { }
+        internal static void ToggleFollow() { }
     }
     internal static class MapUiPointer
     {

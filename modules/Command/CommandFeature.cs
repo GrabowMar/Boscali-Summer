@@ -41,6 +41,7 @@ namespace BoscaliSummer.Features.Command
         public void Install(FeatureContext context)
         {
             AvUiSound.Volume = context.Settings.Command.UiSoundVolume.Value;
+            context.AddSceneService<AvionicsSettingsBridge>(48).Configure(context.Settings.Command);
             TargetPresetRuntime.Configure(context.Settings.Command);
             context.AddSceneService<TargetPresetHotkeys>(49).Configure(context.Settings.Command);
             context.AddService<IRadialMenuPage>(new TargetPresetRadialPage());

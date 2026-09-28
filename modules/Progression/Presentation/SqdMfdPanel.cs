@@ -16,31 +16,18 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Features.Progression.Presentation
 {
     /// <summary>
-    /// "SQD" — pilot status, shared skill board with support authorisations, enemy ace
-    /// roster, and the local pilot studio / squadron identity page. Reads encounter
+    /// "PILOT" (registry id SQD) — pilot status, shared skill board with support authorisations,
+    /// enemy ace roster, and the local pilot studio / squadron identity page. Reads encounter
     /// snapshots only; Wing Command owns aircraft orders, custom-pilot files and pilot
     /// generation. Emblems and the local pilot profile are client-local cosmetics.
+    /// Built entirely from kit v2 (spec 2026-09-28-fui-panel-polish-design.md): one
+    /// <see cref="AvConsole"/> with five icon tabs over a paged <see cref="AvFlow"/> body.
     /// </summary>
     internal sealed partial class SqdMfdPanel : MonoBehaviour, ISceneService
     {
         private const float Width = AvTokens.PanelWidth;
         private const float PanelHeight = AvTokens.PanelHeight;
         private const float RefreshInterval = 0.20f;
-        private const float SpineInset = 14f;
-
-        /// <summary>
-        /// The vertical rhythm the four pages share: the gap between two blocks at rest,
-        /// and the ceiling it may grow to when the bezel hands back spare glass. A page
-        /// never opens a band wider than the ceiling — that is what used to read as a
-        /// hole above the status strip.
-        /// </summary>
-        private const float SheetBaseGap = 10f;
-        private const float SheetGapMax = 22f;
-
-        private const float SheetHeaderHeight = 28f;
-        private const float SheetHeadingHeight = 24f;
-
-        private const int ChipCount = 3;
 
         private const int TabPilot = 0;
         private const int TabSkills = 1;
@@ -51,13 +38,6 @@ namespace BoscaliSummer.Features.Progression.Presentation
         private const int MaximumBudgetPips = 20;
         private const int WingRowsPerPage = 2;
 
-        /// <summary>What each operational page is called, in tab order.</summary>
-        private static readonly string[] SheetNames =
-        {
-            "PILOT STATUS", "QUALIFICATIONS", "ACE INTELLIGENCE", "PILOT STUDIO", "PLANE STATUS",
-        };
-        private static readonly string[] TabLabels = { "PILOT", "SKILLS", "ACES", "STUDIO", "PLANE" };
-
         private ProgressionManager progression;
         private ProgressionSettings settings;
         private ISquadView squad;
@@ -65,12 +45,9 @@ namespace BoscaliSummer.Features.Progression.Presentation
 
         private MFDScreen screen;
         private GameObject screenRoot;
-        private TMP_FontAsset font;
-        private AvScreen shell;
-
-        private AvStyled.DataBar dataBar;
-        private AvStyled.Metric scoreMetric;
-        private AvStyled.Metric budgetMetric;
+        private AvConsole console;
+        private AvChip[] chips;
+        private AvMetric[] metrics;
 
         // ---- Cockpit cosmetics (client-local) ---------------------------------------------
 
@@ -108,16 +85,13 @@ namespace BoscaliSummer.Features.Progression.Presentation
 
         public void ResetForScene()
         {
-            AvKit.ReleaseKeyboardGuard();
             MfdBezel.Release(MfdSlots.Sqd);
             if (screenRoot != null) UnityEngine.Object.Destroy(screenRoot);
             screenRoot = null;
             screen = null;
-            font = null;
-            shell = null;
-            dataBar = null;
-            scoreMetric = null;
-            budgetMetric = null;
+            console = null;
+            chips = null;
+            metrics = null;
 
             ResetSkillRows();
             ResetPilotPage();
@@ -172,7 +146,6 @@ namespace BoscaliSummer.Features.Progression.Presentation
         {
             if (viewOpen == open) return;
             viewOpen = open;
-            if (!open) AvKit.ReleaseKeyboardGuard();
             ((IProgressionView)progression)?.SetViewOpen(open);
         }
 
@@ -227,11 +200,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
 
         private MFDScreen Build(MFDScreen template, Button bezel)
         {
-            TMP_Text sourceText = template.GetComponentInChildren<TMP_Text>(true);
-            font = sourceText != null ? sourceText.font : null;
-            if (font != null) AvFont.Font = font;
-
-            var root = new GameObject("BoscaliSquadron.Screen", typeof(RectTransform), typeof(Image));
+            var root = new GameObject("BoscaliSquadron.Screen", typeof(RectTransform));
             screenRoot = root;
             RectTransform rootRect = root.GetComponent<RectTransform>();
             rootRect.SetParent(template.transform.parent, false);
@@ -242,44 +211,45 @@ namespace BoscaliSummer.Features.Progression.Presentation
             rootRect.pivot = templateRect.pivot;
             rootRect.localScale = templateRect.localScale;
 
-            float height = AvScreen.ResolveHeight(
+            float height = AvLay.ResolveHeight(
                 templateRect.parent as RectTransform, PanelHeight, AvTokens.PanelHeightMax);
             rootRect.sizeDelta = new Vector2(Width, height);
-            AvKit.ClampIntoCanvas(rootRect);
+            AvLay.ClampIntoCanvas(rootRect);
 
-            Image background = root.GetComponent<Image>();
-            background.sprite = AvSprites.Panel;
-            background.type = Image.Type.Sliced;
-            background.color = Color.white;
-            background.raycastTarget = true;
+            // A transparent blocker so map clicks behind the panel never bleed through; the
+            // console's own frame is a non-interactive AvFrame.
+            Image blocker = root.AddComponent<Image>();
+            blocker.color = Color.clear;
+            blocker.raycastTarget = true;
 
             var contentObject = new GameObject("Content", typeof(RectTransform));
             RectTransform content = contentObject.GetComponent<RectTransform>();
             content.SetParent(rootRect, false);
-            AvKit.Stretch(content);
+            content.anchorMin = Vector2.zero;
+            content.anchorMax = Vector2.one;
+            content.pivot = new Vector2(0.5f, 0.5f);
+            content.offsetMin = Vector2.zero;
+            content.offsetMax = Vector2.zero;
+            content.localScale = Vector3.one;
 
-            shell = AvScreen.Build(
-                content, "PILOT",
-                TabLabels,
-                new[]
-                {
-                    new[] { "PILOT SCORE", "THIS PILOT" },
-                    new[] { "QUAL. PICKS", "UNSPENT" },
-                },
-                ChipCount, Width, height, OnTabChanged);
+            console = AvConsole.Build(content, "PILOT", "SQUADRON DOSSIER", 5, Width, height);
+            console.PageChanged += OnTabChanged;
+            chips = console.Chips(3);
+            metrics = console.Metrics("PILOT SCORE", "QUAL PICKS");
+            AvTabBar tabBar = console.Tabs(
+                (AvIcon.User, "PILOT"),
+                (AvIcon.Star, "SKILLS"),
+                (AvIcon.Skull, "ACES"),
+                (AvIcon.Pencil, "STUDIO"),
+                (AvIcon.Plane, "PLANE"));
+            AttachTabHelp(tabBar);
 
-            dataBar = shell.DataBar;
-            scoreMetric = shell.Metrics[0];
-            budgetMetric = shell.Metrics[1];
-            PrepareShell();
-
-            Rect body = shell.Body;
-
-            BuildPilotPage((RectTransform)shell.CreatePage(TabPilot, "PilotPage").transform, body);
-            BuildSkillsPage((RectTransform)shell.CreatePage(TabSkills, "SkillsPage").transform, body);
-            BuildWingsPage((RectTransform)shell.CreatePage(TabWings, "WingsPage").transform, body);
-            studioPageRoot = (RectTransform)shell.CreatePage(TabStudio, "StudioPage").transform;
-            BuildPlanePage((RectTransform)shell.CreatePage(TabPlane, "PlanePage").transform, body);
+            BuildPilotPage(console.Page(TabPilot));
+            BuildSkillsPage(console.Page(TabSkills));
+            BuildWingsPage(console.Page(TabWings));
+            studioPageFlow = console.Page(TabStudio);
+            BuildPlanePage(console.Page(TabPlane));
+            console.Finish();
 
             MFDScreen result = root.AddComponent<MFDScreen>();
             // The registry still owns SQD; the cockpit-facing screen name is PILOT.
@@ -295,37 +265,12 @@ namespace BoscaliSummer.Features.Progression.Presentation
             }
 
             screenRoot = root;
-            shell.SetPage(TabPilot);
             return result;
         }
 
-        private void OnTabChanged(int page)
+        /// <summary>Every tab carries the hover sentence the pre-kit-v2 console gave it.</summary>
+        private static void AttachTabHelp(AvTabBar bar)
         {
-            CancelSkillConfirmation();
-            nextRefresh = 0f;
-            if (page == TabStudio)
-            {
-                if (!studioPageBuilt && studioPageRoot != null)
-                {
-                    BuildStudioPage(studioPageRoot, shell.Body);
-                    studioPageBuilt = true;
-                }
-                studioDirty = true;
-                studioArtDirty = true;
-            }
-        }
-
-        /// <summary>
-        /// The shell builds the metric row and the tabs; their copy is the panel's. The
-        /// metric units and captions are single-line readouts at a tracked font, so they
-        /// shrink to the micro floor rather than clipping a figure into an ellipsis, and
-        /// every tab gets the tooltip the other controls already carry.
-        /// </summary>
-        private void PrepareShell()
-        {
-            PrepareMetric(scoreMetric);
-            PrepareMetric(budgetMetric);
-
             string[] hints =
             {
                 "Pilot status, current sortie, service background and career totals.",
@@ -334,68 +279,31 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 "Manage local pilot profiles and squadron identity.",
                 "Inspect the aircraft you are piloting: flight, systems, stores and damage.",
             };
-            if (shell?.Tabs == null) return;
-            SqdMark[] marks = { SqdMark.Recon, SqdMark.Combat, SqdMark.Strike,
-                SqdMark.Recon, SqdMark.Aircraft };
-            for (int i = 0; i < shell.Tabs.Length && i < hints.Length; i++)
+            AvControl[] tabs = bar.Rect.GetComponentsInChildren<AvControl>(true);
+            for (int i = 0; i < tabs.Length && i < hints.Length; i++) tabs[i].Help = hints[i];
+        }
+
+        private void OnTabChanged(int page)
+        {
+            CancelSkillConfirmation();
+            nextRefresh = 0f;
+            if (page == TabStudio)
             {
-                AvButton tab = shell.Tabs[i];
-                tab.WithTooltip(hints[i]);
-                RectTransform root = (RectTransform)tab.transform;
-                float width = root.sizeDelta.x > 1f ? root.sizeDelta.x : root.rect.width;
-                float height = root.sizeDelta.y > 1f ? root.sizeDelta.y : root.rect.height;
-                if (width <= 1f) width = Width / TabLabels.Length;
-                if (height <= 1f) height = AvTokens.TabBarHeight;
-                SqdGlyph glyph = SqdGlyph.Create(root,
-                    new Rect(7f, -(height - 14f) * 0.5f, 14f, 14f), marks[i]);
-                glyph.color = AvTheme.RailInfo;
-                TMP_Text label = tab.GetComponentInChildren<TMP_Text>();
-                if (label == null) continue;
-                AvKit.Place(label.rectTransform, new Rect(24f, 0f, width - 28f, height));
-                label.alignment = TextAlignmentOptions.MidlineLeft;
-                label.fontSizeMax = label.fontSize;
-                label.fontSizeMin = AvTokens.FontMicro;
-                label.enableAutoSizing = true;
+                if (!studioPageBuilt && studioPageFlow != null)
+                {
+                    BuildStudioPage(studioPageFlow);
+                    studioPageBuilt = true;
+                }
+                studioDirty = true;
+                studioArtDirty = true;
             }
-        }
-
-        private static void PrepareMetric(AvStyled.Metric metric)
-        {
-            if (metric == null) return;
-            FitSingleLine(metric.Unit);
-            FitSingleLine(metric.Caption);
-        }
-
-        /// <summary>
-        /// A readout that must never end in "...": auto-size down to the micro floor and
-        /// let the label overflow its box rather than trade a figure for an ellipsis.
-        /// </summary>
-        private static void FitSingleLine(TMP_Text label)
-        {
-            if (label == null) return;
-            label.enableWordWrapping = false;
-            label.overflowMode = TextOverflowModes.Overflow;
-            label.enableAutoSizing = true;
-            label.fontSizeMin = AvTokens.FontMicro;
-            label.fontSizeMax = label.fontSize;
-        }
-
-        /// <summary>
-        /// The gap between two page blocks once the bezel's spare height is shared out.
-        /// Calling this the same way on every page keeps the four pages on one rhythm.
-        /// </summary>
-        private static float SheetGap(float bodyHeight, float contentHeight, int gapCount)
-        {
-            float slack = bodyHeight - contentHeight;
-            if (slack <= 0f || gapCount <= 0) return SheetBaseGap;
-            return SheetBaseGap + Mathf.Min(slack * 0.6f / gapCount, SheetGapMax - SheetBaseGap);
         }
 
         // ---- Refresh ---------------------------------------------------------------------
 
         private void Refresh()
         {
-            if (scoreMetric == null || progression == null) return;
+            if (metrics == null || progression == null) return;
 
             bool bypass = progression.BypassRequirements;
             int score = Progress.Score;
@@ -408,10 +316,10 @@ namespace BoscaliSummer.Features.Progression.Presentation
             }
 
             RefreshCosmetics();
-            RefreshDataBar(bypass);
+            RefreshChips(bypass);
             RefreshMetrics(bypass, score, bonus);
 
-            switch (shell.Page)
+            switch (console.CurrentPage)
             {
                 case TabPilot: RefreshPilotPage(bypass, score, bonus); break;
                 case TabSkills: RefreshSkillsPage(); break;
@@ -420,23 +328,18 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 case TabPlane: RefreshPlanePage(); break;
             }
 
-            UpdateStatusStrip();
+            UpdateFooter();
         }
 
-        private void RefreshDataBar(bool bypass)
+        private void RefreshChips(bool bypass)
         {
             bool hunted = squad != null && squad.HuntActive;
-            string page = shell.Page >= 0 && shell.Page < TabLabels.Length
-                ? TabLabels[shell.Page]
-                : "PILOT";
-            dataBar.State.text = (hunted ? "ACE HUNT ACTIVE" : bypass
-                ? "DEBUG BYPASS" : "PERSONNEL FILE") + "  /  " + page;
-            dataBar.State.color = hunted ? AvTheme.Alert : bypass ? AvTheme.Warning : AvTheme.RailReady;
-            dataBar.SetChip(0, hunted ? "HUNT ACTIVE" : "NO HUNT", hunted);
-            dataBar.SetChip(1, "RANK " + Progress.Rank, true);
+            chips[0].Set(hunted ? "HUNT ACTIVE" : bypass ? "DEBUG BYPASS" : "PERSONNEL FILE",
+                hunted ? AvState.Danger : bypass ? AvState.Caution : AvState.Ready);
+            chips[1].Set("RANK " + AvNum.Thousands(Progress.Rank), AvState.Info);
             int available = Progress.AvailablePoints;
-            dataBar.SetChip(2, bypass ? "ALL OPEN" : available + " PICK" + (available == 1 ? "" : "S"),
-                available > 0 || bypass);
+            chips[2].Set(bypass ? "ALL OPEN" : available + " PICK" + (available == 1 ? "" : "S"),
+                available > 0 || bypass ? AvState.Ready : AvState.Inert);
         }
 
         private void RefreshMetrics(bool bypass, int score, int bonus)
@@ -448,240 +351,33 @@ namespace BoscaliSummer.Features.Progression.Presentation
             // The same ramp the host pays out, so the header never divides score itself.
             int remaining = PerkPoints.RemainingToNext(score, view.ScorePerPoint);
 
-            scoreMetric.Set(
-                bypass ? "BYPASS" : score.ToString("N0"),
+            metrics[0].Set(
+                bypass ? "BYPASS" : AvNum.Thousands(score),
                 bypass ? "EVERY GRADE OPEN" : capped ? "CEILING REACHED"
                     : remaining < 0 ? "LADDER COMPLETE"
-                    : "NEXT IN " + remaining,
+                    : "NEXT IN " + AvNum.Thousands(remaining),
                 bypass || capped || remaining < 0 ? 1f
                     : 1f - remaining / (float)Mathf.Max(1, view.ScorePerPoint * Mathf.Max(1, PerkCatalog.MaximumDepth)),
-                bypass ? AvTheme.Warning : AvTheme.RailReady);
-            scoreMetric.Unit.text = "THIS PILOT";
+                bypass ? AvState.Caution : AvState.Ready);
 
             int earned = view.EarnedPoints;
-            budgetMetric.Set(
+            metrics[1].Set(
                 bypass ? "FREE" : available + " PICK" + (available == 1 ? "" : "S"),
-                bypass ? "UNLIMITED PICKS" : $"{earned}/{ceiling} EARNED · +{bonus}",
+                bypass ? "UNLIMITED" : earned + "/" + ceiling + " EARNED · +" + bonus,
                 bypass ? 1f : earned / (float)ceiling,
-                available > 0 ? AvTheme.RailReady : AvTheme.RailInfo);
-            budgetMetric.Unit.text = "UNSPENT";
+                available > 0 ? AvState.Ready : AvState.Info);
         }
 
-        private void UpdateStatusStrip()
+        private void UpdateFooter()
         {
-            if (shell == null) return;
-            string baseLine = shell.Page == TabWings
+            if (console == null) return;
+            string baseLine = console.CurrentPage == TabWings
                 ? (squad != null ? squad.Status : "Enemy wing reports are unavailable.")
-                : shell.Page == TabStudio ? StudioStatusLine()
-                : shell.Page == TabPlane ? planeStatus
+                : console.CurrentPage == TabStudio ? StudioStatusLine()
+                : console.CurrentPage == TabPlane ? planeStatus
                 : progression.BypassRequirements ? "DEBUG BYPASS — EVERY GRADE OPEN"
                 : progression.LastResult;
-
-            string pageTag = shell.Page >= 0 && shell.Page < SheetNames.Length
-                ? SheetNames[shell.Page] + "  ·  "
-                : string.Empty;
-            shell.WriteStatus(null, MapPicker.Prompt, pageTag + baseLine);
-        }
-
-        // ---- Shared drawing helpers ------------------------------------------------------
-
-        /// <summary>A quiet instrument section: accent cue, title, optional context and rule.</summary>
-        private float DrawSectionTitle(
-            RectTransform parent, float x, float y, float width, string title, string note, bool band)
-            => DrawSectionTitle(parent, x, y, width, title, note, band, out _);
-
-        private float DrawSectionTitle(
-            RectTransform parent, float x, float y, float width, string title, string note, bool band,
-            out TMP_Text noteLabel)
-        {
-            noteLabel = null;
-            AvKit.Rule(parent, new Rect(x, y - 1f, 3f, 14f),
-                band ? AvTheme.RailInfo : AvTheme.Accent.WithAlpha(0.75f));
-            TMP_Text heading = PlainLabel(parent, new Rect(x + 10f, y, width - 10f, 14f),
-                title, "section-title");
-
-            if (!string.IsNullOrEmpty(note))
-            {
-                noteLabel = PlainLabel(parent, new Rect(x + width * 0.46f, y,
-                    width * 0.54f, 14f), note, "section-title-note");
-                noteLabel.alignment = TextAlignmentOptions.MidlineRight;
-            }
-
-            AvKit.Rule(parent, new Rect(x, y - 18f, width, 1f), AvTheme.Hairline.WithAlpha(0.34f));
-            return y - 24f;
-        }
-
-        /// <summary>One compact page identity; the tab and data bar already carry location.</summary>
-        private static float DrawPageHeader(
-            RectTransform parent, float x, float y, float width, string title, string meta, SqdMark mark)
-        {
-            AvKit.Rule(parent, new Rect(x, y - 8f, 8f, 2f), AvTheme.RailInfo);
-            SqdGlyph glyph = SqdGlyph.Create(parent, new Rect(x + 14f, y - 2f, 15f, 15f), mark);
-            glyph.color = AvTheme.RailInfo;
-            PlainLabel(parent, new Rect(x + 36f, y - 1f, width * 0.52f - 36f, 19f),
-                title, "row-name");
-            if (!string.IsNullOrEmpty(meta))
-            {
-                TMP_Text note = PlainLabel(parent, new Rect(x + width * 0.52f, y - 1f,
-                    width * 0.48f, 19f), meta, "section-title-note");
-                note.alignment = TextAlignmentOptions.MidlineRight;
-            }
-
-            AvKit.Rule(parent, new Rect(x, y - 23f, width, 1f), AvTheme.Hairline);
-            return y - SheetHeaderHeight;
-        }
-
-        /// <summary>A flat, word-labelled status badge.</summary>
-        private static (GameObject Root, Image Fill, TMP_Text Label) StatusBadge(
-            RectTransform parent, Rect area, string text, string state)
-        {
-            var go = new GameObject("StatusBadge", typeof(RectTransform));
-            var rect = (RectTransform)go.transform;
-            rect.SetParent(parent, false);
-            AvKit.Place(rect, area);
-            Image fill = AvKit.Panel(rect, new Rect(0f, 0f, area.width, area.height), AvTheme.SurfaceInert);
-            AvKit.Outline(rect, new Rect(0f, 0f, area.width, area.height), StateColour(state).WithAlpha(0.7f));
-            TMP_Text label = PlainLabel(rect, new Rect(0f, 0f, area.width, area.height), text, "row-sub");
-            label.color = StateColour(state);
-            label.alignment = TextAlignmentOptions.Center;
-            return (go, fill, label);
-        }
-
-        /// <summary>Restate a status badge without rebuilding its frame.</summary>
-        private static void PaintStatusBadge(Image fill, TMP_Text label, string state, string text)
-        {
-            label.text = text;
-            label.color = StateColour(state);
-            if (fill != null) fill.color = StateColour(state).WithAlpha(0.08f);
-        }
-
-        private static Color StateColour(string state) => state == "bad" ? AvTheme.RailDanger
-            : state == "warn" ? AvTheme.RailCaution
-            : state == "ok" ? AvTheme.RailReady
-            : AvTheme.RailInfo;
-
-        /// <summary>An explicit visual-unavailable state used by every portrait frame.</summary>
-        private static GameObject VisualPlaceholder(RectTransform parent, Rect area)
-        {
-            var block = new GameObject("VisualPlaceholder", typeof(RectTransform));
-            var rect = (RectTransform)block.transform;
-            rect.SetParent(parent, false);
-            AvKit.Place(rect, area);
-
-            AvKit.Panel(rect, new Rect(0f, 0f, area.width, area.height), AvTheme.SurfaceInert);
-            AvKit.Rule(rect, new Rect(0f, 0f, 3f, area.height), AvTheme.RailInert);
-            float labelPad = area.width < 60f ? 2f : 6f;
-            TMP_Text label = PlainLabel(rect,
-                new Rect(labelPad, 0f, Mathf.Max(0f, area.width - labelPad * 2f), area.height),
-                area.width < 60f ? "NO\nPHOTO" : "NO VISUAL", "row-sub");
-            label.alignment = TextAlignmentOptions.Center;
-            label.enableWordWrapping = false;
-            label.enableAutoSizing = true;
-            label.fontSizeMin = AvTokens.FontMicro;
-            label.fontSizeMax = label.fontSize;
-            return block;
-        }
-
-        /// <summary>A single structural rail shared by all SQD pages.</summary>
-        private static void PageRail(RectTransform parent, Rect body)
-        {
-            Image rail = AvKit.Rule(parent, new Rect(body.x, body.y, 2f, body.height),
-                AvTheme.RailInfo.WithAlpha(0.45f));
-            rail.raycastTarget = false;
-        }
-
-        /// <summary>
-        /// One aligned status field: key at left and value at right. The value shrinks to
-        /// the micro floor and overflows its own box rather than ending in an ellipsis.
-        /// Built once per field and re-bound on refresh.
-        /// </summary>
-        private sealed class FormRow
-        {
-            private readonly TMP_Text key;
-            public readonly TMP_Text Value;
-
-            public FormRow(RectTransform parent, float lineHeight)
-            {
-                key = PlainLabel(parent, new Rect(0f, 0f, 10f, lineHeight), "", "form-key");
-                Value = PlainLabel(parent, new Rect(0f, 0f, 10f, lineHeight), "—", "form-value");
-                Value.alignment = TextAlignmentOptions.MidlineRight;
-                Value.enableAutoSizing = true;
-                Value.fontSizeMin = AvTokens.FontMicro;
-                Value.fontSizeMax = Value.fontSize;
-                Value.overflowMode = TextOverflowModes.Overflow;
-                key.enableAutoSizing = true;
-                key.fontSizeMin = AvTokens.FontMicro;
-                key.fontSizeMax = key.fontSize;
-                key.overflowMode = TextOverflowModes.Overflow;
-            }
-
-            /// <summary>Lay the field at y; returns the y the next field uses.</summary>
-            public float Bind(float x, float y, float width, float pitch, string keyText, string valueText)
-            {
-                float line = Mathf.Max(12f, pitch - 2f);
-                key.text = keyText ?? "";
-                float keyWidth = width * 0.46f;
-                AvKit.Place(key.rectTransform, new Rect(x, y, keyWidth, line));
-
-                Value.text = string.IsNullOrEmpty(valueText) ? "—" : valueText;
-                float valueWidth = Mathf.Max(44f, width - keyWidth - 8f);
-                AvKit.Place(Value.rectTransform, new Rect(x + width - valueWidth, y, valueWidth, line));
-                return y - pitch;
-            }
-        }
-
-        /// <summary>
-        /// A roster cell that carries a name off the wire: shrink to the micro floor
-        /// rather than cut a pilot's identity into an ellipsis.
-        /// </summary>
-        private static TMP_Text Fitted(TMP_Text label)
-        {
-            if (label == null) return null;
-            label.enableAutoSizing = true;
-            label.fontSizeMin = AvTokens.FontMicro;
-            label.fontSizeMax = label.fontSize;
-            label.overflowMode = TextOverflowModes.Overflow;
-            return label;
-        }
-
-        /// <summary>A field row with its cursor advanced, for a straight run of fields.</summary>
-        private static TMP_Text Field(
-            RectTransform parent, float pitch, float x, ref float y, float width, string key)
-        {
-            var row = new FormRow(parent, pitch - 2f);
-            y = row.Bind(x, y, width, pitch, key, "—");
-            return row.Value;
-        }
-
-        private static Color HoverFill() =>
-            AvStyleHost.Resolve(AvStyleHost.Style("row", "hover").Background, AvTheme.SurfaceRaised);
-
-        /// <summary>Small vector hunt/ace mark, drawn into an area without allocating art.</summary>
-        private static void Glyph(RectTransform parent, Rect area, HuntMark mark, Color color)
-        {
-            var go = new GameObject(mark.ToString(), typeof(RectTransform), typeof(CanvasRenderer), typeof(HuntGlyph));
-            go.transform.SetParent(parent, false);
-            AvKit.Place((RectTransform)go.transform, area);
-            HuntGlyph glyph = go.GetComponent<HuntGlyph>();
-            glyph.Mark = mark;
-            glyph.color = color;
-            glyph.raycastTarget = false;
-        }
-
-        private static TMP_Text PlainLabel(RectTransform parent, Rect area, string text, string classes)
-        {
-            TMP_Text label = AvStyled.Label(parent, area, text, classes, align: TextAlignmentOptions.MidlineLeft);
-            label.richText = false;
-            return label;
-        }
-
-        private static Image FindHighlight(Button button)
-        {
-            if (button == null) return null;
-            Image[] images = button.GetComponentsInChildren<Image>(true);
-            for (int i = 0; i < images.Length; i++)
-                if (images[i].gameObject != button.gameObject) return images[i];
-            return button.GetComponent<Image>();
+            console.Footer.Set(baseLine, progression.BypassRequirements ? AvState.Caution : AvState.Inert);
         }
 
         // ---- Local cosmetics -------------------------------------------------------------
@@ -771,11 +467,13 @@ namespace BoscaliSummer.Features.Progression.Presentation
             return profilePortrait;
         }
 
-        private static void SetPortrait(Image image, GameObject fallback, Sprite sprite)
+        private static Image FindHighlight(Button button)
         {
-            image.sprite = sprite;
-            image.enabled = sprite != null;
-            if (fallback != null) fallback.SetActive(sprite == null);
+            if (button == null) return null;
+            Image[] images = button.GetComponentsInChildren<Image>(true);
+            for (int i = 0; i < images.Length; i++)
+                if (images[i].gameObject != button.gameObject) return images[i];
+            return button.GetComponent<Image>();
         }
 
         // ---- Row pooling -----------------------------------------------------------------
@@ -783,14 +481,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
         private sealed class SkillRow
         {
             public byte Id;
-            public AvButton Select;
-            public Image Fill;
-            public Image Hover;
-            public Image[] Frame;
-            public Image Rail;
-            public SqdGlyph Icon;
-            public TMP_Text Name;
-            public TMP_Text State;
+            public AvRow Row;
         }
 
         /// <summary>One lane's caption and committed count, refreshed as grades are taken.</summary>
@@ -801,25 +492,5 @@ namespace BoscaliSummer.Features.Progression.Presentation
             public readonly List<byte> Ids = new List<byte>(PerkCatalog.MaximumDepth);
         }
 
-        private sealed class WingRow
-        {
-            public RectTransform Root;
-            public GameObject Empty;
-            public TMP_Text EmptyLabel;
-            public Image Rail;
-            public Image Crest;
-            public string CrestKey;
-            public Image Portrait;
-            public GameObject PortraitFallback;
-            public TMP_Text Symbol;
-            public TMP_Text Wing;
-            public TMP_Text Ace;
-            public TMP_Text Skill;
-            public TMP_Text Status;
-            public TMP_Text Members;
-            public TMP_Text Target;
-            public TMP_Text NoSkills;
-            public readonly GameObject[] Badges = new GameObject[AceSkillCatalog.MaximumSkills];
-        }
     }
 }

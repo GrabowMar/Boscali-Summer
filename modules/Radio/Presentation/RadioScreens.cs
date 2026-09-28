@@ -7,31 +7,32 @@ using UnityEngine.UI;
 
 namespace BoscaliSummer.Features.Radio.Presentation
 {
-    /// <summary>One built Boscali radio screen: root, chrome and the body it lays pages into.</summary>
+    /// <summary>One built Boscali radio screen: root, the vanilla show/hide anchor, and the kit v2 console.</summary>
     internal sealed class RadioScreen
     {
         public GameObject Root;
+        public GameObject DisplayPanel;
         public MFDScreen Screen;
-        public AvScreen Shell;
+        public AvConsole Console;
     }
 
     /// <summary>
-    /// The scaffolding the radio panel needs: clone the stock panel's bay, build the shared
-    /// chrome with its tab bar, and hand back the body rectangle. The receiver page and the
-    /// deck page differ in every row they draw and in nothing about how they are mounted.
+    /// The scaffolding the radio panel needs: clone the stock panel's bay position, mount one
+    /// kit v2 <see cref="AvConsole"/> inside it, and wire the vanilla bezel binding
+    /// (<c>MFDScreen.displayPanel</c> / <c>label</c> / <c>highlight</c>). The receiver and deck
+    /// pages differ in every part they add to their <see cref="AvFlow"/>; nothing about how the
+    /// screen is mounted.
     /// </summary>
     internal static class RadioScreens
     {
-        private const float Width = AvTokens.PanelWidth;
-
         public static bool TryBuild(
-            MFDScreen template, Button bezel, string id, string rootName,
-            string[] tabs, Action onPageChanged, out RadioScreen built)
+            MFDScreen template, Button bezel, string id, string title,
+            (AvIcon icon, string label)[] tabs, out RadioScreen built)
         {
             built = null;
             if (template == null) return false;
 
-            var root = new GameObject(rootName, typeof(RectTransform), typeof(Image));
+            var root = new GameObject("BoscaliRadio.Screen", typeof(RectTransform));
             var rootRect = (RectTransform)root.transform;
             rootRect.SetParent(template.transform.parent, false);
 
@@ -44,29 +45,29 @@ namespace BoscaliSummer.Features.Radio.Presentation
             // MFDScreen.ShowScreen assigns it straight to localPosition, so a screen has no
             // remembered home — it is placed by its parent and anchors, and an
             // anchoredPosition written here is overwritten whenever the panel is opened.
-            float height = AvScreen.ResolveHeight(
+            float height = AvLay.ResolveHeight(
                 templateRect.parent as RectTransform, AvTokens.PanelHeight, AvTokens.PanelHeightMax);
-            rootRect.sizeDelta = new Vector2(Width, height);
-            AvKit.ClampIntoCanvas(rootRect);
+            rootRect.sizeDelta = new Vector2(AvTokens.PanelWidth, height);
+            AvLay.ClampIntoCanvas(rootRect);
 
-            Image background = root.GetComponent<Image>();
-            background.sprite = AvSprites.Panel;
-            background.type = Image.Type.Sliced;
-            background.color = Color.white;
-            background.raycastTarget = true;
+            // The vanilla MFDScreen toggles displayPanel's GameObject when the bezel button
+            // cycles to a different screen on this slot; the whole kit v2 console mounts inside
+            // it so one SetActive hides frame, chrome and every page together.
+            var displayObject = new GameObject("Content", typeof(RectTransform));
+            RectTransform display = displayObject.GetComponent<RectTransform>();
+            display.SetParent(rootRect, false);
+            display.anchorMin = Vector2.zero;
+            display.anchorMax = Vector2.one;
+            display.pivot = new Vector2(0.5f, 0.5f);
+            display.offsetMin = Vector2.zero;
+            display.offsetMax = Vector2.zero;
 
-            var contentObject = new GameObject("Content", typeof(RectTransform));
-            RectTransform content = contentObject.GetComponent<RectTransform>();
-            content.SetParent(rootRect, false);
-            AvKit.Stretch(content);
-
-            AvScreen shell = AvScreen.Build(
-                content, id, tabs, null, 3,
-                Width, height, _ => onPageChanged?.Invoke());
+            AvConsole console = AvConsole.Build(display, id, title, tabs.Length, AvTokens.PanelWidth, height);
+            console.Tabs(tabs);
 
             MFDScreen screen = root.AddComponent<MFDScreen>();
             screen.shortName = id;
-            screen.displayPanel = contentObject;
+            screen.displayPanel = displayObject;
             screen.aircraftOnly = false;
             screen.label = bezel == null ? null : bezel.GetComponentInChildren<TextMeshProUGUI>(true);
             screen.highlight = FindHighlight(bezel);
@@ -79,20 +80,11 @@ namespace BoscaliSummer.Features.Radio.Presentation
             built = new RadioScreen
             {
                 Root = root,
+                DisplayPanel = displayObject,
                 Screen = screen,
-                Shell = shell
+                Console = console
             };
             return true;
-        }
-
-        /// <summary>Wrap one page in a clipped scroll viewport when it is taller than the body.</summary>
-        public static RectTransform ScrollPage(
-            AvScreen shell, int index, string name, float contentHeight, out Rect area)
-        {
-            var page = (RectTransform)shell.CreatePage(index, name).transform;
-            RectTransform target = AvScreen.Scroll(page, shell.Body, contentHeight, out area);
-            page.gameObject.SetActive(true);
-            return target;
         }
 
         public static Image FindHighlight(Button button)

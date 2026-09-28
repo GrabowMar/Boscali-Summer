@@ -61,6 +61,65 @@ namespace BoscaliSummer.Tests.Architecture
                 "Fire and Destruction does not own its networking bridge");
             TestAssert.That(File.Exists(Path.Combine(featuresRoot, "Radio", "Runtime", "RadioLibrary.cs")),
                 "Radio does not own its library scanner");
+
+            VerifyKitIsolation(sourceRoot);
+            VerifyMigratedConsoles(sourceRoot, MigratedConsoleFolders);
+        }
+
+        // ------------------------------------------------------------------ kit v2 (FUI program)
+
+        /// <summary>Console folders rebuilt on kit v2 (P2 slices append here). They may not use v1 kit APIs or literals.</summary>
+        internal static readonly string[] MigratedConsoleFolders =
+        {
+            "modules/Command/Presentation", "modules/Support/Presentation", "modules/Comms/Presentation",
+            "modules/Radio/Presentation", "modules/Events/Presentation", "modules/Weather/Presentation",
+            "modules/Progression/Presentation",
+        };
+
+        /// <summary>Data-visualisation files inside migrated folders that legitimately draw raw colours.</summary>
+        private static readonly string[] DataVizAllowlist =
+        {
+            "modules/Command/Presentation/MapUi/MfdTerrainRelief.cs",
+            "modules/Command/Presentation/MapUi/MfdMapDeck.cs",
+            "modules/Support/Presentation/SupportTacticalIcons.cs",
+            "modules/Progression/Presentation/EmblemRenderer.cs",
+            "modules/Radio/Presentation/RadioWaterfall.cs",
+            "modules/Command/Presentation/MapUi/MfdRailPatch.cs",       // map-ground tint
+            "modules/Command/Presentation/MapUi/MfdChromeLay.cs",       // restores a captured vanilla TMP size
+            "modules/Events/Presentation/EventAircraftPreview.cs",      // 3D preview camera background + light
+            "modules/Progression/Presentation/PlaneNativeDamageView.cs", // native damage-state tint (data)
+        };
+
+        private static readonly Regex KitReachesMod = new Regex(
+            @"^\s*using\s+BoscaliSummer\b|\bBoscaliSummer\.[A-Z]", RegexOptions.CultureInvariant | RegexOptions.Multiline);
+
+        private static readonly Regex V1KitOrLiteral = new Regex(
+            @"\bAvKit\.|\bAvStyled\.|\bAvScreen\.|\bnew\s+AvButton\b|\bAvButton\.|\bnew Color\(|\bfontSize\s*=|\bAvFont\.Font\s*=",
+            RegexOptions.CultureInvariant);
+
+        /// <summary>The shared kit is compiled into Wing Command too: it must never reach into Boscali.</summary>
+        internal static void VerifyKitIsolation(string sourceRoot)
+        {
+            foreach (string area in new[] { "Avionics", "AvionicsUi" })
+                foreach (string file in Directory.GetFiles(Path.Combine(sourceRoot, area), "*.cs", SearchOption.AllDirectories))
+                {
+                    if (file.EndsWith("Tests.cs", StringComparison.Ordinal)) continue;
+                    string code = string.Join("\n", File.ReadAllLines(file).Where(l => !l.TrimStart().StartsWith("//")));
+                    TestAssert.That(!KitReachesMod.IsMatch(code), Relative(sourceRoot, file) + " references BoscaliSummer from the shared kit");
+                }
+        }
+
+        internal static void VerifyMigratedConsoles(string sourceRoot, string[] folders)
+        {
+            foreach (string folder in folders)
+                foreach (string file in Directory.GetFiles(Path.Combine(sourceRoot, folder), "*.cs", SearchOption.AllDirectories))
+                {
+                    string rel = Relative(sourceRoot, file).Replace('\\', '/');
+                    if (DataVizAllowlist.Contains(rel)) continue;
+                    string code = string.Join("\n", File.ReadAllLines(file).Where(l => !l.TrimStart().StartsWith("//")));
+                    Match m = V1KitOrLiteral.Match(code);
+                    TestAssert.That(!m.Success, rel + " is a migrated console but uses '" + m.Value + "' (v1 kit or a literal colour/size)");
+                }
         }
 
         private static void VerifySharedArea(string sourceRoot, string area)

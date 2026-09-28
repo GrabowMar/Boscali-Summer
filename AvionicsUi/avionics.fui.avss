@@ -1,0 +1,99 @@
+/* avionics.fui.avss — kit v2 base sheet. Colour ROLES only; a palette sheet defines them.
+   Override: BepInEx/config/NOAvionics/avionics.fui.avss (base) or avionics.<theme>.avss (palette). */
+:root { pad: 14; gap: 8; gutter: 8; }
+
+.console        { background: ground; border: 1 frame; }
+.header         { background: surface-sunken; border: 1 hairline; }
+.id-plate       { background: surface-raised; color: ink; }
+.title          { color: ink; }
+.page-index     { color: ink-dim; }
+
+.chip           { background: surface-inert; color: ink-dim; rail: 2 inert; }
+.chip.ready     { color: ink; rail: 2 ready; }
+.chip.caution   { color: caution; rail: 2 caution; }
+.chip.danger    { color: danger; rail: 2 danger; }
+.chip.info      { color: info; rail: 2 info; }
+
+.metric         { background: surface-inert; border: 1 hairline; }
+.metric-key     { color: key; }
+.metric-value   { color: ink; }
+.metric-unit    { color: ink-dim; }
+.metric-track   { background: hairline; }
+.metric-fill    { background: ready; }
+.metric-fill.caution { background: caution; }
+.metric-fill.danger  { background: danger; }
+
+.tab            { background: surface-sunken; border: 1 hairline; color: ink-dim; }
+.tab:hover      { background: surface; border: 1 frame; color: ink; }
+.tab:latched    { background: surface-raised; border: 1 frame; color: ink; rail: 2 select; }
+
+.section        { border: 1 hairline; }
+.section-title  { color: key; }
+.section-icon   { color: key; }
+.section-caption { color: ink-muted; }
+
+.cell           { background: surface-inert; border: 1 hairline; color: ink; }
+.cell:hover     { background: surface-raised; border: 1 frame; }
+.cell:on        { background: select 14; border: 1 select; }
+.cell:disabled  { background: surface-inert; border: 1 hairline; color: ink-muted; }
+.cell-sub       { color: ink-dim; }
+.cell-state     { color: ink-muted; }
+.cell-state:on  { color: select; }
+.cell-led       { background: inert; }
+.cell-led:on    { background: select; }
+
+.row            { background: surface-inert; rail: 2 info; }
+.row:hover      { background: surface-raised; border: 1 frame; }
+.row:armed      { background: select 14; border: 1 select; rail: 2 select; }
+.row:disabled   { background: surface-inert; rail: 2 inert; }
+.row.ready      { rail: 2 ready; }
+.row.caution    { rail: 2 caution; }
+.row.danger     { rail: 2 danger; }
+.row-name       { color: ink; }
+.row-sub        { color: ink-dim; }
+.row-value      { color: ink; }
+.row-value.ready   { color: ready; }
+.row-value.caution { color: caution; }
+.row-value.danger  { color: danger; }
+
+.control              { background: surface-sunken; border: 1 frame; color: ink; }
+.control:hover        { background: surface-raised; border: 1 ink; color: ink; }
+.control:pressed      { background: select; border: 1 select; color: ground; }
+.control:latched      { background: surface-raised; border: 1 select; color: ink; rail: 2 select; }
+.control:armed        { background: select 22; border: 1 select; color: ink; }
+.control:disabled     { background: surface-inert; border: 1 hairline; color: ink-muted; }
+.control.primary          { background: select; border: 1 select; color: ground; }
+.control.primary:hover    { background: select; border: 1 ink; color: ground; }
+.control.primary:disabled { background: surface-inert; border: 1 hairline; color: ink-muted; }
+.control.quiet            { background: surface-inert; border: 1 hairline; color: ink-dim; }
+.control.quiet:hover      { background: surface; border: 1 frame; color: ink; }
+.control.danger           { background: surface-sunken; border: 1 danger; color: danger; }
+.control.danger:hover     { background: danger 22; border: 1 danger; color: ink; }
+.control.danger:disabled  { background: surface-inert; border: 1 hairline; color: ink-muted; }
+
+.field          { background: surface-sunken; border: 1 hairline; color: ink; }
+.field:focus    { background: surface; border: 1 select; }
+.field:invalid  { border: 1 danger; }
+.field-hint     { color: ink-muted; }
+
+.card           { background: surface; border: 1 hairline; }
+.card.raised    { background: surface-raised; border: 1 frame; }
+.card.inert     { background: surface-inert; border: 1 hairline; }
+.card-bracket   { background: frame; }
+
+.alert          { background: surface-raised; border: 1 caution; rail: 3 caution; }
+.alert.danger   { border: 1 danger; rail: 3 danger; }
+.readout        { color: ink; }
+.readout-unit   { color: ink-dim; }
+.gauge-track    { background: hairline; }
+.gauge-fill     { background: ready; }
+.chart-line     { color: ready; }
+.chart-axis     { color: ink-muted; }
+.chart-grid     { background: hairline 60; }
+.footer         { background: surface-sunken; border: 1 hairline; color: ink-dim; }
+.footer.caution { color: caution; }
+.footer.danger  { color: danger; }
+.window         { background: ground; border: 1 frame; }
+.window-title   { background: surface-raised; color: ink; }
+.scrollbar      { background: hairline; }
+.scrollbar-thumb { background: frame; }

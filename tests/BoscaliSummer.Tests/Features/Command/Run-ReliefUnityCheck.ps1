@@ -18,10 +18,13 @@ $env:BOSCALI_HEIGHT_PREVIEW = $heightAsset
 $env:BOSCALI_STYLE_PREVIEW = $styleAsset
 $env:BOSCALI_ASSET_NAME = $AssetName
 $env:BOSCALI_MAP_WIDTH = if ($AssetName -eq "terrain_naval_map") { "163840" } else { "81920" }
-New-Item -ItemType Directory -Force -Path "$PreviewDirectory/Assets", "$PreviewDirectory/ProjectSettings", "$PreviewDirectory/Packages" | Out-Null
+New-Item -ItemType Directory -Force -Path "$PreviewDirectory/Assets", "$PreviewDirectory/ProjectSettings", "$PreviewDirectory/Packages", "$PreviewDirectory/NOAvionics" | Out-Null
 Set-Content -LiteralPath "$PreviewDirectory/ProjectSettings/ProjectVersion.txt" -Value "m_EditorVersion: 2022.3.62f3"
-Set-Content -LiteralPath "$PreviewDirectory/Packages/manifest.json" -Value '{"dependencies":{"com.unity.ugui":"1.0.0","com.unity.textmeshpro":"3.0.6","com.unity.modules.physics":"1.0.0","com.unity.modules.imageconversion":"1.0.0"}}'
-Copy-Item -LiteralPath "$repo/modules/Command/Presentation/MapUi/MfdTerrainRelief.cs", "$repo/modules/Command/Presentation/MapUi/MfdMapInteractions.cs", "$repo/modules/Command/Domain/ReliefRig.cs", "$repo/modules/Command/Domain/ReliefHoles.cs", "$PSScriptRoot/ReliefUnityStubs.cs", "$PSScriptRoot/ReliefUnityCheck.cs" -Destination "$PreviewDirectory/Assets/"
+Set-Content -LiteralPath "$PreviewDirectory/Packages/manifest.json" -Value '{"dependencies":{"com.unity.ugui":"1.0.0","com.unity.textmeshpro":"3.0.6","com.unity.modules.physics":"1.0.0","com.unity.modules.imageconversion":"1.0.0","com.unity.modules.audio":"1.0.0","com.unity.modules.uielements":"1.0.0","com.unity.modules.assetbundle":"1.0.0","com.unity.modules.imgui":"1.0.0"}}'
+# The relief view and the context menu draw on kit v2 (AvFrame, AvText, AvControl, AvStyleHost ...), so the harness compiles the real kit sources
+# instead of the old v1 kit/AvTheme stubs, like Run-RailUnityCheck.ps1 does.
+Get-ChildItem -LiteralPath "$repo/Avionics", "$repo/AvionicsUi" -Filter '*.cs' -Recurse | Where-Object { $_.Name -notlike '*Tests.cs' } | Copy-Item -Destination "$PreviewDirectory/Assets/"
+Copy-Item -LiteralPath "$repo/modules/Command/Presentation/MapUi/MfdTerrainRelief.cs", "$repo/modules/Command/Presentation/MapUi/MfdMapInteractions.cs", "$repo/modules/Command/Presentation/MapUi/MfdChromeLay.cs", "$repo/modules/Command/Presentation/MapUi/MfdMapOrbitControls.cs", "$repo/modules/Command/Domain/ReliefRig.cs", "$repo/modules/Command/Domain/ReliefHoles.cs", "$PSScriptRoot/ReliefUnityStubs.cs", "$PSScriptRoot/ReliefUnityCheck.cs" -Destination "$PreviewDirectory/Assets/"
 Copy-Item -LiteralPath "$repo/Framework/Contracts/IMapProjection.cs", "$repo/Framework/Contracts/IMapBoxInput.cs" -Destination "$PreviewDirectory/Assets/"
 $arguments = @('-batchmode', '-projectPath', ('"' + $PreviewDirectory + '"'), '-executeMethod', 'ReliefUnityCheck.Run', '-logFile', ('"' + "$PreviewDirectory/check.log" + '"'))
 $process = Start-Process -FilePath $Unity -ArgumentList $arguments -WorkingDirectory $PreviewDirectory -WindowStyle Hidden -PassThru

@@ -277,9 +277,9 @@ namespace BoscaliSummer.Tests.Features.Support
         {
             string text;
             using (System.IO.Stream stream = typeof(OpsLayoutTests).Assembly
-                .GetManifestResourceStream("BoscaliSummer.Tests.avionics.avss"))
+                .GetManifestResourceStream("BoscaliSummer.Tests.rooms.avss"))
             {
-                TestAssert.That(stream != null, "the shipped avionics sheet must be embedded for the room ink check");
+                TestAssert.That(stream != null, "the shipped rooms sheet must be embedded for the room ink check");
                 using (var reader = new System.IO.StreamReader(stream)) text = reader.ReadToEnd();
             }
             AvStyleSheet sheet = AvStyleSheet.Parse(text);

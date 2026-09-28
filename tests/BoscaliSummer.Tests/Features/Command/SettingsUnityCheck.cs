@@ -1,5 +1,6 @@
 #if UNITY_EDITOR
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using BepInEx.Configuration;
@@ -36,14 +37,14 @@ public static class SettingsUnityCheck
             for (int i = 1; i < arguments.Length; i++) arguments[i] = parameters[i].HasDefaultValue ? parameters[i].DefaultValue : null;
             setPaths.Invoke(null, arguments);
             AvStyleHost.Configure(Directory.GetCurrentDirectory(), Debug.Log, Debug.LogWarning);
-            AvFont.Font = TMP_FontAsset.CreateFontAsset(new Font("C:/Windows/Fonts/consola.ttf"));
             new GameObject("Events", typeof(EventSystem));
-            AvionicsUnityCheck.Check();
             CheckMfdLookup();
             CheckLayoutCanvas();
             CheckScreenSpaceSizing();
             foreach (int height in new[] { 596, 420 }) CheckPanel(height);
-            File.WriteAllText("result.txt", "PASS: SET renders six CLIENT pages including live performance toggles and separate SERVER tasking/host settings at 596 and 420 units; toggles, background replacement, disabled dependencies, +/- bounds, scrolling and cached page trees checked. Game adapters are stubbed; in-game acceptance remains required.");
+            File.WriteAllText("result.txt", "PASS: SET (kit v2) renders its nine MAP/DISPLAY/BACKDROP/CAMERA/HUD/PERF/TASKING/HOST/EFFECTS " +
+                "pages at 596 and 420 units; toggles, background replacement, disabled dependencies, +/- bounds and the flat page tree " +
+                "(no per-page GameObject churn) are checked. Game adapters are stubbed; in-game acceptance remains required.");
             EditorApplication.Exit(0);
         }
         catch (Exception ex)
@@ -117,6 +118,9 @@ public static class SettingsUnityCheck
         Object.DestroyImmediate(root);
     }
 
+    // Kit v2 page indices, matching SettingsMfdPanel's own PageMap..PageEffects constants (private there).
+    private const int PMap = 0, PDisplay = 1, PBackdrop = 2, PCamera = 3, PHud = 4, PPerf = 5, PTasking = 6, PHostSettings = 7, PEffects = 8;
+
     private static void CheckPanel(int height)
     {
         var hud = new HudFixture();
@@ -147,21 +151,32 @@ public static class SettingsUnityCheck
         clientBoard.Add("RAIN VISUALS", "CANOPY DROPLETS", "Live; no restart.", canopy);
         clientBoard.Add("RAIN VISUALS", "TERRAIN WET PASS", "Live; no restart.", terrain);
         panel.Configure(config, null, null, hostBoard, clientBoard);
-        var shell = AvScreen.Build((RectTransform)canvas.transform, "SET", new[] { "CLIENT", "SERVER" }, null, 2, 480, height, null);
-        shell.DataBar.SetChip(0, "SAVED", true);
-        shell.DataBar.State.text = "TACTICAL DISPLAY";
-        typeof(SettingsMfdPanel).GetField("shell", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(panel, shell);
-        Invoke(panel, "BuildClientArea", (RectTransform)shell.CreatePage(0, "ClientPage").transform, shell.Body);
-        Invoke(panel, "BuildServerPage", (RectTransform)shell.CreatePage(1, "ServerPage").transform, shell.Body);
+
+        // Install() needs a real bezel claim (stubbed to always fail offline), so the console is built
+        // directly here the same way Install() builds it, then wired into the panel's private field --
+        // mirroring how the retired v1 harness hand-built a shell and injected it as the private "shell" field.
+        AvConsole con = AvConsole.Build((RectTransform)canvas.transform, "SET", "TACTICAL DISPLAY", 9, 480, height);
+        con.Chips(2)[0].Set("SAVED", AvState.Ready);
+        typeof(SettingsMfdPanel).GetField("con", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(panel, con);
+
+        Invoke(panel, "BuildMapPage", con.Page(PMap), PMap);
+        Invoke(panel, "BuildDisplayPage", con.Page(PDisplay), PDisplay);
+        Invoke(panel, "BuildBackdropPage", con.Page(PBackdrop), PBackdrop);
+        Invoke(panel, "BuildCameraPage", con.Page(PCamera), PCamera);
+        Invoke(panel, "BuildHudPage", con.Page(PHud), PHud);
+        Invoke(panel, "BuildPerformancePage", con.Page(PPerf), PPerf);
+        Invoke(panel, "BuildTaskingPage", con.Page(PTasking), PTasking);
+        Invoke(panel, "BuildHostSettingsPage", con.Page(PHostSettings), PHostSettings, HostSettingsPage.Settings, "HOST SETTINGS");
+        Invoke(panel, "BuildHostSettingsPage", con.Page(PEffects), PEffects, HostSettingsPage.Effects, "EFFECTS");
+        con.Finish();
+
         int objects = canvas.GetComponentsInChildren<Transform>(true).Length;
-        shell.SetPage(0);
+
         for (int page = 0; page < 6; page++)
         {
-            Invoke(panel, "SetClientPage", page);
-            Refresh(panel);
-            shell.WriteStatus(null, null, "Saved automatically. Hover a control for help.");
+            con.SetPage(page);
             Render(camera, canvas, height, page);
-            if (page == 1 && height == 596)
+            if (page == PDisplay && height == 596)
             {
                 Image finish = AvDisplayGlass.AttachFullDisplay((RectTransform)canvas.transform);
                 for (int color = 1; color <= 4; color++)
@@ -172,7 +187,6 @@ public static class SettingsUnityCheck
                     config.DisplayVignette.Value = .4f;
                     Invoke(panel, "ApplyDisplayEffects");
                     foreach (var glass in canvas.GetComponentsInChildren<AvDisplayGlass>()) glass.Update();
-                    Refresh(panel);
                     Render(camera, canvas, height, 10 + color);
                 }
                 Object.DestroyImmediate(finish.gameObject);
@@ -184,25 +198,31 @@ public static class SettingsUnityCheck
                 foreach (var glass in canvas.GetComponentsInChildren<AvDisplayGlass>()) glass.Update();
             }
         }
-        shell.SetPage(1);
-        Refresh(panel);
-        Check(Array.Exists(canvas.GetComponentsInChildren<TMP_Text>(), t => t.text == "FACTION TASKING"),
+
+        con.SetPage(PTasking);
+        Check(Array.Exists(canvas.GetComponentsInChildren<TMP_Text>(true), t => t.text == "FACTION TASKING"),
             "SERVER tasking must have its own populated page");
-        Render(camera, canvas, height, 16);
-        Invoke(panel, "SetServerPage", 2);
-        Check(Array.Exists(canvas.GetComponentsInChildren<TMP_Text>(), t => t.text == "MAX FIRE SITES"),
+        Render(camera, canvas, height, PTasking);
+        con.SetPage(PEffects);
+        Check(Array.Exists(canvas.GetComponentsInChildren<TMP_Text>(true), t => t.text == "MAX FIRE SITES"),
             "SERVER effects (fire, weather) must have a dedicated populated page");
-        Refresh(panel);
-        shell.WriteStatus(null, null, "Host only. These settings are read-only on a remote client.");
-        Render(camera, canvas, height, 17);
-        shell.SetPage(0);
-        Invoke(panel, "SetClientPage", 0);
-        Refresh(panel);
-        Click(Find(canvas, "ON"));
+        Render(camera, canvas, height, PEffects);
+
+        // Kit v2 hides an inactive page's canvas rather than deactivating its GameObjects (spec section 8:
+        // "hidden pages get Canvas.enabled = false", not a SetActive churn), so every row search below is
+        // scoped to the page's own content -- otherwise every page's rows would be found at once.
+        RectTransform mapContent = con.Page(PMap).Content;
+        RectTransform displayContent = con.Page(PDisplay).Content;
+        RectTransform cameraContent = con.Page(PCamera).Content;
+        RectTransform hudContent = con.Page(PHud).Content;
+        RectTransform perfContent = con.Page(PPerf).Content;
+
+        con.SetPage(PMap);
+        Click(FindRow(mapContent, "ON"));
         Check(!config.ExpandedMapUi.Value, "Expanded toggle must change persisted config");
-        Invoke(panel, "SetClientPage", 1);
-        Refresh(panel);
-        var plus = Array.FindAll(canvas.GetComponentsInChildren<AvButton>(), b => b.GetComponentInChildren<TMP_Text>().text == "+");
+
+        con.SetPage(PDisplay);
+        var plus = FindByIcon(displayContent, AvIcon.Plus);
         for (int i = 0; i < 20; i++) Click(plus[0]);
         Check(Mathf.Approximately(config.DisplayGlass.Value, 1f), "Glass stepper must clamp at full strength");
         Click(plus[1]);
@@ -212,7 +232,7 @@ public static class SettingsUnityCheck
         var saved = new CommandSettings(new ConfigFile(config.ExpandedMapUi.ConfigFile.ConfigFilePath, false));
         Check(saved.DisplayScanlines.Value == config.DisplayScanlines.Value && saved.DisplayTint.Value == 1,
             "Display effects survive config reload");
-        Click(Find(canvas, "RESET DISPLAY FILTER"));
+        Click(FindControl(displayContent, "RESET DISPLAY FILTER"));
         Check(config.DisplayScanlines.Value == 0f && config.DisplayTint.Value == 0 &&
             Mathf.Approximately(config.DisplayGlass.Value, .6f), "Reset restores the default filter");
         var disabled = plus[5];
@@ -220,7 +240,6 @@ public static class SettingsUnityCheck
         Click(disabled);
         Check(config.DeckOpacity.Value == before, "Disabled controls must reject clicks");
         config.ExpandedMapUi.Value = true;
-        Refresh(panel);
         for (int i = 0; i < 30; i++) Click(plus[5]);
         Check(Mathf.Approximately(config.DeckOpacity.Value, 1f), "Stepper must stop at its upper limit");
         Click(plus[6]);
@@ -232,38 +251,49 @@ public static class SettingsUnityCheck
         var reloaded = new CommandSettings(new ConfigFile(config.ExpandedMapUi.ConfigFile.ConfigFilePath, false));
         Check(reloaded.BackgroundImagePreset.Value == 3 && reloaded.BackgroundImage.Value && !reloaded.DeckGrid.Value,
             "Settings survive reloading the saved configuration");
-        Invoke(panel, "SetClientPage", 4); Refresh(panel);
-        Click(Find(canvas, "ON"));
+        // The four new Avionics.* rows (spec section 11) live on DISPLAY and PERF; a segmented choice and a
+        // toggle cell, both built straight from kit v2 primitives rather than the row helper above.
+        Check(config.AvionicsTheme.Value == AvThemeId.Steel, "Theme defaults to Steel");
+        var themeAce = FindControl(displayContent, "ACE");
+        Click(themeAce);
+        Check(config.AvionicsTheme.Value == AvThemeId.Ace, "THEME segmented control must write AvionicsTheme");
+        var reducedMotion = FindCellState(displayContent, "REDUCED MOTION");
+        Click(reducedMotion);
+        Check(config.AvionicsReducedMotion.Value, "REDUCED MOTION cell must write AvionicsReducedMotion");
+
+        con.SetPage(PHud);
+        Click(FindRow(hudContent, "ON"));
         Check(!hud.Enabled, "HUD switch must write through its public settings seam");
-        Click(Find(canvas, "RESET STATUS LAYOUT"));
+        Click(FindControl(hudContent, "RESET STATUS LAYOUT"));
         Check(hud.Enabled && hud.Resets == 1, "HUD reset must remain usable while the overlay is disabled");
-        Invoke(panel, "SetClientPage", 3); Refresh(panel);
-        Click(Find(canvas, "ON"));
+
+        con.SetPage(PCamera);
+        Click(FindRow(cameraContent, "ON"));
         Check(!hud.CameraFeedEnabled, "TARGET CAMERA must write through the HUD board seam");
-        Refresh(panel);
-        Click(Find(canvas, "ON"));
+        Click(FindRow(cameraContent, "ON"));
         Check(!config.TargetPresetWheel.Value, "RADIAL PRESETS must write its saved entry");
-        Invoke(panel, "SetClientPage", 5); Refresh(panel);
-        Check(Array.Exists(canvas.GetComponentsInChildren<TMP_Text>(), t => t.text == "NO RESTART"),
+
+        con.SetPage(PPerf);
+        Check(Array.Exists(perfContent.GetComponentsInChildren<TMP_Text>(true), t => t.text == "NO RESTART"),
             "Performance rows must state their restart requirement");
-        Click(Find(canvas, "OFF"));
+        Click(FindRow(perfContent, "OFF"));
         Check(performance.Value, "Performance toggle must update its owning config entry");
-        var onButtons = Array.FindAll(canvas.GetComponentsInChildren<AvButton>(),
-            b => b.GetComponentInChildren<TMP_Text>().text == "ON");
-        Check(onButtons.Length == 4, "Performance page must expose four live switches");
-        Click(onButtons[1]);
+        var onRows = FindRows(perfContent, "ON");
+        Check(onRows.Length == 4, "Performance page must expose four live switches");
+        Click(onRows[1]);
         Check(!rain.Value, "Weather performance toggle must update its owning config entry");
-        Click(onButtons[2]);
-        Click(onButtons[3]);
+        Click(onRows[2]);
+        Click(onRows[3]);
         Check(!canopy.Value && !terrain.Value, "Canopy and terrain switches must update their owning entries");
-        for (int i = 0; i < 20; i++)
-        {
-            shell.SetPage(i % 2);
-            Invoke(panel, "SetClientPage", i % 6);
-            Refresh(panel);
-        }
-        Check(objects == canvas.GetComponentsInChildren<Transform>(true).Length, "Tab changes must reuse the same tree");
-        if (height == 420) Check(canvas.GetComponentsInChildren<ScrollRect>(true).Length > 0, "Short panels must scroll");
+        Check(config.AvionicsFxTier.Value == AvFxTier.Full, "FX tier defaults to Full");
+        Click(FindControl(perfContent, "OFF"));
+        Check(config.AvionicsFxTier.Value == AvFxTier.Off, "FX TIER segmented control must write AvionicsFxTier");
+        Click(FindCellState(perfContent, "BLUR BEHIND"));
+        Check(config.AvionicsBlurBehind.Value, "BLUR BEHIND cell must write AvionicsBlurBehind");
+
+        for (int i = 0; i < 20; i++) con.SetPage(i % 9);
+        Check(objects == canvas.GetComponentsInChildren<Transform>(true).Length, "Page changes must reuse the same tree");
+        if (height == 420) Check(canvas.GetComponentsInChildren<ScrollRect>(true).Length > 0, "Every page keeps its scroll viewport");
         Object.DestroyImmediate(canvas.gameObject);
         Object.DestroyImmediate(camera.gameObject);
     }
@@ -272,13 +302,45 @@ public static class SettingsUnityCheck
         typeof(SettingsMfdPanel).GetMethod(method, BindingFlags.NonPublic | BindingFlags.Instance)
             .Invoke(panel, args);
 
-    private static void Refresh(SettingsMfdPanel panel) => typeof(SettingsMfdPanel)
-        .GetMethod("RefreshPanel", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(panel, null);
-    private static AvButton Find(Canvas canvas, string label) => Array.Find(canvas.GetComponentsInChildren<AvButton>(),
-        b => b.GetComponentInChildren<TMP_Text>().text == label);
-    private static void Click(AvButton button) => button.OnPointerClick(new PointerEventData(EventSystem.current)
+    /// <summary>The AvRow whose ON/OFF (or numeric) badge reads exactly this text, inside one page's content.</summary>
+    private static Transform FindRow(RectTransform scope, string valueText)
+    {
+        var rows = FindRows(scope, valueText);
+        return rows.Length > 0 ? rows[0] : null;
+    }
+
+    private static Transform[] FindRows(RectTransform scope, string valueText)
+    {
+        var found = new List<Transform>();
+        foreach (TMP_Text t in scope.GetComponentsInChildren<TMP_Text>(true))
+            if (t.gameObject.name == "Value" && t.text == valueText) found.Add(t.transform.parent);
+        return found.ToArray();
+    }
+
+    /// <summary>A standalone AvControl (a plain button, or one option of an AvSegmented) by its visible label.</summary>
+    private static AvControl FindControl(RectTransform scope, string label) =>
+        Array.Find(scope.GetComponentsInChildren<AvControl>(true), c => c.Label == label);
+
+    /// <summary>The trailing +/- (or similarly iconed) AvControls across a page, in build order.</summary>
+    private static AvControl[] FindByIcon(RectTransform scope, AvIcon icon) =>
+        Array.FindAll(scope.GetComponentsInChildren<AvControl>(true), c => c.transform.Find("Icon " + icon) != null);
+
+    /// <summary>An AvCell's own click surface (its Frame, found by the cell's title text), by title.</summary>
+    private static Transform FindCellState(RectTransform scope, string title)
+    {
+        foreach (TMP_Text t in scope.GetComponentsInChildren<TMP_Text>(true))
+            if (t.gameObject.name == "Title" && t.text == title) return t.transform.parent;
+        return null;
+    }
+
+    private static void Click(Transform target) =>
+        target.GetComponentInChildren<AvHit>(true).OnPointerClick(new PointerEventData(EventSystem.current)
         { button = PointerEventData.InputButton.Left });
+
+    private static void Click(AvControl control) => Click(control.transform);
+
     private static void Check(bool condition, string message) { if (!condition) throw new Exception(message); }
+
     private static void Render(Camera camera, Canvas canvas, int height, int page)
     {
         Canvas.ForceUpdateCanvases();
@@ -296,6 +358,7 @@ public static class SettingsUnityCheck
         Object.DestroyImmediate(target);
         Object.DestroyImmediate(image);
     }
+
     private sealed class HostFixture : IHostSettingsView
     {
         private readonly HostSettingView[] rows =

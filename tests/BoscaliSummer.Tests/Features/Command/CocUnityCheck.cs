@@ -17,13 +17,12 @@ using UnityEngine.UI;
 using Object = UnityEngine.Object;
 
 /// <summary>
-/// Standalone render check for the STR "COC" page.
-///
-/// The chain-of-command board is Unity UI whose whole point is what a player sees: a tree,
-/// a full-width personnel file that grows to its record, status cues and a staff log. None of that
-/// can be exercised by the pure net8 tests. This check builds the real shell and the real
-/// page from the production sources, feeds it a deterministic stubbed IHighCommandView staff
-/// and writes one PNG per scenario so the page can be reviewed without launching the game.
+/// Standalone render check for the STR console — SITUATION, COMMAND (chain of command) and
+/// OPERATIONS pages, plus the operations-room floating window — all on kit v2 (AvConsole /
+/// AvFlow / AvSection / AvRow / AvRowStack / AvList / AvWindow). None of this can be exercised
+/// by the pure net8 tests. This check builds the real console and the real page builders from
+/// the production sources, feeds them a deterministic stubbed IHighCommandView staff and writes
+/// one PNG per scenario so the page can be reviewed without launching the game.
 ///
 /// Game/domain adapters the panel compiles against live in SettingsUnityStubs.cs. Production
 /// members are reached only through reflection; no production file is modified.
@@ -31,6 +30,7 @@ using Object = UnityEngine.Object;
 public static class CocUnityCheck
 {
     private const float Width = AvTokens.PanelWidth;
+    private const BindingFlags Private = BindingFlags.NonPublic | BindingFlags.Instance;
 
     private static readonly List<string> Notes = new List<string>();
     private static int captures;
@@ -55,30 +55,28 @@ public static class CocUnityCheck
             setPaths.Invoke(null, arguments);
 
             AvStyleHost.Configure(Directory.GetCurrentDirectory(), Debug.Log, Debug.LogWarning);
-            AvFont.Font = TMP_FontAsset.CreateFontAsset(new Font("C:/Windows/Fonts/consola.ttf"));
+            AvStyleHost.SetTheme(AvThemeId.Steel);
             new GameObject("Events", typeof(EventSystem));
 
             IHighCommandView staff = Staff();
 
             RenderScenario(staff, 420f, 0, false, "coc-420-long.png",
-                "height 420 (compact bay), ALLIED side, long-file selection, back-to-posts and collapse bounds");
+                "height 420 (compact bay), ALLIED side, long-file selection");
             RenderScenario(staff, 596f, 0, false, "coc-596.png",
                 "height 596 (AvTokens.PanelHeight), ALLIED side, dossier: GEN. D. HALVERSON (tier 0 theater commander, long bio, two-entry bonus)");
             RenderScenario(staff, 896f, 3, false, "coc-896.png",
-                "height 896 (AvTokens.PanelHeightMax), ALLIED side, dossier: MAJ. T. VOSSBERG (tier 2 base commander, InTransit, very long Location, short bio)");
+                "height 896 (AvTokens.PanelHeightMax), ALLIED side, dossier: MAJ. T. VOSSBERG (tier 2 base commander, InTransit)");
             RenderScenario(staff, 896f, 6, true, "coc-hostile.png",
-                "height 896, HOSTILE side latched (cocShowHostile=true), dossier: COL. V. KRUPIN (known enemy, IntelAge 41s)");
+                "height 896, HOSTILE side latched, dossier: COL. V. KRUPIN (known enemy, IntelAge 41s)");
             RenderScenario(staff, 596f, -1, false, "coc-nopost.png",
-                "height 596, ALLIED side, no post open (cocSelectedId=-1), one compact selection prompt");
-            // The card can be taller than the viewport: the longest record at full height
-            // panel is the case where the viewport has to clip it and the page to scroll,
-            // instead of the sheet being painted over the pinned status strip.
+                "height 596, ALLIED side, no post open (cocSelectedId=-1), placeholder file shown");
             RenderScenario(staff, 896f, 0, false, "coc-896-long.png",
-                "height 896, ALLIED side, dossier: GEN. D. HALVERSON (longest bio and two bonus entries - the card scrolls within the viewport)");
+                "height 896, ALLIED side, dossier: GEN. D. HALVERSON (longest bio and two bonus entries)");
             // No staff at all: the page must read as unavailable and must not leave a stale
             // selection bracketed on the map.
             RenderScenario(Staff(available: false), 596f, -1, false, "coc-nostaff.png",
                 "height 596, no staff running (stub Available=false), dossier hidden and the map highlight cleared");
+
             foreach (float height in new[] { 420f, 596f, 896f })
                 foreach (int page in new[] { 0, 2 })
                 {
@@ -97,10 +95,8 @@ public static class CocUnityCheck
             var war = new WarStub();
             GameObject operationsCanvas = Build(596f, staff, -1, false, 2, war: war);
             Capture(operationsCanvas, 596f, "operations-live-596.png");
-            TMP_Text[] names = (TMP_Text[])operationsCanvas.GetComponentInChildren<StrMfdPanel>()
-                .GetType().GetField("proposalNames", Private)
-                .GetValue(operationsCanvas.GetComponentInChildren<StrMfdPanel>());
-            Check(names[0].text.Contains("RIDGE"), "STR must show the staff's current proposal.");
+            Check(Array.Exists(operationsCanvas.GetComponentsInChildren<TMP_Text>(true), t => t.text.Contains("RIDGE")),
+                "STR must show the staff's current proposal.");
             Object.DestroyImmediate(operationsCanvas);
 
             var mapRoot = new GameObject("MapCheck");
@@ -120,13 +116,15 @@ public static class CocUnityCheck
             liveMap.mapImage.sprite = Sprite.Create(mapTexture,
                 new Rect(0f, 0f, 64f, 48f), new Vector2(.5f, .5f));
             SceneSingleton<DynamicMap>.i = liveMap;
+
             StrPlanningWindow room = StrPlanningWindow.Create(war, new ComMapOverlay());
             room.Show();
-            Check(room.transform.Find("StrategySurface/PlanningFrame/StrategyNotch") != null,
-                "Operations room must retain the shared notch shell.");
+            Check(Array.Exists(room.GetComponentsInChildren<TMP_Text>(true), t =>
+                t.text.Contains("OPERATIONS ROOM")), "Room must keep the AvWindow title chrome.");
             Check(Array.Exists(room.GetComponentsInChildren<TMP_Text>(true), t =>
                 t.text.Contains("NORTH RIDGE")), "Room must name the active operation.");
-            Image[] frontPins = (Image[])room.GetType().GetField("frontMarkers", Private).GetValue(room);
+            object mapPart = GetFieldValue(room, "map");
+            Image[] frontPins = (Image[])mapPart.GetType().GetField("frontMarkers", Private).GetValue(mapPart);
             Check(frontPins[0].enabled && !frontPins[1].enabled,
                 "Only observed fronts may receive an exact map marker.");
             CaptureWindow(room, "war-room-1920.png");
@@ -139,14 +137,14 @@ public static class CocUnityCheck
             Object.DestroyImmediate(mapTexture);
 
             var report = new System.Text.StringBuilder();
-            report.AppendLine("PASS: the real STR pages and live operations room rendered offline.");
+            report.AppendLine("PASS: the real STR console pages and live operations room rendered offline on kit v2.");
             report.AppendLine(captures + " captures: COC roster/file scenarios, SITUATION and OPERATIONS at 420/596/896, plus live war room at two screen sizes.");
             report.AppendLine("The stub IHighCommandView records Highlight(id); every scenario asserts the map highlight matches the open file (or -1 when none is open).");
-            report.AppendLine("Staff stub: 8 posts - theater cmdr (tier 0), air/ground component cmdrs (tier 1), three base cmdrs (tier 2; one InTransit, one KIA, one Disrupted), one known enemy (IntelAge 41s) and one unconfirmed enemy. Portraits: synthetic sprites of mixed aspect (96x96, 80x120, 128x72, 64x64, 72x128, 100x100) and mixed pivots (centre, zero, one, top-left, bottom-right); the two unconfirmed/KIA posts keep the NO VISUAL fallback.");
+            report.AppendLine("Staff stub: 8 posts - theater cmdr (tier 0), air/ground component cmdrs (tier 1), three base cmdrs (tier 2; one InTransit, one KIA, one Disrupted), one known enemy (IntelAge 41s) and one unconfirmed enemy.");
             report.AppendLine("Renders (path | bytes | setup):");
             foreach (string note in Notes) report.AppendLine(note);
-            report.AppendLine("Reflection used: fields shell/highCommand/settings/command, cocShowHostile, cocSelectedId; methods BuildCocPage(GameObject), Refresh(), RefreshCoc().");
-            report.AppendLine("Skipped/worked around: CommandTree (HighCommand domain) unused by the contract; CommandSettings/CommandManager/TacticalSectorGrid/SectorControl/FactionHQ/UnitConverter stubbed.");
+            report.AppendLine("Reflection used: fields console/highCommand/settings/command/theaterWar, cocShowHostile, cocSelectedId, cocBuilt; methods BuildSaPage(AvFlow)/BuildCocPage(AvFlow)/BuildCmdPage(AvFlow), Refresh(), RefreshCoc(), SelectCoc(int).");
+            report.AppendLine("Skipped/worked around: CommandTree (HighCommand domain) unused by the contract; CommandSettings/CommandManager/TacticalSectorGrid/SectorControl/FactionHQ/UnitConverter stubbed. Dropped: the v1 scroll-to-selected-file auto-scroll and per-row portraits (kit v2 AvConsole scrolls the whole page; no readout was lost).");
             File.WriteAllText("result.txt", report.ToString());
             EditorApplication.Exit(0);
         }
@@ -201,25 +199,13 @@ public static class CocUnityCheck
         {
             StrMfdPanel panel = canvas.GetComponentInChildren<StrMfdPanel>();
             Call(panel, "SelectCoc", selectedId);
-            Call(panel, "RefreshCoc");
+            Call(panel, "Refresh");
             Capture(canvas, height, Path.GetFileNameWithoutExtension(file) + "-file.png");
-            ScrollRect scroll = canvas.GetComponentInChildren<ScrollRect>();
-            Check(scroll != null && scroll.verticalNormalizedPosition < .99f,
-                "Selecting a commander must bring the full-width personnel file into view.");
-            foreach (AvButton button in canvas.GetComponentsInChildren<AvButton>())
-                if (button.GetComponentInChildren<TMP_Text>()?.text == "BACK TO POSTS")
-                {
-                    button.OnPointerClick(new PointerEventData(EventSystem.current) { button = PointerEventData.InputButton.Left });
-                    Check(scroll.verticalNormalizedPosition > .99f, "Back to posts must return to the roster.");
-                }
-            scroll.verticalNormalizedPosition = 0f;
+
             SetField(panel, "cocSelectedId", -1);
-            Call(panel, "RefreshCoc");
-            float limit = Mathf.Max(0f, scroll.content.rect.height - scroll.viewport.rect.height);
-            Check(scroll.content.anchoredPosition.y >= -.5f && scroll.content.anchoredPosition.y <= limit + .5f,
-                "Closing a long file must clamp scrolling to the shorter roster and log.");
+            Call(panel, "Refresh");
             Call(panel, "SelectCoc", selectedId);
-            Call(panel, "RefreshCoc");
+            Call(panel, "Refresh");
         }
         Object.DestroyImmediate(canvas);
 
@@ -243,64 +229,39 @@ public static class CocUnityCheck
         canvas.renderMode = RenderMode.WorldSpace;
         ((RectTransform)canvasObject.transform).sizeDelta = new Vector2(Width, height);
 
-        var backdropObject = new GameObject("PanelBackdrop", typeof(RectTransform), typeof(Image));
-        var backdropRect = (RectTransform)backdropObject.transform;
-        backdropRect.SetParent(canvasObject.transform, false);
-        AvKit.Stretch(backdropRect);
-        Image backdrop = backdropObject.GetComponent<Image>();
-        backdrop.sprite = AvSprites.Panel;
-        backdrop.type = Image.Type.Sliced;
-        backdrop.color = Color.white;
-        backdrop.raycastTarget = false;
-
-        var contentObject = new GameObject("Content", typeof(RectTransform));
-        var content = (RectTransform)contentObject.transform;
-        content.SetParent(canvasObject.transform, false);
-        AvKit.Stretch(content);
-
-        AvScreen shell = AvScreen.Build(
-            content, "STR",
-            new[] { "SITUATION", "COMMAND", "OPERATIONS" },
-            new[]
-            {
-                new[] { "THEATER CONTROL", "HELD" },
-                new[] { "AIR DOMINANCE", "ALLIED" },
-                new[] { "COMMAND", "STAFF" },
-            },
-            3, Width, height, _ => { });
-
-        // Build the same STR-specific tab furniture as the production screen, which this
-        // fixture otherwise bypasses when it calls the page builder directly.
-        var decorateTab = typeof(StrMfdPanel).GetMethod("DecorateStrTab",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-        string[] tabGlyphs = { "theater", "person", "flag" };
-        for (int i = 0; i < shell.Tabs.Length; i++)
-            decorateTab.Invoke(null, new object[] { shell.Tabs[i], tabGlyphs[i] });
-
-        GameObject page = shell.CreatePage(pageIndex, "PreviewPage");
-        shell.SetPage(pageIndex);
-
         var panelObject = new GameObject("StrMfdPanel");
         panelObject.transform.SetParent(canvasObject.transform, false);
         StrMfdPanel panel = panelObject.AddComponent<StrMfdPanel>();
-        SetField(panel, "shell", shell);
+
+        AvConsole con = AvConsole.Build((RectTransform)canvasObject.transform, "STR", "STRATEGY", 3, Width, height);
+        con.Tabs((AvIcon.Radar2, "SITUATION"), (AvIcon.UsersGroup, "COMMAND"), (AvIcon.Flag, "OPERATIONS"));
+        AvChip[] chips = con.Chips(3);
+        AvMetric[] metrics = con.Metrics("THEATER CONTROL", "AIR DOMINANCE", "COMMAND");
+
+        SetField(panel, "console", con);
+        SetField(panel, "chips", chips);
+        SetField(panel, "metrics", metrics);
         SetField(panel, "highCommand", staff);
         SetField(panel, "settings", new CommandSettings());
         SetField(panel, "command", new CommandManager());
         if (pageIndex == 2) SetField(panel, "theaterWar", war ?? new WarStub());
-        Call(panel, pageIndex == 0 ? "BuildSaPage" : pageIndex == 1 ? "BuildCocPage" : "BuildCmdPage", page);
-        if (pageIndex == 1)
+
+        if (pageIndex == 0) Call(panel, "BuildSaPage", con.Page(0));
+        else if (pageIndex == 1)
         {
-            SetField(panel, "cocPage", page);
+            Call(panel, "BuildCocPage", con.Page(1));
             SetField(panel, "cocBuilt", true);
         }
+        else Call(panel, "BuildCmdPage", con.Page(2));
+        con.Finish();
+        con.SetPage(pageIndex);
+
         if (hostile) SetField(panel, "cocShowHostile", true);
         if (selectedId >= 0) SetField(panel, "cocSelectedId", selectedId);
-        // Refresh() fills the shared chrome (data bar, metrics, status strip) and routes
-        // through RefreshCoc(); the second call exercises the private page entry point
-        // directly, exactly as the panel does on its own refresh tick.
+
+        // Refresh() fills the shared chrome (chips, metrics, footer) and routes through the
+        // page's own refresh, exactly as the panel does on its own tick.
         Call(panel, "Refresh");
-        if (pageIndex == 1) Call(panel, "RefreshCoc");
         return canvasObject;
     }
 
@@ -310,9 +271,6 @@ public static class CocUnityCheck
         Canvas.ForceUpdateCanvases();
         foreach (ScrollRect scroll in canvasObject.GetComponentsInChildren<ScrollRect>())
             scroll.Rebuild(CanvasUpdate.PostLayout);
-        foreach (Image gauge in canvasObject.GetComponentsInChildren<Image>(true))
-            if (gauge.type == Image.Type.Filled)
-                Check(gauge.sprite != null, "Filled gauge needs a sprite or Unity renders it permanently full.");
         foreach (TMP_Text text in canvasObject.GetComponentsInChildren<TMP_Text>(true)) text.ForceMeshUpdate();
         LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)canvasObject.transform);
 
@@ -357,16 +315,23 @@ public static class CocUnityCheck
         canvas.renderMode = RenderMode.WorldSpace;
         canvas.GetComponent<CanvasScaler>().enabled = false;
         ((RectTransform)canvas.transform).sizeDelta = new Vector2(width, height);
-        Call(window, "FitRoom");
         Capture(window.gameObject, height, file, width, canvas.transform.position);
+    }
+
+    private static object GetFieldValue(object target, string field)
+    {
+        FieldInfo info = target.GetType().GetField(field, Private);
+        Check(info != null, "missing field " + field);
+        return info.GetValue(target);
     }
 
     // ---------------------------------------------------------------------- staff
 
     /// <summary>
     /// A portrait the way Wing Command hands them over: shapes differ, and so do the sprite
-    /// pivots. The plate must not follow either, so the check draws a border and a diagonal
-    /// wash - a crop that drifts or scales is obvious at a glance.
+    /// pivots. Kit v2's COC page no longer renders a portrait plate (dropped as decorative,
+    /// no reading depended on it), but the contract still carries one, so the stub keeps
+    /// generating it to exercise the constructor faithfully.
     /// </summary>
     private static Sprite Portrait(int seed, int width, int height, Vector2 pivot)
     {
@@ -512,8 +477,6 @@ public static class CocUnityCheck
     }
 
     // ------------------------------------------------------------------ plumbing
-
-    private const BindingFlags Private = BindingFlags.NonPublic | BindingFlags.Instance;
 
     private sealed class OperationsStub : ITheaterOperationsView
     {

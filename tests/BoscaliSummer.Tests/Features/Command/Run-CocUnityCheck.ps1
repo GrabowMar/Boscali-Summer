@@ -6,9 +6,9 @@ $ErrorActionPreference = "Stop"
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "../../../..")).Path
 New-Item -ItemType Directory -Force -Path "$PreviewDirectory/Assets", "$PreviewDirectory/ProjectSettings", "$PreviewDirectory/Packages", "$PreviewDirectory/NOAvionics" | Out-Null
 Set-Content -LiteralPath "$PreviewDirectory/ProjectSettings/ProjectVersion.txt" -Value "m_EditorVersion: 2022.3.62f3"
-Set-Content -LiteralPath "$PreviewDirectory/Packages/manifest.json" -Value '{"dependencies":{"com.unity.ugui":"1.0.0","com.unity.textmeshpro":"3.0.6","com.unity.modules.audio":"1.0.0","com.unity.modules.imageconversion":"1.0.0","com.unity.modules.uielements":"1.0.0"}}'
-Get-ChildItem -LiteralPath "$repo/Avionics", "$repo/AvionicsUi" -Filter '*.cs' | Where-Object { $_.Name -notlike '*Tests.cs' } | Copy-Item -Destination "$PreviewDirectory/Assets/"
-Copy-Item -LiteralPath "$repo/AvionicsUi/avionics.avss" -Destination "$PreviewDirectory/NOAvionics/"
+Set-Content -LiteralPath "$PreviewDirectory/Packages/manifest.json" -Value '{"dependencies":{"com.unity.ugui":"1.0.0","com.unity.textmeshpro":"3.0.6","com.unity.modules.audio":"1.0.0","com.unity.modules.imageconversion":"1.0.0","com.unity.modules.uielements":"1.0.0","com.unity.modules.assetbundle":"1.0.0"}}'
+Get-ChildItem -LiteralPath "$repo/Avionics", "$repo/AvionicsUi" -Filter '*.cs' -Recurse | Where-Object { $_.Name -notlike '*Tests.cs' } | Copy-Item -Destination "$PreviewDirectory/Assets/"
+Get-ChildItem -LiteralPath "$repo/AvionicsUi" -Filter 'avionics.*.avss' | Copy-Item -Destination "$PreviewDirectory/NOAvionics/"
 Copy-Item -LiteralPath `
     "$repo/modules/Command/Presentation/MapUi/MfdGlyph.cs", `
     "$repo/modules/Command/Presentation/MapUi/MfdLayout.cs", `
@@ -16,6 +16,7 @@ Copy-Item -LiteralPath `
     "$repo/modules/Command/Presentation/StrMfdPanel.Coc.cs", `
     "$repo/modules/Command/Presentation/StrMfdPanel.Cmd.cs", `
     "$repo/modules/Command/Presentation/StrPlanningWindow.cs", `
+    "$repo/modules/Command/Presentation/StrConsoleParts.cs", `
     "$repo/modules/Command/Domain/CommandRosterOrder.cs", `
     "$repo/modules/Command/Domain/TacticalTheaterState.cs", `
     "$repo/modules/Command/Domain/TheaterReadout.cs", `

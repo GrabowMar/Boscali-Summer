@@ -1,12 +1,9 @@
-﻿using System;
+using System;
 using BoscaliSummer.Features.Support.Domain;
 using BoscaliSummer.Features.Support.Domain.Orbital;
 using BoscaliSummer.Features.Support.Runtime;
 using NOAvionics;
 using NOAvionics.Ui;
-using TMPro;
-using UnityEngine;
-using UnityEngine.UI;
 
 namespace BoscaliSummer.Features.Support.Presentation
 {
@@ -20,25 +17,23 @@ namespace BoscaliSummer.Features.Support.Presentation
     /// the task map (<see cref="Views.StationTaskingView"/>), with the station wall one step deeper because it has
     /// no business competing for attention with the aircraft.</para>
     ///
-    /// <para>This file is the shell: sub-tabs, the work that must keep running with the page
-    /// closed (the radar product and the voice loop) and the widgets the pages share. Every
-    /// figure comes from the station model; every control is a host request.</para>
+    /// <para>This file is the shell: sub-page wiring, the work that must keep running with the
+    /// page closed (the radar product and the voice loop) and the state the two SPACE sub-pages
+    /// share. Every figure comes from the station model; every control is a host request.</para>
     /// </summary>
     internal sealed partial class SupportPanel
     {
-        private const int SubStatus = 0;
-        private const int SubActions = 1;
         private const int LoopLines = 6;
-        private const float TileHeight = 46f;
+        private const string StationStatusHelp = "The station at a glance: fixed position, modules, health and the voice loop.";
+        private const string StationActionsHelp = "The station's abilities and their module requirements.";
 
-        private static readonly string[] SubLabels = { "STATUS", "ACTIONS" };
+        private OpsSubPage spacePage;
 
-        /// <summary>Mobility's tint, taken from the live theme so a wash and its rail can never disagree.</summary>
-        private static Color MobilityColour => AvTheme.Warning;
-
-        private readonly GameObject[] spaceSubPages = new GameObject[2];
-        private int spaceSub;
-
+        /// <summary>
+        /// The voice loop, newest line first. <see cref="Views.StationView"/> and
+        /// <see cref="Views.StationTaskingView"/> take this array by reference (Window.cs), so its
+        /// identity and ring-buffer semantics must not change.
+        /// </summary>
         private readonly string[] loop = new string[LoopLines];
         private readonly PlatformProducts products = new PlatformProducts();
         private readonly PlatformPlan plan = new PlatformPlan();
@@ -55,9 +50,8 @@ namespace BoscaliSummer.Features.Support.Presentation
 
         private void ResetSpacePage()
         {
-            for (int i = 0; i < spaceSubPages.Length; i++) spaceSubPages[i] = null;
+            spacePage = null;
             for (int i = 0; i < loop.Length; i++) loop[i] = null;
-            spaceSub = SubStatus;
             loggedStatus = null;
             loggedExists = false;
             loggedPending = ModuleKind.None;
@@ -72,51 +66,24 @@ namespace BoscaliSummer.Features.Support.Presentation
 
         // ---- Build ---------------------------------------------------------------------------
 
-        private void BuildSpacePage()
+        private void BuildSpacePage(AvFlow page)
         {
-            var page = (RectTransform)shell.CreatePage(TabSpace, "SpacePage").transform;
-            // Each sub-page carries its own title row with the STATUS / ACTIONS toggle (M1).
-            Rect subBody = shell.Body;
-            for (int i = 0; i < spaceSubPages.Length; i++)
+            spacePage = page.Add(new OpsSubPage(page.Content, page.Ticker, page.Inner, AvIcon.Satellite, "SPACE", sub =>
             {
-                var go = new GameObject("Space" + i, typeof(RectTransform));
-                var rect = (RectTransform)go.transform;
-                rect.SetParent(page, false);
-                AvKit.Stretch(rect);
-                spaceSubPages[i] = go;
-            }
-
-            BuildStationPage((RectTransform)spaceSubPages[SubStatus].transform, subBody);
-            BuildSpaceOpsPage((RectTransform)spaceSubPages[SubActions].transform, subBody);
-            SelectSpaceSub(SubStatus);
+                nextRefresh = 0f;
+                shell.Page(TabSpace).RequestRelayout();
+            }, StationStatusHelp, StationActionsHelp));
+            BuildStationPage(spacePage.Status);
+            BuildSpaceOpsPage(spacePage.Actions);
             Log("CONSOLE ONLINE · FLIGHT HAS THE ROOM");
-        }
-
-        private static RectTransform BeginSub(RectTransform root, Rect body, float contentHeight,
-                                              out float x, out float y, out float width)
-        {
-            RectTransform parent = AvScreen.Scroll(root, body, contentHeight, out Rect area);
-            x = area.x + 4f;
-            y = area.y;
-            width = area.width - 8f;
-            return parent;
-        }
-
-        private void SelectSpaceSub(int sub)
-        {
-            spaceSub = Mathf.Clamp(sub, 0, spaceSubPages.Length - 1);
-            AvButton.ClearTooltip();
-            for (int i = 0; i < spaceSubPages.Length; i++)
-                if (spaceSubPages[i] != null) spaceSubPages[i].SetActive(i == spaceSub);
-            nextRefresh = 0f;
         }
 
         private void RefreshSpace(bool bypass)
         {
-            if (spaceSubPages[SubStatus] == null) return;
+            if (spacePage == null) return;
             OrbitalPlatform platform = support.LocalPlatform;
             double now = support.OrbitNow;
-            if (spaceSub == SubStatus) RefreshStationPage(platform, now);
+            if (spacePage.Sub == 0) RefreshStationPage(platform, now);
             else RefreshSpaceOpsPage(bypass, platform, now);
         }
 
@@ -126,7 +93,7 @@ namespace BoscaliSummer.Features.Support.Presentation
         private void OpenStationConsole()
         {
             if (FullscreenInput.AnyOpen && !Window.OpsWindow.IsOpen) return;
-            OpenRoom(TaskingRoom(), null, consoleButton);
+            OpenRoom(TaskingRoom(), null, stationConsoleButton != null ? stationConsoleButton.Rect : null);
             Log("FLIGHT · " + OrbitalPlatform.Callsign + " TASKING MAP OPEN");
         }
 
@@ -142,17 +109,17 @@ namespace BoscaliSummer.Features.Support.Presentation
         /// <summary>Work that must not wait for the SPACE page to be on screen.</summary>
         private void TickSpaceBackground()
         {
-            if (spaceSubPages[SubStatus] == null) return;
+            if (spacePage == null) return;
             // The SAR scene is expensive (rays, raster, texture upload), so it only forms
             // while the OPS screen or the uplink feed is actually on screen.
             if (viewOpen || ImagerOpen)
             {
-                if (products.Tick(support, Time.unscaledDeltaTime))
+                if (products.Tick(support, UnityEngine.Time.unscaledDeltaTime))
                     Log("RADAR SCAN · SCENE FORMING · " + support.RadarScanContacts + " STATIONARY CONTACT(S)");
             }
 
-            if (Time.unscaledTime < nextBackground) return;
-            nextBackground = Time.unscaledTime + 0.2f;
+            if (UnityEngine.Time.unscaledTime < nextBackground) return;
+            nextBackground = UnityEngine.Time.unscaledTime + 0.2f;
             OrbitalPlatform platform = support.LocalPlatform;
             TrackLoopEvents(platform, support.OrbitNow);
         }
@@ -247,73 +214,6 @@ namespace BoscaliSummer.Features.Support.Presentation
             double elapsed = platform != null && platform.Exists ? platform.Elapsed(support.OrbitNow) : -1.0;
             for (int i = loop.Length - 1; i > 0; i--) loop[i] = loop[i - 1];
             loop[0] = TheaterGrid.Elapsed(elapsed) + "  " + line;
-        }
-
-        private static void WriteLoop(TMP_Text[] labels, string[] lines)
-        {
-            for (int i = 0; i < labels.Length && i < lines.Length; i++)
-                if (labels[i] != null) labels[i].text = lines[i] ?? "";
-        }
-
-        // ---- Shared widgets --------------------------------------------------------------------
-
-        /// <summary>Module category tint.</summary>
-        private static Color CategoryColour(ModuleCategory category)
-        {
-            switch (category)
-            {
-                case ModuleCategory.Power: return AvTheme.RailCaution;
-                case ModuleCategory.Utility: return AvTheme.RailInfo;
-                case ModuleCategory.Sensor: return AvTheme.RailReady;
-                case ModuleCategory.Weapon: return AvTheme.RailDanger;
-                case ModuleCategory.Mobility: return AvTheme.Warning;
-                default: return AvTheme.TextPrimary;
-            }
-        }
-
-        /// <summary>A flight-deck annunciator: small channel key, large written state, semantic rail.</summary>
-        private sealed class Tile
-        {
-            public Image Fill;
-            public Image[] Frame;
-            public TMP_Text Value;
-            public Tone LastTone = (Tone)255;
-            public string LastValue;
-        }
-
-        private static Tile BuildTile(RectTransform parent, Rect area, string key)
-        {
-            var tile = new Tile
-            {
-                Fill = AvKit.Panel(parent, area, AvTheme.SurfaceInert),
-                Frame = new[]
-                {
-                    AvKit.Rule(parent, new Rect(area.x, area.y, 2f, area.height), AvTheme.RailInert),
-                    AvKit.Rule(parent, new Rect(area.x + 2f, area.y, area.width - 2f, 1f), AvTheme.Hairline)
-                }
-            };
-            AvKit.Label(parent, key, new Rect(area.x + 9f, area.y - 5f, area.width - 18f, 13f), AvTheme.Dim,
-                AvTokens.FontMicro, FontStyles.Bold).characterSpacing = 0.6f;
-            tile.Value = AvKit.Label(parent, "", new Rect(area.x + 9f, area.y - 21f, area.width - 18f, 21f),
-                AvTheme.TextPrimary, AvTokens.FontLead, FontStyles.Bold);
-            // Four tiles share 480 px; a long reading shrinks toward the 10 px floor rather than clipping.
-            tile.Value.enableAutoSizing = true;
-            tile.Value.fontSizeMin = AvTokens.FontMicro;
-            tile.Value.fontSizeMax = AvTokens.FontLead;
-            return tile;
-        }
-
-        private static void PaintTile(Tile tile, string value, Tone tone)
-        {
-            if (tile == null || (tile.LastTone == tone && tile.LastValue == value)) return;
-            tile.LastTone = tone;
-            tile.LastValue = value;
-            Color colour = tone == Tone.Locked ? AvTheme.Disabled : StatusColor(tone);
-            tile.Value.text = value;
-            tile.Value.color = tone == Tone.Locked ? AvTheme.Dim : colour;
-            tile.Fill.color = tone == Tone.Danger ? colour.WithAlpha(0.08f) : AvTheme.SurfaceInert;
-            tile.Frame[0].color = colour;
-            tile.Frame[1].color = tone == Tone.Locked ? AvTheme.Hairline : colour.WithAlpha(0.5f);
         }
     }
 }

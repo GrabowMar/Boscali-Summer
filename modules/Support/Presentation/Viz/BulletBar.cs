@@ -11,9 +11,10 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
     internal sealed class BulletBar
     {
         private Skin skin;
-        private Image fill, limit;
+        private AvGaugeGraphic bar;
+        private Image limit, pattern;
         private TMP_Text label, value;
-        private float width;
+        private float width, barX, barHeight;
         private float shownFraction = -1f, shownLimit = -1f;
         private string shownLabel, shownValue;
 
@@ -26,10 +27,20 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
                 TextAlignmentOptions.MidlineRight);
             float barY = area.y - 17f;
             float barH = Mathf.Max(4f, area.height - 18f);
-            AvKit.Panel(parent, new Rect(area.x, barY, area.width, barH), skin.Track);
-            fill = AvKit.Panel(parent, new Rect(area.x, barY, 0f, barH), skin.Fill);
-            if (skin.Pattern != null) { fill.sprite = skin.Pattern; fill.type = Image.Type.Tiled; }
-            limit = AvKit.Panel(parent, new Rect(area.x, barY + 3f, 2f, barH + 6f), skin.Mark);
+            barX = area.x;
+            barHeight = barH;
+            bar = Chrome.Graphic<AvGaugeGraphic>(parent, new Rect(area.x, barY, area.width, barH), "Bar");
+            bar.Shape = AvGaugeShape.Bar;
+            bar.Track = skin.Track;
+            bar.FillColor = bar.FillEnd = skin.Fill;
+            bar.Value = 0f;
+            // A pattern for fills that must not rely on colour: tiled over the filled part only.
+            if (skin.Pattern != null)
+            {
+                pattern = Chrome.Panel(parent, new Rect(area.x, barY, 0f, barH), skin.Track, skin.Pattern);
+                pattern.type = Image.Type.Tiled;
+            }
+            limit = Chrome.Panel(parent, new Rect(area.x, barY + 3f, 2f, barH + 6f), skin.Mark);
             limit.enabled = false;
         }
 
@@ -39,14 +50,15 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
             if (Mathf.Abs(fraction - shownFraction) >= 0.002f)
             {
                 shownFraction = fraction;
-                fill.rectTransform.sizeDelta = new Vector2(width * fraction, fill.rectTransform.sizeDelta.y);
+                bar.Value = fraction;
+                if (pattern != null) pattern.rectTransform.sizeDelta = new Vector2(width * fraction, barHeight);
             }
             if (Mathf.Abs(limitFraction - shownLimit) >= 0.002f)
             {
                 shownLimit = limitFraction;
                 limit.enabled = limitFraction > 0f && limitFraction < 1f;
                 Vector2 at = limit.rectTransform.anchoredPosition;
-                limit.rectTransform.anchoredPosition = new Vector2(fill.rectTransform.anchoredPosition.x + width * limitFraction - 1f, at.y);
+                limit.rectTransform.anchoredPosition = new Vector2(barX + width * limitFraction - 1f, at.y);
             }
             PrimitiveText.Write(label, skin, labelText, ref shownLabel);
             PrimitiveText.Write(value, skin, valueText, ref shownValue);

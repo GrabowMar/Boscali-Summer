@@ -116,7 +116,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             sensorRect = new Rect(16f, -HeaderHeight - 8f, sensorW, workH);
             railRect = new Rect(sensorRect.xMax + 12f, sensorRect.y, railW, workH);
             footerRect = new Rect(16f, -(h - FooterHeight + 8f), w - 32f, FooterHeight - 16f);
-            Image surface = AvKit.Panel(host, new Rect(0f, 0f, w, h), ImagerStyle.Pod.WithAlpha(1f));
+            Image surface = Chrome.Panel(host, new Rect(0f, 0f, w, h), ImagerStyle.Pod.WithAlpha(1f));
             surface.raycastTarget = true;
 
             feedPixelsHigh = Mathf.Clamp(Mathf.RoundToInt(FeedPixelsWide * workH / Mathf.Max(1f, sensorW)), 64, 2048);
@@ -144,14 +144,14 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             scanlines = Raw(host, "Scanlines", sensorRect);
             scanlines.texture = sharedScanlines;
             scanlines.uvRect = new Rect(0f, 0f, 1f, workH / 4f);
-            scanlines.color = new Color(1f, 1f, 1f, 0.045f);
-            veil = AvKit.Panel(host, sensorRect, ImagerStyle.Pod.WithAlpha(1f));
+            scanlines.color = Color.white.WithAlpha(0.045f);
+            veil = Chrome.Panel(host, sensorRect, ImagerStyle.Pod.WithAlpha(1f));
 
             BuildSymbology(host, w, h);
             BuildSoftkeys(host, w, h);
             BuildPip(host, w, h);
             BuildCameraControls(host, w);
-            sweep = AvKit.Panel(host, new Rect(sensorRect.x, sensorRect.y, sensorRect.width, 54f),
+            sweep = Chrome.Panel(host, new Rect(sensorRect.x, sensorRect.y, sensorRect.width, 54f),
                 ImagerStyle.Ink.WithAlpha(0.35f), OpsSprites.Scan);
             sweep.type = Image.Type.Simple;
             sweep.enabled = false;
@@ -167,7 +167,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             var go = new GameObject(name, typeof(RectTransform), typeof(RawImage));
             RawImage raw = go.GetComponent<RawImage>();
             raw.rectTransform.SetParent(parent, false);
-            AvKit.Place(raw.rectTransform, at);
+            Chrome.Place(raw.rectTransform, at);
             raw.raycastTarget = false;
             return raw;
         }
@@ -175,26 +175,26 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         private void BuildSymbology(RectTransform host, float w, float h)
         {
             Color ink = ImagerStyle.Ink;
-            AvKit.Panel(host, new Rect(0f, 0f, w, HeaderHeight), ImagerStyle.Halo.WithAlpha(0.96f));
-            AvKit.Rule(host, new Rect(0f, -HeaderHeight + 2f, w, 2f), ink.WithAlpha(0.5f));
-            ImagerStyle.Symbol(host, "BASTION / SENSOR TASKING", new Rect(22f, -12f, w * 0.45f, 28f), 22f);
+            Chrome.Panel(host, new Rect(0f, 0f, w, HeaderHeight), ImagerStyle.Halo.WithAlpha(0.96f));
+            Chrome.Rule(host, new Rect(0f, -HeaderHeight + 2f, w, 2f), ink.WithAlpha(0.5f));
+            Chrome.Lead(ImagerStyle.Symbol(host, "BASTION / SENSOR TASKING", new Rect(22f, -12f, w * 0.45f, 28f), 22f), AvIcon.Camera, 22f);
             osd = ImagerStyle.Symbol(host, "", new Rect(22f, -45f, w - 390f, 20f), 14f);
-            liveDot = AvKit.Panel(host, new Rect(w - 357f, -22f, 11f, 11f), ink, OpsSprites.Dot);
+            liveDot = Chrome.Panel(host, new Rect(w - 357f, -22f, 11f, 11f), ink, OpsSprites.Dot);
             liveDot.type = Image.Type.Simple;
             linkStatus = ImagerStyle.Symbol(host, "", new Rect(w - 335f, -14f, 312f, 28f), 14f,
                 TextAlignmentOptions.MidlineRight);
-            AvKit.Panel(host, sensorRect, ImagerStyle.Halo.WithAlpha(0.2f), OpsSprites.Brackets);
+            Chrome.Panel(host, sensorRect, ImagerStyle.Halo.WithAlpha(0.2f), OpsSprites.Brackets);
             float sx = sensorRect.x, sy = sensorRect.y, sw = sensorRect.width, sh = sensorRect.height;
-            AvKit.Panel(host, new Rect(sx + 12f, sy - 12f, sw - 24f, 37f), ImagerStyle.Halo.WithAlpha(0.78f));
+            Chrome.Panel(host, new Rect(sx + 12f, sy - 12f, sw - 24f, 37f), ImagerStyle.Halo.WithAlpha(0.78f));
             cornerTL = ImagerStyle.Symbol(host, "", new Rect(sx + 24f, sy - 18f, sw * 0.55f, 24f), 16f);
             cornerTR = ImagerStyle.Symbol(host, "", new Rect(sx + sw * 0.56f, sy - 18f, sw * 0.40f, 24f), 16f,
                 TextAlignmentOptions.MidlineRight);
-            AvKit.Panel(host, new Rect(sx + 12f, sy - sh + 41f, sw - 24f, 31f), ImagerStyle.Halo.WithAlpha(0.82f));
+            Chrome.Panel(host, new Rect(sx + 12f, sy - sh + 41f, sw - 24f, 31f), ImagerStyle.Halo.WithAlpha(0.82f));
             cornerBL = ImagerStyle.Symbol(host, "", new Rect(sx + 24f, sy - sh + 33f, sw * 0.56f, 22f), 14f);
             cornerBR = ImagerStyle.Symbol(host, "", new Rect(sx + sw * 0.56f, sy - sh + 33f, sw * 0.40f, 22f), 14f,
                 TextAlignmentOptions.MidlineRight);
-            passFill = AvKit.Panel(host, new Rect(sx + 12f, sy - 49f, 0f, 3f), ink);
-            reticle = AvKit.Panel(host, new Rect(sx + sw * 0.5f - 72f, sy - sh * 0.5f + 72f,
+            passFill = Chrome.Panel(host, new Rect(sx + 12f, sy - 49f, 0f, 3f), ink);
+            reticle = Chrome.Panel(host, new Rect(sx + sw * 0.5f - 72f, sy - sh * 0.5f + 72f,
                 144f, 144f), ink, OpsSprites.Reticle);
             reticle.type = Image.Type.Simple;
 
@@ -205,8 +205,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             north.pivot = new Vector2(0.5f, 0.5f);
             north.sizeDelta = new Vector2(44f, 44f);
             north.anchoredPosition = new Vector2(sx + sw - 64f, sy - 112f);
-            AvKit.Rule(north, new Rect(21f, -6f, 2f, 26f), ink);
-            Image head = AvKit.Panel(north, new Rect(14f, 6f, 16f, 14f), ink, OpsSprites.Triangle);
+            Chrome.Rule(north, new Rect(21f, -6f, 2f, 26f), ink);
+            Image head = Chrome.Panel(north, new Rect(14f, 6f, 16f, 14f), ink, OpsSprites.Triangle);
             Lines.Centre(head.rectTransform, 22f, -1f, 16f, 14f);
             head.rectTransform.localEulerAngles = new Vector3(0f, 0f, 180f);
             ImagerStyle.Symbol(north, "N", new Rect(0f, 22f, 44f, 16f), ImagerStyle.Small, TextAlignmentOptions.Center);
@@ -214,28 +214,28 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             var scaleObject = new GameObject("Scale", typeof(RectTransform));
             scaleGroup = (RectTransform)scaleObject.transform;
             scaleGroup.SetParent(host, false);
-            AvKit.Place(scaleGroup, sensorRect);
+            Chrome.Place(scaleGroup, sensorRect);
             float scaleY = -sh + 88f;
-            AvKit.Rule(scaleGroup, new Rect(25f, scaleY, ScaleBarPixels, 2f), ink);
-            AvKit.Rule(scaleGroup, new Rect(25f, scaleY + 6f, 2f, 8f), ink);
-            AvKit.Rule(scaleGroup, new Rect(23f + ScaleBarPixels, scaleY + 6f, 2f, 8f), ink);
+            Chrome.Rule(scaleGroup, new Rect(25f, scaleY, ScaleBarPixels, 2f), ink);
+            Chrome.Rule(scaleGroup, new Rect(25f, scaleY + 6f, 2f, 8f), ink);
+            Chrome.Rule(scaleGroup, new Rect(23f + ScaleBarPixels, scaleY + 6f, 2f, 8f), ink);
             scaleLabel = ImagerStyle.Symbol(scaleGroup, "", new Rect(38f + ScaleBarPixels, scaleY + 8f, 160f, 18f), 13f);
 
             float plateW = Mathf.Min(650f, sw - 66f);
             const float plateH = 156f;
-            Image plate = AvKit.Panel(host, new Rect(sx + (sw - plateW) * 0.5f,
+            Image plate = Chrome.Panel(host, new Rect(sx + (sw - plateW) * 0.5f,
                 sy - sh * 0.5f + plateH * 0.5f, plateW, plateH), ImagerStyle.Halo.WithAlpha(0.96f));
             signalPlate = plate.rectTransform;
             plate.raycastTarget = false;
-            AvKit.Outline(signalPlate, new Rect(0f, 0f, plateW, plateH), ink.WithAlpha(0.75f));
-            AvKit.Rule(signalPlate, new Rect(20f, -38f, plateW - 40f, 1f), ink.WithAlpha(0.5f));
-            ImagerStyle.Symbol(signalPlate, "SENSOR PRODUCT / SIGNAL STATE", new Rect(24f, -10f, plateW - 48f, 20f),
-                13f, TextAlignmentOptions.Center);
+            Chrome.Outline(signalPlate, new Rect(0f, 0f, plateW, plateH), ink.WithAlpha(0.75f));
+            Chrome.Rule(signalPlate, new Rect(20f, -38f, plateW - 40f, 1f), ink.WithAlpha(0.5f));
+            Chrome.Lead(ImagerStyle.Symbol(signalPlate, "SENSOR PRODUCT / SIGNAL STATE", new Rect(24f, -10f, plateW - 48f, 20f),
+                13f, TextAlignmentOptions.Center), AvIcon.Radar2);
             slate = ImagerStyle.Symbol(signalPlate, "", new Rect(24f, -49f, plateW - 48f, 86f), 22f, TextAlignmentOptions.Center);
             slate.enableWordWrapping = true;
 
-            AvKit.Panel(host, footerRect, ImagerStyle.Halo.WithAlpha(0.96f));
-            AvKit.Outline(host, footerRect, ink.WithAlpha(0.38f));
+            Chrome.Panel(host, footerRect, ImagerStyle.Halo.WithAlpha(0.96f));
+            Chrome.Outline(host, footerRect, ink.WithAlpha(0.38f));
             aimStatus = ImagerStyle.Symbol(host, "", new Rect(footerRect.x + 16f, footerRect.y - 8f,
                 footerRect.width - 360f, 22f), 15f);
             ImagerStyle.Symbol(host, "SAR SCAN TO FORM · EO FOR MANUAL AIM", new Rect(footerRect.x + 16f,
@@ -244,10 +244,10 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
 
         private void BuildSoftkeys(RectTransform host, float w, float h)
         {
-            AvKit.Panel(host, railRect, ImagerStyle.Halo.WithAlpha(0.94f));
-            AvKit.Outline(host, railRect, ImagerStyle.Ink.WithAlpha(0.5f));
-            ImagerStyle.Symbol(host, "TASKING / HOST-VALIDATED", new Rect(railRect.x + 16f,
-                railRect.y - 12f, railRect.width - 32f, 24f), 17f);
+            Chrome.Panel(host, railRect, ImagerStyle.Halo.WithAlpha(0.94f));
+            Chrome.Outline(host, railRect, ImagerStyle.Ink.WithAlpha(0.5f));
+            Chrome.Lead(ImagerStyle.Symbol(host, "TASKING / HOST-VALIDATED", new Rect(railRect.x + 16f,
+                railRect.y - 12f, railRect.width - 32f, 24f), 17f), AvIcon.Target);
             ImagerStyle.Symbol(host, "SELECT A SENSOR OR EFFECT AT THE AIM POINT", new Rect(railRect.x + 16f,
                 railRect.y - 39f, railRect.width - 32f, 18f), 12f, dim: true);
             float gap = 6f;
@@ -263,8 +263,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 var key = new Softkey();
                 key.Control = RoomControl.Create(host, at, click, "Softkey");
                 RectTransform rect = key.Control.Rect;
-                key.Fill = AvKit.Panel(rect, new Rect(0f, 0f, at.width, at.height), ImagerStyle.Halo.WithAlpha(0.7f));
-                key.Edge = AvKit.Outline(rect, new Rect(0f, 0f, at.width, at.height), ImagerStyle.Ink);
+                key.Fill = Chrome.Panel(rect, new Rect(0f, 0f, at.width, at.height), ImagerStyle.Halo.WithAlpha(0.7f));
+                key.Edge = Chrome.Outline(rect, new Rect(0f, 0f, at.width, at.height), ImagerStyle.Ink);
                 key.Title = ImagerStyle.Symbol(rect, "", new Rect(14f, -8f, at.width - 28f, 24f), 16f);
                 key.Facts = ImagerStyle.Symbol(rect, "", new Rect(14f, -35f, at.width - 28f,
                     Mathf.Max(24f, at.height - 39f)), 13f, TextAlignmentOptions.TopLeft, true);
@@ -289,8 +289,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         {
             float pw = Mathf.Min(260f, sensorRect.width * 0.28f), ph = Mathf.Min(174f, sensorRect.height * 0.28f);
             pipRect = new Rect(sensorRect.xMax - 15f - pw, sensorRect.y - sensorRect.height + ph + 64f, pw, ph);
-            pipFrame = AvKit.Panel(host, pipRect, ImagerStyle.Halo.WithAlpha(0.85f));
-            pipEdges = AvKit.Outline(host, pipRect, ImagerStyle.Ink);
+            pipFrame = Chrome.Panel(host, pipRect, ImagerStyle.Halo.WithAlpha(0.85f));
+            pipEdges = Chrome.Outline(host, pipRect, ImagerStyle.Ink);
             pip = Raw(host, "Product", new Rect(pipRect.x + 6f, pipRect.y - 6f, pw - 12f, ph - 34f));
             // Formed images keep range on the horizontal axis; flip so the product is a rotation, not a mirror.
             pip.uvRect = new Rect(1f, 0f, -1f, 1f);
@@ -306,7 +306,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             float buttonW = Mathf.Min(142f, (sensorRect.width - 54f) / 4f);
             cameraControls = new Rect(sensorRect.x + 12f, sensorRect.y - 61f,
                 buttonW * 4f + 18f, 44f);
-            AvKit.Panel(host, cameraControls, ImagerStyle.Halo.WithAlpha(0.88f));
+            Chrome.Panel(host, cameraControls, ImagerStyle.Halo.WithAlpha(0.88f));
             float x = cameraControls.x + 5f, y = cameraControls.y - 5f;
             zoomOutButton = CameraButton(host, new Rect(x, y, buttonW, 34f), "− ZOOM [Q]", () => Zoom(-1), out _);
             zoomInButton = CameraButton(host, new Rect(x + buttonW + 3f, y, buttonW, 34f), "+ ZOOM [E]", () => Zoom(1), out _);
@@ -324,8 +324,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         private static RoomControl CameraButton(RectTransform host, Rect at, string title, Action action, out TMP_Text label)
         {
             RoomControl control = RoomControl.Create(host, at, action, "CameraControl");
-            Image fill = AvKit.Panel(control.Rect, new Rect(0f, 0f, at.width, at.height), ImagerStyle.Pod.WithAlpha(1f));
-            AvKit.Outline(control.Rect, new Rect(0f, 0f, at.width, at.height), ImagerStyle.Dim);
+            Image fill = Chrome.Panel(control.Rect, new Rect(0f, 0f, at.width, at.height), ImagerStyle.Pod.WithAlpha(1f));
+            Chrome.Outline(control.Rect, new Rect(0f, 0f, at.width, at.height), ImagerStyle.Dim);
             label = ImagerStyle.Symbol(control.Rect, title, new Rect(6f, 0f, at.width - 12f, at.height), 12f, TextAlignmentOptions.Center);
             control.Changed = c => fill.color = !c.Enabled ? ImagerStyle.Pod.WithAlpha(0.6f)
                 : c.Hovered ? ImagerStyle.Ink.WithAlpha(0.25f) : ImagerStyle.Pod.WithAlpha(1f);
@@ -365,7 +365,6 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             live = false;
             DestroyImager();
             support?.SetUplinkAim(AimPoint());
-            AvButton.ClearTooltip();
         }
 
         private void DestroyImager()
@@ -387,7 +386,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 r.anchoredPosition = new Vector2(sensorRect.x,
                     sensorRect.y - (sensorRect.height - 54f) * entrance);
             }
-            feed.color = new Color(1f, 1f, 1f, Mathf.Clamp01(0.3f + entrance));
+            feed.color = Color.white.WithAlpha(Mathf.Clamp01(0.3f + entrance));
         }
 
         public void Refresh(double now, float time, bool textTick)

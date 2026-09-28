@@ -16,16 +16,25 @@ using UnityEngine.UI;
 
 namespace BoscaliSummer.Features.Command.Presentation.MapUi
 {
+    /// <summary>
+    /// The SET console (kit v2). One flat icon-tab strip carries every page instead of a
+    /// nested CLIENT/SERVER tab pair: audience is still enforced per row (host-authoritative
+    /// rows disable and explain themselves for a remote client), so the extra tab tier added
+    /// nothing kit v2's per-row gating doesn't already say.
+    /// </summary>
     internal sealed partial class SettingsMfdPanel : MonoBehaviour, ISceneService
     {
-        private const int TabClient = 0;
-        private const int TabServer = 1;
-        private const int ClientPageCount = 6;
+        private const int PageMap = 0, PageDisplay = 1, PageBackdrop = 2, PageCamera = 3, PageHud = 4, PagePerf = 5,
+                           PageTasking = 6, PageHostSettings = 7, PageEffects = 8;
+        private const int PageCount = 9;
 
-        /// <summary>Display index of the SERVER page, after the six CLIENT sub-pages.</summary>
-        private const int ServerDisplay = 6;
+        private static readonly string[] PageNames =
+        {
+            "TACTICAL DISPLAY", "DISPLAY STYLE", "BACKGROUND IMAGERY", "CAMERA & CONTROLS",
+            "HUD OVERLAYS", "PERFORMANCE", "FACTION TASKING", "HOST SETTINGS", "WORLD EFFECTS"
+        };
 
-        private const int DisplayCount = ServerDisplay + 1;
+        private static string PageName(int page) => page >= 0 && page < PageNames.Length ? PageNames[page] : PageNames[0];
 
         private CommandSettings settings;
         private ComMapOverlay overlay;
@@ -35,25 +44,20 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private GameObject root;
         private GameObject surface;
         private MFDScreen screen;
-        private AvScreen shell;
+        private AvConsole con;
+        private AvChip savedChip;
+        private AvChip roleChip;
         private List<MFDScreen> boundScreens;
         private int boundSlot = -1;
         private bool claimed;
         private bool failed;
         private float nextTick;
-        private readonly List<Action> refreshers = new List<Action>();
-        private int serverRefresherStart;
-        private bool dirty = true;
-        private bool wasVisible;
+        private string actionEcho;
+        private float actionEchoUntil;
         private bool appearancePending;
         private bool overlayPending;
         private bool layoutPending;
         private bool tickerPending;
-        private string actionEcho;
-        private float actionEchoUntil;
-        private GameObject[] clientPages;
-        private AvButton[] clientTabs;
-        private int clientPage;
 
         public void Configure(CommandSettings config, ManualLogSource log, ComMapOverlay mapOverlay = null,
             HostSettingsBoard hostSettingsBoard = null, ClientSettingsBoard clientSettingsBoard = null)
@@ -74,12 +78,13 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
         private void OnSettingChanged(object sender, SettingChangedEventArgs args)
         {
-            // Repaint client-owned rows when F1 or session changes their config. The
-            // underlying modules read their entries themselves; SET only reflects them.
+            // Live world-state side effects (display glass, map deck, news ticker, overlay
+            // sync) must still react when F1 or another session changes a key, whether or not
+            // this panel is even installed. The console's own row values re-read the config
+            // on their own next Slow tick, so no "dirty" flag is needed for those.
             string section = args.ChangedSetting.Definition.Section;
             if (section != "Command" && section != "Hud" && section != "Avionics" &&
                 section != "Weather" && section != "Garrisons" && section != "Performance") return;
-            dirty = true;
             if (section != "Command") return;
             switch (args.ChangedSetting.Definition.Key)
             {
@@ -119,36 +124,24 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             // step with the screen's own state, so a close path that skips CloseScreen can no
             // longer leave the settings panel floating over the cockpit.
             if (surface != null && surface.activeSelf != visible) surface.SetActive(visible);
-
-            if (visible)
-            {
-                // Host values can change independently; client controls update on edits.
-                if (dirty || !wasVisible || shell.Page == TabServer) RefreshPanel();
-                string echo = Time.unscaledTime < actionEchoUntil ? actionEcho : null;
-                shell?.WriteStatus(null, echo ?? MapPicker.Prompt, AmbientStatus());
-            }
-            wasVisible = visible;
         }
 
         private static bool HostAuthority() => GameAccess.IsServer();
 
-        private int DisplayIndex =>
-            shell != null && shell.Page == TabServer ? ServerDisplay : clientPage;
-
         private string AmbientStatus()
         {
-            if (shell != null && shell.Page == TabServer)
+            int page = con?.CurrentPage ?? PageMap;
+            if (page == PageTasking)
                 return HostAuthority()
-                    ? (serverPage != ServerTasking && serverScrolls[serverPage]
-                        ? "Host controls are saved automatically. Scroll for more."
-                        : serverPage == ServerTasking ? "Host tasking board. Refreshes while visible."
-                        : "Host controls are saved automatically.")
+                    ? "Host tasking board. Refreshes while visible."
+                    : "Host only. The host issues faction tasking.";
+            if (page == PageHostSettings || page == PageEffects)
+                return HostAuthority()
+                    ? "Host controls are saved automatically."
                     : "Host only. The host's values apply to this server.";
-            if (DisplayIndex == 2) return MfdMapDeck.WallpaperStatus;
-            if (DisplayIndex == 5) return "Changes apply now. No mission or game restart.";
-            return pageScrolls[Mathf.Clamp(DisplayIndex, 0, DisplayCount - 1)]
-                ? "Saved automatically. Scroll for more; hover for help."
-                : "Saved automatically. Hover a control for help.";
+            if (page == PageBackdrop) return MfdMapDeck.WallpaperStatus;
+            if (page == PagePerf) return "Changes apply now. No mission or game restart.";
+            return "Saved automatically. Hover a control for help.";
         }
 
         private void Install(VirtualMFD mfd)
@@ -177,9 +170,6 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             if (label == null || highlight == null)
                 throw new InvalidOperationException("SET bezel label or highlight is missing.");
 
-            TMP_Text sourceText = template.GetComponentInChildren<TMP_Text>(true);
-            if (sourceText != null && sourceText.font != null) AvFont.Font = sourceText.font;
-
             root = new GameObject("BoscaliSummer.SET", typeof(RectTransform));
             var rect = (RectTransform)root.transform;
             var source = (RectTransform)template.transform;
@@ -188,47 +178,63 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             rect.anchorMax = source.anchorMax;
             rect.pivot = source.pivot;
             rect.localScale = source.localScale;
-            float height = AvScreen.ResolveHeight(
-                source.parent as RectTransform, AvTokens.PanelHeight, AvTokens.PanelHeightMax);
+            float height = AvLay.ResolveHeight(source.parent as RectTransform, AvTokens.PanelHeight, AvTokens.PanelHeightMax);
             rect.sizeDelta = new Vector2(AvTokens.PanelWidth, height);
-            AvKit.ClampIntoCanvas(rect);
-            var content = new GameObject("Content", typeof(RectTransform), typeof(Image));
-            var background = content.GetComponent<Image>();
-            background.sprite = AvSprites.Panel;
-            background.type = Image.Type.Sliced;
-            background.color = Color.white;
-            background.raycastTarget = true;
+            AvLay.ClampIntoCanvas(rect);
 
-
+            // The dock naming convention ("Content" marks a mod-built panel, vs. a stock
+            // screen's "DisplayPanel") predates kit v2 and is enforced elsewhere
+            // (MfdPanelDock.IsStockScreen); it is unrelated to AvConsole's own chrome, which
+            // is built as a nested child of this wrapper.
+            var content = new GameObject("Content", typeof(RectTransform));
             content.transform.SetParent(rect, false);
             var body = (RectTransform)content.transform;
-            AvKit.Stretch(body);
+            AvLay.Fill(body);
             surface = content;
 
-            shell = AvScreen.Build(
-                body, "SET", new[] { "CLIENT", "SERVER" }, null, 2,
-                AvTokens.PanelWidth, height, page =>
-                {
-                    shell.DataBar.State.text = page == TabServer
-                        ? ServerPageTitle()
-                        : ClientPageTitle();
-                    nextTick = 0f;
-                    RefreshPanel();
-                });
-            shell.Tabs[TabClient].WithTooltip(
-                "Client-local display settings: the map, console surface, background imagery and cockpit view.");
-            shell.Tabs[TabServer].WithTooltip(
-                "Faction tasking and host settings. Remote clients can read the host's values.");
-            shell.DataBar.SetChip(0, "SAVED", true);
-            shell.Status.richText = false;
+            con = AvConsole.Build(body, "SET", PageName(0), PageCount, AvTokens.PanelWidth, height);
+            con.PageChanged += index => con.SetTitle(PageName(index));
 
-            RectTransform clientRoot = (RectTransform)shell.CreatePage(TabClient, "ClientPage").transform;
-            BuildClientArea(clientRoot, shell.Body);
+            AvChip[] chips = con.Chips(2);
+            savedChip = chips[0];
+            roleChip = chips[1];
+            savedChip.Set("SAVED", AvState.Ready);
 
-            RectTransform serverRoot = (RectTransform)shell.CreatePage(TabServer, "ServerPage").transform;
-            BuildServerPage(serverRoot, shell.Body);
+            AvTabBar tabBar = con.Tabs(
+                (AvIcon.Map2, "MAP"),
+                (AvIcon.Typography, "DISPLAY"),
+                (AvIcon.Stack2, "BACKDROP"),
+                (AvIcon.Camera, "CAMERA"),
+                (AvIcon.Eye, "HUD"),
+                (AvIcon.Gauge, "PERF"),
+                (AvIcon.ListDetails, "TASKING"),
+                (AvIcon.Settings, "HOST"),
+                (AvIcon.CloudRain, "EFFECTS"));
+            // Hover help per tab (the v1 sub-tab hints; CAMERA had none that still matches).
+            ApplyTabHelp(tabBar,
+                "Map layout, field refresh and terrain.",
+                "Console surface, backdrop decoration and dispatches.",
+                "Local background imagery and its rescans.",
+                null,
+                "Status stack, readable contrast, placement and individual feeds.",
+                "Client-local work budgets. Each switch applies during this mission. " +
+                "Installing a disabled Weather module requires a game restart.",
+                "Faction tasking and host settings. Remote clients can read the host's values.",
+                "Faction tasking and host settings. Remote clients can read the host's values.",
+                null);
 
-            shell.SetPage(TabClient);
+            BuildMapPage(con.Page(PageMap), PageMap);
+            BuildDisplayPage(con.Page(PageDisplay), PageDisplay);
+            BuildBackdropPage(con.Page(PageBackdrop), PageBackdrop);
+            BuildCameraPage(con.Page(PageCamera), PageCamera);
+            BuildHudPage(con.Page(PageHud), PageHud);
+            BuildPerformancePage(con.Page(PagePerf), PagePerf);
+            BuildTaskingPage(con.Page(PageTasking), PageTasking);
+            BuildHostSettingsPage(con.Page(PageHostSettings), PageHostSettings, HostSettingsPage.Settings, "HOST SETTINGS");
+            BuildHostSettingsPage(con.Page(PageEffects), PageEffects, HostSettingsPage.Effects, "EFFECTS");
+
+            con.Ticker.Add(-1, AvTickRate.Slow, RefreshChrome);
+            con.Finish();
 
             screen = root.AddComponent<MFDScreen>();
             screen.shortName = MfdSlots.Set;
@@ -248,504 +254,24 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             }
 
             MfdMapDeck.ApplyAppearance(settings);
-            RefreshPanel();
             logger?.LogInfo("SET MFD installed on " + (left ? "left" : "right") + " bezel slot " + (slot + 1) + ".");
         }
 
-        private static readonly string[] PageNames =
+        private static void ApplyTabHelp(AvTabBar bar, params string[] hints)
         {
-            "TACTICAL DISPLAY", "DISPLAY STYLE", "BACKGROUND IMAGERY", "CAMERA & CONTROLS", "HUD OVERLAYS", "PERFORMANCE",
-            "SERVER SETTINGS"
-        };
-
-        private readonly bool[] pageScrolls = new bool[DisplayCount];
-
-        private static string PageName(int page) =>
-            page >= 0 && page < PageNames.Length ? PageNames[page] : PageNames[0];
-
-        private string ClientPageTitle() => PageName(clientPage);
-
-        /// <summary>
-        /// The CLIENT main tab: six client-local pages behind a second, smaller tab
-        /// strip. The main strip names the audience (CLIENT / SERVER); this one names the
-        /// console surface, so a player reads the hierarchy in one glance.
-        /// </summary>
-        private void BuildClientArea(RectTransform page, Rect body)
-        {
-            const float barHeight = 26f;
-            const float gap = 6f;
-            string[] names = { "MAP", "DISPLAY", "BACKDROP", "CAMERA", "HUD", "PERF" };
-            string[] hints =
-            {
-                "Map layout, field refresh and terrain.",
-                "Console surface, backdrop decoration and dispatches.",
-                "Local background imagery and its rescans.",
-                "Third-person flight HUD, camera framing and instrument board.",
-                "Status stack, readable contrast, placement and individual feeds.",
-                "Client-local work budgets. Each switch applies during this mission. " +
-                "Installing a disabled Weather module requires a game restart."
-            };
-
-            AvNode bar = AvBox.Row("subtabs").Height(barHeight);
-            for (int i = 0; i < names.Length; i++) bar.Add(AvBox.Cell("c" + i).Grow());
-            bar.Arrange(new Rect(body.x, body.y, body.width, barHeight));
-
-            clientTabs = new AvButton[ClientPageCount];
-            for (int i = 0; i < ClientPageCount; i++)
-            {
-                int index = i;
-                clientTabs[i] = AvStyled.Button(page, bar.At("c" + i), names[i], "tab",
-                    () => SetClientPage(index), AvButtonStyle.Tab)
-                    .WithTooltip(hints[i]);
-            }
-
-            var area = new Rect(body.x, body.y - barHeight - gap, body.width, body.height - barHeight - gap);
-            clientPages = new GameObject[ClientPageCount];
-            for (int i = 0; i < ClientPageCount; i++)
-            {
-                var sub = new GameObject("ClientPage" + i, typeof(RectTransform));
-                var rect = (RectTransform)sub.transform;
-                rect.SetParent(page, false);
-                AvKit.Stretch(rect);
-                clientPages[i] = sub;
-            }
-
-            BuildMapPage((RectTransform)clientPages[0].transform, area);
-            BuildStylePage((RectTransform)clientPages[1].transform, area);
-            BuildImagePage((RectTransform)clientPages[2].transform, area);
-            BuildViewPage((RectTransform)clientPages[3].transform, area);
-            BuildHudPage((RectTransform)clientPages[4].transform, area);
-            BuildPerformancePage((RectTransform)clientPages[5].transform, area);
-
-            SetClientPage(0);
+            AvControl[] tabs = bar.Rect.GetComponentsInChildren<AvControl>(true);
+            for (int i = 0; i < tabs.Length && i < hints.Length; i++)
+                if (hints[i] != null) tabs[i].Help = hints[i];
         }
 
-        private void SetClientPage(int page)
+        private void RefreshChrome()
         {
-            clientPage = Mathf.Clamp(page, 0, ClientPageCount - 1);
-            if (clientPages != null)
-            {
-                for (int i = 0; i < clientPages.Length; i++)
-                    if (clientPages[i] != null) clientPages[i].SetActive(i == clientPage);
-            }
-            if (clientTabs != null)
-            {
-                for (int i = 0; i < clientTabs.Length; i++)
-                    if (clientTabs[i] != null) clientTabs[i].SetLatched(i == clientPage);
-            }
-            if (shell == null) return;
-
-            AvButton.ClearTooltip();
-            if (shell.Page != TabServer) shell.DataBar.State.text = ClientPageTitle();
-            nextTick = 0f;
-            RefreshPanel();
+            AvUiSound.Volume = settings.UiSoundVolume.Value;
+            bool host = HostAuthority();
+            roleChip.Set(host ? "HOST" : "CLIENT", host ? AvState.Ready : AvState.Inert);
+            string echo = Time.unscaledTime < actionEchoUntil ? actionEcho : null;
+            con.Footer.Set(echo ?? AmbientStatus(), echo != null ? AvState.Info : AvState.Inert);
         }
-
-        // One row geometry for every page: a 10px state pip in the left gutter, the name
-        // in a shared label column, and a control group of one width. A toggle puts its
-        // state plate in the same slot a stepper's figure occupies, so ON/OFF and every
-        // number line up on one value column across pages. The value column is wide
-        // enough for a wallpaper filename and still shrinks to the micro floor when a
-        // host string runs longer. RowHeight is the 30px token; the pitch is per page,
-        // because Page() spreads a short page over the bay instead of pooling the empty
-        // height under its last row.
-        private const float PipSize = 6f;
-        private const float CellGap = 4f;
-        private const float StateWidth = 96f;
-        private const float StepWidth = 26f;
-        private const float RowRightPad = 8f;
-        private const float RowInset = 2f; // keeps the 26px controls on the 30px row midline
-
-        // Section headings: the number column is fixed, so every title on every page
-        // starts on the same x, and the rule hangs a fixed distance below the labels.
-        private const float HeadingHeight = 26f;
-        private const float HeadingGap = 6f;
-        private const float PageTail = 12f;
-
-        /// <summary>Flow of the page currently being built, set by <see cref="Page"/>.</summary>
-        private float rowPitch = AvTokens.RowPitch;
-        private float sectionGap = HeadingGap;
-        private int sectionsOnPage;
-
-        // Pages are built once. Dependencies disable controls without rebuilding the tree.
-        private RectTransform Page(int display, RectTransform parent, Rect body, int rows, int sections, out Rect area) =>
-            Page(display, parent, body, rows, sections, 0f, out area);
-
-        /// <summary>
-        /// A page: the spine, then the scroll viewport when the copy is taller than the
-        /// bay, and the content column every heading and row builds into.
-        ///
-        /// The page's natural height is measured from its rows and sections. When it is
-        /// shorter than the bay, the slack is spread evenly across the row advances and
-        /// the gaps between sections, so the copy reaches the bottom of Shell.Body rather
-        /// than leaving a dead band under the last row; a page taller than its bay scrolls
-        /// at the natural pitch instead of compressing. <paramref name="fixedHeight"/> is
-        /// the part of a page whose height does not come from rows — fixed headers and controls
-        /// board — and never stretches.
-        /// </summary>
-        private RectTransform Page(int display, RectTransform parent, Rect body, int rows, int sections,
-            float fixedHeight, out Rect area)
-        {
-            AvStyled.Spine(parent, new Rect(body.x, body.y, 3f, body.height));
-
-            int gaps = Mathf.Max(0, sections - 1);
-            // The last row's own advance is never spent — the page ends at the last row's
-            // bottom — so it is removed from the measured height and only rows and section
-            // gaps that actually move the bottom take a share of the slack.
-            float natural = fixedHeight + sections * HeadingHeight + gaps * HeadingGap
-                          + rows * AvTokens.RowPitch - (AvTokens.RowPitch - AvTokens.RowHeight)
-                          + PageTail;
-            bool scrolls = natural > body.height;
-            int units = rows + gaps - 1;
-            // Settings are a form, not a fill-height dashboard: keep adjacent labels
-            // close enough to scan and leave calm space below short pages.
-            float extra = 4f;
-            natural += Mathf.Max(0, units) * extra;
-            scrolls = natural > body.height;
-            rowPitch = AvTokens.RowPitch + extra;
-            sectionGap = HeadingGap + extra;
-            sectionsOnPage = 0;
-            if (display >= 0 && display < pageScrolls.Length) pageScrolls[display] = scrolls;
-
-            RectTransform content = AvScreen.Scroll(parent, body, Mathf.Max(natural, body.height), out area);
-            area = new Rect(area.x + AvScreen.SpineInset, area.y,
-                Mathf.Max(0f, area.width - AvScreen.SpineInset), area.height);
-            return content;
-        }
-
-        /// <summary>
-        /// A numbered section heading hanging off the spine, like the theater panels:
-        /// index in accent, name in the shared section-title step, status on the right,
-        /// hairline under. Number and title share the page's left column, so the numbering
-        /// lines up across pages.
-        /// </summary>
-        private void Heading(RectTransform parent, ref Rect area, string index, string title, string note)
-        {
-            if (sectionsOnPage > 0) area.y -= sectionGap;
-            sectionsOnPage++;
-
-            var rect = new Rect(area.x, area.y, area.width, HeadingHeight);
-            AvStyled.SpineTick(parent, rect.x - AvScreen.SpineInset + 2f, rect.y - 13f);
-
-            const float numberWidth = 24f;
-            TMP_Text number = AvStyled.Label(parent, new Rect(rect.x, rect.y, numberWidth, 16f), index, "section-title");
-            number.color = AvTheme.Accent;
-            AvStyled.Label(parent,
-                new Rect(rect.x + numberWidth + CellGap, rect.y,
-                    Mathf.Max(0f, rect.width * 0.5f - numberWidth - CellGap), 16f), title, "section-title");
-            if (!string.IsNullOrEmpty(note))
-                AvStyled.Label(parent, new Rect(rect.x + rect.width * 0.5f, rect.y, rect.width * 0.5f, 16f),
-                    note, "section-title-note", align: TextAlignmentOptions.MidlineRight);
-            AvKit.Rule(parent, new Rect(rect.x, rect.y - 20f, rect.width, 1f),
-                AvTheme.Unity(AvTokens.Hairline.WithAlpha(0.5f)));
-
-            area.y -= HeadingHeight;
-        }
-
-        private Rect TakeRow(ref Rect area)
-        {
-            var row = new Rect(area.x, area.y, area.width, AvTokens.RowHeight);
-            area.y -= rowPitch;
-            return row;
-        }
-
-        private void BuildMapPage(RectTransform parent, Rect body)
-        {
-            parent = Page(0, parent, body, 5, 3, out var area);
-
-            Heading(parent, ref area, "01", "DISPLAY", "CONSOLE");
-            Toggle(parent, TakeRow(ref area), "EXPANDED LAYOUT",
-                "Use the full map console. OFF restores the native layout.",
-                () => settings.ExpandedMapUi.Value, v => settings.ExpandedMapUi.Value = v);
-
-            Heading(parent, ref area, "02", "SECTOR FIELD", "REFRESH");
-            Stepper(parent, TakeRow(ref area), "UPDATE INTERVAL",
-                () => settings.GridRefreshInterval.Value.ToString("0.0") + " s",
-                d => settings.GridRefreshInterval.Value = Mathf.Clamp(
-                    Mathf.Round((settings.GridRefreshInterval.Value + d * .1f) * 10f) / 10f, .2f, 2f),
-                () => settings.GridRefreshInterval.Value > .201f,
-                () => settings.GridRefreshInterval.Value < 1.999f,
-                "Longer intervals reduce CPU work. Recommended: 0.5 s.");
-
-            Heading(parent, ref area, "03", "TERRAIN", "SATELLITE");
-            Toggle(parent, TakeRow(ref area), "3D RELIEF",
-                "Render baked game terrain as a tilted tactical model. Symbols, front line and clicks follow the same surface.",
-                () => settings.MapRelief3D.Value, v => settings.MapRelief3D.Value = v,
-                () => settings.ExpandedMapUi.Value && settings.MapTerrainImage.Value,
-                () => "Turn on expanded layout and terrain image first.");
-            Toggle(parent, TakeRow(ref area), "TERRAIN IMAGE",
-                "Show the satellite terrain beneath map symbols.",
-                () => settings.MapTerrainImage.Value, v => settings.MapTerrainImage.Value = v,
-                () => settings.ExpandedMapUi.Value, () => "Turn on expanded layout first.");
-            Percent(parent, TakeRow(ref area), "TERRAIN STRENGTH", settings.MapTerrainOpacity, .1f, 1f, .1f,
-                () => settings.ExpandedMapUi.Value && settings.MapTerrainImage.Value,
-                () => "Enable expanded layout and terrain image first.");
-        }
-
-        private void BuildStylePage(RectTransform parent, Rect body)
-        {
-            parent = Page(1, parent, body, 15, 4, out var area);
-
-            Heading(parent, ref area, "01", "DISPLAY FILTER", "LOCAL");
-            Toggle(parent, TakeRow(ref area), "DISPLAY EFFECTS", "OFF removes glass and overlays. Your tuning is retained.",
-                () => settings.DisplayEffects.Value, v => settings.DisplayEffects.Value = v);
-            Percent(parent, TakeRow(ref area), "GLASS REFLECTION", settings.DisplayGlass, 0f, 1f, .1f,
-                EffectsEnabled, EffectsDisabled);
-            Toggle(parent, TakeRow(ref area), "ADAPT TO LIGHT", "Let ambient light vary the glass reflection. OFF keeps it steady.",
-                () => settings.DisplayAutoLight.Value, v => settings.DisplayAutoLight.Value = v,
-                EffectsEnabled, EffectsDisabled);
-            Percent(parent, TakeRow(ref area), "CRT SCANLINES", settings.DisplayScanlines, 0f, 1f, .1f,
-                EffectsEnabled, EffectsDisabled);
-            Percent(parent, TakeRow(ref area), "EDGE SHADING", settings.DisplayVignette, 0f, 1f, .1f,
-                EffectsEnabled, EffectsDisabled);
-            string[] tints = { "NEUTRAL", "GREEN", "AMBER", "ICE", "ROSE" };
-            Stepper(parent, TakeRow(ref area), "COLOR TINT",
-                () => tints[Mathf.Clamp(settings.DisplayTint.Value, 0, 4)],
-                d => settings.DisplayTint.Value = (settings.DisplayTint.Value + d + tints.Length) % tints.Length,
-                () => true, () => true, "A gentle color wash across the maximized MFD; warning colors remain distinct.",
-                EffectsEnabled, EffectsDisabled);
-            Percent(parent, TakeRow(ref area), "TINT STRENGTH", settings.DisplayTintStrength, 0f, 1f, .1f,
-                () => EffectsEnabled() && settings.DisplayTint.Value != 0, () => "Enable effects and choose a color tint first.");
-            AvStyled.Button(parent, TakeRow(ref area), "RESET DISPLAY FILTER", "btn", () =>
-            {
-                settings.DisplayEffects.Value = true;
-                settings.DisplayGlass.Value = .6f;
-                settings.DisplayAutoLight.Value = true;
-                settings.DisplayScanlines.Value = 0f;
-                settings.DisplayVignette.Value = 0f;
-                settings.DisplayTint.Value = 0;
-                settings.DisplayTintStrength.Value = .25f;
-                Changed();
-            }).WithTooltip("Restore the default glass finish and remove CRT, edge shading and tint.");
-
-            Heading(parent, ref area, "02", "SURFACE", "DECK");
-            Percent(parent, TakeRow(ref area), "CONSOLE OPACITY", settings.DeckOpacity, .1f, 1f, .05f,
-                () => settings.ExpandedMapUi.Value, () => "Turn on expanded layout first.");
-            Stepper(parent, TakeRow(ref area), "BACKGROUND",
-                () => SettingsChoices.BackgroundName(settings.DeckGrid.Value, settings.CheckerboardOverlay.Value,
-                    settings.BackgroundImage.Value, settings.BackgroundImagePreset.Value),
-                d => SetBackground(SettingsChoices.CycleBackground(settings.DeckGrid.Value,
-                    settings.CheckerboardOverlay.Value, settings.BackgroundImage.Value, settings.BackgroundImagePreset.Value, d)),
-                () => true, () => true,
-                "Choose one decoration: plain, grid, checker, hexagon, carbon, radar or custom image. MIXED preserves your old combination.",
-                () => settings.ExpandedMapUi.Value, () => "Turn on expanded layout first.");
-            Percent(parent, TakeRow(ref area), "CHECKER STRENGTH", settings.CheckerboardOpacity, .02f, .4f, .02f,
-                () => settings.ExpandedMapUi.Value && settings.CheckerboardOverlay.Value,
-                () => "Choose CHECKER on STYLE first.");
-            Percent(parent, TakeRow(ref area), "MAP DARKENING", settings.MapTrayOpacity, 0f, 1f, .05f,
-                () => settings.ExpandedMapUi.Value, () => "Turn on expanded layout first.");
-
-            Heading(parent, ref area, "03", "DISPATCHES", "WIRE");
-            Toggle(parent, TakeRow(ref area), "NEWS TICKER", "Show theater dispatches above the map.",
-                () => settings.NewsTickerEnabled.Value, v => settings.NewsTickerEnabled.Value = v,
-                () => settings.ExpandedMapUi.Value, () => "Turn on expanded layout first.");
-            Stepper(parent, TakeRow(ref area), "TICKER SPEED",
-                () => settings.NewsTickerSpeed.Value.ToString("0") + " px/s",
-                d => settings.NewsTickerSpeed.Value = Mathf.Clamp(settings.NewsTickerSpeed.Value + d * 15f, 15f, 150f),
-                () => settings.NewsTickerSpeed.Value > 15f, () => settings.NewsTickerSpeed.Value < 150f,
-                "Lower speeds are easier to read. Disable NEWS TICKER to stop motion.",
-                () => settings.ExpandedMapUi.Value && settings.NewsTickerEnabled.Value,
-                () => "Enable expanded layout and news ticker first.");
-
-            Heading(parent, ref area, "04", "INTERFACE AUDIO", "LOCAL");
-            Percent(parent, TakeRow(ref area), "UI VOLUME", settings.UiSoundVolume, 0f, 1f, .1f,
-                () => true, () => "");
-        }
-
-        private void SetBackground(int mode)
-        {
-            settings.DeckGrid.Value = mode == 1;
-            settings.CheckerboardOverlay.Value = mode == 2;
-            settings.BackgroundImage.Value = mode >= 3;
-            if (mode >= 3) settings.BackgroundImagePreset.Value = mode - 3;
-        }
-
-        private bool ImageEnabled() => settings.ExpandedMapUi.Value && settings.BackgroundImage.Value;
-        private bool CustomEnabled() => ImageEnabled() && settings.BackgroundImagePreset.Value == 3;
-
-        private void BuildImagePage(RectTransform parent, Rect body)
-        {
-            parent = Page(2, parent, body, 4, 1, 26f, out var area);
-
-            Heading(parent, ref area, "01", "LOCAL IMAGERY", "PNG / JPEG");
-            const float cueHeight = 26f;
-            const float cueButtonWidth = 94f;
-            TMP_Text cue = AvStyled.Label(parent,
-                new Rect(area.x + 8f, area.y, area.width - cueButtonWidth - 18f, cueHeight),
-                "", "row-sub", align: TextAlignmentOptions.MidlineLeft);
-            var prerequisite = AvStyled.Button(parent,
-                new Rect(area.x + area.width - cueButtonWidth, area.y, cueButtonWidth, cueHeight),
-                "OPEN MAP", "btn", () => SetClientPage(settings.ExpandedMapUi.Value ? 1 : 0),
-                AvButtonStyle.Quiet);
-            refreshers.Add(() =>
-            {
-                bool ready = CustomEnabled();
-                prerequisite.gameObject.SetActive(!ready);
-                prerequisite.SetText(settings.ExpandedMapUi.Value ? "OPEN STYLE" : "OPEN MAP");
-                cue.text = ready ? "ADD PNG/JPEG FILES, THEN RESCAN"
-                    : settings.ExpandedMapUi.Value ? "SELECT CUSTOM BACKGROUND ON STYLE"
-                    : "TURN ON EXPANDED LAYOUT ON MAP";
-            });
-            area.y -= 26f;
-            Percent(parent, TakeRow(ref area), "IMAGE STRENGTH", settings.BackgroundImageOpacity, .05f, 1f, .05f,
-                ImageEnabled, () => "Choose an image background on STYLE first.");
-            Stepper(parent, TakeRow(ref area), "IMAGE FILE", MfdMapDeck.GetCurrentWallpaperFileName,
-                MfdMapDeck.CycleCustomWallpaper,
-                () => MfdMapDeck.DiscoveredWallpaperCount > 1,
-                () => MfdMapDeck.DiscoveredWallpaperCount > 1,
-                "Local PNG/JPEG files. Use RESCAN after adding or replacing files.", CustomEnabled,
-                () => "Choose CUSTOM on STYLE. Add files to BepInEx/config/BoscaliSummer/wallpapers.");
-            string[] fits = { "COVER", "FIT", "STRETCH" };
-            Stepper(parent, TakeRow(ref area), "IMAGE FIT",
-                () => fits[Mathf.Clamp(settings.WallpaperFitMode.Value, 0, 2)],
-                d => settings.WallpaperFitMode.Value = (settings.WallpaperFitMode.Value + d + 3) % 3,
-                () => true, () => true, "COVER crops; FIT keeps the full image; STRETCH fills the screen.",
-                CustomEnabled, () => "Choose CUSTOM on STYLE first.");
-            var scan = AvStyled.Button(parent, TakeRow(ref area), "RESCAN LOCAL FILES  →", "btn", () =>
-            {
-                MfdMapDeck.RescanWallpapers();
-                Echo("RESCAN — " + MfdMapDeck.WallpaperStatus);
-                Changed();
-            }, AvButtonStyle.Primary)
-                .WithTooltip("Scan up to 512 directory entries; images are limited to 16 MB and 4096 pixels per side.");
-            refreshers.Add(() =>
-            {
-                scan.SetEnabled(CustomEnabled());
-                scan.WithTooltip(CustomEnabled()
-                    ? "Scan up to 512 entries. PNG/JPEG: 16 MB and 4096 pixels per side."
-                    : "Choose CUSTOM on STYLE first.");
-            });
-        }
-
-        /// <summary>
-        /// Cockpit-side presentation: the native target camera inset published by the Hud
-        /// module through <see cref="IHudBoard"/>, plus Command's own radial preset page. Every
-        /// row here writes live state.
-        /// </summary>
-        private void BuildViewPage(RectTransform parent, Rect body)
-        {
-            ModServices.TryGet(out IHudBoard board);
-            parent = Page(3, parent, body, 2, 2, out var area);
-
-            Heading(parent, ref area, "01", "CAMERA", "TARGET");
-            Toggle(parent, TakeRow(ref area), "TARGET CAMERA",
-                "Show the native target camera feed inset on the status panel while a target is selected.",
-                () => board != null && board.CameraFeedEnabled, v => { if (board != null) board.CameraFeedEnabled = v; },
-                () => board != null, () => "HUD service unavailable in this scene.");
-
-            Heading(parent, ref area, "02", "TARGETING", "RADIAL");
-            Toggle(parent, TakeRow(ref area), "RADIAL PRESETS",
-                "Offer the TGT quick slots as a page in the native cockpit radial menu.",
-                () => settings.TargetPresetWheel.Value, v => settings.TargetPresetWheel.Value = v);
-        }
-
-        /// <summary>Element-wide rows, before one row per declared feed.</summary>
-        private const int HudSettingRows = 11;
-
-        /// <summary>
-        /// The common HUD element's own rows. Everything here is client-local presentation and
-        /// applies on the board's next tick, so the pilot sees the change while flying. The
-        /// feeds below are listed from whatever modules declared one, not from a list kept here.
-        /// </summary>
-        private void BuildHudRows(RectTransform parent, ref Rect area, IHudBoard board)
-        {
-            Func<bool> on = () => board != null && board.Enabled;
-            Func<string> off = () => "Turn the common HUD element on first.";
-
-            Toggle(parent, TakeRow(ref area), "HUD ELEMENT",
-                "Draw the one cockpit HUD element every feature shares for status lines and notices.",
-                () => on(), v => { if (board != null) board.Enabled = v; });
-
-            Stepper(parent, TakeRow(ref area), "SIZE",
-                () => board != null ? HudLayout.ScaleName(board.ScaleStep) : "--",
-                d => { if (board != null) board.ScaleStep = HudLayout.Cycle(board.ScaleStep, HudLayout.ScaleCount, d); },
-                () => board != null, () => board != null,
-                "Text size as a multiple of the game's own overlay text size option.",
-                on, off);
-
-            Stepper(parent, TakeRow(ref area), "OPACITY",
-                () => board != null ? HudLayout.OpacityName(board.OpacityStep) : "--",
-                d => { if (board != null) board.OpacityStep = HudLayout.Cycle(board.OpacityStep, HudLayout.OpacityCount, d); },
-                () => board != null, () => board != null,
-                "How solid the element reads over a bright sky. OFF hides it without unloading it.",
-                on, off);
-
-            Stepper(parent, TakeRow(ref area), "MAX LINES",
-                () => board != null ? board.MaxRows.ToString() : "--",
-                d => { if (board != null) board.MaxRows = Mathf.Clamp(board.MaxRows + d, HudLayout.MinRows, HudLayout.MaxRows); },
-                () => board != null && board.MaxRows > HudLayout.MinRows,
-                () => board != null && board.MaxRows < HudLayout.MaxRows,
-                "How many lines the element may show at once. Two are kept for live notices.",
-                on, off);
-
-            Toggle(parent, TakeRow(ref area), "NOTICES",
-                "Show transient notices, including ace hunt and mission alerts.",
-                () => board != null && board.NoticesEnabled,
-                v => { if (board != null) board.NoticesEnabled = v; },
-                on, off);
-
-            Stepper(parent, TakeRow(ref area), "NOTICE TIME",
-                () => board != null ? board.NoticeSeconds.ToString("0") + " s" : "--",
-                d => { if (board != null) board.NoticeSeconds = Mathf.Clamp(board.NoticeSeconds + d, HudLayout.MinNoticeSeconds, HudLayout.MaxNoticeSeconds); },
-                () => board != null && board.NoticeSeconds > HudLayout.MinNoticeSeconds,
-                () => board != null && board.NoticeSeconds < HudLayout.MaxNoticeSeconds,
-                "How long a transient notice stays up.",
-                () => on() && board.NoticesEnabled, () => "Turn notices on first.");
-
-            Stepper(parent, TakeRow(ref area), "CONTRAST",
-                () => HudLayout.ContrastName(board?.Contrast ?? 1),
-                d => { if (board != null) board.Contrast = HudLayout.Cycle(board.Contrast, 3, d); },
-                () => true, () => true, "CLEAR floating ink, GLASS backing, or SOLID for bright sky.", on, off);
-            Toggle(parent, TakeRow(ref area), "DETAIL LINES", "Supporting text and progress gauges; off uses compact single-line rows.",
-                () => board != null && board.ShowDetails, v => { if (board != null) board.ShowDetails = v; }, on, off);
-            HudOffset(parent, ref area, "HORIZONTAL", () => board?.OffsetX ?? 0,
-                v => { if (board != null) board.OffsetX = v; }, -600, on, off);
-            HudOffset(parent, ref area, "VERTICAL", () => board?.OffsetY ?? 0,
-                v => { if (board != null) board.OffsetY = v; }, -600, on, off);
-            AvStyled.Button(parent, TakeRow(ref area), "RESET STATUS LAYOUT", "btn", () =>
-            { board?.ResetLayout(); Echo("Status layout restored. Feed preferences kept."); Changed(); });
-
-            if (board == null)
-            {
-                Toggle(parent, TakeRow(ref area), "FEEDS",
-                    "The common HUD element is not installed in this session.",
-                    () => false, v => { }, () => false, () => "HUD element unavailable.");
-                return;
-            }
-
-            int feeds = Mathf.Min(board.Channels.Count, HudLayout.MaxChannels);
-            for (int i = 0; i < feeds; i++)
-            {
-                IHudChannel feed = board.Channels[i];
-                Toggle(parent, TakeRow(ref area), feed.Label,
-                    "Show this feed on the common HUD element. Switching it off hides its lines " +
-                    "and changes nothing about how the feature itself runs.",
-                    () => feed.Enabled, v => { if (feed.Enabled != v) feed.Toggle(); },
-                    on, off);
-            }
-        }
-
-        private void Percent(RectTransform parent, Rect area, string title, ConfigEntry<float> entry,
-            float min, float max, float step, Func<bool> enabled, Func<string> reason)
-        {
-            Stepper(parent, area, title, () => entry.Value.ToString("P0"),
-                d => entry.Value = Mathf.Clamp(Mathf.Round((entry.Value + d * step) * 100f) / 100f, min, max),
-                () => entry.Value > min + .001f, () => entry.Value < max - .001f,
-                "Adjust " + title.ToLowerInvariant() + ".", enabled, reason);
-        }
-
-        /// <summary>
-        /// The five shared row columns: state pip, name, minus, value, plus. A toggle
-        /// draws only the pip and the value plate, a stepper the minus/value/plus, so the
-        /// label column and the value column never move between the two kinds of row.
-        /// </summary>
-        private static AvNode SettingRow(string name) =>
-            AvBox.Row(name).Height(AvTokens.RowHeight).Pad(0f, RowInset, RowRightPad, RowInset).Gaps(CellGap)
-                .Add(AvBox.Cell("pip").Width(PipSize))
-                .Add(AvBox.Cell("label").Grow())
-                .Add(AvBox.Cell("minus").Width(StepWidth))
-                .Add(AvBox.Cell("value").Width(StateWidth))
-                .Add(AvBox.Cell("plus").Width(StepWidth));
 
         private static Image FindHighlight(Button button)
         {
@@ -759,46 +285,11 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             return button.GetComponent<Image>();
         }
 
-        private void Changed()
-        {
-            ApplyPending();
-            dirty = true;
-            RefreshPanel();
-        }
-
-        // The row's own state, before hover: an active control carries an accent marker
-        // and subtle wash, so ON reads at a glance without overpowering the panel.
-        private static Color LatchedRow => AvTheme.Unity(AvTokens.Wash(AvTheme.Accent.ToRgba(), 0.12f, 0.16f));
-        private static Color LatchedRowHover => AvTheme.Unity(AvTokens.Wash(AvTheme.Accent.ToRgba(), 0.18f, 0.24f));
-        private static Color HoverRow => AvTheme.Unity(AvTokens.SurfaceRaised.WithAlpha(0.5f));
-
-        // The ON plate is a wash of the accent, not a solid block. The wash keeps the dark
-        // ink label at roughly 5:1 on the panel ground, and the state is never colour alone:
-        // the pip is lit and the plate says ON.
-        private static Color LatchedState => AvTheme.Unity(AvTokens.Wash(AvTheme.Accent.ToRgba(), 0.16f, 0.75f));
-
-        /// <summary>
-        /// Confirm the action on the status strip for a moment. Text, not colour alone:
-        /// the value label changes too, so the cue survives a colour-blind reading.
-        /// </summary>
+        /// <summary>Confirm the action on the footer for a moment. Text, not colour alone.</summary>
         private void Echo(string text)
         {
             actionEcho = text;
             actionEchoUntil = Time.unscaledTime + 1.6f;
-        }
-
-        /// <summary>
-        /// A full-row hover target behind the controls: the help has to appear whether the
-        /// pointer is over the label or the value box, and the row lights as one control.
-        /// </summary>
-        private static AvTooltipTarget RowHover(RectTransform parent, AvRect area, string tooltip)
-        {
-            Image background = AvKit.Panel(parent, area.ToUnity(), Color.clear);
-            background.raycastTarget = true;
-            var target = background.gameObject.AddComponent<AvTooltipTarget>();
-            target.Initialise(tooltip);
-            target.SetTint(background, Color.clear, HoverRow);
-            return target;
         }
 
         private bool EffectsEnabled() => settings.DisplayEffects.Value;
@@ -827,106 +318,293 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             appearancePending = overlayPending = layoutPending = tickerPending = false;
         }
 
-        private void Toggle(RectTransform parent, Rect area, string title, string tooltip,
-            Func<bool> get, Action<bool> set, Func<bool> enabled = null, Func<string> reason = null)
+        private void Changed() => ApplyPending();
+
+        // ------------------------------------------------------------------ row helpers
+        //
+        // Every SET row used to be one of two shapes: a latched ON/OFF, or a "- value +"
+        // stepper, both built from the retired v1 kit's primitives with hand-measured
+        // geometry (Page/Heading/TakeRow/rowPitch). Kit v2's AvFlow measures and places every
+        // part itself, so that geometry is gone; these two helpers now build one AvRow per
+        // setting (state rail, name, always-visible help/reason line, and either the ON/OFF
+        // word or a pair of trailing +/- AvControls), refreshed at the console's 2 Hz "Slow"
+        // tier while their page is open.
+
+        private AvRow Toggle(AvFlow flow, int page, string title, string help, Func<bool> get, Action<bool> set,
+            Func<bool> enabled = null, Func<string> reason = null)
         {
-            var row = SettingRow("row").Arrange(area);
-            var hover = RowHover(parent, row.Rect, tooltip);
-            Rect pip = row.At("pip");
-            Image led = AvKit.Panel(parent,
-                new Rect(pip.x, pip.y - (pip.height - PipSize) * 0.5f, PipSize, PipSize),
-                AvTheme.RailInert);
-            TMP_Text label = AvStyled.Label(parent, row.At("label"), title, "row-name",
-                align: TextAlignmentOptions.MidlineLeft);
-            var button = AvStyled.Button(parent, row.At("value"), "", "btn", () =>
+            AvRow row = null;
+            void RefreshRow()
+            {
+                bool avail = enabled == null || enabled();
+                bool on = get();
+                row.Interactable = avail;
+                row.Set(title, avail ? help : (reason != null ? reason() : help), on ? "ON" : "OFF",
+                    on ? AvState.Ready : AvState.Inert);
+            }
+            row = new AvRow(flow.Content, () =>
             {
                 if (enabled != null && !enabled()) return;
                 set(!get());
                 Echo(title + " — " + (get() ? "ON" : "OFF"));
+                RefreshRow();
                 Changed();
             });
-            refreshers.Add(() =>
-            {
-                bool available = enabled == null || enabled();
-                bool on = get();
-                string why = available ? tooltip : reason != null ? reason() : tooltip;
-                button.SetEnabled(available);
-                button.SetText(on ? "ON" : "OFF");
-                button.SetLatched(on);
-                if (on)
-                {
-                    button.SetCustomColors(LatchedState, AvTheme.Frame, AvTheme.Accent);
-                }
-                else
-                {
-                    button.ClearCustomColors();
-                }
-                button.WithTooltip(why);
-                hover.SetText(why);
-                led.color = !available ? AvTheme.Disabled : on ? AvTheme.RailReady : AvTheme.RailInert;
-                label.color = available ? AvTheme.TextPrimary : AvTheme.Disabled;
-                hover.SetColors(on && available ? LatchedRow : Color.clear,
-                                on && available ? LatchedRowHover : HoverRow);
-            });
+            flow.Add(row);
+            RefreshRow();
+            flow.Ticker.Add(page, AvTickRate.Slow, RefreshRow);
+            return row;
         }
 
-        private void Stepper(RectTransform parent, Rect area, string title, Func<string> get,
-            Action<int> change, Func<bool> decrease, Func<bool> increase, string tooltip,
-            Func<bool> enabled = null, Func<string> reason = null, bool readOnlyValue = false)
+        private AvRow Stepper(AvFlow flow, int page, string title, Func<string> get, Action<int> change,
+            Func<bool> decrease, Func<bool> increase, string help, Func<bool> enabled = null,
+            Func<string> reason = null, bool readOnlyValue = false)
         {
-            var row = SettingRow("row").Arrange(area);
-            var hover = RowHover(parent, row.Rect, tooltip);
-            TMP_Text label = AvStyled.Label(parent, row.At("label"), title, "row-name",
-                align: TextAlignmentOptions.MidlineLeft);
-            Action<int> click = d =>
+            var row = new AvRow(flow.Content);
+            AvControl minus = row.AddTrailing(new AvControl.Spec("", () =>
             {
-                if (enabled != null && !enabled() || !(d < 0 ? decrease() : increase())) return;
-                change(d);
+                if ((enabled != null && !enabled()) || !decrease()) return;
+                change(-1);
                 Echo(title + " — " + get());
                 Changed();
-            };
-            var minus = AvStyled.Button(parent, row.At("minus"), "-", "btn", () => click(-1));
-            var value = AvStyled.Label(parent, row.At("value"), "", "row-value", align: TextAlignmentOptions.Center);
-            // A value is never traded for an ellipsis: it shrinks to the micro floor and
-            // then overflows its cell, the module's FitSingleLine rule.
-            value.enableWordWrapping = false;
-            value.overflowMode = TextOverflowModes.Overflow;
-            value.enableAutoSizing = true;
-            value.fontSizeMin = AvTokens.FontMicro;
-            value.fontSizeMax = value.fontSize;
-            value.richText = false;
-            var plus = AvStyled.Button(parent, row.At("plus"), "+", "btn", () => click(1));
-            minus.GetComponentInChildren<TMP_Text>().fontSize = AvTokens.FontLead;
-            plus.GetComponentInChildren<TMP_Text>().fontSize = AvTokens.FontLead;
-            refreshers.Add(() =>
+            }, AvButtonStyle.Quiet, AvIcon.Minus));
+            AvControl plus = row.AddTrailing(new AvControl.Spec("", () =>
             {
-                bool available = enabled == null || enabled();
-                minus.SetEnabled(available && decrease());
-                plus.SetEnabled(available && increase());
-                string text = available || readOnlyValue ? get() : "--";
-                if (value.text != text) value.text = text;
-                string why = available ? tooltip : reason != null ? reason() : tooltip;
-                minus.WithTooltip(available ? tooltip + " Previous / decrease. " + text : why);
-                plus.WithTooltip(available ? tooltip + " Next / increase. " + text : why);
-                hover.SetText(why);
-                label.color = available ? AvTheme.TextPrimary : AvTheme.Disabled;
-                // A remote client sees the host's value read-only; the figure stays legible,
-                // the controls around it say why they are inert.
-                value.color = available || readOnlyValue ? AvTheme.TextPrimary : AvTheme.Disabled;
+                if ((enabled != null && !enabled()) || !increase()) return;
+                change(1);
+                Echo(title + " — " + get());
+                Changed();
+            }, AvButtonStyle.Quiet, AvIcon.Plus));
+            void Refresh()
+            {
+                bool avail = enabled == null || enabled();
+                minus.Interactable = avail && decrease();
+                plus.Interactable = avail && increase();
+                string text = avail || readOnlyValue ? get() : "--";
+                string why = avail ? help : (reason != null ? reason() : help);
+                minus.Help = avail ? help + " Previous / decrease. " + text : why;
+                plus.Help = avail ? help + " Next / increase. " + text : why;
+                row.Set(title, why, text, AvState.Info);
+            }
+            flow.Add(row);
+            Refresh();
+            flow.Ticker.Add(page, AvTickRate.Slow, Refresh);
+            return row;
+        }
+
+        private AvRow Percent(AvFlow flow, int page, string title, ConfigEntry<float> entry,
+            float min, float max, float step, Func<bool> enabled, Func<string> reason) =>
+            Stepper(flow, page, title, () => AvNum.Percent(entry.Value),
+                d => entry.Value = Mathf.Clamp(Mathf.Round((entry.Value + d * step) * 100f) / 100f, min, max),
+                () => entry.Value > min + .001f, () => entry.Value < max - .001f,
+                "Adjust " + title.ToLowerInvariant() + ".", enabled, reason);
+
+        /// <summary>A single wrapped line of prose/status copy, built from kit v2 primitives (a kit gap:
+        /// there is no bare "label part" in the v2 set — every text-bearing part carries its own chrome).</summary>
+        private sealed class NoteLine : AvPart
+        {
+            private readonly TMP_Text text;
+
+            public NoteLine(RectTransform parent, AvTextRole role = AvTextRole.ProseSmall)
+            {
+                Rect = AvLay.Child(parent, "Note");
+                text = AvText.Make(Rect, "Text", role, "", TextAlignmentOptions.TopLeft, true);
+                Restyle();
+            }
+
+            public void Set(string t) { if (text.text != (t ?? "")) text.text = t ?? ""; }
+
+            public override float Measure(float width) => Mathf.Max(18f, AvText.Height(text, width));
+
+            public override void Place(AvSlot s)
+            {
+                base.Place(s);
+                AvLay.Place(text.rectTransform, 0f, 0f, s.W, s.H);
+            }
+
+            public override void Restyle() =>
+                text.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
+        }
+
+        // ------------------------------------------------------------------ CLIENT pages
+
+        private void BuildMapPage(AvFlow flow, int page)
+        {
+            flow.Section(AvIcon.Map2, "DISPLAY", "CONSOLE");
+            Toggle(flow, page, "EXPANDED LAYOUT", "Use the full map console. OFF restores the native layout.",
+                () => settings.ExpandedMapUi.Value, v => settings.ExpandedMapUi.Value = v);
+
+            flow.Section(AvIcon.Refresh, "SECTOR FIELD", "REFRESH");
+            Stepper(flow, page, "UPDATE INTERVAL",
+                () => AvNum.Seconds(settings.GridRefreshInterval.Value, 1),
+                d => settings.GridRefreshInterval.Value = Mathf.Clamp(
+                    Mathf.Round((settings.GridRefreshInterval.Value + d * .1f) * 10f) / 10f, .2f, 2f),
+                () => settings.GridRefreshInterval.Value > .201f,
+                () => settings.GridRefreshInterval.Value < 1.999f,
+                "Longer intervals reduce CPU work. Recommended: 0.5 s.");
+
+            flow.Section(AvIcon.Satellite, "TERRAIN", "SATELLITE");
+            Toggle(flow, page, "3D RELIEF",
+                "Render baked game terrain as a tilted tactical model. Symbols, front line and clicks follow the same surface.",
+                () => settings.MapRelief3D.Value, v => settings.MapRelief3D.Value = v,
+                () => settings.ExpandedMapUi.Value && settings.MapTerrainImage.Value,
+                () => "Turn on expanded layout and terrain image first.");
+            Toggle(flow, page, "TERRAIN IMAGE", "Show the satellite terrain beneath map symbols.",
+                () => settings.MapTerrainImage.Value, v => settings.MapTerrainImage.Value = v,
+                () => settings.ExpandedMapUi.Value, () => "Turn on expanded layout first.");
+            Percent(flow, page, "TERRAIN STRENGTH", settings.MapTerrainOpacity, .1f, 1f, .1f,
+                () => settings.ExpandedMapUi.Value && settings.MapTerrainImage.Value,
+                () => "Enable expanded layout and terrain image first.");
+        }
+
+        private void BuildDisplayPage(AvFlow flow, int page)
+        {
+            flow.Section(AvIcon.Typography, "DISPLAY FILTER", "LOCAL");
+            Toggle(flow, page, "DISPLAY EFFECTS", "OFF removes glass and overlays. Your tuning is retained.",
+                () => settings.DisplayEffects.Value, v => settings.DisplayEffects.Value = v);
+            Percent(flow, page, "GLASS REFLECTION", settings.DisplayGlass, 0f, 1f, .1f, EffectsEnabled, EffectsDisabled);
+            Toggle(flow, page, "ADAPT TO LIGHT", "Let ambient light vary the glass reflection. OFF keeps it steady.",
+                () => settings.DisplayAutoLight.Value, v => settings.DisplayAutoLight.Value = v,
+                EffectsEnabled, EffectsDisabled);
+            Percent(flow, page, "CRT SCANLINES", settings.DisplayScanlines, 0f, 1f, .1f, EffectsEnabled, EffectsDisabled);
+            Percent(flow, page, "EDGE SHADING", settings.DisplayVignette, 0f, 1f, .1f, EffectsEnabled, EffectsDisabled);
+            string[] tints = { "NEUTRAL", "GREEN", "AMBER", "ICE", "ROSE" };
+            Stepper(flow, page, "COLOR TINT",
+                () => tints[Mathf.Clamp(settings.DisplayTint.Value, 0, 4)],
+                d => settings.DisplayTint.Value = (settings.DisplayTint.Value + d + tints.Length) % tints.Length,
+                () => true, () => true, "A gentle color wash across the maximized MFD; warning colors remain distinct.",
+                EffectsEnabled, EffectsDisabled);
+            Percent(flow, page, "TINT STRENGTH", settings.DisplayTintStrength, 0f, 1f, .1f,
+                () => EffectsEnabled() && settings.DisplayTint.Value != 0, () => "Enable effects and choose a color tint first.");
+            AvControl resetDisplay = flow.Buttons(new AvControl.Spec("RESET DISPLAY FILTER", () =>
+            {
+                settings.DisplayEffects.Value = true;
+                settings.DisplayGlass.Value = .6f;
+                settings.DisplayAutoLight.Value = true;
+                settings.DisplayScanlines.Value = 0f;
+                settings.DisplayVignette.Value = 0f;
+                settings.DisplayTint.Value = 0;
+                settings.DisplayTintStrength.Value = .25f;
+                Echo("Display filter reset.");
+                Changed();
+            })).Controls[0];
+            resetDisplay.Help = "Restore the default glass finish and remove CRT, edge shading and tint.";
+
+            flow.Section(AvIcon.Settings, "PANEL THEME", "AVIONICS");
+            var themeSeg = flow.Add(new AvSegmented(flow.Content, "THEME", new[] { "STEEL", "ACE", "PHOSPHOR" },
+                () => (int)settings.AvionicsTheme.Value,
+                i => { settings.AvionicsTheme.Value = (AvThemeId)i; Echo("THEME — " + settings.AvionicsTheme.Value); }));
+            var motionCell = flow.Add(AvCell.Toggle(flow.Content, "REDUCED MOTION",
+                "Snap every panel animation to its end state.",
+                () => settings.AvionicsReducedMotion.Value,
+                v => { settings.AvionicsReducedMotion.Value = v; Echo("REDUCED MOTION — " + (v ? "ON" : "OFF")); }));
+            flow.Ticker.Add(page, AvTickRate.Slow, () => { themeSeg.Refresh(); motionCell.Refresh(); });
+
+            flow.Section(AvIcon.Stack2, "SURFACE", "DECK");
+            Percent(flow, page, "CONSOLE OPACITY", settings.DeckOpacity, .1f, 1f, .05f,
+                () => settings.ExpandedMapUi.Value, () => "Turn on expanded layout first.");
+            Stepper(flow, page, "BACKGROUND",
+                () => SettingsChoices.BackgroundName(settings.DeckGrid.Value, settings.CheckerboardOverlay.Value,
+                    settings.BackgroundImage.Value, settings.BackgroundImagePreset.Value),
+                d => SetBackground(SettingsChoices.CycleBackground(settings.DeckGrid.Value,
+                    settings.CheckerboardOverlay.Value, settings.BackgroundImage.Value, settings.BackgroundImagePreset.Value, d)),
+                () => true, () => true,
+                "Choose one decoration: plain, grid, checker, hexagon, carbon, radar or custom image. MIXED preserves your old combination.",
+                () => settings.ExpandedMapUi.Value, () => "Turn on expanded layout first.");
+            Percent(flow, page, "CHECKER STRENGTH", settings.CheckerboardOpacity, .02f, .4f, .02f,
+                () => settings.ExpandedMapUi.Value && settings.CheckerboardOverlay.Value,
+                () => "Choose CHECKER on DISPLAY first.");
+            Percent(flow, page, "MAP DARKENING", settings.MapTrayOpacity, 0f, 1f, .05f,
+                () => settings.ExpandedMapUi.Value, () => "Turn on expanded layout first.");
+
+            flow.Section(AvIcon.Message2, "DISPATCHES", "WIRE");
+            Toggle(flow, page, "NEWS TICKER", "Show theater dispatches above the map.",
+                () => settings.NewsTickerEnabled.Value, v => settings.NewsTickerEnabled.Value = v,
+                () => settings.ExpandedMapUi.Value, () => "Turn on expanded layout first.");
+            Stepper(flow, page, "TICKER SPEED",
+                () => AvNum.Fixed(settings.NewsTickerSpeed.Value, 0) + " px/s",
+                d => settings.NewsTickerSpeed.Value = Mathf.Clamp(settings.NewsTickerSpeed.Value + d * 15f, 15f, 150f),
+                () => settings.NewsTickerSpeed.Value > 15f, () => settings.NewsTickerSpeed.Value < 150f,
+                "Lower speeds are easier to read. Disable NEWS TICKER to stop motion.",
+                () => settings.ExpandedMapUi.Value && settings.NewsTickerEnabled.Value,
+                () => "Enable expanded layout and news ticker first.");
+
+            flow.Section(AvIcon.Volume, "INTERFACE AUDIO", "LOCAL");
+            Percent(flow, page, "UI VOLUME", settings.UiSoundVolume, 0f, 1f, .1f, () => true, () => "");
+        }
+
+        private void SetBackground(int mode)
+        {
+            settings.DeckGrid.Value = mode == 1;
+            settings.CheckerboardOverlay.Value = mode == 2;
+            settings.BackgroundImage.Value = mode >= 3;
+            if (mode >= 3) settings.BackgroundImagePreset.Value = mode - 3;
+        }
+
+        private bool ImageEnabled() => settings.ExpandedMapUi.Value && settings.BackgroundImage.Value;
+        private bool CustomEnabled() => ImageEnabled() && settings.BackgroundImagePreset.Value == 3;
+
+        private void BuildBackdropPage(AvFlow flow, int page)
+        {
+            flow.Section(AvIcon.Satellite, "LOCAL IMAGERY", "PNG / JPEG");
+            var cue = flow.Add(new NoteLine(flow.Content));
+            AvControl openButton = flow.Buttons(new AvControl.Spec("OPEN MAP",
+                () => con.SetPage(settings.ExpandedMapUi.Value ? PageDisplay : PageMap))).Controls[0];
+            flow.Ticker.Add(page, AvTickRate.Slow, () =>
+            {
+                bool ready = CustomEnabled();
+                openButton.Rect.gameObject.SetActive(!ready);
+                openButton.Label = settings.ExpandedMapUi.Value ? "OPEN STYLE" : "OPEN MAP";
+                string cueText = ready ? "ADD PNG/JPEG FILES, THEN RESCAN"
+                    : settings.ExpandedMapUi.Value ? "SELECT CUSTOM BACKGROUND ON DISPLAY"
+                    : "TURN ON EXPANDED LAYOUT ON MAP";
+                cue.Set(cueText);
+                openButton.Help = cueText;
+            });
+
+            Percent(flow, page, "IMAGE STRENGTH", settings.BackgroundImageOpacity, .05f, 1f, .05f,
+                ImageEnabled, () => "Choose an image background on DISPLAY first.");
+            Stepper(flow, page, "IMAGE FILE", MfdMapDeck.GetCurrentWallpaperFileName,
+                MfdMapDeck.CycleCustomWallpaper,
+                () => MfdMapDeck.DiscoveredWallpaperCount > 1,
+                () => MfdMapDeck.DiscoveredWallpaperCount > 1,
+                "Local PNG/JPEG files. Use RESCAN after adding or replacing files.", CustomEnabled,
+                () => "Choose CUSTOM on DISPLAY. Add files to BepInEx/config/BoscaliSummer/wallpapers.");
+            string[] fits = { "COVER", "FIT", "STRETCH" };
+            Stepper(flow, page, "IMAGE FIT",
+                () => fits[Mathf.Clamp(settings.WallpaperFitMode.Value, 0, 2)],
+                d => settings.WallpaperFitMode.Value = (settings.WallpaperFitMode.Value + d + 3) % 3,
+                () => true, () => true, "COVER crops; FIT keeps the full image; STRETCH fills the screen.",
+                CustomEnabled, () => "Choose CUSTOM on DISPLAY first.");
+            AvControl scan = flow.Buttons(new AvControl.Spec("RESCAN LOCAL FILES", () =>
+            {
+                MfdMapDeck.RescanWallpapers();
+                Echo("RESCAN — " + MfdMapDeck.WallpaperStatus);
+                Changed();
+            }, AvButtonStyle.Primary)).Controls[0];
+            flow.Ticker.Add(page, AvTickRate.Slow, () =>
+            {
+                bool custom = CustomEnabled();
+                scan.Interactable = custom;
+                scan.Help = custom
+                    ? "Scan up to 512 entries. PNG/JPEG: 16 MB and 4096 pixels per side."
+                    : "Choose CUSTOM on DISPLAY first.";
             });
         }
 
-        private void RefreshPanel()
+        private void BuildCameraPage(AvFlow flow, int page)
         {
-            AvUiSound.Volume = settings.UiSoundVolume.Value;
-            bool host = HostAuthority();
-            shell?.DataBar.SetChip(1, host ? "HOST" : "CLIENT", host ? "live" : "inert");
-            // The server page updates every tick while open. Its host rows do not need
-            // to refresh every hidden client control at the same time.
-            int start = shell != null && shell.Page == TabServer ? serverRefresherStart : 0;
-            int end = shell != null && shell.Page == TabServer ? refreshers.Count : serverRefresherStart;
-            for (int i = start; i < end; i++) refreshers[i]();
-            dirty = false;
+            ModServices.TryGet(out IHudBoard board);
+            flow.Section(AvIcon.Camera, "CAMERA", "TARGET");
+            Toggle(flow, page, "TARGET CAMERA",
+                "Show the native target camera feed inset on the status panel while a target is selected.",
+                () => board != null && board.CameraFeedEnabled, v => { if (board != null) board.CameraFeedEnabled = v; },
+                () => board != null, () => "HUD service unavailable in this scene.");
+
+            flow.Section(AvIcon.Target, "TARGETING", "RADIAL");
+            Toggle(flow, page, "RADIAL PRESETS",
+                "Offer the TGT quick slots as a page in the native cockpit radial menu.",
+                () => settings.TargetPresetWheel.Value, v => settings.TargetPresetWheel.Value = v);
         }
 
         public void ResetForScene()
@@ -937,21 +615,11 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             screen = null;
             failed = false;
             nextTick = 0f;
-            dirty = true;
-            wasVisible = false;
             actionEcho = null;
             actionEchoUntil = 0f;
-            clientPages = null;
-            clientTabs = null;
-            clientPage = 0;
-            serverPages = null;
-            serverTabs = null;
-            serverPage = 0;
             tasking = null;
-            taskRequest = null;
-            taskNote = null;
+            taskCards = null;
             nextTaskingRefresh = 0f;
-            Array.Clear(taskRows, 0, taskRows.Length);
             AvUiSound.Reset();
         }
 
@@ -969,17 +637,14 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             boundSlot = -1;
             claimed = false;
             surface = null;
-            shell = null;
-            clientPages = null;
-            clientTabs = null;
-            serverPages = null;
-            serverTabs = null;
-            Array.Clear(taskRows, 0, taskRows.Length);
-            tasking = null;
+            con = null;
+            savedChip = null;
+            roleChip = null;
             taskRequest = null;
             taskNote = null;
-            refreshers.Clear();
-            serverRefresherStart = 0;
+            taskList = null;
+            tasking = null;
+            taskCards = null;
         }
 
         private void OnDestroy()

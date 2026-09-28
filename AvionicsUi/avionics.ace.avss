@@ -1,0 +1,22 @@
+/* Theme B · Ace Combat blue + amber. Fixed palette; friendly/hostile still follow the game. */
+:root {
+  ground:          #04070D fb;
+  surface:         #08111E fa;
+  surface-raised:  #102034 fa;
+  surface-inert:   #0A1522 f5;
+  surface-sunken:  #060C16 f8;
+  hairline:        #2A4E7A c7;
+  frame:           #3F8FE8 e6;
+  ink:             #EEF5FF;
+  ink-dim:         #BFD3EE;
+  ink-muted:       #8EA6C6;
+  key:             #8CC4FF;
+  select:          #FFB23F;
+  ready:           #5BE38A;
+  caution:         #FFE14D;
+  danger:          #FF5A5F;
+  info:            #8CC4FF;
+  inert:           #34496A a6;
+  friendly:        friendly;
+  hostile:         hostile;
+}

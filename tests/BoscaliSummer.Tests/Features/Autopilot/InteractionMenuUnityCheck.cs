@@ -33,8 +33,6 @@ public static class InteractionMenuUnityCheck
                 return;
             }
 
-            AvFont.Font = TMP_FontAsset.CreateFontAsset(new Font("C:/Windows/Fonts/consola.ttf"));
-
             RenderMenu();
 
             File.WriteAllText("result.txt",

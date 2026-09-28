@@ -56,7 +56,6 @@ public static class RailUnityCheck
             for (int i = 1; i < arguments.Length; i++) arguments[i] = parameters[i].HasDefaultValue ? parameters[i].DefaultValue : null;
             setPaths.Invoke(null, arguments);
             AvStyleHost.Configure(Directory.GetCurrentDirectory(), Debug.Log, Debug.LogWarning);
-            AvFont.Font = TMP_FontAsset.CreateFontAsset(new Font("C:/Windows/Fonts/consola.ttf"));
             new GameObject("Events", typeof(EventSystem));
 
             CheckGlyphGeometry();
@@ -110,7 +109,7 @@ public static class RailUnityCheck
         {
             var go = new GameObject("Glyph_" + kind, typeof(RectTransform), typeof(MfdGlyph));
             var rect = go.GetComponent<RectTransform>();
-            AvKit.Place(rect, new Rect(0f, 0f, 32f, 32f));
+            AvLay.Place(rect, 0f, 0f, 32f, 32f);
             MfdGlyph glyph = go.GetComponent<MfdGlyph>();
             glyph.SetKind(kind, Color.white);
 
@@ -138,7 +137,7 @@ public static class RailUnityCheck
             var go = new GameObject("Glyph_" + Kinds[i], typeof(RectTransform), typeof(MfdGlyph));
             var rect = go.GetComponent<RectTransform>();
             rect.SetParent(root.transform, false);
-            AvKit.Place(rect, new Rect(18f + i % 8 * 56f, -(16f + i / 8 * 46f), 32f, 32f));
+            AvLay.Place(rect, 18f + i % 8 * 56f, 16f + i / 8 * 46f, 32f, 32f);
 
             MfdGlyph glyph = go.GetComponent<MfdGlyph>();
             glyph.raycastTarget = false;

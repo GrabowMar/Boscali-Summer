@@ -1,0 +1,9 @@
+Avionics UI asset provenance (fetched 2026-09-28)
+
+Barlow Condensed Medium/SemiBold  https://github.com/google/fonts/tree/main/ofl/barlowcondensed  SIL OFL 1.1  -> OFL-BarlowCondensed.txt
+JetBrains Mono Regular/Bold       https://github.com/JetBrains/JetBrainsMono (master, fonts/ttf)   SIL OFL 1.1  -> OFL-JetBrainsMono.txt
+Tabler Icons webfont @tabler/icons-webfont@3.48.0 https://github.com/tabler/tabler-icons         MIT          -> MIT-Tabler.txt
+Technique only (vertex-packed effect parameters, shiny/dissolve/transition): mob-sakai/UIEffect (MIT) -> MIT-UIEffect.txt
+Technique only (line/circle/gradient/outline mesh modifiers): Unity-UI-Extensions (BSD-3-Clause) -> BSD3-UnityUIExtensions.txt
+No source file from UIEffect or Unity-UI-Extensions is copied; any future copied file must name its source path and commit here.
+Bundle built by tools/Compile-AvionicsUiAssets.ps1 with Unity 2022.3.62f3 + com.unity.textmeshpro 3.0.6.

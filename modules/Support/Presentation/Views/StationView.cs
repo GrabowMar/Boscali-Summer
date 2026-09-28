@@ -7,6 +7,7 @@ using BoscaliSummer.Features.Support.Domain.Orbital;
 using BoscaliSummer.Features.Support.Presentation.Viz;
 using BoscaliSummer.Features.Support.Presentation.Window;
 using BoscaliSummer.Features.Support.Runtime;
+using NOAvionics;
 using NOAvionics.Ui;
 using TMPro;
 using UnityEngine;
@@ -153,8 +154,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             BuildPassTrack(passGroup, w - g * 2f, passH);
             leftGroup = Group(room, "PowerBalance", new Rect(g, -midTop, stripW, midH), out leftFade);
             rightGroup = Group(room, "PlatformReserves", new Rect(rightX, -midTop, stripW, midH), out rightFade);
-            StationStyle.Text(leftGroup, "POWER / STORAGE", new Rect(0f, -6f, stripW, 16f), 10f, StationStyle.Dim, 4f);
-            StationStyle.Text(rightGroup, "SUPPLIES / MASS", new Rect(0f, -6f, stripW, 16f), 10f, StationStyle.Dim, 4f);
+            Chrome.Lead(StationStyle.Text(leftGroup, "POWER / STORAGE", new Rect(0f, -6f, stripW, 16f), 10f, StationStyle.Dim, 4f), AvIcon.Bolt);
+            Chrome.Lead(StationStyle.Text(rightGroup, "SUPPLIES / MASS", new Rect(0f, -6f, stripW, 16f), 10f, StationStyle.Dim, 4f), AvIcon.Database);
             string[] names = { "ENERGY", "SUN", "DARK", "FUEL", "RODS", "MASS" };
             for (int i = 0; i < 6; i++)
             {
@@ -164,7 +165,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             var bpObject = new GameObject("Blueprint", typeof(RectTransform));
             blueprintGroup = (RectTransform)bpObject.transform;
             blueprintGroup.SetParent(room, false);
-            AvKit.Place(blueprintGroup, new Rect(0f, 0f, w, h));
+            Chrome.Place(blueprintGroup, new Rect(0f, 0f, w, h));
             var bpRect = new Rect(bpX, -midTop, bpW, midH);
             BuildBlueprint(blueprintGroup, bpRect);
             rackGroup = Group(room, "BuildChoices", new Rect(rackX, -midTop, rackW, midH), out rackFade);
@@ -194,38 +195,38 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             var go = new GameObject(name, typeof(RectTransform), typeof(CanvasGroup));
             var rect = (RectTransform)go.transform;
             rect.SetParent(parent, false);
-            AvKit.Place(rect, at);
+            Chrome.Place(rect, at);
             fade = go.GetComponent<CanvasGroup>();
             return rect;
         }
 
         private static void BuildSurface(RectTransform room, float w, float h)
         {
-            Image surface = AvKit.Panel(room, new Rect(0f, 0f, w, h), StationStyle.Surface.WithAlpha(1f));
+            Image surface = Chrome.Panel(room, new Rect(0f, 0f, w, h), StationStyle.Surface.WithAlpha(1f));
             surface.raycastTarget = true;
-            Image stars = AvKit.Panel(room, new Rect(0f, 0f, w, h), StationStyle.Ink.WithAlpha(0.18f));
+            Image stars = Chrome.Panel(room, new Rect(0f, 0f, w, h), StationStyle.Ink.WithAlpha(0.18f));
             stars.sprite = OpsSprites.Stars;
             stars.type = Image.Type.Tiled;
-            Image grid = AvKit.Panel(room, new Rect(0f, 0f, w, h), StationStyle.Line.WithAlpha(0.05f));
+            Image grid = Chrome.Panel(room, new Rect(0f, 0f, w, h), StationStyle.Line.WithAlpha(0.05f));
             grid.sprite = OpsSprites.Blueprint;
             grid.type = Image.Type.Tiled;
-            Image sky = AvKit.Panel(room, new Rect(-w * 0.1f, -h + 240f, w * 1.2f, 240f), StationStyle.LimbSky.WithAlpha(0.85f));
+            Image sky = Chrome.Panel(room, new Rect(-w * 0.1f, -h + 240f, w * 1.2f, 240f), StationStyle.LimbSky.WithAlpha(0.85f));
             sky.sprite = OpsSprites.Limb;
             sky.type = Image.Type.Simple;
-            Image limb = AvKit.Panel(room, new Rect(-w * 0.05f, -h + 190f, w * 1.1f, 190f), StationStyle.Limb.WithAlpha(0.35f));
+            Image limb = Chrome.Panel(room, new Rect(-w * 0.05f, -h + 190f, w * 1.1f, 190f), StationStyle.Limb.WithAlpha(0.35f));
             limb.sprite = OpsSprites.Limb;
             limb.type = Image.Type.Simple;
         }
 
         private void BuildHeader(RectTransform parent, float w, float h)
         {
-            AvKit.Rule(parent, new Rect(24f, -h + 1f, w - 48f, 1f), StationStyle.Line.WithAlpha(0.5f));
-            StationStyle.Text(parent, OrbitalPlatform.Callsign, new Rect(24f, -8f, 420f, 32f), StationStyle.Callsign,
-                StationStyle.Ink, 16f, TextAlignmentOptions.MidlineLeft, true);
+            Chrome.Rule(parent, new Rect(24f, -h + 1f, w - 48f, 1f), StationStyle.Line.WithAlpha(0.5f));
+            Chrome.Lead(StationStyle.Text(parent, OrbitalPlatform.Callsign, new Rect(24f, -8f, 420f, 32f), StationStyle.Callsign,
+                StationStyle.Ink, 16f, TextAlignmentOptions.MidlineLeft, true), AvIcon.Satellite, 24f);
             subtitle = StationStyle.Text(parent, "", new Rect(26f, -42f, 390f, 18f), StationStyle.Label, StationStyle.Dim,
                 StationStyle.LabelTracking);
-            getLabel = StationStyle.Text(parent, "STATION COMMAND", new Rect(w * 0.5f - 150f, -10f, 300f, 14f), 10f,
-                StationStyle.Dim, 5f, TextAlignmentOptions.Center);
+            getLabel = Chrome.Lead(StationStyle.Text(parent, "STATION COMMAND", new Rect(w * 0.5f - 150f, -10f, 300f, 14f), 10f,
+                StationStyle.Dim, 5f, TextAlignmentOptions.Center), AvIcon.Satellite);
             getClock = StationStyle.Text(parent, "", new Rect(w * 0.5f - 150f, -28f, 300f, 30f), 16f,
                 StationStyle.Ink, 1f, TextAlignmentOptions.Center);
             passWord = StationStyle.Text(parent, "", new Rect(w - 480f, -5f, 300f, 26f), 18f, StationStyle.Ink, 4f,
@@ -240,9 +241,9 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
 
         private void BuildPassTrack(RectTransform parent, float w, float h)
         {
-            AvKit.Panel(parent, new Rect(0f, 0f, w, h), StationStyle.Console.WithAlpha(0.85f));
-            AvKit.Rule(parent, new Rect(0f, 0f, 3f, h), StationStyle.Limb);
-            StationStyle.Text(parent, "POSITION / COVERAGE", new Rect(16f, -8f, w * 0.46f, 16f), 12f, StationStyle.Dim, 3f);
+            Chrome.Panel(parent, new Rect(0f, 0f, w, h), StationStyle.Console.WithAlpha(0.85f));
+            Chrome.Rule(parent, new Rect(0f, 0f, 3f, h), StationStyle.Limb);
+            Chrome.Lead(StationStyle.Text(parent, "POSITION / COVERAGE", new Rect(16f, -8f, w * 0.46f, 16f), 12f, StationStyle.Dim, 3f), AvIcon.CurrentLocation);
             coverage = StationStyle.Text(parent, "", new Rect(16f, -29f, w * 0.36f, 38f), 16f, StationStyle.Ink, 2f);
             coverage.enableWordWrapping = true;
             mobility = StationStyle.Text(parent, "", new Rect(w * 0.37f, -12f, w * 0.63f - 530f, 54f), 13f, StationStyle.Ink, 1f);
@@ -274,14 +275,14 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 TextAlignmentOptions.Center);
             strip.Top = -40f - top;
             strip.Height = h - 50f - top;
-            AvKit.Panel(parent, new Rect(x + 18f, strip.Top, 20f, strip.Height), StationStyle.Line.WithAlpha(0.12f));
-            AvKit.Outline(parent, new Rect(x + 18f, strip.Top, 20f, strip.Height), StationStyle.Line.WithAlpha(0.45f));
+            Chrome.Panel(parent, new Rect(x + 18f, strip.Top, 20f, strip.Height), StationStyle.Line.WithAlpha(0.12f));
+            Chrome.Outline(parent, new Rect(x + 18f, strip.Top, 20f, strip.Height), StationStyle.Line.WithAlpha(0.45f));
             for (int t = 1; t < 10; t++)
-                AvKit.Rule(parent, new Rect(x + 12f, strip.Top - strip.Height * t / 10f, 6f, 1f), StationStyle.Line.WithAlpha(0.5f));
-            strip.Fill = AvKit.Panel(parent, new Rect(x + 19f, strip.Top, 18f, 0f), StationStyle.Line);
-            strip.Ghost = AvKit.Panel(parent, new Rect(x + 12f, strip.Top, 32f, 3f), StationStyle.Limb);
+                Chrome.Rule(parent, new Rect(x + 12f, strip.Top - strip.Height * t / 10f, 6f, 1f), StationStyle.Line.WithAlpha(0.5f));
+            strip.Fill = Chrome.Panel(parent, new Rect(x + 19f, strip.Top, 18f, 0f), StationStyle.Line);
+            strip.Ghost = Chrome.Panel(parent, new Rect(x + 12f, strip.Top, 32f, 3f), StationStyle.Limb);
             strip.Ghost.enabled = false;
-            strip.Mid = AvKit.Rule(parent, new Rect(x + 14f, strip.Top - strip.Height * 0.5f, 28f, 1f), StationStyle.Ink.WithAlpha(0.8f));
+            strip.Mid = Chrome.Rule(parent, new Rect(x + 14f, strip.Top - strip.Height * 0.5f, 28f, 1f), StationStyle.Ink.WithAlpha(0.8f));
             strip.Mid.enabled = signed;
             return strip;
         }
@@ -292,7 +293,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 4f);
             jettison = BuildButton(parent, new Rect(at.x + at.width - 190f, at.y + 2f, 190f, 26f), OnJettison, false, 10f);
             jettison.Danger = true;
-            jettison.Guard = AvKit.Panel(jettison.Control.Rect, new Rect(0f, 0f, 190f, 26f), AvTheme.RailCaution.WithAlpha(0.25f));
+            jettison.Guard = Chrome.Panel(jettison.Control.Rect, new Rect(0f, 0f, 190f, 26f), AvTheme.RailCaution.WithAlpha(0.25f));
             jettison.Guard.sprite = OpsSprites.Guard;
             jettison.Guard.type = Image.Type.Tiled;
             jettison.Guard.rectTransform.SetSiblingIndex(1);
@@ -300,9 +301,9 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
 
             emptyGroup = (RectTransform)new GameObject("Empty", typeof(RectTransform)).transform;
             emptyGroup.SetParent(parent, false);
-            AvKit.Place(emptyGroup, new Rect(at.x, at.y, at.width, at.height));
-            StationStyle.Text(emptyGroup, "PRELAUNCH / ORBITAL CONTROL", new Rect(0f, -8f, at.width, 16f),
-                10f, StationStyle.Limb, 6f, TextAlignmentOptions.Center);
+            Chrome.Place(emptyGroup, new Rect(at.x, at.y, at.width, at.height));
+            Chrome.Lead(StationStyle.Text(emptyGroup, "PRELAUNCH / ORBITAL CONTROL", new Rect(0f, -8f, at.width, 16f),
+                10f, StationStyle.Limb, 6f, TextAlignmentOptions.Center), AvIcon.Satellite);
             emptyTitle = StationStyle.Text(emptyGroup, "", new Rect(0f, -34f, at.width, 34f), 24f, StationStyle.Ink, 10f,
                 TextAlignmentOptions.Center, true);
             emptyCost = StationStyle.Text(emptyGroup, "", new Rect(0f, -72f, at.width, 22f), 13f, StationStyle.Limb, 4f,
@@ -315,9 +316,9 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
 
         private void BuildRack(RectTransform parent, float w, float h)
         {
-            AvKit.Panel(parent, new Rect(0f, 0f, w, h), StationStyle.Console.WithAlpha(0.72f));
-            AvKit.Outline(parent, new Rect(0f, 0f, w, h), StationStyle.ConsoleEdge);
-            rackTitle = StationStyle.Text(parent, "", new Rect(12f, -8f, w - 24f, 16f), 12f, StationStyle.Dim, 6f);
+            Chrome.Panel(parent, new Rect(0f, 0f, w, h), StationStyle.Console.WithAlpha(0.72f));
+            Chrome.Outline(parent, new Rect(0f, 0f, w, h), StationStyle.ConsoleEdge);
+            rackTitle = Chrome.Lead(StationStyle.Text(parent, "", new Rect(12f, -8f, w - 24f, 16f), 12f, StationStyle.Dim, 6f), AvIcon.Stack2);
             float pitch = Mathf.Min(42f, (h - 130f) / rack.Length);
             int r = 0;
             for (int i = 0; i < PlatformModules.Designs.Length && r < rack.Length; i++)
@@ -326,7 +327,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 if (info.Kind == ModuleKind.Core || info.Kind == ModuleKind.None) continue;
                 rack[r++] = BuildRackRow(parent, info, new Rect(8f, -32f - (r - 1) * pitch, w - 16f, pitch - 4f));
             }
-            AvKit.Rule(parent, new Rect(12f, -h + 86f, w - 24f, 1f), StationStyle.ConsoleEdge);
+            Chrome.Rule(parent, new Rect(12f, -h + 86f, w - 24f, 1f), StationStyle.ConsoleEdge);
             moduleDetail = StationStyle.Text(parent, "", new Rect(14f, -h + 78f, w - 28f, 70f), 13f, StationStyle.Ink, 1f, TextAlignmentOptions.TopLeft);
             moduleDetail.enableWordWrapping = true;
             rackCollapsed = StationStyle.Text(parent, "", new Rect(14f, -36f, w - 28f, h - 50f), 13f, StationStyle.Ink, 3f,
@@ -340,8 +341,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             ModuleKind kind = info.Kind;
             row.Control = RoomControl.Create(parent, at, () => SelectModule(kind), "RackRow");
             RectTransform host = row.Control.Rect;
-            row.Fill = AvKit.Panel(host, new Rect(0f, 0f, at.width, at.height), StationStyle.Console);
-            row.Glyph = AvKit.Panel(host, new Rect(6f, -(at.height - 26f) * 0.5f, 26f, 26f), StationStyle.Ink);
+            row.Fill = Chrome.Panel(host, new Rect(0f, 0f, at.width, at.height), StationStyle.Console);
+            row.Glyph = Chrome.Panel(host, new Rect(6f, -(at.height - 26f) * 0.5f, 26f, 26f), StationStyle.Ink);
             row.Glyph.sprite = OpsSprites.Glyph((int)info.Kind);
             StationStyle.Text(host, info.Code, new Rect(40f, 0f, 60f, at.height), 13f, StationStyle.Ink, 6f,
                 TextAlignmentOptions.MidlineLeft, true);
@@ -365,15 +366,15 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
 
         private void BuildRail(RectTransform parent, float w, float h)
         {
-            AvKit.Panel(parent, new Rect(0f, 0f, w, h), StationStyle.Console.WithAlpha(0.76f));
-            AvKit.Outline(parent, new Rect(0f, 0f, w, h), StationStyle.ConsoleEdge);
-            StationStyle.Text(parent, "NEXT AUTHORIZED ORDER", new Rect(0f, 0f, 300f, 14f), 10f, StationStyle.Dim, 5f);
+            Chrome.Panel(parent, new Rect(0f, 0f, w, h), StationStyle.Console.WithAlpha(0.76f));
+            Chrome.Outline(parent, new Rect(0f, 0f, w, h), StationStyle.ConsoleEdge);
+            Chrome.Lead(StationStyle.Text(parent, "NEXT AUTHORIZED ORDER", new Rect(0f, 0f, 300f, 14f), 10f, StationStyle.Dim, 5f), AvIcon.ArrowRight);
             float left = 20f, right = 470f;
-            AvKit.Rule(parent, new Rect(left, -30f, right - left, 2f), StationStyle.Line.WithAlpha(0.6f));
+            Chrome.Rule(parent, new Rect(left, -30f, right - left, 2f), StationStyle.Line.WithAlpha(0.6f));
             for (int i = 0; i < 4; i++)
             {
                 float x = left + (right - left) * i / 3f;
-                stageDots[i] = AvKit.Panel(parent, new Rect(x - 7f, -24f, 14f, 14f), StationStyle.Line, OpsSprites.Dot);
+                stageDots[i] = Chrome.Panel(parent, new Rect(x - 7f, -24f, 14f, 14f), StationStyle.Line, OpsSprites.Dot);
                 stageDots[i].type = Image.Type.Simple;
                 stageText[i] = StationStyle.Text(parent, StageNames[i], new Rect(x - 60f, -42f, 120f, 14f), 10f, StationStyle.Dim, 4f,
                     TextAlignmentOptions.Center);
@@ -392,13 +393,13 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 StationStyle.Dim, 1f, TextAlignmentOptions.MidlineLeft);
             railStatus.enableWordWrapping = true;
             railStatus.fontSizeMin = 10f;
-            AvKit.Rule(parent, new Rect(0f, -h + 1f, w, 1f), StationStyle.Line.WithAlpha(0.3f));
+            Chrome.Rule(parent, new Rect(0f, -h + 1f, w, 1f), StationStyle.Line.WithAlpha(0.3f));
         }
 
         private void BuildLoadout(RectTransform parent, float w, float h)
         {
-            AvKit.Panel(parent, new Rect(0f, 0f, w, h), StationStyle.Console.WithAlpha(0.52f));
-            StationStyle.Text(parent, "MISSION PACKAGE · SELECT TO PREVIEW", new Rect(0f, 0f, 360f, 14f), 10f, StationStyle.Dim, 5f);
+            Chrome.Panel(parent, new Rect(0f, 0f, w, h), StationStyle.Console.WithAlpha(0.52f));
+            Chrome.Lead(StationStyle.Text(parent, "MISSION PACKAGE · SELECT TO PREVIEW", new Rect(0f, 0f, 360f, 14f), 10f, StationStyle.Dim, 5f), AvIcon.Bookmark);
             float cw = (w - 16f) / missions.Length;
             for (int i = 0; i < missions.Length; i++)
             {
@@ -406,7 +407,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 var card = new Mission();
                 card.Control = RoomControl.Create(parent, new Rect(i * (cw + 8f), -18f, cw, 54f), () => SelectMission(mission), "Loadout");
                 RectTransform host = card.Control.Rect;
-                card.Edge = AvKit.Outline(host, new Rect(0f, 0f, cw, 54f), StationStyle.ConsoleEdge);
+                card.Edge = Chrome.Outline(host, new Rect(0f, 0f, cw, 54f), StationStyle.ConsoleEdge);
                 card.Ring = new ArcGauge();
                 card.Ring.Build(host, new Rect(2f, 1f, 48f, 50f), StationStyle.Telemetry());
                 card.Name = StationStyle.Text(host, PlatformMissions.Name(mission), new Rect(56f, -5f, cw - 62f, 43f), 11f,
@@ -420,7 +421,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
 
         private void BuildLoop(RectTransform parent, float w, float h)
         {
-            StationStyle.Text(parent, "OPS LOOP", new Rect(0f, 0f, 200f, 14f), 10f, StationStyle.Dim, 5f);
+            Chrome.Lead(StationStyle.Text(parent, "OPS LOOP", new Rect(0f, 0f, 200f, 14f), 10f, StationStyle.Dim, 5f), AvIcon.Radio);
             float pitch = Mathf.Min(18f, (h - 16f) / LoopShown);
             for (int i = 0; i < LoopShown; i++)
             {
@@ -437,8 +438,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             var button = new Button { Primary = primaryStyle };
             button.Control = RoomControl.Create(parent, at, click, "Control");
             RectTransform host = button.Control.Rect;
-            button.Fill = AvKit.Panel(host, new Rect(0f, 0f, at.width, at.height), StationStyle.Console);
-            button.Edge = AvKit.Outline(host, new Rect(0f, 0f, at.width, at.height), StationStyle.Line);
+            button.Fill = Chrome.Panel(host, new Rect(0f, 0f, at.width, at.height), StationStyle.Console);
+            button.Edge = Chrome.Outline(host, new Rect(0f, 0f, at.width, at.height), StationStyle.Line);
             button.Text = StationStyle.Text(host, "", new Rect(8f, 0f, at.width - 16f, at.height), size, StationStyle.Ink, 5f,
                 TextAlignmentOptions.Center, primaryStyle);
             button.Text.enableAutoSizing = true;
@@ -485,7 +486,6 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         public void Hide()
         {
             hover = ModuleKind.None;
-            AvButton.ClearTooltip();
         }
 
         public void Entrance(float progress)
@@ -884,13 +884,13 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 float f = Mathf.Clamp(float.IsNaN(fraction) ? 0f : fraction, -1f, 1f) * 0.5f;
                 float mid = strip.Top - strip.Height * 0.5f;
                 float h = Mathf.Abs(f) * strip.Height;
-                AvKit.Place(strip.Fill.rectTransform, new Rect(x, f >= 0f ? mid + h : mid, 18f, h));
+                Chrome.Place(strip.Fill.rectTransform, new Rect(x, f >= 0f ? mid + h : mid, 18f, h));
             }
             else
             {
                 float f = Mathf.Clamp01(float.IsNaN(fraction) ? 0f : fraction);
                 float h = f * strip.Height;
-                AvKit.Place(strip.Fill.rectTransform, new Rect(x, strip.Top - strip.Height + h, 18f, h));
+                Chrome.Place(strip.Fill.rectTransform, new Rect(x, strip.Top - strip.Height + h, 18f, h));
             }
             strip.Fill.color = tone;
             strip.Value.color = tone == StationStyle.Line ? StationStyle.Ink : tone;
@@ -899,7 +899,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             float level = strip.Signed
                 ? strip.Top - strip.Height * 0.5f + Mathf.Clamp(ghost, -1f, 1f) * 0.5f * strip.Height
                 : strip.Top - strip.Height + Mathf.Clamp01(ghost) * strip.Height;
-            AvKit.Place(strip.Ghost.rectTransform, new Rect(strip.X + 12f, level + 1.5f, 32f, 3f));
+            Chrome.Place(strip.Ghost.rectTransform, new Rect(strip.X + 12f, level + 1.5f, 32f, 3f));
         }
 
         private void WriteInspector(OrbitalPlatform platform, bool station, double now)
