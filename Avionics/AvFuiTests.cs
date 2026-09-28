@@ -14,6 +14,7 @@ namespace NOAvionics.Tests
             TestPaletteContrast(assert);
             TestComposeLetsPaletteWin(assert);
             TestNumbers(assert);
+            TestTypeScale(assert);
         }
 
         // Live-theme references resolve to AvTheme's fallbacks in an engine-free test.
@@ -120,6 +121,16 @@ namespace NOAvionics.Tests
                 }
                 finally { System.Threading.Thread.CurrentThread.CurrentCulture = saved; }
             }
+        }
+
+        private static void TestTypeScale(Action<bool, string> assert)
+        {
+            foreach (AvTextRole r in (AvTextRole[])Enum.GetValues(typeof(AvTextRole)))
+                assert(AvTypeScale.Of(r).Size >= AvTypeScale.Floor, r + " respects the 11 px floor");
+            assert(AvTypeScale.Of(AvTextRole.Head).Upper && AvTypeScale.Of(AvTextRole.Title).Upper, "heads and titles are caps");
+            assert(!AvTypeScale.Of(AvTextRole.Prose).Upper, "prose keeps authored case");
+            assert(AvTypeScale.Of(AvTextRole.Data).Face == AvFace.Mono && AvTypeScale.Of(AvTextRole.Display).Face == AvFace.MonoStrong, "numbers are mono");
+            assert(AvTypeScale.AssetName(AvFace.Icons) == "NOA Icons SDF", "icon asset name matches the bundle");
         }
     }
 }
