@@ -10,14 +10,14 @@ namespace BoscaliSummer.Features.Weather.Domain
     }
 
     /// <summary>
-    /// One convective cell resolved at one instant. Everything but <see cref="Age"/> and the
-    /// position is fixed at birth, so a cell drifts and evolves smoothly and never pops.
+    /// One convective cell at a fixed site of the static layout. <see cref="Age"/> is its
+    /// activation by the weather state (0 = gone, 0.5 = mature), so a fade grows the tower,
+    /// then the rain, then the lightning, in place. Velocity only orients the rain halo.
     /// </summary>
     internal struct StormCell
     {
         public int Slot;
         public int Cluster;
-        public int Generation;
         public uint Seed;
 
         /// <summary>Centre now (metres, map frame: x east, z north).</summary>
@@ -25,9 +25,6 @@ namespace BoscaliSummer.Features.Weather.Domain
         public float Z;
         public float VelocityX;
         public float VelocityZ;
-
-        public float BirthTime;
-        public float Life;
 
         /// <summary>0..1 through the lifecycle.</summary>
         public float Age;
@@ -39,7 +36,6 @@ namespace BoscaliSummer.Features.Weather.Domain
         public float LightningPeak;
         public bool Severe;
         public bool Hail;
-        public bool OnFront;
 
         public StormStage Stage => Age < 0.3f ? StormStage.Towering : Age < 0.7f ? StormStage.Mature : StormStage.Dissipating;
 
@@ -85,6 +81,14 @@ namespace BoscaliSummer.Features.Weather.Domain
             float dx = x - X, dz = z - Z;
             float d = (float)Math.Sqrt(dx * dx + dz * dz);
             return level * (1f - WeatherMath.Smoothstep(Radius * 1.0f, Radius * 2.2f, d));
+        }
+
+        /// <summary>Continuous horizontal buoyant core for the cloud crown; unlike
+        /// cover, it has no flat centre that would make a cylindrical tower.</summary>
+        public float ShapeAt(float x, float z)
+        {
+            float dx = x - X, dz = z - Z;
+            return CloudLevel * Gauss2(dx, dz, Radius * 1.4f);
         }
 
         /// <summary>0..1 how deep a point is in the core (rain-weighted), for HUD and hazard.</summary>
@@ -144,120 +148,68 @@ namespace BoscaliSummer.Features.Weather.Domain
     }
 
     /// <summary>
-    /// Four deterministic clusters of three cells. Members share a birth region and steering
-    /// wind, but grow at staggered times. Frontal clusters form behind the boundary; free
-    /// clusters form in the convective air mass.
+    /// Four clusters of three cell sites per layout. Sites are fixed; each has a rank, and the
+    /// state's convective level decides how many are active and how deep they grow.
     /// </summary>
     internal static class StormCells
     {
         public const int MaxCells = 12;
         public const int CellsPerCluster = 3;
-        public const float MinPeriod = 24f * 60f;
-        public const float MaxPeriod = 36f * 60f;
-        public const float MinLife = 18f * 60f;
-        public const float MaxLife = 30f * 60f;
 
-        /// <summary>Fills <paramref name="cells"/> with the cells alive at <paramref name="time"/>; returns the count.</summary>
-        public static int Fill(StormCell[] cells, WeatherKey key, float time, float halfX, float halfZ)
+        public static int Fill(StormCell[] cells, uint layout, StateParams sky, float halfX, float halfZ,
+            float driftX, float driftZ)
         {
             int count = 0;
+            float convective = WeatherMath.Clamp01(sky.Convective);
+            if (convective <= 0f) return 0;
             for (int slot = 0; slot < MaxCells && count < cells.Length; slot++)
             {
-                if (TryResolve(key, slot, time, halfX, halfZ, out StormCell cell)) cells[count++] = cell;
+                int cluster = slot / CellsPerCluster;
+                uint clusterSeed = unchecked(layout ^ (uint)(cluster * 73856093) ^ 0x51ed27u);
+                uint cellSeed = unchecked(layout ^ (uint)(slot * 19349663) ^ 0x2c1b3au);
+                // Rank orders sites by how early they fire as convection deepens.
+                float rank = (slot + WeatherMath.Hash01(cellSeed, 1, 0)) / MaxCells;
+                float activation = WeatherMath.Smoothstep(rank * 0.7f, rank * 0.7f + 0.4f, convective);
+                if (activation <= 0f) continue;
+
+                // Severity blends each cluster toward its severe form rather than flipping it,
+                // so a fade into STORM swells cells instead of popping them.
+                float threshold = WeatherMath.Hash01(clusterSeed, 1, 0);
+                float severe = WeatherMath.Smoothstep(threshold, threshold + 0.15f, sky.Severity);
+                var cell = new StormCell
+                {
+                    Slot = slot,
+                    Cluster = cluster,
+                    Seed = cellSeed,
+                    Age = 0.5f * activation,
+                    Severe = severe > 0.5f,
+                    X = WeatherMath.HashRange(clusterSeed, 10, 0, 0, -0.38f, 0.38f) * halfX * 2f +
+                        WeatherMath.HashRange(cellSeed, 10, 1, 0, -5000f, 5000f),
+                    Z = WeatherMath.HashRange(clusterSeed, 11, 0, 0, -0.38f, 0.38f) * halfZ * 2f +
+                        WeatherMath.HashRange(cellSeed, 11, 1, 0, -5000f, 5000f),
+                    VelocityX = driftX,
+                    VelocityZ = driftZ,
+                };
+                cell.Radius = WeatherMath.Lerp(
+                    WeatherMath.HashRange(cellSeed, 2, 0, 0, 1500f, 4000f) * (0.7f + 0.3f * convective),
+                    WeatherMath.HashRange(cellSeed, 2, 0, 0, 2500f, 5000f), severe);
+                float peakRain = 2f + 78f * convective * convective * convective;
+                cell.PeakRain = WeatherMath.Lerp(
+                    WeatherMath.HashRange(cellSeed, 3, 0, 0, peakRain * 0.36f, peakRain),
+                    WeatherMath.HashRange(cellSeed, 3, 0, 0, 60f, 120f), severe);
+                cell.Hail = severe > 0.5f && cell.PeakRain > 70f && WeatherMath.Hash01(cellSeed, 4, 0) < 0.6f;
+                cell.Base = WeatherMath.Clamp(sky.CloudBase, 400f, 2500f);
+                // A fair-weather thermal condenses into shallow cumulus; deep moist
+                // convection has the buoyancy for a tall rain cell.
+                float depth = 1200f + 4600f * convective +
+                    WeatherMath.HashRange(cellSeed, 5, 0, 0, 0f, 800f + 1800f * convective);
+                cell.TopMax = cell.Base + depth + 3000f * severe;
+                float lightning = convective < 0.55f ? 0f :
+                    WeatherMath.HashRange(cellSeed, 6, 0, 0, 0.3f, 4f) * (convective - 0.55f) / 0.45f;
+                cell.LightningPeak = WeatherMath.Lerp(lightning, WeatherMath.HashRange(cellSeed, 6, 0, 0, 6f, 18f), severe);
+                cells[count++] = cell;
             }
             return count;
-        }
-
-        public static bool TryResolve(WeatherKey key, int slot, float time, float halfX, float halfZ, out StormCell cell)
-        {
-            cell = default;
-            uint seed = key.Seed;
-            int cluster = slot / CellsPerCluster;
-            int member = slot % CellsPerCluster;
-            float period = WeatherMath.HashRange(seed, cluster, 21, 0, MinPeriod, MaxPeriod);
-            float phase = WeatherMath.Hash01(seed, cluster, 22) * period;
-            int generation = (int)Math.Floor((time - key.Epoch - phase) / period);
-            float clusterBirth = key.Epoch + phase + generation * period;
-            float stagger = member * 85f + WeatherMath.HashRange(seed, slot, generation, 26, 0f, 65f);
-            float birth = clusterBirth + stagger;
-            float life = Math.Min(WeatherMath.HashRange(seed, slot, generation, 24, MinLife, MaxLife),
-                period - stagger - 60f);
-            float age = (time - birth) / life;
-            if (age < 0f || age >= 1f) return false;
-
-            RegimeState sky = RegimeSchedule.Evaluate(key, clusterBirth);
-            float roll = WeatherMath.Hash01(seed, cluster, generation, 23);
-            if (roll >= sky.Params.Convective) return false;
-
-            uint clusterSeed = unchecked((uint)(cluster * 73856093) ^ (uint)(generation * 19349663) ^ seed);
-            uint cellSeed = unchecked((uint)(slot * 73856093) ^ (uint)(generation * 19349663) ^ seed);
-            bool severe = WeatherMath.Hash01(clusterSeed, 1, 0) < sky.Params.Severity;
-
-            cell.Slot = slot;
-            cell.Cluster = cluster;
-            cell.Generation = generation;
-            cell.Seed = cellSeed;
-            cell.BirthTime = birth;
-            cell.Life = life;
-            cell.Age = age;
-            cell.Severe = severe;
-            cell.Radius = severe
-                ? WeatherMath.HashRange(cellSeed, 2, 0, 0, 2500f, 5000f)
-                : WeatherMath.HashRange(cellSeed, 2, 0, 0, 1500f, 4000f) * (0.7f + 0.3f * sky.Params.Convective);
-            cell.PeakRain = severe
-                ? WeatherMath.HashRange(cellSeed, 3, 0, 0, 60f, 120f)
-                : WeatherMath.HashRange(cellSeed, 3, 0, 0, 15f, 80f);
-            cell.Hail = severe && cell.PeakRain > 70f && WeatherMath.Hash01(cellSeed, 4, 0) < 0.6f;
-            cell.Base = WeatherMath.Clamp(sky.Params.CloudBase, 400f, 2500f);
-            cell.TopMax = WeatherMath.HashRange(cellSeed, 5, 0, 0, 7000f, 11000f) + (severe ? 2000f : 0f);
-            cell.LightningPeak = WeatherMath.HashRange(cellSeed, 6, 0, 0, 2f, 6f) * (severe ? 3f : 1f);
-
-            // Anchor to the strongest front on the map at birth, if the roll says so.
-            int best = -1;
-            float bestStrength = 0.3f;
-            for (int i = 0; i < sky.FrontCount; i++)
-            {
-                FrontSource source = sky.GetFront(i);
-                if (source.Strength > bestStrength)
-                {
-                    bestStrength = source.Strength;
-                    best = i;
-                }
-            }
-
-            float x0, z0, vx, vz;
-            if (best >= 0 && WeatherMath.Hash01(clusterSeed, 7, 0) < 0.6f * bestStrength + 0.2f)
-            {
-                FrontState front = WeatherFronts.Resolve(sky.GetFront(best), seed, clusterBirth);
-                float along = ((cluster - 1.5f) * 0.28f +
-                    WeatherMath.HashRange(clusterSeed, 8, 0, 0, -0.07f, 0.07f)) * Math.Max(halfX, halfZ) * 2f;
-                along += WeatherMath.HashRange(cellSeed, 8, 1, 0, -4500f, 4500f);
-                // Just behind the line (the side it has already swept), riding with it.
-                float behind = WeatherMath.HashRange(cellSeed, 9, 0, 0, 500f, 3500f);
-                float lx = front.OffsetAtAlong(along) - behind;
-                x0 = front.NormalX * lx - front.NormalZ * along;
-                z0 = front.NormalZ * lx + front.NormalX * along;
-                vx = front.NormalX * front.Speed;
-                vz = front.NormalZ * front.Speed;
-                cell.OnFront = true;
-            }
-            else
-            {
-                x0 = WeatherMath.HashRange(clusterSeed, 10, 0, 0, -0.38f, 0.38f) * halfX * 2f +
-                    WeatherMath.HashRange(cellSeed, 10, 1, 0, -5000f, 5000f);
-                z0 = WeatherMath.HashRange(clusterSeed, 11, 0, 0, -0.38f, 0.38f) * halfZ * 2f +
-                    WeatherMath.HashRange(cellSeed, 11, 1, 0, -5000f, 5000f);
-                WeatherField.PrevailingWind(seed, sky.Params.WindSpeed, birth, out float wx, out float wz);
-                vx = 0.8f * wx + WeatherMath.HashRange(cellSeed, 12, 0, 0, -2.5f, 2.5f);
-                vz = 0.8f * wz + WeatherMath.HashRange(cellSeed, 13, 0, 0, -2.5f, 2.5f);
-            }
-
-            float elapsed = time - birth;
-            cell.X = x0 + vx * elapsed;
-            cell.Z = z0 + vz * elapsed;
-            cell.VelocityX = vx;
-            cell.VelocityZ = vz;
-            return true;
         }
     }
 }

@@ -124,6 +124,10 @@ namespace BoscaliSummer
             BindAndRemove(config, "Weather", "SupercellDetail", 0.6f);
             BindAndRemove(config, "Weather", "ReplaceVanillaClouds", false);
             BindAndRemove(config, "Weather", "CloudSortFudge", -100f);
+            // The moving front/cell model gave way to static weather states.
+            BindAndRemove(config, "Weather", "TransitionIntervalMinutes", 4f);
+            BindAndRemove(config, "Weather", "TransitionDurationMinutes", 2f);
+            BindAndRemove(config, "Weather", "RadarRangeKm", 40f);
 
             // The weather overhaul's own [WeatherFronts] section is gone with the module.
             BindAndRemove(config, "WeatherFronts", "Enabled", true);

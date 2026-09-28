@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using BoscaliSummer.Features.Weather.Domain;
 using UnityEngine;
 using static BoscaliSummer.Infrastructure.Diagnostics.AutomationArgs;
 
@@ -24,14 +25,21 @@ namespace BoscaliSummer.Features.Weather.Runtime
             WeatherManager manager = Find();
             if (manager == null) return Fail("ForceWeather", "no weather manager in this scene");
             if (!BoscaliSummer.Runtime.GameAccess.IsServer()) return Fail("ForceWeather", "weather overrides are host-only");
+            WeatherRegimeType? fixtureRegime = null;
+            if (Has(args, "regime"))
+            {
+                if (!Enum.TryParse(Text(args, "regime"), true, out WeatherRegimeType parsed) || !Enum.IsDefined(typeof(WeatherRegimeType), parsed))
+                    return Fail("ForceWeather", "unknown weather state (Clear, Fair, Scattered, Broken, Overcast, RainSquall, Storm)");
+                fixtureRegime = parsed;
+            }
             float conditions = Mathf.Clamp01(Number(args, "conditions", 0.92f));
             float cloud = Mathf.Clamp(Number(args, "cloudHeight", 4500f), 500f, 12000f);
             float? rain = args != null && args.ContainsKey("rain")
                 ? Mathf.Clamp01(Number(args, "rain", 1f)) : (float?)null;
             manager.SetManualOverride(conditions, cloud, null, rain, snapImmediate: true);
-            if (args != null && (args.ContainsKey("seed") || args.ContainsKey("modelAge")))
+            if (args != null && (args.ContainsKey("seed") || args.ContainsKey("modelAge") || fixtureRegime.HasValue))
                 manager.SetFixtureField((uint)Mathf.Clamp(Number(args, "seed", 1337f), 1f, 16000000f),
-                    Mathf.Clamp(Number(args, "modelAge", 0f), 0f, 14400f));
+                    Mathf.Clamp(Number(args, "modelAge", 0f), 0f, 14400f), fixtureRegime);
             string followed = Follow(args);
             manager.LogAutomation($"ForceWeather: conditions {conditions:F2}, cloud {cloud:F0} m, rain {(rain.HasValue ? rain.Value.ToString("F2") : "AUTO")}, follow {followed ?? "-"}");
             return Readout(manager);
@@ -74,6 +82,9 @@ namespace BoscaliSummer.Features.Weather.Runtime
             WeatherManager manager = Find();
             if (manager == null) return Fail("Readout", "no weather manager in this scene");
             Dictionary<string, object> state = Readout(manager);
+            if (Bool(args, "requireClouds") &&
+                (Convert.ToInt32(state["flightClouds"]) != 1 || Convert.ToInt32(state["nativeCloudsHidden"]) != 1))
+                throw new InvalidOperationException("Weather capture requested before cloud renderer/native takeover was ready.");
             manager.LogAutomation("Readout: " + Describe(state));
             return state;
         }

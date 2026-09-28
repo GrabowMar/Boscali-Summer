@@ -178,7 +178,7 @@
     <Compile Include="..\..\modules\Weather\Domain\CanopyShaderParams.cs" Link="Features\Weather\CanopyShaderParams.cs" />
     <Compile Include="..\..\modules\Weather\Domain\RainSkyMath.cs" Link="Features\Weather\RainSkyMath.cs" />
     <Compile Include="..\..\modules\Weather\Domain\LightningMath.cs" Link="Features\Weather\LightningMath.cs" />
-    <Compile Include="..\..\modules\Weather\Domain\RegimeSchedule.cs" Link="Features\Weather\RegimeSchedule.cs" />
+    <Compile Include="..\..\modules\Weather\Domain\WeatherTimeline.cs" Link="Features\Weather\WeatherTimeline.cs" />
     <Compile Include="..\..\modules\Weather\Domain\StormCell.cs" Link="Features\Weather\StormCell.cs" />
     <Compile Include="..\..\modules\Weather\Domain\WeatherField.cs" Link="Features\Weather\WeatherField.cs" />
     <Compile Include="..\..\modules\Weather\Domain\FlightWeatherAirMass.cs" Link="Features\Weather\FlightWeatherAirMass.cs" />

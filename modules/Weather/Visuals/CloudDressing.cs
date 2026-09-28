@@ -12,7 +12,12 @@ namespace BoscaliSummer.Features.Weather.Visuals
         private const BindingFlags PrivateInstance = BindingFlags.Instance | BindingFlags.NonPublic;
         private static readonly FieldInfo LayerField = typeof(LevelInfo).GetField("cloudLayer", PrivateInstance);
         private static readonly FieldInfo SystemField = typeof(CloudLayer).GetField("cloudSystem", PrivateInstance);
+        private static readonly FieldInfo DistantSystemField = typeof(CloudLayer).GetField("distantCloudSystem", PrivateInstance);
         private static readonly FieldInfo FlyThroughField = typeof(CloudLayer).GetField("flyThroughSystem", PrivateInstance);
+        private static readonly FieldInfo RendererField = typeof(CloudLayer).GetField("cloudRenderer", PrivateInstance);
+        private static readonly FieldInfo LightningField = typeof(CloudLayer).GetField("lightning", PrivateInstance);
+        private static readonly FieldInfo LightningSystemField = typeof(Lightning).GetField("lightningSystem", PrivateInstance);
+        private static readonly FieldInfo LightningFlashField = typeof(Lightning).GetField("flashLight", PrivateInstance);
         private static readonly FieldInfo SizeMinField = typeof(CloudLayer).GetField("cloudSizeMin", PrivateInstance);
         private static readonly FieldInfo SizeMaxField = typeof(CloudLayer).GetField("cloudSizeMax", PrivateInstance);
         private static readonly FieldInfo MapScaleField = typeof(CloudLayer).GetField("densityMapScale", PrivateInstance);
@@ -24,9 +29,13 @@ namespace BoscaliSummer.Features.Weather.Visuals
         private ParticleSystem system;
         private LevelInfo observedOwner;
         private ParticleSystem flyThrough;
-        private ParticleSystemRenderer hiddenRenderer;
+        private readonly Renderer[] hiddenRenderers = new Renderer[5];
+        private readonly bool[] rendererWasEnabled = new bool[5];
+        private CloudLayer hiddenLayer;
         private LevelInfo hiddenOwner;
-        private bool rendererWasEnabled;
+        private Behaviour hiddenLightning;
+        private Light hiddenFlash;
+        private bool nativeHidden, layerWasEnabled, lightningWasEnabled;
         private float sizeMin, sizeMax, mapScale, thickness;
         private float writtenSizeMin, writtenSizeMax, writtenMapScale, writtenThickness;
         private int particleLimit;
@@ -104,26 +113,78 @@ namespace BoscaliSummer.Features.Weather.Visuals
             writtenSizeMin = writtenSizeMax = writtenMapScale = writtenThickness = 0f;
         }
 
-        internal bool NativeHidden => hiddenRenderer != null;
+        internal bool NativeHidden => nativeHidden && hiddenLayer != null;
 
         internal void SetNativeHidden(LevelInfo level, bool hidden)
         {
-            if (hiddenRenderer != null && (!hidden || hiddenOwner != level))
+            if (nativeHidden && (!hidden || hiddenOwner != level || hiddenLayer == null))
+                RestoreNativeVisibility();
+            if (!hidden || level == null) return;
+            if (!nativeHidden)
             {
-                if (hiddenRenderer != null) hiddenRenderer.enabled = rendererWasEnabled;
-                hiddenRenderer = null;
-                hiddenOwner = null;
+                if (LayerField == null || SystemField == null || DistantSystemField == null ||
+                    FlyThroughField == null || RendererField == null) return;
+                hiddenLayer = LayerField.GetValue(level) as CloudLayer;
+                if (hiddenLayer == null) return;
+                hiddenOwner = level;
+                layerWasEnabled = hiddenLayer.enabled;
+                RememberRenderer(0, ParticleRenderer(SystemField, hiddenLayer));
+                RememberRenderer(1, ParticleRenderer(DistantSystemField, hiddenLayer));
+                RememberRenderer(2, ParticleRenderer(FlyThroughField, hiddenLayer));
+                RememberRenderer(3, RendererField.GetValue(hiddenLayer) as Renderer);
+                hiddenLightning = LightningField?.GetValue(hiddenLayer) as Behaviour;
+                if (hiddenLightning != null)
+                {
+                    lightningWasEnabled = hiddenLightning.enabled;
+                    RememberRenderer(4, ParticleRenderer(LightningSystemField, hiddenLightning));
+                    hiddenFlash = LightningFlashField?.GetValue(hiddenLightning) as Light;
+                }
+                nativeHidden = true;
             }
-            if (!hidden || hiddenRenderer != null || level == null || LayerField == null || SystemField == null)
-                return;
-            CloudLayer cloudLayer = LayerField.GetValue(level) as CloudLayer;
-            ParticleSystem nativeSystem = cloudLayer != null ? SystemField.GetValue(cloudLayer) as ParticleSystem : null;
-            var renderer = nativeSystem != null ? nativeSystem.GetComponent<ParticleSystemRenderer>() : null;
-            if (renderer == null) return;
-            rendererWasEnabled = renderer.enabled;
-            renderer.enabled = false;
-            hiddenRenderer = renderer;
-            hiddenOwner = level;
+
+            // Stop native particle generation and its independent sun/moon cookie writer.
+            // LevelInfo still reads this altitude when applying atmospheric lighting.
+            hiddenLayer.enabled = false;
+            Vector3 position = hiddenLayer.transform.position;
+            position.y = Datum.LocalSeaY + level.cloudHeight;
+            hiddenLayer.transform.position = position;
+            for (int i = 0; i < hiddenRenderers.Length; i++)
+                if (hiddenRenderers[i] != null) hiddenRenderers[i].enabled = false;
+
+            // The native async weather loop survives component disable and reactivates
+            // distant-cloud/lightning objects. Component suppression survives those toggles.
+            if (hiddenLightning != null) hiddenLightning.enabled = false;
+            if (hiddenFlash != null) hiddenFlash.enabled = false;
+        }
+
+        private void RememberRenderer(int index, Renderer renderer)
+        {
+            hiddenRenderers[index] = renderer;
+            rendererWasEnabled[index] = renderer != null && renderer.enabled;
+        }
+
+        private static Renderer ParticleRenderer(FieldInfo field, object owner)
+        {
+            var particles = field?.GetValue(owner) as ParticleSystem;
+            return particles != null ? particles.GetComponent<ParticleSystemRenderer>() : null;
+        }
+
+        private void RestoreNativeVisibility()
+        {
+            for (int i = 0; i < hiddenRenderers.Length; i++)
+            {
+                if (hiddenRenderers[i] != null) hiddenRenderers[i].enabled = rendererWasEnabled[i];
+                hiddenRenderers[i] = null;
+            }
+            // A flash is a transient event; do not resurrect a flash from before takeover.
+            // Re-enabling Lightning gives its own OnEnable/Update control of the light.
+            if (hiddenLightning != null) hiddenLightning.enabled = lightningWasEnabled;
+            if (hiddenLayer != null) hiddenLayer.enabled = layerWasEnabled;
+            hiddenLayer = null;
+            hiddenOwner = null;
+            hiddenLightning = null;
+            hiddenFlash = null;
+            nativeHidden = false;
         }
 
         // Native CloudLayer already samples its cloud mask and altitude for this emitter.

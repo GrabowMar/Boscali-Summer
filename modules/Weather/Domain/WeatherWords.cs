@@ -16,7 +16,7 @@ namespace BoscaliSummer.Features.Weather.Domain
     internal struct ForecastEntry
     {
         public float OffsetSeconds;
-        public WeatherRegime Regime;
+        public WeatherRegimeType Regime;
         public float RainRate;
         public float Cover;
         public float WindFrom;
@@ -188,7 +188,7 @@ namespace BoscaliSummer.Features.Weather.Domain
                 buffer[count++] = new ForecastEntry
                 {
                     OffsetSeconds = offset,
-                    Regime = scratch.Regime.Dominant,
+                    Regime = scratch.Timeline.Dominant,
                     RainRate = p.RainRate,
                     Cover = p.Cover,
                     WindFrom = WindFrom(p.WindHeading),

@@ -21,8 +21,6 @@ namespace BoscaliSummer.Features.Weather.Presentation
     {
         private const int TabForecast = 0;
         private const int TabEnvironment = 1;
-        private const int TabSynoptic = 2;
-        private const int RadarResolution = 32;
         private const float Width = AvTokens.PanelWidth;
         private const int ChipCount = 2;
 
@@ -99,11 +97,6 @@ namespace BoscaliSummer.Features.Weather.Presentation
         private TMP_Text atmoDensityText;
         private TMP_Text atmoSpeedOfSoundText;
         private TMP_Text atmoAltitudeText;
-        private Texture2D radarTexture;
-        private readonly Color32[] radarPixels = new Color32[RadarResolution * RadarResolution];
-        private TMP_Text radarSummary;
-        private TMP_Text radarDetail;
-        private float nextRadarRefresh;
 
         private sealed class TimelineRowWidgets
         {
@@ -127,8 +120,6 @@ namespace BoscaliSummer.Features.Weather.Presentation
         public void ResetForScene()
         {
             MfdScreenHost.Release(MfdSlots.Weather);
-            if (radarTexture != null) UnityEngine.Object.Destroy(radarTexture);
-            radarTexture = null;
             if (screenRoot != null) UnityEngine.Object.Destroy(screenRoot);
 
             screenRoot = null;
@@ -137,7 +128,6 @@ namespace BoscaliSummer.Features.Weather.Presentation
             timelineRows.Clear();
             nextAttempt = 0f;
             nextRefresh = 0f;
-            nextRadarRefresh = 0f;
             failed = false;
         }
 
@@ -259,7 +249,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
             content.SetParent(rootRect, false);
             AvKit.Stretch(content);
 
-            string[] tabs = { "WEATHER", "SKY & AIR", "SYNOPTIC" };
+            string[] tabs = { "WEATHER", "SKY & AIR" };
 
             shell = AvScreen.Build(
                 content, MfdSlots.Weather,
@@ -280,7 +270,6 @@ namespace BoscaliSummer.Features.Weather.Presentation
 
             BuildForecastPage(shell.CreatePage(TabForecast, "ForecastPage"));
             BuildEnvironmentPage(shell.CreatePage(TabEnvironment, "EnvironmentPage"));
-            BuildSynopticPage(shell.CreatePage(TabSynoptic, "SynopticPage"));
 
             MFDScreen result = root.AddComponent<MFDScreen>();
             result.shortName = MfdSlots.Weather;
@@ -724,102 +713,6 @@ namespace BoscaliSummer.Features.Weather.Presentation
             AvKit.Rule(container, new Rect(densityX + 59f, densityY, 1f, 10f), AvTheme.Warning);
         }
 
-        private void BuildSynopticPage(GameObject page)
-        {
-            Rect body = shell.Body;
-            RectTransform container = AvScreen.Scroll((RectTransform)page.transform, body,
-                Mathf.Max(550f, body.height), out Rect area);
-            float x = area.x + 4f, y = area.y, w = area.width - 8f;
-            AvKit.Panel(container, new Rect(x, y, w, 66f), AvTheme.Surface, AvSprites.Card);
-            AvKit.Rule(container, new Rect(x, y, 4f, 66f), AvTheme.Accent);
-            AvKit.Label(container, "REGIONAL WEATHER / SEEDED MODEL",
-                new Rect(x + 12f, y - 8f, w - 24f, 16f), AvTheme.Accent,
-                AvTokens.FontMicro, FontStyles.Bold, TextAlignmentOptions.Left);
-            radarSummary = AvKit.Label(container, "FIELD INITIALISING",
-                new Rect(x + 12f, y - 30f, w - 24f, 25f), AvTheme.TextPrimary,
-                AvTokens.FontBody, FontStyles.Bold, TextAlignmentOptions.Left);
-
-            float size = Mathf.Min(300f, w - 24f);
-            float mapX = x + (w - size) * 0.5f, mapY = y - 80f;
-            AvKit.Panel(container, new Rect(mapX - 2f, mapY + 2f, size + 4f, size + 4f), AvTheme.SurfaceInert);
-            var radarObject = new GameObject("ModelRadar", typeof(RectTransform), typeof(RawImage));
-            var radarRect = (RectTransform)radarObject.transform;
-            radarRect.SetParent(container, false);
-            AvKit.Place(radarRect, new Rect(mapX, mapY, size, size));
-            radarTexture = new Texture2D(RadarResolution, RadarResolution, TextureFormat.RGBA32, false)
-            { name = "Boscali ENV model echo", filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
-            var image = radarObject.GetComponent<RawImage>();
-            image.texture = radarTexture;
-            image.raycastTarget = false;
-            AvKit.Outline(container, new Rect(mapX, mapY, size, size), AvTheme.Frame);
-            AvKit.Rule(container, new Rect(mapX + size * 0.5f, mapY, 1f, size), AvTheme.Frame);
-            AvKit.Rule(container, new Rect(mapX, mapY - size * 0.5f, size, 1f), AvTheme.Frame);
-            AvKit.Label(container, "N", new Rect(mapX + size * 0.5f - 10f, mapY - 3f, 20f, 16f),
-                AvTheme.TextPrimary, AvTokens.FontMicro, FontStyles.Bold, TextAlignmentOptions.Center);
-            AvKit.Label(container, "+", new Rect(mapX + size * 0.5f - 10f, mapY - size * 0.5f - 8f, 20f, 16f),
-                AvTheme.TextPrimary, AvTokens.FontBody, FontStyles.Bold, TextAlignmentOptions.Center);
-            AvKit.Label(container, "BLUE / DRIZZLE     GREEN / RAIN     AMBER / HEAVY     RED / INTENSE",
-                new Rect(x + 7f, mapY - size - 12f, w - 14f, 20f), AvTheme.Dim,
-                AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.Center);
-            AvKit.Label(container, "CYAN / FRONT LINE     PURPLE / CELL EDGE",
-                new Rect(x + 7f, mapY - size - 30f, w - 14f, 18f), AvTheme.Dim,
-                AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.Center);
-            radarDetail = AvKit.Label(container, "MODEL DATA / AIRCRAFT CENTRED",
-                new Rect(x + 8f, mapY - size - 56f, w - 16f, 70f), AvTheme.TextPrimary,
-                AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.TopLeft);
-        }
-
-        private void RefreshSynopticTab()
-        {
-            WeatherField field = weather.Field;
-            if (field == null || radarTexture == null)
-            {
-                if (radarSummary != null) radarSummary.text = "WAITING FOR WEATHER MODEL";
-                return;
-            }
-            if (Time.unscaledTime < nextRadarRefresh) return;
-            nextRadarRefresh = Time.unscaledTime + 4f;
-
-            float range = settings.RadarRangeKm.Value * 1000f;
-            Vector2 center = weather.FieldPosition;
-            float maxRain = 0f;
-            for (int z = 0; z < RadarResolution; z++)
-            {
-                float worldZ = center.y + ((z + 0.5f) / RadarResolution * 2f - 1f) * range;
-                for (int x = 0; x < RadarResolution; x++)
-                {
-                    float worldX = center.x + ((x + 0.5f) / RadarResolution * 2f - 1f) * range;
-                    float rain = field.Sample(worldX, worldZ).RainRate;
-                    if (rain > maxRain) maxRain = rain;
-                    radarPixels[z * RadarResolution + x] = rain < 0.1f ? new Color32(9, 23, 29, 255)
-                        : rain < 0.5f ? new Color32(46, 112, 168, 255)
-                        : rain < 2.5f ? new Color32(31, 157, 95, 255)
-                        : rain < 10f ? new Color32(224, 166, 58, 255)
-                        : new Color32(223, 72, 70, 255);
-                    float lineWidth = range * 2f / RadarResolution * 0.6f;
-                    for (int f = 0; f < field.FrontCount; f++)
-                    {
-                        if (Mathf.Abs(field.Front(f).SignedDistance(worldX, worldZ)) < lineWidth)
-                        { radarPixels[z * RadarResolution + x] = new Color32(72, 218, 224, 255); break; }
-                    }
-                    for (int c = 0; c < field.CellCount; c++)
-                    {
-                        StormCell cell = field.Cell(c);
-                        float dx = worldX - cell.X, dz = worldZ - cell.Z;
-                        if (Mathf.Abs(dx * dx + dz * dz - cell.Radius * cell.Radius) < lineWidth * cell.Radius * 2f)
-                        { radarPixels[z * RadarResolution + x] = new Color32(213, 122, 240, 255); break; }
-                    }
-                }
-            }
-            radarTexture.SetPixels32(radarPixels);
-            radarTexture.Apply(false, false);
-            radarSummary.text = $"{field.Regime.From.ToString().ToUpperInvariant()}  /  {field.FrontCount} FRONTS  /  {field.CellCount} CELLS";
-            radarDetail.text = $"MODEL ECHO ±{settings.RadarRangeKm.Value:0} KM · PEAK {maxRain:0.0} MM/H\n" +
-                $"LOCAL {weather.LocalWeather.RainRate:0.0} MM/H · COVER {weather.LocalWeather.Cover * 100f:0}% · " +
-                $"BASE {weather.LocalWeather.CloudBase:0} M\n" +
-                "Generated regional outlook; aircraft centred. Wind remains theater wide.";
-        }
-
         // ---- Refresh ---------------------------------------------------------------------
 
         private void Refresh()
@@ -866,8 +759,13 @@ namespace BoscaliSummer.Features.Weather.Presentation
             shell.DataBar.State.text = "METOC / BATTLEFIELD";
             shell.DataBar.SetChip(0, "WX " + regime.Code,
                 regime.Type == WeatherRegimeType.Storm ? "warn" : "live");
-            bool dynamicField = weather.Field != null && weather.Field.Key.Dynamic;
-            shell.DataBar.SetChip(1, dynamicField ? "MODEL ACTIVE" : "STATIC WEATHER", "info");
+            WeatherField stateField = weather.Field;
+            bool dynamicField = stateField != null && stateField.Key.Dynamic;
+            float missionNow = NetworkSceneSingleton<MissionManager>.i != null
+                ? NetworkSceneSingleton<MissionManager>.i.MissionTime : 0f;
+            float nextIn = dynamicField ? Mathf.Max(0f, stateField.Timeline.NextChangeAt - missionNow) : 0f;
+            string countdown = $"{Mathf.FloorToInt(nextIn / 60f)}:{Mathf.FloorToInt(nextIn % 60f):00}";
+            shell.DataBar.SetChip(1, dynamicField ? "NEXT " + countdown : "HELD WEATHER", "info");
 
             // Active Tab Content
             if (shell.Page == TabForecast)
@@ -878,10 +776,6 @@ namespace BoscaliSummer.Features.Weather.Presentation
             {
                 RefreshEnvironmentTab(level, kts, towards);
             }
-            else if (shell.Page == TabSynoptic)
-            {
-                RefreshSynopticTab();
-            }
             if (shell.Status != null)
             {
                 if (weather.IsManualOverride)
@@ -890,14 +784,18 @@ namespace BoscaliSummer.Features.Weather.Presentation
                 }
                 else if (dynamicField)
                 {
-                    float prog = weather.TransitionProgress;
-                    shell.Status.text = prog < 1f
-                        ? $"REGIME SHIFT IN PROGRESS ({Mathf.RoundToInt(prog * 100f)}%) // BLENDING NATIVE LEVERS"
-                        : $"STEADY STATE: {regime.Name.ToUpperInvariant()} // NEXT EVALUATION IN QUEUE";
+                    TimelineState timeline = stateField.Timeline;
+                    string now = RegimeSnapshot.FromType(timeline.To).Name.ToUpperInvariant();
+                    string next = RegimeSnapshot.FromType(timeline.Next).Name.ToUpperInvariant();
+                    shell.Status.text = timeline.Blend < 1f
+                        ? $"CHANGING TO {now} ({Mathf.RoundToInt(timeline.Blend * 100f)}%)"
+                        : timeline.Next == timeline.To
+                            ? $"{now} // HOLDS NEXT STEP IN {countdown}"
+                            : $"{now} // {next} IN {countdown}";
                 }
                 else
                 {
-                    shell.Status.text = "DYNAMIC TRANSITIONS PAUSED // STATIC ENVIRONMENT";
+                    shell.Status.text = "HELD WEATHER // MISSION CONDITIONS";
                 }
             }
         }

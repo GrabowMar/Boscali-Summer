@@ -306,8 +306,21 @@ public sealed class WeatherUnityCheck : MonoBehaviour
         var particles = layer.gameObject.AddComponent<ParticleSystem>();
         var flyThrough = new GameObject("FlyThrough").AddComponent<ParticleSystem>();
         flyThrough.transform.SetParent(layer.transform, false);
+        var distant = new GameObject("DistantClouds").AddComponent<ParticleSystem>();
+        distant.transform.SetParent(layer.transform, false);
+        var sheet = new GameObject("CloudSheet").AddComponent<MeshRenderer>();
+        sheet.transform.SetParent(layer.transform, false);
+        var lightning = new GameObject("Lightning").AddComponent<Lightning>();
+        lightning.transform.SetParent(layer.transform, false);
+        var strikes = lightning.gameObject.AddComponent<ParticleSystem>();
+        var flash = new GameObject("LightningFlash").AddComponent<Light>();
+        flash.transform.SetParent(layer.transform, false);
+        lightning.SetEffects(strikes, flash);
         layer.SetCloudSystem(particles);
+        layer.SetDistantSystem(distant);
         layer.SetFlyThroughSystem(flyThrough);
+        layer.SetCloudRenderer(sheet);
+        layer.SetLightning(lightning);
         weather.SetCloudLayer(layer);
         var dressing = new CloudDressing();
         flyThrough.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
@@ -340,13 +353,43 @@ public sealed class WeatherUnityCheck : MonoBehaviour
         Check(layer.ParticleLimit == 100 && particles.main.maxParticles == 7,
             "Restore leaves a later particle-system override alone");
         var renderer = particles.GetComponent<ParticleSystemRenderer>();
+        var distantRenderer = distant.GetComponent<ParticleSystemRenderer>();
+        var flyThroughRenderer = flyThrough.GetComponent<ParticleSystemRenderer>();
+        var strikeRenderer = strikes.GetComponent<ParticleSystemRenderer>();
+        distantRenderer.enabled = false;
+        Datum.LocalSeaY = -600f;
+        weather.cloudHeight = 2400f;
         dressing.SetNativeHidden(weather, true);
-        Check(dressing.NativeHidden && !renderer.enabled,
-            "Volume clouds hide only the native particle renderer");
+        Check(dressing.NativeHidden && !renderer.enabled && !distantRenderer.enabled &&
+            !flyThroughRenderer.enabled && !sheet.enabled && !layer.enabled,
+            "Volume clouds suppress every native cloud surface and cookie updater");
+        Check(!lightning.enabled && !strikeRenderer.enabled && !flash.enabled,
+            "Native lightning cannot flash or emit during volume ownership");
+        Check(Mathf.Approximately(layer.transform.position.y, 1800f),
+            "Suppressed native layer retains the correct floating-origin altitude");
+        distant.gameObject.SetActive(false);
+        distant.gameObject.SetActive(true);
+        distantRenderer.enabled = true;
+        lightning.enabled = true;
+        flash.enabled = true;
+        weather.cloudHeight = 2600f;
         dressing.SetNativeHidden(weather, true);
+        Check(!distantRenderer.enabled && !lightning.enabled && !flash.enabled &&
+            Mathf.Approximately(layer.transform.position.y, 2000f),
+            "Repeated suppression survives native asynchronous object reactivation");
         dressing.SetNativeHidden(null, false);
-        Check(!dressing.NativeHidden && renderer.enabled,
-            "Native cloud renderer restores on disable");
+        Check(!dressing.NativeHidden && renderer.enabled && !distantRenderer.enabled &&
+            flyThroughRenderer.enabled && sheet.enabled && layer.enabled &&
+            lightning.enabled && strikeRenderer.enabled && !flash.enabled,
+            "Native cloud and lightning component states restore without replaying an old flash");
+        layer.enabled = false;
+        lightning.enabled = false;
+        dressing.SetNativeHidden(weather, true);
+        dressing.Restore();
+        dressing.Restore();
+        Check(!layer.enabled && !lightning.enabled && renderer.enabled,
+            "Idempotent restore preserves components disabled before takeover");
+        Datum.LocalSeaY = 0f;
         UnityEngine.Object.Destroy(weather.gameObject);
         UnityEngine.Object.Destroy(layer.gameObject);
     }

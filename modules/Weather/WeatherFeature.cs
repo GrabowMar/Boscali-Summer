@@ -49,15 +49,15 @@ namespace BoscaliSummer.Features.Weather
                 "Rain rush and canopy patter through the game's effects volume. Client-local; applies now.",
                 context.Settings.Weather.RainAudioEnabled);
             context.AddClientSetting("SKY", "CINEMATIC CLOUDS",
-                "World-space clouds follow fronts and storm cells, with a storm deck when needed. " +
+                "Volumetric clouds for the current weather state: fronts, cumulus and storm towers. " +
                 "Falls back to native clouds if the shader is unavailable. Client-local; applies now.",
                 context.Settings.Weather.CinematicCloudsEnabled);
 
             context.AddHostSettings(new HostSettingsTable("WEATHER & ENVIRONMENT")
-                .Toggle(1, context.Settings.Weather.DynamicWeatherEnabled, "DYNAMIC WEATHER",
-                    "Allow the server to smoothly shift weather regimes and ceilings over mission time.")
-                .Number(2, context.Settings.Weather.TransitionIntervalMinutes, "TRANSITION GAP",
-                    "Average mission minutes between weather transitions.",
+                .Toggle(1, context.Settings.Weather.DynamicWeatherEnabled, "CHANGING WEATHER",
+                    "Step the weather one state at a time over mission time. Off holds the mission's weather.")
+                .Number(2, context.Settings.Weather.StateIntervalMinutes, "STATE INTERVAL",
+                    "Mission minutes each weather state holds before the next step.",
                     1.0f, v => $"{v:F0} MIN")
                 .Number(3, context.Settings.Weather.WindVariability, "WIND VARIABILITY",
                     "How strongly wind shifts direction during weather transitions.",

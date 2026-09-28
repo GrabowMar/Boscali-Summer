@@ -10,8 +10,8 @@ namespace BoscaliSummer.Features.Weather.Configuration
     {
         public ConfigEntry<bool> Enabled { get; }
         public ConfigEntry<bool> DynamicWeatherEnabled { get; }
-        public ConfigEntry<float> TransitionIntervalMinutes { get; }
-        public ConfigEntry<float> TransitionDurationMinutes { get; }
+        public ConfigEntry<float> StateIntervalMinutes { get; }
+        public ConfigEntry<float> StateFadeSeconds { get; }
         public ConfigEntry<float> MinConditions { get; }
         public ConfigEntry<float> MaxConditions { get; }
         public ConfigEntry<float> WindVariability { get; }
@@ -26,7 +26,6 @@ namespace BoscaliSummer.Features.Weather.Configuration
         public ConfigEntry<bool> TerrainRainEnabled { get; }
         public ConfigEntry<bool> RainAtmosphereEnabled { get; }
         public ConfigEntry<bool> LightningEnabled { get; }
-        public ConfigEntry<float> RadarRangeKm { get; }
 
         public ConfigEntry<bool> DebugControlsEnabled { get; }
         public ConfigEntry<KeyCode> DebugKey { get; }
@@ -40,18 +39,22 @@ namespace BoscaliSummer.Features.Weather.Configuration
                 "Enable the Weather module: the ENV bezel screen, native weather transitions and local rain.");
 
             DynamicWeatherEnabled = config.Bind(section, "DynamicWeatherEnabled", true,
-                "Enable smooth dynamic weather transitions over mission time by gently modulating " +
-                "native conditions, cloud ceiling, and wind.");
+                "Step the weather between static states over mission time (clear, fair, scattered, " +
+                "broken, overcast, rain, storm). Off holds the mission's authored weather.");
 
-            TransitionIntervalMinutes = config.Bind(section, "TransitionIntervalMinutes", 4.0f,
+            // New keys on purpose: the retired Transition* keys stored minutes for the old
+            // moving model, and an old stored value would override the new five-minute default.
+            StateIntervalMinutes = config.Bind(section, "StateIntervalMinutes", 5.0f,
                 new ConfigDescription(
-                    "Average time in mission minutes between weather regime shifts.",
+                    "Mission minutes each weather state holds before the next step (hold, one state " +
+                    "better or one state worse).",
                     new AcceptableValueRange<float>(1.0f, 30.0f)));
 
-            TransitionDurationMinutes = config.Bind(section, "TransitionDurationMinutes", 2.0f,
+            StateFadeSeconds = config.Bind(section, "StateFadeSeconds", 60.0f,
                 new ConfigDescription(
-                    "How long a weather transition takes to smoothly blend into the new regime (minutes).",
-                    new AcceptableValueRange<float>(0.5f, 10.0f)));
+                    "Seconds a state change fades the sky, fog and wind. Storm cells grow more slowly " +
+                    "(up to five minutes) so rain and lightning build in.",
+                    new AcceptableValueRange<float>(10.0f, 300.0f)));
 
             MinConditions = config.Bind(section, "MinConditions", 0.05f,
                 new ConfigDescription(
@@ -81,7 +84,7 @@ namespace BoscaliSummer.Features.Weather.Configuration
                 "Client-local rain rush and canopy patter through the game's effects mixer. Applies now.");
 
             CinematicCloudsEnabled = config.Bind(section, "CinematicCloudsEnabled", true,
-                "Render fly-through cloud bodies from the dynamic weather field. " +
+                "Render fly-through volumetric clouds for the current weather state. " +
                 "Falls back to native clouds when the shader is unavailable; applies now.");
 
             RainDensity = config.Bind(section, "RainDensity", 1.0f,
@@ -105,10 +108,6 @@ namespace BoscaliSummer.Features.Weather.Configuration
             LightningEnabled = config.Bind(section, "LightningEnabled", true,
                 "Lightning flashes and delayed thunder in heavy rain. The flash pulses the vanilla " +
                 "sun and is restored exactly when it ends.");
-
-            RadarRangeKm = config.Bind(section, "RadarRangeKm", 40f,
-                new ConfigDescription("Range of the ENV model radar in km. Client-local.",
-                    new AcceptableValueRange<float>(10f, 200f)));
 
             RainAtmosphereEnabled = config.Bind(section, "RainAtmosphereEnabled", true,
                 "Thicken and grey the haze and dim ambient light under local rain. Layered on the " +

@@ -16,12 +16,15 @@ namespace BoscaliSummer.Features.Weather.Networking
     /// </summary>
     internal sealed class WeatherNet : MonoBehaviour
     {
-        public const byte ProtocolVersion = 3;
+        public const byte ProtocolVersion = 4;
 
         private WeatherManager manager;
         private MessageHandler serverHandler;
         private MessageHandler clientHandler;
         private float nextRegistration;
+        private int knownPeers;
+        private float resyncAt;
+        private int resyncsLeft;
         private static bool serializersInstalled;
 
         public void Configure(WeatherManager owner)
@@ -36,6 +39,8 @@ namespace BoscaliSummer.Features.Weather.Networking
             serverHandler = null;
             clientHandler = null;
             nextRegistration = 0f;
+            knownPeers = 0;
+            resyncsLeft = 0;
         }
 
         private void Update()
@@ -51,12 +56,32 @@ namespace BoscaliSummer.Features.Weather.Networking
             {
                 serverHandler = server;
             }
+            WatchPeers(server != null ? network.Server : null);
 
             if (client != clientHandler)
             {
                 clientHandler?.UnregisterHandler<WeatherSyncMessage>();
                 clientHandler = client;
                 clientHandler?.RegisterHandler<WeatherSyncMessage>(ReceiveWeatherSync, false);
+            }
+        }
+
+        // A joining peer gets the key within seconds instead of on the next 8 s refresh.
+        // Two resends cover a peer whose handler registers after the first one lands.
+        private void WatchPeers(NetworkServer server)
+        {
+            int peers = server?.AuthenticatedPlayers?.Count ?? 0;
+            if (peers > knownPeers)
+            {
+                resyncAt = Time.unscaledTime + 1f;
+                resyncsLeft = 2;
+            }
+            knownPeers = peers;
+            if (resyncsLeft > 0 && Time.unscaledTime >= resyncAt)
+            {
+                resyncsLeft--;
+                resyncAt = Time.unscaledTime + 3f;
+                manager?.ResendSync();
             }
         }
 
