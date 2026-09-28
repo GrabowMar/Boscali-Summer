@@ -1,17 +1,18 @@
 using System.Text;
+using NOAvionics;
 
 namespace BoscaliSummer.Features.Command.Presentation.MapUi
 {
     /// <summary>
     /// One rail button's identity: the short code the game already prints, the words that
-    /// say what the code means, and the vector glyph that carries the same meaning without
-    /// reading.
+    /// say what the code means, and the kit v2 <see cref="AvIcon"/> that carries the same
+    /// meaning without reading.
     ///
     /// Pure data: the rail renders it, tests read it, and nothing here touches Unity.
     /// </summary>
     internal readonly struct MfdRailEntry
     {
-        public MfdRailEntry(string code, string name, string glyph)
+        public MfdRailEntry(string code, string name, AvIcon glyph)
         {
             Code = code;
             Name = name;
@@ -20,7 +21,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
         public readonly string Code;
         public readonly string Name;
-        public readonly string Glyph;
+        public readonly AvIcon Glyph;
 
         public bool HasName => !string.IsNullOrEmpty(Name);
     }
@@ -38,30 +39,33 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
     {
         private const int MaxCodeLength = 8;
 
+        /// <summary>The neutral icon an unrecognised code still gets (spec §5.4's "list" fallback).</summary>
+        private const AvIcon NeutralGlyph = AvIcon.ListDetails;
+
         public static MfdRailEntry For(string label)
         {
             string code = Sanitise(label, MaxCodeLength);
             switch (code)
             {
-                case "FAC": return new MfdRailEntry(code, "FACTIONS", "faction");
-                case "BDF": return new MfdRailEntry(code, "BOSCALI HQ", "faction");
-                case "PALA": return new MfdRailEntry(code, "PALA HQ", "faction");
-                case "MAP": return new MfdRailEntry(code, "TACTICAL", "map");
-                case "MFD": return new MfdRailEntry(code, "DISPLAY", "hud");
-                case "HUD": return new MfdRailEntry(code, "SYMBOLOGY", "hud");
-                case "TGT": return new MfdRailEntry(code, "TARGETS", "target");
-                case "MIS": return new MfdRailEntry(code, "MISSION", "flag");
-                case "WMC": return new MfdRailEntry(code, "WING CMD", "air");
-                case "OPS": return new MfdRailEntry(code, "SUPPORT", "support");
-                case "STR": return new MfdRailEntry(code, "THEATER", "theater");
-                case "SQD": return new MfdRailEntry(code, "PILOT", "person");
-                case "PILOT": return new MfdRailEntry(code, "PERSONNEL", "person");
-                case "RAD": return new MfdRailEntry(code, "RADIO", "radio");
-                case "SET": return new MfdRailEntry(code, "SETTINGS", "settings");
-                case "EVN": return new MfdRailEntry(code, "EVENTS", "pulse");
-                case "COM": return new MfdRailEntry(code, "COMMS", "comms");
-                case "ENV": return new MfdRailEntry(code, "WEATHER", "weather");
-                default: return new MfdRailEntry(code, null, null);
+                case "FAC": return new MfdRailEntry(code, "FACTIONS", AvIcon.BuildingBank);
+                case "BDF": return new MfdRailEntry(code, "BOSCALI HQ", AvIcon.BuildingBank);
+                case "PALA": return new MfdRailEntry(code, "PALA HQ", AvIcon.BuildingBank);
+                case "MAP": return new MfdRailEntry(code, "TACTICAL", AvIcon.Map2);
+                case "MFD": return new MfdRailEntry(code, "DISPLAY", AvIcon.Focus2);
+                case "HUD": return new MfdRailEntry(code, "SYMBOLOGY", AvIcon.Focus2);
+                case "TGT": return new MfdRailEntry(code, "TARGETS", AvIcon.Target);
+                case "MIS": return new MfdRailEntry(code, "MISSION", AvIcon.Flag);
+                case "WMC": return new MfdRailEntry(code, "WING CMD", AvIcon.Plane);
+                case "OPS": return new MfdRailEntry(code, "SUPPORT", AvIcon.Stack2);
+                case "STR": return new MfdRailEntry(code, "THEATER", AvIcon.ChartArrows);
+                case "SQD": return new MfdRailEntry(code, "PILOT", AvIcon.User);
+                case "PILOT": return new MfdRailEntry(code, "PERSONNEL", AvIcon.User);
+                case "RAD": return new MfdRailEntry(code, "RADIO", AvIcon.Antenna);
+                case "SET": return new MfdRailEntry(code, "SETTINGS", AvIcon.AdjustmentsHorizontal);
+                case "EVN": return new MfdRailEntry(code, "EVENTS", AvIcon.Activity);
+                case "COM": return new MfdRailEntry(code, "COMMS", AvIcon.Message2);
+                case "ENV": return new MfdRailEntry(code, "WEATHER", AvIcon.Cloud);
+                default: return new MfdRailEntry(code, null, NeutralGlyph);
             }
         }
 

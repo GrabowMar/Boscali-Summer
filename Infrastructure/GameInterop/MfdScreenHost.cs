@@ -129,10 +129,12 @@ namespace BoscaliSummer.Runtime
             if (siblingLabel != null)
             {
                 label.font = siblingLabel.font;
-                label.fontSize = siblingLabel.fontSize;
-                label.fontSizeMin = siblingLabel.fontSizeMin;
-                label.fontSizeMax = siblingLabel.fontSizeMax;
-                label.enableAutoSizing = siblingLabel.enableAutoSizing;
+                // Pin min == max when the sibling itself has a fixed size, rather than assign
+                // fontSize directly: this button is inactive and invisible until MfdRail adopts
+                // and restyles it moments later, so it only needs to mirror the sibling's size.
+                label.fontSizeMin = siblingLabel.enableAutoSizing ? siblingLabel.fontSizeMin : siblingLabel.fontSize;
+                label.fontSizeMax = siblingLabel.enableAutoSizing ? siblingLabel.fontSizeMax : siblingLabel.fontSize;
+                label.enableAutoSizing = true;
                 label.fontStyle = siblingLabel.fontStyle;
                 label.color = siblingLabel.color;
             }
